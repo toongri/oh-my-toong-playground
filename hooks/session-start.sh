@@ -75,7 +75,7 @@ if command -v jq &> /dev/null; then
   STALE_THRESHOLD=10800  # 3 hours in seconds
   CURRENT_TIME=$(date +%s)
 
-  for state_file in "$OMT_DIR"/ralph-state-*.json "$OMT_DIR"/prometheus-state-*.json; do
+  for state_file in "$OMT_DIR"/ralph-state-*.json "$OMT_DIR"/prometheus-state-*.json "$OMT_DIR"/goal-state-*.json; do
     if [ -f "$state_file" ]; then
       STARTED_AT=$(jq -r '.started_at // ""' "$state_file" 2>/dev/null)
       if [ -n "$STARTED_AT" ] && [ "$STARTED_AT" != "null" ]; then
@@ -151,6 +151,52 @@ if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
       fi
 
       MESSAGES="$MESSAGES<session-restore>\n\n[PROMETHEUS RESTORED]\n\nYou have an active prometheus session.\nPhase: $PROM_PHASE\nPlan path: $PROM_PLAN_PATH\n$PROM_PLAN_NOTE$PROM_INSTRUCTION\n</session-restore>\n\n---\n\n"
+    fi
+  fi
+fi
+
+# Check for active goal state (session-specific)
+if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
+  GOAL_STATE=$(cat "$OMT_DIR/goal-state-${SESSION_ID}.json" 2>/dev/null)
+
+  if command -v jq &> /dev/null; then
+    GOAL_ACTIVE=$(echo "$GOAL_STATE" | jq -r '.active // false' 2>/dev/null)
+    if [ "$GOAL_ACTIVE" = "true" ]; then
+      GOAL_PHASE=$(echo "$GOAL_STATE" | jq -r '.phase // ""' 2>/dev/null)
+      GOAL_PLAN_PATH=$(echo "$GOAL_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
+      GOAL_RESUME=$(echo "$GOAL_STATE" | jq -r '.resume_summary // ""' 2>/dev/null)
+      GOAL_RESUME=$(printf '%s' "$GOAL_RESUME" | sed 's/\\/\\\\/g')
+      GOAL_ITERATION=$(echo "$GOAL_STATE" | jq -r '.iteration // 0' 2>/dev/null)
+      GOAL_MAX_ITER=$(echo "$GOAL_STATE" | jq -r '.max_iterations // 10' 2>/dev/null)
+
+      # Determine whether the plan file is available on disk.
+      GOAL_PLAN_AVAILABLE=false
+      if [ -n "$GOAL_PLAN_PATH" ] && [ "$GOAL_PLAN_PATH" != "null" ] && [ -f "$GOAL_PLAN_PATH" ]; then
+        GOAL_PLAN_AVAILABLE=true
+      fi
+
+      GOAL_PLAN_NOTE=""
+      GOAL_INSTRUCTION=""
+      if [ "$GOAL_PHASE" = "planning" ]; then
+        # Planning-resume: guide the AI to continue co-designing the plan
+        if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
+          GOAL_INSTRUCTION="\nRe-read the current plan from disk and continue the planning process where you left off.\n"
+        else
+          if [ -n "$GOAL_RESUME" ] && [ "$GOAL_RESUME" != "null" ]; then
+            GOAL_PLAN_NOTE="\nPlan file not available on disk. Resume from this bookmark: ${GOAL_RESUME}\n"
+          else
+            GOAL_PLAN_NOTE="\nPlan file not available on disk yet. Continue planning from the beginning.\n"
+          fi
+        fi
+      else
+        # Pursuing-resume: guide the AI to continue autonomous pursuit
+        GOAL_INSTRUCTION="\nIteration: $GOAL_ITERATION/$GOAL_MAX_ITER. Continue pursuing the objective autonomously.\n"
+        if [ -n "$GOAL_RESUME" ] && [ "$GOAL_RESUME" != "null" ]; then
+          GOAL_PLAN_NOTE="\nLast checkpoint: ${GOAL_RESUME}\n"
+        fi
+      fi
+
+      MESSAGES="$MESSAGES<session-restore>\n\n[GOAL RESTORED]\n\nYou have an active goal session (phase: $GOAL_PHASE).\nPlan path: $GOAL_PLAN_PATH\n$GOAL_PLAN_NOTE$GOAL_INSTRUCTION\nIMPORTANT: Invoking the goal skill again while a goal is already active is refused. Continue the existing goal, do not start a new one.\n\n</session-restore>\n\n---\n\n"
     fi
   fi
 fi
