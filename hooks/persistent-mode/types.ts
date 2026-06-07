@@ -40,12 +40,13 @@ export interface DeepInterviewState {
 /**
  * Minimal contract the persistent-mode hook reads from the prometheus
  * state file. The on-disk file may carry additional fields at runtime
- * written by the prometheus skill itself; only `active` is consulted here.
- * Writers must merge rather than overwrite.
+ * (e.g. phase, plan_path, resume_summary, started_at) written by the
+ * prometheus skill itself; only `active` is consulted here. Writers must
+ * merge rather than overwrite — replacing the file with this minimal shape
+ * discards in-flight prometheus data.
  */
 export interface PrometheusState {
   active: boolean;
-  sessionId: string;
 }
 
 // Hook output format

@@ -12,7 +12,7 @@ import {
   cleanupBlockCountFiles,
   MAX_BLOCK_COUNT,
 } from './state.ts';
-import type { RalphState, DeepInterviewState, PrometheusState } from './types.ts';
+import type { RalphState, DeepInterviewState } from './types.ts';
 import { mkdir, rm, writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -352,24 +352,30 @@ describe('Prometheus state management', () => {
 
   describe('readPrometheusState', () => {
     it('prometheus: readPrometheusState returns state when active=true', async () => {
-      const state: PrometheusState = { active: true, sessionId: 's1' };
+      // Write the realistic on-disk shape that the seed hook and CLI produce
+      const onDisk = {
+        active: true,
+        phase: 'planning',
+        plan_path: '/tmp/plan.md',
+        resume_summary: 'Continue from step 3',
+        started_at: '2026-06-08T12:00:00+09:00',
+      };
       await writeFile(
         join(omtDir, `prometheus-state-${sessionId}.json`),
-        JSON.stringify(state)
+        JSON.stringify(onDisk)
       );
 
       const result = readPrometheusState(sessionId);
 
       expect(result).not.toBeNull();
       expect(result?.active).toBe(true);
-      expect(result?.sessionId).toBe('s1');
     });
 
     it('prometheus: readPrometheusState returns null when active=false', async () => {
-      const state: PrometheusState = { active: false, sessionId: 's1' };
+      const onDisk = { active: false };
       await writeFile(
         join(omtDir, `prometheus-state-${sessionId}.json`),
-        JSON.stringify(state)
+        JSON.stringify(onDisk)
       );
 
       const result = readPrometheusState(sessionId);
@@ -387,7 +393,7 @@ describe('Prometheus state management', () => {
   describe('cleanupPrometheusState', () => {
     it('prometheus: cleanupPrometheusState removes file and is idempotent', async () => {
       const stateFile = join(omtDir, `prometheus-state-${sessionId}.json`);
-      await writeFile(stateFile, JSON.stringify({ active: true, sessionId: 's1' }));
+      await writeFile(stateFile, JSON.stringify({ active: true, phase: 'planning', plan_path: '/tmp/plan.md', resume_summary: '', started_at: '2026-06-08T12:00:00+09:00' }));
 
       cleanupPrometheusState(sessionId);
 
