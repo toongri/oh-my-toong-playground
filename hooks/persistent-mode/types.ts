@@ -60,7 +60,7 @@ export interface PrometheusState {
 export interface GoalState {
   active: boolean;
   phase: 'planning' | 'pursuing' | 'budget_limited' | 'blocked' | 'complete';
-  objective_verdict: string;
+  objective_verdict: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' | 'absent';
   iteration: number;
   max_iterations: number;
   /** Continuation-objective text (hook-consumed): the desired end state. */

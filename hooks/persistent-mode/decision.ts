@@ -3,7 +3,7 @@ import {
   readRalphState, updateRalphState, cleanupRalphState,
   readDeepInterviewState, cleanupDeepInterviewState,
   readPrometheusState, cleanupPrometheusState,
-  readGoalStateRaw, readGoalState, updateGoalState,
+  readGoalStateRaw, updateGoalState,
   getBlockCount, incrementBlockCount, cleanupBlockCountFiles,
   MAX_BLOCK_COUNT
 } from './state.ts';
@@ -295,14 +295,16 @@ export function makeDecision(context: DecisionContext): HookOutput {
 
   // Priority 1.4: Goal autonomous pursuit loop
   const goalRaw = readGoalStateRaw(sessionId);
+  let goalSuppressesBaselineTodo = false;
   if (goalRaw) {
-    // A goal-state file exists → goal owns the lifecycle; suppress the
-    // baseline-todo branch for ANY phase (M3), including terminal states.
-    const goal = readGoalState(sessionId); // active-only (null when active=false / terminal)
+    // Single read; derive the active-only view locally (no second I/O, no TOCTOU).
+    const goal = goalRaw.active ? goalRaw : null;
     if (goal && goal.phase === 'pursuing') {
       if (goal.iteration >= goal.max_iterations) {
         // Cap reached — terminal disposition (E3: cap check BEFORE APPROVE-yield).
-        const evidence = goal.completion_evidence_paths ?? [];
+        const evidence = Array.isArray(goal.completion_evidence_paths)
+          ? goal.completion_evidence_paths
+          : []; // B5: a non-array (corrupted state) is NOT valid evidence.
         if (goal.objective_verdict === 'APPROVE' && evidence.length > 0) {
           // complete-wins (ADR-7) — gated on verdict=APPROVE AND evidence non-empty (M2).
           try { updateGoalState(sessionId, { phase: 'complete', active: false }); } catch { /* M1 */ }
@@ -330,9 +332,10 @@ export function makeDecision(context: DecisionContext): HookOutput {
       try { updateGoalState(sessionId, { iteration: newIteration }); } catch { /* M1 */ }
       return formatBlockOutput(message);
     }
-    // Active non-pursuing phase (planning/...) OR terminal inactive →
-    // yield + suppress baseline-todo (goal owns lifecycle; ADR-2).
-    return formatContinueOutput();
+    // Active non-pursuing phase OR terminal inactive: goal owns lifecycle → suppress the
+    // baseline-todo branch (M3). Do NOT suppress Deep-Interview Protection below (B2):
+    // a lingering/terminal goal-state must not strip an unrelated active interview's loop.
+    goalSuppressesBaselineTodo = true;
   }
 
   // Priority 1.5: Deep Interview Protection
@@ -363,8 +366,8 @@ export function makeDecision(context: DecisionContext): HookOutput {
     }
   }
 
-  // Priority 2: Baseline todo-continuation (incomplete tasks from file-based counting)
-  if (incompleteTodoCount > 0) {
+  // Priority 2: Baseline todo-continuation (suppressed when goal owns the lifecycle)
+  if (!goalSuppressesBaselineTodo && incompleteTodoCount > 0) {
     // Check escape hatch
     const blockCount = getBlockCount(stateDir, attemptId);
     if (blockCount >= MAX_BLOCK_COUNT) {

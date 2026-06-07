@@ -1299,5 +1299,87 @@ describe('makeDecision', () => {
       expect(result).toEqual({ continue: true });
       expect(result.reason ?? '').not.toContain('<todo-continuation>');
     });
+
+    // B2: a lingering/terminal goal-state must not strip an unrelated active
+    // deep-interview's continuation loop.
+    it('terminal goal-state does not suppress an active deep-interview', async () => {
+      await writeGoal({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 5,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+      await writeFile(
+        join(omtDir, 'deep-interview-active-state-test-session.json'),
+        JSON.stringify({ active: true, sessionId: 'test-session' })
+      );
+
+      const result = makeDecision(createContext({ lastAssistantMessage: 'no done token' }));
+
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<deep-interview-continuation>');
+    });
+
+    it('non-pursuing active goal-state does not suppress an active deep-interview', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'planning',
+        objective_verdict: '',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+      await writeFile(
+        join(omtDir, 'deep-interview-active-state-test-session.json'),
+        JSON.stringify({ active: true, sessionId: 'test-session' })
+      );
+
+      const result = makeDecision(createContext({ lastAssistantMessage: 'no done token' }));
+
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<deep-interview-continuation>');
+    });
+
+    // B5: a non-array completion_evidence (corrupted state) is NOT valid evidence.
+    it('complete-wins rejects non-array completion_evidence (B5)', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'APPROVE',
+        iteration: 10,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+        completion_evidence_paths: 'x', // non-array (corrupted)
+      });
+
+      const result = makeDecision(createContext());
+
+      // Treated as no evidence → budget_limited soft-stop, NOT complete
+      expect(result.decision).toBe('block');
+      const after = await readGoalFile();
+      expect(after.phase).toBe('budget_limited');
+      expect(after.active).toBe(false);
+    });
+
+    it('complete-wins still fires on APPROVE + array evidence at cap', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'APPROVE',
+        iteration: 10,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+        completion_evidence_paths: ['artifacts/report.md'],
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result).toEqual({ continue: true });
+      const after = await readGoalFile();
+      expect(after.phase).toBe('complete');
+      expect(after.active).toBe(false);
+    });
   });
 });
