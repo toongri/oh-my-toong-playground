@@ -162,7 +162,7 @@ sequenceDiagram
 - The idempotency lookup added in this PR reads `inventory_reservations` by `order_id`, but the column has no index, so reads are full scans. Not introduced here, but this PR is the first heavy reader. Noted, not blocking.
 
 ## Recommendations
-- Introduce a `PaymentApplicationService` between controllers and adapters to own transaction boundaries.
-- Configure a dead-letter topic for the `payment-events` consumer group so failed messages are recoverable.
-- Propagate a correlation ID through HTTP headers → Kafka message headers → consumer MDC for end-to-end tracing.
+- Resolve the `@Transactional`-over-Stripe finding (`OrderPaymentController.kt:34`) — removes a bug that exhausts the connection pool under normal load.
+- Add the webhook amount re-check (`OrderPaymentController.kt:88`) — preserves the requirement that an order is never marked PAID for less than its total.
+- Replace the inline money conversion with `MoneyUtils.toMinorUnits` (`PaymentRecord.kt:21`) — improves maintainability and removes the latent zero-decimal-currency bug.
 ````
