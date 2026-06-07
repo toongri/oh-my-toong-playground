@@ -37,6 +37,17 @@ export interface DeepInterviewState {
   sessionId: string;
 }
 
+/**
+ * Minimal contract the persistent-mode hook reads from the prometheus
+ * state file. The on-disk file may carry additional fields at runtime
+ * written by the prometheus skill itself; only `active` is consulted here.
+ * Writers must merge rather than overwrite.
+ */
+export interface PrometheusState {
+  active: boolean;
+  sessionId: string;
+}
+
 // Hook output format
 export interface HookOutput {
   decision?: 'block' | 'continue';
