@@ -254,15 +254,17 @@ export function makeDecision(context: DecisionContext): HookOutput {
   // Priority 1.5: Prometheus Session Protection (bounded — walk-away safe)
   const prometheusState = readPrometheusState(sessionId);
   if (prometheusState && prometheusState.active) {
+    const prometheusAttemptId = `prometheus-${attemptId}`;
     if (detectPrometheusDone(lastAssistantMessage)) {
       cleanupPrometheusState(sessionId);
+      cleanupBlockCountFiles(stateDir, prometheusAttemptId);
     } else {
-      const blockCount = getBlockCount(stateDir, attemptId);
+      const blockCount = getBlockCount(stateDir, prometheusAttemptId);
       if (blockCount >= MAX_BLOCK_COUNT) {
-        cleanupBlockCountFiles(stateDir, attemptId);
+        cleanupBlockCountFiles(stateDir, prometheusAttemptId);
         return formatContinueOutput();
       }
-      incrementBlockCount(stateDir, attemptId);
+      incrementBlockCount(stateDir, prometheusAttemptId);
       return formatBlockOutput(buildPrometheusContinuationMessage());
     }
   }
