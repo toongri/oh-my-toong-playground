@@ -48,20 +48,6 @@ assert_file_not_exists() {
     fi
 }
 
-assert_output_contains() {
-    local output="$1"
-    local pattern="$2"
-    local msg="${3:-Output should contain pattern}"
-    if echo "$output" | grep -q "$pattern"; then
-        return 0
-    else
-        echo "ASSERTION FAILED: $msg"
-        echo "  Pattern: '$pattern'"
-        echo "  Output: $output"
-        return 1
-    fi
-}
-
 assert_output_not_contains() {
     local output="$1"
     local pattern="$2"
@@ -227,11 +213,14 @@ test_ac4_cwd_independent_seeding() {
 test_ac8_fail_open_missing_omt_dir() {
     local exit_code=0
     local output
+    # Capture the test OMT_DIR before we unset it inside the subshell
+    local saved_omt_dir="$OMT_DIR"
 
-    # Unset OMT_DIR for this test (env inherits from parent, must explicitly clear)
+    # unset OMT_DIR inside the $() subshell so the hook on the pipe RHS also
+    # sees OMT_DIR unset.  env -u on the printf (LHS) would NOT affect the hook.
     output=$(
-        env -u OMT_DIR \
-            printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"prometheus"}}' \
+        unset OMT_DIR
+        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"prometheus"}}' \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
     ) || exit_code=$?
 
@@ -240,6 +229,12 @@ test_ac8_fail_open_missing_omt_dir() {
 
     assert_output_not_contains "$output" '"continue"[[:space:]]*:[[:space:]]*false' \
         "Hook should NOT emit deny payload when OMT_DIR unset" || return 1
+
+    # Distinguishing assertion: with OMT_DIR unset the hook must NOT create a
+    # state file.  This would catch any fail-closed regression.
+    local state_file="$saved_omt_dir/prometheus-state-${OMT_SESSION_ID}.json"
+    assert_file_not_exists "$state_file" \
+        "Hook must NOT create state file when OMT_DIR is unset (fail-open)" || return 1
 }
 
 # =============================================================================
@@ -263,32 +258,11 @@ test_ac9_started_at_parseable_by_stale_cleanup() {
     tmp_file=$(mktemp)
     jq --arg ts "$old_timestamp" '.started_at = $ts' "$state_file" > "$tmp_file" && mv "$tmp_file" "$state_file"
 
-    # Run the stale-cleanup logic inline (mirrors session-start.sh lines 74-94)
-    if command -v jq &> /dev/null; then
-        local stale_threshold=10800
-        local current_time
-        current_time=$(date +%s)
-
-        for sf in "$OMT_DIR"/prometheus-state-*.json; do
-            if [ -f "$sf" ]; then
-                local started_at_val
-                started_at_val=$(jq -r '.started_at // ""' "$sf" 2>/dev/null)
-                if [ -n "$started_at_val" ] && [ "$started_at_val" != "null" ]; then
-                    local time_part
-                    time_part=$(echo "$started_at_val" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
-                    local file_timestamp
-                    file_timestamp=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$time_part" "+%s" 2>/dev/null)
-                    if [ -n "$file_timestamp" ]; then
-                        local age
-                        age=$((current_time - file_timestamp))
-                        if [ "$age" -gt "$stale_threshold" ]; then
-                            rm -f "$sf"
-                        fi
-                    fi
-                fi
-            fi
-        done
-    fi
+    # Invoke the REAL session-start hook so the production stale-cleanup path is
+    # exercised (not an inline copy that could diverge).  OMT_DIR is already
+    # exported by setup_test_env; compute_omt_dir short-circuits on a preset
+    # OMT_DIR, so session-start runs against the test directory.
+    printf '{}' | bash "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1
 
     assert_file_not_exists "$state_file" \
         "Stale-cleanup should delete state file with started_at >3h old" || return 1
