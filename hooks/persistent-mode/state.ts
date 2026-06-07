@@ -61,17 +61,10 @@ export function cleanupPrometheusState(sessionId: string): void {
   deleteFile(join(getOmtDir(), `prometheus-state-${sessionId}.json`));
 }
 
+// active-only view: readGoalStateRaw folded by active (null on absent/malformed/inactive).
 export function readGoalState(sessionId: string): GoalState | null {
-  const path = join(getOmtDir(), `goal-state-${sessionId}.json`);
-  const content = readFileOrNull(path);
-  if (!content) return null;
-
-  try {
-    const state = JSON.parse(content) as GoalState;
-    return state.active ? state : null;
-  } catch {
-    return null;
-  }
+  const state = readGoalStateRaw(sessionId);
+  return state && state.active ? state : null;
 }
 
 // Active-agnostic probe: returns the parsed goal-state even when active=false

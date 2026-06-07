@@ -477,6 +477,31 @@ describe('Goal state management', () => {
       expect(result?.max_iterations).toBe(10);
       expect(result?.objective_verdict).toBe('absent');
     });
+
+    // B8: readGoalState is readGoalStateRaw folded by active — same object
+    // when active, null when inactive.
+    it('readGoalState mirrors readGoalStateRaw folded by active', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 4,
+        max_iterations: 10,
+      }));
+      expect(readGoalState(sessionId)).toEqual(readGoalStateRaw(sessionId));
+
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 4,
+        max_iterations: 10,
+      }));
+      expect(readGoalState(sessionId)).toBeNull();
+      expect(readGoalStateRaw(sessionId)).not.toBeNull();
+    });
   });
 
   describe('readGoalStateRaw', () => {
