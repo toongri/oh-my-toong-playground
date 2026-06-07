@@ -819,4 +819,85 @@ describe('makeDecision', () => {
       expect(result.reason ?? '').not.toContain('<deep-interview-continuation>');
     });
   });
+
+  describe('Priority 1.5: Prometheus State Protection', () => {
+    it('makeDecision blocks with prometheus-continuation when state active and no token', async () => {
+      const prometheusState = { active: true, sessionId: 'test-session' };
+      await writeFile(
+        join(omtDir, 'prometheus-state-test-session.json'),
+        JSON.stringify(prometheusState)
+      );
+
+      const context = createContext({ lastAssistantMessage: 'some message without done token' });
+
+      const result = makeDecision(context);
+
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<prometheus-continuation>');
+    });
+
+    it('makeDecision cleans up prometheus state when token present in lastAssistantMessage', async () => {
+      const prometheusState = { active: true, sessionId: 'test-session' };
+      await writeFile(
+        join(omtDir, 'prometheus-state-test-session.json'),
+        JSON.stringify(prometheusState)
+      );
+
+      const context = createContext({ lastAssistantMessage: 'Plan complete. <prometheus-done/>' });
+
+      const result = makeDecision(context);
+
+      const { existsSync } = await import('fs');
+      expect(existsSync(join(omtDir, 'prometheus-state-test-session.json'))).toBe(false);
+      expect(result.reason ?? '').not.toContain('<prometheus-continuation>');
+    });
+
+    it('makeDecision allows stop after MAX_BLOCK_COUNT token-less blocks (bounded escape)', async () => {
+      const prometheusState = { active: true, sessionId: 'test-session' };
+      await writeFile(
+        join(omtDir, 'prometheus-state-test-session.json'),
+        JSON.stringify(prometheusState)
+      );
+
+      const context = createContext({ lastAssistantMessage: 'no token here' });
+
+      // First call should block (prometheus active, no token, below ceiling)
+      const firstResult = makeDecision(context);
+      expect(firstResult.decision).toBe('block');
+
+      // Drive blockCount to ceiling (MAX_BLOCK_COUNT = 5; first call already incremented to 1)
+      for (let i = 1; i < 5; i++) {
+        makeDecision(context);
+      }
+      // This call is at/past ceiling — must NOT block
+      const escapedResult = makeDecision(context);
+      expect(escapedResult.decision).not.toBe('block');
+    });
+
+    it('makeDecision prioritizes ralph over prometheus when both active', async () => {
+      const ralphState = {
+        active: true,
+        iteration: 1,
+        max_iterations: 10,
+        completion_promise: 'DONE',
+        prompt: 'Ralph task',
+      };
+      await writeFile(
+        join(omtDir, 'ralph-state-test-session.json'),
+        JSON.stringify(ralphState)
+      );
+      const prometheusState = { active: true, sessionId: 'test-session' };
+      await writeFile(
+        join(omtDir, 'prometheus-state-test-session.json'),
+        JSON.stringify(prometheusState)
+      );
+
+      const context = createContext();
+
+      const result = makeDecision(context);
+
+      expect(result.reason).toContain('<ralph-loop-continuation>');
+      expect(result.reason).not.toContain('<prometheus-continuation>');
+    });
+  });
 });
