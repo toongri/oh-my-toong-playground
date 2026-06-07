@@ -959,7 +959,7 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 
 These directives govern how prometheus records its own pipeline state via the state CLI.
 
-- **Per each S-transition**: run `bun ${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the design-brief / ADR is first written during the Co-Design state — this is the first durable plan artifact on disk; the TODO plan body is appended later at S3); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
+- **Per each S-transition**: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the design-brief / ADR is first written during the Co-Design state — this is the first durable plan artifact on disk; the TODO plan body is appended later at S3); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
 - **Teardown**: At S8 dispatch and on abort, emit `<prometheus-done/>` as a standalone output token. The persistent-mode hook detects this token and performs the actual state-file deletion — the model does not call `clear` directly.
 - **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable (the CLI falls back to `default` when `OMT_SESSION_ID` is unset).
 - **Restore**: on restore, re-read the current plan file, restart from `resume_summary` if `plan_path` is missing, distrust any stored verdict, and re-run gates on the current artifact. A stored verdict is not a pass — re-verification is mandatory.
@@ -978,7 +978,7 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 2 | File references exist | All file paths and line references resolve |
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
-| 5 | Section validator passes | Run `bun ${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts <plan_path>` (invoked ONLY here, pre-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Momus. |
+| 5 | Section validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Momus. |
 | 6 | design forks resolved | Every CRITICAL design fork is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
 
 Item 2 ("File references exist") is a lightweight pre-Momus self-filter — it catches obviously stale paths before the plan reaches the feasibility gate. It is complementary to, not a substitute for, Momus's authoritative codebase-feasibility verification: this self-check is a cheap first pass; Momus is the gate.
