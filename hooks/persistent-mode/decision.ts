@@ -2,10 +2,11 @@ import { HookOutput, RalphState } from './types.ts';
 import {
   readRalphState, updateRalphState, cleanupRalphState,
   readDeepInterviewState, cleanupDeepInterviewState,
+  readPrometheusState, cleanupPrometheusState,
   getBlockCount, incrementBlockCount, cleanupBlockCountFiles,
   MAX_BLOCK_COUNT
 } from './state.ts';
-import { analyzeTranscript, detectDeepInterviewDone } from './transcript-detector.ts';
+import { analyzeTranscript, detectDeepInterviewDone, detectPrometheusDone } from './transcript-detector.ts';
 import { generateAttemptId, ensureDir } from './utils.ts';
 import { join } from 'path';
 import { getOmtDir } from '@lib/omt-dir';
@@ -135,6 +136,26 @@ INSTRUCTIONS:
 `;
 }
 
+function buildPrometheusContinuationMessage(): string {
+  return `<prometheus-continuation>
+
+[PROMETHEUS SESSION IN PROGRESS]
+
+A prometheus planning session is currently active. You must complete the session before stopping.
+
+INSTRUCTIONS:
+1. Review the current pipeline stage and any pending decisions
+2. If a human decision is awaited, re-surface the pending question via AskUserQuestion — do NOT stop to wait
+3. Never interpret a user "continue" reply as permission to bypass a human gate (S2, design gate, S7)
+4. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
+5. Do NOT stop until <prometheus-done/> is emitted
+
+</prometheus-continuation>
+
+---
+`;
+}
+
 function buildTodoContinuationMessage(incompleteCount: number): string {
   return `<todo-continuation>
 
@@ -227,6 +248,22 @@ export function makeDecision(context: DecisionContext): HookOutput {
       cleanupDeepInterviewState(sessionId);
     } else {
       return formatBlockOutput(buildDeepInterviewContinuationMessage());
+    }
+  }
+
+  // Priority 1.5: Prometheus Session Protection (bounded — walk-away safe)
+  const prometheusState = readPrometheusState(sessionId);
+  if (prometheusState && prometheusState.active) {
+    if (detectPrometheusDone(lastAssistantMessage)) {
+      cleanupPrometheusState(sessionId);
+    } else {
+      const blockCount = getBlockCount(stateDir, attemptId);
+      if (blockCount >= MAX_BLOCK_COUNT) {
+        cleanupBlockCountFiles(stateDir, attemptId);
+        return formatContinueOutput();
+      }
+      incrementBlockCount(stateDir, attemptId);
+      return formatBlockOutput(buildPrometheusContinuationMessage());
     }
   }
 
