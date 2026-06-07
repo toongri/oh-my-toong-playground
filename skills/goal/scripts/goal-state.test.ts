@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, rmSync, readFileSync } from 'fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 function rawState(): any {
-  return JSON.parse(readFileSync(resolveStatePath(S), 'utf8'));
+  return rawStateOf(S);
 }
 
 describe('goal state', () => {
@@ -251,6 +251,90 @@ describe('goal state', () => {
     setBlocked(S, 'B1: no actionable story');
     expect(rawState().phase).toBe('blocked');
     expect(rawState().phase).not.toBe('complete');
+  });
+
+  // A1: request-complete refused when evidence present but verdict is not APPROVE
+  test('request-complete refused when evidence present but verdict is not APPROVE', () => {
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/a.md`] });
+    // verdict intentionally left as 'absent' (default)
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).toBe('pursuing');
+    expect(rawState().active).toBe(true);
+  });
+
+  // A1: request-complete refused when completion_evidence_paths is not an array
+  test('request-complete refused when completion_evidence_paths is not an array', () => {
+    // Manually write a state where completion_evidence_paths is a string (corrupted)
+    writeFileSync(
+      resolveStatePath(S),
+      JSON.stringify({
+        phase: 'pursuing',
+        active: true,
+        objective_verdict: 'APPROVE',
+        completion_evidence_paths: 'x',
+        started_at: '2026-01-01T00:00:00',
+        iteration: 0,
+        max_iterations: 10,
+        schema_version: 1,
+        outcome: '',
+        verification_surface: '',
+        constraints: '',
+        boundaries: '',
+        blocked_stop: '',
+        plan_path: '',
+        resume_summary: '',
+        budget_limit_notified: false,
+        blocked_reason: '',
+      }),
+      'utf8'
+    );
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).toBe('pursuing');
+    expect(rawState().active).toBe(true);
+  });
+
+  // A1: request-complete succeeds with APPROVE and array evidence
+  test('request-complete succeeds with APPROVE and array evidence', () => {
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/a.md`] });
+    setVerdict(S, 'APPROVE');
+    expect(requestComplete(S)).toBe(true);
+    expect(rawState().phase).toBe('complete');
+    expect(rawState().active).toBe(false);
+  });
+
+  // A3: set --max-iterations rejects non-numeric input
+  test('set --max-iterations rejects non-numeric input', () => {
+    setGoalState(S, { phase: 'pursuing' });
+    const prior = rawState().max_iterations;
+    const script = join(import.meta.dir, 'goal-state.ts');
+    const run = (cmd: string) =>
+      execSync(`bun ${script} ${cmd}`, { encoding: 'utf8', env: process.env });
+    expect(() => run('set --phase pursuing --max-iterations ten')).toThrow();
+    // state must be unchanged (prior max_iterations preserved)
+    expect(rawState().max_iterations).toBe(prior);
+  });
+
+  // A3: set --max-iterations rejects zero / negative
+  test('set --max-iterations rejects zero or negative', () => {
+    setGoalState(S, { phase: 'pursuing', max_iterations: 5 });
+    const script = join(import.meta.dir, 'goal-state.ts');
+    const run = (cmd: string) =>
+      execSync(`bun ${script} ${cmd}`, { encoding: 'utf8', env: process.env });
+    expect(() => run('set --phase pursuing --max-iterations 0')).toThrow();
+    expect(rawState().max_iterations).toBe(5);
+    expect(() => run('set --phase pursuing --max-iterations -3')).toThrow();
+    expect(rawState().max_iterations).toBe(5);
+  });
+
+  // A4: set-verdict rejects an out-of-enum verdict
+  test('set-verdict rejects an out-of-enum verdict', () => {
+    setGoalState(S, { phase: 'pursuing' });
+    const script = join(import.meta.dir, 'goal-state.ts');
+    const run = (cmd: string) =>
+      execSync(`bun ${script} ${cmd}`, { encoding: 'utf8', env: process.env });
+    expect(() => run('set-verdict --verdict APPROVED')).toThrow();
+    // objective_verdict must remain 'absent' (not updated to invalid value)
+    expect(rawState().objective_verdict).toBe('absent');
   });
 
   // CLI completion path — exercises the actual script end-to-end, proving the

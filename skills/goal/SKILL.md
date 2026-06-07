@@ -27,7 +27,7 @@ Subcommands used by this orchestrator:
 |------------|-----------|---------|
 | `set --phase <planning\|pursuing> [slot flags…]` | orchestrator | Seed/advance phase; carries the slot values. Accepts ONLY `planning`/`pursuing` — it can never write `complete`, and on `planning` it resets the verdict to `absent`. |
 | `set-verdict --verdict <APPROVE\|REQUEST_CHANGES\|COMMENT\|absent>` | gate layer | The ONLY writer of `objective_verdict`. |
-| `request-complete` | gate layer | The ONLY path to `phase=complete`; structurally gated on completion-evidence being present. |
+| `request-complete` | gate layer | The ONLY path to `phase=complete`; structurally gated on completion-evidence being present and `objective_verdict=APPROVE`. |
 | `get` / `status` | read | Inspect current state / derived status. |
 
 `set-budget-limited` and `set-blocked --reason <text>` are system-only setters (the hook layer writes `budget_limited`; `set-blocked` records a reported blocker). The orchestrator never writes `complete`, `budget_limited`, or a fabricated verdict by any other route — the narrow gates are structural, not vigilance-based.
@@ -126,7 +126,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts request-complete
 
 `<audit-artifact-paths>` is a comma-separated list of the artifacts argus's Evidence Audit read (the evidence that demonstrates the verification surface was met). `set --phase pursuing --completion-evidence` keeps the phase `pursuing` and only records the evidence — it can never write `complete`.
 
-**Why evidence is recorded BEFORE the verdict flips:** so that whenever `objective_verdict=APPROVE` is observed, the completion evidence is already present. This keeps the completion path reachable for both the orchestrator's `request-complete` AND the hook-layer complete-wins — neither can observe APPROVE without evidence already in place, so the evidence gate can never strand a truly-achieved objective.
+**Why evidence is recorded BEFORE the verdict flips:** so that whenever `objective_verdict=APPROVE` is observed, the completion evidence is already present. This keeps the completion path reachable for both the orchestrator's `request-complete` AND the hook-layer complete-wins — neither can observe APPROVE without evidence already in place. `request-complete` requires BOTH `objective_verdict=APPROVE` AND non-empty evidence, so recording evidence first ensures the gate is satisfiable the moment the verdict flips.
 
 APPROVE alone does NOT leave the goal pursuing/active — the `request-complete` handoff is what transitions to terminal `complete` (and it is structurally gated on completion-evidence, so a write that never reached the gate cannot false-complete).
 
@@ -153,4 +153,4 @@ On either condition: run `set-blocked --reason "<blocker>"`, report the blocker 
 
 ## Benign-failure note
 
-A verdict-write or state-write failure must degrade toward continued pursuit, **never** toward a claimed completion. If `set-verdict` fails to record APPROVE, the verdict reads `absent`, the pursuit keeps going (the hook blocks while the verdict is not APPROVE), and `request-complete` is refused for lack of evidence — the system continues pursuing rather than false-completing. Absent verdict = block-and-continue. There is no path where a failed write produces a completion.
+A verdict-write or state-write failure must degrade toward continued pursuit, **never** toward a claimed completion. If `set-verdict` fails to record APPROVE, the verdict reads `absent`; `request-complete` is refused because `objective_verdict !== 'APPROVE'` (the verdict gate), so the system continues pursuing rather than false-completing. Absent verdict = block-and-continue. There is no path where a failed write produces a completion.

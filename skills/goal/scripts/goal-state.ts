@@ -14,7 +14,7 @@
  *   - `set` (orchestrator) accepts ONLY phase planning|pursuing; it can never
  *     write phase=complete and never writes objective_verdict.
  *   - `request-complete` is the ONLY path to phase=complete, and it is gated on
- *     completion-evidence being present.
+ *     `objective_verdict=APPROVE` AND completion-evidence being present.
  *   - `set-verdict` is the ONLY writer of objective_verdict.
  *   - `set-budget-limited` / `set-blocked` are system-only terminal setters and
  *     can never write phase=complete.
@@ -26,7 +26,7 @@
  *       [--completion-evidence p1,p2]
  *   set-budget-limited                       (system-only)
  *   set-blocked --reason <text>              (system-only)
- *   request-complete                         (gated: requires completion evidence)
+ *   request-complete                         (gated: requires objective_verdict=APPROVE and completion evidence)
  *   set-verdict --verdict <APPROVE|REQUEST_CHANGES|COMMENT|absent>
  *   get
  *   status
@@ -262,14 +262,21 @@ export function setBlocked(sessionId: string, reason: string): void {
 }
 
 /**
- * The ONLY path to phase=complete. Gated: requires completion-evidence present.
+ * The ONLY path to phase=complete. Gated: requires `objective_verdict=APPROVE` AND
+ * completion-evidence present.
  * Returns false (no state change) when the gate is not satisfied. Succeeds even
  * over a prior budget_limited (complete-wins, ADR-7).
  */
 export function requestComplete(sessionId: string): boolean {
   const prior = readPrior(sessionId);
-  const evidence = prior.completion_evidence_paths ?? [];
-  if (evidence.length === 0) {
+  const evidence = Array.isArray(prior.completion_evidence_paths)
+    ? prior.completion_evidence_paths
+    : [];
+  // Structural gate: complete requires BOTH a recorded APPROVE verdict AND non-empty
+  // evidence. Evidence-only is insufficient — the documented sequence records evidence
+  // BEFORE flipping the verdict, so an absent/failed set-verdict must not be able to
+  // complete on already-recorded evidence (never-false-complete invariant).
+  if (evidence.length === 0 || prior.objective_verdict !== 'APPROVE') {
     return false;
   }
   mergeWrite(sessionId, { phase: 'complete', active: false });
@@ -310,7 +317,17 @@ function main(): void {
   const sessionId = process.env.OMT_SESSION_ID || 'default';
 
   if (subcommand === 'set') {
-    const maxIter = args['max-iterations'] !== undefined ? Number(args['max-iterations']) : undefined;
+    let maxIter: number | undefined;
+    if (args['max-iterations'] !== undefined) {
+      const n = Number(args['max-iterations']);
+      if (!Number.isInteger(n) || n < 1) {
+        process.stderr.write(
+          `set: invalid --max-iterations "${String(args['max-iterations'])}" (positive integer required)\n`
+        );
+        process.exit(1);
+      }
+      maxIter = n;
+    }
     // parseArgs collapses repeated --key to the LAST value, so evidence arrives
     // as a single comma-separated value. Absent => undefined so the merge-write
     // preserves prior evidence rather than clobbering it with [].
@@ -330,7 +347,13 @@ function main(): void {
       completion_evidence_paths: completionEvidence,
     });
   } else if (subcommand === 'set-verdict') {
-    setVerdict(sessionId, String(args['verdict'] ?? 'absent') as ObjectiveVerdict);
+    const v = String(args['verdict'] ?? 'absent');
+    const allowed: ObjectiveVerdict[] = ['APPROVE', 'REQUEST_CHANGES', 'COMMENT', 'absent'];
+    if (!allowed.includes(v as ObjectiveVerdict)) {
+      process.stderr.write(`set-verdict: invalid --verdict "${v}" (one of ${allowed.join('|')})\n`);
+      process.exit(1);
+    }
+    setVerdict(sessionId, v as ObjectiveVerdict);
   } else if (subcommand === 'set-budget-limited') {
     setBudgetLimited(sessionId);
   } else if (subcommand === 'set-blocked') {
@@ -338,7 +361,7 @@ function main(): void {
   } else if (subcommand === 'request-complete') {
     const ok = requestComplete(sessionId);
     if (!ok) {
-      process.stderr.write('request-complete: refused — completion evidence absent\n');
+      process.stderr.write('request-complete: refused — requires objective_verdict=APPROVE and completion evidence present\n');
       process.exit(1);
     }
   } else if (subcommand === 'get') {
