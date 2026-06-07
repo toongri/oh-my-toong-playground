@@ -960,4 +960,344 @@ describe('makeDecision', () => {
       expect(existsSync(join(stateDir, 'block-count-prometheus-test-session'))).toBe(false);
     });
   });
+
+  describe('Priority 1.4: Goal autonomous pursuit loop', () => {
+    const goalPath = join(omtDir, 'goal-state-test-session.json');
+
+    const writeGoal = async (state: Record<string, unknown>) => {
+      await writeFile(goalPath, JSON.stringify(state));
+    };
+
+    const readGoalFile = async (): Promise<Record<string, unknown>> => {
+      const { readFileSync } = await import('fs');
+      return JSON.parse(readFileSync(goalPath, 'utf8'));
+    };
+
+    it('ralph takes priority over goal', async () => {
+      await writeFile(
+        join(omtDir, 'ralph-state-test-session.json'),
+        JSON.stringify({
+          active: true,
+          iteration: 1,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: 'Ralph task',
+        })
+      );
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 1,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<ralph-loop-continuation>');
+      expect(result.reason).not.toContain('[GOAL - ITERATION');
+    });
+
+    it('goal yields for any non-pursuing phase incl fresh entry', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'planning',
+        objective_verdict: '',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result).toEqual({ continue: true });
+      // No iteration++ for non-pursuing phase
+      const after = await readGoalFile();
+      expect(after.iteration).toBe(0);
+    });
+
+    it('goal blocks when objective unmet incl absent verdict during pursuit', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        // objective_verdict intentionally absent
+        iteration: 2,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('[GOAL - ITERATION 3/10]');
+      const after = await readGoalFile();
+      expect(after.iteration).toBe(3);
+    });
+
+    it('goal does not block when objective verdict is APPROVE', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'APPROVE',
+        iteration: 2,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result).toEqual({ continue: true });
+      // No iteration++ on APPROVE-yield
+      const after = await readGoalFile();
+      expect(after.iteration).toBe(2);
+    });
+
+    it('budget exhaustion soft-stops without completing', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'REQUEST_CHANGES',
+        iteration: 10,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      const after = await readGoalFile();
+      expect(after.phase).toBe('budget_limited');
+      expect(after.active).toBe(false);
+      expect(after.budget_limit_notified).toBe(true);
+      // No iteration++ on cap path
+      expect(after.iteration).toBe(10);
+    });
+
+    it('complete wins when max_iterations and APPROVE coincide', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'APPROVE',
+        iteration: 10,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+        completion_evidence_paths: ['artifacts/report.md'],
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result).toEqual({ continue: true });
+      const after = await readGoalFile();
+      expect(after.phase).toBe('complete');
+      expect(after.active).toBe(false);
+    });
+
+    it('goal pursuit ignores shared block-count hatch', async () => {
+      // Block-count already at the baseline escape-hatch limit (5)
+      await writeFile(join(stateDir, 'block-count-test-session'), '5');
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 3,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
+
+      // Goal still blocks even though shared block-count is maxed out
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('[GOAL - ITERATION 4/10]');
+      const after = await readGoalFile();
+      expect(after.iteration).toBe(4);
+    });
+
+    it('goal active suppresses baseline todo branch', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'planning',
+        objective_verdict: '',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 5 }));
+
+      // Yields without firing baseline todo-continuation
+      expect(result).toEqual({ continue: true });
+      expect(result.reason ?? '').not.toContain('<todo-continuation>');
+    });
+
+    it('goal does not yield to inactive/stale ralph', async () => {
+      // Stale ralph state with active:false must not starve goal pursuit
+      await writeFile(
+        join(omtDir, 'ralph-state-test-session.json'),
+        JSON.stringify({
+          active: false,
+          iteration: 2,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: 'Stale ralph task',
+        })
+      );
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 1,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('[GOAL - ITERATION 2/10]');
+      expect(result.reason).not.toContain('<ralph-loop-continuation>');
+    });
+
+    it('continuation has untrusted_objective wrap', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 1,
+        max_iterations: 10,
+        outcome: 'SENTINEL_OBJECTIVE_TEXT',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<untrusted_objective>');
+      expect(result.reason).toContain('</untrusted_objective>');
+      expect(result.reason).toContain('SENTINEL_OBJECTIVE_TEXT');
+    });
+
+    it('continuation has iteration and tokens-not-measured', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 4,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('[GOAL - ITERATION 5/10]');
+      expect(result.reason!.toLowerCase()).toContain('not measured');
+    });
+
+    it('continuation is behavioral steering without audit rubric', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 1,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      const reason = result.reason!;
+      // behavioral steering: next concrete action + proxy-signal refusal + when-uncertain-keep-going
+      expect(reason.toLowerCase()).toContain('next');
+      expect(reason.toLowerCase()).toContain('proxy');
+      expect(reason.toLowerCase()).toContain('uncertain');
+      // NO audit rubric leaked into the continuation (ADR-5: rubric lives in argus)
+      expect(reason.toLowerCase()).not.toContain('prompt-to-artifact');
+      expect(reason.toLowerCase()).not.toContain('verify-the-verifier');
+    });
+
+    it('continuation has complete-blocked gate', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 1,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      const reason = result.reason!.toLowerCase();
+      expect(reason).toContain('complete');
+      expect(reason).toContain('blocked');
+    });
+
+    it('budget_limit message forbids new work and completion', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'REQUEST_CHANGES',
+        iteration: 10,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      const reason = result.reason!.toLowerCase();
+      // forbid starting new work
+      expect(reason).toContain('new');
+      // require a progress summary + next step
+      expect(reason).toContain('summary');
+      expect(reason).toContain('next');
+      // explicitly do NOT complete
+      expect(reason).toContain('not');
+      expect(reason).toContain('complete');
+    });
+
+    // Oracle-mandated safety tests (beyond the plan's enumerated ACs)
+
+    it('goal at cap with APPROVE but no evidence soft-stops not completes', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'APPROVE',
+        iteration: 10,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+        completion_evidence_paths: [], // APPROVE but NO evidence
+      });
+
+      const result = makeDecision(createContext());
+
+      // M2: APPROVE without evidence at cap → budget_limited, NOT complete
+      expect(result.decision).toBe('block');
+      const after = await readGoalFile();
+      expect(after.phase).toBe('budget_limited');
+      expect(after.active).toBe(false);
+    });
+
+    it('goal suppresses baseline todo for terminal goal-state', async () => {
+      // Terminal goal-state file (active:false, complete) still present on disk
+      await writeGoal({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 5,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 4 }));
+
+      // M3: terminal goal-state owns lifecycle → yields, no todo-block
+      expect(result).toEqual({ continue: true });
+      expect(result.reason ?? '').not.toContain('<todo-continuation>');
+    });
+  });
 });
