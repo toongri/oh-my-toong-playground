@@ -70,7 +70,7 @@ fi
 
 MESSAGES=""
 
-# Cleanup stale ralph-state files (older than 3 hours)
+# Cleanup stale ralph-state / prometheus-state / goal-state files (older than 3 hours)
 if command -v jq &> /dev/null; then
   STALE_THRESHOLD=10800  # 3 hours in seconds
   CURRENT_TIME=$(date +%s)
@@ -191,6 +191,9 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
       else
         # Pursuing-resume: guide the AI to continue autonomous pursuit
         GOAL_INSTRUCTION="\nIteration: $GOAL_ITERATION/$GOAL_MAX_ITER. Continue pursuing the objective autonomously.\n"
+        if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
+          GOAL_INSTRUCTION="${GOAL_INSTRUCTION}Re-read the current plan from disk before continuing.\n"
+        fi
         if [ -n "$GOAL_RESUME" ] && [ "$GOAL_RESUME" != "null" ]; then
           GOAL_PLAN_NOTE="\nLast checkpoint: ${GOAL_RESUME}\n"
         fi
