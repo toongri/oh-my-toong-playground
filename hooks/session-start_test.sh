@@ -522,6 +522,63 @@ EOF
     assert_output_not_contains "$output" "GOAL RESTORED" "terminal goal-state must NOT inject GOAL RESTORED" || return 1
 }
 
+test_session_start_goal_pursuing_resume_rereads_plan() {
+    local sid="test-goal-pursuing-plan"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # Create a real plan file on disk so plan_path resolves to an existing file
+    local plan_file="$TEST_OMT_DIR/test-goal-plan.md"
+    echo "# Test Plan" > "$plan_file"
+
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "plan_path": "${plan_file}",
+  "resume_summary": "Iterating toward the objective. Block 2 of 5.",
+  "outcome": "Build feature X",
+  "iteration": 2,
+  "max_iterations": 10,
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Must instruct to re-read the plan
+    assert_output_contains "$output" "Re-read the current plan from disk" "pursuing with plan file: should instruct to re-read plan" || return 1
+}
+
+test_session_start_goal_pursuing_resume_no_plan_file() {
+    local sid="test-goal-pursuing-noplan"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # plan_path is empty — no plan file available
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "plan_path": "",
+  "resume_summary": "Iterating toward the objective. Block 2 of 5.",
+  "outcome": "Build feature X",
+  "iteration": 2,
+  "max_iterations": 10,
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Must NOT instruct to re-read (no plan on disk)
+    assert_output_not_contains "$output" "Re-read the current plan from disk" "pursuing without plan file: must NOT inject re-read instruction" || return 1
+    # Must still surface iteration info
+    assert_output_contains "$output" "GOAL RESTORED" "pursuing without plan file: should still inject GOAL RESTORED" || return 1
+}
+
 # =============================================================================
 # Main Test Runner
 # =============================================================================
@@ -562,6 +619,8 @@ main() {
     run_test test_session_start_goal_state_restore_planning_vs_pursuing
     run_test test_session_start_stale_goal_state_purged
     run_test test_session_start_terminal_goal_state_not_restored
+    run_test test_session_start_goal_pursuing_resume_rereads_plan
+    run_test test_session_start_goal_pursuing_resume_no_plan_file
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
