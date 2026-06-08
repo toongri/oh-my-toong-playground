@@ -44,6 +44,23 @@ export function resolveOmtDir(cwd: string = process.cwd()): string {
 }
 
 /**
+ * Returns the fixed home directory for the pins manifest for the given project.
+ *
+ * Always resolves to `${homedir()}/.pins/${deriveProjectName(cwd)}` — this is
+ * deliberately env-independent (unlike resolveOmtDir which honours $OMT_DIR).
+ * The predictable, fixed location decouples manifest discovery from ambient
+ * $OMT_DIR state, enabling reliable cross-session manifest access.
+ *
+ * Does NOT create the directory. Pure path computation.
+ *
+ * @param cwd - Directory to derive project name from. Defaults to process.cwd().
+ */
+export function resolvePinsHome(cwd: string = process.cwd()): string {
+  const projectName = deriveProjectName(cwd);
+  return `${homedir()}/.pins/${projectName}`;
+}
+
+/**
  * Returns the project root directory for the given cwd.
  *
  * Resolves to the git worktree top-level so a session launched from a
