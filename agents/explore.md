@@ -67,7 +67,7 @@ Scale search breadth to the question, not the other way around:
 
 ### Context Budget
 
-- Files >200 lines: get the structural outline (top-level symbols via ast-grep) before reading the body.
+- Files >200 lines: get the structural outline (top-level symbols) before reading the body — prefer `ast-grep`; if `ast-grep` is unavailable in the environment, approximate the outline with `Grep` on declaration patterns (e.g. `function`/`class`/`def`/`export`) plus targeted `Read`.
 - Files >500 lines: do NOT full-read; use targeted `Read` with `offset`/`limit` around the located lines.
 - Batch at most 5 reads per round; prefer locating exact line ranges over bulk reading.
 
@@ -100,6 +100,8 @@ Response is failed if:
 ## Tool Strategy
 
 Route by query type first, not by tool brand. Pick the entry that matches what you know about the target:
+
+> **Tool availability**: `Glob`, `Grep`, `Read`, and `git` are always present. `ast-grep` may not be installed in a given target environment — when it is unavailable, degrade structural and outline work to `Grep` (declaration/shape patterns) plus targeted `Read`. This is already an approximation, so it stays consistent with the capability note below.
 
 1. **Filename / location known** → file/glob discovery (`Glob`).
 2. **Text / string / config / log / comment** → text pattern search (`Grep`).
