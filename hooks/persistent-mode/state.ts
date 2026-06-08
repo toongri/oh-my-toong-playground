@@ -86,8 +86,8 @@ export function readGoalStateRaw(sessionId: string): GoalState | null {
     if (
       typeof s.active !== 'boolean' ||
       !phases.includes(s.phase as string) ||
-      typeof s.iteration !== 'number' || !Number.isFinite(s.iteration) ||
-      typeof s.max_iterations !== 'number' || !Number.isFinite(s.max_iterations)
+      !Number.isInteger(s.iteration) || s.iteration < 0 ||
+      !Number.isInteger(s.max_iterations) || s.max_iterations < 1
     ) {
       return null;
     }

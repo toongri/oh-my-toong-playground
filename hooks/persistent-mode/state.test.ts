@@ -581,6 +581,107 @@ describe('Goal state management', () => {
       expect(readGoalStateRaw(sessionId)).toBeNull();
     });
 
+    // B-2: integer + range guards — asymmetric corrupted-state defense
+    it('readGoalStateRaw returns null when max_iterations is 0 (must be >= 1)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 0,
+        max_iterations: 0,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when max_iterations is negative (e.g. -1)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 0,
+        max_iterations: -1,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when iteration is negative (e.g. -1000)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: -1000,
+        max_iterations: 10,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when iteration is fractional (e.g. 2.5)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 2.5,
+        max_iterations: 10,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when max_iterations is fractional (e.g. 1.5)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 0,
+        max_iterations: 1.5,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns valid state when iteration is 0 (base-0 is valid)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 0,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalStateRaw(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.iteration).toBe(0);
+      expect(result?.max_iterations).toBe(10);
+    });
+
+    it('readGoalStateRaw returns valid terminal state when iteration equals max_iterations', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 10,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalStateRaw(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.active).toBe(false);
+      expect(result?.iteration).toBe(10);
+      expect(result?.max_iterations).toBe(10);
+    });
+
     it('readGoalStateRaw returns the object for a VALID terminal state (active:false, all fields well-formed)', async () => {
       const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
       await writeFile(stateFile, JSON.stringify({
