@@ -146,12 +146,20 @@ function readPrior(sessionId: string): Partial<GoalState> {
  */
 function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
   const prior = readPrior(sessionId);
+  // `??` rejects only null/undefined; a corrupt on-disk max_iterations (e.g. a string or
+  // a fractional/<1 value) would otherwise survive uncoerced and defeat the hook's
+  // `iteration >= max_iterations` budget comparison. Fall back to DEFAULT when the
+  // candidate is not a positive integer.
+  const maxItCandidate = next.max_iterations ?? prior.max_iterations;
   const state: GoalState = {
     outcome: next.outcome ?? prior.outcome ?? '',
     verification_surface: next.verification_surface ?? prior.verification_surface ?? '',
     constraints: next.constraints ?? prior.constraints ?? '',
     boundaries: next.boundaries ?? prior.boundaries ?? '',
-    max_iterations: next.max_iterations ?? prior.max_iterations ?? DEFAULT_MAX_ITERATIONS,
+    max_iterations:
+      typeof maxItCandidate === 'number' && Number.isInteger(maxItCandidate) && maxItCandidate >= 1
+        ? maxItCandidate
+        : DEFAULT_MAX_ITERATIONS,
     blocked_stop: next.blocked_stop ?? prior.blocked_stop ?? '',
     phase: next.phase ?? prior.phase ?? 'planning',
     iteration: next.iteration ?? prior.iteration ?? 0,
@@ -208,8 +216,16 @@ export interface SetGoalOpts {
 /**
  * Orchestrator-authority set. Accepts ONLY planning|pursuing — it can never
  * write phase=complete (that is request-complete-only) and never writes
- * objective_verdict. On phase=planning, objective_verdict is reset to 'absent'
- * so a stale APPROVE cannot survive a re-plan.
+ * objective_verdict. On phase=planning, three stale-state resets fire so a new
+ * objective never inherits a prior objective's state:
+ *   - objective_verdict is reset to 'absent' so a stale APPROVE cannot survive a
+ *     re-plan;
+ *   - completion_evidence_paths is reset to [] on EVERY planning transition —
+ *     evidence is only ever valid from the current pursuit's completion audit
+ *     (recorded fresh during the pursuing phase), never carried across planning;
+ *   - iteration is reset to 0 ONLY for a FRESH goal (no active prior). A re-plan
+ *     loop-back of the SAME active goal preserves iteration — budget accumulates
+ *     across re-plans.
  */
 export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
   if (!SETTABLE_PHASES.includes(opts.phase)) {
@@ -234,6 +250,17 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
   if (opts.phase === 'planning') {
     // Stale verdict cannot survive a re-plan (ADR-3).
     next.objective_verdict = 'absent';
+    // Stale completion evidence cannot survive ANY planning transition — evidence is only
+    // ever valid from the current pursuit's completion audit, recorded fresh during the
+    // `pursuing` phase right before completing. A new objective must never complete on a
+    // prior objective's evidence.
+    next.completion_evidence_paths = [];
+    // A FRESH goal (no active prior) must not inherit the dead goal's consumed iteration
+    // budget; a re-plan loop-back of the SAME active goal MUST (budget accumulates across
+    // re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.
+    if (!readGoalState(sessionId)) {
+      next.iteration = 0;
+    }
   }
   mergeWrite(sessionId, next);
 }
@@ -317,6 +344,19 @@ function main(): void {
   const sessionId = process.env.OMT_SESSION_ID || 'default';
 
   if (subcommand === 'set') {
+    // parseArgs coerces a flag supplied WITHOUT a value to boolean true. For these
+    // value-bearing flags that is a silent corruption: --max-iterations true →
+    // Number(true)===1 (budget collapses to one block); --completion-evidence true →
+    // ["true"] (a bogus non-path that satisfies the evidence-presence gate). Reject
+    // both before any state mutation.
+    if (args['max-iterations'] === true) {
+      process.stderr.write('set: --max-iterations requires a value\n');
+      process.exit(1);
+    }
+    if (args['completion-evidence'] === true) {
+      process.stderr.write('set: --completion-evidence requires a value\n');
+      process.exit(1);
+    }
     let maxIter: number | undefined;
     if (args['max-iterations'] !== undefined) {
       const n = Number(args['max-iterations']);
