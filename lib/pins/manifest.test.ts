@@ -39,10 +39,11 @@ describe('precedence', () => {
   test('falls back to user-root pins.yaml when only user-root has one', async () => {
     const projectRoot = makeTmpDir();
     const userRoot = makeTmpDir();
+    const pinsHome = makeTmpDir(); // empty — must not shadow userRoot
 
     writeFileSync(join(userRoot, 'pins.yaml'), 'location: user-pins\nscope: user-scope\n');
 
-    const result = await resolveManifest({ projectRoot, userRoot });
+    const result = await resolveManifest({ projectRoot, userRoot, pinsHome });
 
     expect(result.kind).toBe('resolved');
     if (result.kind !== 'resolved') return;
@@ -109,8 +110,9 @@ describe('absent signal', () => {
   test('returns absent when neither project-root nor user-root has a pins.yaml', async () => {
     const projectRoot = makeTmpDir();
     const userRoot = makeTmpDir();
+    const pinsHome = makeTmpDir(); // empty — must not resolve
 
-    const result = await resolveManifest({ projectRoot, userRoot });
+    const result = await resolveManifest({ projectRoot, userRoot, pinsHome });
 
     expect(result.kind).toBe('absent');
   });
@@ -118,8 +120,9 @@ describe('absent signal', () => {
   test('does not throw when neither manifest exists', async () => {
     const projectRoot = makeTmpDir();
     const userRoot = makeTmpDir();
+    const pinsHome = makeTmpDir(); // empty
 
-    const call = () => resolveManifest({ projectRoot, userRoot });
+    const call = () => resolveManifest({ projectRoot, userRoot, pinsHome });
 
     await expect(call()).resolves.toBeDefined();
   });
@@ -127,8 +130,9 @@ describe('absent signal', () => {
   test('does not create any file when absent', async () => {
     const projectRoot = makeTmpDir();
     const userRoot = makeTmpDir();
+    const pinsHome = makeTmpDir(); // empty
 
-    await resolveManifest({ projectRoot, userRoot });
+    await resolveManifest({ projectRoot, userRoot, pinsHome });
 
     const { readdirSync } = await import('fs');
     expect(readdirSync(projectRoot)).toHaveLength(0);

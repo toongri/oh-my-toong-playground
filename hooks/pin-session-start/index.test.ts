@@ -27,9 +27,7 @@ function runHook(
   if (omtDir !== undefined) {
     env.OMT_DIR = omtDir;
   }
-  if (options?.homeOverride) {
-    env.HOME = options.homeOverride;
-  }
+  env.HOME = options?.homeOverride ?? makeTmpDir();
 
   const input = { sessionId: 'test-session', ...(options?.inputOverride ?? {}) };
   return spawnSync('bun', ['run', HOOK_PATH], {
