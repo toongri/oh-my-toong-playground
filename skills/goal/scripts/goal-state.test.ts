@@ -358,6 +358,142 @@ describe('goal state', () => {
     expect(rawState().active).toBe(false);
     expect(rawState().completion_evidence_paths).toEqual([p1, p2]);
   });
+
+  // C1: a FRESH goal (planning over a terminal/inactive prior) resets the consumed
+  // iteration budget — a new objective must never inherit the dead goal's iteration.
+  test('C1: fresh goal over a terminal state resets iteration to 0', () => {
+    // Seed a terminal (inactive) state with a fully-consumed iteration budget.
+    writeFileSync(
+      resolveStatePath(S),
+      JSON.stringify({
+        phase: 'complete',
+        active: false,
+        objective_verdict: 'APPROVE',
+        completion_evidence_paths: [`${tmpDir}/a.md`],
+        started_at: '2026-01-01T00:00:00',
+        iteration: 10,
+        max_iterations: 10,
+        schema_version: 1,
+        outcome: '',
+        verification_surface: '',
+        constraints: '',
+        boundaries: '',
+        blocked_stop: '',
+        plan_path: '',
+        resume_summary: '',
+        budget_limit_notified: false,
+        blocked_reason: '',
+      }),
+      'utf8'
+    );
+    // No active prior (active:false reads as null) => fresh goal.
+    setGoalState(S, { phase: 'planning', max_iterations: 10 });
+    expect(rawState().iteration).toBe(0);
+  });
+
+  // C1: a FRESH goal must not inherit a prior objective's completion evidence —
+  // evidence is only valid from the current pursuit's audit, so planning clears it.
+  test('C1: fresh goal over a terminal state with prior evidence resets evidence to []', () => {
+    writeFileSync(
+      resolveStatePath(S),
+      JSON.stringify({
+        phase: 'complete',
+        active: false,
+        objective_verdict: 'APPROVE',
+        completion_evidence_paths: [`${tmpDir}/a.md`],
+        started_at: '2026-01-01T00:00:00',
+        iteration: 3,
+        max_iterations: 10,
+        schema_version: 1,
+        outcome: '',
+        verification_surface: '',
+        constraints: '',
+        boundaries: '',
+        blocked_stop: '',
+        plan_path: '',
+        resume_summary: '',
+        budget_limit_notified: false,
+        blocked_reason: '',
+      }),
+      'utf8'
+    );
+    setGoalState(S, { phase: 'planning' });
+    expect(rawState().completion_evidence_paths).toEqual([]);
+  });
+
+  // C1: a re-plan loop-back of the SAME active goal preserves the iteration budget —
+  // budget accumulates across re-plans (active prior present => re-plan, not fresh).
+  test('C1: re-plan over an active pursuing state preserves iteration', () => {
+    setGoalState(S, { phase: 'pursuing' });
+    // Simulate the hook advancing the pursuit-block counter to 5 on an active goal.
+    const cur = rawState();
+    writeFileSync(
+      resolveStatePath(S),
+      JSON.stringify({ ...cur, iteration: 5 }),
+      'utf8'
+    );
+    expect(readGoalState(S)!.active).toBe(true); // active prior => re-plan
+    setGoalState(S, { phase: 'planning' });
+    expect(rawState().iteration).toBe(5);
+  });
+
+  // V_flags: --max-iterations supplied with NO value (parsed as boolean true) must
+  // exit non-zero and NOT collapse the budget to max_iterations:1.
+  test('V_flags: set --max-iterations with no value exits non-zero and leaves state unchanged', () => {
+    setGoalState(S, { phase: 'pursuing', max_iterations: 8 });
+    const priorMax = rawState().max_iterations;
+    const script = join(import.meta.dir, 'goal-state.ts');
+    const run = (cmd: string) =>
+      execSync(`bun ${script} ${cmd}`, { encoding: 'utf8', env: process.env });
+    // --max-iterations is the last token, so parseArgs coerces it to boolean true.
+    expect(() => run('set --phase pursuing --max-iterations')).toThrow();
+    expect(rawState().max_iterations).toBe(priorMax);
+    expect(rawState().max_iterations).not.toBe(1);
+  });
+
+  // V_flags: --completion-evidence supplied with NO value (parsed as boolean true)
+  // must exit non-zero and NOT persist the bogus ["true"] evidence.
+  test('V_flags: set --completion-evidence with no value exits non-zero and persists no evidence', () => {
+    setGoalState(S, { phase: 'pursuing' });
+    const script = join(import.meta.dir, 'goal-state.ts');
+    const run = (cmd: string) =>
+      execSync(`bun ${script} ${cmd}`, { encoding: 'utf8', env: process.env });
+    expect(() => run('set --phase pursuing --completion-evidence')).toThrow();
+    expect(rawState().completion_evidence_paths).not.toEqual(['true']);
+    expect(rawState().completion_evidence_paths).toEqual([]);
+  });
+
+  // C6: a corrupt on-disk max_iterations (non-number string) must be coerced to the
+  // DEFAULT on the next merge-write rather than surviving uncoerced (it would defeat
+  // the hook's iteration >= max_iterations comparison).
+  test('C6: corrupt non-numeric prior max_iterations is coerced to DEFAULT on next write', () => {
+    writeFileSync(
+      resolveStatePath(S),
+      JSON.stringify({
+        phase: 'pursuing',
+        active: true,
+        objective_verdict: 'absent',
+        completion_evidence_paths: [],
+        started_at: '2026-01-01T00:00:00',
+        iteration: 0,
+        max_iterations: 'not-a-number',
+        schema_version: 1,
+        outcome: '',
+        verification_surface: '',
+        constraints: '',
+        boundaries: '',
+        blocked_stop: '',
+        plan_path: '',
+        resume_summary: '',
+        budget_limit_notified: false,
+        blocked_reason: '',
+      }),
+      'utf8'
+    );
+    // set with no --max-iterations => candidate falls back to the corrupt prior.
+    setGoalState(S, { phase: 'pursuing' });
+    expect(rawState().max_iterations).toBe(10);
+  });
 });
 
 // helper: read raw JSON for an arbitrary session id under the test OMT_DIR
