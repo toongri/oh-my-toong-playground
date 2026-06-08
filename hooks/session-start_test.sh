@@ -579,6 +579,41 @@ EOF
     assert_output_contains "$output" "GOAL RESTORED" "pursuing without plan file: should still inject GOAL RESTORED" || return 1
 }
 
+test_session_start_goal_plan_path_backslash_produces_valid_json() {
+    local sid="test-goal-planpath-backslash"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # Active pursuing goal-state with a backslash in plan_path (e.g. Windows-style path).
+    # plan_path does NOT exist on disk (so the existence check stays false — we are testing
+    # the JSON-escaping code path, not the file-available branch).
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "plan_path": "/tmp/a\\\\plan.md",
+  "resume_summary": "checkpoint",
+  "outcome": "Test goal",
+  "iteration": 1,
+  "max_iterations": 10,
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # The hook stdout must be valid JSON (parseable by jq)
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: hook stdout is not valid JSON when plan_path contains a backslash"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    # The parsed additionalContext must contain GOAL RESTORED
+    assert_output_contains "$output" "GOAL RESTORED" "goal plan_path backslash: should inject GOAL RESTORED" || return 1
+}
+
 # =============================================================================
 # Main Test Runner
 # =============================================================================
@@ -621,6 +656,9 @@ main() {
     run_test test_session_start_terminal_goal_state_not_restored
     run_test test_session_start_goal_pursuing_resume_rereads_plan
     run_test test_session_start_goal_pursuing_resume_no_plan_file
+
+    # Goal state restore: backslash in plan_path produces valid JSON
+    run_test test_session_start_goal_plan_path_backslash_produces_valid_json
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
