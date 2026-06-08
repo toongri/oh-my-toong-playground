@@ -14,18 +14,24 @@ function makeTmpDir() {
 
 /**
  * Runs setup.ts as a subprocess in cwd=projectDir with the given extra args.
+ * Overrides HOME to tmpHome so resolvePinsHome() resolves to a
+ * test-controlled location instead of the real ~/.pins/.
  * Returns { exitCode, stdout, stderr }.
  */
 async function runSetup(
   projectDir: string,
   args: string[],
+  tmpHome: string,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const proc = Bun.spawn(['bun', SETUP_PATH, ...args], {
     cwd: projectDir,
     stdout: 'pipe',
     stderr: 'pipe',
-    // Ensure non-git temp dir is NOT influenced by outer OMT_DIR.
-    env: { ...process.env, OMT_DIR: undefined as unknown as string },
+    env: {
+      ...process.env,
+      OMT_DIR: undefined as unknown as string,
+      HOME: tmpHome,
+    },
   });
   const exitCode = await proc.exited;
   const stdout = await new Response(proc.stdout).text();
@@ -33,17 +39,29 @@ async function runSetup(
   return { exitCode, stdout, stderr };
 }
 
+/**
+ * Returns the expected resolvePinsHome() value for a subprocess running with
+ * cwd=projectDir and HOME=tmpHome.  Since projectDir is not a git repo,
+ * deriveProjectName falls back to basename(projectDir).
+ */
+function expectedPinsHome(tmpHome: string, projectDir: string): string {
+  return path.join(tmpHome, '.pins', path.basename(projectDir));
+}
+
 // ── C6: non-existent location does not crash ────────────────────────────────
 
 describe('C6 — missing location directory', () => {
   let tmpDir: string;
+  let tmpHome: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
+    tmpHome = makeTmpDir();
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   test('exits 0 when --location directory does not exist', async () => {
@@ -53,38 +71,121 @@ describe('C6 — missing location directory', () => {
     const { exitCode, stderr } = await runSetup(tmpDir, [
       '--location', missingLocation,
       '--scope', 'private',
-    ]);
+    ], tmpHome);
 
     expect(stderr).not.toContain('ENOENT');
     expect(exitCode).toBe(0);
   });
 });
 
-// ── C7: pins.yaml written to resolveProjectRoot(), not bare cwd ─────────────
+// ── AC3: fixed-home manifest target, optional --location ────────────────────
 
-describe('C7 — pins.yaml written to project root', () => {
+describe('AC3.1 — no --location → manifest written to resolvePinsHome()', () => {
   let tmpDir: string;
+  let tmpHome: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
+    tmpHome = makeTmpDir();
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  test('creates pins.yaml in cwd (project root fallback for non-git dir)', async () => {
-    // tmpDir is not a git repo → resolveProjectRoot() falls back to cwd.
-    const missingLocation = path.join(tmpDir, 'pins');
-
-    const { exitCode } = await runSetup(tmpDir, [
-      '--location', missingLocation,
-      '--scope', 'private',
-    ]);
+  test('creates pins.yaml at ~/.pins/{name}/pins.yaml when --location is omitted', async () => {
+    const { exitCode } = await runSetup(tmpDir, ['--scope', 'private'], tmpHome);
 
     expect(exitCode).toBe(0);
-    const manifestPath = path.join(tmpDir, 'pins.yaml');
+    const pinsHome = expectedPinsHome(tmpHome, tmpDir);
+    const manifestPath = path.join(pinsHome, 'pins.yaml');
     expect(fs.existsSync(manifestPath)).toBe(true);
+  });
+});
+
+describe('AC3.2 — no --location → manifest location field defaults to resolvePinsHome()', () => {
+  let tmpDir: string;
+  let tmpHome: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    tmpHome = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  test('manifest location field equals resolvePinsHome() when --location is omitted', async () => {
+    const { exitCode } = await runSetup(tmpDir, ['--scope', 'private'], tmpHome);
+
+    expect(exitCode).toBe(0);
+    const pinsHome = expectedPinsHome(tmpHome, tmpDir);
+    const manifestPath = path.join(pinsHome, 'pins.yaml');
+    const text = fs.readFileSync(manifestPath, 'utf8');
+    const parsed = parseYaml(text) as { location: string; scope: string };
+    expect(parsed.location).toBe(pinsHome);
+  });
+});
+
+describe('AC3.3 — --location /custom → file at pins home, location field = custom', () => {
+  let tmpDir: string;
+  let tmpHome: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    tmpHome = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  test('manifest file is at pins home and location field reflects custom path', async () => {
+    const customLocation = path.join(tmpDir, 'custom-data');
+
+    const { exitCode } = await runSetup(tmpDir, [
+      '--location', customLocation,
+      '--scope', 'shared',
+    ], tmpHome);
+
+    expect(exitCode).toBe(0);
+    const pinsHome = expectedPinsHome(tmpHome, tmpDir);
+    const manifestPath = path.join(pinsHome, 'pins.yaml');
+    expect(fs.existsSync(manifestPath)).toBe(true);
+
+    const text = fs.readFileSync(manifestPath, 'utf8');
+    const parsed = parseYaml(text) as { location: string; scope: string };
+    expect(parsed.location).toBe(customLocation);
+  });
+});
+
+describe('AC3.4 — creates ~/.pins/{name}/ recursively if absent', () => {
+  let tmpDir: string;
+  let tmpHome: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    tmpHome = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  test('creates pins home directory when it does not yet exist', async () => {
+    // tmpHome is a fresh dir with no .pins subdirectory.
+    const pinsHome = expectedPinsHome(tmpHome, tmpDir);
+    expect(fs.existsSync(pinsHome)).toBe(false);
+
+    const { exitCode } = await runSetup(tmpDir, ['--scope', 'private'], tmpHome);
+
+    expect(exitCode).toBe(0);
+    expect(fs.existsSync(pinsHome)).toBe(true);
   });
 });
 
@@ -92,13 +193,16 @@ describe('C7 — pins.yaml written to project root', () => {
 
 describe('C8 — special characters in location', () => {
   let tmpDir: string;
+  let tmpHome: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
+    tmpHome = makeTmpDir();
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   test('location with # is preserved after yaml round-trip', async () => {
@@ -108,10 +212,11 @@ describe('C8 — special characters in location', () => {
     const { exitCode } = await runSetup(tmpDir, [
       '--location', hashLocation,
       '--scope', 'private',
-    ]);
+    ], tmpHome);
 
     expect(exitCode).toBe(0);
-    const manifestPath = path.join(tmpDir, 'pins.yaml');
+    const pinsHome = expectedPinsHome(tmpHome, tmpDir);
+    const manifestPath = path.join(pinsHome, 'pins.yaml');
     const text = fs.readFileSync(manifestPath, 'utf8');
     const parsed = parseYaml(text) as { location: string; scope: string };
     expect(parsed.location).toBe(hashLocation);
@@ -124,10 +229,11 @@ describe('C8 — special characters in location', () => {
     const { exitCode } = await runSetup(tmpDir, [
       '--location', spaceLocation,
       '--scope', 'private',
-    ]);
+    ], tmpHome);
 
     expect(exitCode).toBe(0);
-    const manifestPath = path.join(tmpDir, 'pins.yaml');
+    const pinsHome = expectedPinsHome(tmpHome, tmpDir);
+    const manifestPath = path.join(pinsHome, 'pins.yaml');
     const text = fs.readFileSync(manifestPath, 'utf8');
     const parsed = parseYaml(text) as { location: string; scope: string };
     expect(parsed.location).toBe(spaceLocation);

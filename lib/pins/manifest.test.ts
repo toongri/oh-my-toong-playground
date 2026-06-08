@@ -39,10 +39,11 @@ describe('precedence', () => {
   test('falls back to user-root pins.yaml when only user-root has one', async () => {
     const projectRoot = makeTmpDir();
     const userRoot = makeTmpDir();
+    const pinsHome = makeTmpDir(); // empty — must not shadow userRoot
 
     writeFileSync(join(userRoot, 'pins.yaml'), 'location: user-pins\nscope: user-scope\n');
 
-    const result = await resolveManifest({ projectRoot, userRoot });
+    const result = await resolveManifest({ projectRoot, userRoot, pinsHome });
 
     expect(result.kind).toBe('resolved');
     if (result.kind !== 'resolved') return;
@@ -109,8 +110,9 @@ describe('absent signal', () => {
   test('returns absent when neither project-root nor user-root has a pins.yaml', async () => {
     const projectRoot = makeTmpDir();
     const userRoot = makeTmpDir();
+    const pinsHome = makeTmpDir(); // empty — must not resolve
 
-    const result = await resolveManifest({ projectRoot, userRoot });
+    const result = await resolveManifest({ projectRoot, userRoot, pinsHome });
 
     expect(result.kind).toBe('absent');
   });
@@ -118,8 +120,9 @@ describe('absent signal', () => {
   test('does not throw when neither manifest exists', async () => {
     const projectRoot = makeTmpDir();
     const userRoot = makeTmpDir();
+    const pinsHome = makeTmpDir(); // empty
 
-    const call = () => resolveManifest({ projectRoot, userRoot });
+    const call = () => resolveManifest({ projectRoot, userRoot, pinsHome });
 
     await expect(call()).resolves.toBeDefined();
   });
@@ -127,8 +130,9 @@ describe('absent signal', () => {
   test('does not create any file when absent', async () => {
     const projectRoot = makeTmpDir();
     const userRoot = makeTmpDir();
+    const pinsHome = makeTmpDir(); // empty
 
-    await resolveManifest({ projectRoot, userRoot });
+    await resolveManifest({ projectRoot, userRoot, pinsHome });
 
     const { readdirSync } = await import('fs');
     expect(readdirSync(projectRoot)).toHaveLength(0);
@@ -139,15 +143,20 @@ describe('absent signal', () => {
     // Simulate OMT_DIR unset: use a tmp dir as cwd base so the derived
     // ~/.omt/<project> path is known and verifiably absent.
     const savedOmtDir = process.env.OMT_DIR;
+    const savedHome = process.env.HOME;
     const savedCwd = process.cwd();
 
     const tmpCwd = makeTmpDir();
-    // Derive what resolveOmtDir() would compute for this cwd (non-git dir):
-    // basename(tmpCwd) → ~/.omt/<basename>
-    const derivedDir = join(homedir(), '.omt', tmpCwd.split('/').pop()!);
 
+    let derivedDir: string;
     try {
       delete process.env.OMT_DIR;
+      // Sandbox HOME so derivations never touch the real ~/.pins or ~/.omt
+      process.env.HOME = makeTmpDir();
+      // Derive what resolveOmtDir() would compute for this cwd (non-git dir):
+      // basename(tmpCwd) → ~/.omt/<basename>
+      // Must be computed AFTER HOME is set so homedir() reflects the sandbox.
+      derivedDir = join(homedir(), '.omt', tmpCwd.split('/').pop()!);
       process.chdir(tmpCwd);
 
       // Pre-condition: derived dir must not exist before the call
@@ -167,11 +176,67 @@ describe('absent signal', () => {
       } else {
         delete process.env.OMT_DIR;
       }
+      if (savedHome !== undefined) {
+        process.env.HOME = savedHome;
+      } else {
+        delete process.env.HOME;
+      }
       // Clean up derivedDir if it was unexpectedly created
-      if (!existsSync(derivedDir) === false) {
-        rmSync(derivedDir, { recursive: true, force: true });
+      if (!existsSync(derivedDir!) === false) {
+        rmSync(derivedDir!, { recursive: true, force: true });
       }
     }
+  });
+});
+
+describe('pinsHome tier', () => {
+  test('AC2.1: resolves pinsHome/pins.yaml when no projectRoot manifest exists', async () => {
+    const projectRoot = makeTmpDir();
+    const pinsHome = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    writeFileSync(join(pinsHome, 'pins.yaml'), 'location: pins-home-location\nscope: pins-home-scope\n');
+
+    const result = await resolveManifest({ projectRoot, pinsHome, userRoot });
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') return;
+    expect(result.manifest.location).toBe('pins-home-location');
+    expect(result.manifest.scope).toBe('pins-home-scope');
+  });
+
+  test('AC2.2: projectRoot/pins.yaml wins over pinsHome/pins.yaml when both exist', async () => {
+    const projectRoot = makeTmpDir();
+    const pinsHome = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    writeFileSync(join(projectRoot, 'pins.yaml'), 'location: project-location\nscope: project-scope\n');
+    writeFileSync(join(pinsHome, 'pins.yaml'), 'location: pins-home-location\nscope: pins-home-scope\n');
+
+    const result = await resolveManifest({ projectRoot, pinsHome, userRoot });
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') return;
+    expect(result.manifest.location).toBe('project-location');
+    expect(result.manifest.scope).toBe('project-scope');
+  });
+
+  test('QA: pinsHome wins over userRoot when both exist and projectRoot is absent', async () => {
+    const projectRoot = makeTmpDir();
+    const pinsHome = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    // Only pinsHome and userRoot have manifests — no projectRoot manifest
+    writeFileSync(join(pinsHome, 'pins.yaml'), 'location: pins-home-location\nscope: pins-home-scope\n');
+    writeFileSync(join(userRoot, 'pins.yaml'), 'location: user-root-location\nscope: user-root-scope\n');
+
+    const result = await resolveManifest({ projectRoot, pinsHome, userRoot });
+
+    // pinsHome must be returned — a stale userRoot manifest cannot shadow it
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') return;
+    expect(result.manifest.location).toBe('pins-home-location');
+    expect(result.manifest.scope).toBe('pins-home-scope');
   });
 });
 
