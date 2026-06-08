@@ -175,6 +175,57 @@ describe('absent signal', () => {
   });
 });
 
+describe('pinsHome tier', () => {
+  test('AC2.1: resolves pinsHome/pins.yaml when no projectRoot manifest exists', async () => {
+    const projectRoot = makeTmpDir();
+    const pinsHome = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    writeFileSync(join(pinsHome, 'pins.yaml'), 'location: pins-home-location\nscope: pins-home-scope\n');
+
+    const result = await resolveManifest({ projectRoot, pinsHome, userRoot });
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') return;
+    expect(result.manifest.location).toBe('pins-home-location');
+    expect(result.manifest.scope).toBe('pins-home-scope');
+  });
+
+  test('AC2.2: projectRoot/pins.yaml wins over pinsHome/pins.yaml when both exist', async () => {
+    const projectRoot = makeTmpDir();
+    const pinsHome = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    writeFileSync(join(projectRoot, 'pins.yaml'), 'location: project-location\nscope: project-scope\n');
+    writeFileSync(join(pinsHome, 'pins.yaml'), 'location: pins-home-location\nscope: pins-home-scope\n');
+
+    const result = await resolveManifest({ projectRoot, pinsHome, userRoot });
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') return;
+    expect(result.manifest.location).toBe('project-location');
+    expect(result.manifest.scope).toBe('project-scope');
+  });
+
+  test('QA: pinsHome wins over userRoot when both exist and projectRoot is absent', async () => {
+    const projectRoot = makeTmpDir();
+    const pinsHome = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    // Only pinsHome and userRoot have manifests — no projectRoot manifest
+    writeFileSync(join(pinsHome, 'pins.yaml'), 'location: pins-home-location\nscope: pins-home-scope\n');
+    writeFileSync(join(userRoot, 'pins.yaml'), 'location: user-root-location\nscope: user-root-scope\n');
+
+    const result = await resolveManifest({ projectRoot, pinsHome, userRoot });
+
+    // pinsHome must be returned — a stale userRoot manifest cannot shadow it
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') return;
+    expect(result.manifest.location).toBe('pins-home-location');
+    expect(result.manifest.scope).toBe('pins-home-scope');
+  });
+});
+
 describe('project root resolution', () => {
   test('resolveManifest() finds the git-root pins.yaml when cwd is a subdirectory', async () => {
     const savedCwd = process.cwd();
