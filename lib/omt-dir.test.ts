@@ -6,7 +6,7 @@ import { tmpdir, homedir } from 'os';
 import { basename, dirname, resolve } from 'path';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 
-import { getOmtDir, resolveOmtDir, resolveProjectRoot } from './omt-dir.ts';
+import { getOmtDir, resolveOmtDir, resolveProjectRoot, resolvePinsHome } from './omt-dir.ts';
 
 const testTmpBase = join(tmpdir(), 'omt-dir-test-' + Date.now());
 
@@ -335,5 +335,84 @@ describe('resolveProjectRoot', () => {
     await mkdir(nonGitDir, { recursive: true });
 
     expect(resolveProjectRoot(nonGitDir)).toBe(nonGitDir);
+  });
+});
+
+describe('resolvePinsHome', () => {
+  let originalOmtDir: string | undefined;
+
+  beforeEach(() => {
+    originalOmtDir = process.env.OMT_DIR;
+  });
+
+  afterEach(() => {
+    if (originalOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = originalOmtDir;
+    }
+  });
+
+  it('AC1.1: returns ${homedir()}/.pins/${deriveProjectName(cwd)}', () => {
+    // Use the current repo dir — derive expected name via the same git-common-dir logic
+    const repoDir = join(import.meta.dir, '..');
+
+    const gitCommonDir = execSync('git rev-parse --git-common-dir', {
+      cwd: repoDir,
+      encoding: 'utf-8',
+    }).trim();
+
+    let expectedName: string;
+    if (gitCommonDir !== '.git') {
+      const resolved = resolve(repoDir, gitCommonDir);
+      expectedName = basename(dirname(resolved));
+    } else {
+      const toplevel = execSync('git rev-parse --show-toplevel', {
+        cwd: repoDir,
+        encoding: 'utf-8',
+      }).trim();
+      expectedName = basename(toplevel);
+    }
+    expectedName = expectedName.replace(/ /g, '-');
+
+    const result = resolvePinsHome(repoDir);
+
+    expect(result).toBe(`${homedir()}/.pins/${expectedName}`);
+  });
+
+  it('AC1.2: this bare+worktree repo yields basename oh-my-toong-playground, not main', () => {
+    const repoDir = join(import.meta.dir, '..');
+
+    const result = resolvePinsHome(repoDir);
+
+    // The worktree-aware logic must resolve to the bare repo name, not the worktree dir name
+    expect(result).toBe(`${homedir()}/.pins/oh-my-toong-playground`);
+    expect(result).not.toContain('/main');
+  });
+
+  it('AC1.3: ignores $OMT_DIR — result is always under ~/.pins, never under $OMT_DIR', () => {
+    process.env.OMT_DIR = '/tmp/x-omt-override';
+
+    const repoDir = join(import.meta.dir, '..');
+    const result = resolvePinsHome(repoDir);
+
+    expect(result.startsWith(`${homedir()}/.pins/`)).toBe(true);
+    expect(result).not.toContain('/tmp/x-omt-override');
+  });
+
+  it('QA-asymmetry: resolvePinsHome uses ~/.pins while resolveOmtDir still uses $OMT_DIR', () => {
+    process.env.OMT_DIR = '/tmp/x-omt-override';
+
+    const repoDir = join(import.meta.dir, '..');
+
+    const pinsResult = resolvePinsHome(repoDir);
+    const omtResult = resolveOmtDir(repoDir);
+
+    // resolvePinsHome must contain /.pins/ and never /tmp/x-omt-override
+    expect(pinsResult).toContain('/.pins/');
+    expect(pinsResult).not.toContain('/tmp/x-omt-override');
+
+    // resolveOmtDir must still honor $OMT_DIR
+    expect(omtResult).toBe('/tmp/x-omt-override');
   });
 });
