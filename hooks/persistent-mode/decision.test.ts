@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from 'bun:test';
+import * as fs from 'fs';
 import { makeDecision, DecisionContext } from './decision.ts';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
@@ -1424,8 +1425,6 @@ describe('makeDecision', () => {
     // only the write fails, so the on-disk iteration never advances and the cap is
     // never reached. The block-count is reused as a write-failure escape.
     describe('write-failure escape on iteration++ block path', () => {
-      const { chmodSync } = require('fs');
-
       it('escapes after MAX_BLOCK_COUNT turns when iteration write fails every turn, never completing', async () => {
         await writeGoal({
           active: true,
@@ -1435,9 +1434,15 @@ describe('makeDecision', () => {
           max_iterations: 100, // cap never reached
           outcome: 'goal objective text',
         });
-        // Make the goal-state FILE read-only so updateGoalState's writeFileSync throws,
-        // while readGoalStateRaw still reads it and the sibling state/ dir stays writable.
-        chmodSync(goalPath, 0o444);
+        // Force updateGoalState's writeFileSync to throw ONLY for the goal-state file, so the
+        // on-disk iteration never advances while readGoalStateRaw and the sibling block-count
+        // writes stay healthy. A mocked writer is deterministic regardless of uid; chmod 0444
+        // is silently bypassed by root (common in CI containers), letting the write succeed.
+        const realWriteFileSync = fs.writeFileSync;
+        const writeSpy = spyOn(fs, 'writeFileSync').mockImplementation(((path: any, ...rest: any[]) => {
+          if (path === goalPath) throw new Error('simulated goal-state write failure');
+          return (realWriteFileSync as any)(path, ...rest);
+        }) as any);
 
         try {
           // MAX_BLOCK_COUNT = 5: turns 1..5 block (incrementing the stuck-counter),
@@ -1450,7 +1455,7 @@ describe('makeDecision', () => {
           const escaped = makeDecision(createContext());
           expect(escaped).toEqual({ continue: true });
         } finally {
-          chmodSync(goalPath, 0o644);
+          writeSpy.mockRestore();
         }
 
         // Never false-completed: phase stays pursuing, file untouched by the escape.
