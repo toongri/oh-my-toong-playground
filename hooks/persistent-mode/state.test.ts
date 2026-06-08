@@ -5,6 +5,8 @@ import {
   cleanupRalphState,
   readDeepInterviewState,
   cleanupDeepInterviewState,
+  readPrometheusState,
+  cleanupPrometheusState,
   getBlockCount,
   incrementBlockCount,
   cleanupBlockCountFiles,
@@ -315,6 +317,90 @@ describe('Deep interview state management', () => {
 
       // Second call on nonexistent file must not throw
       expect(() => cleanupDeepInterviewState(sessionId)).not.toThrow();
+    });
+  });
+});
+
+describe('Prometheus state management', () => {
+  const testDir = join(tmpdir(), 'state-test-prometheus-' + Date.now());
+  const omtDir = join(testDir, 'omt');
+  const sessionId = 'test-session-prom';
+
+  const savedOmtDir = process.env.OMT_DIR;
+
+  beforeAll(async () => {
+    await mkdir(omtDir, { recursive: true });
+  });
+
+  afterAll(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    process.env.OMT_DIR = omtDir;
+    const stateFile = join(omtDir, `prometheus-state-${sessionId}.json`);
+    try { await rm(stateFile, { force: true }); } catch {}
+  });
+
+  afterEach(() => {
+    if (savedOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = savedOmtDir;
+    }
+  });
+
+  describe('readPrometheusState', () => {
+    it('prometheus: readPrometheusState returns state when active=true', async () => {
+      // Write the realistic on-disk shape that the seed hook and CLI produce
+      const onDisk = {
+        active: true,
+        phase: 'planning',
+        plan_path: '/tmp/plan.md',
+        resume_summary: 'Continue from step 3',
+        started_at: '2026-06-08T12:00:00+09:00',
+      };
+      await writeFile(
+        join(omtDir, `prometheus-state-${sessionId}.json`),
+        JSON.stringify(onDisk)
+      );
+
+      const result = readPrometheusState(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.active).toBe(true);
+    });
+
+    it('prometheus: readPrometheusState returns null when active=false', async () => {
+      const onDisk = { active: false };
+      await writeFile(
+        join(omtDir, `prometheus-state-${sessionId}.json`),
+        JSON.stringify(onDisk)
+      );
+
+      const result = readPrometheusState(sessionId);
+
+      expect(result).toBeNull();
+    });
+
+    it('prometheus: readPrometheusState returns null when file is missing', () => {
+      const result = readPrometheusState(sessionId);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('cleanupPrometheusState', () => {
+    it('prometheus: cleanupPrometheusState removes file and is idempotent', async () => {
+      const stateFile = join(omtDir, `prometheus-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({ active: true, phase: 'planning', plan_path: '/tmp/plan.md', resume_summary: '', started_at: '2026-06-08T12:00:00+09:00' }));
+
+      cleanupPrometheusState(sessionId);
+
+      expect(existsSync(stateFile)).toBe(false);
+
+      // Second call on nonexistent file must not throw
+      expect(() => cleanupPrometheusState(sessionId)).not.toThrow();
     });
   });
 });

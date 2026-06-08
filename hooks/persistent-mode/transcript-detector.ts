@@ -5,6 +5,7 @@ import { logDebug } from '@lib/logging';
 const PROMISE_PATTERN = /<promise>\s*DONE\s*<\/promise>/i;
 const ORACLE_APPROVED_PATTERN = /<oracle-approved>.*VERIFIED_COMPLETE.*<\/oracle-approved>/i;
 const DEEP_INTERVIEW_DONE_PATTERN = /<deep-interview-done\s*\/>/i;
+const PROMETHEUS_DONE_PATTERN = /<prometheus-done\s*\/>/i;
 
 export function detectCompletionPromise(lastAssistantMessage: string | null): boolean {
   if (!lastAssistantMessage) return false;
@@ -32,6 +33,16 @@ export function detectDeepInterviewDone(lastAssistantMessage: string | null): bo
   const detected = DEEP_INTERVIEW_DONE_PATTERN.test(lastAssistantMessage);
   if (detected) {
     logDebug('detected deep-interview done <deep-interview-done/>');
+  }
+  return detected;
+}
+
+export function detectPrometheusDone(lastAssistantMessage: string | null): boolean {
+  if (!lastAssistantMessage) return false;
+
+  const detected = PROMETHEUS_DONE_PATTERN.test(lastAssistantMessage);
+  if (detected) {
+    logDebug('detected prometheus done <prometheus-done/>');
   }
   return detected;
 }
