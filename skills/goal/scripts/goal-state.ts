@@ -187,6 +187,19 @@ export function readGoalState(sessionId: string): GoalState | null {
   if (!content) return null;
   try {
     const state = JSON.parse(content) as GoalState;
+    // Schema guard: mirrors readGoalStateRaw in hooks/persistent-mode/state.ts so the
+    // two readers never disagree on whether a goal is active (finding A-4). Validate the
+    // load-bearing fields BEFORE the active-fold; a corrupt file (e.g. active:"true",
+    // iteration:-1, phase:"pursuit") reads as null, not as a live active goal.
+    const VALID_PHASES: string[] = ['planning', 'pursuing', 'budget_limited', 'blocked', 'complete'];
+    if (
+      typeof state.active !== 'boolean' ||
+      !VALID_PHASES.includes(state.phase as string) ||
+      !Number.isInteger(state.iteration) || state.iteration < 0 ||
+      !Number.isInteger(state.max_iterations) || state.max_iterations < 1
+    ) {
+      return null;
+    }
     return state.active ? state : null;
   } catch {
     return null;
