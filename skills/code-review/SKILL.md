@@ -549,7 +549,10 @@ Fallback (verifier failed): If a verifier subagent errored or timed out for a ca
 [Only if one or more verifiers errored or timed out. Candidates listed with the finder's text and a count, explicitly NOT verdict-labeled — coverage gaps, not findings. Omit the section entirely when every candidate was verified.]
 
 ## Recommendations
-[Optional, non-finding suggestions for the author. Omit if none.]
+[Optional. From the `## Findings` section above only (not Out of Scope or
+Unverified), the ones worth resolving — where resolving carries real
+benefit: it preserves a requirement, removes a bug, or improves
+maintainability. Recommend those; omit if none.]
 ```
 
 There is no Assessment / "Ready to merge" section. This review reports; it does not gate.
