@@ -175,6 +175,11 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
         GOAL_PLAN_AVAILABLE=true
       fi
 
+      # Escape backslashes so the value is safe to embed in a hand-built JSON string.
+      # Must happen after the -f existence check (which needs the raw path) and before
+      # $GOAL_PLAN_PATH is interpolated into MESSAGES.
+      GOAL_PLAN_PATH=$(printf '%s' "$GOAL_PLAN_PATH" | sed 's/\\/\\\\/g')
+
       GOAL_PLAN_NOTE=""
       GOAL_INSTRUCTION=""
       if [ "$GOAL_PHASE" = "planning" ]; then
