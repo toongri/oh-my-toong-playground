@@ -1381,5 +1381,42 @@ describe('makeDecision', () => {
       expect(after.phase).toBe('complete');
       expect(after.active).toBe(false);
     });
+
+    // Schema-guard regression tests
+
+    it('malformed active goal-state does NOT suppress baseline-todo (fails schema guard)', async () => {
+      // {active:true, phase:"pursuit"} fails the phase guard → readGoalStateRaw returns null
+      // → goalRaw is null → goalSuppressesBaselineTodo stays false → todo branch fires.
+      await writeGoal({
+        active: true,
+        phase: 'pursuit', // typo'd — not a valid GoalPhase
+        // max_iterations intentionally omitted to also fail that guard
+      });
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
+
+      // Baseline-todo continuation FIRES (not suppressed by malformed goal)
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
+    });
+
+    it('VALID terminal goal-state (active:false, valid phase) still suppresses baseline-todo (M3 preserved)', async () => {
+      // A well-formed terminal state passes the schema guard → readGoalStateRaw returns the
+      // object → goalSuppressesBaselineTodo = true → baseline-todo does NOT fire (M3).
+      await writeGoal({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 5,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 4 }));
+
+      // M3: terminal goal-state suppresses baseline-todo
+      expect(result).toEqual({ continue: true });
+      expect(result.reason ?? '').not.toContain('<todo-continuation>');
+    });
   });
 });

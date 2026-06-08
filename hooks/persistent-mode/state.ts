@@ -77,7 +77,21 @@ export function readGoalStateRaw(sessionId: string): GoalState | null {
   if (!content) return null;
 
   try {
-    return JSON.parse(content) as GoalState;
+    const s = JSON.parse(content) as GoalState;
+    // Schema guard: a structurally partial/corrupt state must read as absent (null) —
+    // never let garbage drive the loop (cap bypass) or suppress baseline-todo. Validate
+    // only the load-bearing fields the decision tree branches/arithmetic on; a VALID
+    // terminal state (active:false + well-formed fields) still returns so M3 suppression holds.
+    const phases = ['planning', 'pursuing', 'budget_limited', 'blocked', 'complete'];
+    if (
+      typeof s.active !== 'boolean' ||
+      !phases.includes(s.phase as string) ||
+      typeof s.iteration !== 'number' || !Number.isFinite(s.iteration) ||
+      typeof s.max_iterations !== 'number' || !Number.isFinite(s.max_iterations)
+    ) {
+      return null;
+    }
+    return s;
   } catch {
     return null;
   }

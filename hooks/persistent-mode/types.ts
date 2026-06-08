@@ -53,9 +53,16 @@ export interface PrometheusState {
  * Minimal contract the persistent-mode hook reads from the goal-state file
  * written by `skills/goal/scripts/goal-state.ts`. The on-disk file carries
  * many additional SKILL-only fields (outcome, verification_surface, etc.);
- * the hook only consults this subset. `active === false` means a terminal
- * state (complete/blocked/budget_limited) — the hook must treat it as null
- * so it never blocks on a finished goal.
+ * the hook only consults this subset.
+ *
+ * `active === false` signals a terminal state (complete/blocked/budget_limited).
+ * The active-folded helper `readGoalState` returns null for terminal states,
+ * so the goal pursuit branch never re-enters a finished goal. However, the
+ * baseline-todo path reads terminal states via `readGoalStateRaw` (M3): a
+ * goal that has reached any terminal phase still owns the session lifecycle
+ * and suppresses the baseline-todo continuation, preventing spurious re-blocks
+ * after the goal completes. Inactive states are therefore consumed by M3, not
+ * discarded entirely.
  */
 export interface GoalState {
   active: boolean;
