@@ -328,8 +328,25 @@ export function makeDecision(context: DecisionContext): HookOutput {
       // verdict in {REQUEST_CHANGES, COMMENT, absent} → block + continuation + iteration++.
       const newIteration = goal.iteration + 1;
       const message = buildGoalContinuationMessage(goal, newIteration); // build FIRST (E1)
+      let writeOk = true;
       // M1: swallow write failure — STILL block, never degrade to continue.
-      try { updateGoalState(sessionId, { iteration: newIteration }); } catch { /* M1 */ }
+      try { updateGoalState(sessionId, { iteration: newIteration }); } catch { writeOk = false; }
+      if (writeOk) {
+        // Progress made (iteration advanced on disk) → reset the write-failure stuck-counter
+        // so a normally-progressing goal NEVER spuriously escapes, no matter how long it runs.
+        cleanupBlockCountFiles(stateDir, attemptId);
+        return formatBlockOutput(message);
+      }
+      // B-4: the write FAILED — iteration did not advance on disk, so the cap can never be
+      // reached and this branch (unlike baseline-todo) has no other escape. Use the
+      // block-count as a write-failure escape so a SUSTAINED write failure cannot block
+      // forever. This is a soft-escape (allow stop) — NEVER a completion claim, and it
+      // writes NOTHING to the goal-state file (the write is failing anyway).
+      if (getBlockCount(stateDir, attemptId) >= MAX_BLOCK_COUNT) {
+        cleanupBlockCountFiles(stateDir, attemptId);
+        return formatContinueOutput();
+      }
+      incrementBlockCount(stateDir, attemptId);
       return formatBlockOutput(message);
     }
     // Active non-pursuing phase OR terminal inactive: goal owns lifecycle → suppress the

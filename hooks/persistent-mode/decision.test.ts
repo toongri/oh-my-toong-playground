@@ -1418,5 +1418,71 @@ describe('makeDecision', () => {
       expect(result).toEqual({ continue: true });
       expect(result.reason ?? '').not.toContain('<todo-continuation>');
     });
+
+    // B-4: a SUSTAINED updateGoalState write failure on the iteration++ block path
+    // must not block the AI forever. The read path stays healthy (file readable) while
+    // only the write fails, so the on-disk iteration never advances and the cap is
+    // never reached. The block-count is reused as a write-failure escape.
+    describe('write-failure escape on iteration++ block path', () => {
+      const { chmodSync } = require('fs');
+
+      it('escapes after MAX_BLOCK_COUNT turns when iteration write fails every turn, never completing', async () => {
+        await writeGoal({
+          active: true,
+          phase: 'pursuing',
+          objective_verdict: 'REQUEST_CHANGES', // not APPROVE → iteration++ block path
+          iteration: 1,
+          max_iterations: 100, // cap never reached
+          outcome: 'goal objective text',
+        });
+        // Make the goal-state FILE read-only so updateGoalState's writeFileSync throws,
+        // while readGoalStateRaw still reads it and the sibling state/ dir stays writable.
+        chmodSync(goalPath, 0o444);
+
+        try {
+          // MAX_BLOCK_COUNT = 5: turns 1..5 block (incrementing the stuck-counter),
+          // turn 6 sees blockCount >= 5 and escapes.
+          for (let i = 0; i < 5; i++) {
+            const blocked = makeDecision(createContext());
+            expect(blocked.decision).toBe('block');
+          }
+
+          const escaped = makeDecision(createContext());
+          expect(escaped).toEqual({ continue: true });
+        } finally {
+          chmodSync(goalPath, 0o644);
+        }
+
+        // Never false-completed: phase stays pursuing, file untouched by the escape.
+        const after = await readGoalFile();
+        expect(after.phase).toBe('pursuing');
+        expect(after.active).toBe(true);
+        expect(after.iteration).toBe(1); // never advanced (write kept failing)
+      });
+
+      it('does NOT escape early when writes SUCCEED, no matter how many turns', async () => {
+        await writeGoal({
+          active: true,
+          phase: 'pursuing',
+          objective_verdict: 'REQUEST_CHANGES', // not APPROVE → iteration++ block path
+          iteration: 1,
+          max_iterations: 100, // cap never reached within the loop
+          outcome: 'goal objective text',
+        });
+
+        // Run well past MAX_BLOCK_COUNT (5) — 7 turns. Writes succeed each turn, so the
+        // stuck-counter is reset every turn and the escape NEVER fires.
+        for (let i = 0; i < 7; i++) {
+          const result = makeDecision(createContext());
+          expect(result.decision).toBe('block');
+        }
+
+        // iteration advanced once per turn; goal still pursuing (no spurious escape/complete).
+        const after = await readGoalFile();
+        expect(after.iteration).toBe(8); // 1 + 7 turns
+        expect(after.phase).toBe('pursuing');
+        expect(after.active).toBe(true);
+      });
+    });
   });
 });
