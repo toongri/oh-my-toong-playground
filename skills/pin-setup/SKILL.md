@@ -5,7 +5,7 @@ description: Use when initializing the pins knowledge graph for the first time i
 
 # pin-setup
 
-First-run interview to create `pins.yaml`, the storage manifest for the pins knowledge graph.
+First-run interview to create `~/.pins/{name}/pins.yaml`, the storage manifest for the pins knowledge graph.
 
 ## What is pins.yaml
 
@@ -19,12 +19,13 @@ Walk the user through three decisions:
 
 ### 1. Storage location
 
-Ask: "Where should pin files live?"
+The manifest is always written to `~/.pins/{name}/pins.yaml`, where `{name}` is derived from the project name of the cwd (`deriveProjectName(cwd)`). This path is fixed.
+
+Ask: "Where should pin *data files* live?"
 
 Common choices:
-- `~/.omt/<project>/pins/` — stored in the user's home directory, outside any repo
-- `.pins/` inside the repo — stored alongside the project source
-- A custom absolute path — for monorepos or multi-project setups
+- Co-located with the manifest (default) — `~/.pins/{name}/` — no `--location` needed
+- A custom absolute path — pass via `--location`; useful for monorepos or multi-project setups
 
 Confirm whether the directory should be created if it does not exist (it will be, automatically, on the first `record()` call).
 
@@ -47,7 +48,7 @@ Record the answer as `git: true` or `git: false`.
 
 ## Output
 
-Once all three questions are answered, write `pins.yaml` at the project root (or the location the user specifies):
+Once all three questions are answered, write `pins.yaml` to `~/.pins/{name}/pins.yaml`:
 
 ```yaml
 # pins.yaml — knowledge graph storage manifest
@@ -63,7 +64,7 @@ Confirm the path is correct and the user understands that all pins API calls wil
 If the project has legacy pin files (frontmatter with `slug` instead of `id`, no `type` field), run migration after setup:
 
 ```bash
-bun "${CLAUDE_SKILL_DIR}/scripts/setup.ts" --location "$LOC" --scope "$SCOPE" [--git true|false]
+bun "${CLAUDE_SKILL_DIR}/scripts/setup.ts" --scope "$SCOPE" [--location "$LOC"] [--git true|false]
 ```
 
-The script writes `pins.yaml` into the current working directory and then runs `migrate()` against the just-written location. `migrate()` is idempotent — re-running it is safe. Each legacy file gets a `.bak` sibling before conversion.
+`--location` is optional. When omitted, pin data is co-located with the manifest at `~/.pins/{name}/`. The script writes `pins.yaml` to `~/.pins/{name}/pins.yaml` and then runs `migrate()` against the just-written location. `migrate()` is idempotent — re-running it is safe. Each legacy file gets a `.bak` sibling before conversion.
