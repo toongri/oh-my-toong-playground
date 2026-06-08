@@ -143,15 +143,20 @@ describe('absent signal', () => {
     // Simulate OMT_DIR unset: use a tmp dir as cwd base so the derived
     // ~/.omt/<project> path is known and verifiably absent.
     const savedOmtDir = process.env.OMT_DIR;
+    const savedHome = process.env.HOME;
     const savedCwd = process.cwd();
 
     const tmpCwd = makeTmpDir();
-    // Derive what resolveOmtDir() would compute for this cwd (non-git dir):
-    // basename(tmpCwd) → ~/.omt/<basename>
-    const derivedDir = join(homedir(), '.omt', tmpCwd.split('/').pop()!);
 
+    let derivedDir: string;
     try {
       delete process.env.OMT_DIR;
+      // Sandbox HOME so derivations never touch the real ~/.pins or ~/.omt
+      process.env.HOME = makeTmpDir();
+      // Derive what resolveOmtDir() would compute for this cwd (non-git dir):
+      // basename(tmpCwd) → ~/.omt/<basename>
+      // Must be computed AFTER HOME is set so homedir() reflects the sandbox.
+      derivedDir = join(homedir(), '.omt', tmpCwd.split('/').pop()!);
       process.chdir(tmpCwd);
 
       // Pre-condition: derived dir must not exist before the call
@@ -171,9 +176,14 @@ describe('absent signal', () => {
       } else {
         delete process.env.OMT_DIR;
       }
+      if (savedHome !== undefined) {
+        process.env.HOME = savedHome;
+      } else {
+        delete process.env.HOME;
+      }
       // Clean up derivedDir if it was unexpectedly created
-      if (!existsSync(derivedDir) === false) {
-        rmSync(derivedDir, { recursive: true, force: true });
+      if (!existsSync(derivedDir!) === false) {
+        rmSync(derivedDir!, { recursive: true, force: true });
       }
     }
   });

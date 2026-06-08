@@ -14,14 +14,14 @@ function makeTmpDir() {
 
 /**
  * Runs setup.ts as a subprocess in cwd=projectDir with the given extra args.
- * Overrides HOME to tmpHome (if provided) so resolvePinsHome() resolves to a
+ * Overrides HOME to tmpHome so resolvePinsHome() resolves to a
  * test-controlled location instead of the real ~/.pins/.
  * Returns { exitCode, stdout, stderr }.
  */
 async function runSetup(
   projectDir: string,
   args: string[],
-  tmpHome?: string,
+  tmpHome: string,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const proc = Bun.spawn(['bun', SETUP_PATH, ...args], {
     cwd: projectDir,
@@ -30,7 +30,7 @@ async function runSetup(
     env: {
       ...process.env,
       OMT_DIR: undefined as unknown as string,
-      ...(tmpHome ? { HOME: tmpHome } : {}),
+      HOME: tmpHome,
     },
   });
   const exitCode = await proc.exited;
