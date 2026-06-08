@@ -79,9 +79,10 @@ if command -v jq &> /dev/null; then
     if [ -f "$state_file" ]; then
       STARTED_AT=$(jq -r '.started_at // ""' "$state_file" 2>/dev/null)
       if [ -n "$STARTED_AT" ] && [ "$STARTED_AT" != "null" ]; then
-        # Parse ISO 8601 timestamp (strip timezone for BSD date)
+        # Parse ISO 8601 timestamp (strip timezone first). BSD date (macOS) is the deploy
+        # target; the GNU date -d fallback keeps stale cleanup working on Linux/CI.
         TIME_PART=$(echo "$STARTED_AT" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
-        FILE_TIMESTAMP=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$TIME_PART" "+%s" 2>/dev/null)
+        FILE_TIMESTAMP=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$TIME_PART" "+%s" 2>/dev/null || date -d "$TIME_PART" "+%s" 2>/dev/null)
 
         if [ -n "$FILE_TIMESTAMP" ]; then
           AGE=$((CURRENT_TIME - FILE_TIMESTAMP))
