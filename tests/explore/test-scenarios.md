@@ -11,7 +11,7 @@ These scenarios test whether the explore agent's core techniques are correctly a
 | E-1 | Output Format Compliance | Output Format (MANDATORY) | Section structure |
 | E-2 | Decision Tree - Known File Path | Decision Tree - Start From What You Know | Token efficiency |
 | E-3 | Decision Tree - Known Symbol | Decision Tree - Symbol name only | Codebase-wide search |
-| E-4 | Workflow - Find Who Calls | Workflow Example - Scenario 4 | find_referencing_symbols |
+| E-4 | Workflow - Find Who Calls | Workflow Example - Scenario 4 | Approximate reference search (candidate set, verify) |
 | E-5 | Anti-Pattern Avoidance | Anti-Patterns + Core Principle (Token Efficiency) | Precision querying |
 | E-6 | Intent Understanding | Success Criteria - Intent | Actual Need vs Literal Request |
 
@@ -52,9 +52,9 @@ src/auth/AuthService.kt 파일의 주요 메서드 구조를 분석해줘
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Direct overview call | `get_symbols_overview(relative_path="src/auth/AuthService.kt")` 직접 호출 |
-| V2 | No unnecessary pre-call | 불필요한 `list_dir` 선행 호출 없음 |
-| V3 | Precise lookup | 필요 시 `find_symbol`로 특정 메서드 body 조회 |
+| V1 | Direct structural outline | 알려진 파일에 대해 `ast-grep` 구조 아웃라인(top-level 심볼)을 바로 호출 |
+| V2 | No unnecessary pre-call | 불필요한 디렉터리 나열 선행 호출 없음 |
+| V3 | Precise lookup | 필요 시 `Grep` 또는 `Read(offset/limit)`로 특정 메서드 body를 표적 조회 |
 
 ---
 
@@ -71,15 +71,15 @@ PaymentProcessor 클래스의 위치와 메서드 구성을 알려줘
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Repo-wide search | `find_symbol(name_path_pattern="PaymentProcessor")` 호출 시 `relative_path` 미지정 (전체 코드베이스 검색) |
-| V2 | depth=1 method list | 검색 결과에서 위치 확인 후 `depth=1`로 메서드 목록 조회 |
+| V1 | Repo-wide search | `ast-grep` + `Grep`로 심볼명 `PaymentProcessor`를 경로 제한 없이 전체 코드베이스 검색 |
+| V2 | Targeted method list | 검색 결과에서 위치 확인 후 `ast-grep` 구조 아웃라인으로 메서드 목록 조회 |
 | V3 | Absolute paths | 결과에 절대 경로 포함 |
 
 ---
 
 ## Scenario E-4: Workflow - Find Who Calls a Method
 
-**Primary Technique:** Workflow Example - Scenario 4 (find referencing symbols)
+**Primary Technique:** Workflow Example - Scenario 4 (approximate reference search)
 
 **Prompt:**
 ```
@@ -90,9 +90,9 @@ AuthService의 login 메서드를 호출하는 모든 코드를 찾아줘
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Definition file specified | `find_referencing_symbols` 호출 시 `relative_path`에 심볼이 **정의된** 파일 지정 |
-| V2 | Automatic repo-wide search | 검색 범위는 자동으로 전체 코드베이스 (별도 설정 불필요) |
-| V3 | Snippets included | 결과에 referencing 심볼의 위치와 코드 스니펫 포함 |
+| V1 | Locate definition first | 먼저 `login` 정의를 찾은 뒤 그 이름으로 호출부를 근사 검색 (`Grep` 텍스트 + `ast-grep` 구문) |
+| V2 | Repo-wide candidate search | 경로 제한 없이 전체 코드베이스에서 호출 후보를 수집 |
+| V3 | Candidate-set honesty | 결과를 검증 필요한 **후보 집합**으로 명시 — 동명 식별자 오탐 가능, scope/type/import 미해결, 의미 기반 find-references 도구 부재이므로 ground-truth 참조 집합이 아님을 `<answer>`에 플래그 |
 
 ---
 
@@ -110,8 +110,8 @@ UserService 클래스의 validateEmail 메서드 구현을 보여줘
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | No full-file read | 전체 파일 읽기 시도 없음 |
-| V2 | Precise lookup | `find_symbol(name_path_pattern="UserService/validateEmail", include_body=True)` 형태의 정밀 조회 |
-| V3 | Staged approach | 대형 클래스에서 바로 `include_body=True` 대신, 메서드 목록 먼저 확인 후 특정 메서드만 body 조회 |
+| V2 | Precise lookup | `Grep`로 `validateEmail` 위치를 특정한 뒤 `Read(offset/limit)`로 해당 메서드 body만 정밀 조회 |
+| V3 | Staged approach | 대형 클래스에서 바로 전체 body를 읽지 않고, `ast-grep` 구조 아웃라인으로 메서드 목록 먼저 확인 후 특정 메서드 범위만 `Read(offset/limit)` |
 
 ---
 
@@ -153,10 +153,10 @@ UserService 클래스의 validateEmail 메서드 구현을 보여줘
 | Scenario | Result | V-Points | Key Evidence |
 |----------|--------|----------|-------------|
 | E-1: Output Format | PASS | 6/6 | analysis+results 블록 모두 존재, 절대 경로, 관계 설명, next_steps 포함 |
-| E-2: Known File Path | PASS | 3/3 | get_symbols_overview/Read 직접 호출, 불필요한 list_dir 없음 |
-| E-3: Known Symbol | PASS | 3/3 | find_file+search_for_pattern 전체 코드베이스 검색, 절대 경로 포함 |
-| E-4: Find References | PASS | 3/3 | Grep+search_for_pattern으로 전체 코드베이스 검색, 51개 파일 발견, 컨텍스트 포함 |
-| E-5: Token Efficiency | PASS | 3/3 | search_for_pattern -> Read(offset+limit) 정밀 조회, 전체 파일 읽기 없음 |
+| E-2: Known File Path | PASS | 3/3 | ast-grep 구조 아웃라인 바로 호출, 불필요한 디렉터리 나열 없음, Grep/Read(offset/limit) 표적 조회 |
+| E-3: Known Symbol | PASS | 3/3 | ast-grep+Grep 전체 코드베이스 심볼명 검색, ast-grep 아웃라인으로 메서드 목록, 절대 경로 포함 |
+| E-4: Find References | PASS | 3/3 | 정의 위치 확인 후 Grep+ast-grep로 호출 후보 근사 검색, 검증 필요한 후보 집합으로 플래그(동명 오탐·scope 미해결) |
+| E-5: Token Efficiency | PASS | 3/3 | Grep로 위치 특정 -> Read(offset/limit) 정밀 조회, 전체 파일 읽기 없음 |
 | E-6: Intent Understanding | PASS | 3/3 | Literal/Actual Need 구분, hook 관계/역할 설명, 완결적 정보 제공 |
 
 **Overall: 6/6 scenarios PASSED (21/21 verification points)**

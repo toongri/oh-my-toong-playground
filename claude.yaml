@@ -48,7 +48,6 @@ mcps:
 plugins:
   items:
     - context7
-    - serena
     - superpowers
     - code-review
     - name: plannotator@plannotator

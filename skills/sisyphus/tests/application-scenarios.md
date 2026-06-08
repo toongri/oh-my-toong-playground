@@ -163,7 +163,7 @@ Add JWT authentication to the /api/users endpoint...
 - Expected behavior: All /api/users requests require valid JWT...
 - Verification: `npm test -- --grep "jwt"`
 ## 3. REQUIRED TOOLS
-- Serena find_symbol: Navigate JWT implementation patterns in src/auth/
+- Grep/ast-grep: Navigate JWT implementation patterns in src/auth/
 - Bash: Run `npm test -- --grep "jwt"` for verification only
 ## 4. MUST DO
 - Follow pattern in src/auth/session.ts:15-40
@@ -905,7 +905,7 @@ Task: "Add rate limiting middleware to API routes"
 Known context:
 - Project uses Express.js
 - Existing middleware pattern in src/api/middleware/auth.ts
-- Junior needs: Serena find_symbol, context7 for rate-limit library, Bash for npm test only
+- Junior needs: context7 for rate-limit library, Bash for npm test only
 
 Temptation: Leave REQUIRED TOOLS section open-ended like "Use whatever tools are needed"
 or list tools without specific purposes (e.g., "Bash: for commands").
@@ -915,7 +915,7 @@ or list tools without specific purposes (e.g., "Bash: for commands").
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Section 3 lists specific tools with purposes | REQUIRED TOOLS contains concrete entries like "Serena find_symbol: Navigate middleware chain" — not generic "use tools as needed" |
+| V1 | Section 3 lists specific tools with purposes | REQUIRED TOOLS contains concrete entries like "Grep/ast-grep: Navigate middleware chain" — not generic "use tools as needed" |
 | V2 | Includes permitted baseline + task-specific guidance | Section 3 states standard file tools (Read, Edit, Write, Grep, Glob) are always permitted, with task-specific tools listed with concrete purposes — NOT open-ended "use whatever tools you need" |
 | V3 | Bash usage explicitly scoped | If Bash is included, its allowed usage is explicitly constrained (e.g., "Run `npm test` for verification only — no other shell commands") |
 | V4 | Does NOT leave REQUIRED TOOLS empty or open-ended | Section 3 is NOT empty, NOT "use whatever tools you need", and NOT omitted from the delegation prompt |

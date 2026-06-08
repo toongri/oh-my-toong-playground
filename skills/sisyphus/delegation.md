@@ -53,8 +53,8 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 - Verification: `npm test -- --grep "rate limit"` passes
 
 ## 3. REQUIRED TOOLS
-- Serena find_symbol: Navigate to router setup and existing middleware chain in src/api/router.ts
-- Serena get_symbols_overview: Understand middleware structure in src/api/middleware/
+- Grep: Navigate to router setup and existing middleware chain in src/api/router.ts (search for `app.use` / route registration patterns)
+- ast-grep: Understand middleware structure in src/api/middleware/ (structural outline of exported functions per file)
 - context7: Look up express-rate-limit library docs for configuration options
 - Bash: Run `npm test -- --grep "rate limit"` for verification only — no other shell commands
 
