@@ -532,6 +532,89 @@ describe('Goal state management', () => {
 
       expect(readGoalStateRaw(sessionId)).toBeNull();
     });
+
+    // Schema guard: structural validation of load-bearing fields
+    it('readGoalStateRaw returns null when max_iterations is missing (cap-bypass guard)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 2,
+        // max_iterations intentionally omitted
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when phase is an unknown token (e.g. "pursuit")', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuit', // typo'd — not a valid GoalPhase
+        objective_verdict: 'absent',
+        iteration: 2,
+        max_iterations: 10,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null for empty object {}', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({}));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when iteration is non-finite (e.g. NaN)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      // JSON does not have NaN; use null to produce a non-number value
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: null,
+        max_iterations: 10,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns the object for a VALID terminal state (active:false, all fields well-formed)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 5,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalStateRaw(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.active).toBe(false);
+      expect(result?.phase).toBe('complete');
+      expect(result?.iteration).toBe(5);
+      expect(result?.max_iterations).toBe(10);
+    });
+
+    it('readGoalState returns null for a VALID terminal state (active-fold preserved)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 5,
+        max_iterations: 10,
+      }));
+
+      // readGoalState folds active:false → null even when all fields are valid
+      expect(readGoalState(sessionId)).toBeNull();
+      // readGoalStateRaw still returns the object
+      expect(readGoalStateRaw(sessionId)).not.toBeNull();
+    });
   });
 
   describe('updateGoalState', () => {
