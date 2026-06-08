@@ -496,6 +496,79 @@ describe('goal state', () => {
   });
 });
 
+// A-4: readGoalState schema guard — mirrors readGoalStateRaw validation so the two
+// readers can never disagree on whether a goal is active (finding A-4, 3rd /code-review).
+describe('readGoalState schema guard', () => {
+  function writeRaw(sessionId: string, obj: object): void {
+    writeFileSync(resolveStatePath(sessionId), JSON.stringify(obj), 'utf8');
+  }
+
+  const VALID_ACTIVE: object = {
+    active: true,
+    phase: 'pursuing',
+    iteration: 0,
+    max_iterations: 10,
+    started_at: '2026-01-01T00:00:00',
+    outcome: '',
+    verification_surface: '',
+    constraints: '',
+    boundaries: '',
+    blocked_stop: '',
+    plan_path: '',
+    resume_summary: '',
+    budget_limit_notified: false,
+    blocked_reason: '',
+    completion_evidence_paths: [],
+    objective_verdict: 'absent',
+    schema_version: 1,
+  };
+
+  // A-4a: active is string "true" (truthy non-boolean) — must return null, not the object
+  test('returns null when active is the string "true" (truthy non-boolean)', () => {
+    writeRaw(S, { ...VALID_ACTIVE, active: 'true' });
+    expect(readGoalState(S)).toBeNull();
+  });
+
+  // A-4b: iteration is a non-numeric string — must return null
+  test('returns null when iteration is a non-numeric string', () => {
+    writeRaw(S, { ...VALID_ACTIVE, iteration: 'bad' });
+    expect(readGoalState(S)).toBeNull();
+  });
+
+  // A-4c: iteration is negative — must return null
+  test('returns null when iteration is negative', () => {
+    writeRaw(S, { ...VALID_ACTIVE, iteration: -1 });
+    expect(readGoalState(S)).toBeNull();
+  });
+
+  // A-4d: max_iterations is 0 — must return null
+  test('returns null when max_iterations is 0', () => {
+    writeRaw(S, { ...VALID_ACTIVE, max_iterations: 0 });
+    expect(readGoalState(S)).toBeNull();
+  });
+
+  // A-4e: phase is an unknown string typo — must return null
+  test('returns null when phase is an unknown string ("pursuit" typo)', () => {
+    writeRaw(S, { ...VALID_ACTIVE, phase: 'pursuit' });
+    expect(readGoalState(S)).toBeNull();
+  });
+
+  // A-4f regression: valid active state still returns the state
+  test('regression: valid active state is returned normally', () => {
+    writeRaw(S, VALID_ACTIVE);
+    const state = readGoalState(S);
+    expect(state).not.toBeNull();
+    expect(state!.active).toBe(true);
+    expect(state!.phase).toBe('pursuing');
+  });
+
+  // A-4g regression: valid inactive state still returns null (active-fold preserved)
+  test('regression: valid inactive state returns null (active-fold preserved)', () => {
+    writeRaw(S, { ...VALID_ACTIVE, active: false, phase: 'complete' });
+    expect(readGoalState(S)).toBeNull();
+  });
+});
+
 // helper: read raw JSON for an arbitrary session id under the test OMT_DIR
 function rawStateOf(sessionId: string): any {
   return JSON.parse(readFileSync(resolveStatePath(sessionId), 'utf8'));
