@@ -1,4 +1,4 @@
-import { RalphState, DeepInterviewState, PrometheusState } from './types.ts';
+import { RalphState, DeepInterviewState, PrometheusState, GoalState } from './types.ts';
 import { readFileOrNull, writeFileSafe, deleteFile, ensureDir } from './utils.ts';
 import { join } from 'path';
 import { getOmtDir } from '@lib/omt-dir';
@@ -59,6 +59,63 @@ export function readPrometheusState(sessionId: string): PrometheusState | null {
 
 export function cleanupPrometheusState(sessionId: string): void {
   deleteFile(join(getOmtDir(), `prometheus-state-${sessionId}.json`));
+}
+
+// active-only view: readGoalStateRaw folded by active (null on absent/malformed/inactive).
+export function readGoalState(sessionId: string): GoalState | null {
+  const state = readGoalStateRaw(sessionId);
+  return state && state.active ? state : null;
+}
+
+// Active-agnostic probe: returns the parsed goal-state even when active=false
+// (terminal phases complete/blocked/budget_limited), so the hook can suppress
+// the baseline-todo branch for ANY goal phase. Null on absent or malformed;
+// never throws. Distinct from readGoalState, which folds active:false -> null.
+export function readGoalStateRaw(sessionId: string): GoalState | null {
+  const path = join(getOmtDir(), `goal-state-${sessionId}.json`);
+  const content = readFileOrNull(path);
+  if (!content) return null;
+
+  try {
+    const s = JSON.parse(content) as GoalState;
+    // Schema guard: a structurally partial/corrupt state must read as absent (null) —
+    // never let garbage drive the loop (cap bypass) or suppress baseline-todo. Validate
+    // only the load-bearing fields the decision tree branches/arithmetic on; a VALID
+    // terminal state (active:false + well-formed fields) still returns so M3 suppression holds.
+    const phases = ['planning', 'pursuing', 'budget_limited', 'blocked', 'complete'];
+    if (
+      typeof s.active !== 'boolean' ||
+      !phases.includes(s.phase as string) ||
+      !Number.isInteger(s.iteration) || s.iteration < 0 ||
+      !Number.isInteger(s.max_iterations) || s.max_iterations < 1
+    ) {
+      return null;
+    }
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+// Strict spread-overlay writer. Reads the RAW on-disk JSON untyped (preserving
+// every field, including SKILL-only ones written by goal-state.ts), overlays
+// ONLY the keys in `partial`, and writes back. If the raw read is absent or
+// malformed it does NOTHING — never seeds defaults, never reconstructs a fresh
+// object, never creates a file. Diverging from goal-state.ts's mergeWrite would
+// risk fabricating a goal-state, so a second writer must stay strictly additive.
+export function updateGoalState(sessionId: string, partial: Partial<GoalState>): void {
+  const path = join(getOmtDir(), `goal-state-${sessionId}.json`);
+  const content = readFileOrNull(path);
+  if (!content) return;
+
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+
+  writeFileSafe(path, JSON.stringify({ ...raw, ...partial }, null, 2));
 }
 
 // Block counting for stuck agent escape hatch

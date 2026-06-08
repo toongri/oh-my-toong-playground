@@ -26,6 +26,8 @@ skills:
       platforms: [claude]
     - component: sisyphus
       platforms: [claude]
+    - component: goal
+      platforms: [claude]
     - agent-council
     - clarify
     - git-master

@@ -7,6 +7,9 @@ import {
   cleanupDeepInterviewState,
   readPrometheusState,
   cleanupPrometheusState,
+  readGoalState,
+  readGoalStateRaw,
+  updateGoalState,
   getBlockCount,
   incrementBlockCount,
   cleanupBlockCountFiles,
@@ -401,6 +404,367 @@ describe('Prometheus state management', () => {
 
       // Second call on nonexistent file must not throw
       expect(() => cleanupPrometheusState(sessionId)).not.toThrow();
+    });
+  });
+});
+
+describe('Goal state management', () => {
+  const testDir = join(tmpdir(), 'state-test-goal-' + Date.now());
+  const omtDir = join(testDir, 'omt');
+  const sessionId = 'test-session-goal';
+
+  const savedOmtDir = process.env.OMT_DIR;
+
+  beforeAll(async () => {
+    await mkdir(omtDir, { recursive: true });
+  });
+
+  afterAll(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    process.env.OMT_DIR = omtDir;
+    const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+    try { await rm(stateFile, { force: true }); } catch {}
+  });
+
+  afterEach(() => {
+    if (savedOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = savedOmtDir;
+    }
+  });
+
+  describe('readGoalState', () => {
+    it('readGoalState null on absent or malformed file', async () => {
+      // absent: file does not exist
+      expect(readGoalState('nonexistent-goal')).toBeNull();
+
+      // malformed: invalid JSON
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, 'not valid json {');
+      expect(readGoalState(sessionId)).toBeNull();
+
+      // active=false (terminal state): must read as null
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 3,
+        max_iterations: 10,
+      }));
+      expect(readGoalState(sessionId)).toBeNull();
+    });
+
+    it('goal: readGoalState returns state when active=true', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 2,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalState(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.active).toBe(true);
+      expect(result?.phase).toBe('pursuing');
+      expect(result?.iteration).toBe(2);
+      expect(result?.max_iterations).toBe(10);
+      expect(result?.objective_verdict).toBe('absent');
+    });
+
+    // B8: readGoalState is readGoalStateRaw folded by active — same object
+    // when active, null when inactive.
+    it('readGoalState mirrors readGoalStateRaw folded by active', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 4,
+        max_iterations: 10,
+      }));
+      expect(readGoalState(sessionId)).toEqual(readGoalStateRaw(sessionId));
+
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 4,
+        max_iterations: 10,
+      }));
+      expect(readGoalState(sessionId)).toBeNull();
+      expect(readGoalStateRaw(sessionId)).not.toBeNull();
+    });
+  });
+
+  describe('readGoalStateRaw', () => {
+    it('readGoalStateRaw returns the object even when active=false (terminal state)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 3,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalStateRaw(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.active).toBe(false);
+      expect(result?.phase).toBe('complete');
+    });
+
+    it('readGoalStateRaw returns null on absent file', () => {
+      expect(readGoalStateRaw('nonexistent-goal-raw')).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null on malformed file', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, 'not valid json {');
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    // Schema guard: structural validation of load-bearing fields
+    it('readGoalStateRaw returns null when max_iterations is missing (cap-bypass guard)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 2,
+        // max_iterations intentionally omitted
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when phase is an unknown token (e.g. "pursuit")', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuit', // typo'd — not a valid GoalPhase
+        objective_verdict: 'absent',
+        iteration: 2,
+        max_iterations: 10,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null for empty object {}', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({}));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when iteration is non-finite (e.g. NaN)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      // JSON does not have NaN; use null to produce a non-number value
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: null,
+        max_iterations: 10,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    // B-2: integer + range guards — asymmetric corrupted-state defense
+    it('readGoalStateRaw returns null when max_iterations is 0 (must be >= 1)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 0,
+        max_iterations: 0,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when max_iterations is negative (e.g. -1)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 0,
+        max_iterations: -1,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when iteration is negative (e.g. -1000)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: -1000,
+        max_iterations: 10,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when iteration is fractional (e.g. 2.5)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 2.5,
+        max_iterations: 10,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null when max_iterations is fractional (e.g. 1.5)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 0,
+        max_iterations: 1.5,
+      }));
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+
+    it('readGoalStateRaw returns valid state when iteration is 0 (base-0 is valid)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 0,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalStateRaw(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.iteration).toBe(0);
+      expect(result?.max_iterations).toBe(10);
+    });
+
+    it('readGoalStateRaw returns valid terminal state when iteration equals max_iterations', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 10,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalStateRaw(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.active).toBe(false);
+      expect(result?.iteration).toBe(10);
+      expect(result?.max_iterations).toBe(10);
+    });
+
+    it('readGoalStateRaw returns the object for a VALID terminal state (active:false, all fields well-formed)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 5,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalStateRaw(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.active).toBe(false);
+      expect(result?.phase).toBe('complete');
+      expect(result?.iteration).toBe(5);
+      expect(result?.max_iterations).toBe(10);
+    });
+
+    it('readGoalState returns null for a VALID terminal state (active-fold preserved)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 5,
+        max_iterations: 10,
+      }));
+
+      // readGoalState folds active:false → null even when all fields are valid
+      expect(readGoalState(sessionId)).toBeNull();
+      // readGoalStateRaw still returns the object
+      expect(readGoalStateRaw(sessionId)).not.toBeNull();
+    });
+  });
+
+  describe('updateGoalState', () => {
+    it('updateGoalState spread-overlay preserves SKILL-only fields', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 1,
+        max_iterations: 10,
+        // SKILL-only fields the hook does not type:
+        outcome: 'Ship the feature',
+        started_at: '2026-06-06T12:00:00',
+        schema_version: 1,
+      }));
+
+      updateGoalState(sessionId, { iteration: 3 });
+
+      const content = await readFile(stateFile, 'utf8');
+      const parsed = JSON.parse(content);
+      // Overlaid key changed:
+      expect(parsed.iteration).toBe(3);
+      // SKILL-only fields survive unchanged:
+      expect(parsed.outcome).toBe('Ship the feature');
+      expect(parsed.started_at).toBe('2026-06-06T12:00:00');
+      expect(parsed.schema_version).toBe(1);
+      // Untouched typed fields survive:
+      expect(parsed.phase).toBe('pursuing');
+      expect(parsed.max_iterations).toBe(10);
+    });
+
+    it('updateGoalState is a no-op on absent file (creates no file)', () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      expect(existsSync(stateFile)).toBe(false);
+
+      updateGoalState(sessionId, { iteration: 3 });
+
+      expect(existsSync(stateFile)).toBe(false);
+    });
+
+    it('updateGoalState is a no-op on malformed file (does not overwrite)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, 'not valid json {');
+
+      updateGoalState(sessionId, { iteration: 3 });
+
+      const content = await readFile(stateFile, 'utf8');
+      expect(content).toBe('not valid json {');
     });
   });
 });
