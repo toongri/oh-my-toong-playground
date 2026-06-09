@@ -70,12 +70,12 @@ fi
 
 MESSAGES=""
 
-# Cleanup stale ralph-state / prometheus-state / goal-state files (older than 3 hours)
+# Cleanup stale ralph-state / prometheus-state / goal-state / deep-interview files (older than 3 hours)
 if command -v jq &> /dev/null; then
   STALE_THRESHOLD=10800  # 3 hours in seconds
   CURRENT_TIME=$(date +%s)
 
-  for state_file in "$OMT_DIR"/ralph-state-*.json "$OMT_DIR"/prometheus-state-*.json "$OMT_DIR"/goal-state-*.json; do
+  for state_file in "$OMT_DIR"/ralph-state-*.json "$OMT_DIR"/prometheus-state-*.json "$OMT_DIR"/goal-state-*.json "$OMT_DIR"/deep-interview-active-state-*.json; do
     if [ -f "$state_file" ]; then
       STARTED_AT=$(jq -r '.started_at // ""' "$state_file" 2>/dev/null)
       if [ -n "$STARTED_AT" ] && [ "$STARTED_AT" != "null" ]; then
@@ -84,6 +84,16 @@ if command -v jq &> /dev/null; then
         TIME_PART=$(echo "$STARTED_AT" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
         FILE_TIMESTAMP=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$TIME_PART" "+%s" 2>/dev/null || date -d "$TIME_PART" "+%s" 2>/dev/null)
 
+        if [ -n "$FILE_TIMESTAMP" ]; then
+          AGE=$((CURRENT_TIME - FILE_TIMESTAMP))
+          if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then
+            rm -f "$state_file"
+          fi
+        fi
+      else
+        # No parseable started_at: fall back to file mtime so legacy markers age out.
+        # BSD stat (macOS): stat -f %m; GNU stat (Linux): stat -c %Y.
+        FILE_TIMESTAMP=$(stat -f %m "$state_file" 2>/dev/null || stat -c %Y "$state_file" 2>/dev/null)
         if [ -n "$FILE_TIMESTAMP" ]; then
           AGE=$((CURRENT_TIME - FILE_TIMESTAMP))
           if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then

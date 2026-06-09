@@ -352,7 +352,7 @@ test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable() {
 EOF
 
     local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
 
     # Stdout must be valid JSON
     if ! echo "$output" | jq . > /dev/null 2>&1; then
@@ -380,7 +380,7 @@ test_session_start_prometheus_resume_summary_backslash_produces_valid_json() {
 EOF
 
     local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
 
     # (a) stdout must be valid JSON
     if ! echo "$output" | jq . > /dev/null 2>&1; then
@@ -601,7 +601,7 @@ test_session_start_goal_plan_path_backslash_produces_valid_json() {
 EOF
 
     local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
 
     # The hook stdout must be valid JSON (parseable by jq)
     if ! echo "$output" | jq -e . > /dev/null 2>&1; then
@@ -612,6 +612,67 @@ EOF
 
     # The parsed additionalContext must contain GOAL RESTORED
     assert_output_contains "$output" "GOAL RESTORED" "goal plan_path backslash: should inject GOAL RESTORED" || return 1
+}
+
+# =============================================================================
+# Tests: deep-interview stale-cleanup (glob + mtime fallback)
+# =============================================================================
+
+test_session_start_stale_deep_interview_with_started_at_purged() {
+    # AC: old started_at deep-interview marker is removed
+    local stale_ts
+    stale_ts=$(date -j -v-4H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "4 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local stale_file="$TEST_OMT_DIR/deep-interview-active-state-stale-di.json"
+    cat > "$stale_file" << EOF
+{
+  "active": true,
+  "sessionId": "stale-di",
+  "started_at": "${stale_ts}"
+}
+EOF
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$stale_file" ]; then
+        echo "ASSERTION FAILED: stale deep-interview marker (old started_at) should have been purged but still exists"
+        return 1
+    fi
+    return 0
+}
+
+test_session_start_stale_deep_interview_no_started_at_purged_via_mtime() {
+    # AC: started_at-less deep-interview marker with old mtime is removed via mtime fallback
+    local stale_file="$TEST_OMT_DIR/deep-interview-active-state-mtime-di.json"
+    printf '{"active":true,"sessionId":"mtime-di"}' > "$stale_file"
+
+    # Set mtime to 4 hours ago (BSD: touch -t YYYYmmddHHMM; GNU: touch -d)
+    local old_mtime
+    old_mtime=$(date -j -v-4H "+%Y%m%d%H%M" 2>/dev/null || date -d "4 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" "$stale_file" 2>/dev/null || touch -d "4 hours ago" "$stale_file" 2>/dev/null || true
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$stale_file" ]; then
+        echo "ASSERTION FAILED: started_at-less deep-interview marker with old mtime should have been purged but still exists"
+        return 1
+    fi
+    return 0
+}
+
+test_session_start_fresh_deep_interview_marker_survives() {
+    # AC: fresh deep-interview marker (mtime now) is NOT removed
+    local fresh_file="$TEST_OMT_DIR/deep-interview-active-state-fresh-di.json"
+    printf '{"active":true,"sessionId":"fresh-di"}' > "$fresh_file"
+    # mtime is already "now" — no touch needed
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$fresh_file" ]; then
+        echo "ASSERTION FAILED: fresh deep-interview marker should survive cleanup but was removed"
+        return 1
+    fi
+    return 0
 }
 
 # =============================================================================
@@ -659,6 +720,11 @@ main() {
 
     # Goal state restore: backslash in plan_path produces valid JSON
     run_test test_session_start_goal_plan_path_backslash_produces_valid_json
+
+    # deep-interview stale-cleanup: glob + mtime fallback
+    run_test test_session_start_stale_deep_interview_with_started_at_purged
+    run_test test_session_start_stale_deep_interview_no_started_at_purged_via_mtime
+    run_test test_session_start_fresh_deep_interview_marker_survives
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
