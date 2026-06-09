@@ -89,7 +89,7 @@ For each artifact passing curation, apply both of the following:
 
 ### 6a. Native Related Relation (PM tool)
 
-Attach a native related relation in the PM tool between the new/enriched ticket and the related artifact. Express this as an abstract write step — the concrete field binding lives only in the write tail (Stage 6 of the spine). The instruction here is: for each curated PM artifact, attach a native related relation in the PM tool.
+Attach a native related relation in the PM tool between the new/enriched ticket and the related artifact. Express this as an abstract write step — the concrete field binding lives only in the write tail (Stage 6 of the spine). The instruction here applies only to the **curated-related** PM-issue class (§6b) — related tickets and near-duplicates that should become native related items. Parent epics, context-only mentions, and duplicate-policy distinct siblings are **excluded** here: parent assignment is handled by the parent step (Stage 6), and the rest are rendered in a non-auto-linking form per §6b. For each curated PM artifact in the curated-related class, attach a native related relation in the PM tool.
 
 ### 6b. References Section in the Ticket Body
 
