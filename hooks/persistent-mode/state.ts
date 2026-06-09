@@ -40,6 +40,22 @@ export function readDeepInterviewState(sessionId: string): DeepInterviewState | 
   }
 }
 
+// Active-agnostic probe: returns the parsed deep-interview state even when active=false
+// (terminal — interview concluded), so the hook can delete orphaned terminal markers.
+// Null on absent or malformed; never throws. Distinct from readDeepInterviewState, which
+// folds active:false -> null (causing the delete branch to never fire on terminal files).
+export function readDeepInterviewStateRaw(sessionId: string): DeepInterviewState | null {
+  const path = join(getOmtDir(), `deep-interview-active-state-${sessionId}.json`);
+  const content = readFileOrNull(path);
+  if (!content) return null;
+
+  try {
+    return JSON.parse(content) as DeepInterviewState;
+  } catch {
+    return null;
+  }
+}
+
 export function cleanupDeepInterviewState(sessionId: string): void {
   deleteFile(join(getOmtDir(), `deep-interview-active-state-${sessionId}.json`));
 }

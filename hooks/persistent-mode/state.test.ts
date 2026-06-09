@@ -4,6 +4,7 @@ import {
   updateRalphState,
   cleanupRalphState,
   readDeepInterviewState,
+  readDeepInterviewStateRaw,
   cleanupDeepInterviewState,
   readPrometheusState,
   cleanupPrometheusState,
@@ -766,5 +767,75 @@ describe('Goal state management', () => {
       const content = await readFile(stateFile, 'utf8');
       expect(content).toBe('not valid json {');
     });
+  });
+});
+
+describe('readDeepInterviewStateRaw', () => {
+  const testDir = join(tmpdir(), 'state-test-diraw-' + Date.now());
+  const omtDir = join(testDir, 'omt');
+  const sessionId = 'test-session';
+
+  const savedOmtDir = process.env.OMT_DIR;
+
+  beforeAll(async () => {
+    await mkdir(omtDir, { recursive: true });
+  });
+
+  afterAll(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    process.env.OMT_DIR = omtDir;
+    const stateFile = join(omtDir, `deep-interview-active-state-${sessionId}.json`);
+    try { await rm(stateFile, { force: true }); } catch {}
+  });
+
+  afterEach(() => {
+    if (savedOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = savedOmtDir;
+    }
+  });
+
+  it('readDeepInterviewStateRaw returns the object even when active=false (terminal state)', async () => {
+    const state: DeepInterviewState = { active: false, sessionId: 's1' };
+    await writeFile(
+      join(omtDir, `deep-interview-active-state-${sessionId}.json`),
+      JSON.stringify(state)
+    );
+
+    const result = readDeepInterviewStateRaw(sessionId);
+
+    expect(result).not.toBeNull();
+    expect(result?.active).toBe(false);
+    expect(result?.sessionId).toBe('s1');
+  });
+
+  it('readDeepInterviewStateRaw returns state when active=true', async () => {
+    const state: DeepInterviewState = { active: true, sessionId: 's2' };
+    await writeFile(
+      join(omtDir, `deep-interview-active-state-${sessionId}.json`),
+      JSON.stringify(state)
+    );
+
+    const result = readDeepInterviewStateRaw(sessionId);
+
+    expect(result).not.toBeNull();
+    expect(result?.active).toBe(true);
+  });
+
+  it('readDeepInterviewStateRaw returns null on absent file', () => {
+    expect(readDeepInterviewStateRaw('nonexistent-di-raw')).toBeNull();
+  });
+
+  it('readDeepInterviewStateRaw returns null on malformed JSON', async () => {
+    await writeFile(
+      join(omtDir, `deep-interview-active-state-${sessionId}.json`),
+      'not valid json {'
+    );
+
+    expect(readDeepInterviewStateRaw(sessionId)).toBeNull();
   });
 });
