@@ -20,14 +20,14 @@ Classifies document type and verifies that required elements for that type are m
 Read the document's title, overview, and first paragraph to determine the type.
 
 **P16. Type selection criteria:**
-- "에러 해결", "문제 발생 시" → How-to
+- "에러 해결", "오류 해결", "문제 발생 시" → How-to
 - "개념", "원리", "왜" → Explanation
 - "API", "파라미터", "시그니처" → Reference
 - "시작하기", "설치", "첫 번째" → Tutorial
 - Hybrid types allowed: Tutorial+Reference, etc.
 
 좋은 예:
-> 제목 "JWT 인증 오류 해결하기"를 보면 "에러 해결" 키워드가 포함되어 있으므로 How-to로 분류합니다.
+> 제목 "JWT 인증 오류 해결하기"를 보면 "오류 해결" 키워드가 포함되어 있으므로 How-to로 분류합니다.
 
 ### Step 2: Verify Required Elements by Type
 
