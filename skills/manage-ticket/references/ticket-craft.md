@@ -19,7 +19,7 @@ are omitted rather than left blank.
 | **Root Cause** | The underlying mechanism that produces the problem. Must be grounded in code, logs, or a reproducible trace — not speculation. If unknown, write `TBD — needs validation via {method}`. |
 | **AC** | Acceptance criteria (see Section 2 below). At least one AC per ticket. |
 | **Non-Goals** | What this ticket explicitly does NOT address. Prevents scope creep. |
-| **Links** | Related tickets, PRDs, design docs, Slack threads, incident records. Annotate each with a one-sentence relationship note. |
+| **Links** | Related tickets (plain identifier/title text + one-sentence relationship note — no markdown issue-link); PRDs, design docs, Slack threads, incident records (markdown links). PM-issue body mentions use plain identifier text so the body cannot create relations the curation did not intend. |
 
 ### Bug-Genre Additions
 

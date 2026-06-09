@@ -93,12 +93,22 @@ Attach a native related relation in the PM tool between the new/enriched ticket 
 
 ### 6b. References Section in the Ticket Body
 
-Add a `## References` section to the ticket body. Format each entry using this pattern:
+Add a `## References` section to the ticket body. The rendering form differs by artifact class — this distinction is critical to preventing the body from acting as an implicit relation channel.
+
+**Artifact class split**:
+
+- **Non-PM artifacts** (PRDs, design docs, meeting notes, Slack threads, comment trails, code commits/PRs, logs, incident records): render as a markdown link — `[anchor text](URL)` — followed by a one-line justification. These links are passive references; they do not create relations in the PM tool.
+- **PM-tool issue artifacts** (linked issues, parent epics, related tickets, near-duplicate annotations): render as **plain identifier/title text** — `{issue-key} — {key content summary} — One-line justification: {reason}` — with **no** markdown link to the issue URL. Do not use `[anchor](issue-url)` form for PM issues in the body.
+
+**Sole-authority invariant**: the curated native-relation set (§6a) is the sole authority for relations between tickets. The body must never be a second, implicit relation channel. A PM-issue body mention using a markdown link can silently create an unintended relation in some PM tools; using plain identifier text prevents this. Context mentions of PM issues remain valuable — render them as plain text, not links.
+
+Format each entry using the appropriate form:
 
 ```
 - PRD: [Short title summarizing the relevant content inline] — [link] — One-line justification: [why this is relevant to this ticket].
 - 회의록: [Short title summarizing the relevant content inline] — [link] — One-line justification: [why this is relevant to this ticket].
 - 관련 논의: [Short title summarizing the relevant content inline] — [link] — One-line justification: [why this is relevant to this ticket].
+- 관련 논의: {PM-issue-key} — {key content summary} — One-line justification: [why this is relevant to this ticket].
 ```
 
 **Labels**: use the labels `PRD:`, `회의록:`, `관련 논의:` literally as the prefix for the corresponding artifact type. Do not invent new label names.
@@ -106,15 +116,13 @@ Add a `## References` section to the ticket body. Format each entry using this p
 **Label assignment**:
 - `PRD:` — spec pages, PRDs, design docs, requirement documents from collaboration-docs.
 - `회의록:` — meeting notes, recorded decisions from collaboration-docs.
-- `관련 논의:` — Slack threads, comment trails, PM discussion threads, review comments, or any artifact that is a discussion record rather than a formal document.
+- `관련 논의:` — Slack threads, comment trails, PM discussion threads, review comments, code-VCS artifacts, logs artifacts, and PM-tool issue artifacts (all rendered according to the class split above).
 
-**Key content inline**: the short title must convey the substance of the artifact — what it says that matters for this ticket — not just its file name or issue number. A reader should understand why this link exists without opening it.
+**Key content inline**: the short title (or issue-key summary) must convey the substance of the artifact — what it says that matters for this ticket — not just its file name or issue number. A reader should understand why this entry exists without opening it.
 
-**Details linked**: the title is followed by a link (using GitHub/Linear markdown link syntax: `[anchor text](URL)`). When the URL is not known, note "URL unavailable" and ask the caller for it before the write tail.
+**Per-entry justification**: every entry ends with a one-line justification (`One-line justification: ...`) stating the specific reason this artifact is related to this ticket. Justifications are not optional.
 
-**Per-link justification**: every entry ends with a one-line justification (`One-line justification: ...`) stating the specific reason this artifact is related to this ticket. Justifications are not optional.
-
-**code-VCS artifacts**: commits and PRs that pass curation are included as `관련 논의:` entries (they are discussion-adjacent evidence, not formal documents).
+**code-VCS artifacts**: commits and PRs that pass curation are included as `관련 논의:` entries using the markdown-link form (they are non-PM, so passive links are safe).
 
 **logs artifacts**: log entries and incident records that pass curation are included as `관련 논의:` entries with the artifact type noted parenthetically, e.g., `관련 논의: (incident log) [title] — [link] — One-line justification: ...`.
 
