@@ -44,8 +44,9 @@ compute_omt_dir() {
     # Standard repo: use the actual toplevel directory name
     _omt_name=$(basename "$(git -C "$_omt_root" rev-parse --show-toplevel 2>/dev/null)") || _omt_name=""
   else
-    # No git: fall back to the project root basename
+    # No git: fall back to the project root basename (non-canonical)
     _omt_name=$(basename "$_omt_root")
+    echo "omt-dir: non-canonical project '$_omt_name' from non-git path $_omt_root" >&2
   fi
 
   # Final fallback if name is still empty
@@ -76,6 +77,15 @@ resolve_omt_dir() {
 
   local _r_root=""
   while [ "$_r_dir" != "/" ] && [ "$_r_dir" != "." ] && [ -n "$_r_dir" ]; do
+    # $HOME boundary: do not use $HOME itself as a project root (HOME/CLAUDE.md is user-global)
+    if [ "$_r_dir" = "$HOME" ]; then
+      break
+    fi
+    # Bare repo dir: has HEAD + config + objects but no .git subdir/file — valid project root
+    if [ -f "$_r_dir/HEAD" ] && [ -f "$_r_dir/config" ] && [ -d "$_r_dir/objects" ] && [ ! -e "$_r_dir/.git" ]; then
+      _r_root="$_r_dir"
+      break
+    fi
     if [ -d "$_r_dir/.git" ] || [ -f "$_r_dir/CLAUDE.md" ] || [ -f "$_r_dir/package.json" ]; then
       _r_root="$_r_dir"
       break
