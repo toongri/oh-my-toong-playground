@@ -38,7 +38,8 @@ skills:
     - component: code-review
       platforms: [claude]
     - make-pr
-    - manage-ticket
+    - component: manage-ticket
+      platforms: [claude]
     - technical-writing
     - technical-copywriting
     - humanizer
