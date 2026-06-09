@@ -2,7 +2,7 @@
 
 Area: Architecture Review
 Reference: `skills/technical-writing/references/architecture.md`
-Scenario Count: 8
+Scenario Count: 9
 
 ---
 
@@ -344,3 +344,39 @@ PA17 기준:
 (2) 구체적 링크 위치와 대상 문서를 명시
 (3) 크로스링크 설정 원칙(튜토리얼→가이드→참조 흐름)에 부합
 (4) 크로스링크 누락을 지적하지 않으면 RED
+
+---
+
+### AR-9: 산출물(명령어) 매몰 — artifact-first 위반 감지
+
+**Technique Under Test**: P26 Artifact-first: 복사 가능한 핵심 산출물을 문서 앞부분에 노출 (architecture.md Step 5)
+
+**Input**:
+```markdown
+# 컨테이너 로그 확인하기
+
+컨테이너 로그를 실시간으로 확인하면 장애 원인을 빠르게 파악할 수 있습니다. Docker는 로그 출력을 위한 다양한 옵션을 제공합니다. `-f`는 실시간 추적 모드로 새 로그 라인이 생기면 즉시 출력합니다. `--tail`은 마지막 N줄만 출력하는 옵션으로, 로그가 많을 때 최근 항목만 볼 수 있습니다. `web`은 확인하려는 컨테이너 이름입니다. 위 옵션을 조합한 명령은 다음과 같습니다.
+
+```bash
+docker logs -f --tail 100 web
+```
+```
+
+**Expected Output**:
+P26 기준:
+- 이 문서의 핵심 산출물은 `docker logs -f --tail 100 web` 명령어임
+- 현재 구조: 옵션 카탈로그(3문장 설명) → 명령어 순서로 핵심 산출물이 매몰되어 있음
+- 개선: 한 줄 컨텍스트 → 명령어 먼저 → 옵션 설명 순서로 재배치 필요
+
+개선 제안:
+> 컨테이너 로그를 실시간으로 보려면 다음을 실행합니다.
+> ```bash
+> docker logs -f --tail 100 web
+> ```
+> `-f`는 실시간 추적, `--tail 100`은 마지막 100줄만 출력합니다.
+
+**Pass Criteria**:
+(1) 핵심 산출물(명령어)이 옵션 카탈로그 뒤에 매몰되어 있음을 지적
+(2) artifact-first 원칙(P26)을 인용하거나 "핵심 명령어/산출물을 먼저 제시"하도록 개선 제안
+(3) 한 줄 컨텍스트 → 명령어 → 옵션 상세 순서의 재구성 방향 제시
+(4) 명령어 매몰을 지적하지 않거나 P26 기준을 적용하지 않으면 RED

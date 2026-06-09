@@ -141,6 +141,23 @@ Before:
 After:
 > 이 스니펫을 사용하면 PostgreSQL 데이터베이스 연결 속도가 50% 빨라집니다.
 
+**P26. Artifact-first: surface the primary deliverable early** (don't bury the copy-pasteable artifact):
+
+문서의 핵심 산출물이 복사해서 바로 실행할 수 있는 명령어, 코드 스니펫, 설정값인 경우, 해당 산출물을 문서 앞부분에 먼저 노출합니다. 한 줄 컨텍스트가 앞에 올 수 있고(P9와 호환), 옵션 상세 설명은 산출물 이후에 배치합니다. 이 원칙은 value-first(P12/P13)를 산출물 자체에 적용한 것입니다 — 정확성이나 운영 관련 주장이 아닙니다.
+
+Before:
+> 컨테이너 로그를 실시간으로 확인하면 장애 원인을 빠르게 파악할 수 있습니다. `-f`는 실시간 추적, `--tail`은 마지막 N줄 출력, `web`은 대상 컨테이너를 의미합니다. 위 옵션을 조합한 명령은 다음과 같습니다.
+> ```bash
+> docker logs -f --tail 100 web
+> ```
+
+After:
+> 컨테이너 로그를 실시간으로 보려면 다음을 실행합니다.
+> ```bash
+> docker logs -f --tail 100 web
+> ```
+> `-f`는 실시간 추적, `--tail 100`은 마지막 100줄만 출력합니다.
+
 ### Step 6: Background Explanation
 
 **P14. Define new concepts immediately upon introduction:**
