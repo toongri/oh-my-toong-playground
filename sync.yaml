@@ -15,3 +15,5 @@ skills:
     - using-maestro
     - mock-interview
     - scan-pdf-to-notes
+    - component: goal
+      platforms: [claude]
