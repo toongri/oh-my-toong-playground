@@ -1,7 +1,7 @@
 import { HookOutput, RalphState, GoalState } from './types.ts';
 import {
   readRalphState, updateRalphState, cleanupRalphState,
-  readDeepInterviewState, cleanupDeepInterviewState,
+  readDeepInterviewStateRaw, cleanupDeepInterviewState,
   readPrometheusState, cleanupPrometheusState,
   readGoalStateRaw, updateGoalState,
   getBlockCount, incrementBlockCount, cleanupBlockCountFiles,
@@ -356,9 +356,16 @@ export function makeDecision(context: DecisionContext): HookOutput {
   }
 
   // Priority 1.5: Deep Interview Protection
-  const deepInterviewState = readDeepInterviewState(sessionId);
-  if (deepInterviewState && deepInterviewState.active) {
-    if (detectDeepInterviewDone(lastAssistantMessage)) {
+  // Use the raw reader to also catch active:false terminal markers (which the folded
+  // readDeepInterviewState returns as null, causing delete to never fire and leaving
+  // orphaned files on disk). active:false → delete without requiring the done-token.
+  // active:true path is unchanged: done-token → delete, no token → block + continuation.
+  const deepInterviewStateRaw = readDeepInterviewStateRaw(sessionId);
+  if (deepInterviewStateRaw) {
+    if (!deepInterviewStateRaw.active) {
+      // Terminal marker — interview already concluded. Delete the orphan unconditionally.
+      cleanupDeepInterviewState(sessionId);
+    } else if (detectDeepInterviewDone(lastAssistantMessage)) {
       cleanupDeepInterviewState(sessionId);
     } else {
       return formatBlockOutput(buildDeepInterviewContinuationMessage());

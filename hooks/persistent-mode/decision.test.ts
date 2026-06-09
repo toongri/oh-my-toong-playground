@@ -819,6 +819,39 @@ describe('makeDecision', () => {
       expect(existsSync(join(omtDir, 'deep-interview-active-state-test-session.json'))).toBe(false);
       expect(result.reason ?? '').not.toContain('<deep-interview-continuation>');
     });
+
+    it('makeDecision deletes active:false terminal marker via raw reader (no done-token required)', async () => {
+      // Seed an active:false terminal marker — the normal readDeepInterviewState folds this to null,
+      // so without the raw reader the delete branch never fires and the file orphans.
+      const deepInterviewState = { active: false, sessionId: 'test-session' };
+      const markerPath = join(omtDir, 'deep-interview-active-state-test-session.json');
+      await writeFile(markerPath, JSON.stringify(deepInterviewState));
+
+      // No done-token in the message — the fix must use the raw reader to detect active:false.
+      const context = createContext({ lastAssistantMessage: 'some message without done token' });
+
+      const result = makeDecision(context);
+
+      const { existsSync } = await import('fs');
+      expect(existsSync(markerPath)).toBe(false);
+      expect(result.reason ?? '').not.toContain('<deep-interview-continuation>');
+    });
+
+    it('makeDecision preserves active:true marker and emits continuation (no done-token)', async () => {
+      // An active interview with no done-token must still be blocked and the marker kept.
+      const deepInterviewState = { active: true, sessionId: 'test-session' };
+      const markerPath = join(omtDir, 'deep-interview-active-state-test-session.json');
+      await writeFile(markerPath, JSON.stringify(deepInterviewState));
+
+      const context = createContext({ lastAssistantMessage: 'some message without done token' });
+
+      const result = makeDecision(context);
+
+      const { existsSync } = await import('fs');
+      expect(existsSync(markerPath)).toBe(true);
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<deep-interview-continuation>');
+    });
   });
 
   describe('Priority 1.5: Prometheus State Protection', () => {
