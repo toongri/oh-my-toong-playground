@@ -129,6 +129,8 @@ Abstract write steps (in order):
 
 **Runtime tool binding** (this is the only place concrete tool identifiers may appear): when the PM tool is Linear, the write steps map to the Linear MCP: `save_issue` to create or update, `relatedTo` for related links, `parentId` for parent assignment. When the PM tool differs, substitute the equivalent fields. The binding is resolved at runtime based on what MCP is wired — this skill carries no hardcoded assumption beyond Linear as the documented example.
 
+**Linear auto-relation fact**: Linear auto-creates a native `relatedTo` relation from any issue-markdown-link or issue URL placed in a description body. Therefore, when the PM tool is Linear: `relatedTo` is written only for the curated related set (step 1 above), `parentId` only for parent assignment (step 2 above), and PM-issue mentions in the References/Links body section are rendered as plain identifier text (not issue links) so the body does not silently add relations beyond the curated set.
+
 Review is post-hoc: the ticket is written first; the caller can review and request changes afterward.
 
 ---
