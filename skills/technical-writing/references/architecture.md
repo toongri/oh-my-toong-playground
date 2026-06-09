@@ -133,6 +133,9 @@ Before:
 After:
 > 리버스 프록시 설정을 적용하면 네트워크 지연 문제를 최소화할 수 있어요.
 
+좋은 예:
+> 환경 변수를 사용하면 코드 수정 없이 스테이징과 프로덕션 설정을 분리할 수 있어요.
+
 **P13. Explain usefulness before listing features:**
 
 Before:
@@ -157,6 +160,13 @@ After:
 > docker logs -f --tail 100 web
 > ```
 > `-f`는 실시간 추적, `--tail 100`은 마지막 100줄만 출력합니다.
+
+좋은 예:
+> 로컬 환경을 초기화하려면 다음을 실행하세요.
+> ```bash
+> ./scripts/setup.sh
+> ```
+> 이 스크립트는 의존성 설치, 환경 변수 복사, 데이터베이스 초기화를 순서대로 수행합니다.
 
 ### Step 6: Background Explanation
 

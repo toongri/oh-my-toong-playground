@@ -26,6 +26,9 @@ Read the document's title, overview, and first paragraph to determine the type.
 - "시작하기", "설치", "첫 번째" → Tutorial
 - Hybrid types allowed: Tutorial+Reference, etc.
 
+좋은 예:
+> 제목 "JWT 인증 오류 해결하기"를 보면 "에러 해결" 키워드가 포함되어 있으므로 How-to로 분류합니다.
+
 ### Step 2: Verify Required Elements by Type
 
 #### P17. Tutorial Required Elements
@@ -309,6 +312,16 @@ Function name → Signature → Parameters (type/default/required) → Return va
 - Accuracy & completeness: No technical errors, no omissions, up-to-date
 - Searchability: Table of contents, keywords, anchor links
 - Place prerequisite info (API keys, auth methods) at the beginning
+
+좋은 예:
+> #### `createUser(options)`
+>
+> 새 사용자를 생성하고 생성된 사용자 객체를 반환합니다. 호출 전에 관리자 API 키가 설정되어 있어야 합니다.
+>
+> | 파라미터 | 타입 | 필수 | 설명 |
+> |---------|------|------|------|
+> | `email` | string | 필수 | 사용자 이메일 주소 |
+> | `role` | `"admin" \| "user"` | 선택 | 기본값: `"user"` |
 
 **Example: fetch API 참조 문서**
 
