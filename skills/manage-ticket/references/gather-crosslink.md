@@ -98,9 +98,10 @@ Add a `## References` section to the ticket body. The rendering form differs by 
 **Artifact class split**:
 
 - **Non-PM artifacts** (PRDs, design docs, meeting notes, Slack threads, comment trails, code commits/PRs, logs, incident records): render as a markdown link — `[anchor text](URL)` — followed by a one-line justification. These links are passive references; they do not create relations in the PM tool.
-- **PM-tool issue artifacts** (linked issues, parent epics, related tickets, near-duplicate annotations): render as **plain identifier/title text** — `{issue-key} — {key content summary} — One-line justification: {reason}` — with **no** markdown link to the issue URL. Do not use `[anchor](issue-url)` form for PM issues in the body.
+- **Curated-related PM-tool issue artifacts** (related tickets and near-duplicates that should be native related items): do not add a separate body reference just to create or repeat the relationship. Their cross-link is the native related relation from §6a; include body prose only when it is needed to explain scope, and render any PM-issue reference in a form your PM tool does not auto-link into a relation.
+- **Must-not-relate PM-tool issue mentions** (parent epics, context-only mentions, and duplicate-policy distinct siblings that should not become native related items): if they must appear in the body, render the issue reference in a form your PM tool does not auto-link into a relation, followed by the key content summary and one-line justification.
 
-**Sole-authority invariant**: the curated native-relation set (§6a) is the sole authority for relations between tickets. The body must never be a second, implicit relation channel. A PM-issue body mention using a markdown link can silently create an unintended relation in some PM tools; using plain identifier text prevents this. Context mentions of PM issues remain valuable — render them as plain text, not links.
+**Sole-authority invariant**: the curated native-relation set (§6a) is the sole authority for related-ticket relations. The body must never be a second, implicit relation channel. Any PM-issue body reference that is not intended to become a native related relation must use a form your PM tool does not auto-link into a relation.
 
 Format each entry using the appropriate form:
 
@@ -108,7 +109,7 @@ Format each entry using the appropriate form:
 - PRD: [Short title summarizing the relevant content inline] — [link] — One-line justification: [why this is relevant to this ticket].
 - 회의록: [Short title summarizing the relevant content inline] — [link] — One-line justification: [why this is relevant to this ticket].
 - 관련 논의: [Short title summarizing the relevant content inline] — [link] — One-line justification: [why this is relevant to this ticket].
-- 관련 논의: {PM-issue-key} — {key content summary} — One-line justification: [why this is relevant to this ticket].
+- 관련 논의: {PM-tool non-auto-linking issue reference} — {key content summary} — One-line justification: [why this PM issue is relevant context but must not become a related-ticket relation].
 ```
 
 **Labels**: use the labels `PRD:`, `회의록:`, `관련 논의:` literally as the prefix for the corresponding artifact type. Do not invent new label names.
@@ -116,7 +117,7 @@ Format each entry using the appropriate form:
 **Label assignment**:
 - `PRD:` — spec pages, PRDs, design docs, requirement documents from collaboration-docs.
 - `회의록:` — meeting notes, recorded decisions from collaboration-docs.
-- `관련 논의:` — Slack threads, comment trails, PM discussion threads, review comments, code-VCS artifacts, logs artifacts, and PM-tool issue artifacts (all rendered according to the class split above).
+- `관련 논의:` — Slack threads, comment trails, PM discussion threads, review comments, code-VCS artifacts, logs artifacts, and must-not-relate PM-tool issue mentions (all rendered according to the class split above).
 
 **Key content inline**: the short title (or issue-key summary) must convey the substance of the artifact — what it says that matters for this ticket — not just its file name or issue number. A reader should understand why this entry exists without opening it.
 
