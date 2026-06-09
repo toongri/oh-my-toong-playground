@@ -19,7 +19,7 @@ are omitted rather than left blank.
 | **Root Cause** | The underlying mechanism that produces the problem. Must be grounded in code, logs, or a reproducible trace — not speculation. If unknown, write `TBD — needs validation via {method}`. |
 | **AC** | Acceptance criteria (see Section 2 below). At least one AC per ticket. |
 | **Non-Goals** | What this ticket explicitly does NOT address. Prevents scope creep. |
-| **Links** | PRDs, design docs, Slack threads, incident records, code commits/PRs, and logs use markdown links. Related PM tickets are linked through the native relation step, not by duplicating the relationship in the body. PM-issue mentions that must appear in the body without becoming related use a form your PM tool does not auto-link into a relation, with a one-sentence note explaining why they are context rather than related-ticket links. |
+| **References** | PRDs, design docs, Slack threads, incident records, code commits/PRs, and logs use markdown links. Related PM tickets are linked through the native relation step, not by duplicating the relationship in the body. PM-issue mentions that must appear in the body without becoming related use a form your PM tool does not auto-link into a relation, with a one-sentence note explaining why they are context rather than related-ticket links. |
 
 ### Bug-Genre Additions
 
@@ -31,7 +31,7 @@ Bug tickets add three fields, placed between Problem and AC:
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
-For bug tickets the ordering is: Problem → Reproduction → Root Cause → Evidence → AC → Non-Goals → Links.
+For bug tickets the ordering is: Problem → Reproduction → Root Cause → Evidence → AC → Non-Goals → References.
 
 ### Anti-Fluff Rule
 
@@ -44,7 +44,8 @@ Missing information must be represented honestly. Do not invent plausible requir
 > user interview", "TBD — needs validation via log inspection", "TBD — needs validation via
 > reproduction attempt"). A `TBD` field is not a defect — it is an honest statement that
 > blocks refuse-to-file only when the field is evidence-class (Root Cause with runtime-evidence
-> claim, or Reproduction for a bug report with no reproducible scenario).
+> claim, or Reproduction for a bug report with no reproducible scenario AND no log evidence AND
+> no witness account).
 
 ---
 
@@ -116,7 +117,7 @@ When the ticket is a runtime bug, the Root Cause section uses this sub-template:
 **Symptom**: What the caller observes.
 **Root Cause**: The actual underlying issue — not the symptom. Must be grounded at a
                specific code location, log line, or reproducible mechanism.
-**Reproduction**: Minimal steps to trigger.
+**Reproduction**: Minimal steps to trigger. (For tickets that follow the §1 Bug-Genre body shape, this field is fulfilled by the top-level Reproduction section — reference it here rather than repeating the steps.)
 **Fix direction**: Recommended change (direction only — implementation is downstream).
 **Verification step**: How to confirm the fix worked.
 **Similar issues**: Other places the same pattern may exist.
