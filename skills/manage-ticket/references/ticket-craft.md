@@ -173,7 +173,7 @@ For each child:
 A partially-settled intake splits naturally: open sub-units stay as Model-A WHAT children;
 settled sub-units receive a handoff recommendation rather than being pre-solved.
 
-### Named Contract: sisyphus atomicity smell heuristics + blockedBy dependency-ordering
+### Named Contract: sisyphus atomicity smell heuristics + dependency-ordering
 
 When determining whether a candidate child ticket is atomic, apply these smell heuristics:
 
@@ -185,10 +185,10 @@ When determining whether a candidate child ticket is atomic, apply these smell h
 | Two child tickets modify the same domain object or module | MECE violation — merge or split by responsibility |
 | Completed child tickets would not cover a requirement | Coverage gap — add a missing child |
 
-Dependency ordering between child tickets uses `blockedBy` links:
-- A child that depends on another child's output is marked `blockedBy` the predecessor.
-- Independent children carry no `blockedBy` and can be executed in parallel.
-- Circular `blockedBy` chains are forbidden.
+Dependency ordering between child tickets uses blocked-by dependency links:
+- A child that depends on another child's output is marked as blocked by the predecessor.
+- Independent children carry no dependency link and can be executed in parallel.
+- Circular dependency chains are forbidden.
 
 ### Model-A Purity Rules
 
