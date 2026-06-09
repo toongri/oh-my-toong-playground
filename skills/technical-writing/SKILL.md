@@ -26,7 +26,7 @@ Reviews technical documents and suggests improvements. 3-phase sequential review
 | Sequential Execution | Type → Architecture → Sentence order |
 | Per-Area Approval | User confirmation after each Area |
 | Before/After | All improvement suggestions in Before/After format |
-| Cite Principle | Each suggestion must cite its principle ID (T1~T16, P1~PA17, P26) |
+| Cite Principle | Each suggestion must cite its principle ID (sentence T1~T16; architecture P1~P15, PA16/PA17, P26; type P16~P24) |
 
 ## Review Areas
 
