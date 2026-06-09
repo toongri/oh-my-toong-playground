@@ -164,22 +164,31 @@ RALPH_STATE_EOF
 
 # Function to create deep-interview state file
 # Uses SESSION_ID for session-specific file naming
+# Writes atomically via temp file + mv so a mid-write failure leaves no partial file.
 create_deep_interview_state() {
+  local timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
+  local target="$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json"
+  local tmp="${target}.tmp.$$"
+
   if command -v jq &> /dev/null; then
     jq -n \
       --arg session_id "$SESSION_ID" \
+      --arg started_at "$timestamp" \
       '{
         active: true,
-        sessionId: $session_id
-      }' > "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" 2>/dev/null
+        sessionId: $session_id,
+        started_at: $started_at
+      }' > "$tmp" 2>/dev/null && mv "$tmp" "$target" || rm -f "$tmp"
   else
     # Fallback: write manually when jq is unavailable
-    cat > "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" 2>/dev/null << DEEP_INTERVIEW_STATE_EOF
+    cat > "$tmp" 2>/dev/null << DEEP_INTERVIEW_STATE_EOF
 {
   "active": true,
-  "sessionId": "${SESSION_ID}"
+  "sessionId": "${SESSION_ID}",
+  "started_at": "${timestamp}"
 }
 DEEP_INTERVIEW_STATE_EOF
+    if [ $? -eq 0 ]; then mv "$tmp" "$target"; else rm -f "$tmp"; fi
   fi
 }
 
