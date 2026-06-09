@@ -124,10 +124,11 @@ Abstract write steps (in order):
 
 1. **Link related items**: attach previously gathered related tickets/issues as related items in the PM tool.
 2. **Set parent**: if this is a child ticket from the slice stage, set the parent relationship to the parent ticket.
-3. **Write body**: write the full ticket body following the body shape from `references/ticket-craft.md`.
-4. **Label**: apply any labels derived from the ticket genre (bug, feature, improvement, etc.) and the source domain.
+3. **Set dependency links**: for child tickets that carry a blocked-by ordering from the slice stage, attach the blocked-by relation to the predecessor ticket. Independent children carry no dependency link.
+4. **Write body**: write the full ticket body following the body shape from `references/ticket-craft.md`.
+5. **Label**: apply any labels derived from the ticket genre (bug, feature, improvement, etc.) and the source domain.
 
-**Runtime tool binding** (this is the only place concrete tool identifiers may appear): when the PM tool is Linear, the write steps map to the Linear MCP: `save_issue` to create or update, `relatedTo` for related links, `parentId` for parent assignment. When the PM tool differs, substitute the equivalent fields. The binding is resolved at runtime based on what MCP is wired — this skill carries no hardcoded assumption beyond Linear as the documented example.
+**Runtime tool binding** (this is the only place concrete tool identifiers may appear): when the PM tool is Linear, the write steps map to the Linear MCP: `save_issue` to create or update, `relatedTo` for related links, `parentId` for parent assignment, `blockedBy` for dependency links. When the PM tool differs, substitute the equivalent fields. The binding is resolved at runtime based on what MCP is wired — this skill carries no hardcoded assumption beyond Linear as the documented example.
 
 **Linear auto-relation fact**: Linear auto-creates a native `relatedTo` relation from any unescaped issue reference placed in a description body, including a bare issue key (for example, `B2C-4992` as normal text), an issue markdown link, or an issue URL. Therefore, when the PM tool is Linear: `relatedTo` is written only for the curated related set (step 1 above), `parentId` only for parent assignment (step 2 above), and PM issues that must be referenced in the body without becoming related — parent epics, context-only mentions, or duplicate-policy distinct siblings — are rendered as inline-code issue identifiers (for example, `` `B2C-4992` ``), which preserves literal text and does not create a Linear issue mention/relation. Do not render must-not-relate Linear issue references as bare keys, markdown issue links, or issue URLs in the body.
 
