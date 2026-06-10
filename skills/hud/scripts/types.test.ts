@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import type {
   StdinInput,
-  RalphState,
   HudData,
   UsageResponse,
   UsageLimit,
@@ -49,30 +48,10 @@ describe('types', () => {
     });
   });
 
-  describe('RalphState', () => {
-    it('should accept valid ralph state structure', () => {
-      const state: RalphState = {
-        active: true,
-        iteration: 2,
-        max_iterations: 5,
-        completion_promise: 'Complete the task',
-        prompt: 'Original prompt',
-        started_at: '2024-01-22T10:00:00Z',
-      };
-
-      expect(state.active).toBe(true);
-      expect(state.iteration).toBe(2);
-      expect(state.max_iterations).toBe(5);
-    });
-  });
-
-  // RalphVerification tests removed - oracle_feedback is now in RalphState
-
   describe('HudData', () => {
     it('should accept valid hud data structure with null values', () => {
       const data: HudData = {
         contextPercent: null,
-        ralph: null,
         runningAgents: 0,
         backgroundTasks: 0,
         activeSkill: null,
@@ -85,21 +64,13 @@ describe('types', () => {
     it('should accept valid hud data structure with populated values', () => {
       const data: HudData = {
         contextPercent: 75,
-        ralph: {
-          active: true,
-          iteration: 2,
-          max_iterations: 5,
-          completion_promise: 'Promise',
-          prompt: 'Prompt',
-          started_at: '2024-01-22T10:00:00Z',
-        },
         runningAgents: 2,
         backgroundTasks: 1,
         activeSkill: 'prometheus',
       };
 
       expect(data.contextPercent).toBe(75);
-      expect(data.ralph?.iteration).toBe(2);
+      expect(data.runningAgents).toBe(2);
     });
   });
 
@@ -233,7 +204,6 @@ describe('types', () => {
     it('should accept valid HudDataV2 structure with all null values', () => {
       const data: HudDataV2 = {
         contextPercent: null,
-        ralph: null,
         runningAgents: 0,
         backgroundTasks: 0,
         activeSkill: null,
@@ -257,14 +227,6 @@ describe('types', () => {
     it('should accept fully populated HudDataV2 structure', () => {
       const data: HudDataV2 = {
         contextPercent: 75,
-        ralph: {
-          active: true,
-          iteration: 2,
-          max_iterations: 5,
-          completion_promise: 'Promise',
-          prompt: 'Prompt',
-          started_at: '2024-01-22T10:00:00Z',
-        },
         runningAgents: 2,
         backgroundTasks: 1,
         activeSkill: 'prometheus',
