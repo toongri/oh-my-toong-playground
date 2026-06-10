@@ -134,15 +134,25 @@ is_current_session() {
   local basename_val
   basename_val=$(basename "$file" .json)
 
-  # The sid is everything after the last recognized prefix separator.
-  # All known prefixes end with a '-' before the sid. Strip the prefix by
-  # removing up to and including the last '-' in the known pattern groups:
-  #   goal-state-<sid>
-  #   prometheus-state-<sid>
-  #   deep-interview-active-state-<sid>
-  # Strategy: strip everything up to and including the last occurrence of '-'.
+  # Strip the known prefix to extract the session id.
+  # Known prefixes (basename without .json):
+  #   goal-state-<sid>                         prefix = "goal-state-"
+  #   prometheus-state-<sid>                   prefix = "prometheus-state-"
+  #   deep-interview-active-state-<sid>        prefix = "deep-interview-active-state-"
+  # Session IDs may themselves contain '-' (e.g. UUIDs), so we MUST strip only
+  # the fixed prefix, not everything up to the last '-'.
   local file_sid
-  file_sid=$(printf '%s' "$basename_val" | sed 's/.*-//')
+  case "$basename_val" in
+    goal-state-*)
+      file_sid="${basename_val#goal-state-}" ;;
+    prometheus-state-*)
+      file_sid="${basename_val#prometheus-state-}" ;;
+    deep-interview-active-state-*)
+      file_sid="${basename_val#deep-interview-active-state-}" ;;
+    *)
+      # Unknown prefix — cannot determine sid; treat as different session
+      file_sid="" ;;
+  esac
 
   if [ "$file_sid" = "$current_sid" ]; then
     return 0
