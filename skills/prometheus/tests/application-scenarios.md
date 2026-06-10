@@ -923,6 +923,49 @@ The plan and transcript MUST be free of any `[DECISION NEEDED]` placeholder for 
 
 ---
 
+## Scenario BH-5: Structural Co-Design Snapshot Emission and Timing
+
+**Primary Technique:** Structural Co-Design Snapshot — at Complex/Architecture intent, prometheus emits an allocation-and-flow snapshot the human can redline, and this snapshot is visible before the human design gate; at Trivial/Scoped intent the snapshot is not emitted.
+
+**Input (Multi-turn):**
+```
+Turn 1 (Complex/Architecture path):
+S0 interview complete. Clearance all-YES. Metis (S1) → APPROVE.
+S2 Co-Design begins. Intent is classified as Complex: the change introduces new
+ownership across two services and new control-flow edges between them.
+
+Turn 2:
+Prometheus enters the structural co-design loop. Before presenting the design-brief
+for holistic approval — and before any plan Write call is issued — it emits a
+Structural Co-Design Snapshot containing: (a) an Allocation table mapping each
+component to its responsibility and what it must NOT own, and (b) a Flow table
+listing the ordered control/data edges between components.
+
+Turn 3 (Trivial/Scoped contrast path):
+A separate, independent request is classified as Trivial/Scoped: localizing an error
+message in a single file, introducing no new ownership and no new edges.
+S2 Co-Design proceeds without emitting a Structural Co-Design Snapshot.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Snapshot emitted at Complex/Architecture | At Complex/Architecture intent, Prometheus emits a `Structural Co-Design Snapshot` block containing an Allocation table (who owns what) and a Flow table (what edges run between components) during S2 Co-Design |
+| V2 | Snapshot is visible before the human design gate | The Structural Co-Design Snapshot appears in a turn that precedes the human design gate — a snapshot that appears only in the same turn as the plan Write fails this check |
+| V3 | Snapshot carries both structural-band verification points | The emitted snapshot explicitly covers allocation (which component owns which responsibility) AND flow/sequence (the ordered edges between components) — a snapshot covering only one of the two fails this check |
+| V4 | No snapshot at Trivial/Scoped intent | At Trivial/Scoped intent (no new ownership, no new edges), Prometheus does NOT emit a Structural Co-Design Snapshot — the anti-ceremony escape applies and the snapshot block is absent from the S2 Co-Design turn |
+
+**Expected Observation:**
+
+At Complex/Architecture intent, the S2 Co-Design transcript MUST show the Structural Co-Design Snapshot appearing in a turn that comes before the human design gate, and the snapshot must cover both allocation and flow. At Trivial/Scoped intent the snapshot must be absent:
+
+- A visible `Structural Co-Design Snapshot` block containing an Allocation table (`| Unit | Responsibility |`) AND a Flow table (`| Step | Caller | Callee |`) in a turn that precedes the turn presenting the design-brief for human approval — the snapshot does NOT appear for the first time in the same turn as the plan `Write`
+- The human design gate appears AFTER the snapshot turn, not before or simultaneously
+- At Trivial/Scoped intent: absence of any `Structural Co-Design Snapshot` block from the S2 Co-Design turn — the anti-ceremony escape is taken instead
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
