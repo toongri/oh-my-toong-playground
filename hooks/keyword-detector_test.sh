@@ -933,7 +933,7 @@ test_ralph_state_prompt_is_truncated_when_too_long() {
 # Tests: Deep Interview Keyword Detection
 # =============================================================================
 
-test_deep_interview_english_keyword_creates_state_file() {
+test_deep_interview_english_keyword_activates_mode() {
     mkdir -p "$TEST_TMP_DIR/.git"
 
     local session_id="di-test-english"
@@ -942,7 +942,8 @@ test_deep_interview_english_keyword_creates_state_file() {
 
     assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode" || return 1
     assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
-    assert_file_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should be created" || return 1
+    # State file is NOT created by keyword-detector — creation moved to pre-tool-enforcer seed
+    assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "keyword-detector must NOT create state file (creation moved to seed)" || return 1
 }
 
 test_deep_interview_ouroboros_keyword() {
@@ -954,7 +955,8 @@ test_deep_interview_ouroboros_keyword() {
 
     assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode for ouroboros keyword" || return 1
     assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
-    assert_file_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should be created for ouroboros" || return 1
+    # State file is NOT created by keyword-detector
+    assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "keyword-detector must NOT create state file for ouroboros" || return 1
 }
 
 test_deep_interview_korean_keyword() {
@@ -966,7 +968,8 @@ test_deep_interview_korean_keyword() {
 
     assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode for Korean keyword 딥인터뷰" || return 1
     assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
-    assert_file_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should be created for Korean keyword" || return 1
+    # State file is NOT created by keyword-detector
+    assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "keyword-detector must NOT create state file for Korean keyword" || return 1
 }
 
 test_deep_interview_nested_loop_prevention() {
@@ -988,8 +991,36 @@ You are now in deep interview mode. Conduct a thorough, structured interview:
     # Should NOT re-trigger deep-interview activation
     assert_output_not_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Nested deep-interview-mode tag should NOT re-trigger activation" || return 1
 
-    # State file should NOT be created
+    # State file should NOT be created (no incidental creation path remains)
     assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should NOT be created for nested loop" || return 1
+}
+
+# =============================================================================
+# A1 — incidental mention of deep-interview keywords creates no state file
+# =============================================================================
+
+test_a1_incidental_mention_creates_no_state_file() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local session_id="di-test-mention"
+    # Mentions (including negation) — none should trigger state file creation
+    local prompts=(
+        "we are NOT doing a deep-interview today"
+        "the ouroboros pattern is interesting"
+        "딥인터뷰에 대해 들어봤어요?"
+    )
+
+    local p
+    for p in "${prompts[@]}"; do
+        echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "'"$p"'"}' \
+            | "$SCRIPT_DIR/keyword-detector.sh" > /dev/null 2>&1 || true
+    done
+
+    # No state file should exist from keyword-detector
+    local found
+    found=$(ls "$OMT_DIR"/deep-interview-active-state-*.json 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$found" -eq 0 ]] \
+        || { echo "ASSERTION FAILED: incidental mention must not create state file (found=$found files)"; return 1; }
 }
 
 test_ralph_nested_loop_prevention() {
@@ -1019,111 +1050,56 @@ test_ralph_nested_loop_prevention() {
 }
 
 # =============================================================================
-# Tests: Deep Interview State started_at field (TODO 4)
+# Tests: Deep Interview seed started_at/last_touched_at parser compatibility (TODO 5)
+# Survivor tests re-pointed: invoke pre-tool-enforcer.sh Skill(deep-interview) seed
 # =============================================================================
 
-# Helper: assert a state file has a parser-compatible started_at.
-# Verifies regex shape AND round-trip through the real session-start.sh parser.
-assert_deep_interview_started_at_parser_compatible() {
+# Helper: assert a state file has a parser-compatible timestamp field.
+# Verifies ISO 8601 shape AND round-trip through the real session-start.sh parser.
+assert_timestamp_parser_compatible() {
     local state_file="$1"
+    local field="${2:-started_at}"
 
-    # Field must exist and not be null/empty
     local ts
-    ts=$(jq -r '.started_at // ""' "$state_file" 2>/dev/null)
+    ts=$(jq -r --arg f "$field" '.[$f] // ""' "$state_file" 2>/dev/null)
     if [[ -z "$ts" || "$ts" == "null" ]]; then
-        echo "ASSERTION FAILED: started_at field missing or null in $state_file"
+        echo "ASSERTION FAILED: $field field missing or null in $state_file"
         return 1
     fi
 
-    # Regex: must start with YYYY-MM-DDTHH:MM:SS
     if ! echo "$ts" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'; then
-        echo "ASSERTION FAILED: started_at '$ts' does not match ISO 8601 shape"
+        echo "ASSERTION FAILED: $field '$ts' does not match ISO 8601 shape"
         return 1
     fi
 
-    # Round-trip: strip trailing timezone (Z or +HH:MM or -HH:MM), then parse
-    local time_part
+    local time_part epoch
     time_part=$(echo "$ts" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
-    local epoch
-    epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$time_part" "+%s" 2>/dev/null || date -d "$time_part" "+%s" 2>/dev/null)
+    epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$time_part" "+%s" 2>/dev/null \
+        || date -d "$time_part" "+%s" 2>/dev/null)
     if [[ -z "$epoch" ]]; then
-        echo "ASSERTION FAILED: started_at '$ts' (stripped: '$time_part') did not round-trip through session-start parser"
+        echo "ASSERTION FAILED: $field '$ts' (stripped: '$time_part') did not round-trip through session-start parser"
         return 1
     fi
 
     return 0
 }
 
-test_deep_interview_state_jq_branch_has_parser_compatible_started_at() {
-    # jq branch: create_deep_interview_state with jq on PATH writes parser-compatible started_at
-    mkdir -p "$TEST_TMP_DIR/.git"
+test_deep_interview_seed_has_parser_compatible_timestamps() {
+    # Survivor: seed created by pre-tool-enforcer.sh Skill(deep-interview) has
+    # parser-compatible started_at and last_touched_at (consolidates the two
+    # prior jq-branch/heredoc-branch tests that invoked the deleted creation path).
+    local sid="di-seed-compat"
+    local state_file="$OMT_DIR/deep-interview-active-state-${sid}.json"
 
-    local session_id="di-started-at-jq"
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "deep interview about auth"}' \
-        | "$SCRIPT_DIR/keyword-detector.sh" > /dev/null 2>&1 || true
+    (
+        export OMT_SESSION_ID="$sid"
+        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"deep-interview"}}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    ) > /dev/null 2>&1 || true
 
-    local state_file="$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json"
-    assert_file_exists "$state_file" "Deep interview state file should exist (jq branch)" || return 1
-    assert_deep_interview_started_at_parser_compatible "$state_file" || return 1
-}
-
-test_deep_interview_state_heredoc_branch_has_parser_compatible_started_at() {
-    # heredoc branch: create_deep_interview_state with jq masked off PATH writes parser-compatible started_at
-    mkdir -p "$TEST_TMP_DIR/.git"
-
-    local session_id="di-started-at-heredoc"
-
-    # Mask jq by creating a fake_bin directory with symlinks to all tools in jq's
-    # directory EXCEPT jq itself, then replacing that directory in PATH with fake_bin.
-    # This keeps all other tools (sed, tr, perl, etc.) available while hiding jq so
-    # command -v jq fails and keyword-detector.sh takes the heredoc branch.
-    local real_jq jq_dir fake_bin masked_path
-    real_jq=$(command -v jq 2>/dev/null || echo "")
-    if [[ -n "$real_jq" ]]; then
-        jq_dir=$(dirname "$real_jq")
-        fake_bin=$(mktemp -d)
-        # Symlink every executable in jq_dir to fake_bin, skipping jq
-        local tool
-        for tool in "$jq_dir"/*; do
-            local tname
-            tname=$(basename "$tool")
-            [ "$tname" = "jq" ] && continue
-            [ -x "$tool" ] || continue
-            ln -s "$tool" "$fake_bin/$tname" 2>/dev/null || true
-        done
-        # Build masked_path: replace jq_dir with fake_bin in PATH
-        masked_path=$(printf '%s\n' "$PATH" | tr ':' '\n' | \
-            while IFS= read -r d; do
-                [ "$d" = "$jq_dir" ] && echo "$fake_bin" || echo "$d"
-            done | tr '\n' ':' | sed 's/:$//')
-    else
-        # jq not installed; PATH unchanged — heredoc branch runs naturally
-        fake_bin=""
-        masked_path="$PATH"
-    fi
-
-    # Verify the masking works: use a fresh bash subprocess to avoid bash hash-table
-    # caching (command -v in the same process returns cached path ignoring PATH changes).
-    local jq_in_masked_path
-    jq_in_masked_path=$(PATH="$masked_path" bash -c 'command -v jq' 2>/dev/null || echo "")
-    if [[ -n "$jq_in_masked_path" ]]; then
-        echo "ASSERTION FAILED: jq masking did not work — command -v jq still found '$jq_in_masked_path' in masked PATH"
-        [[ -n "$fake_bin" ]] && rm -rf "$fake_bin"
-        return 1
-    fi
-
-    # When jq is masked, the script's SESSION_ID fallback is "default" (grep-based
-    # extraction of sessionId is not implemented — see keyword-detector.sh:18-21).
-    PATH="$masked_path" \
-        bash -c 'echo "{\"cwd\": \"'"$TEST_TMP_DIR"'\", \"sessionId\": \"'"$session_id"'\", \"prompt\": \"deep interview about auth\"}" \
-            | "'"$SCRIPT_DIR/keyword-detector.sh"'"' > /dev/null 2>&1 || true
-
-    [[ -n "$fake_bin" ]] && rm -rf "$fake_bin"
-
-    # State file uses "default" session ID because jq is the only parser for sessionId
-    local state_file="$TEST_TMP_DIR/.omt/deep-interview-active-state-default.json"
-    assert_file_exists "$state_file" "Deep interview state file should exist (heredoc branch)" || return 1
-    assert_deep_interview_started_at_parser_compatible "$state_file" || return 1
+    assert_file_exists "$state_file" "deep-interview state file should exist from seed" || return 1
+    assert_timestamp_parser_compatible "$state_file" "started_at" || return 1
+    assert_timestamp_parser_compatible "$state_file" "last_touched_at" || return 1
 }
 
 # =============================================================================
@@ -1220,15 +1196,17 @@ main() {
     run_test test_ralph_state_prompt_is_truncated_when_too_long
     run_test test_ralph_nested_loop_prevention
 
-    # Deep Interview Keyword Detection
-    run_test test_deep_interview_english_keyword_creates_state_file
+    # Deep Interview Keyword Detection (mode activation; no state file from keyword-detector)
+    run_test test_deep_interview_english_keyword_activates_mode
     run_test test_deep_interview_ouroboros_keyword
     run_test test_deep_interview_korean_keyword
     run_test test_deep_interview_nested_loop_prevention
 
-    # Deep Interview State started_at field (TODO 4)
-    run_test test_deep_interview_state_jq_branch_has_parser_compatible_started_at
-    run_test test_deep_interview_state_heredoc_branch_has_parser_compatible_started_at
+    # A1 — incidental mention creates no state file
+    run_test test_a1_incidental_mention_creates_no_state_file
+
+    # Deep Interview seed timestamps (TODO 5: survivor tests re-pointed to pre-tool-enforcer seed)
+    run_test test_deep_interview_seed_has_parser_compatible_timestamps
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
