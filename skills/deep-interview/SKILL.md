@@ -67,7 +67,18 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - If the initial context is oversized or likely to crowd out downstream prompts, produce a concise prompt-safe summary that preserves user intent, decisions, constraints, unknowns, cited files/symbols, and any explicit non-goals.
    - Treat the summary as the canonical `initial_idea` and store the raw oversized material only as external/advisory context if it can be referenced safely; do not paste the raw oversized context into question-generation, ambiguity-scoring, spec-crystallization, or execution-handoff prompts.
    - Wait until the summary exists before ambiguity scoring, weakest-dimension selection, brownfield exploration prompts, or any bridge to prometheus or sisyphus.
-4. **Initialize state** by writing `$OMT_DIR/deep-interview-active-state-{sessionId}.json` via Write tool:
+4. **Initialize state** by invoking the CLI:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init \
+  --initial-idea "<prompt-safe initial-context summary or user input>" \
+  --interview-id "<uuid>" \
+  --type "greenfield|brownfield" \
+  --current-phase "deep-interview" \
+  --threshold <resolvedThreshold>
+```
+
+The `init` subcommand performs a strict overlay of the rich state shape into the seed file that the PreToolUse hook already created. The full shape written to state is:
 
 ```json
 {
@@ -77,7 +88,7 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
     "interview_id": "<uuid>",
     "type": "greenfield|brownfield",
     "initial_idea": "<prompt-safe initial-context summary or user input>",
-    "initial_context_summary": "<summary if oversized, else null>",
+    "initial_context_summary": null,
     "rounds": [],
     "current_ambiguity": 1.0,
     "threshold": <resolvedThreshold>,
@@ -227,7 +238,13 @@ Round {n} complete.
 
 ### Step 2e: Update State
 
-Update interview state with the new round and scores by writing `$OMT_DIR/deep-interview-active-state-{sessionId}.json` via Write tool.
+Update interview state with the new round and scores by invoking the CLI:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --current-phase "deep-interview" \
+  --current-ambiguity <ambiguity>
+```
 
 ### Step 2f: Check Soft Limits
 
@@ -372,8 +389,9 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - Use `AskUserQuestion` for each interview question — provides clickable UI with contextual options
 - Use `Agent(subagent_type="explore")` for brownfield codebase exploration (run BEFORE asking user about codebase)
 - Use temperature 0.1 for ambiguity scoring — consistency is critical
-- Use `Write` tool to write and update interview state at `$OMT_DIR/deep-interview-active-state-{sessionId}.json`
-- Use `Read` tool to read back state when resuming an interrupted session
+- Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init` to initialize interview state (Phase-1 step 4)
+- Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update` to update state after each round (Phase-2 step 2e)
+- Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get` to read back state when resuming an interrupted session
 - Use `Write` tool to save the final spec to `$OMT_DIR/deep-interview/{slug}.md`
 - Use `Skill()` to bridge to execution modes — never implement directly
 - Challenge agent modes are prompt injections, not separate agent spawns
@@ -525,7 +543,13 @@ Optional settings in `.claude/settings.json`:
 
 ## Resume
 
-If interrupted, run `/deep-interview` again. The skill reads state from `$OMT_DIR/deep-interview-active-state-{sessionId}.json` via Read tool and resumes from the last completed round.
+If interrupted, run `/deep-interview` again. The skill reads state by invoking:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get
+```
+
+and resumes from the last completed round.
 
 ## Integration with Prometheus
 
