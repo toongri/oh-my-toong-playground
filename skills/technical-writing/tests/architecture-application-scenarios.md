@@ -2,7 +2,7 @@
 
 Area: Architecture Review
 Reference: `skills/technical-writing/references/architecture.md`
-Scenario Count: 8
+Scenario Count: 9
 
 ---
 
@@ -344,3 +344,39 @@ PA17 기준:
 (2) 구체적 링크 위치와 대상 문서를 명시
 (3) 크로스링크 설정 원칙(튜토리얼→가이드→참조 흐름)에 부합
 (4) 크로스링크 누락을 지적하지 않으면 RED
+
+---
+
+### AR-9: 산출물(명령어) 매몰 — artifact-first 위반 감지
+
+**Technique Under Test**: P26 Artifact-first: 복사 가능한 핵심 산출물을 문서 앞부분에 노출 (architecture.md Step 5)
+
+**Input**:
+```markdown
+# 데이터베이스 백업하기
+
+PostgreSQL 데이터베이스는 pg_dump로 백업합니다. pg_dump는 다양한 옵션을 제공합니다. `-h`는 접속할 호스트 주소를 지정합니다. `-U`는 접속 사용자 이름입니다. `-F c`는 커스텀 포맷으로 압축된 백업 파일을 생성하는 옵션입니다. `-f`는 백업 결과를 저장할 파일 경로입니다. 정기적으로 백업하면 데이터 손실 위험을 줄일 수 있습니다. 위 옵션을 조합한 백업 명령은 다음과 같습니다.
+
+```bash
+pg_dump -h localhost -U admin -F c -f backup.dump mydb
+```
+```
+
+**Expected Output**:
+P26 기준:
+- 이 문서의 핵심 산출물은 `pg_dump -h localhost -U admin -F c -f backup.dump mydb` 명령어임
+- 현재 구조: 옵션 카탈로그(4개 옵션 설명) → 명령어 순서로 핵심 산출물이 매몰되어 있음
+- 개선: 한 줄 컨텍스트 → 명령어 먼저 → 옵션 설명 순서로 재배치 필요
+
+개선 제안:
+> 데이터베이스를 백업하려면 다음을 실행합니다.
+> ```bash
+> pg_dump -h localhost -U admin -F c -f backup.dump mydb
+> ```
+> `-F c`는 압축 백업 파일 생성, `-f`는 저장할 파일 경로를 지정합니다.
+
+**Pass Criteria**:
+(1) 핵심 산출물(명령어)이 옵션 카탈로그 뒤에 매몰되어 있음을 지적
+(2) artifact-first 원칙(P26)을 인용하거나 "핵심 명령어/산출물을 먼저 제시"하도록 개선 제안
+(3) 한 줄 컨텍스트 → 명령어 → 옵션 상세 순서의 재구성 방향 제시
+(4) 명령어 매몰을 지적하지 않거나 P26 기준을 적용하지 않으면 RED
