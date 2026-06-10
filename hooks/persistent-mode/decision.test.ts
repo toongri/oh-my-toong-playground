@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import { makeDecision, DecisionContext } from './decision.ts';
-import { mkdir, writeFile, rm } from 'fs/promises';
+import { mkdir, writeFile, rm, readFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -1521,6 +1521,47 @@ describe('makeDecision', () => {
         expect(after.phase).toBe('pursuing');
         expect(after.active).toBe(true);
       });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // C2 witness: suppression read (ADR-8) refreshes last_touched_at
+  // -------------------------------------------------------------------------
+  describe('C2 (ADR-8): terminal goal suppression read refreshes heartbeat', () => {
+    const goalPath = join(omtDir, 'goal-state-test-session.json');
+    const OLD_STAMP = '2020-01-01T00:00:00+00:00';
+
+    it('(C2-witness) suppression path on a terminal goal advances last_touched_at', async () => {
+      // Terminal goal (active=false) — this takes the suppression path (M3),
+      // setting goalSuppressesBaselineTodo=true. ADR-8 requires updateGoalState({})
+      // to be called after line 355 so the heartbeat refreshes.
+      await writeFile(goalPath, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 3,
+        max_iterations: 10,
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+        outcome: 'shipped',
+        completion_evidence_paths: ['a.md'],
+      }));
+
+      // Run the decision path (no ralph, no deep-interview, no incomplete todos)
+      makeDecision(createContext());
+
+      const content = await readFile(goalPath, 'utf8');
+      const after = JSON.parse(content);
+      // last_touched_at must have advanced beyond the old stamp
+      expect(after.last_touched_at).not.toBe(OLD_STAMP);
+      expect(after.last_touched_at > OLD_STAMP).toBe(true);
+    });
+
+    it('(C2-absent) suppression path with no goal file creates nothing', () => {
+      // No goal-state file — decision must still exit without creating a file
+      makeDecision(createContext());
+
+      expect(fs.existsSync(goalPath)).toBe(false);
     });
   });
 });

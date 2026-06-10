@@ -36,6 +36,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { execSync } from 'child_process';
 import { getOmtDir } from '@lib/omt-dir';
+import { mergeWithHeartbeat, resolveSessionIdOrThrow } from '@lib/state-core';
 
 export type GoalPhase = 'planning' | 'pursuing' | 'budget_limited' | 'blocked' | 'complete';
 export type ObjectiveVerdict = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' | 'absent';
@@ -71,6 +72,8 @@ export interface GoalState {
   completion_evidence_paths: string[];
   /** Present-but-unused placeholder; no migration logic. */
   schema_version: number;
+  /** Refreshed on every write (heartbeat). Used by the GC liveness check. */
+  last_touched_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +108,7 @@ export function resolveStatePath(sessionId: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// started_at seeding — spawns shell date to match ralph's BSD-parseable format
+// started_at seeding — spawns shell date to match the BSD-parseable format
 // ---------------------------------------------------------------------------
 
 function seedStartedAt(): string {
@@ -143,15 +146,26 @@ function readPrior(sessionId: string): Partial<GoalState> {
 /**
  * Merge `next` over the prior on-disk state, seeding `started_at` once and
  * supplying field defaults on first write. Persists and returns the result.
+ *
+ * ADR-7 (strict no-create): refuses and exits non-zero when the state file is
+ * absent. The PreToolUse seed is the ONLY creator of state files.
  */
 function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
+  const stateFilePath = resolveStatePath(sessionId);
+  if (!existsSync(stateFilePath)) {
+    throw new Error(
+      `goal-state: state file absent for session "${sessionId}". ` +
+        `Possible causes: state adopted by another session, or seed missing. ` +
+        `Re-invoke the goal skill to re-seed.`
+    );
+  }
   const prior = readPrior(sessionId);
   // `??` rejects only null/undefined; a corrupt on-disk max_iterations (e.g. a string or
   // a fractional/<1 value) would otherwise survive uncoerced and defeat the hook's
   // `iteration >= max_iterations` budget comparison. Fall back to DEFAULT when the
   // candidate is not a positive integer.
   const maxItCandidate = next.max_iterations ?? prior.max_iterations;
-  const state: GoalState = {
+  const partial: Omit<GoalState, 'last_touched_at'> = {
     outcome: next.outcome ?? prior.outcome ?? '',
     verification_surface: next.verification_surface ?? prior.verification_surface ?? '',
     constraints: next.constraints ?? prior.constraints ?? '',
@@ -174,7 +188,8 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
       next.completion_evidence_paths ?? prior.completion_evidence_paths ?? [],
     schema_version: next.schema_version ?? prior.schema_version ?? 1,
   };
-  writeFileSafe(resolveStatePath(sessionId), JSON.stringify(state, null, 2));
+  const state = mergeWithHeartbeat(partial, {}) as GoalState;
+  writeFileSafe(stateFilePath, JSON.stringify(state, null, 2));
   return state;
 }
 
@@ -354,78 +369,89 @@ function str(v: string | boolean | undefined): string | undefined {
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const subcommand = args['_subcommand'];
-  const sessionId = process.env.OMT_SESSION_ID || 'default';
+  let sessionId: string;
+  try {
+    sessionId = resolveSessionIdOrThrow();
+  } catch (e) {
+    process.stderr.write(`goal-state: ${String(e)}\n`);
+    process.exit(1);
+  }
 
-  if (subcommand === 'set') {
-    // parseArgs coerces a flag supplied WITHOUT a value to boolean true. For these
-    // value-bearing flags that is a silent corruption: --max-iterations true →
-    // Number(true)===1 (budget collapses to one block); --completion-evidence true →
-    // ["true"] (a bogus non-path that satisfies the evidence-presence gate). Reject
-    // both before any state mutation.
-    if (args['max-iterations'] === true) {
-      process.stderr.write('set: --max-iterations requires a value\n');
-      process.exit(1);
-    }
-    if (args['completion-evidence'] === true) {
-      process.stderr.write('set: --completion-evidence requires a value\n');
-      process.exit(1);
-    }
-    let maxIter: number | undefined;
-    if (args['max-iterations'] !== undefined) {
-      const n = Number(args['max-iterations']);
-      if (!Number.isInteger(n) || n < 1) {
-        process.stderr.write(
-          `set: invalid --max-iterations "${String(args['max-iterations'])}" (positive integer required)\n`
-        );
+  try {
+    if (subcommand === 'set') {
+      // parseArgs coerces a flag supplied WITHOUT a value to boolean true. For these
+      // value-bearing flags that is a silent corruption: --max-iterations true →
+      // Number(true)===1 (budget collapses to one block); --completion-evidence true →
+      // ["true"] (a bogus non-path that satisfies the evidence-presence gate). Reject
+      // both before any state mutation.
+      if (args['max-iterations'] === true) {
+        process.stderr.write('set: --max-iterations requires a value\n');
         process.exit(1);
       }
-      maxIter = n;
-    }
-    // parseArgs collapses repeated --key to the LAST value, so evidence arrives
-    // as a single comma-separated value. Absent => undefined so the merge-write
-    // preserves prior evidence rather than clobbering it with [].
-    const evidence = str(args['completion-evidence']);
-    const completionEvidence =
-      evidence !== undefined ? evidence.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
-    setGoalState(sessionId, {
-      phase: String(args['phase'] ?? '') as GoalPhase,
-      outcome: str(args['outcome']),
-      verification_surface: str(args['verification-surface']),
-      constraints: str(args['constraints']),
-      boundaries: str(args['boundaries']),
-      max_iterations: maxIter,
-      blocked_stop: str(args['blocked-stop']),
-      plan_path: str(args['plan-path']),
-      resume_summary: str(args['resume-summary']),
-      completion_evidence_paths: completionEvidence,
-    });
-  } else if (subcommand === 'set-verdict') {
-    const v = String(args['verdict'] ?? 'absent');
-    const allowed: ObjectiveVerdict[] = ['APPROVE', 'REQUEST_CHANGES', 'COMMENT', 'absent'];
-    if (!allowed.includes(v as ObjectiveVerdict)) {
-      process.stderr.write(`set-verdict: invalid --verdict "${v}" (one of ${allowed.join('|')})\n`);
+      if (args['completion-evidence'] === true) {
+        process.stderr.write('set: --completion-evidence requires a value\n');
+        process.exit(1);
+      }
+      let maxIter: number | undefined;
+      if (args['max-iterations'] !== undefined) {
+        const n = Number(args['max-iterations']);
+        if (!Number.isInteger(n) || n < 1) {
+          process.stderr.write(
+            `set: invalid --max-iterations "${String(args['max-iterations'])}" (positive integer required)\n`
+          );
+          process.exit(1);
+        }
+        maxIter = n;
+      }
+      // parseArgs collapses repeated --key to the LAST value, so evidence arrives
+      // as a single comma-separated value. Absent => undefined so the merge-write
+      // preserves prior evidence rather than clobbering it with [].
+      const evidence = str(args['completion-evidence']);
+      const completionEvidence =
+        evidence !== undefined ? evidence.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
+      setGoalState(sessionId, {
+        phase: String(args['phase'] ?? '') as GoalPhase,
+        outcome: str(args['outcome']),
+        verification_surface: str(args['verification-surface']),
+        constraints: str(args['constraints']),
+        boundaries: str(args['boundaries']),
+        max_iterations: maxIter,
+        blocked_stop: str(args['blocked-stop']),
+        plan_path: str(args['plan-path']),
+        resume_summary: str(args['resume-summary']),
+        completion_evidence_paths: completionEvidence,
+      });
+    } else if (subcommand === 'set-verdict') {
+      const v = String(args['verdict'] ?? 'absent');
+      const allowed: ObjectiveVerdict[] = ['APPROVE', 'REQUEST_CHANGES', 'COMMENT', 'absent'];
+      if (!allowed.includes(v as ObjectiveVerdict)) {
+        process.stderr.write(`set-verdict: invalid --verdict "${v}" (one of ${allowed.join('|')})\n`);
+        process.exit(1);
+      }
+      setVerdict(sessionId, v as ObjectiveVerdict);
+    } else if (subcommand === 'set-budget-limited') {
+      setBudgetLimited(sessionId);
+    } else if (subcommand === 'set-blocked') {
+      setBlocked(sessionId, String(args['reason'] ?? ''));
+    } else if (subcommand === 'request-complete') {
+      const ok = requestComplete(sessionId);
+      if (!ok) {
+        process.stderr.write('request-complete: refused — requires objective_verdict=APPROVE and completion evidence present\n');
+        process.exit(1);
+      }
+    } else if (subcommand === 'get') {
+      process.stdout.write(JSON.stringify(readGoalState(sessionId)) + '\n');
+    } else if (subcommand === 'status') {
+      const state = readGoalState(sessionId);
+      process.stdout.write((state ? deriveStatus(state) : 'absent') + '\n');
+    } else {
+      process.stderr.write(
+        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status> [options]\n'
+      );
       process.exit(1);
     }
-    setVerdict(sessionId, v as ObjectiveVerdict);
-  } else if (subcommand === 'set-budget-limited') {
-    setBudgetLimited(sessionId);
-  } else if (subcommand === 'set-blocked') {
-    setBlocked(sessionId, String(args['reason'] ?? ''));
-  } else if (subcommand === 'request-complete') {
-    const ok = requestComplete(sessionId);
-    if (!ok) {
-      process.stderr.write('request-complete: refused — requires objective_verdict=APPROVE and completion evidence present\n');
-      process.exit(1);
-    }
-  } else if (subcommand === 'get') {
-    process.stdout.write(JSON.stringify(readGoalState(sessionId)) + '\n');
-  } else if (subcommand === 'status') {
-    const state = readGoalState(sessionId);
-    process.stdout.write((state ? deriveStatus(state) : 'absent') + '\n');
-  } else {
-    process.stderr.write(
-      'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status> [options]\n'
-    );
+  } catch (e) {
+    process.stderr.write(`goal-state: ${String(e)}\n`);
     process.exit(1);
   }
 }

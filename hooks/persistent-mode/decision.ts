@@ -353,6 +353,10 @@ export function makeDecision(context: DecisionContext): HookOutput {
     // baseline-todo branch (M3). Do NOT suppress Deep-Interview Protection below (B2):
     // a lingering/terminal goal-state must not strip an unrelated active interview's loop.
     goalSuppressesBaselineTodo = true;
+    // ADR-8 (C2): every suppression read IS a use — refresh the heartbeat so an
+    // in-use terminal state does not age toward TERMINAL_TTL while still functioning.
+    // updateGoalState is no-create: absent file produces no write.
+    try { updateGoalState(sessionId, {}); } catch { /* M1: never degrade */ }
   }
 
   // Priority 1.5: Deep Interview Protection

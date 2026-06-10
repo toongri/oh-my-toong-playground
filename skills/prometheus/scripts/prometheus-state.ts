@@ -2,7 +2,7 @@
  * Prometheus skill state CLI.
  *
  * State file path: ${OMT_DIR}/prometheus-state-${sessionId}.json
- * Session ID: process.env.OMT_SESSION_ID || "default"
+ * Session ID: resolved via resolveSessionIdOrThrow() (hard-fail on absent/unsafe)
  *
  * Subcommands:
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]
@@ -12,6 +12,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { dirname } from 'path';
 import { execSync } from 'child_process';
+import { mergeWithHeartbeat, resolveSessionIdOrThrow } from '@lib/state-core';
 
 export interface PrometheusState {
   active: boolean;
@@ -23,6 +24,8 @@ export interface PrometheusState {
   resume_summary: string;
   /** Local ISO-8601 without milliseconds, seeded once via `date -Iseconds` */
   started_at: string;
+  /** Refreshed on every write (heartbeat). Used by the GC liveness check. */
+  last_touched_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +74,7 @@ export function resolveStatePath(sessionId: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// started_at seeding — spawns shell date to match ralph's BSD-parseable format
+// started_at seeding — spawns shell date to match the BSD-parseable format
 // ---------------------------------------------------------------------------
 
 function seedStartedAt(): string {
@@ -118,17 +121,26 @@ export function setPrometheusState(
   opts: { phase: string; plan_path?: string; resume_summary?: string }
 ): void {
   const path = resolveStatePath(sessionId);
+  // ADR-7 (strict no-create): absent file -> throw (caught and converted to non-zero exit in main).
+  // The PreToolUse seed is the ONLY creator of state files.
+  if (!existsSync(path)) {
+    throw new Error(
+      `prometheus-state: state file absent for session "${sessionId}". ` +
+        `Possible causes: state adopted by another session, or seed missing. ` +
+        `Re-invoke the prometheus skill to re-seed.`
+    );
+  }
   const existing = readFileOrNull(path);
   let prior: Partial<PrometheusState> = {};
   if (existing) {
     try {
       prior = JSON.parse(existing) as Partial<PrometheusState>;
     } catch {
-      // corrupt file; start fresh
+      // corrupt file; start fresh from empty prior
     }
   }
 
-  const state: PrometheusState = {
+  const partial: Omit<PrometheusState, 'last_touched_at'> = {
     active: true,
     phase: opts.phase,
     plan_path: opts.plan_path ?? prior.plan_path ?? '',
@@ -137,6 +149,7 @@ export function setPrometheusState(
     started_at: prior.started_at ?? seedStartedAt(),
   };
 
+  const state = mergeWithHeartbeat(partial, {}) as PrometheusState;
   writeFileSafe(path, JSON.stringify(state, null, 2));
 }
 
@@ -171,17 +184,28 @@ function parseArgs(args: string[]): Record<string, string | boolean> {
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const subcommand = args['_subcommand'];
-  const sessionId = process.env.OMT_SESSION_ID || 'default';
+  let sessionId: string;
+  try {
+    sessionId = resolveSessionIdOrThrow();
+  } catch (e) {
+    process.stderr.write(`prometheus-state: ${String(e)}\n`);
+    process.exit(1);
+  }
 
-  if (subcommand === 'set') {
-    const phase = String(args['phase'] ?? '');
-    const planPath = args['plan-path'] !== undefined ? String(args['plan-path']) : undefined;
-    const resumeSummary = args['resume-summary'] !== undefined ? String(args['resume-summary']) : undefined;
-    setPrometheusState(sessionId, { phase, plan_path: planPath, resume_summary: resumeSummary });
-  } else if (subcommand === 'clear') {
-    clearPrometheusState(sessionId);
-  } else {
-    process.stderr.write('Usage: prometheus-state.ts <set|clear> [options]\n');
+  try {
+    if (subcommand === 'set') {
+      const phase = String(args['phase'] ?? '');
+      const planPath = args['plan-path'] !== undefined ? String(args['plan-path']) : undefined;
+      const resumeSummary = args['resume-summary'] !== undefined ? String(args['resume-summary']) : undefined;
+      setPrometheusState(sessionId, { phase, plan_path: planPath, resume_summary: resumeSummary });
+    } else if (subcommand === 'clear') {
+      clearPrometheusState(sessionId);
+    } else {
+      process.stderr.write('Usage: prometheus-state.ts <set|clear> [options]\n');
+      process.exit(1);
+    }
+  } catch (e) {
+    process.stderr.write(`prometheus-state: ${String(e)}\n`);
     process.exit(1);
   }
 }

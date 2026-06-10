@@ -284,7 +284,7 @@ describe('Deep interview state management', () => {
 
   describe('readDeepInterviewState', () => {
     it('deep-interview: readDeepInterviewState returns state when active=true', async () => {
-      const state: DeepInterviewState = { active: true, sessionId: 's1' };
+      const state: DeepInterviewState = { active: true };
       await writeFile(
         join(omtDir, `deep-interview-active-state-${sessionId}.json`),
         JSON.stringify(state)
@@ -294,11 +294,10 @@ describe('Deep interview state management', () => {
 
       expect(result).not.toBeNull();
       expect(result?.active).toBe(true);
-      expect(result?.sessionId).toBe('s1');
     });
 
     it('deep-interview: readDeepInterviewState returns null when active=false', async () => {
-      const state: DeepInterviewState = { active: false, sessionId: 's1' };
+      const state: DeepInterviewState = { active: false };
       await writeFile(
         join(omtDir, `deep-interview-active-state-${sessionId}.json`),
         JSON.stringify(state)
@@ -313,7 +312,7 @@ describe('Deep interview state management', () => {
   describe('cleanupDeepInterviewState', () => {
     it('deep-interview: cleanupDeepInterviewState removes file and is idempotent', async () => {
       const stateFile = join(omtDir, `deep-interview-active-state-${sessionId}.json`);
-      await writeFile(stateFile, JSON.stringify({ active: true, sessionId: 's1' }));
+      await writeFile(stateFile, JSON.stringify({ active: true }));
 
       cleanupDeepInterviewState(sessionId);
 
@@ -767,6 +766,67 @@ describe('Goal state management', () => {
       const content = await readFile(stateFile, 'utf8');
       expect(content).toBe('not valid json {');
     });
+
+    // (A5) hook-side updateGoalState refreshes last_touched_at without creating
+    it('(A5) updateGoalState stamps last_touched_at on an existing file', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      const oldStamp = '2020-01-01T00:00:00+00:00';
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 1,
+        max_iterations: 10,
+        started_at: '2020-01-01T00:00:00+00:00',
+        last_touched_at: oldStamp,
+      }));
+
+      updateGoalState(sessionId, { iteration: 2 });
+
+      const content = await readFile(stateFile, 'utf8');
+      const parsed = JSON.parse(content);
+      expect(parsed.last_touched_at).toBeTruthy();
+      expect(parsed.last_touched_at).not.toBe(oldStamp);
+      // stamp must be greater than the old one
+      expect(parsed.last_touched_at > oldStamp).toBe(true);
+    });
+
+    // (A5) updateGoalState does NOT create a file when absent
+    it('(A5) updateGoalState does not create a file when absent', () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      expect(existsSync(stateFile)).toBe(false);
+
+      updateGoalState(sessionId, { iteration: 1 });
+
+      expect(existsSync(stateFile)).toBe(false);
+    });
+
+    // (ADR-8) updateGoalState stamps last_touched_at UNCONDITIONALLY — empty partial still refreshes
+    it('(ADR-8) updateGoalState stamps last_touched_at on an EMPTY partial', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      const oldStamp = '2020-01-01T00:00:00+00:00';
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 1,
+        max_iterations: 10,
+        started_at: '2020-01-01T00:00:00+00:00',
+        last_touched_at: oldStamp,
+        outcome: 'keep me',
+      }));
+
+      updateGoalState(sessionId, {});
+
+      const content = await readFile(stateFile, 'utf8');
+      const parsed = JSON.parse(content);
+      // stamp must have advanced
+      expect(parsed.last_touched_at).not.toBe(oldStamp);
+      expect(parsed.last_touched_at > oldStamp).toBe(true);
+      // all other fields unchanged
+      expect(parsed.iteration).toBe(1);
+      expect(parsed.outcome).toBe('keep me');
+    });
   });
 });
 
@@ -800,7 +860,7 @@ describe('readDeepInterviewStateRaw', () => {
   });
 
   it('readDeepInterviewStateRaw returns the object even when active=false (terminal state)', async () => {
-    const state: DeepInterviewState = { active: false, sessionId: 's1' };
+    const state: DeepInterviewState = { active: false };
     await writeFile(
       join(omtDir, `deep-interview-active-state-${sessionId}.json`),
       JSON.stringify(state)
@@ -810,11 +870,10 @@ describe('readDeepInterviewStateRaw', () => {
 
     expect(result).not.toBeNull();
     expect(result?.active).toBe(false);
-    expect(result?.sessionId).toBe('s1');
   });
 
   it('readDeepInterviewStateRaw returns state when active=true', async () => {
-    const state: DeepInterviewState = { active: true, sessionId: 's2' };
+    const state: DeepInterviewState = { active: true };
     await writeFile(
       join(omtDir, `deep-interview-active-state-${sessionId}.json`),
       JSON.stringify(state)
