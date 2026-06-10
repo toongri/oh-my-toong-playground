@@ -704,7 +704,7 @@ Each plan section is emitted as exactly its canonical heading above (plus `## AD
 
 Architecture Decision Record (Nygard 2011 / MADR) — one entry per significant design choice in the plan. **Required for Scoped+ intent. Trivial intent is exempt from ADR output.** Inline in the plan; no separate file needed.
 
-**The ADR is a co-authored design artifact, not a solo post-hoc record.** It is filled WITH the user during the S2 Co-Design phase — the joint decision log of the co-design dialogue — and is the **review object** of both the human design gate and the in-phase Daedalus advisory pass. By the time the plan is written at S3, the plan's `## ADR` section is a **refined copy** of this co-authored artifact (the same MADR fields, cleaned up for the executor), not a freshly authored record. Authorship timing/ownership changed (solo post-hoc → co-authored during design); the MADR 7-field structure below is unchanged.
+**The ADR is a co-authored design artifact, not a solo post-hoc record.** It is filled WITH the user during the S2 Co-Design phase — the joint decision log of the co-design dialogue — and is the **review object** of both the human design gate and the in-phase Daedalus advisory pass. By the time the plan is written at S3, the plan's `## ADR` section is a **refined copy** of this co-authored artifact (the same MADR fields, cleaned up for the executor), not a freshly authored record. Authorship timing/ownership changed (solo post-hoc → co-authored during design); the MADR 7-field structure below is unchanged. The Structural Snapshot's allocation and flow decisions (`### Structural Co-Design Snapshot`) are co-authored into this same ADR — an adopted placement in **Considered Options** / **Decision** / **Consequences**, a rejected one in **Rationale** — using the existing 7 MADR fields only; no eighth field is added for structure.
 
 **Gate-vs-sub-fork deferral boundary.** The human design gate (S2) blocks on the user's **explicit holistic approval** of the design — there is no auto-default for the gate itself; an unanswered gate does not silently pass. Individual sub-forks *within* the design are a separate matter: whenever a sub-fork is surfaced — including late, at the gate itself — it follows the existing `### User Deferral Handling` (defer → recommended default becomes the autonomous decision, recorded in the ADR's **Considered Options** / **Decision** with its deferral noted). A deferral that is later revised is not a free edit: a deferred-to-default decision that is subsequently changed is a **design defect** that re-enters the design phase and forces re-plan → re-Momus, per the Pipeline State Machine's deferred-then-revised loop-back rule (`## Review Pipeline > Pipeline State Machine`). So a deferral can never silently survive past a fresh plan gate — revising it re-walks design.
 
@@ -826,6 +826,8 @@ Tasks must be Mutually Exclusive (no overlap) and Collectively Exhaustive (full 
 
 Anti-patterns: same-file overlap (merge or split by layer), CRUD gap (add missing op), false MECE — "frontend"/"backend" but contract owned by neither (add contract TODO).
 
+**Snapshot trace (Complex/Architecture):** when a decided Structural Snapshot exists, each TODO must trace to a Structural Snapshot **Allocation unit** — the unit it builds or modifies. A TODO that maps to no Allocation unit signals either a missing unit (add the row) or scope creep (drop the TODO); an Allocation unit with no TODO signals a coverage gap.
+
 ### Atomicity Heuristic
 
 Each TODO must be completable in one delegation pass:
@@ -939,7 +941,7 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 |-------|-------------|-------------|
 | **S0: Requirements** | Open requirements interview + AC co-decide | → S1 on Metis-ready clearance |
 | **S1: Metis Invocation** | 3-Section prompt to Metis (requirements gate) | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
-| **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / ADR | → S3 on human design-gate approval; advisory Daedalus input folded in per `## Design Consensus` (no gating signal — the human gate gates this state) |
+| **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / ADR including the Structural Snapshot `### Structural Co-Design Snapshot` (defined below) | → S3 on human design-gate approval; advisory Daedalus input folded in per `## Design Consensus` (no gating signal — the human gate gates this state) |
 | **S3: Plan Generation** | Writing the TODO plan to `$OMT_DIR/plans/{name}.md` from the approved design | → S4 on self-review pass |
 | **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; on REQUEST_CHANGES → earliest affected phase: → S0 on a requirements problem (re-Metis → … → re-Momus), → S2 on a design problem (human gate → re-plan → re-Momus) |
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
@@ -985,6 +987,41 @@ Reviewer loop terminates **iff** the reviewer issues APPROVE or COMMENT on the c
 
 Time pressure, user override ("just proceed"), self-assessment of fix correctness, parallel dispatch on a blocked artifact — none terminate the loop.
 
+### Structural Co-Design Snapshot
+
+Planner-internal S2 machinery: at **Complex** and **Architecture** intent the co-design loop produces a codebase-grounded **Structural Co-Design Snapshot** — an Allocation table + a Flow table + a Structural Fork ledger — that the human redlines, so allocation and flow are co-decided rather than approved unseen. This is an AI-internal gate, not a user-facing risk dial.
+
+The snapshot is **gated to Complex and Architecture only**.
+Smaller intents have no snapshot at all — there is no path that produces one below the Complex band.
+
+#### Allocation and Flow tables
+
+Allocation names every component and its boundary. Rows referencing **existing code** cite `file:symbol`; net-new units mark `(new)`.
+
+| Unit | Responsibility | Owns State | Interfaces | Must NOT Own |
+|------|----------------|-----------|------------|--------------|
+
+Flow names every ordered runtime edge between those units.
+
+| Step | Caller | Callee | Data/Command | Side Effect | Failure/Retry Path |
+|------|--------|--------|--------------|-------------|--------------------|
+
+#### Structural Fork ledger
+
+A **structural fork** is a decision over *where a responsibility lives or how control/data flows between units* — which component owns a piece of state, which unit a new interface attaches to, the direction or ordering of an edge between units. **NOT a structural fork** (excluded from the ledger): naming, formatting, intra-unit implementation choices, library/version picks, and any decision that does not move ownership or change an edge. **Promotion rule**: a decision enters the ledger only when **two or more** structural options are live (N ≥ 2 viable placements/edges); a single forced placement is recorded as a closed Allocation row, not a fork. **Tie-break**: when options are otherwise even, prefer the placement that adds no new ownership and no new edges (the cheapest structural delta); if still even, carry it as an open fork for the human. Examples — e.g. "validation lives in the controller vs a new `Validator` unit" is a structural fork (ownership moves); e.g. "rename `cfg` to `config`" is excluded (no ownership, no edge).
+
+#### Falsifiable close gate
+
+S2 closes on the snapshot only when this is answerable YES: **Can a sequence/component diagram be drawn from this snapshot WITHOUT inventing new ownership or edges? (YES/NO)** YES means Allocation gives every component + owner + Must-NOT boundary and Flow gives every edge, so no unstated owner or edge remains. NO keeps the loop open. This gate is **loop-closure, not coverage** — whether every eventually-touched file appears is the human co-owner's call at the design gate plus a soft self-review nudge, never folded into this question.
+
+#### Anti-ceremony escape
+
+The snapshot may be skipped **only** when the change introduces **no new ownership and no new edges** (triviality derived from the change itself, not the planner's effort). Skipping requires recording a **named, specific** consequence of skipping — **not boilerplate** ("low risk", "trivial", "no impact" are rejected). Example of a good named consequence: "skips Allocation because this change only edits copy inside `Formatter.render`; if that turns out to also move the rounding rule, the unowned-rounding fork goes uncaught." A boilerplate consequence fails this clause and forces the snapshot.
+
+#### Momus framing and transition
+
+The snapshot's Allocation/Flow claims are reviewed downstream as **document quality** (internal consistency: do the tables agree with each other and with the prose?) and **feasibility** (do the cited `file:symbol` rows exist and match the codebase?) — **NOT architecture ideality** (whether the chosen structure is the architecturally best one stays with the human and the in-phase Daedalus advisory). Closing the gate emits an explicit transition **marker** into the rest of S2; it is **not** a mandatory sub-phase checkpoint. Preserving the continuous co-design loop, the planner can **close or carry the fork forward**: a YES closes the snapshot, a NO carries the open fork forward (it becomes a CRITICAL gap, per `### Gap Classification`) without halting the dialogue. A **closed snapshot may be re-entered** (re-opened / revisited) whenever a later turn surfaces a new structural fork; on re-entry, reconcile the **already-decided** rows against the **new** fork rather than re-deciding closed ones — closed allocations stand unless the new fork directly contradicts them.
+
 ### Self-Review Checklist (after plan generation at S3, before Momus)
 
 | # | Item | Check |
@@ -995,8 +1032,11 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
 | 5 | Section validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Momus. |
 | 6 | design forks resolved | Every CRITICAL design fork is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
+| 7 | structural snapshot present (Complex/Arch) | For a Complex or Architecture plan, the artifact carries the decided Structural Snapshot (Allocation + Flow tables) OR the anti-ceremony escape with a named, specific consequence recorded. This item asserts presence only; fork-resolution stays with item 6. |
 
 Item 2 ("File references exist") is a lightweight pre-Momus self-filter — it catches obviously stale paths before the plan reaches the feasibility gate. It is complementary to, not a substitute for, Momus's authoritative codebase-feasibility verification: this self-check is a cheap first pass; Momus is the gate.
+
+**Soft coverage nudge** (not a gate): are all components this change creates or modifies enumerated in the Allocation table? This is a non-blocking prompt — coverage is the human co-owner's call at the design gate, never folded into the close gate.
 
 Failure action: loop back and fix before submitting to Momus.
 
@@ -1004,13 +1044,15 @@ Failure action: loop back and fix before submitting to Momus.
 
 | Level | Definition | Handling |
 |---|---|---|
-| **CRITICAL** | Requires user input | A requirements fork returns to the S0 Requirements interview; a design fork is surfaced and resolved at the S2 Co-Design human design gate (the co-design loop stays open and the channel reopens for it per `### Next-Gate Readiness Rule`). A CRITICAL fork is never carried forward unresolved — the channel stays open until it is co-decided. A design decision deferred to its default and later revised is a **design problem** that re-walks from S2 → human gate → re-plan → re-Momus. |
+| **CRITICAL** | Requires user input | A requirements fork returns to the S0 Requirements interview; a design fork is surfaced and resolved at the S2 Co-Design human design gate (the co-design loop stays open and the channel reopens for it per `### Next-Gate Readiness Rule`). An **unresolved structural fork** (an open Structural Snapshot fork, the same severity class as a **T1** risk fork) is **CRITICAL** by this mapping — it is carried forward as a CRITICAL gap and co-decided at the human gate, never absorbed. A CRITICAL fork is never carried forward unresolved — the channel stays open until it is co-decided. A design decision deferred to its default and later revised is a **design problem** that re-walks from S2 → human gate → re-plan → re-Momus. |
 | **MINOR** | Self-resolvable from context | Resolve inline during plan revision |
 | **AMBIGUOUS** | Standard convention / safe default exists | Apply documented default, note in plan |
 
 ### Design Consensus (reconciling Daedalus advisory input)
 
 Daedalus is advisory: it emits no gating signal and never bounces the plan back. Instead it returns design opinions (steelman antithesis, tradeoff tensions, alternative options). Prometheus reconciles those opinions in-phase during the S2 Co-Design state — between the in-phase Daedalus advisory pass and the human design gate / S3 plan write. The Daedalus advisory pass is MANDATORY across ALL intents (Trivial / Scoped / Complex / Architecture) — no intent class skips it.
+
+The **Structural Co-Design Snapshot** (`### Structural Co-Design Snapshot`) is co-decided here, not AI-unilateral: the planner proposes the Allocation/Flow/Fork tables, but the human is full co-owner of the structure and redlines ownership and edges before the design gate. The planner never bakes structure unilaterally.
 
 Reconciliation is simple: **the Daedalus advisory is discussed with the user in the open co-design interview, and the decisions are recorded in the co-authored ADR.** Prometheus uses its own judgment on what is worth raising — there is no fork-detection binary and no severity taxonomy (do not classify opinions as material/routine or Critical/High/Medium). What prometheus judges worth discussing is folded into the open Socratic interview channel (`### Next-Gate Readiness Rule`); the rest it absorbs on the opinion's merits. Either way the outcome lands in the co-authored ADR's MADR 7-field structure (`## Plan Structure > ADR`): an adopted opinion in **Considered Options** / **Decision** / **Consequences**, a rejected one in **Rationale** — no new ADR sub-field. Because every surfaced or resolved design choice already leaves a trace in its ADR **Considered Options**, that trace is the identity key against which an opinion already reflected (resolved earlier in the interview) is recognized and not raised twice.
 
