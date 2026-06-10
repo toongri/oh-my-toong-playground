@@ -60,6 +60,8 @@ All context (interview summary) is already in the plan's Context section. No sup
 
 Momus verifies both document quality and codebase feasibility: it reads the referenced files cited in the plan to confirm existence, current file:line accuracy, and that dependency assumptions hold.
 
+**Structural Snapshot framing**: When the plan contains a Structural Co-Design Snapshot, Momus reviews its Allocation and Flow claims as document-quality (internal consistency) and feasibility (cited code exists and matches), NOT architecture ideality. Whether the chosen architecture is optimal is out of Momus's remit; that judgment belongs to Daedalus at S2 and the human design gate. The canonical E6 framing contract lives in `SKILL.md:### Structural Co-Design Snapshot`.
+
 ---
 
 ## Stage A: HTML Render — Procedure
@@ -127,6 +129,8 @@ Translating any item is a rule violation.
 - Rephrasing plan prose for natural reading flow in the communication language (per Translation Rule).
 - Markdown blockquote callouts (`>`) that surface context the reader needs — drawn from the plan's own Context / interview-rationale / ADR sections. Use them to make an already-stated WHY easy to find, not to assert anything new.
 - Mermaid diagrams that re-visualize flow or structure **already decided in `plan.md`** (e.g. a runtime control flow the plan describes only in prose across several TODOs). Gated by the Necessity Test and bound by the Stage A Fidelity Bounds. Type selection (Sequence / Class / State / Flowchart), guardrails, and the Why -> Diagram -> Interpretation presentation protocol live in `diagram-guide.md`. The template loads the Mermaid runtime, so a ` ```mermaid ` fence injected into the render-time markdown renders as a diagram. Before drawing, full-read `diagram-guide.md` first — the Reference Full-Read Mandate triggers on diagram insertion (Necessity Test = YES).
+
+  **Render-source invariant**: When the plan contains a Structural Co-Design Snapshot, any in-band mermaid diagram re-visualizes the decided Structural Snapshot as recorded in plan.md — the snapshot in plan.md is the single render authority; the diagram is derived from it. The diagram must not introduce allocation or flow decisions absent from the decided Structural Snapshot as recorded in plan.md.
 
 **Forbidden:**
 - Introducing any fact, decision, scope, or rationale not already present in `plan.md`. Enrichment re-surfaces existing context; it does not author new context. If the plan genuinely lacks context the reader needs, that is a plan defect — fix the plan and re-run the pipeline, do not paper over it at render time.
