@@ -36,7 +36,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { execSync } from 'child_process';
 import { getOmtDir } from '@lib/omt-dir';
-import { mergeWithHeartbeat, resolveSessionIdOrThrow } from '@lib/state-core';
+import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt } from '@lib/state-core';
 
 export type GoalPhase = 'planning' | 'pursuing' | 'budget_limited' | 'blocked' | 'complete';
 export type ObjectiveVerdict = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' | 'absent';
@@ -444,9 +444,24 @@ function main(): void {
     } else if (subcommand === 'status') {
       const state = readGoalState(sessionId);
       process.stdout.write((state ? deriveStatus(state) : 'absent') + '\n');
+    } else if (subcommand === 'list-others') {
+      const candidates = listOthers('goal');
+      for (const c of candidates) {
+        const shortSid = c.sid.slice(0, 8);
+        process.stdout.write(
+          `${shortSid}\t${c.sid}\t${c.purpose}\t${c.startedAt}\t${c.idleSeconds}s\n`
+        );
+      }
+    } else if (subcommand === 'adopt') {
+      const srcSid = str(args['src']);
+      if (!srcSid) {
+        process.stderr.write('adopt: --src <sid> is required\n');
+        process.exit(1);
+      }
+      adopt('goal', srcSid);
     } else {
       process.stderr.write(
-        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status> [options]\n'
+        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt> [options]\n'
       );
       process.exit(1);
     }

@@ -955,6 +955,21 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 
 **Deferred-then-revised design decision:** a design decision that was previously deferred to its recommended default and is *later revised* is classified as a **design problem** (a design defect), NOT a routine edit. It therefore routes to S2 (the design phase) → human design gate → re-plan → fresh S4 Momus re-review. Re-review is forced by construction; it does not depend on the user choosing "Revise plan".
 
+### Continuation Intent
+
+When the user's invocation expresses explicit continuation intent — e.g. "하던 거 계속", "continue what I was doing", "resume the previous plan" — run:
+
+```
+bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" list-others
+```
+
+If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's purpose and age — plan path or phase, plus started_at and idle time), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
+
+- On candidate selection: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" adopt --src <selected-sid>`, then resume normal flow on the adopted state (restore reads the adopted plan file; re-run gates on the current artifact).
+- On "start fresh": proceed as a new planning session.
+
+If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.
+
 ### State Lifecycle Directives
 
 These directives govern how prometheus records its own pipeline state via the state CLI.

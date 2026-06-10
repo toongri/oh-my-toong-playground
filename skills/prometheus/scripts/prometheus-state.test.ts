@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from 'fs';
+import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -185,5 +186,159 @@ describe('prometheus state', () => {
     // No file seeded — must throw because process.exit(1) is called
     expect(() => setPrometheusState('absent-session', { phase: 'S1' })).toThrow();
     expect(existsSync(resolveStatePath('absent-session'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Adoption surface tests (TODO 8)
+// ---------------------------------------------------------------------------
+
+const promScript = join(import.meta.dir, 'prometheus-state.ts');
+
+/** Returns a current-time ISO-8601 string with timezone offset. */
+function nowIsoP(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const tzOffset = -d.getTimezoneOffset();
+  const tzSign = tzOffset >= 0 ? '+' : '-';
+  const tzH = pad(Math.floor(Math.abs(tzOffset) / 60));
+  const tzM = pad(Math.abs(tzOffset) % 60);
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+    `${tzSign}${tzH}:${tzM}`
+  );
+}
+
+/** Write a live prometheus state with the given sid and plan_path. */
+function writeLivePromState(sid: string, planPath: string): void {
+  const path = `${tmpDir}/prometheus-state-${sid}.json`;
+  const now = nowIsoP();
+  writeFileSync(
+    path,
+    JSON.stringify({
+      active: true,
+      phase: 'S3',
+      plan_path: planPath,
+      resume_summary: '',
+      started_at: now,
+      last_touched_at: now,
+    }),
+    'utf8'
+  );
+}
+
+/** Write a pristine prometheus state (S0, plan_path empty). */
+function writePristinePromState(sid: string): void {
+  const path = `${tmpDir}/prometheus-state-${sid}.json`;
+  const now = nowIsoP();
+  writeFileSync(
+    path,
+    JSON.stringify({
+      active: true,
+      phase: 'S0',
+      plan_path: '',
+      resume_summary: '',
+      started_at: now,
+      last_touched_at: now,
+    }),
+    'utf8'
+  );
+}
+
+function runPromCli(args: string, env?: Record<string, string>): string {
+  return execSync(`bun ${promScript} ${args}`, {
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
+}
+
+describe('adoption: list-others + adopt (prometheus CLI)', () => {
+  // (F2-prom) list-others surfaces ACTIVE-live candidate, purpose = plan_path or phase
+  test('F2-prom: list-others shows A with plan_path as purpose, excludes self B', () => {
+    process.env.OMT_SESSION_ID = 'B';
+    writeLivePromState('A', `${tmpDir}/plans/myplan.md`);
+    writePristinePromState('B');
+    const out = runPromCli('list-others', { OMT_SESSION_ID: 'B' });
+    expect(out).toContain('A');
+    expect(out).toContain('myplan.md');
+    // Self B must not appear
+    const lines = out.trim().split('\n').filter(Boolean);
+    expect(lines.some((l) => l.includes('prometheus-state-B') || l.startsWith('B '))).toBe(false);
+  });
+
+  // (F2-prom) purpose shows phase when plan_path is empty
+  test('F2-prom: list-others shows phase as purpose when plan_path is empty', () => {
+    // writeLivePromState with empty planPath: plan_path='', phase='S3' → purpose is phase
+    writeLivePromState('PA', '');
+    const out = runPromCli('list-others', { OMT_SESSION_ID: 'PB' });
+    expect(out).toContain('PA');
+    expect(out).toContain('S3');
+  });
+
+  // (label) candidate line has all 4 fields
+  test('label: list-others prometheus candidate line has sid + purpose + started_at + idle-seconds', () => {
+    writeLivePromState('labelProm', `${tmpDir}/plans/z.md`);
+    const out = runPromCli('list-others', { OMT_SESSION_ID: 'xSession' });
+    expect(out).toContain('labelProm');
+    expect(out).toContain('z.md');
+    expect(out).toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(out).toMatch(/\d+s/);
+  });
+
+  // (F3-cli) adopt re-keys via prometheus CLI
+  test('F3-cli: prometheus adopt --src A moves A into B; A absent, B holds content', () => {
+    writeLivePromState('A', `${tmpDir}/plans/myplan.md`);
+    writePristinePromState('B');
+    runPromCli('adopt --src A', { OMT_SESSION_ID: 'B' });
+    expect(existsSync(`${tmpDir}/prometheus-state-A.json`)).toBe(false);
+    const b = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-B.json`, 'utf8'));
+    expect(b.plan_path).toBe(`${tmpDir}/plans/myplan.md`);
+    const log = readFileSync(`${tmpDir}/adoption.log`, 'utf8');
+    expect(log).toContain('prometheus');
+    expect(log).toContain('A -> B');
+  });
+
+  // (F6-cli) adopt refused when current B is ACTIVE non-pristine
+  test('F6-cli: prometheus adopt refused on ACTIVE non-pristine current B', () => {
+    writeLivePromState('A', `${tmpDir}/plans/a.md`);
+    writeLivePromState('B', `${tmpDir}/plans/b.md`);  // non-pristine (phase S3)
+    const aContent = readFileSync(`${tmpDir}/prometheus-state-A.json`, 'utf8');
+    const bContent = readFileSync(`${tmpDir}/prometheus-state-B.json`, 'utf8');
+    expect(() => runPromCli('adopt --src A', { OMT_SESSION_ID: 'B' })).toThrow();
+    expect(readFileSync(`${tmpDir}/prometheus-state-A.json`, 'utf8')).toBe(aContent);
+    expect(readFileSync(`${tmpDir}/prometheus-state-B.json`, 'utf8')).toBe(bContent);
+  });
+
+  // (plan-path-warn) adopt with unresolvable plan_path: exit 0 + stderr warning
+  test('plan-path-warn: adopt exits 0 and warns on stderr when plan_path does not resolve', () => {
+    writeLivePromState('pwSrc', '/nonexistent/plan.md');
+    writePristinePromState('pwDst');
+    // Capture stdout+stderr merged; should exit 0 (no throw)
+    const merged = execSync(
+      `bun ${promScript} adopt --src pwSrc 2>&1`,
+      {
+        encoding: 'utf8',
+        env: { ...process.env, OMT_SESSION_ID: 'pwDst', OMT_DIR: tmpDir },
+        shell: '/bin/sh',
+      }
+    );
+    // Source must be renamed away
+    expect(existsSync(`${tmpDir}/prometheus-state-pwSrc.json`)).toBe(false);
+    // Warning must be present in output
+    expect(merged).toMatch(/warn|warning|plan_path|not found|does not exist/i);
+  });
+
+  // (dormancy-prom) adopted-away source cannot write via set
+  test('dormancy-prom: after adoption, session A write is refused (no-create)', () => {
+    writeLivePromState('A', `${tmpDir}/plans/plan.md`);
+    writePristinePromState('B');
+    runPromCli('adopt --src A', { OMT_SESSION_ID: 'B' });
+    expect(existsSync(`${tmpDir}/prometheus-state-A.json`)).toBe(false);
+    // Session A tries to write — must fail
+    expect(() =>
+      runPromCli('set --phase S2', { OMT_SESSION_ID: 'A' })
+    ).toThrow();
+    expect(existsSync(`${tmpDir}/prometheus-state-A.json`)).toBe(false);
   });
 });
