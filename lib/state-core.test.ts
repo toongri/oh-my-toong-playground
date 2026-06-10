@@ -1,8 +1,9 @@
 /**
  * Tests for lib/state-core.ts
  *
- * Covers all 20 ACs from the state-lifecycle-and-ralph-retirement.md TODO 1.
- * Tests are hermetic: OMT_DIR is pointed at a mktemp fixture; real ~/.omt is never touched.
+ * Covers session-keyed state lifecycle: create, merge-write, TTL expiry, safe-id validation,
+ * and resolveSessionIdOrThrow hard-fail behavior. Tests are hermetic: OMT_DIR is pointed at
+ * a mktemp fixture; real ~/.omt is never touched.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
