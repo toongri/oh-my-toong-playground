@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { SITUATIONS, SKILL_HASHMAP, buildCatalog, formatCatalog } from './catalog.ts';
 
 const SUPERPOWERS_PLUGIN = 'superpowers@claude-plugins-official';
-const FRONTEND_DESIGN_PLUGIN = 'frontend-design@claude-code-plugins';
+const FRONTEND_DESIGN_PLUGIN = 'frontend-design@claude-plugins-official';
 
 describe('SITUATIONS', () => {
   it('5개의 상황이 정의되어 있다', () => {

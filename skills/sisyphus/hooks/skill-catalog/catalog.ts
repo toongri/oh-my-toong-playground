@@ -58,7 +58,7 @@ export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
     'frontend-design',
     {
       description: 'Frontend design skill — UI component design and visual implementation',
-      pluginId: 'frontend-design@claude-code-plugins',
+      pluginId: 'frontend-design@claude-plugins-official',
       situationIds: ['design'],
     },
   ],
