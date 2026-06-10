@@ -27,6 +27,8 @@ import {
   resolveSessionIdOrThrow,
   mergeWithHeartbeat,
   STATE_PREFIX,
+  listOthers,
+  adopt,
 } from '@lib/state-core';
 
 // ---------------------------------------------------------------------------
@@ -253,13 +255,35 @@ function main(): void {
   } else if (subcommand === 'get') {
     const result = readDeepInterviewState(sessionId);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+  } else if (subcommand === 'list-others') {
+    const candidates = listOthers('deep-interview');
+    for (const c of candidates) {
+      const shortSid = c.sid.slice(0, 8);
+      process.stdout.write(
+        `${shortSid}\t${c.sid}\t${c.purpose}\t${c.startedAt}\t${c.idleSeconds}s\n`
+      );
+    }
+  } else if (subcommand === 'adopt') {
+    const srcSid = str(args['src']);
+    if (!srcSid) {
+      process.stderr.write('adopt: --src <sid> is required\n');
+      process.exit(1);
+    }
+    try {
+      adopt('deep-interview', srcSid);
+    } catch (e) {
+      process.stderr.write(`deep-interview-state adopt: ${String(e)}\n`);
+      process.exit(1);
+    }
   } else {
     process.stderr.write(
-      'Usage: deep-interview-state.ts <init|update|get> [options]\n' +
+      'Usage: deep-interview-state.ts <init|update|get|list-others|adopt> [options]\n' +
         '  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n' +
         '         [--current-phase <phase>] [--threshold <n>]\n' +
         '  update --current-phase <phase> [--current-ambiguity <n>]\n' +
-        '  get\n'
+        '  get\n' +
+        '  list-others\n' +
+        '  adopt --src <sid>\n'
     );
     process.exit(1);
   }

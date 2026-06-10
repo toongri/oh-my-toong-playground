@@ -9,10 +9,10 @@
  *   clear
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, statSync } from 'fs';
 import { dirname } from 'path';
 import { execSync } from 'child_process';
-import { mergeWithHeartbeat, resolveSessionIdOrThrow } from '@lib/state-core';
+import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt } from '@lib/state-core';
 
 export interface PrometheusState {
   active: boolean;
@@ -200,8 +200,44 @@ function main(): void {
       setPrometheusState(sessionId, { phase, plan_path: planPath, resume_summary: resumeSummary });
     } else if (subcommand === 'clear') {
       clearPrometheusState(sessionId);
+    } else if (subcommand === 'list-others') {
+      const candidates = listOthers('prometheus');
+      for (const c of candidates) {
+        const shortSid = c.sid.slice(0, 8);
+        process.stdout.write(
+          `${shortSid}\t${c.sid}\t${c.purpose}\t${c.startedAt}\t${c.idleSeconds}s\n`
+        );
+      }
+    } else if (subcommand === 'adopt') {
+      const srcSid = args['src'] !== undefined ? String(args['src']) : undefined;
+      if (!srcSid) {
+        process.stderr.write('adopt: --src <sid> is required\n');
+        process.exit(1);
+      }
+      adopt('prometheus', srcSid);
+      // Additional check: stat the adopted state's plan_path and warn if it does not resolve
+      const dstPath = resolveStatePath(sessionId);
+      if (existsSync(dstPath)) {
+        try {
+          const content = readFileSync(dstPath, 'utf8');
+          const parsed = JSON.parse(content) as Partial<PrometheusState>;
+          const planPath = parsed.plan_path;
+          if (planPath && planPath !== '') {
+            try {
+              statSync(planPath);
+            } catch {
+              process.stderr.write(
+                `adopt: warning: adopted plan_path "${planPath}" does not resolve on disk. ` +
+                  `The state was adopted successfully, but the plan file may need to be located manually.\n`
+              );
+            }
+          }
+        } catch {
+          // parse failure: skip plan_path check
+        }
+      }
     } else {
-      process.stderr.write('Usage: prometheus-state.ts <set|clear> [options]\n');
+      process.stderr.write('Usage: prometheus-state.ts <set|clear|list-others|adopt> [options]\n');
       process.exit(1);
     }
   } catch (e) {

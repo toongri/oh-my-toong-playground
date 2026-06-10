@@ -45,6 +45,19 @@ On a non-falsifiable request, take exactly ONE of these two remediation outcomes
 
 **Re-invocation refusal.** Before seeding anything, read state via `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get`. If a goal-state is already `active`, REFUSE to start a second pursuit — report the active objective and its phase, and stop. A second concurrent goal is never seeded over an `active` one. (Terminal states read as inactive and do not block a fresh goal.)
 
+**Continuation intent.** When the user's invocation expresses explicit continuation intent — e.g. "하던 거 계속", "continue what I was doing", "resume the previous goal" — run:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts list-others
+```
+
+If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's purpose and age — e.g. "ship X — started 2026-06-10, 3 hours idle"), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
+
+- On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts adopt --src <selected-sid>`, then resume normal flow on the adopted state.
+- On "start fresh": proceed as a new goal.
+
+If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.
+
 ---
 
 ## Six Slots
