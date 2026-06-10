@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -20,10 +20,42 @@ const originalOmtDir = process.env.OMT_DIR;
 const originalSessionId = process.env.OMT_SESSION_ID;
 const S = 'test-session';
 
+/** Seed the state file as the PreToolUse hook would (create-if-absent skeleton). */
+function seedGoalFile(sessionId: string): void {
+  const path = resolveStatePath(sessionId);
+  if (!existsSync(path)) {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        started_at: new Date().toISOString().slice(0, 19),
+        last_touched_at: new Date().toISOString().slice(0, 19),
+        outcome: '',
+        verification_surface: '',
+        constraints: '',
+        boundaries: '',
+        blocked_stop: '',
+        plan_path: '',
+        resume_summary: '',
+        budget_limit_notified: false,
+        blocked_reason: '',
+        completion_evidence_paths: [],
+        objective_verdict: 'absent',
+        schema_version: 1,
+      }),
+      'utf8'
+    );
+  }
+}
+
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), 'goal-state-test-'));
   process.env.OMT_DIR = tmpDir;
   process.env.OMT_SESSION_ID = S;
+  seedGoalFile(S);
 });
 
 afterEach(() => {
@@ -104,6 +136,7 @@ describe('goal state', () => {
     expect(s).toHaveProperty('blocked_reason');
     expect(s).toHaveProperty('completion_evidence_paths');
     expect(s).toHaveProperty('schema_version');
+    expect(s).toHaveProperty('last_touched_at');
   });
 
   // AC #3 — name omits literal parens so bun's `-t` regex (the plan's exact
@@ -119,6 +152,7 @@ describe('goal state', () => {
 
     // Override honored on a fresh session
     const S2 = 'override-session';
+    seedGoalFile(S2);
     setGoalState(S2, { phase: 'planning', max_iterations: 25 });
     const ovr = readGoalState(S2)!;
     expect(ovr.phase).toBe('planning');
@@ -143,6 +177,7 @@ describe('goal state', () => {
 
     // (d) request-complete is the ONLY path to phase=complete; gated on evidence
     const S2 = 'gate-session';
+    seedGoalFile(S2);
     setGoalState(S2, { phase: 'pursuing' });
     // no completion evidence yet -> gate refuses, stays non-complete
     expect(requestComplete(S2)).toBe(false);
@@ -157,12 +192,14 @@ describe('goal state', () => {
 
     // (e) system-only setters drive their own terminal phases
     const S3 = 'sys-session';
+    seedGoalFile(S3);
     setGoalState(S3, { phase: 'pursuing' });
     setBudgetLimited(S3);
     expect(readGoalState(S3)).toBeNull(); // active:false reads as null
     expect(rawStateOf(S3).phase).toBe('budget_limited');
 
     const S4 = 'blk-session';
+    seedGoalFile(S4);
     setGoalState(S4, { phase: 'pursuing' });
     setBlocked(S4, 'API key revoked');
     expect(rawStateOf(S4).phase).toBe('blocked');
@@ -222,6 +259,7 @@ describe('goal state', () => {
   test('terminal phases set active false', () => {
     // complete
     const Sc = 'c';
+    seedGoalFile(Sc);
     setGoalState(Sc, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/p`] });
     setVerdict(Sc, 'APPROVE');
     requestComplete(Sc);
@@ -229,18 +267,21 @@ describe('goal state', () => {
 
     // budget_limited
     const Sb = 'b';
+    seedGoalFile(Sb);
     setGoalState(Sb, { phase: 'pursuing' });
     setBudgetLimited(Sb);
     expect(rawStateOf(Sb).active).toBe(false);
 
     // blocked
     const Sk = 'k';
+    seedGoalFile(Sk);
     setGoalState(Sk, { phase: 'pursuing' });
     setBlocked(Sk, 'no path');
     expect(rawStateOf(Sk).active).toBe(false);
 
     // non-terminal stays active
     const Sp = 'p';
+    seedGoalFile(Sp);
     setGoalState(Sp, { phase: 'pursuing' });
     expect(rawStateOf(Sp).active).toBe(true);
   });
@@ -573,3 +614,45 @@ describe('readGoalState schema guard', () => {
 function rawStateOf(sessionId: string): any {
   return JSON.parse(readFileSync(resolveStatePath(sessionId), 'utf8'));
 }
+
+// --- New TODO-3 ACs ---
+
+describe('goal-state hardening: heartbeat + no-create + hard-fail', () => {
+  // (A5) goal-state refreshes last_touched_at on every write
+  test('(A5) last_touched_at refreshed on every write, >= started_at', async () => {
+    // S is already seeded in beforeEach
+    setGoalState(S, { phase: 'planning', outcome: 'x' });
+    const first = rawState();
+    expect(first.last_touched_at).toBeTruthy();
+    const firstLta: string = first.last_touched_at;
+    // Wait 1 second to ensure timestamp advances
+    await new Promise((r) => setTimeout(r, 1100));
+    setGoalState(S, { phase: 'pursuing' });
+    const second = rawState();
+    expect(second.last_touched_at > firstLta).toBe(true);
+    expect(second.last_touched_at >= second.started_at).toBe(true);
+  });
+
+  // (ADR-7-goal) goal CLI refuses to create when file absent
+  test('(ADR-7-goal) setGoalState refuses when state file is absent — exits non-zero', () => {
+    const absentSid = 'absent-goal-session';
+    // No file seeded — must throw (process.exit(1))
+    expect(() => setGoalState(absentSid, { phase: 'planning' })).toThrow();
+    expect(existsSync(resolveStatePath(absentSid))).toBe(false);
+  });
+
+  // (B2) absent OMT_SESSION_ID via CLI → non-zero exit, no default file
+  test('(B2) CLI exits non-zero when OMT_SESSION_ID is empty', () => {
+    const script = join(import.meta.dir, 'goal-state.ts');
+    const env = { ...process.env, OMT_SESSION_ID: '' };
+    expect(() =>
+      execSync(
+        `bun ${script} set --phase planning --outcome x --verification-surface y --constraints z --boundaries b --max-iterations 10 --blocked-stop s`,
+        { encoding: 'utf8', env }
+      )
+    ).toThrow();
+    // No goal-state-default.json should have been created
+    const defaultPath = `${tmpDir}/goal-state-default.json`;
+    expect(existsSync(defaultPath)).toBe(false);
+  });
+});

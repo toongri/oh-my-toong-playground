@@ -34,7 +34,6 @@ export interface RalphState {
  */
 export interface DeepInterviewState {
   active: boolean;
-  sessionId: string;
 }
 
 /**
@@ -78,6 +77,8 @@ export interface GoalState {
   completion_evidence_paths?: string[];
   /** Set by the hook when it emits the budget-limit notice (write-once guard). */
   budget_limit_notified?: boolean;
+  /** Refreshed on every write (heartbeat). Used by the GC liveness check. */
+  last_touched_at?: string;
 }
 
 // Hook output format

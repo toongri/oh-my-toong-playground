@@ -3,6 +3,22 @@ import { readFileOrNull, writeFileSafe, deleteFile, ensureDir } from './utils.ts
 import { join } from 'path';
 import { getOmtDir } from '@lib/omt-dir';
 
+/** Returns the current local time as an ISO-seconds string (hooks/persistent-mode
+ *  is deployed separately from lib/ and cannot import @lib/state-core). */
+function nowStamp(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const tzOffset = -d.getTimezoneOffset();
+  const tzSign = tzOffset >= 0 ? '+' : '-';
+  const tzH = pad(Math.floor(Math.abs(tzOffset) / 60));
+  const tzM = pad(Math.abs(tzOffset) % 60);
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+    `${tzSign}${tzH}:${tzM}`
+  );
+}
+
 const MAX_BLOCK_COUNT = 5;
 
 export function readRalphState(sessionId: string): RalphState | null {
@@ -131,7 +147,9 @@ export function updateGoalState(sessionId: string, partial: Partial<GoalState>):
     return;
   }
 
-  writeFileSafe(path, JSON.stringify({ ...raw, ...partial }, null, 2));
+  // Stamp last_touched_at UNCONDITIONALLY — an empty partial still refreshes
+  // the heartbeat (ADR-8: every use of a state is a use).
+  writeFileSafe(path, JSON.stringify({ ...raw, ...partial, last_touched_at: nowStamp() }, null, 2));
 }
 
 // Block counting for stuck agent escape hatch
