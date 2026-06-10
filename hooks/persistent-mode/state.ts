@@ -1,4 +1,4 @@
-import { RalphState, DeepInterviewState, PrometheusState, GoalState } from './types.ts';
+import { DeepInterviewState, PrometheusState, GoalState } from './types.ts';
 import { readFileOrNull, writeFileSafe, deleteFile, ensureDir } from './utils.ts';
 import { join } from 'path';
 import { getOmtDir } from '@lib/omt-dir';
@@ -20,28 +20,6 @@ function nowStamp(): string {
 }
 
 const MAX_BLOCK_COUNT = 5;
-
-export function readRalphState(sessionId: string): RalphState | null {
-  const path = join(getOmtDir(), `ralph-state-${sessionId}.json`);
-  const content = readFileOrNull(path);
-  if (!content) return null;
-
-  try {
-    const state = JSON.parse(content) as RalphState;
-    return state.active ? state : null;
-  } catch {
-    return null;
-  }
-}
-
-export function updateRalphState(sessionId: string, state: RalphState): void {
-  const path = join(getOmtDir(), `ralph-state-${sessionId}.json`);
-  writeFileSafe(path, JSON.stringify(state, null, 2));
-}
-
-export function cleanupRalphState(sessionId: string): void {
-  deleteFile(join(getOmtDir(), `ralph-state-${sessionId}.json`));
-}
 
 export function readDeepInterviewState(sessionId: string): DeepInterviewState | null {
   const path = join(getOmtDir(), `deep-interview-active-state-${sessionId}.json`);

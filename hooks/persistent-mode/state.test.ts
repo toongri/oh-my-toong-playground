@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 import {
-  readRalphState,
-  updateRalphState,
-  cleanupRalphState,
   readDeepInterviewState,
   readDeepInterviewStateRaw,
   cleanupDeepInterviewState,
@@ -16,155 +13,11 @@ import {
   cleanupBlockCountFiles,
   MAX_BLOCK_COUNT,
 } from './state.ts';
-import type { RalphState, DeepInterviewState } from './types.ts';
+import type { DeepInterviewState } from './types.ts';
 import { mkdir, rm, writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-
-describe('Ralph state management', () => {
-  const testDir = join(tmpdir(), 'state-test-ralph-' + Date.now());
-  const omtDir = join(testDir, 'omt');
-  const sessionId = 'test-session';
-
-  const savedOmtDir = process.env.OMT_DIR;
-
-  beforeAll(async () => {
-    await mkdir(omtDir, { recursive: true });
-  });
-
-  afterAll(async () => {
-    await rm(testDir, { recursive: true, force: true });
-  });
-
-  beforeEach(async () => {
-    process.env.OMT_DIR = omtDir;
-    // Clean up state files before each test
-    const stateFile = join(omtDir, `ralph-state-${sessionId}.json`);
-    try { await rm(stateFile, { force: true }); } catch {}
-  });
-
-  afterEach(() => {
-    if (savedOmtDir === undefined) {
-      delete process.env.OMT_DIR;
-    } else {
-      process.env.OMT_DIR = savedOmtDir;
-    }
-  });
-
-  describe('readRalphState', () => {
-    it('should return null when state file does not exist', () => {
-      const result = readRalphState('nonexistent');
-
-      expect(result).toBeNull();
-    });
-
-    it('should read active ralph state from session-specific file', async () => {
-      const state: RalphState = {
-        active: true,
-        iteration: 2,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(
-        join(omtDir, `ralph-state-${sessionId}.json`),
-        JSON.stringify(state)
-      );
-
-      const result = readRalphState(sessionId);
-
-      expect(result).not.toBeNull();
-      expect(result?.active).toBe(true);
-      expect(result?.iteration).toBe(2);
-      expect(result?.prompt).toBe('Test task');
-    });
-
-    it('should return null when state is inactive', async () => {
-      const state: RalphState = {
-        active: false,
-        iteration: 5,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Completed task',
-      };
-      await writeFile(
-        join(omtDir, `ralph-state-${sessionId}.json`),
-        JSON.stringify(state)
-      );
-
-      const result = readRalphState(sessionId);
-
-      expect(result).toBeNull();
-    });
-
-    it('should return null for invalid JSON', async () => {
-      await writeFile(
-        join(omtDir, `ralph-state-${sessionId}.json`),
-        'invalid json {'
-      );
-
-      const result = readRalphState(sessionId);
-
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('updateRalphState', () => {
-    it('should write state to session-specific file', async () => {
-      const state = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Updated task',
-        oracle_feedback: ['Feedback 1'],
-      } as RalphState;
-
-      updateRalphState(sessionId, state);
-
-      const content = await readFile(
-        join(omtDir, `ralph-state-${sessionId}.json`),
-        'utf8'
-      );
-      const parsed = JSON.parse(content);
-      expect(parsed.iteration).toBe(3);
-      expect(parsed.oracle_feedback).toContain('Feedback 1');
-    });
-
-    it('should create directory if it does not exist', async () => {
-      const newOmtDir = join(testDir, 'new-omt');
-      process.env.OMT_DIR = newOmtDir;
-      const state: RalphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 5,
-        completion_promise: 'DONE',
-        prompt: 'New task',
-      };
-
-      updateRalphState(sessionId, state);
-
-      const stateFile = join(newOmtDir, `ralph-state-${sessionId}.json`);
-      expect(existsSync(stateFile)).toBe(true);
-    });
-  });
-
-  describe('cleanupRalphState', () => {
-    it('should delete session-specific state file', async () => {
-      const stateFile = join(omtDir, `ralph-state-${sessionId}.json`);
-      await writeFile(stateFile, '{}');
-
-      cleanupRalphState(sessionId);
-
-      expect(existsSync(stateFile)).toBe(false);
-    });
-
-    it('should not throw when file does not exist', () => {
-      expect(() => cleanupRalphState('nonexistent')).not.toThrow();
-    });
-  });
-});
 
 describe('Block counting', () => {
   const testDir = join(tmpdir(), 'state-test-block-count-' + Date.now());

@@ -76,8 +76,6 @@ fi
 
 # Strip all mode tags to prevent nested activation loops
 strip_mode_tags() {
-  perl -0pe 's/<ralph-loop-continuation>.*?<\/ralph-loop-continuation>//gs' |
-  perl -0pe 's/<ralph-mode>.*?<\/ralph-mode>//gs' |
   perl -0pe 's/<search-mode>.*?<\/search-mode>//gs' |
   perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' |
   perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' |
@@ -109,92 +107,7 @@ fi
 # Convert to lowercase
 PROMPT_LOWER=$(echo "$PROMPT_NO_CODE" | tr '[:upper:]' '[:lower:]')
 
-RALPH_STATE_PROMPT_MAX=2000
-RALPH_CONTEXT_PROMPT_MAX=2000
-
-truncate_prompt_text() {
-  local text="$1"
-  local max_chars="$2"
-  local normalized
-  normalized=$(printf '%s' "$text" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ *//; s/ *$//')
-  local text_len=${#normalized}
-
-  if [ "$text_len" -le "$max_chars" ]; then
-    printf '%s' "$normalized"
-    return 0
-  fi
-
-  local truncated="${normalized:0:$max_chars}"
-  printf '%s...[truncated from %s chars]' "$truncated" "$text_len"
-}
-
-# Function to create ralph state file
-# Uses SESSION_ID for session-specific file naming
-create_ralph_state() {
-  local prompt="$1"
-  local timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
-
-  if command -v jq &> /dev/null; then
-    jq -n \
-      --arg prompt "$prompt" \
-      --arg started_at "$timestamp" \
-      '{
-        active: true,
-        iteration: 0,
-        max_iterations: 10,
-        completion_promise: "DONE",
-        prompt: $prompt,
-        started_at: $started_at
-      }' > "$OMT_DIR/ralph-state-${SESSION_ID}.json" 2>/dev/null
-  else
-    # Fallback: basic escaping when jq is unavailable
-    local escaped_prompt=$(printf '%s' "$prompt" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
-    cat > "$OMT_DIR/ralph-state-${SESSION_ID}.json" 2>/dev/null << RALPH_STATE_EOF
-{
-  "active": true,
-  "iteration": 0,
-  "max_iterations": 10,
-  "completion_promise": "DONE",
-  "prompt": "$escaped_prompt",
-  "started_at": "$timestamp"
-}
-RALPH_STATE_EOF
-  fi
-}
-
-# Check for ralph keyword (highest priority) - ralph loop activation
-if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
-  RALPH_STATE_PROMPT=$(truncate_prompt_text "$PROMPT_CLEAN" "$RALPH_STATE_PROMPT_MAX")
-  RALPH_CONTEXT_PROMPT=$(truncate_prompt_text "$PROMPT_CLEAN" "$RALPH_CONTEXT_PROMPT_MAX")
-
-  # Create ralph state file
-  create_ralph_state "$RALPH_STATE_PROMPT"
-
-  # Build ralph activation JSON safely using jq --arg to escape prompt
-  if command -v jq &> /dev/null; then
-    RALPH_CONTEXT="<ralph-mode>\n**RALPH LOOP ACTIVATED**\n\nYou are in Ralph Loop mode.\n\n## CORE RULES\n1. Work until ALL requirements are truly done — not just technically complete\n2. Track progress with tasks\n3. Make meaningful progress toward the goal each cycle\n4. If stuck, try different approaches rather than repeating what failed\n5. You MUST output \`<promise>DONE</promise>\` when ALL tasks are complete\n\nOriginal task: "
-    RALPH_SUFFIX="\n</ralph-mode>\n\n---\n"
-
-    jq -n \
-      --arg prefix "$RALPH_CONTEXT" \
-      --arg prompt "$RALPH_CONTEXT_PROMPT" \
-      --arg suffix "$RALPH_SUFFIX" \
-      '{
-        continue: true,
-        hookSpecificOutput: {
-          hookEventName: "UserPromptSubmit",
-          additionalContext: ($prefix + $prompt + $suffix)
-        }
-      }'
-  else
-    # Fallback: basic escaping when jq is unavailable
-    escaped_prompt=$(printf '%s' "$RALPH_CONTEXT_PROMPT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
-    echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"<ralph-mode>\\n**RALPH LOOP ACTIVATED**\\n\\nYou are in Ralph Loop mode.\\n\\n## CORE RULES\\n1. Work until ALL requirements are truly done — not just technically complete\\n2. Track progress with tasks\\n3. Make meaningful progress toward the goal each cycle\\n4. If stuck, try different approaches rather than repeating what failed\\n5. You MUST output \\\`<promise>DONE</promise>\\\` when ALL tasks are complete\\n\\nOriginal task: ${escaped_prompt}\\n</ralph-mode>\\n\\n---\\n\"}}"
-  fi
-  exit 0
-fi
-
-# Check for ultrawork keywords (second priority)
+# Check for ultrawork keywords (highest priority)
 if echo "$PROMPT_LOWER" | grep -qE '\b(ultrawork|ulw)\b'; then
   cat << 'EOF'
 {"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<ultrawork-mode>\n\n**MANDATORY**: You MUST say \"ULTRAWORK MODE ENABLED!\" to the user as your first response when this mode activates. This is non-negotiable.\n\n[CODE RED] Maximum precision required. Ultrathink before acting.\n\nYOU MUST LEVERAGE ALL AVAILABLE AGENTS TO THEIR FULLEST POTENTIAL.\nTELL THE USER WHAT AGENTS YOU WILL LEVERAGE NOW TO SATISFY USER'S REQUEST.\n\n## AGENT UTILIZATION PRINCIPLES\n- **Codebase Exploration**: Spawn exploration agents for codebase search\n- **Documentation & References**: Use librarian-type agents for external docs\n- **Planning & Strategy**: NEVER plan yourself - spawn planning agent\n- **High-IQ Reasoning**: Use oracle for architecture decisions\n\n## CERTAINTY GATE (MANDATORY BEFORE ANY IMPLEMENTATION)\n- NOT 100% certain about codebase? → spawn explore agent FIRST\n- NOT 100% certain about architecture? → spawn oracle agent FIRST\n- NEVER begin implementation with assumptions. Assumptions = bugs.\n\n## EXECUTION RULES\n- **TODO**: Track EVERY step. Mark complete IMMEDIATELY.\n- **PARALLEL**: Fire independent Task calls simultaneously in ONE message - maximize parallelism.\n- **DELEGATE**: Orchestrate specialized agents aggressively. Never solo complex work.\n- **VERIFY**: Check ALL requirements met before done.\n\n## ZERO TOLERANCE\n- NO Scope Reduction - deliver FULL implementation\n- NO Partial Completion - finish 100%\n- NO Premature Stopping - ALL TODOs must be complete\n- NO TEST DELETION - fix code, not tests\n\n## BLOCKED EXCUSES (catch yourself saying these → STOP and FIX)\n| Excuse Pattern | Required Action |\n|----------------|------------------|\n| \"I couldn't find/access...\" | Spawn explore agent, try harder |\n| \"Here's a simplified version...\" | Deliver the FULL version |\n| \"This should work but I can't verify...\" | Spawn argus for verification |\n| \"I'll leave this for the user to...\" | YOU complete it |\n| \"Due to complexity, I only...\" | Continue until 100% done |\n\nTHE USER ASKED FOR X. DELIVER EXACTLY X.\n\n</ultrawork-mode>\n\n---\n"}}

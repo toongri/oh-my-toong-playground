@@ -14,16 +14,6 @@ export interface ParsedInput {
   lastAssistantMessage: string | null;
 }
 
-// Ralph state file structure
-export interface RalphState {
-  active: boolean;
-  iteration: number;
-  max_iterations: number;
-  completion_promise: string;
-  prompt: string;
-  started_at?: string;
-}
-
 /**
  * Minimal contract the persistent-mode hook reads from the deep-interview
  * state file. The on-disk file may carry additional fields at runtime
@@ -94,8 +84,3 @@ export interface TodoItem {
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
 }
 
-// Transcript detection results
-export interface TranscriptDetection {
-  hasCompletionPromise: boolean;
-  hasOracleApproval: boolean;
-}
