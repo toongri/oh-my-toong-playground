@@ -17,10 +17,10 @@ config:
 
 plugins:
   items:
-    - name: frontend-design@claude-code-plugins
-      check: jq -e '.plugins["frontend-design@claude-code-plugins"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+    - name: frontend-design@claude-plugins-official
+      check: jq -e '.plugins["frontend-design@claude-plugins-official"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
       pre-commands:
-        - claude plugin marketplace add anthropics/claude-code
+        - claude plugin marketplace add anthropics/claude-plugins-official
     - name: insane-search@gptaku-plugins
       check: jq -e '.plugins["insane-search@gptaku-plugins"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
       pre-commands:
