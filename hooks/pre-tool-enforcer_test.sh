@@ -293,6 +293,201 @@ test_ac10_seed_and_cli_set_phase_compose() {
 }
 
 # =============================================================================
+# P1 — prometheus seed carries last_touched_at, date round-trips
+# =============================================================================
+
+test_p1_prometheus_seed_has_last_touched_at() {
+    local state_file="$OMT_DIR/prometheus-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"prometheus"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "Prometheus state file should exist" || return 1
+
+    jq -e '.last_touched_at | length > 0' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: .last_touched_at should be non-empty"; return 1; }
+
+    local lta
+    lta=$(jq -r '.last_touched_at' "$state_file")
+    if ! echo "$lta" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'; then
+        echo "ASSERTION FAILED: last_touched_at '$lta' does not match ISO 8601 shape"
+        return 1
+    fi
+
+    local time_part epoch
+    time_part=$(echo "$lta" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
+    epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$time_part" "+%s" 2>/dev/null \
+        || date -d "$time_part" "+%s" 2>/dev/null)
+    [[ -n "$epoch" ]] \
+        || { echo "ASSERTION FAILED: last_touched_at '$lta' did not round-trip through parser"; return 1; }
+}
+
+# =============================================================================
+# A2 — Skill(deep-interview) seeds env-sid marker with active/started_at/last_touched_at
+# =============================================================================
+
+test_a2_deep_interview_seed_creates_marker() {
+    local state_file="$OMT_DIR/deep-interview-active-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"deep-interview"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "deep-interview state file should be created" || return 1
+
+    jq -e '.active == true' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: .active should be true"; return 1; }
+
+    jq -e '.started_at | length > 0' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: .started_at should be non-empty"; return 1; }
+
+    jq -e '.last_touched_at | length > 0' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: .last_touched_at should be non-empty"; return 1; }
+}
+
+# =============================================================================
+# seed-DI-shape — deep-interview seed has no sessionId field
+# =============================================================================
+
+test_seed_di_no_session_id_field() {
+    local state_file="$OMT_DIR/deep-interview-active-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"deep-interview"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "deep-interview state file should exist" || return 1
+
+    jq -e 'has("sessionId") | not' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: seed must not write a sessionId field"; return 1; }
+}
+
+# =============================================================================
+# seed-goal — Skill(goal) seeds the pristine goal skeleton
+# =============================================================================
+
+test_seed_goal_creates_skeleton() {
+    local state_file="$OMT_DIR/goal-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "goal state file should be created" || return 1
+
+    jq -e '.phase == "planning" and .iteration == 0 and .outcome == "" and .active == true
+        and (.started_at | length > 0) and (.last_touched_at | length > 0)' \
+        "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: goal seed does not match pristine skeleton"; return 1; }
+}
+
+# =============================================================================
+# seed-goal-idem — second goal seed run leaves the existing file unchanged
+# =============================================================================
+
+test_seed_goal_is_idempotent() {
+    local state_file="$OMT_DIR/goal-state-test-sid.json"
+
+    # First seed
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "goal state file should exist after first seed" || return 1
+
+    # Mutate iteration to 3
+    local tmp
+    tmp=$(mktemp)
+    jq '.iteration = 3' "$state_file" > "$tmp" && mv "$tmp" "$state_file"
+
+    jq -e '.iteration == 3' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: mutation of iteration to 3 failed"; return 1; }
+
+    # Re-fire seed
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    jq -e '.iteration == 3' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: re-fire seed must not reset iteration (create-if-absent only)"; return 1; }
+}
+
+# =============================================================================
+# B1 — absent id → no default file, stderr warn, exit 0
+# =============================================================================
+
+test_b1_absent_session_id_skips_and_warns() {
+    local exit_code=0
+    local stderr_out
+
+    stderr_out=$(
+        unset OMT_SESSION_ID
+        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED: Hook should exit 0 on absent id (exit=$exit_code)"; return 1; }
+
+    # No *-state-*.json files created with empty or "default" id
+    local found
+    found=$(ls "$OMT_DIR"/*-state-*.json 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$found" -eq 0 ]] \
+        || { echo "ASSERTION FAILED: No state files should be created when OMT_SESSION_ID is absent (found=$found)"; return 1; }
+
+    echo "$stderr_out" | grep -qi "warn\|skip\|session" \
+        || { echo "ASSERTION FAILED: stderr should contain a warning about missing session id. Got: '$stderr_out'"; return 1; }
+}
+
+# =============================================================================
+# B3 — unsafe id → skip+warn+exit0, no file outside the state dir
+# =============================================================================
+
+test_b3_unsafe_session_id_skips_and_warns() {
+    local exit_code=0
+    local stderr_out
+
+    stderr_out=$(
+        export OMT_SESSION_ID="../escape"
+        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED: Hook should exit 0 on unsafe id (exit=$exit_code)"; return 1; }
+
+    # No file created anywhere with "../escape" in the name or outside OMT_DIR
+    local found
+    found=$(find "$OMT_DIR" -maxdepth 1 -name "*-state-*" 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$found" -eq 0 ]] \
+        || { echo "ASSERTION FAILED: No state files should be created for unsafe id (found=$found)"; return 1; }
+
+    echo "$stderr_out" | grep -qi "warn\|skip\|unsafe\|invalid" \
+        || { echo "ASSERTION FAILED: stderr should contain a warning about unsafe id. Got: '$stderr_out'"; return 1; }
+}
+
+# =============================================================================
+# fail-loud — a forced seed-write failure prints a stderr warning, exit 0
+# =============================================================================
+
+test_fail_loud_write_failure_warns_not_silent() {
+    local exit_code=0
+    local stderr_out
+
+    # Make OMT_DIR read-only so the write attempt fails
+    chmod -w "$OMT_DIR"
+
+    stderr_out=$(
+        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
+    ) || exit_code=$?
+
+    # Restore perms
+    chmod +w "$OMT_DIR"
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED: Hook should exit 0 even on write failure (exit=$exit_code)"; return 1; }
+
+    echo "$stderr_out" | grep -qi "warn\|fail\|error\|seed" \
+        || { echo "ASSERTION FAILED: stderr should contain a seed-failure warning. Got: '$stderr_out'"; return 1; }
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -313,6 +508,17 @@ main() {
     run_test test_ac8_fail_open_missing_omt_dir
     run_test test_ac9_started_at_parseable_by_stale_cleanup
     run_test test_ac10_seed_and_cli_set_phase_compose
+
+    # New seeds: P1 (prometheus last_touched_at), A2 (deep-interview), seed-goal, seed-goal-idem,
+    # seed-DI-shape, B1 (absent id), B3 (unsafe id), fail-loud
+    run_test test_p1_prometheus_seed_has_last_touched_at
+    run_test test_a2_deep_interview_seed_creates_marker
+    run_test test_seed_di_no_session_id_field
+    run_test test_seed_goal_creates_skeleton
+    run_test test_seed_goal_is_idempotent
+    run_test test_b1_absent_session_id_skips_and_warns
+    run_test test_b3_unsafe_session_id_skips_and_warns
+    run_test test_fail_loud_write_failure_warns_not_silent
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

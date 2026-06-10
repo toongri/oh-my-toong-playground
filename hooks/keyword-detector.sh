@@ -162,36 +162,6 @@ RALPH_STATE_EOF
   fi
 }
 
-# Function to create deep-interview state file
-# Uses SESSION_ID for session-specific file naming
-# Writes atomically via temp file + mv so a mid-write failure leaves no partial file.
-create_deep_interview_state() {
-  local timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
-  local target="$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json"
-  local tmp="${target}.tmp.$$"
-
-  if command -v jq &> /dev/null; then
-    jq -n \
-      --arg session_id "$SESSION_ID" \
-      --arg started_at "$timestamp" \
-      '{
-        active: true,
-        sessionId: $session_id,
-        started_at: $started_at
-      }' > "$tmp" 2>/dev/null && mv "$tmp" "$target" || rm -f "$tmp"
-  else
-    # Fallback: write manually when jq is unavailable
-    cat > "$tmp" 2>/dev/null << DEEP_INTERVIEW_STATE_EOF
-{
-  "active": true,
-  "sessionId": "${SESSION_ID}",
-  "started_at": "${timestamp}"
-}
-DEEP_INTERVIEW_STATE_EOF
-    if [ $? -eq 0 ]; then mv "$tmp" "$target"; else rm -f "$tmp"; fi
-  fi
-}
-
 # Check for ralph keyword (highest priority) - ralph loop activation
 if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
   RALPH_STATE_PROMPT=$(truncate_prompt_text "$PROMPT_CLEAN" "$RALPH_STATE_PROMPT_MAX")
@@ -234,9 +204,6 @@ fi
 
 # Check for deep-interview keywords (third priority)
 if echo "$PROMPT_LOWER" | grep -qiE '\b(deep[- ]?interview|ouroboros)\b|딥인터뷰'; then
-  # Create deep-interview state file
-  create_deep_interview_state
-
   cat << 'EOF'
 {"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<deep-interview-mode>\n\n**DEEP INTERVIEW MODE ACTIVATED** (deep-interview)\n\nYou are now in deep interview mode. Conduct a thorough, structured interview:\n1. Ask one focused question at a time\n2. Listen carefully and probe deeper based on responses\n3. Synthesize insights across the conversation\n4. Surface assumptions and validate them explicitly\n\nRemain in deep interview mode until the session is explicitly concluded.\n\n</deep-interview-mode>\n\n---\n"}}
 EOF
