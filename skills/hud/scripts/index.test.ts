@@ -1,6 +1,6 @@
 import { jest, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { tmpdir } from 'os';
-import type { StdinInput, RalphState, RateLimitData } from './types.ts';
+import type { StdinInput, RateLimitData } from './types.ts';
 import type { TranscriptResult } from './transcript.ts';
 import * as stdinMod from './stdin.ts';
 import * as stateMod from './state.ts';
@@ -22,7 +22,6 @@ describe('main', () => {
   let mockLogError: ReturnType<typeof spyOn>;
   let mockLogStart: ReturnType<typeof spyOn>;
   let mockLogEnd: ReturnType<typeof spyOn>;
-  let mockReadRalphState: ReturnType<typeof spyOn>;
   let mockReadBackgroundTasks: ReturnType<typeof spyOn>;
   let mockCalculateSessionDuration: ReturnType<typeof spyOn>;
   let mockIsThinkingEnabled: ReturnType<typeof spyOn>;
@@ -46,7 +45,6 @@ describe('main', () => {
     mockLogError = spyOn(loggingMod, 'logError').mockImplementation(() => {});
     mockLogStart = spyOn(loggingMod, 'logStart').mockImplementation(() => {});
     mockLogEnd = spyOn(loggingMod, 'logEnd').mockImplementation(() => {});
-    mockReadRalphState = spyOn(stateMod, 'readRalphState');
     mockReadBackgroundTasks = spyOn(stateMod, 'readBackgroundTasks');
     mockCalculateSessionDuration = spyOn(stateMod, 'calculateSessionDuration');
     mockIsThinkingEnabled = spyOn(stateMod, 'isThinkingEnabled');
@@ -59,7 +57,6 @@ describe('main', () => {
 
     // Default mock implementations
     mockReadStdin.mockResolvedValue(null);
-    mockReadRalphState.mockResolvedValue(null);
     mockReadBackgroundTasks.mockResolvedValue(0);
     mockCalculateSessionDuration.mockReturnValue(null);
     mockIsThinkingEnabled.mockResolvedValue(false);
@@ -82,7 +79,6 @@ describe('main', () => {
     mockLogError.mockRestore();
     mockLogStart.mockRestore();
     mockLogEnd.mockRestore();
-    mockReadRalphState.mockRestore();
     mockReadBackgroundTasks.mockRestore();
     mockCalculateSessionDuration.mockRestore();
     mockIsThinkingEnabled.mockRestore();
@@ -133,24 +129,6 @@ describe('main', () => {
       expect(mockFormatStatusLineV2).toHaveBeenCalledWith(
         expect.objectContaining({ contextPercent: 75.5 })
       );
-    });
-
-    it('reads state files with correct cwd', async () => {
-      mockReadStdin.mockResolvedValue({
-        hook_event_name: 'Status',
-        session_id: 'test-session',
-        transcript_path: '/path/to/transcript.jsonl',
-        cwd: '/my/project',
-        context_window: {
-          used_percentage: 50,
-          total_input_tokens: 10000,
-          context_window_size: 200000,
-        },
-      });
-
-      await main();
-
-      expect(mockReadRalphState).toHaveBeenCalledWith('/my/project', 'test-session');
     });
 
     it('fetches rate limits', async () => {
@@ -244,15 +222,6 @@ describe('main', () => {
     });
 
     it('includes all gathered data in HudDataV2', async () => {
-      const ralphState: RalphState = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'test',
-        started_at: '2025-01-22T10:00:00+09:00',
-        oracle_feedback: ['First rejection reason'],
-      };
       const rateLimits: RateLimitData = {
         fiveHour: { percent: 25, resetIn: '3h' },
         sevenDay: { percent: 10, resetIn: '5d' },
@@ -270,7 +239,6 @@ describe('main', () => {
           context_window_size: 200000,
         },
       });
-      mockReadRalphState.mockResolvedValue(ralphState);
       mockReadBackgroundTasks.mockResolvedValue(2);
       mockParseTranscript.mockResolvedValue({
         runningAgents: 3,
@@ -288,7 +256,6 @@ describe('main', () => {
 
       expect(mockFormatStatusLineV2).toHaveBeenCalledWith({
         contextPercent: 50,
-        ralph: ralphState,
         runningAgents: 3,
         backgroundTasks: 2,
         activeSkill: 'prometheus',
@@ -362,13 +329,13 @@ describe('main', () => {
           context_window_size: 200000,
         },
       });
-      mockReadRalphState.mockRejectedValue(new Error('File not found'));
+      mockReadBackgroundTasks.mockRejectedValue(new Error('File not found'));
 
       await main();
 
       // Promise.allSettled: individual failure falls back to default, formatStatusLineV2 still called
       expect(mockFormatStatusLineV2).toHaveBeenCalledWith(
-        expect.objectContaining({ ralph: null })
+        expect.objectContaining({ backgroundTasks: 0 })
       );
       expect(mockFormatMinimalStatus).not.toHaveBeenCalled();
     });
@@ -385,14 +352,13 @@ describe('main', () => {
           context_window_size: 200000,
         },
       });
-      mockReadRalphState.mockRejectedValue(new Error('File not found'));
+      mockReadBackgroundTasks.mockRejectedValue(new Error('File not found'));
 
       await main();
 
-      // ralph falls back to null; other fields use beforeEach defaults
+      // backgroundTasks falls back to 0; other fields use beforeEach defaults
       expect(mockFormatStatusLineV2).toHaveBeenCalledWith(
         expect.objectContaining({
-          ralph: null,
           backgroundTasks: 0,
           runningAgents: 0,
           rateLimits: null,
@@ -416,11 +382,11 @@ describe('main', () => {
           context_window_size: 200000,
         },
       });
-      mockReadRalphState.mockRejectedValue(new Error('File not found'));
+      mockReadBackgroundTasks.mockRejectedValue(new Error('File not found'));
 
       await main();
 
-      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('readRalphState'));
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('readBackgroundTasks'));
     });
 
     it('degrades gracefully when multiple data sources fail', async () => {
@@ -435,7 +401,7 @@ describe('main', () => {
           context_window_size: 200000,
         },
       });
-      mockReadRalphState.mockRejectedValue(new Error('ralph error'));
+      mockReadBackgroundTasks.mockRejectedValue(new Error('bg error'));
       mockReadTasks.mockRejectedValue(new Error('tasks error'));
       mockFetchRateLimits.mockRejectedValue(new Error('rate limit error'));
 
@@ -482,12 +448,12 @@ describe('main', () => {
           context_window_size: 200000,
         },
       });
-      mockFormatStatusLineV2.mockReturnValue('[OMT] | ctx:50%\nralph:2/10 | session:45m');
+      mockFormatStatusLineV2.mockReturnValue('[OMT] | ctx:50%\ntasks:2/10 | session:45m');
 
       await main();
 
       // Should convert spaces on both lines to non-breaking spaces
-      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT]\u00A0|\u00A0ctx:50%\nralph:2/10\u00A0|\u00A0session:45m');
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT]\u00A0|\u00A0ctx:50%\ntasks:2/10\u00A0|\u00A0session:45m');
     });
 
     it('converts spaces in minimal status output', async () => {

@@ -1,92 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { readRalphState, readBackgroundTasks, calculateSessionDuration, isThinkingEnabled, readTasks, getActiveTaskForm } from './state.ts';
+import { readBackgroundTasks, calculateSessionDuration, isThinkingEnabled, readTasks, getActiveTaskForm } from './state.ts';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
 
 describe('state readers', () => {
   const testDir = join(tmpdir(), 'hud-state-test-' + Date.now());
-  const projectDir = join(testDir, 'project');
-  const omtDir = join(testDir, 'omt');
-
-  beforeAll(async () => {
-    await mkdir(omtDir, { recursive: true });
-    process.env.OMT_DIR = omtDir;
-  });
 
   afterAll(async () => {
-    delete process.env.OMT_DIR;
     await rm(testDir, { recursive: true, force: true });
   });
-
-  describe('readRalphState', () => {
-    it('should read session-specific ralph state from project-local .omt/', async () => {
-      const state = {
-        active: true,
-        iteration: 2,
-        max_iterations: 5,
-        completion_promise: 'Complete the task',
-        prompt: 'Original prompt',
-        started_at: '2024-01-22T10:00:00Z',
-              };
-
-      // Session-specific file: ralph-state-test-session.json
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(state));
-
-      const result = await readRalphState(projectDir, 'test-session');
-
-      expect(result).not.toBeNull();
-      expect(result?.active).toBe(true);
-      expect(result?.iteration).toBe(2);
-      expect(result?.max_iterations).toBe(5);
-    });
-
-    it('should use default session ID when not provided', async () => {
-      const state = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Default session prompt',
-        started_at: '2024-01-22T10:00:00Z',
-              };
-
-      // Default session file: ralph-state-default.json
-      await writeFile(join(omtDir, 'ralph-state-default.json'), JSON.stringify(state));
-
-      const result = await readRalphState(projectDir);
-
-      expect(result).not.toBeNull();
-      expect(result?.iteration).toBe(3);
-    });
-
-    it('should return null when session-specific file does not exist', async () => {
-      const result = await readRalphState('', 'non-existent-session');
-
-      expect(result).toBeNull();
-    });
-
-    it('should NOT read other sessions ralph state files', async () => {
-      const state = {
-        active: true,
-        iteration: 5,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Other session task',
-        started_at: '2024-01-22T10:00:00Z',
-              };
-
-      // Create ralph state for a different session
-      await writeFile(join(omtDir, 'ralph-state-other-session.json'), JSON.stringify(state));
-
-      // Try to read with a different session ID
-      const result = await readRalphState(projectDir, 'my-session');
-
-      expect(result).toBeNull();
-    });
-  });
-
-  // readRalphVerification tests removed - verification is now part of ralph-state (oracle_feedback field)
 
   // readTodos tests removed - todos now come from transcript only for session isolation
 

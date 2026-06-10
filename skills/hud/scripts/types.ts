@@ -12,21 +12,9 @@ export interface StdinInput {
   };
 }
 
-// ralph-state.json
-export interface RalphState {
-  active: boolean;
-  iteration: number;
-  max_iterations: number;
-  completion_promise: string;
-  prompt: string;
-  started_at: string;
-  oracle_feedback?: string[];
-}
-
 // Aggregated HUD data
 export interface HudData {
   contextPercent: number | null;
-  ralph: RalphState | null;
   runningAgents: number;
   backgroundTasks: number;
   activeSkill: string | null;
@@ -68,7 +56,6 @@ export interface AgentInfo {
 // Enhanced HUD data (extends existing)
 export interface HudDataV2 {
   contextPercent: number | null;
-  ralph: RalphState | null;
   runningAgents: number;
   backgroundTasks: number;
   activeSkill: string | null;
