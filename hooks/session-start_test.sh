@@ -469,27 +469,27 @@ EOF
 }
 
 test_session_start_stale_goal_state_purged() {
-    # Create a goal-state file with started_at older than STALE_THRESHOLD (3 hours)
+    # Create a goal-state file with last_touched_at older than ACTIVE_IDLE_TTL (6h) — use 7h
     local stale_ts
-    stale_ts=$(date -j -v-4H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "4 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local stale_file="$TEST_OMT_DIR/goal-state-stale-session.json"
     cat > "$stale_file" << EOF
 {
   "active": true,
   "phase": "pursuing",
-  "started_at": "${stale_ts}",
+  "last_touched_at": "${stale_ts}",
   "outcome": "old goal",
   "iteration": 1
 }
 EOF
 
-    # Run the hook (stale cleanup runs regardless of sessionId)
+    # Run the hook (GC runs regardless of sessionId; stale-session != fresh-session)
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
 
-    # Stale goal-state file should be removed
+    # Stale goal-state file should be removed (age 7h > ACTIVE_IDLE_TTL 6h)
     if [ -f "$stale_file" ]; then
-        echo "ASSERTION FAILED: stale goal-state file should have been purged but still exists"
+        echo "ASSERTION FAILED: stale goal-state file (7h heartbeat) should have been purged but still exists"
         return 1
     fi
     return 0
@@ -619,42 +619,42 @@ EOF
 # =============================================================================
 
 test_session_start_stale_deep_interview_with_started_at_purged() {
-    # AC: old started_at deep-interview marker is removed
+    # AC: deep-interview with last_touched_at older than ACTIVE_IDLE_TTL (6h) is removed — use 7h
     local stale_ts
-    stale_ts=$(date -j -v-4H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "4 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local stale_file="$TEST_OMT_DIR/deep-interview-active-state-stale-di.json"
     cat > "$stale_file" << EOF
 {
   "active": true,
   "sessionId": "stale-di",
-  "started_at": "${stale_ts}"
+  "last_touched_at": "${stale_ts}"
 }
 EOF
 
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
 
     if [ -f "$stale_file" ]; then
-        echo "ASSERTION FAILED: stale deep-interview marker (old started_at) should have been purged but still exists"
+        echo "ASSERTION FAILED: stale deep-interview marker (7h heartbeat) should have been purged but still exists"
         return 1
     fi
     return 0
 }
 
 test_session_start_stale_deep_interview_no_started_at_purged_via_mtime() {
-    # AC: started_at-less deep-interview marker with old mtime is removed via mtime fallback
+    # AC: timestamp-less deep-interview marker with mtime older than ACTIVE_IDLE_TTL (6h) is removed — use 7h
     local stale_file="$TEST_OMT_DIR/deep-interview-active-state-mtime-di.json"
     printf '{"active":true,"sessionId":"mtime-di"}' > "$stale_file"
 
-    # Set mtime to 4 hours ago (BSD: touch -t YYYYmmddHHMM; GNU: touch -d)
+    # Set mtime to 7 hours ago (BSD: touch -t YYYYmmddHHMM; GNU: touch -d)
     local old_mtime
-    old_mtime=$(date -j -v-4H "+%Y%m%d%H%M" 2>/dev/null || date -d "4 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
-    touch -t "$old_mtime" "$stale_file" 2>/dev/null || touch -d "4 hours ago" "$stale_file" 2>/dev/null || true
+    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" "$stale_file" 2>/dev/null || touch -d "7 hours ago" "$stale_file" 2>/dev/null || true
 
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
 
     if [ -f "$stale_file" ]; then
-        echo "ASSERTION FAILED: started_at-less deep-interview marker with old mtime should have been purged but still exists"
+        echo "ASSERTION FAILED: timestamp-less deep-interview marker with 7h mtime should have been purged but still exists"
         return 1
     fi
     return 0
@@ -670,6 +670,171 @@ test_session_start_fresh_deep_interview_marker_survives() {
 
     if [ ! -f "$fresh_file" ]; then
         echo "ASSERTION FAILED: fresh deep-interview marker should survive cleanup but was removed"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: GC liveness unification (TODO 7)
+# New TTL semantics: is_state_live via hooks/lib/state-liveness.sh
+# ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m (see state-liveness.sh for exact values)
+# =============================================================================
+
+# C2: current session's active state with 7h-old heartbeat SURVIVES (never reap own session)
+test_gc_current_session_active_7h_idle_survives() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local sid="current-gc-session"
+    local state_file="$TEST_OMT_DIR/goal-state-${sid}.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "live goal",
+  "iteration": 1
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: current session's active state should survive GC even with 7h-old heartbeat"
+        return 1
+    fi
+    return 0
+}
+
+# C1: other-session active with fresh 5m heartbeat SURVIVES
+test_gc_other_session_active_fresh_heartbeat_survives() {
+    local fresh_ts
+    fresh_ts=$(date -j -v-5M "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "5 minutes ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S")
+    local state_file="$TEST_OMT_DIR/goal-state-other-session-A.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${fresh_ts}",
+  "outcome": "live goal",
+  "iteration": 1
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "session-B"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: other-session active state with 5m heartbeat should survive GC"
+        return 1
+    fi
+    return 0
+}
+
+# C3a: other-session active with 7h-old heartbeat is REAPED
+test_gc_other_session_active_7h_idle_reaped() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local state_file="$TEST_OMT_DIR/goal-state-other-session-stale.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "session-B"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ -f "$state_file" ]; then
+        echo "ASSERTION FAILED: other-session active state with 7h heartbeat should be reaped"
+        return 1
+    fi
+    return 0
+}
+
+# C3b part1: terminal state with 1h-old heartbeat is REAPED
+test_gc_terminal_state_1h_old_reaped() {
+    local old_ts
+    old_ts=$(date -j -v-1H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "1 hour ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local state_file="$TEST_OMT_DIR/prometheus-state-terminal-old.json"
+    cat > "$state_file" << EOF
+{
+  "active": false,
+  "phase": "complete",
+  "last_touched_at": "${old_ts}"
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "any-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ -f "$state_file" ]; then
+        echo "ASSERTION FAILED: terminal state with 1h heartbeat should be reaped (TERMINAL_TTL=30m)"
+        return 1
+    fi
+    return 0
+}
+
+# C3b part2: terminal state with 10m-old heartbeat is KEPT
+test_gc_terminal_state_10m_old_kept() {
+    local fresh_ts
+    fresh_ts=$(date -j -v-10M "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "10 minutes ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S")
+    local state_file="$TEST_OMT_DIR/prometheus-state-terminal-fresh.json"
+    cat > "$state_file" << EOF
+{
+  "active": false,
+  "phase": "complete",
+  "last_touched_at": "${fresh_ts}"
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "any-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: terminal state with 10m heartbeat should survive GC (TERMINAL_TTL=30m)"
+        return 1
+    fi
+    return 0
+}
+
+# C6: in-use terminal goal with 10m heartbeat SURVIVES — no carve-out code
+test_gc_terminal_goal_fresh_heartbeat_survives_no_carveout() {
+    local fresh_ts
+    fresh_ts=$(date -j -v-10M "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "10 minutes ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S")
+    local sid="terminal-goal-sid"
+    local state_file="$TEST_OMT_DIR/goal-state-${sid}.json"
+    cat > "$state_file" << EOF
+{
+  "active": false,
+  "phase": "complete",
+  "last_touched_at": "${fresh_ts}",
+  "outcome": "Build feature X",
+  "iteration": 3
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "other-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: in-use terminal goal with fresh heartbeat should survive without carve-out code"
+        return 1
+    fi
+    # Verify no suppress/baseline branch in session-start.sh
+    if grep -qiE 'suppress|baseline' "$SCRIPT_DIR/session-start.sh" 2>/dev/null; then
+        echo "ASSERTION FAILED: session-start.sh must have 0 suppress/baseline references"
+        return 1
+    fi
+    return 0
+}
+
+# glob: the GC for-loop glob must NOT reference ralph-state
+# (the restore block below the GC may still reference ralph-state; only the GC loop is checked)
+test_gc_glob_no_ralph_state_entry() {
+    # Extract lines between "# GC:" marker and "# Check for active ralph" to isolate the GC block
+    local gc_section
+    gc_section=$(awk '/^# GC:/{found=1} found && /^# Check for active ralph/{found=0} found{print}' "$SCRIPT_DIR/session-start.sh")
+    if echo "$gc_section" | grep -q 'ralph-state'; then
+        echo "ASSERTION FAILED: session-start.sh GC glob must NOT include ralph-state"
+        echo "  GC section:"
+        echo "$gc_section" | head -20
+        return 1
+    fi
+    return 0
+}
+
+# old-threshold-gone: STALE_THRESHOLD / 10800 must not appear
+test_gc_old_threshold_constants_removed() {
+    if grep -qE '10800|STALE_THRESHOLD' "$SCRIPT_DIR/session-start.sh" 2>/dev/null; then
+        echo "ASSERTION FAILED: session-start.sh must not contain STALE_THRESHOLD or 10800"
         return 1
     fi
     return 0
@@ -725,6 +890,16 @@ main() {
     run_test test_session_start_stale_deep_interview_with_started_at_purged
     run_test test_session_start_stale_deep_interview_no_started_at_purged_via_mtime
     run_test test_session_start_fresh_deep_interview_marker_survives
+
+    # GC liveness unification (TODO 7)
+    run_test test_gc_current_session_active_7h_idle_survives
+    run_test test_gc_other_session_active_fresh_heartbeat_survives
+    run_test test_gc_other_session_active_7h_idle_reaped
+    run_test test_gc_terminal_state_1h_old_reaped
+    run_test test_gc_terminal_state_10m_old_kept
+    run_test test_gc_terminal_goal_fresh_heartbeat_survives_no_carveout
+    run_test test_gc_glob_no_ralph_state_entry
+    run_test test_gc_old_threshold_constants_removed
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

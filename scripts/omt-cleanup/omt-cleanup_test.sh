@@ -328,6 +328,95 @@ test_execute_preserves_active_goal_state_files() {
 }
 
 # ---------------------------------------------------------------------------
+# AC liveness unification (TODO 7)
+# P4/P5/P6 preserve predicates now use is_state_live (ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m)
+# ---------------------------------------------------------------------------
+
+# C8: a dir whose ONLY state file is a 1h-terminal prometheus-state is NOT preserved
+# (dead terminal: 1h > TERMINAL_TTL 30m)
+test_liveness_all_dead_dir_not_preserved() {
+    local old_ts
+    old_ts=$(date -j -v-1H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "1 hour ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    # Create a new dir (not in residue list, not a legit P1/P2/P3 name)
+    local dead_dir="$FIXTURE_HOME/.omt/dead-project-only-terminal"
+    mkdir -p "$dead_dir"
+    cat > "$dead_dir/prometheus-state-dead-sess.json" << EOF
+{
+  "active": false,
+  "phase": "complete",
+  "last_touched_at": "${old_ts}"
+}
+EOF
+
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
+    # It must NOT appear as PRESERVED — it should be either DELETE or unknown-fallback
+    # The key assertion: it does NOT appear under PRESERVED
+    if echo "$out" | grep "PRESERVED" | grep -q "dead-project-only-terminal"; then
+        echo "ASSERTION FAILED: dir with only a dead terminal state must NOT be preserved"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    return 0
+}
+
+# C4/omt-cleanup: a dir whose ONLY goal-state is active-but-7h-idle is NOT preserved
+# (dead active: 7h > ACTIVE_IDLE_TTL 6h) — parity with session-start GC
+test_liveness_active_7h_idle_dir_not_preserved() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local stale_dir="$FIXTURE_HOME/.omt/stale-active-project"
+    mkdir -p "$stale_dir"
+    cat > "$stale_dir/goal-state-stale-sess.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
+    if echo "$out" | grep "PRESERVED" | grep -q "stale-active-project"; then
+        echo "ASSERTION FAILED: dir with only a 7h-idle active state must NOT be preserved (parity with session-start GC)"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    return 0
+}
+
+# Positive: a dir with a LIVE active goal-state (fresh heartbeat) IS preserved via liveness
+test_liveness_fresh_active_dir_preserved() {
+    local fresh_ts
+    fresh_ts=$(date -j -v-5M "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "5 minutes ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S")
+
+    local live_dir="$FIXTURE_HOME/.omt/live-active-project"
+    mkdir -p "$live_dir"
+    cat > "$live_dir/goal-state-live-sess.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${fresh_ts}",
+  "outcome": "live goal",
+  "iteration": 1
+}
+EOF
+
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
+    if ! echo "$out" | grep "PRESERVED" | grep -q "live-active-project"; then
+        echo "ASSERTION FAILED: dir with a fresh-heartbeat active state must be PRESERVED"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -378,6 +467,11 @@ main() {
     run_test test_execute_preserves_algocare_home
     run_test test_execute_preserves_algocd
     run_test test_execute_preserves_active_goal_state_files
+
+    # AC liveness unification (TODO 7)
+    run_test test_liveness_all_dead_dir_not_preserved
+    run_test test_liveness_active_7h_idle_dir_not_preserved
+    run_test test_liveness_fresh_active_dir_preserved
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

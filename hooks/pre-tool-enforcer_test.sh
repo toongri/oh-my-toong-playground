@@ -238,7 +238,9 @@ test_ac8_fail_open_missing_omt_dir() {
 }
 
 # =============================================================================
-# AC9 — started_at parseable by stale-cleanup (3h backstop)
+# AC9 — started_at parseable by stale-cleanup (ACTIVE_IDLE_TTL=6h fallback)
+# Updated to reflect new GC semantics: liveness uses last_touched_at -> started_at -> mtime.
+# A state with no last_touched_at falls back to started_at; age must exceed 6h to be reaped.
 # =============================================================================
 
 test_ac9_started_at_parseable_by_stale_cleanup() {
@@ -250,13 +252,13 @@ test_ac9_started_at_parseable_by_stale_cleanup() {
 
     assert_file_exists "$state_file" "State file should exist after seed" || return 1
 
-    # Backdate started_at to 4 hours ago (well past 3h threshold) by rewriting the file
+    # Backdate started_at to 7 hours ago (well past ACTIVE_IDLE_TTL=6h) by rewriting the file.
+    # Remove last_touched_at so the GC falls back to started_at for age computation.
     local old_timestamp
-    old_timestamp=$(date -v-4H -Iseconds 2>/dev/null || date -d "4 hours ago" +"%Y-%m-%dT%H:%M:%S" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S" -d "-4 hours")
-    # Use jq to write a modified state file with old timestamp
+    old_timestamp=$(date -v-7H -Iseconds 2>/dev/null || date -d "7 hours ago" +"%Y-%m-%dT%H:%M:%S" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S" -d "-7 hours")
     local tmp_file
     tmp_file=$(mktemp)
-    jq --arg ts "$old_timestamp" '.started_at = $ts' "$state_file" > "$tmp_file" && mv "$tmp_file" "$state_file"
+    jq --arg ts "$old_timestamp" '.started_at = $ts | del(.last_touched_at)' "$state_file" > "$tmp_file" && mv "$tmp_file" "$state_file"
 
     # Invoke the REAL session-start hook so the production stale-cleanup path is
     # exercised (not an inline copy that could diverge).  OMT_DIR is already
@@ -265,7 +267,7 @@ test_ac9_started_at_parseable_by_stale_cleanup() {
     printf '{}' | bash "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1
 
     assert_file_not_exists "$state_file" \
-        "Stale-cleanup should delete state file with started_at >3h old" || return 1
+        "Stale-cleanup should delete state file with started_at >6h old (ACTIVE_IDLE_TTL)" || return 1
 }
 
 # =============================================================================

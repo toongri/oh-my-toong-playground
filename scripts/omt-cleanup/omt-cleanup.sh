@@ -16,7 +16,12 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 
+SCRIPT_DIR_CLEANUP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=hooks/lib/state-liveness.sh
+source "$SCRIPT_DIR_CLEANUP/../../hooks/lib/state-liveness.sh"
+
 OMT_DIR="${HOME}/.omt"
+CLEANUP_NOW=$(date +%s)
 
 # Confirmed-residue names (14 entries from §1 classification table).
 # Order matches the 7 slugs + name-based residue.
@@ -61,31 +66,32 @@ is_residue() {
     return 1
 }
 
-has_active_goal_state() {
+has_any_state_file() {
+    # Returns 0 (true) iff dir contains at least one state file (live or dead) across the 3 managed prefixes.
     local dir="$1"
     local f
-    for f in "$dir"/goal-state-*.json; do
+    for f in \
+        "$dir"/goal-state-*.json \
+        "$dir"/prometheus-state-*.json \
+        "$dir"/deep-interview-active-state-*.json; do
+        [[ -f "$f" ]] && return 0
+    done
+    return 1
+}
+
+has_live_state() {
+    # Returns 0 (true) iff dir contains at least one LIVE state file across the 3 managed prefixes.
+    # Liveness is defined by is_state_live from hooks/lib/state-liveness.sh.
+    local dir="$1"
+    local f
+    for f in \
+        "$dir"/goal-state-*.json \
+        "$dir"/prometheus-state-*.json \
+        "$dir"/deep-interview-active-state-*.json; do
         [[ -f "$f" ]] || continue
-        if grep -q '"active":true' "$f" 2>/dev/null || grep -q '"active": true' "$f" 2>/dev/null; then
+        if is_state_live "$f" "$CLEANUP_NOW"; then
             return 0
         fi
-    done
-    return 1
-}
-
-has_deep_interview_state() {
-    local dir="$1"
-    # Any deep-interview marker (active or not) is preserved — it may be current-session
-    for f in "$dir"/deep-interview-active-state-*.json; do
-        [[ -f "$f" ]] && return 0
-    done
-    return 1
-}
-
-has_prometheus_state() {
-    local dir="$1"
-    for f in "$dir"/prometheus-state-*.json; do
-        [[ -f "$f" ]] && return 0
     done
     return 1
 }
@@ -106,14 +112,8 @@ is_preserved() {
         [[ "$name" == "algocare-home-stage" ]] || return 0
     fi
 
-    # P4: contains an active goal-state file
-    has_active_goal_state "$dir" && return 0
-
-    # P5: contains a deep-interview active state file
-    has_deep_interview_state "$dir" && return 0
-
-    # P6: contains a prometheus-state file
-    has_prometheus_state "$dir" && return 0
+    # P4/P5/P6: contains at least one LIVE state file (goal, prometheus, or deep-interview)
+    has_live_state "$dir" && return 0
 
     return 1
 }
@@ -148,8 +148,11 @@ for entry_path in "$OMT_DIR"/*/; do
         PRESERVE_LIST="$PRESERVE_LIST $name"
     elif is_residue "$name"; then
         DELETE_LIST="$DELETE_LIST $name"
+    elif has_any_state_file "$OMT_DIR/$name" && ! has_live_state "$OMT_DIR/$name"; then
+        # Unknown entry: has state files but ALL are dead — do not preserve
+        DELETE_LIST="$DELETE_LIST $name"
     else
-        # Unknown entry — preserve by default (conservative)
+        # Unknown entry with no state files, or with live state — preserve (conservative)
         PRESERVE_LIST="$PRESERVE_LIST $name"
     fi
 done

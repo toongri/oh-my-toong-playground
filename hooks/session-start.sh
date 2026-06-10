@@ -70,40 +70,23 @@ fi
 
 MESSAGES=""
 
-# Cleanup stale ralph-state / prometheus-state / goal-state / deep-interview files (older than 3 hours)
-if command -v jq &> /dev/null; then
-  STALE_THRESHOLD=10800  # 3 hours in seconds
-  CURRENT_TIME=$(date +%s)
-
-  for state_file in "$OMT_DIR"/ralph-state-*.json "$OMT_DIR"/prometheus-state-*.json "$OMT_DIR"/goal-state-*.json "$OMT_DIR"/deep-interview-active-state-*.json; do
-    if [ -f "$state_file" ]; then
-      STARTED_AT=$(jq -r '.started_at // ""' "$state_file" 2>/dev/null)
-      if [ -n "$STARTED_AT" ] && [ "$STARTED_AT" != "null" ]; then
-        # Parse ISO 8601 timestamp (strip timezone first). BSD date (macOS) is the deploy
-        # target; the GNU date -d fallback keeps stale cleanup working on Linux/CI.
-        TIME_PART=$(echo "$STARTED_AT" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
-        FILE_TIMESTAMP=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$TIME_PART" "+%s" 2>/dev/null || date -d "$TIME_PART" "+%s" 2>/dev/null)
-
-        if [ -n "$FILE_TIMESTAMP" ]; then
-          AGE=$((CURRENT_TIME - FILE_TIMESTAMP))
-          if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then
-            rm -f "$state_file"
-          fi
-        fi
-      else
-        # No parseable started_at: fall back to file mtime so legacy markers age out.
-        # BSD stat (macOS): stat -f %m; GNU stat (Linux): stat -c %Y.
-        FILE_TIMESTAMP=$(stat -f %m "$state_file" 2>/dev/null || stat -c %Y "$state_file" 2>/dev/null)
-        if [ -n "$FILE_TIMESTAMP" ]; then
-          AGE=$((CURRENT_TIME - FILE_TIMESTAMP))
-          if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then
-            rm -f "$state_file"
-          fi
-        fi
-      fi
-    fi
-  done
-fi
+# GC: reap dead state files for the 3 managed prefixes.
+# Liveness defined by hooks/lib/state-liveness.sh (ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m).
+# The current session's state is always kept regardless of age.
+source "$SCRIPT_DIR_SS/lib/state-liveness.sh"
+GC_NOW=$(date +%s)
+for state_file in \
+    "$OMT_DIR"/goal-state-*.json \
+    "$OMT_DIR"/prometheus-state-*.json \
+    "$OMT_DIR"/deep-interview-active-state-*.json; do
+  [ -f "$state_file" ] || continue
+  if is_current_session "$state_file" "$SESSION_ID"; then
+    continue
+  fi
+  if ! is_state_live "$state_file" "$GC_NOW"; then
+    rm -f "$state_file"
+  fi
+done
 
 # Check for active ralph loop state (session-specific)
 if [ -f "$OMT_DIR/ralph-state-${SESSION_ID}.json" ]; then
