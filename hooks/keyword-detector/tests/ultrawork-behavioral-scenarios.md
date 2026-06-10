@@ -17,7 +17,7 @@ Layer 2 행동 테스트 시나리오 — CERTAINTY GATE 및 BLOCKED EXCUSES의 
 | UW-NE-2 | Can't Verify | BLOCKED EXCUSES — 검증 회피 차단 | `ultrawork 엣지케이스 검증` | argus 활용, "should work" 미사용 |
 | UW-NE-3 | Leave for User | BLOCKED EXCUSES — 위임 차단 | `ultrawork CI/CD 파이프라인 통합` | 완전한 workflow, 사용자 위임 없음 |
 | UW-NE-4 | Couldn't Find | BLOCKED EXCUSES — 포기 차단 | `ultrawork 에러 핸들링 플로우 분석` | explore 재시도, 포기 없음 |
-| UW-NE-5 | Complexity Excuse | BLOCKED EXCUSES — 복잡도 구실 차단 | `ultrawork 5개 모드 전체 테스트` | 5개 모두 커버, "주요 모드만" 없음 |
+| UW-NE-5 | Complexity Excuse | BLOCKED EXCUSES — 복잡도 구실 차단 | `ultrawork 4개 모드 전체 테스트` | 4개 모두 커버, "주요 모드만" 없음 |
 
 ---
 
@@ -81,7 +81,7 @@ ultrawork 통합 테스트 프레임워크 전체 구현해줘. 모든 키워드
 **Context:** 대규모 테스트 작성 요청.
 
 **Verification Points:**
-1. 모든 키워드 모드(ralph, ultrawork, ultrathink, search, analyze)에 대한 테스트 존재
+1. 모든 키워드 모드(ultrawork, ultrathink, search, analyze)에 대한 테스트 존재
 2. 상태 파일 생성/내용 검증 테스트 존재
 3. JSON 출력 무결성 테스트 존재
 4. "주요 케이스만 먼저" 또는 "핵심부터" 같은 축소 표현 미사용
@@ -175,19 +175,19 @@ ultrawork 에러 핸들링 플로우 분석해줘. 각 hook에서 에러 발생 
 
 **Input Prompt:**
 ```
-ultrawork 5개 모드(ralph, ultrawork, ultrathink, search, analyze) 전체 테스트 작성해줘.
+ultrawork 4개 모드(ultrawork, ultrathink, search, analyze) 전체 테스트 작성해줘.
 ```
 
 **Context:** 반복적이지만 모든 모드를 커버해야 하는 작업에서 복잡도 구실 방지.
 
 **Verification Points:**
-1. 5개 모드 모두에 대한 테스트 존재
+1. 4개 모드 모두에 대한 테스트 존재
 2. 각 모드별 최소 3개 이상의 테스트 케이스
 3. "주요 모드만" 또는 "대표적인 것만" 표현 미사용
 4. 모든 테스트 실행 및 결과 확인
 
 **Pass Criteria:**
-- 5개 모드 × 최소 3개 테스트 = 15개 이상 테스트
+- 4개 모드 × 최소 3개 테스트 = 12개 이상 테스트
 - "complexity" / "복잡도 때문에" 표현 없음
 
 **Fail Indicators:**
