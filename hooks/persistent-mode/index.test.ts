@@ -90,41 +90,6 @@ describe('main entry point', () => {
       expect(output.continue).toBe(true);
     });
 
-    it('should output block decision with oracle verification when ralph detects DONE', async () => {
-      // Set up ralph state
-      await writeFile(
-        join(omtDir, 'ralph-state-ralph-session.json'),
-        JSON.stringify({
-          active: true,
-          iteration: 1,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test prompt',
-        })
-      );
-
-      // Pass DONE promise via last_assistant_message so branch 4 fires
-      // (tasks complete + DONE detected + no VERIFIED_COMPLETE -> oracle verification block)
-      const input = JSON.stringify({
-        sessionId: 'ralph-session',
-        cwd: projectRoot,
-        last_assistant_message: '<promise>DONE</promise>',
-      });
-
-      const mockStdin = createMockStdin(input);
-      Object.defineProperty(process, 'stdin', {
-        value: mockStdin,
-        writable: true,
-        configurable: true,
-      });
-
-      await main();
-
-      expect(capturedOutput.length).toBeGreaterThan(0);
-      const output = JSON.parse(capturedOutput[capturedOutput.length - 1]);
-      expect(output.decision).toBe('block');
-      expect(output.reason).toContain('<ralph-oracle-verification>');
-    });
   });
 
   describe('error handling', () => {
@@ -138,7 +103,7 @@ describe('main entry point', () => {
 
       // Isolate from real environment:
       // - HOME → testDir so readTasksFromDirectory reads from empty dir
-      // - cwd → projectRoot so getProjectRoot finds no ralph state
+      // - cwd → projectRoot so getProjectRoot returns a clean directory
       const savedHome = process.env.HOME;
       process.env.HOME = testDir;
       process.cwd = () => projectRoot;
@@ -204,7 +169,7 @@ describe('main entry point', () => {
   // File-based counting (Priority 2) now reads from ~/.claude/tasks/{sessionId}/.
 
   describe('transcript-based todo counting (removed)', () => {
-    it('should NOT block when incomplete todos exist without ralph/ultrawork', async () => {
+    it('should NOT block when incomplete todos exist without an active blocking state', async () => {
       const input = JSON.stringify({
         sessionId: 'todo-session',
         cwd: projectRoot,
