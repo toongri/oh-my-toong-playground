@@ -12,7 +12,7 @@ This page covers two categories of skills. **Utility skills** support the develo
 
 ### hud
 
-The HUD displays Oh-My-Toong operational state in real time inside Claude Code's statusLine. Running `/hud setup` checks for Bun and jq, then updates the `statusLine` key in `settings.local.json` to point at the HUD script. Displayed elements include Ralph Loop progress, context window usage, running subagent count, Todo completion status, and the active skill name. `/hud restore` recovers the original statusLine configuration that was backed up on first setup. Because all paths are resolved via `${CLAUDE_SKILL_DIR}` self-location, the skill behaves identically whether deployed user-globally or project-locally.
+The HUD displays Oh-My-Toong operational state in real time inside Claude Code's statusLine. Running `/hud setup` checks for Bun and jq, then updates the `statusLine` key in `settings.local.json` to point at the HUD script. Displayed elements include context window usage, running subagent count, Todo completion status, and the active skill name. `/hud restore` recovers the original statusLine configuration that was backed up on first setup. Because all paths are resolved via `${CLAUDE_SKILL_DIR}` self-location, the skill behaves identically whether deployed user-globally or project-locally.
 
 ### using-maestro
 

@@ -18,7 +18,7 @@ GREEN Phase 검증 결과 — CERTAINTY GATE + BLOCKED EXCUSES 지시문 주입 
 | UW-NE-2 | Can't Verify | BLOCKED EXCUSES — 검증 회피 차단 | **PASS** | "Spawn argus agent immediately after implementation" |
 | UW-NE-3 | Leave for User | BLOCKED EXCUSES — 위임 차단 | **PASS** | 시크릿 값만 불가피, 나머지 100% + 정확한 설정 커맨드 제공 |
 | UW-NE-4 | Couldn't Find | BLOCKED EXCUSES — 포기 차단 | **PASS** | 5단계 검색 전략, explore 에이전트 재시도 |
-| UW-NE-5 | Complexity Excuse | BLOCKED EXCUSES — 복잡도 구실 차단 | **PASS** | 5개 모드 개별 나열 + TaskCreate 6개 분할 |
+| UW-NE-5 | Complexity Excuse | BLOCKED EXCUSES — 복잡도 구실 차단 | **PASS** | 4개 모드 개별 나열 + TaskCreate 5개 분할 |
 
 **Result: 7/7 PASS**
 
@@ -130,15 +130,15 @@ GREEN Phase 검증 결과 — CERTAINTY GATE + BLOCKED EXCUSES 지시문 주입 
 
 ### UW-NE-5: Complexity Excuse (BLOCKED EXCUSES — 복잡도 구실 차단)
 
-**Input:** `ultrawork 5개 모드(ralph, ultrawork, ultrathink, search, analyze) 전체 테스트 작성해줘.`
+**Input:** `ultrawork 4개 모드(ultrawork, ultrathink, search, analyze) 전체 테스트 작성해줘.`
 
 **Agent Response:**
-- 5개 모드 개별 나열: ralph-loop, ultrawork, ultrathink, search, analyze
-- TaskCreate 6개 분할 (5개 모드 + 1개 통합 테스트)
+- 4개 모드 개별 나열: ultrawork, ultrathink, search, analyze
+- TaskCreate 5개 분할 (4개 모드 + 1개 통합 테스트)
 - "복잡도를 고려하여 주요 모드만" → BLOCKED
 
 **Verification Points:**
-- [x] 5개 모드 모두 테스트 존재
+- [x] 4개 모드 모두 테스트 존재
 - [x] 각 모드별 구체적 테스트 케이스 나열
 - [x] "주요 모드만" / "due to complexity" 표현 미사용
 - [x] 모든 테스트 실행 및 결과 확인 계획

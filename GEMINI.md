@@ -20,7 +20,7 @@
 
 - **`skills/`**: Contains `SKILL.md` files defining methodologies for specific tasks (e.g., `prometheus`, `sisyphus`, `git-master`).
 - **`agents/`**: Defines sub-agents and their personalities/constraints.
-- **`commands/`**: Custom slash commands (e.g., `/hud`, `/ralph`).
+- **`commands/`**: Custom slash commands (e.g., `/hud`).
 - **`hooks/`**: Scripts triggering on session events (e.g., `session-start.sh`, `keyword-detector.sh`).
 - **`projects/`**: Project-specific skill overrides and configurations.
 - **`scripts/`**: Utility scripts for validation and synchronization.
@@ -66,7 +66,6 @@ This project uses `make` to validate and sync configurations to your local envir
 1.  **Plan First**: Use `Prometheus` to generate a plan (`~/.omt/{OMT_PROJECT}/plans/*.md`, via `$OMT_DIR`) before any code is written.
 2.  **Orchestrate**: Use `Sisyphus` to execute the plan. Sisyphus delegates the actual coding to `Sisyphus-Junior`.
 3.  **Verify**: Use `Oracle` or `Code-Reviewer` to validate changes.
-4.  **Ralph Loop**: A mechanism (`/ralph`) to enforce iterative work until a strict definition of done is met.
 
 ### Modifying the Framework
 - **New Skills**: Add a new directory in `skills/` with a `SKILL.md`.

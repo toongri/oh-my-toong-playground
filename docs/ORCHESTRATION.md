@@ -152,9 +152,7 @@ flowchart TD
 | `/deep-interview <아이디어>` | 모호성 게이팅으로 명세 수렴 | `$OMT_DIR/deep-interview/{slug}.md` |
 | `/prometheus <작업>` | 작업 계획 생성 | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/sisyphus` | 조율을 통한 계획 실행 | 검증된 코드 변경 |
-| `/ralph <작업>` | oracle 검증과 함께 반복적 완료 | 작업 완료 |
 | `/hud setup\|restore` | HUD 설정 및 관리 | statusLine 설정 |
-| `/cancel-ralph` | Ralph Loop 취소 | 상태 파일 정리 |
 
 ---
 

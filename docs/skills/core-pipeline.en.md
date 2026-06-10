@@ -217,41 +217,6 @@ If skills are the *methodologies*, agents are the *delegation targets*. sisyphus
 
 ---
 
-## 8. Ralph Loop — Completion-Verification Enforcement Loop
-
-**Purpose**: When the `/ralph` keyword is activated, it refuses to end the session until Oracle verification passes.
-
-**Core mechanism**: A Stop hook intercepts session-end attempts, analyzes whether requirements are complete, and rejects termination when they are not.
-
-```mermaid
-flowchart TB
-    Start(["/ralph task"]) --> Work[Work via sisyphus]
-    Work --> Stop{Session-end<br/>attempt?}
-    Stop -->|No| Work
-    Stop -->|Yes| Hook[Stop Hook intercepts]
-    Hook --> Check{Oracle verification<br/>passes?}
-    Check -->|No| Block[Reject end +<br/>inject feedback]
-    Block --> Work
-    Check -->|Yes| Done([Allow session end])
-```
-
-**Verification conditions**:
-
-- The `<oracle-approved>VERIFIED_COMPLETE</oracle-approved>` tag is required.
-- Termination is refused while any task is incomplete.
-- After a maximum of 10 iterations, forced termination is allowed.
-
-### Commands
-
-| Command | Purpose |
-|---------|---------|
-| `/ralph <task>` | Loads the sisyphus skill first, then executes the task with the Ralph Loop enabled |
-| `/cancel-ralph` | Cancels the active Ralph Loop and cleans up all state files |
-
-Ralph state is stored at `$OMT_DIR/ralph-state-*.json`, and `/cancel-ralph` also cleans up the linked ultrawork state alongside these files.
-
----
-
 ## See Also
 
 - [README](../../README.en.md) — project overview and the central-management + per-project-differentiation story
