@@ -3,7 +3,7 @@
 # stop-notify hook
 # 세션 종료 시 macOS 알림 센터에 작업 완료 알림 전송 (Stop)
 #
-# 조건: ralph-loop 활성 상태이거나 미완료 태스크가 있으면 알림을 보내지 않음
+# 조건: 미완료 태스크가 있으면 알림을 보내지 않음
 # (실제 종료 시에만 알림)
 # =============================================================================
 
@@ -38,15 +38,6 @@ PROJECT_ROOT=$(find_project_root "$CWD")
 SCRIPT_DIR_SN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR_SN/lib/omt-dir.sh"
 compute_omt_dir "$PROJECT_ROOT"
-
-# --- 조건 검사: ralph-state 활성 여부 ---
-RALPH_STATE_FILE="$OMT_DIR/ralph-state-${SESSION_ID}.json"
-if [[ -f "$RALPH_STATE_FILE" ]]; then
-  RALPH_ACTIVE=$(jq -r '.active // false' "$RALPH_STATE_FILE" 2>/dev/null)
-  if [[ "$RALPH_ACTIVE" == "true" ]]; then
-    exit 0
-  fi
-fi
 
 # --- 조건 검사: incomplete tasks 여부 ---
 TASKS_DIR="$HOME/.claude/tasks/${SESSION_ID}"

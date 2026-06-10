@@ -88,28 +88,6 @@ for state_file in \
   fi
 done
 
-# Check for active ralph loop state (session-specific)
-if [ -f "$OMT_DIR/ralph-state-${SESSION_ID}.json" ]; then
-  RALPH_STATE=$(cat "$OMT_DIR/ralph-state-${SESSION_ID}.json" 2>/dev/null)
-
-  if command -v jq &> /dev/null; then
-    IS_ACTIVE=$(echo "$RALPH_STATE" | jq -r '.active // false' 2>/dev/null)
-    if [ "$IS_ACTIVE" = "true" ]; then
-      ITERATION=$(echo "$RALPH_STATE" | jq -r '.iteration // 0' 2>/dev/null)
-      MAX_ITER=$(echo "$RALPH_STATE" | jq -r '.max_iterations // 10' 2>/dev/null)
-      PROMPT=$(echo "$RALPH_STATE" | jq -r '.prompt // "Task in progress"' 2>/dev/null)
-      ORACLE_FEEDBACK=$(echo "$RALPH_STATE" | jq -r '.oracle_feedback // [] | join("\n")' 2>/dev/null)
-
-      FEEDBACK_SECTION=""
-      if [ -n "$ORACLE_FEEDBACK" ] && [ "$ORACLE_FEEDBACK" != "null" ] && [ "$ORACLE_FEEDBACK" != "" ]; then
-        FEEDBACK_SECTION="\nPrevious Oracle Feedback:\n$ORACLE_FEEDBACK\n"
-      fi
-
-      MESSAGES="$MESSAGES<session-restore>\n\n[RALPH LOOP RESTORED]\n\nYou have an active ralph-loop session.\nOriginal task: $PROMPT\nIteration: $ITERATION/$MAX_ITER\n$FEEDBACK_SECTION\nContinue working until the task is verified complete.\n\n</session-restore>\n\n---\n\n"
-    fi
-  fi
-fi
-
 # Check for active prometheus state (session-specific)
 if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
   PROMETHEUS_STATE=$(cat "$OMT_DIR/prometheus-state-${SESSION_ID}.json" 2>/dev/null)
