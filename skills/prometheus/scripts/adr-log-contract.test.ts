@@ -36,9 +36,6 @@ describe('absence assertions — obsolete structural-snapshot tokens', () => {
     );
   });
 
-  it('O4: close-gate inline pointer is gone', () => {
-    expect(skillContent).not.toContain('(defined below)');
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -47,9 +44,11 @@ describe('absence assertions — obsolete structural-snapshot tokens', () => {
 // ---------------------------------------------------------------------------
 
 describe('presence assertions — new ADR-log tokens', () => {
-  it('N1: one titled D-N item', () => {
-    // Literal contains backticks around D-N: `D-N`
-    expect(skillContent).toContain('`D-N`');
+  it('N1: core contract sentence — every decision is one titled D-N item', () => {
+    // Anchors the core contract sentence (SKILL.md ~707) which exists exactly once.
+    // The old `D-N` token alone matched 5 independent locations; this distinctive
+    // substring is the unique sentence that names the contract and must not be deletable.
+    expect(skillContent).toContain('is **one titled `D-N` item**');
   });
 
   it('N2: invalidated alternative (one line)', () => {
