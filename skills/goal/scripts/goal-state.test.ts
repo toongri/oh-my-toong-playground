@@ -12,6 +12,7 @@ import {
   setVerdict,
   deriveStatus,
   resolveStatePath,
+  readGoalGet,
   type GoalPhase,
 } from './goal-state.ts';
 
@@ -817,5 +818,72 @@ describe('adoption: list-others + adopt (goal CLI)', () => {
     ).toThrow();
     // File must still be absent
     expect(existsSync(`${tmpDir}/goal-state-A.json`)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F2/F10: get subcommand pristine field (RED tests — must fail before implementation)
+// ---------------------------------------------------------------------------
+
+describe('get subcommand includes pristine field', () => {
+  // (F2-get-pristine) A freshly seeded state (phase=planning, iteration=0, outcome='')
+  // must report pristine:true in get output so the SKILL.md gate can distinguish its
+  // own seed from a real in-flight pursuit.
+  test('F2-get-pristine: get returns pristine:true for a freshly seeded state', () => {
+    // S is seeded in beforeEach with phase=planning, iteration=0, outcome=''
+    const result = readGoalGet(S);
+    expect(result).not.toBeNull();
+    expect(result!.pristine).toBe(true);
+  });
+
+  // (F2-get-not-pristine-outcome) Once the orchestrator writes a real outcome, the
+  // seed is no longer pristine — get must report pristine:false.
+  test('F2-get-not-pristine-outcome: get returns pristine:false after outcome is set', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'ship feature X' });
+    const result = readGoalGet(S);
+    expect(result).not.toBeNull();
+    expect(result!.pristine).toBe(false);
+  });
+
+  // (F2-get-not-pristine-pursuing) Phase=pursuing is not pristine (iteration may be 0
+  // but phase has advanced past planning).
+  test('F2-get-not-pristine-pursuing: get returns pristine:false when phase is pursuing', () => {
+    setGoalState(S, { phase: 'pursuing' });
+    const result = readGoalGet(S);
+    expect(result).not.toBeNull();
+    expect(result!.pristine).toBe(false);
+  });
+
+  // (F2-get-cli) CLI `get` subcommand JSON output contains pristine field.
+  test('F2-get-cli: CLI get output JSON contains pristine field', () => {
+    const out = runCli('get');
+    const parsed = JSON.parse(out);
+    expect(typeof parsed.pristine).toBe('boolean');
+    expect(parsed.pristine).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F10/ADR-7: writeFileNoCreate — no TOCTOU race in merge-write path
+// ---------------------------------------------------------------------------
+
+describe('mergeWrite uses writeFileNoCreate (no TOCTOU race)', () => {
+  // (F10-no-create-after-adopt) After a rename-away (simulating adopt), the orphaned
+  // session's merge-write must throw ENOENT, not silently recreate the file.
+  // This is the TOCTOU scenario: rename happens between an existsSync check and a
+  // writeFileSync call. writeFileNoCreate collapses check+write to a single open('r+')
+  // so the race window does not exist.
+  test('F10-no-create-after-adopt: merge-write throws after file is renamed away', () => {
+    // Set up a valid state
+    setGoalState(S, { phase: 'planning', outcome: 'test' });
+    // Simulate adopt-rename: rename the file away WHILE session S still holds reference
+    const src = resolveStatePath(S);
+    const dst = src + '.adopted';
+    const { renameSync } = require('fs');
+    renameSync(src, dst);
+    // Now try to write — must fail (file absent), not silently recreate
+    expect(() => setGoalState(S, { phase: 'pursuing' })).toThrow();
+    // The original file path must still be absent (not recreated)
+    expect(existsSync(src)).toBe(false);
   });
 });
