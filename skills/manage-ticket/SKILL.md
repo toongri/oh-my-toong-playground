@@ -88,7 +88,7 @@ Read `references/ticket-craft.md` (already loaded in Stage 4 — re-read only if
 **Slice gate decision:**
 
 - If the ticket passes INVEST as a single unit: proceed to Stage 6 (write as-is).
-- If the ticket is too large (fails Independent or Estimable or Small): slice into child tickets, each passing the per-child stage-check ("requirement-understanding vs implementation-planning"). Then restructure the parent body per the **Parent-Ticket Body Shape** in `references/ticket-craft.md`: the parent retains shared context (Background, Core Concept, Scope of Application, Decisions Needed) and the initiative-level sections (User Value, User Flow: current → after when applicable, References); each child carries its own Problem, Pre-Context, AC, and Non-Goals and references the parent for shared definitions rather than duplicating them.
+- If the ticket is too large (fails Independent or Estimable or Small): slice into child tickets, each passing the per-child stage-check ("requirement-understanding vs implementation-planning"). Then restructure the parent body per the **Parent-Ticket Body Shape** in `references/ticket-craft.md` — follow its required/conditional column in full (the parent keeps its own Pre-Context; shared context lives in the parent once). Each child carries its own Problem, Pre-Context, AC, and Non-Goals and references the parent for shared definitions rather than duplicating them.
 - Settled child tickets hand off to `prometheus` (for planning) or `sisyphus` (for execution) as appropriate.
 
 INVEST is the slice gate. File-count or LOC atomicity is NOT the gate.
