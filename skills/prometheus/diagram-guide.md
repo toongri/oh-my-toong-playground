@@ -15,7 +15,7 @@ A diagram is the highest-density enrichment, so the fidelity bound is strictest:
 > "Does a diagram reveal flow or structure that prose alone cannot efficiently convey?"
 > NO -> no diagram. Prose or a blockquote callout is enough.
 
-**Snapshot mermaid (Structural Co-Design Snapshot).** The Structural Co-Design Snapshot's optional in-band mermaid is presumed beneficial for multi-component flows, unless prose alone is clearer. When included, it re-visualizes the DECIDED flow only — it MUST NOT invent ownership or edges beyond what the decided Allocation and Flow tables already record. The snapshot (and any mermaid derived from it) is never a source of truth; the decided Structural Snapshot as recorded in `plan.md` remains the single authority. The standard `MAY, never MUST` rule applies: omit the mermaid if the Necessity Test returns NO.
+**Decision-log mermaid.** Each D-item in the unified decision log records one decided commitment. An optional in-band mermaid re-visualizes the DECIDED D-items only — it MUST NOT invent ownership or edges beyond what the decided items already record. The diagram (and any mermaid derived from the log) is never a source of truth; the decided decision log in `plan.md` remains the single authority. The standard `MAY, never MUST` rule applies: omit the mermaid if the Necessity Test returns NO.
 
 ## 1. Diagram Types
 
