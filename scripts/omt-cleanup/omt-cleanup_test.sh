@@ -389,6 +389,72 @@ EOF
     return 0
 }
 
+# C4/omt-cleanup execute: dir with dead state + plans/plan.md keeps plan.md and the dir; state file is deleted
+test_liveness_active_7h_idle_execute_keeps_plan() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local stale_dir="$FIXTURE_HOME/.omt/stale-project-with-plans"
+    mkdir -p "$stale_dir/plans"
+    printf 'important plan content' > "$stale_dir/plans/plan.md"
+    cat > "$stale_dir/goal-state-stale-sess.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+
+    bash "$CLEANUP_SCRIPT" --execute > /dev/null
+
+    # State file must be gone
+    if [[ -f "$stale_dir/goal-state-stale-sess.json" ]]; then
+        echo "ASSERTION FAILED: dead state file must be deleted"
+        return 1
+    fi
+    # plan.md must survive
+    if [[ ! -f "$stale_dir/plans/plan.md" ]]; then
+        echo "ASSERTION FAILED: plans/plan.md must survive (only state files are reaped)"
+        return 1
+    fi
+    # directory must survive (non-empty after reap)
+    if [[ ! -d "$stale_dir" ]]; then
+        echo "ASSERTION FAILED: directory must survive when non-empty after state reap"
+        return 1
+    fi
+    return 0
+}
+
+# dry-run for dead-state dir lists state file path, not bare directory name
+test_dead_state_dryrun_shows_state_file_path() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local stale_dir="$FIXTURE_HOME/.omt/stale-dry-run-project"
+    mkdir -p "$stale_dir"
+    cat > "$stale_dir/goal-state-dry-sess.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
+    # Must list the state file path
+    if ! echo "$out" | grep "DELETE" | grep -q "goal-state-dry-sess.json"; then
+        echo "ASSERTION FAILED: dry-run must list state file path, not just dir name"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    return 0
+}
+
 # Positive: a dir with a LIVE active goal-state (fresh heartbeat) IS preserved via liveness
 test_liveness_fresh_active_dir_preserved() {
     local fresh_ts
@@ -471,6 +537,8 @@ main() {
     # AC liveness unification (TODO 7)
     run_test test_liveness_all_dead_dir_not_preserved
     run_test test_liveness_active_7h_idle_dir_not_preserved
+    run_test test_liveness_active_7h_idle_execute_keeps_plan
+    run_test test_dead_state_dryrun_shows_state_file_path
     run_test test_liveness_fresh_active_dir_preserved
 
     echo "=========================================="

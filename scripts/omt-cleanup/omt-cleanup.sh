@@ -136,6 +136,7 @@ echo "=== omt-cleanup: scanning $OMT_DIR ==="
 echo ""
 
 DELETE_LIST=""
+DEAD_STATE_FILES=""
 PRESERVE_LIST=""
 
 # Iterate top-level entries only
@@ -149,21 +150,40 @@ for entry_path in "$OMT_DIR"/*/; do
     elif is_residue "$name"; then
         DELETE_LIST="$DELETE_LIST $name"
     elif has_any_state_file "$OMT_DIR/$name" && ! has_live_state "$OMT_DIR/$name"; then
-        # Unknown entry: has state files but ALL are dead — do not preserve
-        DELETE_LIST="$DELETE_LIST $name"
+        # Unknown entry: has state files but ALL are dead — reap only the state files (file-level).
+        # The directory is removed afterwards only if it is empty.
+        local_dir="$OMT_DIR/$name"
+        for f in \
+            "$local_dir"/goal-state-*.json \
+            "$local_dir"/prometheus-state-*.json \
+            "$local_dir"/deep-interview-active-state-*.json; do
+            [[ -f "$f" ]] && DEAD_STATE_FILES="$DEAD_STATE_FILES $f"
+        done
     else
         # Unknown entry with no state files, or with live state — preserve (conservative)
         PRESERVE_LIST="$PRESERVE_LIST $name"
     fi
 done
 
-# Print DELETE section
+# Print RESIDUE section (full-directory deletions)
 echo "--- RESIDUE (to delete) ---"
 if [[ -z "$DELETE_LIST" ]]; then
     echo "  (none)"
 else
     for name in $DELETE_LIST; do
         echo "  DELETE  $name"
+    done
+fi
+
+echo ""
+
+# Print DEAD-STATE section (file-level reap)
+echo "--- DEAD-STATE (state files to reap) ---"
+if [[ -z "$DEAD_STATE_FILES" ]]; then
+    echo "  (none)"
+else
+    for f in $DEAD_STATE_FILES; do
+        echo "  DELETE  $f"
     done
 fi
 
@@ -186,10 +206,18 @@ if [[ $DRY_RUN -eq 1 ]]; then
     echo "=== dry-run complete — nothing deleted. Pass --execute to remove residue. ==="
 else
     echo "=== executing deletions ==="
+    # Residue: full directory removal
     for name in $DELETE_LIST; do
         target="$OMT_DIR/$name"
         echo "  removing $target"
         rm -rf "$target"
+    done
+    # Dead-state: reap state files; remove directory only if empty
+    for f in $DEAD_STATE_FILES; do
+        echo "  reaping $f"
+        rm -f "$f"
+        dir="$(dirname "$f")"
+        rmdir "$dir" 2>/dev/null || true
     done
     echo "=== done ==="
 fi
