@@ -32,11 +32,10 @@
  *   status
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { getOmtDir } from '@lib/omt-dir';
-import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt } from '@lib/state-core';
+import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFileNoCreate, isPristine } from '@lib/state-core';
 
 export type GoalPhase = 'planning' | 'pursuing' | 'budget_limited' | 'blocked' | 'complete';
 export type ObjectiveVerdict = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' | 'absent';
@@ -77,14 +76,8 @@ export interface GoalState {
 }
 
 // ---------------------------------------------------------------------------
-// IO helpers (safe write semantics, no import from hooks/)
+// IO helpers (safe read, no import from hooks/)
 // ---------------------------------------------------------------------------
-
-function ensureDir(path: string): void {
-  if (!existsSync(path)) {
-    mkdirSync(path, { recursive: true });
-  }
-}
 
 function readFileOrNull(path: string): string | null {
   try {
@@ -92,11 +85,6 @@ function readFileOrNull(path: string): string | null {
   } catch {
     return null;
   }
-}
-
-function writeFileSafe(path: string, content: string): void {
-  ensureDir(dirname(path));
-  writeFileSync(path, content, 'utf8');
 }
 
 // ---------------------------------------------------------------------------
@@ -152,13 +140,6 @@ function readPrior(sessionId: string): Partial<GoalState> {
  */
 function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
   const stateFilePath = resolveStatePath(sessionId);
-  if (!existsSync(stateFilePath)) {
-    throw new Error(
-      `goal-state: state file absent for session "${sessionId}". ` +
-        `Possible causes: state adopted by another session, or seed missing. ` +
-        `Re-invoke the goal skill to re-seed.`
-    );
-  }
   const prior = readPrior(sessionId);
   // `??` rejects only null/undefined; a corrupt on-disk max_iterations (e.g. a string or
   // a fractional/<1 value) would otherwise survive uncoerced and defeat the hook's
@@ -189,7 +170,18 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
     schema_version: next.schema_version ?? prior.schema_version ?? 1,
   };
   const state = mergeWithHeartbeat(partial, {}) as GoalState;
-  writeFileSafe(stateFilePath, JSON.stringify(state, null, 2));
+  try {
+    writeFileNoCreate(stateFilePath, JSON.stringify(state, null, 2));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(
+        `goal-state: state file absent for session "${sessionId}". ` +
+          `Possible causes: state adopted by another session, or seed missing. ` +
+          `Re-invoke the goal skill to re-seed.`
+      );
+    }
+    throw err;
+  }
   return state;
 }
 
@@ -219,6 +211,22 @@ export function readGoalState(sessionId: string): GoalState | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Returns the active goal state augmented with a computed `pristine` boolean,
+ * or null when no active state exists.
+ *
+ * `pristine: true` means the state was freshly seeded and no real work has been
+ * recorded yet (phase=planning, iteration=0, outcome=''). This lets the SKILL.md
+ * Entry Gate distinguish this invocation's own PreToolUse seed from a real
+ * in-flight pursuit seeded by a prior invocation.
+ */
+export function readGoalGet(sessionId: string): (GoalState & { pristine: boolean }) | null {
+  const state = readGoalState(sessionId);
+  if (state === null) return null;
+  const pristine = isPristine('goal', state as unknown as Record<string, unknown>);
+  return { ...state, pristine };
 }
 
 /**
@@ -440,7 +448,7 @@ function main(): void {
         process.exit(1);
       }
     } else if (subcommand === 'get') {
-      process.stdout.write(JSON.stringify(readGoalState(sessionId)) + '\n');
+      process.stdout.write(JSON.stringify(readGoalGet(sessionId)) + '\n');
     } else if (subcommand === 'status') {
       const state = readGoalState(sessionId);
       process.stdout.write((state ? deriveStatus(state) : 'absent') + '\n');

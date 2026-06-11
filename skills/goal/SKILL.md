@@ -43,7 +43,7 @@ On a non-falsifiable request, take exactly ONE of these two remediation outcomes
 - **deep-interview supplementation** — when the objective is rich but under-specified (the verification surface can be derived through questioning), invoke `Skill(skill: "deep-interview")` to crystallize a spec whose acceptance criteria become the verification surface. Resume the Entry Gate against the crystallized spec.
 - **ask-user** — when a single missing fact would make the objective falsifiable (the user can state the success criterion in one sentence), ask the user directly for the verification surface before proceeding.
 
-**Re-invocation refusal.** Before seeding anything, read state via `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get`. If a goal-state is already `active`, REFUSE to start a second pursuit — report the active objective and its phase, and stop. A second concurrent goal is never seeded over an `active` one. (Terminal states read as inactive and do not block a fresh goal.)
+**Re-invocation refusal.** Before seeding anything, read state via `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get`. If the result is `active: true` AND `pristine: false`, REFUSE to start a second pursuit — report the active objective and its phase, and stop. A second concurrent goal is never seeded over a non-pristine active one. A `pristine: true` result means the state was freshly seeded by this very invocation's PreToolUse hook — proceed normally. (Terminal states read as inactive and do not block a fresh goal.)
 
 **Continuation intent.** When the user's invocation expresses explicit continuation intent — e.g. "하던 거 계속", "continue what I was doing", "resume the previous goal" — run:
 
