@@ -118,7 +118,7 @@ fi
 # Check for deep-interview keywords (third priority)
 if echo "$PROMPT_LOWER" | grep -qiE '\b(deep[- ]?interview|ouroboros)\b|딥인터뷰'; then
   cat << 'EOF'
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<deep-interview-mode>\n\n**DEEP INTERVIEW MODE ACTIVATED** (deep-interview)\n\nYou are now in deep interview mode. Conduct a thorough, structured interview:\n1. Ask one focused question at a time\n2. Listen carefully and probe deeper based on responses\n3. Synthesize insights across the conversation\n4. Surface assumptions and validate them explicitly\n\nRemain in deep interview mode until the session is explicitly concluded.\n\n</deep-interview-mode>\n\n---\n"}}
+{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<deep-interview-mode>\n\n**DEEP INTERVIEW REQUESTED** — you MUST invoke `Skill(deep-interview)` before responding. Do NOT conduct the interview directly. The skill invocation activates state tracking and stop protection.\n\n</deep-interview-mode>\n\n---\n"}}
 EOF
   exit 0
 fi
