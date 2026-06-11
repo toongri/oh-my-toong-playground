@@ -333,7 +333,7 @@ tags: [go, kafka, resilience]
 
 ## Session State
 
-`$OMT_DIR/state/resume-forge-{sessionId}.json` (follows ralph state pattern — sessionId from Claude's `input.sessionId`):
+`$OMT_DIR/state/resume-forge-{sessionId}.json` (session-scoped state file — sessionId from Claude's `input.sessionId`):
 
 ```json
 {

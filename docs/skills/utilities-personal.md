@@ -12,7 +12,7 @@
 
 ### hud
 
-HUD는 Claude Code의 statusLine에 Oh-My-Toong 운영 상태를 실시간으로 표시합니다. `/hud setup`을 실행하면 Bun과 jq의 설치 여부를 확인한 뒤 `settings.local.json`의 `statusLine` 키를 HUD 스크립트 경로로 업데이트합니다. 표시 항목은 Ralph Loop 진행률, 컨텍스트 창 사용량, 실행 중인 서브에이전트 수, Todo 완료 상태, 현재 활성 스킬 이름입니다. `/hud restore`는 첫 설정 시 백업해 둔 원래 statusLine 설정을 복원합니다. `${CLAUDE_SKILL_DIR}` 기반의 자기 위치 참조(self-location) 덕분에 사용자 전역 또는 프로젝트 로컬 배포 모두 동일하게 동작합니다.
+HUD는 Claude Code의 statusLine에 Oh-My-Toong 운영 상태를 실시간으로 표시합니다. `/hud setup`을 실행하면 Bun과 jq의 설치 여부를 확인한 뒤 `settings.local.json`의 `statusLine` 키를 HUD 스크립트 경로로 업데이트합니다. 표시 항목은 컨텍스트 창 사용량, 실행 중인 서브에이전트 수, Todo 완료 상태, 현재 활성 스킬 이름입니다. `/hud restore`는 첫 설정 시 백업해 둔 원래 statusLine 설정을 복원합니다. `${CLAUDE_SKILL_DIR}` 기반의 자기 위치 참조(self-location) 덕분에 사용자 전역 또는 프로젝트 로컬 배포 모두 동일하게 동작합니다.
 
 ### using-maestro
 

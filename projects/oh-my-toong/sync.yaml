@@ -14,11 +14,6 @@ agents:
     - chunk-reviewer
     - sisyphus-junior
 
-commands:
-  items:
-    - cancel-ralph
-    - ralph
-
 skills:
   items:
     - component: deep-interview

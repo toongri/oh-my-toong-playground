@@ -14,16 +14,6 @@ export interface ParsedInput {
   lastAssistantMessage: string | null;
 }
 
-// Ralph state file structure
-export interface RalphState {
-  active: boolean;
-  iteration: number;
-  max_iterations: number;
-  completion_promise: string;
-  prompt: string;
-  started_at?: string;
-}
-
 /**
  * Minimal contract the persistent-mode hook reads from the deep-interview
  * state file. The on-disk file may carry additional fields at runtime
@@ -34,7 +24,6 @@ export interface RalphState {
  */
 export interface DeepInterviewState {
   active: boolean;
-  sessionId: string;
 }
 
 /**
@@ -78,6 +67,8 @@ export interface GoalState {
   completion_evidence_paths?: string[];
   /** Set by the hook when it emits the budget-limit notice (write-once guard). */
   budget_limit_notified?: boolean;
+  /** Refreshed on every write (heartbeat). Used by the GC liveness check. */
+  last_touched_at?: string;
 }
 
 // Hook output format
@@ -93,8 +84,3 @@ export interface TodoItem {
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
 }
 
-// Transcript detection results
-export interface TranscriptDetection {
-  hasCompletionPromise: boolean;
-  hasOracleApproval: boolean;
-}

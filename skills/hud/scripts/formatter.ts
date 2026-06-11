@@ -10,24 +10,11 @@ function getContextColor(percent: number): string {
   return ANSI.green;
 }
 
-function getRalphColor(iteration: number, max: number): string {
-  if (iteration >= max) return ANSI.red;
-  if (iteration > max * 0.7) return ANSI.yellow;
-  return ANSI.green;
-}
-
 export function formatStatusLine(data: HudData): string {
   const parts: string[] = [];
 
   // Always show prefix
   parts.push(colorize('[OMT]', ANSI.bold));
-
-  // Ralph status
-  if (data.ralph?.active) {
-    const color = getRalphColor(data.ralph.iteration, data.ralph.max_iterations);
-    const ralphText = `ralph:${data.ralph.iteration}/${data.ralph.max_iterations}`;
-    parts.push(colorize(ralphText, color));
-  }
 
   // Context window percentage (most reliable)
   if (data.contextPercent !== null) {
@@ -133,13 +120,6 @@ export function formatStatusLineV2(data: HudDataV2): string {
   const tasksText = `tasks:${completed}/${total}`;
   const tasksColor = total > 0 ? ANSI.green : ANSI.dim;
   line2Parts.push(colorize(tasksText, tasksColor));
-
-  // Line 2: Ralph (only when active)
-  if (data.ralph?.active) {
-    const color = getRalphColor(data.ralph.iteration, data.ralph.max_iterations);
-    const text = `ralph:${data.ralph.iteration}/${data.ralph.max_iterations}`;
-    line2Parts.push(colorize(text, color));
-  }
 
   // In-progress task (only if one is active)
   if (data.inProgressTodo) {

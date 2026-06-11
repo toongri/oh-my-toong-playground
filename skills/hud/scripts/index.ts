@@ -1,5 +1,5 @@
 import { readStdin } from './stdin.ts';
-import { readRalphState, readBackgroundTasks, calculateSessionDuration, isThinkingEnabled, readTasks, getActiveTaskForm } from './state.ts';
+import { readBackgroundTasks, calculateSessionDuration, isThinkingEnabled, readTasks, getActiveTaskForm } from './state.ts';
 import { parseTranscript } from './transcript.ts';
 import { fetchRateLimits } from './usage-api.ts';
 import { formatStatusLineV2, formatMinimalStatus } from './formatter.ts';
@@ -41,11 +41,10 @@ export async function main(): Promise<void> {
 
     // Gather data from all sources in parallel (individual failures don't block others)
     const functionNames = [
-      'readRalphState', 'readBackgroundTasks', 'parseTranscript',
+      'readBackgroundTasks', 'parseTranscript',
       'fetchRateLimits', 'isThinkingEnabled', 'readTasks', 'getActiveTaskForm',
     ];
     const results = await Promise.allSettled([
-      readRalphState(cwd, sessionId),
       readBackgroundTasks(),
       input.transcript_path
         ? parseTranscript(input.transcript_path)
@@ -64,22 +63,20 @@ export async function main(): Promise<void> {
     });
 
     // Extract values with type-safe fallbacks for rejected promises
-    const ralph = isFulfilled(results[0]) ? results[0].value : null;
-    const backgroundTasks = isFulfilled(results[1]) ? results[1].value : 0;
-    const transcriptData = isFulfilled(results[2])
-      ? results[2].value
+    const backgroundTasks = isFulfilled(results[0]) ? results[0].value : 0;
+    const transcriptData = isFulfilled(results[1])
+      ? results[1].value
       : { runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null };
-    const rateLimits = isFulfilled(results[3]) ? results[3].value : null;
-    const thinkingActive = isFulfilled(results[4]) ? results[4].value : false;
-    const todos = isFulfilled(results[5]) ? results[5].value : null;
-    const inProgressTodo = isFulfilled(results[6]) ? results[6].value : null;
+    const rateLimits = isFulfilled(results[2]) ? results[2].value : null;
+    const thinkingActive = isFulfilled(results[3]) ? results[3].value : false;
+    const todos = isFulfilled(results[4]) ? results[4].value : null;
+    const inProgressTodo = isFulfilled(results[5]) ? results[5].value : null;
 
     // Log transcript parsing results
     logInfo(`Transcript parsed: runningAgents=${transcriptData.runningAgents}`);
 
     const hudData: HudDataV2 = {
       contextPercent: input.context_window?.used_percentage ?? null,
-      ralph,
       runningAgents: transcriptData.runningAgents,
       backgroundTasks,
       activeSkill: transcriptData.activeSkill,

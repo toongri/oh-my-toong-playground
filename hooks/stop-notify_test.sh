@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # Stop Notify Hook Tests
-# Tests for OMT_DIR resolution and ralph-state gating logic
+# Tests for OMT_DIR resolution and notification gating logic
 # =============================================================================
 set -euo pipefail
 
@@ -108,8 +108,8 @@ test_omt_dir_preset_is_respected() {
     run_stop_notify "s1" "$TEST_TMP_DIR" > /dev/null 2>&1 || true
 
     # OMT_DIR must still be the preset value after the hook runs.
-    # We verify indirectly: ralph-state lookup uses preset_dir, not a fallback.
-    # Since no ralph-state exists, the hook should proceed to notification.
+    # We verify indirectly: since no state files exist in preset_dir, the hook
+    # should proceed to notification.
     if [[ ! -f "$marker" ]]; then
         echo "ASSERTION FAILED: osascript should have been called (notification stage reached)"
         return 1
@@ -153,7 +153,7 @@ test_omt_dir_fallback_computed_from_git_repo() {
         return 1
     fi
 
-    # Notification should still reach osascript (no ralph-state file present)
+    # Notification should still reach osascript (no state files present)
     if [[ ! -f "$marker" ]]; then
         echo "ASSERTION FAILED: osascript should have been called after fallback OMT_DIR computation"
         return 1
@@ -163,88 +163,17 @@ test_omt_dir_fallback_computed_from_git_repo() {
 }
 
 # =============================================================================
-# Tests: ralph-state active suppresses notification
+# Tests: Retired-loop removal (TODO 10)
 # =============================================================================
 
-test_ralph_state_active_suppresses_notification() {
-    # When ralph-state-{session}.json has "active": true, the hook must
-    # exit before reaching the notification stage.
-    local omt_dir="$TEST_TMP_DIR/.omt"
-    mkdir -p "$omt_dir"
-    export OMT_DIR="$omt_dir"
-
-    local session_id="session-active"
-    cat > "$omt_dir/ralph-state-${session_id}.json" << 'EOF'
-{"active": true, "iteration": 1, "max_iterations": 10, "completion_promise": "DONE"}
-EOF
-
-    local marker="$TEST_TMP_DIR/notified"
-    export OSASCRIPT_MARKER_FILE="$marker"
-
-    run_stop_notify "$session_id" "$TEST_TMP_DIR" > /dev/null 2>&1 || true
-
-    # osascript must NOT have been called
-    if [[ -f "$marker" ]]; then
-        echo "ASSERTION FAILED: osascript should NOT be called when ralph is active"
+# grep-0: stop-notify.sh must contain zero retired-loop gating references
+test_stop_notify_no_retired_loop_gating() {
+    # The retired loop state check and its file prefix must be absent from the hook.
+    if grep -qiE 'retired-loop-state|LOOP_ACTIVE' "$SCRIPT_DIR/stop-notify.sh" 2>/dev/null; then
+        echo "ASSERTION FAILED: stop-notify.sh must have 0 retired-loop gating references"
+        grep -niE 'retired-loop-state|LOOP_ACTIVE' "$SCRIPT_DIR/stop-notify.sh" | head -10
         return 1
     fi
-
-    return 0
-}
-
-# =============================================================================
-# Tests: ralph-state absent allows notification
-# =============================================================================
-
-test_ralph_state_absent_allows_notification() {
-    # When no ralph-state file exists, the hook must proceed to notification.
-    local omt_dir="$TEST_TMP_DIR/.omt"
-    mkdir -p "$omt_dir"
-    export OMT_DIR="$omt_dir"
-
-    # Ensure no state file exists
-    rm -f "$omt_dir/ralph-state-session-absent.json"
-
-    local marker="$TEST_TMP_DIR/notified"
-    export OSASCRIPT_MARKER_FILE="$marker"
-
-    run_stop_notify "session-absent" "$TEST_TMP_DIR" > /dev/null 2>&1 || true
-
-    # osascript MUST have been called
-    if [[ ! -f "$marker" ]]; then
-        echo "ASSERTION FAILED: osascript should be called when no ralph-state file exists"
-        return 1
-    fi
-
-    return 0
-}
-
-# =============================================================================
-# Tests: ralph-state active=false allows notification
-# =============================================================================
-
-test_ralph_state_inactive_allows_notification() {
-    # When ralph-state has "active": false, the hook must proceed to notification.
-    local omt_dir="$TEST_TMP_DIR/.omt"
-    mkdir -p "$omt_dir"
-    export OMT_DIR="$omt_dir"
-
-    local session_id="session-inactive"
-    cat > "$omt_dir/ralph-state-${session_id}.json" << 'EOF'
-{"active": false, "iteration": 5, "max_iterations": 10, "completion_promise": "DONE"}
-EOF
-
-    local marker="$TEST_TMP_DIR/notified"
-    export OSASCRIPT_MARKER_FILE="$marker"
-
-    run_stop_notify "$session_id" "$TEST_TMP_DIR" > /dev/null 2>&1 || true
-
-    # osascript MUST have been called
-    if [[ ! -f "$marker" ]]; then
-        echo "ASSERTION FAILED: osascript should be called when ralph-state has active=false"
-        return 1
-    fi
-
     return 0
 }
 
@@ -285,10 +214,8 @@ main() {
     run_test test_omt_dir_preset_is_respected
     run_test test_omt_dir_fallback_computed_from_git_repo
 
-    # ralph-state gating logic
-    run_test test_ralph_state_active_suppresses_notification
-    run_test test_ralph_state_absent_allows_notification
-    run_test test_ralph_state_inactive_allows_notification
+    # Retired-loop removal (TODO 10)
+    run_test test_stop_notify_no_retired_loop_gating
 
     # Early exit guard
     run_test test_empty_cwd_causes_early_exit

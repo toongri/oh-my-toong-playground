@@ -1,23 +1,10 @@
 import { describe, it, expect } from 'bun:test';
 import { formatStatusLine, formatMinimalStatus, formatStatusLineV2 } from './formatter.ts';
-import { ANSI, type HudData, type HudDataV2, type RalphState, type AgentInfo } from './types.ts';
-
-// Helper to create complete ralph state for tests
-function createRalphState(overrides: Partial<RalphState> & Pick<RalphState, 'active' | 'iteration' | 'max_iterations'>): RalphState {
-  return {
-    completion_promise: 'DONE',
-    prompt: 'test prompt',
-    started_at: '2025-01-22T10:00:00+09:00',
-    ...overrides,
-  };
-}
-
-// createRalphVerification helper removed - oracle_feedback is now in RalphState
+import { ANSI, type HudData, type HudDataV2, type AgentInfo } from './types.ts';
 
 describe('formatStatusLine', () => {
   const emptyData: HudData = {
     contextPercent: null,
-    ralph: null,
     runningAgents: 0,
     backgroundTasks: 0,
     activeSkill: null,
@@ -28,74 +15,6 @@ describe('formatStatusLine', () => {
       const result = formatStatusLine(emptyData);
       expect(result).toContain('[OMT]');
       expect(result).toContain(ANSI.bold);
-    });
-  });
-
-  describe('ralph status', () => {
-    it('shows ralph iteration when active', () => {
-      const data: HudData = {
-        ...emptyData,
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10 }),
-      };
-      const result = formatStatusLine(data);
-      expect(result).toContain('ralph:3/10');
-    });
-
-    it('does not show ralph when inactive', () => {
-      const data: HudData = {
-        ...emptyData,
-        ralph: createRalphState({ active: false, iteration: 0, max_iterations: 10 }),
-      };
-      const result = formatStatusLine(data);
-      expect(result).not.toContain('ralph');
-    });
-
-    it('shows green color when iteration is low', () => {
-      const data: HudData = {
-        ...emptyData,
-        ralph: createRalphState({ active: true, iteration: 2, max_iterations: 10 }),
-      };
-      const result = formatStatusLine(data);
-      expect(result).toContain(ANSI.green);
-    });
-
-    it('shows yellow color when iteration is above 70% of max', () => {
-      const data: HudData = {
-        ...emptyData,
-        ralph: createRalphState({ active: true, iteration: 8, max_iterations: 10 }),
-      };
-      const result = formatStatusLine(data);
-      expect(result).toContain(ANSI.yellow);
-    });
-
-    it('shows red color when iteration equals max', () => {
-      const data: HudData = {
-        ...emptyData,
-        ralph: createRalphState({ active: true, iteration: 10, max_iterations: 10 }),
-      };
-      const result = formatStatusLine(data);
-      expect(result).toContain(ANSI.red);
-    });
-  });
-
-  describe('ralph oracle feedback', () => {
-    it('does not show feedback count even when oracle_feedback has items', () => {
-      const data: HudData = {
-        ...emptyData,
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10, oracle_feedback: ['feedback1', 'feedback2'] }),
-      };
-      const result = formatStatusLine(data);
-      expect(result).toContain('ralph:3/10');
-      expect(result).not.toContain('fb:');
-    });
-
-    it('does not show feedback when oracle_feedback is empty', () => {
-      const data: HudData = {
-        ...emptyData,
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10, oracle_feedback: [] }),
-      };
-      const result = formatStatusLine(data);
-      expect(result).not.toContain('fb:');
     });
   });
 
@@ -214,7 +133,7 @@ describe('formatStatusLine', () => {
       const data: HudData = {
         ...emptyData,
         contextPercent: 50,
-        ralph: createRalphState({ active: true, iteration: 2, max_iterations: 10 }),
+        runningAgents: 2,
       };
       const result = formatStatusLine(data);
       expect(result).toContain(' | ');
@@ -252,7 +171,6 @@ describe('formatMinimalStatus', () => {
 describe('formatStatusLineV2', () => {
   const emptyDataV2: HudDataV2 = {
     contextPercent: null,
-    ralph: null,
     runningAgents: 0,
     backgroundTasks: 0,
     activeSkill: null,
@@ -452,36 +370,6 @@ describe('formatStatusLineV2', () => {
     });
   });
 
-  describe('ralph status', () => {
-    it('shows ralph only when active is true', () => {
-      const data: HudDataV2 = {
-        ...emptyDataV2,
-        ralph: createRalphState({ active: true, iteration: 2, max_iterations: 10 }),
-      };
-      const result = formatStatusLineV2(data);
-      expect(result).toContain('ralph:2/10');
-    });
-
-    it('does not show ralph when active is false', () => {
-      const data: HudDataV2 = {
-        ...emptyDataV2,
-        ralph: createRalphState({ active: false, iteration: 2, max_iterations: 10 }),
-      };
-      const result = formatStatusLineV2(data);
-      expect(result).not.toContain('ralph');
-    });
-
-    it('does not show feedback count even when oracle_feedback has items', () => {
-      const data: HudDataV2 = {
-        ...emptyDataV2,
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10, oracle_feedback: ['feedback1'] }),
-      };
-      const result = formatStatusLineV2(data);
-      expect(result).toContain('ralph:3/10');
-      expect(result).not.toContain('fb:');
-    });
-  });
-
   describe('thinking indicator', () => {
     it('shows thinking when thinkingActive is true', () => {
       const data: HudDataV2 = {
@@ -504,19 +392,6 @@ describe('formatStatusLineV2', () => {
       };
       const result = formatStatusLineV2(data);
       expect(result).toContain(ANSI.cyan);
-    });
-  });
-
-  describe('line 2 - ralph', () => {
-    it('shows ralph on line 2 when active', () => {
-      const data: HudDataV2 = {
-        ...emptyDataV2,
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10 }),
-      };
-      const result = formatStatusLineV2(data);
-      const lines = result.split('\n');
-      expect(lines.length).toBe(2);
-      expect(lines[1]).toContain('ralph:3/10');
     });
   });
 
@@ -661,23 +536,11 @@ describe('formatStatusLineV2', () => {
       expect(result.split('\n').length).toBe(2);
     });
 
-    it('returns 2 lines when line 2 content exists (ralph active)', () => {
-      const data: HudDataV2 = {
-        ...emptyDataV2,
-        contextPercent: 50,
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10 }),
-      };
-      const result = formatStatusLineV2(data);
-      const lines = result.split('\n');
-      expect(lines.length).toBe(2);
-    });
-
     it('has line 1 with session duration and main status', () => {
       const data: HudDataV2 = {
         ...emptyDataV2,
         contextPercent: 50,
         agents: [{ type: 'S', model: 's', id: 'sub-1', name: 'explore' }],
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10 }),
         sessionDuration: 45,
       };
       const result = formatStatusLineV2(data);
@@ -687,16 +550,15 @@ describe('formatStatusLineV2', () => {
       expect(lines[0]).toContain('agents:explore');
     });
 
-    it('has line 2 with tasks and ralph', () => {
+    it('has line 2 with tasks', () => {
       const data: HudDataV2 = {
         ...emptyDataV2,
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10 }),
+        todos: { completed: 2, total: 5 },
         sessionDuration: 45,
       };
       const result = formatStatusLineV2(data);
       const lines = result.split('\n');
-      expect(lines[1]).toContain('ralph:3/10');
-      expect(lines[1]).toContain('tasks:0/0');
+      expect(lines[1]).toContain('tasks:2/5');
     });
   });
 
@@ -741,35 +603,12 @@ describe('formatStatusLineV2', () => {
     it('uses pipe separator between line 2 elements', () => {
       const data: HudDataV2 = {
         ...emptyDataV2,
-        ralph: createRalphState({ active: true, iteration: 2, max_iterations: 10 }),
         todos: { completed: 3, total: 5 },
+        inProgressTodo: 'Running tests',
       };
       const result = formatStatusLineV2(data);
       const line2 = result.split('\n')[1];
       expect(line2).toContain(' | ');
-    });
-  });
-
-  describe('ralph display', () => {
-    it('shows ralph iteration without + suffix', () => {
-      const data: HudDataV2 = {
-        ...emptyDataV2,
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10 }),
-      };
-      const result = formatStatusLineV2(data);
-      expect(result).toContain('ralph:3/10');
-      expect(result).not.toContain('ralph:3/10+');
-    });
-
-    it('does not show feedback count alongside ralph iteration', () => {
-      const data: HudDataV2 = {
-        ...emptyDataV2,
-        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10, oracle_feedback: ['feedback1'] }),
-      };
-      const result = formatStatusLineV2(data);
-      expect(result).toContain('ralph:3/10');
-      expect(result).not.toContain('ralph:3/10+');
-      expect(result).not.toContain('fb:');
     });
   });
 });

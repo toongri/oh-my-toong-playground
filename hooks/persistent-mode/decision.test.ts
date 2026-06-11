@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import { makeDecision, DecisionContext } from './decision.ts';
-import { mkdir, writeFile, rm } from 'fs/promises';
+import { mkdir, writeFile, rm, readFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -62,262 +62,8 @@ describe('makeDecision', () => {
     });
   });
 
-  describe('Priority 1: Ralph Loop with Oracle Verification', () => {
-    it('should block when ralph active but DONE not detected (branch 5)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext();
-
-      const result = makeDecision(context);
-
-      // Branch 5: no transcript = no DONE detected → block
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('<ralph-loop-continuation>');
-      expect(result.reason).toContain('truly done');
-    });
-
-    it('should increment iteration when DONE not detected (branch 5)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext();
-
-      const result = makeDecision(context);
-
-      // Branch 5: no transcript = no DONE → block, iteration incremented
-      expect(result.decision).toBe('block');
-      const { readFileSync } = await import('fs');
-      const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-      expect(updatedState.iteration).toBe(4);
-    });
-
-    it('should allow stop when max iterations reached', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 10, // At max
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext();
-
-      const result = makeDecision(context);
-
-      expect(result).toEqual({ continue: true });
-    });
-
-    it('should cleanup ralph state when max iterations reached', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 10,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext();
-
-      makeDecision(context);
-
-      const { existsSync } = await import('fs');
-      expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(false);
-    });
-
-    it('should allow stop when DONE and oracle approval detected in transcript (branch 3)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' });
-
-      const result = makeDecision(context);
-
-      expect(result).toEqual({ continue: true });
-    });
-
-    it('should cleanup ralph state when DONE and oracle approval detected (branch 3)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' });
-
-      makeDecision(context);
-
-      const { existsSync } = await import('fs');
-      expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(false);
-    });
-
-    describe('tasks completion check before Oracle approval', () => {
-      it('should block when tasks incomplete even if DONE and oracle approval present', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 1,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        // But tasks are incomplete
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>', incompleteTodoCount: 3 });
-
-        const result = makeDecision(context);
-
-        // Should block because tasks incomplete (branch 2), even though DONE + Oracle approved
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-loop-continuation>');
-      });
-
-      it('should increment iteration when blocking due to incomplete tasks', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 2,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        // Tasks incomplete, no oracle approval
-        const context = createContext({ incompleteTodoCount: 5 });
-
-        makeDecision(context);
-
-        const { readFileSync } = await import('fs');
-        const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-        expect(updatedState.iteration).toBe(3);
-      });
-
-      it('should allow stop when max iterations reached even with incomplete tasks', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 10, // At max
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        // Tasks incomplete, but max iterations reached
-        const context = createContext({ incompleteTodoCount: 5 });
-
-        const result = makeDecision(context);
-
-        // Should pass because max iterations is escape hatch regardless of tasks
-        expect(result).toEqual({ continue: true });
-      });
-
-      it('should only check Oracle approval after tasks are complete (branch 3)', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 3,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        // DONE + Oracle approved AND tasks complete
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>', incompleteTodoCount: 0 });
-
-        const result = makeDecision(context);
-
-        // Should pass because tasks complete AND DONE + oracle approved (branch 3)
-        expect(result).toEqual({ continue: true });
-      });
-
-      it('should block when tasks complete and DONE detected but Oracle not called yet (branch 4)', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 3,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        // DONE detected but no VERIFIED_COMPLETE
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>', incompleteTodoCount: 0 });
-
-        const result = makeDecision(context);
-
-        // Should block with oracle verification message (branch 4)
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-      });
-
-      it('should ALWAYS increment iteration when DONE detected but no VERIFIED_COMPLETE (branch 4)', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 3,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        // DONE detected, no VERIFIED_COMPLETE
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>', incompleteTodoCount: 0 });
-
-        makeDecision(context);
-
-        // Branch 4: iteration ALWAYS increments
-        const { readFileSync } = await import('fs');
-        const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-        expect(updatedState.iteration).toBe(4);
-      });
-
-      it('should increment iteration from higher value when DONE but no VERIFIED_COMPLETE (branch 4)', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 5,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>', incompleteTodoCount: 0 });
-
-        makeDecision(context);
-
-        // Branch 4: Iteration ALWAYS increments
-        const { readFileSync } = await import('fs');
-        const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-        expect(updatedState.iteration).toBe(6);
-      });
-    });
-  });
-
   describe('Priority 2: Baseline todo-continuation', () => {
-    it('should block and return todo-continuation message when incomplete todos exist (no ralph/ultrawork)', () => {
+    it('should block and return todo-continuation message when incomplete todos exist', () => {
       const context = createContext({ incompleteTodoCount: 5 });
 
       const result = makeDecision(context);
@@ -370,393 +116,12 @@ describe('makeDecision', () => {
     });
   });
 
-  describe('message size limits (truncation)', () => {
-    describe('prompt truncation', () => {
-      it('should truncate prompt to 2000 characters with structural suffix when exceeding limit', async () => {
-        const longPrompt = 'A'.repeat(2500); // 2500 chars, exceeds 2000 limit
-        const ralphState = {
-          active: true,
-          iteration: 1,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: longPrompt,
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        // Need DONE in message to hit branch 4 (oracle verification)
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-        const result = makeDecision(context);
-
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-        // Should contain truncated prompt (2000 chars + '...[truncated from 2500 chars]')
-        const truncatedPrompt = 'A'.repeat(2000) + '...[truncated from 2500 chars]';
-        expect(result.reason).toContain(truncatedPrompt);
-        // Should NOT contain the full 2500 char prompt
-        expect(result.reason).not.toContain(longPrompt);
-      });
-
-      it('should not truncate prompt when under 2000 characters', async () => {
-        const shortPrompt = 'A'.repeat(1500); // Under limit
-        const ralphState = {
-          active: true,
-          iteration: 1,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: shortPrompt,
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-        const result = makeDecision(context);
-
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-        expect(result.reason).toContain(shortPrompt);
-        expect(result.reason).not.toContain('...[truncated from');
-      });
-
-      it('should not truncate prompt when exactly 2000 characters', async () => {
-        const exactPrompt = 'A'.repeat(2000); // Exactly at limit
-        const ralphState = {
-          active: true,
-          iteration: 1,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: exactPrompt,
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-        const result = makeDecision(context);
-
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-        expect(result.reason).toContain(exactPrompt);
-        expect(result.reason).not.toContain('...[truncated from');
-      });
-    });
-
-    describe('prompt duplication removal', () => {
-      it('should contain prompt only once in oracle verification message', async () => {
-        const testPrompt = 'UNIQUE_PROMPT_FOR_DUPLICATION_TEST';
-        const ralphState = {
-          active: true,
-          iteration: 1,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: testPrompt,
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-        const result = makeDecision(context);
-
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-        // Count occurrences of the prompt in the message
-        const occurrences = result.reason!.split(testPrompt).length - 1;
-        expect(occurrences).toBe(1);
-      });
-
-      it('should not contain "Original task:" section in oracle verification message', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 1,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-        const result = makeDecision(context);
-
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-        expect(result.reason).not.toContain('Original task:');
-      });
-
-      it('should contain prompt in Oracle spawn instruction with "Verify task completion:" prefix', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 1,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-        const result = makeDecision(context);
-
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-        expect(result.reason).toContain('Verify task completion: Test task');
-      });
-    });
-  });
-
-  describe('5-branch decision tree (branches 3-5)', () => {
-    it('should continue and cleanup state when DONE and VERIFIED_COMPLETE detected (branch 3)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' });
-
-      const result = makeDecision(context);
-
-      expect(result).toEqual({ continue: true });
-
-      // State should be cleaned up
-      const { existsSync } = await import('fs');
-      expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(false);
-    });
-
-    it('should continue and cleanup state when VERIFIED_COMPLETE detected without DONE (branch 3)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' });
-
-      const result = makeDecision(context);
-
-      expect(result).toEqual({ continue: true });
-
-      // State should be cleaned up
-      const { existsSync } = await import('fs');
-      expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(false);
-    });
-
-    it('should block with oracle verification message when DONE detected but no VERIFIED_COMPLETE (branch 4)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 2,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-      const result = makeDecision(context);
-
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('<ralph-oracle-verification>');
-      expect(result.reason).toContain('DONE detected');
-      expect(result.reason).toContain('Spawn Oracle');
-    });
-
-    it('should block with continuation when DONE not detected (branch 5)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 2,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      // No transcript = no DONE detected
-      const context = createContext();
-
-      const result = makeDecision(context);
-
-      // Branch 5: no DONE → block with continuation
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('<ralph-loop-continuation>');
-      expect(result.reason).toContain('truly done');
-
-      // State should still exist
-      const { existsSync } = await import('fs');
-      expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(true);
-    });
-
-    it('should increment iteration and include original task when DONE not detected (branch 5)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 4,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      // Message without DONE
-      const context = createContext({ lastAssistantMessage: 'some random content without promise tag' });
-
-      const result = makeDecision(context);
-
-      // Branch 5: no DONE → block, iteration incremented
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('<ralph-loop-continuation>');
-      expect(result.reason).toContain('ITERATION 5/10');
-      expect(result.reason).toContain('truly done');
-      expect(result.reason).toContain('meaningful progress');
-      expect(result.reason).toContain('different approaches');
-      expect(result.reason).toContain('<promise>DONE</promise>');
-      expect(result.reason).toContain('Original task: Test task');
-
-      const { readFileSync } = await import('fs');
-      const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-      expect(updatedState.iteration).toBe(5);
-    });
-  });
-
-  describe('buildOracleVerificationMessage content', () => {
-    it('should contain ralph-oracle-verification wrapper tag', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-      const result = makeDecision(context);
-
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('<ralph-oracle-verification>');
-      expect(result.reason).toContain('</ralph-oracle-verification>');
-    });
-
-    it('should contain "DONE detected" text', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-      const result = makeDecision(context);
-
-      expect(result.reason).toContain('DONE detected');
-    });
-
-    it('should contain "Spawn Oracle" instruction', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-      const result = makeDecision(context);
-
-      expect(result.reason).toContain('Spawn Oracle');
-    });
-
-    it('should contain VERIFIED_COMPLETE output instruction', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-      const result = makeDecision(context);
-
-      expect(result.reason).toContain('<oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
-    });
-
-    it('should contain iteration and maxIterations', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-      const result = makeDecision(context);
-
-      // Branch 4 always increments: 3 → 4
-      expect(result.reason).toContain('ITERATION 4/10');
-    });
-
-    it('should contain prompt in Oracle spawn instruction', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Implement the feature',
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
-
-      const result = makeDecision(context);
-
-      expect(result.reason).toContain('Verify task completion: Implement the feature');
-    });
-  });
-
   describe('priority ordering', () => {
-    it('should check ralph before baseline todos', async () => {
-      // Ralph active with incomplete todos
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify({
-        active: true,
-        iteration: 1,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Ralph task',
-      }));
-
-      const context = createContext({ incompleteTodoCount: 5 });
-
-      const result = makeDecision(context);
-
-      // Should block with ralph message (priority 1)
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('<ralph-loop-continuation>');
-      expect(result.reason).not.toContain('<todo-continuation>');
-    });
-
-    it('should use baseline todo-continuation when no ralph active', () => {
-      // No ralph, just incomplete todos
+    it('should use baseline todo-continuation when incomplete todos exist', () => {
       const context = createContext({ incompleteTodoCount: 3 });
 
       const result = makeDecision(context);
 
-      // Should block with todo-continuation message (priority 2)
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('<todo-continuation>');
     });
@@ -778,32 +143,6 @@ describe('makeDecision', () => {
       expect(result.reason).toContain('<deep-interview-continuation>');
     });
 
-    it('makeDecision prioritizes ralph over deep-interview when both active', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Ralph task',
-      };
-      await writeFile(
-        join(omtDir, 'ralph-state-test-session.json'),
-        JSON.stringify(ralphState)
-      );
-      const deepInterviewState = { active: true, sessionId: 'test-session' };
-      await writeFile(
-        join(omtDir, 'deep-interview-active-state-test-session.json'),
-        JSON.stringify(deepInterviewState)
-      );
-
-      const context = createContext();
-
-      const result = makeDecision(context);
-
-      expect(result.reason).toContain('<ralph-loop-continuation>');
-      expect(result.reason).not.toContain('<deep-interview-continuation>');
-    });
-
     it('makeDecision cleans up deep-interview state when token present in lastAssistantMessage', async () => {
       const deepInterviewState = { active: true, sessionId: 'test-session' };
       await writeFile(
@@ -818,6 +157,39 @@ describe('makeDecision', () => {
       const { existsSync } = await import('fs');
       expect(existsSync(join(omtDir, 'deep-interview-active-state-test-session.json'))).toBe(false);
       expect(result.reason ?? '').not.toContain('<deep-interview-continuation>');
+    });
+
+    it('makeDecision deletes active:false terminal marker via raw reader (no done-token required)', async () => {
+      // Seed an active:false terminal marker — the normal readDeepInterviewState folds this to null,
+      // so without the raw reader the delete branch never fires and the file orphans.
+      const deepInterviewState = { active: false, sessionId: 'test-session' };
+      const markerPath = join(omtDir, 'deep-interview-active-state-test-session.json');
+      await writeFile(markerPath, JSON.stringify(deepInterviewState));
+
+      // No done-token in the message — the fix must use the raw reader to detect active:false.
+      const context = createContext({ lastAssistantMessage: 'some message without done token' });
+
+      const result = makeDecision(context);
+
+      const { existsSync } = await import('fs');
+      expect(existsSync(markerPath)).toBe(false);
+      expect(result.reason ?? '').not.toContain('<deep-interview-continuation>');
+    });
+
+    it('makeDecision preserves active:true marker and emits continuation (no done-token)', async () => {
+      // An active interview with no done-token must still be blocked and the marker kept.
+      const deepInterviewState = { active: true, sessionId: 'test-session' };
+      const markerPath = join(omtDir, 'deep-interview-active-state-test-session.json');
+      await writeFile(markerPath, JSON.stringify(deepInterviewState));
+
+      const context = createContext({ lastAssistantMessage: 'some message without done token' });
+
+      const result = makeDecision(context);
+
+      const { existsSync } = await import('fs');
+      expect(existsSync(markerPath)).toBe(true);
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<deep-interview-continuation>');
     });
   });
 
@@ -873,32 +245,6 @@ describe('makeDecision', () => {
       // This call is at/past ceiling — must NOT block
       const escapedResult = makeDecision(context);
       expect(escapedResult.decision).not.toBe('block');
-    });
-
-    it('makeDecision prioritizes ralph over prometheus when both active', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Ralph task',
-      };
-      await writeFile(
-        join(omtDir, 'ralph-state-test-session.json'),
-        JSON.stringify(ralphState)
-      );
-      const prometheusState = { active: true, sessionId: 'test-session' };
-      await writeFile(
-        join(omtDir, 'prometheus-state-test-session.json'),
-        JSON.stringify(prometheusState)
-      );
-
-      const context = createContext();
-
-      const result = makeDecision(context);
-
-      expect(result.reason).toContain('<ralph-loop-continuation>');
-      expect(result.reason).not.toContain('<prometheus-continuation>');
     });
 
     it('(regression) todo block-count pre-loaded to MAX does not shorten prometheus protection', async () => {
@@ -973,33 +319,6 @@ describe('makeDecision', () => {
       const { readFileSync } = await import('fs');
       return JSON.parse(readFileSync(goalPath, 'utf8'));
     };
-
-    it('ralph takes priority over goal', async () => {
-      await writeFile(
-        join(omtDir, 'ralph-state-test-session.json'),
-        JSON.stringify({
-          active: true,
-          iteration: 1,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Ralph task',
-        })
-      );
-      await writeGoal({
-        active: true,
-        phase: 'pursuing',
-        objective_verdict: '',
-        iteration: 1,
-        max_iterations: 10,
-        outcome: 'goal objective text',
-      });
-
-      const result = makeDecision(createContext());
-
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('<ralph-loop-continuation>');
-      expect(result.reason).not.toContain('[GOAL - ITERATION');
-    });
 
     it('goal yields for any non-pursuing phase incl fresh entry', async () => {
       await writeGoal({
@@ -1133,18 +452,7 @@ describe('makeDecision', () => {
       expect(result.reason ?? '').not.toContain('<todo-continuation>');
     });
 
-    it('goal does not yield to inactive/stale ralph', async () => {
-      // Stale ralph state with active:false must not starve goal pursuit
-      await writeFile(
-        join(omtDir, 'ralph-state-test-session.json'),
-        JSON.stringify({
-          active: false,
-          iteration: 2,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Stale ralph task',
-        })
-      );
+    it('goal pursuit fires when only goal-state exists on disk', async () => {
       await writeGoal({
         active: true,
         phase: 'pursuing',
@@ -1158,7 +466,6 @@ describe('makeDecision', () => {
 
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('[GOAL - ITERATION 2/10]');
-      expect(result.reason).not.toContain('<ralph-loop-continuation>');
     });
 
     it('continuation has untrusted_objective wrap', async () => {
@@ -1434,14 +741,25 @@ describe('makeDecision', () => {
           max_iterations: 100, // cap never reached
           outcome: 'goal objective text',
         });
-        // Force updateGoalState's writeFileSync to throw ONLY for the goal-state file, so the
-        // on-disk iteration never advances while readGoalStateRaw and the sibling block-count
-        // writes stay healthy. A mocked writer is deterministic regardless of uid; chmod 0444
-        // is silently bypassed by root (common in CI containers), letting the write succeed.
-        const realWriteFileSync = fs.writeFileSync;
-        const writeSpy = spyOn(fs, 'writeFileSync').mockImplementation(((path: any, ...rest: any[]) => {
-          if (path === goalPath) throw new Error('simulated goal-state write failure');
-          return (realWriteFileSync as any)(path, ...rest);
+        // Force updateGoalState's openSync to throw a non-ENOENT error ONLY for the
+        // goal-state file, so the on-disk iteration never advances while readGoalStateRaw
+        // and the sibling block-count writes (which use writeFileSync) stay healthy.
+        // updateGoalState now uses writeFileNoCreate (openSync r+ / ftruncateSync / writeSync)
+        // rather than writeFileSync, so the mock must target openSync.
+        // IMPORTANT: ENOENT must NOT be thrown here — updateGoalState swallows ENOENT as
+        // its normal "race-deleted file" no-op, so decision.ts would never see writeOk=false.
+        // A non-ENOENT error (e.g. EACCES / EIO) simulates a real write failure (disk full,
+        // permissions) that updateGoalState re-throws and decision.ts catches as writeOk=false.
+        // A mocked syscall is deterministic regardless of uid; chmod 0444 is silently bypassed
+        // by root (common in CI containers), making chmod unreliable.
+        const realOpenSync = fs.openSync;
+        const openSpy = spyOn(fs, 'openSync').mockImplementation(((path: any, ...rest: any[]) => {
+          if (path === goalPath) {
+            const err = new Error('simulated goal-state write failure') as NodeJS.ErrnoException;
+            err.code = 'EIO'; // non-ENOENT → re-thrown by updateGoalState → writeOk=false
+            throw err;
+          }
+          return (realOpenSync as any)(path, ...rest);
         }) as any);
 
         try {
@@ -1455,7 +773,7 @@ describe('makeDecision', () => {
           const escaped = makeDecision(createContext());
           expect(escaped).toEqual({ continue: true });
         } finally {
-          writeSpy.mockRestore();
+          openSpy.mockRestore();
         }
 
         // Never false-completed: phase stays pursuing, file untouched by the escape.
@@ -1488,6 +806,176 @@ describe('makeDecision', () => {
         expect(after.phase).toBe('pursuing');
         expect(after.active).toBe(true);
       });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // C2 witness: suppression read (ADR-8) refreshes last_touched_at
+  // -------------------------------------------------------------------------
+  describe('C2 (ADR-8): terminal goal suppression read refreshes heartbeat', () => {
+    const goalPath = join(omtDir, 'goal-state-test-session.json');
+    const OLD_STAMP = '2020-01-01T00:00:00+00:00';
+
+    it('(C2-witness) suppression path on a terminal goal advances last_touched_at', async () => {
+      // Terminal goal (active=false) — this takes the suppression path (M3),
+      // setting goalSuppressesBaselineTodo=true. ADR-8 requires updateGoalState({})
+      // to be called after line 355 so the heartbeat refreshes.
+      await writeFile(goalPath, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 3,
+        max_iterations: 10,
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+        outcome: 'shipped',
+        completion_evidence_paths: ['a.md'],
+      }));
+
+      // Run the decision path (no blocking state, no deep-interview, no incomplete todos)
+      makeDecision(createContext());
+
+      const content = await readFile(goalPath, 'utf8');
+      const after = JSON.parse(content);
+      // last_touched_at must have advanced beyond the old stamp
+      expect(after.last_touched_at).not.toBe(OLD_STAMP);
+      expect(after.last_touched_at > OLD_STAMP).toBe(true);
+    });
+
+    it('(C2-absent) suppression path with no goal file creates nothing', () => {
+      // No goal-state file — decision must still exit without creating a file
+      makeDecision(createContext());
+
+      expect(fs.existsSync(goalPath)).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Pristine goal-state: invisible to all consumers except the goal skill
+  // A pristine seed (phase=planning, iteration=0, outcome="") must be INERT:
+  //   - does NOT suppress baseline-todo continuation
+  //   - does NOT refresh last_touched_at (no heartbeat write)
+  // -------------------------------------------------------------------------
+  describe('Pristine goal-state is inert to consumers', () => {
+    const goalPath = join(omtDir, 'goal-state-test-session.json');
+    const OLD_STAMP = '2020-01-01T00:00:00+00:00';
+
+    it('pristine active goal-state does NOT suppress baseline-todo', async () => {
+      // Pristine seed: phase=planning, iteration=0, outcome="" — the Entry Gate
+      // hasn't run yet; orphan if goal skill refused. Must NOT suppress todo block.
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: '',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+      }));
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
+
+      // Baseline-todo continuation MUST fire (pristine does NOT suppress)
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
+    });
+
+    it('pristine active goal-state does NOT refresh last_touched_at (heartbeat not kept alive)', async () => {
+      // An orphan pristine seed must age toward ACTIVE TTL and be GC'd —
+      // NOT be kept alive by a suppression-path heartbeat refresh.
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: '',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+      }));
+
+      makeDecision(createContext());
+
+      // File content must be unchanged — no heartbeat write must have occurred
+      const content = fs.readFileSync(goalPath, 'utf8');
+      const after = JSON.parse(content);
+      expect(after.last_touched_at).toBe(OLD_STAMP);
+    });
+
+    it('non-pristine planning state (outcome set) still suppresses baseline-todo (regression guard)', async () => {
+      // A planning state with a real outcome is NOT pristine — it is a real goal.
+      // Suppression must still apply (regression guard for the pristine gate).
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: 'ship feature X',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+      }));
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
+
+      // Non-pristine planning → suppress; baseline-todo must NOT fire
+      expect(result).toEqual({ continue: true });
+      expect(result.reason ?? '').not.toContain('<todo-continuation>');
+    });
+
+    it('non-pristine planning state (outcome set) refreshes heartbeat (regression guard)', async () => {
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: 'ship feature X',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+      }));
+
+      makeDecision(createContext());
+
+      const content = fs.readFileSync(goalPath, 'utf8');
+      const after = JSON.parse(content);
+      // Non-pristine suppression path DOES refresh the heartbeat
+      expect(after.last_touched_at).not.toBe(OLD_STAMP);
+    });
+
+    it('pristine with iteration absent (undefined) also treated as inert', async () => {
+      // iteration absent from the seed file → isPristine treats it as 0
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        max_iterations: 10,
+        outcome: '',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+        // iteration intentionally absent
+      }));
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 2 }));
+
+      // Must NOT suppress — iteration absent = pristine = inert
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
+    });
+
+    it('pristine with outcome absent (undefined) also treated as inert', async () => {
+      // outcome absent from the seed file → isPristine treats it as ""
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+        // outcome intentionally absent
+      }));
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 2 }));
+
+      // Must NOT suppress — outcome absent = pristine = inert
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
     });
   });
 });

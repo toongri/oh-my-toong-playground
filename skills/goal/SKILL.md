@@ -36,14 +36,27 @@ Subcommands used by this orchestrator:
 
 ## Entry Gate
 
-A goal is only worth pursuing autonomously if "done" is decidable. **Falsifiability trigger: refuse to start pursuit unless the request carries a falsifiable objective — a concrete verification surface a machine can check (a test, a benchmark, an artifact, an observable end state).** "Make it better", "improve performance", "clean this up" with no verification surface are NOT pursuable objectives. When the verification surface is absent or vague, do NOT seed a goal-state and do NOT begin orchestration.
+A goal is only worth pursuing autonomously if "done" is decidable. **Falsifiability trigger: refuse to start pursuit unless the request carries a falsifiable objective — a concrete verification surface a machine can check (a test, a benchmark, an artifact, an observable end state).** "Make it better", "improve performance", "clean this up" with no verification surface are NOT pursuable objectives. When the verification surface is absent or vague, do NOT begin orchestration and do NOT advance state beyond the pristine seed (no `set` call); a pristine seed left untouched is inert — hooks ignore it and the lifecycle GC reaps it by TTL.
 
 On a non-falsifiable request, take exactly ONE of these two remediation outcomes:
 
 - **deep-interview supplementation** — when the objective is rich but under-specified (the verification surface can be derived through questioning), invoke `Skill(skill: "deep-interview")` to crystallize a spec whose acceptance criteria become the verification surface. Resume the Entry Gate against the crystallized spec.
 - **ask-user** — when a single missing fact would make the objective falsifiable (the user can state the success criterion in one sentence), ask the user directly for the verification surface before proceeding.
 
-**Re-invocation refusal.** Before seeding anything, read state via `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get`. If a goal-state is already `active`, REFUSE to start a second pursuit — report the active objective and its phase, and stop. A second concurrent goal is never seeded over an `active` one. (Terminal states read as inactive and do not block a fresh goal.)
+**Re-invocation refusal.** Before seeding anything, read state via `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get`. If the result is `active: true` AND `pristine: false`, REFUSE to start a second pursuit — report the active objective and its phase, and stop. A second concurrent goal is never seeded over a non-pristine active one. A `pristine: true` result means the state was freshly seeded by this very invocation's PreToolUse hook — proceed normally. (Terminal states read as inactive and do not block a fresh goal.)
+
+**Continuation intent.** When the user's invocation expresses explicit continuation intent — e.g. "하던 거 계속", "continue what I was doing", "resume the previous goal" — run:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts list-others
+```
+
+If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's purpose and age — e.g. "ship X — started 2026-06-10, 3 hours idle"), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
+
+- On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts adopt --src <selected-sid>`, then resume normal flow on the adopted state.
+- On "start fresh": proceed as a new goal.
+
+If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.
 
 ---
 

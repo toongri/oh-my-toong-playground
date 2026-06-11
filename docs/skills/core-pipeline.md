@@ -217,41 +217,6 @@ flowchart TB
 
 ---
 
-## 8. Ralph Loop — 완료 검증 강제 루프
-
-**목적**: `/ralph` 키워드를 활성화하면, Oracle 검증을 통과할 때까지 세션 종료를 거부합니다.
-
-**핵심 메커니즘**: Stop hook이 세션 종료 시도를 가로채, 요구사항 완료 여부를 분석하고 미완료 시 종료를 반려합니다.
-
-```mermaid
-flowchart TB
-    Start(["/ralph 태스크"]) --> Work[sisyphus로 작업 수행]
-    Work --> Stop{세션 종료<br/>시도?}
-    Stop -->|아니오| Work
-    Stop -->|예| Hook[Stop Hook 가로챔]
-    Hook --> Check{Oracle 검증<br/>통과?}
-    Check -->|아니오| Block[종료 반려 +<br/>피드백 주입]
-    Block --> Work
-    Check -->|예| Done([세션 종료 허용])
-```
-
-**검증 조건**:
-
-- `<oracle-approved>VERIFIED_COMPLETE</oracle-approved>` 태그가 필수입니다.
-- 미완료 태스크가 있으면 종료를 거부합니다.
-- 최대 10회 반복 후에는 강제 종료를 허용합니다.
-
-### 명령어
-
-| 명령어 | 용도 |
-|--------|------|
-| `/ralph <작업>` | 가장 먼저 sisyphus 스킬을 로드한 뒤, Ralph Loop를 켠 상태로 작업을 실행 |
-| `/cancel-ralph` | 활성 Ralph Loop를 취소하고 모든 상태 파일을 정리 |
-
-Ralph 상태는 `$OMT_DIR/ralph-state-*.json`에 저장되며, `/cancel-ralph`가 이 파일들과 연동된 ultrawork 상태까지 정리합니다.
-
----
-
 ## 더 보기
 
 - [README](../../README.md) — 프로젝트 개요와 중앙 관리 + 프로젝트 분화 스토리

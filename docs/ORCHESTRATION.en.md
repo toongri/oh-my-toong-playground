@@ -152,9 +152,7 @@ With a plan ready, use `/sisyphus`:
 | `/deep-interview <idea>` | Crystallize a spec via ambiguity gating | `$OMT_DIR/deep-interview/{slug}.md` |
 | `/prometheus <task>` | Create work plan | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/sisyphus` | Execute plan via orchestration | Verified code changes |
-| `/ralph <task>` | Iterative completion with oracle verification | Task completion |
 | `/hud setup\|restore` | HUD setup and management | statusLine configuration |
-| `/cancel-ralph` | Cancel Ralph Loop | State file cleanup |
 
 ---
 
