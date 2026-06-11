@@ -34,7 +34,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | BH-2 | Human Design Gate Operative | Human design gate blocks plan generation | S2 → S3 gate |
 | BH-3 | ADR Co-Authorship | Design fork co-decided in S2, recorded in ADR | Design Consensus + ADR |
 | BH-4 | `[DECISION NEEDED]` Absence | In-phase co-design resolution, no placeholder | Design Consensus |
-| BH-5 | ADR Log Emission and Structural Enumeration Timing | Decision log with structural enumeration at Complex/Architecture; no structural enumeration at Trivial/Scoped | ADR Log + Structural Enumeration |
+| BH-5 | ADR Log Emission and Structural Enumeration Timing | Decision log with structural enumeration at Complex/Architecture; full-item log without structural items at Scoped; no ADR log at Trivial | ADR Log + Structural Enumeration |
 
 ---
 
@@ -926,7 +926,7 @@ The plan and transcript MUST be free of any `[DECISION NEEDED]` placeholder for 
 
 ## Scenario BH-5: ADR Log Emission and Structural Enumeration Timing
 
-**Primary Technique:** ADR Log + Structural Enumeration — at Complex/Architecture intent, prometheus emits a decision log whose structural items declare ownership (what they own / what they must NOT own) and edges (caller→callee, side effect, failure path) before the human design gate; at Trivial/Scoped intent no structural enumeration is emitted, and this absence is a hard architectural fact, not an anti-ceremony escape.
+**Primary Technique:** ADR Log + Structural Enumeration — at Complex/Architecture intent, prometheus emits a decision log whose structural items declare ownership (what they own / what they must NOT own) and edges (caller→callee, side effect, failure path) before the human design gate; at Scoped intent the full-item ADR log is present but structural enumeration is absent (the two gates are distinct); at Trivial intent the ADR log itself is absent (Trivial is ADR-exempt).
 
 **Input (Multi-turn):**
 ```
@@ -944,15 +944,25 @@ must NOT own, and the edges it participates in (caller→callee, side effect, fa
 path); a structural item with no edges declares "Edges: none". The full log is
 visible before the human design gate.
 
-Turn 3 (Trivial/Scoped contrast path):
-A separate, independent request is classified as Trivial/Scoped: localizing an error
-message in a single file, introducing no new ownership and no new edges.
-S2 Co-Design proceeds. No structural enumeration appears — there is no structural
-item to emit because no new ownership or edges are introduced. This absence is
-distinct from the anti-ceremony escape: the escape is a Complex/Architecture-only
-mechanism that skips enumeration when the change introduces no new ownership and no
-new edges AND a named, specific consequence is provided; it is not in play at
-Trivial/Scoped, where structural enumeration simply has no path to emit.
+Turn 3a (Trivial contrast path):
+A separate, independent request is classified as Trivial: localizing an error message
+in a single file (single file, <10 lines — Trivial by definition; file count takes
+precedence over per-file complexity, so this is unambiguously Trivial).
+S2 Co-Design proceeds. No ADR log is emitted at all — Trivial intent is exempt from
+ADR output entirely. The absence is not merely an absence of structural items; the
+log machinery itself does not run.
+
+Turn 3b (Scoped contrast path):
+A separate, independent request is classified as Scoped: copying a static help-text
+string from one module to two sibling modules — three files touched, all copy-only,
+introducing no new ownership and no new edges.
+S2 Co-Design proceeds. The full-item ADR log IS emitted (Scoped+ mandatory: contested
+and solo items both populate the log from Scoped intent upward). The log contains
+the relevant solo D-N items with Decision / Why / Invalidated alternative / Cites
+fields. However, no structural D-N items appear in the log — no ownership declarations
+(Owns / Must NOT own) and no edge declarations — because structural enumeration has
+no path below the Complex band, and the anti-ceremony escape is Complex/Architecture-
+only and is not in play here. The ADR log is present; its structural subset is empty.
 ```
 
 **Verification Points:**
@@ -962,16 +972,18 @@ Trivial/Scoped, where structural enumeration simply has no path to emit.
 | V1 | Decision log emitted at Complex/Architecture | At Complex/Architecture intent, Prometheus emits a decision log containing `one titled \`D-N\` item` per design decision during S2 Co-Design, before the human design gate |
 | V2 | Structural items declare ownership and edges | Each structural D-N item in the log explicitly states what the component owns, `what it must NOT own`, and lists edges `(caller→callee, side effect, failure path)`; a structural item with no edges declares `Edges: none` |
 | V3 | Decision log is visible before the human design gate | The ADR decision log appears in a turn that precedes the human design gate — a log that first appears in the same turn as the plan Write fails this check |
-| V4 | No structural enumeration at Trivial/Scoped intent | At Trivial/Scoped intent (no new ownership, no new edges), Prometheus does NOT emit structural enumeration — `no structural-enumeration path below the Complex band` exists, so the structural items are simply absent from the S2 Co-Design turn; this is NOT an anti-ceremony escape (the escape is Complex/Architecture-only and requires a named, specific consequence); emitting an escape token at Trivial/Scoped is itself a bug |
+| V4 | No ADR log at Trivial intent | At Trivial intent, Prometheus emits NO ADR log — the log machinery does not run (Trivial is ADR-exempt); absence of the log itself is the expected signal, not merely absence of structural items within a log |
+| V5 | ADR log present but structurally empty at Scoped intent | At Scoped intent, Prometheus emits the full-item ADR log (solo and contested D-N items as applicable) but ZERO structural D-N items — no ownership declarations (`Owns` / `Must NOT own`) and no edge declarations appear; `no structural-enumeration path below the Complex band` exists, and the anti-ceremony escape is Complex/Architecture-only and is not invoked; emitting structural items or an escape token at Scoped is itself a bug |
 
 **Expected Observation:**
 
-At Complex/Architecture intent, the S2 Co-Design transcript MUST show the ADR decision log appearing in a turn that comes before the human design gate, with each structural item declaring ownership and edges. At Trivial/Scoped intent, structural enumeration must be absent with no escape mechanism invoked:
+At Complex/Architecture intent, the S2 Co-Design transcript MUST show the ADR decision log appearing in a turn that comes before the human design gate, with each structural item declaring ownership and edges. At Trivial intent, the ADR log itself must be absent. At Scoped intent, the ADR log must be present but contain no structural D-N items:
 
 - A visible ADR decision log containing `one titled \`D-N\` item` per decision in a turn that precedes the turn presenting the design-brief for human approval — the log does NOT appear for the first time in the same turn as the plan `Write`
 - Each structural D-N item in the log states what it owns, `what it must NOT own`, and its edges `(caller→callee, side effect, failure path)`; items with no edges carry `Edges: none`
 - The human design gate appears AFTER the decision log turn, not before or simultaneously
-- At Trivial/Scoped intent: absence of any structural D-N items (ownership/edge declarations) from the S2 Co-Design turn — `no structural-enumeration path below the Complex band` exists, so the absence is architectural; no anti-ceremony escape token or boilerplate is emitted (a Trivial/Scoped escape emission is a scenario failure)
+- At Trivial intent: absence of any `## ADR` section or D-N item output from the S2 Co-Design turn — the log itself does not appear (Trivial is ADR-exempt, not merely structurally-silent)
+- At Scoped intent: a visible ADR log (or `## ADR` section) containing solo D-N items with Decision / Why / Invalidated alternative / Cites, AND absence of any structural annotations (`Owns`, `Must NOT own`, edge declarations) from those items — `no structural-enumeration path below the Complex band` exists; no anti-ceremony escape token or boilerplate is emitted (a structural annotation or escape emission at Scoped is a scenario failure)
 
 ---
 
@@ -1006,4 +1018,4 @@ At Complex/Architecture intent, the S2 Co-Design transcript MUST show the ADR de
 | BH-2 | Human Design Gate Operative | | | New behavior scenario (S3 plan write blocked until S2 human design approval). Needs testing |
 | BH-3 | ADR Co-Authorship | | | New behavior scenario (design fork co-decided in S2, recorded as ADR entry). Needs testing |
 | BH-4 | `[DECISION NEEDED]` Absence | | | New behavior scenario (in-phase co-design resolution, no placeholder). Needs testing |
-| BH-5 | ADR Log Emission and Structural Enumeration Timing | | | New behavior scenario (decision log with structural D-N items before human design gate at Complex/Architecture; no structural enumeration at Trivial/Scoped — no structural-enumeration path below the Complex band). Needs testing |
+| BH-5 | ADR Log Emission and Structural Enumeration Timing | | | New behavior scenario (decision log with structural D-N items before human design gate at Complex/Architecture; full-item log without structural items at Scoped; no ADR log at Trivial — the two gates are distinct). Needs testing |
