@@ -135,48 +135,61 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
     GOAL_ACTIVE=$(echo "$GOAL_STATE" | jq -r '.active // false' 2>/dev/null)
     if [ "$GOAL_ACTIVE" = "true" ]; then
       GOAL_PHASE=$(echo "$GOAL_STATE" | jq -r '.phase // ""' 2>/dev/null)
-      GOAL_PLAN_PATH=$(echo "$GOAL_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
-      GOAL_RESUME=$(echo "$GOAL_STATE" | jq -r '.resume_summary // ""' 2>/dev/null)
-      GOAL_RESUME=$(printf '%s' "$GOAL_RESUME" | sed 's/\\/\\\\/g')
-      GOAL_ITERATION=$(echo "$GOAL_STATE" | jq -r '.iteration // 0' 2>/dev/null)
-      GOAL_MAX_ITER=$(echo "$GOAL_STATE" | jq -r '.max_iterations // 10' 2>/dev/null)
 
-      # Determine whether the plan file is available on disk.
-      GOAL_PLAN_AVAILABLE=false
-      if [ -n "$GOAL_PLAN_PATH" ] && [ "$GOAL_PLAN_PATH" != "null" ] && [ -f "$GOAL_PLAN_PATH" ]; then
-        GOAL_PLAN_AVAILABLE=true
+      # Pristine-seed guard: a freshly seeded state (phase=planning, iteration=0,
+      # outcome="" or absent) is inert — it may be an orphan from a refused goal
+      # invocation. Skip the restore block; GC reaps the orphan by TTL.
+      GOAL_ITERATION_RAW=$(echo "$GOAL_STATE" | jq -r '.iteration // 0' 2>/dev/null)
+      GOAL_OUTCOME_RAW=$(echo "$GOAL_STATE" | jq -r '.outcome // ""' 2>/dev/null)
+      GOAL_IS_PRISTINE=false
+      if [ "$GOAL_PHASE" = "planning" ] && [ "$GOAL_ITERATION_RAW" = "0" ] && [ "$GOAL_OUTCOME_RAW" = "" ]; then
+        GOAL_IS_PRISTINE=true
       fi
 
-      # Escape backslashes so the value is safe to embed in a hand-built JSON string.
-      # Must happen after the -f existence check (which needs the raw path) and before
-      # $GOAL_PLAN_PATH is interpolated into MESSAGES.
-      GOAL_PLAN_PATH=$(printf '%s' "$GOAL_PLAN_PATH" | sed 's/\\/\\\\/g')
+      if [ "$GOAL_IS_PRISTINE" = "false" ]; then
+        GOAL_PLAN_PATH=$(echo "$GOAL_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
+        GOAL_RESUME=$(echo "$GOAL_STATE" | jq -r '.resume_summary // ""' 2>/dev/null)
+        GOAL_RESUME=$(printf '%s' "$GOAL_RESUME" | sed 's/\\/\\\\/g')
+        GOAL_ITERATION=$(echo "$GOAL_STATE" | jq -r '.iteration // 0' 2>/dev/null)
+        GOAL_MAX_ITER=$(echo "$GOAL_STATE" | jq -r '.max_iterations // 10' 2>/dev/null)
 
-      GOAL_PLAN_NOTE=""
-      GOAL_INSTRUCTION=""
-      if [ "$GOAL_PHASE" = "planning" ]; then
-        # Planning-resume: guide the AI to continue co-designing the plan
-        if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
-          GOAL_INSTRUCTION="\nRe-read the current plan from disk and continue the planning process where you left off.\n"
-        else
-          if [ -n "$GOAL_RESUME" ] && [ "$GOAL_RESUME" != "null" ]; then
-            GOAL_PLAN_NOTE="\nPlan file not available on disk. Resume from this bookmark: ${GOAL_RESUME}\n"
+        # Determine whether the plan file is available on disk.
+        GOAL_PLAN_AVAILABLE=false
+        if [ -n "$GOAL_PLAN_PATH" ] && [ "$GOAL_PLAN_PATH" != "null" ] && [ -f "$GOAL_PLAN_PATH" ]; then
+          GOAL_PLAN_AVAILABLE=true
+        fi
+
+        # Escape backslashes so the value is safe to embed in a hand-built JSON string.
+        # Must happen after the -f existence check (which needs the raw path) and before
+        # $GOAL_PLAN_PATH is interpolated into MESSAGES.
+        GOAL_PLAN_PATH=$(printf '%s' "$GOAL_PLAN_PATH" | sed 's/\\/\\\\/g')
+
+        GOAL_PLAN_NOTE=""
+        GOAL_INSTRUCTION=""
+        if [ "$GOAL_PHASE" = "planning" ]; then
+          # Planning-resume: guide the AI to continue co-designing the plan
+          if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
+            GOAL_INSTRUCTION="\nRe-read the current plan from disk and continue the planning process where you left off.\n"
           else
-            GOAL_PLAN_NOTE="\nPlan file not available on disk yet. Continue planning from the beginning.\n"
+            if [ -n "$GOAL_RESUME" ] && [ "$GOAL_RESUME" != "null" ]; then
+              GOAL_PLAN_NOTE="\nPlan file not available on disk. Resume from this bookmark: ${GOAL_RESUME}\n"
+            else
+              GOAL_PLAN_NOTE="\nPlan file not available on disk yet. Continue planning from the beginning.\n"
+            fi
+          fi
+        else
+          # Pursuing-resume: guide the AI to continue autonomous pursuit
+          GOAL_INSTRUCTION="\nIteration: $GOAL_ITERATION/$GOAL_MAX_ITER. Continue pursuing the objective autonomously.\n"
+          if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
+            GOAL_INSTRUCTION="${GOAL_INSTRUCTION}Re-read the current plan from disk before continuing.\n"
+          fi
+          if [ -n "$GOAL_RESUME" ] && [ "$GOAL_RESUME" != "null" ]; then
+            GOAL_PLAN_NOTE="\nLast checkpoint: ${GOAL_RESUME}\n"
           fi
         fi
-      else
-        # Pursuing-resume: guide the AI to continue autonomous pursuit
-        GOAL_INSTRUCTION="\nIteration: $GOAL_ITERATION/$GOAL_MAX_ITER. Continue pursuing the objective autonomously.\n"
-        if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
-          GOAL_INSTRUCTION="${GOAL_INSTRUCTION}Re-read the current plan from disk before continuing.\n"
-        fi
-        if [ -n "$GOAL_RESUME" ] && [ "$GOAL_RESUME" != "null" ]; then
-          GOAL_PLAN_NOTE="\nLast checkpoint: ${GOAL_RESUME}\n"
-        fi
-      fi
 
-      MESSAGES="$MESSAGES<session-restore>\n\n[GOAL RESTORED]\n\nYou have an active goal session (phase: $GOAL_PHASE).\nPlan path: $GOAL_PLAN_PATH\n$GOAL_PLAN_NOTE$GOAL_INSTRUCTION\nIMPORTANT: Invoking the goal skill again while a goal is already active is refused. Continue the existing goal, do not start a new one.\n\n</session-restore>\n\n---\n\n"
+        MESSAGES="$MESSAGES<session-restore>\n\n[GOAL RESTORED]\n\nYou have an active goal session (phase: $GOAL_PHASE).\nPlan path: $GOAL_PLAN_PATH\n$GOAL_PLAN_NOTE$GOAL_INSTRUCTION\nIMPORTANT: Invoking the goal skill again while a goal is already active is refused. Continue the existing goal, do not start a new one.\n\n</session-restore>\n\n---\n\n"
+      fi
     fi
   fi
 fi

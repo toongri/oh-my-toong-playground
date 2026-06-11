@@ -800,6 +800,83 @@ test_gc_old_threshold_constants_removed() {
 }
 
 # =============================================================================
+# Tests: Pristine goal-state is invisible to session-start restore
+# A pristine seed (phase=planning, iteration=0, outcome="") must NOT produce
+# [GOAL RESTORED]; a non-pristine active state must still be restored.
+# =============================================================================
+
+test_session_start_pristine_goal_state_not_restored() {
+    local sid="test-goal-pristine"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # Pristine seed: phase=planning, iteration=0, outcome="" — the PreToolUse hook
+    # seeded this before the goal skill ran; if the skill refuses, this file lingers.
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "iteration": 0,
+  "max_iterations": 10,
+  "outcome": "",
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Pristine seed must NOT produce GOAL RESTORED
+    assert_output_not_contains "$output" "GOAL RESTORED" "pristine goal-state must NOT inject GOAL RESTORED" || return 1
+}
+
+test_session_start_non_pristine_planning_goal_still_restored() {
+    local sid="test-goal-nonpristine"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # Non-pristine: outcome is set — this is a real in-progress goal.
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "iteration": 0,
+  "max_iterations": 10,
+  "outcome": "ship feature X",
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Non-pristine planning state must still produce GOAL RESTORED
+    assert_output_contains "$output" "GOAL RESTORED" "non-pristine planning goal-state must inject GOAL RESTORED" || return 1
+}
+
+test_session_start_pristine_goal_absent_outcome_not_restored() {
+    # outcome field entirely absent (jq .outcome returns null) → treated as "" → pristine → not restored
+    local sid="test-goal-pristine-absent-outcome"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "iteration": 0,
+  "max_iterations": 10,
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    assert_output_not_contains "$output" "GOAL RESTORED" "pristine goal-state (absent outcome) must NOT inject GOAL RESTORED" || return 1
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -839,6 +916,11 @@ main() {
 
     # Goal state restore: backslash in plan_path produces valid JSON
     run_test test_session_start_goal_plan_path_backslash_produces_valid_json
+
+    # Pristine goal-state: invisible to session-start restore
+    run_test test_session_start_pristine_goal_state_not_restored
+    run_test test_session_start_non_pristine_planning_goal_still_restored
+    run_test test_session_start_pristine_goal_absent_outcome_not_restored
 
     # deep-interview stale-cleanup: glob + mtime fallback
     run_test test_session_start_stale_deep_interview_with_started_at_purged

@@ -849,4 +849,133 @@ describe('makeDecision', () => {
       expect(fs.existsSync(goalPath)).toBe(false);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Pristine goal-state: invisible to all consumers except the goal skill
+  // A pristine seed (phase=planning, iteration=0, outcome="") must be INERT:
+  //   - does NOT suppress baseline-todo continuation
+  //   - does NOT refresh last_touched_at (no heartbeat write)
+  // -------------------------------------------------------------------------
+  describe('Pristine goal-state is inert to consumers', () => {
+    const goalPath = join(omtDir, 'goal-state-test-session.json');
+    const OLD_STAMP = '2020-01-01T00:00:00+00:00';
+
+    it('pristine active goal-state does NOT suppress baseline-todo', async () => {
+      // Pristine seed: phase=planning, iteration=0, outcome="" — the Entry Gate
+      // hasn't run yet; orphan if goal skill refused. Must NOT suppress todo block.
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: '',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+      }));
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
+
+      // Baseline-todo continuation MUST fire (pristine does NOT suppress)
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
+    });
+
+    it('pristine active goal-state does NOT refresh last_touched_at (heartbeat not kept alive)', async () => {
+      // An orphan pristine seed must age toward ACTIVE TTL and be GC'd —
+      // NOT be kept alive by a suppression-path heartbeat refresh.
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: '',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+      }));
+
+      makeDecision(createContext());
+
+      // File content must be unchanged — no heartbeat write must have occurred
+      const content = fs.readFileSync(goalPath, 'utf8');
+      const after = JSON.parse(content);
+      expect(after.last_touched_at).toBe(OLD_STAMP);
+    });
+
+    it('non-pristine planning state (outcome set) still suppresses baseline-todo (regression guard)', async () => {
+      // A planning state with a real outcome is NOT pristine — it is a real goal.
+      // Suppression must still apply (regression guard for the pristine gate).
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: 'ship feature X',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+      }));
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
+
+      // Non-pristine planning → suppress; baseline-todo must NOT fire
+      expect(result).toEqual({ continue: true });
+      expect(result.reason ?? '').not.toContain('<todo-continuation>');
+    });
+
+    it('non-pristine planning state (outcome set) refreshes heartbeat (regression guard)', async () => {
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        outcome: 'ship feature X',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+      }));
+
+      makeDecision(createContext());
+
+      const content = fs.readFileSync(goalPath, 'utf8');
+      const after = JSON.parse(content);
+      // Non-pristine suppression path DOES refresh the heartbeat
+      expect(after.last_touched_at).not.toBe(OLD_STAMP);
+    });
+
+    it('pristine with iteration absent (undefined) also treated as inert', async () => {
+      // iteration absent from the seed file → isPristine treats it as 0
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        max_iterations: 10,
+        outcome: '',
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+        // iteration intentionally absent
+      }));
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 2 }));
+
+      // Must NOT suppress — iteration absent = pristine = inert
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
+    });
+
+    it('pristine with outcome absent (undefined) also treated as inert', async () => {
+      // outcome absent from the seed file → isPristine treats it as ""
+      await writeFile(goalPath, JSON.stringify({
+        active: true,
+        phase: 'planning',
+        iteration: 0,
+        max_iterations: 10,
+        last_touched_at: OLD_STAMP,
+        started_at: OLD_STAMP,
+        // outcome intentionally absent
+      }));
+
+      const result = makeDecision(createContext({ incompleteTodoCount: 2 }));
+
+      // Must NOT suppress — outcome absent = pristine = inert
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
+    });
+  });
 });
