@@ -131,14 +131,14 @@ Format each entry using the appropriate form:
 
 ## 7. Impact & Premises Investigation Delegation
 
-When the requirement touches code — any requirement whose realization lands in the codebase, not only bugs or regressions:
+Impact and premises investigation (the trigger, the explore/oracle agent split, and the Pre-Context wiring) is defined solely in SKILL.md Stage 3 and must NOT be dispatched during Stage 2 (gather). Do not dispatch `explore` or `oracle` while following this procedure.
 
-- **`explore` fires by default**: dispatch for facts — where in the codebase the requirement lands, current behavior of the relevant flow, related recent commits and open PRs touching the area. The `explore` agent is scoped to code and the filesystem/VCS. It does not reach the PM tool, messenger, collaboration-docs, or logs.
-- **`oracle` fires conditionally**: dispatch for judgment — change propagation, structural constraints, cross-cutting concerns — when the impact appears to cross module boundaries or an architectural risk is suspected.
-- Non-code gather — collaboration-docs, PM, messenger, logs — stays inline in this skill. Do not route non-code gather through `explore` or any other subagent.
-- `explore` and `oracle` return their findings to the caller; feed those findings into the record stage (Stage 4) as the **Pre-Context** section content (sub-items: **Affected Areas**, **Premises**, **Blockers & Risks**), and additionally as the Root Cause and Evidence content for bug-genre tickets.
+**Scope constraints that apply when Stage 3 fires:**
 
-When the requirement does not touch code, skip delegation and proceed directly to curation.
+- **`explore` reach limitation**: `explore` is scoped to code and the filesystem/VCS. It does not reach the PM tool, messenger, collaboration-docs, or logs. Any retrieval from those source types stays inline in this skill and must not be routed through `explore` or any other subagent.
+- **Non-code gather stays inline**: collaboration-docs, PM, messenger, and logs gather is performed inline in Stage 2 of this skill. Do not route non-code gather through `explore` or any other subagent regardless of the trigger.
+
+When the requirement does not touch code, skip Stage 3 entirely. Proceed to Stage 4 (record) and fill the Pre-Context section from the documents gathered in Stage 2, or mark each sub-item `TBD — needs validation via {method}` where information is missing.
 
 ---
 
