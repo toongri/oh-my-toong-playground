@@ -10,8 +10,9 @@
  *   TERMINAL_TTL_SECONDS          — 1800 (30 minutes) — TS definition site
  *   isStateLive(parsed, nowEpoch) — Single liveness rule; fallback: last_touched_at → started_at
  *   STATE_PREFIX                  — type → filename prefix map
- *   listOthers(type)              — ACTIVE-live other-session candidates
- *   adopt(type, srcSid)           — atomic rename re-key, rules r1-r7
+ *   listOthers(type)              — ACTIVE-live non-pristine other-session candidates
+ *   adopt(type, srcSid)           — atomic rename re-key, rules r1-r8
+ *   restampAfterAdopt(path)       — post-rename heartbeat re-stamp via writeFileNoCreate
  *   writeFileNoCreate(path, s)    — single-syscall no-create write (ENOENT if absent)
  *   isPristine(type, parsed)      — true iff state is freshly seeded, safe for adoption overwrite
  *
@@ -19,7 +20,7 @@
  * This module does NOT create state files; adoption may only rename existing ones.
  */
 
-import { readdirSync, readFileSync, renameSync, writeFileSync, appendFileSync, existsSync, openSync, ftruncateSync, writeSync, closeSync } from 'fs';
+import { readdirSync, readFileSync, renameSync, appendFileSync, existsSync, openSync, ftruncateSync, writeSync, closeSync } from 'fs';
 import { join } from 'path';
 // lib-internal imports must be relative — deployed copies under .claude/lib/ have no @lib alias
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
@@ -325,6 +326,8 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
     // Only ACTIVE-live candidates (r7 source filter)
     if (parsed['active'] !== true) continue;
     if (!isStateLive(parsed as { active?: boolean; last_touched_at?: string; started_at?: string }, now)) continue;
+    // Pristine seeds are INERT to consumers (f9f3242): skip empty-purpose seeds
+    if (isPristine(type, parsed)) continue;
     const lta = String(parsed['last_touched_at'] ?? '');
     const touched = parseEpoch(lta);
     const idleSeconds = touched !== null ? Math.max(0, now - touched) : 0;
@@ -340,6 +343,25 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
 }
 
 // ---------------------------------------------------------------------------
+// restampAfterAdopt
+// ---------------------------------------------------------------------------
+
+/**
+ * Reads the file at `path`, updates `last_touched_at`, and writes it back using
+ * writeFileNoCreate — so it will throw ENOENT if the file has disappeared between
+ * the rename and this call, preventing accidental file creation.
+ *
+ * Called by adopt's r5 best-effort heartbeat re-stamp block; also exported for
+ * direct unit testing of the no-create invariant.
+ */
+export function restampAfterAdopt(path: string): void {
+  const content = readFileSync(path, 'utf8');
+  const parsed = JSON.parse(content) as Record<string, unknown>;
+  const stamped = { ...parsed, last_touched_at: nowStamp() };
+  writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
+}
+
+// ---------------------------------------------------------------------------
 // adopt
 // ---------------------------------------------------------------------------
 
@@ -351,9 +373,10 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
  *   r2: both sids safe-id validated
  *   r3: refused iff current exists AND (ACTIVE non-pristine OR malformed)
  *   r4: atomic fs.renameSync; ENOENT → throw, no mutation
- *   r5: post-rename best-effort heartbeat re-stamp (failure → stderr warn)
+ *   r5: post-rename best-effort heartbeat re-stamp via restampAfterAdopt (failure → stderr warn)
  *   r6: LIVE source adoptable (checked via isStateLive)
  *   r7: source must be ACTIVE-live (TERMINAL/stale/malformed refused)
+ *   r8: source must not be pristine (pristine seeds are INERT — f9f3242)
  *
  * Sid is derived from filename only — never reads session-id from file content.
  * Does NOT create any file; only renames an existing one.
@@ -397,6 +420,13 @@ export function adopt(type: StateType, srcSid: string): void {
     throw new Error(`adopt: source "${srcPath}" failed the liveness check (r7: TTL-expired or no parseable timestamp — only live sources are adoptable)`);
   }
 
+  // r8: source must not be pristine (pristine seeds are INERT to consumers — f9f3242)
+  if (isPristine(type, srcParsed)) {
+    throw new Error(
+      `adopt: source "${srcPath}" is a pristine seed with no real work (r8: pristine sources are refused — nothing to adopt).`
+    );
+  }
+
   // r3: check current session state
   if (existsSync(dstPath)) {
     const curParsed = readParsed(dstPath);
@@ -433,10 +463,7 @@ export function adopt(type: StateType, srcSid: string): void {
 
   // r5: post-rename heartbeat re-stamp of the renamed-to file (best-effort)
   try {
-    const content = readFileSync(dstPath, 'utf8');
-    const parsed = JSON.parse(content) as Record<string, unknown>;
-    const stamped = { ...parsed, last_touched_at: nowStamp() };
-    writeFileSync(dstPath, JSON.stringify(stamped, null, 2), 'utf8');
+    restampAfterAdopt(dstPath);
   } catch (e) {
     process.stderr.write(
       `adopt: warning: post-rename heartbeat re-stamp failed for "${dstPath}": ${String(e)}\n`
