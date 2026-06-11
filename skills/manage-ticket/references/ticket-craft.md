@@ -44,7 +44,7 @@ The three sub-items are:
 - **Premises** — what must currently be true about the system for this requirement to make sense (e.g., "stock decrement happens only at dispense time").
 - **Blockers & Risks** — upstream dependencies, potential blocking points, and open questions; observations only, never solution proposals.
 
-Every sub-item must carry either an evidence citation (investigation result, document, commit) or the marker `TBD — needs validation via {method}`. An unbacked assertion is a rule violation.
+Every sub-item must carry either an evidence citation (investigation result, document, code location, commit) or the marker `TBD — needs validation via {method}`. An unbacked assertion is a rule violation.
 
 ### Parent-Ticket Body Shape
 
@@ -69,7 +69,7 @@ After slicing, the relationship rule is: shared context lives in the parent ONCE
 
 When the Pre-Context section holds more than a couple of items within any one sub-item (**Affected Areas**, **Premises**, or **Blockers & Risks**), group them into two labeled buckets:
 
-- **Confirmed Facts** — each item cites the evidence that confirmed it: an investigation result, a document reference, a code location, a commit. An item belongs here only when it is backed.
+- **Confirmed Facts** — each item cites the evidence that confirmed it, per the Pre-Context evidence contract above. An item belongs here only when it is backed.
 - **Needs Verification** — each item states what is open and what method would resolve it. Use the existing marker form: `TBD — needs validation via {method}`.
 
 This is a presentation rule layered on the existing per-item evidence-or-`TBD` requirement — the underlying rule is unchanged. When Pre-Context is short (two items or fewer per sub-item), the two-bucket grouping is optional. The buckets apply to both the Standard Body Shape and the Parent-Ticket Body Shape.
