@@ -17,6 +17,7 @@ are omitted rather than left blank.
 | **Problem** | What user-observable or system-observable behavior is wrong or missing. One paragraph. |
 | **Evidence** | Concrete data supporting the problem: logs, error messages, screenshots, metric readings, witness accounts. Direct quotes or paste, not paraphrase. |
 | **Root Cause** | The underlying mechanism that produces the problem. Must be grounded in code, logs, or a reproducible trace — not speculation. If unknown, write `TBD — needs validation via {method}`. |
+| **Pre-Context** | Background facts the reader needs to understand scope and risk before implementation begins. Three sub-items: **Affected Areas** — modules, flows, or domains likely impacted by this requirement; file-level references are permitted when investigation confirmed them. **Premises** — what must currently be true about the system for this requirement to make sense (e.g., "stock decrement happens only at dispense time"). **Blockers & Risks** — upstream dependencies, potential blocking points, and open questions; observations only, never solution proposals. Every sub-item must carry either an evidence citation (investigation result, document, commit) or the marker `TBD — needs validation via {method}`. An unbacked assertion is a rule violation. For non-code tickets, fill from gathered documents or mark TBD. |
 | **AC** | Acceptance criteria (see Section 2 below). At least one AC per ticket. |
 | **Non-Goals** | What this ticket explicitly does NOT address. Prevents scope creep. |
 | **References** | PRDs, design docs, Slack threads, incident records, code commits/PRs, and logs use markdown links. Related PM tickets are linked through the native relation step, not by duplicating the relationship in the body. PM-issue mentions that must appear in the body without becoming related use a form your PM tool does not auto-link into a relation, with a one-sentence note explaining why they are context rather than related-ticket links. |
@@ -31,7 +32,9 @@ Bug tickets add three fields, placed between Problem and AC:
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
-For bug tickets the ordering is: Problem → Reproduction → Root Cause → Evidence → AC → Non-Goals → References.
+For bug tickets the ordering is: Problem → Reproduction → Root Cause → Evidence → Pre-Context → AC → Non-Goals → References.
+
+Pre-Context applies to all ticket genres. For non-code tickets fill each sub-item from gathered documents or mark `TBD — needs validation via {method}`.
 
 ### Anti-Fluff Rule
 
@@ -167,8 +170,9 @@ For each child:
   [ ] Or has the solution for this child been decided ("implementation-planning" stage,
       HOW is known)?
       → This child is "settled". Hand off to `prometheus` (for planning) or `sisyphus`
-        (for execution) as the next step. Do NOT emit Model-B implementation-path fields
-        (filePaths, fixed architecture, DoR) here.
+        (for execution) as the next step. Do NOT emit fields that decide or fix the
+        implementation method (fixed-architecture commitments, DoR implementation fields,
+        prescriptive edit instructions) here. Observational pre-context remains allowed.
 ```
 
 A partially-settled intake splits naturally: open sub-units stay as Model-A WHAT children;
@@ -193,14 +197,20 @@ Dependency ordering between child tickets uses blocked-by dependency links:
 
 ### Model-A Purity Rules
 
-Slice templates at requirement stage must NOT include:
+The test is **intent, not form**: does the text close HOW decisions, or record current-state observations?
 
-- `filePaths` — specific file paths to edit (Model B, work decomposition)
-- `DoR` (Definition of Ready) implementation fields
-- Fixed-architecture fields that commit to a specific implementation structure
-- Any field that "pre-solves" HOW the child will be implemented
+**Banned** — fields or prose that decide or fix the solution or implementation method:
+- Fixed-architecture commitments ("use service X", "add column Y to table Z")
+- DoR implementation fields that prescribe a specific construction approach
+- Prescriptive edit instructions ("edit file X to do Y", "replace function F with G")
+- Any field whose purpose is to pre-solve HOW the child will be implemented
 
-These belong exclusively to `prometheus` (planning) and `sisyphus` (execution) after handoff.
+**Permitted** — observational, evidence-backed pre-context, including file-level references:
+- "Module `dispatch/stock.ts` looks likely to be affected — confirmed by Stage 3 investigation"
+- "Could block if the retry queue is not idempotent — needs verification via load test"
+- Pre-Context sub-items (Affected Areas, Premises, Blockers & Risks) filled from investigation results
+
+The rule's motive: WHAT is decided here; HOW belongs to `prometheus` (planning) and `sisyphus` (execution) after handoff. Recording where a requirement lands and what premises must hold is not pre-solving — it reduces PM round-trips and gives workers a confirmed starting point.
 
 ### Settled Child Handoff
 
@@ -208,4 +218,4 @@ When a child is at implementation-planning stage (HOW is decided):
 
 1. Record the settled decision in the child ticket body (under a "Design Decision" note, not in an implementation-path field).
 2. State in the ticket: "Handoff to `prometheus` for planning" or "Handoff to `sisyphus` for execution".
-3. Do not emit Model-B decomposition. The handoff target owns that decomposition.
+3. Do not emit fields that fix the implementation method (Model-B decomposition). The handoff target owns that decomposition. Observational pre-context already recorded in the body remains intact.
