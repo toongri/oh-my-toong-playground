@@ -244,7 +244,12 @@ export function makeDecision(context: DecisionContext): HookOutput {
       cleanupDeepInterviewState(sessionId);
     } else if (detectDeepInterviewDone(lastAssistantMessage)) {
       cleanupDeepInterviewState(sessionId);
-    } else {
+    } else if (!isPristine('deep-interview', deepInterviewStateRaw as unknown as Record<string, unknown>)) {
+      // Pristine exception: a seed-only file (no rich `state` object) was written by the
+      // PreToolUse hook before the skill prose ran. If the skill died before `init`
+      // (permission denial, ESC, crash), the seed lingers. A pristine state is INERT to
+      // all consumers — it must not block session stop. The orphan ages toward TTL and is
+      // GC'd naturally.
       return formatBlockOutput(buildDeepInterviewContinuationMessage());
     }
   }

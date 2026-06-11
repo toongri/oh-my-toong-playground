@@ -129,7 +129,7 @@ describe('makeDecision', () => {
 
   describe('Priority 1.5: Deep Interview Protection', () => {
     it('makeDecision blocks with deep-interview-continuation when state active and no token', async () => {
-      const deepInterviewState = { active: true, sessionId: 'test-session' };
+      const deepInterviewState = { active: true, sessionId: 'test-session', state: { phase: 'in_progress' } };
       await writeFile(
         join(omtDir, 'deep-interview-active-state-test-session.json'),
         JSON.stringify(deepInterviewState)
@@ -144,7 +144,7 @@ describe('makeDecision', () => {
     });
 
     it('makeDecision cleans up deep-interview state when token present in lastAssistantMessage', async () => {
-      const deepInterviewState = { active: true, sessionId: 'test-session' };
+      const deepInterviewState = { active: true, sessionId: 'test-session', state: { phase: 'in_progress' } };
       await writeFile(
         join(omtDir, 'deep-interview-active-state-test-session.json'),
         JSON.stringify(deepInterviewState)
@@ -178,7 +178,7 @@ describe('makeDecision', () => {
 
     it('makeDecision preserves active:true marker and emits continuation (no done-token)', async () => {
       // An active interview with no done-token must still be blocked and the marker kept.
-      const deepInterviewState = { active: true, sessionId: 'test-session' };
+      const deepInterviewState = { active: true, sessionId: 'test-session', state: { phase: 'in_progress' } };
       const markerPath = join(omtDir, 'deep-interview-active-state-test-session.json');
       await writeFile(markerPath, JSON.stringify(deepInterviewState));
 
@@ -188,6 +188,50 @@ describe('makeDecision', () => {
 
       const { existsSync } = await import('fs');
       expect(existsSync(markerPath)).toBe(true);
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<deep-interview-continuation>');
+    });
+
+    // -------------------------------------------------------------------------
+    // Pristine deep-interview state: seed-only file (no rich `state` object)
+    // must be INERT — must NOT block session stop.
+    // -------------------------------------------------------------------------
+
+    it('pristine DI seed (no state key, active:true) does NOT block session stop', async () => {
+      // Seed-only file: written by pre-tool-enforcer.sh before the skill prose runs.
+      // If the skill call died (permission denial, ESC, crash) no rich `state` is ever
+      // written — the seed orphans. A pristine state is INERT to all consumers.
+      const markerPath = join(omtDir, 'deep-interview-active-state-test-session.json');
+      await writeFile(markerPath, JSON.stringify({
+        active: true,
+        started_at: '2025-01-01T00:00:00+00:00',
+        last_touched_at: '2025-01-01T00:00:00+00:00',
+        // no `state` key — this is the pristine definition per isPristine('deep-interview')
+      }));
+
+      const context = createContext({ lastAssistantMessage: 'some message without done token' });
+
+      const result = makeDecision(context);
+
+      // A pristine seed must NOT produce a block.
+      expect(result).toEqual({ continue: true });
+    });
+
+    it('non-pristine active DI state (has state key) still blocks session stop', async () => {
+      // A DI state with a rich `state` object is non-pristine — the interview is genuinely
+      // in progress and must continue blocking until the done-token or active:false.
+      const markerPath = join(omtDir, 'deep-interview-active-state-test-session.json');
+      await writeFile(markerPath, JSON.stringify({
+        active: true,
+        started_at: '2025-01-01T00:00:00+00:00',
+        last_touched_at: '2025-01-01T00:00:00+00:00',
+        state: { phase: 'in_progress', answers: {} },
+      }));
+
+      const context = createContext({ lastAssistantMessage: 'some message without done token' });
+
+      const result = makeDecision(context);
+
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('<deep-interview-continuation>');
     });
@@ -621,7 +665,7 @@ describe('makeDecision', () => {
       });
       await writeFile(
         join(omtDir, 'deep-interview-active-state-test-session.json'),
-        JSON.stringify({ active: true, sessionId: 'test-session' })
+        JSON.stringify({ active: true, sessionId: 'test-session', state: { phase: 'in_progress' } })
       );
 
       const result = makeDecision(createContext({ lastAssistantMessage: 'no done token' }));
@@ -641,7 +685,7 @@ describe('makeDecision', () => {
       });
       await writeFile(
         join(omtDir, 'deep-interview-active-state-test-session.json'),
-        JSON.stringify({ active: true, sessionId: 'test-session' })
+        JSON.stringify({ active: true, sessionId: 'test-session', state: { phase: 'in_progress' } })
       );
 
       const result = makeDecision(createContext({ lastAssistantMessage: 'no done token' }));
