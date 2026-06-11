@@ -67,6 +67,7 @@ When the requirement touches code — any requirement whose realization lands in
 - **`oracle` fires conditionally**: judgment — change propagation, structural constraints, cross-cutting concerns — when the impact appears to cross module boundaries or an architectural risk is suspected.
 - Non-code gather (docs, PM, messenger, logs) stays inline — do not route it through `explore` or `oracle`.
 - The output of this stage feeds the **Pre-Context** section at Stage 4 (sub-items: **Affected Areas**, **Premises**, **Blockers & Risks**), and additionally feeds the "Root Cause" and "Evidence" fields for bug-genre tickets.
+- **Bug-genre causal diagnosis**: for bugs, regressions, and unexpected behavior, the dispatch must additionally pursue causal diagnosis — include root-cause identification in the `explore` dispatch, or fire `oracle` regardless of the cross-module condition when the causal mechanism remains unclear after `explore` returns.
 
 When the requirement does not touch code, skip this stage. In that case, the Pre-Context section at Stage 4 is filled from gathered documents or each item is marked `TBD — needs validation via {method}`.
 
