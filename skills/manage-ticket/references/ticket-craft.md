@@ -17,7 +17,7 @@ are omitted rather than left blank.
 | **Problem** | What user-observable or system-observable behavior is wrong or missing. One paragraph. |
 | **Evidence** | Concrete data supporting the problem: logs, error messages, screenshots, metric readings, witness accounts. Direct quotes or paste, not paraphrase. |
 | **Root Cause** | The underlying mechanism that produces the problem. Must be grounded in code, logs, or a reproducible trace — not speculation. If unknown, write `TBD — needs validation via {method}`. |
-| **Pre-Context** | Background facts the reader needs to understand scope and risk before implementation begins. Three sub-items: **Affected Areas** — modules, flows, or domains likely impacted by this requirement; file-level references are permitted when investigation confirmed them. **Premises** — what must currently be true about the system for this requirement to make sense (e.g., "stock decrement happens only at dispense time"). **Blockers & Risks** — upstream dependencies, potential blocking points, and open questions; observations only, never solution proposals. Every sub-item must carry either an evidence citation (investigation result, document, commit) or the marker `TBD — needs validation via {method}`. An unbacked assertion is a rule violation. For non-code tickets, fill from gathered documents or mark TBD. |
+| **Pre-Context** | Background facts on scope and risk the reader needs before implementation begins — three sub-items (**Affected Areas**, **Premises**, **Blockers & Risks**). See Pre-Context Rules below. |
 | **AC** | Acceptance criteria (see Section 2 below). At least one AC per ticket. |
 | **Non-Goals** | What this ticket explicitly does NOT address. Prevents scope creep. |
 | **References** | PRDs, design docs, Slack threads, incident records, code commits/PRs, and logs use markdown links. Related PM tickets are linked through the native relation step, not by duplicating the relationship in the body. PM-issue mentions that must appear in the body without becoming related use a form your PM tool does not auto-link into a relation, with a one-sentence note explaining why they are context rather than related-ticket links. |
@@ -34,7 +34,17 @@ Bug tickets add three fields, placed between Problem and AC:
 
 For bug tickets the ordering is: Problem → Reproduction → Root Cause → Evidence → Pre-Context → AC → Non-Goals → References.
 
-Pre-Context applies to all ticket genres. For non-code tickets fill each sub-item from gathered documents or mark `TBD — needs validation via {method}`.
+### Pre-Context Rules
+
+Pre-Context applies to all ticket genres. For non-code tickets, fill each sub-item from gathered documents or mark `TBD — needs validation via {method}`.
+
+The three sub-items are:
+
+- **Affected Areas** — modules, flows, or domains likely impacted by this requirement; file-level references are permitted when investigation confirmed them.
+- **Premises** — what must currently be true about the system for this requirement to make sense (e.g., "stock decrement happens only at dispense time").
+- **Blockers & Risks** — upstream dependencies, potential blocking points, and open questions; observations only, never solution proposals.
+
+Every sub-item must carry either an evidence citation (investigation result, document, commit) or the marker `TBD — needs validation via {method}`. An unbacked assertion is a rule violation.
 
 ### Parent-Ticket Body Shape
 
