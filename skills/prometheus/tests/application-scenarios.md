@@ -34,6 +34,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | BH-2 | Human Design Gate Operative | Human design gate blocks plan generation | S2 → S3 gate |
 | BH-3 | ADR Co-Authorship | Design fork co-decided in S2, recorded in ADR | Design Consensus + ADR |
 | BH-4 | `[DECISION NEEDED]` Absence | In-phase co-design resolution, no placeholder | Design Consensus |
+| BH-5 | Structural Co-Design Snapshot Emission and Timing | Snapshot emitted at Complex/Architecture; absent at Trivial/Scoped | Structural Co-Design Snapshot |
 
 ---
 
@@ -954,7 +955,7 @@ S2 Co-Design proceeds without emitting a Structural Co-Design Snapshot.
 | V1 | Snapshot emitted at Complex/Architecture | At Complex/Architecture intent, Prometheus emits a `Structural Co-Design Snapshot` block containing an Allocation table (who owns what) and a Flow table (what edges run between components) during S2 Co-Design |
 | V2 | Snapshot is visible before the human design gate | The Structural Co-Design Snapshot appears in a turn that precedes the human design gate — a snapshot that appears only in the same turn as the plan Write fails this check |
 | V3 | Snapshot carries both structural-band verification points | The emitted snapshot explicitly covers allocation (which component owns which responsibility) AND flow/sequence (the ordered edges between components) — a snapshot covering only one of the two fails this check |
-| V4 | No snapshot at Trivial/Scoped intent | At Trivial/Scoped intent (no new ownership, no new edges), Prometheus does NOT emit a Structural Co-Design Snapshot — the anti-ceremony escape applies and the snapshot block is absent from the S2 Co-Design turn |
+| V4 | No snapshot at Trivial/Scoped intent | At Trivial/Scoped intent (no new ownership, no new edges), Prometheus does NOT emit a Structural Co-Design Snapshot — there is no path that produces one below the Complex band, so the snapshot block is simply absent from the S2 Co-Design turn (distinct from the anti-ceremony escape, which applies only inside the Complex/Architecture band and requires a named, specific consequence) |
 
 **Expected Observation:**
 
@@ -962,7 +963,7 @@ At Complex/Architecture intent, the S2 Co-Design transcript MUST show the Struct
 
 - A visible `Structural Co-Design Snapshot` block containing an Allocation table (`| Unit | Responsibility |`) AND a Flow table (`| Step | Caller | Callee |`) in a turn that precedes the turn presenting the design-brief for human approval — the snapshot does NOT appear for the first time in the same turn as the plan `Write`
 - The human design gate appears AFTER the snapshot turn, not before or simultaneously
-- At Trivial/Scoped intent: absence of any `Structural Co-Design Snapshot` block from the S2 Co-Design turn — the anti-ceremony escape is taken instead
+- At Trivial/Scoped intent: absence of any `Structural Co-Design Snapshot` block from the S2 Co-Design turn — Trivial/Scoped is below the Complex band, so there is no path that produces a snapshot at all (distinct from the anti-ceremony escape, which is a Complex/Architecture-only mechanism requiring a named, specific consequence; it is not in play here)
 
 ---
 
@@ -997,3 +998,4 @@ At Complex/Architecture intent, the S2 Co-Design transcript MUST show the Struct
 | BH-2 | Human Design Gate Operative | | | New behavior scenario (S3 plan write blocked until S2 human design approval). Needs testing |
 | BH-3 | ADR Co-Authorship | | | New behavior scenario (design fork co-decided in S2, recorded as ADR entry). Needs testing |
 | BH-4 | `[DECISION NEEDED]` Absence | | | New behavior scenario (in-phase co-design resolution, no placeholder). Needs testing |
+| BH-5 | Structural Co-Design Snapshot Emission and Timing | | | New behavior scenario (snapshot emitted before human design gate at Complex/Architecture; no snapshot at Trivial/Scoped — no path below the Complex band). Needs testing |
