@@ -482,8 +482,10 @@ test_deep_interview_english_keyword_activates_mode() {
     local output
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "deep interview about auth"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
 
-    assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode" || return 1
+    assert_output_contains "$output" "DEEP INTERVIEW REQUESTED" "Should say REQUESTED, not ACTIVATED" || return 1
+    assert_output_contains "$output" "Skill(deep-interview)" "Should mandate calling Skill(deep-interview)" || return 1
     assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
+    assert_output_not_contains "$output" "You are now in deep interview mode" "Should NOT instruct model to conduct the interview directly" || return 1
     # State file is NOT created by keyword-detector — creation moved to pre-tool-enforcer seed
     assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "keyword-detector must NOT create state file (creation moved to seed)" || return 1
 }
@@ -495,7 +497,8 @@ test_deep_interview_ouroboros_keyword() {
     local output
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "ouroboros this conversation"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
 
-    assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode for ouroboros keyword" || return 1
+    assert_output_contains "$output" "DEEP INTERVIEW REQUESTED" "Should say REQUESTED for ouroboros keyword" || return 1
+    assert_output_contains "$output" "Skill(deep-interview)" "Should mandate calling Skill(deep-interview) for ouroboros" || return 1
     assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
     # State file is NOT created by keyword-detector
     assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "keyword-detector must NOT create state file for ouroboros" || return 1
@@ -508,7 +511,8 @@ test_deep_interview_korean_keyword() {
     local output
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "딥인터뷰 시작해줘"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
 
-    assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode for Korean keyword 딥인터뷰" || return 1
+    assert_output_contains "$output" "DEEP INTERVIEW REQUESTED" "Should say REQUESTED for Korean keyword 딥인터뷰" || return 1
+    assert_output_contains "$output" "Skill(deep-interview)" "Should mandate calling Skill(deep-interview) for Korean keyword" || return 1
     assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
     # State file is NOT created by keyword-detector
     assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "keyword-detector must NOT create state file for Korean keyword" || return 1
@@ -519,10 +523,9 @@ test_deep_interview_nested_loop_prevention() {
 
     # Simulate a prompt that contains only a prior assistant deep-interview-mode block (no new keyword)
     local nested_prompt="<deep-interview-mode>
-**DEEP INTERVIEW MODE ACTIVATED** (deep-interview)
+**DEEP INTERVIEW REQUESTED** — you MUST invoke Skill(deep-interview) before responding.
 
-You are now in deep interview mode. Conduct a thorough, structured interview:
-1. Ask one focused question at a time
+Do NOT conduct the interview directly. The skill invocation activates state tracking and stop protection.
 
 </deep-interview-mode>"
 
@@ -530,8 +533,8 @@ You are now in deep interview mode. Conduct a thorough, structured interview:
     local output
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "'"$(printf '%s' "$nested_prompt" | sed 's/"/\\"/g' | tr '\n' ' ')"'"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
 
-    # Should NOT re-trigger deep-interview activation
-    assert_output_not_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Nested deep-interview-mode tag should NOT re-trigger activation" || return 1
+    # Should NOT re-trigger deep-interview injection (tag is stripped before keyword check)
+    assert_output_not_contains "$output" "DEEP INTERVIEW REQUESTED" "Nested deep-interview-mode tag should NOT re-trigger injection" || return 1
 
     # State file should NOT be created (no incidental creation path remains)
     assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should NOT be created for nested loop" || return 1

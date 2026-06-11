@@ -718,23 +718,46 @@ EOF
     return 0
 }
 
-# glob: the GC for-loop glob must only include the 3 managed prefixes
+# glob: the GC for-loop glob must only include exactly the 3 managed prefixes
 test_gc_glob_only_managed_prefixes() {
     # Extract lines between "# GC:" marker and the first "# Check for active" block.
-    # The GC glob must contain only goal-state, prometheus-state, deep-interview-active-state.
-    local gc_section
+    # Then pull the glob prefix names from lines matching the OMT_DIR pattern.
+    local gc_section glob_lines glob_count
     gc_section=$(awk '/^# GC:/{found=1} found && /^# Check for active (prometheus|goal)/{found=0} found{print}' "$SCRIPT_DIR/session-start.sh")
-    if echo "$gc_section" | grep -qE 'state-\*\.json' && ! echo "$gc_section" | grep -qE '^[[:space:]]+".*goal-state|prometheus-state|deep-interview'; then
-        echo "ASSERTION FAILED: session-start.sh GC glob appears malformed"
-        echo "  GC section:"
+
+    # Extract lines that reference "$OMT_DIR"/<prefix>-*.json
+    glob_lines=$(echo "$gc_section" | grep -oE '"?\$\{?OMT_DIR\}?"?/[a-z-]+-\*\.json')
+    glob_count=$(echo "$glob_lines" | grep -c '.' 2>/dev/null || true)
+
+    # Exact-set assertion: must be exactly 3 globs
+    if [ "$glob_count" -ne 3 ]; then
+        echo "ASSERTION FAILED: GC glob must have exactly 3 entries, found $glob_count"
+        echo "  Glob lines:"
+        echo "$glob_lines"
+        echo "  Full GC section:"
         echo "$gc_section" | head -20
         return 1
     fi
-    # Verify the deprecated retired-loop state prefix is absent from the GC glob
-    if echo "$gc_section" | grep -q 'retired-loop-state'; then
-        echo "ASSERTION FAILED: session-start.sh GC glob must NOT include retired-loop-state"
+
+    # Each expected prefix must appear exactly once
+    local prefix
+    for prefix in goal-state prometheus-state deep-interview-active-state; do
+        local count
+        count=$(echo "$glob_lines" | grep -c "$prefix" 2>/dev/null || true)
+        if [ "$count" -ne 1 ]; then
+            echo "ASSERTION FAILED: GC glob must contain '$prefix' exactly once, found $count"
+            echo "  Glob lines: $glob_lines"
+            return 1
+        fi
+    done
+
+    # Deny-list: the historically removed ralph-state prefix (git af4dff6) must be absent
+    if echo "$gc_section" | grep -q 'ralph-state'; then
+        echo "ASSERTION FAILED: session-start.sh GC glob must NOT include ralph-state (retired)"
+        grep -n 'ralph-state' "$SCRIPT_DIR/session-start.sh" | head -5
         return 1
     fi
+
     return 0
 }
 
@@ -780,11 +803,11 @@ EOF
 
 # grep-0: session-start.sh must contain zero retired-loop restore references
 test_session_start_no_retired_loop_restore() {
-    # The retired loop state file prefix must not appear in any restore block.
-    # This verifies the loop's session-restore machinery has been fully removed.
-    if grep -qiE 'retired-loop-state|LOOP RESTORED' "$SCRIPT_DIR/session-start.sh" 2>/dev/null; then
-        echo "ASSERTION FAILED: session-start.sh must have 0 retired-loop restore references"
-        grep -niE 'retired-loop-state|LOOP RESTORED' "$SCRIPT_DIR/session-start.sh" | head -10
+    # Guard against re-introducing the ralph-loop restore block (git af4dff6 lines 99-115).
+    # Real historical tokens: ralph-state (file prefix) and [RALPH LOOP RESTORED] (restore banner).
+    if grep -qiE 'ralph-state|LOOP RESTORED' "$SCRIPT_DIR/session-start.sh" 2>/dev/null; then
+        echo "ASSERTION FAILED: session-start.sh must have 0 ralph-loop restore references"
+        grep -niE 'ralph-state|LOOP RESTORED' "$SCRIPT_DIR/session-start.sh" | head -10
         return 1
     fi
     return 0

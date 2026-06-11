@@ -168,10 +168,11 @@ test_omt_dir_fallback_computed_from_git_repo() {
 
 # grep-0: stop-notify.sh must contain zero retired-loop gating references
 test_stop_notify_no_retired_loop_gating() {
-    # The retired loop state check and its file prefix must be absent from the hook.
-    if grep -qiE 'retired-loop-state|LOOP_ACTIVE' "$SCRIPT_DIR/stop-notify.sh" 2>/dev/null; then
-        echo "ASSERTION FAILED: stop-notify.sh must have 0 retired-loop gating references"
-        grep -niE 'retired-loop-state|LOOP_ACTIVE' "$SCRIPT_DIR/stop-notify.sh" | head -10
+    # The retired ralph-loop gate used RALPH_STATE_FILE and RALPH_ACTIVE (git af4dff6).
+    # Guard against exact historical tokens (case-insensitive) so re-adding that code fails.
+    if grep -qiE 'ralph[-_]?state|ralph[-_]?active' "$SCRIPT_DIR/stop-notify.sh" 2>/dev/null; then
+        echo "ASSERTION FAILED: stop-notify.sh must have 0 ralph-loop gating references"
+        grep -niE 'ralph[-_]?state|ralph[-_]?active' "$SCRIPT_DIR/stop-notify.sh" | head -10
         return 1
     fi
     return 0

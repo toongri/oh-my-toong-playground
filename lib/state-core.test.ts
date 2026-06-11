@@ -25,6 +25,7 @@ import {
   adopt,
   writeFileNoCreate,
   isPristine,
+  restampAfterAdopt,
 } from './state-core.ts';
 
 // ---------------------------------------------------------------------------
@@ -657,6 +658,188 @@ describe('adopt', () => {
     const target = readState(omtDir, 'deep-interview-active-state-B.json') as Record<string, unknown>;
     const stateObj = target['state'] as Record<string, unknown> | undefined;
     expect(stateObj?.['initial_idea']).toBe('diving skills');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// r5 — restampAfterAdopt helper uses writeFileNoCreate (no-create semantics)
+// ---------------------------------------------------------------------------
+
+describe('restampAfterAdopt — writeFileNoCreate 의미론', () => {
+  let omtDir: string;
+
+  beforeEach(() => {
+    omtDir = mkdtempSync(join(tmpdir(), 'state-core-restamp-'));
+  });
+
+  afterEach(() => {
+    rmSync(omtDir, { recursive: true, force: true });
+  });
+
+  test('존재하는 파일에 last_touched_at을 갱신한다', () => {
+    const p = join(omtDir, 'goal-state-X.json');
+    const old = '2020-01-01T00:00:00+00:00';
+    writeFileSync(p, JSON.stringify({ active: true, last_touched_at: old, outcome: 'y' }, null, 2));
+    restampAfterAdopt(p);
+    const updated = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>;
+    expect(updated['outcome']).toBe('y');
+    expect(typeof updated['last_touched_at']).toBe('string');
+    expect(updated['last_touched_at'] as string > old).toBe(true);
+  });
+
+  test('파일이 없으면 파일을 생성하지 않는다 (ENOENT를 던지며 파일 미생성)', () => {
+    const p = join(omtDir, 'nonexistent-state.json');
+    expect(() => restampAfterAdopt(p)).toThrow();
+    expect(existsSync(p)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listOthers — pristine 시드는 후보에서 제외된다 (f9f3242 원칙 적용)
+// ---------------------------------------------------------------------------
+
+describe('listOthers — pristine 시드 제외', () => {
+  let omtDir: string;
+  const origOmtDir = process.env.OMT_DIR;
+  const origSid = process.env.OMT_SESSION_ID;
+
+  beforeEach(() => {
+    omtDir = mkdtempSync(join(tmpdir(), 'state-core-lo-pristine-'));
+    process.env.OMT_DIR = omtDir;
+    process.env.OMT_SESSION_ID = 'current';
+  });
+
+  afterEach(() => {
+    if (origOmtDir === undefined) delete process.env.OMT_DIR;
+    else process.env.OMT_DIR = origOmtDir;
+    if (origSid === undefined) delete process.env.OMT_SESSION_ID;
+    else process.env.OMT_SESSION_ID = origSid;
+    rmSync(omtDir, { recursive: true, force: true });
+  });
+
+  test('goal pristine 시드(outcome 빈값)는 listOthers 결과에서 제외된다', () => {
+    // pristine goal seed — outcome='', phase='planning', iteration=0
+    writeState(omtDir, 'goal-state-pristine.json', {
+      active: true,
+      outcome: '',
+      phase: 'planning',
+      iteration: 0,
+      started_at: isoSecondsAgo(60),
+      last_touched_at: isoSecondsAgo(30),
+    });
+    // rich goal state — should appear
+    writeState(omtDir, 'goal-state-rich.json', {
+      active: true,
+      outcome: 'ship the feature',
+      phase: 'pursuing',
+      iteration: 2,
+      started_at: isoSecondsAgo(300),
+      last_touched_at: isoSecondsAgo(60),
+    });
+    const results = listOthers('goal');
+    expect(results.find((r) => r.sid === 'pristine')).toBeUndefined();
+    expect(results.find((r) => r.sid === 'rich')).toBeDefined();
+  });
+
+  test('deep-interview pristine 시드(state 키 없음)는 listOthers 결과에서 제외된다', () => {
+    // pristine DI seed — no `state` key
+    writeState(omtDir, 'deep-interview-active-state-pristine.json', {
+      active: true,
+      current_phase: 'deep-interview',
+      started_at: isoSecondsAgo(60),
+      last_touched_at: isoSecondsAgo(30),
+    });
+    // rich DI state — should appear
+    writeState(omtDir, 'deep-interview-active-state-rich.json', {
+      active: true,
+      current_phase: 'deep-interview',
+      started_at: isoSecondsAgo(300),
+      last_touched_at: isoSecondsAgo(60),
+      state: { initial_idea: 'deep idea', interview_id: 'uid-99' },
+    });
+    const results = listOthers('deep-interview');
+    expect(results.find((r) => r.sid === 'pristine')).toBeUndefined();
+    expect(results.find((r) => r.sid === 'rich')).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isPristine — prometheus resume_summary 비어있지 않으면 non-pristine
+// ---------------------------------------------------------------------------
+
+describe('isPristine — prometheus resume_summary 조건', () => {
+  test('resume_summary가 있으면 S0이라도 non-pristine이다', () => {
+    expect(isPristine('prometheus', { phase: 'S0', plan_path: '', resume_summary: '작업 중' })).toBe(false);
+  });
+
+  test('resume_summary가 없으면(undefined) S0+plan_path 빈값은 pristine이다', () => {
+    expect(isPristine('prometheus', { phase: 'S0', plan_path: '' })).toBe(true);
+  });
+
+  test('resume_summary가 빈 문자열이면 S0+plan_path 빈값은 pristine이다', () => {
+    expect(isPristine('prometheus', { phase: 'S0', plan_path: '', resume_summary: '' })).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// adopt — pristine 소스는 r8으로 거부된다
+// ---------------------------------------------------------------------------
+
+describe('adopt — pristine 소스 거부 (r8)', () => {
+  let omtDir: string;
+  const origOmtDir = process.env.OMT_DIR;
+  const origSid = process.env.OMT_SESSION_ID;
+
+  beforeEach(() => {
+    omtDir = mkdtempSync(join(tmpdir(), 'state-core-adopt-r8-'));
+    process.env.OMT_DIR = omtDir;
+    process.env.OMT_SESSION_ID = 'B';
+  });
+
+  afterEach(() => {
+    if (origOmtDir === undefined) delete process.env.OMT_DIR;
+    else process.env.OMT_DIR = origOmtDir;
+    if (origSid === undefined) delete process.env.OMT_SESSION_ID;
+    else process.env.OMT_SESSION_ID = origSid;
+    rmSync(omtDir, { recursive: true, force: true });
+  });
+
+  test('(r8) pristine goal 소스 adopt 시 throw하고 소스 파일은 변경되지 않는다', () => {
+    writeState(omtDir, 'goal-state-A.json', {
+      active: true,
+      outcome: '',
+      phase: 'planning',
+      iteration: 0,
+      started_at: isoSecondsAgo(30),
+      last_touched_at: isoSecondsAgo(10),
+    });
+    const srcBefore = readFileSync(join(omtDir, 'goal-state-A.json'), 'utf8');
+    expect(() => adopt('goal', 'A')).toThrow();
+    expect(readFileSync(join(omtDir, 'goal-state-A.json'), 'utf8')).toBe(srcBefore);
+  });
+
+  test('(r8) rich goal 소스는 정상 adopt된다', () => {
+    writeState(omtDir, 'goal-state-A.json', {
+      active: true,
+      outcome: 'ship it',
+      phase: 'pursuing',
+      iteration: 2,
+      started_at: isoSecondsAgo(300),
+      last_touched_at: isoSecondsAgo(60),
+    });
+    // pristine current B so adopt-over is allowed
+    writeState(omtDir, 'goal-state-B.json', {
+      active: true,
+      outcome: '',
+      phase: 'planning',
+      iteration: 0,
+      started_at: isoSecondsAgo(10),
+      last_touched_at: isoSecondsAgo(5),
+    });
+    expect(() => adopt('goal', 'A')).not.toThrow();
+    expect(existsSync(join(omtDir, 'goal-state-A.json'))).toBe(false);
+    const target = JSON.parse(readFileSync(join(omtDir, 'goal-state-B.json'), 'utf8')) as Record<string, unknown>;
+    expect(target['outcome']).toBe('ship it');
   });
 });
 
