@@ -16,7 +16,7 @@ The pipeline runs in five sequential stages:
 ```
 intake
   → gather + cross-link   (the heart — READ references/gather-crosslink.md at this stage)
-    → investigate         (code root-cause/exploration DELEGATED to explore / oracle)
+    → investigate         (impact & premises DELEGATED to explore / oracle when requirement touches code)
       → record            (best-practice body — READ references/ticket-craft.md at this stage)
         → slice           (Model A INVEST — READ references/ticket-craft.md at this stage)
           → write tail    (autonomous post-hoc write to PM tool)
@@ -59,15 +59,16 @@ Read `references/gather-crosslink.md` now (using the Read tool with path `refere
 
 ---
 
-## Stage 3: Investigate (Code Root-Cause)
+## Stage 3: Investigate (Impact & Premises)
 
-When the requirement or ticket involves a code-level issue (bug, regression, unexpected behavior):
+When the requirement touches code — any requirement whose realization lands in the codebase, not only bugs or regressions:
 
-- Delegate code exploration and root-cause analysis to `explore` (codebase search) and/or `oracle` (architecture/feasibility analysis).
-- Non-code gather (docs, PM, messenger, logs) stays inline — do not route it through `explore`.
-- The output of this stage feeds the "Root Cause" and "Evidence" fields at the record stage.
+- **`explore` fires by default**: facts — where in the codebase the requirement lands, current behavior of the relevant flow, related recent commits and open PRs touching the area. Investigation-confirmed file-level references are permissible observations; they record what was found, not what should be built.
+- **`oracle` fires conditionally**: judgment — change propagation, structural constraints, cross-cutting concerns — when the impact appears to cross module boundaries or an architectural risk is suspected.
+- Non-code gather (docs, PM, messenger, logs) stays inline — do not route it through `explore` or `oracle`.
+- The output of this stage feeds the **Pre-Context** section at Stage 4 (sub-items: **Affected Areas**, **Premises**, **Blockers & Risks**), and additionally feeds the "Root Cause" and "Evidence" fields for bug-genre tickets.
 
-When the requirement is purely product/feature-level (no code investigation needed), skip this stage.
+When the requirement does not touch code, skip this stage. In that case, the Pre-Context section at Stage 4 is filled from gathered documents or each item is marked `TBD — needs validation via {method}`.
 
 ---
 
@@ -138,5 +139,5 @@ Review is post-hoc: the ticket is written first; the caller can review and reque
 
 ## Reference Files
 
-- `references/gather-crosslink.md`: complete gather bound, curation rules, cross-link procedure, source-unreachable handling, code-RCA delegation, and cross-link annotation format. Read at Stage 2.
+- `references/gather-crosslink.md`: complete gather bound, curation rules, cross-link procedure, source-unreachable handling, impact & premises investigation delegation (§7), and cross-link annotation format. Read at Stage 2.
 - `references/ticket-craft.md`: best-practice body shape, observable-AC rubric (weasel-word prohibition, Action/Expected/Verification), RCA Bug-Report shape, anti-fluff rules, Model A INVEST slice rubric with per-child stage-check and settled-child handoff. Read at Stages 4 and 5.

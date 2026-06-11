@@ -129,16 +129,16 @@ Format each entry using the appropriate form:
 
 ---
 
-## 7. Code-RCA Delegation
+## 7. Impact & Premises Investigation Delegation
 
-When the ticket involves a code-level issue (bug, regression, unexpected behavior):
+When the requirement touches code — any requirement whose realization lands in the codebase, not only bugs or regressions:
 
-- Delegate code exploration and root-cause analysis to `explore` (codebase search, file/symbol location) and/or `oracle` (architecture and feasibility analysis).
-- The `explore` agent is scoped to code and the filesystem/VCS. It does not reach the PM tool, messenger, collaboration-docs, or logs.
+- **`explore` fires by default**: dispatch for facts — where in the codebase the requirement lands, current behavior of the relevant flow, related recent commits and open PRs touching the area. The `explore` agent is scoped to code and the filesystem/VCS. It does not reach the PM tool, messenger, collaboration-docs, or logs.
+- **`oracle` fires conditionally**: dispatch for judgment — change propagation, structural constraints, cross-cutting concerns — when the impact appears to cross module boundaries or an architectural risk is suspected.
 - Non-code gather — collaboration-docs, PM, messenger, logs — stays inline in this skill. Do not route non-code gather through `explore` or any other subagent.
-- `explore` and `oracle` return their findings to the caller; feed those findings into the record stage (Stage 4) as the Root Cause and Evidence content.
+- `explore` and `oracle` return their findings to the caller; feed those findings into the record stage (Stage 4) as the **Pre-Context** section content (sub-items: **Affected Areas**, **Premises**, **Blockers & Risks**), and additionally as the Root Cause and Evidence content for bug-genre tickets.
 
-When the requirement is purely product/feature-level with no code investigation needed, skip delegation and proceed directly to curation.
+When the requirement does not touch code, skip delegation and proceed directly to curation.
 
 ---
 
