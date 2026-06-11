@@ -71,13 +71,21 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init \
-  --initial-idea "<prompt-safe initial-context summary or user input>" \
+  --initial-idea "$(cat <<'EOF'
+<prompt-safe initial-context summary or user input>
+EOF
+)" \
   --interview-id "<uuid>" \
   --type "greenfield|brownfield" \
   --current-phase "deep-interview" \
   --threshold <resolvedThreshold>
-  # brownfield only: append --codebase-context "<explore summary>"
+  # brownfield only: append --codebase-context "$(cat <<'EOF'
+  # <explore summary>
+  # EOF
+  # )"
 ```
+
+Use `"$(cat <<'EOF' ... EOF)"` for `--initial-idea` and `--codebase-context` so apostrophes and `$`/backtick sequences in user text are passed verbatim without shell expansion.
 
 The `init` subcommand performs a strict overlay of the rich state shape into the seed file that the PreToolUse hook already created. The full shape written to state is:
 
@@ -217,8 +225,12 @@ Store the ontology snapshot (entities + stability_ratio + matching_reasoning) by
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
-  --append-ontology-snapshot '{"entities":[...],"stability_ratio":<ratio>,"matching_reasoning":"<text>"}'
+  --append-ontology-snapshot-stdin <<'EOF'
+{"entities":[...],"stability_ratio":<ratio>,"matching_reasoning":"<text>"}
+EOF
 ```
+
+Use `--append-ontology-snapshot-stdin` with a quoted-delimiter heredoc (`<<'EOF'`) so entity names containing apostrophes or double quotes are not mangled by shell quoting.
 
 ### Step 2d: Report Progress
 
@@ -248,12 +260,27 @@ Update interview state with the new round and scores by invoking the CLI twice â
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
-  --append-round '{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>},"ambiguity":<ambiguity>}'
+  --append-round-stdin <<'EOF'
+{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>},"ambiguity":<ambiguity>}
+EOF
 
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --current-phase "deep-interview" \
   --current-ambiguity <ambiguity>
 ```
+
+Use `--append-round-stdin` with a quoted-delimiter heredoc (`<<'EOF'`) so question and answer text containing apostrophes or double quotes is passed verbatim without shell-quoting hazards. The CLI reads stdin, validates JSON, and exits 1 loudly on invalid input.
+
+For brownfield interviews, include the `context` score in the `scores` object:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-round-stdin <<'EOF'
+{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>,"context":<ctx>},"ambiguity":<ambiguity>}
+EOF
+```
+
+`context` carries 15% of the ambiguity formula for brownfield (`context Ã— 0.15`) and is required for accurate resume after `adopt`.
 
 ### Step 2f: Check Soft Limits
 

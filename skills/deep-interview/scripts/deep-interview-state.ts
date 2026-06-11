@@ -15,8 +15,12 @@
  *          Strict overlay of the rich shape into the EXISTING seed file.
  *   update [--current-phase <phase>] [--current-ambiguity <n>]
  *          [--append-round '<json>'] [--append-ontology-snapshot '<json>']
+ *          [--append-round-stdin] [--append-ontology-snapshot-stdin]
  *          [--challenge-mode <name>]
  *          Strict-overlay merge refreshing last_touched_at.
+ *          Stdin flags (--append-round-stdin / --append-ontology-snapshot-stdin) read
+ *          the JSON payload from stdin, avoiding shell-quoting hazards with free text
+ *          (apostrophes, double quotes). Use with a quoted-delimiter heredoc in SKILL.md.
  *   get    Print the state JSON.
  *
  * No sessionId field is ever written (ADR-7, RC3 root-cause fix: sid is
@@ -289,11 +293,33 @@ function main(): void {
     const ambiguity = str(args['current-ambiguity']);
     const appendRoundRaw = str(args['append-round']);
     const appendSnapshotRaw = str(args['append-ontology-snapshot']);
+    const appendRoundStdin = args['append-round-stdin'] === true;
+    const appendSnapshotStdin = args['append-ontology-snapshot-stdin'] === true;
     const challengeMode = str(args['challenge-mode']);
+
+    // Read stdin once if any stdin flag is present (avoids double-read)
+    let stdinText: string | undefined;
+    if (appendRoundStdin || appendSnapshotStdin) {
+      try {
+        stdinText = readFileSync(0, 'utf8').trim();
+      } catch (e) {
+        process.stderr.write(`deep-interview-state update: failed to read stdin: ${String(e)}\n`);
+        process.exit(1);
+      }
+    }
 
     // Validate JSON flags before any write
     let appendRound: unknown;
-    if (appendRoundRaw !== undefined) {
+    if (appendRoundStdin) {
+      try {
+        appendRound = JSON.parse(stdinText!);
+      } catch {
+        process.stderr.write(
+          `deep-interview-state update: --append-round-stdin: invalid JSON from stdin\n`
+        );
+        process.exit(1);
+      }
+    } else if (appendRoundRaw !== undefined) {
       try {
         appendRound = JSON.parse(appendRoundRaw);
       } catch {
@@ -304,7 +330,16 @@ function main(): void {
       }
     }
     let appendSnapshot: unknown;
-    if (appendSnapshotRaw !== undefined) {
+    if (appendSnapshotStdin) {
+      try {
+        appendSnapshot = JSON.parse(stdinText!);
+      } catch {
+        process.stderr.write(
+          `deep-interview-state update: --append-ontology-snapshot-stdin: invalid JSON from stdin\n`
+        );
+        process.exit(1);
+      }
+    } else if (appendSnapshotRaw !== undefined) {
       try {
         appendSnapshot = JSON.parse(appendSnapshotRaw);
       } catch {
@@ -357,6 +392,8 @@ function main(): void {
         '         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n' +
         "  update [--current-phase <phase>] [--current-ambiguity <n>]\n" +
         "         [--append-round '<json>'] [--append-ontology-snapshot '<json>']\n" +
+        "         [--append-round-stdin]            (recommended for free-text: read JSON from stdin)\n" +
+        "         [--append-ontology-snapshot-stdin] (recommended for free-text: read JSON from stdin)\n" +
         '         [--challenge-mode <name>]\n' +
         '  get\n' +
         '  list-others\n' +
