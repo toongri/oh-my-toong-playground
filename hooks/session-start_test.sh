@@ -727,7 +727,7 @@ test_gc_glob_only_managed_prefixes() {
 
     # Extract lines that reference "$OMT_DIR"/<prefix>-*.json
     glob_lines=$(echo "$gc_section" | grep -oE '"?\$\{?OMT_DIR\}?"?/[a-z-]+-\*\.json')
-    glob_count=$(echo "$glob_lines" | grep -c '.' 2>/dev/null || echo 0)
+    glob_count=$(echo "$glob_lines" | grep -c '.' 2>/dev/null || true)
 
     # Exact-set assertion: must be exactly 3 globs
     if [ "$glob_count" -ne 3 ]; then
@@ -743,7 +743,7 @@ test_gc_glob_only_managed_prefixes() {
     local prefix
     for prefix in goal-state prometheus-state deep-interview-active-state; do
         local count
-        count=$(echo "$glob_lines" | grep -c "$prefix" 2>/dev/null || echo 0)
+        count=$(echo "$glob_lines" | grep -c "$prefix" 2>/dev/null || true)
         if [ "$count" -ne 1 ]; then
             echo "ASSERTION FAILED: GC glob must contain '$prefix' exactly once, found $count"
             echo "  Glob lines: $glob_lines"
