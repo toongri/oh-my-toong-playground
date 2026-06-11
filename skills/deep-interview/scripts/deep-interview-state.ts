@@ -11,9 +11,11 @@
  *
  * Subcommands:
  *   init   [--initial-idea <text>] [--interview-id <id>] [--type greenfield|brownfield]
- *          [--current-phase <phase>] [--threshold <n>]
+ *          [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]
  *          Strict overlay of the rich shape into the EXISTING seed file.
  *   update [--current-phase <phase>] [--current-ambiguity <n>]
+ *          [--append-round '<json>'] [--append-ontology-snapshot '<json>']
+ *          [--challenge-mode <name>]
  *          Strict-overlay merge refreshing last_touched_at.
  *   get    Print the state JSON.
  *
@@ -21,11 +23,12 @@
  * derived from the FILENAME only, never from file content).
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { getOmtDir } from '@lib/omt-dir';
 import {
   resolveSessionIdOrThrow,
   mergeWithHeartbeat,
+  writeFileNoCreate,
   STATE_PREFIX,
   listOthers,
   adopt,
@@ -96,6 +99,7 @@ export function initDeepInterviewState(
     type?: 'greenfield' | 'brownfield';
     current_phase?: string;
     threshold?: number;
+    codebase_context?: string;
   }
 ): void {
   const path = resolveStatePath(sessionId);
@@ -122,7 +126,7 @@ export function initDeepInterviewState(
     rounds: priorState.rounds ?? [],
     current_ambiguity: priorState.current_ambiguity ?? 1.0,
     threshold: payload.threshold ?? priorState.threshold,
-    codebase_context: priorState.codebase_context ?? null,
+    codebase_context: payload.codebase_context ?? priorState.codebase_context ?? null,
     challenge_modes_used: priorState.challenge_modes_used ?? [],
     ontology_snapshots: priorState.ontology_snapshots ?? [],
   };
@@ -133,7 +137,7 @@ export function initDeepInterviewState(
   };
 
   const next = mergeWithHeartbeat(prior, overlay as Record<string, unknown>);
-  writeFileSync(path, JSON.stringify(next, null, 2), 'utf8');
+  writeFileNoCreate(path, JSON.stringify(next, null, 2));
 }
 
 /**
@@ -142,12 +146,19 @@ export function initDeepInterviewState(
  *
  * current_ambiguity is nested under state (SKILL.md:93 shape); current_phase
  * lives at the top level alongside active/started_at/last_touched_at.
+ *
+ * append_round: appended to state.rounds array (one round object per call).
+ * append_ontology_snapshot: appended to state.ontology_snapshots array.
+ * challenge_mode: appended to state.challenge_modes_used (deduplicated).
  */
 export function updateDeepInterviewState(
   sessionId: string,
   partial: {
     current_phase?: string;
     current_ambiguity?: number;
+    append_round?: unknown;
+    append_ontology_snapshot?: unknown;
+    challenge_mode?: string;
   }
 ): void {
   const path = resolveStatePath(sessionId);
@@ -164,17 +175,49 @@ export function updateDeepInterviewState(
   if (partial.current_phase !== undefined) {
     overlay['current_phase'] = partial.current_phase;
   }
-  if (partial.current_ambiguity !== undefined) {
+
+  const needsStateOverlay =
+    partial.current_ambiguity !== undefined ||
+    partial.append_round !== undefined ||
+    partial.append_ontology_snapshot !== undefined ||
+    partial.challenge_mode !== undefined;
+
+  if (needsStateOverlay) {
     // current_ambiguity lives under state per the SKILL.md rich shape
     const priorState =
       typeof prior['state'] === 'object' && prior['state'] !== null && !Array.isArray(prior['state'])
         ? (prior['state'] as Record<string, unknown>)
         : {};
-    overlay['state'] = { ...priorState, current_ambiguity: partial.current_ambiguity };
+
+    const updatedState: Record<string, unknown> = { ...priorState };
+
+    if (partial.current_ambiguity !== undefined) {
+      updatedState['current_ambiguity'] = partial.current_ambiguity;
+    }
+    if (partial.append_round !== undefined) {
+      const existing = Array.isArray(priorState['rounds']) ? (priorState['rounds'] as unknown[]) : [];
+      updatedState['rounds'] = [...existing, partial.append_round];
+    }
+    if (partial.append_ontology_snapshot !== undefined) {
+      const existing = Array.isArray(priorState['ontology_snapshots'])
+        ? (priorState['ontology_snapshots'] as unknown[])
+        : [];
+      updatedState['ontology_snapshots'] = [...existing, partial.append_ontology_snapshot];
+    }
+    if (partial.challenge_mode !== undefined) {
+      const existing = Array.isArray(priorState['challenge_modes_used'])
+        ? (priorState['challenge_modes_used'] as string[])
+        : [];
+      if (!existing.includes(partial.challenge_mode)) {
+        updatedState['challenge_modes_used'] = [...existing, partial.challenge_mode];
+      }
+    }
+
+    overlay['state'] = updatedState;
   }
 
   const next = mergeWithHeartbeat(prior, overlay);
-  writeFileSync(path, JSON.stringify(next, null, 2), 'utf8');
+  writeFileNoCreate(path, JSON.stringify(next, null, 2));
 }
 
 /**
@@ -236,6 +279,7 @@ function main(): void {
         type: str(args['type']) as 'greenfield' | 'brownfield' | undefined,
         current_phase: str(args['current-phase']),
         threshold: threshold !== undefined ? Number(threshold) : undefined,
+        codebase_context: str(args['codebase-context']),
       });
     } catch (e) {
       process.stderr.write(`deep-interview-state init: ${String(e)}\n`);
@@ -243,10 +287,41 @@ function main(): void {
     }
   } else if (subcommand === 'update') {
     const ambiguity = str(args['current-ambiguity']);
+    const appendRoundRaw = str(args['append-round']);
+    const appendSnapshotRaw = str(args['append-ontology-snapshot']);
+    const challengeMode = str(args['challenge-mode']);
+
+    // Validate JSON flags before any write
+    let appendRound: unknown;
+    if (appendRoundRaw !== undefined) {
+      try {
+        appendRound = JSON.parse(appendRoundRaw);
+      } catch {
+        process.stderr.write(
+          `deep-interview-state update: --append-round: invalid JSON: ${appendRoundRaw}\n`
+        );
+        process.exit(1);
+      }
+    }
+    let appendSnapshot: unknown;
+    if (appendSnapshotRaw !== undefined) {
+      try {
+        appendSnapshot = JSON.parse(appendSnapshotRaw);
+      } catch {
+        process.stderr.write(
+          `deep-interview-state update: --append-ontology-snapshot: invalid JSON: ${appendSnapshotRaw}\n`
+        );
+        process.exit(1);
+      }
+    }
+
     try {
       updateDeepInterviewState(sessionId, {
         current_phase: str(args['current-phase']),
         current_ambiguity: ambiguity !== undefined ? Number(ambiguity) : undefined,
+        append_round: appendRound,
+        append_ontology_snapshot: appendSnapshot,
+        challenge_mode: challengeMode,
       });
     } catch (e) {
       process.stderr.write(`deep-interview-state update: ${String(e)}\n`);
@@ -279,8 +354,10 @@ function main(): void {
     process.stderr.write(
       'Usage: deep-interview-state.ts <init|update|get|list-others|adopt> [options]\n' +
         '  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n' +
-        '         [--current-phase <phase>] [--threshold <n>]\n' +
-        '  update --current-phase <phase> [--current-ambiguity <n>]\n' +
+        '         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n' +
+        "  update [--current-phase <phase>] [--current-ambiguity <n>]\n" +
+        "         [--append-round '<json>'] [--append-ontology-snapshot '<json>']\n" +
+        '         [--challenge-mode <name>]\n' +
         '  get\n' +
         '  list-others\n' +
         '  adopt --src <sid>\n'
