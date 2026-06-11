@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -340,5 +340,69 @@ describe('adoption: list-others + adopt (prometheus CLI)', () => {
       runPromCli('set --phase S2', { OMT_SESSION_ID: 'A' })
     ).toThrow();
     expect(existsSync(`${tmpDir}/prometheus-state-A.json`)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (a) get subcommand
+// ---------------------------------------------------------------------------
+
+describe('get subcommand', () => {
+  // RED: get with present state file prints JSON to stdout, exits 0
+  test('get: prints state JSON to stdout when state file exists', () => {
+    writePristinePromState('getSession');
+    const out = runPromCli('get', { OMT_SESSION_ID: 'getSession' });
+    const parsed = JSON.parse(out);
+    expect(parsed).not.toBeNull();
+    expect(parsed.phase).toBe('S0');
+    expect(parsed.active).toBe(true);
+  });
+
+  // RED: get with absent state file exits non-zero with a clear message
+  test('get: exits non-zero with error message when state file is absent', () => {
+    // No file written for 'noStateSession'
+    let errorOutput = '';
+    try {
+      execSync(`bun ${promScript} get 2>&1`, {
+        encoding: 'utf8',
+        env: { ...process.env, OMT_SESSION_ID: 'noStateSession', OMT_DIR: tmpDir },
+        shell: '/bin/sh',
+      });
+      // Should have thrown — fail if it reaches here
+      expect('should have thrown').toBe('did not throw');
+    } catch (err) {
+      errorOutput = (err as { stdout?: string; stderr?: string; message?: string }).stdout
+        ?? (err as { message?: string }).message
+        ?? '';
+    }
+    expect(errorOutput).toMatch(/noStateSession|absent|not found|no state/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (c) no-create write: writeFileNoCreate replaces existsSync-then-write
+// ---------------------------------------------------------------------------
+
+describe('no-create write (TOCTOU)', () => {
+  // RED: setPrometheusState uses writeFileNoCreate — file deleted between
+  // the old existsSync check and write must not resurrect the file.
+  // Because we replace existsSync-then-write with writeFileNoCreate (single
+  // open-with-r+-flag), the only way to verify the syscall-level contract is to
+  // confirm that setPrometheusState still throws on absent file (the property
+  // that writeFileNoCreate enforces). The existsSync path could theoretically
+  // be fooled by a TOCTOU race; writeFileNoCreate cannot.
+  // This test verifies the observable contract (throw on absent) is preserved
+  // after the internal change.
+  test('setPrometheusState throws ENOENT-style when file is absent (writeFileNoCreate contract)', () => {
+    // Write then delete to simulate the "file vanished after existsSync"
+    const path = resolveStatePath('toctouSession');
+    writeFileSync(path, JSON.stringify({ active: true, phase: 'S0', plan_path: '', resume_summary: '', started_at: '2024-01-01T00:00:00', last_touched_at: '2024-01-01T00:00:00' }), 'utf8');
+    // Verify it works when present
+    setPrometheusState('toctouSession', { phase: 'S1' });
+    expect(existsSync(path)).toBe(true);
+    // Now delete it and confirm the write is refused
+    unlinkSync(path);
+    expect(() => setPrometheusState('toctouSession', { phase: 'S2' })).toThrow();
+    expect(existsSync(path)).toBe(false);
   });
 });
