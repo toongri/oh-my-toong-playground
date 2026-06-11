@@ -685,7 +685,7 @@ This contract applies to EVERY plan. The contract lives here — not in a refere
 | **Execution Strategy** | Wave visualization, Dependency Matrix, Critical Path. Target 5-8 tasks/wave. Circular dependencies forbidden. **Final Verification Wave mandatory for Scoped+ intent.** |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Zero Human Intervention — agent-executed with evidence to `$OMT_DIR/evidence/{plan-name}/` |
 | **Success Criteria** | Binary pass/fail end state. Verification commands + final checklist |
-| **ADR** | Architecture Decision Record — MADR 7-field (Context / Decision Drivers / Considered Options / Decision / Rationale / Consequences / Follow-ups). Scoped+ default; Trivial exempt. |
+| **ADR** | Co-authored decision log of titled `D-N` items — contested tier full 7-field MADR, solo tier lightweight fields + ownership/edges (see `### ADR`). Scoped+ default; Trivial exempt. |
 
 Canonical required section headings (validator single source):
 ```

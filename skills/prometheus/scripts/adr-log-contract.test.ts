@@ -97,3 +97,20 @@ describe('presence assertions — new ADR-log tokens', () => {
     expect(skillContent).toContain('every component the change creates or modifies');
   });
 });
+
+// ---------------------------------------------------------------------------
+// plan-template.md worked example — D-N two-tier conformance
+// Guards that the lookup-only ADR worked example uses the D-N item structure
+// and does not regress to the pre-redesign single unnumbered MADR block.
+// ---------------------------------------------------------------------------
+
+const templatePath = join(import.meta.dir, '..', 'plan-template.md');
+const templateContent = readFileSync(templatePath, 'utf8');
+
+describe('plan-template ADR example — D-N structure', () => {
+  it('T1: worked example contains a D-1 contested-tier heading', () => {
+    // Unique in plan-template.md: only the ADR example section uses D-N item headings.
+    // A regression to the old single unnumbered MADR block removes this token.
+    expect(templateContent).toContain('### D-1:');
+  });
+});

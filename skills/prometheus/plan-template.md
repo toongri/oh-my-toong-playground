@@ -90,8 +90,14 @@ Critical Path: Task 1 -> Task 2 -> Task 4 -> Task 7 -> F1-F4
 
 ## ADR Example (worked example)
 
+Each entry is one titled `D-N` item. Contested items carry the full 7-field MADR. Solo items carry the lightweight fields plus ownership and edges. See `SKILL.md > ### ADR` for the authoritative contract; this example is lookup-only.
+
 ```
 ## ADR
+
+### D-1: Add optional enrich flag to UserService rather than a separate UserEnrichmentService
+
+**Tier: contested**
 
 Context:
 - Additive-only — no existing behaviour is altered; new code is inserted alongside existing paths.
@@ -104,17 +110,17 @@ Decision Drivers:
 
 Considered Options:
 
-Option A — Extend existing UserService with optional parameter
+Option A — Extend existing UserService with optional `enrich` flag
   Pros: minimal surface area; no new abstraction; single delegation pass.
-  Cons: UserService grows; violates single-responsibility if logic diverges.
+  Cons: UserService grows; violates single-responsibility if enrichment logic diverges later.
 
 Option B — Introduce a separate UserEnrichmentService
   Pros: clean separation; independently testable; UserService stays unchanged.
-  Cons: extra file; extra wiring; overkill for current scope.
+  Cons: extra file; extra wiring; overkill for current three-line enrichment scope.
 
 Decision: Extend UserService with an optional `enrich` flag rather than creating a separate service.
 
-Rationale: The enrichment logic is three lines. A separate service would add indirection cost exceeding the value of isolation at this scope.
+Rationale: The enrichment logic is three lines. A separate service would add indirection cost exceeding the value of isolation at this scope. Option B becomes the right choice only when enrichment exceeds ~3 fields.
 
 Consequences:
   + UserService remains the single delegation target for callers.
@@ -122,6 +128,30 @@ Consequences:
   - If enrichment logic grows significantly, a future refactor to Option B becomes necessary.
 
 Follow-ups: Revisit if enrichment adds >2 additional fields (create UserEnrichmentService at that point).
+
+---
+
+### D-2: UserService owns the enrich-flag handling; controller must not contain enrichment logic
+
+**Tier: solo**
+
+Decision: The `enrich` flag is read and acted on inside `UserService.getUser`, not in the controller layer.
+
+Why: Enrichment is a domain concern — the controller's role is to translate HTTP to domain calls, not to
+contain domain-conditional branches. Placing the flag check in the controller would bypass the service
+layer and scatter domain logic.
+
+Invalidated alternative (one line): Controller reads flag and calls `enrich()` directly — rejected because
+it violates the service-layer contract and cannot be tested without standing up the HTTP layer.
+
+Cites: src/service/user-service.ts:getUser
+
+Owns: Reading the `enrich` flag; invoking the enrichment branch; returning the enriched User entity.
+Must NOT own: HTTP parsing, session context, or request validation — those remain in the controller.
+
+Edges: (controller→UserService.getUser, passes enrich flag; UserService.getUser→UserRepository.findById,
+  side effect: none beyond the read; failure path: repository throws NotFoundError → service re-throws as
+  domain error, controller maps to 404)
 ```
 
 ---
