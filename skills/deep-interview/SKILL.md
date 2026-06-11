@@ -57,7 +57,7 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - Run `explore` agent: check if cwd has existing source code, package files, or git history
    - If source files exist AND the user's idea references modifying/extending something: **brownfield**
    - Otherwise: **greenfield**
-3. **For brownfield**: Run `explore` agent to map relevant codebase areas, store as `codebase_context`
+3. **For brownfield**: Run `explore` agent to map relevant codebase areas; pass the summary as `--codebase-context` in the `init` call (step 4)
 3.5. **Load runtime settings**:
    - Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user)
    - Resolve `omt.deepInterview.ambiguityThreshold` into `<resolvedThreshold>`; if it is undefined, use `0.2`
@@ -76,6 +76,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init \
   --type "greenfield|brownfield" \
   --current-phase "deep-interview" \
   --threshold <resolvedThreshold>
+  # brownfield only: append --codebase-context "<explore summary>"
 ```
 
 The `init` subcommand performs a strict overlay of the rich state shape into the seed file that the PreToolUse hook already created. The full shape written to state is:
@@ -212,7 +213,12 @@ This formula counts renamed entities (changed) toward stability. Renamed entitie
 
 **Show your work:** Before reporting stability numbers, briefly list which entities were matched (by name or fuzzy) and which are new/removed. This lets the user sanity-check the matching.
 
-Store the ontology snapshot (entities + stability_ratio + matching_reasoning) in `state.ontology_snapshots[]`.
+Store the ontology snapshot (entities + stability_ratio + matching_reasoning) by invoking:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-ontology-snapshot '{"entities":[...],"stability_ratio":<ratio>,"matching_reasoning":"<text>"}'
+```
 
 ### Step 2d: Report Progress
 
@@ -238,9 +244,12 @@ Round {n} complete.
 
 ### Step 2e: Update State
 
-Update interview state with the new round and scores by invoking the CLI:
+Update interview state with the new round and scores by invoking the CLI twice — once to record the round, once to advance the phase and ambiguity:
 
 ```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-round '{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>},"ambiguity":<ambiguity>}'
+
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --current-phase "deep-interview" \
   --current-ambiguity <ambiguity>
@@ -268,7 +277,14 @@ Inject into the question generation prompt:
 Inject into the question generation prompt:
 > You are now in ONTOLOGIST mode. The ambiguity is still high after 8 rounds, suggesting we may be addressing symptoms rather than the core problem. The tracked entities so far are: {current_entities_summary from latest ontology snapshot}. Ask "What IS this, really?" or "Looking at these entities, which one is the CORE concept and which are just supporting?" The goal is to find the essence by examining the ontology.
 
-Challenge modes are used ONCE each, then return to normal Socratic questioning. Track which modes have been used in state.
+Challenge modes are used ONCE each, then return to normal Socratic questioning. Track which modes have been used by invoking:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --challenge-mode "<mode-name>"
+```
+
+(Duplicate names are silently deduped; safe to call even if the mode was already recorded.)
 
 ## Phase 4: Crystallize Spec
 

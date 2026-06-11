@@ -218,6 +218,72 @@ describe('deep-interview-state CLI main()', () => {
   test('CLI exits non-zero when OMT_SESSION_ID is empty', () => {
     expect(() => run('init --initial-idea "x"', { OMT_SESSION_ID: '' })).toThrow();
   });
+
+  // --- new-flags RED tests ---
+
+  // init --codebase-context stores text under state.codebase_context
+  test('init --codebase-context persists codebase_context under state', () => {
+    writeSeed();
+    run("init --initial-idea 'base idea' --codebase-context 'src/ uses Express'");
+    const state = rawState();
+    const nested = state['state'] as Record<string, unknown>;
+    expect(nested['codebase_context']).toBe('src/ uses Express');
+  });
+
+  // update --append-round appends one round object to state.rounds
+  test('update --append-round appends a round object to state.rounds; two calls → two rounds in order', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    run(`update --append-round '{"n":1,"score":0.8}'`);
+    run(`update --append-round '{"n":2,"score":0.6}'`);
+    const state = rawState();
+    const nested = state['state'] as Record<string, unknown>;
+    const rounds = nested['rounds'] as unknown[];
+    expect(rounds).toHaveLength(2);
+    expect((rounds[0] as Record<string, unknown>)['n']).toBe(1);
+    expect((rounds[1] as Record<string, unknown>)['n']).toBe(2);
+  });
+
+  // update --append-ontology-snapshot appends to state.ontology_snapshots
+  test('update --append-ontology-snapshot appends to state.ontology_snapshots', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    run(`update --append-ontology-snapshot '{"entities":["User"],"stability_ratio":0.5}'`);
+    const state = rawState();
+    const nested = state['state'] as Record<string, unknown>;
+    const snaps = nested['ontology_snapshots'] as unknown[];
+    expect(snaps).toHaveLength(1);
+    expect((snaps[0] as Record<string, unknown>)['stability_ratio']).toBe(0.5);
+  });
+
+  // update --challenge-mode appends name; second call with same name is deduped
+  test('update --challenge-mode appends to challenge_modes_used; duplicate is deduped', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    run("update --challenge-mode contrarian");
+    run("update --challenge-mode simplifier");
+    run("update --challenge-mode contrarian"); // duplicate — must dedupe
+    const state = rawState();
+    const nested = state['state'] as Record<string, unknown>;
+    const modes = nested['challenge_modes_used'] as string[];
+    expect(modes).toHaveLength(2);
+    expect(modes).toContain('contrarian');
+    expect(modes).toContain('simplifier');
+  });
+
+  // invalid JSON for --append-round → non-zero exit
+  test('update --append-round with invalid JSON exits non-zero', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    expect(() => run("update --append-round 'not json'")).toThrow();
+  });
+
+  // invalid JSON for --append-ontology-snapshot → non-zero exit
+  test('update --append-ontology-snapshot with invalid JSON exits non-zero', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    expect(() => run("update --append-ontology-snapshot '{bad}'")).toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------
