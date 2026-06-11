@@ -32,7 +32,7 @@ test('contract token present: close-gate literal', () => {
 });
 
 test('contract token present: escape derived-trigger literal', () => {
-  expect(skillContent).toContain('no new ownership and no new edges');
+  expect(skillContent).toContain('when the change introduces **no new ownership and no new edges**');
 });
 
 test('contract token present: Momus framing — architecture ideality exclusion', () => {
@@ -40,7 +40,7 @@ test('contract token present: Momus framing — architecture ideality exclusion'
 });
 
 test('contract token present: Momus framing — feasibility', () => {
-  expect(skillContent).toContain('feasibility');
+  expect(skillContent).toContain('do the cited `file:symbol` rows exist and match the codebase?');
 });
 
 test('contract token present: citation convention', () => {
