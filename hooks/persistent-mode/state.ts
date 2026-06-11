@@ -1,5 +1,6 @@
 import { DeepInterviewState, PrometheusState, GoalState } from './types.ts';
 import { readFileOrNull, writeFileSafe, deleteFile, ensureDir } from './utils.ts';
+import { writeFileNoCreate } from '@lib/state-core';
 import { join } from 'path';
 import { getOmtDir } from '@lib/omt-dir';
 
@@ -127,7 +128,16 @@ export function updateGoalState(sessionId: string, partial: Partial<GoalState>):
 
   // Stamp last_touched_at UNCONDITIONALLY — an empty partial still refreshes
   // the heartbeat (ADR-8: every use of a state is a use).
-  writeFileSafe(path, JSON.stringify({ ...raw, ...partial, last_touched_at: nowStamp() }, null, 2));
+  // writeFileNoCreate (single open-truncate-write syscall) throws ENOENT if the file
+  // was renamed away between our read and this write — i.e. the adopt TOCTOU window.
+  // Catching ENOENT preserves the existing "file absent → do nothing" semantics while
+  // closing the race: the write syscall itself refuses creation (ADR-7 / F10).
+  try {
+    writeFileNoCreate(path, JSON.stringify({ ...raw, ...partial, last_touched_at: nowStamp() }, null, 2));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw err;
+  }
 }
 
 // Block counting for stuck agent escape hatch

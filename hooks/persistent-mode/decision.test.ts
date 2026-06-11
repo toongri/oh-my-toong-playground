@@ -741,14 +741,25 @@ describe('makeDecision', () => {
           max_iterations: 100, // cap never reached
           outcome: 'goal objective text',
         });
-        // Force updateGoalState's writeFileSync to throw ONLY for the goal-state file, so the
-        // on-disk iteration never advances while readGoalStateRaw and the sibling block-count
-        // writes stay healthy. A mocked writer is deterministic regardless of uid; chmod 0444
-        // is silently bypassed by root (common in CI containers), letting the write succeed.
-        const realWriteFileSync = fs.writeFileSync;
-        const writeSpy = spyOn(fs, 'writeFileSync').mockImplementation(((path: any, ...rest: any[]) => {
-          if (path === goalPath) throw new Error('simulated goal-state write failure');
-          return (realWriteFileSync as any)(path, ...rest);
+        // Force updateGoalState's openSync to throw a non-ENOENT error ONLY for the
+        // goal-state file, so the on-disk iteration never advances while readGoalStateRaw
+        // and the sibling block-count writes (which use writeFileSync) stay healthy.
+        // updateGoalState now uses writeFileNoCreate (openSync r+ / ftruncateSync / writeSync)
+        // rather than writeFileSync, so the mock must target openSync.
+        // IMPORTANT: ENOENT must NOT be thrown here — updateGoalState swallows ENOENT as
+        // its normal "race-deleted file" no-op, so decision.ts would never see writeOk=false.
+        // A non-ENOENT error (e.g. EACCES / EIO) simulates a real write failure (disk full,
+        // permissions) that updateGoalState re-throws and decision.ts catches as writeOk=false.
+        // A mocked syscall is deterministic regardless of uid; chmod 0444 is silently bypassed
+        // by root (common in CI containers), making chmod unreliable.
+        const realOpenSync = fs.openSync;
+        const openSpy = spyOn(fs, 'openSync').mockImplementation(((path: any, ...rest: any[]) => {
+          if (path === goalPath) {
+            const err = new Error('simulated goal-state write failure') as NodeJS.ErrnoException;
+            err.code = 'EIO'; // non-ENOENT → re-thrown by updateGoalState → writeOk=false
+            throw err;
+          }
+          return (realOpenSync as any)(path, ...rest);
         }) as any);
 
         try {
@@ -762,7 +773,7 @@ describe('makeDecision', () => {
           const escaped = makeDecision(createContext());
           expect(escaped).toEqual({ continue: true });
         } finally {
-          writeSpy.mockRestore();
+          openSpy.mockRestore();
         }
 
         // Never false-completed: phase stays pursuing, file untouched by the escape.
