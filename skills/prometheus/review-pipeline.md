@@ -60,6 +60,8 @@ All context (interview summary) is already in the plan's Context section. No sup
 
 Momus verifies both document quality and codebase feasibility: it reads the referenced files cited in the plan to confirm existence, current file:line accuracy, and that dependency assumptions hold.
 
+**Decision log framing**: When the plan contains a decision log (ADR items), Momus reviews its structural claims as document quality (do the D-items agree with each other and with the prose?) and feasibility (do the cited `file:symbol` references exist and match?), NOT architecture ideality. Whether the chosen architecture is optimal is out of Momus's remit; that judgment belongs to Daedalus at S2 and the human design gate. The canonical E6 framing contract lives in `SKILL.md:### ADR`.
+
 ---
 
 ## Stage A: HTML Render — Procedure
@@ -73,11 +75,12 @@ Convert `$OMT_DIR/plans/{name}.md` to a single-file HTML document and open it in
 
 ### HTML Components
 
-The Stage A HTML output is composed of 4 distinct components:
+The Stage A HTML output is composed of 5 distinct components:
 
 - **hero header** — plan title, meta pills (TODO count, AC count, wave label, plan file path), and stage kicker
 - **Stage B** — execution recommendation box injected from session state (reviewer verdicts, recommendation output)
 - **Pipeline State** — pipeline state journal box injected from session state (S0 → S_current transitions)
+- **bird's-eye view** — ownership table + flow mermaid generated FROM the decided D-items in the plan's decision log. REQUIRED when the plan's decision log contains structural enumeration (Complex/Architecture flag). When every structural (solo) D-item in the log declares `Edges: none` — contested items carry no Edges field and are excluded from this check — the component renders the ownership table only (the flow mermaid is omitted). Exempt from the Necessity Test; `diagram-guide.md` governs type selection, guardrails, and presentation for all diagrams including this one, but does not gate its existence. Rendered in-band: the renderer prepends a generated `## Bird's-Eye View` section (ownership table + ` ```mermaid ` fence if edges exist) to the render-time markdown before JSON-encoding into `article#plan-content`. Classified as plan-derived.
 - **plan-content** — the full plan markdown rendered into `article#plan-content`; sourced faithfully from plan.md (readability rewrite + enrichment callouts allowed per Readability Enrichment — no omission, no contradiction, no invented facts)
 
 ### Source Classification
@@ -87,6 +90,7 @@ The Stage A HTML output is composed of 4 distinct components:
 | hero header | plan-derived |
 | Stage B | session-derived |
 | Pipeline State | session-derived |
+| bird's-eye view | plan-derived |
 | article#plan-content | plan-derived |
 
 `plan-derived` components populated from `$OMT_DIR/plans/{name}.md`. `session-derived` composed from session state (reviewer verdicts, pipeline state transitions) and injected via `<!-- SESSION-DERIVED-BOXES-HERE -->` marker.
@@ -127,6 +131,8 @@ Translating any item is a rule violation.
 - Rephrasing plan prose for natural reading flow in the communication language (per Translation Rule).
 - Markdown blockquote callouts (`>`) that surface context the reader needs — drawn from the plan's own Context / interview-rationale / ADR sections. Use them to make an already-stated WHY easy to find, not to assert anything new.
 - Mermaid diagrams that re-visualize flow or structure **already decided in `plan.md`** (e.g. a runtime control flow the plan describes only in prose across several TODOs). Gated by the Necessity Test and bound by the Stage A Fidelity Bounds. Type selection (Sequence / Class / State / Flowchart), guardrails, and the Why -> Diagram -> Interpretation presentation protocol live in `diagram-guide.md`. The template loads the Mermaid runtime, so a ` ```mermaid ` fence injected into the render-time markdown renders as a diagram. Before drawing, full-read `diagram-guide.md` first — the Reference Full-Read Mandate triggers on diagram insertion (Necessity Test = YES).
+
+  **Render-source invariant**: The derived bird's-eye view and any in-band mermaid diagram re-visualize the decided D-items as recorded in plan.md — the decision log in plan.md is the single render authority; no diagram may introduce ownership or edges absent from the decided log.
 
 **Forbidden:**
 - Introducing any fact, decision, scope, or rationale not already present in `plan.md`. Enrichment re-surfaces existing context; it does not author new context. If the plan genuinely lacks context the reader needs, that is a plan defect — fix the plan and re-run the pipeline, do not paper over it at render time.
