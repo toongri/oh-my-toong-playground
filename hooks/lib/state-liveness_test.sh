@@ -315,17 +315,9 @@ test_is_current_session_no_match_different_sid() {
 test_ttl_parity_with_state_core_ts() {
   local state_core="$REPO_ROOT/lib/state-core.ts"
 
-  # If state-core.ts doesn't exist yet (sibling agent creating it), wait briefly
-  local wait_secs=0
-  while [ ! -f "$state_core" ] && [ "$wait_secs" -lt 10 ]; do
-    sleep 1
-    wait_secs=$((wait_secs + 1))
-  done
-
   if [ ! -f "$state_core" ]; then
-    echo "  SKIP: lib/state-core.ts not yet created (sibling agent still running)"
-    # Return 0 to not fail the suite if sibling hasn't landed yet
-    return 0
+    echo "  ASSERTION FAILED: lib/state-core.ts not found at '$state_core'"
+    return 1
   fi
 
   # Extract bash constants
