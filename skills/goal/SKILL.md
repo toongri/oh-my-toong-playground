@@ -53,7 +53,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts list-others
 
 If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's purpose and age — e.g. "ship X — started 2026-06-10, 3 hours idle"), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
 
-- On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts adopt --src <selected-sid>`, then resume normal flow on the adopted state.
+- On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts adopt --src <selected-sid>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get` to read what was adopted, and resume from the restored state — if `phase` is `planning`, resume planning from the stored `plan_path`/`resume_summary`; if `phase` is `pursuing`, continue pursuit at the adopted `iteration`. Do NOT re-seed via `set --phase planning` from the new invocation's text.
 - On "start fresh": proceed as a new goal.
 
 If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.

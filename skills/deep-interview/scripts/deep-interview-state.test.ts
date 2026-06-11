@@ -284,6 +284,100 @@ describe('deep-interview-state CLI main()', () => {
     initDeepInterviewState(SID, { initial_idea: 'q' });
     expect(() => run("update --append-ontology-snapshot '{bad}'")).toThrow();
   });
+
+  // ---------------------------------------------------------------------------
+  // stdin channel tests (Finding #7)
+  // ---------------------------------------------------------------------------
+
+  const runStdin = (cmd: string, stdinInput: string, env?: Record<string, string>): string =>
+    execSync(`bun ${script} ${cmd}`, {
+      encoding: 'utf8',
+      input: stdinInput,
+      env: { ...process.env, ...env },
+    });
+
+  // stdin --append-round-stdin: round with apostrophe and inner double quotes round-trips verbatim
+  test("stdin round-trip: apostrophe and inner double quotes in question/answer survive --append-round-stdin", () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    const payload = JSON.stringify({
+      n: 1,
+      question: "What's the user's role?",
+      answer: 'She said "admin" and "editor"',
+      scores: { goal: 0.8, constraints: 0.6, criteria: 0.7 },
+      ambiguity: 0.3,
+    });
+    runStdin('update --append-round-stdin', payload);
+    const state = rawState();
+    const rounds = (state['state'] as Record<string, unknown>)['rounds'] as unknown[];
+    expect(rounds).toHaveLength(1);
+    const r = rounds[0] as Record<string, unknown>;
+    expect(r['question']).toBe("What's the user's role?");
+    expect(r['answer']).toBe('She said "admin" and "editor"');
+  });
+
+  // stdin --append-round-stdin: invalid JSON → exit 1 loudly
+  test('stdin --append-round-stdin with invalid JSON exits non-zero', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    expect(() => runStdin('update --append-round-stdin', 'not valid json')).toThrow();
+  });
+
+  // stdin --append-round-stdin back-compat: argv --append-round still works
+  test('argv --append-round still works alongside stdin flag (back-compat)', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    run(`update --append-round '{"n":1,"scores":{"goal":0.5,"constraints":0.5,"criteria":0.5},"ambiguity":0.5}'`);
+    const state = rawState();
+    const rounds = (state['state'] as Record<string, unknown>)['rounds'] as unknown[];
+    expect(rounds).toHaveLength(1);
+    expect((rounds[0] as Record<string, unknown>)['n']).toBe(1);
+  });
+
+  // stdin --append-ontology-snapshot-stdin: round-trips verbatim
+  test('stdin round-trip: --append-ontology-snapshot-stdin persists snapshot verbatim', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    const payload = JSON.stringify({
+      entities: [{ name: "User's \"account\"", type: 'entity', fields: [], relationships: [] }],
+      stability_ratio: 0.9,
+      matching_reasoning: "stable",
+    });
+    runStdin('update --append-ontology-snapshot-stdin', payload);
+    const state = rawState();
+    const snaps = (state['state'] as Record<string, unknown>)['ontology_snapshots'] as unknown[];
+    expect(snaps).toHaveLength(1);
+    const snap = snaps[0] as Record<string, unknown>;
+    expect((snap['entities'] as unknown[])).toHaveLength(1);
+    expect(((snap['entities'] as unknown[])[0] as Record<string, unknown>)['name']).toBe("User's \"account\"");
+  });
+
+  // stdin --append-ontology-snapshot-stdin: invalid JSON → exit 1
+  test('stdin --append-ontology-snapshot-stdin with invalid JSON exits non-zero', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q' });
+    expect(() => runStdin('update --append-ontology-snapshot-stdin', '{bad json}')).toThrow();
+  });
+
+  // brownfield context score: round with "context" key round-trips verbatim (Finding #6)
+  test('brownfield context score: round with context key round-trips verbatim via stdin', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'q', type: 'brownfield' });
+    const payload = JSON.stringify({
+      n: 1,
+      question: 'Where is the auth layer?',
+      answer: 'In middleware',
+      scores: { goal: 0.7, constraints: 0.6, criteria: 0.6, context: 0.5 },
+      ambiguity: 0.42,
+    });
+    runStdin('update --append-round-stdin', payload);
+    const state = rawState();
+    const rounds = (state['state'] as Record<string, unknown>)['rounds'] as unknown[];
+    expect(rounds).toHaveLength(1);
+    const r = rounds[0] as Record<string, unknown>;
+    const scores = r['scores'] as Record<string, unknown>;
+    expect(scores['context']).toBe(0.5);
+  });
 });
 
 // ---------------------------------------------------------------------------

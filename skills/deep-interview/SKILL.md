@@ -71,13 +71,21 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init \
-  --initial-idea "<prompt-safe initial-context summary or user input>" \
+  --initial-idea "$(cat <<'OMT_DI_PAYLOAD_EOF'
+<prompt-safe initial-context summary or user input>
+OMT_DI_PAYLOAD_EOF
+)" \
   --interview-id "<uuid>" \
   --type "greenfield|brownfield" \
   --current-phase "deep-interview" \
   --threshold <resolvedThreshold>
-  # brownfield only: append --codebase-context "<explore summary>"
+  # brownfield only: append --codebase-context "$(cat <<'OMT_DI_PAYLOAD_EOF'
+  # <explore summary>
+  # OMT_DI_PAYLOAD_EOF
+  # )"
 ```
+
+Use `"$(cat <<'OMT_DI_PAYLOAD_EOF' ... OMT_DI_PAYLOAD_EOF)"` for `--initial-idea` and `--codebase-context` so apostrophes and `$`/backtick sequences in user text are passed verbatim without shell expansion.
 
 The `init` subcommand performs a strict overlay of the rich state shape into the seed file that the PreToolUse hook already created. The full shape written to state is:
 
@@ -200,7 +208,7 @@ Brownfield: `ambiguity = 1 - (goal × 0.35 + constraints × 0.25 + criteria × 0
 
 **Calculate ontology stability:**
 
-**Round 1 special case:** For the first round, skip stability comparison. All entities are "new". Set stability_ratio = N/A. If any round produces zero entities, set stability_ratio = N/A (avoids division by zero).
+**Round 1 special case:** For the first round, skip stability comparison. All entities are "new". Set stability_ratio = null (JSON null — never the bare token N/A). If any round produces zero entities, set stability_ratio = null (avoids division by zero).
 
 For rounds 2+, compare with the previous round's entity list:
 - `stable_entities`: entities present in both rounds with the same name
@@ -217,8 +225,12 @@ Store the ontology snapshot (entities + stability_ratio + matching_reasoning) by
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
-  --append-ontology-snapshot '{"entities":[...],"stability_ratio":<ratio>,"matching_reasoning":"<text>"}'
+  --append-ontology-snapshot-stdin <<'OMT_DI_PAYLOAD_EOF'
+{"entities":[...],"stability_ratio":<ratio or null>,"matching_reasoning":"<text>"}
+OMT_DI_PAYLOAD_EOF
 ```
+
+Use `--append-ontology-snapshot-stdin` with a quoted-delimiter heredoc (`<<'OMT_DI_PAYLOAD_EOF'`) to protect shell quoting (apostrophes, `$`, backticks in entity names are not expanded). This heredoc guards the shell layer only — all substituted string values must be JSON-encoded (`\"`, `\\`, newlines as `\n`) so the payload remains valid JSON.
 
 ### Step 2d: Report Progress
 
@@ -248,12 +260,27 @@ Update interview state with the new round and scores by invoking the CLI twice �
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
-  --append-round '{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>},"ambiguity":<ambiguity>}'
+  --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
+{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>},"ambiguity":<ambiguity>}
+OMT_DI_PAYLOAD_EOF
 
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --current-phase "deep-interview" \
   --current-ambiguity <ambiguity>
 ```
+
+Use `--append-round-stdin` with a quoted-delimiter heredoc (`<<'OMT_DI_PAYLOAD_EOF'`) to protect shell quoting (apostrophes, `$`, backticks in question/answer text are not expanded). This heredoc guards the shell layer only — all substituted string values (`<question>`, `<answer>`) must be JSON-encoded (`\"`, `\\`, newlines as `\n`) so the payload remains valid JSON. The CLI reads stdin, validates JSON, and exits 1 loudly on invalid input.
+
+For brownfield interviews, include the `context` score in the `scores` object:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
+{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>,"context":<ctx>},"ambiguity":<ambiguity>}
+OMT_DI_PAYLOAD_EOF
+```
+
+`context` carries 15% of the ambiguity formula for brownfield (`context × 0.15`) and is required for accurate resume after `adopt`.
 
 ### Step 2f: Check Soft Limits
 
