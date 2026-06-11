@@ -262,7 +262,11 @@ export function writeFileNoCreate(path: string, content: string): void {
  */
 export function isPristine(type: StateType, parsed: Record<string, unknown>): boolean {
   if (type === 'prometheus') {
-    return parsed['phase'] === 'S0' && parsed['plan_path'] === '';
+    return (
+      parsed['phase'] === 'S0' &&
+      parsed['plan_path'] === '' &&
+      (parsed['resume_summary'] === '' || parsed['resume_summary'] === undefined)
+    );
   }
   if (type === 'goal') {
     return (
@@ -368,7 +372,7 @@ export function restampAfterAdopt(path: string): void {
 /**
  * Adopts the state from `srcSid` into the current session for `type`.
  *
- * Enforces ADR-2 rules r1–r7:
+ * Enforces ADR-2 rules r1–r8:
  *   r1: self-adopt refused
  *   r2: both sids safe-id validated
  *   r3: refused iff current exists AND (ACTIVE non-pristine OR malformed)
