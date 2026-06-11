@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 import {
-  readRalphState,
-  updateRalphState,
-  cleanupRalphState,
   readDeepInterviewState,
+  readDeepInterviewStateRaw,
   cleanupDeepInterviewState,
   readPrometheusState,
   cleanupPrometheusState,
@@ -15,155 +13,12 @@ import {
   cleanupBlockCountFiles,
   MAX_BLOCK_COUNT,
 } from './state.ts';
-import type { RalphState, DeepInterviewState } from './types.ts';
+import { writeFileNoCreate } from '@lib/state-core';
+import type { DeepInterviewState } from './types.ts';
 import { mkdir, rm, writeFile, readFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-
-describe('Ralph state management', () => {
-  const testDir = join(tmpdir(), 'state-test-ralph-' + Date.now());
-  const omtDir = join(testDir, 'omt');
-  const sessionId = 'test-session';
-
-  const savedOmtDir = process.env.OMT_DIR;
-
-  beforeAll(async () => {
-    await mkdir(omtDir, { recursive: true });
-  });
-
-  afterAll(async () => {
-    await rm(testDir, { recursive: true, force: true });
-  });
-
-  beforeEach(async () => {
-    process.env.OMT_DIR = omtDir;
-    // Clean up state files before each test
-    const stateFile = join(omtDir, `ralph-state-${sessionId}.json`);
-    try { await rm(stateFile, { force: true }); } catch {}
-  });
-
-  afterEach(() => {
-    if (savedOmtDir === undefined) {
-      delete process.env.OMT_DIR;
-    } else {
-      process.env.OMT_DIR = savedOmtDir;
-    }
-  });
-
-  describe('readRalphState', () => {
-    it('should return null when state file does not exist', () => {
-      const result = readRalphState('nonexistent');
-
-      expect(result).toBeNull();
-    });
-
-    it('should read active ralph state from session-specific file', async () => {
-      const state: RalphState = {
-        active: true,
-        iteration: 2,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-      };
-      await writeFile(
-        join(omtDir, `ralph-state-${sessionId}.json`),
-        JSON.stringify(state)
-      );
-
-      const result = readRalphState(sessionId);
-
-      expect(result).not.toBeNull();
-      expect(result?.active).toBe(true);
-      expect(result?.iteration).toBe(2);
-      expect(result?.prompt).toBe('Test task');
-    });
-
-    it('should return null when state is inactive', async () => {
-      const state: RalphState = {
-        active: false,
-        iteration: 5,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Completed task',
-      };
-      await writeFile(
-        join(omtDir, `ralph-state-${sessionId}.json`),
-        JSON.stringify(state)
-      );
-
-      const result = readRalphState(sessionId);
-
-      expect(result).toBeNull();
-    });
-
-    it('should return null for invalid JSON', async () => {
-      await writeFile(
-        join(omtDir, `ralph-state-${sessionId}.json`),
-        'invalid json {'
-      );
-
-      const result = readRalphState(sessionId);
-
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('updateRalphState', () => {
-    it('should write state to session-specific file', async () => {
-      const state = {
-        active: true,
-        iteration: 3,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Updated task',
-        oracle_feedback: ['Feedback 1'],
-      } as RalphState;
-
-      updateRalphState(sessionId, state);
-
-      const content = await readFile(
-        join(omtDir, `ralph-state-${sessionId}.json`),
-        'utf8'
-      );
-      const parsed = JSON.parse(content);
-      expect(parsed.iteration).toBe(3);
-      expect(parsed.oracle_feedback).toContain('Feedback 1');
-    });
-
-    it('should create directory if it does not exist', async () => {
-      const newOmtDir = join(testDir, 'new-omt');
-      process.env.OMT_DIR = newOmtDir;
-      const state: RalphState = {
-        active: true,
-        iteration: 1,
-        max_iterations: 5,
-        completion_promise: 'DONE',
-        prompt: 'New task',
-      };
-
-      updateRalphState(sessionId, state);
-
-      const stateFile = join(newOmtDir, `ralph-state-${sessionId}.json`);
-      expect(existsSync(stateFile)).toBe(true);
-    });
-  });
-
-  describe('cleanupRalphState', () => {
-    it('should delete session-specific state file', async () => {
-      const stateFile = join(omtDir, `ralph-state-${sessionId}.json`);
-      await writeFile(stateFile, '{}');
-
-      cleanupRalphState(sessionId);
-
-      expect(existsSync(stateFile)).toBe(false);
-    });
-
-    it('should not throw when file does not exist', () => {
-      expect(() => cleanupRalphState('nonexistent')).not.toThrow();
-    });
-  });
-});
 
 describe('Block counting', () => {
   const testDir = join(tmpdir(), 'state-test-block-count-' + Date.now());
@@ -283,7 +138,7 @@ describe('Deep interview state management', () => {
 
   describe('readDeepInterviewState', () => {
     it('deep-interview: readDeepInterviewState returns state when active=true', async () => {
-      const state: DeepInterviewState = { active: true, sessionId: 's1' };
+      const state: DeepInterviewState = { active: true };
       await writeFile(
         join(omtDir, `deep-interview-active-state-${sessionId}.json`),
         JSON.stringify(state)
@@ -293,11 +148,10 @@ describe('Deep interview state management', () => {
 
       expect(result).not.toBeNull();
       expect(result?.active).toBe(true);
-      expect(result?.sessionId).toBe('s1');
     });
 
     it('deep-interview: readDeepInterviewState returns null when active=false', async () => {
-      const state: DeepInterviewState = { active: false, sessionId: 's1' };
+      const state: DeepInterviewState = { active: false };
       await writeFile(
         join(omtDir, `deep-interview-active-state-${sessionId}.json`),
         JSON.stringify(state)
@@ -312,7 +166,7 @@ describe('Deep interview state management', () => {
   describe('cleanupDeepInterviewState', () => {
     it('deep-interview: cleanupDeepInterviewState removes file and is idempotent', async () => {
       const stateFile = join(omtDir, `deep-interview-active-state-${sessionId}.json`);
-      await writeFile(stateFile, JSON.stringify({ active: true, sessionId: 's1' }));
+      await writeFile(stateFile, JSON.stringify({ active: true }));
 
       cleanupDeepInterviewState(sessionId);
 
@@ -766,5 +620,192 @@ describe('Goal state management', () => {
       const content = await readFile(stateFile, 'utf8');
       expect(content).toBe('not valid json {');
     });
+
+    // (A5) hook-side updateGoalState refreshes last_touched_at without creating
+    it('(A5) updateGoalState stamps last_touched_at on an existing file', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      const oldStamp = '2020-01-01T00:00:00+00:00';
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 1,
+        max_iterations: 10,
+        started_at: '2020-01-01T00:00:00+00:00',
+        last_touched_at: oldStamp,
+      }));
+
+      updateGoalState(sessionId, { iteration: 2 });
+
+      const content = await readFile(stateFile, 'utf8');
+      const parsed = JSON.parse(content);
+      expect(parsed.last_touched_at).toBeTruthy();
+      expect(parsed.last_touched_at).not.toBe(oldStamp);
+      // stamp must be greater than the old one
+      expect(parsed.last_touched_at > oldStamp).toBe(true);
+    });
+
+    // (A5) updateGoalState does NOT create a file when absent
+    it('(A5) updateGoalState does not create a file when absent', () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      expect(existsSync(stateFile)).toBe(false);
+
+      updateGoalState(sessionId, { iteration: 1 });
+
+      expect(existsSync(stateFile)).toBe(false);
+    });
+
+    // (ADR-8) updateGoalState stamps last_touched_at UNCONDITIONALLY — empty partial still refreshes
+    it('(ADR-8) updateGoalState stamps last_touched_at on an EMPTY partial', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      const oldStamp = '2020-01-01T00:00:00+00:00';
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 1,
+        max_iterations: 10,
+        started_at: '2020-01-01T00:00:00+00:00',
+        last_touched_at: oldStamp,
+        outcome: 'keep me',
+      }));
+
+      updateGoalState(sessionId, {});
+
+      const content = await readFile(stateFile, 'utf8');
+      const parsed = JSON.parse(content);
+      // stamp must have advanced
+      expect(parsed.last_touched_at).not.toBe(oldStamp);
+      expect(parsed.last_touched_at > oldStamp).toBe(true);
+      // all other fields unchanged
+      expect(parsed.iteration).toBe(1);
+      expect(parsed.outcome).toBe('keep me');
+    });
+
+    // (TOCTOU no-create) updateGoalState must use a no-create write primitive so that a
+    // concurrent adopt-rename between read and write does NOT resurrect the orphaned file.
+    //
+    // RED achieved: primitive-level contract test.
+    //   OLD code path: writeFileSafe(path, content) on an absent path creates the file
+    //     → existsSync(path) would be true after the call.
+    //   NEW code path: writeFileNoCreate(path, content) throws ENOENT on absent path
+    //     → updateGoalState catches ENOENT and returns → no file created.
+    //
+    // This test verifies the primitive contract: writeFileNoCreate on an absent path
+    // throws ENOENT (the no-create guarantee) and does NOT create the file.
+    // Against the old writeFileSafe: a parallel call to writeFileSafe on an absent path
+    // would PASS (no throw) but would create the file — making the existsSync assertion fail.
+    it('(TOCTOU) writeFileNoCreate on absent path throws ENOENT and does NOT create a file', () => {
+      const racePath = join(omtDir, `goal-state-race-${sessionId}.json`);
+      // Guarantee the file does not exist (simulates file deleted between read and write)
+      expect(existsSync(racePath)).toBe(false);
+
+      // writeFileNoCreate must throw ENOENT on absent path (no-create contract)
+      let thrownCode: string | undefined;
+      try {
+        writeFileNoCreate(racePath, '{"active":true}');
+      } catch (err) {
+        thrownCode = (err as NodeJS.ErrnoException).code;
+      }
+      expect(thrownCode).toBe('ENOENT');
+      // The file must NOT have been created — no resurrection
+      expect(existsSync(racePath)).toBe(false);
+    });
+
+    // (TOCTOU public-API) after a race-deletion between read and write, updateGoalState
+    // must not resurrect the file.  Simulated deterministically: seed, then call
+    // updateGoalState (succeeds on existing file), then synchronously delete and call again.
+    // Second call exercises the null-check guard.  Included to document that the full
+    // update cycle — including the no-create write path — never creates an absent file.
+    it('(TOCTOU public-API) updateGoalState does not resurrect a file deleted before write', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 5,
+        max_iterations: 10,
+      }));
+
+      // First call succeeds — file is present at read AND write time
+      updateGoalState(sessionId, { iteration: 6 });
+      expect(existsSync(stateFile)).toBe(true);
+
+      // Simulate the adopt-rename completing between two hook invocations — file is gone
+      unlinkSync(stateFile);
+
+      // Second call: file absent — must be a no-op, must not create
+      updateGoalState(sessionId, { iteration: 7 });
+      expect(existsSync(stateFile)).toBe(false);
+    });
+  });
+});
+
+describe('readDeepInterviewStateRaw', () => {
+  const testDir = join(tmpdir(), 'state-test-diraw-' + Date.now());
+  const omtDir = join(testDir, 'omt');
+  const sessionId = 'test-session';
+
+  const savedOmtDir = process.env.OMT_DIR;
+
+  beforeAll(async () => {
+    await mkdir(omtDir, { recursive: true });
+  });
+
+  afterAll(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    process.env.OMT_DIR = omtDir;
+    const stateFile = join(omtDir, `deep-interview-active-state-${sessionId}.json`);
+    try { await rm(stateFile, { force: true }); } catch {}
+  });
+
+  afterEach(() => {
+    if (savedOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = savedOmtDir;
+    }
+  });
+
+  it('readDeepInterviewStateRaw returns the object even when active=false (terminal state)', async () => {
+    const state: DeepInterviewState = { active: false };
+    await writeFile(
+      join(omtDir, `deep-interview-active-state-${sessionId}.json`),
+      JSON.stringify(state)
+    );
+
+    const result = readDeepInterviewStateRaw(sessionId);
+
+    expect(result).not.toBeNull();
+    expect(result?.active).toBe(false);
+  });
+
+  it('readDeepInterviewStateRaw returns state when active=true', async () => {
+    const state: DeepInterviewState = { active: true };
+    await writeFile(
+      join(omtDir, `deep-interview-active-state-${sessionId}.json`),
+      JSON.stringify(state)
+    );
+
+    const result = readDeepInterviewStateRaw(sessionId);
+
+    expect(result).not.toBeNull();
+    expect(result?.active).toBe(true);
+  });
+
+  it('readDeepInterviewStateRaw returns null on absent file', () => {
+    expect(readDeepInterviewStateRaw('nonexistent-di-raw')).toBeNull();
+  });
+
+  it('readDeepInterviewStateRaw returns null on malformed JSON', async () => {
+    await writeFile(
+      join(omtDir, `deep-interview-active-state-${sessionId}.json`),
+      'not valid json {'
+    );
+
+    expect(readDeepInterviewStateRaw(sessionId)).toBeNull();
   });
 });

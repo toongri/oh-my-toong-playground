@@ -111,7 +111,7 @@ skills:
 
 ### Hooks
 
-- **session-start.sh**: Restores persistent mode states (ralph-loop, incomplete todos)
+- **session-start.sh**: Restores persistent mode states (goal, incomplete todos)
 - **keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context
 - **persistent-mode/**: Prevents stopping when work remains incomplete (Stop hook, TypeScript directory)
 - **pre-tool-enforcer.sh**: Tool execution gate (TaskOutput blocking)
@@ -121,11 +121,6 @@ skills:
 **Ultrawork Mode** (`ultrawork`, `ulw`, `uw` keywords):
 - Maximum precision mode with parallel agent utilization
 - Activated via keyword detection (1-time context injection per message)
-
-**Ralph Loop**:
-- Iterative completion enforcement with oracle verification
-- State file at `~/.omt/{OMT_PROJECT}/ralph-state.json` (resolved via `$OMT_DIR` env var)
-- Cancel with `/cancel-ralph`
 
 ## Coding Conventions
 

@@ -1,7 +1,6 @@
 #!/bin/bash
 # =============================================================================
 # Session Start Hook Tests
-# Tests for session-based ralph state file reading
 # =============================================================================
 set -euo pipefail
 
@@ -93,7 +92,7 @@ run_test() {
 }
 
 # =============================================================================
-# Tests: Session-based ralph state file reading
+# Tests: Session ID extraction
 # =============================================================================
 
 test_session_start_extracts_session_id() {
@@ -102,103 +101,6 @@ test_session_start_extracts_session_id() {
         return 0
     else
         echo "ASSERTION FAILED: session-start.sh should extract SESSION_ID"
-        return 1
-    fi
-}
-
-test_session_start_reads_session_specific_ralph_state() {
-    # Create session-specific ralph state file
-    cat > "$TEST_OMT_DIR/ralph-state-test-session-abc.json" << 'EOF'
-{
-  "active": true,
-  "iteration": 3,
-  "max_iterations": 10,
-  "completion_promise": "DONE",
-  "prompt": "session specific task"
-}
-EOF
-
-    # Run with sessionId in input
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session-abc"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Verify output contains ralph loop restored message
-    assert_output_contains "$output" "RALPH LOOP RESTORED" "Should restore session-specific ralph state" || return 1
-}
-
-test_session_start_ignores_other_sessions_ralph_state() {
-    # Create ralph state file for DIFFERENT session
-    cat > "$TEST_OMT_DIR/ralph-state-other-session.json" << 'EOF'
-{
-  "active": true,
-  "iteration": 5,
-  "max_iterations": 10,
-  "completion_promise": "DONE",
-  "prompt": "other session task"
-}
-EOF
-
-    # Run with different sessionId
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "my-session"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Should NOT contain ralph loop restored (no state for this session)
-    assert_output_not_contains "$output" "RALPH LOOP RESTORED" "Should NOT restore other session's ralph state" || return 1
-}
-
-test_session_start_uses_default_when_no_session_id() {
-    # Create default ralph state file
-    cat > "$TEST_OMT_DIR/ralph-state-default.json" << 'EOF'
-{
-  "active": true,
-  "iteration": 2,
-  "max_iterations": 10,
-  "completion_promise": "DONE",
-  "prompt": "default session task"
-}
-EOF
-
-    # Run without sessionId in input
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Should contain ralph loop restored (using default session)
-    assert_output_contains "$output" "RALPH LOOP RESTORED" "Should restore default session ralph state" || return 1
-}
-
-test_session_start_no_verification_file_references() {
-    # session-start.sh should NOT reference ralph-verification files (removed)
-    if grep -q 'ralph-verification-' "$SCRIPT_DIR/session-start.sh"; then
-        echo "ASSERTION FAILED: session-start.sh should NOT reference ralph-verification files (removed)"
-        return 1
-    else
-        return 0
-    fi
-}
-
-test_session_start_reads_oracle_feedback_from_ralph_state() {
-    # Create ralph state with oracle_feedback
-    cat > "$TEST_OMT_DIR/ralph-state-test-session-feedback.json" << 'EOF'
-{
-  "active": true,
-  "iteration": 3,
-  "max_iterations": 10,
-  "completion_promise": "DONE",
-  "prompt": "test task",
-  "oracle_feedback": ["issue: tests failing", "issue: missing docs"]
-}
-EOF
-
-    # Run with sessionId
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session-feedback"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Should contain oracle feedback in output
-    if echo "$output" | grep -qi "feedback\|oracle"; then
-        return 0
-    else
-        echo "ASSERTION FAILED: session-start.sh should display oracle_feedback from ralph-state"
-        echo "  Output: ${output:0:500}"
         return 1
     fi
 }
@@ -352,7 +254,7 @@ test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable() {
 EOF
 
     local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
 
     # Stdout must be valid JSON
     if ! echo "$output" | jq . > /dev/null 2>&1; then
@@ -380,7 +282,7 @@ test_session_start_prometheus_resume_summary_backslash_produces_valid_json() {
 EOF
 
     local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
 
     # (a) stdout must be valid JSON
     if ! echo "$output" | jq . > /dev/null 2>&1; then
@@ -469,27 +371,27 @@ EOF
 }
 
 test_session_start_stale_goal_state_purged() {
-    # Create a goal-state file with started_at older than STALE_THRESHOLD (3 hours)
+    # Create a goal-state file with last_touched_at older than ACTIVE_IDLE_TTL (6h) — use 7h
     local stale_ts
-    stale_ts=$(date -j -v-4H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "4 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
 
     local stale_file="$TEST_OMT_DIR/goal-state-stale-session.json"
     cat > "$stale_file" << EOF
 {
   "active": true,
   "phase": "pursuing",
-  "started_at": "${stale_ts}",
+  "last_touched_at": "${stale_ts}",
   "outcome": "old goal",
   "iteration": 1
 }
 EOF
 
-    # Run the hook (stale cleanup runs regardless of sessionId)
+    # Run the hook (GC runs regardless of sessionId; stale-session != fresh-session)
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
 
-    # Stale goal-state file should be removed
+    # Stale goal-state file should be removed (age 7h > ACTIVE_IDLE_TTL 6h)
     if [ -f "$stale_file" ]; then
-        echo "ASSERTION FAILED: stale goal-state file should have been purged but still exists"
+        echo "ASSERTION FAILED: stale goal-state file (7h heartbeat) should have been purged but still exists"
         return 1
     fi
     return 0
@@ -601,7 +503,7 @@ test_session_start_goal_plan_path_backslash_produces_valid_json() {
 EOF
 
     local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
 
     # The hook stdout must be valid JSON (parseable by jq)
     if ! echo "$output" | jq -e . > /dev/null 2>&1; then
@@ -615,6 +517,366 @@ EOF
 }
 
 # =============================================================================
+# Tests: deep-interview stale-cleanup (glob + mtime fallback)
+# =============================================================================
+
+test_session_start_stale_deep_interview_with_started_at_purged() {
+    # AC: deep-interview with last_touched_at older than ACTIVE_IDLE_TTL (6h) is removed — use 7h
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local stale_file="$TEST_OMT_DIR/deep-interview-active-state-stale-di.json"
+    cat > "$stale_file" << EOF
+{
+  "active": true,
+  "sessionId": "stale-di",
+  "last_touched_at": "${stale_ts}"
+}
+EOF
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$stale_file" ]; then
+        echo "ASSERTION FAILED: stale deep-interview marker (7h heartbeat) should have been purged but still exists"
+        return 1
+    fi
+    return 0
+}
+
+test_session_start_stale_deep_interview_no_started_at_purged_via_mtime() {
+    # AC: timestamp-less deep-interview marker with mtime older than ACTIVE_IDLE_TTL (6h) is removed — use 7h
+    local stale_file="$TEST_OMT_DIR/deep-interview-active-state-mtime-di.json"
+    printf '{"active":true,"sessionId":"mtime-di"}' > "$stale_file"
+
+    # Set mtime to 7 hours ago (BSD: touch -t YYYYmmddHHMM; GNU: touch -d)
+    local old_mtime
+    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" "$stale_file" 2>/dev/null || touch -d "7 hours ago" "$stale_file" 2>/dev/null || true
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$stale_file" ]; then
+        echo "ASSERTION FAILED: timestamp-less deep-interview marker with 7h mtime should have been purged but still exists"
+        return 1
+    fi
+    return 0
+}
+
+test_session_start_fresh_deep_interview_marker_survives() {
+    # AC: fresh deep-interview marker (mtime now) is NOT removed
+    local fresh_file="$TEST_OMT_DIR/deep-interview-active-state-fresh-di.json"
+    printf '{"active":true,"sessionId":"fresh-di"}' > "$fresh_file"
+    # mtime is already "now" — no touch needed
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$fresh_file" ]; then
+        echo "ASSERTION FAILED: fresh deep-interview marker should survive cleanup but was removed"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: GC liveness unification (TODO 7)
+# New TTL semantics: is_state_live via hooks/lib/state-liveness.sh
+# ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m (see state-liveness.sh for exact values)
+# =============================================================================
+
+# C2: current session's active state with 7h-old heartbeat SURVIVES (never reap own session)
+test_gc_current_session_active_7h_idle_survives() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local sid="current-gc-session"
+    local state_file="$TEST_OMT_DIR/goal-state-${sid}.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "live goal",
+  "iteration": 1
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: current session's active state should survive GC even with 7h-old heartbeat"
+        return 1
+    fi
+    return 0
+}
+
+# C1: other-session active with fresh 5m heartbeat SURVIVES
+test_gc_other_session_active_fresh_heartbeat_survives() {
+    local fresh_ts
+    fresh_ts=$(date -j -v-5M "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "5 minutes ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S")
+    local state_file="$TEST_OMT_DIR/goal-state-other-session-A.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${fresh_ts}",
+  "outcome": "live goal",
+  "iteration": 1
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "session-B"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: other-session active state with 5m heartbeat should survive GC"
+        return 1
+    fi
+    return 0
+}
+
+# C3a: other-session active with 7h-old heartbeat is REAPED
+test_gc_other_session_active_7h_idle_reaped() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local state_file="$TEST_OMT_DIR/goal-state-other-session-stale.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "session-B"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ -f "$state_file" ]; then
+        echo "ASSERTION FAILED: other-session active state with 7h heartbeat should be reaped"
+        return 1
+    fi
+    return 0
+}
+
+# C3b part1: terminal state with 1h-old heartbeat is REAPED
+test_gc_terminal_state_1h_old_reaped() {
+    local old_ts
+    old_ts=$(date -j -v-1H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "1 hour ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local state_file="$TEST_OMT_DIR/prometheus-state-terminal-old.json"
+    cat > "$state_file" << EOF
+{
+  "active": false,
+  "phase": "complete",
+  "last_touched_at": "${old_ts}"
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "any-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ -f "$state_file" ]; then
+        echo "ASSERTION FAILED: terminal state with 1h heartbeat should be reaped (TERMINAL_TTL=30m)"
+        return 1
+    fi
+    return 0
+}
+
+# C3b part2: terminal state with 10m-old heartbeat is KEPT
+test_gc_terminal_state_10m_old_kept() {
+    local fresh_ts
+    fresh_ts=$(date -j -v-10M "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "10 minutes ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S")
+    local state_file="$TEST_OMT_DIR/prometheus-state-terminal-fresh.json"
+    cat > "$state_file" << EOF
+{
+  "active": false,
+  "phase": "complete",
+  "last_touched_at": "${fresh_ts}"
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "any-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: terminal state with 10m heartbeat should survive GC (TERMINAL_TTL=30m)"
+        return 1
+    fi
+    return 0
+}
+
+# C6: in-use terminal goal with 10m heartbeat SURVIVES — no carve-out code
+test_gc_terminal_goal_fresh_heartbeat_survives_no_carveout() {
+    local fresh_ts
+    fresh_ts=$(date -j -v-10M "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "10 minutes ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S")
+    local sid="terminal-goal-sid"
+    local state_file="$TEST_OMT_DIR/goal-state-${sid}.json"
+    cat > "$state_file" << EOF
+{
+  "active": false,
+  "phase": "complete",
+  "last_touched_at": "${fresh_ts}",
+  "outcome": "Build feature X",
+  "iteration": 3
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "other-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: in-use terminal goal with fresh heartbeat should survive without carve-out code"
+        return 1
+    fi
+    # Verify no suppress/baseline branch in session-start.sh
+    if grep -qiE 'suppress|baseline' "$SCRIPT_DIR/session-start.sh" 2>/dev/null; then
+        echo "ASSERTION FAILED: session-start.sh must have 0 suppress/baseline references"
+        return 1
+    fi
+    return 0
+}
+
+# glob: the GC for-loop glob must only include the 3 managed prefixes
+test_gc_glob_only_managed_prefixes() {
+    # Extract lines between "# GC:" marker and the first "# Check for active" block.
+    # The GC glob must contain only goal-state, prometheus-state, deep-interview-active-state.
+    local gc_section
+    gc_section=$(awk '/^# GC:/{found=1} found && /^# Check for active (prometheus|goal)/{found=0} found{print}' "$SCRIPT_DIR/session-start.sh")
+    if echo "$gc_section" | grep -qE 'state-\*\.json' && ! echo "$gc_section" | grep -qE '^[[:space:]]+".*goal-state|prometheus-state|deep-interview'; then
+        echo "ASSERTION FAILED: session-start.sh GC glob appears malformed"
+        echo "  GC section:"
+        echo "$gc_section" | head -20
+        return 1
+    fi
+    # Verify the deprecated retired-loop state prefix is absent from the GC glob
+    if echo "$gc_section" | grep -q 'retired-loop-state'; then
+        echo "ASSERTION FAILED: session-start.sh GC glob must NOT include retired-loop-state"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: Retired-loop removal (TODO 10)
+# =============================================================================
+
+# G4: orphan-accept — a pre-existing unmanaged state file causes no crash;
+# session-start exits 0 and emits no unexpected restore context.
+# Uses an unknown-prefix state file to simulate an orphaned legacy state.
+test_session_start_orphan_accept_unmanaged_state() {
+    # Create a state file with an unknown prefix (simulates legacy orphan)
+    cat > "$TEST_OMT_DIR/legacy-loop-state-orphan-abc.json" << 'EOF'
+{
+  "active": true,
+  "iteration": 3,
+  "max_iterations": 10,
+  "prompt": "orphaned task"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "live-session-xyz"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # Must exit 0 (captured via subshell — check for valid JSON as proxy)
+    if ! echo "$output" | jq . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: hook output must be valid JSON (exit 0 proxy)"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    # Must NOT emit any restore context for this unknown prefix
+    assert_output_not_contains "$output" "LEGACY-LOOP" "orphan unmanaged state must NOT produce an unexpected restore block" || return 1
+
+    # File must remain untouched (orphan-accept: no migration)
+    if [ ! -f "$TEST_OMT_DIR/legacy-loop-state-orphan-abc.json" ]; then
+        echo "ASSERTION FAILED: orphan state file should be left untouched (not deleted)"
+        return 1
+    fi
+
+    return 0
+}
+
+# grep-0: session-start.sh must contain zero retired-loop restore references
+test_session_start_no_retired_loop_restore() {
+    # The retired loop state file prefix must not appear in any restore block.
+    # This verifies the loop's session-restore machinery has been fully removed.
+    if grep -qiE 'retired-loop-state|LOOP RESTORED' "$SCRIPT_DIR/session-start.sh" 2>/dev/null; then
+        echo "ASSERTION FAILED: session-start.sh must have 0 retired-loop restore references"
+        grep -niE 'retired-loop-state|LOOP RESTORED' "$SCRIPT_DIR/session-start.sh" | head -10
+        return 1
+    fi
+    return 0
+}
+
+# old-threshold-gone: STALE_THRESHOLD / 10800 must not appear
+test_gc_old_threshold_constants_removed() {
+    if grep -qE '10800|STALE_THRESHOLD' "$SCRIPT_DIR/session-start.sh" 2>/dev/null; then
+        echo "ASSERTION FAILED: session-start.sh must not contain STALE_THRESHOLD or 10800"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: Pristine goal-state is invisible to session-start restore
+# A pristine seed (phase=planning, iteration=0, outcome="") must NOT produce
+# [GOAL RESTORED]; a non-pristine active state must still be restored.
+# =============================================================================
+
+test_session_start_pristine_goal_state_not_restored() {
+    local sid="test-goal-pristine"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # Pristine seed: phase=planning, iteration=0, outcome="" — the PreToolUse hook
+    # seeded this before the goal skill ran; if the skill refuses, this file lingers.
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "iteration": 0,
+  "max_iterations": 10,
+  "outcome": "",
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Pristine seed must NOT produce GOAL RESTORED
+    assert_output_not_contains "$output" "GOAL RESTORED" "pristine goal-state must NOT inject GOAL RESTORED" || return 1
+}
+
+test_session_start_non_pristine_planning_goal_still_restored() {
+    local sid="test-goal-nonpristine"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # Non-pristine: outcome is set — this is a real in-progress goal.
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "iteration": 0,
+  "max_iterations": 10,
+  "outcome": "ship feature X",
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Non-pristine planning state must still produce GOAL RESTORED
+    assert_output_contains "$output" "GOAL RESTORED" "non-pristine planning goal-state must inject GOAL RESTORED" || return 1
+}
+
+test_session_start_pristine_goal_absent_outcome_not_restored() {
+    # outcome field entirely absent (jq .outcome returns null) → treated as "" → pristine → not restored
+    local sid="test-goal-pristine-absent-outcome"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "iteration": 0,
+  "max_iterations": 10,
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    assert_output_not_contains "$output" "GOAL RESTORED" "pristine goal-state (absent outcome) must NOT inject GOAL RESTORED" || return 1
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -623,13 +885,8 @@ main() {
     echo "Session Start Hook Tests"
     echo "=========================================="
 
-    # Session-based ralph state tests
+    # Session ID extraction
     run_test test_session_start_extracts_session_id
-    run_test test_session_start_reads_session_specific_ralph_state
-    run_test test_session_start_ignores_other_sessions_ralph_state
-    run_test test_session_start_uses_default_when_no_session_id
-    run_test test_session_start_no_verification_file_references
-    run_test test_session_start_reads_oracle_feedback_from_ralph_state
 
     # Session-based ultrawork state tests
     run_test test_session_start_ignores_other_sessions_ultrawork_state
@@ -659,6 +916,30 @@ main() {
 
     # Goal state restore: backslash in plan_path produces valid JSON
     run_test test_session_start_goal_plan_path_backslash_produces_valid_json
+
+    # Pristine goal-state: invisible to session-start restore
+    run_test test_session_start_pristine_goal_state_not_restored
+    run_test test_session_start_non_pristine_planning_goal_still_restored
+    run_test test_session_start_pristine_goal_absent_outcome_not_restored
+
+    # deep-interview stale-cleanup: glob + mtime fallback
+    run_test test_session_start_stale_deep_interview_with_started_at_purged
+    run_test test_session_start_stale_deep_interview_no_started_at_purged_via_mtime
+    run_test test_session_start_fresh_deep_interview_marker_survives
+
+    # GC liveness unification (TODO 7)
+    run_test test_gc_current_session_active_7h_idle_survives
+    run_test test_gc_other_session_active_fresh_heartbeat_survives
+    run_test test_gc_other_session_active_7h_idle_reaped
+    run_test test_gc_terminal_state_1h_old_reaped
+    run_test test_gc_terminal_state_10m_old_kept
+    run_test test_gc_terminal_goal_fresh_heartbeat_survives_no_carveout
+    run_test test_gc_glob_only_managed_prefixes
+    run_test test_gc_old_threshold_constants_removed
+
+    # Retired-loop removal (TODO 10)
+    run_test test_session_start_orphan_accept_unmanaged_state
+    run_test test_session_start_no_retired_loop_restore
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

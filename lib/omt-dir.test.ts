@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
 import { basename, dirname, resolve } from 'path';
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from 'bun:test';
 
 import { getOmtDir, resolveOmtDir, resolveProjectRoot, resolvePinsHome } from './omt-dir.ts';
 
@@ -315,6 +315,87 @@ describe('no-mkdir sibling path matches getOmtDir', () => {
 
     // Must NOT create the directory
     expect(existsSync(expectedPath)).toBe(false);
+  });
+});
+
+describe('non-canonical warn', () => {
+  let originalOmtDir: string | undefined;
+  let originalCwd: string;
+  let createdOmtDirs: string[] = [];
+  let preExistingDirs: Set<string>;
+  let warnSpy: ReturnType<typeof spyOn> | null = null;
+
+  beforeEach(() => {
+    originalOmtDir = process.env.OMT_DIR;
+    originalCwd = process.cwd();
+    createdOmtDirs = [];
+    const omtBase = `${homedir()}/.omt`;
+    preExistingDirs = new Set(
+      existsSync(omtBase)
+        ? readdirSync(omtBase).map(d => `${omtBase}/${d}`)
+        : []
+    );
+  });
+
+  afterEach(async () => {
+    if (warnSpy) {
+      warnSpy.mockRestore();
+      warnSpy = null;
+    }
+    if (originalOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = originalOmtDir;
+    }
+    process.chdir(originalCwd);
+
+    for (const dir of createdOmtDirs) {
+      if (
+        dir.startsWith(`${homedir()}/.omt/`) &&
+        !preExistingDirs.has(dir) &&
+        existsSync(dir)
+      ) {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('no-git cwd: emits console.warn with non-canonical message and returns correct path', async () => {
+    delete process.env.OMT_DIR;
+
+    const nonGitDir = join(testTmpBase, 'non-canonical-warn-' + Date.now());
+    await mkdir(nonGitDir, { recursive: true });
+    process.chdir(nonGitDir);
+
+    const warnMessages: string[] = [];
+    warnSpy = spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+      warnMessages.push(args.map(String).join(' '));
+    });
+
+    const result = resolveOmtDir(nonGitDir);
+    createdOmtDirs.push(`${homedir()}/.omt/${basename(nonGitDir).replace(/ /g, '-')}`);
+
+    const expectedName = basename(nonGitDir).replace(/ /g, '-');
+    expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
+    expect(warnMessages.length).toBeGreaterThan(0);
+    expect(warnMessages[0]).toContain('non-canonical');
+    expect(warnMessages[0]).toContain(expectedName);
+  });
+
+  it('canonical path (git repo): emits NO console.warn', () => {
+    delete process.env.OMT_DIR;
+
+    const repoDir = join(import.meta.dir, '..');
+
+    const warnMessages: string[] = [];
+    warnSpy = spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+      warnMessages.push(args.map(String).join(' '));
+    });
+
+    const result = resolveOmtDir(repoDir);
+
+    expect(result.startsWith(`${homedir()}/.omt/`)).toBe(true);
+    expect(warnMessages).toHaveLength(0);
   });
 });
 

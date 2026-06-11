@@ -57,7 +57,7 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - Run `explore` agent: check if cwd has existing source code, package files, or git history
    - If source files exist AND the user's idea references modifying/extending something: **brownfield**
    - Otherwise: **greenfield**
-3. **For brownfield**: Run `explore` agent to map relevant codebase areas, store as `codebase_context`
+3. **For brownfield**: Run `explore` agent to map relevant codebase areas; pass the summary as `--codebase-context` in the `init` call (step 4)
 3.5. **Load runtime settings**:
    - Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user)
    - Resolve `omt.deepInterview.ambiguityThreshold` into `<resolvedThreshold>`; if it is undefined, use `0.2`
@@ -67,7 +67,19 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - If the initial context is oversized or likely to crowd out downstream prompts, produce a concise prompt-safe summary that preserves user intent, decisions, constraints, unknowns, cited files/symbols, and any explicit non-goals.
    - Treat the summary as the canonical `initial_idea` and store the raw oversized material only as external/advisory context if it can be referenced safely; do not paste the raw oversized context into question-generation, ambiguity-scoring, spec-crystallization, or execution-handoff prompts.
    - Wait until the summary exists before ambiguity scoring, weakest-dimension selection, brownfield exploration prompts, or any bridge to prometheus or sisyphus.
-4. **Initialize state** by writing `$OMT_DIR/deep-interview-active-state-{sessionId}.json` via Write tool:
+4. **Initialize state** by invoking the CLI:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init \
+  --initial-idea "<prompt-safe initial-context summary or user input>" \
+  --interview-id "<uuid>" \
+  --type "greenfield|brownfield" \
+  --current-phase "deep-interview" \
+  --threshold <resolvedThreshold>
+  # brownfield only: append --codebase-context "<explore summary>"
+```
+
+The `init` subcommand performs a strict overlay of the rich state shape into the seed file that the PreToolUse hook already created. The full shape written to state is:
 
 ```json
 {
@@ -77,7 +89,7 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
     "interview_id": "<uuid>",
     "type": "greenfield|brownfield",
     "initial_idea": "<prompt-safe initial-context summary or user input>",
-    "initial_context_summary": "<summary if oversized, else null>",
+    "initial_context_summary": null,
     "rounds": [],
     "current_ambiguity": 1.0,
     "threshold": <resolvedThreshold>,
@@ -201,7 +213,12 @@ This formula counts renamed entities (changed) toward stability. Renamed entitie
 
 **Show your work:** Before reporting stability numbers, briefly list which entities were matched (by name or fuzzy) and which are new/removed. This lets the user sanity-check the matching.
 
-Store the ontology snapshot (entities + stability_ratio + matching_reasoning) in `state.ontology_snapshots[]`.
+Store the ontology snapshot (entities + stability_ratio + matching_reasoning) by invoking:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-ontology-snapshot '{"entities":[...],"stability_ratio":<ratio>,"matching_reasoning":"<text>"}'
+```
 
 ### Step 2d: Report Progress
 
@@ -227,7 +244,16 @@ Round {n} complete.
 
 ### Step 2e: Update State
 
-Update interview state with the new round and scores by writing `$OMT_DIR/deep-interview-active-state-{sessionId}.json` via Write tool.
+Update interview state with the new round and scores by invoking the CLI twice — once to record the round, once to advance the phase and ambiguity:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-round '{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>},"ambiguity":<ambiguity>}'
+
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --current-phase "deep-interview" \
+  --current-ambiguity <ambiguity>
+```
 
 ### Step 2f: Check Soft Limits
 
@@ -251,7 +277,14 @@ Inject into the question generation prompt:
 Inject into the question generation prompt:
 > You are now in ONTOLOGIST mode. The ambiguity is still high after 8 rounds, suggesting we may be addressing symptoms rather than the core problem. The tracked entities so far are: {current_entities_summary from latest ontology snapshot}. Ask "What IS this, really?" or "Looking at these entities, which one is the CORE concept and which are just supporting?" The goal is to find the essence by examining the ontology.
 
-Challenge modes are used ONCE each, then return to normal Socratic questioning. Track which modes have been used in state.
+Challenge modes are used ONCE each, then return to normal Socratic questioning. Track which modes have been used by invoking:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --challenge-mode "<mode-name>"
+```
+
+(Duplicate names are silently deduped; safe to call even if the mode was already recorded.)
 
 ## Phase 4: Crystallize Spec
 
@@ -372,8 +405,9 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - Use `AskUserQuestion` for each interview question — provides clickable UI with contextual options
 - Use `Agent(subagent_type="explore")` for brownfield codebase exploration (run BEFORE asking user about codebase)
 - Use temperature 0.1 for ambiguity scoring — consistency is critical
-- Use `Write` tool to write and update interview state at `$OMT_DIR/deep-interview-active-state-{sessionId}.json`
-- Use `Read` tool to read back state when resuming an interrupted session
+- Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init` to initialize interview state (Phase-1 step 4)
+- Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update` to update state after each round (Phase-2 step 2e)
+- Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get` to read back state when resuming an interrupted session
 - Use `Write` tool to save the final spec to `$OMT_DIR/deep-interview/{slug}.md`
 - Use `Skill()` to bridge to execution modes — never implement directly
 - Challenge agent modes are prompt injections, not separate agent spawns
@@ -525,7 +559,28 @@ Optional settings in `.claude/settings.json`:
 
 ## Resume
 
-If interrupted, run `/deep-interview` again. The skill reads state from `$OMT_DIR/deep-interview-active-state-{sessionId}.json` via Read tool and resumes from the last completed round.
+If interrupted, run `/deep-interview` again. The skill reads state by invoking:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get
+```
+
+and resumes from the last completed round.
+
+## Continuation Intent (cross-session adoption)
+
+When the user's invocation expresses explicit continuation intent — e.g. "하던 거 계속", "continue what I was doing", "resume the previous interview" — run:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts list-others
+```
+
+If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's initial idea and age — purpose and idle time from the state), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
+
+- On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts adopt --src <selected-sid>`, then resume the interview from the adopted state's last completed round (read state via `get` after adoption).
+- On "start fresh": proceed to Phase 1 as a new interview.
+
+If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.
 
 ## Integration with Prometheus
 

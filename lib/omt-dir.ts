@@ -109,6 +109,8 @@ function deriveProjectName(cwd: string): string {
     return name.replace(/ /g, '-');
   } catch {
     // Not a git repo — fall back to basename of cwd
-    return basename(cwd).replace(/ /g, '-');
+    const name = basename(cwd).replace(/ /g, '-');
+    console.warn(`omt-dir: non-canonical project '${name}' from non-git path ${cwd}`);
+    return name;
   }
 }

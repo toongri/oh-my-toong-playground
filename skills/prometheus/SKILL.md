@@ -955,13 +955,28 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 
 **Deferred-then-revised design decision:** a design decision that was previously deferred to its recommended default and is *later revised* is classified as a **design problem** (a design defect), NOT a routine edit. It therefore routes to S2 (the design phase) → human design gate → re-plan → fresh S4 Momus re-review. Re-review is forced by construction; it does not depend on the user choosing "Revise plan".
 
+### Continuation Intent
+
+When the user's invocation expresses explicit continuation intent — e.g. "하던 거 계속", "continue what I was doing", "resume the previous plan" — run:
+
+```
+bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" list-others
+```
+
+If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's purpose and age — plan path or phase, plus started_at and idle time), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
+
+- On candidate selection: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" adopt --src <selected-sid>`, then run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" get` to read what was adopted, and resume normal flow from the restored state (restore reads the adopted plan file; re-run gates on the current artifact).
+- On "start fresh": proceed as a new planning session.
+
+If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.
+
 ### State Lifecycle Directives
 
 These directives govern how prometheus records its own pipeline state via the state CLI.
 
 - **Per each S-transition**: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the design-brief / ADR is first written during the Co-Design state — this is the first durable plan artifact on disk; the TODO plan body is appended later at S3); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
 - **Teardown**: At S8 dispatch and on abort, emit `<prometheus-done/>` as a standalone output token. The persistent-mode hook detects this token and performs the actual state-file deletion — the model does not call `clear` directly.
-- **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable (the CLI falls back to `default` when `OMT_SESSION_ID` is unset).
+- **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable. The CLI hard-fails with a non-zero exit when `OMT_SESSION_ID` is absent or unsafe — there is no fallback.
 - **Restore**: on restore, re-read the current plan file, restart from `resume_summary` if `plan_path` is missing, distrust any stored verdict, and re-run gates on the current artifact. A stored verdict is not a pass — re-verification is mandatory.
 
 ### Loop Termination Rule

@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Keyword Detector Hook Tests - Ralph Keyword Activation (Phase 1)
+# Keyword Detector Hook Tests
 # =============================================================================
 set -euo pipefail
 
@@ -206,173 +206,6 @@ run_keyword_detector() {
 }
 
 # =============================================================================
-# Tests: Ralph Keyword Detection
-# =============================================================================
-
-test_ralph_keyword_detected_case_insensitive() {
-    # When "ralph" keyword is in prompt (case-insensitive), should be detected
-    local output=$(run_keyword_detector "Please ralph this task" "$TEST_TMP_DIR")
-
-    assert_output_contains "$output" "ralph-mode" "Should output ralph-mode message" || return 1
-}
-
-test_ralph_keyword_detected_uppercase() {
-    # When "RALPH" keyword is in prompt, should be detected
-    local output=$(run_keyword_detector "RALPH complete this task" "$TEST_TMP_DIR")
-
-    assert_output_contains "$output" "ralph-mode" "Should output ralph-mode for uppercase RALPH" || return 1
-}
-
-test_ralph_keyword_detected_mixed_case() {
-    # When "Ralph" keyword is in prompt, should be detected
-    local output=$(run_keyword_detector "Ralph please finish" "$TEST_TMP_DIR")
-
-    assert_output_contains "$output" "ralph-mode" "Should output ralph-mode for mixed case Ralph" || return 1
-}
-
-test_ralph_keyword_not_detected_in_code_block() {
-    # When "ralph" is inside a code block, should NOT be detected
-    local prompt='Here is code:
-```bash
-echo ralph
-```
-Please review'
-    local output=$(run_keyword_detector "$prompt" "$TEST_TMP_DIR")
-
-    # Should NOT contain ralph-mode
-    if echo "$output" | grep -q "ralph-mode"; then
-        echo "ASSERTION FAILED: ralph inside code block should be ignored"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_keyword_not_detected_in_inline_code() {
-    # When "ralph" is inside inline code, should NOT be detected
-    local prompt='Use the \`ralph\` variable in your code'
-    local output=$(run_keyword_detector "$prompt" "$TEST_TMP_DIR")
-
-    # Should NOT contain ralph-mode
-    if echo "$output" | grep -q "ralph-mode"; then
-        echo "ASSERTION FAILED: ralph inside inline code should be ignored"
-        return 1
-    fi
-    return 0
-}
-
-# =============================================================================
-# Tests: Ralph State File Creation
-# =============================================================================
-
-test_ralph_creates_ralph_state_json() {
-    # When ralph keyword detected, should create ralph-state-default.json
-    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
-
-    assert_file_exists "$TEST_TMP_DIR/.omt/ralph-state-default.json" "Should create ralph-state-default.json" || return 1
-}
-
-test_ralph_state_has_correct_structure() {
-    # ralph-state-default.json should have the required fields
-    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
-
-    local state_file="$TEST_TMP_DIR/.omt/ralph-state-default.json"
-
-    assert_json_field "$state_file" ".active" "true" "active should be true" || return 1
-    assert_json_field "$state_file" ".iteration" "0" "iteration should be 0" || return 1
-    assert_json_field "$state_file" ".max_iterations" "10" "max_iterations should be 10" || return 1
-    assert_json_field "$state_file" ".completion_promise" "DONE" "completion_promise should be DONE" || return 1
-}
-
-test_ralph_state_contains_prompt() {
-    # ralph-state-default.json should contain the original prompt
-    run_keyword_detector "ralph complete this task" "$TEST_TMP_DIR" > /dev/null
-
-    local state_file="$TEST_TMP_DIR/.omt/ralph-state-default.json"
-
-    # Check prompt is not empty
-    local prompt=$(jq -r ".prompt" "$state_file" 2>/dev/null)
-    if [[ -z "$prompt" || "$prompt" == "null" ]]; then
-        echo "ASSERTION FAILED: prompt should not be empty"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_state_has_timestamp() {
-    # ralph-state-default.json should have started_at timestamp
-    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
-
-    local state_file="$TEST_TMP_DIR/.omt/ralph-state-default.json"
-
-    local timestamp=$(jq -r ".started_at" "$state_file" 2>/dev/null)
-    if [[ -z "$timestamp" || "$timestamp" == "null" ]]; then
-        echo "ASSERTION FAILED: started_at timestamp should exist"
-        return 1
-    fi
-    return 0
-}
-
-# =============================================================================
-# Tests: Session-Based Ultrawork State Creation
-# =============================================================================
-
-test_ralph_does_not_overwrite_existing_ultrawork_state() {
-    # When ultrawork-state-default.json already exists, ralph should NOT overwrite it
-    local existing_state='{"active": true, "started_at": "2025-01-01T00:00:00", "original_prompt": "existing task"}'
-    echo "$existing_state" > "$TEST_TMP_DIR/.omt/ultrawork-state-default.json"
-
-    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
-
-    local state_file="$TEST_TMP_DIR/.omt/ultrawork-state-default.json"
-
-    # Should preserve original content
-    assert_json_field "$state_file" ".original_prompt" "existing task" "Should preserve existing ultrawork state" || return 1
-}
-
-# =============================================================================
-# Tests: Ralph Priority over Ultrawork
-# =============================================================================
-
-test_ralph_takes_priority_over_ultrawork() {
-    # When both "ralph" and "ultrawork" are in prompt, ralph should win
-    local output=$(run_keyword_detector "ralph ultrawork complete this" "$TEST_TMP_DIR")
-
-    assert_output_contains "$output" "ralph-mode" "ralph should take priority" || return 1
-
-    # Should NOT contain ultrawork-mode
-    if echo "$output" | grep -q "ultrawork-mode"; then
-        echo "ASSERTION FAILED: Should not output ultrawork-mode when ralph is present"
-        return 1
-    fi
-    return 0
-}
-
-# =============================================================================
-# Tests: Ralph Output Message
-# =============================================================================
-
-test_ralph_output_contains_behavioral_expressions() {
-    # Output should contain behavioral expressions
-    local output=$(run_keyword_detector "ralph complete this" "$TEST_TMP_DIR")
-
-    assert_output_contains "$output" "truly done" "Should show 'truly done' behavioral expression" || return 1
-}
-
-test_ralph_output_contains_ralph_loop_activated() {
-    # Output should contain activation message
-    local output=$(run_keyword_detector "ralph complete this" "$TEST_TMP_DIR")
-
-    assert_output_contains "$output" "RALPH LOOP ACTIVATED" "Should show RALPH LOOP ACTIVATED" || return 1
-}
-
-test_ralph_output_contains_done_promise_instruction() {
-    # Output should mention the DONE promise
-    local output=$(run_keyword_detector "ralph complete this" "$TEST_TMP_DIR")
-
-    assert_output_contains "$output" "DONE" "Should mention DONE promise" || return 1
-}
-
-# =============================================================================
 # Tests: Ultrawork CERTAINTY GATE Content
 # =============================================================================
 
@@ -571,216 +404,8 @@ test_ultrawork_output_has_continue_true() {
 }
 
 # =============================================================================
-# Tests: Ralph activation message validation (from hooks/tests/)
-# =============================================================================
-
-test_ralph_message_json_valid() {
-    local result
-    result=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
-
-    if ! echo "$result" | jq . > /dev/null 2>&1; then
-        echo "FAIL: Output is not valid JSON"
-        echo "Output was: $result"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_must_keyword_present() {
-    local message
-    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
-
-    if [[ "$message" != *"MUST"* ]]; then
-        echo "FAIL: Message does not contain 'MUST'"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_promise_done_present() {
-    local message
-    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
-
-    if [[ "$message" != *'<promise>DONE</promise>'* ]]; then
-        echo "FAIL: Message does not contain '<promise>DONE</promise>'"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_no_oracle_or_verified_complete() {
-    local message
-    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
-
-    if [[ "$message" == *"Oracle"* ]] || [[ "$message" == *"VERIFIED_COMPLETE"* ]]; then
-        echo "FAIL: Message should not contain 'Oracle' or 'VERIFIED_COMPLETE'"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_core_rules_present() {
-    local message
-    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
-
-    if [[ "$message" != *"CORE RULES"* ]]; then
-        echo "FAIL: Message does not contain 'CORE RULES'"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_variable_expansion() {
-    local message
-    message=$(echo '{"prompt": "ralph implement feature X", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
-
-    if [[ "$message" != *"Original task: ralph implement feature X"* ]]; then
-        echo "FAIL: PROMPT variable not expanded correctly"
-        echo "Message excerpt: $(echo "$message" | grep -o 'Original task:.*' | head -1)"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_file_references() {
-    local output
-    output=$(echo '{"parts": [{"type": "text", "text": "ralph fix this"}, {"type": "file", "file_path": "src/main.kt"}], "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
-
-    local message
-    message=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-
-    if [[ "$message" != *"[referenced files: src/main.kt]"* ]]; then
-        echo "FAIL: File reference not found in message"
-        echo "Message excerpt: $(echo "$message" | grep -o 'referenced files:.*' | head -1)"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_multiple_file_references() {
-    local output
-    output=$(echo '{"parts": [{"type": "text", "text": "ralph refactor these"}, {"type": "file", "file_path": "src/Foo.kt"}, {"type": "file", "file_path": "test/FooTest.kt"}], "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
-
-    local message
-    message=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-
-    if [[ "$message" != *"[referenced files: src/Foo.kt, test/FooTest.kt]"* ]]; then
-        echo "FAIL: Multiple file references not found"
-        echo "Message excerpt: $(echo "$message" | grep -o 'referenced files:.*' | head -1)"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_code_blocks_preserved() {
-    local output
-    output=$(printf '{"prompt": "ralph fix this ```kotlin\\nfun foo() = 42\\n```", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
-
-    # Note: Code blocks with newlines produce raw newlines in output,
-    # which breaks JSON parsing. Check raw output instead of jq.
-    if [[ "$output" != *'```kotlin'* ]]; then
-        echo "FAIL: Code block not preserved in message"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_system_reminder_removed() {
-    local output
-    output=$(echo '{"prompt": "ralph fix this <system-reminder>noise</system-reminder> please", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
-
-    local message
-    message=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-
-    if [[ "$message" == *"system-reminder"* ]]; then
-        echo "FAIL: System-reminder tag not removed"
-        return 1
-    fi
-    if [[ "$message" != *"ralph fix this"* ]]; then
-        echo "FAIL: Non-reminder content was lost"
-        return 1
-    fi
-    return 0
-}
-
-test_ralph_message_no_file_annotation_without_files() {
-    local output
-    output=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
-
-    local message
-    message=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-
-    if [[ "$message" == *"referenced files"* ]]; then
-        echo "FAIL: File annotation present without file parts"
-        return 1
-    fi
-    return 0
-}
-
-# =============================================================================
-# Tests: Session-based ralph state file creation (from hooks/test/)
-# =============================================================================
-
-test_ralph_keyword_creates_session_specific_state_file() {
-    # Setup: Create project marker
-    mkdir -p "$TEST_TMP_DIR/.git"
-
-    # Run with sessionId in input
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session-123", "prompt": "ralph do the task"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
-
-    # Verify output contains ralph activation
-    assert_output_contains "$output" "RALPH LOOP ACTIVATED" "Should activate ralph loop" || return 1
-
-    # Verify session-specific state file was created
-    assert_file_exists "$TEST_TMP_DIR/.omt/ralph-state-test-session-123.json" "Session-specific ralph state file should exist" || return 1
-
-    # Verify old non-session file was NOT created
-    assert_file_not_exists "$TEST_TMP_DIR/.omt/ralph-state.json" "Non-session ralph state file should NOT exist" || return 1
-}
-
-test_ralph_keyword_uses_default_when_no_session_id() {
-    # Setup: Create project marker
-    mkdir -p "$TEST_TMP_DIR/.git"
-
-    # Run without sessionId in input
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "prompt": "ralph do the task"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
-
-    # Verify output contains ralph activation
-    assert_output_contains "$output" "RALPH LOOP ACTIVATED" "Should activate ralph loop" || return 1
-
-    # Verify default session state file was created
-    assert_file_exists "$TEST_TMP_DIR/.omt/ralph-state-default.json" "Default ralph state file should exist" || return 1
-}
-
-test_ralph_verification_uses_session_id() {
-    # This test verifies that ralph-verification also uses session ID
-    # The verification file is created by persistent-mode.sh, not keyword-detector
-    # So we just check that keyword-detector extracts session ID correctly
-
-    # Check that keyword-detector.sh has SESSION_ID extraction code
-    if grep -q 'SESSION_ID.*jq.*sessionId' "$SCRIPT_DIR/keyword-detector.sh"; then
-        return 0
-    else
-        echo "ASSERTION FAILED: keyword-detector.sh should extract SESSION_ID"
-        return 1
-    fi
-}
-
-# =============================================================================
 # Tests: JSON output format validation - hookSpecificOutput (from hooks/test/)
 # =============================================================================
-
-test_ralph_output_uses_hook_specific_output_format() {
-    mkdir -p "$TEST_TMP_DIR/.git"
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "ralph do the task"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
-
-    assert_json_has_hook_specific_output "$output" "ralph" "Ralph mode should use hookSpecificOutput format" || return 1
-    assert_no_message_field "$output" "Ralph mode should not use message field" || return 1
-}
 
 test_ultrawork_output_uses_hook_specific_output_format() {
     mkdir -p "$TEST_TMP_DIR/.git"
@@ -847,93 +472,10 @@ test_keyword_detector_uses_project_root_variable() {
 }
 
 # =============================================================================
-# Tests: Special Characters JSON Safety
-# =============================================================================
-
-test_ralph_special_characters_produce_valid_json() {
-    # When prompt contains quotes, $, backticks, and newlines,
-    # both stdout JSON and ralph-state JSON must be valid via jq
-    mkdir -p "$TEST_TMP_DIR/.git"
-
-    # Prompt with special characters: double quotes, $variable, backticks, newline
-    local special_prompt='ralph fix "this" with $HOME and `echo hi`
-and a newline'
-
-    # Build properly escaped JSON input using jq
-    local input_json
-    input_json=$(jq -n --arg p "$special_prompt" --arg d "$TEST_TMP_DIR" \
-      '{prompt: $p, cwd: $d, sessionId: "special-test"}')
-
-    local output
-    output=$(echo "$input_json" | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
-
-    # Validate stdout JSON is parseable by jq
-    if ! echo "$output" | jq . > /dev/null 2>&1; then
-        echo "ASSERTION FAILED: stdout output is not valid JSON with special characters"
-        echo "  Output (first 500 chars): ${output:0:500}"
-        return 1
-    fi
-
-    # Validate ralph-state file exists and is valid JSON
-    local state_file="$TEST_TMP_DIR/.omt/ralph-state-special-test.json"
-    assert_file_exists "$state_file" "Ralph state file should exist for special chars test" || return 1
-
-    if ! jq . "$state_file" > /dev/null 2>&1; then
-        echo "ASSERTION FAILED: ralph-state JSON is not valid with special characters"
-        echo "  File contents: $(cat "$state_file")"
-        return 1
-    fi
-
-    # Verify the prompt field in state file preserved special characters
-    local stored_prompt
-    stored_prompt=$(jq -r '.prompt' "$state_file" 2>/dev/null)
-    if [[ -z "$stored_prompt" || "$stored_prompt" == "null" ]]; then
-        echo "ASSERTION FAILED: prompt should be preserved in ralph-state file"
-        return 1
-    fi
-
-    # Verify stdout JSON has correct structure
-    local hook_event
-    hook_event=$(echo "$output" | jq -r '.hookSpecificOutput.hookEventName' 2>/dev/null)
-    assert_equals "UserPromptSubmit" "$hook_event" "hookEventName should be UserPromptSubmit with special chars" || return 1
-
-    return 0
-}
-
-test_ralph_state_prompt_is_truncated_when_too_long() {
-    mkdir -p "$TEST_TMP_DIR/.git"
-
-    local long_text
-    long_text=$(perl -e 'print "x" x 3500')
-    local long_prompt="ralph ${long_text}"
-
-    run_keyword_detector "$long_prompt" "$TEST_TMP_DIR" > /dev/null
-
-    local state_file="$TEST_TMP_DIR/.omt/ralph-state-default.json"
-    assert_file_exists "$state_file" "Ralph state file should exist for truncation test" || return 1
-
-    local stored_prompt
-    stored_prompt=$(jq -r '.prompt' "$state_file" 2>/dev/null)
-
-    if [[ "$stored_prompt" != *"[truncated from "* ]]; then
-        echo "ASSERTION FAILED: state prompt should include truncation suffix"
-        return 1
-    fi
-
-    if [[ ${#stored_prompt} -gt 2100 ]]; then
-        echo "ASSERTION FAILED: state prompt should be bounded after truncation"
-        echo "  Actual length: ${#stored_prompt}"
-        return 1
-    fi
-
-    return 0
-}
-
-# =============================================================================
 # Tests: Deep Interview Keyword Detection
 # =============================================================================
 
-test_deep_interview_english_keyword_creates_state_file() {
+test_deep_interview_english_keyword_activates_mode() {
     mkdir -p "$TEST_TMP_DIR/.git"
 
     local session_id="di-test-english"
@@ -942,7 +484,8 @@ test_deep_interview_english_keyword_creates_state_file() {
 
     assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode" || return 1
     assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
-    assert_file_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should be created" || return 1
+    # State file is NOT created by keyword-detector — creation moved to pre-tool-enforcer seed
+    assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "keyword-detector must NOT create state file (creation moved to seed)" || return 1
 }
 
 test_deep_interview_ouroboros_keyword() {
@@ -954,7 +497,8 @@ test_deep_interview_ouroboros_keyword() {
 
     assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode for ouroboros keyword" || return 1
     assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
-    assert_file_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should be created for ouroboros" || return 1
+    # State file is NOT created by keyword-detector
+    assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "keyword-detector must NOT create state file for ouroboros" || return 1
 }
 
 test_deep_interview_korean_keyword() {
@@ -966,7 +510,8 @@ test_deep_interview_korean_keyword() {
 
     assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode for Korean keyword 딥인터뷰" || return 1
     assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
-    assert_file_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should be created for Korean keyword" || return 1
+    # State file is NOT created by keyword-detector
+    assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "keyword-detector must NOT create state file for Korean keyword" || return 1
 }
 
 test_deep_interview_nested_loop_prevention() {
@@ -988,34 +533,89 @@ You are now in deep interview mode. Conduct a thorough, structured interview:
     # Should NOT re-trigger deep-interview activation
     assert_output_not_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Nested deep-interview-mode tag should NOT re-trigger activation" || return 1
 
-    # State file should NOT be created
+    # State file should NOT be created (no incidental creation path remains)
     assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should NOT be created for nested loop" || return 1
 }
 
-test_ralph_nested_loop_prevention() {
+# =============================================================================
+# A1 — incidental mention of deep-interview keywords creates no state file
+# =============================================================================
+
+test_a1_incidental_mention_creates_no_state_file() {
     mkdir -p "$TEST_TMP_DIR/.git"
 
-    local nested_prompt="ralph <ralph-loop-continuation>Previous ralph task</ralph-loop-continuation> new task"
+    local session_id="di-test-mention"
+    # Mentions (including negation) — none should trigger state file creation
+    local prompts=(
+        "we are NOT doing a deep-interview today"
+        "the ouroboros pattern is interesting"
+        "딥인터뷰에 대해 들어봤어요?"
+    )
 
-    run_keyword_detector "$nested_prompt" "$TEST_TMP_DIR" > /dev/null
+    local p
+    for p in "${prompts[@]}"; do
+        echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "'"$p"'"}' \
+            | "$SCRIPT_DIR/keyword-detector.sh" > /dev/null 2>&1 || true
+    done
 
-    local state_file="$TEST_TMP_DIR/.omt/ralph-state-default.json"
-    assert_file_exists "$state_file" "Ralph state file should exist" || return 1
+    # No state file should exist from keyword-detector
+    local found
+    found=$(ls "$OMT_DIR"/deep-interview-active-state-*.json 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$found" -eq 0 ]] \
+        || { echo "ASSERTION FAILED: incidental mention must not create state file (found=$found files)"; return 1; }
+}
 
-    local stored_prompt
-    stored_prompt=$(jq -r '.prompt' "$state_file" 2>/dev/null)
+# =============================================================================
+# Tests: Deep Interview seed started_at/last_touched_at parser compatibility (TODO 5)
+# Survivor tests re-pointed: invoke pre-tool-enforcer.sh Skill(deep-interview) seed
+# =============================================================================
 
-    if [[ "$stored_prompt" == *"<ralph-loop-"* ]]; then
-        echo "ASSERTION FAILED: nested ralph tags should be stripped"
+# Helper: assert a state file has a parser-compatible timestamp field.
+# Verifies ISO 8601 shape AND round-trip through the real session-start.sh parser.
+assert_timestamp_parser_compatible() {
+    local state_file="$1"
+    local field="${2:-started_at}"
+
+    local ts
+    ts=$(jq -r --arg f "$field" '.[$f] // ""' "$state_file" 2>/dev/null)
+    if [[ -z "$ts" || "$ts" == "null" ]]; then
+        echo "ASSERTION FAILED: $field field missing or null in $state_file"
         return 1
     fi
 
-    if [[ "$stored_prompt" != *"new task" ]]; then
-        echo "ASSERTION FAILED: original task should be preserved"
+    if ! echo "$ts" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'; then
+        echo "ASSERTION FAILED: $field '$ts' does not match ISO 8601 shape"
+        return 1
+    fi
+
+    local time_part epoch
+    time_part=$(echo "$ts" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
+    epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$time_part" "+%s" 2>/dev/null \
+        || date -d "$time_part" "+%s" 2>/dev/null)
+    if [[ -z "$epoch" ]]; then
+        echo "ASSERTION FAILED: $field '$ts' (stripped: '$time_part') did not round-trip through session-start parser"
         return 1
     fi
 
     return 0
+}
+
+test_deep_interview_seed_has_parser_compatible_timestamps() {
+    # Survivor: seed created by pre-tool-enforcer.sh Skill(deep-interview) has
+    # parser-compatible started_at and last_touched_at (consolidates the two
+    # prior jq-branch/heredoc-branch tests that invoked the deleted creation path).
+    local sid="di-seed-compat"
+    local state_file="$OMT_DIR/deep-interview-active-state-${sid}.json"
+
+    (
+        export OMT_SESSION_ID="$sid"
+        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"deep-interview"}}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    ) > /dev/null 2>&1 || true
+
+    assert_file_exists "$state_file" "deep-interview state file should exist from seed" || return 1
+    assert_timestamp_parser_compatible "$state_file" "started_at" || return 1
+    assert_timestamp_parser_compatible "$state_file" "last_touched_at" || return 1
 }
 
 # =============================================================================
@@ -1024,32 +624,8 @@ test_ralph_nested_loop_prevention() {
 
 main() {
     echo "=========================================="
-    echo "Keyword Detector Tests - Ralph Activation"
+    echo "Keyword Detector Tests"
     echo "=========================================="
-
-    # Ralph Keyword Detection
-    run_test test_ralph_keyword_detected_case_insensitive
-    run_test test_ralph_keyword_detected_uppercase
-    run_test test_ralph_keyword_detected_mixed_case
-    run_test test_ralph_keyword_not_detected_in_code_block
-    run_test test_ralph_keyword_not_detected_in_inline_code
-
-    # Ralph State File Creation
-    run_test test_ralph_creates_ralph_state_json
-    run_test test_ralph_state_has_correct_structure
-    run_test test_ralph_state_contains_prompt
-    run_test test_ralph_state_has_timestamp
-
-    # Session-Based Ultrawork State Creation
-    run_test test_ralph_does_not_overwrite_existing_ultrawork_state
-
-    # Ralph Priority over Ultrawork
-    run_test test_ralph_takes_priority_over_ultrawork
-
-    # Ralph Output Message
-    run_test test_ralph_output_contains_behavioral_expressions
-    run_test test_ralph_output_contains_ralph_loop_activated
-    run_test test_ralph_output_contains_done_promise_instruction
 
     # Ultrawork CERTAINTY GATE Content
     run_test test_ultrawork_output_contains_certainty_gate
@@ -1078,45 +654,27 @@ main() {
     run_test test_ultrawork_output_has_correct_hook_event
     run_test test_ultrawork_output_has_continue_true
 
-    # Ralph activation message validation (from hooks/tests/)
-    run_test test_ralph_message_json_valid
-    run_test test_ralph_message_must_keyword_present
-    run_test test_ralph_message_promise_done_present
-    run_test test_ralph_message_no_oracle_or_verified_complete
-    run_test test_ralph_message_core_rules_present
-    run_test test_ralph_message_variable_expansion
-    run_test test_ralph_message_file_references
-    run_test test_ralph_message_multiple_file_references
-    run_test test_ralph_message_code_blocks_preserved
-    run_test test_ralph_message_system_reminder_removed
-    run_test test_ralph_message_no_file_annotation_without_files
-
-    # Session-based ralph state file creation (from hooks/test/)
-    run_test test_ralph_keyword_creates_session_specific_state_file
-    run_test test_ralph_keyword_uses_default_when_no_session_id
-    run_test test_ralph_verification_uses_session_id
-
     # Project root detection - keyword-detector (from hooks/test/project_root_test.sh)
     run_test test_get_project_root_function_exists_in_keyword_detector
     run_test test_keyword_detector_uses_project_root_variable
 
     # JSON output format validation - hookSpecificOutput (from hooks/test/)
-    run_test test_ralph_output_uses_hook_specific_output_format
     run_test test_ultrawork_output_uses_hook_specific_output_format
     run_test test_think_output_uses_hook_specific_output_format
     run_test test_search_output_uses_hook_specific_output_format
     run_test test_analyze_output_uses_hook_specific_output_format
 
-    # Special Characters JSON Safety
-    run_test test_ralph_special_characters_produce_valid_json
-    run_test test_ralph_state_prompt_is_truncated_when_too_long
-    run_test test_ralph_nested_loop_prevention
-
-    # Deep Interview Keyword Detection
-    run_test test_deep_interview_english_keyword_creates_state_file
+    # Deep Interview Keyword Detection (mode activation; no state file from keyword-detector)
+    run_test test_deep_interview_english_keyword_activates_mode
     run_test test_deep_interview_ouroboros_keyword
     run_test test_deep_interview_korean_keyword
     run_test test_deep_interview_nested_loop_prevention
+
+    # A1 — incidental mention creates no state file
+    run_test test_a1_incidental_mention_creates_no_state_file
+
+    # Deep Interview seed timestamps (TODO 5: survivor tests re-pointed to pre-tool-enforcer seed)
+    run_test test_deep_interview_seed_has_parser_compatible_timestamps
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

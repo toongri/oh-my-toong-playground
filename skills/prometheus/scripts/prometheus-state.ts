@@ -2,16 +2,17 @@
  * Prometheus skill state CLI.
  *
  * State file path: ${OMT_DIR}/prometheus-state-${sessionId}.json
- * Session ID: process.env.OMT_SESSION_ID || "default"
+ * Session ID: resolved via resolveSessionIdOrThrow() (hard-fail on absent/unsafe)
  *
  * Subcommands:
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]
+ *   get
  *   clear
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
-import { dirname } from 'path';
+import { existsSync, readFileSync, unlinkSync, statSync } from 'fs';
 import { execSync } from 'child_process';
+import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFileNoCreate } from '@lib/state-core';
 
 export interface PrometheusState {
   active: boolean;
@@ -23,17 +24,13 @@ export interface PrometheusState {
   resume_summary: string;
   /** Local ISO-8601 without milliseconds, seeded once via `date -Iseconds` */
   started_at: string;
+  /** Refreshed on every write (heartbeat). Used by the GC liveness check. */
+  last_touched_at: string;
 }
 
 // ---------------------------------------------------------------------------
 // IO helpers (safe write semantics, no import from hooks/)
 // ---------------------------------------------------------------------------
-
-function ensureDir(path: string): void {
-  if (!existsSync(path)) {
-    mkdirSync(path, { recursive: true });
-  }
-}
 
 function readFileOrNull(path: string): string | null {
   try {
@@ -41,11 +38,6 @@ function readFileOrNull(path: string): string | null {
   } catch {
     return null;
   }
-}
-
-function writeFileSafe(path: string, content: string): void {
-  ensureDir(dirname(path));
-  writeFileSync(path, content, 'utf8');
 }
 
 function deleteFile(path: string): void {
@@ -71,7 +63,7 @@ export function resolveStatePath(sessionId: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// started_at seeding — spawns shell date to match ralph's BSD-parseable format
+// started_at seeding — spawns shell date to match the BSD-parseable format
 // ---------------------------------------------------------------------------
 
 function seedStartedAt(): string {
@@ -124,11 +116,11 @@ export function setPrometheusState(
     try {
       prior = JSON.parse(existing) as Partial<PrometheusState>;
     } catch {
-      // corrupt file; start fresh
+      // corrupt file; start fresh from empty prior
     }
   }
 
-  const state: PrometheusState = {
+  const partial: Omit<PrometheusState, 'last_touched_at'> = {
     active: true,
     phase: opts.phase,
     plan_path: opts.plan_path ?? prior.plan_path ?? '',
@@ -137,7 +129,24 @@ export function setPrometheusState(
     started_at: prior.started_at ?? seedStartedAt(),
   };
 
-  writeFileSafe(path, JSON.stringify(state, null, 2));
+  const state = mergeWithHeartbeat(partial, {}) as PrometheusState;
+  // ADR-7 (strict no-create): writeFileNoCreate throws ENOENT when the file is
+  // absent — no existsSync check required. Eliminates the TOCTOU window where
+  // an adopt-rename between existsSync and write could resurrect an orphan.
+  // The PreToolUse seed is the ONLY creator of state files.
+  try {
+    writeFileNoCreate(path, JSON.stringify(state, null, 2));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new Error(
+        `prometheus-state: state file absent for session "${sessionId}". ` +
+          `Possible causes: state adopted by another session, or seed missing. ` +
+          `Re-invoke the prometheus skill to re-seed.`
+      );
+    }
+    throw err;
+  }
 }
 
 export function clearPrometheusState(sessionId: string): void {
@@ -171,17 +180,75 @@ function parseArgs(args: string[]): Record<string, string | boolean> {
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const subcommand = args['_subcommand'];
-  const sessionId = process.env.OMT_SESSION_ID || 'default';
+  let sessionId: string;
+  try {
+    sessionId = resolveSessionIdOrThrow();
+  } catch (e) {
+    process.stderr.write(`prometheus-state: ${String(e)}\n`);
+    process.exit(1);
+  }
 
-  if (subcommand === 'set') {
-    const phase = String(args['phase'] ?? '');
-    const planPath = args['plan-path'] !== undefined ? String(args['plan-path']) : undefined;
-    const resumeSummary = args['resume-summary'] !== undefined ? String(args['resume-summary']) : undefined;
-    setPrometheusState(sessionId, { phase, plan_path: planPath, resume_summary: resumeSummary });
-  } else if (subcommand === 'clear') {
-    clearPrometheusState(sessionId);
-  } else {
-    process.stderr.write('Usage: prometheus-state.ts <set|clear> [options]\n');
+  try {
+    if (subcommand === 'set') {
+      const phase = String(args['phase'] ?? '');
+      const planPath = args['plan-path'] !== undefined ? String(args['plan-path']) : undefined;
+      const resumeSummary = args['resume-summary'] !== undefined ? String(args['resume-summary']) : undefined;
+      setPrometheusState(sessionId, { phase, plan_path: planPath, resume_summary: resumeSummary });
+    } else if (subcommand === 'clear') {
+      clearPrometheusState(sessionId);
+    } else if (subcommand === 'list-others') {
+      const candidates = listOthers('prometheus');
+      for (const c of candidates) {
+        const shortSid = c.sid.slice(0, 8);
+        process.stdout.write(
+          `${shortSid}\t${c.sid}\t${c.purpose}\t${c.startedAt}\t${c.idleSeconds}s\n`
+        );
+      }
+    } else if (subcommand === 'get') {
+      const statePath = resolveStatePath(sessionId);
+      const content = readFileOrNull(statePath);
+      if (content === null) {
+        process.stderr.write(
+          `prometheus-state: state file absent for session "${sessionId}". ` +
+            `Run the prometheus skill to seed state first.\n`
+        );
+        process.exit(1);
+      }
+      process.stdout.write(content + '\n');
+    } else if (subcommand === 'adopt') {
+      const srcSid = args['src'] !== undefined ? String(args['src']) : undefined;
+      if (!srcSid) {
+        process.stderr.write('adopt: --src <sid> is required\n');
+        process.exit(1);
+      }
+      adopt('prometheus', srcSid);
+      // Additional check: stat the adopted state's plan_path and warn if it does not resolve
+      const dstPath = resolveStatePath(sessionId);
+      if (existsSync(dstPath)) {
+        try {
+          const content = readFileSync(dstPath, 'utf8');
+          const parsed = JSON.parse(content) as Partial<PrometheusState>;
+          const planPath = parsed.plan_path;
+          if (planPath && planPath !== '') {
+            try {
+              statSync(planPath);
+            } catch {
+              process.stderr.write(
+                `adopt: warning: adopted plan_path "${planPath}" does not resolve on disk. ` +
+                  `The state was adopted successfully, but the plan file may need to be located manually.\n`
+              );
+            }
+          }
+        } catch {
+          // parse failure: skip plan_path check
+        }
+      }
+    } else {
+      process.stderr.write('Usage: prometheus-state.ts <set|get|clear|list-others|adopt> [options]\n');
+      process.exit(1);
+    }
+  } catch (e) {
+    process.stderr.write(`prometheus-state: ${String(e)}\n`);
     process.exit(1);
   }
 }

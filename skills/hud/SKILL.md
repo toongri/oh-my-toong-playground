@@ -159,7 +159,7 @@ When user runs `/hud restore`:
 After setup, the HUD shows:
 
 ```
-[OMC] ralph:3/10 | ultrawork | ctx:67% | agents:2 | bg:1 | todos:2/5 | skill:prometheus
+[OMC] ultrawork | ctx:67% | agents:2 | bg:1 | todos:2/5 | skill:prometheus
 ```
 
 ### Elements
@@ -167,8 +167,6 @@ After setup, the HUD shows:
 | Element | Description |
 |---------|-------------|
 | `[OMC]` | Oh-My-Toong prefix (always shown) |
-| `ralph:X/Y` | Ralph loop iteration (green/yellow/red) |
-| `N/M` | Verification attempt N of M (after ralph) |
 | `ultrawork` | Ultrawork mode active |
 | `ctx:N%` | Context window usage (green <70%, yellow 70-85%, red >85%) |
 | `agents:N` | Running subagents count |
