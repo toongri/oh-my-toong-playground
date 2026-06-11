@@ -10,6 +10,7 @@ import { detectDeepInterviewDone, detectPrometheusDone } from './transcript-dete
 import { generateAttemptId, ensureDir } from './utils.ts';
 import { join } from 'path';
 import { getOmtDir } from '@lib/omt-dir';
+import { isPristine } from '@lib/state-core';
 
 export interface DecisionContext {
   projectRoot: string;
@@ -216,11 +217,19 @@ export function makeDecision(context: DecisionContext): HookOutput {
     // Active non-pursuing phase OR terminal inactive: goal owns lifecycle → suppress the
     // baseline-todo branch (M3). Do NOT suppress Deep-Interview Protection below (B2):
     // a lingering/terminal goal-state must not strip an unrelated active interview's loop.
-    goalSuppressesBaselineTodo = true;
-    // ADR-8 (C2): every suppression read IS a use — refresh the heartbeat so an
-    // in-use terminal state does not age toward TERMINAL_TTL while still functioning.
-    // updateGoalState is no-create: absent file produces no write.
-    try { updateGoalState(sessionId, {}); } catch { /* M1: never degrade */ }
+    //
+    // Pristine exception: a pristine seed (phase=planning, iteration=0, outcome="")
+    // was seeded by the PreToolUse hook before the goal skill ran. If the skill refused
+    // (non-falsifiable objective), the seed lingers. A pristine state is INERT to all
+    // consumers — it must not suppress baseline-todo and must not be kept alive by a
+    // heartbeat refresh. The orphan ages toward ACTIVE TTL and is GC'd naturally.
+    if (!isPristine('goal', goalRaw as unknown as Record<string, unknown>)) {
+      goalSuppressesBaselineTodo = true;
+      // ADR-8 (C2): every suppression read IS a use — refresh the heartbeat so an
+      // in-use terminal state does not age toward TERMINAL_TTL while still functioning.
+      // updateGoalState is no-create: absent file produces no write.
+      try { updateGoalState(sessionId, {}); } catch { /* M1: never degrade */ }
+    }
   }
 
   // Priority 1.5: Deep Interview Protection
