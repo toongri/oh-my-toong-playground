@@ -6,13 +6,13 @@
  *
  * Subcommands:
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]
+ *   get
  *   clear
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, statSync } from 'fs';
-import { dirname } from 'path';
+import { existsSync, readFileSync, unlinkSync, statSync } from 'fs';
 import { execSync } from 'child_process';
-import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt } from '@lib/state-core';
+import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFileNoCreate } from '@lib/state-core';
 
 export interface PrometheusState {
   active: boolean;
@@ -32,23 +32,12 @@ export interface PrometheusState {
 // IO helpers (safe write semantics, no import from hooks/)
 // ---------------------------------------------------------------------------
 
-function ensureDir(path: string): void {
-  if (!existsSync(path)) {
-    mkdirSync(path, { recursive: true });
-  }
-}
-
 function readFileOrNull(path: string): string | null {
   try {
     return readFileSync(path, 'utf8');
   } catch {
     return null;
   }
-}
-
-function writeFileSafe(path: string, content: string): void {
-  ensureDir(dirname(path));
-  writeFileSync(path, content, 'utf8');
 }
 
 function deleteFile(path: string): void {
@@ -121,15 +110,6 @@ export function setPrometheusState(
   opts: { phase: string; plan_path?: string; resume_summary?: string }
 ): void {
   const path = resolveStatePath(sessionId);
-  // ADR-7 (strict no-create): absent file -> throw (caught and converted to non-zero exit in main).
-  // The PreToolUse seed is the ONLY creator of state files.
-  if (!existsSync(path)) {
-    throw new Error(
-      `prometheus-state: state file absent for session "${sessionId}". ` +
-        `Possible causes: state adopted by another session, or seed missing. ` +
-        `Re-invoke the prometheus skill to re-seed.`
-    );
-  }
   const existing = readFileOrNull(path);
   let prior: Partial<PrometheusState> = {};
   if (existing) {
@@ -150,7 +130,23 @@ export function setPrometheusState(
   };
 
   const state = mergeWithHeartbeat(partial, {}) as PrometheusState;
-  writeFileSafe(path, JSON.stringify(state, null, 2));
+  // ADR-7 (strict no-create): writeFileNoCreate throws ENOENT when the file is
+  // absent — no existsSync check required. Eliminates the TOCTOU window where
+  // an adopt-rename between existsSync and write could resurrect an orphan.
+  // The PreToolUse seed is the ONLY creator of state files.
+  try {
+    writeFileNoCreate(path, JSON.stringify(state, null, 2));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new Error(
+        `prometheus-state: state file absent for session "${sessionId}". ` +
+          `Possible causes: state adopted by another session, or seed missing. ` +
+          `Re-invoke the prometheus skill to re-seed.`
+      );
+    }
+    throw err;
+  }
 }
 
 export function clearPrometheusState(sessionId: string): void {
@@ -208,6 +204,17 @@ function main(): void {
           `${shortSid}\t${c.sid}\t${c.purpose}\t${c.startedAt}\t${c.idleSeconds}s\n`
         );
       }
+    } else if (subcommand === 'get') {
+      const statePath = resolveStatePath(sessionId);
+      const content = readFileOrNull(statePath);
+      if (content === null) {
+        process.stderr.write(
+          `prometheus-state: state file absent for session "${sessionId}". ` +
+            `Run the prometheus skill to seed state first.\n`
+        );
+        process.exit(1);
+      }
+      process.stdout.write(content + '\n');
     } else if (subcommand === 'adopt') {
       const srcSid = args['src'] !== undefined ? String(args['src']) : undefined;
       if (!srcSid) {
@@ -237,7 +244,7 @@ function main(): void {
         }
       }
     } else {
-      process.stderr.write('Usage: prometheus-state.ts <set|clear|list-others|adopt> [options]\n');
+      process.stderr.write('Usage: prometheus-state.ts <set|get|clear|list-others|adopt> [options]\n');
       process.exit(1);
     }
   } catch (e) {
