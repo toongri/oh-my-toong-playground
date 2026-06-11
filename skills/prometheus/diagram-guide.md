@@ -8,12 +8,14 @@ A diagram is the highest-density enrichment, so the fidelity bound is strictest:
 
 - **Ephemeral only.** Diagrams render into the HTML presentation only. NEVER write a diagram or its source into `plan.md` — Invariant 3 keeps `plan.md` the unmodified single source of truth; every re-render redraws from it. Inject the ` ```mermaid ` fence into the render-time markdown string, not into the file on disk.
 - **Re-visualize decided flow only.** Drawing an edge forces a commitment: who calls whom, in what order, which component owns what. If you cannot draw an arrow or relationship without making a decision `plan.md` did not already make, **STOP** — that is a plan defect, not a diagram opportunity. Return to revise the plan and re-run the pipeline; do not invent the missing edge at render time. A diagram can never be vaguer than the plan it visualizes.
-- **MAY, never MUST.** The Necessity Test gates existence. Most plans need no diagram.
+- **MAY, never MUST.** The Necessity Test gates existence. Most plans need no diagram. *Exception*: the Stage A bird's-eye view (ownership table + flow mermaid derived from the decision log) is REQUIRED on structural enumeration — its existence is governed by `review-pipeline.md`, not the Necessity Test. This guide still governs type selection, guardrails, and presentation for all diagrams including the bird's-eye.
 
 ## Necessity Test
 
 > "Does a diagram reveal flow or structure that prose alone cannot efficiently convey?"
 > NO -> no diagram. Prose or a blockquote callout is enough.
+
+**Decision-log mermaid.** Each D-item in the unified decision log records one decided commitment. An optional in-band mermaid re-visualizes the DECIDED D-items only — it MUST NOT invent ownership or edges beyond what the decided items already record. The diagram (and any mermaid derived from the log) is never a source of truth; the decided decision log in `plan.md` remains the single authority. The standard `MAY, never MUST` rule applies to discretionary enrichment diagrams: omit the mermaid if the Necessity Test returns NO. *Exception*: the Stage A bird's-eye flow mermaid's existence is governed by `review-pipeline.md` — REQUIRED on structural enumeration (Complex/Architecture flag) unless every structural (solo) D-item declares `Edges: none`; the Necessity Test does not gate it.
 
 ## 1. Diagram Types
 

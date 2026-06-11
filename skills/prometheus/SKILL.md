@@ -685,7 +685,7 @@ This contract applies to EVERY plan. The contract lives here — not in a refere
 | **Execution Strategy** | Wave visualization, Dependency Matrix, Critical Path. Target 5-8 tasks/wave. Circular dependencies forbidden. **Final Verification Wave mandatory for Scoped+ intent.** |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Zero Human Intervention — agent-executed with evidence to `$OMT_DIR/evidence/{plan-name}/` |
 | **Success Criteria** | Binary pass/fail end state. Verification commands + final checklist |
-| **ADR** | Architecture Decision Record — MADR 7-field (Context / Decision Drivers / Considered Options / Decision / Rationale / Consequences / Follow-ups). Scoped+ default; Trivial exempt. |
+| **ADR** | Co-authored decision log of titled `D-N` items — contested tier full 7-field MADR, solo tier lightweight fields + ownership/edges (see `### ADR`). Scoped+ default; Trivial exempt. |
 
 Canonical required section headings (validator single source):
 ```
@@ -704,11 +704,16 @@ Each plan section is emitted as exactly its canonical heading above (plus `## AD
 
 Architecture Decision Record (Nygard 2011 / MADR) — one entry per significant design choice in the plan. **Required for Scoped+ intent. Trivial intent is exempt from ADR output.** Inline in the plan; no separate file needed.
 
-**The ADR is a co-authored design artifact, not a solo post-hoc record.** It is filled WITH the user during the S2 Co-Design phase — the joint decision log of the co-design dialogue — and is the **review object** of both the human design gate and the in-phase Daedalus advisory pass. By the time the plan is written at S3, the plan's `## ADR` section is a **refined copy** of this co-authored artifact (the same MADR fields, cleaned up for the executor), not a freshly authored record. Authorship timing/ownership changed (solo post-hoc → co-authored during design); the MADR 7-field structure below is unchanged.
+**The ADR log is the design source of truth — a co-authored decision log, not a solo post-hoc record.** It is filled WITH the user during the S2 Co-Design phase — the joint decision log of the co-design dialogue — and is the **review object** of both the human design gate and the in-phase Daedalus advisory pass. Every design decision — contested or not — is **one titled `D-N` item** carrying its own rationale. Items come in two tiers:
+
+- **Contested tier** — a decision whose alternatives stand in a genuine tradeoff relationship, co-decided with the human. It carries the full 7-field MADR (fields listed below). An item whose **Decision** field is left empty is the open-fork representation: an unresolved contested decision still under co-design.
+- **Solo tier** — an uncontested decision, including every structural allocation and runtime edge. It carries lightweight fields: **Decision** / **Why** / **Invalidated alternative (one line)** / **Cites** (`file:symbol` for existing code, `(new)` for greenfield). A solo structural item also declares its **ownership** — what it owns, and **what it must NOT own** — and its **edges** `(caller→callee, side effect, failure path)`, or explicitly declares `Edges: none` (the close gate treats an explicit none as a complete enumeration, not an omission). When no Must-NOT boundary applies, the item must state it explicitly — e.g., `Must NOT own: none — <one-line reason>` — rather than omitting the field.
+
+By the time the plan is written at S3, the plan's `## ADR` section is a **refined copy** of this co-authored log (the same fields, cleaned up for the executor), not a freshly authored record.
 
 **Gate-vs-sub-fork deferral boundary.** The human design gate (S2) blocks on the user's **explicit holistic approval** of the design — there is no auto-default for the gate itself; an unanswered gate does not silently pass. Individual sub-forks *within* the design are a separate matter: whenever a sub-fork is surfaced — including late, at the gate itself — it follows the existing `### User Deferral Handling` (defer → recommended default becomes the autonomous decision, recorded in the ADR's **Considered Options** / **Decision** with its deferral noted). A deferral that is later revised is not a free edit: a deferred-to-default decision that is subsequently changed is a **design defect** that re-enters the design phase and forces re-plan → re-Momus, per the Pipeline State Machine's deferred-then-revised loop-back rule (`## Review Pipeline > Pipeline State Machine`). So a deferral can never silently survive past a fresh plan gate — revising it re-walks design.
 
-Fields (all required per ADR entry):
+Contested-tier fields (all required per contested `D-N` item):
 
 - **Context** — Background and design principles governing this decision (e.g., additive-only, zero-downtime, backward-compatible). State the principles from the requirements or interview here; they shape everything below.
 - **Decision Drivers** — Factors that constrained or guided the choice (e.g., performance budget, team conventions, existing contract, timeline).
@@ -717,6 +722,18 @@ Fields (all required per ADR entry):
 - **Rationale** — Reasoning for the chosen option over the alternatives.
 - **Consequences** — Positive outcomes expected AND trade-offs accepted.
 - **Follow-ups** — Open questions or tasks this decision defers (write "none" if empty).
+
+**Required for Scoped+ intent. Trivial intent is exempt from ADR output.** This full-item gate is unchanged: contested and solo items both populate the log from Scoped intent upward.
+
+#### Structural enumeration (Complex and Architecture only)
+
+**MUST enumeration rule.** At **Complex** and **Architecture** intent, **every component the change creates or modifies** is enumerated as a solo `D-N` item declaring its ownership and its edges (or an explicit none). Structural enumeration is Complex and Architecture ONLY — there is **no structural-enumeration path below the Complex band**. (Full-item output, by contrast, is gated from Scoped+ as stated above; the two gates are distinct.)
+
+**Close gate.** S2 closes on the structural set only when this is answerable YES: **Can a sequence/component diagram be drawn from the full set of D-items WITHOUT inventing new ownership or edges? (YES/NO)** YES means every component item gives its owner + Must-NOT boundary and every edge is enumerated (an explicit declaration of no edges counts), so no unstated owner or edge remains. An explicit `Must NOT own: none` declaration satisfies the Must-NOT boundary requirement — it is a declared boundary, not an omission. NO keeps the loop open. This gate is **loop-closure, not coverage** — whether every eventually-touched file appears is the human co-owner's call at the design gate plus a soft self-review nudge, never folded into this question.
+
+**Anti-ceremony escape.** Structural enumeration may be skipped **only** when the change introduces **no new ownership and no new edges** (triviality derived from the change itself, not the planner's effort). Skipping requires recording a **named, specific** consequence of skipping — **not boilerplate** ("low risk", "trivial", "no impact" are rejected). Example of a good named consequence: "skips enumeration because this change only edits copy inside `Formatter.render`; if that turns out to also move the rounding rule, the unowned-rounding fork goes uncaught." A boilerplate consequence fails this clause and forces enumeration.
+
+**Momus framing.** The solo items' structural claims are reviewed downstream as **document quality** (internal consistency: do the items agree with each other and with the prose?) and **feasibility** (do the cited references exist and match the codebase?) — **NOT architecture ideality** (whether the chosen structure is the architecturally best one stays with the human and the in-phase Daedalus advisory).
 
 > Worked example → [plan-template.md](plan-template.md). Lookup-only.
 
@@ -939,7 +956,7 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 |-------|-------------|-------------|
 | **S0: Requirements** | Open requirements interview + AC co-decide | → S1 on Metis-ready clearance |
 | **S1: Metis Invocation** | 3-Section prompt to Metis (requirements gate) | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
-| **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / ADR | → S3 on human design-gate approval; advisory Daedalus input folded in per `## Design Consensus` (no gating signal — the human gate gates this state) |
+| **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / co-authored decision log, including the structural enumeration of D-items per `## Plan Structure > ADR` | → S3 on human design-gate approval; advisory Daedalus input folded in per `## Design Consensus` (no gating signal — the human gate gates this state) |
 | **S3: Plan Generation** | Writing the TODO plan to `$OMT_DIR/plans/{name}.md` from the approved design | → S4 on self-review pass |
 | **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; on REQUEST_CHANGES → earliest affected phase: → S0 on a requirements problem (re-Metis → … → re-Momus), → S2 on a design problem (human gate → re-plan → re-Momus) |
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
@@ -995,8 +1012,11 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
 | 5 | Section validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Momus. |
 | 6 | design forks resolved | Every CRITICAL design fork is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
+| 7 | structural enumeration present (Complex/Arch) | For a Complex or Architecture plan, the artifact carries the decision log with structural enumeration OR the anti-ceremony escape with a named, specific consequence recorded. Presence only; fork resolution stays with item 6. |
 
 Item 2 ("File references exist") is a lightweight pre-Momus self-filter — it catches obviously stale paths before the plan reaches the feasibility gate. It is complementary to, not a substitute for, Momus's authoritative codebase-feasibility verification: this self-check is a cheap first pass; Momus is the gate.
+
+**Soft coverage nudge** (not a gate): are all components this change creates or modifies enumerated in the decision log's ownership declarations? This is a non-blocking prompt — coverage is the human co-owner's call at the design gate, never folded into the close gate.
 
 Failure action: loop back and fix before submitting to Momus.
 
@@ -1004,7 +1024,7 @@ Failure action: loop back and fix before submitting to Momus.
 
 | Level | Definition | Handling |
 |---|---|---|
-| **CRITICAL** | Requires user input | A requirements fork returns to the S0 Requirements interview; a design fork is surfaced and resolved at the S2 Co-Design human design gate (the co-design loop stays open and the channel reopens for it per `### Next-Gate Readiness Rule`). A CRITICAL fork is never carried forward unresolved — the channel stays open until it is co-decided. A design decision deferred to its default and later revised is a **design problem** that re-walks from S2 → human gate → re-plan → re-Momus. |
+| **CRITICAL** | Requires user input | A requirements fork returns to the S0 Requirements interview; a design fork is surfaced and resolved at the S2 Co-Design human design gate (the co-design loop stays open and the channel reopens for it per `### Next-Gate Readiness Rule`). An **unresolved structural fork** (a contested `D-N` item with an empty **Decision** field, the same severity class as a **T1** risk fork) is **CRITICAL** by this mapping — it is carried forward as a CRITICAL gap and co-decided at the human gate, never absorbed. A CRITICAL fork is never carried forward unresolved — the channel stays open until it is co-decided. A design decision deferred to its default and later revised is a **design problem** that re-walks from S2 → human gate → re-plan → re-Momus. |
 | **MINOR** | Self-resolvable from context | Resolve inline during plan revision |
 | **AMBIGUOUS** | Standard convention / safe default exists | Apply documented default, note in plan |
 
@@ -1012,7 +1032,9 @@ Failure action: loop back and fix before submitting to Momus.
 
 Daedalus is advisory: it emits no gating signal and never bounces the plan back. Instead it returns design opinions (steelman antithesis, tradeoff tensions, alternative options). Prometheus reconciles those opinions in-phase during the S2 Co-Design state — between the in-phase Daedalus advisory pass and the human design gate / S3 plan write. The Daedalus advisory pass is MANDATORY across ALL intents (Trivial / Scoped / Complex / Architecture) — no intent class skips it.
 
-Reconciliation is simple: **the Daedalus advisory is discussed with the user in the open co-design interview, and the decisions are recorded in the co-authored ADR.** Prometheus uses its own judgment on what is worth raising — there is no fork-detection binary and no severity taxonomy (do not classify opinions as material/routine or Critical/High/Medium). What prometheus judges worth discussing is folded into the open Socratic interview channel (`### Next-Gate Readiness Rule`); the rest it absorbs on the opinion's merits. Either way the outcome lands in the co-authored ADR's MADR 7-field structure (`## Plan Structure > ADR`): an adopted opinion in **Considered Options** / **Decision** / **Consequences**, a rejected one in **Rationale** — no new ADR sub-field. Because every surfaced or resolved design choice already leaves a trace in its ADR **Considered Options**, that trace is the identity key against which an opinion already reflected (resolved earlier in the interview) is recognized and not raised twice.
+Structure is co-decided here over the co-authored decision log (`## Plan Structure > ADR`), not AI-unilateral: the planner proposes the structural `D-N` items, but the human is full co-owner of the structure and redlines ownership and edges before the design gate. The planner never bakes structure unilaterally.
+
+Reconciliation is simple: **the Daedalus advisory is discussed with the user in the open co-design interview, and the decisions are recorded in the co-authored ADR.** Prometheus uses its own judgment on what is worth raising — there is no fork-detection binary and no severity taxonomy (do not classify opinions as material/routine or Critical/High/Medium). What prometheus judges worth discussing is folded into the open Socratic interview channel (`### Next-Gate Readiness Rule`); the rest it absorbs on the opinion's merits. The outcome's landing point is tier-dependent — no new ADR sub-field in either case: on a **contested item**, the outcome lands in the full MADR structure (`## Plan Structure > ADR`), with an adopted opinion recorded in **Considered Options** / **Decision** / **Consequences** and a rejected one in **Rationale**; on a **solo item**, the outcome lands in **Decision** / **Why**, with a rejected opinion recorded as the **Invalidated alternative**. An opinion whose alternatives turn out to stand in genuine tradeoff and is co-decided with the human promotes the item from solo to the contested tier. Because every surfaced or resolved design choice already leaves a trace in its ADR — in **Considered Options** for contested items or in **Invalidated alternative** for solo items — that recorded trace is the identity key against which an opinion already reflected (resolved earlier in the interview) is recognized and not raised twice.
 
 **1-revision-round backstop** — reconcile in a single revision round. If, after that one round, a genuine conflict still remains unresolved, escalate the remaining conflict to the user rather than looping further. The backstop bounds reconciliation to one round; it is not a gate, since this advisory pass never blocks the pipeline.
 
@@ -1024,7 +1046,7 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 
 | Stage | Mandate | Detail location |
 |---|---|---|
-| **Stage A** | Render plan to a single-file, browser-openable HTML — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts + optional necessity-gated Mermaid diagram (re-visualizing flow/structure the plan already decided, never inventing edges) + session-derived boxes (Stage B recommendation, Pipeline State). Always produced via template substitution (no converter needed); when the plan is approved, the HTML gets made. | Exact output path, rendering invariants (6), translation invariants (3), readability enrichment, template reference in `review-pipeline.md`; diagram type-selection + guardrails + presentation protocol in `diagram-guide.md` |
+| **Stage A** | Render plan to a single-file, browser-openable HTML — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts + Mermaid diagram(s) — a bird's-eye component/flow diagram REQUIRED when the plan is structural (governed by `review-pipeline.md`), plus optional necessity-gated enrichment diagrams (re-visualizing flow/structure the plan already decided, never inventing edges) + session-derived boxes (Stage B recommendation, Pipeline State). Always produced via template substitution (no converter needed); when the plan is approved, the HTML gets made. | Exact output path, rendering invariants (6), translation invariants (3), readability enrichment, template reference in `review-pipeline.md`; diagram type-selection + guardrails + presentation protocol in `diagram-guide.md` |
 | **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Momus feasibility signal). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
 | **Stage C** | Execution Bridge (S7) via platform's user-prompt primitive — mode choice ONLY: 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. Execution selection is valid only against the fresh S4 verdict on the current artifact (see the S8 reachability invariant in the Pipeline State Machine). | Option formatting in `review-pipeline.md` |
 
@@ -1066,7 +1088,7 @@ This resolves the apparent paradox in the prior wording — "optional" referred 
 | Entering Acceptance Criteria drafting (Clearance all-YES, about to propose AC) | [acceptance-criteria.md](acceptance-criteria.md) | Full file, single Read call |
 | About to invoke `Write` on the plan file (`$OMT_DIR/plans/*.md`) | [plan-template.md](plan-template.md) | Full file, single Read call |
 | About to invoke a reviewer (Metis/Daedalus/Momus) OR execute Stage A/B/C | [review-pipeline.md](review-pipeline.md) | Full file, single Read call |
-| About to insert a Mermaid diagram into the Stage A HTML (Necessity Test = YES) | [diagram-guide.md](diagram-guide.md) | Full file, single Read call |
+| About to insert any diagram into the Stage A HTML (whether the required bird's-eye structural diagram or a necessity-gated enrichment diagram) | [diagram-guide.md](diagram-guide.md) | Full file, single Read call |
 
 **Per-reference cache**: One full-read per session per reference is sufficient. If you have already full-read `interview.md` earlier in this session, you do not need to re-read on every subsequent interview turn — but if you did partial-read or have not read it at all, the trigger still demands full-read NOW.
 
