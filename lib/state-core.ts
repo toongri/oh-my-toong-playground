@@ -8,18 +8,23 @@
  *   mergeWithHeartbeat(p, q)      — {...p, ...q, last_touched_at: nowStamp()}
  *   ACTIVE_IDLE_TTL_SECONDS       — 21600 (6 hours) — TS definition site (parity-tested vs bash)
  *   TERMINAL_TTL_SECONDS          — 1800 (30 minutes) — TS definition site
- *   isStateLive(parsed, nowEpoch) — Single liveness rule (active + idle window)
+ *   isStateLive(parsed, nowEpoch) — Single liveness rule; fallback: last_touched_at → started_at
  *   STATE_PREFIX                  — type → filename prefix map
  *   listOthers(type)              — ACTIVE-live other-session candidates
  *   adopt(type, srcSid)           — atomic rename re-key, rules r1-r7
+ *   writeFileNoCreate(path, s)    — single-syscall no-create write (ENOENT if absent)
+ *   isPristine(type, parsed)      — true iff state is freshly seeded, safe for adoption overwrite
  *
  * Sid is derived from FILENAME ONLY — never read a session-id field from file content.
  * This module does NOT create state files; adoption may only rename existing ones.
  */
 
-import { readdirSync, readFileSync, renameSync, writeFileSync, appendFileSync, existsSync } from 'fs';
+import { readdirSync, readFileSync, renameSync, writeFileSync, appendFileSync, existsSync, openSync, ftruncateSync, writeSync, closeSync } from 'fs';
 import { join } from 'path';
-import { getOmtDir } from '@lib/omt-dir';
+// lib-internal imports must be relative — deployed copies under .claude/lib/ have no @lib alias
+// (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
+// follow the path and deploy omt-dir alongside this module.
+import { getOmtDir } from './omt-dir';
 
 // ---------------------------------------------------------------------------
 // Timestamp
@@ -113,18 +118,29 @@ export const TERMINAL_TTL_SECONDS = 1800;
  * A state is live iff:
  *   active && idle < ACTIVE_IDLE_TTL_SECONDS, OR
  *   !active && idle < TERMINAL_TTL_SECONDS
- * where idle = nowEpoch − epochFromTimestamp(last_touched_at).
+ * where idle = nowEpoch − epochFromTimestamp(touched).
  *
- * @param parsed  The parsed state object (must have .active and .last_touched_at).
+ * Fallback chain for touched timestamp (bash parity: state-liveness.sh):
+ *   last_touched_at → started_at → (both absent/unparseable) → return false
+ * Note: the bash spine also falls back to file mtime, but that requires a file
+ * path which this function does not receive — the two-step chain is the full
+ * TS-applicable parity.
+ *
+ * @param parsed    The parsed state object (.active, .last_touched_at, .started_at).
  * @param nowEpoch  Current Unix epoch seconds.
  */
 export function isStateLive(
-  parsed: { active?: boolean; last_touched_at?: string },
+  parsed: { active?: boolean; last_touched_at?: string; started_at?: string },
   nowEpoch: number
 ): boolean {
+  // Fallback chain: last_touched_at → started_at → dead
+  let touched: number | null = null;
   const lta = parsed.last_touched_at;
-  if (!lta) return false;
-  const touched = parseEpoch(lta);
+  if (lta) touched = parseEpoch(lta);
+  if (touched === null) {
+    const sa = parsed.started_at;
+    if (sa) touched = parseEpoch(sa);
+  }
   if (touched === null) return false;
   // Clock-skew: if touched > now, treat as live (age clamped to 0)
   const idle = Math.max(0, nowEpoch - touched);
@@ -207,6 +223,30 @@ function purposeFor(type: StateType, parsed: Record<string, unknown>): string {
 }
 
 // ---------------------------------------------------------------------------
+// writeFileNoCreate
+// ---------------------------------------------------------------------------
+
+/**
+ * Writes `content` to an existing file at `path` using a single open-truncate-write
+ * sequence. Throws ENOENT if the file does not exist — callers decide whether to
+ * create it. This eliminates the existsSync-then-writeFileSync TOCTOU window where
+ * an adopt-rename between the two calls could resurrect an orphan file.
+ */
+export function writeFileNoCreate(path: string, content: string): void {
+  const buf = Buffer.from(content, 'utf8');
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, 'r+');
+    ftruncateSync(fd, 0);
+    if (buf.length > 0) {
+      writeSync(fd, buf, 0, buf.length, 0);
+    }
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Pristine predicates (ADR-2)
 // ---------------------------------------------------------------------------
 
@@ -219,7 +259,7 @@ function purposeFor(type: StateType, parsed: Record<string, unknown>): string {
  *   goal:           phase=="planning" && iteration==0 && outcome==""
  *   deep-interview: seeded file lacking the rich `state` object
  */
-function isPristine(type: StateType, parsed: Record<string, unknown>): boolean {
+export function isPristine(type: StateType, parsed: Record<string, unknown>): boolean {
   if (type === 'prometheus') {
     return parsed['phase'] === 'S0' && parsed['plan_path'] === '';
   }
@@ -284,7 +324,7 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
     if (parsed === null) continue;
     // Only ACTIVE-live candidates (r7 source filter)
     if (parsed['active'] !== true) continue;
-    if (!isStateLive(parsed as { active?: boolean; last_touched_at?: string }, now)) continue;
+    if (!isStateLive(parsed as { active?: boolean; last_touched_at?: string; started_at?: string }, now)) continue;
     const lta = String(parsed['last_touched_at'] ?? '');
     const touched = parseEpoch(lta);
     const idleSeconds = touched !== null ? Math.max(0, now - touched) : 0;
@@ -353,8 +393,8 @@ export function adopt(type: StateType, srcSid: string): void {
   if (srcParsed['active'] !== true) {
     throw new Error(`adopt: source "${srcPath}" is not ACTIVE (r7: TERMINAL sources are refused)`);
   }
-  if (!isStateLive(srcParsed as { active?: boolean; last_touched_at?: string }, now)) {
-    throw new Error(`adopt: source "${srcPath}" is not live (r7: stale sources are refused)`);
+  if (!isStateLive(srcParsed as { active?: boolean; last_touched_at?: string; started_at?: string }, now)) {
+    throw new Error(`adopt: source "${srcPath}" failed the liveness check (r7: TTL-expired or no parseable timestamp — only live sources are adoptable)`);
   }
 
   // r3: check current session state

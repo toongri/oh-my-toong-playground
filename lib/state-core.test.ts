@@ -23,6 +23,8 @@ import {
   STATE_PREFIX,
   listOthers,
   adopt,
+  writeFileNoCreate,
+  isPristine,
 } from './state-core.ts';
 
 // ---------------------------------------------------------------------------
@@ -198,6 +200,99 @@ describe('isStateLive', () => {
     const now = nowEpoch();
     const parsed = { active: false, last_touched_at: isoSecondsAgo(35 * 60) };
     expect(isStateLive(parsed, now)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isStateLive — started_at fallback (bash parity: last_touched_at absent → started_at)
+// ---------------------------------------------------------------------------
+
+describe('isStateLive — started_at fallback', () => {
+  test('active state with only started_at recently is live', () => {
+    const now = nowEpoch();
+    const parsed = { active: true, started_at: isoSecondsAgo(60) };
+    expect(isStateLive(parsed, now)).toBe(true);
+  });
+
+  test('active state with only started_at 7h ago is NOT live', () => {
+    const now = nowEpoch();
+    const parsed = { active: true, started_at: isoSecondsAgo(7 * 3600) };
+    expect(isStateLive(parsed, now)).toBe(false);
+  });
+
+  test('terminal state with only started_at 10min ago is live', () => {
+    const now = nowEpoch();
+    const parsed = { active: false, started_at: isoSecondsAgo(600) };
+    expect(isStateLive(parsed, now)).toBe(true);
+  });
+
+  test('terminal state with only started_at 35min ago is NOT live', () => {
+    const now = nowEpoch();
+    const parsed = { active: false, started_at: isoSecondsAgo(35 * 60) };
+    expect(isStateLive(parsed, now)).toBe(false);
+  });
+
+  test('both last_touched_at and started_at absent → returns false', () => {
+    const now = nowEpoch();
+    const parsed = { active: true };
+    expect(isStateLive(parsed, now)).toBe(false);
+  });
+
+  test('last_touched_at unparseable → falls back to started_at', () => {
+    const now = nowEpoch();
+    const parsed = { active: true, last_touched_at: 'not-a-date', started_at: isoSecondsAgo(60) };
+    expect(isStateLive(parsed, now)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// writeFileNoCreate
+// ---------------------------------------------------------------------------
+
+describe('writeFileNoCreate', () => {
+  let omtDir: string;
+
+  beforeEach(() => {
+    omtDir = mkdtempSync(join(tmpdir(), 'state-core-wnc-'));
+  });
+
+  afterEach(() => {
+    rmSync(omtDir, { recursive: true, force: true });
+  });
+
+  test('writes content to an existing file', () => {
+    const p = join(omtDir, 'existing.json');
+    writeFileSync(p, 'old content');
+    writeFileNoCreate(p, 'new content');
+    expect(readFileSync(p, 'utf8')).toBe('new content');
+  });
+
+  test('truncates when new content is shorter than old content', () => {
+    const p = join(omtDir, 'truncate.json');
+    writeFileSync(p, 'long old content here');
+    writeFileNoCreate(p, 'short');
+    expect(readFileSync(p, 'utf8')).toBe('short');
+  });
+
+  test('throws ENOENT when file does not exist', () => {
+    const p = join(omtDir, 'nonexistent.json');
+    let code: string | undefined;
+    try {
+      writeFileNoCreate(p, 'data');
+    } catch (e) {
+      code = (e as NodeJS.ErrnoException).code;
+    }
+    expect(code).toBe('ENOENT');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isPristine (exported)
+// ---------------------------------------------------------------------------
+
+describe('isPristine (exported)', () => {
+  test('isPristine is a callable function', () => {
+    expect(typeof isPristine).toBe('function');
   });
 });
 
