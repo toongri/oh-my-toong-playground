@@ -764,6 +764,24 @@ describe('listOthers — pristine 시드 제외', () => {
 });
 
 // ---------------------------------------------------------------------------
+// isPristine — prometheus resume_summary 비어있지 않으면 non-pristine
+// ---------------------------------------------------------------------------
+
+describe('isPristine — prometheus resume_summary 조건', () => {
+  test('resume_summary가 있으면 S0이라도 non-pristine이다', () => {
+    expect(isPristine('prometheus', { phase: 'S0', plan_path: '', resume_summary: '작업 중' })).toBe(false);
+  });
+
+  test('resume_summary가 없으면(undefined) S0+plan_path 빈값은 pristine이다', () => {
+    expect(isPristine('prometheus', { phase: 'S0', plan_path: '' })).toBe(true);
+  });
+
+  test('resume_summary가 빈 문자열이면 S0+plan_path 빈값은 pristine이다', () => {
+    expect(isPristine('prometheus', { phase: 'S0', plan_path: '', resume_summary: '' })).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // adopt — pristine 소스는 r8으로 거부된다
 // ---------------------------------------------------------------------------
 
