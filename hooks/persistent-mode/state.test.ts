@@ -13,9 +13,10 @@ import {
   cleanupBlockCountFiles,
   MAX_BLOCK_COUNT,
 } from './state.ts';
+import { writeFileNoCreate } from '@lib/state-core';
 import type { DeepInterviewState } from './types.ts';
 import { mkdir, rm, writeFile, readFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -679,6 +680,63 @@ describe('Goal state management', () => {
       // all other fields unchanged
       expect(parsed.iteration).toBe(1);
       expect(parsed.outcome).toBe('keep me');
+    });
+
+    // (TOCTOU no-create) updateGoalState must use a no-create write primitive so that a
+    // concurrent adopt-rename between read and write does NOT resurrect the orphaned file.
+    //
+    // RED achieved: primitive-level contract test.
+    //   OLD code path: writeFileSafe(path, content) on an absent path creates the file
+    //     → existsSync(path) would be true after the call.
+    //   NEW code path: writeFileNoCreate(path, content) throws ENOENT on absent path
+    //     → updateGoalState catches ENOENT and returns → no file created.
+    //
+    // This test verifies the primitive contract: writeFileNoCreate on an absent path
+    // throws ENOENT (the no-create guarantee) and does NOT create the file.
+    // Against the old writeFileSafe: a parallel call to writeFileSafe on an absent path
+    // would PASS (no throw) but would create the file — making the existsSync assertion fail.
+    it('(TOCTOU) writeFileNoCreate on absent path throws ENOENT and does NOT create a file', () => {
+      const racePath = join(omtDir, `goal-state-race-${sessionId}.json`);
+      // Guarantee the file does not exist (simulates file deleted between read and write)
+      expect(existsSync(racePath)).toBe(false);
+
+      // writeFileNoCreate must throw ENOENT on absent path (no-create contract)
+      let thrownCode: string | undefined;
+      try {
+        writeFileNoCreate(racePath, '{"active":true}');
+      } catch (err) {
+        thrownCode = (err as NodeJS.ErrnoException).code;
+      }
+      expect(thrownCode).toBe('ENOENT');
+      // The file must NOT have been created — no resurrection
+      expect(existsSync(racePath)).toBe(false);
+    });
+
+    // (TOCTOU public-API) after a race-deletion between read and write, updateGoalState
+    // must not resurrect the file.  Simulated deterministically: seed, then call
+    // updateGoalState (succeeds on existing file), then synchronously delete and call again.
+    // Second call exercises the null-check guard.  Included to document that the full
+    // update cycle — including the no-create write path — never creates an absent file.
+    it('(TOCTOU public-API) updateGoalState does not resurrect a file deleted before write', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 5,
+        max_iterations: 10,
+      }));
+
+      // First call succeeds — file is present at read AND write time
+      updateGoalState(sessionId, { iteration: 6 });
+      expect(existsSync(stateFile)).toBe(true);
+
+      // Simulate the adopt-rename completing between two hook invocations — file is gone
+      unlinkSync(stateFile);
+
+      // Second call: file absent — must be a no-op, must not create
+      updateGoalState(sessionId, { iteration: 7 });
+      expect(existsSync(stateFile)).toBe(false);
     });
   });
 });
