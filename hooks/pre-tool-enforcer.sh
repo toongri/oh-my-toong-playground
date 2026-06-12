@@ -65,7 +65,7 @@ if [[ "$toolName" == "Skill" ]]; then
             elif ! echo "$sid" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
                 echo "WARNING: pre-tool-enforcer seed skipped — OMT_SESSION_ID is unsafe or invalid: '$sid'" >&2
             elif [[ -z "$omt_dir" ]]; then
-                echo "WARNING: pre-tool-enforcer seed failed — OMT_DIR absent from env and cwd unresolvable from stdin payload" >&2
+                echo "WARNING: pre-tool-enforcer seed failed — OMT_DIR absent from env and cwd absent from stdin payload" >&2
             else
                 ts=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
                 # write_seed_if_absent <state_file> <skill_label> <json_content>
