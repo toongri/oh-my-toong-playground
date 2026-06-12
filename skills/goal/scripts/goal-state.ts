@@ -30,6 +30,8 @@
  *   set-verdict --verdict <APPROVE|REQUEST_CHANGES|COMMENT|absent>
  *   get
  *   status
+ *   set-stories --json '<array>' | --single
+ *   confirm-story <id>                   (sole writer of confirmed — D-8)
  */
 
 import { readFileSync } from 'fs';
@@ -299,6 +301,18 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
         `complete is request-complete-only; budget_limited/blocked are system-only.`
     );
   }
+  // Pursuing gate (D-8 / AC-2a): refused while any story is unconfirmed.
+  // An empty stories[] does NOT block pursuing (story definition is mandated by prose).
+  if (opts.phase === 'pursuing') {
+    const prior = readPrior(sessionId);
+    const stories: Story[] = prior.stories ?? [];
+    const unconfirmed = stories.filter((s) => s.status === 'unconfirmed').map((s) => s.id);
+    if (unconfirmed.length > 0) {
+      throw new Error(
+        `set: pursuing refused — ${unconfirmed.length} unconfirmed ${unconfirmed.length === 1 ? 'story' : 'stories'}: ${unconfirmed.join(', ')}`
+      );
+    }
+  }
   const next: Partial<GoalState> = {
     phase: opts.phase,
     active: true,
@@ -419,6 +433,33 @@ export function setSingleStory(sessionId: string): void {
     status: 'confirmed',
   };
   mergeWrite(sessionId, { stories: [derived] });
+}
+
+/**
+ * Confirms a story: the ONLY path from `unconfirmed` to `confirmed` (D-8).
+ * Refuses with an error when:
+ *   - The story id is not found in stories[]
+ *   - The story is already `retired`
+ * All refusals: throws, state unchanged.
+ */
+export function confirmStory(sessionId: string, storyId: string): void {
+  const prior = readPrior(sessionId);
+  const stories: Story[] = prior.stories ?? [];
+  const idx = stories.findIndex((s) => s.id === storyId);
+  if (idx === -1) {
+    throw new Error(`confirm-story: unknown story id "${storyId}"`);
+  }
+  if (stories[idx].status === 'retired') {
+    throw new Error(`confirm-story: refused — story "${storyId}" is retired`);
+  }
+  // Already confirmed is a no-op (idempotent, harmless)
+  if (stories[idx].status === 'confirmed') {
+    return;
+  }
+  const updated: Story[] = stories.map((s) =>
+    s.id === storyId ? { ...s, status: 'confirmed' as StoryStatus } : s
+  );
+  mergeWrite(sessionId, { stories: updated });
 }
 
 /**
@@ -564,6 +605,15 @@ function main(): void {
         process.exit(1);
       }
       adopt('goal', srcSid);
+    } else if (subcommand === 'confirm-story') {
+      // parseArgs only captures the FIRST non-flag token as _subcommand.
+      // The story id is the second positional: scan raw argv past the subcommand.
+      const rawId = process.argv.slice(3).find((a) => !a.startsWith('--'));
+      if (!rawId) {
+        process.stderr.write('confirm-story: <id> argument is required\n');
+        process.exit(1);
+      }
+      confirmStory(sessionId, rawId);
     } else if (subcommand === 'set-stories') {
       if (args['single'] === true) {
         setSingleStory(sessionId);
@@ -585,7 +635,7 @@ function main(): void {
       }
     } else {
       process.stderr.write(
-        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories> [options]\n'
+        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story> [options]\n'
       );
       process.exit(1);
     }

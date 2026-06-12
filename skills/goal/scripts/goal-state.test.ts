@@ -15,6 +15,7 @@ import {
   readGoalGet,
   setStories,
   setSingleStory,
+  confirmStory,
   type GoalPhase,
   type Story,
 } from './goal-state.ts';
@@ -1028,5 +1029,172 @@ describe('story layer: set-stories', () => {
     expect(state.stories!.length).toBe(1);
     expect(state.stories![0].id).toBe('S1');
     expect(state.stories![0].status).toBe('unconfirmed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 2: Confirmation + phase-transition gates
+// ---------------------------------------------------------------------------
+
+describe('story layer: confirmation and phase gates', () => {
+  /** A minimal valid story for use in tests. */
+  const validStory: Story = {
+    id: 'S1',
+    story: 'ship feature X',
+    acceptance_criteria: ['all tests green'],
+    verification_surface: 'CI pipeline passes',
+    status: 'unconfirmed',
+  };
+  const validStory2: Story = {
+    id: 'S2',
+    story: 'add observability',
+    acceptance_criteria: ['dashboards visible'],
+    verification_surface: 'Grafana dashboard',
+    status: 'unconfirmed',
+  };
+
+  function seedWithOutcome(sid: string, outcome = 'ship feature X'): void {
+    setGoalState(sid, { phase: 'planning', outcome });
+  }
+
+  // AC-2a: pursuing refused while any story unconfirmed; succeeds after all confirmed
+  test('pursuing refused while unconfirmed', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory, validStory2]);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    // Attempt pursuing while both stories unconfirmed — must throw naming S1 or S2
+    let err: Error | undefined;
+    try {
+      setGoalState(S, { phase: 'pursuing' });
+    } catch (e) {
+      err = e as Error;
+    }
+    expect(err).toBeDefined();
+    // stderr message must name the offending story id
+    expect(err!.message).toMatch(/S1|S2/);
+    // State must be unchanged
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+
+    // Confirm S1, still refused because S2 is unconfirmed
+    confirmStory(S, 'S1');
+    let err2: Error | undefined;
+    try {
+      setGoalState(S, { phase: 'pursuing' });
+    } catch (e) {
+      err2 = e as Error;
+    }
+    expect(err2).toBeDefined();
+    expect(err2!.message).toMatch(/S2/);
+    // S1 must NOT appear since it is confirmed
+    expect(err2!.message).not.toMatch(/\bS1\b/);
+
+    // Confirm S2 — now pursuing must succeed
+    confirmStory(S, 'S2');
+    setGoalState(S, { phase: 'pursuing' });
+    expect(readGoalGet(S)!.phase).toBe('pursuing');
+  });
+
+  // AC-2b: confirm-story is the sole path unconfirmed → confirmed
+  test('confirm-story flips status', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory]);
+    // confirm-story flips the story to confirmed
+    confirmStory(S, 'S1');
+    const afterConfirm = readGoalGet(S)!;
+    expect(afterConfirm.stories![0].status).toBe('confirmed');
+
+    // Re-ingest via set-stories --json always produces unconfirmed
+    setStories(S, [{ ...validStory, status: 'confirmed' as any }]);
+    expect(readGoalGet(S)!.stories![0].status).toBe('unconfirmed');
+
+    // set cannot produce confirmed
+    seedWithOutcome(S);
+    setStories(S, [validStory]);
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'planning', outcome: 'new outcome' });
+    // stories should survive; S1 remains confirmed after a non-story set write
+    // (this also tests that set cannot flip status to anything)
+    const afterSet = readGoalGet(S)!;
+    expect(afterSet.stories![0].status).toBe('confirmed');
+
+    // set-verdict cannot produce confirmed on a story
+    setVerdict(S, 'APPROVE');
+    expect(readGoalGet(S)!.stories![0].status).toBe('confirmed'); // still confirmed, not changed by set-verdict
+
+    // Confirm refused on unknown id
+    let errUnknown: Error | undefined;
+    try {
+      confirmStory(S, 'UNKNOWN_ID');
+    } catch (e) {
+      errUnknown = e as Error;
+    }
+    expect(errUnknown).toBeDefined();
+
+    // Confirm refused on retired story — set up a retired story
+    const S2 = 'confirm-retired-session';
+    seedGoalFile(S2);
+    seedWithOutcome(S2);
+    setStories(S2, [{ ...validStory, id: 'R1' }]);
+    // Manually write retired status
+    const raw = JSON.parse(readFileSync(resolveStatePath(S2), 'utf8'));
+    raw.stories[0].status = 'retired';
+    writeFileSync(resolveStatePath(S2), JSON.stringify(raw, null, 2), 'utf8');
+    let errRetired: Error | undefined;
+    try {
+      confirmStory(S2, 'R1');
+    } catch (e) {
+      errRetired = e as Error;
+    }
+    expect(errRetired).toBeDefined();
+    // State unchanged after refusal
+    expect(JSON.parse(readFileSync(resolveStatePath(S2), 'utf8')).stories[0].status).toBe('retired');
+  });
+
+  // AC-5: re-plan preserves stories and statuses, resets verdict/evidence as today
+  test('replan preserves stories', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory, validStory2]);
+    // Confirm both stories so we can enter pursuing
+    confirmStory(S, 'S1');
+    confirmStory(S, 'S2');
+    // Enter pursuing and set evidence and verdict (mimicking end of pursuit attempt)
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/a.md`] });
+    setVerdict(S, 'APPROVE');
+    expect(readGoalGet(S)!.objective_verdict).toBe('APPROVE');
+    expect(readGoalGet(S)!.completion_evidence_paths).toEqual([`${tmpDir}/a.md`]);
+    // Re-plan: goes back to planning
+    setGoalState(S, { phase: 'planning' });
+    const state = readGoalGet(S)!;
+    // verdict and evidence must be reset exactly as today (existing reset behaviour)
+    expect(state.objective_verdict).toBe('absent');
+    expect(state.completion_evidence_paths).toEqual([]);
+    // stories and per-story statuses must be preserved (AC-5 new behaviour)
+    expect(Array.isArray(state.stories)).toBe(true);
+    expect(state.stories!.length).toBe(2);
+    const s1 = state.stories!.find((s) => s.id === 'S1')!;
+    const s2 = state.stories!.find((s) => s.id === 'S2')!;
+    expect(s1.status).toBe('confirmed');
+    expect(s2.status).toBe('confirmed');
+  });
+
+  // AC-12: set still cannot write complete or objective_verdict (regression with stories present)
+  test('set cannot write complete or objective_verdict', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory]);
+    // set cannot write phase=complete
+    expect(() => setGoalState(S, { phase: 'complete' as any })).toThrow();
+    expect(readGoalGet(S)!.phase).not.toBe('complete');
+    // set cannot write objective_verdict — even if stories are present
+    // (SetGoalOpts has no objective_verdict field by design; compile-time fence)
+    // At runtime: set --phase planning must not alter objective_verdict if it was set by set-verdict
+    setVerdict(S, 'REQUEST_CHANGES');
+    setGoalState(S, { phase: 'planning', outcome: 'updated outcome' });
+    // planning resets verdict to absent (existing behaviour), stories must remain
+    expect(readGoalGet(S)!.objective_verdict).toBe('absent');
+    expect(readGoalGet(S)!.stories!.length).toBe(1);
+    // set --phase pursuing (after confirming) also must not write objective_verdict
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing' });
+    expect(readGoalGet(S)!.objective_verdict).toBe('absent');
   });
 });
