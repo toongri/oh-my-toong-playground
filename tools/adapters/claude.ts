@@ -207,6 +207,7 @@ export class ClaudeAdapter implements PlatformAdapter {
       } else {
         await syncDirectory(sourcePath, targetHookDir, {
           exclude: ["*.test.ts"],
+          platformRoot: path.join(targetPath, ".claude"),
         });
         logInfo(`Copied: ${displayName}/`);
         // Copy shell dependencies discovered in directory hooks
@@ -258,7 +259,9 @@ export class ClaudeAdapter implements PlatformAdapter {
     }
 
     await fs.mkdir(targetDir, { recursive: true });
-    await syncDirectory(sourcePath, targetSkillDir);
+    await syncDirectory(sourcePath, targetSkillDir, {
+      platformRoot: path.join(targetPath, ".claude"),
+    });
     logInfo(`Copied: ${displayName}/`);
   }
 
@@ -289,6 +292,7 @@ export class ClaudeAdapter implements PlatformAdapter {
       } else {
         await syncDirectory(sourcePath, targetScriptDir, {
           exclude: ["*.test.ts"],
+          platformRoot: path.join(targetPath, ".claude"),
         });
         logInfo(`Copied: ${displayName}/`);
       }

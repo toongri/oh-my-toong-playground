@@ -65,6 +65,35 @@ export async function collectDirs(dir: string, rel = ""): Promise<string[]> {
 }
 
 /**
+ * Rewrites @lib/ import aliases in TypeScript source content to relative paths.
+ *
+ * This is a pure helper shared by both copy-time rewrite (syncDirectory) and
+ * the post-pass rewrite (rewriteLibAliases in sync.ts). Both must produce
+ * identical output so that the post-pass is a no-op on already-rewritten files.
+ *
+ * @param content      File content to rewrite
+ * @param targetFile   Absolute path where the file will be written (used to compute depth)
+ * @param platformRoot Absolute path to the platform root directory (e.g. /path/.claude/)
+ * @returns            Rewritten content, or the original string if no @lib/ present
+ */
+export function rewriteLibImports(
+  content: string,
+  targetFile: string,
+  platformRoot: string,
+): string {
+  if (!content.includes("@lib/")) return content;
+
+  const dir = path.dirname(targetFile);
+  const relDir = path.relative(platformRoot, dir);
+  const depth = relDir === "" ? 0 : relDir.split(path.sep).length;
+  const prefix = depth === 0 ? "./" : "../".repeat(depth);
+
+  return content
+    .replace(/'@lib\//g, `'${prefix}lib/`)
+    .replace(/"@lib\//g, `"${prefix}lib/`);
+}
+
+/**
  * Copies a single file from source to target, preserving execute permissions.
  */
 export async function copyFile(source: string, target: string): Promise<void> {
@@ -89,14 +118,18 @@ export async function copyFile(source: string, target: string): Promise<void> {
  * @param source  Absolute path to source directory
  * @param target  Absolute path to target directory
  * @param options Optional configuration
- * @param options.exclude  Glob-style patterns to exclude (default: ["*.test.ts"])
+ * @param options.exclude      Glob-style patterns to exclude (default: ["*.test.ts"])
+ * @param options.platformRoot When provided, rewrites @lib/ aliases in .ts files at
+ *                             write time so the deployed bytes are already resolved.
+ *                             Must be the platform root dir (e.g. /path/.claude/).
  */
 export async function syncDirectory(
   source: string,
   target: string,
-  options?: { exclude?: string[] }
+  options?: { exclude?: string[]; platformRoot?: string }
 ): Promise<void> {
   const exclude = options?.exclude ?? DEFAULT_EXCLUDE;
+  const platformRoot = options?.platformRoot;
 
   // 1. Ensure target directory exists
   await fs.mkdir(target, { recursive: true });
@@ -110,11 +143,27 @@ export async function syncDirectory(
     return !isExcluded(filename, exclude);
   });
 
-  // 4. Copy included files to target, preserving permissions
+  // 4. Copy included files to target, preserving permissions.
+  //    If platformRoot is set, rewrite @lib/ aliases in .ts files at write time
+  //    so that no deployed file ever exists on disk with raw @lib/ specifiers.
   for (const relPath of includedSourceFiles) {
     const srcFile = path.join(source, relPath);
     const tgtFile = path.join(target, relPath);
-    await copyFile(srcFile, tgtFile);
+
+    if (platformRoot && tgtFile.endsWith(".ts") && !tgtFile.endsWith(".test.ts")) {
+      await fs.mkdir(path.dirname(tgtFile), { recursive: true });
+      const srcContent = await fs.readFile(srcFile, "utf8");
+      const rewritten = rewriteLibImports(srcContent, tgtFile, platformRoot);
+      await fs.writeFile(tgtFile, rewritten, "utf8");
+      // Preserve execute permissions
+      const stat = await fs.stat(srcFile);
+      if (stat.mode & 0o111) {
+        const tgtStat = await fs.stat(tgtFile);
+        await fs.chmod(tgtFile, tgtStat.mode | 0o111);
+      }
+    } else {
+      await copyFile(srcFile, tgtFile);
+    }
   }
 
   // 5. Collect target files and delete orphans

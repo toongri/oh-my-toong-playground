@@ -176,6 +176,95 @@ describe("syncDirectory", () => {
   });
 });
 
+describe("@lib/ alias rewrite at copy time (platformRoot option)", () => {
+  let tmpDir: string;
+  let src: string;
+  let tgt: string;
+  let platformRoot: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-directory-rewrite-test-"));
+    platformRoot = path.join(tmpDir, "platform");
+    src = path.join(tmpDir, "src");
+    tgt = path.join(platformRoot, "hooks", "my-hook");
+    await fs.mkdir(src, { recursive: true });
+    await fs.mkdir(platformRoot, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("immediately-written .ts file contains no raw @lib/ after syncDirectory with platformRoot", async () => {
+    // hooks/my-hook/index.ts lives at depth 2 from platformRoot
+    // so @lib/ should become ../../lib/
+    await writeFile(
+      path.join(src, "index.ts"),
+      "import { foo } from '@lib/types.ts';\n",
+    );
+
+    await syncDirectory(src, tgt, { platformRoot });
+
+    const content = await fs.readFile(path.join(tgt, "index.ts"), "utf8");
+    expect(content).not.toContain("@lib/");
+    expect(content).toContain("'../../lib/types.ts'");
+  });
+
+  it("rewrites @lib/ in nested .ts files using correct depth", async () => {
+    // hooks/my-hook/sub/deep.ts lives at depth 3 from platformRoot
+    await writeFile(
+      path.join(src, "sub", "deep.ts"),
+      `import { X } from "@lib/foo.ts";\n`,
+    );
+
+    await syncDirectory(src, tgt, { platformRoot });
+
+    const content = await fs.readFile(path.join(tgt, "sub", "deep.ts"), "utf8");
+    expect(content).not.toContain("@lib/");
+    expect(content).toContain('"../../../lib/foo.ts"');
+  });
+
+  it("non-.ts files are copied verbatim even with platformRoot", async () => {
+    const original = "some raw content with @lib/ mention";
+    await writeFile(path.join(src, "readme.md"), original);
+
+    await syncDirectory(src, tgt, { platformRoot });
+
+    const content = await fs.readFile(path.join(tgt, "readme.md"), "utf8");
+    expect(content).toBe(original);
+  });
+
+  it(".ts files without @lib/ are byte-identical after copy with platformRoot", async () => {
+    const original = "import { X } from './local.ts';\n";
+    await writeFile(path.join(src, "clean.ts"), original);
+
+    await syncDirectory(src, tgt, { platformRoot });
+
+    const content = await fs.readFile(path.join(tgt, "clean.ts"), "utf8");
+    expect(content).toBe(original);
+  });
+
+  it("post-pass rewrite is a no-op when syncDirectory already rewrote aliases", async () => {
+    await writeFile(
+      path.join(src, "index.ts"),
+      "import { foo } from '@lib/types.ts';\n",
+    );
+
+    await syncDirectory(src, tgt, { platformRoot });
+
+    const contentBefore = await fs.readFile(path.join(tgt, "index.ts"), "utf8");
+
+    // Simulate post-pass: rewrite again. Result must be identical (idempotent).
+    const depth = path.relative(platformRoot, tgt).split(path.sep).length;
+    const prefix = "../".repeat(depth);
+    const rewritten = contentBefore
+      .replace(/'@lib\//g, `'${prefix}lib/`)
+      .replace(/"@lib\//g, `"${prefix}lib/`);
+
+    expect(rewritten).toBe(contentBefore);
+  });
+});
+
 describe("copyFile", () => {
   let tmpDir: string;
 
