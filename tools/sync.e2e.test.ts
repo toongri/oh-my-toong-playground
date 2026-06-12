@@ -3,9 +3,10 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 
-import { syncPlatformConfigs, createContext, runProjectsLoop, resolveProjectFilter, type AdapterMap } from "./sync.ts";
+import { syncPlatformConfigs, processYaml, createContext, runProjectsLoop, resolveProjectFilter, type AdapterMap } from "./sync.ts";
 import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "./lib/types.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
+import { ClaudeAdapter } from "./adapters/claude.ts";
 import { _resetConfigCache } from "./lib/config.ts";
 
 // ---------------------------------------------------------------------------
@@ -421,5 +422,162 @@ describe("Phase 1 destinations unchanged", () => {
 
     const settingsExists = await fs.stat(settingsFile).then(() => true).catch(() => false);
     expect(settingsExists).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: lib deployment is complete after copy-time @lib/ rewrite (regression)
+//
+// Regression guard for the incident where 106aaf3's copy-time @lib/ rewrite
+// left the deployed tree with zero raw `@lib/` specifiers, so the lib-dependency
+// collector — which used to scan the DEPLOYED platform dir — found nothing and
+// deployed an EMPTY lib/. SessionStart hooks then crashed at runtime with
+// "Cannot find module '../../lib/pins/manifest'". This suite runs the REAL
+// orchestrator end-to-end (real ClaudeAdapter, dryRun=false) and asserts the
+// deployed lib is complete AND that bun resolves the rewritten import.
+// ---------------------------------------------------------------------------
+
+describe("lib deployment complete after copy-time @lib/ rewrite (regression)", () => {
+  let tmpDir: string;
+  let rootDir: string;
+  let targetPath: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "omt-e2e-libdeploy-"));
+    rootDir = path.join(tmpDir, "root");
+    targetPath = path.join(tmpDir, "target");
+    await fs.mkdir(rootDir, { recursive: true });
+    await fs.mkdir(targetPath, { recursive: true });
+    await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+    _resetConfigCache();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    _resetConfigCache();
+  });
+
+  it("deploys all @lib/-referenced modules + transitive deps + data files, prunes unused, and the deployed hook resolves at runtime", async () => {
+    // --- Source lib tree (rootDir/lib) ---
+    const libSrc = path.join(rootDir, "lib");
+    // manifest.ts imports a lib-internal transitive dep via a relative import.
+    await writeFile(
+      path.join(libSrc, "pins", "manifest.ts"),
+      [
+        'import { TAG } from "./parser.ts";',
+        "export const manifest = { tag: TAG };",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      path.join(libSrc, "pins", "parser.ts"),
+      'export const TAG = "parsed";\n',
+    );
+    // tbox-loader.ts statically references a sibling data file via import.meta.dir.
+    await writeFile(
+      path.join(libSrc, "pins", "tbox-loader.ts"),
+      [
+        'import { join } from "path";',
+        'export const TBOX_PATH = join(import.meta.dir, "tbox.yaml");',
+        "",
+      ].join("\n"),
+    );
+    await writeFile(path.join(libSrc, "pins", "tbox.yaml"), "schema: 1\n");
+    // A lib module that nothing imports — must be pruned.
+    await writeFile(path.join(libSrc, "unused.ts"), "export const dead = true;\n");
+
+    // --- Component: a skill bundling a .ts that imports @lib/pins/manifest.ts ---
+    const skillDir = path.join(rootDir, "skills", "pin-thing");
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: pin-thing\ndescription: test skill\n---\n\nbody\n",
+    );
+    await writeFile(
+      path.join(skillDir, "run.ts"),
+      [
+        'import { manifest } from "@lib/pins/manifest.ts";',
+        'import { TBOX_PATH } from "@lib/pins/tbox-loader.ts";',
+        "export const out = { manifest, TBOX_PATH };",
+        "",
+      ].join("\n"),
+    );
+
+    // --- Component: a SessionStart hook (directory) wired via claude.yaml ---
+    const hookDir = path.join(rootDir, "hooks", "pin-session-start");
+    await writeFile(
+      path.join(hookDir, "index.ts"),
+      [
+        'import { manifest } from "@lib/pins/manifest.ts";',
+        "// Minimal SessionStart hook: read stdin, emit nothing, exit 0.",
+        "await new Response(Bun.stdin.stream()).text();",
+        "if (!manifest) process.exit(1);",
+        "process.exit(0);",
+        "",
+      ].join("\n"),
+    );
+
+    // --- sync.yaml + claude.yaml in rootDir (yamlDir = dirname(syncYaml)) ---
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(
+      syncYamlPath,
+      [
+        `path: ${targetPath}`,
+        "platforms: [claude]",
+        "skills:",
+        "  items:",
+        "    - pin-thing",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      path.join(rootDir, "claude.yaml"),
+      [
+        "hooks:",
+        "  SessionStart:",
+        "    - component: pin-session-start",
+        "",
+      ].join("\n"),
+    );
+
+    // --- Run the REAL orchestrator (real ClaudeAdapter, dryRun=false) ---
+    const adapters: AdapterMap = new Map<Platform, PlatformAdapter>();
+    adapters.set("claude", new ClaudeAdapter(async () => {}, async () => ({ exitCode: 0 })));
+    const context = createContext(false);
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    const claudeDir = path.join(targetPath, ".claude");
+    const libDest = path.join(claudeDir, "lib");
+
+    // The deployed component .ts has NO raw @lib/ and a depth-correct relative import.
+    const deployedSkillTs = await fs.readFile(path.join(claudeDir, "skills", "pin-thing", "run.ts"), "utf8");
+    expect(deployedSkillTs).not.toContain("@lib/");
+    // skills/pin-thing/run.ts is two levels deep → ../../lib/
+    expect(deployedSkillTs).toContain("../../lib/pins/manifest.ts");
+
+    const deployedHookTs = await fs.readFile(path.join(claudeDir, "hooks", "pin-session-start", "index.ts"), "utf8");
+    expect(deployedHookTs).not.toContain("@lib/");
+    expect(deployedHookTs).toContain("../../lib/pins/manifest.ts");
+
+    // The regression: the @lib/-referenced module must be deployed.
+    expect(await fs.stat(path.join(libDest, "pins", "manifest.ts")).then(() => true).catch(() => false)).toBe(true);
+    // Transitive lib-internal dep deploys.
+    expect(await fs.stat(path.join(libDest, "pins", "parser.ts")).then(() => true).catch(() => false)).toBe(true);
+    // The data-file loader and its data file both deploy.
+    expect(await fs.stat(path.join(libDest, "pins", "tbox-loader.ts")).then(() => true).catch(() => false)).toBe(true);
+    expect(await fs.stat(path.join(libDest, "pins", "tbox.yaml")).then(() => true).catch(() => false)).toBe(true);
+    // Unused lib module is pruned.
+    expect(await fs.stat(path.join(libDest, "unused.ts")).then(() => true).catch(() => false)).toBe(false);
+
+    // Runtime resolution: bun must resolve the rewritten relative import against
+    // the deployed lib. Spawn the deployed hook with minimal SessionStart stdin.
+    const proc = Bun.spawn(["bun", "run", path.join(claudeDir, "hooks", "pin-session-start", "index.ts")], {
+      stdin: new TextEncoder().encode('{"hook_event_name":"SessionStart","session_id":"e2e"}\n'),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+    expect({ exitCode: proc.exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
   });
 });
