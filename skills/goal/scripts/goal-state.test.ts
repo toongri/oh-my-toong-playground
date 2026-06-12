@@ -186,13 +186,20 @@ describe('goal state', () => {
     // (d) request-complete is the ONLY path to phase=complete; gated on evidence
     const S2 = 'gate-session';
     seedGoalFile(S2);
+    setGoalState(S2, { phase: 'planning', outcome: 'gate test', verification_surface: 'v' });
+    setSingleStory(S2);  // auto-confirms one story (D-7 carve-out)
     setGoalState(S2, { phase: 'pursuing' });
     // no completion evidence yet -> gate refuses, stays non-complete
     expect(requestComplete(S2)).toBe(false);
     expect(readGoalState(S2)!.phase).not.toBe('complete');
-    // supply evidence, then request-complete succeeds
+    // supply evidence, then request-complete succeeds (with story artifact)
     setGoalState(S2, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/proof.txt`] });
     setVerdict(S2, 'APPROVE');
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${S2}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['proof.txt'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
     expect(requestComplete(S2)).toBe(true);
     // complete is terminal (active:false) so readGoalState returns null; assert on raw
     expect(rawStateOf(S2).phase).toBe('complete');
@@ -216,8 +223,15 @@ describe('goal state', () => {
 
   // AC #5 — complete-wins
   test('request-complete wins over prior budget_limited when verdict APPROVE', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'complete-wins test', verification_surface: 'v' });
+    setSingleStory(S);  // auto-confirms one story
     setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/done.md`] });
     setVerdict(S, 'APPROVE');
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${S}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['done.md'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
     setBudgetLimited(S);
     expect(rawState().phase).toBe('budget_limited');
 
@@ -268,8 +282,15 @@ describe('goal state', () => {
     // complete
     const Sc = 'c';
     seedGoalFile(Sc);
+    setGoalState(Sc, { phase: 'planning', outcome: 'terminal test', verification_surface: 'v' });
+    setSingleStory(Sc);
     setGoalState(Sc, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/p`] });
     setVerdict(Sc, 'APPROVE');
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${Sc}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['p'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
     requestComplete(Sc);
     expect(rawStateOf(Sc).active).toBe(false);
 
@@ -344,8 +365,15 @@ describe('goal state', () => {
 
   // A1: request-complete succeeds with APPROVE and array evidence
   test('request-complete succeeds with APPROVE and array evidence', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'succeed test', verification_surface: 'v' });
+    setSingleStory(S);
     setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/a.md`] });
     setVerdict(S, 'APPROVE');
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${S}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['a.md'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
     expect(requestComplete(S)).toBe(true);
     expect(rawState().phase).toBe('complete');
     expect(rawState().active).toBe(false);
@@ -395,13 +423,24 @@ describe('goal state', () => {
     const run = (cmd: string) =>
       execSync(`bun ${script} ${cmd}`, { encoding: 'utf8', env: process.env });
 
+    // Seed a story so the gate can be satisfied
+    run('set --phase planning --outcome "cli-evidence-test" --verification-surface "v"');
+    run('set-stories --single');
+
     run(`set --phase pursuing --completion-evidence ${p1},${p2}`);
     expect(rawState().phase).toBe('pursuing');
     expect(rawState().completion_evidence_paths).toEqual([p1, p2]);
 
     run('set-verdict --verdict APPROVE');
 
-    // request-complete must exit 0 (no throw) now that evidence is present
+    // Write the verdict artifact so the story gate passes
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${S}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: [p1] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
+
+    // request-complete must exit 0 (no throw) now that evidence + story artifact present
     run('request-complete');
     expect(rawState().phase).toBe('complete');
     expect(rawState().active).toBe(false);
@@ -1402,5 +1441,219 @@ describe('story layer: mutations', () => {
     expect(restored.stories[0].status).toBe('unconfirmed');
     expect(restored.stories[0].story).toBe('ship feature X');
     expect(restored.active).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 4: Re-derived per-story verdict gate
+// ---------------------------------------------------------------------------
+
+/**
+ * Helpers for the T4 gate tests.
+ * Artifact lives at $OMT_DIR/goal-verdict-{sid}.json (mirrors state path convention).
+ */
+function verdictArtifactPath(sid: string): string {
+  return `${process.env.OMT_DIR}/goal-verdict-${sid}.json`;
+}
+
+function writeVerdictArtifact(sid: string, obj: object): void {
+  writeFileSync(verdictArtifactPath(sid), JSON.stringify(obj), 'utf8');
+}
+
+/** Build a fully-satisfied gate fixture for one session:
+ *  - 2 confirmed stories (S1, S2)
+ *  - evidence paths set
+ *  - objective_verdict = APPROVE
+ *  Returns the artifact that would pass the gate. */
+function buildSatisfiedFixture(sid: string): object {
+  // State
+  setGoalState(sid, { phase: 'planning', outcome: 'ship it' });
+  const s1: Story = { id: 'S1', story: 'ship', acceptance_criteria: ['ac1'], verification_surface: 'v1', status: 'unconfirmed' };
+  const s2: Story = { id: 'S2', story: 'test', acceptance_criteria: ['ac2'], verification_surface: 'v2', status: 'unconfirmed' };
+  setStories(sid, [s1, s2]);
+  confirmStory(sid, 'S1');
+  confirmStory(sid, 'S2');
+  setGoalState(sid, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/evidence.md`] });
+  setVerdict(sid, 'APPROVE');
+
+  // Valid artifact
+  return {
+    objective_verdict: 'APPROVE',
+    stories: [
+      { id: 'S1', verdict: 'APPROVE', evidence_refs: ['evidence.md'] },
+      { id: 'S2', verdict: 'APPROVE', evidence_refs: ['evidence.md'] },
+    ],
+    verifier: 'argus',
+    at: '2026-06-12T10:00:00',
+  };
+}
+
+describe('story layer: request-complete verdict gate (T4)', () => {
+  // AC-6a: artifact schema validation — malformed and unknown-id both rejected
+  test('artifact schema validation', () => {
+    buildSatisfiedFixture(S);
+
+    // Malformed: missing required fields (no `stories` array)
+    writeVerdictArtifact(S, { objective_verdict: 'APPROVE', verifier: 'argus', at: '2026-06-12T00:00:00' });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+
+    // Unknown story id in artifact
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: [] },
+        { id: 'UNKNOWN', verdict: 'APPROVE', evidence_refs: [] },  // unknown
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC-6b-i: gate refuses when the artifact is absent
+  test('gate refuses artifact-absent', () => {
+    buildSatisfiedFixture(S);
+    // No artifact file written — must refuse
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC-6b-ii: gate refuses when exactly one story is non-APPROVE despite state APPROVE
+  // Precedence rule (D-3): non-APPROVE story entry blocks regardless of objective_verdict
+  test('gate refuses single-story-non-APPROVE', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',  // state also has APPROVE
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'REQUEST_CHANGES', evidence_refs: [] },  // one non-APPROVE
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    // state objective_verdict === 'APPROVE' but one story entry is REQUEST_CHANGES
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+    expect(rawState().phase).toBe('pursuing');
+  });
+
+  // AC-6b-iii: gate refuses when dual gate is unmet
+  test('gate refuses dual-gate-unmet', () => {
+    // Set up stories but NO verdict set (stays 'absent')
+    setGoalState(S, { phase: 'planning', outcome: 'obj' });
+    const s1: Story = { id: 'S1', story: 'x', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    setStories(S, [s1]);
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`] });
+    // objective_verdict stays 'absent' — dual gate unmet
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] }],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC-6b-iv: gate refuses when any non-retired story is unconfirmed
+  // Scenario: story added mid-flight (add-story) without confirm, then request-complete attempted
+  test('gate refuses unconfirmed-story', () => {
+    // Start with a confirmed story so we can enter pursuing
+    setGoalState(S, { phase: 'planning', outcome: 'obj' });
+    const s1: Story = { id: 'S1', story: 'x', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    setStories(S, [s1]);
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`] });
+    setVerdict(S, 'APPROVE');
+    // Add a new story mid-flight (born unconfirmed) — now an unconfirmed story exists
+    addStory(S, { id: 'S2', story: 'new mid-flight story', acceptance_criteria: ['ac2'], verification_surface: 'v2', status: 'unconfirmed' });
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    // S2 is unconfirmed — gate must refuse
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC-6b-v: gate refuses when artifact omits an entry for a non-retired story;
+  //          a fixture with an extra retired-story entry still passes (ignored)
+  test('gate refuses missing-artifact-entry', () => {
+    // Fixture A: artifact missing S2 entry
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        // S2 entry deliberately omitted
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+
+    // Fixture B: state has S1 (confirmed) + S2 (retired); artifact has S1 entry + extra retired-S2 entry
+    // Extra retired entry is ignored; S1 APPROVE => should pass
+    const S2 = 'gate-retired-extra';
+    seedGoalFile(S2);
+    setGoalState(S2, { phase: 'planning', outcome: 'obj2' });
+    const sa: Story = { id: 'S1', story: 'x', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    const sb: Story = { id: 'S2', story: 'y', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    setStories(S2, [sa, sb]);
+    confirmStory(S2, 'S1');
+    // Retire S2 while planning (allowed)
+    retireStory(S2, 'S2');
+    setGoalState(S2, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`] });
+    setVerdict(S2, 'APPROVE');
+    // Artifact has both entries (S2 retired entry is extra — should be ignored)
+    writeVerdictArtifact(S2, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: [] },  // retired story — ignored
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S2)).toBe(true);
+    expect(rawStateOf(S2).phase).toBe('complete');
+  });
+
+  // AC-6b-vi: all checks satisfied => phase=complete written
+  test('gate completes when all satisfied', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    expect(requestComplete(S)).toBe(true);
+    expect(rawState().phase).toBe('complete');
+    expect(rawState().active).toBe(false);
+  });
+
+  // AC-6c: zero non-retired stories => refused even with dual gate satisfied
+  test('gate refuses all-retired', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'obj' });
+    const s1: Story = { id: 'S1', story: 'x', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    setStories(S, [s1]);
+    confirmStory(S, 'S1');
+    // Retire S1 while planning (allowed)
+    retireStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`] });
+    setVerdict(S, 'APPROVE');
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [],  // no entries for retired story (correct — retired is ignored)
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
   });
 });
