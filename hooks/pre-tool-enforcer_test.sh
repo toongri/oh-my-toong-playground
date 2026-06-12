@@ -217,27 +217,30 @@ test_ac4_cwd_independent_seeding() {
 
 test_ac8_fail_open_missing_omt_dir() {
     local exit_code=0
-    local output stderr_out
+    local stderr_out
 
     # Use gamy-shake itself as the project cwd — has .git and CLAUDE.md so
     # resolve_omt_dir will walk up to the project root and compute OMT_DIR.
     local project_cwd
     project_cwd="$SCRIPT_DIR"
 
-    # Compute what OMT_DIR resolve_omt_dir will produce for this cwd
+    # Sandbox HOME inside TEST_TMP_DIR so no real $HOME is touched
+    local fake_home="$TEST_TMP_DIR/home"
+    mkdir -p "$fake_home"
+
+    # Compute what OMT_DIR resolve_omt_dir will produce for this cwd, using the same fake HOME
     local expected_omt_dir
     expected_omt_dir=$(
         unset OMT_DIR
+        export HOME="$fake_home"
         source "$SCRIPT_DIR/lib/omt-dir.sh" && resolve_omt_dir "$project_cwd"
     )
 
     local expected_file="$expected_omt_dir/prometheus-state-${OMT_SESSION_ID}.json"
 
-    # Ensure no pre-existing file at that path (cleanup)
-    rm -f "$expected_file" 2>/dev/null || true
-
     stderr_out=$(
         unset OMT_DIR
+        export HOME="$fake_home"
         printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"prometheus\"},\"session_id\":\"${OMT_SESSION_ID}\",\"cwd\":\"$project_cwd\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
@@ -245,12 +248,9 @@ test_ac8_fail_open_missing_omt_dir() {
     [[ "$exit_code" -eq 0 ]] \
         || { echo "ASSERTION FAILED: Hook should exit 0 when OMT_DIR unset (exit=$exit_code)"; return 1; }
 
-    # New contract: file must be created at the derived path
+    # New contract: file must be created at the derived path (under sandboxed HOME)
     assert_file_exists "$expected_file" \
         "Hook must create state file at resolve_omt_dir-derived path when env OMT_DIR absent but stdin cwd present" || return 1
-
-    # Cleanup the file we just created in the real OMT_DIR
-    rm -f "$expected_file" 2>/dev/null || true
 }
 
 # =============================================================================
@@ -524,18 +524,23 @@ test_ac8a_env_stripped_full_payload_seeds_derived_path() {
     local project_cwd="$SCRIPT_DIR"
     local stdin_sid="env-stripped-test-sid"
 
-    # Derive expected OMT_DIR via resolve_omt_dir (in subshell, no env OMT_DIR)
+    # Sandbox HOME inside TEST_TMP_DIR so no real $HOME is touched
+    local fake_home="$TEST_TMP_DIR/home"
+    mkdir -p "$fake_home"
+
+    # Derive expected OMT_DIR via resolve_omt_dir (in subshell, no env OMT_DIR, sandboxed HOME)
     local derived_omt_dir
     derived_omt_dir=$(
         unset OMT_DIR
+        export HOME="$fake_home"
         source "$SCRIPT_DIR/lib/omt-dir.sh" && resolve_omt_dir "$project_cwd"
     )
 
     local expected_file="$derived_omt_dir/goal-state-${stdin_sid}.json"
-    rm -f "$expected_file" 2>/dev/null || true
 
     stderr_out=$(
         unset OMT_DIR OMT_SESSION_ID
+        export HOME="$fake_home"
         printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"$stdin_sid\",\"cwd\":\"$project_cwd\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
@@ -545,19 +550,6 @@ test_ac8a_env_stripped_full_payload_seeds_derived_path() {
 
     assert_file_exists "$expected_file" \
         "AC-8a: Seed file must be created at resolve_omt_dir-derived path when env is stripped" || return 1
-
-    # Save evidence
-    mkdir -p "$HOME/.omt/oh-my-toong-playground/evidence/goal-story-layer/t5-seed"
-    {
-        echo "=== AC-8a: env-stripped full-payload stdin derivation ==="
-        echo "project_cwd=$project_cwd"
-        echo "derived_omt_dir=$derived_omt_dir"
-        echo "expected_file=$expected_file"
-        echo "file_exists=$([ -f "$expected_file" ] && echo YES || echo NO)"
-        echo "stderr=$stderr_out"
-    } > "$HOME/.omt/oh-my-toong-playground/evidence/goal-story-layer/t5-seed/stdin-derivation.txt"
-
-    rm -f "$expected_file" 2>/dev/null || true
 }
 
 # =============================================================================
@@ -619,21 +611,28 @@ test_ac8b_ii_missing_cwd_loud_failure() {
 }
 
 # =============================================================================
-# AC-8b-iii — cwd present but non-project (omt-dir.sh emits non-canonical warn)
-#             → hook is loud (stderr non-empty) and still exits 0
+# AC-8b-iii — cwd present but non-project (no .git / CLAUDE.md / package.json)
+#             → omt-dir.sh falls back to $HOME/.omt/<basename>; hook exits 0,
+#               stderr CONTAINS the "non-canonical" warning, seed IS created
 # =============================================================================
 
-test_ac8b_iii_nonproject_cwd_is_loud() {
+test_ac8b_iii_nonproject_cwd_falls_back_with_warning() {
     local exit_code=0
     local stderr_out
 
-    # Use a bare temp directory with no .git / CLAUDE.md / package.json up the tree
+    # Use a bare temp directory with no .git / CLAUDE.md / package.json up the tree.
+    # Must be created BEFORE sandboxing HOME so the path is a real dir the hook can stat.
     local bare_cwd
     bare_cwd=$(mktemp -d)
     local stdin_sid="nonproject-cwd-sid"
 
+    # Sandbox HOME inside TEST_TMP_DIR so no real $HOME is touched
+    local fake_home="$TEST_TMP_DIR/home"
+    mkdir -p "$fake_home"
+
     stderr_out=$(
-        unset OMT_DIR
+        unset OMT_DIR OMT_SESSION_ID
+        export HOME="$fake_home"
         printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"$stdin_sid\",\"cwd\":\"$bare_cwd\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
@@ -643,18 +642,16 @@ test_ac8b_iii_nonproject_cwd_is_loud() {
     [[ "$exit_code" -eq 0 ]] \
         || { echo "ASSERTION FAILED AC-8b-iii: Hook should exit 0 for non-project cwd (exit=$exit_code)"; return 1; }
 
-    # Loud: stderr must be non-empty (omt-dir.sh emits non-canonical warning for bare dirs)
-    [[ -n "$stderr_out" ]] \
-        || { echo "ASSERTION FAILED AC-8b-iii: stderr should be non-empty for non-project cwd. Got: '$stderr_out'"; return 1; }
+    # Loud: stderr must contain the "non-canonical" warning emitted by omt-dir.sh
+    echo "$stderr_out" | grep -q "non-canonical" \
+        || { echo "ASSERTION FAILED AC-8b-iii: stderr should contain 'non-canonical'. Got: '$stderr_out'"; return 1; }
 
-    # Save evidence
-    mkdir -p "$HOME/.omt/oh-my-toong-playground/evidence/goal-story-layer/t5-seed"
-    {
-        echo "=== AC-8b-iii: non-project cwd loud ==="
-        echo "bare_cwd=$bare_cwd"
-        echo "exit=$exit_code"
-        echo "stderr=$stderr_out"
-    } > "$HOME/.omt/oh-my-toong-playground/evidence/goal-story-layer/t5-seed/unresolvable-cwd.txt"
+    # Fallback contract: seed IS created at $HOME/.omt/<basename of bare_cwd>/goal-state-<sid>.json
+    local bare_basename
+    bare_basename=$(basename "$bare_cwd")
+    local expected_file="$fake_home/.omt/${bare_basename}/goal-state-${stdin_sid}.json"
+    assert_file_exists "$expected_file" \
+        "AC-8b-iii: Seed file must be created at fallback path for non-project cwd" || return 1
 }
 
 # =============================================================================
@@ -780,7 +777,7 @@ main() {
     run_test test_ac8a_env_stripped_full_payload_seeds_derived_path
     run_test test_ac8b_i_missing_session_id_loud_failure
     run_test test_ac8b_ii_missing_cwd_loud_failure
-    run_test test_ac8b_iii_nonproject_cwd_is_loud
+    run_test test_ac8b_iii_nonproject_cwd_falls_back_with_warning
     run_test test_ac8c_prometheus_and_di_seed_field_preservation
 
     echo "=========================================="
