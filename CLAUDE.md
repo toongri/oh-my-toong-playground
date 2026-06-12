@@ -107,7 +107,7 @@ skills:
 | clarify | Requirements clarification | MANDATORY gate before implementation |
 | git-master | Git conventions (commits + branch naming) | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
-| argus | Quality Assurance guardian | Comprehensive quality verification - nothing escapes |
+| qa | Quality Assurance verification | Comprehensive quality verification - nothing escapes |
 
 ### Hooks
 

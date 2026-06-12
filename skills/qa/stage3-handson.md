@@ -37,7 +37,7 @@ Stage 3 Result: SKIPPED (internal logic only / non-code change)
 
 ## Step 3.2: Server / Application Lifecycle
 
-**Argus manages the full lifecycle: start, verify, stop.**
+**The verifier manages the full lifecycle: start, verify, stop.**
 
 ### Start
 
@@ -167,11 +167,11 @@ Before proceeding, load the `using-maestro` skill (via the Skill tool) — it en
 
 ### Parallel Workspace Isolation
 
-When multiple Argus runs may execute concurrently (parallel git worktrees, CI matrix), each MUST target a distinct device instance — sharing a single emulator across concurrent flows corrupts app state.
+When multiple QA runs may execute concurrently (parallel git worktrees, CI matrix), each MUST target a distinct device instance — sharing a single emulator across concurrent flows corrupts app state.
 
 - iOS: create a per-workspace device, then use the same UDID-derived boot pattern as Step 2 above:
   ```bash
-  IOS_UDID=$(xcrun simctl create "argus-$WORKSPACE" "iPhone 16")
+  IOS_UDID=$(xcrun simctl create "qa-$WORKSPACE" "iPhone 16")
   xcrun simctl bootstatus "$IOS_UDID" -b
   export IOS_UDID
   ```
@@ -196,7 +196,7 @@ Items requiring physical hardware (push delivery, biometric enrollment, camera, 
 
 After all maestro verification completes (pass or fail):
 
-- **iOS — parallel-workspace mode** (created via `xcrun simctl create "argus-$WORKSPACE" ...`):
+- **iOS — parallel-workspace mode** (created via `xcrun simctl create "qa-$WORKSPACE" ...`):
   ```bash
   xcrun simctl shutdown "$IOS_UDID" 2>/dev/null
   xcrun simctl delete "$IOS_UDID" 2>/dev/null
