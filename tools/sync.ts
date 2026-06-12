@@ -442,27 +442,29 @@ export async function syncLib(
     const platformDir = path.join(targetPath, `.${platform}`);
     const libDest = path.join(platformDir, "lib");
 
-    // Always wipe libDest first (dry-run: log only)
-    if (context.dryRun) {
-      if (existsSync(libDest)) {
-        logDry(`Remove stale lib directory: ${libDest}`);
-      }
-    } else {
-      try {
-        await fs.rm(libDest, { recursive: true, force: true });
-      } catch {
-        // ignore
-      }
-    }
-
     const requiredModules = await collectRequiredLibModules(platformDir, libSrc);
 
     if (requiredModules.size === 0 && dataFiles.size === 0) {
+      // No @lib/ imports — remove any stale lib (dry-run: log only)
+      if (context.dryRun) {
+        if (existsSync(libDest)) {
+          logDry(`Remove stale lib directory: ${libDest}`);
+        }
+      } else {
+        try {
+          await fs.rm(libDest, { recursive: true, force: true });
+        } catch {
+          // ignore
+        }
+      }
       logInfo(`No @lib/ imports found in .${platform}/, skipping lib deployment`);
       continue;
     }
 
     if (context.dryRun) {
+      if (existsSync(libDest)) {
+        logDry(`Remove stale lib directory: ${libDest}`);
+      }
       logDry(`Deploy lib modules to ${libDest}/:`);
       for (const dep of requiredModules) {
         logDry(`  ${path.relative(libSrc, dep)}`);
@@ -472,19 +474,50 @@ export async function syncLib(
       }
       logDry(`Rewrite @lib/* aliases in ${platformDir}/`);
     } else {
-      await fs.mkdir(libDest, { recursive: true });
-      for (const dep of requiredModules) {
-        const relPath = path.relative(libSrc, dep);
-        const destFile = path.join(libDest, relPath);
-        await fs.mkdir(path.dirname(destFile), { recursive: true });
-        await fs.copyFile(dep, destFile);
+      // Build the new lib tree in a temp sibling directory (same filesystem as
+      // libDest) so we can atomically swap it in via fs.rename.  The reader
+      // always sees either the complete old lib or the complete new lib.
+      const suffix = Math.random().toString(36).slice(2);
+      const libTmp = path.join(platformDir, `lib.tmp-${suffix}`);
+      const libOld = path.join(platformDir, `lib.old-${suffix}`);
+
+      // Remove any leftover temp dirs from prior crashed runs.
+      const platformEntries = await fs.readdir(platformDir).catch(() => [] as string[]);
+      for (const entry of platformEntries) {
+        if (entry.startsWith("lib.tmp-") || entry.startsWith("lib.old-")) {
+          await fs.rm(path.join(platformDir, entry), { recursive: true, force: true }).catch(
+            () => undefined,
+          );
+        }
       }
-      for (const file of dataFiles) {
-        const relPath = path.relative(libSrc, file);
-        const destFile = path.join(libDest, relPath);
-        await fs.mkdir(path.dirname(destFile), { recursive: true });
-        await fs.copyFile(file, destFile);
+
+      try {
+        await fs.mkdir(libTmp, { recursive: true });
+        for (const dep of requiredModules) {
+          const relPath = path.relative(libSrc, dep);
+          const destFile = path.join(libTmp, relPath);
+          await fs.mkdir(path.dirname(destFile), { recursive: true });
+          await fs.copyFile(dep, destFile);
+        }
+        for (const file of dataFiles) {
+          const relPath = path.relative(libSrc, file);
+          const destFile = path.join(libTmp, relPath);
+          await fs.mkdir(path.dirname(destFile), { recursive: true });
+          await fs.copyFile(file, destFile);
+        }
+
+        // Atomic swap: rename old out, rename new in, remove old.
+        if (existsSync(libDest)) {
+          await fs.rename(libDest, libOld);
+        }
+        await fs.rename(libTmp, libDest);
+        await fs.rm(libOld, { recursive: true, force: true }).catch(() => undefined);
+      } catch (err) {
+        // Build failed — clean up temp, leave the original lib untouched.
+        await fs.rm(libTmp, { recursive: true, force: true }).catch(() => undefined);
+        throw err;
       }
+
       logInfo(`Deployed shared lib to .${platform}/lib/`);
       await rewriteLibAliases(platformDir);
     }

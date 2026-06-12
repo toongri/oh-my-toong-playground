@@ -1714,6 +1714,71 @@ describe("syncLib", () => {
     expect(rewritten).toContain("../lib/types.ts");
     expect(rewritten).not.toContain("@lib/");
   });
+
+  it("leaves original lib intact when mid-build copy fails (atomic swap)", async () => {
+    // Arrange: a pre-existing deployed lib with known content.
+    const libSrc = path.join(rootDir, "lib");
+    await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
+
+    const claudeDir = path.join(targetPath, ".claude");
+    // First sync: establishes the deployed lib.
+    await writeFile(
+      path.join(claudeDir, "agents", "oracle.ts"),
+      "import { x } from '@lib/helper';\n",
+    );
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"]);
+    const libDest = path.join(targetPath, ".claude", "lib");
+    expect(await exists(path.join(libDest, "helper.ts"))).toBe(true);
+    const originalContent = await readFile(path.join(libDest, "helper.ts"));
+
+    // Reset oracle.ts back to @lib/ import so the second sync's scan finds it
+    // and proceeds to the build phase (rewriteLibAliases rewrites it after sync1).
+    await writeFile(
+      path.join(claudeDir, "agents", "oracle.ts"),
+      "import { x } from '@lib/helper';\n",
+    );
+
+    // Sabotage: replace source file with a directory so fs.copyFile throws EISDIR.
+    await fs.rm(path.join(libSrc, "helper.ts"));
+    await fs.mkdir(path.join(libSrc, "helper.ts")); // directory masquerading as file
+
+    // Act: second sync will fail during the temp-dir build phase.
+    let threw = false;
+    try {
+      await syncLib(makeContext(), targetPath, rootDir, ["claude"]);
+    } catch {
+      threw = true;
+    }
+
+    // The build should have thrown (copy-to-temp fails on EISDIR).
+    expect(threw).toBe(true);
+
+    // Assert: the deployed lib at its FINAL path still has the original module.
+    // On pre-fix code this fails because the wipe happened before the copy attempt.
+    expect(await exists(libDest)).toBe(true);
+    expect(await exists(path.join(libDest, "helper.ts"))).toBe(true);
+    const contentAfter = await readFile(path.join(libDest, "helper.ts"));
+    expect(contentAfter).toBe(originalContent);
+  });
+
+  it("cleans up lib.tmp-* sibling on successful sync (no temp dir residue)", async () => {
+    const libSrc = path.join(rootDir, "lib");
+    await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
+
+    const claudeDir = path.join(targetPath, ".claude");
+    await writeFile(
+      path.join(claudeDir, "agents", "oracle.ts"),
+      "import { x } from '@lib/helper';\n",
+    );
+
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"]);
+
+    // No lib.tmp-* directories should remain next to the deployed lib.
+    const platformDir = path.join(targetPath, ".claude");
+    const entries = await fs.readdir(platformDir);
+    const tempLeftovers = entries.filter((e) => e.startsWith("lib.tmp-"));
+    expect(tempLeftovers).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
