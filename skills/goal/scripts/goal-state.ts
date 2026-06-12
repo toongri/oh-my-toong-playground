@@ -99,8 +99,9 @@ export interface GoalState {
   last_touched_at: string;
   /**
    * WHAT-slices of the objective. Defined during planning, tracked through completion.
-   * Absent field reads as [] (backward-compatible). Owned exclusively by set-stories
-   * and the --single carve-out; no hook or merge-write path touches these.
+   * Absent field reads as [] (backward-compatible). Writers: setStories, setSingleStory,
+   * addStory, reviseStory, confirmStory, retireStory. No hook or merge-write path
+   * touches these directly.
    */
   stories?: Story[];
 }
@@ -199,7 +200,8 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
       next.completion_evidence_paths ?? prior.completion_evidence_paths ?? [],
     schema_version: next.schema_version ?? prior.schema_version ?? 1,
     // D-5 pinned hazard: stories MUST be enumerated here or silently dropped on every
-    // non-story write. next.stories is only set by setStories/setSingleStory.
+    // non-story write. Writers: setStories, setSingleStory, addStory, reviseStory,
+    // confirmStory, retireStory.
     stories: next.stories ?? prior.stories ?? [],
   };
   const state = mergeWithHeartbeat(partial, {}) as GoalState;
@@ -445,6 +447,10 @@ export function addStory(sessionId: string, story: Story): void {
   const prior = readPrior(sessionId);
   const existing: Story[] = prior.stories ?? [];
 
+  if (!prior.outcome || prior.outcome.trim() === '') {
+    throw new Error('add-story: refused — outcome must be set before adding stories');
+  }
+
   // No mutation may produce confirmed (D-9) or out-of-enum status
   const VALID_STATUSES: StoryStatus[] = ['unconfirmed', 'confirmed', 'retired'];
   if (story.status !== undefined && !VALID_STATUSES.includes(story.status)) {
@@ -485,6 +491,11 @@ export function reviseStory(sessionId: string, storyId: string, patch: Partial<S
   }
   if (stories[idx].status === 'retired') {
     throw new Error(`revise-story: refused — story "${storyId}" is retired (no resurrect-via-revise)`);
+  }
+
+  // id collision guard: patch.id must not collide with a different existing story
+  if (patch.id !== undefined && patch.id !== storyId && stories.some((s) => s.id === patch.id)) {
+    throw new Error(`revise-story: refused — story id "${patch.id}" already exists`);
   }
 
   // No mutation may produce confirmed or out-of-enum status (D-9)
