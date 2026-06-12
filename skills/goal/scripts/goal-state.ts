@@ -37,7 +37,7 @@
  *   retire-story <id>                    (sets retired; confirmed-retire fence — D-9)
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, unlinkSync } from 'fs';
 import { execSync } from 'child_process';
 import { getOmtDir } from '@lib/omt-dir';
 import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFileNoCreate, isPristine } from '@lib/state-core';
@@ -330,13 +330,27 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
     completion_evidence_paths: opts.completion_evidence_paths,
   };
   if (opts.phase === 'planning') {
-    // Stale verdict cannot survive a re-plan (ADR-3).
+    // ADR-3: Stale verdict cannot survive a re-plan. Three verdict carriers must all be
+    // invalidated together:
+    //   1. objective_verdict state field → reset to 'absent'
+    //   2. completion_evidence_paths state field → cleared to []
+    //   3. goal-verdict-{sid}.json artifact on disk → deleted
+    // Clearing (1) and (2) without deleting (3) allows requestComplete to read the old
+    // artifact and false-complete a new objective on a prior objective's evidence.
     next.objective_verdict = 'absent';
     // Stale completion evidence cannot survive ANY planning transition — evidence is only
     // ever valid from the current pursuit's completion audit, recorded fresh during the
     // `pursuing` phase right before completing. A new objective must never complete on a
     // prior objective's evidence.
     next.completion_evidence_paths = [];
+    // Delete the on-disk verdict artifact. ENOENT is ignored (no artifact = already clean).
+    // Fail-open: if deletion fails for any other reason, the re-plan still proceeds;
+    // the subsequent requestComplete will find an artifact with mismatched state and refuse.
+    try {
+      unlinkSync(resolveVerdictArtifactPath(sessionId));
+    } catch {
+      // ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
+    }
     // A FRESH goal (no active prior) must not inherit the dead goal's consumed iteration
     // budget; a re-plan loop-back of the SAME active goal MUST (budget accumulates across
     // re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.

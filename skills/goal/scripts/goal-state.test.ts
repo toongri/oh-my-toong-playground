@@ -1723,3 +1723,43 @@ describe('story layer: request-complete verdict gate (T4)', () => {
     expect(rawState().phase).not.toBe('complete');
   });
 });
+
+// ---------------------------------------------------------------------------
+// TODO 5: re-plan 시 verdict 아티팩트 파일 무효화 (ADR-3)
+// ---------------------------------------------------------------------------
+
+describe('re-plan 시 verdict 아티팩트 무효화', () => {
+  // AC: goal A 완료(아티팩트 존재) → re-plan(planning 전환) →
+  //     새 evidence + state APPROVE 갖췄지만 새 아티팩트 없는 상태에서 requestComplete는 false
+  test('re-plan 후 구 아티팩트가 없는 상태에서 requestComplete가 false를 반환한다', () => {
+    // Phase 1 — goal A 완료까지 진행
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    // 아티팩트 파일이 존재하는지 확인
+    const { existsSync } = require('fs');
+    expect(existsSync(verdictArtifactPath(S))).toBe(true);
+
+    // Phase 2 — re-plan (planning 전환)
+    setGoalState(S, { phase: 'planning', outcome: '새 목표' });
+    // re-plan 후 아티팩트 파일이 삭제됐어야 함
+    expect(existsSync(verdictArtifactPath(S))).toBe(false);
+
+    // Phase 3 — 새 evidence + state APPROVE 갖추되 새 아티팩트는 작성하지 않음
+    const s1: Story = { id: 'S1', story: 'new', acceptance_criteria: ['ac1'], verification_surface: 'v1', status: 'unconfirmed' };
+    setStories(S, [s1]);
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/evidence.md`] });
+    setVerdict(S, 'APPROVE');
+    // 아티팩트 없이 requestComplete 호출 → false (구 아티팩트로 false-complete 불가)
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC: 아티팩트가 없는 최초 planning 전환에서도 ENOENT 무시 (정상 진행)
+  test('아티팩트가 없는 상태에서 planning 전환이 정상 완료된다', () => {
+    // 아티팩트 없이 planning → pursuing 전환
+    setGoalState(S, { phase: 'planning', outcome: '초기 목표' });
+    // 에러 없이 진행됐는지 확인
+    expect(rawState().phase).toBe('planning');
+  });
+});
