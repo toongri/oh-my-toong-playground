@@ -19,6 +19,7 @@ import {
   resolveProjectFilter,
   runProjectsLoop,
   type AdapterMap,
+  type LibSourceRoots,
 } from "./sync.ts";
 import type { SyncContext, Platform, Category, SyncYaml } from "./lib/types.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
@@ -107,6 +108,15 @@ function makeContext(overrides?: Partial<SyncContext>): SyncContext {
     platformYamlSections: new Map(),
     ...overrides,
   };
+}
+
+/**
+ * Build a LibSourceRoots map mapping the given source paths to one platform.
+ * syncLib scans these SOURCE roots (which carry raw @lib/) for lib deps — the
+ * deployed tree no longer does, since aliases are rewritten at copy time.
+ */
+function libRoots(platform: Platform, ...sourcePaths: string[]): LibSourceRoots {
+  return new Map([[platform, new Set(sourcePaths)]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -1493,18 +1503,16 @@ describe("syncLib", () => {
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
     await writeFile(path.join(libSrc, "unused.ts"), "export const y = 2;\n");
 
-    // Place a deployed .ts file that imports @lib/helper in .claude/
-    const claudeDir = path.join(targetPath, ".claude");
-    await writeFile(
-      path.join(claudeDir, "agents", "oracle.ts"),
-      "import { x } from '@lib/helper';\n",
-    );
+    // A SOURCE component .ts that imports @lib/helper. syncLib scans source
+    // roots (production deployed .ts no longer carries raw @lib/).
+    const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+    await writeFile(sourceTs, "import { x } from '@lib/helper';\n");
 
     const context = makeContext();
 
-    await syncLib(context, targetPath, rootDir, ["claude"]);
+    await syncLib(context, targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
 
-    // helper.ts should be copied (imported by oracle.ts)
+    // helper.ts should be copied (imported by the source component)
     expect(await exists(path.join(targetPath, ".claude", "lib", "helper.ts"))).toBe(true);
     // unused.ts should NOT be copied (not imported anywhere)
     expect(await exists(path.join(targetPath, ".claude", "lib", "unused.ts"))).toBe(false);
@@ -1515,16 +1523,13 @@ describe("syncLib", () => {
     await fs.mkdir(libSrc, { recursive: true });
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
 
-    // Place a deployed .ts file with NO @lib/ imports
-    const claudeDir = path.join(targetPath, ".claude");
-    await writeFile(
-      path.join(claudeDir, "agents", "simple.ts"),
-      "export const hello = 'world';\n",
-    );
+    // A SOURCE component .ts with NO @lib/ imports
+    const sourceTs = path.join(rootDir, "skills", "simple", "run.ts");
+    await writeFile(sourceTs, "export const hello = 'world';\n");
 
     const context = makeContext();
 
-    await syncLib(context, targetPath, rootDir, ["claude"]);
+    await syncLib(context, targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
 
     // lib/ directory should NOT be created
     expect(await exists(path.join(targetPath, ".claude", "lib"))).toBe(false);
@@ -1540,16 +1545,13 @@ describe("syncLib", () => {
     await fs.mkdir(staleDest, { recursive: true });
     await writeFile(path.join(staleDest, "helper.ts"), "export const x = 1;\n");
 
-    // Place a deployed .ts file with NO @lib/ imports
-    const claudeDir = path.join(targetPath, ".claude");
-    await writeFile(
-      path.join(claudeDir, "agents", "simple.ts"),
-      "export const hello = 'world';\n",
-    );
+    // A SOURCE component .ts with NO @lib/ imports
+    const sourceTs = path.join(rootDir, "skills", "simple", "run.ts");
+    await writeFile(sourceTs, "export const hello = 'world';\n");
 
     const context = makeContext();
 
-    await syncLib(context, targetPath, rootDir, ["claude"]);
+    await syncLib(context, targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
 
     // Stale lib/ directory should be removed
     expect(await exists(path.join(targetPath, ".claude", "lib"))).toBe(false);
@@ -1561,16 +1563,13 @@ describe("syncLib", () => {
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
     await writeFile(path.join(libSrc, "helper.test.ts"), "// test file\n");
 
-    // Place a deployed file that imports helper
-    const claudeDir = path.join(targetPath, ".claude");
-    await writeFile(
-      path.join(claudeDir, "agents", "oracle.ts"),
-      "import { x } from '@lib/helper';\n",
-    );
+    // A SOURCE component that imports helper
+    const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+    await writeFile(sourceTs, "import { x } from '@lib/helper';\n");
 
     const context = makeContext();
 
-    await syncLib(context, targetPath, rootDir, ["claude"]);
+    await syncLib(context, targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
 
     const testFile = path.join(targetPath, ".claude", "lib", "helper.test.ts");
     expect(await exists(testFile)).toBe(false);
@@ -1581,18 +1580,14 @@ describe("syncLib", () => {
     await fs.mkdir(libSrc, { recursive: true });
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
 
-    // Place a .ts file with @lib/ import inside .claude/ so collectRequiredLibModules
-    // returns a non-empty set and the dry-run logDry branch is exercised.
-    const scriptsDir = path.join(targetPath, ".claude", "scripts");
-    await fs.mkdir(scriptsDir, { recursive: true });
-    await writeFile(
-      path.join(scriptsDir, "test-script.ts"),
-      "import { x } from '@lib/helper';\n",
-    );
+    // A SOURCE component .ts with @lib/ import so requiredModules is non-empty
+    // and the dry-run logDry branch is exercised.
+    const sourceTs = path.join(rootDir, "scripts", "test-script", "run.ts");
+    await writeFile(sourceTs, "import { x } from '@lib/helper';\n");
 
     const context = makeContext({ dryRun: true });
 
-    await syncLib(context, targetPath, rootDir, ["claude"]);
+    await syncLib(context, targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
 
     // dry-run: lib file must NOT have been copied
     expect(await exists(path.join(targetPath, ".claude", "lib", "helper.ts"))).toBe(false);
@@ -1604,18 +1599,27 @@ describe("syncLib", () => {
     await fs.mkdir(libSrc, { recursive: true });
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
 
+    // A SOURCE skill that bundles a .ts importing @lib/helper. Because the skill
+    // is synced to [gemini], processYaml records its source under gemini only,
+    // so syncLib deploys lib to .gemini/ (cascade), not .claude/.
+    await writeFile(
+      path.join(rootDir, "skills", "oracle", "SKILL.md"),
+      "---\nname: oracle\ndescription: t\n---\nbody\n",
+    );
+    await writeFile(
+      path.join(rootDir, "skills", "oracle", "run.ts"),
+      "import { x } from '@lib/helper';\n",
+    );
+
     const syncYamlPath = path.join(rootDir, "sync.yaml");
     // Top-level platforms: [gemini] — cascade level 3 should override the old hardcoded ["claude"]
-    await writeFile(syncYamlPath, `path: ${targetPath}\nplatforms: [gemini]\n`);
+    await writeFile(
+      syncYamlPath,
+      `path: ${targetPath}\nplatforms: [gemini]\nskills:\n  items:\n    - oracle\n`,
+    );
 
     const adapters = makeAdapterMap(["claude", "gemini"]);
     const context = makeContext();
-
-    // Place a file in .gemini/ that imports @lib/helper
-    await writeFile(
-      path.join(targetPath, ".gemini", "agents", "oracle.ts"),
-      "import { x } from '@lib/helper';\n",
-    );
 
     await processYaml(context, syncYamlPath, adapters, rootDir);
 
@@ -1635,16 +1639,13 @@ describe("syncLib", () => {
     await writeFile(path.join(libSrc, "foo", "data.yaml"), "key: value\n");
     await writeFile(path.join(libSrc, "foo", "other.yaml"), "key: other\n");
 
-    // A deployed component that imports the lib module, so it is collected for deployment.
-    const claudeDir = path.join(targetPath, ".claude");
-    await writeFile(
-      path.join(claudeDir, "agents", "oracle.ts"),
-      "import { x } from '@lib/foo/x';\n",
-    );
+    // A SOURCE component that imports the lib module, so it is collected for deployment.
+    const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+    await writeFile(sourceTs, "import { x } from '@lib/foo/x';\n");
 
     const context = makeContext();
 
-    await syncLib(context, targetPath, rootDir, ["claude"]);
+    await syncLib(context, targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
 
     const libDest = path.join(targetPath, ".claude", "lib");
     // The .ts module deploys (existing behavior, structure preserved).
@@ -1666,14 +1667,11 @@ describe("syncLib", () => {
     );
     await writeFile(path.join(libSrc, "pins", "tbox.yaml"), "schema: 1\n");
 
-    // The deployed .claude/ tree has NO @lib/ imports → requiredModules is empty.
-    // In dry-run nothing is copied, so collectRequiredLibModules scans this stale
-    // tree and returns 0 modules — the exact AC8 condition.
-    const claudeDir = path.join(targetPath, ".claude");
-    await writeFile(
-      path.join(claudeDir, "agents", "plain.ts"),
-      "export const hello = 'world';\n",
-    );
+    // The component sources have NO @lib/ imports → requiredModules is empty.
+    // collectLibDataFiles still traces tbox.yaml from the SOURCE lib tree,
+    // independent of what any component imports — the exact AC8 condition.
+    const sourceTs = path.join(rootDir, "skills", "plain", "run.ts");
+    await writeFile(sourceTs, "export const hello = 'world';\n");
 
     const lines: string[] = [];
     const origStderr = process.stderr.write.bind(process.stderr);
@@ -1683,7 +1681,7 @@ describe("syncLib", () => {
     };
     const context = makeContext({ dryRun: true });
     try {
-      await syncLib(context, targetPath, rootDir, ["claude"]);
+      await syncLib(context, targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
     } finally {
       process.stderr.write = origStderr;
     }
@@ -1697,7 +1695,12 @@ describe("syncLib", () => {
     await fs.mkdir(libSrc, { recursive: true });
     await writeFile(path.join(libSrc, "types.ts"), "export type X = string;\n");
 
-    // Place a file that uses @lib/ import
+    // A SOURCE component drives lib collection so the build+rewrite phase runs.
+    const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+    await writeFile(sourceTs, "import { X } from '@lib/types.ts';\n");
+
+    // Plant a deployed .ts still carrying raw @lib/ (e.g. not rewritten at copy
+    // time) — the rewriteLibAliases post-pass must rewrite it in place.
     const agentsDir = path.join(targetPath, ".claude", "agents");
     await fs.mkdir(agentsDir, { recursive: true });
     await writeFile(
@@ -1707,7 +1710,7 @@ describe("syncLib", () => {
 
     const context = makeContext();
 
-    await syncLib(context, targetPath, rootDir, ["claude"]);
+    await syncLib(context, targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
 
     const rewritten = await readFile(path.join(agentsDir, "oracle.ts"));
     // agents/ is one level deep, so prefix should be ../
@@ -1720,23 +1723,16 @@ describe("syncLib", () => {
     const libSrc = path.join(rootDir, "lib");
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
 
-    const claudeDir = path.join(targetPath, ".claude");
+    // A SOURCE component imports @lib/helper — drives collection for both syncs.
+    const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+    await writeFile(sourceTs, "import { x } from '@lib/helper';\n");
+    const roots = libRoots("claude", sourceTs);
+
     // First sync: establishes the deployed lib.
-    await writeFile(
-      path.join(claudeDir, "agents", "oracle.ts"),
-      "import { x } from '@lib/helper';\n",
-    );
-    await syncLib(makeContext(), targetPath, rootDir, ["claude"]);
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], roots);
     const libDest = path.join(targetPath, ".claude", "lib");
     expect(await exists(path.join(libDest, "helper.ts"))).toBe(true);
     const originalContent = await readFile(path.join(libDest, "helper.ts"));
-
-    // Reset oracle.ts back to @lib/ import so the second sync's scan finds it
-    // and proceeds to the build phase (rewriteLibAliases rewrites it after sync1).
-    await writeFile(
-      path.join(claudeDir, "agents", "oracle.ts"),
-      "import { x } from '@lib/helper';\n",
-    );
 
     // Sabotage: replace source file with a directory so fs.copyFile throws EISDIR.
     await fs.rm(path.join(libSrc, "helper.ts"));
@@ -1745,7 +1741,7 @@ describe("syncLib", () => {
     // Act: second sync will fail during the temp-dir build phase.
     let threw = false;
     try {
-      await syncLib(makeContext(), targetPath, rootDir, ["claude"]);
+      await syncLib(makeContext(), targetPath, rootDir, ["claude"], roots);
     } catch {
       threw = true;
     }
@@ -1765,13 +1761,10 @@ describe("syncLib", () => {
     const libSrc = path.join(rootDir, "lib");
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
 
-    const claudeDir = path.join(targetPath, ".claude");
-    await writeFile(
-      path.join(claudeDir, "agents", "oracle.ts"),
-      "import { x } from '@lib/helper';\n",
-    );
+    const sourceTs = path.join(rootDir, "skills", "oracle", "run.ts");
+    await writeFile(sourceTs, "import { x } from '@lib/helper';\n");
 
-    await syncLib(makeContext(), targetPath, rootDir, ["claude"]);
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
 
     // No lib.tmp-* directories should remain next to the deployed lib.
     const platformDir = path.join(targetPath, ".claude");

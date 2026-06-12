@@ -176,6 +176,53 @@ export async function collectRequiredLibModules(
 }
 
 /**
+ * Resolve required lib modules from a set of component SOURCE roots (files or
+ * directories) rather than from a deployed platform directory.
+ *
+ * This is the production path: the deployed tree no longer carries raw `@lib/`
+ * specifiers (they are rewritten to relative paths at copy time), so scanning
+ * the deployed tree finds nothing. Component SOURCE still contains raw `@lib/`,
+ * so the matcher logic in resolveTsLibDependencies works unchanged here.
+ *
+ * Each root may be a single .ts/.md file (e.g. an agent file) or a directory
+ * (e.g. a skill/script/hook bundle). Directories are walked with the same
+ * excluder as collectRequiredLibModules: the nested lib/ subdir and *.test.ts
+ * files are skipped. (A component bundle never contains a lib/ subdir, but the
+ * exclusion is harmless and keeps the two collection paths consistent.)
+ */
+export async function collectRequiredLibModulesFromSources(
+  sourceRoots: Iterable<string>,
+  libSourceDir: string,
+): Promise<Set<string>> {
+  const result = new Set<string>();
+  const shared = new Set<string>();
+  for (const root of sourceRoots) {
+    let tsFiles: string[];
+    let stat: import("fs").Stats;
+    try {
+      stat = await fs.stat(root);
+    } catch {
+      continue;
+    }
+    if (stat.isDirectory()) {
+      tsFiles = await collectTsFiles(root, root);
+    } else if (root.endsWith(".ts") && !root.endsWith(".test.ts")) {
+      tsFiles = [root];
+    } else {
+      // Non-.ts file (e.g. an agent/command/rule .md) — no @lib/ deps to follow.
+      continue;
+    }
+    for (const filePath of tsFiles) {
+      const deps = await resolveTsLibDependencies(filePath, libSourceDir, shared);
+      for (const dep of deps) {
+        result.add(dep);
+      }
+    }
+  }
+  return result;
+}
+
+/**
  * Recursively collect all .ts files under a directory,
  * excluding the lib/ subdirectory and *.test.ts files.
  */

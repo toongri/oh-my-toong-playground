@@ -34,7 +34,7 @@ import {
 import { generateBackupSessionId, backupCategory, cleanupOldBackups } from "./lib/backup.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
-import { collectRequiredLibModules, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
+import { collectRequiredLibModulesFromSources, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
 import { CodexAdapter } from "./adapters/codex.ts";
@@ -47,6 +47,25 @@ import type { PlatformAdapter } from "./adapters/types.ts";
 
 /** Map from platform name to its adapter instance. */
 export type AdapterMap = Map<Platform, PlatformAdapter>;
+
+/**
+ * Per-platform accumulator of resolved component SOURCE paths, populated as
+ * categories and per-platform hooks are processed. syncLib scans these SOURCE
+ * roots (not the deployed tree, which no longer carries raw `@lib/`) to decide
+ * which lib modules to deploy. Keyed per platform so a component synced only to
+ * one platform does not pull lib into another.
+ */
+export type LibSourceRoots = Map<Platform, Set<string>>;
+
+/** Record a resolved source path under a platform in the lib-source accumulator. */
+function addLibSourceRoot(roots: LibSourceRoots, platform: Platform, sourcePath: string): void {
+  let set = roots.get(platform);
+  if (!set) {
+    set = new Set<string>();
+    roots.set(platform, set);
+  }
+  set.add(sourcePath);
+}
 
 // ---------------------------------------------------------------------------
 // syncCategory
@@ -84,6 +103,7 @@ export async function syncCategory(
   syncYaml: SyncYaml,
   adapters: AdapterMap,
   rootDir: string,
+  libSourceRoots?: LibSourceRoots,
 ): Promise<void> {
   const section = syncYaml[category as keyof SyncYaml] as
     | { platforms?: Platform[]; items?: SyncItem[] }
@@ -210,6 +230,20 @@ export async function syncCategory(
       // Skip unsupported platform×category combinations entirely (no backup/wipe/dispatch).
       if (!SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
 
+      // Record SOURCE paths for lib-dependency collection (independent of dryRun:
+      // the lib scan reads source, never the deployed tree). The component itself
+      // plus any add-hooks bundles it deploys may carry @lib/ imports.
+      if (libSourceRoots) {
+        addLibSourceRoot(libSourceRoots, platform, sourcePath);
+        if (category === "agents" && Array.isArray(addHooks)) {
+          for (const hook of addHooks as Array<{ source_path?: string }>) {
+            if (typeof hook.source_path === "string" && hook.source_path) {
+              addLibSourceRoot(libSourceRoots, platform, hook.source_path);
+            }
+          }
+        }
+      }
+
       // Backup before first write for this platform×category
       const prepKey = `${platform}:${category}`;
       if (!preparedKeys.has(prepKey) && !context.dryRun) {
@@ -296,6 +330,7 @@ export async function syncPlatformConfigs(
   yamlDir: string,
   adapters: AdapterMap,
   rootDir: string,
+  libSourceRoots?: LibSourceRoots,
 ): Promise<void> {
   for (const platform of KNOWN_PLATFORMS) {
     const merged = await parseAndMergePlatformYaml(yamlDir, platform);
@@ -336,6 +371,10 @@ export async function syncPlatformConfigs(
             // Skip this item — do not add to resolvedItems
           } else {
             resolvedItems.push({ ...item, component: resolved.path });
+            // Record the hook SOURCE so syncLib deploys any @lib/ deps it imports.
+            if (libSourceRoots) {
+              addLibSourceRoot(libSourceRoots, platform, resolved.path);
+            }
           }
         }
         hooksMap[hookEvent] = resolvedItems;
@@ -424,6 +463,7 @@ export async function syncLib(
   targetPath: string,
   rootDir: string,
   platforms: Platform[],
+  libSourceRoots?: LibSourceRoots,
 ): Promise<void> {
   const libSrc = path.join(rootDir, "lib");
   if (!existsSync(libSrc)) {
@@ -442,7 +482,11 @@ export async function syncLib(
     const platformDir = path.join(targetPath, `.${platform}`);
     const libDest = path.join(platformDir, "lib");
 
-    const requiredModules = await collectRequiredLibModules(platformDir, libSrc);
+    // Collect from component SOURCE (not the deployed tree): the deployed .ts
+    // files have already had their `@lib/` aliases rewritten to relative paths
+    // at copy time, so the deployed tree carries zero raw `@lib/` to match.
+    const sourceRoots = libSourceRoots?.get(platform) ?? new Set<string>();
+    const requiredModules = await collectRequiredLibModulesFromSources(sourceRoots, libSrc);
 
     if (requiredModules.size === 0 && dataFiles.size === 0) {
       // No @lib/ imports — remove any stale lib (dry-run: log only)
@@ -642,9 +686,13 @@ export async function processYaml(
   context.modelMaps.clear();
   context.platformYamlSections.clear();
 
+  // Accumulate component SOURCE paths per platform as configs/categories are
+  // processed; syncLib scans these (not the deployed tree) for @lib/ deps.
+  const libSourceRoots: LibSourceRoots = new Map();
+
   // Per-platform YAML processing
   const yamlDir = path.dirname(syncYamlPath);
-  await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
+  await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir, libSourceRoots);
 
   // Resolve platforms for lib sync using the full cascade (item, section, syncYaml,
   // feature-platforms.lib, use-platforms, hardcoded ["claude"]).
@@ -652,11 +700,11 @@ export async function processYaml(
 
   // Sync 5 categories
   for (const category of CATEGORIES) {
-    await syncCategory(context, category, syncYaml, adapters, rootDir);
+    await syncCategory(context, category, syncYaml, adapters, rootDir, libSourceRoots);
   }
 
   // Sync lib
-  await syncLib(context, targetPath, rootDir, libPlatforms);
+  await syncLib(context, targetPath, rootDir, libPlatforms, libSourceRoots);
 
   // Rewrite platform paths for non-claude platforms
   for (const platform of (["gemini", "codex", "opencode"] as Platform[])) {
