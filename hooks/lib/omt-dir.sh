@@ -62,8 +62,10 @@ compute_omt_dir() {
 # resolve_omt_dir <cwd>
 #
 # Resolves OMT_DIR from a cwd by locating the project root, then delegating
-# to compute_omt_dir. Echoes the resolved OMT_DIR to stdout (empty on failure).
-# Intended as a single-shot entry point for non-shell callers via child_process.
+# to compute_omt_dir. Echoes the resolved OMT_DIR to stdout; always non-empty
+# for a non-empty cwd (non-git paths fall back to $HOME/.omt/<basename> with a
+# "non-canonical" warning on stderr). Intended as a single-shot entry point for
+# non-shell callers via child_process.
 #
 # Project root rules (mirrors session-start.sh / keyword-detector.sh):
 #   - Strip trailing /.omt and /.claude

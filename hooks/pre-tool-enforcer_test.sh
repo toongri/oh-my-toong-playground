@@ -207,34 +207,50 @@ test_ac4_cwd_independent_seeding() {
 }
 
 # =============================================================================
-# AC8 — Fail-open: missing OMT_DIR must not block/deny
+# AC8 — [CONTRACT-INVERTED] OMT_DIR absent: derive from stdin cwd or fail loudly
+#
+# New contract: with OMT_DIR absent from env but a full stdin payload
+# (session_id + cwd pointing to a real project), the hook DERIVES OMT_DIR via
+# resolve_omt_dir and creates the seed file there.  The old "fail-open silent
+# skip" is eliminated.
 # =============================================================================
 
 test_ac8_fail_open_missing_omt_dir() {
     local exit_code=0
-    local output
-    # Capture the test OMT_DIR before we unset it inside the subshell
-    local saved_omt_dir="$OMT_DIR"
+    local stderr_out
 
-    # unset OMT_DIR inside the $() subshell so the hook on the pipe RHS also
-    # sees OMT_DIR unset.  env -u on the printf (LHS) would NOT affect the hook.
-    output=$(
+    # Use gamy-shake itself as the project cwd — has .git and CLAUDE.md so
+    # resolve_omt_dir will walk up to the project root and compute OMT_DIR.
+    local project_cwd
+    project_cwd="$SCRIPT_DIR"
+
+    # Sandbox HOME inside TEST_TMP_DIR so no real $HOME is touched
+    local fake_home="$TEST_TMP_DIR/home"
+    mkdir -p "$fake_home"
+
+    # Compute what OMT_DIR resolve_omt_dir will produce for this cwd, using the same fake HOME
+    local expected_omt_dir
+    expected_omt_dir=$(
         unset OMT_DIR
-        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"prometheus"}}' \
-            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+        export HOME="$fake_home"
+        source "$SCRIPT_DIR/lib/omt-dir.sh" && resolve_omt_dir "$project_cwd"
+    )
+
+    local expected_file="$expected_omt_dir/prometheus-state-${OMT_SESSION_ID}.json"
+
+    stderr_out=$(
+        unset OMT_DIR
+        export HOME="$fake_home"
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"prometheus\"},\"session_id\":\"${OMT_SESSION_ID}\",\"cwd\":\"$project_cwd\"}" \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
 
     [[ "$exit_code" -eq 0 ]] \
         || { echo "ASSERTION FAILED: Hook should exit 0 when OMT_DIR unset (exit=$exit_code)"; return 1; }
 
-    assert_output_not_contains "$output" '"continue"[[:space:]]*:[[:space:]]*false' \
-        "Hook should NOT emit deny payload when OMT_DIR unset" || return 1
-
-    # Distinguishing assertion: with OMT_DIR unset the hook must NOT create a
-    # state file.  This would catch any fail-closed regression.
-    local state_file="$saved_omt_dir/prometheus-state-${OMT_SESSION_ID}.json"
-    assert_file_not_exists "$state_file" \
-        "Hook must NOT create state file when OMT_DIR is unset (fail-open)" || return 1
+    # New contract: file must be created at the derived path (under sandboxed HOME)
+    assert_file_exists "$expected_file" \
+        "Hook must create state file at resolve_omt_dir-derived path when env OMT_DIR absent but stdin cwd present" || return 1
 }
 
 # =============================================================================
@@ -410,30 +426,63 @@ test_seed_goal_is_idempotent() {
 }
 
 # =============================================================================
-# B1 — absent id → no default file, stderr warn, exit 0
+# B1 — [CONTRACT-INVERTED] session_id absent from env: derive from stdin or fail loudly
+#
+# New contract (two sub-cases):
+#   B1a — OMT_SESSION_ID absent from env but stdin carries session_id: hook
+#         DERIVES the id from stdin and seeds the file (no skip, no warning).
+#   B1b — OMT_SESSION_ID absent from both env and stdin: loud failure —
+#         stderr names "session"; no file created; exit 0.
 # =============================================================================
 
 test_b1_absent_session_id_skips_and_warns() {
-    local exit_code=0
-    local stderr_out
+    # --- B1a: stdin session_id present → seed created, no session-absent warning ---
+    local exit_code_a=0
+    local stderr_a
+    local state_file_a="$OMT_DIR/goal-state-stdin-derived-sid.json"
 
-    stderr_out=$(
+    stderr_a=$(
+        unset OMT_SESSION_ID
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"stdin-derived-sid\",\"cwd\":\"$OMT_DIR\"}" \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
+    ) || exit_code_a=$?
+
+    [[ "$exit_code_a" -eq 0 ]] \
+        || { echo "ASSERTION FAILED B1a: Hook should exit 0 on stdin session_id (exit=$exit_code_a)"; return 1; }
+
+    assert_file_exists "$state_file_a" \
+        "B1a: State file should be created when OMT_SESSION_ID absent but stdin session_id present" || return 1
+
+    # No "session absent" warning expected when stdin id filled in
+    if echo "$stderr_a" | grep -qi "session_id absent\|session.*absent"; then
+        echo "ASSERTION FAILED B1a: Should NOT warn about absent session when stdin provides it. Got: '$stderr_a'"
+        return 1
+    fi
+
+    # --- B1b: stdin session_id also absent → loud failure naming session ---
+    local exit_code_b=0
+    local stderr_b
+
+    stderr_b=$(
         unset OMT_SESSION_ID
         printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
-    ) || exit_code=$?
+    ) || exit_code_b=$?
 
-    [[ "$exit_code" -eq 0 ]] \
-        || { echo "ASSERTION FAILED: Hook should exit 0 on absent id (exit=$exit_code)"; return 1; }
+    [[ "$exit_code_b" -eq 0 ]] \
+        || { echo "ASSERTION FAILED B1b: Hook should exit 0 when both env and stdin session_id absent (exit=$exit_code_b)"; return 1; }
 
-    # No *-state-*.json files created with empty or "default" id
+    # No *-state-*.json files created for session-absent case
     local found
-    found=$(ls "$OMT_DIR"/*-state-*.json 2>/dev/null | wc -l | tr -d ' ')
-    [[ "$found" -eq 0 ]] \
-        || { echo "ASSERTION FAILED: No state files should be created when OMT_SESSION_ID is absent (found=$found)"; return 1; }
+    found=$(ls "$OMT_DIR"/*-state-*b*.json 2>/dev/null | wc -l | tr -d ' ')
+    # Only b1a's file should exist; b1b must not add more
+    local total
+    total=$(ls "$OMT_DIR"/*-state-*.json 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$total" -le 1 ]] \
+        || { echo "ASSERTION FAILED B1b: No extra state files should be created when both session ids absent (found=$total)"; return 1; }
 
-    echo "$stderr_out" | grep -qi "warn\|skip\|session" \
-        || { echo "ASSERTION FAILED: stderr should contain a warning about missing session id. Got: '$stderr_out'"; return 1; }
+    echo "$stderr_b" | grep -qi "session" \
+        || { echo "ASSERTION FAILED B1b: stderr should name 'session' when both absent. Got: '$stderr_b'"; return 1; }
 }
 
 # =============================================================================
@@ -461,6 +510,220 @@ test_b3_unsafe_session_id_skips_and_warns() {
 
     echo "$stderr_out" | grep -qi "warn\|skip\|unsafe\|invalid" \
         || { echo "ASSERTION FAILED: stderr should contain a warning about unsafe id. Got: '$stderr_out'"; return 1; }
+}
+
+# =============================================================================
+# AC-8a — env-stripped + full stdin payload → seed created at derived path
+# =============================================================================
+
+test_ac8a_env_stripped_full_payload_seeds_derived_path() {
+    local exit_code=0
+    local stderr_out
+
+    # Use gamy-shake as the project cwd so resolve_omt_dir finds a real project root
+    local project_cwd="$SCRIPT_DIR"
+    local stdin_sid="env-stripped-test-sid"
+
+    # Sandbox HOME inside TEST_TMP_DIR so no real $HOME is touched
+    local fake_home="$TEST_TMP_DIR/home"
+    mkdir -p "$fake_home"
+
+    # Derive expected OMT_DIR via resolve_omt_dir (in subshell, no env OMT_DIR, sandboxed HOME)
+    local derived_omt_dir
+    derived_omt_dir=$(
+        unset OMT_DIR
+        export HOME="$fake_home"
+        source "$SCRIPT_DIR/lib/omt-dir.sh" && resolve_omt_dir "$project_cwd"
+    )
+
+    local expected_file="$derived_omt_dir/goal-state-${stdin_sid}.json"
+
+    stderr_out=$(
+        unset OMT_DIR OMT_SESSION_ID
+        export HOME="$fake_home"
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"$stdin_sid\",\"cwd\":\"$project_cwd\"}" \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED AC-8a: Hook should exit 0 (exit=$exit_code)"; return 1; }
+
+    assert_file_exists "$expected_file" \
+        "AC-8a: Seed file must be created at resolve_omt_dir-derived path when env is stripped" || return 1
+}
+
+# =============================================================================
+# AC-8b-i — missing session_id (env + stdin) → loud failure naming session
+# =============================================================================
+
+test_ac8b_i_missing_session_id_loud_failure() {
+    local exit_code=0
+    local stderr_out
+    local project_cwd="$SCRIPT_DIR"
+
+    # Sandbox HOME so resolve_omt_dir (called before sid validation when cwd is present)
+    # never touches real $HOME
+    local fake_home="$TEST_TMP_DIR/home_8b_i"
+    mkdir -p "$fake_home"
+
+    stderr_out=$(
+        unset OMT_DIR OMT_SESSION_ID
+        export HOME="$fake_home"
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"cwd\":\"$project_cwd\"}" \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED AC-8b-i: Hook should exit 0 (exit=$exit_code)"; return 1; }
+
+    # Loud: stderr must name 'session'
+    echo "$stderr_out" | grep -qi "session" \
+        || { echo "ASSERTION FAILED AC-8b-i: stderr should name 'session'. Got: '$stderr_out'"; return 1; }
+
+    # No file created — scan fake_home where hook would actually write (via resolve_omt_dir → $HOME/.omt/...)
+    local found
+    found=$(find "$fake_home" -name '*-state-*.json' 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$found" -eq 0 ]] \
+        || { echo "ASSERTION FAILED AC-8b-i: No state file should be created when session_id absent (found=$found)"; return 1; }
+}
+
+# =============================================================================
+# AC-8b-ii — missing cwd (env OMT_DIR absent, stdin cwd absent) → loud failure
+# =============================================================================
+
+test_ac8b_ii_missing_cwd_loud_failure() {
+    local exit_code=0
+    local stderr_out
+    local stdin_sid="cwd-missing-test-sid"
+
+    # Sandbox HOME so the hook (even though it won't call resolve_omt_dir without cwd)
+    # cannot reach real $HOME if behavior ever changes
+    local fake_home="$TEST_TMP_DIR/home_8b_ii"
+    mkdir -p "$fake_home"
+
+    stderr_out=$(
+        unset OMT_DIR
+        export HOME="$fake_home"
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"$stdin_sid\"}" \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED AC-8b-ii: Hook should exit 0 (exit=$exit_code)"; return 1; }
+
+    # Loud: stderr must name cwd or dir
+    echo "$stderr_out" | grep -qiE "cwd|dir" \
+        || { echo "ASSERTION FAILED AC-8b-ii: stderr should name cwd/dir. Got: '$stderr_out'"; return 1; }
+
+    # No file created — scan fake_home which is the only $HOME the hook can reach
+    local found
+    found=$(find "$fake_home" -name '*-state-*.json' 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$found" -eq 0 ]] \
+        || { echo "ASSERTION FAILED AC-8b-ii: No state file should be created when cwd absent (found=$found)"; return 1; }
+}
+
+# =============================================================================
+# AC-8b-iii — cwd present but non-project (no .git / CLAUDE.md / package.json)
+#             → omt-dir.sh falls back to $HOME/.omt/<basename>; hook exits 0,
+#               stderr CONTAINS the "non-canonical" warning, seed IS created
+# =============================================================================
+
+test_ac8b_iii_nonproject_cwd_falls_back_with_warning() {
+    local exit_code=0
+    local stderr_out
+
+    # Use a bare temp directory with no .git / CLAUDE.md / package.json up the tree.
+    # Must be created BEFORE sandboxing HOME so the path is a real dir the hook can stat.
+    local bare_cwd
+    bare_cwd=$(mktemp -d)
+    local stdin_sid="nonproject-cwd-sid"
+
+    # Sandbox HOME inside TEST_TMP_DIR so no real $HOME is touched
+    local fake_home="$TEST_TMP_DIR/home"
+    mkdir -p "$fake_home"
+
+    stderr_out=$(
+        unset OMT_DIR OMT_SESSION_ID
+        export HOME="$fake_home"
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"$stdin_sid\",\"cwd\":\"$bare_cwd\"}" \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
+    ) || exit_code=$?
+
+    rmdir "$bare_cwd" 2>/dev/null || true
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED AC-8b-iii: Hook should exit 0 for non-project cwd (exit=$exit_code)"; return 1; }
+
+    # Loud: stderr must contain the "non-canonical" warning emitted by omt-dir.sh
+    echo "$stderr_out" | grep -q "non-canonical" \
+        || { echo "ASSERTION FAILED AC-8b-iii: stderr should contain 'non-canonical'. Got: '$stderr_out'"; return 1; }
+
+    # Fallback contract: seed IS created at $HOME/.omt/<basename of bare_cwd>/goal-state-<sid>.json
+    local bare_basename
+    bare_basename=$(basename "$bare_cwd")
+    local expected_file="$fake_home/.omt/${bare_basename}/goal-state-${stdin_sid}.json"
+    assert_file_exists "$expected_file" \
+        "AC-8b-iii: Seed file must be created at fallback path for non-project cwd" || return 1
+}
+
+# =============================================================================
+# AC-8c — preservation: prometheus and deep-interview seed field sets unchanged
+#          when env (OMT_DIR + OMT_SESSION_ID) is present
+# =============================================================================
+
+test_ac8c_prometheus_and_di_seed_field_preservation() {
+    # --- prometheus ---
+    local prom_file="$OMT_DIR/prometheus-state-test-sid.json"
+    rm -f "$prom_file" 2>/dev/null || true
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"prometheus"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$prom_file" "AC-8c: prometheus state file should be created" || return 1
+
+    # Assert all expected fields present with correct types/values
+    jq -e '.active == true' "$prom_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c prometheus: .active should be true"; return 1; }
+    jq -e '.phase == "S0"' "$prom_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c prometheus: .phase should be S0"; return 1; }
+    jq -e '.plan_path == ""' "$prom_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c prometheus: .plan_path should be empty string"; return 1; }
+    jq -e '.resume_summary == ""' "$prom_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c prometheus: .resume_summary should be empty string"; return 1; }
+    jq -e '(.started_at | length) > 0' "$prom_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c prometheus: .started_at should be non-empty"; return 1; }
+    jq -e '(.last_touched_at | length) > 0' "$prom_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c prometheus: .last_touched_at should be non-empty"; return 1; }
+
+    # Ensure NO extra unexpected fields beyond the 6 defined
+    local prom_keys
+    prom_keys=$(jq -r 'keys[]' "$prom_file" | sort | tr '\n' ',' | sed 's/,$//')
+    [[ "$prom_keys" == "active,last_touched_at,phase,plan_path,resume_summary,started_at" ]] \
+        || { echo "ASSERTION FAILED AC-8c prometheus: unexpected keys '$prom_keys'"; return 1; }
+
+    # --- deep-interview ---
+    local di_file="$OMT_DIR/deep-interview-active-state-test-sid.json"
+    rm -f "$di_file" 2>/dev/null || true
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"deep-interview"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$di_file" "AC-8c: deep-interview state file should be created" || return 1
+
+    jq -e '.active == true' "$di_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c DI: .active should be true"; return 1; }
+    jq -e '(.started_at | length) > 0' "$di_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c DI: .started_at should be non-empty"; return 1; }
+    jq -e '(.last_touched_at | length) > 0' "$di_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c DI: .last_touched_at should be non-empty"; return 1; }
+    jq -e 'has("sessionId") | not' "$di_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-8c DI: must not have sessionId field"; return 1; }
+
+    # Exactly 3 fields: active, started_at, last_touched_at
+    local di_keys
+    di_keys=$(jq -r 'keys[]' "$di_file" | sort | tr '\n' ',' | sed 's/,$//')
+    [[ "$di_keys" == "active,last_touched_at,started_at" ]] \
+        || { echo "ASSERTION FAILED AC-8c DI: unexpected keys '$di_keys'"; return 1; }
 }
 
 # =============================================================================
@@ -521,6 +784,13 @@ main() {
     run_test test_b1_absent_session_id_skips_and_warns
     run_test test_b3_unsafe_session_id_skips_and_warns
     run_test test_fail_loud_write_failure_warns_not_silent
+
+    # TODO-5 seed reliability: stdin derivation + loud failures
+    run_test test_ac8a_env_stripped_full_payload_seeds_derived_path
+    run_test test_ac8b_i_missing_session_id_loud_failure
+    run_test test_ac8b_ii_missing_cwd_loud_failure
+    run_test test_ac8b_iii_nonproject_cwd_falls_back_with_warning
+    run_test test_ac8c_prometheus_and_di_seed_field_preservation
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
