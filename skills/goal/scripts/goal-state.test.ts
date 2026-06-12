@@ -1055,6 +1055,32 @@ describe('story layer: set-stories', () => {
     expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(sContentBefore);
   });
 
+  // finding 8 — id 비-공백 검증: id 누락 스토리를 거부하고 상태 불변
+  test('ingestion: id가 빈 문자열인 스토리를 거부하고 상태 불변', () => {
+    seedWithOutcome(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    const noId = { ...validStory, id: '' };
+    expect(() => setStories(S, [noId])).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // finding 8 — id 비-공백 검증: id 키가 아예 없는 스토리도 거부 (LLM JSON 오타 시나리오)
+  test('ingestion: id 키가 없는 스토리를 거부하고 상태 불변', () => {
+    seedWithOutcome(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    const { id: _omit, ...noIdKey } = validStory;
+    expect(() => setStories(S, [noIdKey as Story])).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // finding 7 — setSingleStory 빈 verification_surface: 미설정 상태에서 --single 거부 + 상태 불변
+  test('setSingleStory: verification_surface가 비어 있으면 거부하고 상태 불변', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'deploy new service' });
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    expect(() => setSingleStory(S)).toThrow('set-stories --single: refused');
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
   // AC-13: stories[] survives non-story writes (mergeWrite whitelist)
   test('stories survive non-story writes', () => {
     seedWithOutcome(S);

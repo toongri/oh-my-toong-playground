@@ -392,6 +392,9 @@ export function setBlocked(sessionId: string, reason: string): void {
  * Throws on violation; caller provides the context label for the error message.
  */
 function validateStoryFields(s: Story, label: string): void {
+  if (typeof s.id !== 'string' || s.id.trim() === '') {
+    throw new Error(`${label}: refused — story is missing a non-empty id`);
+  }
   if (!Array.isArray(s.acceptance_criteria) || s.acceptance_criteria.length === 0) {
     throw new Error(`${label}: refused — story "${s.id}" has no acceptance criteria`);
   }
@@ -572,6 +575,9 @@ export function setSingleStory(sessionId: string): void {
     throw new Error('set-stories --single: refused — outcome must be set before auto-deriving a story');
   }
   const surface = prior.verification_surface ?? '';
+  if (surface.trim() === '') {
+    throw new Error('set-stories --single: refused — verification_surface must be set before auto-deriving a story');
+  }
   const derived: Story = {
     id: 'S1',
     story: prior.outcome,
