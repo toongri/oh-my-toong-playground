@@ -439,7 +439,9 @@ describe('makeDecision', () => {
       expect(after.iteration).toBe(10);
     });
 
-    it('complete wins when max_iterations and APPROVE coincide', async () => {
+    it('cap reached with APPROVE coinciding → budget_limited soft-stop, not complete', async () => {
+      // complete-wins (ADR-7) applies only when request-complete gate is called;
+      // decision.ts must not write phase='complete' directly even when verdict=APPROVE.
       await writeGoal({
         active: true,
         phase: 'pursuing',
@@ -452,10 +454,11 @@ describe('makeDecision', () => {
 
       const result = makeDecision(createContext());
 
-      expect(result).toEqual({ continue: true });
+      expect(result.decision).toBe('block');
       const after = await readGoalFile();
-      expect(after.phase).toBe('complete');
+      expect(after.phase).toBe('budget_limited');
       expect(after.active).toBe(false);
+      expect(after.budget_limit_notified).toBe(true);
     });
 
     it('goal pursuit ignores shared block-count hatch', async () => {
@@ -694,8 +697,9 @@ describe('makeDecision', () => {
       expect(result.reason).toContain('<deep-interview-continuation>');
     });
 
-    // B5: a non-array completion_evidence (corrupted state) is NOT valid evidence.
-    it('complete-wins rejects non-array completion_evidence (B5)', async () => {
+    it('corrupted completion_evidence_paths does not affect cap path — budget_limited regardless', async () => {
+      // The cap path no longer inspects completion_evidence_paths at all; this confirms
+      // corrupted state is harmless (budget_limited is the unconditional cap outcome).
       await writeGoal({
         active: true,
         phase: 'pursuing',
@@ -703,19 +707,20 @@ describe('makeDecision', () => {
         iteration: 10,
         max_iterations: 10,
         outcome: 'goal objective text',
-        completion_evidence_paths: 'x', // non-array (corrupted)
+        completion_evidence_paths: 'x', // non-array (corrupted) — ignored by cap path
       });
 
       const result = makeDecision(createContext());
 
-      // Treated as no evidence → budget_limited soft-stop, NOT complete
       expect(result.decision).toBe('block');
       const after = await readGoalFile();
       expect(after.phase).toBe('budget_limited');
       expect(after.active).toBe(false);
     });
 
-    it('complete-wins still fires on APPROVE + array evidence at cap', async () => {
+    it('APPROVE + array evidence at cap still soft-stops — complete requires request-complete gate', async () => {
+      // B5 non-array check is now irrelevant (shortcut removed); this test confirms
+      // that even valid evidence does not bypass the gate.
       await writeGoal({
         active: true,
         phase: 'pursuing',
@@ -728,10 +733,32 @@ describe('makeDecision', () => {
 
       const result = makeDecision(createContext());
 
-      expect(result).toEqual({ continue: true });
+      expect(result.decision).toBe('block');
       const after = await readGoalFile();
-      expect(after.phase).toBe('complete');
+      expect(after.phase).toBe('budget_limited');
       expect(after.active).toBe(false);
+    });
+
+    // Regression: cap path must always merge into budget_limited — no shortcut to complete.
+    it('cap reached with APPROVE + evidence → budget_limited block, decision.ts never writes complete', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'APPROVE',
+        iteration: 10,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+        completion_evidence_paths: ['artifacts/report.md'],
+      });
+
+      const result = makeDecision(createContext());
+
+      // complete is ONLY reachable via request-complete gate; cap path must soft-stop.
+      expect(result.decision).toBe('block');
+      const after = await readGoalFile();
+      expect(after.phase).toBe('budget_limited');
+      expect(after.active).toBe(false);
+      expect(after.budget_limit_notified).toBe(true);
     });
 
     // Schema-guard regression tests

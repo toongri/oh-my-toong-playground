@@ -13,7 +13,14 @@ import {
   deriveStatus,
   resolveStatePath,
   readGoalGet,
+  setStories,
+  setSingleStory,
+  confirmStory,
+  reviseStory,
+  addStory,
+  retireStory,
   type GoalPhase,
+  type Story,
 } from './goal-state.ts';
 
 let tmpDir: string;
@@ -179,13 +186,20 @@ describe('goal state', () => {
     // (d) request-complete is the ONLY path to phase=complete; gated on evidence
     const S2 = 'gate-session';
     seedGoalFile(S2);
+    setGoalState(S2, { phase: 'planning', outcome: 'gate test', verification_surface: 'v' });
+    setSingleStory(S2);  // auto-confirms one story (D-7 carve-out)
     setGoalState(S2, { phase: 'pursuing' });
     // no completion evidence yet -> gate refuses, stays non-complete
     expect(requestComplete(S2)).toBe(false);
     expect(readGoalState(S2)!.phase).not.toBe('complete');
-    // supply evidence, then request-complete succeeds
+    // supply evidence, then request-complete succeeds (with story artifact)
     setGoalState(S2, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/proof.txt`] });
     setVerdict(S2, 'APPROVE');
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${S2}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['proof.txt'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
     expect(requestComplete(S2)).toBe(true);
     // complete is terminal (active:false) so readGoalState returns null; assert on raw
     expect(rawStateOf(S2).phase).toBe('complete');
@@ -209,8 +223,15 @@ describe('goal state', () => {
 
   // AC #5 — complete-wins
   test('request-complete wins over prior budget_limited when verdict APPROVE', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'complete-wins test', verification_surface: 'v' });
+    setSingleStory(S);  // auto-confirms one story
     setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/done.md`] });
     setVerdict(S, 'APPROVE');
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${S}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['done.md'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
     setBudgetLimited(S);
     expect(rawState().phase).toBe('budget_limited');
 
@@ -261,8 +282,15 @@ describe('goal state', () => {
     // complete
     const Sc = 'c';
     seedGoalFile(Sc);
+    setGoalState(Sc, { phase: 'planning', outcome: 'terminal test', verification_surface: 'v' });
+    setSingleStory(Sc);
     setGoalState(Sc, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/p`] });
     setVerdict(Sc, 'APPROVE');
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${Sc}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['p'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
     requestComplete(Sc);
     expect(rawStateOf(Sc).active).toBe(false);
 
@@ -337,8 +365,15 @@ describe('goal state', () => {
 
   // A1: request-complete succeeds with APPROVE and array evidence
   test('request-complete succeeds with APPROVE and array evidence', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'succeed test', verification_surface: 'v' });
+    setSingleStory(S);
     setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/a.md`] });
     setVerdict(S, 'APPROVE');
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${S}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['a.md'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
     expect(requestComplete(S)).toBe(true);
     expect(rawState().phase).toBe('complete');
     expect(rawState().active).toBe(false);
@@ -388,13 +423,24 @@ describe('goal state', () => {
     const run = (cmd: string) =>
       execSync(`bun ${script} ${cmd}`, { encoding: 'utf8', env: process.env });
 
+    // Seed a story so the gate can be satisfied
+    run('set --phase planning --outcome "cli-evidence-test" --verification-surface "v"');
+    run('set-stories --single');
+
     run(`set --phase pursuing --completion-evidence ${p1},${p2}`);
     expect(rawState().phase).toBe('pursuing');
     expect(rawState().completion_evidence_paths).toEqual([p1, p2]);
 
     run('set-verdict --verdict APPROVE');
 
-    // request-complete must exit 0 (no throw) now that evidence is present
+    // Write the verdict artifact so the story gate passes
+    writeFileSync(
+      `${tmpDir}/goal-verdict-${S}.json`,
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: [p1] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      'utf8'
+    );
+
+    // request-complete must exit 0 (no throw) now that evidence + story artifact present
     run('request-complete');
     expect(rawState().phase).toBe('complete');
     expect(rawState().active).toBe(false);
@@ -885,5 +931,888 @@ describe('mergeWrite uses writeFileNoCreate (no TOCTOU race)', () => {
     expect(() => setGoalState(S, { phase: 'pursuing' })).toThrow();
     // The original file path must still be absent (not recreated)
     expect(existsSync(src)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 1: Story schema + ingestion (set-stories, --single) + mergeWrite whitelist
+// ---------------------------------------------------------------------------
+
+describe('story layer: set-stories', () => {
+  /** A minimal valid story for use in tests. */
+  const validStory: Story = {
+    id: 'S1',
+    story: 'ship feature X',
+    acceptance_criteria: ['all tests green'],
+    verification_surface: 'CI pipeline passes',
+    status: 'unconfirmed',
+  };
+
+  /** Seed a state with a non-empty outcome so ingestion is not refused. */
+  function seedWithOutcome(sid: string, outcome = 'ship feature X'): void {
+    setGoalState(sid, { phase: 'planning', outcome });
+  }
+
+  // AC-1a: valid story set ingested via set-stories --json persists in get output
+  test('story ingestion persists', () => {
+    seedWithOutcome(S);
+    const story2: Story = {
+      id: 'S2',
+      story: 'add observability',
+      acceptance_criteria: ['dashboards visible', 'alerts firing'],
+      verification_surface: 'Grafana dashboard',
+      status: 'unconfirmed',
+    };
+    setStories(S, [validStory, story2]);
+    const state = readGoalGet(S)!;
+    expect(state).not.toBeNull();
+    expect(Array.isArray(state.stories)).toBe(true);
+    expect(state.stories!.length).toBe(2);
+    expect(state.stories![0].id).toBe('S1');
+    expect(state.stories![0].status).toBe('unconfirmed');
+    expect(state.stories![1].id).toBe('S2');
+    expect(state.stories![1].status).toBe('unconfirmed');
+  });
+
+  // AC-1b-i: refuses empty story set
+  test('ingestion rejects zero-stories', () => {
+    seedWithOutcome(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    expect(() => setStories(S, [])).toThrow();
+    // State file must be byte-identical
+    const stateAfter = readFileSync(resolveStatePath(S), 'utf8');
+    expect(stateAfter).toBe(stateBefore);
+  });
+
+  // AC-1b-ii: refuses story with no acceptance criteria
+  test('ingestion rejects story-without-AC', () => {
+    seedWithOutcome(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    const noAC = { ...validStory, acceptance_criteria: [] };
+    expect(() => setStories(S, [noAC])).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // AC-1b-iii: refuses story missing verification_surface
+  test('ingestion rejects missing-verification-surface', () => {
+    seedWithOutcome(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    const noSurface = { ...validStory, verification_surface: '' };
+    expect(() => setStories(S, [noSurface])).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // AC-1b-iv: refuses when outcome is empty
+  test('ingestion rejects empty-outcome', () => {
+    // S is seeded with empty outcome by default
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    expect(() => setStories(S, [validStory])).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // AC-1b-v: refuses duplicate story ids
+  test('ingestion rejects duplicate-ids', () => {
+    seedWithOutcome(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    const dup: Story = { ...validStory, id: 'S1' };
+    expect(() => setStories(S, [validStory, dup])).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // AC-3: set-stories --single derives exactly one story (text == outcome), status confirmed
+  test('single-WHAT auto-derivation', () => {
+    setGoalState(S, {
+      phase: 'planning',
+      outcome: 'deploy new service',
+      verification_surface: 'smoke tests pass in staging',
+    });
+    setSingleStory(S);
+    const state = readGoalGet(S)!;
+    expect(state.stories).toBeDefined();
+    expect(state.stories!.length).toBe(1);
+    const s = state.stories![0];
+    expect(s.id).toBe('S1');
+    expect(s.story).toBe('deploy new service');
+    expect(s.acceptance_criteria).toEqual(['smoke tests pass in staging']);
+    expect(s.verification_surface).toBe('smoke tests pass in staging');
+    expect(s.status).toBe('confirmed');
+    // Must not require a separate confirm-story call — already pursuing-eligible
+    setGoalState(S, { phase: 'pursuing' });
+    expect(readGoalGet(S)!.phase).toBe('pursuing');
+  });
+
+  // AC-10: stories-bearing state is not pristine and not in list-others candidates
+  test('stories state is not pristine', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory]);
+    const state = readGoalGet(S)!;
+    expect(state.pristine).toBe(false);
+    // adopt into S (ACTIVE non-pristine) must be refused (r3 destination fence)
+    const other = 'other-session';
+    writeLiveGoalState(other, 'other purpose');
+    const sContentBefore = readFileSync(resolveStatePath(S), 'utf8');
+    expect(() => runCli('adopt --src ' + other, { OMT_SESSION_ID: S })).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(sContentBefore);
+  });
+
+  // finding 8 — id 비-공백 검증: id 누락 스토리를 거부하고 상태 불변
+  test('ingestion: id가 빈 문자열인 스토리를 거부하고 상태 불변', () => {
+    seedWithOutcome(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    const noId = { ...validStory, id: '' };
+    expect(() => setStories(S, [noId])).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // finding 8 — id 비-공백 검증: id 키가 아예 없는 스토리도 거부 (LLM JSON 오타 시나리오)
+  test('ingestion: id 키가 없는 스토리를 거부하고 상태 불변', () => {
+    seedWithOutcome(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    const { id: _omit, ...noIdKey } = validStory;
+    expect(() => setStories(S, [noIdKey as Story])).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // finding 7 — setSingleStory 빈 verification_surface: 미설정 상태에서 --single 거부 + 상태 불변
+  test('setSingleStory: verification_surface가 비어 있으면 거부하고 상태 불변', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'deploy new service' });
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    expect(() => setSingleStory(S)).toThrow('set-stories --single: refused');
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // AC-13: stories[] survives non-story writes (mergeWrite whitelist)
+  test('stories survive non-story writes', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory]);
+    // Non-story writes: set --resume-summary and set-verdict
+    setGoalState(S, { phase: 'planning', resume_summary: 'updated summary' });
+    setVerdict(S, 'APPROVE');
+    const state = readGoalGet(S)!;
+    expect(Array.isArray(state.stories)).toBe(true);
+    expect(state.stories!.length).toBe(1);
+    expect(state.stories![0].id).toBe('S1');
+    expect(state.stories![0].status).toBe('unconfirmed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 2: Confirmation + phase-transition gates
+// ---------------------------------------------------------------------------
+
+describe('story layer: confirmation and phase gates', () => {
+  /** A minimal valid story for use in tests. */
+  const validStory: Story = {
+    id: 'S1',
+    story: 'ship feature X',
+    acceptance_criteria: ['all tests green'],
+    verification_surface: 'CI pipeline passes',
+    status: 'unconfirmed',
+  };
+  const validStory2: Story = {
+    id: 'S2',
+    story: 'add observability',
+    acceptance_criteria: ['dashboards visible'],
+    verification_surface: 'Grafana dashboard',
+    status: 'unconfirmed',
+  };
+
+  function seedWithOutcome(sid: string, outcome = 'ship feature X'): void {
+    setGoalState(sid, { phase: 'planning', outcome });
+  }
+
+  // AC-2a: pursuing refused while any story unconfirmed; succeeds after all confirmed
+  test('pursuing refused while unconfirmed', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory, validStory2]);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    // Attempt pursuing while both stories unconfirmed — must throw naming S1 or S2
+    let err: Error | undefined;
+    try {
+      setGoalState(S, { phase: 'pursuing' });
+    } catch (e) {
+      err = e as Error;
+    }
+    expect(err).toBeDefined();
+    // stderr message must name the offending story id
+    expect(err!.message).toMatch(/S1|S2/);
+    // State must be unchanged
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+
+    // Confirm S1, still refused because S2 is unconfirmed
+    confirmStory(S, 'S1');
+    let err2: Error | undefined;
+    try {
+      setGoalState(S, { phase: 'pursuing' });
+    } catch (e) {
+      err2 = e as Error;
+    }
+    expect(err2).toBeDefined();
+    expect(err2!.message).toMatch(/S2/);
+    // S1 must NOT appear since it is confirmed
+    expect(err2!.message).not.toMatch(/\bS1\b/);
+
+    // Confirm S2 — now pursuing must succeed
+    confirmStory(S, 'S2');
+    setGoalState(S, { phase: 'pursuing' });
+    expect(readGoalGet(S)!.phase).toBe('pursuing');
+  });
+
+  // AC-2b: confirm-story is the sole path unconfirmed → confirmed
+  test('confirm-story flips status', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory]);
+    // confirm-story flips the story to confirmed
+    confirmStory(S, 'S1');
+    const afterConfirm = readGoalGet(S)!;
+    expect(afterConfirm.stories![0].status).toBe('confirmed');
+
+    // Re-ingest via set-stories --json always produces unconfirmed
+    setStories(S, [{ ...validStory, status: 'confirmed' as any }]);
+    expect(readGoalGet(S)!.stories![0].status).toBe('unconfirmed');
+
+    // set cannot produce confirmed
+    seedWithOutcome(S);
+    setStories(S, [validStory]);
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'planning', outcome: 'new outcome' });
+    // stories should survive; S1 remains confirmed after a non-story set write
+    // (this also tests that set cannot flip status to anything)
+    const afterSet = readGoalGet(S)!;
+    expect(afterSet.stories![0].status).toBe('confirmed');
+
+    // set-verdict cannot produce confirmed on a story
+    setVerdict(S, 'APPROVE');
+    expect(readGoalGet(S)!.stories![0].status).toBe('confirmed'); // still confirmed, not changed by set-verdict
+
+    // Confirm refused on unknown id
+    let errUnknown: Error | undefined;
+    try {
+      confirmStory(S, 'UNKNOWN_ID');
+    } catch (e) {
+      errUnknown = e as Error;
+    }
+    expect(errUnknown).toBeDefined();
+
+    // Confirm refused on retired story — set up a retired story
+    const S2 = 'confirm-retired-session';
+    seedGoalFile(S2);
+    seedWithOutcome(S2);
+    setStories(S2, [{ ...validStory, id: 'R1' }]);
+    // Manually write retired status
+    const raw = JSON.parse(readFileSync(resolveStatePath(S2), 'utf8'));
+    raw.stories[0].status = 'retired';
+    writeFileSync(resolveStatePath(S2), JSON.stringify(raw, null, 2), 'utf8');
+    let errRetired: Error | undefined;
+    try {
+      confirmStory(S2, 'R1');
+    } catch (e) {
+      errRetired = e as Error;
+    }
+    expect(errRetired).toBeDefined();
+    // State unchanged after refusal
+    expect(JSON.parse(readFileSync(resolveStatePath(S2), 'utf8')).stories[0].status).toBe('retired');
+  });
+
+  // AC-5: re-plan preserves stories and statuses, resets verdict/evidence as today
+  test('replan preserves stories', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory, validStory2]);
+    // Confirm both stories so we can enter pursuing
+    confirmStory(S, 'S1');
+    confirmStory(S, 'S2');
+    // Enter pursuing and set evidence and verdict (mimicking end of pursuit attempt)
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${tmpDir}/a.md`] });
+    setVerdict(S, 'APPROVE');
+    expect(readGoalGet(S)!.objective_verdict).toBe('APPROVE');
+    expect(readGoalGet(S)!.completion_evidence_paths).toEqual([`${tmpDir}/a.md`]);
+    // Re-plan: goes back to planning
+    setGoalState(S, { phase: 'planning' });
+    const state = readGoalGet(S)!;
+    // verdict and evidence must be reset exactly as today (existing reset behaviour)
+    expect(state.objective_verdict).toBe('absent');
+    expect(state.completion_evidence_paths).toEqual([]);
+    // stories and per-story statuses must be preserved (AC-5 new behaviour)
+    expect(Array.isArray(state.stories)).toBe(true);
+    expect(state.stories!.length).toBe(2);
+    const s1 = state.stories!.find((s) => s.id === 'S1')!;
+    const s2 = state.stories!.find((s) => s.id === 'S2')!;
+    expect(s1.status).toBe('confirmed');
+    expect(s2.status).toBe('confirmed');
+  });
+
+  // AC-12: set still cannot write complete or objective_verdict (regression with stories present)
+  test('set cannot write complete or objective_verdict', () => {
+    seedWithOutcome(S);
+    setStories(S, [validStory]);
+    // set cannot write phase=complete
+    expect(() => setGoalState(S, { phase: 'complete' as any })).toThrow();
+    expect(readGoalGet(S)!.phase).not.toBe('complete');
+    // set cannot write objective_verdict — even if stories are present
+    // (SetGoalOpts has no objective_verdict field by design; compile-time fence)
+    // At runtime: set --phase planning must not alter objective_verdict if it was set by set-verdict
+    setVerdict(S, 'REQUEST_CHANGES');
+    setGoalState(S, { phase: 'planning', outcome: 'updated outcome' });
+    // planning resets verdict to absent (existing behaviour), stories must remain
+    expect(readGoalGet(S)!.objective_verdict).toBe('absent');
+    expect(readGoalGet(S)!.stories!.length).toBe(1);
+    // set --phase pursuing (after confirming) also must not write objective_verdict
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing' });
+    expect(readGoalGet(S)!.objective_verdict).toBe('absent');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 3: Mutation subcommands with anti-dodge fences
+// ---------------------------------------------------------------------------
+
+describe('story layer: mutations', () => {
+  const baseStory: Story = {
+    id: 'S1',
+    story: 'ship feature X',
+    acceptance_criteria: ['all tests green'],
+    verification_surface: 'CI pipeline passes',
+    status: 'unconfirmed',
+  };
+  const baseStory2: Story = {
+    id: 'S2',
+    story: 'add observability',
+    acceptance_criteria: ['dashboards visible'],
+    verification_surface: 'Grafana dashboard',
+    status: 'unconfirmed',
+  };
+
+  function seedWithStories(sid: string, stories: Story[] = [baseStory], phase: 'planning' | 'pursuing' = 'planning'): void {
+    setGoalState(sid, { phase: 'planning', outcome: 'ship feature X' });
+    setStories(sid, stories);
+    if (phase === 'pursuing') {
+      // confirm all stories first so pursuing gate is satisfied
+      for (const s of stories) {
+        confirmStory(sid, s.id);
+      }
+      setGoalState(sid, { phase: 'pursuing' });
+    }
+  }
+
+  // AC-4a: revise/add/retire each mutate the targeted story (by id) as specified
+  test('mutation subcommands', () => {
+    seedWithStories(S, [baseStory, baseStory2], 'pursuing');
+
+    // revise-story: patches story fields and resets status to unconfirmed
+    // S1 was confirmed before entering pursuing; revise must reset it
+    reviseStory(S, 'S1', { story: 'ship feature X v2', acceptance_criteria: ['all tests green', 'perf meets SLO'] });
+    const afterRevise = readGoalGet(S)!.stories!;
+    const s1 = afterRevise.find((s) => s.id === 'S1')!;
+    expect(s1.story).toBe('ship feature X v2');
+    expect(s1.acceptance_criteria).toEqual(['all tests green', 'perf meets SLO']);
+    expect(s1.status).toBe('unconfirmed'); // revise ALWAYS resets to unconfirmed
+
+    // add-story: appends a new unconfirmed story (allowed in pursuing)
+    const newStory: Omit<Story, 'status'> = {
+      id: 'S3',
+      story: 'add search',
+      acceptance_criteria: ['search returns results'],
+      verification_surface: 'E2E search test',
+    };
+    addStory(S, newStory as Story);
+    const afterAdd = readGoalGet(S)!.stories!;
+    expect(afterAdd.length).toBe(3);
+    const s3 = afterAdd.find((s) => s.id === 'S3')!;
+    expect(s3.status).toBe('unconfirmed');
+    expect(s3.story).toBe('add search');
+
+    // retire-story: sets retired (S2 was confirmed; we're in pursuing — but S2 is confirmed
+    // so this should be refused. Let's use the unconfirmed S1 instead, since revise reset it)
+    // S1 is now unconfirmed, S3 is unconfirmed — retire S3 (unconfirmed, pursuing => allowed)
+    retireStory(S, 'S3');
+    const afterRetire = readGoalGet(S)!.stories!;
+    const s3After = afterRetire.find((s) => s.id === 'S3')!;
+    expect(s3After.status).toBe('retired');
+  });
+
+  // AC-4b: no mutation subcommand can write a status outside the enum or write confirmed
+  test('mutation fence rejects', () => {
+    seedWithStories(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+
+    // revise with an explicit confirmed status in the patch must be refused
+    // (no mutation may produce confirmed)
+    expect(() => reviseStory(S, 'S1', { status: 'confirmed' as any })).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+
+    // revise with an out-of-enum status must be refused
+    expect(() => reviseStory(S, 'S1', { status: 'achieved' as any })).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+
+    // add-story with confirmed status must be refused
+    const confirmedStory: Story = {
+      id: 'S2',
+      story: 'new story',
+      acceptance_criteria: ['passes'],
+      verification_surface: 'manual test',
+      status: 'confirmed',
+    };
+    expect(() => addStory(S, confirmedStory)).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+
+    // add-story with out-of-enum status must be refused
+    const badStatusStory: Story = {
+      id: 'S2',
+      story: 'new story',
+      acceptance_criteria: ['passes'],
+      verification_surface: 'manual test',
+      status: 'open' as any,
+    };
+    expect(() => addStory(S, badStatusStory)).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // AC-4c: revise-story on a confirmed story resets to unconfirmed; on a retired story is refused
+  test('revise resets confirmation', () => {
+    seedWithStories(S);
+    // Confirm S1
+    confirmStory(S, 'S1');
+    expect(readGoalGet(S)!.stories![0].status).toBe('confirmed');
+
+    // Revise S1 (confirmed) — must reset to unconfirmed
+    reviseStory(S, 'S1', { story: 'ship feature X revised' });
+    const afterRevise = readGoalGet(S)!.stories![0];
+    expect(afterRevise.story).toBe('ship feature X revised');
+    expect(afterRevise.status).toBe('unconfirmed'); // reset from confirmed
+
+    // Set S1 to retired via raw file write (to test retire-revise refusal)
+    const raw = JSON.parse(readFileSync(resolveStatePath(S), 'utf8'));
+    raw.stories[0].status = 'retired';
+    writeFileSync(resolveStatePath(S), JSON.stringify(raw, null, 2), 'utf8');
+    expect(readGoalGet(S)!.stories![0].status).toBe('retired');
+
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    // Revise S1 (retired) — must be refused
+    expect(() => reviseStory(S, 'S1', { story: 'attempt resurrect' })).toThrow();
+    // State unchanged
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // AC-4d: retire-story on confirmed story refused while pursuing; allowed while planning;
+  //        unconfirmed story retirable in any phase
+  test('retire fence', () => {
+    // Fixture 1: confirmed story + pursuing => exit 1 (retire-to-dodge fence)
+    const Sp = 'pursuing-confirmed';
+    seedGoalFile(Sp);
+    seedWithStories(Sp, [baseStory], 'pursuing');
+    // S1 is confirmed (confirmed before entering pursuing)
+    expect(readGoalGet(Sp)!.stories![0].status).toBe('confirmed');
+    expect(readGoalGet(Sp)!.phase).toBe('pursuing');
+    const stateBeforeFence = readFileSync(resolveStatePath(Sp), 'utf8');
+    expect(() => retireStory(Sp, 'S1')).toThrow(); // D-9 anti-dodge fence
+    expect(readFileSync(resolveStatePath(Sp), 'utf8')).toBe(stateBeforeFence);
+
+    // Fixture 2: confirmed story + planning => allowed (retire is legal, not a dodge)
+    const Spl = 'planning-confirmed';
+    seedGoalFile(Spl);
+    setGoalState(Spl, { phase: 'planning', outcome: 'ship X' });
+    setStories(Spl, [baseStory]);
+    confirmStory(Spl, 'S1');
+    expect(readGoalGet(Spl)!.stories![0].status).toBe('confirmed');
+    expect(readGoalGet(Spl)!.phase).toBe('planning');
+    retireStory(Spl, 'S1'); // must NOT throw
+    expect(readGoalGet(Spl)!.stories![0].status).toBe('retired');
+
+    // Fixture 3: unconfirmed story + pursuing => allowed (not a dodge — no confirmation to bypass)
+    const Su = 'pursuing-unconfirmed';
+    seedGoalFile(Su);
+    // Seed with one confirmed story so the pursuing gate passes, then add an unconfirmed one
+    setGoalState(Su, { phase: 'planning', outcome: 'ship X' });
+    setStories(Su, [baseStory, baseStory2]);
+    confirmStory(Su, 'S1');
+    confirmStory(Su, 'S2');
+    setGoalState(Su, { phase: 'pursuing' });
+    // Now manually make S2 unconfirmed so we can test retire on unconfirmed-during-pursuing
+    const raw = JSON.parse(readFileSync(resolveStatePath(Su), 'utf8'));
+    raw.stories[1].status = 'unconfirmed';
+    writeFileSync(resolveStatePath(Su), JSON.stringify(raw, null, 2), 'utf8');
+    expect(readGoalGet(Su)!.stories![1].status).toBe('unconfirmed');
+    expect(readGoalGet(Su)!.phase).toBe('pursuing');
+    retireStory(Su, 'S2'); // must NOT throw (unconfirmed is retirable in any phase)
+    expect(readGoalGet(Su)!.stories![1].status).toBe('retired');
+  });
+
+  // AC-11: a failed story write leaves state unchanged and never enables completion
+  test('story write failure is benign', () => {
+    seedWithStories(S);
+    // Record the prior state before the attempted write
+    const priorContent = readFileSync(resolveStatePath(S), 'utf8');
+
+    // Simulate write failure: remove the state file so writeFileNoCreate throws ENOENT
+    const { unlinkSync } = require('fs');
+    unlinkSync(resolveStatePath(S));
+
+    // All three mutation subcommands must fail nonzero when the file is absent
+    // (the file was removed — writeFileNoCreate will throw ENOENT)
+    expect(() => reviseStory(S, 'S1', { story: 'should fail' })).toThrow();
+    expect(() => addStory(S, { id: 'S2', story: 'new', acceptance_criteria: ['ac'], verification_surface: 'manual', status: 'unconfirmed' })).toThrow();
+    expect(() => retireStory(S, 'S1')).toThrow();
+
+    // Restore prior state to verify it was not mutated during failed writes
+    writeFileSync(resolveStatePath(S), priorContent, 'utf8');
+    const restoredContent = readFileSync(resolveStatePath(S), 'utf8');
+    const restored = JSON.parse(restoredContent);
+
+    // No completion-enabling field was mutated:
+    // phase must not be complete, objective_verdict must not be APPROVE (it was absent),
+    // stories must be unchanged
+    expect(restored.phase).not.toBe('complete');
+    expect(restored.objective_verdict).toBe('absent');
+    expect(restored.stories[0].status).toBe('unconfirmed');
+    expect(restored.stories[0].story).toBe('ship feature X');
+    expect(restored.active).toBe(true);
+  });
+
+  // finding 5 — revise-story id 충돌 가드
+  test('revise-story: patch.id가 다른 스토리와 충돌하면 거부하고 상태 불변', () => {
+    seedWithStories(S, [baseStory, baseStory2]);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+
+    // S1을 patch해서 id를 S2(이미 존재)로 바꾸려는 시도 → 거부
+    expect(() => reviseStory(S, 'S1', { id: 'S2' })).toThrow(/revise-story: refused/);
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // finding 6 — add-story: outcome 없는 상태에서 거부하고 상태 불변
+  test('add-story: outcome이 비어 있으면 거부하고 상태 불변', () => {
+    // seed 직후(outcome='') 상태 재현: setGoalState outcome 없이 phase=planning
+    seedGoalFile(S);
+    // outcome이 빈 채로 story 추가 시도
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    const newStory: Story = {
+      id: 'S1',
+      story: 'ship feature X',
+      acceptance_criteria: ['all tests green'],
+      verification_surface: 'CI pipeline passes',
+      status: 'unconfirmed',
+    };
+    expect(() => addStory(S, newStory)).toThrow(/add-story: refused/);
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 4: Re-derived per-story verdict gate
+// ---------------------------------------------------------------------------
+
+/**
+ * Helpers for the T4 gate tests.
+ * Artifact lives at $OMT_DIR/goal-verdict-{sid}.json (mirrors state path convention).
+ */
+function verdictArtifactPath(sid: string): string {
+  return `${process.env.OMT_DIR}/goal-verdict-${sid}.json`;
+}
+
+function writeVerdictArtifact(sid: string, obj: object): void {
+  writeFileSync(verdictArtifactPath(sid), JSON.stringify(obj), 'utf8');
+}
+
+/** Build a fully-satisfied gate fixture for one session:
+ *  - 2 confirmed stories (S1, S2)
+ *  - evidence paths set
+ *  - objective_verdict = APPROVE
+ *  Returns the artifact that would pass the gate. */
+function buildSatisfiedFixture(sid: string): object {
+  // State
+  setGoalState(sid, { phase: 'planning', outcome: 'ship it' });
+  const s1: Story = { id: 'S1', story: 'ship', acceptance_criteria: ['ac1'], verification_surface: 'v1', status: 'unconfirmed' };
+  const s2: Story = { id: 'S2', story: 'test', acceptance_criteria: ['ac2'], verification_surface: 'v2', status: 'unconfirmed' };
+  setStories(sid, [s1, s2]);
+  confirmStory(sid, 'S1');
+  confirmStory(sid, 'S2');
+  setGoalState(sid, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/evidence.md`] });
+  setVerdict(sid, 'APPROVE');
+
+  // Valid artifact
+  return {
+    objective_verdict: 'APPROVE',
+    stories: [
+      { id: 'S1', verdict: 'APPROVE', evidence_refs: ['evidence.md'] },
+      { id: 'S2', verdict: 'APPROVE', evidence_refs: ['evidence.md'] },
+    ],
+    verifier: 'argus',
+    at: '2026-06-12T10:00:00',
+  };
+}
+
+describe('story layer: request-complete verdict gate (T4)', () => {
+  // AC-6a: artifact schema validation — malformed and unknown-id both rejected
+  test('artifact schema validation', () => {
+    buildSatisfiedFixture(S);
+
+    // Malformed: missing required fields (no `stories` array)
+    writeVerdictArtifact(S, { objective_verdict: 'APPROVE', verifier: 'argus', at: '2026-06-12T00:00:00' });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+
+    // Unknown story id in artifact
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: [] },
+        { id: 'UNKNOWN', verdict: 'APPROVE', evidence_refs: [] },  // unknown
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC-6b-i: gate refuses when the artifact is absent
+  test('gate refuses artifact-absent', () => {
+    buildSatisfiedFixture(S);
+    // No artifact file written — must refuse
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC-6b-ii: gate refuses when exactly one story is non-APPROVE despite state APPROVE
+  // Precedence rule (D-3): non-APPROVE story entry blocks regardless of objective_verdict
+  test('gate refuses single-story-non-APPROVE', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',  // state also has APPROVE
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'REQUEST_CHANGES', evidence_refs: [] },  // one non-APPROVE
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    // state objective_verdict === 'APPROVE' but one story entry is REQUEST_CHANGES
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+    expect(rawState().phase).toBe('pursuing');
+  });
+
+  // AC-6b-iii: gate refuses when dual gate is unmet
+  test('gate refuses dual-gate-unmet', () => {
+    // Set up stories but NO verdict set (stays 'absent')
+    setGoalState(S, { phase: 'planning', outcome: 'obj' });
+    const s1: Story = { id: 'S1', story: 'x', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    setStories(S, [s1]);
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`] });
+    // objective_verdict stays 'absent' — dual gate unmet
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] }],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC-6b-iv: gate refuses when any non-retired story is unconfirmed
+  // Scenario: story added mid-flight (add-story) without confirm, then request-complete attempted
+  test('gate refuses unconfirmed-story', () => {
+    // Start with a confirmed story so we can enter pursuing
+    setGoalState(S, { phase: 'planning', outcome: 'obj' });
+    const s1: Story = { id: 'S1', story: 'x', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    setStories(S, [s1]);
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`] });
+    setVerdict(S, 'APPROVE');
+    // Add a new story mid-flight (born unconfirmed) — now an unconfirmed story exists
+    addStory(S, { id: 'S2', story: 'new mid-flight story', acceptance_criteria: ['ac2'], verification_surface: 'v2', status: 'unconfirmed' });
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    // S2 is unconfirmed — gate must refuse
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC-6b-v: gate refuses when artifact omits an entry for a non-retired story;
+  //          a fixture with an extra retired-story entry still passes (ignored)
+  test('gate refuses missing-artifact-entry', () => {
+    // Fixture A: artifact missing S2 entry
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        // S2 entry deliberately omitted
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+
+    // Fixture B: state has S1 (confirmed) + S2 (retired); artifact has S1 entry + extra retired-S2 entry
+    // Extra retired entry is ignored; S1 APPROVE => should pass
+    const S2 = 'gate-retired-extra';
+    seedGoalFile(S2);
+    setGoalState(S2, { phase: 'planning', outcome: 'obj2' });
+    const sa: Story = { id: 'S1', story: 'x', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    const sb: Story = { id: 'S2', story: 'y', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    setStories(S2, [sa, sb]);
+    confirmStory(S2, 'S1');
+    // Retire S2 while planning (allowed)
+    retireStory(S2, 'S2');
+    setGoalState(S2, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`] });
+    setVerdict(S2, 'APPROVE');
+    // Artifact has both entries (S2 retired entry is extra — should be ignored)
+    writeVerdictArtifact(S2, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: [] },  // retired story — ignored
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S2)).toBe(true);
+    expect(rawStateOf(S2).phase).toBe('complete');
+  });
+
+  // AC-6b-vi: all checks satisfied => phase=complete written
+  test('gate completes when all satisfied', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    expect(requestComplete(S)).toBe(true);
+    expect(rawState().phase).toBe('complete');
+    expect(rawState().active).toBe(false);
+  });
+
+  // AC-6c: zero non-retired stories => refused even with dual gate satisfied
+  test('gate refuses all-retired', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'obj' });
+    const s1: Story = { id: 'S1', story: 'x', acceptance_criteria: ['ac'], verification_surface: 'v', status: 'unconfirmed' };
+    setStories(S, [s1]);
+    confirmStory(S, 'S1');
+    // Retire S1 while planning (allowed)
+    retireStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`] });
+    setVerdict(S, 'APPROVE');
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [],  // no entries for retired story (correct — retired is ignored)
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // 중복 story id 거부: [RC, APPROVE] 순서 — last-wins Map 방어
+  test('아티팩트에 중복 story id가 있으면 거부한다 (RC→APPROVE 순서)', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'REQUEST_CHANGES', evidence_refs: [] },  // 첫 번째
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },    // 중복 — 현재 last-wins
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // 중복 story id 거부: [APPROVE, RC] 순서 — 양방향 검증
+  test('아티팩트에 중복 story id가 있으면 거부한다 (APPROVE→RC 순서)', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },    // 첫 번째
+        { id: 'S1', verdict: 'REQUEST_CHANGES', evidence_refs: [] },  // 중복
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // 아티팩트 objective_verdict 비-APPROVE 거부: REQUEST_CHANGES
+  test('아티팩트 objective_verdict가 REQUEST_CHANGES면 스토리·state 전부 APPROVE여도 거부한다', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'REQUEST_CHANGES',  // state는 APPROVE, 스토리도 전부 APPROVE
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // 아티팩트 objective_verdict 비-APPROVE 거부: COMMENT
+  test('아티팩트 objective_verdict가 COMMENT면 스토리·state 전부 APPROVE여도 거부한다', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'COMMENT',  // state는 APPROVE, 스토리도 전부 APPROVE
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 5: re-plan 시 verdict 아티팩트 파일 무효화 (ADR-3)
+// ---------------------------------------------------------------------------
+
+describe('re-plan 시 verdict 아티팩트 무효화', () => {
+  // AC: goal A 완료(아티팩트 존재) → re-plan(planning 전환) →
+  //     새 evidence + state APPROVE 갖췄지만 새 아티팩트 없는 상태에서 requestComplete는 false
+  test('re-plan 후 구 아티팩트가 없는 상태에서 requestComplete가 false를 반환한다', () => {
+    // Phase 1 — goal A 완료까지 진행
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    // 아티팩트 파일이 존재하는지 확인
+    const { existsSync } = require('fs');
+    expect(existsSync(verdictArtifactPath(S))).toBe(true);
+
+    // Phase 2 — re-plan (planning 전환)
+    setGoalState(S, { phase: 'planning', outcome: '새 목표' });
+    // re-plan 후 아티팩트 파일이 삭제됐어야 함
+    expect(existsSync(verdictArtifactPath(S))).toBe(false);
+
+    // Phase 3 — 새 evidence + state APPROVE 갖추되 새 아티팩트는 작성하지 않음
+    const s1: Story = { id: 'S1', story: 'new', acceptance_criteria: ['ac1'], verification_surface: 'v1', status: 'unconfirmed' };
+    setStories(S, [s1]);
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/evidence.md`] });
+    setVerdict(S, 'APPROVE');
+    // 아티팩트 없이 requestComplete 호출 → false (구 아티팩트로 false-complete 불가)
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // AC: 아티팩트가 없는 최초 planning 전환에서도 ENOENT 무시 (정상 진행)
+  test('아티팩트가 없는 상태에서 planning 전환이 정상 완료된다', () => {
+    // 아티팩트 없이 planning → pursuing 전환
+    setGoalState(S, { phase: 'planning', outcome: '초기 목표' });
+    // 에러 없이 진행됐는지 확인
+    expect(rawState().phase).toBe('planning');
   });
 });

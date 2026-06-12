@@ -30,18 +30,42 @@
  *   set-verdict --verdict <APPROVE|REQUEST_CHANGES|COMMENT|absent>
  *   get
  *   status
+ *   set-stories --json '<array>' | --single
+ *   confirm-story <id>                   (sole writer of confirmed — D-8)
+ *   revise-story <id> --json '<patch>'   (resets status to unconfirmed — D-9)
+ *   add-story --json '<story>'           (appends unconfirmed story — D-9)
+ *   retire-story <id>                    (sets retired; confirmed-retire fence — D-9)
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, unlinkSync } from 'fs';
 import { execSync } from 'child_process';
 import { getOmtDir } from '@lib/omt-dir';
 import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFileNoCreate, isPristine } from '@lib/state-core';
 
 export type GoalPhase = 'planning' | 'pursuing' | 'budget_limited' | 'blocked' | 'complete';
 export type ObjectiveVerdict = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' | 'absent';
+export type StoryStatus = 'unconfirmed' | 'confirmed' | 'retired';
 
 /** Phases the orchestrator's `set` subcommand may write. */
 const SETTABLE_PHASES: GoalPhase[] = ['planning', 'pursuing'];
+
+/**
+ * A WHAT-slice of the objective. Defined during planning with the user.
+ * Status transitions: unconfirmed → confirmed (via confirm-story only) or retired.
+ * No stored achievement state; re-derivation lives in the verdict artifact.
+ */
+export interface Story {
+  /** Unique identifier within this goal's story set. */
+  id: string;
+  /** WHAT statement — the slice of the objective this story represents. */
+  story: string;
+  /** >=1 acceptance criteria; structural fence — ingestion refuses empty arrays. */
+  acceptance_criteria: string[];
+  /** How this story's completion will be verified. */
+  verification_surface: string;
+  /** Lifecycle status. `confirmed` writable ONLY by confirm-story (and --single carve-out). */
+  status: StoryStatus;
+}
 const DEFAULT_MAX_ITERATIONS = 10;
 
 export interface GoalState {
@@ -73,6 +97,13 @@ export interface GoalState {
   schema_version: number;
   /** Refreshed on every write (heartbeat). Used by the GC liveness check. */
   last_touched_at: string;
+  /**
+   * WHAT-slices of the objective. Defined during planning, tracked through completion.
+   * Absent field reads as [] (backward-compatible). Writers: setStories, setSingleStory,
+   * addStory, reviseStory, confirmStory, retireStory. No hook or merge-write path
+   * touches these directly.
+   */
+  stories?: Story[];
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +199,10 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
     completion_evidence_paths:
       next.completion_evidence_paths ?? prior.completion_evidence_paths ?? [],
     schema_version: next.schema_version ?? prior.schema_version ?? 1,
+    // D-5 pinned hazard: stories MUST be enumerated here or silently dropped on every
+    // non-story write. Writers: setStories, setSingleStory, addStory, reviseStory,
+    // confirmStory, retireStory.
+    stories: next.stories ?? prior.stories ?? [],
   };
   const state = mergeWithHeartbeat(partial, {}) as GoalState;
   try {
@@ -226,7 +261,8 @@ export function readGoalGet(sessionId: string): (GoalState & { pristine: boolean
   const state = readGoalState(sessionId);
   if (state === null) return null;
   const pristine = isPristine('goal', state as unknown as Record<string, unknown>);
-  return { ...state, pristine };
+  // Default stories to [] when absent (backward-compatible with pre-story states)
+  return { ...state, stories: state.stories ?? [], pristine };
 }
 
 /**
@@ -270,6 +306,18 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
         `complete is request-complete-only; budget_limited/blocked are system-only.`
     );
   }
+  // Pursuing gate (D-8 / AC-2a): refused while any story is unconfirmed.
+  // An empty stories[] does NOT block pursuing (story definition is mandated by prose).
+  if (opts.phase === 'pursuing') {
+    const prior = readPrior(sessionId);
+    const stories: Story[] = prior.stories ?? [];
+    const unconfirmed = stories.filter((s) => s.status === 'unconfirmed').map((s) => s.id);
+    if (unconfirmed.length > 0) {
+      throw new Error(
+        `set: pursuing refused — ${unconfirmed.length} unconfirmed ${unconfirmed.length === 1 ? 'story' : 'stories'}: ${unconfirmed.join(', ')}`
+      );
+    }
+  }
   const next: Partial<GoalState> = {
     phase: opts.phase,
     active: true,
@@ -284,13 +332,27 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
     completion_evidence_paths: opts.completion_evidence_paths,
   };
   if (opts.phase === 'planning') {
-    // Stale verdict cannot survive a re-plan (ADR-3).
+    // ADR-3: Stale verdict cannot survive a re-plan. Three verdict carriers must all be
+    // invalidated together:
+    //   1. objective_verdict state field → reset to 'absent'
+    //   2. completion_evidence_paths state field → cleared to []
+    //   3. goal-verdict-{sid}.json artifact on disk → deleted
+    // Clearing (1) and (2) without deleting (3) allows requestComplete to read the old
+    // artifact and false-complete a new objective on a prior objective's evidence.
     next.objective_verdict = 'absent';
     // Stale completion evidence cannot survive ANY planning transition — evidence is only
     // ever valid from the current pursuit's completion audit, recorded fresh during the
     // `pursuing` phase right before completing. A new objective must never complete on a
     // prior objective's evidence.
     next.completion_evidence_paths = [];
+    // Delete the on-disk verdict artifact. ENOENT is ignored (no artifact = already clean).
+    // Fail-open: if deletion fails for any other reason, the re-plan still proceeds;
+    // the subsequent requestComplete will find an artifact with mismatched state and refuse.
+    try {
+      unlinkSync(resolveVerdictArtifactPath(sessionId));
+    } catch {
+      // ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
+    }
     // A FRESH goal (no active prior) must not inherit the dead goal's consumed iteration
     // budget; a re-plan loop-back of the SAME active goal MUST (budget accumulates across
     // re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.
@@ -325,9 +387,319 @@ export function setBlocked(sessionId: string, reason: string): void {
 }
 
 /**
+ * Validates a single story's structural fields (>=1 AC, non-empty verification_surface).
+ * Shared between setStories (bulk ingestion) and addStory (per-story add).
+ * Throws on violation; caller provides the context label for the error message.
+ */
+function validateStoryFields(s: Story, label: string): void {
+  if (typeof s.id !== 'string' || s.id.trim() === '') {
+    throw new Error(`${label}: refused — story is missing a non-empty id`);
+  }
+  if (!Array.isArray(s.acceptance_criteria) || s.acceptance_criteria.length === 0) {
+    throw new Error(`${label}: refused — story "${s.id}" has no acceptance criteria`);
+  }
+  if (!s.verification_surface || s.verification_surface.trim() === '') {
+    throw new Error(`${label}: refused — story "${s.id}" is missing verification_surface`);
+  }
+}
+
+/**
+ * Validates and persists a story set. Full-replace semantics: every story starts
+ * `unconfirmed`. Refuses when:
+ *   - phase !== 'planning'
+ *   - outcome is empty
+ *   - array is empty
+ *   - any story lacks >=1 AC
+ *   - any story lacks verification_surface
+ *   - duplicate ids within the set
+ * All refusals: throws (exit 1 at CLI boundary), state file unchanged.
+ */
+export function setStories(sessionId: string, stories: Story[]): void {
+  const prior = readPrior(sessionId);
+  if ((prior.phase ?? 'planning') !== 'planning') {
+    throw new Error(`set-stories: refused — phase must be 'planning' (got "${prior.phase}")`);
+  }
+  if (!prior.outcome || prior.outcome.trim() === '') {
+    throw new Error('set-stories: refused — outcome must be set before ingesting stories');
+  }
+  if (stories.length === 0) {
+    throw new Error('set-stories: refused — story set must not be empty');
+  }
+  const seenIds = new Set<string>();
+  for (const s of stories) {
+    validateStoryFields(s, 'set-stories');
+    if (seenIds.has(s.id)) {
+      throw new Error(`set-stories: refused — duplicate story id "${s.id}"`);
+    }
+    seenIds.add(s.id);
+  }
+  // Normalize: force every status to unconfirmed (full-replace semantics, D-6)
+  const normalized: Story[] = stories.map((s) => ({ ...s, status: 'unconfirmed' as StoryStatus }));
+  mergeWrite(sessionId, { stories: normalized });
+}
+
+/**
+ * Appends one new story. The incoming status must be `unconfirmed` (or absent — it is
+ * forced to `unconfirmed` regardless). No mutation may produce `confirmed` (D-9).
+ * Validates same per-story schema as setStories (>=1 AC, verification_surface, unique id).
+ * Allowed in both `planning` and `pursuing` phases.
+ * Refuses on: out-of-enum status, `confirmed` status, duplicate id, schema violation.
+ * All refusals: throws, state unchanged.
+ */
+export function addStory(sessionId: string, story: Story): void {
+  const prior = readPrior(sessionId);
+  const existing: Story[] = prior.stories ?? [];
+
+  if (!prior.outcome || prior.outcome.trim() === '') {
+    throw new Error('add-story: refused — outcome must be set before adding stories');
+  }
+
+  // No mutation may produce confirmed (D-9) or out-of-enum status
+  const VALID_STATUSES: StoryStatus[] = ['unconfirmed', 'confirmed', 'retired'];
+  if (story.status !== undefined && !VALID_STATUSES.includes(story.status)) {
+    throw new Error(`add-story: refused — invalid status "${story.status}"`);
+  }
+  if (story.status === 'confirmed') {
+    throw new Error(`add-story: refused — mutations cannot produce confirmed status (use confirm-story)`);
+  }
+
+  // Structural validation (same as ingestion)
+  validateStoryFields(story, 'add-story');
+
+  // Uniqueness check
+  if (existing.some((s) => s.id === story.id)) {
+    throw new Error(`add-story: refused — story id "${story.id}" already exists`);
+  }
+
+  // Force status to unconfirmed regardless of what was passed
+  const normalized: Story = { ...story, status: 'unconfirmed' };
+  mergeWrite(sessionId, { stories: [...existing, normalized] });
+}
+
+/**
+ * Patches the content fields of an existing story (text/AC/surface).
+ * ALWAYS resets status to `unconfirmed` — a changed story must be re-confirmed.
+ * No mutation may produce `confirmed` or any value outside the enum (D-9).
+ * Refuses on: retired story (no resurrect-via-revise), unknown id, out-of-enum status
+ * in the patch, `confirmed` in the patch.
+ * All refusals: throws, state unchanged.
+ */
+export function reviseStory(sessionId: string, storyId: string, patch: Partial<Story>): void {
+  const prior = readPrior(sessionId);
+  const stories: Story[] = prior.stories ?? [];
+  const idx = stories.findIndex((s) => s.id === storyId);
+
+  if (idx === -1) {
+    throw new Error(`revise-story: unknown story id "${storyId}"`);
+  }
+  if (stories[idx].status === 'retired') {
+    throw new Error(`revise-story: refused — story "${storyId}" is retired (no resurrect-via-revise)`);
+  }
+
+  // id collision guard: patch.id must not collide with a different existing story
+  if (patch.id !== undefined && patch.id !== storyId && stories.some((s) => s.id === patch.id)) {
+    throw new Error(`revise-story: refused — story id "${patch.id}" already exists`);
+  }
+
+  // No mutation may produce confirmed or out-of-enum status (D-9)
+  const VALID_STATUSES: StoryStatus[] = ['unconfirmed', 'confirmed', 'retired'];
+  if (patch.status !== undefined) {
+    if (!VALID_STATUSES.includes(patch.status)) {
+      throw new Error(`revise-story: refused — invalid status "${patch.status}"`);
+    }
+    if (patch.status === 'confirmed') {
+      throw new Error(`revise-story: refused — mutations cannot produce confirmed status (use confirm-story)`);
+    }
+  }
+
+  // Apply the patch but ALWAYS reset status to unconfirmed
+  const updated: Story = { ...stories[idx], ...patch, status: 'unconfirmed' };
+
+  // Validate structural fields after applying the patch
+  validateStoryFields(updated, 'revise-story');
+
+  const updatedStories = stories.map((s, i) => (i === idx ? updated : s));
+  mergeWrite(sessionId, { stories: updatedStories });
+}
+
+/**
+ * Sets a story's status to `retired`. Anti-dodge fence (D-9):
+ *   - `unconfirmed` story → retirable in any phase
+ *   - `confirmed` story → retirable ONLY while `phase=planning`
+ *     (retiring confirmed mid-pursuit would bypass the T4 verdict gate)
+ * Refuses on: unknown id, already retired (no-op would hide bugs — be explicit),
+ *   confirmed+pursuing combination.
+ * All refusals: throws, state unchanged.
+ */
+export function retireStory(sessionId: string, storyId: string): void {
+  const prior = readPrior(sessionId);
+  const stories: Story[] = prior.stories ?? [];
+  const idx = stories.findIndex((s) => s.id === storyId);
+
+  if (idx === -1) {
+    throw new Error(`retire-story: unknown story id "${storyId}"`);
+  }
+
+  const story = stories[idx];
+  if (story.status === 'retired') {
+    throw new Error(`retire-story: refused — story "${storyId}" is already retired`);
+  }
+
+  // Anti-dodge fence (D-9): confirmed story is only retirable while planning
+  if (story.status === 'confirmed' && (prior.phase ?? 'planning') === 'pursuing') {
+    throw new Error(
+      `retire-story: refused — confirmed story "${storyId}" cannot be retired during pursuit. ` +
+        `Re-plan first (set --phase planning) to retire confirmed stories.`
+    );
+  }
+
+  const updatedStories = stories.map((s, i) => (i === idx ? { ...s, status: 'retired' as StoryStatus } : s));
+  mergeWrite(sessionId, { stories: updatedStories });
+}
+
+/**
+ * Derives exactly one story from the current state (D-7 named carve-out):
+ *   story      = outcome
+ *   AC         = [verification_surface]
+ *   surface    = verification_surface
+ *   id         = 'S1'
+ *   status     = 'confirmed'   (carve-out: user already stated this when setting the outcome)
+ * Refuses when phase !== 'planning' or outcome is empty.
+ */
+export function setSingleStory(sessionId: string): void {
+  const prior = readPrior(sessionId);
+  if ((prior.phase ?? 'planning') !== 'planning') {
+    throw new Error(`set-stories --single: refused — phase must be 'planning' (got "${prior.phase}")`);
+  }
+  if (!prior.outcome || prior.outcome.trim() === '') {
+    throw new Error('set-stories --single: refused — outcome must be set before auto-deriving a story');
+  }
+  const surface = prior.verification_surface ?? '';
+  if (surface.trim() === '') {
+    throw new Error('set-stories --single: refused — verification_surface must be set before auto-deriving a story');
+  }
+  const derived: Story = {
+    id: 'S1',
+    story: prior.outcome,
+    acceptance_criteria: [surface],
+    verification_surface: surface,
+    status: 'confirmed',
+  };
+  mergeWrite(sessionId, { stories: [derived] });
+}
+
+/**
+ * Confirms a story: the ONLY path from `unconfirmed` to `confirmed` (D-8).
+ * Refuses with an error when:
+ *   - The story id is not found in stories[]
+ *   - The story is already `retired`
+ * All refusals: throws, state unchanged.
+ */
+export function confirmStory(sessionId: string, storyId: string): void {
+  const prior = readPrior(sessionId);
+  const stories: Story[] = prior.stories ?? [];
+  const idx = stories.findIndex((s) => s.id === storyId);
+  if (idx === -1) {
+    throw new Error(`confirm-story: unknown story id "${storyId}"`);
+  }
+  if (stories[idx].status === 'retired') {
+    throw new Error(`confirm-story: refused — story "${storyId}" is retired`);
+  }
+  // Already confirmed is a no-op (idempotent, harmless)
+  if (stories[idx].status === 'confirmed') {
+    return;
+  }
+  const updated: Story[] = stories.map((s) =>
+    s.id === storyId ? { ...s, status: 'confirmed' as StoryStatus } : s
+  );
+  mergeWrite(sessionId, { stories: updated });
+}
+
+// ---------------------------------------------------------------------------
+// Verdict artifact types (T4 — read/validate only; authorship is argus's job)
+// ---------------------------------------------------------------------------
+
+interface ArtifactStoryEntry {
+  id: string;
+  verdict: 'APPROVE' | 'REQUEST_CHANGES';
+  evidence_refs: string[];
+}
+
+interface VerdictArtifact {
+  objective_verdict: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT';
+  stories: ArtifactStoryEntry[];
+  verifier: string;
+  at: string;
+}
+
+/**
+ * Derives the verdict artifact path from the session id — mirrors the state
+ * path convention (`goal-state-${sid}.json` → `goal-verdict-${sid}.json`).
+ * NO path argument accepted (D-11: a path argument would be a steerable gate input).
+ */
+function resolveVerdictArtifactPath(sessionId: string): string {
+  return `${getOmtDir()}/goal-verdict-${sessionId}.json`;
+}
+
+/**
+ * Reads and validates the verdict artifact. Returns the parsed artifact on
+ * success, or null when the file is absent or the schema is invalid.
+ * Schema: { objective_verdict, stories: [{id, verdict, evidence_refs[]}], verifier, at }
+ * Unknown story ids are not checked here — that belongs in requestComplete.
+ */
+function readVerdictArtifact(sessionId: string): VerdictArtifact | null {
+  const content = readFileOrNull(resolveVerdictArtifactPath(sessionId));
+  if (!content) return null;
+  let obj: unknown;
+  try {
+    obj = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
+  const a = obj as Record<string, unknown>;
+  // Required top-level fields
+  const VALID_OBJ_VERDICTS = ['APPROVE', 'REQUEST_CHANGES', 'COMMENT'];
+  if (!VALID_OBJ_VERDICTS.includes(a['objective_verdict'] as string)) return null;
+  if (!Array.isArray(a['stories'])) return null;
+  if (typeof a['verifier'] !== 'string') return null;
+  if (typeof a['at'] !== 'string') return null;
+  // Validate each story entry and reject duplicate ids (duplicate id makes the
+  // artifact ambiguous — a forged pair [RC, APPROVE] could mask a non-APPROVE verdict
+  // via last-wins Map semantics in the caller)
+  const VALID_STORY_VERDICTS = ['APPROVE', 'REQUEST_CHANGES'];
+  const seenIds = new Set<string>();
+  for (const entry of a['stories'] as unknown[]) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null;
+    const e = entry as Record<string, unknown>;
+    if (typeof e['id'] !== 'string') return null;
+    if (seenIds.has(e['id'] as string)) return null;
+    seenIds.add(e['id'] as string);
+    if (!VALID_STORY_VERDICTS.includes(e['verdict'] as string)) return null;
+    if (!Array.isArray(e['evidence_refs'])) return null;
+  }
+  return obj as VerdictArtifact;
+}
+
+/**
  * The ONLY path to phase=complete. Gated: requires `objective_verdict=APPROVE` AND
- * completion-evidence present.
- * Returns false (no state change) when the gate is not satisfied. Succeeds even
+ * completion-evidence present (existing dual gate), PLUS artifact-backed per-story
+ * checks (T4 extension — D-11).
+ *
+ * Extended refusal branches (each independent):
+ *   1. Artifact absent, schema-invalid, or contains duplicate story ids
+ *   2. Artifact objective_verdict is not 'APPROVE' (COMMENT also blocks — never-false-complete)
+ *   3. Artifact references an unknown story id
+ *   4. Artifact missing an entry for any non-retired story (entries for retired ignored)
+ *   5. Any non-retired story entry non-APPROVE
+ *   6. Any non-retired story unconfirmed
+ *   7. Zero non-retired stories
+ *   8. Existing dual gate unmet (objective_verdict !== 'APPROVE' or empty evidence)
+ *
+ * Precedence rule (D-3): one non-APPROVE per-story entry blocks regardless of
+ * objective_verdict in state.
+ *
+ * Returns false (no state change) when any gate is not satisfied. Succeeds even
  * over a prior budget_limited (complete-wins, ADR-7).
  */
 export function requestComplete(sessionId: string): boolean {
@@ -342,6 +714,62 @@ export function requestComplete(sessionId: string): boolean {
   if (evidence.length === 0 || prior.objective_verdict !== 'APPROVE') {
     return false;
   }
+
+  // T4: Story-level artifact gate
+  const stories: Story[] = prior.stories ?? [];
+
+  // Gate 6: zero non-retired stories → refuse (completion structurally requires >=1)
+  const activeStories = stories.filter((s) => s.status !== 'retired');
+  if (activeStories.length === 0) {
+    return false;
+  }
+
+  // Gate 1: artifact must exist and be schema-valid (schema includes duplicate-id rejection)
+  const artifact = readVerdictArtifact(sessionId);
+  if (artifact === null) {
+    return false;
+  }
+
+  // Gate 2 (artifact objective_verdict): the artifact is the trust anchor written by
+  // argus directly — its objective_verdict must itself be 'APPROVE'. COMMENT also blocks
+  // (never-false-complete invariant). This is independent of the state objective_verdict
+  // checked by the dual gate above.
+  if (artifact.objective_verdict !== 'APPROVE') {
+    return false;
+  }
+
+  // Gate 3: artifact must not reference unknown story ids
+  const knownIds = new Set(stories.map((s) => s.id));
+  for (const entry of artifact.stories) {
+    if (!knownIds.has(entry.id)) {
+      return false;
+    }
+  }
+
+  // Build a map from story id → artifact entry for O(1) lookup
+  const artifactById = new Map<string, ArtifactStoryEntry>();
+  for (const entry of artifact.stories) {
+    artifactById.set(entry.id, entry);
+  }
+
+  for (const story of activeStories) {
+    // Gate 5: non-retired story must be confirmed
+    if (story.status !== 'confirmed') {
+      return false;
+    }
+
+    // Gate 3: artifact must have an entry for every non-retired story
+    const entry = artifactById.get(story.id);
+    if (entry === undefined) {
+      return false;
+    }
+
+    // Gate 4 (+ precedence rule D-3): every non-retired story entry must be APPROVE
+    if (entry.verdict !== 'APPROVE') {
+      return false;
+    }
+  }
+
   mergeWrite(sessionId, { phase: 'complete', active: false });
   return true;
 }
@@ -467,9 +895,86 @@ function main(): void {
         process.exit(1);
       }
       adopt('goal', srcSid);
+    } else if (subcommand === 'confirm-story') {
+      // parseArgs only captures the FIRST non-flag token as _subcommand.
+      // The story id is the second positional: scan raw argv past the subcommand.
+      const rawId = process.argv.slice(3).find((a) => !a.startsWith('--'));
+      if (!rawId) {
+        process.stderr.write('confirm-story: <id> argument is required\n');
+        process.exit(1);
+      }
+      confirmStory(sessionId, rawId);
+    } else if (subcommand === 'set-stories') {
+      if (args['single'] === true) {
+        setSingleStory(sessionId);
+      } else {
+        const jsonArg = str(args['json']);
+        if (!jsonArg) {
+          process.stderr.write('set-stories: --json <array> or --single is required\n');
+          process.exit(1);
+        }
+        let parsed: Story[];
+        try {
+          parsed = JSON.parse(jsonArg) as Story[];
+          if (!Array.isArray(parsed)) throw new Error('expected JSON array');
+        } catch (e) {
+          process.stderr.write(`set-stories: invalid JSON — ${String(e)}\n`);
+          process.exit(1);
+        }
+        setStories(sessionId, parsed);
+      }
+    } else if (subcommand === 'revise-story') {
+      // revise-story <id> --json '<patch>'
+      const rawId = process.argv.slice(3).find((a) => !a.startsWith('--'));
+      if (!rawId) {
+        process.stderr.write('revise-story: <id> argument is required\n');
+        process.exit(1);
+      }
+      const jsonArg = str(args['json']);
+      if (!jsonArg) {
+        process.stderr.write('revise-story: --json <patch> is required\n');
+        process.exit(1);
+      }
+      let patch: Partial<Story>;
+      try {
+        patch = JSON.parse(jsonArg) as Partial<Story>;
+        if (typeof patch !== 'object' || Array.isArray(patch) || patch === null) {
+          throw new Error('expected JSON object');
+        }
+      } catch (e) {
+        process.stderr.write(`revise-story: invalid JSON — ${String(e)}\n`);
+        process.exit(1);
+      }
+      reviseStory(sessionId, rawId, patch);
+    } else if (subcommand === 'add-story') {
+      // add-story --json '<story>'
+      const jsonArg = str(args['json']);
+      if (!jsonArg) {
+        process.stderr.write('add-story: --json <story> is required\n');
+        process.exit(1);
+      }
+      let parsed: Story;
+      try {
+        parsed = JSON.parse(jsonArg) as Story;
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+          throw new Error('expected JSON object');
+        }
+      } catch (e) {
+        process.stderr.write(`add-story: invalid JSON — ${String(e)}\n`);
+        process.exit(1);
+      }
+      addStory(sessionId, parsed);
+    } else if (subcommand === 'retire-story') {
+      // retire-story <id>
+      const rawId = process.argv.slice(3).find((a) => !a.startsWith('--'));
+      if (!rawId) {
+        process.stderr.write('retire-story: <id> argument is required\n');
+        process.exit(1);
+      }
+      retireStory(sessionId, rawId);
     } else {
       process.stderr.write(
-        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt> [options]\n'
+        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story> [options]\n'
       );
       process.exit(1);
     }
