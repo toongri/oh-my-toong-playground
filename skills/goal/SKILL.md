@@ -88,6 +88,44 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set --phase planning \
   --blocked-stop "<objective-specific no-path-forward predicate>"
 ```
 
+<!-- story-layer:start -->
+
+## Story Definition (Planning Phase)
+
+After capturing the six slots and before dispatching to prometheus or sisyphus, define the WHAT-slices of the objective with the user, story by story. Each story is an independently verifiable chunk of the objective — not a task (HOW) but a stated outcome (WHAT).
+
+**When to slice vs. use single-derivation.** If the objective is a single WHAT — one deliverable, one verification surface, no meaningful sub-goals — run:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set-stories --single
+```
+
+This derives one story directly from the current `outcome` and marks it `confirmed` immediately (no separate `confirm-story` call needed). Use `--single` for objectives where slicing into multiple stories would introduce ceremony without value.
+
+For objectives with multiple distinct WHAT-slices, define them one at a time with the user. For each story, establish:
+
+1. A **WHAT statement** — the desired outcome for this slice, stated concretely.
+2. At least one **acceptance criterion** — a falsifiable check that, when met, confirms the slice is done.
+3. A **verification surface** — the concrete evidence that proves the AC is met (a test, an artifact, a command output, an observable behavior).
+
+Once you have agreed on the full story set with the user, ingest it:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set-stories --json '<array-of-stories>'
+```
+
+`set-stories --json` refuses an empty array, any story missing acceptance criteria or a verification surface, duplicate ids, an empty `outcome`, or a `phase` other than `planning`. Every ingested story starts `unconfirmed`.
+
+**Per-story confirmation.** After the user approves each story in the planning dialogue, confirm it:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts confirm-story <id>
+```
+
+`confirm-story` is the sole path from `unconfirmed` to `confirmed`. No other subcommand (`set`, `set-verdict`, `set-stories --json` re-ingestion) can produce `confirmed`. The pursuing phase is refused while any story remains `unconfirmed` — `set --phase pursuing` names the offending ids on stderr. Once all stories are `confirmed` (or `retired`), the pursuing transition is allowed.
+
+<!-- story-layer:end -->
+
 ---
 
 ## Conditional Orchestration
@@ -96,7 +134,7 @@ Goal does not reimplement decomposition or execution. It invokes the existing sk
 
 - **Vague** (the verification surface cannot be derived without questioning the user) → `Skill(skill: "deep-interview")`. The interview crystallizes a spec at `$OMT_DIR/deep-interview/{slug}.md` and bridges to prometheus; its acceptance criteria feed the verification-surface slot.
 - **Complex** (the objective needs decomposition into a TODO plan with waves and acceptance criteria — multi-component, 3+ files, or any non-trivial build) → `Skill(skill: "prometheus")`. Prometheus runs its full planning pipeline (its human gates UN-wrapped) and ends by dispatching to sisyphus with a plan path at `$OMT_DIR/plans/{name}.md`.
-- **Execution** (a plan or crystallized spec already exists and the objective is ready to be built) → `Skill(skill: "sisyphus")` with the plan path. Sisyphus orchestrates its per-story junior → argus → Evidence-Audit loop. `oracle` stays inside sisyphus as per-story diagnosis only — it is never an objective-completion actor here.
+- **Execution** (a plan or crystallized spec already exists and the objective is ready to be built) → `Skill(skill: "sisyphus")` with the plan path. Sisyphus orchestrates its per-TODO junior → argus → Evidence-Audit loop. `oracle` stays inside sisyphus as per-TODO diagnosis only — it is never an objective-completion actor here.
 
 ### Phase transitions
 
@@ -114,11 +152,25 @@ The autonomous loop blocks ONLY when `phase=pursuing`. Set the phase around the 
 
 Initial path: `set --phase planning` (seed slots) → invoke prometheus / deep-interview → on sisyphus dispatch `set --phase pursuing`. Re-plan loop-back: `set --phase planning` (clears the verdict) → invoke prometheus again → `set --phase pursuing` after the fresh sisyphus dispatch.
 
+<!-- story-layer:start -->
+
+### Mid-flight Story Mutations
+
+Stories can be discovered, corrected, or retired during pursuit. Use the per-story mutation subcommands when the situation changes mid-flight:
+
+- **`add-story --json '<story>'`** — appends one new story with status `unconfirmed`. Allowed in both `planning` and `pursuing`. A newly added story must be confirmed via `confirm-story <id>` before completion is allowed (an `unconfirmed` story blocks `request-complete`).
+- **`revise-story <id> --json '<patch>'`** — patches an existing story's text, acceptance criteria, or verification surface. Revision ALWAYS resets the story's status to `unconfirmed` — a story whose definition changed requires fresh user approval. Refused on retired stories and unknown ids.
+- **`retire-story <id>`** — marks a story `retired`. An `unconfirmed` story is retirable in any phase. A `confirmed` story is retirable ONLY while `phase=planning` — retiring a confirmed story mid-pursuit is refused (run `set --phase planning` first to re-enter planning, then retire). This fence prevents retiring a confirmed WHAT mid-pursuit as a way to remove it from the completion gate.
+
+Re-plan (`set --phase planning`) preserves `stories[]` including per-story statuses, while resetting `objective_verdict` and `completion_evidence_paths` exactly as today. Stories survive re-planning; only verdict state is cleared.
+
+<!-- story-layer:end -->
+
 ---
 
 ## Completion Gate
 
-After a sisyphus pass, completion is NOT self-declared. Invoke an objective-level **argus** (a fresh instance, with no prior-verdict context), presenting the **verification surface as PROSE requirements** — a completeness Spec, not just the per-story ACs sisyphus already checked. This is the objective-scope completeness check: argus verifies that every prose-stated requirement in the verification surface is reflected in the deliverable, and renders an APPROVE / REQUEST_CHANGES / COMMENT verdict.
+After a sisyphus pass, completion is NOT self-declared. Invoke an objective-level **argus** (a fresh instance, with no prior-verdict context), presenting the **verification surface as PROSE requirements** — a completeness Spec, not just the per-TODO ACs sisyphus already checked. This is the objective-scope completeness check: argus verifies that every prose-stated requirement in the verification surface is reflected in the deliverable, and renders an APPROVE / REQUEST_CHANGES / COMMENT verdict.
 
 **Inject the completion-audit rubric INTO the argus invocation** (it lives in the argus prompt, never in any continuation prompt). The rubric forces an evidence-based verdict and asserts each element independently:
 
@@ -126,6 +178,27 @@ After a sisyphus pass, completion is NOT self-declared. Invoke an objective-leve
 - **proxy-signal refusal** — argus must refuse proxy signals as completion by themselves: passing tests, a green build, a complete manifest, or substantial effort count only insofar as they cover every requirement in the verification surface.
 - **verify-the-verifier** — argus must confirm that any test suite, manifest, or green status actually COVERS the objective's requirements before relying on it (the FALSE-GREEN guard: not "are tests green?" but "do the green tests cover every objective requirement?").
 - **uncertainty = not-achieved** — argus must treat any uncertain, weakly-verified, or uncovered requirement as not achieved; doubt drives REQUEST_CHANGES, never APPROVE.
+
+<!-- story-layer:start -->
+
+**Per-story re-derivation (same argus invocation).** The same single fresh argus pass also re-derives a verdict for every non-retired story and authors the structured verdict artifact at `$OMT_DIR/goal-verdict-{sid}.json`. Argus writes this file directly (it has file tools); the orchestrator passes only the path and never transcribes verdict content. The artifact schema is:
+
+```json
+{
+  "objective_verdict": "APPROVE | REQUEST_CHANGES | COMMENT",
+  "stories": [
+    { "id": "<story-id>", "verdict": "APPROVE | REQUEST_CHANGES", "evidence_refs": ["<path>"] }
+  ],
+  "verifier": "<argus instance description>",
+  "at": "<ISO timestamp>"
+}
+```
+
+For each non-retired story, argus maps the story's acceptance criteria and verification surface to concrete evidence and renders an `APPROVE` or `REQUEST_CHANGES` per-story verdict. A single non-APPROVE per-story entry blocks completion regardless of the `objective_verdict` field — `objective_verdict === 'APPROVE'` alone is never sufficient.
+
+`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). When all checks pass, `request-complete` writes `phase=complete` and `active=false`.
+
+<!-- story-layer:end -->
 
 **Completion fires ONLY on argus APPROVE AND an objective-scope Evidence Audit pass.** A **COMMENT verdict is NOT sufficient** for completion — COMMENT means MEDIUM gaps remain. The Evidence Audit reuses the verify-the-verifier shape: confirm argus's verdict HOLDS UP by reading the evidence argus saved (does it demonstrate the verification surface was met?) — auditing, never re-running a command and never rendering your own verdict. If the evidence is missing or does not demonstrate the verification surface, it is an Evidence Gap → re-invoke argus, do not complete.
 
@@ -143,13 +216,13 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts request-complete
 
 APPROVE alone does NOT leave the goal pursuing/active — the `request-complete` handoff is what transitions to terminal `complete` (and it is structurally gated on completion-evidence, so a write that never reached the gate cannot false-complete).
 
-**No design/architecture lane gates completion.** The only gates on the completion path are the per-story argus inside sisyphus and this objective-level argus. There is no design-review or daedalus pass between pursuit and completion — design is plan-time advisory only.
+**No design/architecture lane gates completion.** The only gates on the completion path are the per-TODO argus inside sisyphus and this objective-level argus — which also re-derives per-WHAT-slice verdicts and authors the verdict artifact at `$OMT_DIR/goal-verdict-{sid}.json`. There is no design-review or daedalus pass between pursuit and completion — design is plan-time advisory only.
 
 ### Concrete progress action per non-APPROVE verdict
 
 Every non-APPROVE verdict drives a concrete progress action — never action-less spin:
 
-- **REQUEST_CHANGES naming incomplete stories** (tactical — the work is unfinished, the plan is sound) → re-dispatch `Skill(skill: "sisyphus")` on the named incomplete stories. This stays inside sisyphus's junior loop; phase remains `pursuing`.
+- **REQUEST_CHANGES naming incomplete work items** (tactical — the work is unfinished, the plan is sound) → re-dispatch `Skill(skill: "sisyphus")` on the named incomplete TODOs. This stays inside sisyphus's junior loop; phase remains `pursuing`.
 - **Strategic plan inadequacy** (the plan itself cannot reach the objective — the decomposition is wrong, not merely unfinished) → re-plan via `Skill(skill: "prometheus")`: run `set --phase planning` first (which clears the verdict), let prometheus's human design gates run un-wrapped, then `set --phase pursuing` after the fresh sisyphus dispatch.
 - **COMMENT (MEDIUM gaps only)** → re-dispatch `Skill(skill: "sisyphus")` to fix the argus-named MEDIUM gaps; do NOT `request-complete` on a COMMENT.
 
@@ -157,7 +230,7 @@ Every non-APPROVE verdict drives a concrete progress action — never action-les
 
 Pursuit stops as blocked (non-complete) ONLY on a decidable, point-in-time predicate — there is no cross-iteration stall detector; `max_iterations` absorbs genuine stalls. Exactly two conditions trip blocked:
 
-- **B1** — argus names NO actionable incomplete story while the objective is still unmet (no valid progress path: nothing to re-dispatch and the verification surface is not satisfied).
+- **B1** — argus names NO actionable incomplete work item while the objective is still unmet (no valid progress path: nothing to re-dispatch and the verification surface is not satisfied).
 - **B2** — the captured **blocked-stop** slot's objective-specific condition is met.
 
 On either condition: run `set-blocked --reason "<blocker>"`, report the blocker to the user, and stop. A blocked pursuit is non-complete — `set-blocked` can never write `complete`.
