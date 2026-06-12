@@ -7,8 +7,52 @@ It is read at Stage 4 (record) and Stage 5 (slice). Follow it in full at each st
 
 ## 1. Best-Practice Body Shape
 
-Every ticket body follows this structure. Sections that do not apply to a given ticket genre
-are omitted rather than left blank.
+The Standard Body Shape below is the **full menu** of sections. Two principles govern how much of
+that menu a given ticket emits — read them before the menu, because most tickets use far less than
+the full set. Sections that do not apply to a given ticket genre are omitted rather than left blank.
+
+### Working-Language Localization
+
+Section headers and standard labels render in the ticket's **working language**, not in the canonical
+English this rubric uses for universality. Match the language of the sibling tickets in the same
+project/epic — when the siblings are Korean, the new ticket is Korean, headers included. For
+Korean-working teams, use this canonical mapping:
+
+| Rubric (canonical EN) | Emitted header (KO) |
+|---|---|
+| Problem | 문제 |
+| Pre-Context | 사전 확인 |
+| AC | 완료 조건 |
+| (AC) Verification | 검증 |
+| Non-Goals | 범위 제외 |
+| User Flow: current → after | 전환 방식 / 동선 변화 |
+| Decisions Needed | 결정 필요 |
+| References | References (그대로 둔다) |
+
+The observable-AC two-line shape (§2) is unchanged — only its labels localize: `**[결과]**` + `**검증**`.
+
+### Lean by Default, Escalate on Need
+
+The **default** body is the minimal set — **Problem → (사전 확인) → AC → Non-Goals → References** —
+where 사전 확인 is a single **flat bullet list** that folds supporting evidence, affected areas, and
+premises in as plain prose. This default fits most feature, transition, and improvement tickets, and
+is the house norm: a reader should see four-to-five short sections, not a scaffold.
+
+The heavier machinery in this rubric is **escalation** — added only when the ticket genuinely needs
+it, never as a reflex:
+
+| Escalation section | Add only when |
+|---|---|
+| separate **Evidence** section | bug-genre ticket where logs / stack-trace / repro are the spine. Non-bug: fold the one or two facts into Problem or 사전 확인. |
+| structured 3-sub-item **Pre-Context** (Affected Areas / Premises / Blockers & Risks) | parent/umbrella ticket, or a ticket with many (>~5) cross-cutting facts a flat list would muddle. |
+| **two-bucket** Confirmed-Facts / Needs-Verification grouping | the structured Pre-Context above is already in use AND a sub-item holds 3+ items. |
+| **Decisions Needed** | an open product/policy decision actually blocks or shapes the work. |
+| **Notes** | provenance (superseded attempts, deep-interview artifact path) that has no other home. |
+
+The test before emitting any escalation section: *would a lean sibling ticket in this epic carry it?*
+If the house siblings stay flat, match them — do not emit scaffolding the reader skims past. A
+straightforward child ticket carrying Evidence + 3-sub-item Pre-Context + two buckets + Decisions
+Needed + Notes is over-built; collapse it to the lean default.
 
 ### Standard Body Shape
 
@@ -36,7 +80,7 @@ For bug tickets the ordering is: Problem → Reproduction → Root Cause → Evi
 
 ### Pre-Context Rules
 
-Pre-Context applies to all ticket genres. For non-code tickets, fill each sub-item from gathered documents or mark `TBD — needs validation via {method}`.
+Pre-Context applies to all ticket genres. Its **default rendering is the flat 사전 확인 list** (Lean by Default, above) — the three labeled sub-items below are the *escalated* form, used only for parent/umbrella or fact-heavy tickets. For non-code tickets, fill the context (flat list or sub-items) from gathered documents or mark `TBD — needs validation via {method}`.
 
 The three sub-items are:
 
