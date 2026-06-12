@@ -33,7 +33,7 @@ import {
 } from "./lib/resolver.ts";
 import { generateBackupSessionId, backupCategory, cleanupOldBackups } from "./lib/backup.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
-import { syncDirectory } from "./lib/sync-directory.ts";
+import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
 import { collectRequiredLibModules, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
@@ -383,16 +383,7 @@ export async function rewriteLibAliases(platformRoot: string): Promise<void> {
       continue;
     }
 
-    if (!content.includes("@lib/")) continue;
-
-    const dir = path.dirname(filePath);
-    const relDir = path.relative(platformRoot, dir);
-    const depth = relDir === "" ? 0 : relDir.split(path.sep).length;
-    const prefix = depth === 0 ? "./" : "../".repeat(depth);
-
-    const updated = content
-      .replace(/'@lib\//g, `'${prefix}lib/`)
-      .replace(/"@lib\//g, `"${prefix}lib/`);
+    const updated = rewriteLibImports(content, filePath, platformRoot);
 
     if (updated !== content) {
       await fs.writeFile(filePath, updated, "utf8");
