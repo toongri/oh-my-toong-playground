@@ -39,9 +39,28 @@ import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFi
 
 export type GoalPhase = 'planning' | 'pursuing' | 'budget_limited' | 'blocked' | 'complete';
 export type ObjectiveVerdict = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' | 'absent';
+export type StoryStatus = 'unconfirmed' | 'confirmed' | 'retired';
 
 /** Phases the orchestrator's `set` subcommand may write. */
 const SETTABLE_PHASES: GoalPhase[] = ['planning', 'pursuing'];
+
+/**
+ * A WHAT-slice of the objective. Defined during planning with the user.
+ * Status transitions: unconfirmed → confirmed (via confirm-story only) or retired.
+ * No stored achievement state; re-derivation lives in the verdict artifact.
+ */
+export interface Story {
+  /** Unique identifier within this goal's story set. */
+  id: string;
+  /** WHAT statement — the slice of the objective this story represents. */
+  story: string;
+  /** >=1 acceptance criteria; structural fence — ingestion refuses empty arrays. */
+  acceptance_criteria: string[];
+  /** How this story's completion will be verified. */
+  verification_surface: string;
+  /** Lifecycle status. `confirmed` writable ONLY by confirm-story (and --single carve-out). */
+  status: StoryStatus;
+}
 const DEFAULT_MAX_ITERATIONS = 10;
 
 export interface GoalState {
@@ -73,6 +92,12 @@ export interface GoalState {
   schema_version: number;
   /** Refreshed on every write (heartbeat). Used by the GC liveness check. */
   last_touched_at: string;
+  /**
+   * WHAT-slices of the objective. Defined during planning, tracked through completion.
+   * Absent field reads as [] (backward-compatible). Owned exclusively by set-stories
+   * and the --single carve-out; no hook or merge-write path touches these.
+   */
+  stories?: Story[];
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +193,9 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
     completion_evidence_paths:
       next.completion_evidence_paths ?? prior.completion_evidence_paths ?? [],
     schema_version: next.schema_version ?? prior.schema_version ?? 1,
+    // D-5 pinned hazard: stories MUST be enumerated here or silently dropped on every
+    // non-story write. next.stories is only set by setStories/setSingleStory.
+    stories: next.stories ?? prior.stories ?? [],
   };
   const state = mergeWithHeartbeat(partial, {}) as GoalState;
   try {
@@ -226,7 +254,8 @@ export function readGoalGet(sessionId: string): (GoalState & { pristine: boolean
   const state = readGoalState(sessionId);
   if (state === null) return null;
   const pristine = isPristine('goal', state as unknown as Record<string, unknown>);
-  return { ...state, pristine };
+  // Default stories to [] when absent (backward-compatible with pre-story states)
+  return { ...state, stories: state.stories ?? [], pristine };
 }
 
 /**
@@ -322,6 +351,74 @@ export function setBlocked(sessionId: string, reason: string): void {
     active: false,
     blocked_reason: normalize(reason),
   });
+}
+
+/**
+ * Validates and persists a story set. Full-replace semantics: every story starts
+ * `unconfirmed`. Refuses when:
+ *   - phase !== 'planning'
+ *   - outcome is empty
+ *   - array is empty
+ *   - any story lacks >=1 AC
+ *   - any story lacks verification_surface
+ *   - duplicate ids within the set
+ * All refusals: throws (exit 1 at CLI boundary), state file unchanged.
+ */
+export function setStories(sessionId: string, stories: Story[]): void {
+  const prior = readPrior(sessionId);
+  if ((prior.phase ?? 'planning') !== 'planning') {
+    throw new Error(`set-stories: refused — phase must be 'planning' (got "${prior.phase}")`);
+  }
+  if (!prior.outcome || prior.outcome.trim() === '') {
+    throw new Error('set-stories: refused — outcome must be set before ingesting stories');
+  }
+  if (stories.length === 0) {
+    throw new Error('set-stories: refused — story set must not be empty');
+  }
+  const seenIds = new Set<string>();
+  for (const s of stories) {
+    if (!Array.isArray(s.acceptance_criteria) || s.acceptance_criteria.length === 0) {
+      throw new Error(`set-stories: refused — story "${s.id}" has no acceptance criteria`);
+    }
+    if (!s.verification_surface || s.verification_surface.trim() === '') {
+      throw new Error(`set-stories: refused — story "${s.id}" is missing verification_surface`);
+    }
+    if (seenIds.has(s.id)) {
+      throw new Error(`set-stories: refused — duplicate story id "${s.id}"`);
+    }
+    seenIds.add(s.id);
+  }
+  // Normalize: force every status to unconfirmed (full-replace semantics, D-6)
+  const normalized: Story[] = stories.map((s) => ({ ...s, status: 'unconfirmed' as StoryStatus }));
+  mergeWrite(sessionId, { stories: normalized });
+}
+
+/**
+ * Derives exactly one story from the current state (D-7 named carve-out):
+ *   story      = outcome
+ *   AC         = [verification_surface]
+ *   surface    = verification_surface
+ *   id         = 'S1'
+ *   status     = 'confirmed'   (carve-out: user already stated this when setting the outcome)
+ * Refuses when phase !== 'planning' or outcome is empty.
+ */
+export function setSingleStory(sessionId: string): void {
+  const prior = readPrior(sessionId);
+  if ((prior.phase ?? 'planning') !== 'planning') {
+    throw new Error(`set-stories --single: refused — phase must be 'planning' (got "${prior.phase}")`);
+  }
+  if (!prior.outcome || prior.outcome.trim() === '') {
+    throw new Error('set-stories --single: refused — outcome must be set before auto-deriving a story');
+  }
+  const surface = prior.verification_surface ?? '';
+  const derived: Story = {
+    id: 'S1',
+    story: prior.outcome,
+    acceptance_criteria: [surface],
+    verification_surface: surface,
+    status: 'confirmed',
+  };
+  mergeWrite(sessionId, { stories: [derived] });
 }
 
 /**
@@ -467,9 +564,28 @@ function main(): void {
         process.exit(1);
       }
       adopt('goal', srcSid);
+    } else if (subcommand === 'set-stories') {
+      if (args['single'] === true) {
+        setSingleStory(sessionId);
+      } else {
+        const jsonArg = str(args['json']);
+        if (!jsonArg) {
+          process.stderr.write('set-stories: --json <array> or --single is required\n');
+          process.exit(1);
+        }
+        let parsed: Story[];
+        try {
+          parsed = JSON.parse(jsonArg) as Story[];
+          if (!Array.isArray(parsed)) throw new Error('expected JSON array');
+        } catch (e) {
+          process.stderr.write(`set-stories: invalid JSON — ${String(e)}\n`);
+          process.exit(1);
+        }
+        setStories(sessionId, parsed);
+      }
     } else {
       process.stderr.write(
-        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt> [options]\n'
+        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories> [options]\n'
       );
       process.exit(1);
     }
