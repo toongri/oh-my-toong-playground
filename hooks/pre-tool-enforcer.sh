@@ -29,23 +29,43 @@ EOF
 fi
 
 # Single-creation-point seeds for skill state files (ADR-7).
-# Gated on the invoked skill name; sid comes from env $OMT_SESSION_ID only.
-# Fail-closed id: absent or unsafe sid → skip + stderr warn + exit 0.
+# Resolution precedence: (1) env OMT_SESSION_ID / OMT_DIR when present and valid;
+# (2) stdin payload session_id (same safety regex) + cwd via resolve_omt_dir;
+# (3) loud failure — stderr names the missing element; hook still exits 0.
 # Fail-loud: write errors print a stderr warning (no error-swallow); hook still exits 0.
 if [[ "$toolName" == "Skill" ]]; then
     skillName=$(extract_json_field "skill" "")
     case "$skillName" in
         prometheus|goal|deep-interview)
+            # BASH_SOURCE-relative sourcing for resolve_omt_dir (mirrors session-start.sh:49-53)
+            _PTE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
             sid="${OMT_SESSION_ID:-}"
             omt_dir="${OMT_DIR:-}"
 
+            # Derive sid from stdin session_id when env is absent
+            if [[ -z "$sid" ]]; then
+                stdin_sid=$(extract_json_field "session_id" "")
+                if [[ -n "$stdin_sid" ]] && echo "$stdin_sid" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
+                    sid="$stdin_sid"
+                fi
+            fi
+
+            # Derive omt_dir from stdin cwd when env is absent
+            if [[ -z "$omt_dir" ]]; then
+                stdin_cwd=$(extract_json_field "cwd" "")
+                if [[ -n "$stdin_cwd" ]]; then
+                    omt_dir=$(source "$_PTE_SCRIPT_DIR/lib/omt-dir.sh" && unset OMT_DIR && resolve_omt_dir "$stdin_cwd")
+                fi
+            fi
+
             # Validate sid: must be non-empty, safe characters, length 1-200
             if [[ -z "$sid" ]]; then
-                echo "WARNING: pre-tool-enforcer seed skipped — OMT_SESSION_ID is absent" >&2
+                echo "WARNING: pre-tool-enforcer seed failed — session_id absent from env (OMT_SESSION_ID) and stdin payload" >&2
             elif ! echo "$sid" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
                 echo "WARNING: pre-tool-enforcer seed skipped — OMT_SESSION_ID is unsafe or invalid: '$sid'" >&2
             elif [[ -z "$omt_dir" ]]; then
-                : # OMT_DIR unset — skip silently (fail-open for missing dir)
+                echo "WARNING: pre-tool-enforcer seed failed — OMT_DIR absent from env and cwd unresolvable from stdin payload" >&2
             else
                 ts=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
                 # write_seed_if_absent <state_file> <skill_label> <json_content>
