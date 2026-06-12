@@ -1005,16 +1005,12 @@ describe('story layer: set-stories', () => {
     setStories(S, [validStory]);
     const state = readGoalGet(S)!;
     expect(state.pristine).toBe(false);
-    // list-others for a different session must not include S
+    // adopt into S (ACTIVE non-pristine) must be refused (r3 destination fence)
     const other = 'other-session';
-    seedGoalFile(other);
-    const cliOut = runCli('list-others', { OMT_SESSION_ID: other });
-    // S should not appear as an adoption candidate (outcome is non-empty = non-pristine)
-    const lines = cliOut.trim().split('\n').filter(Boolean);
-    // If S appears, it would have sid 'test-session' which list-others excludes as self
-    // and which is non-pristine so the adoption library won't offer it
-    // (outcome is set so isPristine returns false)
-    expect(state.pristine).toBe(false);
+    writeLiveGoalState(other, 'other purpose');
+    const sContentBefore = readFileSync(resolveStatePath(S), 'utf8');
+    expect(() => runCli('adopt --src ' + other, { OMT_SESSION_ID: S })).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(sContentBefore);
   });
 
   // AC-13: stories[] survives non-story writes (mergeWrite whitelist)
