@@ -32,6 +32,9 @@
  *   status
  *   set-stories --json '<array>' | --single
  *   confirm-story <id>                   (sole writer of confirmed — D-8)
+ *   revise-story <id> --json '<patch>'   (resets status to unconfirmed — D-9)
+ *   add-story --json '<story>'           (appends unconfirmed story — D-9)
+ *   retire-story <id>                    (sets retired; confirmed-retire fence — D-9)
  */
 
 import { readFileSync } from 'fs';
@@ -368,6 +371,20 @@ export function setBlocked(sessionId: string, reason: string): void {
 }
 
 /**
+ * Validates a single story's structural fields (>=1 AC, non-empty verification_surface).
+ * Shared between setStories (bulk ingestion) and addStory (per-story add).
+ * Throws on violation; caller provides the context label for the error message.
+ */
+function validateStoryFields(s: Story, label: string): void {
+  if (!Array.isArray(s.acceptance_criteria) || s.acceptance_criteria.length === 0) {
+    throw new Error(`${label}: refused — story "${s.id}" has no acceptance criteria`);
+  }
+  if (!s.verification_surface || s.verification_surface.trim() === '') {
+    throw new Error(`${label}: refused — story "${s.id}" is missing verification_surface`);
+  }
+}
+
+/**
  * Validates and persists a story set. Full-replace semantics: every story starts
  * `unconfirmed`. Refuses when:
  *   - phase !== 'planning'
@@ -391,12 +408,7 @@ export function setStories(sessionId: string, stories: Story[]): void {
   }
   const seenIds = new Set<string>();
   for (const s of stories) {
-    if (!Array.isArray(s.acceptance_criteria) || s.acceptance_criteria.length === 0) {
-      throw new Error(`set-stories: refused — story "${s.id}" has no acceptance criteria`);
-    }
-    if (!s.verification_surface || s.verification_surface.trim() === '') {
-      throw new Error(`set-stories: refused — story "${s.id}" is missing verification_surface`);
-    }
+    validateStoryFields(s, 'set-stories');
     if (seenIds.has(s.id)) {
       throw new Error(`set-stories: refused — duplicate story id "${s.id}"`);
     }
@@ -405,6 +417,116 @@ export function setStories(sessionId: string, stories: Story[]): void {
   // Normalize: force every status to unconfirmed (full-replace semantics, D-6)
   const normalized: Story[] = stories.map((s) => ({ ...s, status: 'unconfirmed' as StoryStatus }));
   mergeWrite(sessionId, { stories: normalized });
+}
+
+/**
+ * Appends one new story. The incoming status must be `unconfirmed` (or absent — it is
+ * forced to `unconfirmed` regardless). No mutation may produce `confirmed` (D-9).
+ * Validates same per-story schema as setStories (>=1 AC, verification_surface, unique id).
+ * Allowed in both `planning` and `pursuing` phases.
+ * Refuses on: out-of-enum status, `confirmed` status, duplicate id, schema violation.
+ * All refusals: throws, state unchanged.
+ */
+export function addStory(sessionId: string, story: Story): void {
+  const prior = readPrior(sessionId);
+  const existing: Story[] = prior.stories ?? [];
+
+  // No mutation may produce confirmed (D-9) or out-of-enum status
+  const VALID_STATUSES: StoryStatus[] = ['unconfirmed', 'confirmed', 'retired'];
+  if (story.status !== undefined && !VALID_STATUSES.includes(story.status)) {
+    throw new Error(`add-story: refused — invalid status "${story.status}"`);
+  }
+  if (story.status === 'confirmed') {
+    throw new Error(`add-story: refused — mutations cannot produce confirmed status (use confirm-story)`);
+  }
+
+  // Structural validation (same as ingestion)
+  validateStoryFields(story, 'add-story');
+
+  // Uniqueness check
+  if (existing.some((s) => s.id === story.id)) {
+    throw new Error(`add-story: refused — story id "${story.id}" already exists`);
+  }
+
+  // Force status to unconfirmed regardless of what was passed
+  const normalized: Story = { ...story, status: 'unconfirmed' };
+  mergeWrite(sessionId, { stories: [...existing, normalized] });
+}
+
+/**
+ * Patches the content fields of an existing story (text/AC/surface).
+ * ALWAYS resets status to `unconfirmed` — a changed story must be re-confirmed.
+ * No mutation may produce `confirmed` or any value outside the enum (D-9).
+ * Refuses on: retired story (no resurrect-via-revise), unknown id, out-of-enum status
+ * in the patch, `confirmed` in the patch.
+ * All refusals: throws, state unchanged.
+ */
+export function reviseStory(sessionId: string, storyId: string, patch: Partial<Story>): void {
+  const prior = readPrior(sessionId);
+  const stories: Story[] = prior.stories ?? [];
+  const idx = stories.findIndex((s) => s.id === storyId);
+
+  if (idx === -1) {
+    throw new Error(`revise-story: unknown story id "${storyId}"`);
+  }
+  if (stories[idx].status === 'retired') {
+    throw new Error(`revise-story: refused — story "${storyId}" is retired (no resurrect-via-revise)`);
+  }
+
+  // No mutation may produce confirmed or out-of-enum status (D-9)
+  const VALID_STATUSES: StoryStatus[] = ['unconfirmed', 'confirmed', 'retired'];
+  if (patch.status !== undefined) {
+    if (!VALID_STATUSES.includes(patch.status)) {
+      throw new Error(`revise-story: refused — invalid status "${patch.status}"`);
+    }
+    if (patch.status === 'confirmed') {
+      throw new Error(`revise-story: refused — mutations cannot produce confirmed status (use confirm-story)`);
+    }
+  }
+
+  // Apply the patch but ALWAYS reset status to unconfirmed
+  const updated: Story = { ...stories[idx], ...patch, status: 'unconfirmed' };
+
+  // Validate structural fields after applying the patch
+  validateStoryFields(updated, 'revise-story');
+
+  const updatedStories = stories.map((s, i) => (i === idx ? updated : s));
+  mergeWrite(sessionId, { stories: updatedStories });
+}
+
+/**
+ * Sets a story's status to `retired`. Anti-dodge fence (D-9):
+ *   - `unconfirmed` story → retirable in any phase
+ *   - `confirmed` story → retirable ONLY while `phase=planning`
+ *     (retiring confirmed mid-pursuit would bypass the T4 verdict gate)
+ * Refuses on: unknown id, already retired (no-op would hide bugs — be explicit),
+ *   confirmed+pursuing combination.
+ * All refusals: throws, state unchanged.
+ */
+export function retireStory(sessionId: string, storyId: string): void {
+  const prior = readPrior(sessionId);
+  const stories: Story[] = prior.stories ?? [];
+  const idx = stories.findIndex((s) => s.id === storyId);
+
+  if (idx === -1) {
+    throw new Error(`retire-story: unknown story id "${storyId}"`);
+  }
+
+  const story = stories[idx];
+  if (story.status === 'retired') {
+    throw new Error(`retire-story: refused — story "${storyId}" is already retired`);
+  }
+
+  // Anti-dodge fence (D-9): confirmed story is only retirable while planning
+  if (story.status === 'confirmed' && (prior.phase ?? 'planning') === 'pursuing') {
+    throw new Error(
+      `retire-story: refused — confirmed story "${storyId}" cannot be retired during pursuit. ` +
+        `Re-plan first (set --phase planning) to retire confirmed stories.`
+    );
+  }
+
+  const updatedStories = stories.map((s, i) => (i === idx ? { ...s, status: 'retired' as StoryStatus } : s));
+  mergeWrite(sessionId, { stories: updatedStories });
 }
 
 /**
@@ -633,9 +755,58 @@ function main(): void {
         }
         setStories(sessionId, parsed);
       }
+    } else if (subcommand === 'revise-story') {
+      // revise-story <id> --json '<patch>'
+      const rawId = process.argv.slice(3).find((a) => !a.startsWith('--'));
+      if (!rawId) {
+        process.stderr.write('revise-story: <id> argument is required\n');
+        process.exit(1);
+      }
+      const jsonArg = str(args['json']);
+      if (!jsonArg) {
+        process.stderr.write('revise-story: --json <patch> is required\n');
+        process.exit(1);
+      }
+      let patch: Partial<Story>;
+      try {
+        patch = JSON.parse(jsonArg) as Partial<Story>;
+        if (typeof patch !== 'object' || Array.isArray(patch) || patch === null) {
+          throw new Error('expected JSON object');
+        }
+      } catch (e) {
+        process.stderr.write(`revise-story: invalid JSON — ${String(e)}\n`);
+        process.exit(1);
+      }
+      reviseStory(sessionId, rawId, patch);
+    } else if (subcommand === 'add-story') {
+      // add-story --json '<story>'
+      const jsonArg = str(args['json']);
+      if (!jsonArg) {
+        process.stderr.write('add-story: --json <story> is required\n');
+        process.exit(1);
+      }
+      let parsed: Story;
+      try {
+        parsed = JSON.parse(jsonArg) as Story;
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+          throw new Error('expected JSON object');
+        }
+      } catch (e) {
+        process.stderr.write(`add-story: invalid JSON — ${String(e)}\n`);
+        process.exit(1);
+      }
+      addStory(sessionId, parsed);
+    } else if (subcommand === 'retire-story') {
+      // retire-story <id>
+      const rawId = process.argv.slice(3).find((a) => !a.startsWith('--'));
+      if (!rawId) {
+        process.stderr.write('retire-story: <id> argument is required\n');
+        process.exit(1);
+      }
+      retireStory(sessionId, rawId);
     } else {
       process.stderr.write(
-        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story> [options]\n'
+        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story> [options]\n'
       );
       process.exit(1);
     }
