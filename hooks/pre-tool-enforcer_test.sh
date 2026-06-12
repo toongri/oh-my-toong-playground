@@ -561,8 +561,14 @@ test_ac8b_i_missing_session_id_loud_failure() {
     local stderr_out
     local project_cwd="$SCRIPT_DIR"
 
+    # Sandbox HOME so resolve_omt_dir (called before sid validation when cwd is present)
+    # never touches real $HOME
+    local fake_home="$TEST_TMP_DIR/home_8b_i"
+    mkdir -p "$fake_home"
+
     stderr_out=$(
         unset OMT_DIR OMT_SESSION_ID
+        export HOME="$fake_home"
         printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"cwd\":\"$project_cwd\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
@@ -574,9 +580,9 @@ test_ac8b_i_missing_session_id_loud_failure() {
     echo "$stderr_out" | grep -qi "session" \
         || { echo "ASSERTION FAILED AC-8b-i: stderr should name 'session'. Got: '$stderr_out'"; return 1; }
 
-    # No file created
+    # No file created — scan fake_home where hook would actually write (via resolve_omt_dir → $HOME/.omt/...)
     local found
-    found=$(ls "$OMT_DIR"/*-state-*.json 2>/dev/null | wc -l | tr -d ' ')
+    found=$(find "$fake_home" -name '*-state-*.json' 2>/dev/null | wc -l | tr -d ' ')
     [[ "$found" -eq 0 ]] \
         || { echo "ASSERTION FAILED AC-8b-i: No state file should be created when session_id absent (found=$found)"; return 1; }
 }
@@ -590,8 +596,14 @@ test_ac8b_ii_missing_cwd_loud_failure() {
     local stderr_out
     local stdin_sid="cwd-missing-test-sid"
 
+    # Sandbox HOME so the hook (even though it won't call resolve_omt_dir without cwd)
+    # cannot reach real $HOME if behavior ever changes
+    local fake_home="$TEST_TMP_DIR/home_8b_ii"
+    mkdir -p "$fake_home"
+
     stderr_out=$(
         unset OMT_DIR
+        export HOME="$fake_home"
         printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"$stdin_sid\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
@@ -603,9 +615,9 @@ test_ac8b_ii_missing_cwd_loud_failure() {
     echo "$stderr_out" | grep -qiE "cwd|dir" \
         || { echo "ASSERTION FAILED AC-8b-ii: stderr should name cwd/dir. Got: '$stderr_out'"; return 1; }
 
-    # No file created
+    # No file created — scan fake_home which is the only $HOME the hook can reach
     local found
-    found=$(ls "$OMT_DIR"/*-state-*.json 2>/dev/null | wc -l | tr -d ' ')
+    found=$(find "$fake_home" -name '*-state-*.json' 2>/dev/null | wc -l | tr -d ' ')
     [[ "$found" -eq 0 ]] \
         || { echo "ASSERTION FAILED AC-8b-ii: No state file should be created when cwd absent (found=$found)"; return 1; }
 }
