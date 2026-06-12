@@ -136,13 +136,15 @@ function buildGoalBudgetLimitMessage(goal: GoalState): string {
 
 [GOAL - BUDGET LIMIT REACHED ${goal.iteration}/${goal.max_iterations}]
 
-The iteration budget for this objective is exhausted. The objective is NOT complete.
+The iteration budget for this objective is exhausted. The objective is NOT verified complete.
 
 INSTRUCTIONS:
 1. Do NOT start any new work.
-2. Do NOT mark the objective complete.
+2. Do NOT call request-complete unless the objective is genuinely achieved AND you can cite
+   concrete artifacts as evidence. The request-complete gate will reject unsubstantiated claims.
+   If the gate rejects, report the blocker honestly and stop — do not retry.
 3. Write a short progress summary of what was accomplished so far.
-4. State the single next step that would resume progress.
+4. State the single next step that would resume progress if the gate rejects.
 
 </goal-budget-limit>
 
@@ -166,18 +168,12 @@ export function makeDecision(context: DecisionContext): HookOutput {
     const goal = goalRaw.active ? goalRaw : null;
     if (goal && goal.phase === 'pursuing') {
       if (goal.iteration >= goal.max_iterations) {
-        // Cap reached — terminal disposition (E3: cap check BEFORE APPROVE-yield).
-        const evidence = Array.isArray(goal.completion_evidence_paths)
-          ? goal.completion_evidence_paths
-          : []; // B5: a non-array (corrupted state) is NOT valid evidence.
-        if (goal.objective_verdict === 'APPROVE' && evidence.length > 0) {
-          // complete-wins (ADR-7) — gated on verdict=APPROVE AND evidence non-empty (M2).
-          try { updateGoalState(sessionId, { phase: 'complete', active: false }); } catch { /* M1 */ }
-          return formatContinueOutput();
-        }
-        // Budget exhausted (incl. APPROVE-but-no-evidence) → soft-stop, NOT complete.
+        // Cap reached — always soft-stop via budget_limited (E3: cap check BEFORE APPROVE-yield).
+        // complete is ONLY reachable via the request-complete gate in goal-state CLI.
+        // ADR-7 complete-wins applies when request-complete is called on a budget_limited state;
+        // decision.ts must never write phase='complete' directly (hook cannot import goal-state.ts).
         const message = buildGoalBudgetLimitMessage(goal); // build FIRST (E1)
-        // M1: swallow write failure — STILL soft-stop, never degrade to complete.
+        // M1: swallow write failure — STILL soft-stop.
         try {
           updateGoalState(sessionId, {
             phase: 'budget_limited', active: false, budget_limit_notified: true,
