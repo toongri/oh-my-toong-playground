@@ -9,6 +9,7 @@ A diagram is the highest-density enrichment, so the fidelity bound is strictest:
 - **Ephemeral only.** Diagrams render into the HTML presentation only. NEVER write a diagram or its source into `plan.md` — Invariant 3 keeps `plan.md` the unmodified single source of truth; every re-render redraws from it. Inject the ` ```mermaid ` fence into the render-time markdown string, not into the file on disk.
 - **Re-visualize decided flow only.** Drawing an edge forces a commitment: who calls whom, in what order, which component owns what. If you cannot draw an arrow or relationship without making a decision `plan.md` did not already make, **STOP** — that is a plan defect, not a diagram opportunity. Return to revise the plan and re-run the pipeline; do not invent the missing edge at render time. A diagram can never be vaguer than the plan it visualizes.
 - **MAY, never MUST.** The Necessity Test gates existence. Most plans need no diagram. *Exception*: the Stage A bird's-eye view (ownership table + flow mermaid derived from the decision log) is REQUIRED on structural enumeration — its existence is governed by `review-pipeline.md`, not the Necessity Test. This guide still governs type selection, guardrails, and presentation for all diagrams including the bird's-eye.
+- **Grouped placement.** All diagrams for a plan render together in the generated Bird's-Eye section, ordered macro → micro (component/flow → sequence → single-component zoom-ins such as state, flowchart, or class) — never scattered through the plan body. Each diagram keeps its own Why → Diagram → Interpretation (§5). A reader verifies the whole design in one place instead of hunting for views.
 
 ## Necessity Test
 
@@ -62,7 +63,7 @@ flowchart TD
 | No duplication of the same flow at the same abstraction level | redundant representation |
 | Flowchart only at 3+ branch points | overkill below that — use prose |
 | System-to-system flow -> Sequence (never Flowchart) | Flowchart is for one component's internals |
-| Max ~15 nodes per diagram | readability — split into subgraphs or narrow scope |
+| Max ~15 nodes per diagram | readability — split into subgraphs or a separate decomposition diagram; NEVER by aggregating decided ownership members into one node (that erases decided ownership — a fidelity violation, not a readability fix) |
 | Decomposition: a Sequence participant with 3+ internal branches MAY get its own Flowchart | complementary multi-level view, not duplication |
 | State Diagram is for lifecycle, not branching logic | branching -> Flowchart |
 
@@ -75,3 +76,27 @@ Every diagram is presented in 3 parts — the same shape as a blockquote callout
 3. **Interpretation** (after): 2-3 lines naming specific structural observations the reader should take away.
 
 **Anti-pattern:** a diagram with a generic or empty Why / Interpretation, or with no surrounding context at all.
+
+## 6. Sequence Authoring Rules
+
+Once `sequenceDiagram` is selected, these rules govern how it is drawn. They are the completeness direction of fidelity: the no-invention bound (Fidelity Bounds above) stops a diagram from saying MORE than the plan; these stop it from saying LESS.
+
+| Rule | Why |
+|---|---|
+| Every synchronous call is drawn as an activation pair — `A->>+B: call` … `B-->>-A: return value`. Activation bars and return edges are one syntax unit; neither is omittable | a call without a visible activation and return hides the response contract the reviewer must verify |
+| A message with no return is explicitly marked async/fire-and-forget (`A-)B:` or a `Note` declaring it) | the reader must be able to distinguish "no response by design" from "author forgot the return edge" |
+| Participant labels are the plan's canonical component names, verbatim — no shortening, no renaming | a shortened label (e.g. a dropped domain prefix) erases the ownership identity the plan decided |
+| Message labels carry only signatures, fields, and value shapes that appear in `plan.md` — compressing plan prose into an invented signature is invention | the reader treats a drawn signature as a decided contract |
+| If the plan decomposes an ownership boundary into N named members, the diagram's view of that boundary shows N members — reduce node count via subgraphs or a separate decomposition diagram, never by collapsing decided members into one node | aggregation silently erases decided ownership |
+
+## 7. Post-Draw Self-Audit
+
+After drawing any diagram and BEFORE injecting it into the render-time markdown, verify the drawn mermaid against `plan.md`:
+
+- [ ] Every synchronous call has its paired activation + return edge, or an explicit async marker
+- [ ] Every participant/node label appears verbatim in `plan.md`
+- [ ] Every decided ownership member within the diagram's scope appears as a node
+- [ ] No signature, field, edge, or relationship in the diagram is absent from `plan.md`
+- [ ] Every claim in the Interpretation corresponds to an edge or node actually drawn — the Interpretation describes the diagram, not the plan
+
+Fix any failed item before injection. If an item cannot be fixed without making a decision `plan.md` never made, that is a plan defect — STOP per Fidelity Bounds and revise the plan instead.
