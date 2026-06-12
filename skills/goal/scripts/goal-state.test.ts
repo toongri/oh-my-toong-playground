@@ -1442,6 +1442,33 @@ describe('story layer: mutations', () => {
     expect(restored.stories[0].story).toBe('ship feature X');
     expect(restored.active).toBe(true);
   });
+
+  // finding 5 — revise-story id 충돌 가드
+  test('revise-story: patch.id가 다른 스토리와 충돌하면 거부하고 상태 불변', () => {
+    seedWithStories(S, [baseStory, baseStory2]);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+
+    // S1을 patch해서 id를 S2(이미 존재)로 바꾸려는 시도 → 거부
+    expect(() => reviseStory(S, 'S1', { id: 'S2' })).toThrow(/revise-story: refused/);
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // finding 6 — add-story: outcome 없는 상태에서 거부하고 상태 불변
+  test('add-story: outcome이 비어 있으면 거부하고 상태 불변', () => {
+    // seed 직후(outcome='') 상태 재현: setGoalState outcome 없이 phase=planning
+    seedGoalFile(S);
+    // outcome이 빈 채로 story 추가 시도
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    const newStory: Story = {
+      id: 'S1',
+      story: 'ship feature X',
+      acceptance_criteria: ['all tests green'],
+      verification_surface: 'CI pipeline passes',
+      status: 'unconfirmed',
+    };
+    expect(() => addStory(S, newStory)).toThrow(/add-story: refused/);
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
 });
 
 // ---------------------------------------------------------------------------
