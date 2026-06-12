@@ -633,12 +633,17 @@ function readVerdictArtifact(sessionId: string): VerdictArtifact | null {
   if (!Array.isArray(a['stories'])) return null;
   if (typeof a['verifier'] !== 'string') return null;
   if (typeof a['at'] !== 'string') return null;
-  // Validate each story entry
+  // Validate each story entry and reject duplicate ids (duplicate id makes the
+  // artifact ambiguous — a forged pair [RC, APPROVE] could mask a non-APPROVE verdict
+  // via last-wins Map semantics in the caller)
   const VALID_STORY_VERDICTS = ['APPROVE', 'REQUEST_CHANGES'];
+  const seenIds = new Set<string>();
   for (const entry of a['stories'] as unknown[]) {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null;
     const e = entry as Record<string, unknown>;
     if (typeof e['id'] !== 'string') return null;
+    if (seenIds.has(e['id'] as string)) return null;
+    seenIds.add(e['id'] as string);
     if (!VALID_STORY_VERDICTS.includes(e['verdict'] as string)) return null;
     if (!Array.isArray(e['evidence_refs'])) return null;
   }
@@ -651,13 +656,14 @@ function readVerdictArtifact(sessionId: string): VerdictArtifact | null {
  * checks (T4 extension — D-11).
  *
  * Extended refusal branches (each independent):
- *   1. Artifact absent or schema-invalid
- *   2. Artifact references an unknown story id
- *   3. Artifact missing an entry for any non-retired story (entries for retired ignored)
- *   4. Any non-retired story entry non-APPROVE
- *   5. Any non-retired story unconfirmed
- *   6. Zero non-retired stories
- *   7. Existing dual gate unmet (objective_verdict !== 'APPROVE' or empty evidence)
+ *   1. Artifact absent, schema-invalid, or contains duplicate story ids
+ *   2. Artifact objective_verdict is not 'APPROVE' (COMMENT also blocks — never-false-complete)
+ *   3. Artifact references an unknown story id
+ *   4. Artifact missing an entry for any non-retired story (entries for retired ignored)
+ *   5. Any non-retired story entry non-APPROVE
+ *   6. Any non-retired story unconfirmed
+ *   7. Zero non-retired stories
+ *   8. Existing dual gate unmet (objective_verdict !== 'APPROVE' or empty evidence)
  *
  * Precedence rule (D-3): one non-APPROVE per-story entry blocks regardless of
  * objective_verdict in state.
@@ -687,13 +693,21 @@ export function requestComplete(sessionId: string): boolean {
     return false;
   }
 
-  // Gate 1: artifact must exist and be schema-valid
+  // Gate 1: artifact must exist and be schema-valid (schema includes duplicate-id rejection)
   const artifact = readVerdictArtifact(sessionId);
   if (artifact === null) {
     return false;
   }
 
-  // Gate 2: artifact must not reference unknown story ids
+  // Gate 2 (artifact objective_verdict): the artifact is the trust anchor written by
+  // argus directly — its objective_verdict must itself be 'APPROVE'. COMMENT also blocks
+  // (never-false-complete invariant). This is independent of the state objective_verdict
+  // checked by the dual gate above.
+  if (artifact.objective_verdict !== 'APPROVE') {
+    return false;
+  }
+
+  // Gate 3: artifact must not reference unknown story ids
   const knownIds = new Set(stories.map((s) => s.id));
   for (const entry of artifact.stories) {
     if (!knownIds.has(entry.id)) {
