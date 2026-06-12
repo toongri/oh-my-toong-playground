@@ -584,10 +584,85 @@ export function confirmStory(sessionId: string, storyId: string): void {
   mergeWrite(sessionId, { stories: updated });
 }
 
+// ---------------------------------------------------------------------------
+// Verdict artifact types (T4 — read/validate only; authorship is argus's job)
+// ---------------------------------------------------------------------------
+
+interface ArtifactStoryEntry {
+  id: string;
+  verdict: 'APPROVE' | 'REQUEST_CHANGES';
+  evidence_refs: string[];
+}
+
+interface VerdictArtifact {
+  objective_verdict: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT';
+  stories: ArtifactStoryEntry[];
+  verifier: string;
+  at: string;
+}
+
+/**
+ * Derives the verdict artifact path from the session id — mirrors the state
+ * path convention (`goal-state-${sid}.json` → `goal-verdict-${sid}.json`).
+ * NO path argument accepted (D-11: a path argument would be a steerable gate input).
+ */
+function resolveVerdictArtifactPath(sessionId: string): string {
+  return `${getOmtDir()}/goal-verdict-${sessionId}.json`;
+}
+
+/**
+ * Reads and validates the verdict artifact. Returns the parsed artifact on
+ * success, or null when the file is absent or the schema is invalid.
+ * Schema: { objective_verdict, stories: [{id, verdict, evidence_refs[]}], verifier, at }
+ * Unknown story ids are not checked here — that belongs in requestComplete.
+ */
+function readVerdictArtifact(sessionId: string): VerdictArtifact | null {
+  const content = readFileOrNull(resolveVerdictArtifactPath(sessionId));
+  if (!content) return null;
+  let obj: unknown;
+  try {
+    obj = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
+  const a = obj as Record<string, unknown>;
+  // Required top-level fields
+  const VALID_OBJ_VERDICTS = ['APPROVE', 'REQUEST_CHANGES', 'COMMENT'];
+  if (!VALID_OBJ_VERDICTS.includes(a['objective_verdict'] as string)) return null;
+  if (!Array.isArray(a['stories'])) return null;
+  if (typeof a['verifier'] !== 'string') return null;
+  if (typeof a['at'] !== 'string') return null;
+  // Validate each story entry
+  const VALID_STORY_VERDICTS = ['APPROVE', 'REQUEST_CHANGES'];
+  for (const entry of a['stories'] as unknown[]) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null;
+    const e = entry as Record<string, unknown>;
+    if (typeof e['id'] !== 'string') return null;
+    if (!VALID_STORY_VERDICTS.includes(e['verdict'] as string)) return null;
+    if (!Array.isArray(e['evidence_refs'])) return null;
+  }
+  return obj as VerdictArtifact;
+}
+
 /**
  * The ONLY path to phase=complete. Gated: requires `objective_verdict=APPROVE` AND
- * completion-evidence present.
- * Returns false (no state change) when the gate is not satisfied. Succeeds even
+ * completion-evidence present (existing dual gate), PLUS artifact-backed per-story
+ * checks (T4 extension — D-11).
+ *
+ * Extended refusal branches (each independent):
+ *   1. Artifact absent or schema-invalid
+ *   2. Artifact references an unknown story id
+ *   3. Artifact missing an entry for any non-retired story (entries for retired ignored)
+ *   4. Any non-retired story entry non-APPROVE
+ *   5. Any non-retired story unconfirmed
+ *   6. Zero non-retired stories
+ *   7. Existing dual gate unmet (objective_verdict !== 'APPROVE' or empty evidence)
+ *
+ * Precedence rule (D-3): one non-APPROVE per-story entry blocks regardless of
+ * objective_verdict in state.
+ *
+ * Returns false (no state change) when any gate is not satisfied. Succeeds even
  * over a prior budget_limited (complete-wins, ADR-7).
  */
 export function requestComplete(sessionId: string): boolean {
@@ -602,6 +677,54 @@ export function requestComplete(sessionId: string): boolean {
   if (evidence.length === 0 || prior.objective_verdict !== 'APPROVE') {
     return false;
   }
+
+  // T4: Story-level artifact gate
+  const stories: Story[] = prior.stories ?? [];
+
+  // Gate 6: zero non-retired stories → refuse (completion structurally requires >=1)
+  const activeStories = stories.filter((s) => s.status !== 'retired');
+  if (activeStories.length === 0) {
+    return false;
+  }
+
+  // Gate 1: artifact must exist and be schema-valid
+  const artifact = readVerdictArtifact(sessionId);
+  if (artifact === null) {
+    return false;
+  }
+
+  // Gate 2: artifact must not reference unknown story ids
+  const knownIds = new Set(stories.map((s) => s.id));
+  for (const entry of artifact.stories) {
+    if (!knownIds.has(entry.id)) {
+      return false;
+    }
+  }
+
+  // Build a map from story id → artifact entry for O(1) lookup
+  const artifactById = new Map<string, ArtifactStoryEntry>();
+  for (const entry of artifact.stories) {
+    artifactById.set(entry.id, entry);
+  }
+
+  for (const story of activeStories) {
+    // Gate 5: non-retired story must be confirmed
+    if (story.status !== 'confirmed') {
+      return false;
+    }
+
+    // Gate 3: artifact must have an entry for every non-retired story
+    const entry = artifactById.get(story.id);
+    if (entry === undefined) {
+      return false;
+    }
+
+    // Gate 4 (+ precedence rule D-3): every non-retired story entry must be APPROVE
+    if (entry.verdict !== 'APPROVE') {
+      return false;
+    }
+  }
+
   mergeWrite(sessionId, { phase: 'complete', active: false });
   return true;
 }
