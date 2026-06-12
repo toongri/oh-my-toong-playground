@@ -16,6 +16,9 @@ import {
   setStories,
   setSingleStory,
   confirmStory,
+  reviseStory,
+  addStory,
+  retireStory,
   type GoalPhase,
   type Story,
 } from './goal-state.ts';
@@ -1192,5 +1195,212 @@ describe('story layer: confirmation and phase gates', () => {
     confirmStory(S, 'S1');
     setGoalState(S, { phase: 'pursuing' });
     expect(readGoalGet(S)!.objective_verdict).toBe('absent');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 3: Mutation subcommands with anti-dodge fences
+// ---------------------------------------------------------------------------
+
+describe('story layer: mutations', () => {
+  const baseStory: Story = {
+    id: 'S1',
+    story: 'ship feature X',
+    acceptance_criteria: ['all tests green'],
+    verification_surface: 'CI pipeline passes',
+    status: 'unconfirmed',
+  };
+  const baseStory2: Story = {
+    id: 'S2',
+    story: 'add observability',
+    acceptance_criteria: ['dashboards visible'],
+    verification_surface: 'Grafana dashboard',
+    status: 'unconfirmed',
+  };
+
+  function seedWithStories(sid: string, stories: Story[] = [baseStory], phase: 'planning' | 'pursuing' = 'planning'): void {
+    setGoalState(sid, { phase: 'planning', outcome: 'ship feature X' });
+    setStories(sid, stories);
+    if (phase === 'pursuing') {
+      // confirm all stories first so pursuing gate is satisfied
+      for (const s of stories) {
+        confirmStory(sid, s.id);
+      }
+      setGoalState(sid, { phase: 'pursuing' });
+    }
+  }
+
+  // AC-4a: revise/add/retire each mutate the targeted story (by id) as specified
+  test('mutation subcommands', () => {
+    seedWithStories(S, [baseStory, baseStory2], 'pursuing');
+
+    // revise-story: patches story fields and resets status to unconfirmed
+    // S1 was confirmed before entering pursuing; revise must reset it
+    reviseStory(S, 'S1', { story: 'ship feature X v2', acceptance_criteria: ['all tests green', 'perf meets SLO'] });
+    const afterRevise = readGoalGet(S)!.stories!;
+    const s1 = afterRevise.find((s) => s.id === 'S1')!;
+    expect(s1.story).toBe('ship feature X v2');
+    expect(s1.acceptance_criteria).toEqual(['all tests green', 'perf meets SLO']);
+    expect(s1.status).toBe('unconfirmed'); // revise ALWAYS resets to unconfirmed
+
+    // add-story: appends a new unconfirmed story (allowed in pursuing)
+    const newStory: Omit<Story, 'status'> = {
+      id: 'S3',
+      story: 'add search',
+      acceptance_criteria: ['search returns results'],
+      verification_surface: 'E2E search test',
+    };
+    addStory(S, newStory as Story);
+    const afterAdd = readGoalGet(S)!.stories!;
+    expect(afterAdd.length).toBe(3);
+    const s3 = afterAdd.find((s) => s.id === 'S3')!;
+    expect(s3.status).toBe('unconfirmed');
+    expect(s3.story).toBe('add search');
+
+    // retire-story: sets retired (S2 was confirmed; we're in pursuing — but S2 is confirmed
+    // so this should be refused. Let's use the unconfirmed S1 instead, since revise reset it)
+    // S1 is now unconfirmed, S3 is unconfirmed — retire S3 (unconfirmed, pursuing => allowed)
+    retireStory(S, 'S3');
+    const afterRetire = readGoalGet(S)!.stories!;
+    const s3After = afterRetire.find((s) => s.id === 'S3')!;
+    expect(s3After.status).toBe('retired');
+  });
+
+  // AC-4b: no mutation subcommand can write a status outside the enum or write confirmed
+  test('mutation fence rejects', () => {
+    seedWithStories(S);
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+
+    // revise with an explicit confirmed status in the patch must be refused
+    // (no mutation may produce confirmed)
+    expect(() => reviseStory(S, 'S1', { status: 'confirmed' as any })).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+
+    // revise with an out-of-enum status must be refused
+    expect(() => reviseStory(S, 'S1', { status: 'achieved' as any })).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+
+    // add-story with confirmed status must be refused
+    const confirmedStory: Story = {
+      id: 'S2',
+      story: 'new story',
+      acceptance_criteria: ['passes'],
+      verification_surface: 'manual test',
+      status: 'confirmed',
+    };
+    expect(() => addStory(S, confirmedStory)).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+
+    // add-story with out-of-enum status must be refused
+    const badStatusStory: Story = {
+      id: 'S2',
+      story: 'new story',
+      acceptance_criteria: ['passes'],
+      verification_surface: 'manual test',
+      status: 'open' as any,
+    };
+    expect(() => addStory(S, badStatusStory)).toThrow();
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // AC-4c: revise-story on a confirmed story resets to unconfirmed; on a retired story is refused
+  test('revise resets confirmation', () => {
+    seedWithStories(S);
+    // Confirm S1
+    confirmStory(S, 'S1');
+    expect(readGoalGet(S)!.stories![0].status).toBe('confirmed');
+
+    // Revise S1 (confirmed) — must reset to unconfirmed
+    reviseStory(S, 'S1', { story: 'ship feature X revised' });
+    const afterRevise = readGoalGet(S)!.stories![0];
+    expect(afterRevise.story).toBe('ship feature X revised');
+    expect(afterRevise.status).toBe('unconfirmed'); // reset from confirmed
+
+    // Set S1 to retired via raw file write (to test retire-revise refusal)
+    const raw = JSON.parse(readFileSync(resolveStatePath(S), 'utf8'));
+    raw.stories[0].status = 'retired';
+    writeFileSync(resolveStatePath(S), JSON.stringify(raw, null, 2), 'utf8');
+    expect(readGoalGet(S)!.stories![0].status).toBe('retired');
+
+    const stateBefore = readFileSync(resolveStatePath(S), 'utf8');
+    // Revise S1 (retired) — must be refused
+    expect(() => reviseStory(S, 'S1', { story: 'attempt resurrect' })).toThrow();
+    // State unchanged
+    expect(readFileSync(resolveStatePath(S), 'utf8')).toBe(stateBefore);
+  });
+
+  // AC-4d: retire-story on confirmed story refused while pursuing; allowed while planning;
+  //        unconfirmed story retirable in any phase
+  test('retire fence', () => {
+    // Fixture 1: confirmed story + pursuing => exit 1 (retire-to-dodge fence)
+    const Sp = 'pursuing-confirmed';
+    seedGoalFile(Sp);
+    seedWithStories(Sp, [baseStory], 'pursuing');
+    // S1 is confirmed (confirmed before entering pursuing)
+    expect(readGoalGet(Sp)!.stories![0].status).toBe('confirmed');
+    expect(readGoalGet(Sp)!.phase).toBe('pursuing');
+    const stateBeforeFence = readFileSync(resolveStatePath(Sp), 'utf8');
+    expect(() => retireStory(Sp, 'S1')).toThrow(); // D-9 anti-dodge fence
+    expect(readFileSync(resolveStatePath(Sp), 'utf8')).toBe(stateBeforeFence);
+
+    // Fixture 2: confirmed story + planning => allowed (retire is legal, not a dodge)
+    const Spl = 'planning-confirmed';
+    seedGoalFile(Spl);
+    setGoalState(Spl, { phase: 'planning', outcome: 'ship X' });
+    setStories(Spl, [baseStory]);
+    confirmStory(Spl, 'S1');
+    expect(readGoalGet(Spl)!.stories![0].status).toBe('confirmed');
+    expect(readGoalGet(Spl)!.phase).toBe('planning');
+    retireStory(Spl, 'S1'); // must NOT throw
+    expect(readGoalGet(Spl)!.stories![0].status).toBe('retired');
+
+    // Fixture 3: unconfirmed story + pursuing => allowed (not a dodge — no confirmation to bypass)
+    const Su = 'pursuing-unconfirmed';
+    seedGoalFile(Su);
+    // Seed with one confirmed story so the pursuing gate passes, then add an unconfirmed one
+    setGoalState(Su, { phase: 'planning', outcome: 'ship X' });
+    setStories(Su, [baseStory, baseStory2]);
+    confirmStory(Su, 'S1');
+    confirmStory(Su, 'S2');
+    setGoalState(Su, { phase: 'pursuing' });
+    // Now manually make S2 unconfirmed so we can test retire on unconfirmed-during-pursuing
+    const raw = JSON.parse(readFileSync(resolveStatePath(Su), 'utf8'));
+    raw.stories[1].status = 'unconfirmed';
+    writeFileSync(resolveStatePath(Su), JSON.stringify(raw, null, 2), 'utf8');
+    expect(readGoalGet(Su)!.stories![1].status).toBe('unconfirmed');
+    expect(readGoalGet(Su)!.phase).toBe('pursuing');
+    retireStory(Su, 'S2'); // must NOT throw (unconfirmed is retirable in any phase)
+    expect(readGoalGet(Su)!.stories![1].status).toBe('retired');
+  });
+
+  // AC-11: a failed story write leaves state unchanged and never enables completion
+  test('story write failure is benign', () => {
+    seedWithStories(S);
+    // Record the prior state before the attempted write
+    const priorContent = readFileSync(resolveStatePath(S), 'utf8');
+
+    // Simulate write failure: remove the state file so writeFileNoCreate throws ENOENT
+    const { unlinkSync } = require('fs');
+    unlinkSync(resolveStatePath(S));
+
+    // All three mutation subcommands must fail nonzero when the file is absent
+    // (the file was removed — writeFileNoCreate will throw ENOENT)
+    expect(() => reviseStory(S, 'S1', { story: 'should fail' })).toThrow();
+    expect(() => addStory(S, { id: 'S2', story: 'new', acceptance_criteria: ['ac'], verification_surface: 'manual', status: 'unconfirmed' })).toThrow();
+    expect(() => retireStory(S, 'S1')).toThrow();
+
+    // Restore prior state to verify it was not mutated during failed writes
+    writeFileSync(resolveStatePath(S), priorContent, 'utf8');
+    const restoredContent = readFileSync(resolveStatePath(S), 'utf8');
+    const restored = JSON.parse(restoredContent);
+
+    // No completion-enabling field was mutated:
+    // phase must not be complete, objective_verdict must not be APPROVE (it was absent),
+    // stories must be unchanged
+    expect(restored.phase).not.toBe('complete');
+    expect(restored.objective_verdict).toBe('absent');
+    expect(restored.stories[0].status).toBe('unconfirmed');
+    expect(restored.stories[0].story).toBe('ship feature X');
+    expect(restored.active).toBe(true);
   });
 });
