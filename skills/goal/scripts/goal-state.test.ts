@@ -1656,4 +1656,70 @@ describe('story layer: request-complete verdict gate (T4)', () => {
     expect(requestComplete(S)).toBe(false);
     expect(rawState().phase).not.toBe('complete');
   });
+
+  // 중복 story id 거부: [RC, APPROVE] 순서 — last-wins Map 방어
+  test('아티팩트에 중복 story id가 있으면 거부한다 (RC→APPROVE 순서)', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'REQUEST_CHANGES', evidence_refs: [] },  // 첫 번째
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },    // 중복 — 현재 last-wins
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // 중복 story id 거부: [APPROVE, RC] 순서 — 양방향 검증
+  test('아티팩트에 중복 story id가 있으면 거부한다 (APPROVE→RC 순서)', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'APPROVE',
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },    // 첫 번째
+        { id: 'S1', verdict: 'REQUEST_CHANGES', evidence_refs: [] },  // 중복
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // 아티팩트 objective_verdict 비-APPROVE 거부: REQUEST_CHANGES
+  test('아티팩트 objective_verdict가 REQUEST_CHANGES면 스토리·state 전부 APPROVE여도 거부한다', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'REQUEST_CHANGES',  // state는 APPROVE, 스토리도 전부 APPROVE
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+
+  // 아티팩트 objective_verdict 비-APPROVE 거부: COMMENT
+  test('아티팩트 objective_verdict가 COMMENT면 스토리·state 전부 APPROVE여도 거부한다', () => {
+    buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, {
+      objective_verdict: 'COMMENT',  // state는 APPROVE, 스토리도 전부 APPROVE
+      stories: [
+        { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+        { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
+      ],
+      verifier: 'argus',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
 });
