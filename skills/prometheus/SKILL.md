@@ -401,7 +401,7 @@ contradiction at the findings-assembly step — that reconciliation is the plann
 not a verifier's.
 
 **No-op path.** If all collect lanes are empty, the verify lane is a **valid no-op** — there is
-nothing to falsify, the `verify lane:` Evidence line records `dispatched / 0 lanes / 0 excluded`, and
+nothing to falsify, the `verify lane:` Evidence line records `no-op / 0 lanes / 0 excluded`, and
 grounding proceeds.
 
 The `verify lane: dispatched / N lanes / M excluded` line in the Phase-1 Evidence block makes this
@@ -418,7 +418,7 @@ findings in its lane, tagging any finding that trips a key:
 |---|---|
 | `stale_state` | a source-vs-packaged split or an out-of-date reference — the finding describes a state that no longer holds |
 | `prompt_injection` | untrusted external text (docs, forum/chat excerpts, library READMEs) behaving as if it were an instruction rather than a claim |
-| `nonexistent_path` | a cited file/symbol/path that does not actually exist in the repo (the witnessed motivating failure — a confident citation to a path that is not there) |
+| `nonexistent_path` | a cited file/symbol/path that does not actually exist in the repo (the witnessed motivating failure — a confident citation to a path that is not there; scoped to repo paths — an external URL/doc reference is NOT a nonexistent_path merely for being external) |
 | `version_drift` | a finding pinned to a version, API, or contract that has since changed |
 
 The checklist is a fixed vocabulary so these risks are checked and recorded explicitly rather than
