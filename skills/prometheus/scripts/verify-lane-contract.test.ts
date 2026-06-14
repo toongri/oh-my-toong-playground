@@ -20,6 +20,9 @@ const skillContent = readFileSync(skillPath, 'utf8');
 const interviewPath = join(import.meta.dir, '..', 'interview.md');
 const interviewContent = readFileSync(interviewPath, 'utf8');
 
+const reviewPipelinePath = join(import.meta.dir, '..', 'review-pipeline.md');
+const reviewPipelineContent = readFileSync(reviewPipelinePath, 'utf8');
+
 // ---------------------------------------------------------------------------
 // SKILL.md PRESENCE — new verify-lane vocabulary that MUST appear.
 // Additive tokens (fan-out, falsifying verifier, the 4 keys, evidence-anchored
@@ -36,8 +39,8 @@ describe('SKILL.md presence — verify-lane tokens', () => {
     expect(skillContent).toContain('falsifying verifier');
   });
 
-  it('P3: verify lane: Evidence-block line (replaces success-output checklist)', () => {
-    expect(skillContent).toContain('verify lane:');
+  it('P3: verify lane: Evidence-block list-marker line (replaces success-output checklist)', () => {
+    expect(skillContent).toContain('- verify lane: dispatched / N lanes / M excluded');
   });
 
   it('P4: stale_state key (additive)', () => {
@@ -67,6 +70,14 @@ describe('SKILL.md presence — verify-lane tokens', () => {
   it('P10: evidence-anchored question (additive)', () => {
     expect(skillContent).toContain('evidence-anchored question');
   });
+
+  it('C6-P: verify lane no-op form (replaces old dispatched/0/0 form)', () => {
+    expect(skillContent).toContain('no-op / 0 lanes / 0 excluded');
+  });
+
+  it('C12-P: nonexistent_path scoped to repo paths (additive scope clarification)', () => {
+    expect(skillContent).toContain('scoped to repo paths');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -95,6 +106,10 @@ describe('SKILL.md absence — replaced verify-lane tokens', () => {
       'librarian dispatched THIS session (Architecture only)',
     );
   });
+
+  it('C6-A: old verify lane dispatched/0/0 form is gone', () => {
+    expect(skillContent).not.toContain('verify lane: dispatched / 0 lanes / 0 excluded');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -118,6 +133,24 @@ describe('SKILL.md survival — untouched-section tokens', () => {
   it('S3: Review Pipeline contract heading survives', () => {
     expect(skillContent).toContain('## Review Pipeline (Mandatory Contract)');
   });
+
+  it('S3b: Review Pipeline body — only Metis/Momus emit verdicts (distinctive section-body phrase)', () => {
+    expect(skillContent).toContain('Only Metis and Momus emit verdicts and gate the pipeline.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// review-pipeline.md SURVIVAL — the file must exist with its structural content
+// intact. The heading check above only guards SKILL.md's inline summary; this
+// guards the lookup file itself.
+// ---------------------------------------------------------------------------
+
+describe('review-pipeline.md survival — file content', () => {
+  it('C15: review-pipeline.md carries the Stage A / Stage B / Stage C lookup structure', () => {
+    expect(reviewPipelineContent).toContain(
+      'Stage A HTML render, Stage B Decision Matrix computation',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -138,11 +171,27 @@ describe('interview.md presence — verify-lane templates', () => {
   it('I4: verifier template carries the schema confidence dimension (replaces the ladder verdict line)', () => {
     expect(interviewContent).toContain('confidence');
   });
+
+  it('C12-P: {LANE_EVIDENCE} placeholder present in verifier dispatch template', () => {
+    expect(interviewContent).toContain('{LANE_EVIDENCE}');
+  });
+
+  it('C11-P: reference to SKILL.md Exclusion rule present (replaces restated prose)', () => {
+    expect(interviewContent).toContain('Exclusion rule');
+  });
 });
 
 describe('interview.md absence — SKILL.md-only token', () => {
   it('I3: evidence-anchored question does not leak into interview.md', () => {
     expect(interviewContent).not.toContain('evidence-anchored question');
+  });
+
+  it('C12-A: old {LANE_FILES} placeholder is gone', () => {
+    expect(interviewContent).not.toContain('{LANE_FILES}');
+  });
+
+  it('C11-A: old restated keep corroborated lanes prose is gone', () => {
+    expect(interviewContent).not.toContain('keep `corroborated` lanes');
   });
 });
 
