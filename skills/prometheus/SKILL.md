@@ -340,7 +340,7 @@ Phase 1 ritual (context loading + explore + librarian) is invisible by default �
 ## Phase 1 Evidence
 - Context files loaded: <list each Read path, or "missing — skipped per Graceful skip rule">
 - explore dispatched THIS session: <Agent invocation reference, or "N/A — intent is Trivial/Scoped without explore need">
-- librarian dispatched THIS session (Architecture only): <Agent invocation reference, or "N/A — intent is not Architecture">
+- librarian dispatched THIS session: <Agent invocation reference, or "N/A — Architecture, or Complex with design surface, not present; intent is Trivial/Scoped, or a purely mechanical refactor">
 - verify lane: dispatched / N lanes / M excluded <or "N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)">
 - Results received and assimilated: <Y/N — Y requires both summary read and key findings noted>
 ```
@@ -595,7 +595,7 @@ The Clearance Checklist itself remains internal — only ambiguity scores are su
 |---|---|
 | **explore** | ANY codebase fact-finding (file paths, patterns, current implementation) |
 | **oracle** | Feasibility check, risk assessment, alternative evaluation, dependency mapping spanning 3+ modules, design decisions affecting performance/security/scalability |
-| **librarian** | New library introduction, major version upgrade, security-related technology choice — external authoritative documentation |
+| **librarian** | **librarian default lane** — Complex fires librarian by default for best-practice / prior-art research on the design problem (external authoritative documentation, production patterns, open-source implementations); skip it **only** for a `purely mechanical refactor` (rename / extract / move with zero design or external surface). Architecture fires librarian unconditionally (see the `Architecture` row above). |
 
 Briefly announce "Consulting Oracle for [reason]" before invocation.
 
