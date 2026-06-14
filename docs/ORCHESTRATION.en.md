@@ -69,10 +69,10 @@ flowchart TD
     subgraph Execution Phase
         PlanFile --> Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
-        Junior -->|verify-gated| QA[argus<br/>Quality Assurance]
-        Junior -->|lean path| Done((Done))
+        Junior --> Done((Done))
+        Sisyphus -->|verify task| QA[argus<br/>Quality Assurance]
         QA -->|Pass| Done
-        QA -->|Fail| Junior
+        QA -->|REQUEST_CHANGES| Junior
     end
 ```
 
@@ -99,7 +99,7 @@ flowchart TD
 
 - **Role**: Execution and delegation
 - **Constraint**: **NEVER works alone**. ALL code changes = DELEGATE to sisyphus-junior.
-- **Verification**: argus is a conditional delegate — invoked only when the task is verify-type or the plan/objective specifies verification. An implement task completes on sisyphus-junior's report.
+- **Verification**: argus handles verify tasks (a PASS/FAIL verdict, routed directly, skip junior). An implement task completes on sisyphus-junior's report — argus does not run on implement tasks.
 
 ### sisyphus-junior (The Implementer)
 
@@ -140,7 +140,7 @@ With a plan ready, use `/sisyphus`:
 
 1. **Task Creation**: Breaks plan into TaskCreate items
 2. **Delegation**: Assigns tasks to sisyphus-junior
-3. **Quality Assurance**: argus validates verify-gated completions — invoked only when the task is verify-type or the plan/objective specifies verification; otherwise the implement task completes on sisyphus-junior's report
+3. **Quality Assurance**: a verify task routes to argus directly (skip junior) for a PASS/FAIL verdict; implement tasks complete on sisyphus-junior's report (no argus)
 4. **Iteration**: Continues until all tasks pass review
 
 ---

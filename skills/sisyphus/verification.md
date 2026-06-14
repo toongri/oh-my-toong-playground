@@ -7,7 +7,7 @@ Verification flow, Evidence Audit Gate, and QA REQUEST composition.
 ```dot
 digraph verification_flow {
     rankdir=LR;
-    "junior done" [shape=ellipse];
+    "verify task" [shape=ellipse];
     "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
     "verdict?" [shape=diamond];
     "evidence audit" [shape=box, style=filled, fillcolor=orange, fontcolor=white];
@@ -18,42 +18,40 @@ digraph verification_flow {
     "retries < 3?" [shape=diamond];
     "interview user" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
     "Oracle diagnosis" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
-    "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "complete" [shape=box, style=filled, fillcolor=green];
     "fix + retry" [shape=box];
 
-    "junior done" -> "argus" -> "verdict?";
+    "verify task" -> "argus" -> "verdict?";
     "verdict?" -> "Oracle diagnosis" [label="REQUEST_CHANGES"];
     "Oracle diagnosis" -> "fix + retry";
     "verdict?" -> "evidence audit" [label="APPROVE/COMMENT"];
     "evidence audit" -> "evidence OK?";
-    "evidence OK?" -> "mnemosyne" [label="yes"];
+    "evidence OK?" -> "complete" [label="yes"];
     "evidence OK?" -> "re-invoke argus" [label="no (gap)"];
     "re-invoke argus" -> "new verdict?";
     "new verdict?" -> "Oracle diagnosis" [label="REQUEST_CHANGES"];
     "new verdict?" -> "still gap?" [label="APPROVE/COMMENT"];
-    "still gap?" -> "mnemosyne" [label="no"];
+    "still gap?" -> "complete" [label="no"];
     "still gap?" -> "retries < 3?" [label="yes"];
     "retries < 3?" -> "re-invoke argus" [label="yes"];
     "retries < 3?" -> "interview user" [label="no (exhausted)"];
-    "mnemosyne" -> "complete";
     "fix + retry" -> "argus";
     "Mark aborted" [shape=box, style=filled, fillcolor=gray];
 
     "interview user" -> "fix + retry" [label="user: retry"];
-    "interview user" -> "mnemosyne" [label="user: accept gaps"];
+    "interview user" -> "complete" [label="user: accept gaps"];
     "interview user" -> "Mark aborted" [label="user: abort"];
 }
 ```
 
-1. **Invoke argus** — when the task is verify-type OR the plan/objective specifies verification; on the lean path (implement task, no specified verification) mnemosyne fires after junior completion and steps 2–6 below are skipped
+1. **Invoke argus** — on a verify task (deliverable = PASS/FAIL verdict; routed argus-direct, skip junior). Implement tasks do NOT invoke argus; they complete on junior's report and mnemosyne commits — steps 2–6 below apply only to verify tasks.
 2. If APPROVE/COMMENT → **Run Evidence Audit Gate** before proceeding
 3. If evidence gap → re-invoke argus (up to 3x; interview user if exhausted)
-4. If evidence OK → **Invoke mnemosyne** to commit
+4. If evidence OK → **mark the verify task complete** (verify tasks do not commit)
 5. If REQUEST_CHANGES → oracle diagnosis → fix task including oracle findings → re-delegate to sisyphus-junior
 6. **No retry limit on fix cycle** — Continue until argus passes
 
-> **When argus runs (steps 2–6 above)**: the Evidence Audit Gate body below applies in full. On the lean path (step 1 condition not met), skip directly to mnemosyne after junior completes.
+> **When argus runs (a verify task)**: the Evidence Audit Gate body below applies in full. Implement tasks skip this file entirely — junior completes, mnemosyne commits.
 
 ---
 
@@ -141,7 +139,7 @@ After the user responds to the AskUserQuestion:
 | User Choice | Sisyphus Action |
 |-------------|-----------------|
 | **Retry** | Re-invoke argus from scratch with the original QA REQUEST (retry counter resets) |
-| **Accept gaps** | Accept current verdict despite missing evidence. Proceed to mnemosyne (if code changes exist) → mark completed |
+| **Accept gaps** | Accept current verdict despite missing evidence. Proceed to mark the verify task completed. |
 | **Abort** | Skip this task. Mark as aborted, report situation to user, proceed to next task |
 
 ---

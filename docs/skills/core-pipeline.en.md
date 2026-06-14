@@ -140,11 +140,12 @@ flowchart TB
 
     Tasks --> Loop{Pending<br/>tasks?}
     Loop -->|No| Done([Done])
-    Loop -->|Yes| Delegate[Delegate to<br/>sisyphus-junior]
-    Delegate --> Ignore["Conditional argus verification"]
-    Ignore --> Review[Invoke argus]
+    Loop -->|Yes| Route{Task type?}
+    Route -->|implement| Delegate[Delegate to<br/>sisyphus-junior]
+    Delegate --> Complete[Mark complete]
+    Route -->|verify| Review[Invoke argus]
     Review --> Pass{Pass?}
-    Pass -->|Yes| Complete[Mark complete]
+    Pass -->|Yes| Complete
     Pass -->|No| Fix[Create fix task]
     Fix --> Delegate
     Complete --> Loop
@@ -152,8 +153,8 @@ flowchart TB
 
 **Verification protocol**:
 
-- **Conditional verification**: sisyphus-junior's implementation completes on junior's report. argus is invoked conditionally — only when the task is verify-type or the plan/objective specifies verification.
-- **Conditional review**: when argus runs, it proceeds through the Evidence Audit Gate before handing off to mnemosyne.
+- **Verification**: an implement task completes on sisyphus-junior's report (no argus). When verification is needed, it is a separate verify task routed directly to argus.
+- **Evidence Audit Gate**: when argus runs (a verify task), it proceeds through the Evidence Audit Gate (a verify task changes no files, so it does not commit). Commits are performed by mnemosyne after junior completes an implement task.
 - **No retry limit**: it continues until argus passes.
 - **Persistence**: the user cannot interrupt the process to stop it midway.
 
