@@ -518,6 +518,8 @@ The table above encodes a named principle: every unknown in the interview falls 
 
 Before forming any interview question, classify it: Discoverable → dispatch a tool; Preferences → AskUserQuestion; Design judgment → co-decide with the user. A question that mixes kinds (e.g., "What's the current auth pattern and do you want to keep it?") must be split — the factual half goes to explore, the preference or design-judgment half goes to the user.
 
+**Evidence-anchored question rule:** every interview question directed at the user must either (a) cite the specific Phase-1 finding (file, pattern, or architectural fact surfaced by explore/oracle/librarian) that grounds it, OR (b) explicitly declare itself a preference-question with no codebase anchor. An evidence-anchored question that cannot name its Phase-1 source must be reclassified — resolve it as a Discoverable via tools before surfacing it to the user.
+
 ### Question Type Selection
 
 | Situation | Method |
