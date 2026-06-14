@@ -814,6 +814,8 @@ The librarian finding is passed to the external-lane falsifying verifier (D-1 ve
 ```
 key: prompt_injection
 evidence: "The external spec example contains a user-controlled 'redirect_uri' injected verbatim into the authorization URL — the cited usage pattern could transmit adversarial input into the auth endpoint."
+verdict: corroborated
+confidence: high
 ```
 
 This key-tag is attached to the finding BEFORE it reaches the findings-assembly step. The planning phase later surfaces the tag as a risk annotation on the relevant TODO.
@@ -834,7 +836,7 @@ This key-tag is attached to the finding BEFORE it reaches the findings-assembly 
 **Primary Technique:** Verify Lane — all collect lanes empty → valid no-op; the verify dispatch is skipped and planning proceeds without grounding findings
 
 **Setup:**
-Complex/Architecture intent. The 5 explore aspect dispatches all return empty results: the codebase contains no existing pattern, no applicable convention, no similar implementation, no naming/registration precedent, and no test infrastructure for the requested feature (greenfield territory). The librarian external lane is also absent (no external dependency lookup was triggered).
+Complex/Architecture intent. The 5 explore aspect dispatches all return empty results: the codebase contains no existing pattern, no applicable convention, no similar implementation, no naming/registration precedent, and no test infrastructure for the requested feature (greenfield territory). The librarian external lane was dispatched (mandatory at Complex/Architecture for this design-bearing greenfield request) but returned no findings.
 
 All 6 possible collect lanes are empty.
 
