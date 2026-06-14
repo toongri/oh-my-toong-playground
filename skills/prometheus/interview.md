@@ -124,8 +124,9 @@ Collect the five results as five named lanes before moving to the verify step.
 
 After collecting all lanes, dispatch one **falsifying verifier** subagent per non-empty lane.
 Mirrors the code-review per-candidate isolation model: each verifier reads the actual files and
-returns a single verdict against the SKILL.md schema — `corroborated` (finding stands) or
-`refuted` (finding does not hold). This is a deliberate divergence from the Review Pipeline's
+returns a **per-finding** verdict against the SKILL.md schema — each finding in the lane gets one
+record whose verdict is `corroborated` (finding stands) or `refuted` (finding does not hold).
+This is a deliberate divergence from the Review Pipeline's
 CONFIRMED/PLAUSIBLE/REFUTED ladder: only the dispatch mechanics are reused, NOT the verdict
 vocabulary. Verifiers are foreground and parallel; dispatch all non-empty lanes in ONE response.
 
