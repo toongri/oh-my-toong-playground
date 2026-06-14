@@ -133,7 +133,7 @@ Commit changes from: [completed task subject]
 - Subject: [task subject]
 - Description: [task description]
 - Changed files:
-  - [explicit file paths from argus review]
+  - [explicit file paths — from junior's report / git diff]
 ```
 
 ---
