@@ -182,7 +182,7 @@ digraph task_loop {
     "sisyphus-junior" -> "code changes?" [label="junior done"];
     "Pass?" -> "evidence audit\n(see verification.md)" [label="APPROVE/COMMENT"];
     "Pass?" -> "Oracle diagnosis" [label="REQUEST_CHANGES"];
-    "evidence audit\n(see verification.md)" -> "code changes?";
+    "evidence audit\n(see verification.md)" -> "Mark completed";
     "code changes?" -> "mnemosyne" [label="yes"];
     "code changes?" -> "Mark completed" [label="no"];
     "mnemosyne" -> "Mark completed";
