@@ -80,8 +80,11 @@ is_state_live() {
 
   if [ -z "$touched_epoch" ]; then
     # No parseable timestamp — fall back to file mtime.
-    # BSD stat (macOS): stat -f %m; GNU stat (Linux): stat -c %Y.
-    touched_epoch=$(stat -f %m "$file" 2>/dev/null || stat -c %Y "$file" 2>/dev/null || true)
+    # GNU form (-c %Y) first: GNU `stat -f` means --file-system and prints a
+    # non-numeric block to stdout for the file operand, which would defeat the
+    # fail-safe below by leaving touched_epoch as non-empty garbage; BSD `stat -c`
+    # fails cleanly with no stdout. GNU-first is portable; BSD-first breaks on Linux.
+    touched_epoch=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null || true)
   fi
 
   if [ -z "$touched_epoch" ]; then

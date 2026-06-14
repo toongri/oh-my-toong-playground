@@ -8,9 +8,11 @@ INPUT=$(cat)
 # Get session ID and directory
 SESSION_ID=""
 DIRECTORY=""
+SOURCE=""
 if command -v jq &> /dev/null; then
   SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null)
   DIRECTORY=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null)
+  SOURCE=$(echo "$INPUT" | jq -r '.source // ""' 2>/dev/null)
 fi
 
 if [ -z "$DIRECTORY" ] || [ "$DIRECTORY" = "null" ]; then
@@ -69,6 +71,7 @@ if [ -n "$CLAUDE_ENV_FILE" ]; then
 fi
 
 MESSAGES=""
+HANDOFF=""
 
 # GC: reap dead state files for the 3 managed prefixes.
 # Liveness defined by hooks/lib/state-liveness.sh (ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m).
@@ -85,6 +88,33 @@ for state_file in \
   fi
   if ! is_state_live "$state_file" "$GC_NOW"; then
     rm -f "$state_file"
+  fi
+done
+
+# GC arm: reap orphaned compaction handoffs by mtime (self-contained).
+# A .md handoff has no JSON liveness fields, so it cannot be classified by
+# is_state_live / is_current_session (which strip .json + match *-state- prefixes).
+# This arm extracts the sid from the basename (dash-safe: prefix + suffix strip,
+# NOT a last-dash split), skips the current session via its OWN guard, and reaps
+# any handoff older than HANDOFF_ORPHAN_TTL_SECS. is_current_session is NOT called.
+# The TTL mirrors the terminal grace period; sourced from the state-liveness SSOT
+# (TERMINAL_TTL) rather than re-stating the literal, to avoid value drift.
+HANDOFF_ORPHAN_TTL_SECS="$TERMINAL_TTL"
+for handoff_file in "$OMT_DIR"/handoff-*.md; do
+  [ -e "$handoff_file" ] || continue
+  handoff_base="${handoff_file##*/}"
+  handoff_sid="${handoff_base#handoff-}"
+  handoff_sid="${handoff_sid%.md}"
+  [ "$handoff_sid" = "$SESSION_ID" ] && continue
+  # GNU form (-c %Y) first: GNU `stat -f` means --file-system and prints a
+  # non-numeric block to stdout for the file operand, which would poison the
+  # arithmetic below; BSD `stat -c` instead fails cleanly with no stdout. So the
+  # GNU-first order is portable, while BSD-first would capture garbage on Linux.
+  handoff_mtime=$(stat -c %Y "$handoff_file" 2>/dev/null || stat -f %m "$handoff_file" 2>/dev/null || true)
+  [ -n "$handoff_mtime" ] || continue
+  handoff_age=$(( GC_NOW - handoff_mtime ))
+  if [ "$handoff_age" -gt "$HANDOFF_ORPHAN_TTL_SECS" ]; then
+    rm -f "$handoff_file"
   fi
 done
 
@@ -194,6 +224,18 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
   fi
 fi
 
+# Compaction handoff (source==compact): read the current-sid handoff into a
+# SEPARATE variable (NOT MESSAGES) so the surgical jq -Rs encoder can handle the
+# untrusted summarizer prose on its own, leaving the restore sed path untouched.
+# Delete-on-consume: the handoff is a one-shot baton.
+if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
+  HANDOFF_FILE="$OMT_DIR/handoff-${SESSION_ID}.md"
+  if [ -f "$HANDOFF_FILE" ]; then
+    HANDOFF=$(cat "$HANDOFF_FILE" 2>/dev/null)
+    rm -f "$HANDOFF_FILE"
+  fi
+fi
+
 # Check for incomplete todos in global directory
 INCOMPLETE_COUNT=0
 TODOS_DIR="$HOME/.claude/todos"
@@ -222,11 +264,15 @@ if [ "$INCOMPLETE_COUNT" -gt 0 ]; then
   MESSAGES="$MESSAGES<session-restore>\n\n[PENDING TASKS DETECTED]\n\nYou have $INCOMPLETE_COUNT incomplete tasks from a previous session.\nPlease continue working on these tasks.\n\n</session-restore>\n\n---\n\n"
 fi
 
-# Output message if we have any
-if [ -n "$MESSAGES" ]; then
+# Output message if we have any restore content OR a consumed handoff.
+if [ -n "$MESSAGES" ] || [ -n "$HANDOFF" ]; then
   # Escape for JSON
   MESSAGES_ESCAPED=$(echo "$MESSAGES" | sed 's/"/\\"/g')
-  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$MESSAGES_ESCAPED\"}}"
+  # Surgically encode the untrusted handoff fragment to a JSON-safe string body:
+  # jq -Rs emits a quoted JSON string; strip the outer quotes so it concatenates
+  # onto the sed-escaped restore body inside the single additionalContext value.
+  HANDOFF_ESCAPED=$(printf '%s' "$HANDOFF" | jq -Rs . | sed '1s/^"//; $s/"$//')
+  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$MESSAGES_ESCAPED$HANDOFF_ESCAPED\"}}"
 else
   echo '{"continue": true}'
 fi

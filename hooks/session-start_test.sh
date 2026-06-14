@@ -900,6 +900,372 @@ EOF
 }
 
 # =============================================================================
+# Tests: T2 — source==compact handoff injection branch + surgical jq -Rs encoder
+# =============================================================================
+
+# AC-T2.1: source==compact + adversarial handoff (quote, backslash, real newline,
+# tab, \x01 control char) → stdout is valid JSON and additionalContext round-trips
+# the handoff text.
+test_session_start_compact_handoff_adversarial_valid_json() {
+    local sid="test-compact-adversarial"
+
+    # Build a handoff with every hazardous byte: " \ <real newline> <tab> <\x01>
+    printf 'HANDOFF_START quote=" back=\\ tab=\tnext-line\nctrl=\001 HANDOFF_END' \
+        > "$TEST_OMT_DIR/handoff-${sid}.md"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # (a) stdout must be valid JSON
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: hook stdout is not valid JSON for adversarial handoff"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    # (b) the parsed additionalContext must contain the handoff text round-tripped
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx" | grep -qF 'HANDOFF_START'; then
+        echo "ASSERTION FAILED: additionalContext should contain handoff head HANDOFF_START"
+        echo "  additionalContext: ${ctx:0:500}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF 'HANDOFF_END'; then
+        echo "ASSERTION FAILED: additionalContext should contain handoff tail HANDOFF_END"
+        echo "  additionalContext: ${ctx:0:500}"
+        return 1
+    fi
+    # The literal quote/backslash must survive the round-trip
+    if ! echo "$ctx" | grep -qF 'quote="'; then
+        echo "ASSERTION FAILED: additionalContext should preserve the literal quote"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF 'back=\'; then
+        echo "ASSERTION FAILED: additionalContext should preserve the literal backslash"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.2 (regression): handoff present AND a prometheus restore present →
+# BOTH appear in additionalContext; stdout valid JSON; [PROMETHEUS RESTORED]
+# marker is byte-present.
+test_session_start_compact_handoff_and_prometheus_restore_coexist() {
+    local sid="test-compact-coexist"
+
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "phase": "STAGE_B",
+  "plan_path": "",
+  "resume_summary": "Restore body present alongside handoff."
+}
+EOF
+
+    printf 'HANDOFF_COEXIST_BODY' > "$TEST_OMT_DIR/handoff-${sid}.md"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # stdout must be valid JSON
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: combined restore+handoff stdout is not valid JSON"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    # The restore marker must be byte-present in the raw stdout
+    assert_output_contains "$output" "\[PROMETHEUS RESTORED\]" "combined output should keep the restore marker" || return 1
+
+    # Both restore content and handoff content must be in the parsed additionalContext
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx" | grep -qF 'PROMETHEUS RESTORED'; then
+        echo "ASSERTION FAILED: additionalContext should contain the prometheus restore"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF 'HANDOFF_COEXIST_BODY'; then
+        echo "ASSERTION FAILED: additionalContext should contain the handoff body"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.3: after a compact start, the handoff file is deleted (delete-on-consume).
+test_session_start_compact_handoff_deleted_on_consume() {
+    local sid="test-compact-consume"
+    local handoff_file="$TEST_OMT_DIR/handoff-${sid}.md"
+
+    printf 'CONSUME_ME' > "$handoff_file"
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$handoff_file" ]; then
+        echo "ASSERTION FAILED: handoff file should be deleted on consume but still exists"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.4: source ∈ {startup,resume,clear} → handoff is NOT read; stdout is
+# byte-identical to the no-handoff baseline run for the same state fixtures.
+test_session_start_non_compact_source_ignores_handoff() {
+    local sid="test-noncompact-source"
+
+    # A prometheus restore fixture so there is non-empty MESSAGES output to compare.
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "phase": "STAGE_B",
+  "plan_path": "",
+  "resume_summary": "Baseline restore body."
+}
+EOF
+
+    # Baseline: no handoff file present, source=startup.
+    local baseline
+    baseline=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "startup"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # Now plant a handoff file that MUST be ignored by non-compact sources.
+    printf 'SHOULD_NOT_APPEAR_NONCOMPACT' > "$TEST_OMT_DIR/handoff-${sid}.md"
+
+    local src
+    for src in startup resume clear; do
+        local out
+        out=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "'"$src"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+        # Handoff content must never appear
+        if echo "$out" | grep -qF 'SHOULD_NOT_APPEAR_NONCOMPACT'; then
+            echo "ASSERTION FAILED: source=$src must NOT read the handoff file"
+            echo "  Output: ${out:0:500}"
+            return 1
+        fi
+
+        # Byte-identical to the no-handoff baseline
+        if [ "$out" != "$baseline" ]; then
+            echo "ASSERTION FAILED: source=$src output should be byte-identical to no-handoff baseline"
+            echo "  baseline: ${baseline:0:500}"
+            echo "  got:      ${out:0:500}"
+            return 1
+        fi
+    done
+
+    # The handoff file must remain untouched (non-compact sources never consume it)
+    if [ ! -f "$TEST_OMT_DIR/handoff-${sid}.md" ]; then
+        echo "ASSERTION FAILED: non-compact source must NOT delete the handoff file"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.5: source grep — the restore sed encoder line is present and unmodified,
+# the per-field escapers at the historical lines are unchanged, and the handoff
+# is encoded via jq -Rs.
+test_session_start_encoder_invariants_in_source() {
+    # Restore encoder present and unmodified
+    if ! grep -qF "MESSAGES_ESCAPED=\$(echo \"\$MESSAGES\" | sed 's/\"/\\\\\"/g')" "$SCRIPT_DIR/session-start.sh"; then
+        echo "ASSERTION FAILED: restore sed encoder line missing or modified"
+        grep -n "MESSAGES_ESCAPED=" "$SCRIPT_DIR/session-start.sh"
+        return 1
+    fi
+
+    # Exactly 3 per-field backslash escapers (PROM_RESUME, GOAL_RESUME, GOAL_PLAN_PATH)
+    local escaper_count
+    escaper_count=$(grep -cF "sed 's/\\\\/\\\\\\\\/g'" "$SCRIPT_DIR/session-start.sh" 2>/dev/null || echo 0)
+    if [ "$escaper_count" -ne 3 ]; then
+        echo "ASSERTION FAILED: expected exactly 3 per-field backslash escapers, found $escaper_count"
+        grep -n "sed 's/\\\\" "$SCRIPT_DIR/session-start.sh"
+        return 1
+    fi
+
+    # Handoff is encoded via jq -Rs
+    if ! grep -qE 'jq -Rs' "$SCRIPT_DIR/session-start.sh"; then
+        echo "ASSERTION FAILED: handoff must be encoded via 'jq -Rs'"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.6: source==compact but NO handoff file → stdout equals the restore-only
+# JSON (no error, valid JSON, identical to the same-state run without compact).
+test_session_start_compact_no_handoff_equals_restore_only() {
+    local sid="test-compact-nofile"
+
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "phase": "STAGE_B",
+  "plan_path": "",
+  "resume_summary": "Restore-only body, no handoff."
+}
+EOF
+
+    # compact source with NO handoff file present
+    local out_compact
+    out_compact=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # must be valid JSON
+    if ! echo "$out_compact" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: compact-with-no-handoff stdout is not valid JSON"
+        echo "  Output: ${out_compact:0:500}"
+        return 1
+    fi
+
+    # restore-only baseline (startup source, same state, no handoff)
+    local out_restore_only
+    out_restore_only=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "startup"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if [ "$out_compact" != "$out_restore_only" ]; then
+        echo "ASSERTION FAILED: compact-with-no-handoff must equal restore-only output"
+        echo "  restore-only: ${out_restore_only:0:500}"
+        echo "  compact:      ${out_compact:0:500}"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: T3 — self-contained orphan-handoff GC arm (ADR D-8)
+# Globs $OMT_DIR/handoff-*.md, dash-safe sid extraction, own current-sid guard,
+# mtime age > HANDOFF_ORPHAN_TTL_SECS → rm -f. Does NOT call/modify
+# is_current_session; leaves the *.json state GC unchanged.
+# =============================================================================
+
+# Helper: back-date a file's mtime by N seconds (BSD touch -t; GNU touch -d).
+# Minute granularity is acceptable for the 60s-vs-2000s distances tested here.
+_backdate_mtime_secs() {
+    local file="$1"
+    local secs="$2"
+    local mins=$(( (secs + 59) / 60 ))
+    local stamp
+    stamp=$(date -j -v-"${mins}"M "+%Y%m%d%H%M" 2>/dev/null \
+        || date -d "${secs} seconds ago" "+%Y%m%d%H%M" 2>/dev/null \
+        || echo "200001010000")
+    touch -t "$stamp" "$file" 2>/dev/null \
+        || touch -d "${secs} seconds ago" "$file" 2>/dev/null \
+        || true
+}
+
+# AC-T3.1: handoff-<otherUUID>.md with mtime 2000s old → reaped.
+test_gc_handoff_orphan_old_reaped() {
+    local orphan="$TEST_OMT_DIR/handoff-11111111-2222-3333-4444-555555555555.md"
+    printf 'stale handoff body' > "$orphan"
+    _backdate_mtime_secs "$orphan" 2000
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "current-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$orphan" ]; then
+        echo "ASSERTION FAILED: orphan handoff (2000s old, other session) should be reaped but still exists"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.2: handoff-<currentSID>.md (current session) → NOT reaped even if old.
+test_gc_handoff_current_session_survives_when_old() {
+    local sid="current-session"
+    local current="$TEST_OMT_DIR/handoff-${sid}.md"
+    printf 'current session handoff' > "$current"
+    _backdate_mtime_secs "$current" 3000
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$current" ]; then
+        echo "ASSERTION FAILED: current-session handoff should survive GC even when old (own current-sid guard)"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.3: handoff-<otherUUID>.md with mtime 60s old → NOT reaped (under TTL).
+test_gc_handoff_orphan_young_survives() {
+    local young="$TEST_OMT_DIR/handoff-99999999-8888-7777-6666-555555555555.md"
+    printf 'young handoff body' > "$young"
+    _backdate_mtime_secs "$young" 60
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "current-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$young" ]; then
+        echo "ASSERTION FAILED: young orphan handoff (60s old) should survive GC (under 1800s TTL)"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.4: sid extraction strips 'handoff-' prefix + '.md' suffix exactly; a sid
+# containing dashes is matched as the current session (no last-'-' split bug).
+test_gc_handoff_dash_sid_matched_exactly() {
+    local sid="89bf1e27-a19c-48a1-9950-aaaaaaaaaaaa"
+    local current="$TEST_OMT_DIR/handoff-${sid}.md"
+    printf 'dash-sid current handoff' > "$current"
+    _backdate_mtime_secs "$current" 3000
+
+    # Run AS this dash-containing session — the file is the current session's,
+    # so a correct prefix+suffix strip recognizes it and skips the reap.
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$current" ]; then
+        echo "ASSERTION FAILED: dash-containing current sid should be matched exactly and skipped (no last-'-' split)"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.5: the handoff GC arm is self-contained — it does NOT call is_current_session
+# (it uses its own dash-safe prefix/suffix sid extraction instead). Inspecting the
+# arm's source region directly asserts that invariant without depending on an
+# origin/main ref, so it neither false-fails in checkouts lacking the ref nor breaks
+# when state-liveness.sh is legitimately edited for an unrelated reason.
+test_gc_handoff_arm_does_not_call_is_current_session() {
+    local arm
+    arm=$(awk '/^for handoff_file in /{f=1} f{print} f&&/^done/{exit}' "$SCRIPT_DIR/session-start.sh")
+    if [ -z "$arm" ]; then
+        echo "ASSERTION FAILED: could not locate the handoff GC arm loop in session-start.sh"
+        return 1
+    fi
+    if printf '%s\n' "$arm" | grep -q 'is_current_session'; then
+        echo "ASSERTION FAILED: handoff GC arm must not call is_current_session (must use its own sid guard)"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.6: the existing *.json state GC behavior is unchanged — a stale other-session
+# *.json state is still reaped while an old handoff is also reaped in the same run.
+test_gc_handoff_arm_does_not_disturb_json_state_gc() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local json_file="$TEST_OMT_DIR/goal-state-other-stale.json"
+    cat > "$json_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+    local orphan="$TEST_OMT_DIR/handoff-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.md"
+    printf 'stale handoff' > "$orphan"
+    _backdate_mtime_secs "$orphan" 2000
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "current-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    # The stale *.json state must still be reaped (existing GC unchanged).
+    if [ -f "$json_file" ]; then
+        echo "ASSERTION FAILED: stale other-session *.json state should still be reaped (existing GC must be unchanged)"
+        return 1
+    fi
+    # And the orphan handoff reaped by the new arm.
+    if [ -f "$orphan" ]; then
+        echo "ASSERTION FAILED: orphan handoff should be reaped alongside the *.json GC"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -963,6 +1329,22 @@ main() {
     # Retired-loop removal (TODO 10)
     run_test test_session_start_orphan_accept_unmanaged_state
     run_test test_session_start_no_retired_loop_restore
+
+    # T2: source==compact handoff injection branch + surgical jq -Rs encoder
+    run_test test_session_start_compact_handoff_adversarial_valid_json
+    run_test test_session_start_compact_handoff_and_prometheus_restore_coexist
+    run_test test_session_start_compact_handoff_deleted_on_consume
+    run_test test_session_start_non_compact_source_ignores_handoff
+    run_test test_session_start_encoder_invariants_in_source
+    run_test test_session_start_compact_no_handoff_equals_restore_only
+
+    # T3: self-contained orphan-handoff GC arm (ADR D-8)
+    run_test test_gc_handoff_orphan_old_reaped
+    run_test test_gc_handoff_current_session_survives_when_old
+    run_test test_gc_handoff_orphan_young_survives
+    run_test test_gc_handoff_dash_sid_matched_exactly
+    run_test test_gc_handoff_arm_does_not_call_is_current_session
+    run_test test_gc_handoff_arm_does_not_disturb_json_state_gc
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
