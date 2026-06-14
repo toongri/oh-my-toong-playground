@@ -1212,13 +1212,20 @@ test_gc_handoff_dash_sid_matched_exactly() {
     return 0
 }
 
-# AC-T3.5: state-liveness.sh is unmodified (is_current_session untouched).
-# Checks the committed branch delta (origin/main...HEAD), not the working tree,
-# so uncommitted local edits neither false-fail nor mask a committed modification.
-test_gc_handoff_arm_leaves_state_liveness_unmodified() {
-    if ! git -C "$SCRIPT_DIR/.." diff --quiet origin/main...HEAD -- hooks/lib/state-liveness.sh; then
-        echo "ASSERTION FAILED: hooks/lib/state-liveness.sh must be unmodified by the handoff GC arm"
-        git -C "$SCRIPT_DIR/.." --no-pager diff origin/main...HEAD -- hooks/lib/state-liveness.sh | head -30
+# AC-T3.5: the handoff GC arm is self-contained — it does NOT call is_current_session
+# (it uses its own dash-safe prefix/suffix sid extraction instead). Inspecting the
+# arm's source region directly asserts that invariant without depending on an
+# origin/main ref, so it neither false-fails in checkouts lacking the ref nor breaks
+# when state-liveness.sh is legitimately edited for an unrelated reason.
+test_gc_handoff_arm_does_not_call_is_current_session() {
+    local arm
+    arm=$(awk '/^for handoff_file in /{f=1} f{print} f&&/^done/{exit}' "$SCRIPT_DIR/session-start.sh")
+    if [ -z "$arm" ]; then
+        echo "ASSERTION FAILED: could not locate the handoff GC arm loop in session-start.sh"
+        return 1
+    fi
+    if printf '%s\n' "$arm" | grep -q 'is_current_session'; then
+        echo "ASSERTION FAILED: handoff GC arm must not call is_current_session (must use its own sid guard)"
         return 1
     fi
     return 0
@@ -1336,7 +1343,7 @@ main() {
     run_test test_gc_handoff_current_session_survives_when_old
     run_test test_gc_handoff_orphan_young_survives
     run_test test_gc_handoff_dash_sid_matched_exactly
-    run_test test_gc_handoff_arm_leaves_state_liveness_unmodified
+    run_test test_gc_handoff_arm_does_not_call_is_current_session
     run_test test_gc_handoff_arm_does_not_disturb_json_state_gc
 
     echo "=========================================="
