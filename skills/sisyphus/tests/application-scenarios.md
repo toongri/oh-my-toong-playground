@@ -20,7 +20,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | Complexity Triggers | Single file ≠ simple |
 | S-3 | Subagent Selection — Correct Agent Per Situation | Subagent Selection Guide | Role matching |
 | S-4 | Verification Flow — Junior Done → Mnemosyne → Complete (Implement Path) | Verification Flow | Role Separation |
-| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
+| S-5 | Argus Prompt Fidelity — Verbatim Verification Criteria | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
 | S-6 | Per-Task Argus — One Call Per Task (when argus runs) | Argus Invocation (Per-Task) | No batch |
 | S-7 | File Path Specificity + No Pre-built Checklist | Argus Invocation (File Path + Checklist) | No abstractions |
 | S-8 | Verdict Response Protocol — Action Per Verdict | Verdict Response Protocol | APPROVE/REQUEST_CHANGES/COMMENT |
@@ -149,46 +149,34 @@ Everything is working correctly."
 
 ---
 
-## Scenario S-5: Argus Prompt Fidelity — Verbatim 7-Section
+## Scenario S-5: Argus Prompt Fidelity — Verbatim Verification Criteria
 
 **Primary Technique:** Argus Invocation (Prompt Fidelity) — verbatim content (no summarization or paraphrasing); heading levels normalized per QA REQUEST recipe
 
 **Input:**
 ```
-Original 7-Section delegation prompt sent to junior (47 lines):
-## 1. TASK
-Add JWT authentication to the /api/users endpoint...
-## 2. EXPECTED OUTCOME
-- Files to modify: src/auth/jwt.ts, src/api/users.ts, tests/auth/jwt.test.ts
-- Expected behavior: All /api/users requests require valid JWT...
-- Verification: `npm test -- --grep "jwt"`
-## 3. REQUIRED TOOLS
-- Grep/ast-grep: Navigate JWT implementation patterns in src/auth/
-- Bash: Run `npm test -- --grep "jwt"` for verification only
-## 4. MUST DO
-- Follow pattern in src/auth/session.ts:15-40
-- Use RS256 algorithm, not HS256
-- Token expiry: 1 hour
-## 5. MUST NOT DO
-- Do NOT modify session.ts
-- Do NOT add new dependencies
-## 6. CONTEXT
-- Related files: src/auth/session.ts (existing auth pattern)
-- Prior task: T-1 added the User model
-## 7. MANDATORY SKILLS
-- superpowers:test-driven-development
+A verify task certifies the JWT auth implementation meets spec.
+Its acceptance criteria / QA scenarios (to be carried verbatim into the QA REQUEST's ## Spec):
+- AC-1: All /api/users requests without a valid JWT return HTTP 401
+- AC-2: All /api/users requests with a valid RS256 JWT return HTTP 200
+- AC-3: Tokens signed with HS256 are rejected (return HTTP 401)
+- AC-4: Expired tokens (TTL > 1 hour) are rejected (return HTTP 401)
+- AC-5: Session.ts is NOT modified (read-only constraint)
+- AC-6: No new npm dependencies are introduced
+- QA-Scenario-1: Valid token → endpoint returns data payload (not empty)
+- QA-Scenario-2: Token signed with wrong algorithm → 401 with error body
 
-Temptation: Summarize to "Junior was asked to add JWT auth to users endpoint."
+Temptation: Summarize the criteria to "Verify JWT auth was implemented correctly."
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | 7-Section prompt content preserved in QA REQUEST | The entire 7-Section prompt content appears in the QA REQUEST without paraphrasing or summarization |
-| V2 | No section omitted | All 7 sections (TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT, MANDATORY SKILLS) are present in the argus call |
-| V3 | No paraphrasing or restructuring | Section content is preserved verbatim; only heading levels may be normalized per the QA REQUEST recipe (delegation prompt sections become `###` under `## Spec`) |
-| V4 | MUST NOT DO section included | The MUST NOT DO section is explicitly included, not dropped as "less important" |
+| V1 | All acceptance criteria appear verbatim in the QA REQUEST | The full AC-1 through AC-6 and QA-Scenario-1/2 list appears in the QA REQUEST's `## Spec` without paraphrasing, summarization, or omission |
+| V2 | No criterion dropped | All 8 items (AC-1 through AC-6, QA-Scenario-1, QA-Scenario-2) are present in the argus call — none dropped as "less important" |
+| V3 | No paraphrasing or restructuring of criteria | Criterion text is preserved verbatim; only heading levels may be normalized per the QA REQUEST recipe (criteria appear under `## Spec`) |
+| V4 | Negative / constraint criteria included | AC-5 (session.ts not modified) and AC-6 (no new dependencies) are explicitly included, not dropped as constraint-rather-than-behavior items |
 
 ---
 
@@ -223,25 +211,26 @@ All 3 tasks are verify-type (argus-direct path). They are dispatched concurrentl
 
 **Input:**
 ```
-Junior modified 5 files in the auth module:
+A verify task certifies the auth-module changes meet spec.
+The changed files in scope (from the prior implement task) are:
 - src/auth/login.ts
 - src/auth/register.ts
 - src/auth/middleware.ts
 - src/auth/types.ts
 - tests/auth/login.test.ts
 
-Temptation: Reference as "5 files in auth module" or "auth/**".
-Also tempted to include: "Please verify: 1) Tests pass, 2) No regressions, 3) Types correct"
+Temptation: Reference scope as "5 files in auth module" or "auth/**".
+Also tempted to include in the QA REQUEST: "Please verify: 1) Tests pass, 2) No regressions, 3) Types correct"
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | All 5 file paths explicitly listed | Each of the 5 files is listed by its full path in the argus invocation |
+| V1 | All 5 file paths explicitly listed in the QA REQUEST | Each of the 5 files is listed by its full path in the argus invocation — the verify task's scope is enumerated as concrete paths |
 | V2 | No glob patterns or abstract counts | Does NOT use "auth/**", "5 files", or "auth module files" — concrete paths only |
-| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the 7-Section prompt |
-| V4 | Junior's summary included as-is | Junior's completion claim is included as reference, not as verified facts |
+| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the spec |
+| V4 | The 5-file list is the verify task's scope input, not a junior handoff claim | The file list appears as the task's changed-files scope (what argus should inspect), not as junior's unverified completion claim being passed through |
 
 ---
 
@@ -1136,9 +1125,9 @@ Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus d
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-4 | Verification Flow — Junior Done → Mnemosyne → Complete (Implement Path) | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (V1: junior→mnemosyne is THE implement path; V2: complete after mnemosyne; V3: argus NEVER on implement; V4: no self-verify) |
-| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | PASS | 2026-05-12 | 4/4 VPs — spec-walk verified (verification.md:251-278 + delegation.md:5-41) |
+| S-5 | Argus Prompt Fidelity — Verbatim Verification Criteria | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (input re-framed as verify task with explicit AC list; verbatim fidelity rule preserved; V1-V4 re-gated: criteria verbatim in QA REQUEST, no criterion dropped, no paraphrase, constraint criteria included) |
 | S-6 | Per-Task Argus — One Call Per Task (on verify tasks) | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (input re-framed as verify tasks; one-per-task no-batch rule preserved for verify tasks; argus NEVER on implement tasks) |
-| S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (input re-framed as verify task scoped to 5 changed files; explicit-paths + no-checklist rule preserved; V4 re-gated: 5-file list is verify task scope input, not junior handoff claim) |
 | S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-06-15 | 5/5 VPs — re-gated under lean-only model (V1: APPROVE on verify task → Evidence Audit Gate → complete, no mnemosyne; V4: mnemosyne NEVER follows argus; V3/V5 preserved) |
 | S-9 | Multi-Agent Conflict — Halt + Oracle | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (V4 re-gated: completed portion goes junior→mnemosyne; argus NEVER on implement portion) |
