@@ -495,67 +495,151 @@ This is a **report**. You surface verified findings, ranked by what matters most
 | Zero findings after verification | Skip enrichment. Report a clean review (Walkthrough + "No findings survived verification."). |
 | 50+ candidates requiring verification | Dispatch verifiers in batches per Phase 2 (≤25), correctness candidates first. |
 
-### Final Output Format (report-only)
+### HTML Render + Terminal Pointer
+
+This is a **report**. It does not gate. There is no Assessment / "Ready to merge" section.
+
+After Phase 2 verification is complete, assemble the render-time markdown, render it into `$OMT_DIR/reviews/{slug}.html`, and print a short terminal pointer. The full report lives only in the HTML — the terminal receives counts and a path, not the report body.
+
+#### Step R1: Assemble the Render-Time Markdown
+
+Assemble the report markdown with these top-level sections (omit optional sections when empty per the rules below):
 
 ```
 ## Walkthrough
 
 ### Change Summary
-[Generated in Phase 1]
+[Phase 1 prose — 1-2 paragraphs]
 
 ### Core Logic Analysis
-[Generated in Phase 1]
+[Phase 1 prose — module narrative, data flow, design decisions]
 
 ### Architecture Diagram
-[Generated in Phase 1 — Mermaid or "No structural changes — existing architecture preserved"]
+[Phase 1 — ```mermaid class/component diagram, or "No structural changes — existing architecture preserved"]
 
 ### Sequence Diagram
-[Generated in Phase 1 — Mermaid or "No call flow changes"]
+[Phase 1 — ```mermaid sequence diagram, or "No call flow changes"]
 
 ---
 
 ## Findings
 [Ranked: correctness CONFIRMED → correctness PLAUSIBLE → cleanup CONFIRMED → cleanup PLAUSIBLE.
-If nothing survived verification: "No findings survived verification." and stop here.]
+If nothing survived verification: "No findings survived verification."]
 
 ### Correctness
-[Findings where the change behaves wrong. Omit the section if none.]
+[Omit if none.]
 
 ### Cleanup
-[Findings where behavior is correct but quality is low. Omit the section if none.]
+[Omit if none.]
 
-Per-finding format (enriched during Phase 2 verification):
-**[{CONFIRMED|PLAUSIBLE}] {finding title}**
-- **Location**: `{file}:{line}` — {section/function name}
+## Out of Scope (Pre-existing)
+[Findings on unchanged context lines — verdict-labeled cards. Do not gate on these.]
+
+## Unverified (verifier unavailable)
+[Only when one or more verifiers errored or timed out — plain markdown, NO data-verdict, explicit count. Omit entirely when every candidate was verified.]
+
+## Recommendations
+[Optional — from the Findings section only (not Out of Scope or Unverified); omit if none.]
+```
+
+**Verdict-bearing findings as literal card HTML** (Findings + Out of Scope Pre-existing): every finding that carries a verdict is authored in the render-time markdown as a literal `<div class="finding" data-verdict="CONFIRMED">…</div>` (or `data-verdict="PLAUSIBLE"`). The literal `[CONFIRMED]` or `[PLAUSIBLE]` token also appears in the card text. Card format:
+
+```
+<div class="finding" data-verdict="CONFIRMED">
+
+**[CONFIRMED] {finding title}**
+<span class="loc">`{file}:{line}` — {section/function name}</span>
+
+- **What's wrong**: {problem, grounded in the quoted line}
+- **Failure scenario**: {concrete inputs/state → wrong output, crash, or lost effect; for cleanup, the concrete cost}
 - **Current Code**:
   ```{lang}
   [5-15 lines centered on the issue]
   ```
-- **What's wrong**: {problem, grounded in the quoted line}
-- **Failure scenario**: {concrete inputs/state → wrong output, crash, or lost effect; for cleanup, the concrete cost — what is duplicated, wasted, or harder to maintain}
 - **Fix**:
   ```diff
   [concrete diff or, if structural, a design direction]
   ```
-- **Blast Radius**: {grep/reference evidence — what else references this, or "This location only"}
-- **Found by**: {angle(s) — note when multiple angles corroborated the same finding}
+- **Blast Radius**: {grep/reference evidence, or "This location only"}
+- **Found by**: {angle(s)}
 
-Fallback (verifier failed): If a verifier subagent errored or timed out for a candidate, do NOT assign a verdict — an unverified candidate is not a finding. List it under the `## Unverified (verifier unavailable)` section using the finder's text, and state how many candidates went unverified. These are coverage gaps the reader must check manually, not confirmed or plausible findings.
-
-## Out of Scope (Pre-existing)
-[Findings on unchanged context lines, verdict-labeled. These do not gate anything — they are noted, not blocking.]
-
-## Unverified (verifier unavailable)
-[Only if one or more verifiers errored or timed out. Candidates listed with the finder's text and a count, explicitly NOT verdict-labeled — coverage gaps, not findings. Omit the section entirely when every candidate was verified.]
-
-## Recommendations
-[Optional. From the `## Findings` section above only (not Out of Scope or
-Unverified), the ones worth resolving — where resolving carries real
-benefit: it preserves a requirement, removes a bug, or improves
-maintainability. Recommend those; omit if none.]
+</div>
 ```
 
-There is no Assessment / "Ready to merge" section. This review reports; it does not gate.
+Use `data-verdict="PLAUSIBLE"` for plausible findings.
+
+**Injection guard — card-body code must stay fenced**: The render sink is `container.innerHTML = marked.parse(md)` with no DOM sanitizer. Only the card chrome (the `<div data-verdict>`, title, verdict badge) is raw HTML. Every reviewed-code snippet inside a card (Current Code / Fix) MUST be a fenced ` ```{lang} ` block so marked.js HTML-escapes it. Fencing — not a DOM sanitizer — is what neutralizes hostile reviewed code (e.g. `<img src=x onerror=BOOM>`, `</script>`): the fenced path goes through marked's escape pipeline while raw HTML inside marked.parse is treated as live HTML and passed through to innerHTML unchanged. NEVER author reviewed code snippets as raw HTML inside a card body.
+
+**Unverified entries — plain markdown, no card**: `Unverified (verifier unavailable)` entries have no verdict by design (they are coverage gaps, not findings). Do NOT wrap them in `<div class="finding" data-verdict>`. Leave them as plain markdown list items.
+
+**Mermaid validity**: The Architecture and Sequence diagrams derive from the reviewed change. mermaid treats `;` as a statement separator — a raw `;` inside sequence-message text (common in code, e.g. `mkdir -p; rm`) silently splits the line and the whole diagram renders as an error SVG. mermaid source MUST be syntactically valid: keep sequence-message text free of raw `;` (rephrase to `then`, a comma, or omit the problematic fragment), and avoid unescaped mermaid control tokens throughout all mermaid fences.
+
+**Translation**: Translate all render-time prose to the detected session language. NEVER translate: code blocks, file paths, CLI tokens, verdict tokens (`CONFIRMED`/`PLAUSIBLE`), the literal `data-verdict="CONFIRMED"` and `data-verdict="PLAUSIBLE"` attribute values (translating these would break the CSS `[data-verdict]` selector), `file:line` references, and finding identifiers. If language detection is ambiguous, fall back to the original language.
+
+**Fallback (verifier failed)**: If a verifier errored or timed out for a candidate, do NOT assign a verdict — list the candidate under `## Unverified (verifier unavailable)` as plain markdown with a count. Do not card it.
+
+#### Step R2: Read the Template
+
+Read the HTML template from `${CLAUDE_SKILL_DIR}/templates/review-presentation.html`. Do NOT construct the path relative to the current working directory — during a review, the skill's bash CWD is the review target repo, not the skill directory, so a CWD-relative read would miss the deployed copy.
+
+#### Step R3: Derive the Slug
+
+Derive `{slug}` from the review target — stable per target so that re-reviewing the same target **overwrites** the prior file (no timestamp suffix):
+
+- PR review: `{repo-basename}-pr{N}` (e.g. `algocare-home-pr123`)
+- Branch comparison: `{repo-basename}-{sanitized-branch}` (branch sanitized to `[a-z0-9-]`)
+- Fallback (no PR, no branch): `{repo-basename}-{short-diff-range-hash}`
+
+where `{repo-basename}` = `basename -s .git $(git remote get-url origin)`, or `basename $(git rev-parse --show-toplevel)` if no remote.
+
+#### Step R4: Substitute Placeholders and Write
+
+Count correctness and cleanup findings (CONFIRMED + PLAUSIBLE each). Apply Rule 6b to the assembled markdown:
+
+```js
+JSON.stringify(reviewMarkdown).replace(/<\/script>/g, '<\\/script>')
+```
+
+Substitute into the template placeholders:
+
+| Placeholder | Value |
+|-------------|-------|
+| `{{LANG_CODE}}` | BCP-47 language tag of the session language (e.g. `ko`, `en`) |
+| `{{HTML_TITLE}}` | Human-readable review title, e.g. `{repo} PR #{N} Code Review` |
+| `{{REVIEW_TITLE}}` | Short kicker, e.g. `Code Review` |
+| `{{TOC_TITLE}}` | TOC nav label in session language, e.g. `목차` / `Contents` |
+| `{{CORRECTNESS_COUNT}}` | e.g. `3 correctness` |
+| `{{CLEANUP_COUNT}}` | e.g. `2 cleanup` |
+| `{{REVIEW_FILE_PATH}}` | Absolute path to the written HTML file |
+| `{{REVIEW_MARKDOWN_JSON}}` | Rule 6b-escaped JSON string of the assembled review markdown |
+| `{{FOOTER_NOTE}}` | Session language note, e.g. `This review reports; it does not gate.` |
+
+Then write the substituted HTML:
+
+```bash
+mkdir -p $OMT_DIR/reviews
+# write to: $OMT_DIR/reviews/{slug}.html
+```
+
+#### Step R5: Open and Print Terminal Pointer
+
+Attempt to open the HTML file in the browser (best-effort, non-blocking — never error on failure):
+
+```bash
+open "$OMT_DIR/reviews/{slug}.html" 2>/dev/null || \
+  xdg-open "$OMT_DIR/reviews/{slug}.html" 2>/dev/null || \
+  true
+```
+
+On headless/CI environments where neither `open` nor `xdg-open` succeeds, print the file path so the user can open it manually — do not raise an error.
+
+Print the terminal pointer (finding counts by verdict/category + the html path — NOT the full report body):
+
+```
+Review written: $OMT_DIR/reviews/{slug}.html
+Correctness: {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
+Cleanup:     {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
+```
 
 ### Example Final Output
 
