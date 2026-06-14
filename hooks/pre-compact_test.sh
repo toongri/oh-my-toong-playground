@@ -422,6 +422,26 @@ test_ac_t1_7_absent_transcript_skips() {
 }
 
 # =============================================================================
+# AC-T1.8b — malformed stdin must fail-open (exit 0), never abort under set -e.
+# =============================================================================
+test_ac_t1_8b_malformed_stdin_exits_zero() {
+    local rc=0
+    printf 'not json{{{' | "$HOOK" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "ASSERTION FAILED: malformed stdin must exit 0 (got $rc)"
+        return 1
+    fi
+    # No handoff file should be written for un-parseable input.
+    local found
+    found=$(ls "$OMT_DIR"/handoff-*.md 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$found" -ne 0 ]; then
+        echo "ASSERTION FAILED: no handoff for malformed stdin (found=$found)"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # AC-T1.8 — source grep: no `exit 2`, no `"block"` token anywhere.
 # =============================================================================
 test_ac_t1_8_never_blocks_source_grep() {
@@ -500,6 +520,7 @@ main() {
     run_test test_ac_t1_5_both_fail_no_file_exit_zero
     run_test test_ac_t1_6_recursion_guard
     run_test test_ac_t1_7_absent_transcript_skips
+    run_test test_ac_t1_8b_malformed_stdin_exits_zero
     run_test test_ac_t1_8_never_blocks_source_grep
     run_test test_ac_t1_9_second_run_overwrites
 
