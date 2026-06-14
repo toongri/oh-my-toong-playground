@@ -146,7 +146,7 @@ Rationale: `plan.md` is the artifact the pipeline reviewed — Momus reviewed th
 
 ### Rendering Methodology
 
-Six invariants govern substitution and injection during Stage A rendering.
+Seven invariants govern substitution and injection during Stage A rendering.
 
 **Rule 1 — Active-element-only substitution**: `{{…}}` placeholders are substituted only at their active template elements. For `{{PLAN_MARKDOWN_JSON}}`, the active container is the `script type="application/json" id="plan-md"` element; substitution occurs only at that active element line. Literal occurrences inside the top-comment documentation block are NOT substituted. Replacement patterns must be anchored to the specific enclosing element by its opening-tag signature, not to the raw placeholder token alone.
 
@@ -158,7 +158,7 @@ Six invariants govern substitution and injection during Stage A rendering.
 
 **Rule 4 — Error recovery / fallback**: If any placeholder is not found in the template, the rendering engine retains the original element untouched — no silent HTML destruction. If translation detection fails per the Translation Rule, fallback to original language.
 
-**Rule 5 — Tool-agnostic**: Substitution engine is the implementer's choice (awk, sed, Node, Python, Bun script, etc.). Rendering Methodology declares invariants, not implementation. Any tool satisfying the six rules is acceptable.
+**Rule 5 — Tool-agnostic**: Substitution engine is the implementer's choice (awk, sed, Node, Python, Bun script, etc.). Rendering Methodology declares invariants, not implementation. Any tool satisfying the seven rules is acceptable.
 
 **Rule 6 — Parser-resilient container embedding**: The HTML element holding plan markdown content (`{{PLAN_MARKDOWN_JSON}}` container) MUST satisfy:
 
@@ -166,13 +166,15 @@ Six invariants govern substitution and injection during Stage A rendering.
 
 - **(6b) Content-side close-tag escape**: The injection pipeline MUST escape the container's close-tag sequence so plan prose cannot terminate the container prematurely. Canonical pattern:
   ```js
-  const payload = JSON.stringify(planMarkdown).replace(/<\/script>/g, '<\\/script>');
+  const payload = JSON.stringify(planMarkdown).replace(/<\/(script)([\s/>])/gi, '<\\/$1$2');
   // consumer: JSON.parse(container.textContent)
   ```
 
 `script type="text/markdown"` MUST NOT be used — unencoded markdown without close-tag escape fails (6b).
 
 Both (6a) and (6b) MUST be present regardless of container choice; alternative inert containers MUST supply their own paired close-tag escape.
+
+**Rule 7 — Active-placeholder HTML escape**: Every `{{…}}` placeholder substituted into an active HTML position — `{{HTML_TITLE}}`, `{{STAGE_KICKER}}`, `{{PLAN_TITLE}}`, `{{TODO_COUNT}}`, `{{AC_COUNT}}`, `{{WAVE_COUNT_LABEL}}`, `{{PLAN_FILE_LABEL}}`, `{{PLAN_FILE_PATH}}`, `{{TOC_TITLE}}`, `{{FOOTER_NOTE}}` — MUST be HTML-escaped (`&`, `<`, `>`, `"`, `'`) before substitution. A plan title, label, or path carrying an HTML-significant character would otherwise inject live markup into `<title>`, `<h1>`, etc. `{{PLAN_MARKDOWN_JSON}}` is exempt — it lives in the inert JSON container and is governed by Rule 6 (the 6b close-tag escape) instead. `{{LANG_CODE}}` must be a plain BCP-47 tag (e.g. `ko`, `en`), not free text.
 
 ---
 
