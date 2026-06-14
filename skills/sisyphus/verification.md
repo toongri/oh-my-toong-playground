@@ -44,14 +44,14 @@ digraph verification_flow {
 }
 ```
 
-1. **Invoke argus** — on a verify task (deliverable = PASS/FAIL verdict; routed argus-direct, skip junior). Implement tasks do NOT invoke argus; they complete on junior's report and mnemosyne commits — steps 2–6 below apply only to verify tasks.
+1. **Invoke argus** — on a verify task (deliverable = PASS/FAIL verdict; routed argus-direct, skip junior). Implement tasks do not reach this flow (see SKILL.md RULE 3); steps 2–6 below apply only to verify tasks.
 2. If APPROVE/COMMENT → **Run Evidence Audit Gate** before proceeding
 3. If evidence gap → re-invoke argus (up to 3x; interview user if exhausted)
 4. If evidence OK → **mark the verify task complete** (verify tasks do not commit)
 5. If REQUEST_CHANGES → oracle diagnosis → fix task including oracle findings → re-delegate to sisyphus-junior
 6. **No retry limit on fix cycle** — Continue until argus passes
 
-> **When argus runs (a verify task)**: the Evidence Audit Gate body below applies in full. Implement tasks skip this file entirely — junior completes, mnemosyne commits.
+> **When argus runs (a verify task)**: the Evidence Audit Gate body below applies in full. Implement tasks skip this file entirely (see SKILL.md routing table).
 
 ---
 
@@ -162,7 +162,7 @@ Protocol:
 When subagent completes only PART of a task:
 1. Create new task items for remaining work
 2. Dispatch NEW subagent for remaining (don't do directly)
-3. Verify completed portion via argus
+3. For an implement task: commit the completed portion via mnemosyne, then create new junior tasks for the remaining work (no argus). For a verify task: verify the completed portion via argus.
 4. Track both portions in task list
 
 **RULE**: Partial subagent completion does NOT permit direct execution of remainder.
@@ -174,7 +174,7 @@ Results from oracle, explore, and librarian are:
 - Used to inform planning and implementation choices
 - NOT subject to correctness verification
 
-**Key Distinction:** "What was DONE?" (Implementation) → argus verifies | "What SHOULD be done?" (Advisory) → Judgment material
+**Key Distinction:** "What was DONE?" (Implementation) → completion is junior's report + mnemosyne commit; argus verifies verify-type tasks only | "What SHOULD be done?" (Advisory) → Judgment material, not correctness-verified
 
 ---
 
@@ -248,8 +248,10 @@ Ensure the target directory exists (`mkdir -p`) before saving evidence files.
 
 ### Composition Recipes
 
-**Recipe 1: After task completion (no plan)**
-- `## Spec` ← full 7-Section delegation prompt content (each section becomes `###` heading)
+All recipes below apply ONLY to verify-type tasks (the argus path). Implement tasks compose no QA REQUEST — they complete junior → mnemosyne (see the boundary note at the top of this file).
+
+**Recipe 1: Verify task (no plan)**
+- `## Spec` ← the verify task's stated acceptance criteria + what must be verified (the task's PASS/FAIL closure criteria)
 - `## Required Verification` ← EXPECTED OUTCOME verification + MUST DO assertions
 - `## Scope` ← changed files + implementer's summary
 - Evidence paths: Include `$OMT_DIR/evidence/{work-slug}/{task-slug}/{check-slug}.{ext}` paths in `## Required Verification` (Tier 1)
