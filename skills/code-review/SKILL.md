@@ -570,6 +570,8 @@ Use `data-verdict="PLAUSIBLE"` for plausible findings.
 
 **Injection guard — card-body code must stay fenced**: The render sink is `container.innerHTML = marked.parse(md)` with no DOM sanitizer. Only the card chrome (the `<div data-verdict>`, title, verdict badge) is raw HTML. Every reviewed-code snippet inside a card (Current Code / Fix) MUST be a fenced ` ```{lang} ` block so marked.js HTML-escapes it. Fencing — not a DOM sanitizer — is what neutralizes hostile reviewed code (e.g. `<img src=x onerror=BOOM>`, `</script>`): the fenced path goes through marked's escape pipeline while raw HTML inside marked.parse is treated as live HTML and passed through to innerHTML unchanged. NEVER author reviewed code snippets as raw HTML inside a card body. If the reviewed snippet itself contains a line that is a code fence (` ``` ` or `~~~`), the card's Current Code / Fix fence MUST use a fence the inner fence cannot terminate — a strictly longer fence of the same character (e.g. 4+ backticks) or the other fence type (`~~~`). CommonMark closes a fence only with the same character and an equal-or-greater run length, so a `~~~`-delimited card body is immune to inner backtick fences and vice-versa.
 
+**Injection guard — prose fields too**: The same `innerHTML = marked.parse(md)` sink treats raw HTML in *prose* as live, not only in card bodies. The card's prose fields — the finding title, `What's wrong`, and `Failure scenario` — are not fenced, so a reviewed-code fragment quoted bare there (e.g. `<img src=x onerror=BOOM>`, `</script>`) reaches innerHTML as live HTML exactly as an unfenced card body would. Every code-derived fragment echoed in a prose field MUST be wrapped in an inline-code span (backticks) so marked.js escapes it as code — or HTML-escaped if an inline-code span does not fit. If the fragment itself contains a backtick, delimit the span with a longer backtick run (CommonMark matches an inline-code span on an equal-length backtick run). NEVER quote a reviewed-code fragment bare in prose.
+
 **Unverified entries — plain markdown, no card**: `Unverified (verifier unavailable)` entries have no verdict by design (they are coverage gaps, not findings). Do NOT wrap them in `<div class="finding" data-verdict>`. Leave them as plain markdown list items.
 
 **Mermaid validity**: The Architecture and Sequence diagrams derive from the reviewed change. mermaid treats `;` as a statement separator — a raw `;` inside sequence-message text (common in code, e.g. `mkdir -p; rm`) silently splits the line and the whole diagram renders as an error SVG. mermaid source MUST be syntactically valid: keep sequence-message text free of raw `;` (rephrase to `then`, a comma, or omit the problematic fragment), and avoid unescaped mermaid control tokens throughout all mermaid fences.
@@ -613,6 +615,14 @@ Substitute into the template placeholders:
 | `{{REVIEW_FILE_PATH}}` | Absolute path to the written HTML file |
 | `{{REVIEW_MARKDOWN_JSON}}` | close-tag-escaped JSON string of the assembled review markdown |
 | `{{FOOTER_NOTE}}` | Session language note, e.g. `This review reports; it does not gate.` |
+
+**Active-HTML placeholders MUST be HTML-escaped.** Every placeholder above EXCEPT `{{REVIEW_MARKDOWN_JSON}}` lands in a live HTML position (`<title>`, `<h1>`, `<span>`). An HTML-significant character flowing in from a repo/branch name, file path, or count — Git permits branch names such as `x<svg/onload=alert(1)>` — would otherwise inject live markup. Escape each value before substitution:
+
+```js
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+```
+
+`{{REVIEW_MARKDOWN_JSON}}` is exempt — it sits in the inert `<script type="application/json">` container and already carries the close-tag escape above. `{{LANG_CODE}}` must be a plain BCP-47 tag (e.g. `ko`, `en`), not free text.
 
 Then write the substituted HTML:
 
