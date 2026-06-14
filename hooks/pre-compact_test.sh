@@ -79,9 +79,12 @@ teardown_test_env() {
     [ -d "$TEST_HOME" ] && rm -rf "$TEST_HOME"
 }
 
-# The canned 8-section summary the stubs emit (matches the ^## N. AC greps).
-CANNED_SUMMARY='## 1. User Requests
+# The canned 8-section summary base (matches the ^## N. AC greps).
+# Stubs embed this with a run-specific marker inside section 1 so that the
+# codex and claude outputs are distinguishable (see AC-T1.9 overwrite test).
+CANNED_SUMMARY_BASE='## 1. User Requests
 - stub user request
+STUB_RUN_MARKER_PLACEHOLDER
 ## 2. Final Goal
 - stub goal
 ## 3. Work Completed
@@ -96,6 +99,9 @@ CANNED_SUMMARY='## 1. User Requests
 - stub verification
 ## 8. Delegated Agent Sessions
 - stub delegated'
+
+CODEX_SUMMARY="${CANNED_SUMMARY_BASE/STUB_RUN_MARKER_PLACEHOLDER/CODEX_RUN_MARKER}"
+CLAUDE_SUMMARY="${CANNED_SUMMARY_BASE/STUB_RUN_MARKER_PLACEHOLDER/CLAUDE_RUN_MARKER}"
 
 # codex stub: captures stdin, honours `-o OUTFILE` (writes the summary there,
 # as the real `codex exec -o` does), exits with the controlled rc.
@@ -112,7 +118,7 @@ done
 rc=\$(cat "$CODEX_RC_FILE" 2>/dev/null || echo 0)
 if [ "\$rc" = "0" ] && [ -n "\$out" ]; then
   cat > "\$out" <<'SUMMARY'
-$CANNED_SUMMARY
+$CODEX_SUMMARY
 SUMMARY
 fi
 exit "\$rc"
@@ -130,7 +136,7 @@ touch "$CLAUDE_SENTINEL"
 rc=\$(cat "$CLAUDE_RC_FILE" 2>/dev/null || echo 0)
 if [ "\$rc" = "0" ]; then
   result=\$(cat <<'SUMMARY'
-$CANNED_SUMMARY
+$CLAUDE_SUMMARY
 SUMMARY
 )
   # Emit a single-line JSON object, matching the real
@@ -500,6 +506,19 @@ test_ac_t1_9_second_run_overwrites() {
     sec1=$(grep -cE '^## 1\.' "$handoff")
     if [ "$sec1" -ne 1 ]; then
         echo "ASSERTION FAILED: handoff should contain exactly one '## 1.' (overwrite, not append) — got $sec1"
+        return 1
+    fi
+
+    # The handoff must contain the claude marker (latest run's output was written)
+    # and must NOT contain the codex marker (first run's output was overwritten).
+    # Without distinct markers, a retain-first regression (no-op second run) would
+    # still satisfy count==1 and sec1==1 — these assertions catch that.
+    if ! grep -q 'CLAUDE_RUN_MARKER' "$handoff"; then
+        echo "ASSERTION FAILED: handoff must contain CLAUDE_RUN_MARKER (latest run's output)"
+        return 1
+    fi
+    if grep -q 'CODEX_RUN_MARKER' "$handoff"; then
+        echo "ASSERTION FAILED: handoff must NOT contain CODEX_RUN_MARKER (first run overwritten)"
         return 1
     fi
     return 0
