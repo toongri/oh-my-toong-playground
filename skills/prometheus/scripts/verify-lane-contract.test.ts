@@ -23,6 +23,9 @@ const interviewContent = readFileSync(interviewPath, 'utf8');
 const reviewPipelinePath = join(import.meta.dir, '..', 'review-pipeline.md');
 const reviewPipelineContent = readFileSync(reviewPipelinePath, 'utf8');
 
+const scenariosPath = join(import.meta.dir, '..', 'tests', 'application-scenarios.md');
+const scenariosContent = readFileSync(scenariosPath, 'utf8');
+
 // ---------------------------------------------------------------------------
 // SKILL.md PRESENCE — new verify-lane vocabulary that MUST appear.
 // Additive tokens (fan-out, falsifying verifier, the 4 keys, evidence-anchored
@@ -213,5 +216,114 @@ describe('interview.md absence — replaced ladder verdict line', () => {
 
   it('I6: old `Verdict: REFUTED` ladder line is gone', () => {
     expect(interviewContent).not.toContain('Verdict: REFUTED');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-A: no-op template branch in Phase-1 Evidence template (SKILL.md :344)
+// The no-op text now lives in the template bullet itself (additive to the
+// No-op path rule section). Guard that the template carries the conditional
+// form so a missing template entry cannot hide behind the rule-section copy.
+// ---------------------------------------------------------------------------
+
+describe('SKILL.md P2-A — no-op form lives in Phase-1 Evidence template', () => {
+  it('P2-A-P: template bullet carries the no-op conditional form', () => {
+    // The template bullet at :344 includes the conditional no-op text inline:
+    // `<or "no-op / 0 lanes / 0 excluded" when all collect lanes are empty ...>`
+    // Anchor on the conjunction that only appears in the template (not the rule
+    // section), making this a tighter guard than the bare `no-op / 0 lanes / 0 excluded` C6-P.
+    expect(skillContent).toContain(
+      '"no-op / 0 lanes / 0 excluded" when all collect lanes are empty',
+    );
+  });
+
+  it('P2-A-P2: N/A branch for Trivial/Scoped is present in template', () => {
+    // The template bullet also specifies the Trivial/Scoped N/A form so both
+    // branches of the visible-or-violation mandate appear inline.
+    expect(skillContent).toContain(
+      '"N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)"',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-B: per-finding verdict contract
+// SKILL.md: per-finding token + N counts lanes unit note.
+// interview.md: {LANE_FINDINGS} present / {LANE_FINDING} (exact singular) absent /
+//   one block per finding present / dispatch invariant present.
+// ---------------------------------------------------------------------------
+
+describe('SKILL.md P2-B — per-finding verdict vocabulary', () => {
+  it('P2-B-P1: per-finding verdict wording present in collect→verify contract', () => {
+    expect(skillContent).toContain('per-finding');
+  });
+
+  it('P2-B-P2: N counts lanes unit distinction present (N=lanes, M=findings)', () => {
+    expect(skillContent).toContain('N counts lanes');
+  });
+
+  it('P2-B-P3: Exclusion rule is explicitly per finding', () => {
+    // Distinctive phrase that confirms per-finding scope of the Exclusion rule.
+    expect(skillContent).toContain('Exclusion is applied **per finding**');
+  });
+});
+
+describe('interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard', () => {
+  it('P2-B-I1: {LANE_FINDINGS} plural placeholder present in verifier template', () => {
+    expect(interviewContent).toContain('{LANE_FINDINGS}');
+  });
+
+  it('P2-B-I2: {LANE_FINDING} singular (exact, closing brace) absent — replaced by plural', () => {
+    // Use the exact singular string with closing brace so `{LANE_FINDINGS}` (which
+    // contains `{LANE_FINDING` as a prefix) does NOT trigger a false absent-failure.
+    // The regex-free not.toContain against the exact `{LANE_FINDING}` token is safe
+    // because `{LANE_FINDINGS}` ends with `S}`, not `}`.
+    expect(interviewContent).not.toContain('{LANE_FINDING}');
+  });
+
+  it('P2-B-I3: one block per finding schema instruction present', () => {
+    expect(interviewContent).toContain('emit one block per finding');
+  });
+
+  it('P2-B-I4: dispatch invariant — one falsifying verifier per non-empty lane', () => {
+    // Guards that the per-lane dispatch contract survived the rewrite.
+    expect(interviewContent).toContain(
+      'dispatch one **falsifying verifier** subagent per non-empty lane',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-C: P-25 reframing in application-scenarios.md
+// Old axis ("outside the verify lane / not confined to the verify stage") is
+// GONE; new axis ("applies uniformly across all lane types") is PRESENT.
+// Both halves guard the reframe: FALSE-GREEN cannot pass if old text survives.
+// ---------------------------------------------------------------------------
+
+describe('scenarios P2-C — P-25 axis reframe (old absent, new present)', () => {
+  it('P2-C-A1: old framing "OUTSIDE the verify lane" is gone', () => {
+    expect(scenariosContent).not.toContain('OUTSIDE the verify lane');
+  });
+
+  it('P2-C-A2: old framing "not confined to the verify stage" is gone', () => {
+    expect(scenariosContent).not.toContain('not confined to the verify stage');
+  });
+
+  it('P2-C-A3: old framing "NOT produced inside the verify lane itself" is gone', () => {
+    expect(scenariosContent).not.toContain('NOT produced inside the verify lane itself');
+  });
+
+  it('P2-C-A4: old framing "out-of-verify-lane" is gone', () => {
+    expect(scenariosContent).not.toContain('out-of-verify-lane');
+  });
+
+  it('P2-C-P1: new axis "applies uniformly across all lane types" is present', () => {
+    // Distinctive new axis from P-25 Primary Technique line.
+    expect(scenariosContent).toContain('applies uniformly across all lane types');
+  });
+
+  it('P2-C-P2: new framing "not one of the 5 explore aspect lanes" present (lane-type disambiguation)', () => {
+    // Guards the cross-lane witness framing that replaces the old verify-stage axis.
+    expect(scenariosContent).toContain('not one of the 5 explore aspect lanes');
   });
 });
