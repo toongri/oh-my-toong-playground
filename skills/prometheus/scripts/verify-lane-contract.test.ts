@@ -217,6 +217,12 @@ describe('interview.md absence — replaced ladder verdict line', () => {
   it('I6: old `Verdict: REFUTED` ladder line is gone', () => {
     expect(interviewContent).not.toContain('Verdict: REFUTED');
   });
+
+  it('M1: intro sentence single-verdict phrasing is gone (per-finding intro reword)', () => {
+    // The intro at :126-127 previously said "returns a single verdict against the SKILL.md schema"
+    // — singular, contradicting the per-finding contract. After the M1 fix this phrase must be absent.
+    expect(interviewContent).not.toContain('returns a single verdict against the SKILL.md schema');
+  });
 });
 
 // ---------------------------------------------------------------------------
