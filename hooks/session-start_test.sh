@@ -1126,6 +1126,137 @@ EOF
 }
 
 # =============================================================================
+# Tests: T3 — self-contained orphan-handoff GC arm (ADR D-8)
+# Globs $OMT_DIR/handoff-*.md, dash-safe sid extraction, own current-sid guard,
+# mtime age > HANDOFF_ORPHAN_TTL_SECS → rm -f. Does NOT call/modify
+# is_current_session; leaves the *.json state GC unchanged.
+# =============================================================================
+
+# Helper: back-date a file's mtime by N seconds (BSD touch -t; GNU touch -d).
+# Minute granularity is acceptable for the 60s-vs-2000s distances tested here.
+_backdate_mtime_secs() {
+    local file="$1"
+    local secs="$2"
+    local mins=$(( (secs + 59) / 60 ))
+    local stamp
+    stamp=$(date -j -v-"${mins}"M "+%Y%m%d%H%M" 2>/dev/null \
+        || date -d "${secs} seconds ago" "+%Y%m%d%H%M" 2>/dev/null \
+        || echo "200001010000")
+    touch -t "$stamp" "$file" 2>/dev/null \
+        || touch -d "${secs} seconds ago" "$file" 2>/dev/null \
+        || true
+}
+
+# AC-T3.1: handoff-<otherUUID>.md with mtime 2000s old → reaped.
+test_gc_handoff_orphan_old_reaped() {
+    local orphan="$TEST_OMT_DIR/handoff-11111111-2222-3333-4444-555555555555.md"
+    printf 'stale handoff body' > "$orphan"
+    _backdate_mtime_secs "$orphan" 2000
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "current-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$orphan" ]; then
+        echo "ASSERTION FAILED: orphan handoff (2000s old, other session) should be reaped but still exists"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.2: handoff-<currentSID>.md (current session) → NOT reaped even if old.
+test_gc_handoff_current_session_survives_when_old() {
+    local sid="current-session"
+    local current="$TEST_OMT_DIR/handoff-${sid}.md"
+    printf 'current session handoff' > "$current"
+    _backdate_mtime_secs "$current" 3000
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$current" ]; then
+        echo "ASSERTION FAILED: current-session handoff should survive GC even when old (own current-sid guard)"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.3: handoff-<otherUUID>.md with mtime 60s old → NOT reaped (under TTL).
+test_gc_handoff_orphan_young_survives() {
+    local young="$TEST_OMT_DIR/handoff-99999999-8888-7777-6666-555555555555.md"
+    printf 'young handoff body' > "$young"
+    _backdate_mtime_secs "$young" 60
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "current-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$young" ]; then
+        echo "ASSERTION FAILED: young orphan handoff (60s old) should survive GC (under 1800s TTL)"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.4: sid extraction strips 'handoff-' prefix + '.md' suffix exactly; a sid
+# containing dashes is matched as the current session (no last-'-' split bug).
+test_gc_handoff_dash_sid_matched_exactly() {
+    local sid="89bf1e27-a19c-48a1-9950-aaaaaaaaaaaa"
+    local current="$TEST_OMT_DIR/handoff-${sid}.md"
+    printf 'dash-sid current handoff' > "$current"
+    _backdate_mtime_secs "$current" 3000
+
+    # Run AS this dash-containing session — the file is the current session's,
+    # so a correct prefix+suffix strip recognizes it and skips the reap.
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$current" ]; then
+        echo "ASSERTION FAILED: dash-containing current sid should be matched exactly and skipped (no last-'-' split)"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.5: state-liveness.sh is unmodified (is_current_session untouched).
+test_gc_handoff_arm_leaves_state_liveness_unmodified() {
+    if ! git -C "$SCRIPT_DIR/.." diff --quiet hooks/lib/state-liveness.sh; then
+        echo "ASSERTION FAILED: hooks/lib/state-liveness.sh must be unmodified by the handoff GC arm"
+        git -C "$SCRIPT_DIR/.." --no-pager diff hooks/lib/state-liveness.sh | head -30
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.6: the existing *.json state GC behavior is unchanged — a stale other-session
+# *.json state is still reaped while an old handoff is also reaped in the same run.
+test_gc_handoff_arm_does_not_disturb_json_state_gc() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local json_file="$TEST_OMT_DIR/goal-state-other-stale.json"
+    cat > "$json_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+    local orphan="$TEST_OMT_DIR/handoff-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.md"
+    printf 'stale handoff' > "$orphan"
+    _backdate_mtime_secs "$orphan" 2000
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "current-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    # The stale *.json state must still be reaped (existing GC unchanged).
+    if [ -f "$json_file" ]; then
+        echo "ASSERTION FAILED: stale other-session *.json state should still be reaped (existing GC must be unchanged)"
+        return 1
+    fi
+    # And the orphan handoff reaped by the new arm.
+    if [ -f "$orphan" ]; then
+        echo "ASSERTION FAILED: orphan handoff should be reaped alongside the *.json GC"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -1197,6 +1328,14 @@ main() {
     run_test test_session_start_non_compact_source_ignores_handoff
     run_test test_session_start_encoder_invariants_in_source
     run_test test_session_start_compact_no_handoff_equals_restore_only
+
+    # T3: self-contained orphan-handoff GC arm (ADR D-8)
+    run_test test_gc_handoff_orphan_old_reaped
+    run_test test_gc_handoff_current_session_survives_when_old
+    run_test test_gc_handoff_orphan_young_survives
+    run_test test_gc_handoff_dash_sid_matched_exactly
+    run_test test_gc_handoff_arm_leaves_state_liveness_unmodified
+    run_test test_gc_handoff_arm_does_not_disturb_json_state_gc
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
