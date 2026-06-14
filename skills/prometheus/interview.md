@@ -132,14 +132,14 @@ vocabulary. Verifiers are foreground and parallel; dispatch all non-empty lanes 
 For each lane, interpolate the placeholders before dispatching:
 
 ```
-Agent(subagent_type="general-purpose", prompt="You are an adversarial falsifying verifier for a single Phase-1 collect lane. Your job is to read the actual codebase evidence and try to falsify the lane finding — assume it is wrong until the cited code forces you to corroborate it.
+Agent(subagent_type="general-purpose", prompt="You are an adversarial falsifying verifier for a single Phase-1 collect lane. Your job is to read the actual codebase evidence and try to falsify each lane finding — assume every finding is wrong until the cited code forces you to corroborate it.
 
 ## Global Request
 {GLOBAL_REQUEST}
 
 ## Lane Under Verification
 Aspect: {LANE_ASPECT}
-Lane finding: {LANE_FINDING}
+Lane findings: {LANE_FINDINGS}
 Source evidence: {LANE_EVIDENCE}
 
 ## Your Task
@@ -150,8 +150,9 @@ Source evidence: {LANE_EVIDENCE}
    symbol, or path that does not exist in the repo — scoped to repo paths; a valid external
    URL/doc reference is NOT nonexistent_path merely for being external) / `version_drift` (a
    finding pinned to a version, API, or contract that has since changed).
-3. Decide whether the finding accurately describes what the code actually does, and return a
-   verdict against this schema (NOT the CONFIRMED/PLAUSIBLE/REFUTED ladder):
+3. For each finding in this lane, decide whether it accurately describes what the code actually
+   does and return one schema record per finding (NOT the CONFIRMED/PLAUSIBLE/REFUTED ladder).
+   A lane may contain one or several findings; emit one block per finding:
 
    verdict: corroborated | refuted   # corroborated = the cited code supports the claim; refuted = inaccurate, misleading, or changed
    evidence: <one paragraph of supporting file:line quotes; for refuted, state the actual behavior>
@@ -164,7 +165,7 @@ Do NOT import findings from other lanes. Do NOT judge the global request. Scope 
 Placeholders to interpolate per dispatch:
 - `{GLOBAL_REQUEST}` ← the original user request (one sentence or bullet list)
 - `{LANE_ASPECT}` ← one of: PATTERN / CONVENTION / SIMILAR IMPLEMENTATION / NAMING/REGISTRATION / TEST INFRASTRUCTURE / EXTERNAL (librarian lane)
-- `{LANE_FINDING}` ← the collect lane's summary finding
+- `{LANE_FINDINGS}` ← the collect lane's finding(s) — one or more
 - `{LANE_EVIDENCE}` ← the lane's cited evidence: comma-separated `file:line` citations for internal lanes, OR URL/doc references for the EXTERNAL (librarian) lane
 
 **After collection**: apply the SKILL.md `Exclusion rule` (drop `refuted` or `confidence: low` findings; a finding matching no collect lane is `unverified` and excluded) and note the exclusions in the plan. Cross-lane contradictions are reconciled by the planner, not by re-dispatching verifiers. All collect lanes empty → valid no-op; proceed directly to interview.
