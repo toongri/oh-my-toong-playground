@@ -166,7 +166,7 @@ Six invariants govern substitution and injection during Stage A rendering.
 
 - **(6b) Content-side close-tag escape**: The injection pipeline MUST escape the container's close-tag sequence so plan prose cannot terminate the container prematurely. Canonical pattern:
   ```js
-  const payload = JSON.stringify(planMarkdown).replace(/<\/script>/g, '<\\/script>');
+  const payload = JSON.stringify(planMarkdown).replace(/<\/(script)([\s/>])/gi, '<\\/$1$2');
   // consumer: JSON.parse(container.textContent)
   ```
 
