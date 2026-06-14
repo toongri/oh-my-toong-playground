@@ -568,7 +568,7 @@ If nothing survived verification: "No findings survived verification."]
 
 Use `data-verdict="PLAUSIBLE"` for plausible findings.
 
-**Injection guard — card-body code must stay fenced**: The render sink is `container.innerHTML = marked.parse(md)` with no DOM sanitizer. Only the card chrome (the `<div data-verdict>`, title, verdict badge) is raw HTML. Every reviewed-code snippet inside a card (Current Code / Fix) MUST be a fenced ` ```{lang} ` block so marked.js HTML-escapes it. Fencing — not a DOM sanitizer — is what neutralizes hostile reviewed code (e.g. `<img src=x onerror=BOOM>`, `</script>`): the fenced path goes through marked's escape pipeline while raw HTML inside marked.parse is treated as live HTML and passed through to innerHTML unchanged. NEVER author reviewed code snippets as raw HTML inside a card body.
+**Injection guard — card-body code must stay fenced**: The render sink is `container.innerHTML = marked.parse(md)` with no DOM sanitizer. Only the card chrome (the `<div data-verdict>`, title, verdict badge) is raw HTML. Every reviewed-code snippet inside a card (Current Code / Fix) MUST be a fenced ` ```{lang} ` block so marked.js HTML-escapes it. Fencing — not a DOM sanitizer — is what neutralizes hostile reviewed code (e.g. `<img src=x onerror=BOOM>`, `</script>`): the fenced path goes through marked's escape pipeline while raw HTML inside marked.parse is treated as live HTML and passed through to innerHTML unchanged. NEVER author reviewed code snippets as raw HTML inside a card body. If the reviewed snippet itself contains a line that is a code fence (` ``` ` or `~~~`), the card's Current Code / Fix fence MUST use a fence the inner fence cannot terminate — a strictly longer fence of the same character (e.g. 4+ backticks) or the other fence type (`~~~`). CommonMark closes a fence only with the same character and an equal-or-greater run length, so a `~~~`-delimited card body is immune to inner backtick fences and vice-versa.
 
 **Unverified entries — plain markdown, no card**: `Unverified (verifier unavailable)` entries have no verdict by design (they are coverage gaps, not findings). Do NOT wrap them in `<div class="finding" data-verdict>`. Leave them as plain markdown list items.
 
@@ -597,7 +597,7 @@ where `{repo-basename}` = `basename -s .git $(git remote get-url origin)`, or `b
 Count correctness and cleanup findings (CONFIRMED + PLAUSIBLE each). Apply the close-tag escape to the assembled markdown:
 
 ```js
-JSON.stringify(reviewMarkdown).replace(/<\/script>/g, '<\\/script>')
+JSON.stringify(reviewMarkdown).replace(/<\/(script)([\s/>])/gi, '<\\/$1$2')
 ```
 
 Substitute into the template placeholders:
