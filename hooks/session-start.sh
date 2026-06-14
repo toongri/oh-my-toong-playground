@@ -8,9 +8,11 @@ INPUT=$(cat)
 # Get session ID and directory
 SESSION_ID=""
 DIRECTORY=""
+SOURCE=""
 if command -v jq &> /dev/null; then
   SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null)
   DIRECTORY=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null)
+  SOURCE=$(echo "$INPUT" | jq -r '.source // ""' 2>/dev/null)
 fi
 
 if [ -z "$DIRECTORY" ] || [ "$DIRECTORY" = "null" ]; then
@@ -69,6 +71,7 @@ if [ -n "$CLAUDE_ENV_FILE" ]; then
 fi
 
 MESSAGES=""
+HANDOFF=""
 
 # GC: reap dead state files for the 3 managed prefixes.
 # Liveness defined by hooks/lib/state-liveness.sh (ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m).
@@ -194,6 +197,18 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
   fi
 fi
 
+# Compaction handoff (source==compact): read the current-sid handoff into a
+# SEPARATE variable (NOT MESSAGES) so the surgical jq -Rs encoder can handle the
+# untrusted summarizer prose on its own, leaving the restore sed path untouched.
+# Delete-on-consume: the handoff is a one-shot baton.
+if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
+  HANDOFF_FILE="$OMT_DIR/handoff-${SESSION_ID}.md"
+  if [ -f "$HANDOFF_FILE" ]; then
+    HANDOFF=$(cat "$HANDOFF_FILE" 2>/dev/null)
+    rm -f "$HANDOFF_FILE"
+  fi
+fi
+
 # Check for incomplete todos in global directory
 INCOMPLETE_COUNT=0
 TODOS_DIR="$HOME/.claude/todos"
@@ -222,11 +237,15 @@ if [ "$INCOMPLETE_COUNT" -gt 0 ]; then
   MESSAGES="$MESSAGES<session-restore>\n\n[PENDING TASKS DETECTED]\n\nYou have $INCOMPLETE_COUNT incomplete tasks from a previous session.\nPlease continue working on these tasks.\n\n</session-restore>\n\n---\n\n"
 fi
 
-# Output message if we have any
-if [ -n "$MESSAGES" ]; then
+# Output message if we have any restore content OR a consumed handoff.
+if [ -n "$MESSAGES" ] || [ -n "$HANDOFF" ]; then
   # Escape for JSON
   MESSAGES_ESCAPED=$(echo "$MESSAGES" | sed 's/"/\\"/g')
-  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$MESSAGES_ESCAPED\"}}"
+  # Surgically encode the untrusted handoff fragment to a JSON-safe string body:
+  # jq -Rs emits a quoted JSON string; strip the outer quotes so it concatenates
+  # onto the sed-escaped restore body inside the single additionalContext value.
+  HANDOFF_ESCAPED=$(printf '%s' "$HANDOFF" | jq -Rs . | sed '1s/^"//; $s/"$//')
+  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$MESSAGES_ESCAPED$HANDOFF_ESCAPED\"}}"
 else
   echo '{"continue": true}'
 fi

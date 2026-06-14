@@ -900,6 +900,232 @@ EOF
 }
 
 # =============================================================================
+# Tests: T2 — source==compact handoff injection branch + surgical jq -Rs encoder
+# =============================================================================
+
+# AC-T2.1: source==compact + adversarial handoff (quote, backslash, real newline,
+# tab, \x01 control char) → stdout is valid JSON and additionalContext round-trips
+# the handoff text.
+test_session_start_compact_handoff_adversarial_valid_json() {
+    local sid="test-compact-adversarial"
+
+    # Build a handoff with every hazardous byte: " \ <real newline> <tab> <\x01>
+    printf 'HANDOFF_START quote=" back=\\ tab=\tnext-line\nctrl=\001 HANDOFF_END' \
+        > "$TEST_OMT_DIR/handoff-${sid}.md"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # (a) stdout must be valid JSON
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: hook stdout is not valid JSON for adversarial handoff"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    # (b) the parsed additionalContext must contain the handoff text round-tripped
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx" | grep -qF 'HANDOFF_START'; then
+        echo "ASSERTION FAILED: additionalContext should contain handoff head HANDOFF_START"
+        echo "  additionalContext: ${ctx:0:500}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF 'HANDOFF_END'; then
+        echo "ASSERTION FAILED: additionalContext should contain handoff tail HANDOFF_END"
+        echo "  additionalContext: ${ctx:0:500}"
+        return 1
+    fi
+    # The literal quote/backslash must survive the round-trip
+    if ! echo "$ctx" | grep -qF 'quote="'; then
+        echo "ASSERTION FAILED: additionalContext should preserve the literal quote"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF 'back=\'; then
+        echo "ASSERTION FAILED: additionalContext should preserve the literal backslash"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.2 (regression): handoff present AND a prometheus restore present →
+# BOTH appear in additionalContext; stdout valid JSON; [PROMETHEUS RESTORED]
+# marker is byte-present.
+test_session_start_compact_handoff_and_prometheus_restore_coexist() {
+    local sid="test-compact-coexist"
+
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "phase": "STAGE_B",
+  "plan_path": "",
+  "resume_summary": "Restore body present alongside handoff."
+}
+EOF
+
+    printf 'HANDOFF_COEXIST_BODY' > "$TEST_OMT_DIR/handoff-${sid}.md"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # stdout must be valid JSON
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: combined restore+handoff stdout is not valid JSON"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    # The restore marker must be byte-present in the raw stdout
+    assert_output_contains "$output" "\[PROMETHEUS RESTORED\]" "combined output should keep the restore marker" || return 1
+
+    # Both restore content and handoff content must be in the parsed additionalContext
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx" | grep -qF 'PROMETHEUS RESTORED'; then
+        echo "ASSERTION FAILED: additionalContext should contain the prometheus restore"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF 'HANDOFF_COEXIST_BODY'; then
+        echo "ASSERTION FAILED: additionalContext should contain the handoff body"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.3: after a compact start, the handoff file is deleted (delete-on-consume).
+test_session_start_compact_handoff_deleted_on_consume() {
+    local sid="test-compact-consume"
+    local handoff_file="$TEST_OMT_DIR/handoff-${sid}.md"
+
+    printf 'CONSUME_ME' > "$handoff_file"
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$handoff_file" ]; then
+        echo "ASSERTION FAILED: handoff file should be deleted on consume but still exists"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.4: source ∈ {startup,resume,clear} → handoff is NOT read; stdout is
+# byte-identical to the no-handoff baseline run for the same state fixtures.
+test_session_start_non_compact_source_ignores_handoff() {
+    local sid="test-noncompact-source"
+
+    # A prometheus restore fixture so there is non-empty MESSAGES output to compare.
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "phase": "STAGE_B",
+  "plan_path": "",
+  "resume_summary": "Baseline restore body."
+}
+EOF
+
+    # Baseline: no handoff file present, source=startup.
+    local baseline
+    baseline=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "startup"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # Now plant a handoff file that MUST be ignored by non-compact sources.
+    printf 'SHOULD_NOT_APPEAR_NONCOMPACT' > "$TEST_OMT_DIR/handoff-${sid}.md"
+
+    local src
+    for src in startup resume clear; do
+        local out
+        out=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "'"$src"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+        # Handoff content must never appear
+        if echo "$out" | grep -qF 'SHOULD_NOT_APPEAR_NONCOMPACT'; then
+            echo "ASSERTION FAILED: source=$src must NOT read the handoff file"
+            echo "  Output: ${out:0:500}"
+            return 1
+        fi
+
+        # Byte-identical to the no-handoff baseline
+        if [ "$out" != "$baseline" ]; then
+            echo "ASSERTION FAILED: source=$src output should be byte-identical to no-handoff baseline"
+            echo "  baseline: ${baseline:0:500}"
+            echo "  got:      ${out:0:500}"
+            return 1
+        fi
+    done
+
+    # The handoff file must remain untouched (non-compact sources never consume it)
+    if [ ! -f "$TEST_OMT_DIR/handoff-${sid}.md" ]; then
+        echo "ASSERTION FAILED: non-compact source must NOT delete the handoff file"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.5: source grep — the restore sed encoder line is present and unmodified,
+# the per-field escapers at the historical lines are unchanged, and the handoff
+# is encoded via jq -Rs.
+test_session_start_encoder_invariants_in_source() {
+    # Restore encoder present and unmodified
+    if ! grep -qF "MESSAGES_ESCAPED=\$(echo \"\$MESSAGES\" | sed 's/\"/\\\\\"/g')" "$SCRIPT_DIR/session-start.sh"; then
+        echo "ASSERTION FAILED: restore sed encoder line missing or modified"
+        grep -n "MESSAGES_ESCAPED=" "$SCRIPT_DIR/session-start.sh"
+        return 1
+    fi
+
+    # Exactly 3 per-field backslash escapers (PROM_RESUME, GOAL_RESUME, GOAL_PLAN_PATH)
+    local escaper_count
+    escaper_count=$(grep -cF "sed 's/\\\\/\\\\\\\\/g'" "$SCRIPT_DIR/session-start.sh" 2>/dev/null || echo 0)
+    if [ "$escaper_count" -ne 3 ]; then
+        echo "ASSERTION FAILED: expected exactly 3 per-field backslash escapers, found $escaper_count"
+        grep -n "sed 's/\\\\" "$SCRIPT_DIR/session-start.sh"
+        return 1
+    fi
+
+    # Handoff is encoded via jq -Rs
+    if ! grep -qE 'jq -Rs' "$SCRIPT_DIR/session-start.sh"; then
+        echo "ASSERTION FAILED: handoff must be encoded via 'jq -Rs'"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T2.6: source==compact but NO handoff file → stdout equals the restore-only
+# JSON (no error, valid JSON, identical to the same-state run without compact).
+test_session_start_compact_no_handoff_equals_restore_only() {
+    local sid="test-compact-nofile"
+
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "phase": "STAGE_B",
+  "plan_path": "",
+  "resume_summary": "Restore-only body, no handoff."
+}
+EOF
+
+    # compact source with NO handoff file present
+    local out_compact
+    out_compact=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # must be valid JSON
+    if ! echo "$out_compact" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: compact-with-no-handoff stdout is not valid JSON"
+        echo "  Output: ${out_compact:0:500}"
+        return 1
+    fi
+
+    # restore-only baseline (startup source, same state, no handoff)
+    local out_restore_only
+    out_restore_only=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "startup"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if [ "$out_compact" != "$out_restore_only" ]; then
+        echo "ASSERTION FAILED: compact-with-no-handoff must equal restore-only output"
+        echo "  restore-only: ${out_restore_only:0:500}"
+        echo "  compact:      ${out_compact:0:500}"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -963,6 +1189,14 @@ main() {
     # Retired-loop removal (TODO 10)
     run_test test_session_start_orphan_accept_unmanaged_state
     run_test test_session_start_no_retired_loop_restore
+
+    # T2: source==compact handoff injection branch + surgical jq -Rs encoder
+    run_test test_session_start_compact_handoff_adversarial_valid_json
+    run_test test_session_start_compact_handoff_and_prometheus_restore_coexist
+    run_test test_session_start_compact_handoff_deleted_on_consume
+    run_test test_session_start_non_compact_source_ignores_handoff
+    run_test test_session_start_encoder_invariants_in_source
+    run_test test_session_start_compact_no_handoff_equals_restore_only
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
