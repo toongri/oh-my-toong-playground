@@ -141,7 +141,7 @@ flowchart TB
     Tasks --> Loop{Pending<br/>tasks?}
     Loop -->|No| Done([Done])
     Loop -->|Yes| Delegate[Delegate to<br/>sisyphus-junior]
-    Delegate --> Ignore["Ignore 'done' claim"]
+    Delegate --> Ignore["Conditional argus verification"]
     Ignore --> Review[Invoke argus]
     Review --> Pass{Pass?}
     Pass -->|Yes| Complete[Mark complete]
@@ -152,8 +152,8 @@ flowchart TB
 
 **Verification protocol**:
 
-- **Zero Trust**: sisyphus-junior's "done" claim is always ignored.
-- **Mandatory review**: argus is invoked after every implementation.
+- **Conditional verification**: sisyphus-junior's implementation completes on junior's report. argus is invoked conditionally — only when the task is verify-type or the plan/objective specifies verification.
+- **Conditional review**: when argus runs, it proceeds through the Evidence Audit Gate before handing off to mnemosyne.
 - **No retry limit**: it continues until argus passes.
 - **Persistence**: the user cannot interrupt the process to stop it midway.
 
