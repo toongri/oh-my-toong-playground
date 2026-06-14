@@ -73,18 +73,18 @@ mkdir -p "$OMT_DIR" 2>/dev/null || true
 # last-prompt, and any non-message type) carry no .message and are dropped.
 EXTRACT=""
 if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ] && [ -r "$TRANSCRIPT_PATH" ]; then
-  EXTRACT=$(jq -r '
+  EXTRACT=$(jq -r --argjson n "$HANDOFF_TOOL_OUTPUT_MAX_CHARS" '
     select(.type == "user" or .type == "assistant")
     | .type as $role
     | (.message.content) as $c
     | if ($c | type) == "string" then
-        ("[" + $role + "] " + ($c[0:'"$HANDOFF_TOOL_OUTPUT_MAX_CHARS"']))
+        ("[" + $role + "] " + $c)
       else
         ( $c[]?
           | if .type == "text" then "[" + $role + " text] " + (.text // "")
             elif .type == "thinking" then "[thinking] " + (.thinking // "")
-            elif .type == "tool_use" then "[tool_use " + (.name // "") + "] " + ((.input | tojson)[0:'"$HANDOFF_TOOL_OUTPUT_MAX_CHARS"'])
-            elif .type == "tool_result" then "[tool_result] " + ((if (.content | type) == "string" then .content else (.content | tojson) end)[0:'"$HANDOFF_TOOL_OUTPUT_MAX_CHARS"'])
+            elif .type == "tool_use" then "[tool_use " + (.name // "") + "] " + ((.input | tojson)[0:$n])
+            elif .type == "tool_result" then "[tool_result] " + ((if (.content | type) == "string" then .content else (.content | tojson) end)[0:$n])
             else empty
           end
         )
