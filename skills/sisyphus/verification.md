@@ -8,7 +8,6 @@ Verification flow, Evidence Audit Gate, and QA REQUEST composition.
 digraph verification_flow {
     rankdir=LR;
     "junior done" [shape=ellipse];
-    "IGNORE" [shape=box];
     "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
     "verdict?" [shape=diamond];
     "evidence audit" [shape=box, style=filled, fillcolor=orange, fontcolor=white];
@@ -23,7 +22,7 @@ digraph verification_flow {
     "complete" [shape=box, style=filled, fillcolor=green];
     "fix + retry" [shape=box];
 
-    "junior done" -> "IGNORE" -> "argus" -> "verdict?";
+    "junior done" -> "argus" -> "verdict?";
     "verdict?" -> "Oracle diagnosis" [label="REQUEST_CHANGES"];
     "Oracle diagnosis" -> "fix + retry";
     "verdict?" -> "evidence audit" [label="APPROVE/COMMENT"];
@@ -47,13 +46,14 @@ digraph verification_flow {
 }
 ```
 
-1. **IGNORE the completion claim** — Never trust "I'm done"
-2. **Invoke argus** — This is your ONLY verification action
-3. If APPROVE/COMMENT → **Run Evidence Audit Gate** before proceeding
-4. If evidence gap → re-invoke argus (up to 3x; interview user if exhausted)
-5. If evidence OK → **Invoke mnemosyne** to commit
-6. If REQUEST_CHANGES → oracle diagnosis → fix task including oracle findings → re-delegate to sisyphus-junior
-7. **No retry limit on fix cycle** — Continue until argus passes
+1. **Invoke argus** — when the task is verify-type OR the plan/objective specifies verification; on the lean path (implement task, no specified verification) mnemosyne fires after junior completion and steps 2–6 below are skipped
+2. If APPROVE/COMMENT → **Run Evidence Audit Gate** before proceeding
+3. If evidence gap → re-invoke argus (up to 3x; interview user if exhausted)
+4. If evidence OK → **Invoke mnemosyne** to commit
+5. If REQUEST_CHANGES → oracle diagnosis → fix task including oracle findings → re-delegate to sisyphus-junior
+6. **No retry limit on fix cycle** — Continue until argus passes
+
+> **When argus runs (steps 2–6 above)**: the Evidence Audit Gate body below applies in full. On the lean path (step 1 condition not met), skip directly to mnemosyne after junior completes.
 
 ---
 

@@ -21,7 +21,6 @@ RULE 2: ALWAYS invoke appropriate skills for recognized patterns
 RULE 3: implement task (produces file changes) → sisyphus-junior (NEVER directly)
 RULE 4: verify task (AC explicitly provided + PASS/FAIL verdict required for task closure) → argus directly (skip junior)
 RULE 5: diagnose / investigate task (analysis or current-state report, verdict NOT required) → oracle (root cause/architecture) or explore (search/comparison) — NEVER junior
-RULE 6: NEVER complete a junior-implemented task without argus verification
 ```
 
 **Routing is by task type, not by session cadence.** Even if the prior task used junior → argus, a new verify/diagnose task does NOT inherit that path.
@@ -42,8 +41,8 @@ RULE 6: NEVER complete a junior-implemented task without argus verification
 | **Diagnose task** — current-state analysis, root cause, debugging, architecture. Deliverable: diagnostic narrative + recommendations, NO verdict. | **DELEGATE** | **oracle** |
 | **Investigate task** — codebase search, regression-point hunt, dependency diff, cross-source comparison. Deliverable: findings report, NO verdict. | **DELEGATE** | **explore** (oracle for causal synthesis if needed) |
 | External documentation research | **DELEGATE** | librarian |
-| QA of junior's completed work (junior → argus path) | **DELEGATE** | argus |
-| Git commits (after argus approval) | **DELEGATE** | mnemosyne |
+| QA of junior's completed work (verify-gated path: task is verify-type OR plan/objective specifies verification) | **DELEGATE** | argus |
+| Git commits (after junior completion on lean path, or after argus APPROVE on verify-gated path) | **DELEGATE** | mnemosyne |
 
 **RULE A**: ANY code change = DELEGATE to junior. No exceptions. Code changes are NEVER "quick tasks" you do directly.
 **RULE B**: ANY task producing NO file changes ≠ junior. Route by *deliverable type*: verdict-required → argus; analysis/diagnosis → oracle; search/comparison → explore. Junior is the IMPLEMENTATION agent, not a "read-only command runner".
@@ -61,20 +60,7 @@ RULE 6: NEVER complete a junior-implemented task without argus verification
 
 **RULE**: Complex analysis requires oracle REGARDLESS of file count.
 
-### Subagent Trust Protocol
-
-**"Subagents lie until proven otherwise."**
-
-| Agent | Trust Model | Verification |
-|-------|-------------|-------------|
-| sisyphus-junior | **Zero Trust** | MANDATORY — argus |
-| oracle / explore / librarian | Advisory/Contextual | Not required — judgment input |
-| argus | **Audited Trust** | MANDATORY — evidence audit |
-| mnemosyne | **Trusted** | Not required — post-argus |
-
-**YOU DO NOT VERIFY**: No `npm test`, `npm run build`, or `git commit` directly. Verification = argus's job. Commits = mnemosyne's job.
-
-When junior completes, your ONLY action is to invoke argus. Not "verify then invoke". Just invoke.
+**Self-verification is forbidden**: No `npm test`, `npm run build`, or `git commit` directly. Verification = argus's job. Commits = mnemosyne's job.
 
 ---
 
@@ -88,7 +74,7 @@ Before TaskCreate, classify each task into ONE type. This decides routing — an
 
 | Type | Deliverable | Verdict produced? | Routing |
 |------|-------------|-------------------|---------|
-| **implement** | File changes (code/tests/docs/config) | no (argus verdicts the implementation afterward) | sisyphus-junior → argus → mnemosyne |
+| **implement** | File changes (code/tests/docs/config) | no | sisyphus-junior → (argus → Evidence Audit Gate → mnemosyne, when verify-gated) \| (mnemosyne, lean path) |
 | **verify** | PASS/FAIL verdict + evidence files — AC explicitly provided, verdict closes the task | **YES** — APPROVE / REQUEST_CHANGES / COMMENT | **argus directly** (skip junior) |
 | **diagnose** | Diagnostic narrative — root cause, architecture analysis, current-state assessment + recommendations | no | **oracle** (NEVER junior, NEVER argus) |
 | **investigate** | Findings report — codebase search, regression-point identification, dependency diff, cross-source comparison | no | **explore** (oracle if causal synthesis needed; NEVER junior, NEVER argus) |
@@ -98,8 +84,6 @@ Before TaskCreate, classify each task into ONE type. This decides routing — an
 - A `diagnose` or `investigate` task MUST NOT produce file changes.
 - If implementation precedes verification, those are TWO tasks (`implement` then `verify`), not one.
 - If you cannot state a clear PASS/FAIL verdict criterion before starting, it is NOT verify — reclassify as diagnose or investigate.
-
-**Routing follows task type, NOT session cadence.** Even if every prior task in this session used junior → argus, a new verify/investigate task is routed by its own type.
 
 ### Atomic Decomposition
 
@@ -129,7 +113,7 @@ Before invoking the first delegation of the batch, emit the following classifica
 
 ```
 ## Task Classification
-- <task-slug-1> | type: implement   | routing: sisyphus-junior -> argus -> mnemosyne
+- <task-slug-1> | type: implement   | routing: sisyphus-junior -> mnemosyne (lean) | sisyphus-junior -> argus -> mnemosyne (verify-gated)
 - <task-slug-2> | type: verify      | routing: argus directly
 - <task-slug-3> | type: diagnose    | routing: oracle
 - <task-slug-4> | type: investigate | routing: explore
@@ -181,6 +165,7 @@ digraph task_loop {
     "Delegate to agent\n(per Agent Routing)" [shape=diamond];
     "sisyphus-junior" [shape=box];
     "argus directly" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "verify-gated?" [shape=diamond];
     "argus QA" [shape=box, style=filled, fillcolor=red, fontcolor=white];
     "Pass?" [shape=diamond];
     "evidence audit\n(see verification.md)" [shape=box, style=filled, fillcolor=orange, fontcolor=white];
@@ -197,7 +182,9 @@ digraph task_loop {
     "Any unblocked?" -> "Done" [label="no"];
     "Delegate to agent\n(per Agent Routing)" -> "sisyphus-junior" [label="implementation"];
     "Delegate to agent\n(per Agent Routing)" -> "argus directly" [label="verification"];
-    "sisyphus-junior" -> "argus QA";
+    "sisyphus-junior" -> "verify-gated?" [label="junior done"];
+    "verify-gated?" -> "argus QA" [label="yes\n(verify-type OR\nplan specifies verification)"];
+    "verify-gated?" -> "code changes?" [label="no (lean path)"];
     "argus QA" -> "Pass?";
     "Pass?" -> "evidence audit\n(see verification.md)" [label="APPROVE/COMMENT"];
     "Pass?" -> "Oracle diagnosis" [label="REQUEST_CHANGES"];
@@ -217,7 +204,8 @@ digraph task_loop {
 **Execution Rules:**
 - Tasks with `blockedBy` → wait until blockers complete
 - Multiple unblocked independent tasks → dispatch in parallel
-- sisyphus-junior path: junior done → argus QA → Evidence Audit Gate (see verification.md) → mnemosyne (if code changes) → mark completed. On REQUEST_CHANGES → oracle diagnosis → fix task → re-delegate to junior.
+- sisyphus-junior path (lean): junior done → mnemosyne (if code changes) → mark completed.
+- sisyphus-junior path (verify-gated — task is verify-type OR plan/objective specifies verification): junior done → argus QA → Evidence Audit Gate (see verification.md) → mnemosyne (if code changes) → mark completed. On REQUEST_CHANGES → oracle diagnosis → fix task → re-delegate to junior.
 - argus direct path: argus approval → Evidence Audit Gate (see verification.md) → mark completed. On REQUEST_CHANGES → oracle diagnosis → fix task → re-delegate to junior.
 - **[CRITICAL]** When a problem arises, resolve it without exception. Act on oracle's diagnosis; if it does not resolve, summarize the current state and consult oracle again. Keep iterating until the matter is concluded.
 - Evidence gap handling, retry logic, and user interview flow: see [verification.md](verification.md)
@@ -225,6 +213,8 @@ digraph task_loop {
 - If oracle returns a circuit-breaker reframe (3 consecutive failed hypotheses), halt the verify→diagnose→fix loop, surface the reframe to the user, and await direction. Do not auto-create fix tasks from circuit-breaker output.
 
 ### Verdict Response Protocol
+
+Applies when argus runs (verify-gated path: task is verify-type, OR the plan/objective specifies verification for an implement task).
 
 | Verdict | Sisyphus Action |
 |---------|-----------------|

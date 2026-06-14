@@ -106,7 +106,7 @@ For complex implementation, request sisyphus-junior with opus: `Agent(subagent_t
 
 ## Mnemosyne Delegation Template
 
-When invoking mnemosyne after argus approval:
+Invoke mnemosyne after junior completion (lean path) OR after argus APPROVE when the task was verify-gated (verify-gated path: argus ran → Evidence Audit Gate passed → mnemosyne commits):
 
 ```markdown
 ## 1. TASK
