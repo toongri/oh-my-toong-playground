@@ -804,7 +804,7 @@ The remaining 3 verifiers return `verdict: corroborated` with `confidence: high`
 
 ## Scenario P-25: Cross-Lane #13 Witness
 
-**Primary Technique:** Adversarial Evidence-Key Vocabulary — a #13 key-tag surfaces on a librarian external finding OUTSIDE the verify lane, proving the 4-key vocabulary is not confined to the verify stage
+**Primary Technique:** Adversarial Evidence-Key Vocabulary — a #13 key-tag surfaces on a librarian external finding (not one of the 5 explore aspect lanes), proving the 4-key vocabulary applies uniformly across all lane types, not just the explore aspect lanes
 
 **Setup:**
 Complex/Architecture intent. Phase-1 collect dispatches a librarian agent to retrieve an external API specification for a third-party service. The librarian returns a finding about the API's authentication flow.
@@ -824,8 +824,8 @@ This key-tag is attached to the finding BEFORE it reaches the findings-assembly 
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | `prompt_injection` key surfaces on a librarian external finding | The finding tagged `prompt_injection` originates from the librarian external lane — it is NOT a finding from an explore aspect lane and is NOT produced inside the verify lane itself |
-| V2 | Key-tag is explicit about being out-of-verify-lane | The scenario transcript and/or the finding record make clear the key-tag was applied by the external-lane verifier working on a librarian-sourced finding, NOT a finding from the 5 explore aspect lanes |
+| V1 | `prompt_injection` key surfaces on a librarian external finding | The finding tagged `prompt_injection` originates from the librarian external lane — it is NOT a finding from one of the 5 explore aspect lanes; the tag is produced by the external-lane falsifying verifier during the verify lane |
+| V2 | Key-tag is explicit about lane origin | The scenario transcript and/or the finding record make clear the key-tag was applied by the external-lane verifier working on a librarian-sourced finding, NOT a finding from the 5 explore aspect lanes |
 | V3 | 4-key vocabulary applies uniformly across all lanes | The `prompt_injection` tag is drawn from the same D-5 4-key vocabulary (`stale_state`, `prompt_injection`, `nonexistent_path`, `version_drift`) that applies in every collect lane — the vocabulary is not confined to any single lane type |
 | V4 | Tagged finding reaches plan grounding as a risk annotation | Because the `prompt_injection`-tagged finding has `verdict: corroborated` and `confidence: high`, it is NOT excluded; it passes through to plan grounding carrying the key-tag as a risk annotation |
 
