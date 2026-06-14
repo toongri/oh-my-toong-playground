@@ -341,7 +341,7 @@ Phase 1 ritual (context loading + explore + librarian) is invisible by default �
 - Context files loaded: <list each Read path, or "missing — skipped per Graceful skip rule">
 - explore dispatched THIS session: <Agent invocation reference, or "N/A — intent is Trivial/Scoped without explore need">
 - librarian dispatched THIS session: <Agent invocation reference, or "N/A — Architecture, or Complex with design surface, not present; intent is Trivial/Scoped, or a purely mechanical refactor">
-- verify lane: dispatched / N lanes / M excluded <or "N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)">
+- verify lane: dispatched / N lanes / M excluded <or "no-op / 0 lanes / 0 excluded" when all collect lanes are empty (Complex/Architecture with no findings) | "N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)">
 - Results received and assimilated: <Y/N — Y requires both summary read and key findings noted>
 ```
 
@@ -382,18 +382,20 @@ request only — NEVER the full aggregate**. Per-lane isolation is deliberate: i
 free of the other lanes' framing (no cross-lane anchoring) and makes the verifier structurally
 adversarial — its job is to falsify the lane's claims, not confirm them.
 
-Each verifier returns a verdict against this schema (a deliberate divergence from the Review
-Pipeline's `CONFIRMED/PLAUSIBLE/REFUTED` ladder — only the dispatch mechanics are reused, NOT the
-verdict vocabulary):
+Each verifier inspects **every finding** in its lane and returns a **per-finding** verdict against
+this schema (a deliberate divergence from the Review Pipeline's `CONFIRMED/PLAUSIBLE/REFUTED` ladder
+— only the dispatch mechanics are reused, NOT the verdict vocabulary). A lane may contain one or
+several findings; the verifier emits one schema record per finding, not a single lane-level summary:
 
 ```
 { verdict, evidence, confidence ∈ {high, medium, low} }
 ```
 
-**Exclusion rule.** A finding is excluded from plan grounding when `verdict = refuted` OR
-`confidence = low`. A finding that matches **no** collect lane is tagged `unverified` and excluded —
-it is never silently trusted. Surviving findings (not refuted, confidence high or medium, matched to
-a lane) are the only ones that reach the interview, AC, and plan grounding.
+**Exclusion rule.** Exclusion is applied **per finding**, consistent with the per-finding verdict
+above. A finding is excluded from plan grounding when `verdict = refuted` OR `confidence = low`. A
+finding that matches **no** collect lane is tagged `unverified` and excluded — it is never silently
+trusted. Surviving findings (not refuted, confidence high or medium, matched to a lane) are the only
+ones that reach the interview, AC, and plan grounding.
 
 **Cross-lane reconciliation.** Because each verifier is scoped to a single lane, no verifier can see
 across lanes. When two lanes' surviving findings contradict each other, the **planner** reconciles the
@@ -407,7 +409,9 @@ grounding proceeds.
 The `verify lane: dispatched / N lanes / M excluded` line in the Phase-1 Evidence block makes this
 stage **visible-or-violation** — the verify stage must be reported there exactly as the
 `explore dispatched THIS session` line is, so a skipped verify lane surfaces as a missing Evidence
-line, not a silent omission.
+line, not a silent omission. Note the unit difference: **N counts lanes** (one per non-empty collect
+lane dispatched to a verifier), **M counts individual findings** excluded across all lanes (the two
+units are independent and will often differ).
 
 #### Adversarial evidence keys (#13 vocabulary)
 
