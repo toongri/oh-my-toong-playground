@@ -37,8 +37,10 @@ INPUT=$(cat)
 SID="default"
 TRANSCRIPT_PATH=""
 if command -v jq >/dev/null 2>&1; then
-  SID=$(printf '%s' "$INPUT" | jq -r '.session_id // .sessionId // ""' 2>/dev/null)
-  TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null)
+  PARSED=$(printf '%s' "$INPUT" | jq -r '[(.session_id // .sessionId // ""), (.transcript_path // "")] | @tsv' 2>/dev/null) || PARSED=""
+  IFS=$'\t' read -r SID TRANSCRIPT_PATH <<<"$PARSED" || true
+  SID="${SID:-}"
+  TRANSCRIPT_PATH="${TRANSCRIPT_PATH:-}"
 else
   # No jq → extraction is impossible (jq-only, per D-11); fail-open.
   exit 0
