@@ -134,10 +134,35 @@ describe('interview.md presence — verify-lane templates', () => {
   it('I2: falsifying verifier (additive)', () => {
     expect(interviewContent).toContain('falsifying verifier');
   });
+
+  it('I4: verifier template carries the schema confidence dimension (replaces the ladder verdict line)', () => {
+    expect(interviewContent).toContain('confidence');
+  });
 });
 
 describe('interview.md absence — SKILL.md-only token', () => {
   it('I3: evidence-anchored question does not leak into interview.md', () => {
     expect(interviewContent).not.toContain('evidence-anchored question');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// interview.md ABSENCE — the absence-half for the verifier-template verdict
+// rewrite. The old template instructed the verifier to return the uppercase
+// CONFIRMED/PLAUSIBLE/REFUTED ladder line, which SKILL.md's D-1 contract
+// EXPLICITLY FORBIDS for the verify schema. Both exact ladder verdict lines
+// MUST be gone so the new `{ verdict, evidence, confidence }` schema cannot pass
+// with the stale ladder line surviving beside it (FALSE-GREEN guard). These are
+// case-sensitive against the exact old phrases — they do NOT forbid lowercase
+// `refuted`/`corroborated`, which the new schema vocabulary uses.
+// ---------------------------------------------------------------------------
+
+describe('interview.md absence — replaced ladder verdict line', () => {
+  it('I5: old `Verdict: CONFIRMED` ladder line is gone', () => {
+    expect(interviewContent).not.toContain('Verdict: CONFIRMED');
+  });
+
+  it('I6: old `Verdict: REFUTED` ladder line is gone', () => {
+    expect(interviewContent).not.toContain('Verdict: REFUTED');
   });
 });

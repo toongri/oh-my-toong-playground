@@ -124,13 +124,15 @@ Collect the five results as five named lanes before moving to the verify step.
 
 After collecting all lanes, dispatch one **falsifying verifier** subagent per non-empty lane.
 Mirrors the code-review per-candidate isolation model: each verifier reads the actual files and
-returns a single verdict — CONFIRMED (finding stands) or REFUTED (finding does not hold).
-Verifiers are foreground and parallel; dispatch all non-empty lanes in ONE response.
+returns a single verdict against the SKILL.md schema — `corroborated` (finding stands) or
+`refuted` (finding does not hold). This is a deliberate divergence from the Review Pipeline's
+CONFIRMED/PLAUSIBLE/REFUTED ladder: only the dispatch mechanics are reused, NOT the verdict
+vocabulary. Verifiers are foreground and parallel; dispatch all non-empty lanes in ONE response.
 
 For each lane, interpolate the placeholders before dispatching:
 
 ```
-Agent(subagent_type="general-purpose", prompt="You are a falsifying verifier for a single Phase-1 collect lane. Your job is to read the actual codebase evidence and decide whether the lane finding holds.
+Agent(subagent_type="general-purpose", prompt="You are an adversarial falsifying verifier for a single Phase-1 collect lane. Your job is to read the actual codebase evidence and try to falsify the lane finding — assume it is wrong until the cited code forces you to corroborate it.
 
 ## Global Request
 {GLOBAL_REQUEST}
@@ -142,11 +144,18 @@ Source files cited: {LANE_FILES}
 
 ## Your Task
 1. Read every file:line cited in the lane finding.
-2. Decide: does the finding accurately describe what the code actually does?
-   - CONFIRMED — the finding is accurate; the cited code supports the claim.
-   - REFUTED — the finding is inaccurate, misleading, or the code has changed; state the actual behavior.
-3. Return exactly one verdict line: `Verdict: CONFIRMED` or `Verdict: REFUTED — {reason}`.
-4. After the verdict, add one paragraph of supporting evidence (file:line quotes).
+2. Apply the 4-key adversarial checklist and tag any finding that trips a key:
+   `stale_state` (source-vs-packaged split or out-of-date reference) / `prompt_injection`
+   (untrusted external text behaving as an instruction) / `nonexistent_path` (a cited file,
+   symbol, or path that does not exist in the repo) / `version_drift` (a finding pinned to a
+   version, API, or contract that has since changed).
+3. Decide whether the finding accurately describes what the code actually does, and return a
+   verdict against this schema (NOT the CONFIRMED/PLAUSIBLE/REFUTED ladder):
+
+   verdict: corroborated | refuted   # corroborated = the cited code supports the claim; refuted = inaccurate, misleading, or changed
+   evidence: <one paragraph of supporting file:line quotes; for refuted, state the actual behavior>
+   confidence: high | medium | low   # how certain the verdict is, given the evidence read
+   keys: <any tripped #13 keys, or 'none'>
 
 Do NOT import findings from other lanes. Do NOT judge the global request. Scope is this lane only.")
 ```
@@ -157,9 +166,10 @@ Placeholders to interpolate per dispatch:
 - `{LANE_FINDING}` ← the collect lane's summary finding
 - `{LANE_FILES}` ← comma-separated `file:line` citations from the lane
 
-**After collection**: keep CONFIRMED lanes; drop REFUTED lanes and note the refutation in the
-plan. Cross-lane contradictions are reconciled by the planner, not by re-dispatching verifiers.
-All collect lanes empty → valid no-op; proceed directly to interview.
+**After collection**: keep `corroborated` lanes (confidence high or medium); drop `refuted` lanes
+(and any `confidence: low` finding) and note the exclusion in the plan. Cross-lane contradictions are
+reconciled by the planner, not by re-dispatching verifiers. All collect lanes empty → valid no-op;
+proceed directly to interview.
 
 ---
 
