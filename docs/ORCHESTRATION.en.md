@@ -69,8 +69,9 @@ flowchart TD
     subgraph Execution Phase
         PlanFile --> Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
-        Junior --> QA[argus<br/>Quality Assurance]
-        QA -->|Pass| Done((Done))
+        Junior -->|verify-gated| QA[argus<br/>Quality Assurance]
+        Junior -->|lean path| Done((Done))
+        QA -->|Pass| Done
         QA -->|Fail| Junior
     end
 ```
@@ -98,8 +99,7 @@ flowchart TD
 
 - **Role**: Execution and delegation
 - **Constraint**: **NEVER works alone**. ALL code changes = DELEGATE to sisyphus-junior.
-- **Trust Model**: Zero trust for sisyphus-junior's "done" claims
-- **Verification**: MANDATORY argus after every implementation
+- **Verification**: argus is a conditional delegate — invoked only when the task is verify-type or the plan/objective specifies verification. An implement task completes on sisyphus-junior's report.
 
 ### sisyphus-junior (The Implementer)
 
@@ -140,7 +140,7 @@ With a plan ready, use `/sisyphus`:
 
 1. **Task Creation**: Breaks plan into TaskCreate items
 2. **Delegation**: Assigns tasks to sisyphus-junior
-3. **Quality Assurance**: argus validates EVERY completion
+3. **Quality Assurance**: argus validates verify-gated completions — invoked only when the task is verify-type or the plan/objective specifies verification; otherwise the implement task completes on sisyphus-junior's report
 4. **Iteration**: Continues until all tasks pass review
 
 ---

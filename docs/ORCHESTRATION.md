@@ -69,8 +69,9 @@ flowchart TD
     subgraph 실행 단계
         PlanFile --> Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
-        Junior --> QA[argus<br/>품질 보증]
-        QA -->|통과| Done((완료))
+        Junior -->|verify-gated| QA[argus<br/>품질 보증]
+        Junior -->|lean path| Done((완료))
+        QA -->|통과| Done
         QA -->|실패| Junior
     end
 ```
@@ -98,8 +99,7 @@ flowchart TD
 
 - **역할**: 실행과 위임
 - **제약**: **절대 단독 작업 안 함**. 모든 코드 변경 = sisyphus-junior 위임.
-- **신뢰 모델**: sisyphus-junior의 "완료" 주장에 Zero Trust
-- **검증**: 모든 구현 후 argus 필수 호출
+- **검증**: argus는 조건부 위임 — 태스크가 verify-type이거나 플랜/목표가 검증을 명시한 경우에만 호출. implement 태스크는 sisyphus-junior의 완료 보고로 완결.
 
 ### sisyphus-junior (구현자)
 
@@ -140,7 +140,7 @@ flowchart TD
 
 1. **태스크 생성**: 계획을 TaskCreate 항목으로 분해
 2. **위임**: sisyphus-junior에 태스크 할당
-3. **품질 보증**: argus가 모든 완료 품질 검증
+3. **품질 보증**: argus가 verify-gated 완료 품질 검증 — 태스크가 verify-type이거나 플랜/목표가 검증을 명시한 경우에만 호출; 그 외 implement 태스크는 sisyphus-junior의 완료 보고로 완결
 4. **반복**: 모든 태스크가 리뷰 통과할 때까지 계속
 
 ---

@@ -141,7 +141,7 @@ flowchart TB
     Tasks --> Loop{대기 중인<br/>태스크?}
     Loop -->|아니오| Done([완료])
     Loop -->|예| Delegate[sisyphus-junior에<br/>위임]
-    Delegate --> Ignore["'완료' 주장 무시"]
+    Delegate --> Ignore["조건부 argus 검증"]
     Ignore --> Review[argus 호출]
     Review --> Pass{통과?}
     Pass -->|예| Complete[완료 처리]
@@ -152,8 +152,8 @@ flowchart TB
 
 **검증 프로토콜**:
 
-- **Zero Trust**: sisyphus-junior의 "완료" 주장은 항상 무시합니다.
-- **필수 리뷰**: 모든 구현 후 argus를 호출합니다.
+- **조건부 검증**: sisyphus-junior의 구현은 junior의 보고로 완료됩니다. argus는 verify 유형 태스크이거나 플랜/목표에 검증이 명시된 경우에만 조건부로 호출합니다.
+- **조건부 리뷰**: argus를 호출할 때는 Evidence Audit Gate를 거쳐 mnemosyne으로 이어집니다.
 - **Retry 제한 없음**: argus가 통과할 때까지 계속합니다.
 - **지속성**: 사용자가 프로세스 중간에 끼어들어 멈출 수 없습니다.
 
