@@ -106,7 +106,7 @@ For complex implementation, request sisyphus-junior with opus: `Agent(subagent_t
 
 ## Mnemosyne Delegation Template
 
-When invoking mnemosyne after argus approval:
+Invoke mnemosyne after sisyphus-junior completes an implement task (argus does not run on implement tasks; verify tasks change no files and never commit):
 
 ```markdown
 ## 1. TASK
@@ -133,7 +133,7 @@ Commit changes from: [completed task subject]
 - Subject: [task subject]
 - Description: [task description]
 - Changed files:
-  - [explicit file paths from argus review]
+  - [explicit file paths — from junior's report / git diff]
 ```
 
 ---

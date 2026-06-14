@@ -134,7 +134,7 @@ Goal does not reimplement decomposition or execution. It invokes the existing sk
 
 - **Vague** (the verification surface cannot be derived without questioning the user) → `Skill(skill: "deep-interview")`. The interview crystallizes a spec at `$OMT_DIR/deep-interview/{slug}.md` and bridges to prometheus; its acceptance criteria feed the verification-surface slot.
 - **Complex** (the objective needs decomposition into a TODO plan with waves and acceptance criteria — multi-component, 3+ files, or any non-trivial build) → `Skill(skill: "prometheus")`. Prometheus runs its full planning pipeline (its human gates UN-wrapped) and ends by dispatching to sisyphus with a plan path at `$OMT_DIR/plans/{name}.md`.
-- **Execution** (a plan or crystallized spec already exists and the objective is ready to be built) → `Skill(skill: "sisyphus")` with the plan path. Sisyphus orchestrates its per-TODO junior → argus → Evidence-Audit loop. `oracle` stays inside sisyphus as per-TODO diagnosis only — it is never an objective-completion actor here.
+- **Execution** (a plan or crystallized spec already exists and the objective is ready to be built) → dispatch to sisyphus for execution: `Skill(skill: "sisyphus")` with the plan path.
 
 ### Phase transitions
 
@@ -170,7 +170,7 @@ Re-plan (`set --phase planning`) preserves `stories[]` including per-story statu
 
 ## Completion Gate
 
-After a sisyphus pass, completion is NOT self-declared. Invoke an objective-level **argus** (a fresh instance, with no prior-verdict context), presenting the **verification surface as PROSE requirements** — a completeness Spec, not just the per-TODO ACs sisyphus already checked. This is the objective-scope completeness check: argus verifies that every prose-stated requirement in the verification surface is reflected in the deliverable, and renders an APPROVE / REQUEST_CHANGES / COMMENT verdict.
+After a sisyphus pass, completion is NOT self-declared. Invoke an objective-level **argus** (a fresh instance, with no prior-verdict context), presenting the **verification surface as PROSE requirements** — a completeness Spec. This is the objective-scope completeness check: argus verifies that every prose-stated requirement in the verification surface is reflected in the deliverable, and renders an APPROVE / REQUEST_CHANGES / COMMENT verdict.
 
 **Inject the completion-audit rubric INTO the argus invocation** (it lives in the argus prompt, never in any continuation prompt). The rubric forces an evidence-based verdict and asserts each element independently:
 
@@ -216,7 +216,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts request-complete
 
 APPROVE alone does NOT leave the goal pursuing/active — the `request-complete` handoff is what transitions to terminal `complete` (and it is structurally gated on completion-evidence, so a write that never reached the gate cannot false-complete).
 
-**No design/architecture lane gates completion.** The only gates on the completion path are the per-TODO argus inside sisyphus and this objective-level argus — which also re-derives per-WHAT-slice verdicts and authors the verdict artifact at `$OMT_DIR/goal-verdict-{sid}.json`. There is no design-review or daedalus pass between pursuit and completion — design is plan-time advisory only.
+**No design/architecture lane gates completion.** The only gate on the completion path is this objective-level argus — which also re-derives per-WHAT-slice verdicts and authors the verdict artifact at `$OMT_DIR/goal-verdict-{sid}.json`. There is no design-review or daedalus pass between pursuit and completion — design is plan-time advisory only.
 
 ### Concrete progress action per non-APPROVE verdict
 

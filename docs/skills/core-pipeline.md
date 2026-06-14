@@ -140,11 +140,12 @@ flowchart TB
 
     Tasks --> Loop{대기 중인<br/>태스크?}
     Loop -->|아니오| Done([완료])
-    Loop -->|예| Delegate[sisyphus-junior에<br/>위임]
-    Delegate --> Ignore["'완료' 주장 무시"]
-    Ignore --> Review[argus 호출]
+    Loop -->|예| Route{태스크 유형?}
+    Route -->|implement| Delegate[sisyphus-junior에<br/>위임]
+    Delegate --> Complete[완료 처리]
+    Route -->|verify| Review[argus 호출]
     Review --> Pass{통과?}
-    Pass -->|예| Complete[완료 처리]
+    Pass -->|예| Complete
     Pass -->|아니오| Fix[수정 태스크 생성]
     Fix --> Delegate
     Complete --> Loop
@@ -152,8 +153,8 @@ flowchart TB
 
 **검증 프로토콜**:
 
-- **Zero Trust**: sisyphus-junior의 "완료" 주장은 항상 무시합니다.
-- **필수 리뷰**: 모든 구현 후 argus를 호출합니다.
+- **검증**: implement 태스크는 sisyphus-junior의 보고로 완료됩니다(argus 없음). 검증이 필요하면 별도 verify 태스크로 argus에 직행합니다.
+- **Evidence Audit Gate**: verify 태스크에서 argus를 호출하면 Evidence Audit Gate를 거칩니다(verify 태스크는 파일을 바꾸지 않으므로 커밋 없음). 커밋은 implement 태스크의 junior 완료 후 mnemosyne가 수행합니다.
 - **Retry 제한 없음**: argus가 통과할 때까지 계속합니다.
 - **지속성**: 사용자가 프로세스 중간에 끼어들어 멈출 수 없습니다.
 
