@@ -506,6 +506,41 @@ test_ac_t1_9_second_run_overwrites() {
 }
 
 # =============================================================================
+# C3 regression — user STRING content must survive whole (no 2000-char cap).
+# A fixture turn with 2500 'x' chars followed by TAILMARKER_ARCHEAD must appear
+# in full in the codex stdin (the marker must survive past char 2000).
+# =============================================================================
+test_c3_prose_string_not_truncated() {
+    local sid="sid-c3"
+    local tp="$TEST_TMP_DIR/transcript_c3.jsonl"
+
+    # Build: 2500 'x' chars then the unique marker — marker sits after char 2000.
+    local long_prefix
+    long_prefix=$(printf 'x%.0s' $(seq 1 2500))
+    local long_content="${long_prefix}TAILMARKER_ARCHEAD"
+
+    # Minimal transcript: just this one user STRING turn (enough to exceed min-input).
+    jq -nc --arg t "$long_content" '{type:"user", message:{role:"user", content:$t}}' > "$tp"
+    # Add a second short turn so the total exceeds HANDOFF_MIN_INPUT_CHARS=200.
+    jq -nc '{type:"assistant", message:{role:"assistant", content:[{type:"text", text:"ok"}]}}' >> "$tp"
+
+    make_stdin "$sid" "$tp" | "$HOOK" >/dev/null 2>&1 || true
+
+    if [ ! -f "$CODEX_STDIN" ]; then
+        echo "ASSERTION FAILED: codex stub stdin was not captured"
+        return 1
+    fi
+    local fed
+    fed=$(cat "$CODEX_STDIN")
+
+    if ! printf '%s' "$fed" | grep -q "TAILMARKER_ARCHEAD"; then
+        echo "ASSERTION FAILED: prose tail (TAILMARKER_ARCHEAD) was truncated — string branch must NOT cap user prose"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 main() {
@@ -523,6 +558,7 @@ main() {
     run_test test_ac_t1_8b_malformed_stdin_exits_zero
     run_test test_ac_t1_8_never_blocks_source_grep
     run_test test_ac_t1_9_second_run_overwrites
+    run_test test_c3_prose_string_not_truncated
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
