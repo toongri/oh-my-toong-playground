@@ -83,6 +83,7 @@ const VALID_EVENTS = new Set([
   "PostToolUse",
   "Stop",
   "SubagentStop",
+  "PreCompact",
 ]);
 
 const VALID_HOOK_TYPES = new Set(["command", "prompt"]);
