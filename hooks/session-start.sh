@@ -91,6 +91,29 @@ for state_file in \
   fi
 done
 
+# GC arm: reap orphaned compaction handoffs by mtime (self-contained).
+# A .md handoff has no JSON liveness fields, so it cannot be classified by
+# is_state_live / is_current_session (which strip .json + match *-state- prefixes).
+# This arm extracts the sid from the basename (dash-safe: prefix + suffix strip,
+# NOT a last-dash split), skips the current session via its OWN guard, and reaps
+# any handoff older than HANDOFF_ORPHAN_TTL_SECS. is_current_session is NOT called.
+# The TTL mirrors the terminal grace period; sourced from the state-liveness SSOT
+# (TERMINAL_TTL) rather than re-stating the literal, to avoid value drift.
+HANDOFF_ORPHAN_TTL_SECS="$TERMINAL_TTL"
+for handoff_file in "$OMT_DIR"/handoff-*.md; do
+  [ -e "$handoff_file" ] || continue
+  handoff_base="${handoff_file##*/}"
+  handoff_sid="${handoff_base#handoff-}"
+  handoff_sid="${handoff_sid%.md}"
+  [ "$handoff_sid" = "$SESSION_ID" ] && continue
+  handoff_mtime=$(stat -f %m "$handoff_file" 2>/dev/null || stat -c %Y "$handoff_file" 2>/dev/null || true)
+  [ -n "$handoff_mtime" ] || continue
+  handoff_age=$(( GC_NOW - handoff_mtime ))
+  if [ "$handoff_age" -gt "$HANDOFF_ORPHAN_TTL_SECS" ]; then
+    rm -f "$handoff_file"
+  fi
+done
+
 # Check for active prometheus state (session-specific)
 if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
   PROMETHEUS_STATE=$(cat "$OMT_DIR/prometheus-state-${SESSION_ID}.json" 2>/dev/null)
