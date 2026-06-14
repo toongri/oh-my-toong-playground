@@ -1213,10 +1213,12 @@ test_gc_handoff_dash_sid_matched_exactly() {
 }
 
 # AC-T3.5: state-liveness.sh is unmodified (is_current_session untouched).
+# Checks the committed branch delta (origin/main...HEAD), not the working tree,
+# so uncommitted local edits neither false-fail nor mask a committed modification.
 test_gc_handoff_arm_leaves_state_liveness_unmodified() {
-    if ! git -C "$SCRIPT_DIR/.." diff --quiet hooks/lib/state-liveness.sh; then
+    if ! git -C "$SCRIPT_DIR/.." diff --quiet origin/main...HEAD -- hooks/lib/state-liveness.sh; then
         echo "ASSERTION FAILED: hooks/lib/state-liveness.sh must be unmodified by the handoff GC arm"
-        git -C "$SCRIPT_DIR/.." --no-pager diff hooks/lib/state-liveness.sh | head -30
+        git -C "$SCRIPT_DIR/.." --no-pager diff origin/main...HEAD -- hooks/lib/state-liveness.sh | head -30
         return 1
     fi
     return 0
