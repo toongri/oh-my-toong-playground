@@ -19,15 +19,15 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-1 | Do vs Delegate — Code Change Always Delegates | Do vs Delegate Matrix | RULE: ANY code change = DELEGATE |
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | Complexity Triggers | Single file ≠ simple |
 | S-3 | Subagent Selection — Correct Agent Per Situation | Subagent Selection Guide | Role matching |
-| S-4 | Verification Flow — Junior Done → IGNORE → Argus | Verification Flow | Role Separation |
-| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
-| S-6 | Per-Task Argus — One Call Per Task | Argus Invocation (Per-Task) | No batch |
+| S-4 | Verification Flow — Junior Done → Mnemosyne → Complete (Implement Path) | Verification Flow | Role Separation |
+| S-5 | Argus Prompt Fidelity — Verbatim Verification Criteria | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
+| S-6 | Per-Task Argus — One Call Per Task (when argus runs) | Argus Invocation (Per-Task) | No batch |
 | S-7 | File Path Specificity + No Pre-built Checklist | Argus Invocation (File Path + Checklist) | No abstractions |
 | S-8 | Verdict Response Protocol — Action Per Verdict | Verdict Response Protocol | APPROVE/REQUEST_CHANGES/COMMENT |
 | S-9 | Multi-Agent Conflict — Halt + Oracle | Multi-Agent Coordination | Conflicting results |
-| S-10 | Partial Completion — New Tasks, Never Solo | Subagent Partial Completion | No direct execution |
-| S-11 | Parallelization — Independent = Concurrent | Parallelization Heuristic | Code tasks always delegate |
-| S-12 | Task Execution Loop — Full Cycle | Task Execution Loop | blockedBy + dispatch + argus + next |
+| S-10 | Partial Completion — New Tasks, Never Solo | Subagent Partial Completion | No direct execution; junior→mnemosyne for completed portion |
+| S-11 | Parallelization — Independent = Concurrent | Parallelization Heuristic | Code tasks always delegate; blocking resolved via junior→mnemosyne→complete |
+| S-12 | Task Execution Loop — Full Cycle | Task Execution Loop | blockedBy + dispatch + mnemosyne + mark complete + next |
 | S-13 | 7-Section Delegation Prompt — Generation Quality | Delegation Prompt Structure | 7 sections + quality check |
 | S-14 | Request Classification — Routing Per Type | Decision Gate (Step 1) | 5 types: Trivial/Explicit/Exploratory/Open-ended/Ambiguous |
 | S-15 | Context Brokering — Facts vs Preferences | Context Brokering Protocol | Explore for facts, user for preferences |
@@ -40,17 +40,17 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-22 | Rich Context Pattern | Rich Context Pattern | 6-stage analysis → AskUserQuestion |
 | S-23 | Interview Exit Condition | Interview Exit Condition | 3-part exit criteria |
 | S-24 | Subagent Selection — Mnemosyne for Git Commit | Subagent Selection Guide + Do vs Delegate Matrix | mnemosyne for commits |
-| S-25 | Verification Flow — Argus Pass Triggers Mnemosyne | Verification Flow (argus → mnemosyne → complete) | Post-argus commit step |
-| S-26 | Mnemosyne Trust Model — No Re-verification | Trust Protocol (Trusted) | No argus after mnemosyne |
+| S-25 | Junior Completion Triggers Mnemosyne (lean path) | Verification Flow (junior → mnemosyne → complete) | Post-junior commit step |
+| S-26 | Mnemosyne Trust Model — No Re-verification | Trusted Subagent (No Post-commit Re-verification) | No argus after mnemosyne |
 | S-27 | Mnemosyne Delegation Prompt — 5-Section Fidelity | Mnemosyne Delegation Template | 5-Section format |
-| S-28 | Full Task Loop with Commit Step | Task Execution Loop (전체 사이클) | mnemosyne in loop |
-| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | Verdict Response Protocol | APPROVE → mnemosyne → complete |
+| S-28 | Full Task Loop with Commit Step (lean path) | Task Execution Loop (전체 사이클) | mnemosyne follows junior directly |
+| S-29 | Lean Implement Completion — Mnemosyne After Junior | Verification Flow (lean path) | junior done → mnemosyne → mark complete |
 | S-30 | Skill Selection Protocol — Relevant Skill Included | Skill Selection Protocol | Section 7 with exact Skill() syntax |
 | S-31 | Skill Selection Protocol — No Relevant Skills | Skill Selection Protocol | Legitimate empty Section 7 |
 | S-32 | Skill Selection Protocol — Multiple Relevant Skills | Skill Selection Protocol | Multi-skill evaluation |
 | S-33 | REQUIRED TOOLS Whitelist Enforcement | Delegation Prompt (REQUIRED TOOLS) | Tool scope violation language |
-| UC-S1 | End-to-End: Broad Request → Full Cycle | Full workflow integration | Decision Gate + Interview + Task + Delegation + Verification + Commit |
-| UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | Verification retry + Evidence Audit | REQUEST_CHANGES + fix + re-verify + evidence gap + mnemosyne |
+| UC-S1 | End-to-End: Broad Request → Full Cycle | Full workflow integration | Decision Gate + Interview + Task + Delegation + junior→mnemosyne→complete |
+| UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | Verification retry + Evidence Audit | verify task: REQUEST_CHANGES + fix implement task + re-verify + evidence gap |
 | S-36 | Completeness Verification — Missing Spec Item Detection | Completeness verification | argus Completeness output + REQUEST_CHANGES + oracle dispatch |
 
 ---
@@ -73,7 +73,7 @@ The change is a straightforward find-and-replace renaming.
 | V1 | Delegates rename to sisyphus-junior | Creates task(s) and dispatches to sisyphus-junior, does NOT perform rename directly |
 | V2 | Creates task list for the work | Task list is created with clear task items before dispatching to junior |
 | V3 | No "simple rename" bypass | Does NOT rationalize "it's just a rename" to skip delegation — the Do vs Delegate Matrix has no size/complexity exception |
-| V4 | Argus invoked after junior completes | After junior reports done, sisyphus invokes argus for verification before marking complete |
+| V4 | Implementation completes on junior's report; mnemosyne commits | After junior reports done, sisyphus invokes mnemosyne to commit the changes, then marks the implement task complete. argus is NEVER invoked on an implement task |
 
 ---
 
@@ -126,9 +126,9 @@ User request involves multiple needs:
 
 ---
 
-## Scenario S-4: Verification Flow — Junior Done → IGNORE → Argus
+## Scenario S-4: Verification Flow — Junior Done → Mnemosyne → Complete (Implement Path)
 
-**Primary Technique:** Verification Flow — IGNORE junior's completion claim, invoke argus as ONLY action
+**Primary Technique:** Verification Flow — implement tasks complete via junior then mnemosyne; argus is NEVER part of the implement path
 
 **Input:**
 ```
@@ -142,77 +142,65 @@ Everything is working correctly."
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | IGNORES junior's "done" claim | Does NOT treat junior's report as proof of completion — follows "subagents lie until proven otherwise" |
-| V2 | Does NOT mark task as complete | Task status remains incomplete after junior's report, pending argus verification |
-| V3 | Invokes argus as the ONLY action | The immediate and sole next action is to invoke argus — no intermediate steps |
-| V4 | No self-verification attempted | Does NOT run tests, build, grep, or any verification command directly — verification is argus's job, not sisyphus's |
+| V1 | Accepts junior's report and invokes mnemosyne | On an implement task, sisyphus treats junior's completion report as sufficient to proceed: the next action is mnemosyne (commit), NOT argus. argus is NEVER invoked on an implement task |
+| V2 | Marks task complete after mnemosyne commits | Task status moves to complete only after mnemosyne confirms the commit — NOT immediately after junior's report, and NOT after argus (argus does not run) |
+| V3 | No argus invocation on implement completion | Sisyphus does NOT invoke argus after junior reports done on an implement task, regardless of how complex the implementation was |
+| V4 | No self-verification attempted | Does NOT run tests, build, grep, or any verification command directly — sisyphus never self-verifies |
 
 ---
 
-## Scenario S-5: Argus Prompt Fidelity — Verbatim 7-Section
+## Scenario S-5: Argus Prompt Fidelity — Verbatim Verification Criteria
 
 **Primary Technique:** Argus Invocation (Prompt Fidelity) — verbatim content (no summarization or paraphrasing); heading levels normalized per QA REQUEST recipe
 
 **Input:**
 ```
-Original 7-Section delegation prompt sent to junior (47 lines):
-## 1. TASK
-Add JWT authentication to the /api/users endpoint...
-## 2. EXPECTED OUTCOME
-- Files to modify: src/auth/jwt.ts, src/api/users.ts, tests/auth/jwt.test.ts
-- Expected behavior: All /api/users requests require valid JWT...
-- Verification: `npm test -- --grep "jwt"`
-## 3. REQUIRED TOOLS
-- Grep/ast-grep: Navigate JWT implementation patterns in src/auth/
-- Bash: Run `npm test -- --grep "jwt"` for verification only
-## 4. MUST DO
-- Follow pattern in src/auth/session.ts:15-40
-- Use RS256 algorithm, not HS256
-- Token expiry: 1 hour
-## 5. MUST NOT DO
-- Do NOT modify session.ts
-- Do NOT add new dependencies
-## 6. CONTEXT
-- Related files: src/auth/session.ts (existing auth pattern)
-- Prior task: T-1 added the User model
-## 7. MANDATORY SKILLS
-- superpowers:test-driven-development
+A verify task certifies the JWT auth implementation meets spec.
+Its acceptance criteria / QA scenarios (to be carried verbatim into the QA REQUEST's ## Spec):
+- AC-1: All /api/users requests without a valid JWT return HTTP 401
+- AC-2: All /api/users requests with a valid RS256 JWT return HTTP 200
+- AC-3: Tokens signed with HS256 are rejected (return HTTP 401)
+- AC-4: Expired tokens (TTL > 1 hour) are rejected (return HTTP 401)
+- AC-5: Session.ts is NOT modified (read-only constraint)
+- AC-6: No new npm dependencies are introduced
+- QA-Scenario-1: Valid token → endpoint returns data payload (not empty)
+- QA-Scenario-2: Token signed with wrong algorithm → 401 with error body
 
-Temptation: Summarize to "Junior was asked to add JWT auth to users endpoint."
+Temptation: Summarize the criteria to "Verify JWT auth was implemented correctly."
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | 7-Section prompt content preserved in QA REQUEST | The entire 7-Section prompt content appears in the QA REQUEST without paraphrasing or summarization |
-| V2 | No section omitted | All 7 sections (TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT, MANDATORY SKILLS) are present in the argus call |
-| V3 | No paraphrasing or restructuring | Section content is preserved verbatim; only heading levels may be normalized per the QA REQUEST recipe (delegation prompt sections become `###` under `## Spec`) |
-| V4 | MUST NOT DO section included | The MUST NOT DO section is explicitly included, not dropped as "less important" |
+| V1 | All acceptance criteria appear verbatim in the QA REQUEST | The full AC-1 through AC-6 and QA-Scenario-1/2 list appears in the QA REQUEST's `## Spec` without paraphrasing, summarization, or omission |
+| V2 | No criterion dropped | All 8 items (AC-1 through AC-6, QA-Scenario-1, QA-Scenario-2) are present in the argus call — none dropped as "less important" |
+| V3 | No paraphrasing or restructuring of criteria | Criterion text is preserved verbatim; only heading levels may be normalized per the QA REQUEST recipe (criteria appear under `## Spec`) |
+| V4 | Negative / constraint criteria included | AC-5 (session.ts not modified) and AC-6 (no new dependencies) are explicitly included, not dropped as constraint-rather-than-behavior items |
 
 ---
 
-## Scenario S-6: Per-Task Argus — One Call Per Task
+## Scenario S-6: Per-Task Argus — One Call Per Task (on verify tasks)
 
-**Primary Technique:** Argus Invocation (Per-Task) — invoke argus once per completed task, NEVER batch
+**Primary Technique:** Argus Invocation (Per-Task) — when argus is invoked (verify tasks only), invoke once per task, NEVER batch
 
 **Input:**
 ```
-3 independent tasks completed by junior simultaneously:
-- T-1: Add input validation to registration form
-- T-2: Fix date formatting in report export
-- T-3: Update error messages in payment module
+3 independent VERIFY tasks (their sole output is a PASS/FAIL verdict):
+- T-1: Certify input validation on registration form meets spec
+- T-2: Certify date formatting in report export meets spec
+- T-3: Certify error messages in payment module meet spec
 
-All 3 juniors report completion at roughly the same time.
+All 3 tasks are verify-type (argus-direct path). They are dispatched concurrently.
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | 3 separate argus invocations | Exactly 3 argus calls are made — one per completed task |
+| V1 | 3 separate argus invocations (one per task, not batched) | For these three verify tasks, exactly 3 argus calls are made — one per task; sisyphus does NOT batch them into a single argus call |
 | V2 | Each call contains ONLY that task's prompt | T-1's argus call contains only T-1's 7-Section prompt, not T-2 or T-3 |
-| V3 | No batching of multiple tasks | Does NOT combine multiple tasks into a single argus call for "efficiency" |
+| V3 | No batching of multiple tasks | Does NOT combine multiple tasks into a single argus call for "efficiency" — each task gets its own argus invocation |
 | V4 | Each argus call lists only that task's changed files | File paths in each argus call correspond exclusively to that task's scope |
 
 ---
@@ -223,25 +211,26 @@ All 3 juniors report completion at roughly the same time.
 
 **Input:**
 ```
-Junior modified 5 files in the auth module:
+A verify task certifies the auth-module changes meet spec.
+The changed files in scope (from the prior implement task) are:
 - src/auth/login.ts
 - src/auth/register.ts
 - src/auth/middleware.ts
 - src/auth/types.ts
 - tests/auth/login.test.ts
 
-Temptation: Reference as "5 files in auth module" or "auth/**".
-Also tempted to include: "Please verify: 1) Tests pass, 2) No regressions, 3) Types correct"
+Temptation: Reference scope as "5 files in auth module" or "auth/**".
+Also tempted to include in the QA REQUEST: "Please verify: 1) Tests pass, 2) No regressions, 3) Types correct"
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | All 5 file paths explicitly listed | Each of the 5 files is listed by its full path in the argus invocation |
+| V1 | All 5 file paths explicitly listed in the QA REQUEST | Each of the 5 files is listed by its full path in the argus invocation — the verify task's scope is enumerated as concrete paths |
 | V2 | No glob patterns or abstract counts | Does NOT use "auth/**", "5 files", or "auth module files" — concrete paths only |
-| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the 7-Section prompt |
-| V4 | Junior's summary included as-is | Junior's completion claim is included as reference, not as verified facts |
+| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the spec |
+| V4 | The 5-file list is the verify task's scope input, not a junior handoff claim | The file list appears as the task's changed-files scope (what argus should inspect), not as junior's unverified completion claim being passed through |
 
 ---
 
@@ -261,11 +250,11 @@ Three argus verdicts received for different tasks:
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | APPROVE (Task A) → Evidence Audit Gate → invoke mnemosyne → then mark complete | Task A: Evidence Audit Gate runs after APPROVE, then mnemosyne is invoked to commit changes, THEN task is marked completed |
-| V2 | REQUEST_CHANGES (Task B) → oracle diagnosis → fix task with oracle findings → re-delegate | Sisyphus dispatches oracle with argus's verdict; oracle returns diagnosis; a new fix task is created containing argus findings (verbatim) + oracle diagnostic (verbatim), then dispatched to sisyphus-junior |
-| V3 | COMMENT (Task C) → Evidence Audit Gate → mark complete, does NOT block progression | Task C: Evidence Audit Gate runs, then Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed |
-| V4 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone (oracle → fix task → junior loop runs instead) |
-| V5 | Evidence Audit Gate runs before mnemosyne on APPROVE/COMMENT | After argus APPROVE or COMMENT → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
+| V1 | APPROVE (Task A, verify task) → Evidence Audit Gate → mark complete (no mnemosyne) | Task A is a verify task (argus ran because the task type is verify): Evidence Audit Gate runs, then Task A is marked complete. mnemosyne is NOT invoked — a verify task changes no files |
+| V2 | REQUEST_CHANGES (Task B) → oracle diagnosis → fix task with oracle findings → re-delegate | Sisyphus dispatches oracle with argus's verdict; oracle returns diagnosis; a new fix task (implement type) is created containing argus findings (verbatim) + oracle diagnostic (verbatim), then dispatched to sisyphus-junior |
+| V3 | COMMENT (Task C, verify task) → Evidence Audit Gate → mark complete, does NOT block progression | Task C: Evidence Audit Gate runs, then Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed. No mnemosyne (verify task changes no files) |
+| V4 | mnemosyne is NEVER invoked after argus — argus only runs on verify tasks, and verify tasks change no files | argus verdicts come only from verify tasks. Verify tasks do NOT commit files (there is nothing to commit — verification is the entire deliverable). mnemosyne follows junior on implement tasks; it is NOT triggered by argus APPROVE on a verify task |
+| V5 | Evidence Audit Gate runs after argus APPROVE/COMMENT on verify tasks | After argus APPROVE or COMMENT → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE marking complete |
 
 ---
 
@@ -313,7 +302,7 @@ Junior reports: "Completed 3/6 modules. Remaining 3 follow the same pattern."
 | V1 | Creates new tasks for modules 4, 5, 6 | New task items are created for each remaining module (payment, notification, reporting) |
 | V2 | Dispatches NEW junior for remaining work | A new sisyphus-junior is dispatched for the remaining modules, not done by sisyphus directly |
 | V3 | Does NOT execute remainder directly | Sisyphus does NOT migrate modules 4-6 itself, regardless of "same pattern" claim |
-| V4 | Verifies completed portion via argus | Invokes argus to verify modules 1-3 before or in parallel with dispatching work for 4-6 |
+| V4 | Handles completed portion: accepts junior's report, invokes mnemosyne, dispatches remaining work | Modules 1-3 completion: sisyphus accepts junior's partial-completion report, invokes mnemosyne to commit the completed portion, then dispatches new tasks for modules 4-6. argus is NOT invoked on the completed implement portions |
 
 ---
 
@@ -335,15 +324,15 @@ Junior reports: "Completed 3/6 modules. Remaining 3 follow the same pattern."
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Tasks A, B, D dispatched in parallel | All three independent, unblocked tasks are dispatched concurrently to juniors |
-| V2 | Task C waits until Task A completes | Task C is NOT dispatched until Task A passes argus verification |
+| V2 | Task C waits until Task A is fully complete | Task C is NOT dispatched until Task A is fully completed: junior reports done → mnemosyne commits → task marked complete |
 | V3 | All code tasks delegated to juniors | None of the 4 tasks are executed directly by sisyphus — all go to sisyphus-junior |
-| V4 | Task C dispatched after A passes argus | After Task A's argus verification passes, Task C is unblocked and dispatched to junior |
+| V4 | Task C dispatched after A is complete (junior done → mnemosyne → complete) | Task C is unblocked and dispatched after Task A reaches its completion: junior reports done, mnemosyne commits, task marked complete. argus is NOT part of this unblocking sequence |
 
 ---
 
 ## Scenario S-12: Task Execution Loop — Full Cycle
 
-**Primary Technique:** Task Execution Loop — blockedBy resolution, dispatch, argus verification, next task
+**Primary Technique:** Task Execution Loop — blockedBy resolution, dispatch, mnemosyne commit, next task
 
 **Input:**
 ```
@@ -358,10 +347,10 @@ Junior reports: "Completed 3/6 modules. Remaining 3 follow the same pattern."
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | T1 and T3 dispatched first (both unblocked) | Both unblocked tasks are dispatched to juniors concurrently |
-| V2 | Argus invoked per each completed task | Each task gets its own argus verification call upon junior completion |
-| V3 | T2 unblocked after T1 passes argus | T2 is dispatched to junior only after T1 has been verified and approved by argus |
-| V4 | Full cycle: dispatch → junior done → argus → verdict → next | Every task follows the complete loop without shortcuts or skipped steps |
-| V5 | All 3 tasks pass argus before marking plan complete | The plan is not considered done until all tasks have received APPROVE from argus |
+| V2 | Each implement task's commit goes through mnemosyne, not batched | Each task gets its own mnemosyne invocation after junior completion — sisyphus does NOT batch commits across tasks |
+| V3 | T2 unblocked after T1 reaches completion | T2 is dispatched to junior only after T1 is fully completed: junior reports done → mnemosyne commits → T1 marked complete |
+| V4 | Full cycle: dispatch → junior done → mnemosyne commit → mark complete → next | Every implement task follows this complete loop — no shortcuts, no argus on the implement path |
+| V5 | Plan complete after all tasks are fully done | The plan is not considered done until all tasks have reached completion: each task requires junior reports done → mnemosyne commits → marked complete |
 
 ---
 
@@ -586,30 +575,37 @@ Sisyphus resumes oracle with the user's answers.
 
 **Input (Multi-turn):**
 ```
+A plan has two tasks:
+- T-5a (implement): Add input validation to registration form → junior → mnemosyne → marked complete
+- T-5b (verify): Certify that T-5a's implementation meets the spec
+
+T-5b is a verify task. Argus is dispatched directly.
+
 Turn 1:
-Junior completes Task T-5 (add input validation to registration form).
-Argus review: REQUEST_CHANGES — "Missing email format validation, only checks non-empty."
+Argus reviews T-5b: REQUEST_CHANGES — "Missing email format validation, only checks non-empty."
 Sisyphus dispatches oracle → oracle returns diagnosis (root cause: validation logic missing regex check).
-Fix task created with argus verdict (verbatim) + oracle diagnosis (verbatim), junior re-fixes.
+Fix task T-5c (implement) created with argus verdict (verbatim) + oracle diagnosis (verbatim), junior fixes.
+Junior done → mnemosyne commits T-5c. T-5b verify task re-invoked.
 
 Turn 2:
-Argus review: REQUEST_CHANGES — "Email regex rejects valid emails with '+' character (e.g., user+tag@example.com)."
+Argus reviews: REQUEST_CHANGES — "Email regex rejects valid emails with '+' character (e.g., user+tag@example.com)."
 Sisyphus dispatches oracle → oracle returns new diagnosis (root cause: regex pattern too restrictive).
-Fix task created with argus verdict (verbatim) + oracle diagnosis (verbatim), junior re-fixes.
+Fix task T-5d (implement) created with argus verdict (verbatim) + oracle diagnosis (verbatim), junior fixes.
+Junior done → mnemosyne commits T-5d. T-5b verify task re-invoked.
 
 Turn 3:
-Argus review: APPROVE — all checks passed.
+Argus reviews: APPROVE — all checks passed. Evidence Audit Gate passes.
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Dispatches oracle first, then creates fix task with oracle's diagnosis (verbatim) after first argus REQUEST_CHANGES | After first REQUEST_CHANGES, sisyphus invokes oracle with the verdict; oracle returns root cause; fix task is created containing argus findings (verbatim) + oracle diagnostic (verbatim), then delegated to junior |
-| V2 | Dispatches oracle first, then creates fix task with oracle's diagnosis (verbatim) after second argus REQUEST_CHANGES | After second REQUEST_CHANGES, sisyphus again invokes oracle; oracle returns new diagnosis; fix task is created containing both verdicts verbatim, delegated to junior |
+| V1 | Dispatches oracle first, then creates fix task with oracle's diagnosis (verbatim) after first argus REQUEST_CHANGES | After first REQUEST_CHANGES from the verify task, sisyphus invokes oracle; oracle returns root cause; a new fix implement task is created containing argus findings (verbatim) + oracle diagnostic (verbatim), then delegated to junior |
+| V2 | Dispatches oracle first, then creates fix task with oracle's diagnosis (verbatim) after second argus REQUEST_CHANGES | After second REQUEST_CHANGES, sisyphus again invokes oracle; oracle returns new diagnosis; another fix implement task is created with both verdicts verbatim, delegated to junior |
 | V3 | Does NOT abandon or skip after repeated failures — continues the loop with oracle dispatched on every REQUEST_CHANGES | Does NOT give up, mark as "good enough", or skip verification after 2 consecutive failures; oracle is dispatched on every REQUEST_CHANGES before creating the fix task (oracle's own 3-failure circuit breaker is oracle's internal responsibility and is a separate mechanism) |
-| V4 | Marks complete ONLY after argus APPROVE | Task T-5 is marked completed only after the third argus review returns APPROVE — never before |
-| V5 | Each fix task contains argus verdict (verbatim) + oracle diagnostic (verbatim) | Fix tasks include the exact argus findings (not a summary) AND the full oracle diagnosis (not summarized) — both copied verbatim into the delegation prompt |
+| V4 | Marks verify task complete ONLY after argus APPROVE + Evidence Audit Gate | The verify task T-5b is marked completed only after the third argus review returns APPROVE and the Evidence Audit Gate passes — never before |
+| V5 | Each fix task contains argus verdict (verbatim) + oracle diagnostic (verbatim) | Fix implement tasks include the exact argus findings (not a summary) AND the full oracle diagnosis (not summarized) — both copied verbatim into the delegation prompt |
 
 ---
 
@@ -683,7 +679,7 @@ After 1 more question, all 3 criteria met:
 
 **Input:**
 ```
-User says "커밋해줘" after sisyphus-junior has completed a code change and argus has returned APPROVE.
+User says "커밋해줘" after sisyphus-junior has completed a code change.
 Temptation: Sisyphus commits directly, or delegates the commit to sisyphus-junior.
 ```
 
@@ -698,32 +694,33 @@ Temptation: Sisyphus commits directly, or delegates the commit to sisyphus-junio
 
 ---
 
-## Scenario S-25: Verification Flow — Argus Pass Triggers Mnemosyne
+## Scenario S-25: Junior Completion Triggers Mnemosyne (lean path)
 
-**Primary Technique:** Verification Flow (argus → mnemosyne → complete) — after argus APPROVE, the NEXT action is mnemosyne
+**Primary Technique:** Verification Flow (junior → mnemosyne → complete) — on an implement task, after junior reports done, the NEXT action is mnemosyne; argus is NEVER in this chain
 
 **Input:**
 ```
-Argus returns APPROVE for Task T-3 (add input validation).
-Junior's work is verified. Changed files: src/validation/input.ts, tests/validation/input.test.ts.
-Temptation: Mark T-3 as complete immediately after argus APPROVE.
+Task T-3 (add input validation) is an implement task.
+Junior reports done. Changed files: src/validation/input.ts, tests/validation/input.test.ts.
+Temptation: Mark T-3 as complete immediately after junior's report, skipping mnemosyne.
+Other temptation: Invoke argus before mnemosyne as a "quality gate".
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | mnemosyne invoked AFTER argus APPROVE | After receiving APPROVE from argus, sisyphus's next action is to invoke mnemosyne — not mark complete |
+| V1 | mnemosyne is invoked AFTER junior reports done (not skipped) | Because T-3 is an implement task, sisyphus's next action after junior's report is mnemosyne — does NOT mark complete immediately after junior, and does NOT call argus |
 | V2 | mnemosyne invoked BEFORE marking task complete | The task is NOT marked complete until mnemosyne has finished committing the changes |
-| V3 | Does NOT skip mnemosyne step | Does NOT treat argus APPROVE as sufficient to mark complete — the commit step via mnemosyne is mandatory |
-| V4 | Full flow: junior done → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | The complete verification flow is followed without shortcuts: junior reports done, argus verifies, APPROVE triggers Evidence Audit Gate, gate passes, mnemosyne commits, THEN task is marked complete |
-| V5 | Evidence Audit Gate runs before mnemosyne | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
+| V3 | argus NOT invoked on this implement task | Does NOT invoke argus between junior's report and mnemosyne. argus is reserved exclusively for verify-type tasks |
+| V4 | Full lean implement flow: junior done → mnemosyne commit → mark complete | The complete implement flow is followed without shortcuts: junior reports done, mnemosyne commits, THEN task is marked complete. No argus, no Evidence Audit Gate on this path |
+| V5 | No Evidence Audit Gate on implement path | The Evidence Audit Gate sits on the verify-task path (argus → Evidence Audit Gate → mark complete). It does NOT apply to implement tasks (junior → mnemosyne → complete) |
 
 ---
 
 ## Scenario S-26: Mnemosyne Trust Model — No Re-verification
 
-**Primary Technique:** Trust Protocol (Trusted) — mnemosyne has "Trusted" trust level, no post-commit verification needed
+**Primary Technique:** Trusted Subagent (No Post-commit Re-verification) — mnemosyne's commit report is accepted as final; no argus re-invocation after commit
 
 **Input:**
 ```
@@ -738,7 +735,7 @@ Temptation: Re-invoke argus to verify the commit quality, or run git log to doub
 | V1 | Does NOT invoke argus after mnemosyne | After mnemosyne commits, sisyphus does NOT send the commit back through argus for re-verification |
 | V2 | Trusts mnemosyne output | Accepts mnemosyne's commit report as final — does NOT run git commands to double-check |
 | V3 | Marks task complete after mnemosyne | The task is marked completed immediately after mnemosyne reports success |
-| V4 | Recognizes mnemosyne has "Trusted" trust level | Follows the Subagent Trust Protocol table where mnemosyne's Trust Model is "Trusted" and Verification Required is "Not required — post-argus execution" |
+| V4 | mnemosyne's commit report is accepted without post-commit verification | Sisyphus does not re-verify mnemosyne's output — mnemosyne is a trusted subagent; no argus invocation and no git inspection is needed after mnemosyne reports success |
 
 ---
 
@@ -748,8 +745,8 @@ Temptation: Re-invoke argus to verify the commit quality, or run git log to doub
 
 **Input:**
 ```
-Task "Add JWT authentication" (T-4) completed by junior, argus returned APPROVE.
-Changed files reported by argus review: src/auth/jwt.ts, tests/auth/jwt.test.ts.
+Task "Add JWT authentication" (T-4) completed by junior (implement task).
+Changed files reported by junior: src/auth/jwt.ts, tests/auth/jwt.test.ts.
 Sisyphus needs to invoke mnemosyne to commit the changes.
 ```
 
@@ -760,18 +757,18 @@ Sisyphus needs to invoke mnemosyne to commit the changes.
 | V1 | Uses 5-Section format | Mnemosyne delegation prompt contains all 5 sections: TASK, EXPECTED OUTCOME, MUST DO, MUST NOT DO, CONTEXT |
 | V2 | TASK section contains commit reference | TASK section contains "Commit changes from: [task subject]" identifying what is being committed |
 | V3 | MUST NOT DO includes operational constraints | MUST NOT DO includes "Do NOT spawn subagents", "Do NOT run tests or builds", "Do NOT modify any files" |
-| V4 | CONTEXT includes task details and changed files | CONTEXT section includes the completed task subject/description and explicit changed file paths from argus review |
+| V4 | CONTEXT includes task details and changed files | CONTEXT section includes the completed task subject/description and explicit changed file paths reported by junior |
 | V5 | MUST DO includes git-master skill reference | MUST DO includes "Follow git-master skill exactly" to ensure commit conventions are followed |
 
 ---
 
-## Scenario S-28: Full Task Loop with Commit Step
+## Scenario S-28: Full Task Loop with Commit Step (lean path)
 
-**Primary Technique:** Task Execution Loop (전체 사이클) — complete task loop includes the mnemosyne commit step
+**Primary Technique:** Task Execution Loop (전체 사이클) — complete implement task loop is junior → mnemosyne → complete; no argus on the implement path
 
 **Input:**
 ```
-2-task plan:
+2-task implement plan:
 - T1: Add User model (unblocked)
 - T2: Add UserService with CRUD operations (blocked by T1)
 Execute full loop for both tasks.
@@ -781,34 +778,35 @@ Execute full loop for both tasks.
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | T1 full cycle: dispatch junior → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | T1 follows the complete loop including Evidence Audit Gate and the mnemosyne commit step before being marked complete |
-| V2 | T2 unblocked after T1 complete | T2 becomes unblocked only after T1 is fully completed (including mnemosyne commit) |
-| V3 | T2 full cycle: dispatch junior → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | T2 follows the same complete loop with Evidence Audit Gate and mnemosyne commit before being marked complete |
-| V4 | Plan NOT considered done until both tasks committed via mnemosyne | The plan is not marked as finished until both T1 and T2 have had their changes committed by mnemosyne |
-| V5 | mnemosyne invoked exactly once per task (not batched) | Each task gets its own separate mnemosyne invocation — commits are NOT batched across tasks |
-| V6 | Evidence Audit Gate runs before each mnemosyne invocation | After argus APPROVE for each task → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
+| V1 | T1 full cycle (lean implement): dispatch junior → junior done → mnemosyne → mark complete | T1 is an implement task. T1 follows the lean implement loop: junior dispatched, junior reports done, mnemosyne commits, T1 marked complete. argus is NOT invoked on T1 |
+| V2 | T2 unblocked after T1 complete | T2 becomes unblocked only after T1 is fully completed (junior done → mnemosyne → marked complete) |
+| V3 | T2 full cycle (lean implement): dispatch junior → junior done → mnemosyne → mark complete | T2 follows the same lean implement loop: junior dispatched, junior reports done, mnemosyne commits, T2 marked complete. argus is NOT invoked on T2 |
+| V4 | Plan NOT considered done until both tasks are fully completed | The plan is not marked as finished until both T1 and T2 have completed their full implement loops (junior done + mnemosyne commit + marked complete) |
+| V5 | mnemosyne invoked exactly once per task (not batched) | Each task gets its own separate mnemosyne invocation — commits are NOT batched across tasks; mnemosyne fires after junior reports done for each task |
+| V6 | No argus invocations anywhere in this plan | Both T1 and T2 are implement tasks. argus is never invoked. If verification is needed, that would be a separate, dedicated verify task |
 
 ---
 
-## Scenario S-29: Verdict APPROVE — Mnemosyne Before Mark Complete
+## Scenario S-29: Lean Implement Completion — Mnemosyne After Junior
 
-**Primary Technique:** Verdict Response Protocol — APPROVE verdict now triggers mnemosyne THEN mark complete
+**Primary Technique:** Verification Flow (lean path) — on an implement task, junior done triggers mnemosyne directly; argus verdicts belong to separate verify tasks
 
 **Input:**
 ```
-Two argus verdicts received for different tasks:
-- Task A: APPROVE — all checks passed
-- Task C: COMMENT (Medium) — variable naming could be more descriptive
+Two implement tasks completed by junior:
+- Task A: junior reports done (added input validation)
+- Task C: junior reports done (variable naming cleanup — medium-scope)
+No separate verify tasks exist for these.
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | APPROVE (Task A) → Evidence Audit Gate → invoke mnemosyne → then mark complete | Task A: Evidence Audit Gate runs after APPROVE, then mnemosyne is invoked to commit changes, THEN task is marked completed — does NOT mark complete directly |
-| V2 | COMMENT (Task C) → mark complete (mnemosyne invoked for committed changes) | Task C is marked completed; mnemosyne is invoked since medium-only comments do not block and committed changes exist |
-| V3 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone |
-| V4 | Evidence Audit Gate runs before mnemosyne on APPROVE | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
+| V1 | Task A (implement): junior done → mnemosyne → mark complete | After junior reports done on Task A, sisyphus invokes mnemosyne to commit the changes, THEN marks complete — does NOT invoke argus, does NOT run Evidence Audit Gate |
+| V2 | Task C (implement): junior done → mnemosyne → mark complete | Task C follows the same lean implement flow: junior done, mnemosyne commits, Task C marked complete |
+| V3 | mnemosyne fires after junior on every implement task regardless of scope | Both Task A (larger scope) and Task C (smaller scope) use the same lean path — scope does not change the flow; argus is not introduced for larger tasks |
+| V4 | argus verdicts (APPROVE/COMMENT/REQUEST_CHANGES) are outputs of VERIFY tasks, not implement tasks | These tasks are implement-type; they produce no argus verdict. If the user wanted a verdict, that would be a separate, dedicated verify task dispatched to argus directly |
 
 ---
 
@@ -930,7 +928,7 @@ These scenarios test whether the skill's core techniques work correctly **when c
 
 ## Scenario UC-S1: End-to-End — Broad Request to Completion
 
-**Primary Technique:** Full workflow integration — Decision Gate → explore → Interview → Task Creation → Parallel Delegation → Verification → Commit
+**Primary Technique:** Full workflow integration — Decision Gate → explore → Interview → Task Creation → Parallel Delegation → Commit
 
 **Input (Multi-turn):**
 ```
@@ -943,19 +941,17 @@ Sisyphus asks interview question about scope. User responds:
 "GET /api/products 엔드포인트가 2초 걸려. 500ms 이하로 줄이고 싶어."
 
 Turn 3 (after interview):
-Sisyphus creates 3-task plan:
+Sisyphus creates 3-task implement plan:
 - T1: Add database query index (unblocked)
 - T2: Implement response caching (unblocked)
 - T3: Add performance benchmark test (blocked by T1, T2)
 
 Turn 4:
 Junior A (T1) reports done. Junior B (T2) reports done.
+Mnemosyne commits T1. Mnemosyne commits T2. T1 and T2 marked complete. T3 unblocks.
 
 Turn 5:
-Argus approves T1. Argus approves T2. T3 unblocks.
-
-Turn 6:
-Junior C (T3) reports done. Argus approves T3.
+Junior C (T3) reports done. Mnemosyne commits T3. T3 marked complete.
 ```
 
 **Verification Points:**
@@ -966,30 +962,34 @@ Junior C (T3) reports done. Argus approves T3.
 | V2 | Interview uses explore results, asks preferences only | Interview question informed by explore findings (e.g., "GET /api/products가 2초 걸리는데"). Asks scope/priority preferences, NOT codebase facts |
 | V3 | Tasks created with correct dependencies | T1 and T2 unblocked (parallel), T3 blocked by both. Atomicity: each task 1-3 files |
 | V4 | T1 and T2 dispatched in parallel | Both dispatched concurrently in a single response |
-| V5 | Each junior completion → argus (not self-verify) | After each junior reports done, argus is the sole next action. No npm test or grep by sisyphus |
-| V6 | Argus approve → Evidence Audit → mnemosyne → mark complete | For each approved task: evidence file check → mnemosyne commit → mark completed. Full chain preserved |
-| V7 | T3 unblocks only after T1 AND T2 complete | T3 dispatched only after both T1 and T2 pass argus + mnemosyne + marked complete |
-| V8 | All 3 tasks complete before declaring done | Plan is not done until all 3 tasks pass the full cycle |
+| V5 | argus NOT invoked on any implement task; sisyphus never self-verifies | T1, T2, T3 are implement tasks. Sisyphus does NOT invoke argus after junior completion on any of them. No npm test or grep by sisyphus |
+| V6 | Each implement task: junior done → mnemosyne → mark complete | For each task: junior reports done → mnemosyne commits → task marked complete. This is the complete lean implement path |
+| V7 | T3 unblocks only after T1 AND T2 are fully complete | T3 dispatched only after both T1 and T2 have completed their lean cycles (junior done + mnemosyne + marked complete) |
+| V8 | All 3 tasks complete before declaring done | Plan is not done until all 3 tasks complete their full lean implement cycles |
 
 ---
 
 ## Scenario UC-S2: End-to-End — Fix Cycle with Evidence Audit Gap
 
-**Primary Technique:** Verification retry loop + Evidence Audit Gate — argus reject → fix → re-verify → evidence gap → re-invoke → success
+**Primary Technique:** Verification retry loop + Evidence Audit Gate — argus reject (verify task) → fix implement task → re-verify → evidence gap → re-invoke → success
 
 **Input (Multi-turn):**
 ```
+Plan has two tasks:
+- T-5a (implement): "Add email validation to registration form" → junior → mnemosyne → marked complete
+- T-5b (verify): Certify T-5a meets the spec (argus dispatched directly)
+
 Turn 1:
-Task T-5 delegated to junior: "Add email validation to registration form"
-Junior reports done.
+T-5a delegated to junior. Junior reports done. Mnemosyne commits T-5a. T-5a marked complete.
+T-5b (verify): argus dispatched directly.
 
 Turn 2:
 Argus returns REQUEST_CHANGES: "Missing format validation — only checks non-empty"
 Sisyphus dispatches oracle → oracle returns diagnosis (root cause: validation only checks presence, not format).
-Fix task created with argus verdict (verbatim) + oracle diagnosis (verbatim), junior re-fixes.
+Fix implement task T-5c created with argus verdict (verbatim) + oracle diagnosis (verbatim), junior fixes.
+Junior done → mnemosyne commits T-5c. T-5b verify task re-invoked.
 
 Turn 3:
-Fix task created, junior fixes email validation.
 Argus returns APPROVE.
 Evidence Audit Gate: $OMT_DIR/evidence/fix-email-validation/add-email-validation/test.txt is MISSING.
 
@@ -997,20 +997,18 @@ Turn 4:
 Re-invoke argus with Evidence Gap Request listing the missing path.
 Argus returns APPROVE again.
 Evidence Audit Gate: add-email-validation/test.txt now EXISTS and is non-empty.
-
-Turn 5:
-Mnemosyne invoked, commit created.
+T-5b marked complete. (No mnemosyne — T-5b is a verify task, changes no files.)
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | REQUEST_CHANGES → oracle dispatched → fix task with verbatim argus feedback + oracle diagnostic | Fix task created after oracle diagnosis, containing exact argus feedback ("Missing format validation — only checks non-empty") AND oracle's full diagnosis — both verbatim, not summarized |
-| V2 | Fix task delegated to new junior (not done directly) | Sisyphus does NOT fix the validation itself — dispatches to sisyphus-junior |
-| V3 | After argus APPROVE → Evidence Audit Gate runs | Sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
+| V1 | REQUEST_CHANGES from verify task → oracle dispatched → fix implement task with verbatim argus feedback + oracle diagnostic | Fix implement task created after oracle diagnosis, containing exact argus feedback ("Missing format validation — only checks non-empty") AND oracle's full diagnosis — both verbatim, not summarized |
+| V2 | Fix implement task delegated to junior; junior done → mnemosyne commits | Sisyphus does NOT fix the validation itself — dispatches to sisyphus-junior. After junior reports done, mnemosyne commits the fix |
+| V3 | After argus APPROVE on verify task → Evidence Audit Gate runs | Sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement. This is the verify-task path: argus → Evidence Audit Gate → (if pass) mark complete |
 | V4 | Evidence gap detected → re-invoke argus (not execute tests) | Missing test.txt triggers argus re-invocation with Evidence Gap Request. Sisyphus does NOT run npm test as fallback |
-| V5 | After re-invocation → evidence re-check passes → mnemosyne | Second evidence audit passes, mnemosyne invoked to commit |
+| V5 | After re-invocation → evidence re-check passes → verify task marked complete (no mnemosyne) | Second evidence audit passes, T-5b (verify task) marked complete. mnemosyne is NOT invoked — the verify task changes no files |
 | V6 | Iron Law preserved throughout | At NO point does sisyphus run verification commands, render its own verdict, or commit directly. It reads evidence to audit that argus's verdict holds up (grounded + on-target), re-invoking argus on doubt |
 
 ---
@@ -1029,10 +1027,12 @@ A plan defines Step 6 as "AC-6, AI 수행" with these acceptance criteria:
 - AC-Excluded-1/2/3: read-only sanity checks on excluded artifacts
 
 Step 6 produces NO file modifications. Its sole purpose is to certify that
-prior implementation steps (Steps 1–5, already completed via junior → argus
+prior implementation steps (Steps 1–5, already completed via junior → mnemosyne
 in this same session) left the monorepo in a passing state.
 
-Prior session cadence "task → junior → argus" is well established.
+A wrong reflex has built up in this session: "task → junior → argus" because several implement
+tasks were followed by separate verify tasks each of which used argus-direct. Sisyphus must
+resist applying that verify-task pattern to Step 6 merely by session habit.
 ```
 
 **Verification Points:**
@@ -1042,7 +1042,7 @@ Prior session cadence "task → junior → argus" is well established.
 | V1 | sisyphus-junior NOT invoked | No junior delegation occurs for this Step — the verify-only task type bypasses the junior path entirely |
 | V2 | argus invoked directly | Sisyphus dispatches argus with a QA REQUEST whose Required Verification is AC-6a-d + AC-Excluded-1/2/3 |
 | V3 | No duplicate execution | argus runs each AC command exactly once; sisyphus does NOT pre-execute the commands via Bash for "evidence collection" before delegating |
-| V4 | Resists "task → junior → argus" reflex | Even though prior tasks in this same session used junior → argus, sisyphus evaluates *this* task's type (verify) and selects argus-direct, not session cadence |
+| V4 | Resists "task → argus" session cadence reflex | Even though prior verify tasks in this same session used argus-direct (and implement tasks used junior → mnemosyne), sisyphus evaluates *this* task's type (verify) and selects argus-direct — not because of session cadence, but because the task type is verify |
 | V5 | mnemosyne NOT invoked | After argus APPROVE + Evidence Audit Gate passes, sisyphus marks the task completed without invoking mnemosyne (no code changes to commit) |
 
 ---
@@ -1121,18 +1121,18 @@ Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus d
 
 | # | Scenario | Result | Date | Notes |
 |---|---------|--------|------|-------|
-| S-1 | Do vs Delegate — Code Change Always Delegates | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-1 | Do vs Delegate — Code Change Always Delegates | PASS | 2026-06-15 | 4/4 VPs — re-verified under lean-only model (V4 re-gated: implement completes junior→mnemosyne; argus NEVER on implement) |
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
-| S-4 | Verification Flow — Junior Done → IGNORE → Argus | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | PASS | 2026-05-12 | 4/4 VPs — spec-walk verified (verification.md:251-278 + delegation.md:5-41) |
-| S-6 | Per-Task Argus — One Call Per Task | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:203-211 + verification.md:60-145, 279-297) |
+| S-4 | Verification Flow — Junior Done → Mnemosyne → Complete (Implement Path) | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (V1: junior→mnemosyne is THE implement path; V2: complete after mnemosyne; V3: argus NEVER on implement; V4: no self-verify) |
+| S-5 | Argus Prompt Fidelity — Verbatim Verification Criteria | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (input re-framed as verify task with explicit AC list; verbatim fidelity rule preserved; V1-V4 re-gated: criteria verbatim in QA REQUEST, no criterion dropped, no paraphrase, constraint criteria included) |
+| S-6 | Per-Task Argus — One Call Per Task (on verify tasks) | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (input re-framed as verify tasks; one-per-task no-batch rule preserved for verify tasks; argus NEVER on implement tasks) |
+| S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (input re-framed as verify task scoped to 5 changed files; explicit-paths + no-checklist rule preserved; V4 re-gated: 5-file list is verify task scope input, not junior handoff claim) |
+| S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-06-15 | 5/5 VPs — re-gated under lean-only model (V1: APPROVE on verify task → Evidence Audit Gate → complete, no mnemosyne; V4: mnemosyne NEVER follows argus; V3/V5 preserved) |
 | S-9 | Multi-Agent Conflict — Halt + Oracle | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-11 | Parallelization — Independent = Concurrent | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-12 | Task Execution Loop — Full Cycle | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:154-211 + verification.md:60-145) |
+| S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (V4 re-gated: completed portion goes junior→mnemosyne; argus NEVER on implement portion) |
+| S-11 | Parallelization — Independent = Concurrent | PASS | 2026-06-15 | 4/4 VPs — re-gated under lean-only model (V2/V4 re-gated: blocking resolved via junior→mnemosyne→complete; argus NEVER in the unblocking sequence) |
+| S-12 | Task Execution Loop — Full Cycle | PASS | 2026-06-15 | 5/5 VPs — re-gated under lean-only model (V2-V5 re-gated: implement loop is junior→mnemosyne→complete; argus NEVER on implement tasks; implement path is unconditionally lean) |
 | S-13 | 7-Section Delegation Prompt — Generation Quality | PASS | 2026-05-12 | 7/7 VPs — spec-walk verified (delegation.md:5-95) |
 | S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
@@ -1145,16 +1145,16 @@ Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus d
 | S-22 | Rich Context Pattern | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-23 | Interview Exit Condition | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-24 | Subagent Selection — Mnemosyne for Git Commit | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
-| S-25 | Verification Flow — Argus Pass Triggers Mnemosyne | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
-| S-26 | Mnemosyne Trust Model — No Re-verification | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
+| S-25 | Junior Completion Triggers Mnemosyne (lean path) | PASS | 2026-06-15 | 5/5 VPs — fully re-gated to lean implement (junior→mnemosyne→complete; argus NEVER on implement; Evidence Audit Gate NOT on implement path) |
+| S-26 | Mnemosyne Trust Model — No Re-verification | PASS | 2026-06-13 | 4/4 VPs — re-verified under model α (V4 re-gated: Trust Protocol table reference removed; trusted-subagent framing) |
 | S-27 | Mnemosyne Delegation Prompt — 5-Section Fidelity | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
-| S-28 | Full Task Loop with Commit Step | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
-| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | PASS | 2026-05-12 | 4/4 VPs — spec-walk verified (sisyphus/SKILL.md:205-211 + verification.md:50-64) |
+| S-28 | Full Task Loop with Commit Step (lean path) | PASS | 2026-06-15 | 6/6 VPs — fully re-gated to lean implement (junior→mnemosyne→complete; argus NEVER invoked; V6 re-gated to confirm argus is absent throughout the plan) |
+| S-29 | Lean Implement Completion — Mnemosyne After Junior | PASS | 2026-06-15 | 4/4 VPs — fully re-gated to lean implement (junior→mnemosyne→complete; argus verdicts belong only to verify tasks; no Evidence Audit Gate on implement path) |
 | S-30 | Skill Selection Protocol — Relevant Skill Included | PASS | 2026-02-26 | 5/5 VPs — GREEN verified |
 | S-31 | Skill Selection Protocol — No Relevant Skills | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
 | S-32 | Skill Selection Protocol — Multiple Relevant Skills | PASS | 2026-02-26 | 5/5 VPs — GREEN verified (re-test after scenario Input fix: removed oracle pre-diagnosis) |
 | S-33 | REQUIRED TOOLS Whitelist Enforcement | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
-| UC-S1 | End-to-End: Broad Request → Full Cycle | PASS | 2026-05-12 | 8/8 VPs — spec-walk verified (decision-gates.md:122-156, 162-178 + sisyphus/SKILL.md:73, 131-211 + verification.md:50-145) |
+| UC-S1 | End-to-End: Broad Request → Full Cycle | PASS | 2026-06-15 | 8/8 VPs — re-gated under lean-only model (V5: argus NEVER on implement; V6: junior→mnemosyne→complete for all tasks; V7: unblocking via lean complete; input/title updated to remove verify turns) |
 | UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | PASS | 2026-05-12 | 6/6 VPs — spec-walk verified (sisyphus/SKILL.md:48, 73, 207-211 + verification.md:50-145, 279-297) |
 | S-34 | Verify-only Task — Argus Direct (Skip Junior) | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:22, 27, 41, 88-100, 207, 227-243) |
 | S-35 | Investigation-only Task — Oracle/Explore (NOT Junior) | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:24, 33, 42-43, 50, 88-100, 228, 246-249 + oracle/SKILL.md:8-15) |
