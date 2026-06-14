@@ -28,6 +28,9 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-18 | Execution Strategy in Plan | Execution Strategy | Plan Template Structure |
 | P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
 | P-23 | Scenario Verification Principle | Scenario Verification Principle Declaration | - |
+| P-24 | Verify-Lane Round | Verify Lane: collect → falsifying verify → refuted exclusion | Phase-1 Grounding |
+| P-25 | Cross-Lane #13 Witness | Adversarial Evidence-Key: key-tag outside the verify lane | D-5 Key Vocabulary |
+| P-26 | All-Collect-Lanes-Empty No-Op | Verify Lane: valid no-op when every collect lane is empty | Phase-1 Grounding |
 | UC-P1 | End-to-End: Full Planning Pipeline | Full workflow integration | Classification + Interview + Clearance + AC + Metis + Co-Design (Daedalus advisory + human design gate) + Plan + Momus + Execution |
 | UC-P2 | End-to-End: Review Pipeline Rejection and Recovery | Review pipeline feedback loops | Momus REQUEST_CHANGES + defect-type loop-back + revision + re-Momus + User rejection + pipeline re-run |
 | BH-1 | Interview Never Closes | Open-channel interview re-entry | Next-Gate Readiness + phase re-entry |
@@ -771,6 +774,81 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 
 ---
 
+## Scenario P-24: Verify-Lane Round
+
+**Primary Technique:** Verify Lane — collect → falsifying verifier per non-empty lane → refuted finding excluded from plan grounding
+
+**Setup:**
+Complex/Architecture intent. Phase-1 grounding completes the collect step: 3 of the 5 explore aspect lanes are non-empty (pattern, convention, naming/registration). The librarian external lane is also non-empty. The remaining 2 aspect lanes (similar implementation, test infrastructure) are empty.
+
+4 falsifying verifiers are dispatched in ONE parallel response — one per non-empty lane. The verifier for the naming/registration lane returns:
+
+```
+verdict: refuted
+evidence: "The naming token 'UserProfileHandler' does not appear anywhere in the repository — the collect lane cited a file that does not exist."
+confidence: high
+```
+
+The remaining 3 verifiers return `verdict: corroborated` with `confidence: high`.
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Exactly one falsifying verifier per non-empty lane | 4 verifiers are dispatched (one per non-empty lane), issued in ONE parallel response — not one verifier over the full aggregate, not one per empty lane |
+| V2 | Refuted finding excluded from plan grounding | The naming/registration finding (verdict = refuted) is excluded from the filtered findings that reach the interview, AC, and plan — it does NOT appear in plan grounding material |
+| V3 | Non-refuted findings pass through | The 3 corroborated findings reach the interview/AC/plan grounding step unchanged — the exclusion applies only to the refuted finding |
+| V4 | Verify lane line in Phase-1 Evidence | The Phase-1 Evidence block records a `verify lane: dispatched / 4 lanes / 1 excluded` line — the verify stage is visible-or-violation, exactly like the existing explore line |
+
+---
+
+## Scenario P-25: Cross-Lane #13 Witness
+
+**Primary Technique:** Adversarial Evidence-Key Vocabulary — a #13 key-tag surfaces on a librarian external finding OUTSIDE the verify lane, proving the 4-key vocabulary is not confined to the verify stage
+
+**Setup:**
+Complex/Architecture intent. Phase-1 collect dispatches a librarian agent to retrieve an external API specification for a third-party service. The librarian returns a finding about the API's authentication flow.
+
+The librarian finding is passed to the external-lane falsifying verifier (D-1 verify). While applying the D-5 adversarial 4-key checklist to the finding, the verifier tags it:
+
+```
+key: prompt_injection
+evidence: "The external spec example contains a user-controlled 'redirect_uri' injected verbatim into the authorization URL — the cited usage pattern could transmit adversarial input into the auth endpoint."
+```
+
+This key-tag is attached to the finding BEFORE it reaches the findings-assembly step. The planning phase later surfaces the tag as a risk annotation on the relevant TODO.
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | `prompt_injection` key surfaces on a librarian external finding | The finding tagged `prompt_injection` originates from the librarian external lane — it is NOT a finding from an explore aspect lane and is NOT produced inside the verify lane itself |
+| V2 | Key-tag is explicit about being out-of-verify-lane | The scenario transcript and/or the finding record make clear the key-tag was applied by the external-lane verifier working on a librarian-sourced finding, NOT a finding from the 5 explore aspect lanes |
+| V3 | 4-key vocabulary applies uniformly across all lanes | The `prompt_injection` tag is drawn from the same D-5 4-key vocabulary (`stale_state`, `prompt_injection`, `nonexistent_path`, `version_drift`) that applies in every collect lane — the vocabulary is not confined to any single lane type |
+| V4 | Tagged finding reaches plan grounding as a risk annotation | Because the `prompt_injection`-tagged finding has `verdict: corroborated` and `confidence: high`, it is NOT excluded; it passes through to plan grounding carrying the key-tag as a risk annotation |
+
+---
+
+## Scenario P-26: All-Collect-Lanes-Empty No-Op
+
+**Primary Technique:** Verify Lane — all collect lanes empty → valid no-op; the verify dispatch is skipped and planning proceeds without grounding findings
+
+**Setup:**
+Complex/Architecture intent. The 5 explore aspect dispatches all return empty results: the codebase contains no existing pattern, no applicable convention, no similar implementation, no naming/registration precedent, and no test infrastructure for the requested feature (greenfield territory). The librarian external lane is also absent (no external dependency lookup was triggered).
+
+All 6 possible collect lanes are empty.
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Verify dispatch is skipped — no falsifying verifiers issued | When every collect lane is empty, Prometheus does NOT dispatch any falsifying verifier. Zero verifier agents are launched; the verify step is a valid no-op |
+| V2 | Planning proceeds without blocking on verify | Prometheus does NOT stall, error, or ask the user for input because of the empty lanes — it proceeds directly from the collect step to the interview/AC/plan grounding step |
+| V3 | Phase-1 Evidence line reflects the no-op | The Phase-1 Evidence block records a `verify lane: no-op / 0 lanes / 0 excluded` line (or equivalent) — the absence of any collect result is documented, not silently omitted |
+| V4 | Greenfield treatment in plan | Because no collect lane produced grounding findings, the relevant TODO references state "Greenfield — no existing pattern" explicitly rather than omitting the References field |
+
+---
+
 ## Behavior Scenarios (Open HITL Co-Design Flow)
 
 These four named scenarios are the deterministic behavior coverage for the open human-in-the-loop co-design flow (Metis requirements gate → S2 Co-Design with in-phase Daedalus advisory + human design gate → Plan → Momus plan gate). Each has an **Expected Observation** block containing a CONCRETE transcript marker that a rubric runner checks PASS/FAIL against. The interview is an open Socratic co-design channel that REOPENS whenever a later phase surfaces a new question — it is never "closed".
@@ -1019,3 +1097,6 @@ At Complex/Architecture intent, the S2 Co-Design transcript MUST show the ADR de
 | BH-3 | ADR Co-Authorship | | | New behavior scenario (design fork co-decided in S2, recorded as ADR entry). Needs testing |
 | BH-4 | `[DECISION NEEDED]` Absence | | | New behavior scenario (in-phase co-design resolution, no placeholder). Needs testing |
 | BH-5 | ADR Log Emission and Structural Enumeration Timing | | | New behavior scenario (decision log with structural D-N items before human design gate at Complex/Architecture; full-item log without structural items at Scoped; no ADR log at Trivial — the two gates are distinct). Needs testing |
+| P-24 | Verify-Lane Round | | | New verify-lane scenario (collect → falsifying verify → refuted exclusion). Needs testing |
+| P-25 | Cross-Lane #13 Witness | | | New cross-lane witness scenario (prompt_injection key on librarian finding, outside verify lane). Needs testing |
+| P-26 | All-Collect-Lanes-Empty No-Op | | | New empty-lanes no-op scenario (valid no-op when all collect lanes empty). Needs testing |
