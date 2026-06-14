@@ -594,7 +594,7 @@ where `{repo-basename}` = `basename -s .git $(git remote get-url origin)`, or `b
 
 #### Step R4: Substitute Placeholders and Write
 
-Count correctness and cleanup findings (CONFIRMED + PLAUSIBLE each). Apply Rule 6b to the assembled markdown:
+Count correctness and cleanup findings (CONFIRMED + PLAUSIBLE each). Apply the close-tag escape to the assembled markdown:
 
 ```js
 JSON.stringify(reviewMarkdown).replace(/<\/script>/g, '<\\/script>')
@@ -611,7 +611,7 @@ Substitute into the template placeholders:
 | `{{CORRECTNESS_COUNT}}` | e.g. `3 correctness` |
 | `{{CLEANUP_COUNT}}` | e.g. `2 cleanup` |
 | `{{REVIEW_FILE_PATH}}` | Absolute path to the written HTML file |
-| `{{REVIEW_MARKDOWN_JSON}}` | Rule 6b-escaped JSON string of the assembled review markdown |
+| `{{REVIEW_MARKDOWN_JSON}}` | close-tag-escaped JSON string of the assembled review markdown |
 | `{{FOOTER_NOTE}}` | Session language note, e.g. `This review reports; it does not gate.` |
 
 Then write the substituted HTML:
