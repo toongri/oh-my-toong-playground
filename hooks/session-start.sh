@@ -106,7 +106,11 @@ for handoff_file in "$OMT_DIR"/handoff-*.md; do
   handoff_sid="${handoff_base#handoff-}"
   handoff_sid="${handoff_sid%.md}"
   [ "$handoff_sid" = "$SESSION_ID" ] && continue
-  handoff_mtime=$(stat -f %m "$handoff_file" 2>/dev/null || stat -c %Y "$handoff_file" 2>/dev/null || true)
+  # GNU form (-c %Y) first: GNU `stat -f` means --file-system and prints a
+  # non-numeric block to stdout for the file operand, which would poison the
+  # arithmetic below; BSD `stat -c` instead fails cleanly with no stdout. So the
+  # GNU-first order is portable, while BSD-first would capture garbage on Linux.
+  handoff_mtime=$(stat -c %Y "$handoff_file" 2>/dev/null || stat -f %m "$handoff_file" 2>/dev/null || true)
   [ -n "$handoff_mtime" ] || continue
   handoff_age=$(( GC_NOW - handoff_mtime ))
   if [ "$handoff_age" -gt "$HANDOFF_ORPHAN_TTL_SECS" ]; then
