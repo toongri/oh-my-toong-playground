@@ -1,3 +1,8 @@
+hooks:
+  PreCompact:
+    - component: pre-compact.sh
+      timeout: 280
+
 config:
   language: "한국어"
   outputStyle: "Explanatory"
