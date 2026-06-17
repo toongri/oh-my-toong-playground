@@ -12,7 +12,7 @@
 
 import { existsSync, readFileSync, unlinkSync, statSync } from 'fs';
 import { execSync } from 'child_process';
-import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFileNoCreate } from '@lib/state-core';
+import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFileNoCreate, ensureSeed } from '@lib/state-core';
 
 export interface PrometheusState {
   active: boolean;
@@ -109,6 +109,10 @@ export function setPrometheusState(
   sessionId: string,
   opts: { phase: string; plan_path?: string; resume_summary?: string }
 ): void {
+  // Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
+  // (e.g. slash-command entry). No-op when the file already exists; the strict
+  // writeFileNoCreate below is unchanged (ADR-7 mid-flight guard preserved).
+  ensureSeed('prometheus', sessionId);
   const path = resolveStatePath(sessionId);
   const existing = readFileOrNull(path);
   let prior: Partial<PrometheusState> = {};

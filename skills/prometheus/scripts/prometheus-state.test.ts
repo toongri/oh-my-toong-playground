@@ -180,12 +180,13 @@ describe('prometheus state', () => {
     expect(second!.last_touched_at >= second!.started_at).toBe(true);
   });
 
-  // --- (ADR-7-prom) prometheus CLI refuses to create when file absent ---
-  test('(ADR-7-prom) setPrometheusState refuses when file absent — exits non-zero', () => {
+  // --- (self-heal-prom) prometheus CLI seeds when the hook never fired ---
+  test('(self-heal-prom) setPrometheusState seeds then succeeds when file absent', () => {
     process.env.OMT_SESSION_ID = 'absent-session';
-    // No file seeded — must throw because process.exit(1) is called
-    expect(() => setPrometheusState('absent-session', { phase: 'S1' })).toThrow();
+    // No file seeded (e.g. slash-command entry) — ensureSeed writes the pristine skeleton
     expect(existsSync(resolveStatePath('absent-session'))).toBe(false);
+    expect(() => setPrometheusState('absent-session', { phase: 'S1' })).not.toThrow();
+    expect(existsSync(resolveStatePath('absent-session'))).toBe(true);
   });
 });
 
@@ -384,25 +385,22 @@ describe('get subcommand', () => {
 // ---------------------------------------------------------------------------
 
 describe('no-create write (TOCTOU)', () => {
-  // RED: setPrometheusState uses writeFileNoCreate — file deleted between
-  // the old existsSync check and write must not resurrect the file.
-  // Because we replace existsSync-then-write with writeFileNoCreate (single
-  // open-with-r+-flag), the only way to verify the syscall-level contract is to
-  // confirm that setPrometheusState still throws on absent file (the property
-  // that writeFileNoCreate enforces). The existsSync path could theoretically
-  // be fooled by a TOCTOU race; writeFileNoCreate cannot.
-  // This test verifies the observable contract (throw on absent) is preserved
-  // after the internal change.
-  test('setPrometheusState throws ENOENT-style when file is absent (writeFileNoCreate contract)', () => {
-    // Write then delete to simulate the "file vanished after existsSync"
+  // The orphan-resurrection guarantee that matters — an adopted-away session whose
+  // old-sid write must be refused — is covered by dormancy-prom above (adopt() records
+  // the adoption, and ensureSeed's adoption.log guard refuses to re-seed it). A file
+  // that is simply absent with NO adoption record is not an orphan: setPrometheusState
+  // self-heals it by seeding the pristine skeleton (mirrors the PreToolUse hook for
+  // slash-command entry). writeFileNoCreate still collapses check+write to a single
+  // open('r+'), so a concurrent mid-write rename of a non-pristine file throws ENOENT.
+  test('setPrometheusState self-heals an absent file with no adoption record', () => {
     const path = resolveStatePath('toctouSession');
     writeFileSync(path, JSON.stringify({ active: true, phase: 'S0', plan_path: '', resume_summary: '', started_at: '2024-01-01T00:00:00', last_touched_at: '2024-01-01T00:00:00' }), 'utf8');
-    // Verify it works when present
     setPrometheusState('toctouSession', { phase: 'S1' });
     expect(existsSync(path)).toBe(true);
-    // Now delete it and confirm the write is refused
+    // Delete with no adoption record → self-heal on the next write
     unlinkSync(path);
-    expect(() => setPrometheusState('toctouSession', { phase: 'S2' })).toThrow();
-    expect(existsSync(path)).toBe(false);
+    expect(() => setPrometheusState('toctouSession', { phase: 'S2' })).not.toThrow();
+    expect(existsSync(path)).toBe(true);
+    expect(JSON.parse(readFileSync(path, 'utf8')).phase).toBe('S2');
   });
 });

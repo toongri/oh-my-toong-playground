@@ -89,17 +89,24 @@ describe('deep-interview state', () => {
     expect(files2).toHaveLength(1);
   });
 
-  // AC ADR-7-init — init on absent file → non-zero (throws), nothing created
-  test('ADR-7-init: init on absent file throws and creates nothing', () => {
-    // No seed file
-    expect(() => initDeepInterviewState(SID, { initial_idea: 'x' })).toThrow();
+  // self-heal-init — init on absent file seeds the pristine skeleton, then overlays
+  // (the PreToolUse hook never fired, e.g. slash-command entry)
+  test('self-heal-init: init on absent file seeds then succeeds', () => {
     expect(existsSync(resolveStatePath(SID))).toBe(false);
+    expect(() => initDeepInterviewState(SID, { initial_idea: 'x' })).not.toThrow();
+    expect(existsSync(resolveStatePath(SID))).toBe(true);
+    const parsed = JSON.parse(readFileSync(resolveStatePath(SID), 'utf8')) as Record<string, unknown>;
+    expect((parsed.state as Record<string, unknown>).initial_idea).toBe('x');
   });
 
-  // AC ADR-7-update — update on absent file → non-zero (throws), nothing created
-  test('ADR-7-update: update on absent file throws and creates nothing', () => {
-    expect(() => updateDeepInterviewState(SID, { current_phase: 'phase1' })).toThrow();
+  // self-heal-update — update on absent file seeds the pristine skeleton, then overlays
+  // (this is the original incident: a round-2 update on a never-seeded file)
+  test('self-heal-update: update on absent file seeds then succeeds', () => {
     expect(existsSync(resolveStatePath(SID))).toBe(false);
+    expect(() => updateDeepInterviewState(SID, { current_phase: 'phase1' })).not.toThrow();
+    expect(existsSync(resolveStatePath(SID))).toBe(true);
+    const parsed = JSON.parse(readFileSync(resolveStatePath(SID), 'utf8')) as Record<string, unknown>;
+    expect(parsed.current_phase).toBe('phase1');
   });
 
   // AC sessionId-free — no sessionId field written
@@ -207,11 +214,11 @@ describe('deep-interview-state CLI main()', () => {
     expect((parsed['state'] as Record<string, unknown>)['initial_idea']).toBe('get test');
   });
 
-  // CLI absent-file → non-zero exit (mirrors goal-state.test.ts:646-653 pattern)
-  test('init on absent file exits non-zero via CLI', () => {
-    // No seed written — init must fail
-    expect(() => run('init --initial-idea "x"')).toThrow();
-    expect(existsSync(resolveStatePath(SID))).toBe(false);
+  // CLI absent-file → self-heal (exit 0, file created) — slash-command entry path
+  test('init on absent file self-heals via CLI (exit 0, file created)', () => {
+    // No seed written — init self-heals by seeding the pristine skeleton first
+    expect(() => run('init --initial-idea "x"')).not.toThrow();
+    expect(existsSync(resolveStatePath(SID))).toBe(true);
   });
 
   // CLI absent OMT_SESSION_ID → non-zero exit

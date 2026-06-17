@@ -40,7 +40,7 @@
 import { readFileSync, unlinkSync } from 'fs';
 import { execSync } from 'child_process';
 import { getOmtDir } from '@lib/omt-dir';
-import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFileNoCreate, isPristine } from '@lib/state-core';
+import { mergeWithHeartbeat, resolveSessionIdOrThrow, listOthers, adopt, writeFileNoCreate, isPristine, ensureSeed } from '@lib/state-core';
 
 export type GoalPhase = 'planning' | 'pursuing' | 'budget_limited' | 'blocked' | 'complete';
 export type ObjectiveVerdict = 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' | 'absent';
@@ -170,6 +170,10 @@ function readPrior(sessionId: string): Partial<GoalState> {
  * absent. The PreToolUse seed is the ONLY creator of state files.
  */
 function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
+  // Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
+  // (e.g. slash-command entry). No-op when the file already exists, so real
+  // work is never clobbered; the strict writeFileNoCreate below is unchanged.
+  ensureSeed('goal', sessionId);
   const stateFilePath = resolveStatePath(sessionId);
   const prior = readPrior(sessionId);
   // `??` rejects only null/undefined; a corrupt on-disk max_iterations (e.g. a string or
