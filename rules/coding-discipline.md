@@ -59,3 +59,14 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+## 5. Deep Modules
+
+**Prefer deep modules — a small interface hiding substantial implementation. Don't scatter logic across many shallow files.**
+
+A *shallow* module's interface is nearly as complex as what it hides; splitting code into many tiny files turns understanding one concept into bouncing across dozens of them. Fewer, deeper modules beat many shallow ones.
+
+- Don't extract a function or file unless it earns its interface. One caller + thin body → inline it.
+- Hide complexity behind the interface; don't spread it across siblings. Locality over fragmentation.
+
+The test: imagine deleting the module. If complexity vanishes, it was a pass-through — inline it. If it reappears across multiple callers, it earned its keep.
