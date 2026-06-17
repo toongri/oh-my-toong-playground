@@ -26,6 +26,7 @@ import {
   writeFileNoCreate,
   isPristine,
   restampAfterAdopt,
+  ensureSeed,
 } from './state-core.ts';
 
 // ---------------------------------------------------------------------------
@@ -860,4 +861,165 @@ describe('nowStamp', () => {
     const s2 = nowStamp();
     expect(s2 >= s1).toBe(true);
   });
+});
+
+// ---------------------------------------------------------------------------
+// (ES-1..8) ensureSeed — autonomous self-heal seed fallback
+// ---------------------------------------------------------------------------
+
+describe('ensureSeed (ES-1..8)', () => {
+  let omtDir: string;
+  const origOmtDir = process.env.OMT_DIR;
+  const origSid = process.env.OMT_SESSION_ID;
+
+  beforeEach(() => {
+    omtDir = makeOmtDir();
+    process.env.OMT_DIR = omtDir;
+    process.env.OMT_SESSION_ID = 'S';
+  });
+
+  afterEach(() => {
+    if (origOmtDir === undefined) delete process.env.OMT_DIR;
+    else process.env.OMT_DIR = origOmtDir;
+    if (origSid === undefined) delete process.env.OMT_SESSION_ID;
+    else process.env.OMT_SESSION_ID = origSid;
+    rmSync(omtDir, { recursive: true, force: true });
+  });
+
+  function statePathFor(type: 'goal' | 'prometheus' | 'deep-interview', sid: string): string {
+    return join(omtDir, STATE_PREFIX[type] + sid + '.json');
+  }
+
+  // ES-1
+  test('creates a pristine deep-interview skeleton when the file is absent', () => {
+    const p = statePathFor('deep-interview', 'S');
+    expect(existsSync(p)).toBe(false);
+    ensureSeed('deep-interview', 'S');
+    expect(existsSync(p)).toBe(true);
+    const parsed = JSON.parse(readFileSync(p, 'utf8'));
+    expect(parsed.active).toBe(true);
+    expect(parsed.started_at).toBeTruthy();
+    expect(parsed.last_touched_at).toBeTruthy();
+    expect(parsed.state).toBeUndefined();
+    expect(isPristine('deep-interview', parsed)).toBe(true);
+  });
+
+  // ES-2
+  test('creates a schema-valid pristine goal skeleton when absent', () => {
+    ensureSeed('goal', 'S');
+    const parsed = JSON.parse(readFileSync(statePathFor('goal', 'S'), 'utf8'));
+    expect(parsed.active).toBe(true);
+    expect(parsed.phase).toBe('planning');
+    expect(parsed.iteration).toBe(0);
+    expect(parsed.max_iterations).toBe(10);
+    expect(parsed.objective_verdict).toBe('absent');
+    expect(parsed.outcome).toBe('');
+    expect(isPristine('goal', parsed)).toBe(true);
+  });
+
+  // ES-3
+  test('creates a pristine prometheus skeleton when absent', () => {
+    ensureSeed('prometheus', 'S');
+    const parsed = JSON.parse(readFileSync(statePathFor('prometheus', 'S'), 'utf8'));
+    expect(parsed.active).toBe(true);
+    expect(parsed.phase).toBe('S0');
+    expect(parsed.plan_path).toBe('');
+    expect(isPristine('prometheus', parsed)).toBe(true);
+  });
+
+  // ES-4
+  test('is a no-op when the file already exists (never clobbers real work)', () => {
+    const real = {
+      active: true,
+      phase: 'pursuing',
+      iteration: 4,
+      outcome: 'ship the thing',
+      max_iterations: 10,
+      started_at: isoSecondsAgo(300),
+      last_touched_at: isoSecondsAgo(30),
+    };
+    writeState(omtDir, 'goal-state-S.json', real);
+    ensureSeed('goal', 'S');
+    expect(readState(omtDir, 'goal-state-S.json')).toEqual(real);
+  });
+
+  // ES-5
+  test('does NOT resurrect a file that was adopted away (adoption.log guard)', () => {
+    writeFileSync(join(omtDir, 'adoption.log'), '2026-06-16T12:00:00+09:00 goal S -> OTHER\n');
+    const p = statePathFor('goal', 'S');
+    expect(existsSync(p)).toBe(false);
+    ensureSeed('goal', 'S');
+    expect(existsSync(p)).toBe(false);
+  });
+
+  // ES-6
+  test('still seeds when adoption.log records a different sid/type (guard specificity)', () => {
+    writeFileSync(
+      join(omtDir, 'adoption.log'),
+      '2026-06-16T12:00:00+09:00 goal OTHER -> Z\n2026-06-16T12:00:00+09:00 prometheus S -> Z\n'
+    );
+    ensureSeed('goal', 'S');
+    expect(existsSync(statePathFor('goal', 'S'))).toBe(true);
+  });
+
+  // ES-7
+  test('tolerates a pre-existing file without throwing (idempotent)', () => {
+    ensureSeed('prometheus', 'S');
+    expect(() => ensureSeed('prometheus', 'S')).not.toThrow();
+  });
+
+  // ES-8
+  test('is a no-op for an unsafe session id (path-traversal defense)', () => {
+    expect(() => ensureSeed('goal', '../escape')).not.toThrow();
+    expect(existsSync(join(omtDir, '..', 'escape.json'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (ES-parity) seed skeleton parity: TS ensureSeed output == bash PreToolUse seed
+// ---------------------------------------------------------------------------
+
+describe('ensureSeed ↔ bash seed parity (ES-parity)', () => {
+  let omtDir: string;
+  const origOmtDir = process.env.OMT_DIR;
+  const origSid = process.env.OMT_SESSION_ID;
+
+  beforeEach(() => {
+    omtDir = makeOmtDir();
+    process.env.OMT_DIR = omtDir;
+    process.env.OMT_SESSION_ID = 'S';
+  });
+  afterEach(() => {
+    if (origOmtDir === undefined) delete process.env.OMT_DIR;
+    else process.env.OMT_DIR = origOmtDir;
+    if (origSid === undefined) delete process.env.OMT_SESSION_ID;
+    else process.env.OMT_SESSION_ID = origSid;
+    rmSync(omtDir, { recursive: true, force: true });
+  });
+
+  // Extracts the JSON skeleton the PreToolUse seed writes for `skill`, normalizing
+  // the bash `'"${ts}"'` timestamp interpolation to a placeholder so it parses.
+  function bashSkeleton(hookSrc: string, skill: string): Record<string, unknown> {
+    const re = new RegExp('\\n\\s*' + skill + "\\)\\s*\\n\\s*write_seed_if_absent[\\s\\S]*?'(\\{[\\s\\S]*?\\})'");
+    const m = hookSrc.match(re);
+    if (!m) throw new Error(`could not extract bash skeleton for ${skill}`);
+    const json = m[1].replace(/'"\$\{ts\}"'/g, 'PLACEHOLDER_TS');
+    return JSON.parse(json) as Record<string, unknown>;
+  }
+
+  function normalizeTs(o: Record<string, unknown>): Record<string, unknown> {
+    return { ...o, started_at: 'PLACEHOLDER_TS', last_touched_at: 'PLACEHOLDER_TS' };
+  }
+
+  const cases: Array<'goal' | 'prometheus' | 'deep-interview'> = ['goal', 'prometheus', 'deep-interview'];
+
+  for (const type of cases) {
+    test(`${type}: ensureSeed output matches the bash PreToolUse skeleton`, () => {
+      const hookSrc = readFileSync(join(import.meta.dir, '../hooks/pre-tool-enforcer.sh'), 'utf8');
+      const expected = bashSkeleton(hookSrc, type);
+      ensureSeed(type, 'S');
+      const actual = JSON.parse(readFileSync(join(omtDir, STATE_PREFIX[type] + 'S.json'), 'utf8'));
+      expect(normalizeTs(actual)).toEqual(normalizeTs(expected));
+    });
+  }
 });

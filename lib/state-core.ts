@@ -483,3 +483,113 @@ export function adopt(type: StateType, srcSid: string): void {
     process.stderr.write(`adopt: warning: failed to append adoption.log: ${String(e)}\n`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// ensureSeed — autonomous self-heal seed fallback
+// ---------------------------------------------------------------------------
+
+/**
+ * The canonical pristine skeleton written when a state file is first created.
+ * MUST stay value-equal (modulo timestamps) to the skeleton the PreToolUse seed
+ * writes in hooks/pre-tool-enforcer.sh — a parity test (state-core.test.ts,
+ * ES-parity) asserts this. The hook and this CLI-side fallback must produce
+ * identical pristine state so that a slash-command entry (hook miss) and a
+ * Skill-tool entry are indistinguishable downstream.
+ */
+function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
+  if (type === 'prometheus') {
+    return { active: true, phase: 'S0', plan_path: '', resume_summary: '', started_at: ts, last_touched_at: ts };
+  }
+  if (type === 'goal') {
+    return {
+      active: true,
+      phase: 'planning',
+      iteration: 0,
+      outcome: '',
+      verification_surface: '',
+      constraints: '',
+      boundaries: '',
+      max_iterations: 10,
+      blocked_stop: '',
+      objective_verdict: 'absent',
+      plan_path: '',
+      resume_summary: '',
+      budget_limit_notified: false,
+      blocked_reason: '',
+      completion_evidence_paths: [],
+      schema_version: 1,
+      started_at: ts,
+      last_touched_at: ts,
+    };
+  }
+  // deep-interview
+  return { active: true, started_at: ts, last_touched_at: ts };
+}
+
+/**
+ * Returns true iff `srcSid`'s state of `type` was adopted away by another session,
+ * per the adoption.log audit trail (`<ts> <type> <srcSid> -> <curSid>`). Used by
+ * ensureSeed to refuse resurrecting a file a live session took over (split-brain
+ * guard). Reaped or never-seeded files leave no log line and are safe to re-create.
+ *
+ * Fails open: a missing/unreadable/partially-written log returns false. This is
+ * required, since the common case (no adoption ever happened) has no log at all and
+ * must still seed. The residual cost is a narrow window — adopt() renames the file
+ * away just before it appends its log line, so a write landing between those two
+ * steps (or against a corrupt log) sees no record and re-creates a PRISTINE (empty)
+ * skeleton. The real content is safe under the adopter's sid; the resurrected file
+ * holds no work, so this is a bounded, recoverable empty-file reappearance — not
+ * content loss. The realistic sequential case (adopt completes, then the old session
+ * writes) is fully covered.
+ */
+function wasAdoptedAway(type: StateType, srcSid: string): boolean {
+  const logPath = join(getOmtDir(), 'adoption.log');
+  let content: string;
+  try {
+    content = readFileSync(logPath, 'utf8');
+  } catch {
+    return false; // no log → no adoption ever happened
+  }
+  for (const line of content.split('\n')) {
+    const parts = line.trim().split(/\s+/);
+    // parts: [<iso-ts>, <type>, <srcSid>, '->', <curSid>]
+    if (parts.length >= 5 && parts[1] === type && parts[2] === srcSid && parts[3] === '->') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Autonomous seed fallback. Creates the pristine skeleton for `type`/`sessionId`
+ * iff the state file is absent AND the session was not adopted away. Idempotent
+ * and race-safe: an atomic O_EXCL create means a concurrent PreToolUse seed loses
+ * to EEXIST and is silently tolerated.
+ *
+ * This is the CLI-side mirror of the PreToolUse seed (hooks/pre-tool-enforcer.sh):
+ * the hook fires only on a `Skill` TOOL call, so slash-command entry never seeds.
+ * Calling ensureSeed at the top of a writer closes that gap WITHOUT relaxing the
+ * strict no-create contract of the real writers — only a pristine skeleton is ever
+ * created here. Because adopt() refuses pristine sources (r8), the skeleton cannot
+ * be renamed away between this create and the writer's own write, so ADR-7's
+ * orphan-resurrection guarantee is preserved.
+ */
+export function ensureSeed(type: StateType, sessionId: string): void {
+  // Defensive: callers validate sid, but never derive a path from an unsafe id.
+  if (!isSafeSessionId(sessionId)) return;
+  const path = statePath(type, sessionId);
+  if (existsSync(path)) return; // already seeded — never clobber real work
+  if (wasAdoptedAway(type, sessionId)) return; // taken over by a live session — do not resurrect
+  const content = JSON.stringify(seedSkeleton(type, nowStamp()), null, 2);
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, 'wx'); // O_CREAT|O_EXCL — atomic; EEXIST if seeded concurrently
+    const buf = Buffer.from(content, 'utf8');
+    writeSync(fd, buf, 0, buf.length, 0);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return; // lost the create race — fine
+    throw err;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}

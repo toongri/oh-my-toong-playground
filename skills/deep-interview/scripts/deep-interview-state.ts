@@ -36,6 +36,7 @@ import {
   STATE_PREFIX,
   listOthers,
   adopt,
+  ensureSeed,
 } from '@lib/state-core';
 
 // ---------------------------------------------------------------------------
@@ -106,6 +107,9 @@ export function initDeepInterviewState(
     codebase_context?: string;
   }
 ): void {
+  // Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
+  // (e.g. slash-command entry). No-op when the file already exists.
+  ensureSeed('deep-interview', sessionId);
   const path = resolveStatePath(sessionId);
   const prior = readRaw(path);
   if (prior === null) {
@@ -165,6 +169,9 @@ export function updateDeepInterviewState(
     challenge_mode?: string;
   }
 ): void {
+  // Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
+  // (e.g. slash-command entry). No-op when the file already exists.
+  ensureSeed('deep-interview', sessionId);
   const path = resolveStatePath(sessionId);
   const prior = readRaw(path);
   if (prior === null) {

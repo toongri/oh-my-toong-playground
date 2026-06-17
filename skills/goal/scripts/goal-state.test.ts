@@ -680,12 +680,13 @@ describe('goal-state hardening: heartbeat + no-create + hard-fail', () => {
     expect(second.last_touched_at >= second.started_at).toBe(true);
   });
 
-  // (ADR-7-goal) goal CLI refuses to create when file absent
-  test('(ADR-7-goal) setGoalState refuses when state file is absent — exits non-zero', () => {
+  // (self-heal-goal) goal CLI seeds the pristine skeleton when the hook never fired
+  test('(self-heal-goal) setGoalState seeds then succeeds when state file is absent', () => {
     const absentSid = 'absent-goal-session';
-    // No file seeded — must throw (process.exit(1))
-    expect(() => setGoalState(absentSid, { phase: 'planning' })).toThrow();
     expect(existsSync(resolveStatePath(absentSid))).toBe(false);
+    expect(() => setGoalState(absentSid, { phase: 'planning' })).not.toThrow();
+    expect(existsSync(resolveStatePath(absentSid))).toBe(true);
+    expect(readGoalState(absentSid)!.phase).toBe('planning');
   });
 
   // (B2) absent OMT_SESSION_ID via CLI → non-zero exit, no default file
@@ -914,22 +915,20 @@ describe('get subcommand includes pristine field', () => {
 // ---------------------------------------------------------------------------
 
 describe('mergeWrite uses writeFileNoCreate (no TOCTOU race)', () => {
-  // (F10-no-create-after-adopt) After a rename-away (simulating adopt), the orphaned
-  // session's merge-write must throw ENOENT, not silently recreate the file.
-  // This is the TOCTOU scenario: rename happens between an existsSync check and a
-  // writeFileSync call. writeFileNoCreate collapses check+write to a single open('r+')
-  // so the race window does not exist.
-  test('F10-no-create-after-adopt: merge-write throws after file is renamed away', () => {
-    // Set up a valid state
+  // (F10-no-create-after-adopt) After an adopt-away, the orphaned session's merge-write
+  // must be refused, not silently recreate the file (split-brain). Two layers enforce it:
+  // ensureSeed's adoption.log guard refuses to re-seed an adopted-away sid, and
+  // writeFileNoCreate's single open('r+') throws ENOENT on a concurrent mid-write rename.
+  // A faithful adopt-away leaves BOTH the rename and the adoption.log line (real adopt()
+  // records the log), so we mirror both here.
+  test('F10-no-create-after-adopt: merge-write refused after adopt-away (no resurrection)', () => {
     setGoalState(S, { phase: 'planning', outcome: 'test' });
-    // Simulate adopt-rename: rename the file away WHILE session S still holds reference
     const src = resolveStatePath(S);
-    const dst = src + '.adopted';
-    const { renameSync } = require('fs');
-    renameSync(src, dst);
-    // Now try to write — must fail (file absent), not silently recreate
+    const { renameSync, appendFileSync } = require('fs');
+    renameSync(src, src + '.adopted');
+    appendFileSync(`${tmpDir}/adoption.log`, `2026-06-16T12:00:00+09:00 goal ${S} -> OTHER\n`, 'utf8');
+    // Now session S tries to write — must be refused, not silently recreated
     expect(() => setGoalState(S, { phase: 'pursuing' })).toThrow();
-    // The original file path must still be absent (not recreated)
     expect(existsSync(src)).toBe(false);
   });
 });
