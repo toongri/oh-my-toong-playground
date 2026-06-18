@@ -5,6 +5,10 @@ export interface HookInput {
   cwd?: string;
   transcript_path?: string;
   last_assistant_message?: string;
+  /** Claude Code v2.1.152+: true when the hook is being re-invoked after a previous block. */
+  stop_hook_active?: boolean;
+  /** Claude Code v2.1.152+: running background subagent tasks at stop time. */
+  background_tasks?: Array<{ id: string; [k: string]: unknown }>;
 }
 
 // Parsed hook input
@@ -12,6 +16,8 @@ export interface ParsedInput {
   sessionId: string;
   directory: string;
   lastAssistantMessage: string | null;
+  stopHookActive: boolean;
+  backgroundTaskCount: number;
 }
 
 /**

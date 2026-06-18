@@ -150,4 +150,24 @@ describe('parseInput', () => {
     expect(result.directory).toBe(process.cwd());
     expect(result.lastAssistantMessage).toBeNull();
   });
+
+  it('should parse stop_hook_active: true as stopHookActive: true', () => {
+    const result = parseInput(JSON.stringify({ stop_hook_active: true }));
+    expect(result.stopHookActive).toBe(true);
+  });
+
+  it('should parse background_tasks array as backgroundTaskCount', () => {
+    const result = parseInput(JSON.stringify({ background_tasks: [{ id: 'x' }] }));
+    expect(result.backgroundTaskCount).toBe(1);
+  });
+
+  it('should default stopHookActive to false when stop_hook_active absent', () => {
+    const result = parseInput(JSON.stringify({ sessionId: 'test' }));
+    expect(result.stopHookActive).toBe(false);
+  });
+
+  it('should default backgroundTaskCount to 0 when background_tasks absent', () => {
+    const result = parseInput(JSON.stringify({ sessionId: 'test' }));
+    expect(result.backgroundTaskCount).toBe(0);
+  });
 });
