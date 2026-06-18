@@ -268,7 +268,7 @@ Produce a Completeness table mapping each Spec item to its delivery status:
 
 After the table, add a summary line: "N/M spec items fully addressed."
 
-- **Missing** or **Partial** items with CRITICAL/HIGH severity are REQUEST_CHANGES grounds
+- **Missing** or **Partial** items on required spec items are REQUEST_CHANGES grounds (blocking)
 - When all Spec requirements are already encapsulated as explicit ACs (i.e., no prose-only requirements exist), the base Spec/AC compliance check already covers the same ground → omit the Completeness sub-check
 - When the directive is absent, the sub-check simply does not run
 
@@ -341,7 +341,7 @@ Every issue MUST include confidence scoring. See [feedback-protocol.md] for Conf
 
 ## Issues (if any)
 [For each issue:]
-- **[CRITICAL/HIGH/MEDIUM/LOW]**: [Brief description]
+- **[CRITICAL/LOW]**: [Brief description]
   - Location: [file:line]
   - What: [problem]
 
@@ -354,7 +354,7 @@ List each Spec item's delivery status using the following table:
 | [summarized spec item] | Addressed / Partial / Missing | file:line OR "not in deliverable" |
 
 N/M spec items fully addressed.
-- If 1 or more items are **Missing** or **Partial**, they affect the verdict (CRITICAL/HIGH severity → REQUEST_CHANGES grounds)
+- If 1 or more items are **Missing** or **Partial**, they affect the verdict (blocking → REQUEST_CHANGES grounds)
 - If all Spec requirements are already encapsulated as explicit ACs (i.e., no prose-only requirements exist), the base Spec/AC compliance check covers the same ground → omit this Completeness sub-check
 
 ## Evidence Files
@@ -374,7 +374,7 @@ N/M spec items fully addressed.
 |-----------|---------|
 | Automated checks FAIL | **REQUEST_CHANGES** (build/typecheck/test/lint broken) |
 | Spec/AC compliance FAIL | **REQUEST_CHANGES** (spec not met) |
-| Spec/AC compliance: Completeness Missing/Partial (CRITICAL/HIGH) | **REQUEST_CHANGES** (spec items unaddressed) |
+| Spec/AC compliance: Completeness Missing/Partial (blocking) | **REQUEST_CHANGES** (spec items unaddressed) |
 | Hands-on execution FAIL (provided scenario or adversarial matrix) | **REQUEST_CHANGES** (hands-on verification failed) |
 | Code quality (Security / Data Integrity) CRITICAL | **REQUEST_CHANGES** (quality issues) |
 | LOW only or no issues | **APPROVE** |
