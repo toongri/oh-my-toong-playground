@@ -197,6 +197,7 @@ Review code against the quality checklists — limited to the two CRITICAL categ
 **Only Flag If:**
 - Code will **fail to compile/parse**
 - Code will **definitely produce wrong results**
+- Code introduces a **Security** or **Data Integrity** risk per the checklists (even if it compiles and produces functionally correct output)
 
 **Never Flag:**
 - Pre-existing issues (not introduced by this change)
