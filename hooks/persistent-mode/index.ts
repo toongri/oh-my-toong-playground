@@ -32,7 +32,9 @@ export async function main(): Promise<void> {
       projectRoot,
       sessionId: input.sessionId,
       lastAssistantMessage: input.lastAssistantMessage,
-      incompleteTodoCount
+      incompleteTodoCount,
+      stopHookActive: input.stopHookActive,
+      backgroundTaskCount: input.backgroundTaskCount
     };
 
     // Make decision

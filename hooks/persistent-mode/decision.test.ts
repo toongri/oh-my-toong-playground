@@ -41,6 +41,8 @@ describe('makeDecision', () => {
     sessionId: 'test-session',
     lastAssistantMessage: null,
     incompleteTodoCount: 0,
+    stopHookActive: false,
+    backgroundTaskCount: 0,
     ...overrides,
   });
 
@@ -1047,6 +1049,24 @@ describe('makeDecision', () => {
       // Must NOT suppress — outcome absent = pristine = inert
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('<todo-continuation>');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Background-aware Stop hook guards
+  // Guard 1: stopHookActive re-entry guard — must pass through immediately.
+  // Guard 2: backgroundTaskCount > 0 — must pass through immediately.
+  // Both guards precede ALL block branches, even with incompleteTodos.
+  // -------------------------------------------------------------------------
+  describe('background-aware Stop hook guards', () => {
+    it('stopHookActive=true with incompleteTodos yields continue (NOT block)', () => {
+      const result = makeDecision(createContext({ stopHookActive: true, incompleteTodoCount: 3 }));
+      expect(result).toEqual({ continue: true });
+    });
+
+    it('backgroundTaskCount=1 with incompleteTodos yields continue (NOT block)', () => {
+      const result = makeDecision(createContext({ backgroundTaskCount: 1, incompleteTodoCount: 3 }));
+      expect(result).toEqual({ continue: true });
     });
   });
 });

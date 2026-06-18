@@ -21,6 +21,8 @@ export function parseInput(raw: string): ParsedInput {
   const sessionId = input.sessionId || input.session_id || 'default';
   const directory = input.cwd || process.cwd();
   const lastAssistantMessage = input.last_assistant_message || null;
+  const stopHookActive = input.stop_hook_active === true;
+  const backgroundTaskCount = Array.isArray(input.background_tasks) ? input.background_tasks.length : 0;
 
-  return { sessionId, directory, lastAssistantMessage };
+  return { sessionId, directory, lastAssistantMessage, stopHookActive, backgroundTaskCount };
 }
