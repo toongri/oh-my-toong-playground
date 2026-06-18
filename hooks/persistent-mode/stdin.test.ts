@@ -151,23 +151,33 @@ describe('parseInput', () => {
     expect(result.lastAssistantMessage).toBeNull();
   });
 
-  it('should parse stop_hook_active: true as stopHookActive: true', () => {
-    const result = parseInput(JSON.stringify({ stop_hook_active: true }));
-    expect(result.stopHookActive).toBe(true);
+  it('subagent running → activeSubagentCount 1', () => {
+    const result = parseInput(JSON.stringify({ background_tasks: [{ id: 'a', type: 'subagent', status: 'running' }] }));
+    expect(result.activeSubagentCount).toBe(1);
   });
 
-  it('should parse background_tasks array as backgroundTaskCount', () => {
-    const result = parseInput(JSON.stringify({ background_tasks: [{ id: 'x' }] }));
-    expect(result.backgroundTaskCount).toBe(1);
+  it('shell running → activeSubagentCount 0 (non-subagent not counted)', () => {
+    const result = parseInput(JSON.stringify({ background_tasks: [{ id: 'b', type: 'shell', status: 'running' }] }));
+    expect(result.activeSubagentCount).toBe(0);
   });
 
-  it('should default stopHookActive to false when stop_hook_active absent', () => {
+  it('subagent completed → activeSubagentCount 0 (non-active not counted)', () => {
+    const result = parseInput(JSON.stringify({ background_tasks: [{ id: 'c', type: 'subagent', status: 'completed' }] }));
+    expect(result.activeSubagentCount).toBe(0);
+  });
+
+  it('mixed: subagent running + shell running → activeSubagentCount 1', () => {
+    const result = parseInput(JSON.stringify({
+      background_tasks: [
+        { id: 'd', type: 'subagent', status: 'running' },
+        { id: 'e', type: 'shell', status: 'running' },
+      ],
+    }));
+    expect(result.activeSubagentCount).toBe(1);
+  });
+
+  it('absent background_tasks → activeSubagentCount 0', () => {
     const result = parseInput(JSON.stringify({ sessionId: 'test' }));
-    expect(result.stopHookActive).toBe(false);
-  });
-
-  it('should default backgroundTaskCount to 0 when background_tasks absent', () => {
-    const result = parseInput(JSON.stringify({ sessionId: 'test' }));
-    expect(result.backgroundTaskCount).toBe(0);
+    expect(result.activeSubagentCount).toBe(0);
   });
 });
