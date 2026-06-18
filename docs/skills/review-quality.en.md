@@ -107,11 +107,9 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 **Purpose**: Quality assurance guardian that verifies implementation correctness. Named after Argus Panoptes — the hundred-eyed giant who never sleeps — this skill operates under the principle: "Nothing ships without proof."
 
 **What it verifies**:
-- Automated checks — build, tests, lint
-- Implementation compliance against Spec or acceptance criteria (AC)
-- Executable QA scenarios — real HTTP / Playwright / CLI verification, not just automated tests
-- When user-facing changes exist but no scenarios are provided, determines verification methods itself
-- When completeness verification is requested, confirms every prose requirement in the Spec is reflected in the deliverable
+- Automated checks — build, typecheck, tests, lint
+- Spec/AC compliance — verifies implementation against provided criteria; when a completeness directive is present, confirms every prose requirement is reflected in the deliverable
+- Hands-on execution — runs caller-provided scenarios verbatim and self-authors a 6-category adversarial matrix for any user-facing change; activates when a user-facing change is present OR caller-provided scenarios are supplied
 
 **Critical distinction**: Automated tests and hands-on QA are not substitutes. Automated tests verify "code behaves as intended." Hands-on QA verifies "the application boots and responds to real requests as in production." These are complementary.
 
