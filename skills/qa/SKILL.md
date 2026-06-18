@@ -197,7 +197,6 @@ Review code against the quality checklists — limited to the two CRITICAL categ
 **Only Flag If:**
 - Code will **fail to compile/parse**
 - Code will **definitely produce wrong results**
-- **Clear** violation of documented architecture/design principles
 
 **Never Flag:**
 - Pre-existing issues (not introduced by this change)
@@ -314,10 +313,8 @@ Both activation arms are handled in one pass:
 
 | Level | Nature | Response |
 |-------|--------|----------|
-| **CRITICAL** | Security/data-loss risk | Must resolve before merge |
-| **HIGH** | Architecture/design violation | Should resolve before merge |
-| **MEDIUM** | Performance/maintainability | Address when feasible |
-| **LOW** | Style/suggestions | Optional consideration |
+| **CRITICAL** | Security/Data Integrity risk | Must resolve before merge |
+| **LOW** | Suggestions | Optional consideration |
 
 ---
 
@@ -379,8 +376,7 @@ N/M spec items fully addressed.
 | Spec/AC compliance FAIL | **REQUEST_CHANGES** (spec not met) |
 | Spec/AC compliance: Completeness Missing/Partial (CRITICAL/HIGH) | **REQUEST_CHANGES** (spec items unaddressed) |
 | Hands-on execution FAIL (provided scenario or adversarial matrix) | **REQUEST_CHANGES** (hands-on verification failed) |
-| Code quality (Security / Data Integrity) CRITICAL/HIGH | **REQUEST_CHANGES** (quality issues) |
-| MEDIUM only | **COMMENT** (conditional approval) |
+| Code quality (Security / Data Integrity) CRITICAL | **REQUEST_CHANGES** (quality issues) |
 | LOW only or no issues | **APPROVE** |
 
 ---
@@ -397,7 +393,6 @@ Hands-on execution:  See stage3-handson.md (incl. ## Adversarial Scenario Matrix
 Code Quality:        See checklists.md
 CONFIDENCE: 0-49 discard, 50-79 nitpick, 80+ report
 FEEDBACK: What + Location (verdict only — diagnosis is oracle's job)
-SEVERITY: CRITICAL (security) > HIGH (arch) > MEDIUM (perf) > LOW (style)
-YAGNI: New code with 0 callers = flag
+SEVERITY: CRITICAL (Security / Data Integrity) > LOW (suggestions)
 TRIGGER TRACE: Always output Active Triggers table (Status + Reason per trigger)
 ```
