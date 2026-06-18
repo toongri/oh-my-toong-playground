@@ -2,7 +2,7 @@
 
 **Purpose**: RED-phase test for the qa skill's Adversarial Scenario Matrix mandate (stage3-handson.md). It plants a defect of an adversarial class that the happy-path / spec-compliance lane structurally misses, and measures whether a verifier running hands-on actually exercises the matrix category that catches it. Run BEFORE and AFTER each change to the hands-on stage to confirm the matrix closes the misleading-success loophole observable in verification sessions.
 
-**Origin**: qa product-quality reshape — ADR D-2 (the six adversarial categories the defect must exercise) and ADR D-3 (human-run documentation form; no automated Claude-API harness exists in this repo). This asset mirrors the structure of `skills/sisyphus/tests/baseline-pressure-scenario.md`: planted defect + expected verdict with-and-without the mechanism + human-scored compliance rubric.
+**Origin**: qa product-quality reshape — the six adversarial categories the defect must exercise, human-run documentation form; no automated Claude-API harness exists in this repo. This asset mirrors the structure of `skills/sisyphus/tests/baseline-pressure-scenario.md`: planted defect + expected verdict with-and-without the mechanism + human-scored compliance rubric.
 
 ---
 
@@ -108,7 +108,7 @@ Score each line from the verifier's visible message history and its verdict. Sco
 
 ## Notes on Test Execution
 
-- Documentation-only and human-run. There is no automated Claude-API harness in this repo (ADR D-3); a human scores the rubric from the verifier's visible message stream, exactly as a real reviewer would.
+- Documentation-only and human-run. There is no automated Claude-API harness in this repo; a human scores the rubric from the verifier's visible message stream, exactly as a real reviewer would.
 - The scenario is intentionally framed so the happy path and the spec/AC lane both agree on success. Do not append clarifying context that hints the success signal is suspect — the agreement between reported signals is the trap.
 - Score from the visible message stream only. The subagent's TaskOutput log is NOT consulted (per tool-usage-policy).
 - If running without subagent infrastructure, paste the Scenario Prompt and diff to a fresh top-level session; the same rubric applies.
