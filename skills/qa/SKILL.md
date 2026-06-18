@@ -281,11 +281,11 @@ After the table, add a summary line: "N/M spec items fully addressed."
 
 This trigger activates on a disjunction: a **user-facing change** OR **caller-provided executable scenarios**. Either arm alone activates it. Internal-only changes with no scenarios (pure refactoring, logic with no user-facing surface) skip this trigger.
 
-Both activation arms are handled in one pass:
+The two arms differ only in whether the adversarial matrix is added:
 
-1. **Execute caller-provided scenarios verbatim.** When the request content includes executable QA scenarios (tool, steps, expected output), run each exactly as specified and collect **per-scenario evidence**. ANY provided-scenario failure = immediate REQUEST_CHANGES.
-2. **Self-author the adversarial matrix.** For the changed surface, self-author the 6-category adversarial scenario matrix (failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency) and run it. See [stage3-handson.md] `## Adversarial Scenario Matrix`.
-3. **Merge both.** When caller-provided scenarios are present, they are NOT a substitute for the self-authored matrix — run the provided scenarios AND add the adversarial matrix on top; the two sets merge into one hands-on pass.
+1. **Execute caller-provided scenarios verbatim.** When the request content includes executable QA scenarios (tool, steps, expected output), run each exactly as specified and collect **per-scenario evidence**. ANY provided-scenario failure = immediate REQUEST_CHANGES. This step applies on either activation arm.
+2. **Self-author the adversarial matrix — user-facing arm only.** When the activation arm includes a **user-facing change**, self-author the 6-category adversarial scenario matrix (failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency) and run it. See [stage3-handson.md] `## Adversarial Scenario Matrix`. When activation is by caller-provided scenarios alone (no user-facing surface), skip the matrix — there is no product surface to attack.
+3. **Combining both.** When the change is user-facing and caller-provided scenarios are also present, run the provided scenarios AND add the adversarial matrix on top — the two sets merge into one hands-on pass. When activation is by caller-provided scenarios alone (non-user-facing change), run those scenarios verbatim only; do NOT add the adversarial matrix.
 
 **By-design non-idempotency note:** Hands-on execution is not necessarily idempotent — running it actually exercises the application (starts servers, sends requests, mutates state). A re-run may not reproduce the first run's environment, and some operations under test are intentionally non-idempotent (that is acceptable, not a defect). Evidence is captured per run.
 
@@ -302,7 +302,7 @@ Both activation arms are handled in one pass:
 ### Lifecycle
 
 1. **Start** the server/application in background
-2. **Execute** caller-provided scenarios verbatim, then the self-authored adversarial matrix, against the running instance
+2. **Execute** caller-provided scenarios verbatim, then the self-authored adversarial matrix (user-facing arm only), against the running instance
 3. **Save** per-scenario evidence for each verification result using the 3-tier Evidence Path Priority
 4. **Stop** the server/application after verification completes
 

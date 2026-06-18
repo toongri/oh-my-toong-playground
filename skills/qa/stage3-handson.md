@@ -1,6 +1,6 @@
 # Stage 3: Hands-On QA
 
-> **Hands-on execution applicability**: This is the detail target for SKILL.md's `Hands-on execution` trigger, which activates on a disjunction: **user-facing change OR caller-provided executable scenarios**. Either arm alone activates it. When both hold, caller-provided scenarios run verbatim AND the adversarial matrix is added on top — both arms handled in one merged pass.
+> **Hands-on execution applicability**: This is the detail target for SKILL.md's `Hands-on execution` trigger, which activates on a disjunction: **user-facing change OR caller-provided executable scenarios**. Either arm alone activates it. Caller-provided scenarios run verbatim on either arm. The adversarial matrix is added only when the **user-facing** arm is active — activation by caller-provided scenarios alone (non-user-facing change) runs those scenarios verbatim without the matrix.
 
 Verify user-facing behavior by actually running the changed code. This is not optional when applicable.
 
@@ -18,8 +18,8 @@ Verify user-facing behavior by actually running the changed code. This is not op
 | UI, page, component, frontend, render | Frontend | Verify with `playwright` |
 | Mobile, app, iOS, Android, simulator, emulator | Mobile | Verify with `maestro` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
-| Refactoring, internal logic, utility, helper, config | Internal only | **Skip Stage 3** — unless caller-provided executable scenarios are present; in that case, run them verbatim AND add the adversarial matrix |
-| Documentation, markdown, comments only | Non-code | **Skip Stage 3** — unless caller-provided executable scenarios are present; in that case, run them verbatim AND add the adversarial matrix |
+| Refactoring, internal logic, utility, helper, config | Internal only | **Skip Stage 3** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — non-user-facing surface) |
+| Documentation, markdown, comments only | Non-code | **Skip Stage 3** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — non-user-facing surface) |
 
 ### When Multiple Types Apply
 
