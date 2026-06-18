@@ -17,8 +17,7 @@ export interface DecisionContext {
   sessionId: string;
   lastAssistantMessage: string | null;
   incompleteTodoCount: number;
-  stopHookActive: boolean;
-  backgroundTaskCount: number;
+  activeSubagentCount: number;
 }
 
 function formatBlockOutput(reason: string): HookOutput {
@@ -155,17 +154,13 @@ INSTRUCTIONS:
 }
 
 export function makeDecision(context: DecisionContext): HookOutput {
-  const { projectRoot, sessionId, lastAssistantMessage, incompleteTodoCount, stopHookActive, backgroundTaskCount } = context;
+  const { projectRoot, sessionId, lastAssistantMessage, incompleteTodoCount, activeSubagentCount } = context;
 
-  // Guard 1: stop_hook_active re-entry guard.
-  // Blocking here would trigger Claude Code's repeated-block safety override, so pass through immediately.
-  if (stopHookActive) {
-    return formatContinueOutput();
-  }
-
-  // Guard 2: background subagent tasks are running.
+  // Guard 2: active subagent tasks are running (type=subagent, status=running|pending).
   // Claude Code will re-invoke the Stop hook via task-notification when they finish, so blocking now is unnecessary.
-  if (backgroundTaskCount > 0) {
+  // Non-subagent background tasks (shell/monitor/etc.) do NOT suppress enforcement — only subagents wake the main
+  // via task-notification, so only they make a deferred Stop hook re-invocation safe.
+  if (activeSubagentCount > 0) {
     return formatContinueOutput();
   }
 

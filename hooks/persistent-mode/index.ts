@@ -33,8 +33,7 @@ export async function main(): Promise<void> {
       sessionId: input.sessionId,
       lastAssistantMessage: input.lastAssistantMessage,
       incompleteTodoCount,
-      stopHookActive: input.stopHookActive,
-      backgroundTaskCount: input.backgroundTaskCount
+      activeSubagentCount: input.activeSubagentCount
     };
 
     // Make decision
