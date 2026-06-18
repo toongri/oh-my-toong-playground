@@ -1,6 +1,6 @@
 # Stage 3: Hands-On QA
 
-> **Layer D applicability**: This guide applies when changes affect user-facing behavior AND no QA scenarios are provided in the QA REQUEST. When QA scenarios are provided, Layer C (QA Scenarios Execution) is used instead.
+> **Hands-on execution applicability**: This is the detail target for SKILL.md's `Hands-on execution` trigger, which activates on a disjunction: **user-facing change OR caller-provided executable scenarios**. Either arm alone activates it. When both hold, caller-provided scenarios run verbatim AND the adversarial matrix is added on top — both arms handled in one merged pass.
 
 Verify user-facing behavior by actually running the changed code. This is not optional when applicable.
 
@@ -18,8 +18,8 @@ Verify user-facing behavior by actually running the changed code. This is not op
 | UI, page, component, frontend, render | Frontend | Verify with `playwright` |
 | Mobile, app, iOS, Android, simulator, emulator | Mobile | Verify with `maestro` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
-| Refactoring, internal logic, utility, helper, config | Internal only | **Skip Stage 3** |
-| Documentation, markdown, comments only | Non-code | **Skip Stage 3** |
+| Refactoring, internal logic, utility, helper, config | Internal only | **Skip Stage 3** — unless caller-provided executable scenarios are present; in that case, run them verbatim AND add the adversarial matrix |
+| Documentation, markdown, comments only | Non-code | **Skip Stage 3** — unless caller-provided executable scenarios are present; in that case, run them verbatim AND add the adversarial matrix |
 
 ### When Multiple Types Apply
 
@@ -285,7 +285,7 @@ Hands-on verification is not "run the happy path once." A change is only verifie
 | # | Category | What the adversarial check probes |
 |---|----------|-----------------------------------|
 | 1 | **Error / failure paths** | Force the failure branch (unreachable dependency, denied permission, invalid auth, exhausted quota) and assert it fails *safely*: no partial writes, a clear error message, and the correct status/exit code. A failure that silently half-completes is a defect. |
-| 2 | **Boundary / malformed input** | Probe the `boundary|malformed` surface: feed empty, oversized, wrong-type, encoding-edge (UTF-8 / null bytes / emoji), and off-by-one boundary values. Assert each is rejected or handled deterministically rather than crashing or coercing silently. |
+| 2 | **Boundary / malformed input** | Probe the `boundary\|malformed` surface: feed empty, oversized, wrong-type, encoding-edge (UTF-8 / null bytes / emoji), and off-by-one boundary values. Assert each is rejected or handled deterministically rather than crashing or coercing silently. |
 | 3 | **Injection** | Send SQL / command / prompt injection payloads through every user-controlled field (query params, body, headers, file names, LLM prompts). Assert the payload is neutralized, not interpreted. |
 | 4 | **Interruption–cancel–resume + dirty initial state** | Kill or cancel the operation mid-flight, then re-run it; also start it from a dirty/partial prior state (leftover lock file, half-written record, stale session). Assert it recovers to a consistent state rather than compounding corruption. |
 | 5 | **Misleading success** (OWASP LLM09) | Distrust a green check / `200` / `"done"` that does not reflect real success. Verify the *actual effect* — the row was written, the file changed on disk, the message was delivered — not the success signal the system reports. An overconfident success claim is itself the bug. |
