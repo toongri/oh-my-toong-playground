@@ -41,6 +41,7 @@ describe('makeDecision', () => {
     sessionId: 'test-session',
     lastAssistantMessage: null,
     incompleteTodoCount: 0,
+    activeSubagentCount: 0,
     ...overrides,
   });
 
@@ -1045,6 +1046,24 @@ describe('makeDecision', () => {
       const result = makeDecision(createContext({ incompleteTodoCount: 2 }));
 
       // Must NOT suppress — outcome absent = pristine = inert
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Background-aware Stop hook guards
+  // Guard 2: activeSubagentCount > 0 — must pass through immediately.
+  // Non-subagent background tasks (shell/monitor/etc.) must NOT bypass enforcement.
+  // -------------------------------------------------------------------------
+  describe('background-aware Stop hook guards', () => {
+    it('activeSubagentCount=1 with incompleteTodos yields continue (NOT block)', () => {
+      const result = makeDecision(createContext({ activeSubagentCount: 1, incompleteTodoCount: 3 }));
+      expect(result).toEqual({ continue: true });
+    });
+
+    it('activeSubagentCount=0 with incompleteTodos still blocks (no subagent bypass)', () => {
+      const result = makeDecision(createContext({ activeSubagentCount: 0, incompleteTodoCount: 3 }));
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('<todo-continuation>');
     });
