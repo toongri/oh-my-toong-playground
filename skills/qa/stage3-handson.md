@@ -274,21 +274,19 @@ If ANY verification fails:
 | "It worked in the test suite" | Test suite mocks may hide real integration issues. |
 | "No test data available" | Create minimal test data. No excuses. |
 | "Skip for internal changes" | If truly internal, document skip. Don't use as escape hatch. |
+| "E2E tests simulate HTTP" | MockMvc/WebTestClient operate without a servlet container. They are not real HTTP. |
 
 ---
 
-## Maintenance: Adding a New Tool Modality
+## Adversarial Scenario Matrix
 
-When introducing a new hands-on verification tool (e.g., `maestro` for Mobile), touch all 7 rows below. Missing any one location causes partial-update defects.
+Hands-on verification is not "run the happy path once." A change is only verified when it survives hostile probing. After the modality procedures above confirm the happy path, run the adversarial checks below. Each category names what a hostile check looks like so a verifier running hands-on knows what to probe — pick the rows that apply to the change under review and actually execute them, do not reason about them on paper.
 
-Row 1 bundles two related edits in this file — the Decision Logic table and the new `## Step 3.N` section — because both are touched in the same editing pass.
-
-| # | Location | What to update | Grep target |
-|---|----------|---------------|-------------|
-| 1 | `skills/qa/stage3-handson.md` § Step 3.1 Decision Logic (+ new `## Step 3.N` section) | Add row to Decision Logic table; insert a new `## Step 3.N` section with Procedure, Verification Criteria, and Real-Device/Edge note if applicable. Renumbering adjacent sections is allowed when grouped placement improves coherence — when renumbering, update all in-file cross-references in the same edit pass. | `grep -nE "Decision Logic|Step 3\." stage3-handson.md` |
-| 2 | `skills/qa/stage3-handson.md` § Stage 3 Output Format (Applicability enum) | Add the new modality token to the Output Format Applicability enum (`[API / Frontend / Mobile / CLI / SKIPPED]`) | `grep -n "Applicability.*API" stage3-handson.md` |
-| 3 | `skills/qa/SKILL.md` § Composable Verification Triggers → Trigger Activation Table | Add a row to the Trigger Activation Table with the action label and tool name | `grep -nE "Trigger|maestro|playwright|curl" skills/qa/SKILL.md` |
-| 4 | `skills/qa/SKILL.md` § "When: user-facing changes, no scenarios" Applicability + § Quick Reference | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -nE "^### Applicability|^## Quick Reference|user-facing changes, no scenarios" skills/qa/SKILL.md` |
-| 5 | `skills/prometheus/plan-template.md` § QA Scenarios `Tool` field | Add the new tool name to the QA Scenarios `Tool` field whitelist | `grep -nE "Tool.*(curl|playwright|maestro)" skills/prometheus/plan-template.md` |
-| 6 | `skills/prometheus/acceptance-criteria.md` § Verification Examples by Tool | Add a subsection under `## Verification Examples by Tool` for the new tool | `grep -n "Verification Examples by Tool" skills/prometheus/acceptance-criteria.md` |
-| 7 | `skills/qa/stage3-handson.md` § Step 3.N Teardown | Document the teardown command for the new modality (process kill, resource delete, or "no teardown — runner-native cleanup") | `grep -nE "Teardown|simctl delete|emu kill|kill <pid>" stage3-handson.md` |
+| # | Category | What the adversarial check probes |
+|---|----------|-----------------------------------|
+| 1 | **Error / failure paths** | Force the failure branch (unreachable dependency, denied permission, invalid auth, exhausted quota) and assert it fails *safely*: no partial writes, a clear error message, and the correct status/exit code. A failure that silently half-completes is a defect. |
+| 2 | **Boundary / malformed input** | Probe the `boundary|malformed` surface: feed empty, oversized, wrong-type, encoding-edge (UTF-8 / null bytes / emoji), and off-by-one boundary values. Assert each is rejected or handled deterministically rather than crashing or coercing silently. |
+| 3 | **Injection** | Send SQL / command / prompt injection payloads through every user-controlled field (query params, body, headers, file names, LLM prompts). Assert the payload is neutralized, not interpreted. |
+| 4 | **Interruption–cancel–resume + dirty initial state** | Kill or cancel the operation mid-flight, then re-run it; also start it from a dirty/partial prior state (leftover lock file, half-written record, stale session). Assert it recovers to a consistent state rather than compounding corruption. |
+| 5 | **Misleading success** (OWASP LLM09) | Distrust a green check / `200` / `"done"` that does not reflect real success. Verify the *actual effect* — the row was written, the file changed on disk, the message was delivered — not the success signal the system reports. An overconfident success claim is itself the bug. |
+| 6 | **Idempotency / re-run** | Run the operation twice with identical inputs and assert no duplicate records, double charges, or corruption. **By-design exception**: some operations are intentionally non-idempotent (append-only logs, "send another reminder", incrementing counters). When the spec marks an operation as intended to differ on re-run, repeated effects are an acceptable exception, not a defect — confirm against the intended behavior rather than flagging it. |
