@@ -22,24 +22,6 @@ Guidelines for providing actionable, well-calibrated code review feedback.
 
 **Report only issues scoring 80+.** Lower scores are filtered automatically.
 
-```dot
-digraph confidence_flow {
-    rankdir=LR;
-    issue [label="Found Issue" shape=ellipse];
-    score [label="Assign Score\n(0-100)" shape=box];
-    threshold [label="Score >= 80?" shape=diamond];
-    report [label="Report as\nissue/suggestion" shape=box style=filled fillcolor=lightgreen];
-    nitpick [label="Score >= 50?" shape=diamond];
-    minor [label="Report as\nnitpick (non-blocking)" shape=box style=filled fillcolor=lightyellow];
-    discard [label="Discard\n(false positive)" shape=box style=filled fillcolor=lightgray];
-
-    issue -> score -> threshold;
-    threshold -> report [label="YES"];
-    threshold -> nitpick [label="NO"];
-    nitpick -> minor [label="YES"];
-    nitpick -> discard [label="NO"];
-}
-```
 
 ### Scoring Checklist
 
