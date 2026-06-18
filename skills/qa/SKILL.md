@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Quality Assurance verification — verifies implementation correctness with unwavering vigilance.
+description: Use when verifying a code change — adversarially checks build/typecheck/test/lint, spec/AC compliance, and hands-on product quality (running the change, attacking failure/boundary/injection/interruption/misleading-success/idempotency paths) before any work is called done.
 ---
 
 <Role>
@@ -53,20 +53,9 @@ To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>`
 
 | Trigger | Activation Condition | Actions |
 |---------|---------------------|---------|
-| **code changes present** | Code changes present | Automated checks (build/test/lint) + Code quality (checklists.md) |
-| **spec or AC provided** | Request content includes specification or acceptance criteria | Verify implementation against provided criteria |
-| **QA scenarios provided** | Request content includes executable test scenarios | Execute scenarios as specified, collect evidence |
-| **user-facing changes, no scenarios** | User-facing changes AND no executable test scenarios present in request content | Self-determined curl/playwright/maestro/bash (see stage3-handson.md) |
-| **completeness verification requested** | QA REQUEST `## Required Verification` section contains a "Completeness check" directive | the verifier confirms that all prose-stated requirements in the Spec are reflected in the deliverable |
-
-### Composition Examples
-
-| QA REQUEST Content | Active Triggers |
-|-------------------|----------------|
-| Task spec + changed files | code changes present + spec or AC provided + user-facing changes, no scenarios |
-| Plan TODO with AC + QA Scenarios + changed files | code changes present + spec or AC provided + QA scenarios provided |
-| AC only, no QA methods + changed files | code changes present + spec or AC provided + user-facing changes, no scenarios |
-| Spec with 3+ prose requirements + "Completeness check" directive | (any above combination) + completeness verification requested |
+| **Automated checks** | Code changes present | Build + typecheck (always); slow native build (e.g. RN bundle) gated to native-code-or-release; test; lint; code-quality limited to Security + Data Integrity (checklists.md) |
+| **Spec/AC compliance** | Request content includes a specification or acceptance criteria | Verify implementation against the provided criteria; when the `## Required Verification` section carries a "Completeness check" directive, also run the completeness coverage sub-check |
+| **Hands-on execution** | User-facing change OR caller-provided executable scenarios | Execute caller-provided scenarios verbatim with per-scenario evidence; self-author the 6-category adversarial matrix for the changed surface; merge both (see stage3-handson.md `## Adversarial Scenario Matrix`) |
 
 ### Fast-Path Exception
 
@@ -74,24 +63,11 @@ Single-line edits, obvious typos, or changes with no functional behavior modific
 
 ### Trigger Independence Rule
 
-Each trigger fires independently based on its own activation condition. One trigger's success does not exempt another trigger from activating.
+Each of the 3 triggers fires independently based on its own activation condition. One trigger's success does not exempt another from activating — this independence is the guarantee.
 
-Specifically: Stage 1 (automated checks) passing does NOT exempt Stage 3 (hands-on QA) from activation when "user-facing changes, no scenarios" is met.
+Specifically: Automated checks passing does NOT exempt Hands-on execution from activating when its condition (user-facing change OR caller-provided executable scenarios) is met. Automated checks verify "the code behaves as intended"; Hands-on execution verifies "the application boots and responds to real requests as in production, including under adversarial conditions" — complementary, not substitutes.
 
-The only trigger that legitimately deactivates "user-facing changes, no scenarios" is "QA scenarios provided" — this is mutual exclusion by design, not an exemption chain.
-
-**Why automated tests and hands-on QA are not substitutes:**
-
-| Dimension | Automated Tests | Hands-On QA |
-|-----------|----------------|-------------|
-| Environment | Test-framework-controlled | Production startup path |
-| HTTP layer | In-process calls (MockMvc/WebTestClient bypass real network) | Real TCP connections through actual HTTP stack |
-| Dependencies | Stubbed (WireMock/Mockito) | Live or real-profile-resolved |
-| Server boot | Not under test | Application boots via production startup path |
-| Filter chain | Partially exercised at best | Full chain (CORS/Security/Auth) |
-| Config | Test application context | Actual profiles and env vars |
-
-Automated tests verify "code behaves as intended." Hands-on QA verifies "application boots and responds to real requests as in production." These are complementary, not substitutes.
+Note that Hands-on execution activates on a disjunction. A caller-provided scenario and a user-facing change are NOT mutually exclusive paths into the trigger: either arm alone activates it, and when both hold, the caller's scenarios run verbatim AND the self-authored adversarial matrix is added on top.
 
 ---
 
@@ -171,7 +147,7 @@ This section is the authoritative list of evidence produced. When no commands we
 
 ### Judgment-Only Trigger Exemption
 
-The **spec or AC provided** trigger (when activated with no executable commands — pure reading and analysis) produces **no evidence files**. Spec/AC compliance is a subjective judgment rendered in the response. Downstream audit gates MUST NOT flag missing evidence files for this trigger when no commands were executed.
+The **Spec/AC compliance** trigger (when activated with no executable commands — pure reading and analysis) produces **no evidence files**. Spec/AC compliance is a subjective judgment rendered in the response. Downstream audit gates MUST NOT flag missing evidence files for this trigger when no commands were executed.
 
 ### Fast-Path Exception
 
@@ -196,24 +172,25 @@ See `stage3-handson.md` Step 3.2: "Run the server/application in background usin
 
 ---
 
-## When: code changes present
+## When: Automated checks
 
 ### Automated Checks
 
 **Before ANY code analysis, run automated checks.**
 
 1. Discover project commands (check memory file, then documentation, then build files)
-2. Run: Build -> Tests -> Lint
-3. Save the full output of each automated check (build, test, lint) as an evidence file using the 3-tier path priority above
-4. ANY failure = immediate REQUEST_CHANGES
+2. Run: Build (fast build/typecheck) -> Tests -> Lint
+3. Slow native build gating: the fast build/typecheck always runs; the slow native build (e.g. an RN bundle) runs ONLY when native code changed OR this is a release build (native-code-or-release). Otherwise skip it.
+4. Save the full output of each automated check (build/typecheck, test, lint) as an evidence file using the 3-tier path priority above
+5. ANY failure = immediate REQUEST_CHANGES
 
 **See** [stage1-commands.md] **for details** on command discovery, special cases, and output format.
 
 ### Code Quality
 
-Review code against quality checklists by severity level.
+Review code against the quality checklists — limited to the two CRITICAL categories, **Security** and **Data Integrity**. qa is a verifier, not a linter; architecture/performance/maintainability/style review is out of scope here.
 
-**See** [checklists.md] **for details** on Security, Data Integrity, Architecture, Performance, Maintainability, and YAGNI checks.
+**See** [checklists.md] **for details** on the Security and Data Integrity checks.
 
 #### Signal Quality
 
@@ -233,7 +210,7 @@ Review code against quality checklists by severity level.
 
 ---
 
-## When: spec or AC provided
+## When: Spec/AC compliance
 
 **Verify the implementation meets the provided specification.**
 
@@ -280,62 +257,9 @@ FLAG if: B - A ≠ ∅ (undeclared files in Changed files)
 
 **Acceptable exceptions:** Test files for in-scope code, related config files.
 
----
+### Completeness Coverage Sub-Check
 
-## When: QA scenarios provided
-
-**Execute provided QA scenarios as specified.**
-
-This trigger activates when the request content includes executable QA scenarios with steps and expected outcomes.
-
-1. Execute each scenario as specified (tool, steps, expected output)
-2. Collect evidence for each scenario result
-3. Save evidence to the path resolved by the 3-tier Evidence Path Priority
-4. ANY scenario failure = immediate REQUEST_CHANGES
-
----
-
-## When: user-facing changes, no scenarios
-
-**Conditionally verify user-facing behavior by actually running the changed code.**
-
-This trigger activates when changes affect user-facing behavior AND the request content contains no executable test scenarios. Internal-only changes (refactoring, logic without user-facing surface) skip this trigger.
-
-### Applicability
-
-| Change Type | Verification Method | Tool |
-|-------------|---------------------|------|
-| API endpoint | HTTP request verification | `curl` |
-| Frontend / UI | Browser interaction verification | `playwright` |
-| Mobile / App | iOS Simulator / Android Emulator E2E | `maestro` |
-| CLI / TUI | Command execution verification | Interactive Bash |
-| Internal logic only | N/A (skip this trigger) | - |
-
-### Lifecycle
-
-1. **Start** the server/application in background
-2. **Execute** verification against the running instance
-3. **Save** evidence for each verification result using the 3-tier Evidence Path Priority
-4. **Stop** the server/application after verification completes
-
-**See** [stage3-handson.md] **for details** on applicability logic, lifecycle management, verification procedures, and output format.
-
-### Evasion Patterns (BLOCKED)
-
-| Excuse | Why Invalid |
-|--------|-------------|
-| "Tests already cover this" | Automated tests verify in-process behavior with mocks. Hands-on verifies out-of-process integration through real network. |
-| "Server setup is too complex" | If it's too complex to start locally, it's too complex to ship. Startup itself is a verification target. |
-| "E2E tests simulate HTTP" | MockMvc/WebTestClient operate without a servlet container. They are not real HTTP. |
-| "It's just a minor API change" | Minor changes break clients. Verify the contract with a real request. |
-
----
-
-## When: completeness verification requested
-
-**Verify that every prose-stated requirement in the Spec is reflected in the deliverable.**
-
-This trigger activates when the QA REQUEST's `## Required Verification` section contains a "Completeness check" directive.
+When the QA REQUEST's `## Required Verification` section contains a "Completeness check" directive, additionally verify that every prose-stated requirement in the Spec — not just the explicit ACs — is reflected in the deliverable. (This directive string is emitted by sisyphus; honor it verbatim.)
 
 Produce a Completeness table mapping each Spec item to its delivery status:
 
@@ -346,7 +270,43 @@ Produce a Completeness table mapping each Spec item to its delivery status:
 After the table, add a summary line: "N/M spec items fully addressed."
 
 - **Missing** or **Partial** items with CRITICAL/HIGH severity are REQUEST_CHANGES grounds
-- When all Spec requirements are already encapsulated as explicit ACs (i.e., no prose-only requirements exist), the **spec or AC provided** trigger covers the same ground → omit the Completeness section
+- When all Spec requirements are already encapsulated as explicit ACs (i.e., no prose-only requirements exist), the base Spec/AC compliance check already covers the same ground → omit the Completeness sub-check
+- When the directive is absent, the sub-check simply does not run
+
+---
+
+## When: Hands-on execution
+
+**Verify the changed surface by actually running it — executing caller-provided scenarios and attacking it adversarially.**
+
+This trigger activates on a disjunction: a **user-facing change** OR **caller-provided executable scenarios**. Either arm alone activates it. Internal-only changes with no scenarios (pure refactoring, logic with no user-facing surface) skip this trigger.
+
+Both activation arms are handled in one pass:
+
+1. **Execute caller-provided scenarios verbatim.** When the request content includes executable QA scenarios (tool, steps, expected output), run each exactly as specified and collect **per-scenario evidence**. ANY provided-scenario failure = immediate REQUEST_CHANGES.
+2. **Self-author the adversarial matrix.** For the changed surface, self-author the 6-category adversarial scenario matrix (failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency) and run it. See [stage3-handson.md] `## Adversarial Scenario Matrix`.
+3. **Merge both.** When caller-provided scenarios are present, they are NOT a substitute for the self-authored matrix — run the provided scenarios AND add the adversarial matrix on top; the two sets merge into one hands-on pass.
+
+**By-design non-idempotency note:** Hands-on execution is not necessarily idempotent — running it actually exercises the application (starts servers, sends requests, mutates state). A re-run may not reproduce the first run's environment, and some operations under test are intentionally non-idempotent (that is acceptable, not a defect). Evidence is captured per run.
+
+### Applicability
+
+| Change Type | Verification Method | Tool |
+|-------------|---------------------|------|
+| API endpoint | HTTP request verification | `curl` |
+| Frontend / UI | Browser interaction verification | `playwright` |
+| Mobile / App | iOS Simulator / Android Emulator E2E | `maestro` |
+| CLI / TUI | Command execution verification | Interactive Bash |
+| Internal logic only, no scenarios | N/A (skip this trigger) | - |
+
+### Lifecycle
+
+1. **Start** the server/application in background
+2. **Execute** caller-provided scenarios verbatim, then the self-authored adversarial matrix, against the running instance
+3. **Save** per-scenario evidence for each verification result using the 3-tier Evidence Path Priority
+4. **Stop** the server/application after verification completes
+
+**See** [stage3-handson.md] **for details** on applicability logic, lifecycle management, the adversarial scenario matrix, verification procedures, and output format.
 
 ---
 
@@ -376,11 +336,9 @@ Every issue MUST include confidence scoring. See [feedback-protocol.md] for Conf
 
 | Trigger | Status | Reason |
 |---------|--------|--------|
-| code changes present | [ACTIVE/INACTIVE] | [reason] |
-| spec or AC provided | [ACTIVE/INACTIVE] | [reason] |
-| QA scenarios provided | [ACTIVE/INACTIVE] | [reason] |
-| user-facing changes, no scenarios | [ACTIVE/INACTIVE] | [reason] |
-| completeness verification requested | [ACTIVE/INACTIVE] | [reason] |
+| Automated checks | [ACTIVE/INACTIVE] | [reason] |
+| Spec/AC compliance | [ACTIVE/INACTIVE] | [reason] |
+| Hands-on execution | [ACTIVE/INACTIVE] | [reason] |
 
 ## Verdict: [APPROVE / REQUEST_CHANGES / COMMENT]
 
@@ -390,7 +348,7 @@ Every issue MUST include confidence scoring. See [feedback-protocol.md] for Conf
   - Location: [file:line]
   - What: [problem]
 
-## Completeness (when completeness verification requested)
+## Completeness (Spec/AC compliance sub-check, only when the "Completeness check" directive is present)
 
 List each Spec item's delivery status using the following table:
 
@@ -400,7 +358,7 @@ List each Spec item's delivery status using the following table:
 
 N/M spec items fully addressed.
 - If 1 or more items are **Missing** or **Partial**, they affect the verdict (CRITICAL/HIGH severity → REQUEST_CHANGES grounds)
-- If all Spec requirements are already encapsulated as explicit ACs (i.e., no prose-only requirements exist), the Spec/AC Compliance section covers the same ground → omit the Completeness section
+- If all Spec requirements are already encapsulated as explicit ACs (i.e., no prose-only requirements exist), the base Spec/AC compliance check covers the same ground → omit this Completeness sub-check
 
 ## Evidence Files
 - [absolute path to each evidence file saved during this verification]
@@ -417,12 +375,11 @@ N/M spec items fully addressed.
 
 | Condition | Verdict |
 |-----------|---------|
-| Automated checks FAIL | **REQUEST_CHANGES** (build/test broken) |
+| Automated checks FAIL | **REQUEST_CHANGES** (build/typecheck/test/lint broken) |
 | Spec/AC compliance FAIL | **REQUEST_CHANGES** (spec not met) |
-| QA scenario FAIL | **REQUEST_CHANGES** (QA scenario failed) |
-| Hands-on verification FAIL | **REQUEST_CHANGES** (hands-on verification failed) |
-| Completeness: Missing/Partial (CRITICAL/HIGH) | **REQUEST_CHANGES** (spec items unaddressed) |
-| Code quality CRITICAL/HIGH | **REQUEST_CHANGES** (quality issues) |
+| Spec/AC compliance: Completeness Missing/Partial (CRITICAL/HIGH) | **REQUEST_CHANGES** (spec items unaddressed) |
+| Hands-on execution FAIL (provided scenario or adversarial matrix) | **REQUEST_CHANGES** (hands-on verification failed) |
+| Code quality (Security / Data Integrity) CRITICAL/HIGH | **REQUEST_CHANGES** (quality issues) |
 | MEDIUM only | **COMMENT** (conditional approval) |
 | LOW only or no issues | **APPROVE** |
 
@@ -431,15 +388,13 @@ N/M spec items fully addressed.
 ## Quick Reference
 
 ```
-code changes present:              Automated checks (Build, Test, Lint) + Code Quality
-spec or AC provided:               Spec/AC compliance (vs QA REQUEST Spec)
-QA scenarios provided:             Execute provided scenarios + collect evidence
-user-facing changes, no scenarios: Hands-On QA (API→curl, Frontend→playwright, Mobile→maestro, CLI→interactive_bash)
-completeness verification requested: Spec item × Status table (Addressed/Partial/Missing) + N/M summary
+Automated checks:   Build/typecheck (always) + native build (native-code-or-release) + Test + Lint + Code Quality (Security, Data Integrity)
+Spec/AC compliance: Spec/AC compliance (vs QA REQUEST Spec); "Completeness check" directive → Spec item × Status table (Addressed/Partial/Missing) + N/M summary
+Hands-on execution: user-facing change OR caller-provided scenarios → run provided scenarios verbatim + self-authored 6-category adversarial matrix (API→curl, Frontend→playwright, Mobile→maestro, CLI→interactive_bash)
 
-Automated checks: See stage1-commands.md
-Hands-On QA:      See stage3-handson.md
-Code Quality:     See checklists.md
+Automated checks:    See stage1-commands.md
+Hands-on execution:  See stage3-handson.md (incl. ## Adversarial Scenario Matrix)
+Code Quality:        See checklists.md
 CONFIDENCE: 0-49 discard, 50-79 nitpick, 80+ report
 FEEDBACK: What + Location (verdict only — diagnosis is oracle's job)
 SEVERITY: CRITICAL (security) > HIGH (arch) > MEDIUM (perf) > LOW (style)
