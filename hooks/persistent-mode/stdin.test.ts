@@ -150,4 +150,34 @@ describe('parseInput', () => {
     expect(result.directory).toBe(process.cwd());
     expect(result.lastAssistantMessage).toBeNull();
   });
+
+  it('subagent running → activeSubagentCount 1', () => {
+    const result = parseInput(JSON.stringify({ background_tasks: [{ id: 'a', type: 'subagent', status: 'running' }] }));
+    expect(result.activeSubagentCount).toBe(1);
+  });
+
+  it('shell running → activeSubagentCount 0 (non-subagent not counted)', () => {
+    const result = parseInput(JSON.stringify({ background_tasks: [{ id: 'b', type: 'shell', status: 'running' }] }));
+    expect(result.activeSubagentCount).toBe(0);
+  });
+
+  it('subagent completed → activeSubagentCount 0 (non-active not counted)', () => {
+    const result = parseInput(JSON.stringify({ background_tasks: [{ id: 'c', type: 'subagent', status: 'completed' }] }));
+    expect(result.activeSubagentCount).toBe(0);
+  });
+
+  it('mixed: subagent running + shell running → activeSubagentCount 1', () => {
+    const result = parseInput(JSON.stringify({
+      background_tasks: [
+        { id: 'd', type: 'subagent', status: 'running' },
+        { id: 'e', type: 'shell', status: 'running' },
+      ],
+    }));
+    expect(result.activeSubagentCount).toBe(1);
+  });
+
+  it('absent background_tasks → activeSubagentCount 0', () => {
+    const result = parseInput(JSON.stringify({ sessionId: 'test' }));
+    expect(result.activeSubagentCount).toBe(0);
+  });
 });
