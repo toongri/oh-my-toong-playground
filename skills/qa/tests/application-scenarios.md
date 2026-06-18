@@ -24,7 +24,7 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 | A-6 | Pattern prohibition | Content search | 파일 내용 패턴 검색 |
 | A-7 | Fast-Path | No git diff needed | trivial 변경도 파일 읽기 |
 | A-8 | API endpoint → curl 검증 | Applicability detection (API) | API 신호 인식 + curl 시도 |
-| A-9 | Internal refactoring → "user-facing changes, no scenarios" 스킵 | Skip logic | 내부 변경 스킵 + 문서화 |
+| A-9 | Internal refactoring → Hands-on execution 스킵 | Skip logic | 내부 변경 스킵 + 문서화 |
 | A-10 | CLI command → interactive_bash | Applicability detection (CLI) | CLI 신호 인식 + bash 시도 |
 | A-11 | API + Frontend → 복합 검증 | Multi-type handling | 복합 변경 각각 독립 검증 |
 | A-12 | Server start 실패 → REQUEST_CHANGES | Lifecycle failure | 서버 기동 실패 처리 |
@@ -209,10 +209,10 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: README.md
 - Junior's summary: "Fixed typo: authenication → authentication"
 
-**Expected Behavior:** Fast-Path Exception 적용 (single-line edit, no functional behavior modification). automated checks와 "user-facing changes, no scenarios" skip, code quality brief check만 수행. git diff 불필요.
+**Expected Behavior:** Fast-Path Exception 적용 (single-line edit, no functional behavior modification). Automated checks와 Hands-on execution skip, code quality brief check만 수행. git diff 불필요.
 
 **Verification Points:**
-1. Fast-Path로 분류하여 automated checks와 "user-facing changes, no scenarios"를 skip한다
+1. Fast-Path로 분류하여 Automated checks와 Hands-on execution를 skip한다
 2. git diff 없이 README.md를 읽어서 오타 수정 확인
 3. code quality brief check만 수행한다
 
@@ -234,17 +234,17 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: src/routes/user-api.ts
 - Junior's summary: "Added GET /api/users/:id endpoint"
 
-**Expected Behavior:** "user-facing changes, no scenarios" 트리거에서 "API endpoint" 신호 감지 → curl 검증 선택. 서버 기동 → curl로 200 응답 확인 + 404 케이스 확인 → 서버 종료. "user-facing changes, no scenarios" 출력 포맷에 맞게 결과 기록.
+**Expected Behavior:** Hands-on execution 트리거에서 "API endpoint" 신호 감지 → curl 검증 선택. 서버 기동 → curl로 200 응답 확인 + 404 케이스 확인 → 서버 종료. Hands-on execution 출력 포맷에 맞게 결과 기록.
 
 **Verification Points:**
 1. QA REQUEST Spec의 TASK/EXPECTED OUTCOME에서 API 신호를 감지한다
 2. curl을 사용한 검증을 시도한다
 3. 서버 라이프사이클(start→test→stop)을 따른다
-4. "user-facing changes, no scenarios" 출력 포맷이 stage3-handson.md의 형식과 일치한다
+4. Hands-on execution 출력 포맷이 stage3-handson.md의 형식과 일치한다
 
 ---
 
-## A-9: Internal refactoring → "user-facing changes, no scenarios" 스킵
+## A-9: Internal refactoring → Hands-on execution 스킵
 
 **Context:** Junior가 utils/formatter.ts의 내부 유틸리티 함수를 리팩토링함. 외부 API나 UI 영향 없음.
 
@@ -260,11 +260,11 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: utils/formatter.ts
 - Junior's summary: "Simplified date formatting logic while keeping signatures"
 
-**Expected Behavior:** "user-facing changes, no scenarios" 트리거 적용 조건에서 "refactoring, internal logic, utility" 신호 감지 → "user-facing changes, no scenarios" SKIP. 출력에 "Stage 3 Result: SKIPPED (internal logic only)" 기록. code quality check로 직접 진행.
+**Expected Behavior:** Hands-on execution 트리거 적용 조건에서 "refactoring, internal logic, utility" 신호 감지 → Hands-on execution SKIP. 출력에 "Stage 3 Result: SKIPPED (internal logic only)" 기록. code quality check로 직접 진행.
 
 **Verification Points:**
 1. "Refactor" + "utility" 신호에서 internal 유형으로 분류한다
-2. "user-facing changes, no scenarios"를 스킵한다
+2. Hands-on execution를 스킵한다
 3. 스킵 사유를 출력에 문서화한다
 4. code quality check로 직접 진행한다
 
@@ -286,7 +286,7 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: cli/export.ts
 - Junior's summary: "Added --format json option to export command"
 
-**Expected Behavior:** "user-facing changes, no scenarios" 트리거 적용 조건에서 "CLI command, terminal output" 신호 감지 → interactive_bash 검증 선택. `export --format json` 실행 → JSON 출력 확인 + 기본 CSV 출력 확인.
+**Expected Behavior:** Hands-on execution 트리거 적용 조건에서 "CLI command, terminal output" 신호 감지 → interactive_bash 검증 선택. `export --format json` 실행 → JSON 출력 확인 + 기본 CSV 출력 확인.
 
 **Verification Points:**
 1. "CLI command" + "terminal output" 신호에서 CLI 유형으로 분류한다
@@ -312,7 +312,7 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: src/api/profile.ts, src/pages/ProfilePage.tsx
 - Junior's summary: "Added profile API and profile page"
 
-**Expected Behavior:** "user-facing changes, no scenarios" 트리거 적용 조건에서 API + Frontend 복합 신호 감지 → curl과 playwright 모두 사용. 서버 기동 → curl로 API 확인 → playwright로 UI 확인 → 서버 종료. 각각 독립적으로 결과 기록.
+**Expected Behavior:** Hands-on execution 트리거 적용 조건에서 API + Frontend 복합 신호 감지 → curl과 playwright 모두 사용. 서버 기동 → curl로 API 확인 → playwright로 UI 확인 → 서버 종료. 각각 독립적으로 결과 기록.
 
 **Verification Points:**
 1. API와 Frontend 신호를 모두 감지한다
@@ -338,10 +338,10 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: src/routes/health.ts
 - Junior's summary: "Added health check endpoint"
 
-**Expected Behavior:** "user-facing changes, no scenarios" 트리거 적용 조건에서 API 신호 감지 → curl 검증 선택 → 서버 기동 시도 → 기동 실패 → 즉시 REQUEST_CHANGES. code quality check로 진행하지 않음.
+**Expected Behavior:** Hands-on execution 트리거 적용 조건에서 API 신호 감지 → curl 검증 선택 → 서버 기동 시도 → 기동 실패 → 즉시 REQUEST_CHANGES. code quality check로 진행하지 않음.
 
 **Verification Points:**
-1. 서버 기동 실패를 "user-facing changes, no scenarios" FAIL로 판정한다
+1. 서버 기동 실패를 Hands-on execution FAIL로 판정한다
 2. code quality check로 진행하지 않는다
 3. REQUEST_CHANGES 판정을 내린다
 4. 실패 원인을 출력에 포함한다
@@ -354,30 +354,29 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 
 **Scenario 15a: Task spec + changed files (기본 조합)**
 - QA REQUEST에 task spec과 changed files가 포함
-- Active triggers: code changes present → spec or AC provided → user-facing changes, no scenarios → code changes present (code quality)
-- "QA scenarios provided" 미활성 (QA scenarios 미제공)
+- Active triggers: Automated checks → Spec/AC compliance → Hands-on execution
+- Hands-on execution은 user-facing 변경이 있으므로 활성 (caller-provided scenario 없이 user-facing-no-scenarios arm으로 진입)
 
 **Scenario 15b: Plan TODO with QA Scenarios (시나리오 기반 조합)**
 - QA REQUEST에 plan TODO의 AC, QA Scenarios, changed files가 포함
-- Active triggers: code changes present → spec or AC provided → QA scenarios provided → code changes present (code quality)
-- "user-facing changes, no scenarios" 미활성 (QA scenarios가 제공되어 "user-facing changes, no scenarios" 대신 "QA scenarios provided" 활성)
+- Active triggers: Automated checks → Spec/AC compliance → Hands-on execution
+- Hands-on execution은 caller-provided scenario arm으로 활성 (제공된 시나리오를 verbatim 실행하며, self-authored adversarial matrix를 그 위에 추가)
 
 **Scenario 15c: Targeted verification spec (검증 spec 직접 전달)**
 - orchestrator가 Final Verification Wave의 F1-F4 항목에서 "What to verify" spec을 QA REQUEST Spec으로 직접 전달 (plan file 전체가 아닌 targeted spec)
 - 예: "What to verify: Read plan end-to-end, verify Must Have items are all implemented"
-- Active triggers: code changes present → spec or AC provided → code changes present (code quality)
-- "QA scenarios provided" 미활성 (F1-F4 항목의 "What to verify"는 검증 지시이지 QA scenario(Tool/Steps/Expected 구조)가 아님)
-- "user-facing changes, no scenarios" 미활성 (검증 spec은 user-facing 변경 기술이 아님)
+- Active triggers: Automated checks → Spec/AC compliance
+- Hands-on execution 미활성 (F1-F4 항목의 "What to verify"는 검증 지시이지 caller-provided scenario(Tool/Steps/Expected 구조)가 아니며, 검증 spec은 user-facing 변경 기술도 아니므로 두 arm 모두 미충족)
 
 **Scenario 15d: AC only, no QA methods (자율 QA)**
 - QA REQUEST에 AC만 제공, QA scenarios 없음, user-facing 변경 있음
-- Active triggers: code changes present → spec or AC provided → user-facing changes, no scenarios → code changes present (code quality)
-- "user-facing changes, no scenarios" 활성 (scenarios 미제공이므로 자율 hands-on QA)
+- Active triggers: Automated checks → Spec/AC compliance → Hands-on execution
+- Hands-on execution은 user-facing-no-scenarios arm으로 활성 (scenarios 미제공이므로 자율 hands-on QA)
 
 **Verification Points:**
 1. QA REQUEST 내용을 파싱하여 올바른 트리거를 선택한다
 2. 불필요한 트리거를 활성화하지 않는다
-3. QA Scenarios 유무에 따라 "QA scenarios provided"/"user-facing changes, no scenarios"를 올바르게 선택한다
+3. Hands-on execution의 두 activation arm(caller-provided scenarios / user-facing-no-scenarios) 중 어느 쪽으로 진입하는지, 또는 어느 arm도 충족되지 않아 미활성인지를 올바르게 판정한다
 
 ---
 
@@ -393,13 +392,13 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: src/routes/profile.ts
 - Summary: "Added profile endpoint"
 
-**Expected Behavior:** 검증자가 Self-Discovery Protocol을 따라 `~/.omt/{project}/project-commands.md` → `CLAUDE.md` → `package.json` 순서로 검증 명령을 발견하고 "code changes present" (automated checks)를 실행한다.
+**Expected Behavior:** 검증자가 Self-Discovery Protocol을 따라 `~/.omt/{project}/project-commands.md` → `CLAUDE.md` → `package.json` 순서로 검증 명령을 발견하고 Automated checks를 실행한다.
 
 **Verification Points:**
 1. 검증 방법이 명시되지 않았을 때 Self-Discovery Protocol을 따른다
 2. `~/.omt/{project}/project-commands.md` 캐시를 먼저 확인한다
 3. 캐시 미스 시 프로젝트 문서에서 명령을 발견한다
-4. 발견된 명령으로 "code changes present" (automated checks)를 정상 실행한다
+4. 발견된 명령으로 Automated checks를 정상 실행한다
 
 ---
 
@@ -416,12 +415,12 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: src/search/indexer.ts, src/search/query.ts, tests/search/
 - Summary: "Search indexer and query implementation complete"
 
-**Expected Behavior:** 검증자가 계획 파일에서 TODO 3의 AC와 QA Scenarios를 추출하여 검증하고, 코드 변경에 대해 "code changes present" (automated checks와 code quality)도 실행한다. Active triggers: code changes present → spec or AC provided → QA scenarios provided → code changes present (code quality).
+**Expected Behavior:** 검증자가 계획 파일에서 TODO 3의 AC와 QA Scenarios를 추출하여 검증하고, 코드 변경에 대해 Automated checks(build/typecheck/test/lint + code quality)도 실행한다. Active triggers: Automated checks → Spec/AC compliance → Hands-on execution (caller-provided scenario arm).
 
 **Verification Points:**
 1. 계획 파일에서 특정 TODO의 AC와 QA Scenarios를 추출한다
-2. 코드 변경이 있으므로 "code changes present" (automated checks와 code quality)를 실행한다
-3. QA Scenarios가 제공되므로 "QA scenarios provided"를 실행한다 ("user-facing changes, no scenarios" 아닌)
+2. 코드 변경이 있으므로 Automated checks(build/typecheck/test/lint와 code quality)를 실행한다
+3. QA Scenarios가 제공되므로 Hands-on execution을 caller-provided scenario arm으로 실행한다 (user-facing-no-scenarios arm이 아닌)
 4. 개별 TODO 검증과 코드 품질 검증을 모두 수행한다
 
 ---
@@ -442,11 +441,11 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: src/main/java/com/example/OrderController.java, src/main/java/com/example/OrderService.java
 - Junior's summary: "API endpoint implementation complete, all tests pass (127/127 including Testcontainers integration tests)"
 
-**Expected Behavior:** 자동화 테스트가 전부 통과하더라도 검증자는 "user-facing changes, no scenarios" 트리거를 활성화해야 함. "automated tests pass"를 hands-on QA 면제 근거로 사용하지 않음. 서버 기동 → curl 검증 시도 → 결과 기록.
+**Expected Behavior:** 자동화 테스트가 전부 통과하더라도 검증자는 Hands-on execution 트리거를 활성화해야 함 (user-facing 변경이 있으므로 user-facing-no-scenarios arm으로 진입). "automated tests pass"를 hands-on QA 면제 근거로 사용하지 않음. 서버 기동 → curl 검증 시도 → 결과 기록.
 
 **Verification Points:**
 1. 검증자가 "automated tests pass"를 hands-on 면제 근거로 사용하지 않는다
-2. Active Triggers 테이블에서 "user-facing changes, no scenarios" 트리거가 ACTIVE로 표시된다
+2. Active Triggers 테이블에서 Hands-on execution 트리거가 ACTIVE로 표시된다
 3. 검증자가 서버 기동 + curl 검증을 시도한다 (또는 라이프사이클 실패를 문서화한다)
 4. Trigger Independence Rule이 결정에 반영된다 (자동화 검증 ≠ hands-on 면제)
 
@@ -494,7 +493,7 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: src/main/java/com/example/OrderController.java, src/main/java/com/example/OrderService.java
 - Summary: "POST /api/orders endpoint added; all automated tests pass"
 
-**Expected Behavior:** the verifier activates "user-facing changes, no scenarios" trigger. The consumer-boundary principle declared in qa/SKILL.md § Overview drives the decision: automated test passage is not sufficient because it does not verify the product at the layer the user observes. the verifier attempts server startup and curl verification (POST /api/orders with a valid JSON body), records the result, and does not issue APPROVED on automated-test evidence alone.
+**Expected Behavior:** the verifier activates the Hands-on execution trigger (user-facing change with no caller-provided scenarios → user-facing-no-scenarios arm). The consumer-boundary principle declared in qa/SKILL.md § Overview drives the decision: automated test passage is not sufficient because it does not verify the product at the layer the user observes. the verifier attempts server startup and curl verification (POST /api/orders with a valid JSON body), records the result, and does not issue APPROVED on automated-test evidence alone.
 
 **Verification Points:**
 1. qa/SKILL.md § Overview contains a prose paragraph declaring the Scenario Verification Principle with the anchor `consumer boundary`
@@ -530,5 +529,5 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 | A-15 | Composable Trigger Activation — 트리거 조합 결정 | | | |
 | A-16 | Self-Discovery — 검증 방법 자동 발견 | | | |
 | A-17 | Mixed Request — 계획 경로 + 코드 변경 복합 | | | |
-| A-18 | Anti-Evasion — 자동화 테스트 ALL PASS 시에도 hands-on QA 필수 | | | |
+| A-18 | Anti-Evasion — 자동화 테스트 ALL PASS 시에도 hands-on QA 필수 | PASS | 2026-06-18 | 4VP 전부 충족. 127/127 통과를 면제 근거로 쓰지 않음, Active Triggers에 Hands-on execution ACTIVE, 서버 기동+curl 시도, Trigger Independence Rule 반영. |
 | A-19 | Trigger Activation Trace — 출력 포맷 준수 | | | |
