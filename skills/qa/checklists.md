@@ -1,6 +1,6 @@
 # Code Quality Checklists
 
-Quality review checklists organized by severity level. Use during Stage 4 of the code review process.
+Quality review checklists covering the two CRITICAL code-quality categories: Security and Data Integrity. Use during Stage 4 of the code review process.
 
 ---
 
