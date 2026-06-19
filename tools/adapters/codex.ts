@@ -5,7 +5,7 @@
  * Key behaviors:
  * - agents: not supported, skip with warning
  * - commands: not supported (global ~/.codex/prompts/ only), skip with warning
- * - hooks: Notification event only
+ * - hooks: supported; command is a literal relative `bun run .codex/hooks/<name>/index.ts`
  * - skills, scripts: syncDirectory
  * - rules: not supported, skip with warning
  * - config: TOML managed block in .codex/config.toml
@@ -418,7 +418,83 @@ export class CodexAdapter implements PlatformAdapter {
 
     // --- hooks ---
     if (yaml.hooks != null) {
-      logWarn("Codex does not support hooks in config.toml. Skipping hooks section.");
+      const hooksMap = yaml.hooks;
+      const preserveConfig = (hooksMap as Record<string, unknown>)["preserve"] as
+        | { "command-contains"?: string[] }
+        | undefined;
+      const accumulatedHooks: Record<string, unknown[]> = {};
+
+      for (const [hookEvent, items] of Object.entries(hooksMap)) {
+        if (hookEvent === "preserve") continue;
+        if (!Array.isArray(items)) continue;
+
+        for (const item of items) {
+          const component = (item["component"] as string | undefined) ?? "";
+          const timeout = (item["timeout"] as number | undefined) ?? 10;
+          const matcher = (item["matcher"] as string | undefined) ?? "*";
+          const customCommand = (item["command"] as string | undefined) ?? "";
+
+          let displayName = "";
+          let resolvedSourcePath = "";
+
+          // If a component is specified, resolve and deploy the hook bundle
+          if (component) {
+            // component is a pre-resolved absolute path (orchestrator resolves before calling adapter)
+            displayName = path.basename(component);
+            resolvedSourcePath = component;
+
+            await this.syncHooksDirect(targetPath, displayName, resolvedSourcePath, dryRun);
+          }
+
+          // Build command string
+          let cmdPath: string;
+          if (customCommand) {
+            cmdPath = customCommand;
+          } else if (component) {
+            // Check if the source is a directory and pick index.ts or index.sh
+            let isDir = false;
+            try {
+              const stat = await fs.stat(resolvedSourcePath);
+              isDir = stat.isDirectory();
+            } catch {
+              // treat as file
+            }
+
+            if (isDir) {
+              const indexTs = path.join(resolvedSourcePath, "index.ts");
+              const indexSh = path.join(resolvedSourcePath, "index.sh");
+              let hasIndexTs = false;
+              let hasIndexSh = false;
+              try { await fs.stat(indexTs); hasIndexTs = true; } catch { /* empty */ }
+              try { await fs.stat(indexSh); hasIndexSh = true; } catch { /* empty */ }
+
+              if (hasIndexTs) {
+                cmdPath = `bun run .codex/hooks/${displayName}/index.ts`;
+              } else if (hasIndexSh) {
+                cmdPath = `bash .codex/hooks/${displayName}/index.sh`;
+              } else {
+                logWarn(`Hook 디렉토리에 index.ts/index.sh 없음: ${resolvedSourcePath} (스킵)`);
+                continue;
+              }
+            } else {
+              cmdPath = `.codex/hooks/${displayName}`;
+            }
+          } else {
+            logWarn(`Hook command 미정의: event=${hookEvent} (스킵)`);
+            continue;
+          }
+
+          const hookEntry = this.buildHookEntry(hookEvent, matcher, timeout, cmdPath);
+
+          // Accumulate hook entries per event
+          const existing = (accumulatedHooks[hookEvent] as unknown[]) ?? [];
+          const entryArray = hookEntry[hookEvent] as unknown[];
+          accumulatedHooks[hookEvent] = [...existing, ...entryArray];
+        }
+      }
+
+      await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig);
+      processedSections.push("hooks");
     }
 
     // --- plugins ---
@@ -427,6 +503,27 @@ export class CodexAdapter implements PlatformAdapter {
     }
 
     return { processedSections, modelMap };
+  }
+
+  // ---------------------------------------------------------------------------
+  // buildHookEntry
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build a hook entry object for hooks.json `hooks` section.
+   *
+   * Returns an object of shape: { [event]: [{ matcher, hooks: [hookDef] }] }
+   */
+  buildHookEntry(
+    event: string,
+    matcher: string,
+    timeout: number,
+    command: string,
+  ): Record<string, unknown[]> {
+    const hookDef: Record<string, unknown> = { type: "command", command, timeout };
+    return {
+      [event]: [{ matcher, hooks: [hookDef] }],
+    };
   }
 
   // ---------------------------------------------------------------------------
