@@ -8,8 +8,10 @@ import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import { execFileSync } from "node:child_process";
 
 import { ClaudeAdapter } from "./claude.ts";
+import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 import baseline from "./__fixtures__/claude-project-baseline.json";
 import type { PlatformYaml } from "../lib/types.ts";
 
@@ -1023,11 +1025,77 @@ describe("syncMcpsMerge", () => {
   it("writes local-scope MCP to projects[targetPath].mcpServers in ~/.claude.json via `syncMcpsMerge`", async () => {
     await adapter.syncMcpsMerge(targetPath, "local-server", { command: "npx local" }, false, "local");
 
+    const derivedKey = deriveClaudeProjectKey(targetPath);
     const config = await readJsonFile(claudeConfigFile);
     const projects = config["projects"] as Record<string, unknown>;
-    const projectEntry = projects[targetPath] as Record<string, unknown>;
+    const projectEntry = projects[derivedKey] as Record<string, unknown>;
     const mcpServers = projectEntry["mcpServers"] as Record<string, unknown>;
     expect(mcpServers["local-server"]).toEqual({ command: "npx local" });
+  });
+
+  it("local mcp derived key", async () => {
+    // Create a git repo with a linked worktree.
+    // deriveClaudeProjectKey(worktreeDir) returns the repo root (branch a),
+    // which is different from worktreeDir — proving the key is git-derived, not raw targetPath.
+    const gitEnv = {
+      ...process.env,
+      GIT_AUTHOR_NAME: "test",
+      GIT_AUTHOR_EMAIL: "t@t.com",
+      GIT_COMMITTER_NAME: "test",
+      GIT_COMMITTER_EMAIL: "t@t.com",
+    };
+    const repoDir = path.join(tmpDir, "main-repo");
+    await fs.mkdir(repoDir, { recursive: true });
+    execFileSync("git", ["init", repoDir]);
+    execFileSync("git", ["-C", repoDir, "commit", "--allow-empty", "-m", "init"], { env: gitEnv });
+    const worktreeDir = path.join(tmpDir, "linked-worktree");
+    execFileSync("git", ["-C", repoDir, "worktree", "add", "-b", "wt-branch", worktreeDir]);
+
+    const derivedKey = deriveClaudeProjectKey(worktreeDir);
+    // derivedKey = repoDir (branch a: basename(.git) === ".git" → dirname)
+    // worktreeDir ≠ derivedKey
+    expect(derivedKey).not.toBe(worktreeDir);
+
+    await adapter.syncMcpsMerge(worktreeDir, "wt-server", { command: "npx wt" }, false, "local");
+
+    const config = await readJsonFile(claudeConfigFile);
+    const projects = config["projects"] as Record<string, unknown>;
+
+    // The key must be derivedKey (repo root), NOT the raw worktreeDir
+    expect(projects[derivedKey]).toBeDefined();
+    const projectEntry = projects[derivedKey] as Record<string, unknown>;
+    const mcpServers = projectEntry["mcpServers"] as Record<string, unknown>;
+    expect(mcpServers["wt-server"]).toEqual({ command: "npx wt" });
+
+    // The raw worktreeDir path must NOT appear as a key
+    expect(projects[worktreeDir]).toBeUndefined();
+  });
+
+  it("user scope unchanged", async () => {
+    await adapter.syncMcpsMerge(targetPath, "user-server", { command: "npx user" }, false, undefined);
+
+    const config = await readJsonFile(claudeConfigFile);
+    const mcpServers = config["mcpServers"] as Record<string, unknown>;
+    expect(mcpServers["user-server"]).toEqual({ command: "npx user" });
+    // No projects key should be written for user-scope
+    expect(config["projects"]).toBeUndefined();
+  });
+
+  it("dry-run logs local MCP key line via `syncMcpsMerge`", async () => {
+    const stderrChunks: string[] = [];
+    const stderrSpy = spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    });
+    try {
+      const derivedKey = deriveClaudeProjectKey(targetPath);
+      await adapter.syncMcpsMerge(targetPath, "dry-server", { command: "npx dry" }, true, "local");
+      const combined = stderrChunks.join("");
+      expect(combined).toContain("local MCP key:");
+      expect(combined).toContain(derivedKey);
+    } finally {
+      stderrSpy.mockRestore();
+    }
   });
 
   it("skips file write in dry-run mode via `syncMcpsMerge`", async () => {
@@ -1172,9 +1240,10 @@ describe("syncPlatformYaml - mcps scope", () => {
       mcps: { "project-server": { command: "npx project-server" } },
     }, false, "project");
 
+    const derivedKey = deriveClaudeProjectKey(targetPath);
     const config = await readJsonFile(claudeConfigFile);
     const projects = config["projects"] as Record<string, unknown>;
-    const projectEntry = projects[targetPath] as Record<string, unknown>;
+    const projectEntry = projects[derivedKey] as Record<string, unknown>;
     const mcpServers = projectEntry["mcpServers"] as Record<string, unknown>;
     expect(mcpServers["project-server"]).toEqual({ command: "npx project-server" });
   });
