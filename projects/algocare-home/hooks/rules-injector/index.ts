@@ -242,3 +242,105 @@ export function getRulesForPath(filePath: string, workingDirectory?: string): Ru
   const hook = createRulesInjectorHook(cwd);
   return hook.getRulesForFile(filePath);
 }
+
+// ---------------------------------------------------------------------------
+// Codex PostToolUse hook entry
+// ---------------------------------------------------------------------------
+
+import { extractCommandPaths } from './extract.js';
+
+/**
+ * Render matched rules into the additionalContext string. Mirrors the core's
+ * private formatRulesForInjection block layout so codex and Claude inject the
+ * same shape.
+ */
+function formatRules(rules: RuleToInject[]): string {
+  let output = '';
+  for (const rule of rules) {
+    output += `\n\n[Rule: ${rule.relativePath}]\n[Match: ${rule.matchReason}]\n${rule.content}`;
+  }
+  return output.trim();
+}
+
+/**
+ * Core of the codex PostToolUse hook: run the D-5 extraction pipeline over
+ * `tool_input.command`, build the dedup entry ONCE, and collect matched rules.
+ * Returns the additionalContext string ('' when nothing matched).
+ *
+ * `hookSpecificOutput` always carries `hookEventName`; `additionalContext` is
+ * present only when at least one rule matched. Any failure surfaces as ''
+ * (a valid no-op) — the caller never throws or blocks.
+ */
+function runCodexPostToolUse(payload: unknown): string {
+  if (typeof payload !== 'object' || payload === null) return '';
+  const input = payload as Record<string, unknown>;
+
+  const cwd = typeof input.cwd === 'string' ? input.cwd : process.cwd();
+  const sessionId =
+    typeof input.session_id === 'string' ? input.session_id : '';
+  if (!sessionId) return '';
+
+  const toolInput =
+    typeof input.tool_input === 'object' && input.tool_input !== null
+      ? (input.tool_input as Record<string, unknown>)
+      : {};
+  const command = toolInput.command;
+  if (typeof command !== 'string' && !Array.isArray(command)) return '';
+
+  const paths = extractCommandPaths(command as string | string[]);
+  if (paths.length === 0) return '';
+
+  // Build the dedup entry ONCE for this invocation, then call it per path.
+  const hook = createRulesInjectorHook(cwd);
+  const matched: RuleToInject[] = [];
+  for (const filePath of paths) {
+    matched.push(...hook.processFilePathForRules(filePath, sessionId));
+  }
+  if (matched.length === 0) return '';
+
+  return formatRules(matched);
+}
+
+function readStdin(): Promise<string> {
+  return new Promise((resolveStdin) => {
+    let data = '';
+    process.stdin.setEncoding('utf-8');
+    process.stdin.on('data', (chunk) => {
+      data += chunk;
+    });
+    process.stdin.once('end', () => resolveStdin(data));
+    process.stdin.once('error', () => resolveStdin(data));
+  });
+}
+
+if (import.meta.main) {
+  // The codex PostToolUse hook contract: emit hookSpecificOutput on stdout and
+  // exit 0 unconditionally. additionalContext is present only when rules
+  // matched; on no-match OR any error we emit a valid no-op and NEVER block.
+  const emit = (additionalContext: string): void => {
+    const hookSpecificOutput: {
+      hookEventName: string;
+      additionalContext?: string;
+    } = { hookEventName: 'PostToolUse' };
+    if (additionalContext.length > 0) {
+      hookSpecificOutput.additionalContext = additionalContext;
+    }
+    process.stdout.write(`${JSON.stringify({ hookSpecificOutput })}\n`);
+  };
+
+  readStdin()
+    .then((raw) => {
+      let additionalContext = '';
+      try {
+        additionalContext = runCodexPostToolUse(JSON.parse(raw));
+      } catch {
+        additionalContext = '';
+      }
+      emit(additionalContext);
+      process.exit(0);
+    })
+    .catch(() => {
+      emit('');
+      process.exit(0);
+    });
+}
