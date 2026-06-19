@@ -488,7 +488,9 @@ export async function syncLib(
     const sourceRoots = libSourceRoots?.get(platform) ?? new Set<string>();
     const requiredModules = await collectRequiredLibModulesFromSources(sourceRoots, libSrc);
 
-    if (requiredModules.size === 0 && dataFiles.size === 0) {
+    // Data files (e.g. pins/tbox.yaml) are runtime assets for lib modules; with
+    // zero modules deployed they have no consumer, so skip the whole lib deploy.
+    if (requiredModules.size === 0) {
       // No @lib/ imports — remove any stale lib (dry-run: log only)
       if (context.dryRun) {
         if (existsSync(libDest)) {
