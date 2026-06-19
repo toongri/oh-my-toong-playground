@@ -89,6 +89,34 @@ interface WorkerResult {
   rules: Array<{ relativePath: string; matchReason: string }>;
 }
 
+/**
+ * Run the codex hook ENTRY (index.ts's import.meta.main) by feeding `payload`
+ * on stdin, the way codex invokes the PostToolUse hook. Returns the raw stdout,
+ * the parsed stdout (or null when not valid JSON), and the process exit status.
+ */
+function runEntry(
+  home: string,
+  payload: string
+): { status: number | null; stdout: string; parsed: any } {
+  const indexPath = join(import.meta.dir, 'index.ts');
+  const env = { ...process.env, HOME: home };
+  const result = spawnSync('bun', ['run', indexPath], {
+    input: payload,
+    encoding: 'utf-8',
+    env,
+  });
+  let parsed: any = null;
+  const text = result.stdout.trim();
+  if (text.length > 0) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+  }
+  return { status: result.status, stdout: result.stdout, parsed };
+}
+
 function runWorker(
   workerPath: string,
   home: string,
@@ -145,5 +173,47 @@ describe('rules-injector CORE gate-free entry', () => {
     // state and dedups — zero rules returned.
     const b = runWorker(workerPath, home, repo, target, sid);
     expect(b.count).toBe(0);
+  });
+});
+
+describe('rules-injector codex hook entry no-op contract', () => {
+  it('no-match emits valid no-op', () => {
+    // T5a: a well-formed PostToolUse payload whose command has no path-shaped
+    // token. The entry must emit a valid no-op: hookEventName present, NO
+    // additionalContext / no stray keys, and exit 0 (never block).
+    const home = makeTmpDir('rules-injector-home-');
+    const cwd = makeTmpDir('rules-injector-cwd-');
+    const payload = JSON.stringify({
+      session_id: 'sid-t5a',
+      cwd,
+      tool_input: { command: 'rg pat' },
+      hook_event_name: 'PostToolUse',
+    });
+
+    const out = runEntry(home, payload);
+
+    expect(out.status).toBe(0);
+    expect(out.parsed).not.toBeNull();
+    expect(out.parsed.hookSpecificOutput.hookEventName).toBe('PostToolUse');
+    // No matched rules -> no additionalContext, and no stray keys.
+    expect(out.parsed.hookSpecificOutput.additionalContext).toBeUndefined();
+    expect(Object.keys(out.parsed.hookSpecificOutput)).toEqual([
+      'hookEventName',
+    ]);
+    expect(Object.keys(out.parsed)).toEqual(['hookSpecificOutput']);
+  });
+
+  it('parse-error emits valid no-op', () => {
+    // T5b: malformed JSON on stdin must NOT throw / exit nonzero / block.
+    // The entry emits a valid no-op and exits 0.
+    const home = makeTmpDir('rules-injector-home-');
+    const payload = '{ this is not valid json';
+
+    const out = runEntry(home, payload);
+
+    expect(out.status).toBe(0);
+    expect(out.parsed).not.toBeNull();
+    expect(out.parsed.hookSpecificOutput.hookEventName).toBe('PostToolUse');
+    expect(out.parsed.hookSpecificOutput.additionalContext).toBeUndefined();
   });
 });
