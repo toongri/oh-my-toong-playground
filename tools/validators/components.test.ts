@@ -156,14 +156,29 @@ agents:
     it("returns error when CLAUDE.md is absent via `validateSyncYamlComponents`", async () => {
       // Remove the CLAUDE.md created in makeRoot
       rmSync(join(root, "CLAUDE.md"));
+      // Fixture has a real agent item (non-empty items) so validateCliProjectFiles is called
+      touch(join(root, "agents", "oracle.md"));
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
 platforms: [claude]
 agents:
-  items: []
+  items:
+    - oracle
 `);
       const result = await validateSyncYamlComponents(syncPath, root);
       expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(true);
+    });
+
+    it("MCP-only 프로젝트(컴포넌트 없음)는 CLAUDE.md 부재 에러를 내지 않는다 via `validateSyncYamlComponents`", async () => {
+      // Target dir exists but has no CLAUDE.md
+      rmSync(join(root, "CLAUDE.md"));
+      // sync.yaml has only name + path, zero component sections
+      const syncPath = writeYaml(root, "sync.yaml", `
+name: mcp-only-project
+path: ${root}
+`);
+      const result = await validateSyncYamlComponents(syncPath, root);
+      expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(false);
     });
 
     it("produces no CLAUDE.md errors when CLAUDE.md exists", async () => {
@@ -644,7 +659,9 @@ describe("validateAll — enabled-projects 화이트리스트", () => {
 
   it("`enabledProjects`로 활성화된 프로젝트는 정상 검증된다", async () => {
     // proj-a 활성: target path가 존재하지 않으면 CLAUDE.md 에러가 나야 함
-    writeYaml(join(root, "projects", "proj-a"), "sync.yaml", `path: /nonexistent/proj-a\n`);
+    // agents 섹션에 항목이 있어야 validateCliProjectFiles가 호출된다
+    writeYaml(join(root, "projects", "proj-a"), "sync.yaml",
+      `path: /nonexistent/proj-a\nagents:\n  items:\n    - oracle\n`);
     writeYaml(root, "sync.yaml", `path: ${root}\n`);
 
     const result = await validateAll(root, ["proj-a"]);
@@ -654,7 +671,9 @@ describe("validateAll — enabled-projects 화이트리스트", () => {
 
   it("루트 sync.yaml은 `enabledProjects` 필터와 무관하게 항상 검증된다", async () => {
     // 루트 sync.yaml만 있고 enabledProjects는 비어있는 sentinel — 루트는 그래도 처리되어야 함
-    writeYaml(root, "sync.yaml", `path: /nonexistent/root-target\n`);
+    // agents 섹션에 항목이 있어야 validateCliProjectFiles가 호출된다
+    writeYaml(root, "sync.yaml",
+      `path: /nonexistent/root-target\nagents:\n  items:\n    - oracle\n`);
 
     const result = await validateAll(root, ["__none__"]);
 
@@ -662,8 +681,11 @@ describe("validateAll — enabled-projects 화이트리스트", () => {
   });
 
   it("`enabledProjects` 미지정 시 모든 프로젝트 검증 (기존 동작 회귀)", async () => {
-    writeYaml(join(root, "projects", "proj-a"), "sync.yaml", `path: /nonexistent/proj-a\n`);
-    writeYaml(join(root, "projects", "proj-b"), "sync.yaml", `path: /nonexistent/proj-b\n`);
+    // agents 섹션에 항목이 있어야 validateCliProjectFiles가 호출된다
+    writeYaml(join(root, "projects", "proj-a"), "sync.yaml",
+      `path: /nonexistent/proj-a\nagents:\n  items:\n    - oracle\n`);
+    writeYaml(join(root, "projects", "proj-b"), "sync.yaml",
+      `path: /nonexistent/proj-b\nagents:\n  items:\n    - oracle\n`);
     writeYaml(root, "sync.yaml", `path: ${root}\n`);
 
     const result = await validateAll(root, []);

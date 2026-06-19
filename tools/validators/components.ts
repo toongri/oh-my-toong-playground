@@ -167,6 +167,21 @@ function validateCliProjectFiles(
 // sync.yaml component validation
 // ---------------------------------------------------------------------------
 
+/**
+ * Returns true if any of the five deployable component sections has at least
+ * one item declared. Used to gate CLI project file validation: an MCP-only
+ * sync.yaml (no component sections) has no reason to require CLAUDE.md.
+ */
+function hasComponentItems(data: Record<string, unknown>): boolean {
+  const sections = ["agents", "commands", "skills", "scripts", "rules"];
+  for (const section of sections) {
+    const sectionData = data[section];
+    if (!isObject(sectionData)) continue;
+    if (isArray(sectionData.items) && sectionData.items.length > 0) return true;
+  }
+  return false;
+}
+
 function getItemComponent(item: unknown): string | null {
   if (typeof item === "string") return item;
   if (isObject(item) && typeof item.component === "string") return item.component;
@@ -204,8 +219,10 @@ export async function validateSyncYamlComponents(
     return result;
   }
 
-  // Validate CLI project files
-  validateCliProjectFiles(data, targetPath, result);
+  // Validate CLI project files — skip for MCP-only projects (no component items)
+  if (hasComponentItems(data)) {
+    validateCliProjectFiles(data, targetPath, result);
+  }
 
   // Category definitions: [category, extension]
   type CategoryDef = { category: string; ext: string };
