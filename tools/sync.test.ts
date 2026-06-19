@@ -1128,12 +1128,21 @@ describe("processYaml", () => {
       // Create target directory inside fakeHome so tilde form is meaningful
       const homeTmpDir = await fs.mkdtemp(path.join(fakeHome, "omt-tilde-test-"));
       try {
-        // Write sync.yaml using tilde form of the target path
+        // Write sync.yaml using tilde form of the target path, with a skill
+        // so that processYaml deploys into .claude/ — confirming tilde expansion.
         const relativePart = path.relative(os.homedir(), homeTmpDir);
         const tildePath = `~/${relativePart}`;
 
+        // Create a skill source so the component section is non-empty
+        const skillDir = path.join(rootDir, "skills", "oracle");
+        await fs.mkdir(skillDir, { recursive: true });
+        await writeFile(path.join(skillDir, "SKILL.md"), "# Oracle\n");
+
         const syncYamlPath = path.join(rootDir, "sync.yaml");
-        await writeFile(syncYamlPath, `path: "${tildePath}"\n`);
+        await writeFile(
+          syncYamlPath,
+          `path: "${tildePath}"\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+        );
 
         const adapters = makeAdapterMap(["claude"]);
         const context = makeContext();
@@ -1199,6 +1208,64 @@ describe("processYaml", () => {
       else process.env.HOME = originalHome;
       await fs.rm(fakeHome, { recursive: true, force: true });
     }
+  });
+
+  it("mcp-only skips claude dir", async () => {
+    // --- MCP-only fixture: claude.yaml has only `mcps`, sync.yaml has no component sections ---
+    const mcpOnlyTargetPath = path.join(tmpDir, "mcp-only-target");
+    await fs.mkdir(mcpOnlyTargetPath, { recursive: true });
+
+    const mcpOnlySyncYamlPath = path.join(rootDir, "sync-mcp-only.yaml");
+    await writeFile(mcpOnlySyncYamlPath, `path: ${mcpOnlyTargetPath}\n`);
+    // claude.yaml with only mcps — writes to ~/.claude.json, NOT into <path>/.claude/
+    await writeFile(
+      path.join(rootDir, "claude-mcp-only.yaml"),
+      "mcps:\n  my-server:\n    type: stdio\n    command: my-mcp\n",
+    );
+
+    // Use a custom yamlDir pointing to rootDir so syncPlatformConfigs finds claude-mcp-only.yaml.
+    // processYaml reads yamlDir = path.dirname(syncYamlPath). So we place claude.yaml in rootDir
+    // but we need it named exactly "claude.yaml". Use a sub-tmpDir to isolate.
+    const mcpOnlyRootDir = path.join(tmpDir, "mcp-only-root");
+    await fs.mkdir(mcpOnlyRootDir, { recursive: true });
+    await writeFile(path.join(mcpOnlyRootDir, "config.yaml"), "use-platforms: [claude]\n");
+    _resetConfigCache();
+    // sync.yaml lives in mcpOnlyRootDir so yamlDir = mcpOnlyRootDir — place claude.yaml there
+    await writeFile(path.join(mcpOnlyRootDir, "claude.yaml"), "mcps:\n  my-server:\n    type: stdio\n    command: my-mcp\n");
+    const mcpOnlySyncYaml = path.join(mcpOnlyRootDir, "sync.yaml");
+    await writeFile(mcpOnlySyncYaml, `path: ${mcpOnlyTargetPath}\n`);
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, mcpOnlySyncYaml, adapters, mcpOnlyRootDir);
+
+    // .claude/ must NOT be created for MCP-only project (nothing deploys into it)
+    expect(await exists(path.join(mcpOnlyTargetPath, ".claude"))).toBe(false);
+
+    // --- Component-bearing fixture: regression guard — .claude/ must still be created ---
+    const compTargetPath = path.join(tmpDir, "comp-target");
+    await fs.mkdir(compTargetPath, { recursive: true });
+    const compRootDir = path.join(tmpDir, "comp-root");
+    await fs.mkdir(compRootDir, { recursive: true });
+    await writeFile(path.join(compRootDir, "config.yaml"), "use-platforms: [claude]\n");
+    _resetConfigCache();
+    const skillDir = path.join(compRootDir, "skills", "oracle");
+    await fs.mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Oracle\n");
+    const compSyncYaml = path.join(compRootDir, "sync.yaml");
+    await writeFile(
+      compSyncYaml,
+      `path: ${compTargetPath}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+    );
+
+    const adapters2 = makeAdapterMap(["claude"]);
+    const context2 = makeContext({ dryRun: false });
+
+    await processYaml(context2, compSyncYaml, adapters2, compRootDir);
+
+    // .claude/ must be created when component items are present
+    expect(await exists(path.join(compTargetPath, ".claude"))).toBe(true);
   });
 });
 
