@@ -1656,7 +1656,7 @@ describe("syncLib", () => {
     expect(await exists(path.join(libDest, "foo", "other.yaml"))).toBe(false);
   });
 
-  it("lists source-traced data files in dry-run even when no @lib/ imports exist (AC8)", async () => {
+  it("skips lib entirely in dry-run when no @lib/ imports exist, even if data files exist in lib source tree", async () => {
     const libSrc = path.join(rootDir, "lib");
     // A lib module that statically references a sibling data file via import.meta.dir,
     // plus the data file itself. This is traced from the SOURCE tree, independent of
@@ -1668,8 +1668,8 @@ describe("syncLib", () => {
     await writeFile(path.join(libSrc, "pins", "tbox.yaml"), "schema: 1\n");
 
     // The component sources have NO @lib/ imports → requiredModules is empty.
-    // collectLibDataFiles still traces tbox.yaml from the SOURCE lib tree,
-    // independent of what any component imports — the exact AC8 condition.
+    // With zero modules, data files have no consumer — the whole lib deploy is
+    // skipped (requiredModules === 0 takes the skip path regardless of dataFiles).
     const sourceTs = path.join(rootDir, "skills", "plain", "run.ts");
     await writeFile(sourceTs, "export const hello = 'world';\n");
 
@@ -1686,8 +1686,11 @@ describe("syncLib", () => {
       process.stderr.write = origStderr;
     }
 
-    // The dry-run enumeration must still list the source-traced data file.
-    expect(lines.some((l) => l.includes(path.join("pins", "tbox.yaml")))).toBe(true);
+    // Zero modules → skip path taken: no "Deploy lib modules" line and no tbox.yaml
+    // listed in the dry-run output. The skip-path logInfo line is the only output.
+    expect(lines.some((l) => l.includes("Deploy lib modules"))).toBe(false);
+    expect(lines.some((l) => l.includes(path.join("pins", "tbox.yaml")))).toBe(false);
+    expect(lines.some((l) => l.includes("skipping lib deployment"))).toBe(true);
   });
 
   it("rewrites @lib/* import aliases to relative paths via `syncLib`", async () => {
@@ -1771,6 +1774,85 @@ describe("syncLib", () => {
     const entries = await fs.readdir(platformDir);
     const tempLeftovers = entries.filter((e) => e.startsWith("lib.tmp-"));
     expect(tempLeftovers).toHaveLength(0);
+  });
+
+  // Regression (a): zero-module target → no lib dir, no tbox.yaml
+  it("제로 @lib 모듈 타겟: lib 디렉토리와 tbox.yaml 모두 배포하지 않음 via `syncLib`", async () => {
+    const libSrc = path.join(rootDir, "lib");
+    // tbox.yaml exists in lib source tree (it would be a data file if any module imported it)
+    await writeFile(
+      path.join(libSrc, "pins", "store.ts"),
+      'import { join } from "path";\nexport const P = join(import.meta.dir, "tbox.yaml");\n',
+    );
+    await writeFile(path.join(libSrc, "pins", "tbox.yaml"), "schema: 1\n");
+
+    // Component has NO @lib/ imports → requiredModules will be empty
+    const sourceTs = path.join(rootDir, "skills", "no-lib", "run.ts");
+    await writeFile(sourceTs, "export const hello = 'world';\n");
+
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
+
+    // Zero modules → skip path: no lib directory created at all
+    const libDest = path.join(targetPath, ".claude", "lib");
+    expect(await exists(libDest)).toBe(false);
+    // tbox.yaml has no consumer → must not be deployed
+    expect(await exists(path.join(libDest, "pins", "tbox.yaml"))).toBe(false);
+  });
+
+  // Regression (b): module-bearing target → lib deploys INCLUDING tbox.yaml
+  it("@lib 모듈 보유 타겟: lib 배포 시 tbox.yaml 데이터 파일도 함께 배포 via `syncLib`", async () => {
+    const libSrc = path.join(rootDir, "lib");
+    // A lib module that references tbox.yaml as a data file
+    await writeFile(
+      path.join(libSrc, "pins", "store.ts"),
+      'import { join } from "path";\nexport const P = join(import.meta.dir, "tbox.yaml");\n',
+    );
+    await writeFile(path.join(libSrc, "pins", "tbox.yaml"), "schema: 1\n");
+
+    // Component DOES import the lib module → requiredModules is non-empty
+    const sourceTs = path.join(rootDir, "skills", "pin-user", "run.ts");
+    await writeFile(sourceTs, "import { P } from '@lib/pins/store';\n");
+
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
+
+    const libDest = path.join(targetPath, ".claude", "lib");
+    // The module deploys
+    expect(await exists(path.join(libDest, "pins", "store.ts"))).toBe(true);
+    // tbox.yaml rides along with its module
+    expect(await exists(path.join(libDest, "pins", "tbox.yaml"))).toBe(true);
+  });
+
+  // Regression (c): hook-only @lib usage → requiredModules > 0 → lib deploys
+  it("훅 소스만으로도 @lib 임포트가 있으면 lib 배포됨 via `syncLib`", async () => {
+    const libSrc = path.join(rootDir, "lib");
+    // A lib module referenced only by a hook (not a skill/agent component)
+    await writeFile(path.join(libSrc, "omt-dir.ts"), "export const OMT_DIR = '/tmp';\n");
+    await writeFile(
+      path.join(libSrc, "pins", "store.ts"),
+      'import { join } from "path";\nexport const P = join(import.meta.dir, "tbox.yaml");\n',
+    );
+    await writeFile(path.join(libSrc, "pins", "tbox.yaml"), "schema: 1\n");
+
+    // The hook source (simulating pin-session-start/index.ts) imports @lib/
+    const hookSource = path.join(rootDir, "hooks", "pin-session-start", "index.ts");
+    await writeFile(
+      hookSource,
+      "import { OMT_DIR } from '@lib/omt-dir';\nimport { P } from '@lib/pins/store';\n",
+    );
+
+    // No component imports @lib/ — ONLY the hook does.
+    // libRoots constructed with the hook source (mirrors how syncPlatformConfigs
+    // calls addLibSourceRoot for hook sources at tools/sync.ts:236-241).
+    const hookRoots = libRoots("claude", hookSource);
+
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], hookRoots);
+
+    // Hook-only @lib → requiredModules > 0 → lib deploys
+    const libDest = path.join(targetPath, ".claude", "lib");
+    expect(await exists(path.join(libDest, "omt-dir.ts"))).toBe(true);
+    expect(await exists(path.join(libDest, "pins", "store.ts"))).toBe(true);
+    // tbox.yaml also deploys (data file for the hook's lib module)
+    expect(await exists(path.join(libDest, "pins", "tbox.yaml"))).toBe(true);
   });
 });
 
