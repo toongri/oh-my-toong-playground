@@ -606,57 +606,59 @@ describe("CodexAdapter", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // updateSettings — hooks not supported
+  // updateSettings — writes .codex/hooks.json
   // ---------------------------------------------------------------------------
 
   describe("updateSettings", () => {
-    it("logs hooks-unsupported warning and creates no config.toml via `updateSettings`", async () => {
-      const stderrChunks: string[] = [];
-      const originalWrite = process.stderr.write.bind(process.stderr);
-      process.stderr.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
-        stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
-        return originalWrite(chunk, ...(args as Parameters<typeof originalWrite> extends [unknown, ...infer R] ? R : []));
+    it("updateSettings writes hooks.json", async () => {
+      const hooksEntries: Record<string, unknown> = {
+        PostToolUse: [{ hooks: [{ command: "echo post-tool-use" }] }],
       };
 
-      try {
-        await adapter.updateSettings(tmpDir, [{ event: "Stop", command: "echo done" }], false);
-      } finally {
-        process.stderr.write = originalWrite;
-      }
+      await adapter.updateSettings(tmpDir, hooksEntries, false);
 
-      const output = stderrChunks.join("");
-      expect(output).toContain("Codex does not support hooks");
-
-      // Must not create any files
-      const exists = await fs
-        .stat(path.join(tmpDir, ".codex", "config.toml"))
-        .then(() => true)
-        .catch(() => false);
-      expect(exists).toBe(false);
+      const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
+      const raw = await fs.readFile(hooksFile, "utf-8");
+      const parsed = JSON.parse(raw) as { hooks?: { PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }> } };
+      expect(parsed.hooks?.PostToolUse?.[0]?.hooks?.[0]?.command).toBe("echo post-tool-use");
     });
 
-    it("logs hooks-unsupported warning and creates no config.toml in dry-run mode via `updateSettings`", async () => {
-      const stderrChunks: string[] = [];
-      const originalWrite = process.stderr.write.bind(process.stderr);
-      process.stderr.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
-        stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
-        return originalWrite(chunk, ...(args as Parameters<typeof originalWrite> extends [unknown, ...infer R] ? R : []));
+    it("updateSettings preserves marked foreign hooks", async () => {
+      // Seed: one FOREIGN block tagged preserve.command-contains AND one untagged OMT block
+      const hooksDir = path.join(tmpDir, ".codex");
+      await fs.mkdir(hooksDir, { recursive: true });
+      const hooksFile = path.join(hooksDir, "hooks.json");
+      const seed = {
+        hooks: {
+          PostToolUse: [
+            // Foreign block — tagged with preserve marker
+            { hooks: [{ command: "/opt/foreign/notify.sh" }] },
+            // Untagged OMT block — must be replaced
+            { hooks: [{ command: "omt-old-command" }] },
+          ],
+        },
+      };
+      await fs.writeFile(hooksFile, JSON.stringify(seed, null, 2) + "\n", "utf-8");
+
+      const freshEntries: Record<string, unknown> = {
+        PostToolUse: [{ hooks: [{ command: "omt-new-command" }] }],
       };
 
-      try {
-        await adapter.updateSettings(tmpDir, [], true);
-      } finally {
-        process.stderr.write = originalWrite;
-      }
+      await adapter.updateSettings(tmpDir, freshEntries, false, {
+        "command-contains": ["/opt/foreign/"],
+      });
 
-      const output = stderrChunks.join("");
-      expect(output).toContain("Codex does not support hooks");
+      const raw = await fs.readFile(hooksFile, "utf-8");
+      const parsed = JSON.parse(raw) as { hooks?: { PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }> } };
+      const commands = (parsed.hooks?.PostToolUse ?? [])
+        .flatMap((block) => (block.hooks ?? []).map((h) => h.command ?? ""));
 
-      const exists = await fs
-        .stat(path.join(tmpDir, ".codex", "config.toml"))
-        .then(() => true)
-        .catch(() => false);
-      expect(exists).toBe(false);
+      // Foreign block with marker survives
+      expect(commands).toContain("/opt/foreign/notify.sh");
+      // Fresh OMT entry is present
+      expect(commands).toContain("omt-new-command");
+      // Untagged old OMT entry is gone
+      expect(commands).not.toContain("omt-old-command");
     });
   });
 });
