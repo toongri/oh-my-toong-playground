@@ -1215,17 +1215,6 @@ describe("processYaml", () => {
     const mcpOnlyTargetPath = path.join(tmpDir, "mcp-only-target");
     await fs.mkdir(mcpOnlyTargetPath, { recursive: true });
 
-    const mcpOnlySyncYamlPath = path.join(rootDir, "sync-mcp-only.yaml");
-    await writeFile(mcpOnlySyncYamlPath, `path: ${mcpOnlyTargetPath}\n`);
-    // claude.yaml with only mcps — writes to ~/.claude.json, NOT into <path>/.claude/
-    await writeFile(
-      path.join(rootDir, "claude-mcp-only.yaml"),
-      "mcps:\n  my-server:\n    type: stdio\n    command: my-mcp\n",
-    );
-
-    // Use a custom yamlDir pointing to rootDir so syncPlatformConfigs finds claude-mcp-only.yaml.
-    // processYaml reads yamlDir = path.dirname(syncYamlPath). So we place claude.yaml in rootDir
-    // but we need it named exactly "claude.yaml". Use a sub-tmpDir to isolate.
     const mcpOnlyRootDir = path.join(tmpDir, "mcp-only-root");
     await fs.mkdir(mcpOnlyRootDir, { recursive: true });
     await writeFile(path.join(mcpOnlyRootDir, "config.yaml"), "use-platforms: [claude]\n");
