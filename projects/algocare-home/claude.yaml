@@ -1,0 +1,4 @@
+mcps:
+  notion-algocare:
+    type: http
+    url: "https://mcp.notion.com/mcp"
