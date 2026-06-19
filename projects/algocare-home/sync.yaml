@@ -1,5 +1,3 @@
 name: algocare-home
-# Bare+worktree repo: point at the git common dir so OMT writes the same
-# ~/.claude.json projects[...] key that every worktree resolves to (local scope).
-path: ~/repos/algocare-home/.bare
+path: ~/repos/algocare-home
 platforms: [claude]

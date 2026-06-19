@@ -1071,6 +1071,58 @@ describe("syncMcpsMerge", () => {
     expect(projects[worktreeDir]).toBeUndefined();
   });
 
+  it("container e2e bare key", async () => {
+    // Build a CONTAINER-layout bare+worktree fixture:
+    //   <container>/
+    //     .bare/       ← actual bare repo (git common-dir)
+    //     .git         ← text file: "gitdir: ./.bare"
+    // so that `git -C <container> rev-parse --path-format=absolute --git-common-dir`
+    // returns `<container>/.bare`.
+    //
+    // Note: on macOS mkdtemp returns /var/... but git resolves via realpath
+    // to /private/var/... — use realpathSync on tmpDir to stay consistent.
+    const gitEnv = {
+      ...process.env,
+      GIT_AUTHOR_NAME: "test",
+      GIT_AUTHOR_EMAIL: "t@t.com",
+      GIT_COMMITTER_NAME: "test",
+      GIT_COMMITTER_EMAIL: "t@t.com",
+    };
+    const { realpathSync } = await import("node:fs");
+    const realTmpDir = realpathSync(tmpDir);
+    const containerDir = path.join(realTmpDir, "container");
+    const bareDir = path.join(containerDir, ".bare");
+    await fs.mkdir(containerDir, { recursive: true });
+    // Init a bare repo in .bare/
+    execFileSync("git", ["init", "--bare", bareDir]);
+    // Write the .git file pointing to .bare so git treats container as a worktree
+    await fs.writeFile(path.join(containerDir, ".git"), "gitdir: ./.bare\n", "utf8");
+    // Create an initial commit in the bare repo so worktree add can work
+    const worktreeDir = path.join(tmpDir, "wt");
+    execFileSync("git", ["-C", containerDir, "worktree", "add", "--orphan", "-b", "main", worktreeDir], { env: gitEnv });
+    execFileSync("git", ["-C", worktreeDir, "commit", "--allow-empty", "-m", "init"], { env: gitEnv });
+
+    // Verify the fixture: git -C <container> rev-parse --git-common-dir must return <container>/.bare
+    const commonDir = execFileSync(
+      "git",
+      ["-C", containerDir, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+    ).toString().trim();
+    expect(commonDir).toBe(bareDir);
+
+    // Drive the adapter with targetPath = containerDir, scope = local
+    await adapter.syncMcpsMerge(containerDir, "notion", { url: "https://mcp.notion.com/sse" }, false, "local");
+
+    // Assert: the key in projects[] ends with "/.bare"
+    const config = await readJsonFile(claudeConfigFile);
+    const projects = config["projects"] as Record<string, unknown>;
+    const matchingKey = Object.keys(projects).find((k) => k.endsWith("/.bare"));
+    expect(matchingKey).toBeDefined();
+    expect(matchingKey).toBe(bareDir);
+    const projectEntry = projects[matchingKey!] as Record<string, unknown>;
+    const mcpServers = projectEntry["mcpServers"] as Record<string, unknown>;
+    expect(mcpServers["notion"]).toEqual({ url: "https://mcp.notion.com/sse" });
+  });
+
   it("user scope unchanged", async () => {
     await adapter.syncMcpsMerge(targetPath, "user-server", { command: "npx user" }, false, undefined);
 
