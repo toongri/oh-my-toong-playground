@@ -679,11 +679,6 @@ export async function processYaml(
   }
   logInfo("========================================");
 
-  // Ensure .claude directory exists (non-dry)
-  if (!context.dryRun) {
-    await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
-  }
-
   // Clear per-project state to prevent cross-project leaks
   context.modelMaps.clear();
   context.platformYamlSections.clear();
@@ -694,6 +689,26 @@ export async function processYaml(
 
   // Per-platform YAML processing
   const yamlDir = path.dirname(syncYamlPath);
+
+  // Ensure .claude directory exists only when something deploys into it (non-dry).
+  // MCP-only projects (claude.yaml has only `mcps`) write to ~/.claude.json, not
+  // <path>/.claude/, so skip the mkdir to avoid littering an empty directory.
+  if (!context.dryRun) {
+    const hasComponentSections = CATEGORIES.some((cat) => {
+      const section = (syncYaml as Record<string, unknown>)[cat];
+      if (section == null || typeof section !== "object") return false;
+      const items = (section as Record<string, unknown>)["items"];
+      return Array.isArray(items) && items.length > 0;
+    });
+    const claudeYaml = await parseAndMergePlatformYaml(yamlDir, "claude");
+    const hasClaudeDotFileDeploy =
+      claudeYaml != null &&
+      Object.keys(claudeYaml).some((k) => k !== "mcps");
+    if (hasComponentSections || hasClaudeDotFileDeploy) {
+      await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+    }
+  }
+
   await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir, libSourceRoots);
 
   // Resolve platforms for lib sync using the full cascade (item, section, syncYaml,
