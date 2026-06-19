@@ -661,4 +661,61 @@ describe("CodexAdapter", () => {
       expect(commands).not.toContain("omt-old-command");
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // syncPlatformYaml — hooks: deploys bundle + relative command
+  // ---------------------------------------------------------------------------
+
+  describe("syncPlatformYaml hooks", () => {
+    it("deploys rules-injector bundle + relative command", async () => {
+      // Stage a synthetic rules-injector hook dir with index.ts and a test file
+      const hookSrcDir = path.join(tmpDir, "source-hooks", "rules-injector");
+      await fs.mkdir(hookSrcDir, { recursive: true });
+      await fs.writeFile(path.join(hookSrcDir, "index.ts"), "// hook entry\n");
+      await fs.writeFile(path.join(hookSrcDir, "helper.ts"), "// helper\n");
+      await fs.writeFile(path.join(hookSrcDir, "helper.test.ts"), "// test — must NOT deploy\n");
+
+      const targetBase = path.join(tmpDir, "target");
+
+      const yaml = {
+        hooks: {
+          PostToolUse: [
+            {
+              component: hookSrcDir,
+              matcher: "*",
+              timeout: 10,
+            },
+          ],
+        },
+      };
+
+      await adapter.syncPlatformYaml(targetBase, yaml as never, false);
+
+      // 1. Bundle deployed: index.ts and helper.ts must exist
+      const deployedDir = path.join(targetBase, ".codex", "hooks", "rules-injector");
+      const indexExists = await fs.stat(path.join(deployedDir, "index.ts")).then(() => true).catch(() => false);
+      const helperExists = await fs.stat(path.join(deployedDir, "helper.ts")).then(() => true).catch(() => false);
+      expect(indexExists).toBe(true);
+      expect(helperExists).toBe(true);
+
+      // 2. *.test.ts must NOT be deployed
+      const testFileExists = await fs.stat(path.join(deployedDir, "helper.test.ts")).then(() => true).catch(() => false);
+      expect(testFileExists).toBe(false);
+
+      // 3. Generated command is a literal relative string — no absolute path, no $-variable
+      const hooksFile = path.join(targetBase, ".codex", "hooks.json");
+      const raw = await fs.readFile(hooksFile, "utf-8");
+      const parsed = JSON.parse(raw) as {
+        hooks?: {
+          PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }>;
+        };
+      };
+      const command = parsed.hooks?.PostToolUse?.[0]?.hooks?.[0]?.command ?? "";
+      expect(command).not.toMatch(/\/Users\//);
+      expect(command).not.toMatch(/\/home\//);
+      expect(command).not.toMatch(/\$/);
+      expect(command.startsWith("bun ")).toBe(true);
+      expect(command).toBe("bun run .codex/hooks/rules-injector/index.ts");
+    });
+  });
 });
