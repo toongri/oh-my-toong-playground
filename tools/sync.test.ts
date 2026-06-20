@@ -28,6 +28,7 @@ import { _resetConfigCache } from "./lib/config.ts";
 import { ProjectKeyError, deriveClaudeProjectKey } from "./lib/git-key.ts";
 import { DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
+import { cleanupOldBackups } from "./lib/backup.ts";
 import { execFileSync } from "child_process";
 
 // ---------------------------------------------------------------------------
@@ -2889,6 +2890,52 @@ describe("component fan-out", () => {
       "SKILL.md",
     );
     expect(await exists(backupCopy)).toBe(true);
+  });
+
+  // AC6.4 — fanned-out worktree backups are retention-pruned
+  it("AC6.4: retention cleanup removes stale backup sessions from each worktree's .sync-backup", async () => {
+    const { container, worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
+    await seedSkill("oracle");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+
+    // Pre-place old content in both worktrees so cycle 1 has something to back up.
+    await writeFile(path.join(worktrees[0]!, ".claude", "skills", "old", "SKILL.md"), "# old\n");
+    await writeFile(path.join(worktrees[1]!, ".claude", "skills", "old", "SKILL.md"), "# old\n");
+
+    // Cycle 1: backs up the pre-placed content into "old-session" in each worktree.
+    const context1 = makeContext({ dryRun: false, backupSession: "old-session" });
+    await processYaml(context1, syncYamlPath, adapters, rootDir);
+
+    // Confirm old-session backup exists in both worktrees before cleanup.
+    const oldBk0 = path.join(worktrees[0]!, ".sync-backup", "old-session");
+    const oldBk1 = path.join(worktrees[1]!, ".sync-backup", "old-session");
+    expect(await exists(oldBk0)).toBe(true);
+    expect(await exists(oldBk1)).toBe(true);
+
+    // Verify the OLD behavior (processedPaths-only) does NOT reach the worktree backups:
+    // processedPaths holds only the container path for bare structures.
+    await Promise.all(
+      [...context1.processedPaths].map((t) => cleanupOldBackups(t, 0).catch(() => {})),
+    );
+    expect(await exists(oldBk0)).toBe(true); // still present — container-only cleanup misses worktrees
+    expect(await exists(oldBk1)).toBe(true);
+
+    // Cycle 2: oracle is now present in each worktree, so it gets backed up as "new-session".
+    const context2 = makeContext({ dryRun: false, backupSession: "new-session" });
+    await processYaml(context2, syncYamlPath, adapters, rootDir);
+
+    // Run cleanup on the union of processedPaths + backupRoots (retention=0 prunes all sessions).
+    // This mirrors the production loop after the TODO-3 fix.
+    const cleanupTargets = new Set<string>([...context2.processedPaths, ...context2.backupRoots]);
+    await Promise.all([...cleanupTargets].map((t) => cleanupOldBackups(t, 0).catch(() => {})));
+
+    // Both worktrees' old-session dirs must now be removed.
+    expect(await exists(oldBk0)).toBe(false);
+    expect(await exists(oldBk1)).toBe(false);
   });
 
   // DeployTargetsError escapes the per-project catch (re-throw, like ProjectKeyError)
