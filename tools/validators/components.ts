@@ -210,7 +210,14 @@ export async function validateSyncYamlComponents(
   // <path>/.claude/ — i.e. component items OR a non-mcps claude.yaml key. This
   // mirrors the sync.ts mkdir gate via the shared deploysToClaudeDotDir predicate,
   // so an MCP-only project (claude.yaml with only `mcps`) is correctly skipped.
-  const claudeYaml = await parseAndMergePlatformYaml(dirname(filePath), "claude");
+  let claudeYaml;
+  try {
+    claudeYaml = await parseAndMergePlatformYaml(dirname(filePath), "claude");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`YAML 파싱 오류 (claude.yaml 또는 claude.local.yaml): ${msg}`);
+    return result;
+  }
   if (deploysToClaudeDotDir(data, claudeYaml)) {
     let deployTargets: string[];
     try {
