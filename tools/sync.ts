@@ -34,6 +34,7 @@ import {
 import { generateBackupSessionId, backupCategory, cleanupOldBackups } from "./lib/backup.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
+import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
 import { collectRequiredLibModulesFromSources, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
@@ -132,6 +133,7 @@ export async function syncCategory(
   syncYaml: SyncYaml,
   adapters: AdapterMap,
   rootDir: string,
+  deployRoot: string,
   libSourceRoots?: LibSourceRoots,
 ): Promise<void> {
   const section = syncYaml[category as keyof SyncYaml] as
@@ -277,7 +279,7 @@ export async function syncCategory(
       const prepKey = `${platform}:${category}`;
       if (!preparedKeys.has(prepKey) && !context.dryRun) {
         await backupCategory(
-          syncYaml.path ?? "",
+          deployRoot,
           platform,
           category,
           context.backupSession,
@@ -286,7 +288,7 @@ export async function syncCategory(
         // Wipe category dir so orphan files from removed components are cleaned up.
         // Rules are excluded: they may contain user-managed files.
         if (category !== "rules") {
-          const categoryDir = path.join(syncYaml.path ?? "", `.${platform}`, category);
+          const categoryDir = path.join(deployRoot, `.${platform}`, category);
           await fs.rm(categoryDir, { recursive: true, force: true });
           await fs.mkdir(categoryDir, { recursive: true });
         }
@@ -300,7 +302,7 @@ export async function syncCategory(
       // Call the appropriate adapter method
       if (category === "agents") {
         await adapter.syncAgentsDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           addSkills,
@@ -310,28 +312,28 @@ export async function syncCategory(
         );
       } else if (category === "commands") {
         await adapter.syncCommandsDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           false,
         );
       } else if (category === "skills") {
         await adapter.syncSkillsDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           false,
         );
       } else if (category === "scripts") {
         await adapter.syncScriptsDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           false,
         );
       } else if (category === "rules") {
         await adapter.syncRulesDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           false,
@@ -719,46 +721,81 @@ export async function processYaml(
   context.modelMaps.clear();
   context.platformYamlSections.clear();
 
-  // Accumulate component SOURCE paths per platform as configs/categories are
-  // processed; syncLib scans these (not the deployed tree) for @lib/ deps.
-  const libSourceRoots: LibSourceRoots = new Map();
-
   // Per-platform YAML processing
   const yamlDir = path.dirname(syncYamlPath);
-
-  // Ensure .claude directory exists only when something deploys into it (non-dry).
-  // MCP-only projects (claude.yaml has only `mcps`) write to ~/.claude.json, not
-  // <path>/.claude/, so skip the mkdir to avoid littering an empty directory.
-  if (!context.dryRun) {
-    const claudeYaml = await parseAndMergePlatformYaml(yamlDir, "claude");
-    if (deploysToClaudeDotDir(syncYaml as Record<string, unknown>, claudeYaml)) {
-      await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
-    }
-  }
-
-  await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir, libSourceRoots);
 
   // Resolve platforms for lib sync using the full cascade (item, section, syncYaml,
   // feature-platforms.lib, use-platforms, hardcoded ["claude"]).
   const libPlatforms = await resolvePlatforms({} as SyncItem, undefined, syncYaml.platforms, "lib");
 
-  // Sync 5 categories
-  for (const category of CATEGORIES) {
-    await syncCategory(context, category, syncYaml, adapters, rootDir, libSourceRoots);
-  }
+  // Parse claude.yaml once (it is colocated with sync.yaml in yamlDir, shared by
+  // every worktree) so the per-worktree mkdir gate need not re-read it.
+  const claudeYaml = await parseAndMergePlatformYaml(yamlDir, "claude");
+  const shouldMkdirClaude = deploysToClaudeDotDir(syncYaml as Record<string, unknown>, claudeYaml);
 
-  // Sync lib
-  await syncLib(context, targetPath, rootDir, libPlatforms, libSourceRoots);
+  // Fan-out (D-1): a bare-structure container deploys into EVERY linked
+  // worktree's .claude/; a plain path resolves to [path] (today's behavior).
+  // targetPath (the container) is NEVER written to — it is the dedup/identity
+  // anchor (processedPaths) and, for a bare structure, a dead-letter.
+  // resolveDeployTargets throws DeployTargetsError on git-enumeration failure or
+  // an empty worktree set — let it escape so it surfaces as a non-zero exit.
+  const deployRoots = resolveDeployTargets(targetPath);
 
-  // Rewrite platform paths for non-claude platforms
-  for (const platform of (["gemini", "codex", "opencode"] as Platform[])) {
-    const platformDir = path.join(targetPath, `.${platform}`);
-    if (existsSync(platformDir)) {
+  for (const deployRoot of deployRoots) {
+    try {
+      // Each worktree's deploy is independent — fresh source-root accumulator so
+      // syncLib targets this deployRoot's .{platform}/lib only.
+      const libSourceRoots: LibSourceRoots = new Map();
+
+      // Per-worktree dry-run target line (AC6.1): list this worktree, never the
+      // container, as a deploy target.
       if (context.dryRun) {
-        logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
-      } else {
-        await rewritePlatformPaths(targetPath, platform);
+        logDry(`Deploy target: ${deployRoot}`);
       }
+
+      // Ensure <deployRoot>/.claude exists only when something deploys into it
+      // (non-dry). The container is never the mkdir target (AC2.2): an MCP-only
+      // project writes to ~/.claude.json, not <deployRoot>/.claude/.
+      if (!context.dryRun && shouldMkdirClaude) {
+        await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
+      }
+
+      // Record this worktree as a backup root so retention cleanup prunes its
+      // .sync-backup (TODO 3 consumes context.backupRoots).
+      context.backupRoots.add(deployRoot);
+
+      await syncPlatformConfigs(context, deployRoot, yamlDir, adapters, rootDir, libSourceRoots);
+
+      // Sync 5 categories
+      for (const category of CATEGORIES) {
+        await syncCategory(context, category, syncYaml, adapters, rootDir, deployRoot, libSourceRoots);
+      }
+
+      // Sync lib
+      await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
+
+      // Rewrite platform paths for non-claude platforms
+      for (const platform of (["gemini", "codex", "opencode"] as Platform[])) {
+        const platformDir = path.join(deployRoot, `.${platform}`);
+        if (existsSync(platformDir)) {
+          if (context.dryRun) {
+            logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
+          } else {
+            await rewritePlatformPaths(deployRoot, platform);
+          }
+        }
+      }
+    } catch (err) {
+      // A local-MCP key-derivation failure must never be downgraded: rethrow so
+      // it surfaces as a non-zero exit (an MCP was silently not written).
+      if (err instanceof ProjectKeyError) {
+        throw err;
+      }
+      // Best-effort fan-out (AC3a/3b): one failing worktree is logged WITH its
+      // path and recorded; the loop continues to the other worktrees. A non-empty
+      // failedTargets later forces the CLI to exit non-zero.
+      logError(`worktree 배포 실패 (계속 진행): ${deployRoot}: ${err}`);
+      context.failedTargets.push(deployRoot);
     }
   }
 
@@ -782,6 +819,8 @@ export function createContext(dryRun: boolean): SyncContext {
     modelMaps: new Map(),
     processedPaths: new Set(),
     platformYamlSections: new Map(),
+    backupRoots: new Set(),
+    failedTargets: [],
   };
 }
 
@@ -905,6 +944,12 @@ export async function runProjectsLoop(
         if (err instanceof ProjectKeyError) {
           throw err;
         }
+        // A topology-resolution failure (bare repo broken / zero worktrees) is
+        // likewise non-recoverable for this project: rethrow so it surfaces as a
+        // non-zero exit rather than being swallowed as a warn-and-continue.
+        if (err instanceof DeployTargetsError) {
+          throw err;
+        }
         logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
       }
       if (verbose) {
@@ -998,7 +1043,12 @@ if (import.meta.main) {
     }
 
     await Promise.all(cleanupPromises);
-    process.exit(0);
+    // Any worktree that failed during the best-effort fan-out forces a non-zero
+    // exit: an unwritable worktree must never be reported as a clean sync.
+    if (context.failedTargets.length > 0) {
+      logError(`일부 worktree 배포 실패 (${context.failedTargets.length}개): ${context.failedTargets.join(", ")}`);
+    }
+    process.exit(context.failedTargets.length > 0 ? 1 : 0);
   } catch (err) {
     logError(`동기화 실패: ${err}`);
     process.exit(1);
