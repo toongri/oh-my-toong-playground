@@ -29,6 +29,7 @@ import type { SyncYaml } from "../lib/types.ts";
 import { readAndExpandSyncYaml } from "../lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "../lib/parse-platform-yaml.ts";
 import { deploysToClaudeDotDir } from "../sync.ts";
+import { resolveDeployTargets } from "../lib/resolve-deploy-targets.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -211,7 +212,17 @@ export async function validateSyncYamlComponents(
   // so an MCP-only project (claude.yaml with only `mcps`) is correctly skipped.
   const claudeYaml = await parseAndMergePlatformYaml(dirname(filePath), "claude");
   if (deploysToClaudeDotDir(data, claudeYaml)) {
-    validateCliProjectFiles(data, targetPath, result);
+    let deployTargets: string[];
+    try {
+      deployTargets = resolveDeployTargets(targetPath);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.errors.push(`배포 대상 확인 실패 (${targetPath}): ${msg}`);
+      deployTargets = [];
+    }
+    for (const wtPath of deployTargets) {
+      validateCliProjectFiles(data, wtPath, result);
+    }
   }
 
   // Category definitions: [category, extension]

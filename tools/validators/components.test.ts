@@ -2,6 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import { execFileSync } from "child_process";
+import fs from "fs";
+import os from "os";
 
 import {
   validateSyncYamlComponents,
@@ -44,6 +47,39 @@ function makeRoot(): string {
   touch(join(root, "config.yaml"));
   touch(join(root, "CLAUDE.md"));
   return root;
+}
+
+const GIT_ENV = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "T",
+  GIT_AUTHOR_EMAIL: "t@t.com",
+  GIT_COMMITTER_NAME: "T",
+  GIT_COMMITTER_EMAIL: "t@t.com",
+};
+
+/**
+ * Seeds an empty commit into a bare repo so worktrees can be added.
+ * Mirrors the recipe from tools/lib/git-key.test.ts.
+ */
+function seedBareRepo(bareDir: string): void {
+  const tmpWt = fs.mkdtempSync(join(os.tmpdir(), "comp-test-seed-"));
+  try {
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", "--orphan", "-b", "main", tmpWt], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+    execFileSync("git", ["-C", tmpWt, "commit", "--allow-empty", "-m", "init"], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+    fs.rmSync(tmpWt, { recursive: true, force: true });
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "prune"], {
+      stdio: "pipe",
+    });
+  } catch {
+    fs.rmSync(tmpWt, { recursive: true, force: true });
+    throw new Error("Failed to seed bare repo");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -725,5 +761,174 @@ describe("validateAll — enabled-projects 화이트리스트", () => {
 
     expect(result.errors.some((e) => e.includes("/nonexistent/proj-a"))).toBe(true);
     expect(result.errors.some((e) => e.includes("/nonexistent/proj-b"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: AC4.1 — bare-structure fan-out (resolveDeployTargets integration)
+// ---------------------------------------------------------------------------
+
+describe("AC4.1 — bare-structure worktree fan-out for CLAUDE.md check", () => {
+  let root: string;
+  let tmpdirs: string[];
+
+  beforeEach(() => {
+    root = makeRoot();
+    tmpdirs = [root];
+  });
+
+  afterEach(() => {
+    for (const d of tmpdirs.splice(0)) {
+      try {
+        rmSync(d, { recursive: true, force: true });
+      } catch {
+        // best-effort
+      }
+    }
+  });
+
+  it("bare-structure path with one worktree missing CLAUDE.md flags that worktree with an error", async () => {
+    // Layout: container/.bare (bare repo) + container/wt (worktree, no CLAUDE.md)
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    const wtDir = join(container, "wt");
+    mkdirSync(wtDir, { recursive: true });
+
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    seedBareRepo(bareDir);
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wtDir], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+
+    // wt has NO CLAUDE.md
+    touch(join(root, "agents", "oracle.md"));
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${container}
+agents:
+  items:
+    - oracle
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+
+    // Must flag the worktree path in the error message
+    expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(true);
+    expect(result.errors.some((e) => e.includes(wtDir))).toBe(true);
+  });
+
+  it("bare-structure with CLAUDE.md in each worktree produces no CLAUDE.md errors", async () => {
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    const wt1 = join(container, "wt1");
+    const wt2 = join(container, "wt2");
+    mkdirSync(wt1, { recursive: true });
+    mkdirSync(wt2, { recursive: true });
+
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    seedBareRepo(bareDir);
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wt1], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", "-b", "wt2-branch", wt2], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+
+    // Both worktrees have CLAUDE.md
+    touch(join(wt1, "CLAUDE.md"));
+    touch(join(wt2, "CLAUDE.md"));
+
+    touch(join(root, "agents", "oracle.md"));
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${container}
+agents:
+  items:
+    - oracle
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    const claudeErrors = result.errors.filter((e) => e.includes("CLAUDE.md"));
+    expect(claudeErrors).toHaveLength(0);
+  });
+
+  it("source-component check runs ONCE regardless of worktree count (no double-error for bare with 2 worktrees)", async () => {
+    // A bare-structure path with 2 worktrees + a missing source component.
+    // The missing-component error must appear exactly ONCE (component resolution
+    // is OMT-root-relative and must not fan out per worktree).
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    const wt1 = join(container, "wt1");
+    const wt2 = join(container, "wt2");
+    mkdirSync(wt1, { recursive: true });
+    mkdirSync(wt2, { recursive: true });
+
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    seedBareRepo(bareDir);
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wt1], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", "-b", "wt2-branch", wt2], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+
+    // Both worktrees have CLAUDE.md (so no CLAUDE.md errors pollute the count)
+    touch(join(wt1, "CLAUDE.md"));
+    touch(join(wt2, "CLAUDE.md"));
+
+    // missing-agent does NOT exist in the OMT root
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${container}
+agents:
+  items:
+    - missing-agent
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+
+    const missingErrors = result.errors.filter((e) => e.includes("missing-agent"));
+    // Source-component check must be single-pass: exactly 1 error, not 2
+    expect(missingErrors).toHaveLength(1);
+  });
+
+  it("resolver failure (bare path with zero real worktrees) lands in result.errors, not a throw", async () => {
+    // A bare-structure path with no worktrees at all → resolveDeployTargets throws
+    // DeployTargetsError → must be caught and pushed into result.errors.
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    // Intentionally NOT seeding / adding any worktrees — zero worktrees → DeployTargetsError
+
+    touch(join(root, "agents", "oracle.md"));
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${container}
+agents:
+  items:
+    - oracle
+`);
+
+    // Must NOT throw — resolver failure must be swallowed into result.errors
+    let result: Awaited<ReturnType<typeof validateSyncYamlComponents>>;
+    expect(async () => {
+      result = await validateSyncYamlComponents(syncPath, root);
+    }).not.toThrow();
+
+    result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.length).toBeGreaterThan(0);
   });
 });
