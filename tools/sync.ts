@@ -33,6 +33,7 @@ import {
 } from "./lib/resolver.ts";
 import { generateBackupSessionId, backupCategory, cleanupOldBackups } from "./lib/backup.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
+import { ProjectKeyError } from "./lib/git-key.ts";
 import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
 import { collectRequiredLibModulesFromSources, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
@@ -394,6 +395,13 @@ export async function syncPlatformConfigs(
         context.modelMaps.set(platform, result.modelMap);
       }
     } catch (err) {
+      // A failed local-MCP key derivation must never be downgraded to a warning:
+      // it means the MCP was silently not written to ~/.claude.json. Rethrow so it
+      // surfaces as a non-zero exit. All other per-platform config/hooks/plugins
+      // errors keep warn-and-continue.
+      if (err instanceof ProjectKeyError) {
+        throw err;
+      }
       logWarn(`${platform}.yaml 처리 실패: ${err}`);
     }
   }
@@ -872,6 +880,12 @@ export async function runProjectsLoop(
         await processYaml(context, projectSyncYaml, adapters, rootDir);
         context.processedPaths.add(targetPath);
       } catch (err) {
+        // A local-MCP key-derivation failure must not be isolated like an
+        // ordinary per-project error: it means an MCP was silently not written.
+        // Let it escape to the top-level handler so the run exits non-zero.
+        if (err instanceof ProjectKeyError) {
+          throw err;
+        }
         logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
       }
       if (verbose) {

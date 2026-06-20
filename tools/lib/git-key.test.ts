@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { execFileSync } from "child_process";
-import { deriveClaudeProjectKey } from "./git-key.ts";
+import { deriveClaudeProjectKey, ProjectKeyError } from "./git-key.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -206,5 +206,38 @@ describe("deriveClaudeProjectKey", () => {
 
     const fakeEnv = { ...process.env, PATH: `${fakeGitDir}:${process.env.PATH}` };
     expect(() => deriveClaudeProjectKey(dir, fakeEnv)).toThrow();
+  });
+
+  it("git failure throws identifiable ProjectKeyError with remediation message", () => {
+    // Branch (d): the thrown error must be an identifiable ProjectKeyError so the
+    // sync orchestrator can surface it as a non-zero exit instead of a warning.
+    const dir = mktemp();
+    tmpdirs.push(dir);
+
+    const fakeGitDir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-git-"));
+    tmpdirs.push(fakeGitDir);
+
+    const fakeGit = path.join(fakeGitDir, "git");
+    fs.writeFileSync(
+      fakeGit,
+      "#!/bin/sh\necho 'error: dubious ownership in repository' >&2\nexit 128\n",
+    );
+    fs.chmodSync(fakeGit, 0o755);
+
+    const fakeEnv = { ...process.env, PATH: `${fakeGitDir}:${process.env.PATH}` };
+
+    let caught: unknown;
+    try {
+      deriveClaudeProjectKey(dir, fakeEnv);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ProjectKeyError);
+    // The message must carry actionable remediation (git version / ownership).
+    expect((caught as Error).message).toMatch(/git >= 2\.31/);
+    expect((caught as Error).message).toMatch(/ownership/);
+    // The original error must be preserved for diagnosis.
+    expect((caught as ProjectKeyError).cause).toBeDefined();
   });
 });
