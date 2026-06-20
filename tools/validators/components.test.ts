@@ -765,6 +765,58 @@ describe("validateAll — enabled-projects 화이트리스트", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Suite: V7 — claude.yaml 파싱 오류 가드
+// ---------------------------------------------------------------------------
+
+describe("V7: claude.yaml 파싱 오류 가드", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = makeRoot();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("malformed claude.yaml 시 크래시 대신 구조화된 YAML 파싱 오류를 result.errors에 반환한다 via `validateSyncYamlComponents`", async () => {
+    writeYaml(root, "claude.yaml", `
+hooks:
+  UserPromptSubmit: [invalid: yaml: parse: error
+`);
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+agents:
+  items: []
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("YAML 파싱 오류"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("claude.yaml"))).toBe(true);
+  });
+
+  it("malformed claude.local.yaml 시 크래시 대신 구조화된 YAML 파싱 오류를 result.errors에 반환한다 via `validateSyncYamlComponents`", async () => {
+    writeYaml(root, "claude.yaml", `
+hooks:
+  UserPromptSubmit: []
+`);
+    writeYaml(root, "claude.local.yaml", `
+hooks:
+  UserPromptSubmit: [invalid: yaml: parse: error
+`);
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+agents:
+  items: []
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("YAML 파싱 오류"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("claude.yaml"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Suite: AC4.1 — bare-structure fan-out (resolveDeployTargets integration)
 // ---------------------------------------------------------------------------
 
