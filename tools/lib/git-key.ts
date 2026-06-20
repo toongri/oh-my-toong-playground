@@ -3,6 +3,26 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
+ * Thrown by deriveClaudeProjectKey branch (d): git failed for a reason other
+ * than "not a git repository" (dubious ownership, git absent, git < 2.31 where
+ * --path-format=absolute is unknown). Carries an actionable remediation message
+ * and the original error as `cause`. Callers MUST surface this loudly (non-zero
+ * exit) — silently mis-keying a local MCP into ~/.claude.json is the worst
+ * failure class for this tool.
+ */
+export class ProjectKeyError extends Error {
+  constructor(targetPath: string, cause: unknown) {
+    super(
+      `Failed to derive Claude project key for ${targetPath}: git command failed. ` +
+        `Ensure git >= 2.31 is installed and check repository ownership ` +
+        `(e.g. git config --global --add safe.directory). Original error: ${cause}`,
+      { cause },
+    );
+    this.name = "ProjectKeyError";
+  }
+}
+
+/**
  * Derives the key used by Claude Code's ~/.claude.json `projects[]` map
  * for a given target path.
  *
@@ -51,7 +71,7 @@ export function deriveClaudeProjectKey(
     }
 
     // Branch (d): git failure for another reason — must throw loudly
-    throw err;
+    throw new ProjectKeyError(targetPath, err);
   }
 
   const commonDir = stdout.trim();

@@ -24,6 +24,7 @@ import {
 import type { SyncContext, Platform, Category, SyncYaml } from "./lib/types.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 import { _resetConfigCache } from "./lib/config.ts";
+import { ProjectKeyError } from "./lib/git-key.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -643,6 +644,55 @@ describe("syncPlatformConfigs", () => {
     expect(calls.some((c) => c.method === "syncPlatformYaml")).toBe(true);
     // gemini adapter not called (no gemini.yaml)
     expect(adapters.getAdapter("gemini")!.calls.filter((c) => c.method === "syncPlatformYaml")).toHaveLength(0);
+  });
+
+  it("rethrows ProjectKeyError instead of swallowing it (local MCP key-derivation must fail loudly)", async () => {
+    await writeFile(
+      path.join(yamlDir, "claude.yaml"),
+      "mcps:\n  notion:\n    url: https://example.com\n",
+    );
+
+    const claudeAdapter = makeMockAdapter("claude");
+    // Simulate deriveClaudeProjectKey failing inside syncMcpsMerge (branch d).
+    claudeAdapter.syncPlatformYaml = async () => {
+      throw new ProjectKeyError("/some/target", new Error("dubious ownership"));
+    };
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    adapters.getAdapter = (_p: Platform) => undefined;
+
+    const context = makeContext();
+
+    // Must NOT be swallowed: the key-derivation failure has to escape the catch.
+    await expect(
+      syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir),
+    ).rejects.toBeInstanceOf(ProjectKeyError);
+  });
+
+  it("still swallows non-ProjectKeyError per-platform config errors (warn-and-continue preserved)", async () => {
+    await writeFile(
+      path.join(yamlDir, "claude.yaml"),
+      "config:\n  theme: dark\n",
+    );
+
+    const claudeAdapter = makeMockAdapter("claude");
+    claudeAdapter.syncPlatformYaml = async () => {
+      throw new Error("config write failed");
+    };
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    adapters.getAdapter = (_p: Platform) => undefined;
+
+    const context = makeContext();
+
+    // Generic config/hooks/plugins errors keep warn-and-continue: no throw.
+    await expect(
+      syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir),
+    ).resolves.toBeUndefined();
   });
 
   it("stores model-map in context.modelMaps (P2-1)", async () => {
@@ -2423,5 +2473,56 @@ describe("enabled-projects 화이트리스트 — projects 루프 통합", () =>
 
     expect(threw).toBe(false);
     expect(warns.some((w) => w.includes("does-not-exist"))).toBe(true);
+  });
+
+  it("ProjectKeyError escapes the projects loop (not isolated) so it reaches a non-zero exit", async () => {
+    const targetA = path.join(tmpDir, "target-a");
+    await fs.mkdir(targetA, { recursive: true });
+
+    await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+    await writeFile(path.join(rootDir, "projects", "proj-a", "sync.yaml"), `path: ${targetA}\n`);
+    // claude.yaml present → syncPlatformConfigs invokes the adapter.
+    await writeFile(
+      path.join(rootDir, "projects", "proj-a", "claude.yaml"),
+      "mcps:\n  notion:\n    url: https://example.com\n",
+    );
+
+    const adapters = makeAdapterMap(["claude"]);
+    adapters.getAdapter("claude")!.syncPlatformYaml = async () => {
+      throw new ProjectKeyError(targetA, new Error("dubious ownership"));
+    };
+
+    const context = makeContext();
+    const effectiveFilter = resolveProjectFilter(new Set(), undefined);
+
+    // The per-project isolation catch must NOT swallow a ProjectKeyError.
+    await expect(
+      runProjectsLoop(rootDir, adapters, context, effectiveFilter, false),
+    ).rejects.toBeInstanceOf(ProjectKeyError);
+  });
+
+  it("generic project errors stay isolated (loop continues, no throw)", async () => {
+    const targetA = path.join(tmpDir, "target-a");
+    await fs.mkdir(targetA, { recursive: true });
+
+    await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+    await writeFile(path.join(rootDir, "projects", "proj-a", "sync.yaml"), `path: ${targetA}\n`);
+    await writeFile(
+      path.join(rootDir, "projects", "proj-a", "claude.yaml"),
+      "mcps:\n  notion:\n    url: https://example.com\n",
+    );
+
+    const adapters = makeAdapterMap(["claude"]);
+    adapters.getAdapter("claude")!.syncPlatformYaml = async () => {
+      throw new Error("generic adapter failure");
+    };
+
+    const context = makeContext();
+    const effectiveFilter = resolveProjectFilter(new Set(), undefined);
+
+    // Non-ProjectKeyError keeps per-project isolation: loop does not throw.
+    await expect(
+      runProjectsLoop(rootDir, adapters, context, effectiveFilter, false),
+    ).resolves.toBeUndefined();
   });
 });
