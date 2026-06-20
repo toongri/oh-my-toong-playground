@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
 import fs from "fs/promises";
+import fs2 from "fs";
 import path from "path";
 import os from "os";
 import { existsSync } from "fs";
@@ -24,7 +25,10 @@ import {
 import type { SyncContext, Platform, Category, SyncYaml } from "./lib/types.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 import { _resetConfigCache } from "./lib/config.ts";
-import { ProjectKeyError } from "./lib/git-key.ts";
+import { ProjectKeyError, deriveClaudeProjectKey } from "./lib/git-key.ts";
+import { DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
+import { ClaudeAdapter } from "./adapters/claude.ts";
+import { execFileSync } from "child_process";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -107,6 +111,8 @@ function makeContext(overrides?: Partial<SyncContext>): SyncContext {
     modelMaps: new Map(),
     processedPaths: new Set(),
     platformYamlSections: new Map(),
+    backupRoots: new Set(),
+    failedTargets: [],
     ...overrides,
   };
 }
@@ -162,7 +168,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["claude", "gemini"]);
     const context = makeContext({ dryRun: false });
 
-    await syncCategory(context, "skills", syncYaml, adapters, rootDir);
+    await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
 
     const claudeCalls = adapters.getAdapter("claude")!.calls;
     expect(claudeCalls.some((c) => c.method === "syncSkillsDirect")).toBe(true);
@@ -186,7 +192,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["claude", "gemini"]);
     const context = makeContext({ dryRun: false });
 
-    await syncCategory(context, "commands", syncYaml, adapters, rootDir);
+    await syncCategory(context, "commands", syncYaml, adapters, rootDir, targetPath);
 
     expect(adapters.getAdapter("gemini")!.calls.some((c) => c.method === "syncCommandsDirect")).toBe(true);
     expect(adapters.getAdapter("claude")!.calls.filter((c) => c.method === "syncCommandsDirect")).toHaveLength(0);
@@ -207,7 +213,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["claude"]);
     const context = makeContext({ dryRun: false });
 
-    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
     const calls = adapters.getAdapter("claude")!.calls;
     expect(calls.some((c) => c.method === "syncAgentsDirect")).toBe(true);
@@ -226,7 +232,7 @@ describe("syncCategory", () => {
     const context = makeContext({ dryRun: false });
 
     // Should not throw
-    await syncCategory(context, "rules", syncYaml, adapters, rootDir);
+    await syncCategory(context, "rules", syncYaml, adapters, rootDir, targetPath);
     expect(adapters.getAdapter("claude")!.calls.filter((c) => c.method === "syncRulesDirect")).toHaveLength(0);
   });
 
@@ -239,7 +245,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["claude"]);
     const context = makeContext({ dryRun: false });
 
-    await syncCategory(context, "scripts", syncYaml, adapters, rootDir);
+    await syncCategory(context, "scripts", syncYaml, adapters, rootDir, targetPath);
     expect(adapters.getAdapter("claude")!.calls).toHaveLength(0);
   });
 
@@ -258,7 +264,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["claude"]);
     const context = makeContext({ dryRun: true });
 
-    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
     // Adapter syncAgentsDirect should NOT be called in dry-run
     const calls = adapters.getAdapter("claude")!.calls;
@@ -290,7 +296,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["claude"]);
     const context = makeContext({ dryRun: false });
 
-    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
     // Orphan should be gone: wipe+recreate cleared the dir before writing
     expect(await exists(path.join(claudeAgentsDir, "orphan-agent.md"))).toBe(false);
@@ -327,7 +333,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["claude"]);
     const context = makeContext({ dryRun: false });
 
-    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
     const calls = adapters.getAdapter("claude")!.calls;
     const agentCall = calls.find((c) => c.method === "syncAgentsDirect");
@@ -367,7 +373,7 @@ describe("syncCategory", () => {
     const context = makeContext({ dryRun: false });
 
     // Should not throw
-    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
     const calls = adapters.getAdapter("claude")!.calls;
     const agentCall = calls.find((c) => c.method === "syncAgentsDirect");
@@ -398,7 +404,7 @@ describe("syncCategory", () => {
     const context = makeContext({ dryRun: false });
 
     // Should not throw
-    await syncCategory(context, "agents", syncYaml as never, adapters, rootDir);
+    await syncCategory(context, "agents", syncYaml as never, adapters, rootDir, targetPath);
 
     const calls = adapters.getAdapter("claude")!.calls;
     const agentCall = calls.find((c) => c.method === "syncAgentsDirect");
@@ -429,7 +435,7 @@ describe("syncCategory", () => {
     const context = makeContext({ dryRun: false });
 
     // Should not throw
-    await syncCategory(context, "agents", syncYaml as never, adapters, rootDir);
+    await syncCategory(context, "agents", syncYaml as never, adapters, rootDir, targetPath);
 
     const calls = adapters.getAdapter("claude")!.calls;
     const agentCall = calls.find((c) => c.method === "syncAgentsDirect");
@@ -459,7 +465,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["claude"]);
     const context = makeContext({ dryRun: false });
 
-    await syncCategory(context, "rules", syncYaml, adapters, rootDir);
+    await syncCategory(context, "rules", syncYaml, adapters, rootDir, targetPath);
 
     // manual-rule.md must still exist — rules dir is never wiped
     expect(await exists(path.join(claudeRulesDir, "manual-rule.md"))).toBe(true);
@@ -485,7 +491,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["codex"]);
     const context = makeContext({ dryRun: false });
 
-    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
     // File must survive — codex does not support agents, so no wipe occurred
     expect(await exists(path.join(codexAgentsDir, "existing-agent.md"))).toBe(true);
@@ -513,7 +519,7 @@ describe("syncCategory", () => {
     const adapters = makeAdapterMap(["claude"]);
     const context = makeContext({ dryRun: false });
 
-    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
     // Orphan wiped — claude supports agents
     expect(await exists(path.join(claudeAgentsDir, "orphan.md"))).toBe(false);
@@ -558,7 +564,7 @@ describe("syncCategory", () => {
         const adapters = makeAdapterMap([platform as Platform]);
         const context = makeContext({ dryRun: false });
 
-        await syncCategory(context, category as Category, syncYaml, adapters, rootDir);
+        await syncCategory(context, category as Category, syncYaml, adapters, rootDir, targetPath);
 
         const methodMap: Record<Category, string> = {
           agents: "syncAgentsDirect",
@@ -586,7 +592,7 @@ describe("syncCategory", () => {
         const adapters = makeAdapterMap([platform as Platform]);
         const context = makeContext({ dryRun: false });
 
-        await syncCategory(context, category as Category, syncYaml, adapters, rootDir);
+        await syncCategory(context, category as Category, syncYaml, adapters, rootDir, targetPath);
 
         const methodMap: Record<Category, string> = {
           agents: "syncAgentsDirect",
@@ -2524,5 +2530,391 @@ describe("enabled-projects 화이트리스트 — projects 루프 통합", () =>
     await expect(
       runProjectsLoop(rootDir, adapters, context, effectiveFilter, false),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: component fan-out (bare-structure → every worktree's .claude/)
+// ---------------------------------------------------------------------------
+
+describe("component fan-out", () => {
+  let tmpDir: string;
+  let rootDir: string;
+
+  const GIT_ENV = {
+    ...process.env,
+    GIT_AUTHOR_NAME: "T",
+    GIT_AUTHOR_EMAIL: "t@t.com",
+    GIT_COMMITTER_NAME: "T",
+    GIT_COMMITTER_EMAIL: "t@t.com",
+  };
+
+  /**
+   * Seeds an empty commit into a bare repo via a throwaway orphan worktree.
+   * (Adapted from tools/lib/git-key.test.ts:seedBareRepo.)
+   */
+  function seedBareRepo(bareDir: string): void {
+    const tmpWt = fs2.mkdtempSync(path.join(os.tmpdir(), "fanout-seed-"));
+    try {
+      execFileSync("git", ["--git-dir", bareDir, "worktree", "add", "--orphan", "-b", "main", tmpWt], {
+        stdio: "pipe",
+        env: GIT_ENV,
+      });
+      execFileSync("git", ["-C", tmpWt, "commit", "--allow-empty", "-m", "init"], {
+        stdio: "pipe",
+        env: GIT_ENV,
+      });
+      fs2.rmSync(tmpWt, { recursive: true, force: true });
+      execFileSync("git", ["--git-dir", bareDir, "worktree", "prune"], { stdio: "pipe" });
+    } catch {
+      fs2.rmSync(tmpWt, { recursive: true, force: true });
+      throw new Error("Failed to seed bare repo");
+    }
+  }
+
+  /**
+   * Builds a real bare-structure container with N worktrees.
+   * Layout: <container>/.bare (bare repo) + <container>/wt1, wt2, ... (worktrees)
+   * Returns the container path and the worktree absolute paths.
+   */
+  function makeBareTopology(containerName: string, worktreeNames: string[]): {
+    container: string;
+    worktrees: string[];
+  } {
+    const container = path.join(tmpDir, containerName);
+    fs2.mkdirSync(container, { recursive: true });
+    const bareDir = path.join(container, ".bare");
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe", env: GIT_ENV });
+    seedBareRepo(bareDir);
+
+    const worktrees: string[] = [];
+    for (const name of worktreeNames) {
+      const wtDir = path.join(container, name);
+      execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wtDir], {
+        stdio: "pipe",
+        env: GIT_ENV,
+      });
+      // git worktree add canonicalizes; capture the path git itself reports so
+      // assertions byte-match resolveDeployTargets output.
+      worktrees.push(fs2.realpathSync(wtDir));
+    }
+    return { container, worktrees };
+  }
+
+  /** Writes a single skill source under rootDir so a non-empty components section deploys. */
+  async function seedSkill(name: string): Promise<void> {
+    const skillDir = path.join(rootDir, "skills", name);
+    await fs.mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), `# ${name}\n`);
+  }
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fanout-test-"));
+    rootDir = path.join(tmpDir, "root");
+    await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+    await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+    _resetConfigCache();
+  });
+
+  afterEach(async () => {
+    // Restore modes that an unwritable-worktree test may have left (chmod 555)
+    // so the recursive rm can traverse and delete every directory.
+    async function chmodTree(dir: string): Promise<void> {
+      await fs.chmod(dir, 0o755).catch(() => {});
+      let entries: import("fs").Dirent[] = [];
+      try {
+        entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        if (e.isDirectory()) await chmodTree(path.join(dir, e.name));
+      }
+    }
+    await chmodTree(tmpDir);
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    _resetConfigCache();
+  });
+
+  // AC2.1 — every worktree receives the component
+  it("AC2.1: fans the skill out to wt1's .claude/", async () => {
+    const { container, worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
+    await seedSkill("oracle");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    expect(await exists(path.join(worktrees[0]!, ".claude", "skills", "oracle", "SKILL.md"))).toBe(true);
+  });
+
+  it("AC2.1: fans the skill out to wt2's .claude/ (separate assertion)", async () => {
+    const { container, worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
+    await seedSkill("oracle");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    expect(await exists(path.join(worktrees[1]!, ".claude", "skills", "oracle", "SKILL.md"))).toBe(true);
+  });
+
+  // AC2.2 — container itself must NOT receive .claude/
+  it("AC2.2: the bare container never gets a .claude/ directory", async () => {
+    const { container } = makeBareTopology("repo", ["wt1", "wt2"]);
+    await seedSkill("oracle");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    expect(await exists(path.join(container, ".claude"))).toBe(false);
+  });
+
+  // AC2.3 — non-bare path keeps today's single-target behavior
+  it("AC2.3 (regression): a plain non-bare path deploys to <path>/.claude/", async () => {
+    const plainTarget = path.join(tmpDir, "plain-target");
+    await fs.mkdir(plainTarget, { recursive: true });
+    await seedSkill("oracle");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${plainTarget}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    expect(await exists(path.join(plainTarget, ".claude", "skills", "oracle", "SKILL.md"))).toBe(true);
+  });
+
+  // AC3a — one unwritable worktree does not block the others
+  it("AC3a: one unwritable worktree does not block deployment to the writable one", async () => {
+    const { worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
+    await seedSkill("oracle");
+
+    // Make wt2 unwritable (read+execute, no write): git can still enumerate it
+    // (it reads the worktree's .git file), but the deploy's .claude mkdir is denied.
+    // chmod 000 would strip execute too → git reports the worktree prunable and it
+    // is excluded from enumeration before deploy, which is NOT the failure under test.
+    await fs.chmod(worktrees[1]!, 0o555);
+
+    const container = path.dirname(worktrees[0]!);
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    // wt1 still got the skill despite wt2 failing.
+    expect(await exists(path.join(worktrees[0]!, ".claude", "skills", "oracle", "SKILL.md"))).toBe(true);
+
+    // restore so afterEach cleanup works
+    await fs.chmod(worktrees[1]!, 0o755);
+  });
+
+  // AC3b — failure is recorded with the worktree path and drives a non-zero exit
+  it("AC3b: a failing worktree is recorded in context.failedTargets", async () => {
+    const { worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
+    await seedSkill("oracle");
+
+    // read+execute, no write — enumerable by git, unwritable by the deploy (see AC3a).
+    await fs.chmod(worktrees[1]!, 0o555);
+
+    const container = path.dirname(worktrees[0]!);
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    // failedTargets is the mechanism the CLI uses to force a non-zero exit.
+    expect(context.failedTargets).toContain(worktrees[1]);
+
+    await fs.chmod(worktrees[1]!, 0o755);
+  });
+
+  // AC5.1 — deriveClaudeProjectKey has EXACTLY ONE call site
+  it("AC5.1: deriveClaudeProjectKey has exactly one production call site", () => {
+    const claudeSrc = fs2.readFileSync(
+      path.join(import.meta.dir, "adapters", "claude.ts"),
+      "utf8",
+    );
+    // Count only the call (the import line is `import { deriveClaudeProjectKey }`).
+    const callMatches = claudeSrc.match(/deriveClaudeProjectKey\(/g) ?? [];
+    expect(callMatches.length).toBe(1);
+
+    // Repo-wide: no other production file calls it.
+    const syncSrc = fs2.readFileSync(path.join(import.meta.dir, "sync.ts"), "utf8");
+    expect(syncSrc.includes("deriveClaudeProjectKey(")).toBe(false);
+  });
+
+  // AC5.2 — MCP keying collapses N worktree writes into ONE ~/.claude.json entry
+  it("AC5.2: a fan-out MCP sync writes exactly one projects[key] entry, keyed by the shared .bare", async () => {
+    const originalHome = process.env.HOME;
+    const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "fanout-fake-home-"));
+    process.env.HOME = fakeHome;
+    try {
+      const { container, worktrees } = makeBareTopology("mcp-repo", ["wt1", "wt2"]);
+
+      // Every worktree resolves to the SAME .bare common-dir key — that shared key
+      // is why N per-worktree MCP writes collapse into one ~/.claude.json entry.
+      // (The container is never deployed-to, AC2.2, so its key is irrelevant.)
+      const k1 = deriveClaudeProjectKey(worktrees[0]!);
+      const k2 = deriveClaudeProjectKey(worktrees[1]!);
+      expect(k1).toBe(k2);
+
+      // Project-scoped sync.yaml so claude.yaml mcps deploy with scope=local.
+      const projDir = path.join(rootDir, "projects", "mcp-proj");
+      await fs.mkdir(projDir, { recursive: true });
+      const syncYamlPath = path.join(projDir, "sync.yaml");
+      await writeFile(syncYamlPath, `path: ${container}\nname: mcp-proj\n`);
+      await writeFile(
+        path.join(projDir, "claude.yaml"),
+        "mcps:\n  my-server:\n    type: stdio\n    command: my-mcp\n",
+      );
+
+      const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+      const context = makeContext({ dryRun: false, isRootYaml: false });
+
+      await processYaml(context, syncYamlPath, adapters, rootDir);
+
+      const claudeJson = JSON.parse(
+        await fs.readFile(path.join(fakeHome, ".claude.json"), "utf8"),
+      ) as { projects?: Record<string, unknown> };
+      const projects = claudeJson.projects ?? {};
+      // N worktree writes collapse to exactly one entry, keyed by the shared .bare.
+      expect(Object.keys(projects).length).toBe(1);
+      expect(projects[k1]).toBeDefined();
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      await fs.rm(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  // AC6.1 — dry-run lists each worktree, never the container, writes nothing
+  it("AC6.1: dry-run lists each worktree absolute path, not the container, and writes nothing", async () => {
+    const { container, worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
+    await seedSkill("oracle");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: true });
+
+    const lines: string[] = [];
+    const origStderr = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: string | Uint8Array) => {
+      if (typeof chunk === "string") lines.push(chunk);
+      return true;
+    };
+    try {
+      await processYaml(context, syncYamlPath, adapters, rootDir);
+    } finally {
+      process.stderr.write = origStderr;
+    }
+
+    const out = lines.join("");
+    // Each worktree absolute path appears as a deploy target line.
+    expect(out).toContain(worktrees[0]!);
+    expect(out).toContain(worktrees[1]!);
+    // No files written in dry-run.
+    expect(await exists(path.join(worktrees[0]!, ".claude"))).toBe(false);
+    expect(await exists(path.join(worktrees[1]!, ".claude"))).toBe(false);
+    expect(await exists(path.join(container, ".claude"))).toBe(false);
+  });
+
+  // AC6.2 — pre-placed rule survives the wipe (rules exempt)
+  it("AC6.2: a pre-placed rule under wt1 survives the fan-out wipe", async () => {
+    const { container, worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
+    await seedSkill("oracle");
+
+    // Pre-place a user rule in wt1/.claude/rules.
+    const rulePath = path.join(worktrees[0]!, ".claude", "rules", "x.md");
+    await writeFile(rulePath, "# user rule\n");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    expect(await exists(rulePath)).toBe(true);
+  });
+
+  // AC6.3 — per-worktree backup of replaced category lands under each worktree
+  it("AC6.3: replacing the skills category backs the old skill up under wt1's .sync-backup", async () => {
+    const { container, worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
+    await seedSkill("oracle");
+
+    // Pre-place an old skill in wt1 that the wipe will replace.
+    const oldSkill = path.join(worktrees[0]!, ".claude", "skills", "old", "SKILL.md");
+    await writeFile(oldSkill, "# old\n");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false, backupSession: "sess-ac63" });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    const backupCopy = path.join(
+      worktrees[0]!,
+      ".sync-backup",
+      "sess-ac63",
+      "claude",
+      "skills",
+      "old",
+      "SKILL.md",
+    );
+    expect(await exists(backupCopy)).toBe(true);
+  });
+
+  // DeployTargetsError escapes the per-project catch (re-throw, like ProjectKeyError)
+  it("DeployTargetsError escapes the per-project isolation catch so it reaches a non-zero exit", async () => {
+    // Bare-structure with ZERO worktrees → resolveDeployTargets throws DeployTargetsError.
+    const container = path.join(tmpDir, "empty-bare");
+    await fs.mkdir(container, { recursive: true });
+    const bareDir = path.join(container, ".bare");
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe", env: GIT_ENV });
+    seedBareRepo(bareDir);
+    // no worktree added → resolveDeployTargets throws
+
+    await seedSkill("oracle");
+    const projDir = path.join(rootDir, "projects", "empty-proj");
+    await fs.mkdir(projDir, { recursive: true });
+    await writeFile(
+      path.join(projDir, "sync.yaml"),
+      `path: ${container}\nname: empty-proj\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+    );
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+    const effectiveFilter = resolveProjectFilter(new Set(), undefined);
+
+    await expect(
+      runProjectsLoop(rootDir, adapters, context, effectiveFilter, false),
+    ).rejects.toBeInstanceOf(DeployTargetsError);
   });
 });

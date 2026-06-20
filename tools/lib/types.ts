@@ -66,6 +66,19 @@ export type SyncContext = {
   modelMaps: Map<Platform, Record<string, string>>;
   processedPaths: Set<string>;
   platformYamlSections: Map<Platform, string[]>;
+  /**
+   * Every per-worktree deploy root that received (or would receive) a backup
+   * during the fan-out. Backup-retention cleanup iterates these so a bare
+   * container's worktrees each get their .sync-backup pruned, not just the
+   * container path tracked in processedPaths.
+   */
+  backupRoots: Set<string>;
+  /**
+   * Deploy roots whose per-worktree iteration failed (best-effort fan-out: one
+   * failing worktree is logged and skipped, the rest continue). A non-empty set
+   * forces the CLI to exit non-zero so an unwritable worktree is never silent.
+   */
+  failedTargets: string[];
 };
 
 export type PlatformConfigResult = {
