@@ -193,6 +193,39 @@ agents:
       const claudeErrors = result.errors.filter((e) => e.includes("CLAUDE.md"));
       expect(claudeErrors).toHaveLength(0);
     });
+
+    it("claude.yaml가 config/hooks만 있고 컴포넌트 항목이 없어도 .claude/로 배포하므로 CLAUDE.md를 요구한다 via `validateSyncYamlComponents`", async () => {
+      // No component items, but claude.yaml has a non-mcps key (config) →
+      // the project deploys into <path>/.claude/, so validateCliProjectFiles must RUN.
+      rmSync(join(root, "CLAUDE.md"));
+      writeYaml(root, "claude.yaml", `
+config:
+  permissions:
+    allow:
+      - "Bash(ls:*)"
+`);
+      const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+`);
+      const result = await validateSyncYamlComponents(syncPath, root);
+      expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(true);
+    });
+
+    it("claude.yaml가 mcps만 있는 MCP-only 프로젝트는 CLAUDE.md를 요구하지 않는다 via `validateSyncYamlComponents`", async () => {
+      // claude.yaml has ONLY mcps → MCP-only, writes to ~/.claude.json not
+      // <path>/.claude/, so validateCliProjectFiles must be SKIPPED.
+      rmSync(join(root, "CLAUDE.md"));
+      writeYaml(root, "claude.yaml", `
+mcps:
+  notion:
+    url: https://example.com/mcp
+`);
+      const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+`);
+      const result = await validateSyncYamlComponents(syncPath, root);
+      expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(false);
+    });
   });
 
   // --- scripts/rules section platform collection ---
