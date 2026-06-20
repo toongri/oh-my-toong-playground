@@ -28,6 +28,7 @@ import { resolveComponentPath, setProjectContext } from "../lib/resolver.ts";
 import type { SyncYaml } from "../lib/types.ts";
 import { readAndExpandSyncYaml } from "../lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "../lib/parse-platform-yaml.ts";
+import { deploysToClaudeDotDir } from "../sync.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -167,21 +168,6 @@ function validateCliProjectFiles(
 // sync.yaml component validation
 // ---------------------------------------------------------------------------
 
-/**
- * Returns true if any of the five deployable component sections has at least
- * one item declared. Used to gate CLI project file validation: an MCP-only
- * sync.yaml (no component sections) has no reason to require CLAUDE.md.
- */
-function hasComponentItems(data: Record<string, unknown>): boolean {
-  const sections = ["agents", "commands", "skills", "scripts", "rules"];
-  for (const section of sections) {
-    const sectionData = data[section];
-    if (!isObject(sectionData)) continue;
-    if (isArray(sectionData.items) && sectionData.items.length > 0) return true;
-  }
-  return false;
-}
-
 function getItemComponent(item: unknown): string | null {
   if (typeof item === "string") return item;
   if (isObject(item) && typeof item.component === "string") return item.component;
@@ -219,8 +205,12 @@ export async function validateSyncYamlComponents(
     return result;
   }
 
-  // Validate CLI project files — skip for MCP-only projects (no component items)
-  if (hasComponentItems(data)) {
+  // Validate CLI project files whenever the project deploys anything into
+  // <path>/.claude/ — i.e. component items OR a non-mcps claude.yaml key. This
+  // mirrors the sync.ts mkdir gate via the shared deploysToClaudeDotDir predicate,
+  // so an MCP-only project (claude.yaml with only `mcps`) is correctly skipped.
+  const claudeYaml = await parseAndMergePlatformYaml(dirname(filePath), "claude");
+  if (deploysToClaudeDotDir(data, claudeYaml)) {
     validateCliProjectFiles(data, targetPath, result);
   }
 

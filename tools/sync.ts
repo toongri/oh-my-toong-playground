@@ -76,6 +76,34 @@ function addLibSourceRoot(roots: LibSourceRoots, platform: Platform, sourcePath:
 export const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
 
 /**
+ * Single source of truth for "does this project deploy anything into <path>/.claude/?".
+ *
+ * True when EITHER:
+ *   (a) any CATEGORIES section in sync.yaml has ≥1 item, OR
+ *   (b) claude.yaml has a key other than `mcps` (config/hooks/plugins → .claude/ files).
+ *
+ * An MCP-only project (claude.yaml with ONLY `mcps`, no component items) writes to
+ * ~/.claude.json instead of <path>/.claude/, so this returns false for it.
+ *
+ * Both the sync.ts mkdir gate and the components.ts CLI-project-file validation gate
+ * route through this predicate so the two cannot drift.
+ */
+export function deploysToClaudeDotDir(
+  syncYamlData: Record<string, unknown>,
+  parsedClaudeYaml: Record<string, unknown> | null,
+): boolean {
+  const hasComponentSections = CATEGORIES.some((cat) => {
+    const section = syncYamlData[cat];
+    if (section == null || typeof section !== "object") return false;
+    const items = (section as Record<string, unknown>)["items"];
+    return Array.isArray(items) && items.length > 0;
+  });
+  const hasClaudeDotFileDeploy =
+    parsedClaudeYaml != null && Object.keys(parsedClaudeYaml).some((k) => k !== "mcps");
+  return hasComponentSections || hasClaudeDotFileDeploy;
+}
+
+/**
  * Platform×category capability map.
  * Only combinations listed here proceed through backup+wipe+dispatch.
  * Unsupported combos (e.g., codex+agents) are skipped entirely.
@@ -702,17 +730,8 @@ export async function processYaml(
   // MCP-only projects (claude.yaml has only `mcps`) write to ~/.claude.json, not
   // <path>/.claude/, so skip the mkdir to avoid littering an empty directory.
   if (!context.dryRun) {
-    const hasComponentSections = CATEGORIES.some((cat) => {
-      const section = (syncYaml as Record<string, unknown>)[cat];
-      if (section == null || typeof section !== "object") return false;
-      const items = (section as Record<string, unknown>)["items"];
-      return Array.isArray(items) && items.length > 0;
-    });
     const claudeYaml = await parseAndMergePlatformYaml(yamlDir, "claude");
-    const hasClaudeDotFileDeploy =
-      claudeYaml != null &&
-      Object.keys(claudeYaml).some((k) => k !== "mcps");
-    if (hasComponentSections || hasClaudeDotFileDeploy) {
+    if (deploysToClaudeDotDir(syncYaml as Record<string, unknown>, claudeYaml)) {
       await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
     }
   }
