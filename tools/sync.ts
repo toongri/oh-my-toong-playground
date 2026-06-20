@@ -1030,9 +1030,12 @@ if (import.meta.main) {
     const cleanupPromises: Promise<void>[] = [];
     if (!dryRun) {
       const retentionDays = await getBackupRetentionDays();
-      // Find all processed target paths and clean up their backups
-      for (const targetPath of context.processedPaths) {
-        cleanupPromises.push(cleanupOldBackups(targetPath, retentionDays).catch(() => {}));
+      // Union of processedPaths (container, drives deploy dedup) and backupRoots (per-worktree
+      // deploy roots populated during fan-out). Set-union ensures a non-bare path present in
+      // both is cleaned exactly once.
+      const cleanupTargets = new Set<string>([...context.processedPaths, ...context.backupRoots]);
+      for (const target of cleanupTargets) {
+        cleanupPromises.push(cleanupOldBackups(target, retentionDays).catch(() => {}));
       }
     }
 
