@@ -151,17 +151,38 @@ export OMT_HANDOFF_ACTIVE=1
 
 SUMMARY=""
 
-# --- codex primary. ----------------------------------------------------------
-CODEX_OUT=$(mktemp "$OMT_DIR/.handoff-codex.XXXXXX")
-codex_rc=0
-perl -e 'alarm shift; exec @ARGV' "$SUMMARIZER_TIMEOUT_SECS" \
-  codex exec --skip-git-repo-check -s read-only \
-  -c model_reasoning_effort="low" --ignore-user-config \
-  -o "$CODEX_OUT" <<<"$PROMPT" >/dev/null 2>&1 || codex_rc=$?
-if [ "$codex_rc" -eq 0 ] && [ -s "$CODEX_OUT" ]; then
-  SUMMARY=$(cat "$CODEX_OUT")
+# Resolve the real codex binary directly. Some environments shim `codex` on
+# PATH with a shell-script wrapper that launches the real binary as a forked
+# child instead of exec-ing it; under such a wrapper the perl `alarm` below
+# would kill only the wrapper and orphan the real codex. Honor an explicit
+# OMT_CODEX_BIN override, else pick the first PATH `codex` that is a real
+# compiled binary (skip shell-script shims by their `#!` shebang). Empty
+# result → codex primary is skipped and the claude fallback still runs.
+CODEX_BIN="${OMT_CODEX_BIN:-}"
+if [ -z "$CODEX_BIN" ]; then
+  _cb_oldifs="$IFS"; IFS=:
+  for _cb_dir in $PATH; do
+    _cb_cand="${_cb_dir%/}/codex"
+    { [ -x "$_cb_cand" ] && [ ! -d "$_cb_cand" ]; } || continue
+    if [ "$(head -c2 "$_cb_cand" 2>/dev/null)" = "#!" ]; then continue; fi
+    CODEX_BIN="$_cb_cand"; break
+  done
+  IFS="$_cb_oldifs"
 fi
-rm -f "$CODEX_OUT" 2>/dev/null || true
+
+# --- codex primary. ----------------------------------------------------------
+if [ -n "$CODEX_BIN" ]; then
+  CODEX_OUT=$(mktemp "$OMT_DIR/.handoff-codex.XXXXXX")
+  codex_rc=0
+  perl -e 'alarm shift; exec @ARGV' "$SUMMARIZER_TIMEOUT_SECS" \
+    "$CODEX_BIN" exec --skip-git-repo-check -s read-only \
+    -c model_reasoning_effort="low" --ignore-user-config \
+    -o "$CODEX_OUT" <<<"$PROMPT" >/dev/null 2>&1 || codex_rc=$?
+  if [ "$codex_rc" -eq 0 ] && [ -s "$CODEX_OUT" ]; then
+    SUMMARY=$(cat "$CODEX_OUT")
+  fi
+  rm -f "$CODEX_OUT" 2>/dev/null || true
+fi
 
 # --- sonnet fallback (only if codex was not accepted). -----------------------
 if [ -z "$SUMMARY" ]; then
