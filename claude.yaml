@@ -1,7 +1,7 @@
 hooks:
   PreCompact:
     - component: pre-compact.sh
-      timeout: 280
+      timeout: 600
 
 config:
   language: "한국어"
