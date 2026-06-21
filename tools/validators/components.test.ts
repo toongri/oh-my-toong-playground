@@ -984,3 +984,109 @@ agents:
     expect(result.errors.length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Suite: C1 — deploy-target resolution is unconditional (validate/sync parity)
+// ---------------------------------------------------------------------------
+
+describe("C1: 배포 대상 해소는 무조건 시도되어 sync.ts와 정렬된다", () => {
+  let root: string;
+  let tmpdirs: string[];
+
+  beforeEach(() => {
+    root = makeRoot();
+    tmpdirs = [root];
+  });
+
+  afterEach(() => {
+    for (const d of tmpdirs.splice(0)) {
+      try {
+        rmSync(d, { recursive: true, force: true });
+      } catch {
+        // best-effort
+      }
+    }
+  });
+
+  it("MCP-only 프로젝트(컴포넌트·non-mcps 키 없음)도 깨진 bare 컨테이너의 해소 실패를 result.errors에 보고한다 via `validateSyncYamlComponents`", async () => {
+    // sync.ts calls resolveDeployTargets(targetPath) UNCONDITIONALLY and aborts on
+    // DeployTargetsError. The validator must do the same: even for an MCP-only
+    // project (deploysToClaudeDotDir=false), a broken bare container (zero
+    // worktrees) must surface as a result.errors entry — so `make validate`
+    // catches it BEFORE `make sync` aborts.
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    // Intentionally NOT seeding / adding any worktrees → zero worktrees → DeployTargetsError
+
+    // MCP-only: claude.yaml has ONLY mcps, sync.yaml has no component sections.
+    writeYaml(root, "claude.yaml", `
+mcps:
+  notion:
+    url: https://example.com/mcp
+`);
+    const syncPath = writeYaml(root, "sync.yaml", `
+name: mcp-only-project
+path: ${container}
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+
+    expect(result.errors.some((e) => e.includes("배포 대상 확인 실패"))).toBe(true);
+    expect(result.errors.some((e) => e.includes(container))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: C2 — CLI context file check is platform-aware (non-Claude regression)
+// ---------------------------------------------------------------------------
+
+describe("C2: 비-Claude config/mcp-only 프로젝트도 자기 플랫폼 CLI 파일을 검사받는다", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = makeRoot();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("platforms: [codex] + 컴포넌트 없음 + AGENTS.md 없음이면 에러를 보고한다 via `validateSyncYamlComponents`", async () => {
+    // deploysToClaudeDotDir is a Claude-only predicate → false here. The base
+    // behavior ran validateCliProjectFiles unconditionally, so a codex-only
+    // project missing AGENTS.md failed. The gate must not swallow non-Claude
+    // platforms.
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+platforms: [codex]
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("AGENTS.md"))).toBe(true);
+  });
+
+  it("platforms: [gemini] + 컴포넌트 없음 + GEMINI.md 없음이면 에러를 보고한다 via `validateSyncYamlComponents`", async () => {
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+platforms: [gemini]
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("GEMINI.md"))).toBe(true);
+  });
+
+  it("platforms: [codex] + AGENTS.md 존재면 에러 없음 via `validateSyncYamlComponents`", async () => {
+    touch(join(root, "AGENTS.md"));
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+platforms: [codex]
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("AGENTS.md"))).toBe(false);
+  });
+});

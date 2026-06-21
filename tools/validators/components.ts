@@ -141,6 +141,7 @@ function validateCliProjectFiles(
   data: Record<string, unknown>,
   targetPath: string,
   result: ValidationResult,
+  claudeDeploys: boolean,
 ): void {
   const usedPlatforms = collectUsedPlatforms(data);
 
@@ -149,11 +150,16 @@ function validateCliProjectFiles(
     let found = false;
 
     if (platform === "claude") {
+      // The MCP-only skip is Claude-only: an MCP-only Claude project writes to
+      // ~/.claude.json, not <path>/.claude/, so it needs no CLAUDE.md.
+      if (!claudeDeploys) continue;
       // Claude: check at target path or target/.claude/
       found =
         existsSync(join(targetPath, projectFile)) ||
         existsSync(join(targetPath, ".claude", projectFile));
     } else {
+      // Non-Claude platforms are always checked (base behavior): a config/mcp-only
+      // codex/gemini project still needs its AGENTS.md / GEMINI.md context file.
       found = existsSync(join(targetPath, projectFile));
     }
 
@@ -206,10 +212,12 @@ export async function validateSyncYamlComponents(
     return result;
   }
 
-  // Validate CLI project files whenever the project deploys anything into
-  // <path>/.claude/ — i.e. component items OR a non-mcps claude.yaml key. This
-  // mirrors the sync.ts mkdir gate via the shared deploysToClaudeDotDir predicate,
-  // so an MCP-only project (claude.yaml with only `mcps`) is correctly skipped.
+  // Determine whether this project deploys into <path>/.claude/ — i.e. component
+  // items OR a non-mcps claude.yaml key. This mirrors the sync.ts mkdir gate via
+  // the shared deploysToClaudeDotDir predicate, so an MCP-only Claude project
+  // (claude.yaml with only `mcps`) skips the Claude CLI-file check below. The
+  // predicate is Claude-only, so it gates ONLY the claude branch of the CLI-file
+  // check — non-Claude platforms are still checked.
   let claudeYaml;
   try {
     claudeYaml = await parseAndMergePlatformYaml(dirname(filePath), "claude");
@@ -218,18 +226,24 @@ export async function validateSyncYamlComponents(
     result.errors.push(`YAML 파싱 오류 (claude.yaml 또는 claude.local.yaml): ${msg}`);
     return result;
   }
-  if (deploysToClaudeDotDir(data, claudeYaml)) {
-    let deployTargets: string[];
-    try {
-      deployTargets = resolveDeployTargets(targetPath);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      result.errors.push(`배포 대상 확인 실패 (${targetPath}): ${msg}`);
-      deployTargets = [];
-    }
-    for (const wtPath of deployTargets) {
-      validateCliProjectFiles(data, wtPath, result);
-    }
+  const claudeDeploys = deploysToClaudeDotDir(data, claudeYaml);
+
+  // Resolve deploy targets UNCONDITIONALLY so the validator mirrors sync.ts —
+  // which calls resolveDeployTargets(targetPath) for every project and aborts on
+  // DeployTargetsError. Gating this behind a Claude-only predicate would let an
+  // MCP-only project pointing at a broken bare container pass `make validate` yet
+  // abort `make sync`. A resolution failure is reported via result.errors so
+  // `make validate` catches it first.
+  let deployTargets: string[];
+  try {
+    deployTargets = resolveDeployTargets(targetPath);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`배포 대상 확인 실패 (${targetPath}): ${msg}`);
+    deployTargets = [];
+  }
+  for (const wtPath of deployTargets) {
+    validateCliProjectFiles(data, wtPath, result, claudeDeploys);
   }
 
   // Category definitions: [category, extension]
