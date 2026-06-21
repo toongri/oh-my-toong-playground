@@ -20,6 +20,7 @@ import {
   resolveProjectFilter,
   runProjectsLoop,
   allTargetsProcessed,
+  isFatalSyncError,
   type AdapterMap,
   type LibSourceRoots,
 } from "./sync.ts";
@@ -2533,6 +2534,32 @@ describe("enabled-projects 화이트리스트 — projects 루프 통합", () =>
     await expect(
       runProjectsLoop(rootDir, adapters, context, effectiveFilter, false),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: isFatalSyncError
+// ---------------------------------------------------------------------------
+
+describe("isFatalSyncError", () => {
+  it("returns true for ProjectKeyError", () => {
+    const err = new ProjectKeyError("/target", new Error("key failure"));
+    expect(isFatalSyncError(err)).toBe(true);
+  });
+
+  it("returns true for DeployTargetsError", () => {
+    const err = new DeployTargetsError("/target", "zero worktrees");
+    expect(isFatalSyncError(err)).toBe(true);
+  });
+
+  it("returns false for generic Error", () => {
+    expect(isFatalSyncError(new Error("boom"))).toBe(false);
+  });
+
+  it("returns false for non-Error values", () => {
+    expect(isFatalSyncError("string error")).toBe(false);
+    expect(isFatalSyncError(42)).toBe(false);
+    expect(isFatalSyncError(null)).toBe(false);
   });
 });
 
