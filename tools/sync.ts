@@ -771,8 +771,14 @@ export async function processYaml(
         await syncCategory(context, category, syncYaml, adapters, rootDir, deployRoot, libSourceRoots);
       }
 
-      // Sync lib
-      await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
+      // Sync lib — only when this project deploys local component files into the
+      // platform dir (same gate as the mkdir above). An MCP-only project
+      // (shouldMkdirClaude=false) targets ~/.claude.json, so syncLib must not
+      // reach into the worktree's .{platform}/lib and delete a directory this
+      // sync never owns.
+      if (shouldMkdirClaude) {
+        await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
+      }
 
       // Rewrite platform paths for non-claude platforms
       for (const platform of (["gemini", "codex", "opencode"] as Platform[])) {
