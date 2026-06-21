@@ -393,7 +393,7 @@ This checklist is internal -- do NOT show it to the user.
 
 ## Step 5: Scope Assessment
 
-After Clearance Checklist passes, analyze whether the PR contains multiple independent theses (behavioral changes) that should be separate PRs. See `references/scope-assessment.md` for the complete framework.
+After Clearance Checklist passes, analyze whether the PR contains multiple independent theses (behavioral changes) that should be separate PRs. **Read `references/scope-assessment.md` now** — it contains the complete multi-thesis split framework required for this step.
 
 **Quick summary:**
 1. Identify candidate theses, then absorb exception-matching changes (campsite cleanup, minimal cross-domain) into their nearest main thesis
@@ -428,7 +428,7 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 
 ### Output Format
 
-**MUST** follow `references/output-format.md` exactly. Key requirements:
+**MUST read `references/output-format.md` before writing the PR body.** It contains the definitive template (emoji headers, Impact Scope field, Review Points 5-part structure, Checklist format). Follow it exactly. Key requirements:
 
 - Use emoji section headers: `📌 Summary`, `🔧 Changes`, `💬 Review Points`, `✅ Checklist`, `📎 References`
 - Each Changes subsection MUST include `**영향 범위**` (Impact Scope)
@@ -540,14 +540,28 @@ Return the PR URL to the user after successful creation.
 
 ## Examples
 
+Read these to calibrate PR body style before writing:
+
 - `examples/example-001.md`: Event-driven architecture PR — domain decoupling, compensating transactions, layer responsibility separation
 - `examples/example-002.md`: Kafka event pipeline PR — Transactional Outbox Pattern, idempotency guarantees, multi-module setup
 
 ---
 
-Step-by-step summary cheat-sheet: see `references/reference-tables.md`.
+**Step-by-step summary cheat-sheet:** read `references/reference-tables.md` when you need a quick step summary.
 
-Known failure-mode lookup: see `references/reference-tables.md`.
+**Known failure-mode lookup:** read `references/reference-tables.md` during self-review to check against documented failure modes.
+
+---
+
+## Reference Files (on-demand)
+
+| Reference file | What it contains | When to read |
+|---|---|---|
+| `references/scope-assessment.md` | Multi-thesis PR split framework | **Step 5** (scope assessment) |
+| `references/output-format.md` | Definitive PR body template: emoji headers, Impact Scope field, Review Points 5-part structure, Checklist format | **Step 6** (write PR title & description) — read before writing |
+| `references/reference-tables.md` | Step-by-step summary cheat-sheet + known-failure-mode lookup | When you need a quick step summary or during self-review |
+| `examples/example-001.md` | Worked example: event-driven architecture PR (domain decoupling, compensating transactions, layer responsibility separation) | To calibrate PR body style before writing |
+| `examples/example-002.md` | Worked example: Kafka event pipeline PR (Transactional Outbox Pattern, idempotency guarantees, multi-module setup) | To calibrate PR body style before writing |
 
 ---
 
