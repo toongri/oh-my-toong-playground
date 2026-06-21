@@ -97,7 +97,7 @@ describe("deriveClaudeProjectKey", () => {
     const bareDir = path.join(container, ".bare");
     const wtDir = path.join(container, "wt");
 
-    git(["init", "--bare", bareDir], os.tmpdir());
+    git(["init", "--bare", "-b", "main", bareDir], os.tmpdir());
     seedBareRepo(bareDir);
 
     fs.mkdirSync(wtDir, { recursive: true });
@@ -125,7 +125,7 @@ describe("deriveClaudeProjectKey", () => {
     const bareDir = path.join(container, ".bare");
     const linkedDir = path.join(container, "linked");
 
-    git(["init", "--bare", bareDir], os.tmpdir());
+    git(["init", "--bare", "-b", "main", bareDir], os.tmpdir());
     seedBareRepo(bareDir);
 
     fs.mkdirSync(linkedDir, { recursive: true });
