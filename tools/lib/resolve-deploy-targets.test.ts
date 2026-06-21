@@ -76,7 +76,7 @@ describe("resolveDeployTargets", () => {
     const wt1 = path.join(container, "wt1");
     const wt2 = path.join(container, "wt2");
 
-    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    execFileSync("git", ["init", "--bare", "-b", "main", bareDir], { stdio: "pipe" });
     seedBareRepo(bareDir);
 
     execFileSync("git", ["--git-dir", bareDir, "worktree", "add", "-b", "feat/a", wt1], {
@@ -112,7 +112,7 @@ describe("resolveDeployTargets", () => {
     tmpdirs.push(container);
 
     const bareDir = path.join(container, ".bare");
-    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    execFileSync("git", ["init", "--bare", "-b", "main", bareDir], { stdio: "pipe" });
     seedBareRepo(bareDir);
     // After seedBareRepo, the seed worktree is pruned — zero real worktrees remain
 
