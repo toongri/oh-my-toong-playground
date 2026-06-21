@@ -51,7 +51,6 @@ export function deriveClaudeProjectKey(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
   let stdout: string;
-  let stderr: string;
 
   try {
     const result = execFileSync(
@@ -60,10 +59,9 @@ export function deriveClaudeProjectKey(
       { stdio: ["pipe", "pipe", "pipe"], env },
     );
     stdout = result.toString();
-    stderr = "";
   } catch (err: unknown) {
     const spawnErr = err as { stderr?: Buffer | string };
-    stderr = spawnErr.stderr ? spawnErr.stderr.toString() : "";
+    const stderr = spawnErr.stderr ? spawnErr.stderr.toString() : "";
 
     if (stderr.includes("not a git repository")) {
       // Branch (c): not a git repo — resolve symlinks on the input path
