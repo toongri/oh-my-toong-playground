@@ -974,14 +974,47 @@ agents:
     - oracle
 `);
 
-    // Must NOT throw — resolver failure must be swallowed into result.errors
-    let result: Awaited<ReturnType<typeof validateSyncYamlComponents>>;
-    expect(async () => {
-      result = await validateSyncYamlComponents(syncPath, root);
-    }).not.toThrow();
-
-    result = await validateSyncYamlComponents(syncPath, root);
+    // Must NOT throw — resolver failure must be swallowed into result.errors.
+    // A rejected promise would cause this test to fail, so no separate
+    // not.toThrow() guard is needed.
+    const result = await validateSyncYamlComponents(syncPath, root);
     expect(result.errors.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: V7b — claude.yaml는 sync.yaml당 1회만 파싱된다 (이중 파싱 금지)
+// ---------------------------------------------------------------------------
+
+describe("V7b: claude.yaml 이중 파싱 금지 — validateAll이 단일 오류만 생성해야 한다", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = makeRoot();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("malformed claude.yaml 시 validateAll이 YAML 파싱 오류를 정확히 1건만 반환한다", async () => {
+    // Both validateSyncYamlComponents and validatePlatformYamlHookComponents
+    // parse claude.yaml. With dual-parse, a broken claude.yaml produces 2 errors.
+    // After dedup, it must produce exactly 1.
+    writeYaml(root, "claude.yaml", `
+hooks:
+  UserPromptSubmit: [invalid: yaml: parse: error
+`);
+    writeYaml(root, "sync.yaml", `
+path: ${root}
+agents:
+  items: []
+`);
+
+    const result = await validateAll(root, []);
+
+    const parseErrors = result.errors.filter((e) => e.includes("YAML 파싱 오류") && e.includes("claude.yaml"));
+    expect(parseErrors).toHaveLength(1);
   });
 });
 

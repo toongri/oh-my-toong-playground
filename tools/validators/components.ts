@@ -181,9 +181,16 @@ function getItemComponent(item: unknown): string | null {
   return null;
 }
 
+/** Pre-parsed claude.yaml result threaded from validateAll to avoid duplicate parsing. */
+type ClaudeYamlPreParsed =
+  | { ok: true; value: unknown }   // successfully parsed (value may be null = no file)
+  | { ok: false };                 // parse failed; error already recorded in caller
+
 export async function validateSyncYamlComponents(
   filePath: string,
   rootDir: string,
+  /** When provided by validateAll, skips re-parsing claude.yaml. */
+  claudeYamlPreParsed?: ClaudeYamlPreParsed,
 ): Promise<ValidationResult> {
   const result = makeResult();
 
@@ -218,13 +225,21 @@ export async function validateSyncYamlComponents(
   // (claude.yaml with only `mcps`) skips the Claude CLI-file check below. The
   // predicate is Claude-only, so it gates ONLY the claude branch of the CLI-file
   // check — non-Claude platforms are still checked.
-  let claudeYaml;
-  try {
-    claudeYaml = await parseAndMergePlatformYaml(dirname(filePath), "claude");
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    result.errors.push(`YAML 파싱 오류 (claude.yaml 또는 claude.local.yaml): ${msg}`);
-    return result;
+  //
+  // When claudeYamlPreParsed is provided by validateAll (deduped), skip re-parsing.
+  // If parse failed upstream ({ ok: false }), bail without adding a duplicate error.
+  let claudeYaml: Record<string, unknown> | null;
+  if (claudeYamlPreParsed !== undefined) {
+    if (!claudeYamlPreParsed.ok) return result; // parse failed upstream; error already recorded
+    claudeYaml = claudeYamlPreParsed.value as Record<string, unknown> | null;
+  } else {
+    try {
+      claudeYaml = await parseAndMergePlatformYaml(dirname(filePath), "claude");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.errors.push(`YAML 파싱 오류 (claude.yaml 또는 claude.local.yaml): ${msg}`);
+      return result;
+    }
   }
   const claudeDeploys = deploysToClaudeDotDir(data, claudeYaml);
 
@@ -355,6 +370,8 @@ export async function validateSyncYamlComponents(
 export async function validatePlatformYamlHookComponents(
   yamlDir: string,
   rootDir: string,
+  /** When provided by validateAll, skips re-parsing claude.yaml. */
+  claudeYamlPreParsed?: ClaudeYamlPreParsed,
 ): Promise<ValidationResult> {
   const result = makeResult();
 
@@ -367,13 +384,20 @@ export async function validatePlatformYamlHookComponents(
 
   // Only claude and gemini support hooks
   for (const platform of ["claude", "gemini"] as const) {
-    let merged;
-    try {
-      merged = await parseAndMergePlatformYaml(yamlDir, platform);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      result.errors.push(`YAML 파싱 오류 (${platform}.yaml 또는 ${platform}.local.yaml): ${msg}`);
-      continue;
+    let merged: unknown;
+    if (platform === "claude" && claudeYamlPreParsed !== undefined) {
+      // Pre-parsed by validateAll: skip re-parsing.
+      // If parse failed ({ ok: false }), error already recorded — skip claude hooks.
+      if (!claudeYamlPreParsed.ok) continue;
+      merged = claudeYamlPreParsed.value;
+    } else {
+      try {
+        merged = await parseAndMergePlatformYaml(yamlDir, platform);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        result.errors.push(`YAML 파싱 오류 (${platform}.yaml 또는 ${platform}.local.yaml): ${msg}`);
+        continue;
+      }
     }
     if (merged === null) continue;
 
@@ -452,9 +476,22 @@ export async function validateAll(
         continue;
       }
     }
-    mergeResult(result, await validateSyncYamlComponents(syncYamlPath, rootDir));
+
+    // Parse claude.yaml exactly once per sync.yaml, so a broken claude.yaml
+    // produces a single error regardless of how many validators consume it.
     const yamlDir = dirname(syncYamlPath);
-    mergeResult(result, await validatePlatformYamlHookComponents(yamlDir, rootDir));
+    let claudeYamlPreParsed: ClaudeYamlPreParsed;
+    try {
+      const value = await parseAndMergePlatformYaml(yamlDir, "claude");
+      claudeYamlPreParsed = { ok: true, value };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.errors.push(`YAML 파싱 오류 (claude.yaml 또는 claude.local.yaml): ${msg}`);
+      claudeYamlPreParsed = { ok: false };
+    }
+
+    mergeResult(result, await validateSyncYamlComponents(syncYamlPath, rootDir, claudeYamlPreParsed));
+    mergeResult(result, await validatePlatformYamlHookComponents(yamlDir, rootDir, claudeYamlPreParsed));
   }
 
   return result;
