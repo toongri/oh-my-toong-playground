@@ -50,7 +50,8 @@ function claudePresent(): boolean {
   return r.status === 0;
 }
 
-const SKIP_REASON = "claude binary not found in PATH — skipping contract test";
+// Evaluated once at module load so all three tests share the same skip decision.
+const HAS_CLAUDE = claudePresent();
 
 function mktemp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "git-key-contract-"));
@@ -187,12 +188,7 @@ describe("deriveClaudeProjectKey (contract: live claude binary)", () => {
   });
 
   // AC-A.1
-  it("contract standalone", () => {
-    if (!claudePresent()) {
-      console.log(SKIP_REASON);
-      return;
-    }
-
+  it.skipIf(!HAS_CLAUDE)("contract standalone", () => {
     // Build fixture: plain `git init` repo
     const root = mktemp();
     tmpdirs.push(root);
@@ -217,12 +213,7 @@ describe("deriveClaudeProjectKey (contract: live claude binary)", () => {
   });
 
   // AC-A.2
-  it("contract bare worktree", () => {
-    if (!claudePresent()) {
-      console.log(SKIP_REASON);
-      return;
-    }
-
+  it.skipIf(!HAS_CLAUDE)("contract bare worktree", () => {
     // Build fixture: bare+worktree pattern
     // Layout: <container>/.bare (bare repo) + <container>/wt (registered worktree)
     // Claude runs from the WORKTREE. The worktree has a .git FILE created by git
@@ -261,12 +252,7 @@ describe("deriveClaudeProjectKey (contract: live claude binary)", () => {
   });
 
   // AC-A.3
-  it("contract container", () => {
-    if (!claudePresent()) {
-      console.log(SKIP_REASON);
-      return;
-    }
-
+  it.skipIf(!HAS_CLAUDE)("contract container", () => {
     // Build fixture: two worktrees off a bare repo.
     // The "container" shape is a directory that has a .git FILE (not a directory),
     // created by `git worktree add`, pointing at the bare dir. This is the same
