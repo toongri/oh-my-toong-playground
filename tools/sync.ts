@@ -33,6 +33,8 @@ import {
 } from "./lib/resolver.ts";
 import { generateBackupSessionId, backupCategory, cleanupOldBackups } from "./lib/backup.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
+import { ProjectKeyError } from "./lib/git-key.ts";
+import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
 import { collectRequiredLibModulesFromSources, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
@@ -75,6 +77,34 @@ function addLibSourceRoot(roots: LibSourceRoots, platform: Platform, sourcePath:
 export const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
 
 /**
+ * Single source of truth for "does this project deploy anything into <path>/.claude/?".
+ *
+ * True when EITHER:
+ *   (a) any CATEGORIES section in sync.yaml has ≥1 item, OR
+ *   (b) claude.yaml has a key other than `mcps` (config/hooks/plugins → .claude/ files).
+ *
+ * An MCP-only project (claude.yaml with ONLY `mcps`, no component items) writes to
+ * ~/.claude.json instead of <path>/.claude/, so this returns false for it.
+ *
+ * Both the sync.ts mkdir gate and the components.ts CLI-project-file validation gate
+ * route through this predicate so the two cannot drift.
+ */
+export function deploysToClaudeDotDir(
+  syncYamlData: Record<string, unknown>,
+  parsedClaudeYaml: Record<string, unknown> | null,
+): boolean {
+  const hasComponentSections = CATEGORIES.some((cat) => {
+    const section = syncYamlData[cat];
+    if (section == null || typeof section !== "object") return false;
+    const items = (section as Record<string, unknown>)["items"];
+    return Array.isArray(items) && items.length > 0;
+  });
+  const hasClaudeDotFileDeploy =
+    parsedClaudeYaml != null && Object.keys(parsedClaudeYaml).some((k) => k !== "mcps");
+  return hasComponentSections || hasClaudeDotFileDeploy;
+}
+
+/**
  * Platform×category capability map.
  * Only combinations listed here proceed through backup+wipe+dispatch.
  * Unsupported combos (e.g., codex+agents) are skipped entirely.
@@ -103,6 +133,7 @@ export async function syncCategory(
   syncYaml: SyncYaml,
   adapters: AdapterMap,
   rootDir: string,
+  deployRoot: string,
   libSourceRoots?: LibSourceRoots,
 ): Promise<void> {
   const section = syncYaml[category as keyof SyncYaml] as
@@ -248,7 +279,7 @@ export async function syncCategory(
       const prepKey = `${platform}:${category}`;
       if (!preparedKeys.has(prepKey) && !context.dryRun) {
         await backupCategory(
-          syncYaml.path ?? "",
+          deployRoot,
           platform,
           category,
           context.backupSession,
@@ -257,7 +288,7 @@ export async function syncCategory(
         // Wipe category dir so orphan files from removed components are cleaned up.
         // Rules are excluded: they may contain user-managed files.
         if (category !== "rules") {
-          const categoryDir = path.join(syncYaml.path ?? "", `.${platform}`, category);
+          const categoryDir = path.join(deployRoot, `.${platform}`, category);
           await fs.rm(categoryDir, { recursive: true, force: true });
           await fs.mkdir(categoryDir, { recursive: true });
         }
@@ -271,7 +302,7 @@ export async function syncCategory(
       // Call the appropriate adapter method
       if (category === "agents") {
         await adapter.syncAgentsDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           addSkills,
@@ -281,28 +312,28 @@ export async function syncCategory(
         );
       } else if (category === "commands") {
         await adapter.syncCommandsDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           false,
         );
       } else if (category === "skills") {
         await adapter.syncSkillsDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           false,
         );
       } else if (category === "scripts") {
         await adapter.syncScriptsDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           false,
         );
       } else if (category === "rules") {
         await adapter.syncRulesDirect(
-          syncYaml.path ?? "",
+          deployRoot,
           displayName,
           sourcePath,
           false,
@@ -394,7 +425,13 @@ export async function syncPlatformConfigs(
         context.modelMaps.set(platform, result.modelMap);
       }
     } catch (err) {
-      logWarn(`${platform}.yaml 처리 실패: ${err}`);
+      // Rethrow so the per-worktree catch in processYaml records this deploy root
+      // in failedTargets and the CLI exits non-zero. A swallowed config/hooks/
+      // plugins error meant a worktree's .claude was silently left unsynced while
+      // the run reported success — the warn-and-continue here was a pre-fan-out
+      // relic. (ProjectKeyError is rethrown for the same reason — a local MCP not
+      // written to ~/.claude.json.)
+      throw err;
     }
   }
 }
@@ -488,7 +525,9 @@ export async function syncLib(
     const sourceRoots = libSourceRoots?.get(platform) ?? new Set<string>();
     const requiredModules = await collectRequiredLibModulesFromSources(sourceRoots, libSrc);
 
-    if (requiredModules.size === 0 && dataFiles.size === 0) {
+    // Data files (e.g. pins/tbox.yaml) are runtime assets for lib modules; with
+    // zero modules deployed they have no consumer, so skip the whole lib deploy.
+    if (requiredModules.size === 0) {
       // No @lib/ imports — remove any stale lib (dry-run: log only)
       if (context.dryRun) {
         if (existsSync(libDest)) {
@@ -623,6 +662,52 @@ async function collectMdFiles(dir: string): Promise<string[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Deploy-target dedup
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a path's deploy targets and record every one in processedPaths.
+ *
+ * Dedup is keyed by the RESOLVED deploy target (a bare container fans out to its
+ * worktrees), never by the raw container path — otherwise a second sync.yaml
+ * pointing directly at a worktree would not be recognized as already processed
+ * and would re-deploy (backup+wipe+redeploy) the same .claude a second time.
+ */
+export function recordProcessedTargets(targetPath: string, processedPaths: Set<string>): void {
+  for (const target of resolveDeployTargets(targetPath)) {
+    processedPaths.add(target);
+  }
+}
+
+/**
+ * True when every resolved deploy target for targetPath is already present in
+ * processedPaths (so the path can be skipped). Empty target sets never skip.
+ */
+export function allTargetsProcessed(targetPath: string, processedPaths: Set<string>): boolean {
+  const targets = resolveDeployTargets(targetPath);
+  return targets.length > 0 && targets.every((t) => processedPaths.has(t));
+}
+
+// ---------------------------------------------------------------------------
+// Error classification
+// ---------------------------------------------------------------------------
+
+/**
+ * True when err is a "fatal" sync error that must always be rethrown rather
+ * than downgraded to warn-and-continue.
+ *
+ * - ProjectKeyError: local MCP key-derivation failed — an MCP was silently
+ *   not written to ~/.claude.json; swallowing would leave the user's config
+ *   corrupted without any signal.
+ * - DeployTargetsError: bare-repo enumeration failed or returned zero
+ *   worktrees; the deployment has no valid target and continuing would silently
+ *   write nothing.
+ */
+export function isFatalSyncError(err: unknown): boolean {
+  return err instanceof ProjectKeyError || err instanceof DeployTargetsError;
+}
+
+// ---------------------------------------------------------------------------
 // processYaml
 // ---------------------------------------------------------------------------
 
@@ -677,44 +762,93 @@ export async function processYaml(
   }
   logInfo("========================================");
 
-  // Ensure .claude directory exists (non-dry)
-  if (!context.dryRun) {
-    await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
-  }
-
   // Clear per-project state to prevent cross-project leaks
   context.modelMaps.clear();
   context.platformYamlSections.clear();
 
-  // Accumulate component SOURCE paths per platform as configs/categories are
-  // processed; syncLib scans these (not the deployed tree) for @lib/ deps.
-  const libSourceRoots: LibSourceRoots = new Map();
-
   // Per-platform YAML processing
   const yamlDir = path.dirname(syncYamlPath);
-  await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir, libSourceRoots);
 
   // Resolve platforms for lib sync using the full cascade (item, section, syncYaml,
   // feature-platforms.lib, use-platforms, hardcoded ["claude"]).
   const libPlatforms = await resolvePlatforms({} as SyncItem, undefined, syncYaml.platforms, "lib");
 
-  // Sync 5 categories
-  for (const category of CATEGORIES) {
-    await syncCategory(context, category, syncYaml, adapters, rootDir, libSourceRoots);
-  }
+  // Parse claude.yaml once (it is colocated with sync.yaml in yamlDir, shared by
+  // every worktree) so the per-worktree mkdir gate need not re-read it.
+  const claudeYaml = await parseAndMergePlatformYaml(yamlDir, "claude");
+  const shouldMkdirClaude = deploysToClaudeDotDir(syncYaml as Record<string, unknown>, claudeYaml);
 
-  // Sync lib
-  await syncLib(context, targetPath, rootDir, libPlatforms, libSourceRoots);
+  // Fan-out (D-1): a bare-structure container deploys into EVERY linked
+  // worktree's .claude/; a plain path resolves to [path] (today's behavior).
+  // targetPath (the container) is NEVER written to — it is the dedup/identity
+  // anchor (processedPaths) and, for a bare structure, a dead-letter.
+  // resolveDeployTargets throws DeployTargetsError on git-enumeration failure or
+  // an empty worktree set — let it escape so it surfaces as a non-zero exit.
+  const deployRoots = resolveDeployTargets(targetPath);
 
-  // Rewrite platform paths for non-claude platforms
-  for (const platform of (["gemini", "codex", "opencode"] as Platform[])) {
-    const platformDir = path.join(targetPath, `.${platform}`);
-    if (existsSync(platformDir)) {
+  for (const deployRoot of deployRoots) {
+    try {
+      // Each worktree's deploy is independent — fresh source-root accumulator so
+      // syncLib targets this deployRoot's .{platform}/lib only.
+      const libSourceRoots: LibSourceRoots = new Map();
+
+      // Per-worktree dry-run target line (AC6.1): list this worktree, never the
+      // container, as a deploy target.
       if (context.dryRun) {
-        logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
-      } else {
-        await rewritePlatformPaths(targetPath, platform);
+        logDry(`Deploy target: ${deployRoot}`);
       }
+
+      // Ensure <deployRoot>/.claude exists only when something deploys into it
+      // (non-dry). The container is never the mkdir target (AC2.2): an MCP-only
+      // project writes to ~/.claude.json, not <deployRoot>/.claude/.
+      if (!context.dryRun && shouldMkdirClaude) {
+        await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
+      }
+
+      await syncPlatformConfigs(context, deployRoot, yamlDir, adapters, rootDir, libSourceRoots);
+
+      // Sync 5 categories
+      for (const category of CATEGORIES) {
+        await syncCategory(context, category, syncYaml, adapters, rootDir, deployRoot, libSourceRoots);
+      }
+
+      // Sync lib — only when this project deploys local component files into the
+      // platform dir (same gate as the mkdir above). An MCP-only project
+      // (shouldMkdirClaude=false) targets ~/.claude.json, so syncLib must not
+      // reach into the worktree's .{platform}/lib and delete a directory this
+      // sync never owns.
+      if (shouldMkdirClaude) {
+        await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
+      }
+
+      // Record this worktree as a backup root ONLY after all sync steps succeeded.
+      // Registering before the steps (or on failure) would let retention cleanup
+      // prune the last good backup of a worktree whose deploy threw — it must hold
+      // a success-only invariant: failed worktrees go to failedTargets, not here.
+      context.backupRoots.add(deployRoot);
+
+      // Rewrite platform paths for non-claude platforms
+      for (const platform of (["gemini", "codex", "opencode"] as Platform[])) {
+        const platformDir = path.join(deployRoot, `.${platform}`);
+        if (existsSync(platformDir)) {
+          if (context.dryRun) {
+            logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
+          } else {
+            await rewritePlatformPaths(deployRoot, platform);
+          }
+        }
+      }
+    } catch (err) {
+      // Fatal errors (MCP key-derivation or topology failure) must never be
+      // downgraded: rethrow so they surface as a non-zero exit.
+      if (isFatalSyncError(err)) {
+        throw err;
+      }
+      // Best-effort fan-out (AC3a/3b): one failing worktree is logged WITH its
+      // path and recorded; the loop continues to the other worktrees. A non-empty
+      // failedTargets later forces the CLI to exit non-zero.
+      logError(`worktree 배포 실패 (계속 진행): ${deployRoot}: ${err}`);
+      context.failedTargets.push(deployRoot);
     }
   }
 
@@ -738,6 +872,8 @@ export function createContext(dryRun: boolean): SyncContext {
     modelMaps: new Map(),
     processedPaths: new Set(),
     platformYamlSections: new Map(),
+    backupRoots: new Set(),
+    failedTargets: [],
   };
 }
 
@@ -853,8 +989,16 @@ export async function runProjectsLoop(
       }
       try {
         await processYaml(context, projectSyncYaml, adapters, rootDir);
-        context.processedPaths.add(targetPath);
+        // Dedup is keyed by the resolved deploy targets (a bare container's
+        // worktrees), not the raw container path, so a later sync.yaml pointing
+        // straight at a worktree is recognized as already processed.
+        recordProcessedTargets(targetPath, context.processedPaths);
       } catch (err) {
+        // Fatal errors (MCP key-derivation or topology failure) must escape to
+        // the top-level handler so the run exits non-zero.
+        if (isFatalSyncError(err)) {
+          throw err;
+        }
         logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
       }
       if (verbose) {
@@ -916,14 +1060,17 @@ if (import.meta.main) {
         const targetPath = syncYaml.path;
         if (!targetPath) {
           logInfo("루트 sync.yaml에 path가 정의되지 않음 (템플릿 상태)");
-        } else if (context.processedPaths.has(targetPath)) {
+        } else if (allTargetsProcessed(targetPath, context.processedPaths)) {
+          // Skip only when EVERY resolved deploy target was already processed by
+          // projects/ — a root path that resolves to the same worktree(s) as a
+          // project container would otherwise re-deploy the same .claude.
           logWarn(`${targetPath}는 projects/에서 이미 처리됨, 스킵`);
         } else {
           if (verbose) {
             logInfo("[verbose] 루트 sync.yaml 처리 시작");
           }
           await processYaml(context, rootSyncYaml, adapters, rootDir);
-          context.processedPaths.add(targetPath);
+          recordProcessedTargets(targetPath, context.processedPaths);
           if (verbose) {
             logInfo("[verbose] 루트 sync.yaml 처리 완료");
           }
@@ -935,9 +1082,12 @@ if (import.meta.main) {
     const cleanupPromises: Promise<void>[] = [];
     if (!dryRun) {
       const retentionDays = await getBackupRetentionDays();
-      // Find all processed target paths and clean up their backups
-      for (const targetPath of context.processedPaths) {
-        cleanupPromises.push(cleanupOldBackups(targetPath, retentionDays).catch(() => {}));
+      // Union of processedPaths (container, drives deploy dedup) and backupRoots (per-worktree
+      // deploy roots populated during fan-out). Set-union ensures a non-bare path present in
+      // both is cleaned exactly once.
+      const cleanupTargets = new Set<string>([...context.processedPaths, ...context.backupRoots]);
+      for (const target of cleanupTargets) {
+        cleanupPromises.push(cleanupOldBackups(target, retentionDays).catch(() => {}));
       }
     }
 
@@ -948,7 +1098,12 @@ if (import.meta.main) {
     }
 
     await Promise.all(cleanupPromises);
-    process.exit(0);
+    // Any worktree that failed during the best-effort fan-out forces a non-zero
+    // exit: an unwritable worktree must never be reported as a clean sync.
+    if (context.failedTargets.length > 0) {
+      logError(`일부 worktree 배포 실패 (${context.failedTargets.length}개): ${context.failedTargets.join(", ")}`);
+    }
+    process.exit(context.failedTargets.length > 0 ? 1 : 0);
   } catch (err) {
     logError(`동기화 실패: ${err}`);
     process.exit(1);

@@ -105,9 +105,11 @@ CLAUDE_SUMMARY="${CANNED_SUMMARY_BASE/STUB_RUN_MARKER_PLACEHOLDER/CLAUDE_RUN_MAR
 
 # codex stub: captures stdin, honours `-o OUTFILE` (writes the summary there,
 # as the real `codex exec -o` does), exits with the controlled rc.
+# No shebang — the resolver skips files whose first two bytes are "#!", so
+# this stub must NOT start with "#!" to be selected as a real binary.
+# macOS falls back to /bin/sh for shebang-less executables, so the stub still runs.
 write_codex_stub() {
     cat > "$STUB_BIN/codex" <<STUB
-#!/bin/bash
 cat > "$CODEX_STDIN"
 out=""
 prev=""
@@ -559,6 +561,162 @@ test_c3_prose_string_not_truncated() {
     return 0
 }
 
+# Helper: run the resolver block from the hook in a subprocess and print the
+# resulting CODEX_BIN.
+# $1 = PATH string for the subprocess (must include system coreutils if needed)
+# $2 = OMT_CODEX_BIN value (pass "" to leave empty)
+_run_resolver() {
+    local test_path="$1"
+    local codex_bin_override="$2"
+
+    # Extract the resolver block: lines from "# Resolve the real codex binary"
+    # through (and including) the closing `fi` that ends the outer if block.
+    local resolver_block
+    resolver_block=$(awk '
+      /^# Resolve the real codex binary/ { capture=1 }
+      capture { print }
+      capture && /^fi$/ { capture=0 }
+    ' "$HOOK")
+
+    if [ -z "$resolver_block" ]; then
+        printf ''
+        return 0
+    fi
+
+    PATH="$test_path" OMT_CODEX_BIN="$codex_bin_override" /bin/bash -c "$resolver_block
+printf '%s' \"\$CODEX_BIN\""
+}
+
+# Return the directory containing system coreutils needed by the resolver
+# (specifically `head`), excluding any directory that also contains `codex`.
+# This lets resolver tests that need "no real codex on PATH" still have `head`.
+_system_coreutils_path() {
+    local head_dir
+    head_dir=$(dirname "$(command -v head 2>/dev/null || echo /usr/bin/head)")
+    # If this dir also contains `codex`, walk up to find one that doesn't —
+    # but in practice head lives in /usr/bin which never ships a codex binary.
+    printf '%s' "$head_dir"
+}
+
+# =============================================================================
+# RESOLVER-1 — When a shell-script codex (#!/bin/bash shim) appears before a
+# real (non-shebang) codex on PATH, the resolver picks the real one.
+# =============================================================================
+test_resolver_skips_shim_picks_real() {
+    # Build two separate directories: shim first, real second.
+    local shim_dir="$TEST_TMP_DIR/shim"
+    local real_dir="$TEST_TMP_DIR/real"
+    mkdir -p "$shim_dir" "$real_dir"
+
+    # Shim: a shell-script (first 2 bytes = "#!")
+    printf '#!/bin/bash\nexit 0\n' > "$shim_dir/codex"
+    chmod +x "$shim_dir/codex"
+
+    # Real: a non-shebang file (first byte = NUL; not a script shebang).
+    printf '\x00FAKE_BINARY\n' > "$real_dir/codex"
+    chmod +x "$real_dir/codex"
+
+    unset OMT_CODEX_BIN || true
+
+    local sysutils
+    sysutils=$(_system_coreutils_path)
+    local resolved
+    resolved=$(_run_resolver "$shim_dir:$real_dir:$sysutils" "" 2>/dev/null) || resolved=""
+
+    if [ "$resolved" != "$real_dir/codex" ]; then
+        echo "ASSERTION FAILED: resolver should pick $real_dir/codex, got '$resolved'"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# RESOLVER-2 — OMT_CODEX_BIN takes precedence over PATH scanning.
+# =============================================================================
+test_resolver_env_override_takes_precedence() {
+    local override_path="$TEST_TMP_DIR/explicit/codex"
+    mkdir -p "$(dirname "$override_path")"
+    printf '\x00OVERRIDE_BINARY\n' > "$override_path"
+    chmod +x "$override_path"
+
+    # Also place a real (non-shebang) codex on PATH to confirm it is NOT chosen.
+    local real_dir="$TEST_TMP_DIR/real2"
+    mkdir -p "$real_dir"
+    printf '\x00REAL_ON_PATH\n' > "$real_dir/codex"
+    chmod +x "$real_dir/codex"
+
+    local sysutils
+    sysutils=$(_system_coreutils_path)
+    local resolved
+    resolved=$(_run_resolver "$real_dir:$sysutils" "$override_path" 2>/dev/null) || resolved=""
+
+    if [ "$resolved" != "$override_path" ]; then
+        echo "ASSERTION FAILED: OMT_CODEX_BIN override should yield $override_path, got '$resolved'"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# RESOLVER-3 — When no codex is resolvable (only a shim on PATH, no real binary),
+# the resolver yields empty CODEX_BIN and the hook still exits 0 (fail-open),
+# falling through to the claude fallback.
+# =============================================================================
+test_resolver_no_codex_yields_empty_and_failopen() {
+    # Only a shim codex on PATH — should be skipped, yielding empty CODEX_BIN.
+    local shim_dir="$TEST_TMP_DIR/shim2"
+    mkdir -p "$shim_dir"
+    printf '#!/bin/bash\nexit 0\n' > "$shim_dir/codex"
+    chmod +x "$shim_dir/codex"
+
+    unset OMT_CODEX_BIN || true
+
+    # Verify the resolver yields empty.
+    # PATH: only the shim dir + system coreutils dir (for `head`).
+    # The coreutils dir must not itself contain a real `codex` binary.
+    local sysutils
+    sysutils=$(_system_coreutils_path)
+    local resolved
+    resolved=$(_run_resolver "$shim_dir:$sysutils" "" 2>/dev/null) || resolved=""
+
+    if [ -n "$resolved" ]; then
+        echo "ASSERTION FAILED: resolver should yield empty when only a shim exists, got '$resolved'"
+        return 1
+    fi
+
+    # Verify the full hook still exits 0 (fail-open) with no resolvable codex.
+    # Build a PATH that:
+    #   - has the shim codex (resolver skips it — first 2 bytes are "#!")
+    #   - has the claude stub (for the fallback)
+    #   - has system coreutils dirs that are known to contain no `codex` binary
+    #     (/usr/bin, /bin — jq, perl, head, mktemp, mv, cat all live there)
+    # STUB_BIN is excluded so its non-shebang codex stub is not reachable.
+    local sid="sid-noresolve"
+    local tp="$TEST_TMP_DIR/transcript_noresolve.jsonl"
+    write_fixture_transcript "$tp"
+
+    # Create a claude-only stub dir (no codex in it).
+    local claude_only_dir="$TEST_TMP_DIR/claude_only"
+    mkdir -p "$claude_only_dir"
+    cp "$STUB_BIN/claude" "$claude_only_dir/claude"
+
+    # Minimal system PATH: /usr/bin and /bin are stable macOS dirs with no codex.
+    local min_sys_path="/usr/bin:/bin"
+    local rc=0
+    make_stdin "$sid" "$tp" | env PATH="$shim_dir:$claude_only_dir:$min_sys_path" OMT_CODEX_BIN="" "$HOOK" >/dev/null 2>&1 || rc=$?
+
+    if [ "$rc" -ne 0 ]; then
+        echo "ASSERTION FAILED: hook must exit 0 when codex is not resolvable (got $rc)"
+        return 1
+    fi
+    # Claude fallback should be invoked (codex primary was skipped).
+    if [ ! -f "$CLAUDE_SENTINEL" ]; then
+        echo "ASSERTION FAILED: claude fallback should be invoked when CODEX_BIN is empty"
+        return 1
+    fi
+    return 0
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -578,6 +736,9 @@ main() {
     run_test test_ac_t1_8_never_blocks_source_grep
     run_test test_ac_t1_9_second_run_overwrites
     run_test test_c3_prose_string_not_truncated
+    run_test test_resolver_skips_shim_picks_real
+    run_test test_resolver_env_override_takes_precedence
+    run_test test_resolver_no_codex_yields_empty_and_failopen
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
