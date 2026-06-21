@@ -19,6 +19,7 @@ import {
   printUsage,
   resolveProjectFilter,
   runProjectsLoop,
+  allTargetsProcessed,
   type AdapterMap,
   type LibSourceRoots,
 } from "./sync.ts";
@@ -678,7 +679,7 @@ describe("syncPlatformConfigs", () => {
     ).rejects.toBeInstanceOf(ProjectKeyError);
   });
 
-  it("still swallows non-ProjectKeyError per-platform config errors (warn-and-continue preserved)", async () => {
+  it("rethrows non-ProjectKeyError per-platform config errors so the worktree is recorded as failed", async () => {
     await writeFile(
       path.join(yamlDir, "claude.yaml"),
       "config:\n  theme: dark\n",
@@ -696,10 +697,11 @@ describe("syncPlatformConfigs", () => {
 
     const context = makeContext();
 
-    // Generic config/hooks/plugins errors keep warn-and-continue: no throw.
+    // A config/hooks/plugins write failure must escape (no longer swallowed) so
+    // the per-worktree catch records the deploy root and the CLI exits non-zero.
     await expect(
       syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("config write failed");
   });
 
   it("stores model-map in context.modelMaps (P2-1)", async () => {
@@ -2749,6 +2751,108 @@ describe("component fan-out", () => {
     expect(context.failedTargets).toContain(worktrees[1]);
 
     await fs.chmod(worktrees[1]!, 0o755);
+  });
+
+  // Bug (1): a config-write failure in a worktree must reach failedTargets so the
+  // CLI exits non-zero. The .claude dir is read-only (0o555) but the worktree
+  // itself stays writable, so the line-760 mkdir on the pre-existing .claude is a
+  // no-op and the failure is isolated to the claude.yaml config write inside
+  // syncPlatformConfigs — exactly the error class that used to be swallowed.
+  it("Bug1: a worktree whose claude.yaml config write fails is recorded in failedTargets", async () => {
+    const { worktrees } = makeBareTopology("repo", ["wt1"]);
+
+    // Pre-create .claude while the worktree is fully writable, then make ONLY
+    // .claude read-only. config writes (settings.local.json) into it then fail.
+    const claudeDir = path.join(worktrees[0]!, ".claude");
+    await fs.mkdir(claudeDir, { recursive: true });
+    await fs.chmod(claudeDir, 0o555);
+
+    const container = path.dirname(worktrees[0]!);
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    // config-only claude.yaml (no component sections) → deploysToClaudeDotDir=true.
+    await writeFile(syncYamlPath, `path: ${container}\n`);
+    await writeFile(path.join(rootDir, "claude.yaml"), "config:\n  theme: dark\n");
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    // The config-write failure must surface as a failed worktree, not be swallowed.
+    expect(context.failedTargets).toContain(worktrees[0]);
+    // This is the exact expression the CLI uses to choose its exit code.
+    expect(context.failedTargets.length > 0 ? 1 : 0).toBe(1);
+
+    await fs.chmod(claudeDir, 0o755);
+  });
+
+  // Bug (2): a worktree that fails mid-deploy must NOT be registered as a backup
+  // root, so retention cleanup does not prune its last good backup. backupRoots
+  // is the success-only invariant: only worktrees that completed all sync steps
+  // belong in it.
+  it("Bug2: a worktree failing mid-deploy keeps its prior backup and is not a backup root", async () => {
+    const { container, worktrees } = makeBareTopology("repo", ["wt1"]);
+    await seedSkill("oracle");
+
+    // A prior good backup session already present in the worktree.
+    const priorBackup = path.join(worktrees[0]!, ".sync-backup", "good-session", "marker");
+    await writeFile(priorBackup, "keep me\n");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`);
+
+    // Adapter that throws during dispatch — AFTER syncCategory's backup+wipe ran,
+    // i.e. partway through the per-worktree deploy.
+    class FailingAdapter extends ClaudeAdapter {
+      override async syncSkillsDirect(): Promise<void> {
+        throw new Error("boom during skills dispatch");
+      }
+    }
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new FailingAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false, backupSession: "new-session" });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    // The worktree failed, so it is recorded as failed and NOT as a backup root.
+    expect(context.failedTargets).toContain(worktrees[0]);
+    expect(context.backupRoots.has(worktrees[0]!)).toBe(false);
+
+    // Retention cleanup over the production union (processedPaths ∪ backupRoots)
+    // with retentionDays=0 must leave the failed worktree's prior backup intact.
+    const cleanupTargets = new Set<string>([...context.processedPaths, ...context.backupRoots]);
+    await Promise.all([...cleanupTargets].map((t) => cleanupOldBackups(t, 0).catch(() => {})));
+
+    expect(await exists(path.join(worktrees[0]!, ".sync-backup", "good-session"))).toBe(true);
+  });
+
+  // Bug (3): a container sync.yaml and a sync.yaml pointing directly at one of its
+  // worktrees must resolve to the same .claude and deploy it exactly once. The
+  // dedup key is the RESOLVED deploy target, not the raw container path.
+  it("Bug3: a worktree already deployed via its container is recognized as processed (no double deploy)", async () => {
+    const { container, worktrees } = makeBareTopology("repo", ["wt1"]);
+    await seedSkill("oracle");
+
+    // proj-a points at the bare container.
+    const projDir = path.join(rootDir, "projects", "proj-a");
+    await fs.mkdir(projDir, { recursive: true });
+    await writeFile(
+      path.join(projDir, "sync.yaml"),
+      `path: ${container}\nname: proj-a\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+    );
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", new ClaudeAdapter()]]) as AdapterMap;
+    const context = makeContext({ dryRun: false });
+    const effectiveFilter = resolveProjectFilter(new Set(), undefined);
+
+    // Projects phase: deploys the container's worktree.
+    await runProjectsLoop(rootDir, adapters, context, effectiveFilter, false);
+
+    // The RESOLVED worktree path (not the raw container) is what dedup must track.
+    expect(context.processedPaths.has(worktrees[0]!)).toBe(true);
+
+    // Root phase dedup: a sync.yaml whose path is the worktree itself resolves to
+    // [wt1], which is already processed → the CLI must skip it (single deploy).
+    expect(allTargetsProcessed(worktrees[0]!, context.processedPaths)).toBe(true);
   });
 
   // AC5.1 — deriveClaudeProjectKey has EXACTLY ONE call site
