@@ -689,6 +689,25 @@ export function allTargetsProcessed(targetPath: string, processedPaths: Set<stri
 }
 
 // ---------------------------------------------------------------------------
+// Error classification
+// ---------------------------------------------------------------------------
+
+/**
+ * True when err is a "fatal" sync error that must always be rethrown rather
+ * than downgraded to warn-and-continue.
+ *
+ * - ProjectKeyError: local MCP key-derivation failed — an MCP was silently
+ *   not written to ~/.claude.json; swallowing would leave the user's config
+ *   corrupted without any signal.
+ * - DeployTargetsError: bare-repo enumeration failed or returned zero
+ *   worktrees; the deployment has no valid target and continuing would silently
+ *   write nothing.
+ */
+export function isFatalSyncError(err: unknown): boolean {
+  return err instanceof ProjectKeyError || err instanceof DeployTargetsError;
+}
+
+// ---------------------------------------------------------------------------
 // processYaml
 // ---------------------------------------------------------------------------
 
@@ -820,9 +839,9 @@ export async function processYaml(
         }
       }
     } catch (err) {
-      // A local-MCP key-derivation failure must never be downgraded: rethrow so
-      // it surfaces as a non-zero exit (an MCP was silently not written).
-      if (err instanceof ProjectKeyError) {
+      // Fatal errors (MCP key-derivation or topology failure) must never be
+      // downgraded: rethrow so they surface as a non-zero exit.
+      if (isFatalSyncError(err)) {
         throw err;
       }
       // Best-effort fan-out (AC3a/3b): one failing worktree is logged WITH its
@@ -975,16 +994,9 @@ export async function runProjectsLoop(
         // straight at a worktree is recognized as already processed.
         recordProcessedTargets(targetPath, context.processedPaths);
       } catch (err) {
-        // A local-MCP key-derivation failure must not be isolated like an
-        // ordinary per-project error: it means an MCP was silently not written.
-        // Let it escape to the top-level handler so the run exits non-zero.
-        if (err instanceof ProjectKeyError) {
-          throw err;
-        }
-        // A topology-resolution failure (bare repo broken / zero worktrees) is
-        // likewise non-recoverable for this project: rethrow so it surfaces as a
-        // non-zero exit rather than being swallowed as a warn-and-continue.
-        if (err instanceof DeployTargetsError) {
+        // Fatal errors (MCP key-derivation or topology failure) must escape to
+        // the top-level handler so the run exits non-zero.
+        if (isFatalSyncError(err)) {
           throw err;
         }
         logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
