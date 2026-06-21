@@ -22,7 +22,7 @@ set -euo pipefail
 # Pinned constants (see plan "Pinned Constants").
 HANDOFF_TOOL_OUTPUT_MAX_CHARS=2000
 HANDOFF_MIN_INPUT_CHARS=200
-SUMMARIZER_TIMEOUT_SECS=120
+SUMMARIZER_TIMEOUT_SECS=240
 
 # --- Recursion guard FIRST, before any work or summarizer spawn. -------------
 if [ -n "${OMT_HANDOFF_ACTIVE:-}" ]; then
