@@ -413,7 +413,7 @@ Good example:
 - Confirm user's final approval
 
 #### 10.2 Generate Markdown Document
-- Read `performance-report-template.md` (colocated with this skill) for the exact 7-section structure, then generate the final document in downloadable markdown format following that template.
+- **Read `performance-report-template.md`** (colocated with this skill) **before writing the report** — it contains the mandatory 7-section structure. Do not generate the final document without reading it first.
 
 ## Output Location
 
@@ -428,9 +428,15 @@ All performance optimization reports are stored in the `$OMT_DIR/performance-rep
 
 ## Output Format
 
-The final report follows a fixed 7-section structure. When generating the final report, read `performance-report-template.md` (colocated with this skill) for the exact template.
+The final report follows a fixed 7-section structure. **When generating the final report, you MUST read `performance-report-template.md`** (colocated with this skill) for the exact template — do not infer the structure from memory.
 
 Sections: 1. Overview — 2. Test Scenario — 3. Analysis — 4. Improvements — 5. Results — 6. Future Plans — 7. References
+
+## Reference Files (on-demand)
+
+| Reference file | What it contains | When to read |
+|----------------|-----------------|--------------|
+| `performance-report-template.md` | The fixed 7-section final performance report template | When generating the final report (Step 10.2) |
 
 ## Language
 
