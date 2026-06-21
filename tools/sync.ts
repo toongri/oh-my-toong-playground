@@ -425,14 +425,13 @@ export async function syncPlatformConfigs(
         context.modelMaps.set(platform, result.modelMap);
       }
     } catch (err) {
-      // A failed local-MCP key derivation must never be downgraded to a warning:
-      // it means the MCP was silently not written to ~/.claude.json. Rethrow so it
-      // surfaces as a non-zero exit. All other per-platform config/hooks/plugins
-      // errors keep warn-and-continue.
-      if (err instanceof ProjectKeyError) {
-        throw err;
-      }
-      logWarn(`${platform}.yaml 처리 실패: ${err}`);
+      // Rethrow so the per-worktree catch in processYaml records this deploy root
+      // in failedTargets and the CLI exits non-zero. A swallowed config/hooks/
+      // plugins error meant a worktree's .claude was silently left unsynced while
+      // the run reported success — the warn-and-continue here was a pre-fan-out
+      // relic. (ProjectKeyError is rethrown for the same reason — a local MCP not
+      // written to ~/.claude.json.)
+      throw err;
     }
   }
 }
@@ -663,6 +662,33 @@ async function collectMdFiles(dir: string): Promise<string[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Deploy-target dedup
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a path's deploy targets and record every one in processedPaths.
+ *
+ * Dedup is keyed by the RESOLVED deploy target (a bare container fans out to its
+ * worktrees), never by the raw container path — otherwise a second sync.yaml
+ * pointing directly at a worktree would not be recognized as already processed
+ * and would re-deploy (backup+wipe+redeploy) the same .claude a second time.
+ */
+export function recordProcessedTargets(targetPath: string, processedPaths: Set<string>): void {
+  for (const target of resolveDeployTargets(targetPath)) {
+    processedPaths.add(target);
+  }
+}
+
+/**
+ * True when every resolved deploy target for targetPath is already present in
+ * processedPaths (so the path can be skipped). Empty target sets never skip.
+ */
+export function allTargetsProcessed(targetPath: string, processedPaths: Set<string>): boolean {
+  const targets = resolveDeployTargets(targetPath);
+  return targets.length > 0 && targets.every((t) => processedPaths.has(t));
+}
+
+// ---------------------------------------------------------------------------
 // processYaml
 // ---------------------------------------------------------------------------
 
@@ -760,10 +786,6 @@ export async function processYaml(
         await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
       }
 
-      // Record this worktree as a backup root so retention cleanup prunes its
-      // .sync-backup (TODO 3 consumes context.backupRoots).
-      context.backupRoots.add(deployRoot);
-
       await syncPlatformConfigs(context, deployRoot, yamlDir, adapters, rootDir, libSourceRoots);
 
       // Sync 5 categories
@@ -779,6 +801,12 @@ export async function processYaml(
       if (shouldMkdirClaude) {
         await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
       }
+
+      // Record this worktree as a backup root ONLY after all sync steps succeeded.
+      // Registering before the steps (or on failure) would let retention cleanup
+      // prune the last good backup of a worktree whose deploy threw — it must hold
+      // a success-only invariant: failed worktrees go to failedTargets, not here.
+      context.backupRoots.add(deployRoot);
 
       // Rewrite platform paths for non-claude platforms
       for (const platform of (["gemini", "codex", "opencode"] as Platform[])) {
@@ -942,7 +970,10 @@ export async function runProjectsLoop(
       }
       try {
         await processYaml(context, projectSyncYaml, adapters, rootDir);
-        context.processedPaths.add(targetPath);
+        // Dedup is keyed by the resolved deploy targets (a bare container's
+        // worktrees), not the raw container path, so a later sync.yaml pointing
+        // straight at a worktree is recognized as already processed.
+        recordProcessedTargets(targetPath, context.processedPaths);
       } catch (err) {
         // A local-MCP key-derivation failure must not be isolated like an
         // ordinary per-project error: it means an MCP was silently not written.
@@ -1017,14 +1048,17 @@ if (import.meta.main) {
         const targetPath = syncYaml.path;
         if (!targetPath) {
           logInfo("루트 sync.yaml에 path가 정의되지 않음 (템플릿 상태)");
-        } else if (context.processedPaths.has(targetPath)) {
+        } else if (allTargetsProcessed(targetPath, context.processedPaths)) {
+          // Skip only when EVERY resolved deploy target was already processed by
+          // projects/ — a root path that resolves to the same worktree(s) as a
+          // project container would otherwise re-deploy the same .claude.
           logWarn(`${targetPath}는 projects/에서 이미 처리됨, 스킵`);
         } else {
           if (verbose) {
             logInfo("[verbose] 루트 sync.yaml 처리 시작");
           }
           await processYaml(context, rootSyncYaml, adapters, rootDir);
-          context.processedPaths.add(targetPath);
+          recordProcessedTargets(targetPath, context.processedPaths);
           if (verbose) {
             logInfo("[verbose] 루트 sync.yaml 처리 완료");
           }
