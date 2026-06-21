@@ -2,6 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import { execFileSync } from "child_process";
+import fs from "fs";
+import os from "os";
 
 import {
   validateSyncYamlComponents,
@@ -44,6 +47,39 @@ function makeRoot(): string {
   touch(join(root, "config.yaml"));
   touch(join(root, "CLAUDE.md"));
   return root;
+}
+
+const GIT_ENV = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "T",
+  GIT_AUTHOR_EMAIL: "t@t.com",
+  GIT_COMMITTER_NAME: "T",
+  GIT_COMMITTER_EMAIL: "t@t.com",
+};
+
+/**
+ * Seeds an empty commit into a bare repo so worktrees can be added.
+ * Mirrors the recipe from tools/lib/git-key.test.ts.
+ */
+function seedBareRepo(bareDir: string): void {
+  const tmpWt = fs.mkdtempSync(join(os.tmpdir(), "comp-test-seed-"));
+  try {
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", "--orphan", "-b", "main", tmpWt], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+    execFileSync("git", ["-C", tmpWt, "commit", "--allow-empty", "-m", "init"], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+    fs.rmSync(tmpWt, { recursive: true, force: true });
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "prune"], {
+      stdio: "pipe",
+    });
+  } catch {
+    fs.rmSync(tmpWt, { recursive: true, force: true });
+    throw new Error("Failed to seed bare repo");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -156,14 +192,29 @@ agents:
     it("returns error when CLAUDE.md is absent via `validateSyncYamlComponents`", async () => {
       // Remove the CLAUDE.md created in makeRoot
       rmSync(join(root, "CLAUDE.md"));
+      // Fixture has a real agent item (non-empty items) so validateCliProjectFiles is called
+      touch(join(root, "agents", "oracle.md"));
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
 platforms: [claude]
 agents:
-  items: []
+  items:
+    - oracle
 `);
       const result = await validateSyncYamlComponents(syncPath, root);
       expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(true);
+    });
+
+    it("MCP-only 프로젝트(컴포넌트 없음)는 CLAUDE.md 부재 에러를 내지 않는다 via `validateSyncYamlComponents`", async () => {
+      // Target dir exists but has no CLAUDE.md
+      rmSync(join(root, "CLAUDE.md"));
+      // sync.yaml has only name + path, zero component sections
+      const syncPath = writeYaml(root, "sync.yaml", `
+name: mcp-only-project
+path: ${root}
+`);
+      const result = await validateSyncYamlComponents(syncPath, root);
+      expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(false);
     });
 
     it("produces no CLAUDE.md errors when CLAUDE.md exists", async () => {
@@ -177,6 +228,39 @@ agents:
       const result = await validateSyncYamlComponents(syncPath, root);
       const claudeErrors = result.errors.filter((e) => e.includes("CLAUDE.md"));
       expect(claudeErrors).toHaveLength(0);
+    });
+
+    it("claude.yaml가 config/hooks만 있고 컴포넌트 항목이 없어도 .claude/로 배포하므로 CLAUDE.md를 요구한다 via `validateSyncYamlComponents`", async () => {
+      // No component items, but claude.yaml has a non-mcps key (config) →
+      // the project deploys into <path>/.claude/, so validateCliProjectFiles must RUN.
+      rmSync(join(root, "CLAUDE.md"));
+      writeYaml(root, "claude.yaml", `
+config:
+  permissions:
+    allow:
+      - "Bash(ls:*)"
+`);
+      const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+`);
+      const result = await validateSyncYamlComponents(syncPath, root);
+      expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(true);
+    });
+
+    it("claude.yaml가 mcps만 있는 MCP-only 프로젝트는 CLAUDE.md를 요구하지 않는다 via `validateSyncYamlComponents`", async () => {
+      // claude.yaml has ONLY mcps → MCP-only, writes to ~/.claude.json not
+      // <path>/.claude/, so validateCliProjectFiles must be SKIPPED.
+      rmSync(join(root, "CLAUDE.md"));
+      writeYaml(root, "claude.yaml", `
+mcps:
+  notion:
+    url: https://example.com/mcp
+`);
+      const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+`);
+      const result = await validateSyncYamlComponents(syncPath, root);
+      expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(false);
     });
   });
 
@@ -644,7 +728,9 @@ describe("validateAll — enabled-projects 화이트리스트", () => {
 
   it("`enabledProjects`로 활성화된 프로젝트는 정상 검증된다", async () => {
     // proj-a 활성: target path가 존재하지 않으면 CLAUDE.md 에러가 나야 함
-    writeYaml(join(root, "projects", "proj-a"), "sync.yaml", `path: /nonexistent/proj-a\n`);
+    // agents 섹션에 항목이 있어야 validateCliProjectFiles가 호출된다
+    writeYaml(join(root, "projects", "proj-a"), "sync.yaml",
+      `path: /nonexistent/proj-a\nagents:\n  items:\n    - oracle\n`);
     writeYaml(root, "sync.yaml", `path: ${root}\n`);
 
     const result = await validateAll(root, ["proj-a"]);
@@ -654,7 +740,9 @@ describe("validateAll — enabled-projects 화이트리스트", () => {
 
   it("루트 sync.yaml은 `enabledProjects` 필터와 무관하게 항상 검증된다", async () => {
     // 루트 sync.yaml만 있고 enabledProjects는 비어있는 sentinel — 루트는 그래도 처리되어야 함
-    writeYaml(root, "sync.yaml", `path: /nonexistent/root-target\n`);
+    // agents 섹션에 항목이 있어야 validateCliProjectFiles가 호출된다
+    writeYaml(root, "sync.yaml",
+      `path: /nonexistent/root-target\nagents:\n  items:\n    - oracle\n`);
 
     const result = await validateAll(root, ["__none__"]);
 
@@ -662,13 +750,376 @@ describe("validateAll — enabled-projects 화이트리스트", () => {
   });
 
   it("`enabledProjects` 미지정 시 모든 프로젝트 검증 (기존 동작 회귀)", async () => {
-    writeYaml(join(root, "projects", "proj-a"), "sync.yaml", `path: /nonexistent/proj-a\n`);
-    writeYaml(join(root, "projects", "proj-b"), "sync.yaml", `path: /nonexistent/proj-b\n`);
+    // agents 섹션에 항목이 있어야 validateCliProjectFiles가 호출된다
+    writeYaml(join(root, "projects", "proj-a"), "sync.yaml",
+      `path: /nonexistent/proj-a\nagents:\n  items:\n    - oracle\n`);
+    writeYaml(join(root, "projects", "proj-b"), "sync.yaml",
+      `path: /nonexistent/proj-b\nagents:\n  items:\n    - oracle\n`);
     writeYaml(root, "sync.yaml", `path: ${root}\n`);
 
     const result = await validateAll(root, []);
 
     expect(result.errors.some((e) => e.includes("/nonexistent/proj-a"))).toBe(true);
     expect(result.errors.some((e) => e.includes("/nonexistent/proj-b"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: V7 — claude.yaml 파싱 오류 가드
+// ---------------------------------------------------------------------------
+
+describe("V7: claude.yaml 파싱 오류 가드", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = makeRoot();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("malformed claude.yaml 시 크래시 대신 구조화된 YAML 파싱 오류를 result.errors에 반환한다 via `validateSyncYamlComponents`", async () => {
+    writeYaml(root, "claude.yaml", `
+hooks:
+  UserPromptSubmit: [invalid: yaml: parse: error
+`);
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+agents:
+  items: []
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("YAML 파싱 오류"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("claude.yaml"))).toBe(true);
+  });
+
+  it("malformed claude.local.yaml 시 크래시 대신 구조화된 YAML 파싱 오류를 result.errors에 반환한다 via `validateSyncYamlComponents`", async () => {
+    writeYaml(root, "claude.yaml", `
+hooks:
+  UserPromptSubmit: []
+`);
+    writeYaml(root, "claude.local.yaml", `
+hooks:
+  UserPromptSubmit: [invalid: yaml: parse: error
+`);
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+agents:
+  items: []
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("YAML 파싱 오류"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("claude.yaml"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: AC4.1 — bare-structure fan-out (resolveDeployTargets integration)
+// ---------------------------------------------------------------------------
+
+describe("AC4.1 — bare-structure worktree fan-out for CLAUDE.md check", () => {
+  let root: string;
+  let tmpdirs: string[];
+
+  beforeEach(() => {
+    root = makeRoot();
+    tmpdirs = [root];
+  });
+
+  afterEach(() => {
+    for (const d of tmpdirs.splice(0)) {
+      try {
+        rmSync(d, { recursive: true, force: true });
+      } catch {
+        // best-effort
+      }
+    }
+  });
+
+  it("bare-structure path with one worktree missing CLAUDE.md flags that worktree with an error", async () => {
+    // Layout: container/.bare (bare repo) + container/wt (worktree, no CLAUDE.md)
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    const wtDir = join(container, "wt");
+    mkdirSync(wtDir, { recursive: true });
+
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    seedBareRepo(bareDir);
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wtDir], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+
+    // wt has NO CLAUDE.md
+    touch(join(root, "agents", "oracle.md"));
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${container}
+agents:
+  items:
+    - oracle
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+
+    // Must flag the worktree path in the error message
+    expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(true);
+    expect(result.errors.some((e) => e.includes(wtDir))).toBe(true);
+  });
+
+  it("bare-structure with CLAUDE.md in each worktree produces no CLAUDE.md errors", async () => {
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    const wt1 = join(container, "wt1");
+    const wt2 = join(container, "wt2");
+    mkdirSync(wt1, { recursive: true });
+    mkdirSync(wt2, { recursive: true });
+
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    seedBareRepo(bareDir);
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wt1], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", "-b", "wt2-branch", wt2], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+
+    // Both worktrees have CLAUDE.md
+    touch(join(wt1, "CLAUDE.md"));
+    touch(join(wt2, "CLAUDE.md"));
+
+    touch(join(root, "agents", "oracle.md"));
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${container}
+agents:
+  items:
+    - oracle
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    const claudeErrors = result.errors.filter((e) => e.includes("CLAUDE.md"));
+    expect(claudeErrors).toHaveLength(0);
+  });
+
+  it("source-component check runs ONCE regardless of worktree count (no double-error for bare with 2 worktrees)", async () => {
+    // A bare-structure path with 2 worktrees + a missing source component.
+    // The missing-component error must appear exactly ONCE (component resolution
+    // is OMT-root-relative and must not fan out per worktree).
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    const wt1 = join(container, "wt1");
+    const wt2 = join(container, "wt2");
+    mkdirSync(wt1, { recursive: true });
+    mkdirSync(wt2, { recursive: true });
+
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    seedBareRepo(bareDir);
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wt1], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", "-b", "wt2-branch", wt2], {
+      stdio: "pipe",
+      env: GIT_ENV,
+    });
+
+    // Both worktrees have CLAUDE.md (so no CLAUDE.md errors pollute the count)
+    touch(join(wt1, "CLAUDE.md"));
+    touch(join(wt2, "CLAUDE.md"));
+
+    // missing-agent does NOT exist in the OMT root
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${container}
+agents:
+  items:
+    - missing-agent
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+
+    const missingErrors = result.errors.filter((e) => e.includes("missing-agent"));
+    // Source-component check must be single-pass: exactly 1 error, not 2
+    expect(missingErrors).toHaveLength(1);
+  });
+
+  it("resolver failure (bare path with zero real worktrees) lands in result.errors, not a throw", async () => {
+    // A bare-structure path with no worktrees at all → resolveDeployTargets throws
+    // DeployTargetsError → must be caught and pushed into result.errors.
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    // Intentionally NOT seeding / adding any worktrees — zero worktrees → DeployTargetsError
+
+    touch(join(root, "agents", "oracle.md"));
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${container}
+agents:
+  items:
+    - oracle
+`);
+
+    // Must NOT throw — resolver failure must be swallowed into result.errors.
+    // A rejected promise would cause this test to fail, so no separate
+    // not.toThrow() guard is needed.
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: V7b — claude.yaml는 sync.yaml당 1회만 파싱된다 (이중 파싱 금지)
+// ---------------------------------------------------------------------------
+
+describe("V7b: claude.yaml 이중 파싱 금지 — validateAll이 단일 오류만 생성해야 한다", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = makeRoot();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("malformed claude.yaml 시 validateAll이 YAML 파싱 오류를 정확히 1건만 반환한다", async () => {
+    // Both validateSyncYamlComponents and validatePlatformYamlHookComponents
+    // parse claude.yaml. With dual-parse, a broken claude.yaml produces 2 errors.
+    // After dedup, it must produce exactly 1.
+    writeYaml(root, "claude.yaml", `
+hooks:
+  UserPromptSubmit: [invalid: yaml: parse: error
+`);
+    writeYaml(root, "sync.yaml", `
+path: ${root}
+agents:
+  items: []
+`);
+
+    const result = await validateAll(root, []);
+
+    const parseErrors = result.errors.filter((e) => e.includes("YAML 파싱 오류") && e.includes("claude.yaml"));
+    expect(parseErrors).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: C1 — deploy-target resolution is unconditional (validate/sync parity)
+// ---------------------------------------------------------------------------
+
+describe("C1: 배포 대상 해소는 무조건 시도되어 sync.ts와 정렬된다", () => {
+  let root: string;
+  let tmpdirs: string[];
+
+  beforeEach(() => {
+    root = makeRoot();
+    tmpdirs = [root];
+  });
+
+  afterEach(() => {
+    for (const d of tmpdirs.splice(0)) {
+      try {
+        rmSync(d, { recursive: true, force: true });
+      } catch {
+        // best-effort
+      }
+    }
+  });
+
+  it("MCP-only 프로젝트(컴포넌트·non-mcps 키 없음)도 깨진 bare 컨테이너의 해소 실패를 result.errors에 보고한다 via `validateSyncYamlComponents`", async () => {
+    // sync.ts calls resolveDeployTargets(targetPath) UNCONDITIONALLY and aborts on
+    // DeployTargetsError. The validator must do the same: even for an MCP-only
+    // project (deploysToClaudeDotDir=false), a broken bare container (zero
+    // worktrees) must surface as a result.errors entry — so `make validate`
+    // catches it BEFORE `make sync` aborts.
+    const container = join(root, "target");
+    mkdirSync(container, { recursive: true });
+    tmpdirs.push(container);
+
+    const bareDir = join(container, ".bare");
+    execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe" });
+    // Intentionally NOT seeding / adding any worktrees → zero worktrees → DeployTargetsError
+
+    // MCP-only: claude.yaml has ONLY mcps, sync.yaml has no component sections.
+    writeYaml(root, "claude.yaml", `
+mcps:
+  notion:
+    url: https://example.com/mcp
+`);
+    const syncPath = writeYaml(root, "sync.yaml", `
+name: mcp-only-project
+path: ${container}
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+
+    expect(result.errors.some((e) => e.includes("배포 대상 확인 실패"))).toBe(true);
+    expect(result.errors.some((e) => e.includes(container))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: C2 — CLI context file check is platform-aware (non-Claude regression)
+// ---------------------------------------------------------------------------
+
+describe("C2: 비-Claude config/mcp-only 프로젝트도 자기 플랫폼 CLI 파일을 검사받는다", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = makeRoot();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("platforms: [codex] + 컴포넌트 없음 + AGENTS.md 없음이면 에러를 보고한다 via `validateSyncYamlComponents`", async () => {
+    // deploysToClaudeDotDir is a Claude-only predicate → false here. The base
+    // behavior ran validateCliProjectFiles unconditionally, so a codex-only
+    // project missing AGENTS.md failed. The gate must not swallow non-Claude
+    // platforms.
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+platforms: [codex]
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("AGENTS.md"))).toBe(true);
+  });
+
+  it("platforms: [gemini] + 컴포넌트 없음 + GEMINI.md 없음이면 에러를 보고한다 via `validateSyncYamlComponents`", async () => {
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+platforms: [gemini]
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("GEMINI.md"))).toBe(true);
+  });
+
+  it("platforms: [codex] + AGENTS.md 존재면 에러 없음 via `validateSyncYamlComponents`", async () => {
+    touch(join(root, "AGENTS.md"));
+    const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+platforms: [codex]
+`);
+
+    const result = await validateSyncYamlComponents(syncPath, root);
+    expect(result.errors.some((e) => e.includes("AGENTS.md"))).toBe(false);
   });
 });

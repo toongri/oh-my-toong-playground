@@ -10,6 +10,7 @@ import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { deepMerge, isPlainObject } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isGlobalSync } from "../lib/path-utils.ts";
+import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 
 // =============================================================================
 // Plugin installer type (for DI in tests)
@@ -689,25 +690,26 @@ export class ClaudeAdapter implements PlatformAdapter {
       process.env["CLAUDE_USER_CONFIG"] ??
       path.join(process.env["HOME"] ?? "~", ".claude.json");
 
-    if (dryRun) {
-      if (scope === "local") {
-        logDry(`MCP merge: ${serverName} -> ~/.claude.json (local: ${targetPath})`);
-      } else {
-        logDry(`MCP merge: ${serverName} -> ~/.claude.json (user scope)`);
-      }
-      return;
-    }
-
     if (scope === "local") {
+      const projectKey = deriveClaudeProjectKey(targetPath);
+      if (dryRun) {
+        logDry(`local MCP key: ${projectKey}`);
+        logDry(`MCP merge: ${serverName} -> ~/.claude.json (local: ${targetPath})`);
+        return;
+      }
       const current = await readJsonFile(claudeUserConfig);
       const projects = (current["projects"] as Record<string, unknown>) ?? {};
-      const projectEntry = (projects[targetPath] as Record<string, unknown>) ?? {};
+      const projectEntry = (projects[projectKey] as Record<string, unknown>) ?? {};
       const mcpServers = (projectEntry["mcpServers"] as Record<string, unknown>) ?? {};
       mcpServers[serverName] = serverJson;
-      projects[targetPath] = { ...projectEntry, mcpServers };
+      projects[projectKey] = { ...projectEntry, mcpServers };
       await writeJsonFile(claudeUserConfig, { ...current, projects });
       logInfo(`MCP merged: ${serverName} -> ~/.claude.json (local: ${targetPath})`);
     } else {
+      if (dryRun) {
+        logDry(`MCP merge: ${serverName} -> ~/.claude.json (user scope)`);
+        return;
+      }
       const current = await readJsonFile(claudeUserConfig);
       const mcpServers = (current["mcpServers"] as Record<string, unknown>) ?? {};
       mcpServers[serverName] = serverJson;

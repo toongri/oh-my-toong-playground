@@ -1,7 +1,7 @@
 hooks:
   PreCompact:
     - component: pre-compact.sh
-      timeout: 280
+      timeout: 600
 
 config:
   language: "한국어"
@@ -37,8 +37,9 @@ mcps:
   playwright:
     command: npx
     args:
+      - "--prefer-offline"
       - "-y"
-      - "@playwright/mcp@latest"
+      - "@playwright/mcp@0.0.76"
   # Linear hosted MCP. Claude Code supports remote HTTP natively (Linear allows DCR), so no mcp-remote proxy needed.
   linear:
     type: http

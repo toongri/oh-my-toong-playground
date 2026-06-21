@@ -28,6 +28,8 @@ import { resolveComponentPath, setProjectContext } from "../lib/resolver.ts";
 import type { SyncYaml } from "../lib/types.ts";
 import { readAndExpandSyncYaml } from "../lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "../lib/parse-platform-yaml.ts";
+import { deploysToClaudeDotDir } from "../sync.ts";
+import { resolveDeployTargets } from "../lib/resolve-deploy-targets.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -139,6 +141,7 @@ function validateCliProjectFiles(
   data: Record<string, unknown>,
   targetPath: string,
   result: ValidationResult,
+  claudeDeploys: boolean,
 ): void {
   const usedPlatforms = collectUsedPlatforms(data);
 
@@ -147,11 +150,16 @@ function validateCliProjectFiles(
     let found = false;
 
     if (platform === "claude") {
+      // The MCP-only skip is Claude-only: an MCP-only Claude project writes to
+      // ~/.claude.json, not <path>/.claude/, so it needs no CLAUDE.md.
+      if (!claudeDeploys) continue;
       // Claude: check at target path or target/.claude/
       found =
         existsSync(join(targetPath, projectFile)) ||
         existsSync(join(targetPath, ".claude", projectFile));
     } else {
+      // Non-Claude platforms are always checked (base behavior): a config/mcp-only
+      // codex/gemini project still needs its AGENTS.md / GEMINI.md context file.
       found = existsSync(join(targetPath, projectFile));
     }
 
@@ -173,9 +181,16 @@ function getItemComponent(item: unknown): string | null {
   return null;
 }
 
+/** Pre-parsed claude.yaml result threaded from validateAll to avoid duplicate parsing. */
+type ClaudeYamlPreParsed =
+  | { ok: true; value: unknown }   // successfully parsed (value may be null = no file)
+  | { ok: false };                 // parse failed; error already recorded in caller
+
 export async function validateSyncYamlComponents(
   filePath: string,
   rootDir: string,
+  /** When provided by validateAll, skips re-parsing claude.yaml. */
+  claudeYamlPreParsed?: ClaudeYamlPreParsed,
 ): Promise<ValidationResult> {
   const result = makeResult();
 
@@ -204,8 +219,47 @@ export async function validateSyncYamlComponents(
     return result;
   }
 
-  // Validate CLI project files
-  validateCliProjectFiles(data, targetPath, result);
+  // Determine whether this project deploys into <path>/.claude/ — i.e. component
+  // items OR a non-mcps claude.yaml key. This mirrors the sync.ts mkdir gate via
+  // the shared deploysToClaudeDotDir predicate, so an MCP-only Claude project
+  // (claude.yaml with only `mcps`) skips the Claude CLI-file check below. The
+  // predicate is Claude-only, so it gates ONLY the claude branch of the CLI-file
+  // check — non-Claude platforms are still checked.
+  //
+  // When claudeYamlPreParsed is provided by validateAll (deduped), skip re-parsing.
+  // If parse failed upstream ({ ok: false }), bail without adding a duplicate error.
+  let claudeYaml: Record<string, unknown> | null;
+  if (claudeYamlPreParsed !== undefined) {
+    if (!claudeYamlPreParsed.ok) return result; // parse failed upstream; error already recorded
+    claudeYaml = claudeYamlPreParsed.value as Record<string, unknown> | null;
+  } else {
+    try {
+      claudeYaml = await parseAndMergePlatformYaml(dirname(filePath), "claude");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.errors.push(`YAML 파싱 오류 (claude.yaml 또는 claude.local.yaml): ${msg}`);
+      return result;
+    }
+  }
+  const claudeDeploys = deploysToClaudeDotDir(data, claudeYaml);
+
+  // Resolve deploy targets UNCONDITIONALLY so the validator mirrors sync.ts —
+  // which calls resolveDeployTargets(targetPath) for every project and aborts on
+  // DeployTargetsError. Gating this behind a Claude-only predicate would let an
+  // MCP-only project pointing at a broken bare container pass `make validate` yet
+  // abort `make sync`. A resolution failure is reported via result.errors so
+  // `make validate` catches it first.
+  let deployTargets: string[];
+  try {
+    deployTargets = resolveDeployTargets(targetPath);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`배포 대상 확인 실패 (${targetPath}): ${msg}`);
+    deployTargets = [];
+  }
+  for (const wtPath of deployTargets) {
+    validateCliProjectFiles(data, wtPath, result, claudeDeploys);
+  }
 
   // Category definitions: [category, extension]
   type CategoryDef = { category: string; ext: string };
@@ -316,6 +370,8 @@ export async function validateSyncYamlComponents(
 export async function validatePlatformYamlHookComponents(
   yamlDir: string,
   rootDir: string,
+  /** When provided by validateAll, skips re-parsing claude.yaml. */
+  claudeYamlPreParsed?: ClaudeYamlPreParsed,
 ): Promise<ValidationResult> {
   const result = makeResult();
 
@@ -328,13 +384,20 @@ export async function validatePlatformYamlHookComponents(
 
   // Only claude and gemini support hooks
   for (const platform of ["claude", "gemini"] as const) {
-    let merged;
-    try {
-      merged = await parseAndMergePlatformYaml(yamlDir, platform);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      result.errors.push(`YAML 파싱 오류 (${platform}.yaml 또는 ${platform}.local.yaml): ${msg}`);
-      continue;
+    let merged: unknown;
+    if (platform === "claude" && claudeYamlPreParsed !== undefined) {
+      // Pre-parsed by validateAll: skip re-parsing.
+      // If parse failed ({ ok: false }), error already recorded — skip claude hooks.
+      if (!claudeYamlPreParsed.ok) continue;
+      merged = claudeYamlPreParsed.value;
+    } else {
+      try {
+        merged = await parseAndMergePlatformYaml(yamlDir, platform);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        result.errors.push(`YAML 파싱 오류 (${platform}.yaml 또는 ${platform}.local.yaml): ${msg}`);
+        continue;
+      }
     }
     if (merged === null) continue;
 
@@ -413,9 +476,22 @@ export async function validateAll(
         continue;
       }
     }
-    mergeResult(result, await validateSyncYamlComponents(syncYamlPath, rootDir));
+
+    // Parse claude.yaml exactly once per sync.yaml, so a broken claude.yaml
+    // produces a single error regardless of how many validators consume it.
     const yamlDir = dirname(syncYamlPath);
-    mergeResult(result, await validatePlatformYamlHookComponents(yamlDir, rootDir));
+    let claudeYamlPreParsed: ClaudeYamlPreParsed;
+    try {
+      const value = await parseAndMergePlatformYaml(yamlDir, "claude");
+      claudeYamlPreParsed = { ok: true, value };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.errors.push(`YAML 파싱 오류 (claude.yaml 또는 claude.local.yaml): ${msg}`);
+      claudeYamlPreParsed = { ok: false };
+    }
+
+    mergeResult(result, await validateSyncYamlComponents(syncYamlPath, rootDir, claudeYamlPreParsed));
+    mergeResult(result, await validatePlatformYamlHookComponents(yamlDir, rootDir, claudeYamlPreParsed));
   }
 
   return result;
