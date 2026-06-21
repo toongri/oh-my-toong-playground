@@ -34,6 +34,23 @@ const GIT_ENV = {
  * Seeds an empty commit into a bare repo.
  * git commit requires a work tree, so we create a temporary one first.
  */
+/**
+ * Creates a temporary directory containing a fake `git` stub that exits 128
+ * with a message unrelated to "not a git repository", and returns the env
+ * override needed to make execFileSync pick it up.
+ */
+function setupFakeGitFailure(tmpdirs: string[]): NodeJS.ProcessEnv {
+  const fakeGitDir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-git-"));
+  tmpdirs.push(fakeGitDir);
+  const fakeGit = path.join(fakeGitDir, "git");
+  fs.writeFileSync(
+    fakeGit,
+    "#!/bin/sh\necho 'error: dubious ownership in repository' >&2\nexit 128\n",
+  );
+  fs.chmodSync(fakeGit, 0o755);
+  return { ...process.env, PATH: `${fakeGitDir}:${process.env.PATH}` };
+}
+
 function seedBareRepo(bareDir: string): void {
   const tmpWt = fs.mkdtempSync(path.join(os.tmpdir(), "git-key-seed-"));
   try {
@@ -194,17 +211,7 @@ describe("deriveClaudeProjectKey", () => {
     const dir = mktemp();
     tmpdirs.push(dir);
 
-    const fakeGitDir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-git-"));
-    tmpdirs.push(fakeGitDir);
-
-    const fakeGit = path.join(fakeGitDir, "git");
-    fs.writeFileSync(
-      fakeGit,
-      "#!/bin/sh\necho 'error: dubious ownership in repository' >&2\nexit 128\n",
-    );
-    fs.chmodSync(fakeGit, 0o755);
-
-    const fakeEnv = { ...process.env, PATH: `${fakeGitDir}:${process.env.PATH}` };
+    const fakeEnv = setupFakeGitFailure(tmpdirs);
     expect(() => deriveClaudeProjectKey(dir, fakeEnv)).toThrow();
   });
 
@@ -214,17 +221,7 @@ describe("deriveClaudeProjectKey", () => {
     const dir = mktemp();
     tmpdirs.push(dir);
 
-    const fakeGitDir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-git-"));
-    tmpdirs.push(fakeGitDir);
-
-    const fakeGit = path.join(fakeGitDir, "git");
-    fs.writeFileSync(
-      fakeGit,
-      "#!/bin/sh\necho 'error: dubious ownership in repository' >&2\nexit 128\n",
-    );
-    fs.chmodSync(fakeGit, 0o755);
-
-    const fakeEnv = { ...process.env, PATH: `${fakeGitDir}:${process.env.PATH}` };
+    const fakeEnv = setupFakeGitFailure(tmpdirs);
 
     let caught: unknown;
     try {
