@@ -153,8 +153,9 @@ digraph broad_request_flow {
 
 1. **First**: Invoke `explore` to understand relevant codebase areas
 2. **Optionally**: Invoke `oracle` for architectural guidance
-3. **Then**: Enter **Step 2: In-Depth Interview Mode**
-4. **Finally**: Create task list and delegate to sisyphus-junior
+3. **Falsify scout findings (when they drive the plan)**: After explore/oracle collection and before the interview/task-list, when the scout findings will drive the plan/task-list, run the `### Scout Finding Falsification Gate` (verification.md) — dispatch one falsifying verifier per non-empty scout lane, drop refuted/low-confidence findings, and emit the `verify lane: dispatched / N lanes / M excluded` line. Trivial/Explicit requests are a no-op (the gate does not fire).
+4. **Then**: Enter **Step 2: In-Depth Interview Mode**
+5. **Finally**: Create task list and delegate to sisyphus-junior
 
 ---
 
