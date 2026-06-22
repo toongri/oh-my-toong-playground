@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import picomatch from "picomatch";
+import picomatch from "../picomatch/index.js";
 import type { MatchReason, RuleFrontmatter } from "./types.js";
 
 export interface MatcherInput {
