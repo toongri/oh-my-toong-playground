@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -61,7 +62,9 @@ function freshSessionId(prefix: string): string {
 function runHook(subcommand: "session-start" | "post-tool-use", payload: Record<string, unknown>): string {
 	const result = spawnSync("bun", ["run", CLI_PATH, "hook", subcommand], {
 		input: JSON.stringify(payload),
-		env: { ...process.env, HOME: tempHome, PI_RULES_DISABLE_BUNDLED: "1" },
+		// P9: pin PLUGIN_DATA to the hermetic temp dir so external env cannot override the
+		// session-state data root.  Delete any inherited PLUGIN_DATA first, then set our own.
+		env: { ...process.env, HOME: tempHome, PI_RULES_DISABLE_BUNDLED: "1", PLUGIN_DATA: join(tempHome, ".omt") },
 		encoding: "utf8",
 	});
 	const stdout = result.stdout.trim();
@@ -70,6 +73,16 @@ function runHook(subcommand: "session-start" | "post-tool-use", payload: Record<
 	}
 	const parsed = JSON.parse(stdout) as { hookSpecificOutput?: { additionalContext?: string } };
 	return parsed.hookSpecificOutput?.additionalContext ?? "";
+}
+
+/** Raw spawn variant that returns the full SpawnSyncReturns without parsing stdout as JSON.
+ * Used for tests that assert on side-effects (breadcrumb file, exit code) rather than hook output. */
+function runHookRaw(subcommand: "session-start" | "post-tool-use", stdinPayload: string): ReturnType<typeof spawnSync> {
+	return spawnSync("bun", ["run", CLI_PATH, "hook", subcommand], {
+		input: stdinPayload,
+		env: { ...process.env, HOME: tempHome, PI_RULES_DISABLE_BUNDLED: "1", PLUGIN_DATA: join(tempHome, ".omt") },
+		encoding: "utf8",
+	});
 }
 
 function pathBases(relative: string): { projectRelative: string; basename: string } {
@@ -127,15 +140,23 @@ test("B1 SessionStart injects alwaysApply rule body and mutates no project file"
 	expect(after).toBe(before);
 });
 
-/** Recursively list project file names (relative) for a mutation snapshot. */
+/**
+ * Recursively snapshot project files as "relative:sha256:bytes" strings.
+ * The sha256 + byte size detect in-place content mutations that name-only
+ * snapshots would miss (F16 hardening).
+ */
 function snapshotTree(dir: string, prefix = ""): string[] {
 	const entries: string[] = [];
 	for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
 		const relative = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
+		const fullPath = join(dir, entry.name);
 		if (entry.isDirectory()) {
-			entries.push(...snapshotTree(join(dir, entry.name), relative));
+			entries.push(...snapshotTree(fullPath, relative));
 		} else {
-			entries.push(relative);
+			const content = readFileSync(fullPath);
+			const hash = createHash("sha256").update(content).digest("hex").slice(0, 16);
+			const size = statSync(fullPath).size;
+			entries.push(`${relative}:${hash}:${size}`);
 		}
 	}
 	return entries;
@@ -228,3 +249,131 @@ for (const shellCase of shellCases) {
 		expect(additionalContext).not.toContain("SHELL_BINARY_RULE_MARKER");
 	});
 }
+
+// --- C1: parse failure breadcrumb ---
+
+test("C1 non-JSON stdin writes breadcrumb and exits 0", () => {
+	// cli.ts outer catch in runHookCli calls writeErrorBreadcrumb which writes to
+	// $HOME/.omt/rules-injector/error.log. A non-JSON stdin triggers JSON.parse to
+	// throw, propagating up to the catch block.
+	const result = runHookRaw("session-start", "not json{{{");
+
+	// Exit code must be 0: hook failures are advisory, must never block the turn.
+	expect(result.status).toBe(0);
+
+	// Breadcrumb file must exist with non-empty content.
+	const breadcrumb = join(tempHome, ".omt", "rules-injector", "error.log");
+	expect(existsSync(breadcrumb)).toBe(true);
+	const content = readFileSync(breadcrumb, "utf8");
+	expect(content.length).toBeGreaterThan(0);
+});
+
+// --- A5: escaped-quote unwrap (space-in-path via backslash-escaped quotes) ---
+
+test("A5 zsh -lc with escaped-quote path: space-containing file is one token and its rule injects", () => {
+	const projectDir = makeProject();
+	// Rule matches any .ts file anywhere in the project.
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	// File whose name contains a space — path requires quoting in the shell command.
+	writeFileSync(join(projectDir, "src", "a b.ts"), "export const ab = 1;\n");
+
+	// The tool_input command is what Codex would produce: the inner command uses
+	// backslash-escaped double-quotes so the space-containing path is one shell token.
+	// codex-hook.ts tokenize() handles \" via the escaped flag.
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("a5"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u5",
+		tool_input: { command: '/bin/zsh -lc "cat \\"src/a b.ts\\""' },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+	// The display path header in the injection block references the file.
+	expect(additionalContext).toContain("a b.ts");
+});
+
+// --- C9: A3 glob round-trip via real parser (runHook, not matchRule direct call) ---
+
+test("C9 A3 round-trip via parser: JSON-array inline glob globs:[\"*.{ts,js}\"] matches src/x.ts", () => {
+	const projectDir = makeProject();
+	// JSON-array inline form — parseInlineArray path in parser-yaml.ts, no comma-split bug.
+	writeRule(projectDir, "ts-js.md", 'globs: ["*.{ts,js}"]', "TS_JS_GLOB_ROUND_TRIP_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("c9"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u9",
+		tool_input: { command: "cat src/x.ts" },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("TS_JS_GLOB_ROUND_TRIP_MARKER");
+});
+
+// unquoted brace glob mis-split by parser-yaml comma-split — upstream bug, defer to re-vendor.
+// parser-yaml.ts parseGlobValue: `globs: *.{ts,js}` hits the unquoted scalar path which splits
+// on commas, producing ["*.{ts", "js}"] — neither token matches a valid .ts file.
+test.skip("C9 SKIP upstream-bug: unquoted scalar brace glob globs: *.{ts,js} mis-splits on comma", () => {
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts-js-unquoted.md", "globs: *.{ts,js}", "UNQUOTED_BRACE_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("c9skip"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u9s",
+		tool_input: { command: "cat src/x.ts" },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("UNQUOTED_BRACE_MARKER");
+});
+
+// --- F17: grep command — tokenizer drops PATTERN, extracts file path ---
+
+test("F17 Bash grep: PATTERN token is dropped, file path token feeds rule matching", () => {
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	// tool-paths.ts tokenizeShell skips tokens starting with '-', but PATTERN (no dash)
+	// would be treated as a path candidate. addCommandPaths filters it out via mustExist=true
+	// since "PATTERN" does not exist as a file. Only src/x.ts (which exists) passes.
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("f17"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u17",
+		tool_input: { command: "grep PATTERN src/x.ts" },
+		tool_response: {},
+	});
+
+	// The ts rule must fire because src/x.ts was extracted.
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+	expect(additionalContext).toContain("src/x.ts");
+});
