@@ -152,7 +152,7 @@ export async function runPostToolUseHook(
 		return "";
 	}
 
-	const targetPaths = extractCodexToolPaths(input, input.cwd);
+	const targetPaths = extractCodexToolPaths(unwrapShellCommandInput(input), input.cwd);
 	debugTimer.lap("extract", {
 		targets: targetPaths.length,
 		uniqueTargets: uniqueStrings(targetPaths).length,
@@ -215,4 +215,133 @@ export async function runPostToolUseHook(
 	const output = formatAdditionalContextOutput("PostToolUse", block);
 	debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "emit" });
 	return output;
+}
+
+/** Tool names whose payload carries a raw shell command that may be wrapper-wrapped. */
+const SHELL_COMMAND_TOOL_NAMES = new Set(["bash", "shell_command", "exec_command"]);
+
+/**
+ * D-1 Option C: peel a `sh|bash|zsh -c "<inner>"` shell wrapper off the command
+ * field BEFORE the pristine tool-paths extractor sees it, so the inner command's
+ * paths are extracted rather than `/bin/zsh` / `-lc`. Returns a shallow-cloned
+ * input with the unwrapped command; tool-paths.ts stays untouched and tokenizes
+ * the inner command exactly once.
+ */
+function unwrapShellCommandInput(input: CodexPostToolUseInput): CodexPostToolUseInput {
+	if (!SHELL_COMMAND_TOOL_NAMES.has(input.tool_name.toLowerCase())) return input;
+	if (typeof input.tool_input !== "object" || input.tool_input === null || Array.isArray(input.tool_input)) return input;
+	const ti = input.tool_input as Record<string, unknown>;
+	const key = typeof ti["command"] === "string" ? "command" : typeof ti["cmd"] === "string" ? "cmd" : undefined;
+	if (key === undefined) return input;
+	const inner = unwrapShellWrapper(ti[key] as string);
+	if (inner === ti[key]) return input;
+	return { ...input, tool_input: { ...ti, [key]: inner } };
+}
+
+/**
+ * If the command begins with a shell wrapper invocation
+ * (e.g. `/bin/zsh -lc "<inner>"`, `bash -c '<inner>'`), return the INNER
+ * quoted command. Otherwise return the command unchanged.
+ */
+function unwrapShellWrapper(command: string): string {
+	const tokens = tokenize(command.trim());
+	if (tokens.length < 3) return command;
+
+	const shellName = basename(tokens[0]);
+	const shellRe = /^(sh|bash|zsh|dash|ksh|ash|fish)$/;
+	if (!shellRe.test(shellName)) return command;
+
+	// The flag carrying the inline command always ends in 'c' (-c, -lc, -ic).
+	const flag = tokens[1];
+	if (!flag.startsWith("-") || !flag.endsWith("c")) return command;
+
+	// tokenize() already stripped the surrounding quotes from the inner command,
+	// so the third token is the inner command verbatim.
+	return tokens[2];
+}
+
+/**
+ * Quote-aware tokenizer. Splits on unquoted whitespace, treats
+ * `'…'` / `"…"` as single tokens (quotes stripped, spaces preserved), and
+ * surfaces operator runs (&& || | ; newline) as standalone tokens.
+ */
+function tokenize(input: string): string[] {
+	const tokens: string[] = [];
+	let current = "";
+	let hasCurrent = false;
+	let quote: "'" | '"' | null = null;
+
+	const flush = (): void => {
+		if (hasCurrent) {
+			tokens.push(current);
+			current = "";
+			hasCurrent = false;
+		}
+	};
+
+	for (let i = 0; i < input.length; i++) {
+		const ch = input[i];
+
+		if (quote) {
+			if (ch === quote) {
+				quote = null;
+			} else {
+				current += ch;
+				hasCurrent = true;
+			}
+			continue;
+		}
+
+		if (ch === "'" || ch === '"') {
+			quote = ch;
+			hasCurrent = true; // an empty "" still produces a (empty) token
+			continue;
+		}
+
+		// Operators: &&, ||, |, ;, and newline.
+		if (ch === "&" && input[i + 1] === "&") {
+			flush();
+			tokens.push("&&");
+			i++;
+			continue;
+		}
+		if (ch === "|" && input[i + 1] === "|") {
+			flush();
+			tokens.push("||");
+			i++;
+			continue;
+		}
+		if (ch === "|") {
+			flush();
+			tokens.push("|");
+			continue;
+		}
+		if (ch === ";") {
+			flush();
+			tokens.push(";");
+			continue;
+		}
+		if (ch === "\n") {
+			flush();
+			tokens.push(";");
+			continue;
+		}
+
+		if (ch === " " || ch === "\t" || ch === "\r") {
+			flush();
+			continue;
+		}
+
+		current += ch;
+		hasCurrent = true;
+	}
+
+	flush();
+	return tokens;
+}
+
+/** POSIX-style basename for shell-wrapper detection. */
+function basename(path: string): string {
+	const slash = path.lastIndexOf("/");
+	return slash === -1 ? path : path.slice(slash + 1);
 }

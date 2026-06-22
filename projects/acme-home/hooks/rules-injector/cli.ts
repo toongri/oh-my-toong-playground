@@ -12,6 +12,7 @@ import {
 	runSessionStartHook,
 	runUserPromptSubmitHook,
 } from "./codex-hook.js";
+import { writeErrorBreadcrumb } from "./debug-log.js";
 
 const command = process.argv[2];
 const subcommand = process.argv[3];
@@ -31,14 +32,20 @@ if (command === "hook" && subcommand === "session-start") {
 }
 
 async function runHookCli(eventName: HookCliEventName): Promise<void> {
-	const raw = await readStdin();
-	if (raw.trim().length === 0) return;
-	const parsed = parseHookInput(raw);
-	if (!parsed) return;
-	const pluginDataRoot = process.env["PLUGIN_DATA"];
-	const options: CodexRulesHookOptions = pluginDataRoot === undefined ? {} : { pluginDataRoot };
-	const output = await runHook(eventName, parsed, options);
-	await writeStdout(output);
+	try {
+		const raw = await readStdin();
+		if (raw.trim().length === 0) return;
+		const parsed = parseHookInput(raw);
+		if (!parsed) return;
+		const pluginDataRoot = process.env["PLUGIN_DATA"];
+		const options: CodexRulesHookOptions = pluginDataRoot === undefined ? {} : { pluginDataRoot };
+		const output = await runHook(eventName, parsed, options);
+		await writeStdout(output);
+	} catch (error) {
+		// Advisory L2: a hook-execution failure must never block the turn. Leave an
+		// operator breadcrumb, emit nothing, and keep the exit code at 0.
+		writeErrorBreadcrumb(`hook ${eventName}`, error);
+	}
 }
 
 async function runHook(eventName: HookCliEventName, parsed: unknown, options: CodexRulesHookOptions): Promise<string> {
