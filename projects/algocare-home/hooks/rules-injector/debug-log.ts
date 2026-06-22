@@ -1,3 +1,6 @@
+import { appendFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { debuglog } from "node:util";
 
@@ -62,4 +65,20 @@ function formatFields(fields: DebugFields): string {
 	}
 
 	return ` ${entries.map(([key, value]) => `${key}=${String(value)}`).join(" ")}`;
+}
+
+/**
+ * Always-on operator breadcrumb sink (advisory L2). Appends a timestamped line
+ * to `~/.omt/rules-injector/error.log` so a swallowed hook-execution error stays
+ * visible to the operator. Best-effort: never throws and never blocks the turn.
+ */
+export function writeErrorBreadcrumb(context: string, error: unknown): void {
+	try {
+		const sink = join(homedir(), ".omt", "rules-injector", "error.log");
+		mkdirSync(dirname(sink), { recursive: true });
+		const detail = error instanceof Error ? `${error.message}${error.stack ? `\n${error.stack}` : ""}` : String(error);
+		appendFileSync(sink, `[${new Date().toISOString()}] ${context}: ${detail}\n`);
+	} catch {
+		// best-effort; the error sink must never throw or block the turn
+	}
 }
