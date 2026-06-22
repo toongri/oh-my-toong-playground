@@ -23,6 +23,8 @@ skills:
       platforms: [claude]
     - component: goal
       platforms: [claude]
+    - component: ultraresearch
+      platforms: [claude]
     - agent-council
     - clarify
     - git-master
