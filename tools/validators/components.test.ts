@@ -426,17 +426,18 @@ hooks:
     });
   });
 
-  // --- codex/opencode: no hook validation ---
-  describe("codex/opencode는 hook 검증 대상이 아니다", () => {
-    it("does not validate hook components in codex.yaml via `validatePlatformYamlHookComponents`", async () => {
+  // --- codex: hook validation ---
+  describe("codex hook 컴포넌트 검증", () => {
+    it("returns error for missing hook component in codex.yaml via `validatePlatformYamlHookComponents`", async () => {
       writeYaml(root, "codex.yaml", `
 hooks:
   UserPromptSubmit:
     - component: nonexistent.sh
 `);
       const result = await validatePlatformYamlHookComponents(root, root);
-      // codex is not in the validated list (claude and gemini only)
-      expect(result.errors).toHaveLength(0);
+      // codex is in the validated list alongside claude and gemini
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("nonexistent.sh"))).toBe(true);
     });
   });
 
