@@ -73,8 +73,13 @@ sequenceDiagram
 
 ### Correctness
 
+<div class="finding" data-verdict="CONFIRMED">
+
 **[CONFIRMED] `@Transactional` wraps the external HTTP call to Stripe**
-- **Location**: `OrderPaymentController.kt:34` — `processPayment()`
+<span class="loc">`OrderPaymentController.kt:34` — `processPayment()`</span>
+
+- **What's wrong**: `processPayment()` is `@Transactional`, but `stripeGatewayAdapter.charge()` is an external HTTP round-trip (500ms–2s). The DB connection is held open for the entire network call.
+- **Failure scenario**: Under concurrent load, ~10 in-flight payments exhaust the HikariCP pool; every other DB operation (order lookup, cart) then blocks. Every payment request holds a DB connection across the Stripe call, so this manifests in normal operation, not only at peak.
 - **Current Code**:
   ```kotlin
   @PostMapping("/{orderId}/payment")
@@ -89,8 +94,6 @@ sequenceDiagram
       return ResponseEntity.ok(PaymentResponse.from(record))
   }
   ```
-- **What's wrong**: `processPayment()` is `@Transactional`, but `stripeGatewayAdapter.charge()` is an external HTTP round-trip (500ms–2s). The DB connection is held open for the entire network call.
-- **Failure scenario**: Under concurrent load, ~10 in-flight payments exhaust the HikariCP pool; every other DB operation (order lookup, cart) then blocks. Every payment request holds a DB connection across the Stripe call, so this manifests in normal operation, not only at peak.
 - **Fix**:
   ```diff
   -@PostMapping("/{orderId}/payment")
@@ -114,8 +117,15 @@ sequenceDiagram
 - **Blast Radius**: `OrderController.kt:initiatePayment()` calls `processPayment()`; the new `PaymentApplicationService` becomes the transaction owner.
 - **Found by**: cross-file (corroborated by line-scan)
 
+</div>
+
+<div class="finding" data-verdict="PLAUSIBLE">
+
 **[PLAUSIBLE] Webhook marks order PAID without re-checking the charged amount**
-- **Location**: `OrderPaymentController.kt:88` — `handleWebhook()`
+<span class="loc">`OrderPaymentController.kt:88` — `handleWebhook()`</span>
+
+- **What's wrong**: The webhook transitions the order to PAID on `payment_intent.succeeded` but never compares the charged amount against the order total.
+- **Failure scenario**: If a PaymentIntent's amount can be influenced below the order total (client-tampered create path, or a partial-capture flow), the order is marked PAID for less than owed. Whether the create path is influenceable is not provable from this diff — realistic but unconfirmed, hence PLAUSIBLE. Confirm by checking that `PaymentIntentCreateParams.amount` is server-derived only.
 - **Current Code**:
   ```kotlin
   @PostMapping("/webhook")
@@ -130,16 +140,26 @@ sequenceDiagram
       return ResponseEntity.ok().build()
   }
   ```
-- **What's wrong**: The webhook transitions the order to PAID on `payment_intent.succeeded` but never compares the charged amount against the order total.
-- **Failure scenario**: If a PaymentIntent's amount can be influenced below the order total (client-tampered create path, or a partial-capture flow), the order is marked PAID for less than owed. Whether the create path is influenceable is not provable from this diff — realistic but unconfirmed, hence PLAUSIBLE. Confirm by checking that `PaymentIntentCreateParams.amount` is server-derived only.
-- **Fix**: In `handleWebhook()`, load the order and assert `event.amount == order.totalMinorUnits` before transitioning to PAID; reject and alert on mismatch.
+- **Fix**:
+  ```diff
+  -order.transitionTo(OrderStatus.PAID)   // no amount comparison
+  +require(event.amount == order.totalMinorUnits) { "charged amount != order total" }
+  +order.transitionTo(OrderStatus.PAID)
+  ```
 - **Blast Radius**: webhook path only; `verifyWebhookSignature()` already runs first.
 - **Found by**: removed-behavior
 
+</div>
+
 ### Cleanup
 
+<div class="finding" data-verdict="CONFIRMED">
+
 **[CONFIRMED] `PaymentRecord.from()` re-implements the money-conversion helper**
-- **Location**: `PaymentRecord.kt:21`
+<span class="loc">`PaymentRecord.kt:21` — `PaymentRecord.from()`</span>
+
+- **What's wrong**: Converts to minor units inline (`amount.multiply(BigDecimal(100)).toLong()`) when `MoneyUtils.toMinorUnits(amount, currency)` already exists and handles rounding and zero-decimal currencies (JPY).
+- **Failure scenario**: The duplicated money logic drifts from the canonical helper, and the inline version silently mishandles zero-decimal currencies — a correctness-and-maintenance liability the next currency addition will trip on.
 - **Current Code**:
   ```kotlin
   fun from(order: Order, result: PaymentResult): PaymentRecord =
@@ -149,17 +169,33 @@ sequenceDiagram
           currency = order.currency,
       )
   ```
-- **What's wrong**: Converts to minor units inline (`amount.multiply(BigDecimal(100)).toLong()`) when `MoneyUtils.toMinorUnits(amount, currency)` already exists and handles rounding and zero-decimal currencies (JPY).
-- **Failure scenario** (cost): The duplicated money logic drifts from the canonical helper, and the inline version silently mishandles zero-decimal currencies — a correctness-and-maintenance liability the next currency addition will trip on.
-- **Fix**: Replace the inline conversion with `MoneyUtils.toMinorUnits(amount, currency)`.
+- **Fix**:
+  ```diff
+  -        amountMinor = result.amount.multiply(BigDecimal(100)).toLong(),
+  +        amountMinor = MoneyUtils.toMinorUnits(result.amount, order.currency),
+  ```
 - **Blast Radius**: This location only.
 - **Found by**: cleanup
 
+</div>
+
 ## Out of Scope (Pre-existing)
 
+<div class="finding" data-verdict="PLAUSIBLE">
+
 **[PLAUSIBLE] [Pre-existing] `inventory_reservations.order_id` is unindexed**
-- **Location**: `inventory_reservations` table (predates this PR)
-- The idempotency lookup added in this PR reads `inventory_reservations` by `order_id`, but the column has no index, so reads are full scans. Not introduced here, but this PR is the first heavy reader. Noted, not blocking.
+<span class="loc">`inventory_reservations` table — predates this PR</span>
+
+- **What's wrong**: The idempotency lookup added in this PR reads `inventory_reservations` by `order_id`, but the column has no index, so reads are full scans.
+- **Failure scenario**: As reservation volume grows, the per-order idempotency lookup degrades to a full table scan on each payment confirmation. Not introduced here, but this PR is the first heavy reader. Noted, not blocking.
+- **Fix**:
+  ```sql
+  CREATE INDEX idx_inventory_reservations_order_id ON inventory_reservations (order_id);
+  ```
+- **Blast Radius**: This location only.
+- **Found by**: cleanup
+
+</div>
 
 ## Recommendations
 - Resolve the `@Transactional`-over-Stripe finding (`OrderPaymentController.kt:34`) — removes a bug that exhausts the connection pool under normal load.
