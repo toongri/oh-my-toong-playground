@@ -547,12 +547,6 @@ Read these to calibrate PR body style before writing:
 
 ---
 
-**Step-by-step summary cheat-sheet:** read `references/reference-tables.md` when you need a quick step summary.
-
-**Known failure-mode lookup:** read `references/reference-tables.md` during self-review to check against documented failure modes.
-
----
-
 ## Reference Files (on-demand)
 
 | Reference file | What it contains | When to read |
