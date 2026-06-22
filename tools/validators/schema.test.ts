@@ -370,7 +370,7 @@ plugins:
       expect(result.warnings.some((w) => w.includes("plugins"))).toBe(false);
     });
 
-    it("returns warning for hooks section in codex.yaml via `validatePlatformYaml`", () => {
+    it("does NOT warn for hooks section in codex.yaml via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "codex.yaml", `
 config:
   model: o3
@@ -378,7 +378,7 @@ hooks:
   UserPromptSubmit: []
 `);
       const result = validatePlatformYaml(path, "codex");
-      expect(result.warnings.some((w) => w.includes("hooks"))).toBe(true);
+      expect(result.warnings.some((w) => w.includes("hooks"))).toBe(false);
     });
   });
 
