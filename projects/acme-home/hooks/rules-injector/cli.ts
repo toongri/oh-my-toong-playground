@@ -61,13 +61,8 @@ async function runHook(eventName: HookCliEventName, parsed: unknown, options: Co
 	}
 }
 
-function parseHookInput(raw: string): unknown | undefined {
-	try {
-		const parsed: unknown = JSON.parse(raw);
-		return parsed;
-	} catch {
-		return undefined;
-	}
+function parseHookInput(raw: string): unknown {
+	return JSON.parse(raw);
 }
 
 function isCodexSessionStartInput(value: unknown): value is CodexSessionStartInput {
