@@ -302,7 +302,7 @@ AI는 이 값을 **하한선**으로 사용하되, 콘텐츠 밀도와 슬라이
 
 ## JavaScript Policy
 
-- **외부 라이브러리 추가 금지**. highlight.js CDN만 허용.
+- **화이트리스트 외 외부 라이브러리 추가 금지**. 기본 포함은 highlight.js뿐이며, Chart.js·Mermaid·KaTeX·Iconify는 해당 콘텐츠가 있을 때만 추가한다 (아래 Allowed CDN Libraries 참조).
 - **Fullscreen 토글은 기본 포함**: `.fs-btn` 버튼과 `requestFullscreen` 기반 토글 스크립트는 모든 생성 결과물(dark/light)에 기본 포함한다. 사용자가 명시적으로 제외를 요청한 경우에만 생략한다. 상세 구현은 design-system.md의 "6. Fullscreen Toggle" 참조.
 - **그 외 발표 보조용 바닐라 JS는 허용**: 키보드 방향키(←→) 네비게이션, 현재 페이지 인디케이터 등 30줄 이내의 바닐라 JS는 사용자가 요청한 경우에만 추가한다.
 - 기본 생성 시에는 Fullscreen 토글 스크립트를 포함한다. 코드 블럭이 있으면 highlight.js CDN과 함께 `if (typeof hljs !== 'undefined') hljs.highlightAll();`을 포함한다.
