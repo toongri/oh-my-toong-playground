@@ -382,8 +382,8 @@ export async function validatePlatformYamlHookComponents(
     projectDirName = basename(yamlDir);
   }
 
-  // Only claude and gemini support hooks
-  for (const platform of ["claude", "gemini"] as const) {
+  // claude, gemini, and codex support hooks
+  for (const platform of ["claude", "gemini", "codex"] as const) {
     let merged: unknown;
     if (platform === "claude" && claudeYamlPreParsed !== undefined) {
       // Pre-parsed by validateAll: skip re-parsing.
