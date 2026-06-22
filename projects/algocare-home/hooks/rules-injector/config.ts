@@ -6,7 +6,6 @@ export function configFromEnvironment(env: NodeJS.ProcessEnv = process.env): PiR
 	const config = defaultConfig();
 	const disableBundledRules = isTruthy(firstEnv(env, "CODEX_RULES_DISABLE_BUNDLED", "PI_RULES_DISABLE_BUNDLED"));
 	config.disabled = isTruthy(firstEnv(env, "CODEX_RULES_DISABLED", "PI_RULES_DISABLED"));
-	config.mode = parseMode(firstEnv(env, "CODEX_RULES_MODE", "PI_RULES_MODE")) ?? config.mode;
 	config.maxRuleChars =
 		parsePositiveInteger(firstEnv(env, "CODEX_RULES_MAX_RULE_CHARS", "PI_RULES_MAX_RULE_CHARS")) ??
 		config.maxRuleChars;
@@ -54,20 +53,6 @@ function firstEnv(env: NodeJS.ProcessEnv, ...names: string[]): string | undefine
 function isTruthy(value: string | undefined): boolean {
 	if (value === undefined) return false;
 	return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
-}
-
-function parseMode(value: string | undefined): PiRulesConfig["mode"] | undefined {
-	if (value === undefined) return undefined;
-	const normalized = value.trim().toLowerCase();
-	switch (normalized) {
-		case "static":
-		case "dynamic":
-		case "both":
-		case "off":
-			return normalized;
-		default:
-			return undefined;
-	}
 }
 
 function parsePositiveInteger(value: string | undefined): number | undefined {
