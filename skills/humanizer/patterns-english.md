@@ -1,6 +1,6 @@
 # English AI Pattern Catalog
 
-> Replacement guidance for English patterns E1–E18.
+> Replacement guidance for English patterns E1–E17.
 
 ## Table of Contents
 
@@ -21,11 +21,8 @@
 - [E15. Excessive hedging [P2]](#e15-excessive-hedging-p2)
 - [E16. Curly quotes [P3]](#e16-curly-quotes-p3)
 - [E17. Title case in headings [P3]](#e17-title-case-in-headings-p3)
-- [E18. Italic asterisk emphasis in Korean text [P3]](#e18-italic-asterisk-emphasis-in-korean-text-p3)
 
 ### E1. Importance inflation [P1]
-
-**Detection expressions:** stands/serves as, is a testament/reminder, pivotal/crucial/vital role/moment, underscores/highlights its importance, reflects broader, symbolizing its enduring, setting the stage for, marks a shift, key turning point, evolving landscape, indelible mark
 
 **Before:**
 > The Statistical Institute of Catalonia was officially established in 1989, marking a pivotal moment in the evolution of regional statistics in Spain.
@@ -37,8 +34,6 @@
 
 ### E2. Notability/media name-dropping [P1]
 
-**Detection expressions:** independent coverage, local/regional/national media outlets, leading expert, active social media presence
-
 **Before:**
 > Her views have been cited in The New York Times, BBC, Financial Times, and The Hindu. She maintains an active social media presence with over 500,000 followers.
 
@@ -48,8 +43,6 @@
 ---
 
 ### E3. -ing suffix analysis [P1]
-
-**Detection expressions:** highlighting/underscoring/emphasizing..., ensuring..., reflecting/symbolizing..., contributing to..., cultivating/fostering..., showcasing...
 
 **Before:**
 > The temple's color palette resonates with the region's natural beauty, symbolizing Texas bluebonnets, reflecting the community's deep connection to the land.
@@ -61,8 +54,6 @@
 
 ### E4. Promotional language [P1]
 
-**Detection expressions:** boasts, vibrant, rich (figurative), profound, showcasing, exemplifies, commitment to, nestled, in the heart of, groundbreaking, renowned, breathtaking, must-visit, stunning, robust, leverage, streamline, seamless, cutting-edge, state-of-the-art, game-changing
-
 **Before:**
 > Nestled within the breathtaking region of Gonder, Alamata stands as a vibrant town with a rich cultural heritage.
 
@@ -72,8 +63,6 @@
 ---
 
 ### E5. Vague sourcing / Weasel words [P1]
-
-**Detection expressions:** Industry reports, Observers have cited, Experts argue, Some critics argue, several sources
 
 **Before:**
 > Experts believe it plays a crucial role in the regional ecosystem.
@@ -85,8 +74,6 @@
 
 ### E6. "Challenges and Future Prospects" formula [P1]
 
-**Detection expressions:** Despite its... faces challenges..., Despite these challenges, Future Outlook
-
 **Before:**
 > Despite its industrial prosperity, the area faces challenges typical of urban areas. Despite these challenges, it continues to thrive.
 
@@ -96,8 +83,6 @@
 ---
 
 ### E7. AI-frequent vocabulary [P1]
-
-**Detection expressions:** Additionally, align with, crucial, delve, emphasizing, enduring, enhance, fostering, garner, interplay, intricate/intricacies, landscape (abstract), pivotal, showcase, tapestry (abstract), testament, underscore, vibrant, nuanced, multifaceted, realm, paradigm, synergy
 
 **Before:**
 > Additionally, a distinctive feature is the intricate interplay between tradition and innovation, showcasing the vibrant tapestry of local culture.
@@ -109,8 +94,6 @@
 
 ### E8. Copula avoidance [P2]
 
-**Detection expressions:** serves as [a], stands as [a], marks [a], represents [a], boasts [a], features [a], offers [a]
-
 **Before:**
 > Gallery 825 serves as LAAA's exhibition space. The gallery features four rooms and boasts 3,000 square feet.
 
@@ -121,8 +104,6 @@
 
 ### E9. Negative parallel structure [P2]
 
-**Detection expressions:** Not only...but..., It's not just about..., it's..., It's not merely..., it's...
-
 **Before:**
 > It's not just about the beat; it's part of the aggression. It's not merely a song, it's a statement.
 
@@ -132,8 +113,6 @@
 ---
 
 ### E10. False ranges [P2]
-
-**Detection expressions:** from X to Y, from A to B (when not a meaningful scale)
 
 **Before:**
 > Our journey has taken us from the singularity of the Big Bang to the grand cosmic web, from the birth of stars to the dance of dark matter.
@@ -168,8 +147,6 @@
 ---
 
 ### E13. Conversation residue / Flattery / Recent clichés [P1]
-
-**Detection expressions:** I hope this helps, Of course!, Certainly!, You're absolutely right!, Would you like..., let me know, here is a..., Great question!, That's an excellent point!, Absolutely!, "Let's dive in", "Let's break this down", "Here's the thing", "It's worth noting that", "This is where X comes in", "The key takeaway here is", "At the end of the day", "In a world where...", "Here's the reality:", "The bottom line:"
 
 **Problem:** Chatbot conversation traces and post-2024 AI clichés. Delete all.
 
@@ -218,19 +195,3 @@
 **Before:** `## Strategic Negotiations And Global Partnerships`
 
 **After:** `## Strategic negotiations and global partnerships`
-
----
-
-### E18. Italic asterisk emphasis in Korean text [P3]
-
-**Detection signal:** `*phrase*` single-asterisk italic emphasis appearing in Korean prose for emphasis (not for genuine titles or foreign-word styling).
-
-**Problem:** Korean writers using markdown overwhelmingly reach for `**bold**` for emphasis. `*italic*` emphasis is an English-language markdown habit — italic doesn't render as visually emphatic on Hangul as it does on Latin script, so native Korean markdown convention favors bold. LLMs trained heavily on English markdown leak `*italic*` into Korean output.
-
-**Rule:** Convert `*phrase*` to `**phrase**` in Korean prose unless the italic is genuinely for a foreign-word/title convention (e.g., titles of works).
-
-**Before:**
-> 여러 클라이언트가 동시에 메시지를 기다리고 있을 때 *먼저 요청한 클라이언트*가 메시지를 가져간다.
-
-**After:**
-> 여러 클라이언트가 동시에 메시지를 기다리고 있을 때 **먼저 요청한 클라이언트**가 메시지를 가져간다.
