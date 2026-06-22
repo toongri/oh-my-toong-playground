@@ -37,7 +37,8 @@ skills:
     - implementation
     - humanizer
     - orchestrate-review
-    - review-report
+    - component: review-report
+      platforms: [claude]
     - hud
 
 rules:

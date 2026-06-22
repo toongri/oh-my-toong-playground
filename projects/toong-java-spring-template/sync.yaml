@@ -37,7 +37,8 @@ skills:
     - technical-writing
     - humanizer
     - orchestrate-review
-    - review-report
+    - component: review-report
+      platforms: [claude]
     - hud
 
 rules:
