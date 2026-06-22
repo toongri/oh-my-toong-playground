@@ -336,3 +336,225 @@ test("F4: a forced uncaught throw is swallowed (exit 0) and leaves an error.log 
 	const lines = readFileSync(log, "utf8").split("\n").filter((line) => line.trim().length > 0);
 	expect(lines.length).toBeGreaterThanOrEqual(1);
 });
+
+// ===========================================================================
+// C2 — CODEX_RULES_DISABLED=1 must not consume the PostCompact pending state
+// ===========================================================================
+
+test("C2: disabled SessionStart does not consume recovering state, which is emitted after re-enable", () => {
+	// Proves: when config.disabled=true, static-injection.ts must NOT call
+	// completePostCompactRecovery — if it did, the recovery directive would be
+	// permanently lost. Reverting the guard in static-injection.ts (removing the
+	// completedPostCompactChannel check before the disabled early-return) makes
+	// this test RED.
+	const sessionId = "c2-session";
+	const { projectRoot, rulePath } = makeProjectWithStaticRule(
+		"c2-rule.md",
+		"C2 BOULDER: recovery must survive a disabled run.",
+	);
+	const hermDataRoot = join(tempHome, ".omt", "rules-injector");
+
+	// 1. Normal SessionStart — rule injected, dedup recorded.
+	const first = runHook("session-start", sessionStartPayload(sessionId, projectRoot), {
+		PLUGIN_DATA: hermDataRoot,
+	});
+	expect(first.status).toBe(0);
+	expect(additionalContext(first.stdout)).toContain("C2 BOULDER");
+
+	// 2. PostCompact — arms the recovery pending state.
+	const compact = runHook("post-compact", postCompactPayload(sessionId, projectRoot), {
+		PLUGIN_DATA: hermDataRoot,
+	});
+	expect(compact.status).toBe(0);
+	expect(compact.stdout.trim()).toBe("");
+
+	// 3. SessionStart with kill-switch ON — must emit nothing AND must not consume
+	//    the recovering state.
+	const disabledRun = runHook("session-start", sessionStartPayload(sessionId, projectRoot), {
+		PLUGIN_DATA: hermDataRoot,
+		CODEX_RULES_DISABLED: "1",
+	});
+	expect(disabledRun.status).toBe(0);
+	expect(disabledRun.stdout.trim()).toBe("");
+
+	// 4. SessionStart with kill-switch OFF again — recovery directive must still
+	//    fire, proving the disabled run did not consume the pending state.
+	const recovery = runHook("session-start", sessionStartPayload(sessionId, projectRoot), {
+		PLUGIN_DATA: hermDataRoot,
+	});
+	expect(recovery.status).toBe(0);
+	const recovered = additionalContext(recovery.stdout);
+	expect(recovered).toContain("POST-COMPACTION RULE RECOVERY");
+	expect(recovered).toContain(rulePath);
+});
+
+// ===========================================================================
+// C10-D2 positive control — D2 skip is non-vacuous
+// ===========================================================================
+
+test("C10-D2: recovery fires without transcript, then is suppressed when transcript carries the body", () => {
+	// Without this positive control, the D2 test assertion (expect("") vacuously
+	// passes even if recovery was never armed. This test shows recovery IS armed
+	// (emits directive without transcript) before it is suppressed with transcript.
+	// Removing the transcript-backstop check in static-injection.ts would make the
+	// with-transcript branch still emit, catching the suppression regression.
+	const sessionId = "c10d2-session";
+	const { projectRoot, rulePath, ruleBody } = makeProjectWithStaticRule(
+		"c10d2-rule.md",
+		"C10-D2 BOULDER: positive control for D2 transcript backstop.",
+	);
+
+	// Arm the recovery pending state (same as D2 setup).
+	runHook("session-start", sessionStartPayload(sessionId, projectRoot));
+	runHook("post-compact", postCompactPayload(sessionId, projectRoot));
+
+	// Positive control: no transcript → recovery directive IS emitted.
+	const withoutTranscript = runHook("session-start", sessionStartPayload(sessionId, projectRoot));
+	expect(withoutTranscript.status).toBe(0);
+	expect(additionalContext(withoutTranscript.stdout)).toContain("POST-COMPACTION RULE RECOVERY");
+
+	// Re-arm for the suppression branch (a second session).
+	const sessionId2 = "c10d2-session2";
+	runHook("session-start", sessionStartPayload(sessionId2, projectRoot));
+	runHook("post-compact", postCompactPayload(sessionId2, projectRoot));
+
+	// Suppression: transcript carries both the rule body and path marker → "".
+	const transcriptPath = join(projectRoot, "transcript-c10d2.txt");
+	writeFileSync(transcriptPath, `Instructions from: ${rulePath}\n\n${ruleBody}\n`);
+	const withTranscript = runHook(
+		"session-start",
+		sessionStartPayload(sessionId2, projectRoot, { transcript_path: transcriptPath }),
+	);
+	expect(withTranscript.status).toBe(0);
+	expect(additionalContext(withTranscript.stdout)).toBe("");
+});
+
+// ===========================================================================
+// C10-D3 baseline — D3 suppression is non-vacuous
+// ===========================================================================
+
+test("C10-D3: UPS injects without pressure marker (baseline), then is suppressed with marker", () => {
+	// The existing D3 test only checks the suppressed branch; without this
+	// baseline the test would vacuously pass even if UPS never injects at all.
+	// Removing the hasContextPressureMarker check in codex-hook.ts would cause
+	// the suppressed branch to emit, making D3 RED while this baseline stays GREEN.
+	const sessionId = "c10d3-session";
+	const { projectRoot } = makeProjectWithStaticRule(
+		"c10d3-rule.md",
+		"C10-D3 BOULDER: must appear in UPS without pressure, and be absent with pressure.",
+	);
+
+	// Baseline: a UPS without the pressure marker DOES inject.
+	const baselineRun = runHook(
+		"user-prompt-submit",
+		userPromptPayload(sessionId, projectRoot, "continue working on the feature"),
+	);
+	expect(baselineRun.status).toBe(0);
+	expect(additionalContext(baselineRun.stdout)).toContain("C10-D3 BOULDER");
+
+	// Suppression: same UPS but prompt contains the pressure marker → empty.
+	// Use a different session so dedup doesn't interfere.
+	const sessionId2 = "c10d3-session2";
+	const suppressedRun = runHook(
+		"user-prompt-submit",
+		userPromptPayload(sessionId2, projectRoot, "the model reported context_length_exceeded mid-turn"),
+	);
+	expect(suppressedRun.status).toBe(0);
+	expect(additionalContext(suppressedRun.stdout)).toBe("");
+});
+
+// ===========================================================================
+// P9 — spawn env is hermetic: PLUGIN_DATA is pinned to the hermetic data root
+// ===========================================================================
+
+test("P9: spawn env pins PLUGIN_DATA to the hermetic data root so external env cannot redirect state", () => {
+	// The runHook helper spreads ...process.env before HOME and extraEnv.
+	// If a parent process has PLUGIN_DATA set, it leaks into spawned hooks and
+	// redirects where session state is read/written, breaking hermeticity.
+	// This test verifies that passing PLUGIN_DATA in extraEnv correctly pins the
+	// state root: the session-state file lands under hermDataRoot, not elsewhere.
+	const sessionId = "p9-session";
+	const { projectRoot } = makeProjectWithStaticRule(
+		"p9-rule.md",
+		"P9 BOULDER: state must land in hermetic data root.",
+	);
+	const hermDataRoot = join(tempHome, ".omt", "rules-injector");
+
+	// Run hook with explicitly hermetic PLUGIN_DATA.
+	const result = runHook("session-start", sessionStartPayload(sessionId, projectRoot), {
+		PLUGIN_DATA: hermDataRoot,
+	});
+	expect(result.status).toBe(0);
+	expect(additionalContext(result.stdout)).toContain("P9 BOULDER");
+
+	// Session state must be written under hermDataRoot, not under any external path.
+	const statePath = join(hermDataRoot, `${sessionId}.json`);
+	expect(existsSync(statePath)).toBe(true);
+
+	// The state file must be valid JSON — confirming it is a real cache entry,
+	// not an accidental directory or empty file at the hermetic path.
+	expect(() => JSON.parse(readFileSync(statePath, "utf8"))).not.toThrow();
+});
+
+// ===========================================================================
+// F11 — ~/.claude/rules is excluded by DEFAULT_AUTO_DISABLED_SOURCES (behavioral)
+// ===========================================================================
+
+test("F11: a rule planted under ~/.claude/rules is not injected by session-start", () => {
+	// Proves the behavioral effect of DEFAULT_AUTO_DISABLED_SOURCES excluding
+	// "~/.claude/rules": even if the file exists and has alwaysApply:true, its
+	// body must not appear in additionalContext. Removing "~/.claude/rules" from
+	// DEFAULT_AUTO_DISABLED_SOURCES would make this test RED.
+	const sessionId = "f11-session";
+	const { projectRoot } = makeProjectWithStaticRule(
+		"f11-proj-rule.md",
+		"F11 PROJ BOULDER: project rule must appear.",
+	);
+
+	// Plant a rule under the hermetic HOME's ~/.claude/rules directory.
+	const claudeRulesDir = join(tempHome, ".claude", "rules");
+	mkdirSync(claudeRulesDir, { recursive: true });
+	writeFileSync(
+		join(claudeRulesDir, "f11-home-rule.md"),
+		"---\nalwaysApply: true\n---\nF11 HOME BOULDER: this must NOT appear in additionalContext.\n",
+	);
+
+	const result = runHook("session-start", sessionStartPayload(sessionId, projectRoot));
+	expect(result.status).toBe(0);
+	const context = additionalContext(result.stdout);
+
+	// Project rule IS injected (positive control — confirms injection works).
+	expect(context).toContain("F11 PROJ BOULDER");
+	// Home rule is excluded due to DEFAULT_AUTO_DISABLED_SOURCES.
+	expect(context).not.toContain("F11 HOME BOULDER");
+});
+
+// ===========================================================================
+// C4-CJK — byte cap enforced for multi-byte (UTF-8) content
+// ===========================================================================
+
+test("C4-CJK: over-budget CJK rule body is capped to <= 32K bytes (not chars)", () => {
+	// "가" is 3 UTF-8 bytes. 20_000 repetitions = 20_000 chars but 60_000 bytes.
+	// A char-based cap (e.g. <= 32_000 chars) would pass this through uncapped,
+	// but hook-output.ts uses Buffer.byteLength. Reverting to char-based slicing
+	// would emit ~60K bytes of UTF-8 and make this test RED.
+	const sessionId = "c4-cjk-session";
+	const { projectRoot } = makeProjectWithStaticRule(
+		"c4-cjk-rule.md",
+		// 20K Korean chars = 60K UTF-8 bytes — char count is well under 32K but
+		// byte count is well over. The byte cap is the only guard that fires here.
+		"가".repeat(20_000),
+	);
+
+	const result = runHook("session-start", sessionStartPayload(sessionId, projectRoot), {
+		CODEX_RULES_MAX_RULE_CHARS: "60000",
+		CODEX_RULES_MAX_RESULT_CHARS: "60000",
+	});
+	expect(result.status).toBe(0);
+	const emitted = additionalContext(result.stdout);
+	expect(emitted.length).toBeGreaterThan(0);
+
+	// The critical assertion: UTF-8 byte length must be within the 32K cap.
+	// This would fail if sliceToUtf8Bytes were replaced with a plain char slice.
+	expect(Buffer.byteLength(emitted, "utf8")).toBeLessThanOrEqual(32_000);
+});
