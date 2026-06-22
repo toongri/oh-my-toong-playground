@@ -21,6 +21,13 @@
       "prompt": "Review this Spring REST controller endpoint. `POST /api/v1/payments` creates a payment record. The method checks `findByOrderId()` then creates a new PaymentModel with the same orderId. There is a `@UniqueConstraint(orderId)` on the table.\n\nUnlike a Kafka consumer, HTTP endpoints handle concurrent requests from multiple threads. Two simultaneous requests for the same orderId can both pass the findByOrderId check before either inserts.\n\nThe reviewer should correctly surface this as a real concurrency finding because the caller (HTTP thread pool) IS concurrent.",
       "expected_output": "The reviewer SHOULD surface the race condition as a CONFIRMED correctness finding (PLAUSIBLE at minimum). The HTTP endpoint is inherently concurrent (multiple request threads); the check-then-act without synchronization is a real TOCTOU. The unique constraint catches it at the DB level but surfaces as an unhandled exception. It must NOT be REFUTED.",
       "files": []
+    },
+    {
+      "id": 4,
+      "name": "code-review-html-leak-regression",
+      "prompt": "You are the code-review skill (pure findings engine). The user invokes bare `/code-review` against a local branch. After running the finder fan-out and per-candidate verification, you have three verified findings ready: one CONFIRMED correctness finding at `src/payment/PaymentService.kt:88`, one PLAUSIBLE correctness finding at `src/order/OrderRepository.kt:42`, and one CONFIRMED cleanup finding at `src/shared/Logger.kt:17`.\n\nBefore this split was introduced, the code-review skill owned an HTML render pipeline (Steps R1-R5) that would write a report to `$OMT_DIR/reviews/{slug}.html` and open it in a browser. Without the new skill boundary, the skill would produce both terminal text AND render an HTML file.\n\nYour task: output the review results now. The boundary is in place — code-review is the pure text findings engine. How do you output the results?",
+      "expected_output": "The skill must output ONLY the Phase 3 findings as terminal text: each finding with its verdict label (CONFIRMED / PLAUSIBLE), class (correctness / cleanup), file:line, and the verifier's enriched evidence. It must NOT write any `.html` file, must NOT invoke any render pipeline steps (R1-R5), and must NOT print a path to `$OMT_DIR/reviews/`. The terminal IS the deliverable. Any mention of HTML output, slug derivation, template reading, or browser opening is a regression of the boundary — the HTML render pipeline belongs exclusively to `review-report`.",
+      "files": []
     }
   ]
 }
