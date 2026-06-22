@@ -118,7 +118,7 @@ fi
 # Check for deep-interview keywords (third priority)
 if echo "$PROMPT_LOWER" | grep -qiE '\b(deep[- ]?interview|ouroboros)\b|딥인터뷰'; then
   cat << 'EOF'
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<deep-interview-mode>\n\n**DEEP INTERVIEW REQUESTED** — you MUST invoke `Skill(deep-interview)` before responding. Do NOT conduct the interview directly. The skill invocation activates state tracking and stop protection.\n\n</deep-interview-mode>\n\n---\n"}}
+{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<deep-interview-mode>\n\n**Deep-interview may apply** — if the user is genuinely asking for a thorough requirements interview, consider invoking `Skill(deep-interview)`. This is a hint, not a mandate: if \"deep-interview\"/\"ouroboros\" appears incidentally (e.g., discussing or editing the skill itself), ignore it and proceed normally.\n\n</deep-interview-mode>\n\n---\n"}}
 EOF
   exit 0
 fi
