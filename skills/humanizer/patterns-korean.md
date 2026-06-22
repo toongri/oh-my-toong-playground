@@ -23,10 +23,9 @@
 - [K19. "이것이 ~다" definition closing (translated from "This is the X") [P2]](#k19-이것이-다-definition-closing-translated-from-this-is-the-x-p2)
 - [K20. Mid-paragraph blockquote term definition [P2]](#k20-mid-paragraph-blockquote-term-definition-p2)
 - [K21. Bilingual notation uniformity [P2]](#k21-bilingual-notation-uniformity-p2)
+- [K22. Italic asterisk emphasis in Korean text [P3]](#k22-italic-asterisk-emphasis-in-korean-text-p3)
 
 ### K1. Opening clichés [P1]
-
-**Detection expressions:** "오늘날", "현대 사회에서", "급변하는 시대에", "디지털 시대에 접어들면서", "4차 산업혁명 시대", "~에 대해 알아보겠습니다", "~에 대해 살펴보겠습니다", "~를 함께 알아볼까요?", "~에 대해 깊이 파헤쳐 보겠습니다", "이번 글에서는"
 
 **Problem:** AI reflexively sets the scene with era-framing or meta-descriptions when starting a piece.
 
@@ -39,8 +38,6 @@
 ---
 
 ### K2. Exaggerated modifiers [P1]
-
-**Detection expressions:** "혁신적인", "획기적인", "체계적인", "효과적인", "효율적인", "다양한" (2+ times per paragraph), "풍부한", "탁월한", "놀라운", "뛰어난", "독보적인", "선도적인", "차별화된", "의미 있는", "가치 있는", "핵심적인", "필수적인", "지속 가능한"
 
 **Problem:** The most frequent pattern in Korean AI text. If removing the modifier doesn't change the meaning, it's inflation. "다양한" in particular is the single most common word in Korean AI text — it never specifies what exactly is diverse.
 
@@ -58,8 +55,6 @@
 
 ### K3. Hedging sentence endings [P1]
 
-**Detection expressions:** "~라고 할 수 있습니다", "~라고 볼 수 있습니다", "~라고 해도 과언이 아닙니다", "~것으로 보입니다", "~것으로 판단됩니다", "~것으로 예상됩니다", "~에 해당한다고 볼 수 있습니다"
-
 **Problem:** AI appends hedging endings to every sentence to avoid making definitive claims. When stating facts, be definitive.
 
 **Before:**
@@ -72,8 +67,6 @@
 
 ### K4. "이를 통해" chaining [P1]
 
-**Detection expressions:** "이를 통해", "이를 바탕으로", "이를 기반으로", "이러한 관점에서", "이러한 측면에서", "이를 활용하여", "이와 같은 방식으로"
-
 **Problem:** AI mechanically chains sentences with "이를 통해" creating formulaic cause-and-effect links.
 
 **Before:**
@@ -85,8 +78,6 @@
 ---
 
 ### K5. Empty importance claims [P1]
-
-**Detection expressions:** "~의 중요성은 아무리 강조해도 지나치지 않습니다", "~은/는 매우 중요합니다", "~에서 핵심적인 역할을 합니다", "~에 있어서 필수적입니다", "~의 중요성이 날로 커지고 있습니다", "~에 대한 관심이 높아지고 있습니다"
 
 **Problem:** Claims something is important without saying WHY with specifics.
 
@@ -102,8 +93,6 @@
 
 ### K6. "~뿐만 아니라 ~도" overuse [P2]
 
-**Detection expressions:** "~뿐만 아니라 ~도", "~뿐 아니라 ~까지", "단순히 ~하는 것을 넘어", "~에 그치지 않고"
-
 **Problem:** Korean equivalent of "Not only...but also...". AI mechanically uses this for scope expansion.
 
 **Before:**
@@ -115,8 +104,6 @@
 ---
 
 ### K7. "그렇다면" self-Q&A [P2]
-
-**Detection expressions:** "그렇다면 왜 ~일까요?", "그렇다면 어떻게 해야 할까요?", "그렇다면 ~란 무엇일까요?", "과연 ~일까요?"
 
 **Problem:** AI poses questions to itself for structure, especially in blog posts.
 
@@ -130,8 +117,6 @@
 
 ### K8. Rule of Three [P2]
 
-**Detection expressions:** "A, B, 그리고 C", "첫째... 둘째... 셋째...", "A할 뿐만 아니라 B하며 C합니다"
-
 **Problem:** AI bundles items in threes to appear comprehensive. Fine if genuinely three, but suspicious when forced to fit three.
 
 **Before:**
@@ -143,8 +128,6 @@
 ---
 
 ### K9. Formality overuse and "~에 있어서" [P2]
-
-**Detection expressions:** "~하겠습니다", "~되겠습니다", "~것입니다", "~하시기 바랍니다", "~에 해당합니다", "~에 있어서", "~에 있어", "~함에 있어"
 
 **Problem:** AI defaults to overly formal register. "~에 있어서" can almost always be omitted or replaced with a more direct expression.
 
@@ -160,8 +143,6 @@
 
 ### K10. Closing clichés [P1]
 
-**Detection expressions:** "결론적으로", "요약하자면", "마무리하며", "지금까지 ~에 대해 알아보았습니다", "앞으로 ~이/가 기대됩니다", "~의 발전이 기대됩니다", "함께 만들어 나가야 할 것입니다", "지속적인 관심이 필요합니다"
-
 **Problem:** AI appends content-free hopeful outlooks at the end.
 
 **Before:**
@@ -174,15 +155,11 @@
 
 ### K11. Chatbot conversation residue [P1]
 
-**Detection expressions:** "도움이 되셨길 바랍니다", "궁금한 점이 있으시면", "더 자세한 내용이 필요하시면", "좋은 질문입니다!", "물론입니다!", "말씀하신 것처럼"
-
 **Problem:** Chatbot conversation traces remaining in written text. Delete all.
 
 ---
 
 ### K12. Meaningless conjunctive adverbs [P2]
-
-**Detection expressions:** "또한" (overuse), "한편", "더불어", "아울러", "나아가", "특히" (overuse), "무엇보다", "이에 따라", "따라서" (without logical context)
 
 **Problem:** Strings sentences together with conjunctive adverbs without actual logical connection.
 
@@ -201,8 +178,6 @@
 
 ### K13. Pros/cons symmetry structure [P2]
 
-**Detection expressions:** "장점으로는... 단점으로는...", "물론... 하지만...", "한편으로는... 다른 한편으로는...", "긍정적인 측면... 부정적인 측면..."
-
 **Problem:** AI mechanically balances both sides for appearance of objectivity.
 
 **Before:**
@@ -214,8 +189,6 @@
 ---
 
 ### K14. Unnecessary passive constructions [P2]
-
-**Detection expressions:** "~되어지다" (double passive), "작성되어질 수 있습니다", "진행되어지고 있습니다", "사용되어질 수 있는", "변경되어지는"
 
 **Problem:** Korean "~되다" is sufficient for passive, but AI adds "~어지다" creating double passive. Used to increase perceived politeness.
 
@@ -229,8 +202,6 @@
 
 ### K15. "위해" overuse [P2]
 
-**Detection expressions:** "~를 위해", "~하기 위해", "~를 위한" (2+ times per paragraph)
-
 **Problem:** AI repeats "위해" when expressing purpose.
 
 **Before:**
@@ -243,8 +214,6 @@
 
 ### K16. Sino-Korean word overuse [P3]
 
-**Detection expressions:** "활용하다"→쓰다, "수행하다"→하다, "구축하다"→만들다/세우다, "도입하다"→넣다/쓰기 시작하다, "적용하다"→쓰다/붙이다, "진행하다"→하다, "제공하다"→주다/내놓다
-
 **Problem:** AI prefers Sino-Korean words over simpler native Korean. Not always wrong, but creates stiffness outside technical docs.
 
 **Note:** In technical docs, Sino-Korean may be more natural (e.g., "API를 활용하다" isn't worse than "API를 쓰다"). Apply mainly to blog/essay content.
@@ -252,8 +221,6 @@
 ---
 
 ### K19. "이것이 ~다" definition closing (translated from "This is the X") [P2]
-
-**Detection expressions:** "~ — 이것이 X의 핵심이다", "~. 이것이 ~의 핵심 역할이다", "이것이 X다", "이것이 X의 본질이다"
 
 **Problem:** Direct translation of English "This is the core of X" / "This is X" closing patterns. Native Korean writers rarely close a paragraph by referring back with "이것이" — they tend to drop the demonstrative ("X의 핵심이다") or use a different rhythm ("바로 그 점이 ~", "그래서 ~", or no closing at all).
 
@@ -270,8 +237,6 @@
 ---
 
 ### K20. Mid-paragraph blockquote term definition [P2]
-
-**Detection signal:** A `>` blockquote inserted in the middle of running prose for the sole purpose of defining a term, with the format `> term: definition.` or `> **term**: definition.`
 
 **Problem:** LLMs love to break the flow of explanation to drop in a textbook-style term definition as a quote block. Native writers either (a) define inline in parentheses, (b) handle definitions in a separate glossary section, or (c) embed the definition in the surrounding sentence.
 
@@ -291,8 +256,6 @@
 
 ### K21. Bilingual notation uniformity [P2]
 
-**Detection signal:** Every technical term in the document is given consistently in `한국어(English)` form — e.g., "멱등(idempotent)", "소비자 그룹(consumer group)" — with no omissions and the same bracketing format throughout.
-
 **Problem:** Native writers are inconsistent about bilingual notation. They give the English the first time a term appears, then drop it. Or they give the English only when the Korean translation is ambiguous. 100% consistency from start to finish — every technical term, every time, same format — is an LLM-uniformity tell.
 
 **Rule:** Keep bilingual notation only on **first mention** of each term, or only where the Korean alone is ambiguous. Drop it on subsequent uses.
@@ -302,3 +265,17 @@
 
 **After:**
 > 멱등(idempotent)한 처리가 필요하다. 멱등성을 보장하지 않으면 ~. 멱등 키를 써서 ~.
+
+---
+
+### K22. Italic asterisk emphasis in Korean text [P3]
+
+**Problem:** Korean writers using markdown overwhelmingly reach for `**bold**` for emphasis. `*italic*` emphasis is an English-language markdown habit — italic doesn't render as visually emphatic on Hangul as it does on Latin script, so native Korean markdown convention favors bold. LLMs trained heavily on English markdown leak `*italic*` into Korean output.
+
+**Rule:** Convert `*phrase*` to `**phrase**` in Korean prose unless the italic is genuinely for a foreign-word/title convention (e.g., titles of works).
+
+**Before:**
+> 여러 클라이언트가 동시에 메시지를 기다리고 있을 때 *먼저 요청한 클라이언트*가 메시지를 가져간다.
+
+**After:**
+> 여러 클라이언트가 동시에 메시지를 기다리고 있을 때 **먼저 요청한 클라이언트**가 메시지를 가져간다.

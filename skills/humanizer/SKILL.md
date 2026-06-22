@@ -33,7 +33,7 @@ Scan this list FIRST during pattern detection. This cheatsheet is SUFFICIENT FOR
 | K16 | Sino-Korean overuse: "활용하다", "수행하다", "구축하다", "도입하다", "적용하다", "진행하다", "제공하다" (blog/essay only) | P3 |
 | K17 | **any** em-dash (—) in Korean text | **P1** |
 | K18 | **any** middle-dot (·) occurrence — including "남·녀", "동·서양" | **P1** |
-| K19 | "이것이 X의 핵심이다" definition-closing translated from "This is the X" | P2 |
+| K19 | "이것이 X의 핵심이다" / "이것이 X다" / "이것이 X의 본질이다" / "이것이 ~의 핵심 역할이다" definition-closing translated from "This is the X" | P2 |
 | K20 | mid-paragraph `>` blockquote inserted only to define a term | P2 |
 | K21 | 100% consistent Korean(English) bilingual notation across the document | P2 |
 
@@ -41,19 +41,19 @@ Scan this list FIRST during pattern detection. This cheatsheet is SUFFICIENT FOR
 
 | Code | Detection cue | Severity |
 |------|---------------|----------|
-| E1 | Importance inflation: testament, pivotal, evolving landscape, indelible mark, stands/serves as, marks a shift, key turning point, underscores its importance | P1 |
+| E1 | Importance inflation: testament, pivotal, crucial/vital role/moment, evolving landscape, indelible mark, stands/serves as, marks a shift, key turning point, underscores/highlights its importance, setting the stage for | P1 |
 | E2 | Notability/media name-dropping: independent coverage, local/regional/national media outlets, leading expert, active social media presence | P1 |
-| E3 | -ing suffix analysis: highlighting..., underscoring..., emphasizing..., ensuring..., reflecting/symbolizing..., contributing to..., fostering..., showcasing... | P1 |
-| E4 | Promotional language: nestled, groundbreaking, vibrant, robust, seamless, leverage, boasts, in the heart of, breathtaking, must-visit, stunning, cutting-edge, state-of-the-art, game-changing | P1 |
+| E3 | -ing suffix analysis: highlighting..., underscoring..., emphasizing..., ensuring..., reflecting/symbolizing..., contributing to..., cultivating/fostering..., showcasing... | P1 |
+| E4 | Promotional language: nestled, groundbreaking, vibrant, robust, seamless, leverage, boasts, in the heart of, breathtaking, must-visit, stunning, cutting-edge, state-of-the-art, game-changing, rich (figurative), profound, showcasing, exemplifies, commitment to, renowned, streamline | P1 |
 | E5 | Vague sourcing / weasel words: Industry reports, Observers have cited, Experts argue, Some critics argue, several sources | P1 |
 | E6 | "Challenges and Future Prospects" formula: Despite its... faces challenges..., Despite these challenges, Future Outlook | P1 |
-| E7 | AI-frequent vocabulary: Additionally, delve, tapestry, interplay, intricate, crucial, enhance, garner, landscape (abstract), realm, paradigm, synergy, nuanced, multifaceted | P1 |
+| E7 | AI-frequent vocabulary: Additionally, align with, delve, emphasizing, enduring, enhance, fostering, garner, interplay, intricate, landscape (abstract), multifaceted, nuanced, paradigm, pivotal, realm, showcase, synergy, tapestry, testament, underscore, vibrant | P1 |
 | E8 | Copula avoidance: serves as [a], stands as [a], marks [a], represents [a], boasts [a], features [a], offers [a] | P2 |
 | E9 | Negative parallel structure: Not only...but..., It's not just about..., it's..., It's not merely..., it's... | P2 |
 | E10 | False ranges: from X to Y / from A to B (when not a meaningful scale) | P2 |
 | E11 | Em dash overuse (—) in sales-copy style (>1 per paragraph) | P2 |
 | E12 | Bold overuse / inline header lists: mechanical bold on key terms, repeated `- **Header:** Description` pattern | P2 |
-| E13 | Conversation residue / flattery / recent clichés: Great question!, I hope this helps, Let's dive in, Here's the thing, It's worth noting that, The key takeaway here is, At the end of the day, In a world where... | P1 |
+| E13 | Conversation residue / flattery / recent clichés: Great question!, That's an excellent point!, Of course!, Certainly!, Absolutely!, You're absolutely right!, Would you like..., let me know, here is a..., I hope this helps, Let's dive in, Let's break this down, Here's the thing, This is where X comes in, It's worth noting that, The key takeaway here is, At the end of the day, In a world where..., Here's the reality:, The bottom line: | P1 |
 | E14 | Filler phrases: In order to, Due to the fact that, At this point in time, In the event that, has the ability to, It is important to note that, It goes without saying that | P2 |
 | E15 | Excessive hedging: could potentially possibly, might have some | P2 |
 | E16 | curly quotes ("\u201c...\u201d") → straight quotes ("...") | P3 |
@@ -71,7 +71,7 @@ Scan this list FIRST during pattern detection. This cheatsheet is SUFFICIENT FOR
 | C5 | Uniform paragraph length (all paragraphs mechanically 3-4 sentences) | P2 |
 | C6 | Forced three-part structure (Introduction → Body → Conclusion regardless of text type) | P2 |
 | C7 | tables used where prose would fit (qualitative misuse) | **P1** |
-| C8 | "한 줄 요약 → 본문 → 헷갈렸던 지점 → 참고자료" lecture-slide closure | P2 |
+| C8 | "한 줄 요약 → 본문 → 헷갈렸던 지점 → 참고자료" / "TL;DR → Body → Pitfalls → References" lecture-slide closure | P2 |
 | C9 | uniform tone/tension/sentence-length throughout — no fatigue toward the end | P2 |
 
 **Note on markup & structure traces (K17–K21, E18, C7–C9):** these are not single-word matches — scan for whole-document layout signals, not just keyword hits.

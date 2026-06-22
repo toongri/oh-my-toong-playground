@@ -28,17 +28,11 @@
 
 ### C2. Knowledge cutoff disclaimers [P1]
 
-**Detection (KR):** "정확한 정보는 확인이 필요합니다", "최신 정보와 다를 수 있습니다"
-**Detection (EN):** "as of [date]", "Up to my last training update", "based on available information"
-
 **Rule:** Delete all. Find accurate sources, or state ignorance plainly.
 
 ---
 
 ### C3. Positive conclusion formula [P1]
-
-**Detection (KR):** "밝은 미래가 기대됩니다", "무한한 가능성이 열려 있습니다", "함께 노력해야 할 것입니다"
-**Detection (EN):** "The future looks bright", "Exciting times lie ahead", "a major step in the right direction"
 
 **Rule:** Replace with concrete next steps, or delete.
 
@@ -70,8 +64,6 @@
 
 ### C7. Table overuse [P1]
 
-**Detection signal:** A document where tables are used to encode information that could naturally be prose — "term: description" pairs, "list of three concepts," ordered preferences, "A is for X, B is for Y" pairings. The signal is *qualitative misuse*, not a count threshold.
-
 **Problem:** LLMs compulsively tabulate. Anything remotely comparable — pros vs cons, terms vs descriptions, before vs after, "three reasons" — gets converted to a table. Native human writing reserves tables for genuinely tabular data (multi-attribute comparison, lookup tables with ≥3 heterogeneous columns) and lets the rest flow as prose.
 
 **Severity rule:** A document containing tables that should be prose → **P1**. Judgment is qualitative — apply when the writer was tabulating from compulsion rather than fit.
@@ -96,8 +88,6 @@
 
 ### C8. Lecture-slide meta-structure [P2]
 
-**Detection signal:** The document follows a complete "한 줄 요약 → 본문 → 헷갈렸던 지점 → 참고자료" or "TL;DR → Body → Pitfalls → References" structure where every section is present, evenly weighted, and rhetorically self-contained.
-
 **Problem:** Real human study notes are uneven. People scribble heavy notes on one section and skip the framing entirely on another. They forget the "한 줄 요약" or write it as an afterthought. The "헷갈렸던 지점" section, if present, is messy — half-formed sentences, asides, "왜인지 모르겠는데", maybe an unrelated tangent. When all four sections are present, polished, and each ends with a clean conclusion, the structure itself is the AI tell, regardless of content quality.
 
 **Particularly suspicious:**
@@ -114,8 +104,6 @@
 ---
 
 ### C9. Uniform tone and tension throughout [P2]
-
-**Detection signal:** The document maintains identical register, sentence-length distribution, and rhetorical posture from the first paragraph to the last. No fatigue, no acceleration, no sections where the writer obviously cared more or less.
 
 **Problem:** Humans get tired. Early sections of a long note are often careful, well-structured, with longer sentences. Later sections tend to compress: shorter sentences, more telegraphic phrasing, occasionally rougher punctuation, the occasional aside or even a frustrated tone. LLM output, by contrast, holds the *same* rhythm and register from the opening line to the closing line of an 8-section document.
 
