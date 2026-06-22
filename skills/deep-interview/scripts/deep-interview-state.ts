@@ -17,6 +17,8 @@
  *          [--append-round '<json>'] [--append-ontology-snapshot '<json>']
  *          [--append-round-stdin] [--append-ontology-snapshot-stdin]
  *          [--challenge-mode <name>]
+ *          [--append-provenance-item '<json>'] (append one {evidence_id, label} item to evidence_provenance)
+ *          [--append-stance <stance>]          (append one stance string to stance_history; ordered, NOT deduped)
  *          Strict-overlay merge refreshing last_touched_at.
  *          Stdin flags (--append-round-stdin / --append-ontology-snapshot-stdin) read
  *          the JSON payload from stdin, avoiding shell-quoting hazards with free text
@@ -67,6 +69,22 @@ function readRaw(path: string): Record<string, unknown> | null {
 // Rich state shape (per SKILL.md:72-89, NO sessionId field)
 // ---------------------------------------------------------------------------
 
+/**
+ * Closed set of provenance labels (D-H: origin→label assignment rule).
+ * Each evidence item carries exactly one label recording where it entered.
+ */
+export type EvidenceProvenanceLabel =
+  | '[from-code]'
+  | '[from-code][auto-confirmed]'
+  | '[from-research]'
+  | '[from-user]';
+
+/** A single evidence provenance record: one item → one origin label. */
+export interface EvidenceProvenanceItem {
+  evidence_id: string;
+  label: EvidenceProvenanceLabel;
+}
+
 export interface DeepInterviewStateContent {
   interview_id?: string;
   type?: 'greenfield' | 'brownfield';
@@ -78,6 +96,18 @@ export interface DeepInterviewStateContent {
   codebase_context?: unknown;
   challenge_modes_used?: string[];
   ontology_snapshots?: unknown[];
+  /**
+   * Per-evidence provenance tags (D-H). Each entry records the origin label of
+   * one evidence item at the moment it entered the interview.
+   * Distinct from challenge_modes_used: this is evidence-scoped, not stance-scoped.
+   */
+  evidence_provenance?: EvidenceProvenanceItem[];
+  /**
+   * Ordered stance-history (D-E, Dialectic Rhythm Guard). Records the sequence
+   * of stances selected at round head — ordered, NOT deduplicated. Distinct from
+   * challenge_modes_used which is deduped/unordered and tracks modes ever used.
+   */
+  stance_history?: string[];
 }
 
 export interface DeepInterviewState {
@@ -137,6 +167,8 @@ export function initDeepInterviewState(
     codebase_context: payload.codebase_context ?? priorState.codebase_context ?? null,
     challenge_modes_used: priorState.challenge_modes_used ?? [],
     ontology_snapshots: priorState.ontology_snapshots ?? [],
+    evidence_provenance: priorState.evidence_provenance ?? [],
+    stance_history: priorState.stance_history ?? [],
   };
 
   const overlay: DeepInterviewState = {
@@ -167,6 +199,10 @@ export function updateDeepInterviewState(
     append_round?: unknown;
     append_ontology_snapshot?: unknown;
     challenge_mode?: string;
+    /** Append one provenance record (evidence_id + label) to evidence_provenance. */
+    append_provenance_item?: EvidenceProvenanceItem;
+    /** Append one stance string to stance_history (ordered, NOT deduped). */
+    append_stance?: string;
   }
 ): void {
   // Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -191,7 +227,9 @@ export function updateDeepInterviewState(
     partial.current_ambiguity !== undefined ||
     partial.append_round !== undefined ||
     partial.append_ontology_snapshot !== undefined ||
-    partial.challenge_mode !== undefined;
+    partial.challenge_mode !== undefined ||
+    partial.append_provenance_item !== undefined ||
+    partial.append_stance !== undefined;
 
   if (needsStateOverlay) {
     // current_ambiguity lives under state per the SKILL.md rich shape
@@ -222,6 +260,19 @@ export function updateDeepInterviewState(
       if (!existing.includes(partial.challenge_mode)) {
         updatedState['challenge_modes_used'] = [...existing, partial.challenge_mode];
       }
+    }
+    if (partial.append_provenance_item !== undefined) {
+      const existing = Array.isArray(priorState['evidence_provenance'])
+        ? (priorState['evidence_provenance'] as EvidenceProvenanceItem[])
+        : [];
+      updatedState['evidence_provenance'] = [...existing, partial.append_provenance_item];
+    }
+    if (partial.append_stance !== undefined) {
+      // Ordered, NOT deduplicated — preserves insertion order for Dialectic Rhythm Guard (D-E).
+      const existing = Array.isArray(priorState['stance_history'])
+        ? (priorState['stance_history'] as string[])
+        : [];
+      updatedState['stance_history'] = [...existing, partial.append_stance];
     }
 
     overlay['state'] = updatedState;
@@ -303,6 +354,8 @@ function main(): void {
     const appendRoundStdin = args['append-round-stdin'] === true;
     const appendSnapshotStdin = args['append-ontology-snapshot-stdin'] === true;
     const challengeMode = str(args['challenge-mode']);
+    const appendProvenanceItemRaw = str(args['append-provenance-item']);
+    const appendStance = str(args['append-stance']);
 
     // Read stdin once if any stdin flag is present (avoids double-read)
     let stdinText: string | undefined;
@@ -357,6 +410,31 @@ function main(): void {
       }
     }
 
+    let appendProvenanceItem: EvidenceProvenanceItem | undefined;
+    if (appendProvenanceItemRaw !== undefined) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(appendProvenanceItemRaw);
+      } catch {
+        process.stderr.write(
+          `deep-interview-state update: --append-provenance-item: invalid JSON: ${appendProvenanceItemRaw}\n`
+        );
+        process.exit(1);
+      }
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        typeof (parsed as Record<string, unknown>)['evidence_id'] !== 'string' ||
+        typeof (parsed as Record<string, unknown>)['label'] !== 'string'
+      ) {
+        process.stderr.write(
+          `deep-interview-state update: --append-provenance-item: must be {"evidence_id":"<str>","label":"<label>"}\n`
+        );
+        process.exit(1);
+      }
+      appendProvenanceItem = parsed as EvidenceProvenanceItem;
+    }
+
     try {
       updateDeepInterviewState(sessionId, {
         current_phase: str(args['current-phase']),
@@ -364,6 +442,8 @@ function main(): void {
         append_round: appendRound,
         append_ontology_snapshot: appendSnapshot,
         challenge_mode: challengeMode,
+        append_provenance_item: appendProvenanceItem,
+        append_stance: appendStance,
       });
     } catch (e) {
       process.stderr.write(`deep-interview-state update: ${String(e)}\n`);
@@ -402,6 +482,8 @@ function main(): void {
         "         [--append-round-stdin]            (recommended for free-text: read JSON from stdin)\n" +
         "         [--append-ontology-snapshot-stdin] (recommended for free-text: read JSON from stdin)\n" +
         '         [--challenge-mode <name>]\n' +
+        "         [--append-provenance-item '{\"evidence_id\":\"<id>\",\"label\":\"<label>\"}']\n" +
+        '         [--append-stance <stance>]  (ordered, not deduped; for Dialectic Rhythm Guard)\n' +
         '  get\n' +
         '  list-others\n' +
         '  adopt --src <sid>\n'
