@@ -428,7 +428,7 @@ All performance optimization reports are stored in the `$OMT_DIR/performance-rep
 
 ## Output Format
 
-The final report follows a fixed 7-section structure. **When generating the final report, you MUST read `performance-report-template.md`** (colocated with this skill) for the exact template — do not infer the structure from memory.
+The final report follows a fixed 7-section structure.
 
 Sections: 1. Overview — 2. Test Scenario — 3. Analysis — 4. Improvements — 5. Results — 6. Future Plans — 7. References
 
@@ -436,7 +436,7 @@ Sections: 1. Overview — 2. Test Scenario — 3. Analysis — 4. Improvements �
 
 | Reference file | What it contains | When to read |
 |----------------|-----------------|--------------|
-| `performance-report-template.md` | The fixed 7-section final performance report template | When generating the final report (Step 10.2) |
+| `performance-report-template.md` | The final performance report template | When generating the final report (Step 10.2) |
 
 ## Language
 

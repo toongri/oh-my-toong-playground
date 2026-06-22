@@ -137,6 +137,7 @@ digraph broad_request_flow {
     "Invoke explore agent" [shape=box];
     "Need architectural understanding?" [shape=diamond];
     "Invoke oracle agent" [shape=box];
+    "Scout Finding Self-Check" [shape=box];
     "Enter Step 2: In-Depth Interview" [shape=box];
     "Create task list and execute" [shape=ellipse];
 
@@ -145,16 +146,18 @@ digraph broad_request_flow {
     "Do you know which files to modify?" -> "Need architectural understanding?" [label="YES"];
     "Invoke explore agent" -> "Need architectural understanding?";
     "Need architectural understanding?" -> "Invoke oracle agent" [label="YES"];
-    "Need architectural understanding?" -> "Enter Step 2: In-Depth Interview" [label="NO"];
-    "Invoke oracle agent" -> "Enter Step 2: In-Depth Interview";
+    "Need architectural understanding?" -> "Scout Finding Self-Check" [label="NO"];
+    "Invoke oracle agent" -> "Scout Finding Self-Check";
+    "Scout Finding Self-Check" -> "Enter Step 2: In-Depth Interview";
     "Enter Step 2: In-Depth Interview" -> "Create task list and execute";
 }
 ```
 
 1. **First**: Invoke `explore` to understand relevant codebase areas
 2. **Optionally**: Invoke `oracle` for architectural guidance
-3. **Then**: Enter **Step 2: In-Depth Interview Mode**
-4. **Finally**: Create task list and delegate to sisyphus-junior
+3. **Self-check scout findings (when they drive the plan)**: After explore/oracle collection and before the interview/task-list, when the scout findings will drive the plan/task-list, run the Scout Finding Self-Check (verification.md) — re-read plan-driving findings yourself, drop unsupported ones, and emit `scout self-check: K re-read / M dropped`. Trivial/Explicit requests are a no-op (the self-check does not fire).
+4. **Then**: Enter **Step 2: In-Depth Interview Mode**
+5. **Finally**: Create task list and delegate to sisyphus-junior
 
 ---
 

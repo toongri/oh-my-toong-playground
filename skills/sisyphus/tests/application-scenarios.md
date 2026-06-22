@@ -33,7 +33,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-15 | Context Brokering — Facts vs Preferences | Context Brokering Protocol | Explore for facts, user for preferences |
 | S-16 | Interview Mode — Sequential + Quality | In-Depth Interview Mode | One Q per message + rich context |
 | S-17 | User Deferral — Autonomous Decision | User Deferral Handling | "your call" → autonomous + documented |
-| S-18 | Broad Request Detection — Explore First | Broad Request Handling | scope-less verbs → explore → interview |
+| S-18 | Broad Request Detection — Explore First | Broad Request Handling | scope-less verbs → explore → self-check findings → interview |
 | S-19 | Vague Answer Clarification | Vague Answer Clarification | User Deferral distinction |
 | S-20 | Subagent Requests User Interview | Handling Subagent User Interview Requests | Relay + resume |
 | S-21 | Verification Retry Loop | Verification Flow / No Retry Limit | argus repeated failure → fix → re-verify |
@@ -52,6 +52,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | UC-S1 | End-to-End: Broad Request → Full Cycle | Full workflow integration | Decision Gate + Interview + Task + Delegation + junior→mnemosyne→complete |
 | UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | Verification retry + Evidence Audit | verify task: REQUEST_CHANGES + fix implement task + re-verify + evidence gap |
 | S-36 | Completeness Verification — Missing Spec Item Detection | Completeness verification | argus Completeness output + REQUEST_CHANGES + oracle dispatch |
+| S-37 | Scout Finding Self-Check — Fires on Broad, No-op on Trivial | Scout Finding Self-Check | inline self re-read + drop unsupported + `scout self-check:` line; no-op on Trivial; no argus, no dispatch |
 
 ---
 
@@ -504,8 +505,9 @@ Uses scope-less verb "improve" without a concrete target.
 | V1 | Detects as broad request | Identifies "improve the dashboard" as broad — scope-less verb, no specific target, cannot immediately identify files to modify |
 | V2 | Invokes explore first | Dispatches explore agent to understand dashboard structure, components, and current state before asking user anything |
 | V3 | Optionally invokes oracle for architecture | May dispatch oracle for architectural understanding of dashboard dependencies and pain points |
-| V4 | Enters Interview Mode after exploration | After gathering codebase context, enters Step 2 In-Depth Interview Mode to clarify scope with user |
-| V5 | Creates focused task list after interview | After interview completes, creates a concrete, scoped task list and delegates to juniors |
+| V4 | Self-checks scout findings before promotion | Because the explore/oracle findings will drive the task-list, runs the Scout Finding Self-Check (verification.md) — sisyphus itself re-reads each plan-driving finding's cited source as a claim to disprove (no sub-agent dispatch), drops unsupported ones, and emits the `scout self-check: K re-read / M dropped` line before building the task list. NEVER invokes argus, NEVER produces PASS/FAIL |
+| V5 | Enters Interview Mode after exploration | After gathering and self-checking codebase context, enters Step 2 In-Depth Interview Mode to clarify scope with user |
+| V6 | Creates focused task list after interview | After interview completes, creates a concrete, scoped task list (grounded in the surviving self-checked findings) and delegates to juniors |
 
 ---
 
@@ -1117,6 +1119,36 @@ Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus d
 
 ---
 
+## Scenario S-37: Scout Finding Self-Check — Fires on Broad, No-op on Trivial
+
+**Primary Technique:** Scout Finding Self-Check — sisyphus inline re-reads scout findings as claims to disprove before they drive a plan/task-list; no-op when findings do not drive a plan
+
+**Input (Two cases):**
+```
+Case A (Broad — self-check fires):
+User says: "Refactor the notification system."
+Scope-less verb, no specific file → broad request. sisyphus dispatches two explore lanes
+(notification senders; notification config) and one librarian lane (the notification library's
+current API). The findings will drive the task-list.
+
+Case B (Trivial — self-check is a no-op):
+User says: "Fix the typo 'recieve' in src/notify.ts line 12."
+Single file, known location → Trivial. No fan-out, no scout findings drive a plan.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Self-check fires on the broad request | Because explore/librarian findings will drive the task-list, sisyphus runs the Scout Finding Self-Check before the interview/task-list (verification.md activation: Broad/Open-ended/Ambiguous only) |
+| V2 | Inline self re-read, no dispatch | sisyphus itself re-reads each plan-driving finding's cited `file:line`/source — no `general-purpose` verifier, no per-lane fan-out, no parallel dispatch; the stance is "treat each finding as a claim to disprove until the cited source corroborates it" |
+| V3 | Mental 4-failure-mode pass, no schema | sisyphus confirms the path exists, the symbol/API still matches, and the behavior is current, running a quick mental pass over `stale_state` / `prompt_injection` / `nonexistent_path` / `version_drift`; there is no per-finding record schema; NO PASS/FAIL or APPROVE/REQUEST_CHANGES verdict; argus is never invoked |
+| V4 | Drop unsupported + visible line | Drops any finding the source does not support and any finding with no checkable citation; emits `scout self-check: K re-read / M dropped` (K = findings re-read, M = findings dropped) before building the task list — a skipped self-check would surface as a missing line |
+| V5 | oracle judgment stays advisory | If oracle was consulted, its architectural judgment/recommendations are NOT re-verified; only cited file/path/API claims that become task-list inputs are eligible for the self-check |
+| V6 | No-op on the Trivial request | For Case B the self-check does not fire (Trivial = no scout fan-out driving a plan); nothing is re-read. If a no-op line is recorded at all it is `scout self-check: n/a`. The implement→junior→mnemosyne path is untouched |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -1138,7 +1170,7 @@ Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus d
 | S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
 | S-17 | User Deferral — Autonomous Decision | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-18 | Broad Request Detection — Explore First | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
+| S-18 | Broad Request Detection — Explore First | PASS | 2026-06-23 | 6/6 VPs — re-gated to inline Scout Finding Self-Check (V4: sisyphus re-reads findings itself, no dispatch + `scout self-check:` line before task-list) |
 | S-19 | Vague Answer Clarification | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-20 | Subagent Requests User Interview | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-21 | Verification Retry Loop | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:199, 207-211 + verification.md:55-56, 279-297) |
@@ -1159,3 +1191,4 @@ Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus d
 | S-34 | Verify-only Task — Argus Direct (Skip Junior) | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:22, 27, 41, 88-100, 207, 227-243) |
 | S-35 | Investigation-only Task — Oracle/Explore (NOT Junior) | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:24, 33, 42-43, 50, 88-100, 228, 246-249 + oracle/SKILL.md:8-15) |
 | S-36 | Completeness Verification — Missing Spec Item Detection | PASS | 2026-05-12 | 6/6 VPs — spec-walk verified (sisyphus/verification.md:202-230, 279-297 + qa/SKILL.md:60, 332-347, 391-422) |
+| S-37 | Scout Finding Self-Check — Fires on Broad, No-op on Trivial | PASS | 2026-06-23 | 6/6 VPs — spec-walk verified, re-gated to inline self-check (sisyphus/verification.md Scout Finding Self-Check + decision-gates.md Broad Request step 3) |

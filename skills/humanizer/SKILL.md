@@ -58,7 +58,7 @@ Scan this list FIRST during pattern detection. This cheatsheet is SUFFICIENT FOR
 | E15 | Excessive hedging: could potentially possibly, might have some | P2 |
 | E16 | curly quotes ("\u201c...\u201d") → straight quotes ("...") | P3 |
 | E17 | Title Case In Headings → sentence case | P3 |
-| E18 | `*italic*` asterisk emphasis used in Korean text (Korean uses **bold**) | P3 |
+| K22 | `*italic*` asterisk emphasis used in Korean text (Korean uses **bold**) | P3 |
 
 ### Common patterns (Korean + English)
 
@@ -74,7 +74,7 @@ Scan this list FIRST during pattern detection. This cheatsheet is SUFFICIENT FOR
 | C8 | "한 줄 요약 → 본문 → 헷갈렸던 지점 → 참고자료" / "TL;DR → Body → Pitfalls → References" lecture-slide closure | P2 |
 | C9 | uniform tone/tension/sentence-length throughout — no fatigue toward the end | P2 |
 
-**Note on markup & structure traces (K17–K21, E18, C7–C9):** these are not single-word matches — scan for whole-document layout signals, not just keyword hits.
+**Note on markup & structure traces (K17–K22, C7–C9):** these are not single-word matches — scan for whole-document layout signals, not just keyword hits.
 
 ---
 
@@ -134,11 +134,7 @@ Do NOT mechanically keyword-match. Apply these judgment rules:
 
 After the pattern scan, fetch replacement guidance on demand. The cheatsheet is enough to DETECT; the reference files hold the REPLACEMENT recipes (before/after, rules) for the flagged codes.
 
-- If content type is **Blog/Essay** or **SNS/Casual** → read `soul-injection.md` before Step 4 (soul injection guidance; do NOT apply to technical/academic/code).
-- For any flagged **K1–K16 / K19–K21** pattern → read `patterns-korean.md`.
-- For any flagged **E1–E18** pattern → read `patterns-english.md`.
-- For any flagged **C1–C9** pattern → read `patterns-common.md`.
-- If a worked before/after example or the source references are needed → read `examples.md`.
+Look up the flagged codes in the **Reference Files** table at the end of this document, then read the matching file before Step 4.
 
 K17 (em-dash) and K18 (middle-dot) replacement guidance is already inline below under `## Always-On Critical Patterns` — no file read needed for those.
 
@@ -236,7 +232,7 @@ Replacement guidance is relocated to colocated files, read on demand per the rou
 | File | Contents | Read when |
 |------|----------|-----------|
 | `soul-injection.md` | "Breathing Life Into Writing" — soul-injection guidance | Content type is Blog/Essay or SNS/Casual |
-| `patterns-korean.md` | K1–K16, K19–K21 replacement recipes | Any K1–K16 / K19–K21 pattern flagged |
-| `patterns-english.md` | E1–E18 replacement recipes | Any E1–E18 pattern flagged |
+| `patterns-korean.md` | K1–K16, K19–K22 replacement recipes | Any K1–K16 / K19–K22 pattern flagged |
+| `patterns-english.md` | E1–E17 replacement recipes | Any E1–E17 pattern flagged |
 | `patterns-common.md` | C1–C9 replacement recipes | Any C1–C9 pattern flagged |
 | `examples.md` | Full before/after worked example + References | A worked example or the source references are needed |

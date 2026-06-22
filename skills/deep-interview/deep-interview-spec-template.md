@@ -11,6 +11,7 @@
 - Generated: {timestamp}
 - Threshold: {threshold}
 - Initial Context Summarized: {yes|no}
+- Brownfield Scout Self-Check: {K re-read / M dropped | n/a — greenfield}
 - Status: {PASSED | BELOW_THRESHOLD_EARLY_EXIT}
 
 ## Clarity Breakdown
@@ -47,7 +48,7 @@
 | {assumption} | {how it was questioned} | {what was decided} |
 
 ## Technical Context
-{brownfield: relevant codebase findings from explore agent}
+{brownfield: surviving scout findings from the Phase-1 step 3.1 self-check (K re-read / M dropped) — NOT the raw explore output}
 {greenfield: technology choices and constraints}
 
 ## Ontology (Key Entities)

@@ -35,12 +35,13 @@ Gathering codebase facts before asking:
 ```
 [spawns explore agent: "find authentication implementation"]
 [receives: "Auth is in src/auth/ using JWT with passport.js"]
+[step-3.1 self-check: re-read src/auth/ — finding survives (path exists, JWT + passport.js usage confirmed, no version drift)]
 
-Question: "I found JWT authentication with passport.js in `src/auth/` (pattern match from explore).
+Question: "I found JWT authentication with passport.js in `src/auth/` (confirmed by re-reading the source).
 For this new feature, should we extend the existing auth middleware or create
 a separate authentication flow?"
 ```
-Why good: Explored first, cited the repo evidence that triggered the question, then asked an informed confirmation question. Never asks the user what the code already reveals.
+Why good: Explored first, ran step-3.1 self-check (re-read the cited path to confirm the finding survives before it drives anything), then asked an informed confirmation question based only on verified evidence. Never asks the user what the code already reveals.
 
 ### Good: Contrarian mode activation
 

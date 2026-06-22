@@ -275,6 +275,7 @@ Reference files below are **trigger-conditional MANDATORY full-read**. The trigg
 | About to compose your first delegation prompt for any agent in this session (junior, mnemosyne, explore, librarian, oracle) | [delegation.md](delegation.md) |
 | About to dispatch argus OR receive the first verdict in this session OR audit evidence | [verification.md](verification.md) |
 | About to classify a user request, enter Interview Mode, or handle a broad/ambiguous request | [decision-gates.md](decision-gates.md) |
+| About to run Scout Finding Self-Check on a broad/ambiguous request | [verification.md](verification.md) |
 
 **Read evidence line** (emit once per file in your visible message after the read completes):
 ```

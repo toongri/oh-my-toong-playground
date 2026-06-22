@@ -176,6 +176,28 @@ Results from oracle, explore, and librarian are:
 
 **Key Distinction:** "What was DONE?" (Implementation) → completion is junior's report + mnemosyne commit; argus verifies verify-type tasks only | "What SHOULD be done?" (Advisory) → Judgment material, not correctness-verified
 
+**Exception — scout findings that drive a plan.** When scout findings are about to be promoted into a plan or task-list, they are no longer plain advisory. See `### Scout Finding Self-Check` below for the full contract — all eligibility rules and the oracle fact/judgment distinction are defined there only.
+
+### Scout Finding Self-Check
+
+**Activation: Broad/Open-ended/Ambiguous requests whose plan/task-list draws on any scout finding.**
+Trivial and Explicit requests keep the existing advisory trust and skip this entirely. When
+explore/librarian findings (or cited file/path/API claims in oracle output) are about to become task-list
+premises, do NOT trust them on collection: sisyphus itself re-reads each finding's cited `file:line`/source
+and treats it as a claim to disprove — confirm the path exists, the symbol/API still matches, and the
+behavior is current (a quick mental pass over `stale_state` / `prompt_injection` / `nonexistent_path` /
+`version_drift`). Drop any finding the source does not support; a finding with no checkable citation is
+unverified and dropped. Facts drawn from authoritative loaded context are exempt. oracle's architectural
+*judgment* and recommendations stay advisory and are NEVER re-verified — only its factual file/path/API
+citations that become plan inputs are eligible.
+
+This verifies "what was FOUND" (scout facts), never "what was DONE": it does NOT invoke argus, produces no
+PASS/FAIL or APPROVE/REQUEST_CHANGES verdict, and does not touch the implement→junior→mnemosyne path.
+Before building the task list, emit a visible line — `scout self-check: K re-read / M dropped` (nothing to
+check → `scout self-check: n/a`). This makes the step visible-or-violation: a skipped self-check surfaces as
+a missing line. There is no separate artifact or state file — the output is the filtered findings plus this
+line.
+
 ---
 
 ## QA REQUEST Composition

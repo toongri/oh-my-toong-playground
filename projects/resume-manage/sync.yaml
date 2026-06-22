@@ -41,7 +41,8 @@ skills:
     - resume-forge
     - collect-jd
     - orchestrate-review
-    - review-report
+    - component: review-report
+      platforms: [claude]
     - hud
     - mock-interview
     - scan-pdf-to-notes

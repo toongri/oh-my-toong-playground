@@ -40,7 +40,8 @@ skills:
     - technical-copywriting
     - humanizer
     - orchestrate-review
-    - review-report
+    - component: review-report
+      platforms: [claude]
     - create-slides
     - slides-review
     - collect-jd

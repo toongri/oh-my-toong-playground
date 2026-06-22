@@ -218,6 +218,15 @@
 
 **Note:** In technical docs, Sino-Korean may be more natural (e.g., "API를 활용하다" isn't worse than "API를 쓰다"). Apply mainly to blog/essay content.
 
+**Replace:**
+- 활용하다 → 쓰다
+- 수행하다 → 하다
+- 구축하다 → 만들다 / 세우다
+- 도입하다 → 넣다 / 쓰기 시작하다
+- 적용하다 → 쓰다 / 붙이다
+- 진행하다 → 하다
+- 제공하다 → 주다 / 내놓다
+
 ---
 
 ### K19. "이것이 ~다" definition closing (translated from "This is the X") [P2]
