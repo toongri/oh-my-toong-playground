@@ -544,31 +544,58 @@ test_deep_interview_nested_loop_prevention() {
 }
 
 # =============================================================================
-# A1 — incidental mention of deep-interview keywords creates no state file
+# A1 — incidental mention of deep-interview keywords: no state file AND advisory emitted
 # =============================================================================
 
 test_a1_incidental_mention_creates_no_state_file() {
     mkdir -p "$TEST_TMP_DIR/.git"
 
     local session_id="di-test-mention"
-    # Mentions (including negation) — none should trigger state file creation
-    local prompts=(
-        "we are NOT doing a deep-interview today"
-        "the ouroboros pattern is interesting"
-        "딥인터뷰에 대해 들어봤어요?"
-    )
 
-    local p
-    for p in "${prompts[@]}"; do
-        echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "'"$p"'"}' \
-            | "$SCRIPT_DIR/keyword-detector.sh" > /dev/null 2>&1 || true
-    done
+    # A pure incidental mention (no other mode keywords) should emit the advisory hint
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "we are NOT doing a deep-interview today"}' \
+        | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_output_contains "$output" "deep-interview-mode" \
+        "Incidental deep-interview mention should still emit deep-interview advisory" || return 1
+    assert_output_contains "$output" "hint, not a mandate" \
+        "Advisory should say it is a hint, not a mandate" || return 1
 
     # No state file should exist from keyword-detector
     local found
     found=$(ls "$OMT_DIR"/deep-interview-active-state-*.json 2>/dev/null | wc -l | tr -d ' ')
     [[ "$found" -eq 0 ]] \
         || { echo "ASSERTION FAILED: incidental mention must not create state file (found=$found files)"; return 1; }
+}
+
+# =============================================================================
+# V2 — deep-interview + analyze coexistence: analyze-mode must not be masked
+# =============================================================================
+
+test_v2_coexistence_deep_interview_and_analyze_emits_analyze_mode() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    # Prompt contains both "deep-interview" (incidental) AND "analyze" (the real intent).
+    # The hook must NOT exit after the deep-interview branch; analyze-mode must fire too.
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "v2-test", "prompt": "analyze the deep-interview skill"}' \
+        | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_output_contains "$output" "analyze-mode" \
+        "Prompt with analyze+deep-interview should emit analyze-mode" || return 1
+}
+
+test_v2_coexistence_deep_interview_and_search_emits_search_mode() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    # Prompt contains both "deep-interview" (incidental) AND "search" (the real intent).
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "v2-test-search", "prompt": "search for examples in the deep-interview notes"}' \
+        | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_output_contains "$output" "search-mode" \
+        "Prompt with search+deep-interview should emit search-mode" || return 1
 }
 
 # =============================================================================
@@ -676,8 +703,12 @@ main() {
     run_test test_deep_interview_korean_keyword
     run_test test_deep_interview_nested_loop_prevention
 
-    # A1 — incidental mention creates no state file
+    # A1 — incidental mention: no state file AND advisory emitted
     run_test test_a1_incidental_mention_creates_no_state_file
+
+    # V2 — deep-interview + analyze/search coexistence
+    run_test test_v2_coexistence_deep_interview_and_analyze_emits_analyze_mode
+    run_test test_v2_coexistence_deep_interview_and_search_emits_search_mode
 
     # Deep Interview seed timestamps (TODO 5: survivor tests re-pointed to pre-tool-enforcer seed)
     run_test test_deep_interview_seed_has_parser_compatible_timestamps

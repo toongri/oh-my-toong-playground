@@ -116,11 +116,23 @@ EOF
 fi
 
 # Check for deep-interview keywords (third priority)
+# When analyze/search keywords also co-match, do NOT exit — fall through so those
+# mode blocks can still fire. The advisory is only emitted standalone when deep-interview
+# is the sole keyword detected (incidental mention case).
 if echo "$PROMPT_LOWER" | grep -qiE '\b(deep[- ]?interview|ouroboros)\b|딥인터뷰'; then
-  cat << 'EOF'
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<deep-interview-mode>\n\n**Deep-interview may apply** — if the user is genuinely asking for a thorough requirements interview, consider invoking `Skill(deep-interview)`. This is a hint, not a mandate: if \"deep-interview\"/\"ouroboros\" appears incidentally (e.g., discussing or editing the skill itself), ignore it and proceed normally.\n\n</deep-interview-mode>\n\n---\n"}}
+  # Check whether a stronger mode keyword is also present
+  HAS_ANALYZE=$(echo "$PROMPT_LOWER" | grep -cE '\b(analyze|analyse|investigate|examine|research|study|deep.?dive|inspect|audit|evaluate|assess|review|diagnose|scrutinize|dissect|debug|comprehend|interpret|breakdown|understand)\b|why\s+is|how\s+does|how\s+to' || true)
+  HAS_SEARCH=$(echo "$PROMPT_LOWER" | grep -cE '\b(search|find|locate|lookup|explore|discover|scan|grep|query|browse|detect|trace|seek|track|pinpoint|hunt)\b|where\s+is|show\s+me|list\s+all' || true)
+  HAS_THINK=$(echo "$PROMPT_LOWER" | grep -cE '\b(ultrathink|think)\b' || true)
+  if [ "$HAS_ANALYZE" -gt 0 ] || [ "$HAS_SEARCH" -gt 0 ] || [ "$HAS_THINK" -gt 0 ]; then
+    # Co-match: skip standalone advisory, let the matching mode branch handle the output
+    true
+  else
+    cat << 'EOF'
+{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<deep-interview-mode>\n\n**Deep-interview may apply** — if the user is genuinely asking for a thorough requirements interview, consider invoking `Skill(deep-interview)`. This is a hint, not a mandate: if \"deep-interview\"/\"ouroboros\" appears incidentally (e.g., discussing or editing the skill itself), ignore it and proceed normally.\n\nIf you are actually running a deep interview, invoke `Skill(deep-interview)` to ensure state tracking and stop-hook protection are engaged.\n\n</deep-interview-mode>\n\n---\n"}}
 EOF
-  exit 0
+    exit 0
+  fi
 fi
 
 # Check for ultrathink/think keywords
