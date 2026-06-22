@@ -40,13 +40,12 @@ These premises must be reflected in the chunk-reviewer dispatch prompt — see S
 | Diff range determination & git | Yes | - |
 | Evidence Verification (build/test/lint) | Yes | - |
 | Chunking decision | Yes | - |
-| Walkthrough/critique synthesis | Yes | - |
-| Walkthrough context enrichment | Yes (read code directly) | explore (fallback for broad architectural scope) |
+| Findings synthesis (rank/class verified findings) | Yes | - |
 | Individual candidate verification (Phase 2) | NEVER | verifier subagent (one per candidate) |
 | Individual chunk review | NEVER | chunk-reviewer |
 | Code modification | NEVER | (forbidden entirely) |
 
-**RULE**: Orchestration, synthesis, and decisions = Do directly. Per-candidate verification = DELEGATE to verifier subagents (one per candidate). Multi-angle finding = DELEGATE to chunk-reviewer. Code modification = FORBIDDEN. You still read code directly for walkthrough enrichment (Phase 1a).
+**RULE**: Orchestration, synthesis, and decisions = Do directly. Per-candidate verification = DELEGATE to verifier subagents (one per candidate). Multi-angle finding = DELEGATE to chunk-reviewer. Code modification = FORBIDDEN.
 
 ### Role Separation
 
@@ -62,14 +61,13 @@ digraph role_separation {
     "Orchestrator" -> "verifier" [label="dispatch one per candidate"];
     "verifier" -> "Codebase" [label="Read/Grep to verify"];
     "verifier" -> "Orchestrator" [label="verdict + enriched finding"];
-    "Orchestrator" -> "Codebase" [label="Read for walkthrough enrichment"];
 }
 ```
 
 **Your role as orchestrator:**
 - Dispatch chunk-reviewer agents with diff command strings (each fans out the angle finders)
 - Dispatch one verifier subagent per candidate; collect their verdicts and drop REFUTED
-- Synthesize the kept findings into a walkthrough + ranked report; read code directly only to enrich the walkthrough (Phase 1a)
+- Synthesize the kept findings into a ranked findings report (text only)
 - Make chunking decisions and rank the verified findings (no merge verdict — this review reports, it does not gate)
 
 **NOT your role:**
@@ -87,19 +85,16 @@ digraph role_separation {
 - Step 3 evidence summary (structured table — build/test/lint status + test coverage mapping, truncated to summary on success / last 30 lines on failure)
 - chunk-reviewer results (candidate findings)
 - Verifier subagent verdicts + enriched findings (Phase 2)
-- **Targeted code reading** via Read/Grep/Glob for walkthrough enrichment (Phase 1a) only
 
 **Forbidden in orchestrator context:**
 - Running the raw `git diff` command (chunk-reviewers and verifiers execute the diff, not you)
 - Reading code to verify candidates in your own context (each candidate goes to its own verifier subagent)
 - Modifying any source files
 
-**Context management for code reading:**
-- Read only files relevant to walkthrough gaps — not the entire diff
-- For walkthrough enrichment, read key architectural files (configs, base classes) — not every changed file
+**Context management:**
 - Per-candidate code reading happens inside verifier subagents, not your context — see Phase 2 cap & batching
 
-**RULE**: You read code to enrich the walkthrough (Phase 1a). Per-candidate verification is delegated to verifier subagents. You CANNOT run the raw diff command or modify files.
+**RULE**: Per-candidate verification is delegated to verifier subagents. You CANNOT run the raw diff command or modify files.
 
 ## Step 0: Intent and Context Acquisition
 
@@ -204,7 +199,7 @@ Determine range and setup for subsequent steps:
 
 ### PR Mode: Worktree Checkout (per Premise 1)
 
-This skill assumes the orchestrator is already running inside a worktree dedicated to this review (the caller is responsible for creating the worktree). Therefore: **fetch the PR ref AND check it out**. The working directory must reflect the post-change state of the PR so that all subsequent code reading (Phase 1a, Phase 2 verification, chunk-reviewer Step 2) sees the actual code under review.
+This skill assumes the orchestrator is already running inside a worktree dedicated to this review (the caller is responsible for creating the worktree). Therefore: **fetch the PR ref AND check it out**. The working directory must reflect the post-change state of the PR so that all subsequent code reading (Phase 2 verification, chunk-reviewer Step 2) sees the actual code under review.
 
 **PR ID 추출 규칙**: 사용자가 URL(`https://github.com/<org>/<repo>/pull/<N>`) 형식으로 호출하면, 아래 bash로 진입하기 *전에* trailing path segment에서 numeric `<N>`을 추출해 `<number>` 자리에 substitute하라. URL을 그대로 substitute하면 `git fetch origin pull/<URL>/head`가 invalid refspec으로 실패하고 `git checkout -B pr-<URL>`이 invalid 브랜치명으로 실패한다.
 
@@ -388,71 +383,9 @@ Re-dispatch a chunk-reviewer for its chunk only when its response signals an inf
 Cap: maximum 1 re-dispatch per original chunk; if the re-dispatch also fails, accept partial coverage.
 After all re-dispatches complete, merge all chunk results (original + re-dispatched) before proceeding to Step 6.
 
-## Step 6: Walkthrough + Verification + Synthesis
+## Step 6: Verification + Synthesis
 
-After all chunk-reviewers return, produce the final output in three phases: the walkthrough (Phase 1), per-candidate verification via a verifier fan-out (Phase 2), and findings synthesis (Phase 3).
-
-### Phase 1: Walkthrough Synthesis (MANDATORY)
-
-Orchestrator directly produces the Walkthrough from:
-- `git diff {range} --stat` / `--name-only` and `git log {range}` (Step 2) — the shape, scope, and stated intent of the change
-- Targeted reads of the changed files (the working directory is the post-change state) + Phase 1a results (if any)
-- The merged candidate findings — for context on where risk concentrates (not as the narrative itself)
-
-**Execution order:** First evaluate Phase 1a (context enrichment). Then generate the sections below.
-
-### Phase 1a: Context Enrichment (Conditional)
-
-After reviewing the diff shape (Step 2 stat/name-only/log) and the merged candidates, assess whether the available information is sufficient to write the Walkthrough. If gaps exist, **read the relevant code directly** before writing Phase 1 output.
-
-**When to read code for enrichment:**
-
-| Gap | What to Read | Example |
-|-----|-------------|---------|
-| Cross-module relationships unclear | Interfaces, base classes, caller/callee code | "Chunk A shows OrderService calling PaymentGateway — read the gateway interface and its implementations" |
-| Architecture hierarchy unknown | Class hierarchy, module structure | "New class extends BaseRepository — read the base class to understand the contract" |
-| Inconsistent patterns across chunks | Both implementations + project conventions | "Chunk A uses Result<T>, Chunk B uses exceptions — read both to determine project convention" |
-
-**When NOT to enrich:**
-
-| Condition | Reason |
-|-----------|--------|
-| Simple changes (test-only, doc-only, config-only, single-function logic) | The diff stat and commit history are self-sufficient |
-| The diff shape and a quick read of changed files give a complete picture | No gaps to fill |
-| Trivial diff (< 5 files, < 100 lines) | Sparse analysis is expected, not a gap |
-
-**Fallback**: For very broad architectural exploration (10+ files across many modules), dispatch an explore agent instead of reading everything directly. This is the exception, not the default.
-
-**Data flow:**
-```
-Phase 1: Read the diff shape (stat/name-only/log) + the merged candidates
-       → Assess: sufficient for Walkthrough?
-       → If gaps: Read the relevant changed files directly (Read/Grep/Glob)
-       → Write Walkthrough using: diff shape + Step 2 metadata + code reading results
-```
-
-#### Change Summary
-- 1-2 paragraph prose summary of the entire change's purpose and context
-- Include motivation, approach taken, and overall impact
-- Written for someone unfamiliar with the code to understand the change
-
-#### Core Logic Analysis
-- Build a unified module/feature-level narrative of the change from the diff shape and your code reading
-- Cover both core changes AND supporting/peripheral changes
-- Enrich with Step 2 metadata (commit messages, PR description, CLAUDE.md) and Phase 1a results when available
-- Explain data flow, design decisions, and side effects from the perspective of inter-module relationships
-- Level of detail: enough to understand the full change WITHOUT reading the code
-
-#### Architecture Diagram
-- Mermaid class diagram or component diagram
-- Show changed classes/modules and their relationships (inheritance, composition, dependency)
-- Distinguish new vs modified elements
-- If no structural changes (e.g., logic-only changes within existing methods): write "No structural changes — existing architecture preserved"
-
-#### Sequence Diagram
-- Mermaid sequence diagram visualizing the primary call flow(s) affected by the changes
-- Include actors, method calls, return values, and significant conditional branches
-- If no call flow changes (e.g., variable rename, config change): write "No call flow changes"
+After all chunk-reviewers return, produce the final findings in two phases: per-candidate verification via a verifier fan-out (Phase 2), and findings synthesis (Phase 3). The terminal deliverable is the **Phase 3 findings text** — no walkthrough, no diagrams, no HTML.
 
 ### Phase 2: Candidate Verification (MANDATORY)
 
@@ -492,62 +425,14 @@ This is a **report**. You surface verified findings, ranked by what matters most
 | Finding references a deleted file | Read the file at base branch (`git show {base}:{file}`). Note "(deleted file)" in Context. |
 | Finding spans multiple files | Primary file gets the code snippet. Other files listed in Blast Radius with brief context. |
 | Fix cannot be expressed as simple diff | State design direction + "Concrete diff not possible — structural change required". |
-| Zero findings after verification | Skip enrichment. Report a clean review (Walkthrough + "No findings survived verification."). |
+| Zero findings after verification | Report a clean review: "No findings survived verification." |
 | 50+ candidates requiring verification | Dispatch verifiers in batches per Phase 2 (≤25), correctness candidates first. |
 
-### HTML Render + Terminal Pointer
+### Terminal Output
 
-This is a **report**. It does not gate. There is no Assessment / "Ready to merge" section.
+This is a **report**. It does not gate. There is no Assessment / "Ready to merge" section, and there is no HTML — the deliverable is the Phase 3 findings as terminal text.
 
-After Phase 2 verification is complete, assemble the render-time markdown, render it into `$OMT_DIR/reviews/{slug}.html`, and print a short terminal pointer. The full report lives only in the HTML — the terminal receives counts and a path, not the report body.
-
-#### Step R1: Assemble the Render-Time Markdown
-
-Assemble the report markdown with these top-level sections (omit optional sections when empty per the rules below).
-
-**MANDATORY READ: `references/render-assembly.md`** — card format, injection guard rules (card-body + prose), mermaid validity constraints, translation rules, unverified-entry handling, and the placeholder table / write command. Read it now before assembling.
-
-#### Step R2: Read the Template
-
-Read the HTML template from `${CLAUDE_SKILL_DIR}/templates/review-presentation.html`. Do NOT construct the path relative to the current working directory — during a review, the skill's bash CWD is the review target repo, not the skill directory, so a CWD-relative read would miss the deployed copy.
-
-#### Step R3: Derive the Slug
-
-Derive `{slug}` from the review target — stable per target so that re-reviewing the same target **overwrites** the prior file (no timestamp suffix):
-
-- PR review: `{repo-basename}-pr{N}` (e.g. `algocare-home-pr123`)
-- Branch comparison: `{repo-basename}-{sanitized-branch}` (branch sanitized to `[a-z0-9-]`)
-- Fallback (no PR, no branch): `{repo-basename}-{short-diff-range-hash}`
-
-where `{repo-basename}` = `basename -s .git $(git remote get-url origin)`, or `basename $(git rev-parse --show-toplevel)` if no remote.
-
-#### Step R4: Substitute Placeholders and Write
-
-(Placeholder substitution and write procedure: **see `references/render-assembly.md`** — read it if you have not already done so at Step R1.)
-
-#### Step R5: Open and Print Terminal Pointer
-
-Attempt to open the HTML file in the browser (best-effort, non-blocking — never error on failure):
-
-```bash
-open "$OMT_DIR/reviews/{slug}.html" 2>/dev/null || \
-  xdg-open "$OMT_DIR/reviews/{slug}.html" 2>/dev/null || \
-  true
-```
-
-On headless/CI environments where neither `open` nor `xdg-open` succeeds, print the file path so the user can open it manually — do not raise an error.
-
-Print the terminal pointer (finding counts by verdict/category + the html path — NOT the full report body):
-
-```
-Review written: $OMT_DIR/reviews/{slug}.html
-Correctness: {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
-Cleanup:     {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
-```
-
-### Example Final Output
-
-**MANDATORY READ on first output: `references/output-example.md`** — a complete example synthesized from 3 chunks (Order API + domain, Payment integration, Inventory + messaging). Read it before producing your first review output to match the expected format, level of detail, and enrichment style.
+Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup), `file:line`, and the verifier's enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the shape returned by `references/verifier-prompt.md`). Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by `review-report` when it dispatches a code-reviewer agent that runs this skill — do not invent a different format.
 
 ## Reference Files (on-demand)
 
@@ -555,6 +440,4 @@ These files live in `references/` alongside this skill. Each is loaded only when
 
 | Reference file | What it contains | When to read |
 |---|---|---|
-| `references/render-assembly.md` | Card format, injection guards (card-body + prose), mermaid validity constraints, translation rules, unverified-entry handling, placeholder table and write command | Step R1 (assemble render markdown) and Step R4 (substitute placeholders and write) |
 | `references/verifier-prompt.md` | The per-candidate verifier contract: verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), verification method, read-only constraint | Phase 2 — before dispatching verifier subagents |
-| `references/output-example.md` | A complete worked review example synthesized from 3 chunks | When producing your first review output, to match expected format and enrichment depth |
