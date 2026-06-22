@@ -84,6 +84,7 @@ const VALID_EVENTS = new Set([
   "Stop",
   "SubagentStop",
   "PreCompact",
+  "PostCompact", // Codex-only; shared Set is harmless — non-codex platform YAML never names it
 ]);
 
 const VALID_HOOK_TYPES = new Set(["command", "prompt"]);
@@ -91,7 +92,7 @@ const VALID_HOOK_TYPES = new Set(["command", "prompt"]);
 const PLATFORM_ALLOWED_SECTIONS: Record<string, Set<string>> = {
   claude: new Set(["config", "hooks", "mcps", "plugins", "statusLine"]),
   gemini: new Set(["config", "hooks", "mcps", "plugins"]),
-  codex: new Set(["config", "mcps", "model-map"]),
+  codex: new Set(["config", "mcps", "model-map", "hooks"]),
   opencode: new Set(["config", "mcps", "model-map"]),
 };
 
