@@ -37,8 +37,13 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
 - Ask ONE question at a time -- never batch multiple questions
 - Target the WEAKEST clarity dimension with each question
 - Make weakest-dimension targeting explicit every round: name the weakest dimension, state its score/gap, and explain why the next question is aimed there
-- Gather codebase facts via `explore` agent BEFORE asking the user about them
+- Gather facts BEFORE asking the user about them (facts-before-judgment): `explore` for codebase facts, and `librarian`/`ultraresearch` for external facts a dimension turns on. The in-interview `librarian`/`ultraresearch` call is tier-capped at **Scoped (≤3 workers)** and **de-duplicated per dimension** (do not re-call for a dimension already grounded). When `ultraresearch` is unavailable (call fails or absent), gracefully degrade to the existing `explore`-only path — never block the round on it.
 - For brownfield confirmation questions, cite the repo evidence that triggered the question (file path, symbol, or pattern) instead of asking the user to rediscover it
+- Tag every evidence item by its ORIGIN at record time (provenance is assigned where evidence enters, never reconstructed later) and persist it in the `evidence_provenance` state field. Origin→label assignment: a codebase read → `[from-code]`; a codebase read confirmed by executed code → `[from-code][auto-confirmed]`; a `librarian`/`ultraresearch` external fact → `[from-research]`; a user answer → `[from-user]`. Append each item via the state CLI:
+  ```bash
+  bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+    --append-provenance-item '{"evidence_id":"<id>","label":"<one-of-the-four-labels>"}'
+  ```
 - Score ambiguity after every answer -- display the score transparently
 - Keep prompt payloads budgeted: summarize or trim oversized initial context/history before composing question, scoring, spec, or handoff prompts
 - If the user's initial context is oversized, create a concise prompt-safe summary first and wait for that summary before ambiguity scoring, question generation, or downstream execution handoff
@@ -60,7 +65,7 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
 3. **For brownfield**: Run `explore` agent to map relevant codebase areas; pass the summary as `--codebase-context` in the `init` call (step 4)
 3.5. **Load runtime settings**:
    - Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user)
-   - Resolve `omt.deepInterview.ambiguityThreshold` into `<resolvedThreshold>`; if it is undefined, use `0.2`
+   - Resolve `omt.deepInterview.ambiguityThreshold` into `<resolvedThreshold>`; if it is undefined, use `0.15`
    - Derive `<resolvedThresholdPercent>` from `<resolvedThreshold>` and substitute both placeholders throughout the remaining instructions before continuing
 3.6. **Normalize oversized initial context before state init**:
    - Inspect the initial idea plus any pasted artifacts, logs, transcripts, or file excerpts for prompt-budget risk before writing state or generating the first question.
@@ -119,6 +124,36 @@ The `init` subcommand performs a strict overlay of the rich state shape into the
 ## Phase 2: Interview Loop
 
 Repeat until `ambiguity ≤ threshold` OR user exits early:
+
+### Step 2-head: Dialectic Rhythm Guard (pre-question stance selector)
+
+At the HEAD of every round — before generating the question — select this round's **stance** via the rotation rules below, then record it in the ordered `stance_history` field (D-E). This selector is the SINGLE owner of stance selection: it subsumes the previously ad-hoc Ontologist triggers so there are no longer two paths to the same stance.
+
+The five stances are EXISTING behaviors made explicit, not new agent modes:
+- **Clarify** — normal Socratic weakest-dimension questioning (the default round posture; Step 2a).
+- **Fact-ground** — the facts-before-judgment `explore`-or-`librarian`/`ultraresearch` call (the Execution_Policy dispatch), run instead of a user question when the weakest dimension turns on a discoverable fact.
+- **Contrarian** — challenge the core assumption (Phase 3, Round 4+).
+- **Simplifier** — probe whether complexity can be removed (Phase 3, Round 6+).
+- **Ontologist** — find the essence by examining the ontology (Phase 3).
+
+**Rotation rules** (evaluated in order; the first match selects the stance):
+1. **Fact-ground rule** — if the weakest dimension turns on a fact not yet grounded for that dimension, select **Fact-ground** (deduped per dimension — never re-ground an already-grounded dimension).
+2. **Stall rotation rule** → **Ontologist** — if ambiguity has stayed within ±0.05 for 3 rounds (the legacy stall trigger, formerly `<Escalation_And_Stop_Conditions>`), select **Ontologist** to reframe.
+3. **Late-stage rotation rule** → **Ontologist** — if Round ≥ 8 AND ambiguity > 0.3 (the legacy late-stage trigger, formerly Phase 3 Round 8+), select **Ontologist**.
+4. **Contrarian rule** — at Round 4+, if not yet used, select **Contrarian** once.
+5. **Simplifier rule** — at Round 6+, if not yet used, select **Simplifier** once.
+6. **Default** — otherwise select **Clarify**.
+
+Both Ontologist rotation rules (2 and 3) resolve to the SAME Ontologist stance; neither is dropped — they are the two named entry points to Ontologist, each preserved.
+
+Record the selected stance at round head — ordered, NOT deduped (it tracks the sequence, so the same stance may appear more than once):
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-stance "<selected-stance>"
+```
+
+`stance_history` is distinct from `challenge_modes_used` (which stays deduped/unordered for its existing once-each tracking of Contrarian/Simplifier/Ontologist).
 
 ### Step 2a: Generate Next Question
 
@@ -406,23 +441,28 @@ Spec structure:
 
 ## Phase 5: Execution Bridge
 
-After the spec is written, choose the recommended execution route from the spec's own characteristics, then present options via `AskUserQuestion`.
+After the spec is written, FIRST apply the re-entrancy guard, then choose the recommended execution route from the spec's own characteristics, and present options via `AskUserQuestion`.
+
+**Re-entrancy guard (caller marker, NOT a goal-state read):** Check whether this interview was invoked with the caller marker `caller=goal`.
+- **Marker `caller=goal` present** → `goal` is the caller and is already orchestrating. Return the crystallized spec (the `$OMT_DIR/deep-interview/{slug}.md` path) to the caller and emit **NO** `goal` handoff. This prevents a goal→deep-interview→goal loop. Skip the planning/execution route below; the caller routes downstream itself.
+- **Marker absent** → emit the `goal` handoff as described below.
+
+The guard relies ONLY on the caller-supplied marker; it does NOT read any goal-state file.
 
 **Recommend the route by judging the spec you just wrote — its output shape and how much HOW-uncertainty the interview left open:**
-- If the spec's output maps cleanly to a single domain skill available in this session (e.g., documentation → `technical-writing`, slides → `create-slides`), recommend that skill directly. Read the live available-skills list to find the match — do NOT hardcode a skill catalog here, because the available skills change.
-- Else if scope is settled but the *approach, architecture, or risk* is still open and the work is code that benefits from AC-gated planning, recommend **prometheus**.
-- Else (scope and approach are both settled and the remaining work is multi-step execution/orchestration), recommend **sisyphus**.
+- If the spec's output maps cleanly to a single domain skill available in this session (e.g., documentation → `technical-writing`, slides → `create-slides`), recommend that skill **directly** — this terminal domain output bypasses `goal` (it needs no planning/execution orchestration). Read the live available-skills list to find the match — do NOT hardcode a skill catalog here, because the available skills change.
+- Else (the remaining work is planning and/or multi-step execution — code that benefits from AC-gated planning, or settled multi-step orchestration), recommend handing the spec to **`goal`**, which orchestrates planning/execution downstream (it wraps prometheus/sisyphus and re-pursues the objective). Do NOT recommend prometheus or sisyphus directly for planning/execution work; route that through `goal`.
 
-A clean interview often closes HOW as well as WHAT, which makes `sisyphus` the right default at least as often as `prometheus`. Do not reflexively recommend `prometheus` just because the interview produced a spec — its core value, requirements clarification, is exactly what this phase already delivered.
+`goal` is the single orchestration entry for planning/execution work; it chooses between decomposition (prometheus) and execution (sisyphus) itself. Do not reflexively pre-pick prometheus vs sisyphus here — its core value, requirements clarification, is exactly what this phase already delivered, and `goal` selects the downstream skill from the spec it receives.
 
 **Question:** "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
 
 **Build the options like this** (recommended route first, tagged "(Recommended)", with a one-sentence rationale tied to THIS spec):
-- The recommended route from the rule above.
-- Both `prometheus` and `sisyphus` are always present as options; whichever is not the recommended route is offered untagged so the user can override (this override is exactly what the default sometimes gets wrong). When a domain skill is the recommended route, offer both prometheus and sisyphus as the override options.
+- The recommended route from the rule above (a domain skill directly, or `goal` for planning/execution work).
+- When the recommended route is `goal`, also offer a domain skill as the override only if the spec plausibly maps to one. When the recommended route is a domain skill, offer `goal` as the override (so planning/execution can still be chosen). Planning/execution work is always routed through `goal` — never offer prometheus or sisyphus as direct options here.
 - **Continue interviewing** — "Continue interviewing to improve clarity (current: {score}%)" → return to the Phase 2 loop.
 
-Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context.
+Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the planning/execution option invokes `Skill(skill: "goal")`).
 
 **IMPORTANT:** On execution selection, **MUST** invoke the chosen skill via `Skill()`. Do NOT implement directly. The deep-interview agent is a requirements agent, not an execution agent. Pass the spec file path forward (and the prompt-safe summary, if the initial context was summarized) — never the raw oversized source material.
 
@@ -431,6 +471,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 <Tool_Usage>
 - Use `AskUserQuestion` for each interview question — provides clickable UI with contextual options
 - Use `Agent(subagent_type="explore")` for brownfield codebase exploration (run BEFORE asking user about codebase)
+- Use `librarian`/`ultraresearch` for the facts-before-judgment external-fact call when a dimension turns on external knowledge — tier-capped at **Scoped (≤3 workers)**, **de-duplicated per dimension**, and **gracefully degrading to the `explore`-only path** when `ultraresearch` is unavailable (call failure or absence). This is a bounded subroutine inside the round loop, NOT full saturation research.
 - Use temperature 0.1 for ambiguity scoring — consistency is critical
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init` to initialize interview state (Phase-1 step 4)
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update` to update state after each round (Phase-2 step 2e)
