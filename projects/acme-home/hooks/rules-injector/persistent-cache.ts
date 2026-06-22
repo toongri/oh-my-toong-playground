@@ -14,7 +14,10 @@ import { SESSION_STATE_LOCK_CONTENDED, withSessionStateLock } from "./session-st
 
 export type PostCompactClaimResult = "claimed" | "not-pending" | "contended";
 
+const STATE_VERSION = 1;
+
 interface SerializedSessionState {
+	version?: number;
 	staticDedup: string[];
 	dynamicDedup: Record<string, string[]>;
 	postCompactPending?: PostCompactPendingState;
@@ -112,14 +115,15 @@ export function completePostCompactRecovery(cachePath: string, kind: PostCompact
 	});
 }
 
-export function sessionCachePath(sessionId: string, pluginDataRoot: string | undefined): string {
-	const root = pluginDataRoot ?? process.env["PLUGIN_DATA"] ?? join(homedir(), ".codex", "codex-rules");
-	return join(root, "sessions", `${safePathSegment(sessionId)}.json`);
+export function sessionCachePath(sessionId: string, pluginDataRoot?: string): string {
+	const root = pluginDataRoot ?? join(homedir(), ".omt", "rules-injector");
+	return join(root, `${safePathSegment(sessionId)}.json`);
 }
 
 function readSessionState(cachePath: string): SerializedSessionState {
 	try {
 		const parsed = JSON.parse(readFileSync(cachePath, "utf8"));
+		if (!isRecord(parsed) || parsed["version"] !== STATE_VERSION) return emptyState();
 		if (!isSerializedSessionState(parsed)) return emptyState();
 		return parsed;
 	} catch {
@@ -129,7 +133,7 @@ function readSessionState(cachePath: string): SerializedSessionState {
 
 function writeSessionState(cachePath: string, state: SerializedSessionState): void {
 	mkdirSync(dirname(cachePath), { recursive: true });
-	writeFileSync(cachePath, `${JSON.stringify(state)}\n`);
+	writeFileSync(cachePath, `${JSON.stringify({ version: STATE_VERSION, ...state })}\n`);
 }
 
 function emptyState(): SerializedSessionState {
