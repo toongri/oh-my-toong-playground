@@ -137,6 +137,7 @@ digraph broad_request_flow {
     "Invoke explore agent" [shape=box];
     "Need architectural understanding?" [shape=diamond];
     "Invoke oracle agent" [shape=box];
+    "Scout Finding Self-Check" [shape=box];
     "Enter Step 2: In-Depth Interview" [shape=box];
     "Create task list and execute" [shape=ellipse];
 
@@ -145,8 +146,9 @@ digraph broad_request_flow {
     "Do you know which files to modify?" -> "Need architectural understanding?" [label="YES"];
     "Invoke explore agent" -> "Need architectural understanding?";
     "Need architectural understanding?" -> "Invoke oracle agent" [label="YES"];
-    "Need architectural understanding?" -> "Enter Step 2: In-Depth Interview" [label="NO"];
-    "Invoke oracle agent" -> "Enter Step 2: In-Depth Interview";
+    "Need architectural understanding?" -> "Scout Finding Self-Check" [label="NO"];
+    "Invoke oracle agent" -> "Scout Finding Self-Check";
+    "Scout Finding Self-Check" -> "Enter Step 2: In-Depth Interview";
     "Enter Step 2: In-Depth Interview" -> "Create task list and execute";
 }
 ```

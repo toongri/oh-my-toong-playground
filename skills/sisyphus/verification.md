@@ -176,18 +176,11 @@ Results from oracle, explore, and librarian are:
 
 **Key Distinction:** "What was DONE?" (Implementation) → completion is junior's report + mnemosyne commit; argus verifies verify-type tasks only | "What SHOULD be done?" (Advisory) → Judgment material, not correctness-verified
 
-**Exception — scout findings that drive a plan.** When explore/librarian findings (or cited file/path/API
-claims embedded in oracle output) are about to be **promoted into a plan or task-list**, they are no longer
-plain advisory: they become factual premises the task-list is built on. Those findings pass through the
-`### Scout Finding Self-Check` below **before** promotion. This is the "what was FOUND" axis — the self-check
-re-reads the cited source to confirm the scout *facts* hold, never "what was DONE" (implement output, which
-stays junior's report + mnemosyne commit and is NEVER re-verified). oracle's architectural *judgment* and
-recommendations remain advisory and are NEVER re-verified; only its factual file/path/API citations that
-become plan inputs are eligible.
+**Exception — scout findings that drive a plan.** When scout findings are about to be promoted into a plan or task-list, they are no longer plain advisory. See `### Scout Finding Self-Check` below for the full contract — all eligibility rules and the oracle fact/judgment distinction are defined there only.
 
 ### Scout Finding Self-Check
 
-**Activation: Broad/Open-ended/Ambiguous requests whose plan/task-list is driven by scout findings only.**
+**Activation: Broad/Open-ended/Ambiguous requests whose plan/task-list draws on any scout finding.**
 Trivial and Explicit requests keep the existing advisory trust and skip this entirely. When
 explore/librarian findings (or cited file/path/API claims in oracle output) are about to become task-list
 premises, do NOT trust them on collection: sisyphus itself re-reads each finding's cited `file:line`/source
