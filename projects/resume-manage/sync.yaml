@@ -12,6 +12,7 @@ agents:
     - daedalus
     - argus
     - chunk-reviewer
+    - code-reviewer
     - tech-claim-examiner
     - sisyphus-junior
 
@@ -40,6 +41,7 @@ skills:
     - resume-forge
     - collect-jd
     - orchestrate-review
+    - review-report
     - hud
     - mock-interview
     - scan-pdf-to-notes
