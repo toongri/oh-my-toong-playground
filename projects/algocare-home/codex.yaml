@@ -1,4 +1,18 @@
 hooks:
+  SessionStart:
+    - component: algocare-home:rules-injector
+      type: command
+      command: "bun run .codex/hooks/rules-injector/cli.ts hook session-start"
+  UserPromptSubmit:
+    - component: algocare-home:rules-injector
+      type: command
+      command: "bun run .codex/hooks/rules-injector/cli.ts hook user-prompt-submit"
   PostToolUse:
     - component: algocare-home:rules-injector
       type: command
+      matcher: "Bash|apply_patch"
+      command: "bun run .codex/hooks/rules-injector/cli.ts hook post-tool-use"
+  PostCompact:
+    - component: algocare-home:rules-injector
+      type: command
+      command: "bun run .codex/hooks/rules-injector/cli.ts hook post-compact"
