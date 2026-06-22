@@ -73,6 +73,10 @@ export async function runSessionStartHook(
 	input: CodexSessionStartInput,
 	options: CodexRulesHookOptions = {},
 ): Promise<string> {
+	const config = configFromEnvironment(options.env);
+	if (config.disabled || config.mode === "off" || config.mode === "dynamic") {
+		return "";
+	}
 	const cachePath = sessionCachePath(input.session_id, options.pluginDataRoot);
 	if (input.source === "clear") {
 		clearSessionState(cachePath);
@@ -116,6 +120,10 @@ export async function runUserPromptSubmitHook(
 	input: CodexUserPromptSubmitInput,
 	options: CodexRulesHookOptions = {},
 ): Promise<string> {
+	const config = configFromEnvironment(options.env);
+	if (config.disabled || config.mode === "off" || config.mode === "dynamic") {
+		return "";
+	}
 	if (hasContextPressureMarker(input.prompt)) {
 		return "";
 	}
@@ -270,6 +278,7 @@ function tokenize(input: string): string[] {
 	let current = "";
 	let hasCurrent = false;
 	let quote: "'" | '"' | null = null;
+	let escaped = false;
 
 	const flush = (): void => {
 		if (hasCurrent) {
@@ -281,6 +290,17 @@ function tokenize(input: string): string[] {
 
 	for (let i = 0; i < input.length; i++) {
 		const ch = input[i];
+
+		if (escaped) {
+			current += ch;
+			hasCurrent = true;
+			escaped = false;
+			continue;
+		}
+		if (ch === "\\") {
+			escaped = true;
+			continue;
+		}
 
 		if (quote) {
 			if (ch === quote) {
