@@ -17,7 +17,6 @@ export type PostCompactClaimResult = "claimed" | "not-pending" | "contended";
 interface SerializedSessionState {
 	staticDedup: string[];
 	dynamicDedup: Record<string, string[]>;
-	dynamicTargetFingerprints?: Record<string, string>;
 	postCompactPending?: PostCompactPendingState;
 	postCompactRecovering?: PostCompactPendingState;
 	compacted?: boolean;
@@ -27,16 +26,12 @@ export function hydrateEngineState(engine: Engine, cachePath: string): void {
 	const state = readSessionState(cachePath);
 	engine.state.staticDedup.clear();
 	engine.state.dynamicDedup.clear();
-	engine.state.dynamicTargetFingerprints.clear();
 
 	for (const key of state.staticDedup) {
 		engine.state.staticDedup.add(key);
 	}
 	for (const [scope, keys] of Object.entries(state.dynamicDedup)) {
 		engine.state.dynamicDedup.set(scope, new Set(keys));
-	}
-	for (const [targetKey, fingerprint] of Object.entries(state.dynamicTargetFingerprints ?? {})) {
-		engine.state.dynamicTargetFingerprints.set(targetKey, fingerprint);
 	}
 }
 
@@ -56,7 +51,6 @@ export function persistEngineState(
 	writeSessionState(cachePath, {
 		staticDedup: [...engine.state.staticDedup],
 		dynamicDedup,
-		dynamicTargetFingerprints: Object.fromEntries(engine.state.dynamicTargetFingerprints.entries()),
 		...(postCompactPending === undefined ? {} : { postCompactPending }),
 		...(postCompactRecovering === undefined ? {} : { postCompactRecovering }),
 	});
@@ -74,9 +68,6 @@ export function markSessionCompacted(cachePath: string): void {
 	writeSessionState(cachePath, {
 		staticDedup: [],
 		dynamicDedup: state.dynamicDedup,
-		...(state.dynamicTargetFingerprints === undefined
-			? {}
-			: { dynamicTargetFingerprints: state.dynamicTargetFingerprints }),
 		postCompactPending: { static: true, dynamic: true },
 	});
 }
@@ -142,7 +133,7 @@ function writeSessionState(cachePath: string, state: SerializedSessionState): vo
 }
 
 function emptyState(): SerializedSessionState {
-	return { staticDedup: [], dynamicDedup: {}, dynamicTargetFingerprints: {} };
+	return { staticDedup: [], dynamicDedup: {} };
 }
 
 function nextPostCompactPending(
@@ -186,9 +177,6 @@ function stateWithPostCompactKinds(
 	return {
 		staticDedup: state.staticDedup,
 		dynamicDedup: state.dynamicDedup,
-		...(state.dynamicTargetFingerprints === undefined
-			? {}
-			: { dynamicTargetFingerprints: state.dynamicTargetFingerprints }),
 		...(postCompactPending === undefined ? {} : { postCompactPending }),
 		...(postCompactRecovering === undefined ? {} : { postCompactRecovering }),
 	};
@@ -204,7 +192,6 @@ function isSerializedSessionState(value: unknown): value is SerializedSessionSta
 	}
 	const staticDedup = value["staticDedup"];
 	const dynamicDedup = value["dynamicDedup"];
-	const dynamicTargetFingerprints = value["dynamicTargetFingerprints"];
 	const postCompactPending = value["postCompactPending"];
 	const postCompactRecovering = value["postCompactRecovering"];
 	const compacted = value["compacted"];
@@ -213,11 +200,6 @@ function isSerializedSessionState(value: unknown): value is SerializedSessionSta
 		Object.values(dynamicDedup).every(
 			(item) => Array.isArray(item) && item.every((nestedItem) => typeof nestedItem === "string"),
 		) &&
-		(dynamicTargetFingerprints === undefined ||
-			(isRecord(dynamicTargetFingerprints) &&
-				Object.entries(dynamicTargetFingerprints).every(
-					([targetKey, fingerprint]) => typeof targetKey === "string" && typeof fingerprint === "string",
-				))) &&
 		(postCompactPending === undefined || isPostCompactPendingState(postCompactPending)) &&
 		(postCompactRecovering === undefined || isPostCompactPendingState(postCompactRecovering)) &&
 		(compacted === undefined || typeof compacted === "boolean")

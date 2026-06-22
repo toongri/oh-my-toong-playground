@@ -7,7 +7,6 @@ export function createSessionState(cwd?: string): SessionState {
 		cwd,
 		staticDedup: new Set(),
 		dynamicDedup: new Map(),
-		dynamicTargetFingerprints: new Map(),
 		loadedRules: [],
 		diagnostics: [],
 	};
@@ -58,7 +57,6 @@ export function isDynamicInjected(state: SessionState, rule: LoadedRule): boolea
 export function clearSession(state: SessionState): void {
 	state.staticDedup.clear();
 	state.dynamicDedup.clear();
-	state.dynamicTargetFingerprints.clear();
 	state.loadedRules.length = 0;
 	state.diagnostics.length = 0;
 }

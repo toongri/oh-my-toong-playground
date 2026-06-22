@@ -2,7 +2,6 @@ import type { CodexRulesHookOptions } from "./codex-hook-options.js";
 import { configFromEnvironment } from "./config.js";
 import { hasContextPressureMarker, transcriptHasContextPressureMarker } from "./context-pressure.js";
 import { createHookDebugTimer } from "./debug-log.js";
-import { fingerprintDynamicTargets } from "./dynamic-target-fingerprints.js";
 import { withDynamicBudget } from "./event-budget.js";
 import { formatAdditionalContextOutput } from "./hook-output.js";
 import { displayPath, uniqueStrings } from "./path-utils.js";
@@ -186,26 +185,9 @@ export async function runPostToolUseHook(
 	hydrateEngineState(engine, cachePath);
 	debugTimer.lap("hydrate", {
 		dynamicDedupScopes: engine.state.dynamicDedup.size,
-		dynamicTargetFingerprints: engine.state.dynamicTargetFingerprints.size,
 		staticDedup: engine.state.staticDedup.size,
 	});
-	const dynamicTargetFingerprints = fingerprintDynamicTargets(input.cwd, targetPaths, config);
-	debugTimer.lap("fingerprint", { fingerprints: dynamicTargetFingerprints.length });
-	const pendingTargetFingerprints = dynamicTargetFingerprints.filter(
-		(target) => engine.state.dynamicTargetFingerprints.get(target.cacheKey) !== target.fingerprint,
-	);
-	debugTimer.lap("pending", { pending: pendingTargetFingerprints.length });
-	if (pendingTargetFingerprints.length === 0) {
-		persistEngineState(engine, cachePath, completedPostCompactKind);
-		debugTimer.lap("persist", { reason: "no-pending" });
-		debugTimer.done({ outputBytes: 0, reason: "no-pending" });
-		return "";
-	}
-
-	const loaded = engine.loadDynamicRules(
-		input.cwd,
-		pendingTargetFingerprints.map((target) => target.targetPath),
-	);
+	const loaded = engine.loadDynamicRules(input.cwd, uniqueStrings(targetPaths));
 	debugTimer.lap("load", { diagnostics: loaded.diagnostics.length, loadedRules: loaded.rules.length });
 	const rules = filterRulesAlreadyInTranscript(
 		loaded.rules.filter((rule) => !engine.isStaticInjected(rule) && !engine.isDynamicInjected(rule)),
@@ -216,9 +198,6 @@ export async function runPostToolUseHook(
 		{ latestCompactedReplacementOnly: completedPostCompactKind !== undefined },
 	);
 	debugTimer.lap("filter", { rules: rules.length });
-	for (const target of pendingTargetFingerprints) {
-		engine.state.dynamicTargetFingerprints.set(target.cacheKey, target.fingerprint);
-	}
 	if (rules.length === 0) {
 		persistEngineState(engine, cachePath, completedPostCompactKind);
 		debugTimer.lap("persist", { reason: "no-rules" });
@@ -226,8 +205,7 @@ export async function runPostToolUseHook(
 		return "";
 	}
 
-	const firstPendingTargetPath = pendingTargetFingerprints[0]?.targetPath ?? firstTargetPath;
-	const block = engine.formatDynamic(rules, displayPath(input.cwd, firstPendingTargetPath));
+	const block = engine.formatDynamic(rules, displayPath(input.cwd, firstTargetPath));
 	debugTimer.lap("format", { blockChars: block.length, rules: rules.length });
 	for (const rule of rules) {
 		engine.markDynamicInjected(rule);
