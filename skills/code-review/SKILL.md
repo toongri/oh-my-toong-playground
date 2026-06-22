@@ -471,7 +471,7 @@ Finders surface candidates; they do not judge them — and **you do not judge th
 
 **Cap & batching:** verify at most **25 candidates per batch**. If more survive dedup, batch by file proximity, **correctness candidates first**, and state how many were deferred — never silently drop.
 
-**The verdict ladder, the verification method, and the read-only constraint all live in `references/verifier-prompt.md`** — that is the contract each verifier applies. Keep it as the single source; do not restate the ladder here. If you have not read it yet, read it before dispatching.
+**The verdict ladder, the verification method, and the read-only constraint all live in `references/verifier-prompt.md`** — that is the contract each verifier applies. Keep it as the single source; do not restate the ladder here.
 
 **Enrichment arrives with the verdict.** Each kept verifier returns the enriched finding (current code, what's wrong, failure scenario, fix, blast radius) because it had to read the code to decide. Phase 3 assembles these directly — there is no separate enrichment pass.
 
