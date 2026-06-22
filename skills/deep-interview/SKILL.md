@@ -91,7 +91,7 @@ OMT_DI_PAYLOAD_EOF
   --current-phase "deep-interview" \
   --threshold <resolvedThreshold>
   # brownfield only: append --codebase-context "$(cat <<'OMT_DI_PAYLOAD_EOF'
-  # <explore summary>
+  # <surviving findings from step 3.1 — re-read & supported only; NOT the raw explore summary>
   # OMT_DI_PAYLOAD_EOF
   # )"
 ```
@@ -405,8 +405,6 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - [ ] Per-round ambiguity report includes Ontology row with entity count and stability ratio
 - [ ] Spec includes Ontology (Key Entities) table and Ontology Convergence section
 </Final_Checklist>
-
-**Advanced topics (resume, configuration, ambiguityThreshold, cross-session continuation, prometheus integration, weights / challenge-modes / score-interpretation tables): read `deep-interview-advanced.md` now** — do not guess at resume logic or configuration values from memory.
 
 ## Reference Files (on-demand)
 

@@ -54,22 +54,13 @@ If the user chooses interview, prometheus invokes `/deep-interview`. When the in
 
 ## Brownfield vs Greenfield Weights
 
-| Dimension | Greenfield | Brownfield |
-|-----------|-----------|------------|
-| Goal Clarity | 40% | 35% |
-| Constraint Clarity | 30% | 25% |
-| Success Criteria | 30% | 25% |
-| Context Clarity | N/A | 15% |
+Canonical formula and coefficients are in SKILL.md Phase 2 (the `ambiguity =` lines). Do not duplicate them here.
 
-Brownfield adds Context Clarity because modifying existing code safely requires understanding the system being changed.
+Brownfield adds a Context Clarity dimension because modifying existing code safely requires understanding the system being changed. That dimension contributes the remaining weight budget after the three shared dimensions — keeping greenfield weights proportionally larger across goal/constraints/criteria.
 
 ## Challenge Agent Modes
 
-| Mode | Activates | Purpose | Prompt Injection |
-|------|-----------|---------|-----------------|
-| Contrarian | Round 4+ | Challenge assumptions | "What if the opposite were true?" |
-| Simplifier | Round 6+ | Remove complexity | "What's the simplest version?" |
-| Ontologist | Round 8+ (if ambiguity > 0.3) | Find essence | "What IS this, really?" |
+Canonical round thresholds are in SKILL.md Phase 3 headings (Round 4+, Round 6+, Round 8+). Do not duplicate them here.
 
 Each mode is used exactly once, then normal Socratic questioning resumes. Modes are tracked in state to prevent repetition.
 
