@@ -11,7 +11,7 @@
 - Generated: {timestamp}
 - Threshold: {threshold}
 - Initial Context Summarized: {yes|no}
-- Brownfield Verify Lane: dispatched / N lanes / M excluded
+- Brownfield Scout Self-Check: K re-read / M dropped
 - Status: {PASSED | BELOW_THRESHOLD_EARLY_EXIT}
 
 ## Clarity Breakdown
