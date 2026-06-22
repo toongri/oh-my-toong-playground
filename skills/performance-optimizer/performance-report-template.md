@@ -1,5 +1,3 @@
-# Performance Report Template
-
 # Performance Optimization Report
 
 ## 1. Overview
