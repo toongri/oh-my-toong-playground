@@ -588,6 +588,26 @@ describe("CodexAdapter", () => {
       const libExists = await fs.stat(targetLib).then(() => true).catch(() => false);
       expect(libExists).toBe(true);
     });
+
+    it("디렉토리 훅의 @lib/ import를 배포 시 상대 경로로 재작성한다", async () => {
+      // Source dir: hooks/rules-injector/cli.ts with @lib/ import
+      const hookSrcDir = path.join(tmpDir, "hooks", "rules-injector");
+      await fs.mkdir(hookSrcDir, { recursive: true });
+      await fs.writeFile(
+        path.join(hookSrcDir, "cli.ts"),
+        'import { foo } from "@lib/utils.ts";\nconsole.log("hi");\n',
+      );
+
+      const targetBase = path.join(tmpDir, "target");
+      await adapter.syncHooksDirect(targetBase, "rules-injector", hookSrcDir, false);
+
+      // Deployed file must have @lib/ rewritten to a relative path (../../lib/)
+      // .codex/hooks/rules-injector/cli.ts is 2 dirs deep under platformRoot (.codex)
+      const deployedFile = path.join(targetBase, ".codex", "hooks", "rules-injector", "cli.ts");
+      const content = await fs.readFile(deployedFile, "utf-8");
+      expect(content).not.toContain("@lib/");
+      expect(content).toContain("../../lib/");
+    });
   });
 
   // ---------------------------------------------------------------------------
