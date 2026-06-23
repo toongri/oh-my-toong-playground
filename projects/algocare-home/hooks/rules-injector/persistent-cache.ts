@@ -9,12 +9,24 @@ import {
 	postCompactPendingKinds,
 	postCompactRecoveringKinds,
 } from "./post-compact-state.js";
+import {
+	type RecoveryLease,
+	isRecoveryLease,
+	isRecoveryLeaseActive,
+	newRecoveryLease,
+} from "./recovery-lease.js";
 import type { Engine } from "./rules/index.js";
-import { SESSION_STATE_LOCK_CONTENDED, withSessionStateLock } from "./session-state-lock.js";
+import {
+	SESSION_STATE_LOCK_CONTENDED,
+	type SessionStateLockResult,
+	withSessionStateLock,
+} from "./session-state-lock.js";
 
 export type PostCompactClaimResult = "claimed" | "not-pending" | "contended";
 
 const STATE_VERSION = 1;
+
+type RecoveryLeaseRecord = Partial<Record<PostCompactPendingKind, RecoveryLease>>;
 
 interface SerializedSessionState {
 	version?: number;
@@ -22,6 +34,7 @@ interface SerializedSessionState {
 	dynamicDedup: Record<string, string[]>;
 	postCompactPending?: PostCompactPendingState;
 	postCompactRecovering?: PostCompactPendingState;
+	recoveryLease?: RecoveryLeaseRecord;
 	compacted?: boolean;
 }
 
@@ -43,36 +56,61 @@ export function persistEngineState(
 	cachePath: string,
 	completedPostCompactKind?: PostCompactPendingKind,
 ): void {
-	const currentState = readSessionState(cachePath);
-	const dynamicDedup: Record<string, string[]> = {};
-	for (const [scope, keys] of engine.state.dynamicDedup.entries()) {
-		dynamicDedup[scope] = [...keys];
-	}
+	// #7: read-modify-write the shared <sid>.json under the lock. PostCompact and an
+	// in-flight PostToolUse are different events with no shared mutex, so an unlocked
+	// read-then-write here loses cross-event updates in BOTH directions (a dropped
+	// postCompactPending recovery marker AND a dropped dynamic dedup key). Atomic
+	// temp-rename would only prevent torn writes, not lost updates — only the lock does.
+	updateSessionState(cachePath, (currentState) => {
+		const dynamicDedup: Record<string, string[]> = {};
+		for (const [scope, keys] of engine.state.dynamicDedup.entries()) {
+			dynamicDedup[scope] = [...keys];
+		}
 
-	const postCompactPending = nextPostCompactPending(currentState, completedPostCompactKind);
-	const postCompactRecovering = nextPostCompactRecovering(currentState, completedPostCompactKind);
-	writeSessionState(cachePath, {
-		staticDedup: [...engine.state.staticDedup],
-		dynamicDedup,
-		...(postCompactPending === undefined ? {} : { postCompactPending }),
-		...(postCompactRecovering === undefined ? {} : { postCompactRecovering }),
+		const postCompactPending = nextPostCompactPending(currentState, completedPostCompactKind);
+		const postCompactRecovering = nextPostCompactRecovering(currentState, completedPostCompactKind);
+		const recoveryLease = nextRecoveryLease(currentState, completedPostCompactKind);
+		return {
+			staticDedup: [...engine.state.staticDedup],
+			dynamicDedup,
+			...(postCompactPending === undefined ? {} : { postCompactPending }),
+			...(postCompactRecovering === undefined ? {} : { postCompactRecovering }),
+			...(recoveryLease === undefined ? {} : { recoveryLease }),
+		};
 	});
 }
 
 export function clearSessionState(cachePath: string): void {
 	rmSync(cachePath, { force: true });
+	// Drop any leaked lock dir alongside the state file so a killed holder cannot
+	// wedge the fresh session that reuses this path (#14).
+	rmSync(`${cachePath}.lock`, { recursive: true, force: true });
 }
 
 export function markSessionCompacted(cachePath: string): void {
-	const state = readSessionState(cachePath);
-	// Compaction drops injected static rule bodies, so pre-compaction static
-	// dedup marks must not suppress the post-compact recovery directive.
-	// Dynamic dedup survives: those rules are recovered as read-directive paths.
-	writeSessionState(cachePath, {
+	// #7: same locked read-modify-write as persistEngineState — preserves a concurrent
+	// PostToolUse's dynamicDedup writes instead of clobbering them.
+	updateSessionState(cachePath, (state) => ({
+		// Compaction drops injected static rule bodies, so pre-compaction static
+		// dedup marks must not suppress the post-compact recovery directive.
+		// Dynamic dedup survives: those rules are recovered as read-directive paths.
 		staticDedup: [],
 		dynamicDedup: state.dynamicDedup,
 		postCompactPending: { static: true, dynamic: true },
+	}));
+}
+
+// Locked read-modify-write over the shared session-state file. On the rare event of
+// lock contention (all retries exhausted) it falls back to a single unlocked RMW so a
+// write is never silently dropped — no worse than the pre-lock behavior, but the
+// common path is now serialized.
+function updateSessionState(cachePath: string, fn: (state: SerializedSessionState) => SerializedSessionState): void {
+	const result = withSessionStateLock(cachePath, () => {
+		writeSessionState(cachePath, fn(readSessionState(cachePath)));
 	});
+	if (result === SESSION_STATE_LOCK_CONTENDED) {
+		writeSessionState(cachePath, fn(readSessionState(cachePath)));
+	}
 }
 
 export function hasPostCompactPending(cachePath: string): boolean {
@@ -85,25 +123,37 @@ export function isPostCompactPending(cachePath: string, kind: PostCompactPending
 }
 
 export function claimPostCompactPending(cachePath: string, kind: PostCompactPendingKind): PostCompactClaimResult {
-	const result = withSessionStateLock(cachePath, () => {
+	const result = withSessionStateLock(cachePath, (): SessionStateLockResult<PostCompactClaimResult> => {
 		const state = readSessionState(cachePath);
 		const pendingKinds = postCompactPendingKinds(state);
 		const recoveringKinds = postCompactRecoveringKinds(state);
-		// Orphaned recovery: a prior hook moved this kind pending->recovering, then
-		// died mid-recovery (e.g. OOM on the post-compaction transcript full-read)
-		// before completePostCompactRecovery cleared it. The kind is now recovering
-		// but no longer pending, so every later hook gets "not-pending" + recovery-
-		// in-progress and skips forever, wedging the session until a new compaction.
-		// Re-claim it: recovery does not hold the lock, so reaching this callback
-		// means no claim/complete is mid-flight (a genuinely in-flight one would hold
-		// the lock and yield "contended" instead), making this kind safe to retry.
+		const leaseRecord = recoveryLeaseRecord(state);
+
 		if (!pendingKinds.has(kind) && !recoveringKinds.has(kind)) {
 			return "not-pending";
 		}
 
+		// Orphaned recovery: the kind is recovering but no longer pending — a prior hook
+		// moved it pending->recovering, and either completed (cleared) or died mid-flight.
+		// A boolean marker alone cannot tell an in-flight recovery from a dead orphan
+		// (#8/#14), so consult the lease the owner stamped on its claim. If the lease is
+		// still ACTIVE (owner alive OR not yet expired), a genuine recovery is in flight —
+		// refuse, surfaced as "contended" so the wedge gate skips this turn. Only when the
+		// lease is absent/stale do we re-claim, healing a session that would otherwise
+		// wedge forever waiting on a dead recoverer.
+		if (!pendingKinds.has(kind)) {
+			const lease = leaseRecord[kind];
+			if (lease !== undefined && isRecoveryLeaseActive(lease)) {
+				return SESSION_STATE_LOCK_CONTENDED;
+			}
+		}
+
 		pendingKinds.delete(kind);
 		recoveringKinds.add(kind);
-		writeSessionState(cachePath, stateWithPostCompactKinds(state, pendingKinds, recoveringKinds));
+		// Stamp a fresh lease: THIS hook now owns recovery of this kind, so a later
+		// racing hook can detect the in-flight work and refuse to double-recover.
+		const nextLease: RecoveryLeaseRecord = { ...leaseRecord, [kind]: newRecoveryLease() };
+		writeSessionState(cachePath, stateWithPostCompactKinds(state, pendingKinds, recoveringKinds, nextLease));
 		return "claimed";
 	});
 	return result === SESSION_STATE_LOCK_CONTENDED ? "contended" : result;
@@ -114,12 +164,14 @@ export function isPostCompactRecoveryInProgress(cachePath: string, kind: PostCom
 }
 
 export function completePostCompactRecovery(cachePath: string, kind: PostCompactPendingKind): void {
-	withSessionStateLock(cachePath, () => {
-		const state = readSessionState(cachePath);
+	updateSessionState(cachePath, (state) => {
 		const pendingKinds = postCompactPendingKinds(state);
 		const recoveringKinds = postCompactRecoveringKinds(state);
 		recoveringKinds.delete(kind);
-		writeSessionState(cachePath, stateWithPostCompactKinds(state, pendingKinds, recoveringKinds));
+		// Recovery is done: drop this kind's lease so the slot is free again.
+		const nextLease: RecoveryLeaseRecord = { ...recoveryLeaseRecord(state) };
+		delete nextLease[kind];
+		return stateWithPostCompactKinds(state, pendingKinds, recoveringKinds, nextLease);
 	});
 }
 
@@ -179,18 +231,56 @@ function nextPostCompactRecovering(
 	return postCompactKindState(recoveringKinds);
 }
 
+// A persisted write completing `completedKind` also frees that kind's lease; every
+// other kind's lease carries forward unchanged.
+function nextRecoveryLease(
+	state: SerializedSessionState,
+	completedKind: PostCompactPendingKind | undefined,
+): RecoveryLeaseRecord | undefined {
+	const leases: RecoveryLeaseRecord = { ...recoveryLeaseRecord(state) };
+	if (completedKind !== undefined) {
+		delete leases[completedKind];
+	}
+	return pruneLeasesToRecovering(leases, postCompactRecoveringKinds(state), completedKind);
+}
+
+function recoveryLeaseRecord(state: SerializedSessionState): RecoveryLeaseRecord {
+	return state.recoveryLease ?? {};
+}
+
+// Keep only leases for kinds that remain recovering, so a completed/cleared kind never
+// leaves a dangling lease behind that a future claim would misread as in-flight.
+function pruneLeasesToRecovering(
+	leases: RecoveryLeaseRecord,
+	recoveringKinds: ReadonlySet<PostCompactPendingKind>,
+	completedKind: PostCompactPendingKind | undefined,
+): RecoveryLeaseRecord | undefined {
+	const pruned: RecoveryLeaseRecord = {};
+	for (const kind of ["static", "dynamic"] as const) {
+		const lease = leases[kind];
+		const stillRecovering = recoveringKinds.has(kind) && kind !== completedKind;
+		if (lease !== undefined && stillRecovering) {
+			pruned[kind] = lease;
+		}
+	}
+	return Object.keys(pruned).length === 0 ? undefined : pruned;
+}
+
 function stateWithPostCompactKinds(
 	state: SerializedSessionState,
 	pendingKinds: ReadonlySet<PostCompactPendingKind>,
 	recoveringKinds: ReadonlySet<PostCompactPendingKind>,
+	leaseRecord: RecoveryLeaseRecord = recoveryLeaseRecord(state),
 ): SerializedSessionState {
 	const postCompactPending = postCompactKindState(pendingKinds);
 	const postCompactRecovering = postCompactKindState(recoveringKinds);
+	const recoveryLease = pruneLeasesToRecovering(leaseRecord, recoveringKinds, undefined);
 	return {
 		staticDedup: state.staticDedup,
 		dynamicDedup: state.dynamicDedup,
 		...(postCompactPending === undefined ? {} : { postCompactPending }),
 		...(postCompactRecovering === undefined ? {} : { postCompactRecovering }),
+		...(recoveryLease === undefined ? {} : { recoveryLease }),
 	};
 }
 
@@ -206,6 +296,7 @@ function isSerializedSessionState(value: unknown): value is SerializedSessionSta
 	const dynamicDedup = value["dynamicDedup"];
 	const postCompactPending = value["postCompactPending"];
 	const postCompactRecovering = value["postCompactRecovering"];
+	const recoveryLease = value["recoveryLease"];
 	const compacted = value["compacted"];
 	return (
 		staticDedup.every((item) => typeof item === "string") &&
@@ -214,7 +305,17 @@ function isSerializedSessionState(value: unknown): value is SerializedSessionSta
 		) &&
 		(postCompactPending === undefined || isPostCompactPendingState(postCompactPending)) &&
 		(postCompactRecovering === undefined || isPostCompactPendingState(postCompactRecovering)) &&
+		(recoveryLease === undefined || isRecoveryLeaseRecord(recoveryLease)) &&
 		(compacted === undefined || typeof compacted === "boolean")
+	);
+}
+
+function isRecoveryLeaseRecord(value: unknown): value is RecoveryLeaseRecord {
+	return (
+		isRecord(value) &&
+		Object.entries(value).every(
+			([key, lease]) => (key === "static" || key === "dynamic") && isRecoveryLease(lease),
+		)
 	);
 }
 
