@@ -39,14 +39,6 @@ export function filterRulesNotInTranscriptText(
 }
 
 function isRuleAlreadyInTranscript(rule: LoadedRule, transcriptText: string): boolean {
-	const staticReferenceNeedles = [
-		`- [${displayFilename(rule)}]{${rule.path}}`,
-		`- [${displayFilename(rule)}]{${rule.realPath}}`,
-	];
-	if (staticReferenceNeedles.some((needle) => transcriptText.includes(needle))) {
-		return true;
-	}
-
 	const bodyNeedle = rule.body.trim().slice(0, 2_000);
 	if (bodyNeedle.length === 0 || !transcriptText.includes(bodyNeedle)) {
 		return false;
@@ -55,13 +47,4 @@ function isRuleAlreadyInTranscript(rule: LoadedRule, transcriptText: string): bo
 	// Anchor on the content version: an edited rule whose first 2000 chars are
 	// unchanged must NOT be mistaken for the version already in the transcript.
 	return transcriptHasRuleVersion(transcriptText, [rule.path, rule.realPath], rule.contentHash);
-}
-
-function displayFilename(rule: LoadedRule): string {
-	const normalizedPath = rule.relativePath.length > 0 ? rule.relativePath : rule.path;
-	const segments = normalizedPath
-		.replace(/\\/g, "/")
-		.split("/")
-		.filter((segment) => segment.length > 0);
-	return segments.at(-1) ?? normalizedPath;
 }
