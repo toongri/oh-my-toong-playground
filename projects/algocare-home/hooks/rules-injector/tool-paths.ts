@@ -34,7 +34,9 @@ export function extractCodexToolPaths(input: CodexPostToolUseLike, cwd: string):
 	const paths = new Set<string>();
 	const toolInput = isRecord(input.tool_input) ? input.tool_input : {};
 	addCommonPathFields(paths, toolInput, cwd);
-	addPatchPayloadPaths(paths, toolInput, cwd);
+	if (toolName === "apply_patch") {
+		addPatchPayloadPaths(paths, toolInput, cwd);
+	}
 	addPatchRecordPaths(paths, toolInput["files"], cwd);
 	addPatchRecordPaths(paths, toolInput["changes"], cwd);
 
@@ -190,6 +192,51 @@ export function tokenizeShell(command: string): string[] {
 			}
 			if (ch === ";" || ch === "\n") {
 				flush();
+				continue;
+			}
+			// Redirection operators: <, >, >>, 2>, 2>>
+			// Guard: <<EOF / <<-EOF heredoc — double-< is NOT a redirection boundary;
+			// treat <<... as a single opaque token (flush current, accumulate << + rest as token).
+			if (ch === "<" && command[i + 1] === "<") {
+				// heredoc: flush preceding token, consume the entire <<[-]WORD as one token
+				flush();
+				current += "<";
+				current += "<";
+				i += 2; // skip both '<'
+				// consume optional '-' in <<-
+				if (i < command.length && command[i] === "-") {
+					current += command[i];
+					i++;
+				}
+				// consume the heredoc delimiter word (until whitespace / newline)
+				while (i < command.length && !/[\s;]/.test(command[i])) {
+					current += command[i];
+					i++;
+				}
+				flush();
+				i--; // rewind: outer loop will i++ past the last consumed char
+				continue;
+			}
+			if (ch === ">") {
+				flush();
+				// consume >>
+				if (command[i + 1] === ">") {
+					i++;
+				}
+				continue;
+			}
+			if (ch === "<") {
+				flush();
+				continue;
+			}
+			// Digit-prefixed fd redirect: digit immediately followed by > or >> (e.g. 2>, 2>>)
+			// Flush current token, skip the digit and the > / >> characters.
+			if (/[0-9]/.test(ch) && (command[i + 1] === ">" || command[i + 1] === "<")) {
+				flush();
+				i++; // skip the digit
+				if (command[i + 1] === ">") {
+					i++; // skip second > for >>
+				}
 				continue;
 			}
 			if (/\s/.test(ch)) {

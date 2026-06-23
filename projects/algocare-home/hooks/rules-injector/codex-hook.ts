@@ -313,7 +313,9 @@ function unwrapShellWrapper(command: string): string {
 		}
 	}
 	if (flagIndex === -1) return command;
-	return tokens[flagIndex + 1];
+	const inner = tokens[flagIndex + 1];
+	const rest = tokens.slice(flagIndex + 2);
+	return rest.length === 0 ? inner : [inner, ...rest].join(" ");
 }
 
 /**

@@ -146,6 +146,36 @@ test("C7-c regression bash -c still unwraps correctly", () => {
 	expect(additionalContext).toContain("src/x.ts");
 });
 
+// ── C11: unwrapShellWrapper must preserve positional args after -c '<script>' ─────
+
+// bash -c 'sed -n 1,20p "$1"' _ src/x.ts
+// tokens: [bash, -c, 'sed -n 1,20p "$1"', _, src/x.ts]
+// Before fix: returns only tokens[flagIndex+1] = 'sed -n 1,20p "$1"' → src/x.ts dropped
+// After fix: returns 'sed -n 1,20p "$1" _ src/x.ts' → src/x.ts extracted by addCommandPaths
+test("C11 bash -c '<script>' _ src/x.ts: positional arg src/x.ts is NOT dropped", () => {
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("c11"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u-c11",
+		tool_input: { command: "bash -c 'sed -n 1,20p \"$1\"' _ src/x.ts" },
+		tool_response: {},
+	});
+
+	// src/x.ts must be resolved and matched → TS rule injects
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+	expect(additionalContext).toContain("src/x.ts");
+});
+
 // ── P1: dynamic block header derived from emittedRules[0], not pre-budget rules[0] ──
 
 // Setup: two targets, two rules. Rule A (priority=2, large body) matches target-a.ts
