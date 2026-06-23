@@ -542,6 +542,89 @@ test("E-3 same physical rule file reached via two symlinked parent dirs is dedup
 	rmSync(base, { recursive: true, force: true });
 });
 
+// --- F-7: shell-unwrap for exec_command / shell_command tool names and cmd field ---
+
+// SHELL_COMMAND_TOOL_NAMES = ["bash", "shell_command", "exec_command"] (codex-hook.ts:252).
+// Command-field resolution: "command" key first, "cmd" key as fallback (codex-hook.ts:265).
+// H1 above only exercises tool_name="Bash" with a "command" field.
+// These tests cover the two additional tool names and the "cmd" fallback field.
+
+test("F-7 exec_command with command field: shell wrapper is unwrapped, inner path injects rule", () => {
+	// tool_name "exec_command" (lowercased) is in SHELL_COMMAND_TOOL_NAMES.
+	// The wrapper `/bin/sh -c "cat src/x.ts"` must be peeled so src/x.ts feeds matching.
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("f7-exec"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "exec_command",
+		tool_use_id: "u-f7-exec",
+		tool_input: { command: '/bin/sh -c "cat src/x.ts"' },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+	expect(additionalContext).toContain("src/x.ts");
+});
+
+test("F-7 shell_command with command field: shell wrapper is unwrapped, inner path injects rule", () => {
+	// tool_name "shell_command" (already lowercase) is in SHELL_COMMAND_TOOL_NAMES.
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("f7-shell"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "shell_command",
+		tool_use_id: "u-f7-shell",
+		tool_input: { command: '/bin/bash -c "cat src/x.ts"' },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+	expect(additionalContext).toContain("src/x.ts");
+});
+
+test("F-7 exec_command with cmd field: shell wrapper unwrap reads cmd not command", () => {
+	// codex-hook.ts:265 falls back to "cmd" when "command" is absent.
+	// Verifies that exec_command with tool_input.cmd (not .command) still unwraps
+	// and the inner path feeds rule matching. Without the cmd-key fallback the hook
+	// would return the input unchanged, treating "/bin/sh" as the target path.
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("f7-cmd"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "exec_command",
+		tool_use_id: "u-f7-cmd",
+		tool_input: { cmd: '/bin/sh -c "cat src/x.ts"' },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+	expect(additionalContext).toContain("src/x.ts");
+});
+
 // --- D-8: monorepo subdir cwd — findProjectRoot walks past nested package.json to workspace root ---
 
 test("D-8 findProjectRoot from monorepo package subdir reaches workspace root not nested package", () => {
