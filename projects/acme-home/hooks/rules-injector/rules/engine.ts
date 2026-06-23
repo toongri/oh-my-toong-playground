@@ -86,12 +86,12 @@ export function createEngine(config: PiRulesConfig, deps: EngineDeps): Engine {
 		loadStaticRules,
 		loadDynamicRules,
 		formatStatic: (rules) =>
-			formatStaticBlock(rules, { maxRuleChars: config.maxRuleChars, maxResultChars: config.maxResultChars }),
+			formatStaticBlock(rules, { maxRuleChars: config.maxRuleChars, maxResultChars: config.maxResultChars }).text,
 		formatDynamic: (rules, target) =>
 			formatDynamicBlock(rules, target, {
 				maxRuleChars: config.maxRuleChars,
 				maxResultChars: config.maxResultChars,
-			}),
+			}).text,
 		resetSession: (cwd) => {
 			clearSession(state);
 			dynamicMatchCache.clear();

@@ -6,6 +6,23 @@ export interface FormatOptions {
 	maxResultChars: number;
 }
 
+/**
+ * Result shape returned by formatStaticBlock and formatDynamicBlock.
+ *
+ * - `text`: the fully-rendered injection string (may be "").
+ * - `emittedRules`: the subset of input rules whose body was non-empty in the
+ *   final output. A rule is included even when its body was truncated (partial
+ *   body still appears). A rule whose body was entirely dropped by the budget
+ *   — including rules for which only the header would have appeared — is NOT
+ *   included. Callers must use this set (not the full input rules array) to
+ *   mark which rules were actually injected; marking budget-dropped rules as
+ *   injected causes permanent suppression on future turns.
+ */
+export interface FormatResult {
+	text: string;
+	emittedRules: LoadedRule[];
+}
+
 type TruncatedRule = {
 	path: string;
 	relativePath: string;
@@ -16,6 +33,16 @@ type NormalizedRule = TruncatedRule & {
 	source: LoadedRule["source"];
 };
 
+/**
+ * Byte length of the "Instructions from: <path>\n\n" header that precedes
+ * each rule's body in the final output. This overhead is charged to the budget
+ * before body bytes so that rules without any remaining budget for body content
+ * are dropped entirely (no header-only ghost blocks).
+ */
+function ruleHeaderLength(path: string): number {
+	return `Instructions from: ${path}\n\n`.length;
+}
+
 function formatRule(rule: TruncatedRule): string {
 	const body = normalizeRuleBody(rule.body);
 	if (body.length === 0) {
@@ -24,7 +51,25 @@ function formatRule(rule: TruncatedRule): string {
 	return `Instructions from: ${rule.path}\n\n${body}`;
 }
 
-function truncateRules(rules: ReadonlyArray<LoadedRule>, options: FormatOptions): TruncatedRule[] {
+/**
+ * Truncate and budget the given rules, returning:
+ * - the list of TruncatedRule entries whose body is non-empty after budgeting
+ * - the original LoadedRule entries at those same positions (for emittedRules)
+ *
+ * Budget accounting includes per-rule header bytes so that a rule cannot
+ * consume budget purely for its header while leaving no budget for body content.
+ * Rules where the budget (after deducting the header) is insufficient to fit
+ * any body bytes are dropped — they produce no output and are absent from
+ * emittedRules.
+ *
+ * The strategy: run truncateBudget on the body-only strings with a budget
+ * pre-reduced by each rule's header length. Rules that get a zero-or-negative
+ * body budget are excluded before reaching truncateBudget.
+ */
+function truncateRules(
+	rules: ReadonlyArray<LoadedRule>,
+	options: FormatOptions,
+): { truncatedRules: TruncatedRule[]; emittedRules: LoadedRule[] } {
 	const perRuleNormalized: NormalizedRule[] = rules.map((rule) => ({
 		path: rule.path,
 		relativePath: rule.relativePath,
@@ -42,16 +87,43 @@ function truncateRules(rules: ReadonlyArray<LoadedRule>, options: FormatOptions)
 					relativePath: rule.relativePath,
 				}).body,
 	}));
-	const budgetedRules = truncateBudget({
-		rules: perRuleBudgeted.map((rule) => ({ body: rule.body, relativePath: rule.relativePath })),
-		maxResultChars: options.maxResultChars,
-	});
-	const truncatedRules: TruncatedRule[] = [];
 
-	for (let index = 0; index < budgetedRules.length; index += 1) {
+	// Compute per-rule header overhead and deduct it from the total budget
+	// before handing bodies to truncateBudget. Rules whose header alone would
+	// exhaust the remaining budget get no budget for their body and are excluded.
+	const headerLengths = perRuleBudgeted.map((rule) => ruleHeaderLength(rule.path));
+	const totalHeaderOverhead = headerLengths.reduce((sum, len) => sum + len, 0);
+
+	// Body-only budget: the amount available for rule bodies after all headers
+	// are charged. We pass this as the effective maxResultChars to truncateBudget.
+	// We clip at 0 to avoid negative values when headers exceed total budget.
+	const bodyOnlyBudget = Math.max(0, options.maxResultChars - totalHeaderOverhead);
+
+	// Similarly, build per-rule body-only entries for truncateBudget.
+	const bodyRules = perRuleBudgeted.map((rule) => ({
+		body: rule.body,
+		relativePath: rule.relativePath,
+	}));
+
+	const budgetedBodies = truncateBudget({
+		rules: bodyRules,
+		maxResultChars: bodyOnlyBudget,
+	});
+
+	const truncatedRules: TruncatedRule[] = [];
+	const emittedRules: LoadedRule[] = [];
+
+	for (let index = 0; index < budgetedBodies.length; index += 1) {
 		const sourceRule = perRuleBudgeted[index];
-		const budgetedRule = budgetedRules[index];
-		if (sourceRule === undefined || budgetedRule === undefined) {
+		const budgetedRule = budgetedBodies[index];
+		const originalRule = rules[index];
+		if (sourceRule === undefined || budgetedRule === undefined || originalRule === undefined) {
+			continue;
+		}
+
+		// A rule with an empty body after budget allocation produces no useful
+		// output (the header alone would be a ghost block). Drop it entirely.
+		if (budgetedRule.body.length === 0) {
 			continue;
 		}
 
@@ -60,22 +132,29 @@ function truncateRules(rules: ReadonlyArray<LoadedRule>, options: FormatOptions)
 			relativePath: budgetedRule.relativePath,
 			body: budgetedRule.body,
 		});
+		emittedRules.push(originalRule);
 	}
 
-	return truncatedRules;
+	return { truncatedRules, emittedRules };
 }
 
-export function formatStaticBlock(rules: ReadonlyArray<LoadedRule>, options: FormatOptions): string {
+export function formatStaticBlock(rules: ReadonlyArray<LoadedRule>, options: FormatOptions): FormatResult {
 	if (rules.length === 0) {
-		return "";
+		return { text: "", emittedRules: [] };
 	}
 	if (options.maxResultChars <= 0) {
-		return "";
+		return { text: "", emittedRules: [] };
 	}
 
 	const orderedRules = orderStaticRules(uniqueRulesByBody(rules));
 
-	return ["## Project Instructions", "", truncateRules(orderedRules, options).map(formatRule).join("\n\n")].join("\n");
+	const { truncatedRules, emittedRules } = truncateRules(orderedRules, options);
+	if (truncatedRules.length === 0) {
+		return { text: "", emittedRules: [] };
+	}
+
+	const text = ["## Project Instructions", "", truncatedRules.map(formatRule).join("\n\n")].join("\n");
+	return { text, emittedRules };
 }
 
 function orderStaticRules(rules: ReadonlyArray<LoadedRule>): LoadedRule[] {
@@ -132,16 +211,22 @@ export function formatDynamicBlock(
 	rules: ReadonlyArray<LoadedRule>,
 	targetRelativePath: string,
 	options: FormatOptions,
-): string {
+): FormatResult {
 	if (rules.length === 0) {
-		return "";
+		return { text: "", emittedRules: [] };
 	}
 
-	return [
+	const { truncatedRules, emittedRules } = truncateRules(rules, options);
+	if (truncatedRules.length === 0) {
+		return { text: "", emittedRules: [] };
+	}
+
+	const text = [
 		`Additional project instructions matched for ${targetRelativePath}:`,
 		"",
-		truncateRules(rules, options).map(formatRule).join("\n\n"),
+		truncatedRules.map(formatRule).join("\n\n"),
 	].join("\n");
+	return { text, emittedRules };
 }
 
 function normalizeRuleBody(body: string): string {

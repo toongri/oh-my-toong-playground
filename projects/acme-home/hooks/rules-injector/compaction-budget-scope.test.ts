@@ -530,6 +530,104 @@ test("F11: a rule planted under ~/.claude/rules is not injected by session-start
 });
 
 // ===========================================================================
+// AC1 — header bytes must be in budget: all-bodies-dropped => no header-only block
+// ===========================================================================
+
+// Import the formatter directly for unit-level assertions (no CLI spawn needed).
+// These tests prove the D-5/D-6 contract: per-rule/block header bytes are charged
+// to the budget before bodies. When no body survives, the block emits nothing.
+import { formatStaticBlock, formatDynamicBlock } from "./rules/formatter.js";
+import type { LoadedRule } from "./rules/types.js";
+
+/** Minimal LoadedRule fixture for formatter unit tests. */
+function makeRule(overrides: { path?: string; relativePath?: string; body?: string }): LoadedRule {
+	return {
+		path: overrides.path ?? "/proj/.claude/rules/test.md",
+		realPath: overrides.path ?? "/proj/.claude/rules/test.md",
+		relativePath: overrides.relativePath ?? ".claude/rules/test.md",
+		body: overrides.body ?? "rule body content",
+		source: ".claude/rules",
+		distance: 0,
+		isGlobal: false,
+		isSingleFile: false,
+		contentHash: "abc123",
+		matchReason: "alwaysApply",
+		frontmatter: { alwaysApply: true },
+	};
+}
+
+test("AC1-static: when budget fits header but not body, formatStaticBlock emits nothing and emittedRules is empty", () => {
+	// Rule body = 200 chars. Header = "Instructions from: /p/r.md\n\n" = 28 chars.
+	// Truncation notice for "r.md" = "\n\n[Truncated. Full: r.md]" = 26 chars.
+	// Budget = 50: header overhead (28) leaves bodyOnlyBudget = 22.
+	// truncateBudget: remaining(22) <= notice(26) => break => body is completely dropped.
+	// Under the old code, truncateBudget never saw the header, so the 50-char budget
+	// fit partial body — the header was added on top, producing a ghost block.
+	// Under the new contract, header is charged first: all-bodies-dropped => nothing emits.
+	const rule = makeRule({ path: "/p/r.md", relativePath: "r.md", body: "B".repeat(200) });
+	const result = formatStaticBlock([rule], { maxRuleChars: 200, maxResultChars: 50 });
+	// Under the new contract, result is { text: string; emittedRules: LoadedRule[] }
+	expect(result.text).toBe("");
+	expect(result.emittedRules).toHaveLength(0);
+});
+
+test("AC1-dynamic: when budget fits header but not body, formatDynamicBlock emits nothing and emittedRules is empty", () => {
+	// Same budget arithmetic as AC1-static: budget=50, header=28, bodyOnlyBudget=22 <= notice(26).
+	const rule = makeRule({ path: "/p/r.md", relativePath: "r.md", body: "B".repeat(200) });
+	const result = formatDynamicBlock([rule], "src/x.ts", { maxRuleChars: 200, maxResultChars: 50 });
+	expect(result.text).toBe("");
+	expect(result.emittedRules).toHaveLength(0);
+});
+
+// ===========================================================================
+// AC2 — emittedRules only contains rules whose body is in the output
+// ===========================================================================
+
+test("AC2-static: emittedRules contains only rules that survived budget (not all input rules)", () => {
+	// Two rules. Headers: r1.md=29, r2.md=29 => totalHeaderOverhead=58.
+	// Budget=110: bodyOnlyBudget=52. rule1 body="A"*50 fits (remaining=2 after).
+	// rule2 body: perRuleResultChars=55, truncateRule("B"*300,55)="B"*28+notice(27)=55 chars.
+	// truncateBudget: remaining=2 <= notice(27) => break => rule2 body completely dropped.
+	// emittedRules must contain only rule1, not rule2.
+	const rule1 = makeRule({ path: "/p/r1.md", relativePath: "r1.md", body: "A".repeat(50) });
+	const rule2 = makeRule({ path: "/p/r2.md", relativePath: "r2.md", body: "B".repeat(300) });
+	const result = formatStaticBlock([rule1, rule2], { maxRuleChars: 300, maxResultChars: 110 });
+	expect(result.emittedRules).toHaveLength(1);
+	expect(result.emittedRules[0]?.path).toBe("/p/r1.md");
+	expect(result.text).toContain("A".repeat(50));
+	// rule2 body is entirely absent (not even a truncated fragment).
+	expect(result.text).not.toContain("B");
+});
+
+test("AC2-dynamic: emittedRules contains only rules that survived budget", () => {
+	// Same budget arithmetic as AC2-static.
+	const rule1 = makeRule({ path: "/p/r1.md", relativePath: "r1.md", body: "A".repeat(50) });
+	const rule2 = makeRule({ path: "/p/r2.md", relativePath: "r2.md", body: "B".repeat(300) });
+	const result = formatDynamicBlock([rule1, rule2], "src/x.ts", { maxRuleChars: 300, maxResultChars: 110 });
+	expect(result.emittedRules).toHaveLength(1);
+	expect(result.emittedRules[0]?.path).toBe("/p/r1.md");
+});
+
+test("AC2-static: emittedRules is empty when all rules fit but no rules supplied", () => {
+	const result = formatStaticBlock([], { maxRuleChars: 1000, maxResultChars: 1000 });
+	expect(result.text).toBe("");
+	expect(result.emittedRules).toHaveLength(0);
+});
+
+test("AC2-static: emittedRules contains rule even when its body is truncated (partial body is still emitted)", () => {
+	// A rule whose body is truncated (partial) still appears in emittedRules — it was partially emitted.
+	// Only fully-dropped (zero body) rules are excluded.
+	const rule = makeRule({ path: "/p/r.md", relativePath: "r.md", body: "C".repeat(500) });
+	// Budget enough to emit partial body (truncation notice will be appended).
+	// Header ~28 chars + some body chars + truncation notice.
+	const result = formatStaticBlock([rule], { maxRuleChars: 200, maxResultChars: 300 });
+	// Body is partially emitted (truncated). Rule should appear in emittedRules.
+	expect(result.emittedRules).toHaveLength(1);
+	expect(result.emittedRules[0]?.path).toBe("/p/r.md");
+	expect(result.text).toContain("C"); // some body content present
+});
+
+// ===========================================================================
 // C4-CJK — byte cap enforced for multi-byte (UTF-8) content
 // ===========================================================================
 
