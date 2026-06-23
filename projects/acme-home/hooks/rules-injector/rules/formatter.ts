@@ -27,6 +27,7 @@ type TruncatedRule = {
 	path: string;
 	relativePath: string;
 	body: string;
+	contentHash: string;
 };
 
 type NormalizedRule = TruncatedRule & {
@@ -34,21 +35,79 @@ type NormalizedRule = TruncatedRule & {
 };
 
 /**
- * Byte length of the "Instructions from: <path>\n\n" header that precedes
- * each rule's body in the final output. This overhead is charged to the budget
- * before body bytes so that rules without any remaining budget for body content
- * are dropped entirely (no header-only ghost blocks).
+ * The "Instructions from: <path> [hash:<contentHash>]" marker line emitted ahead
+ * of each rule's body. The `[hash:...]` anchor pins the marker to the rule's
+ * content version, so a transcript-presence check can tell an unchanged rule
+ * (skip) from an edited one whose first 2000 chars happen to be identical
+ * (re-inject). Producer (formatRule) and consumers (the transcript filters) MUST
+ * build this line through ruleMarkerLine so the emitted and sought markers agree.
+ */
+export function ruleMarkerLine(path: string, contentHash: string): string {
+	return `Instructions from: ${path} [hash:${contentHash}]`;
+}
+
+/** The bare, version-less marker prefix kept for legacy transcripts (pre-anchor emits). */
+function legacyMarker(path: string): string {
+	return `Instructions from: ${path}`;
+}
+
+/** The hash-anchor opening for a given path, used to detect that SOME version marker exists. */
+function hashAnchorPrefix(path: string): string {
+	return `Instructions from: ${path} [hash:`;
+}
+
+/**
+ * Decide whether a transcript already carries THIS content version of a rule.
+ *
+ * Version semantics (the content-version anchor):
+ * - If the transcript carries the exact `Instructions from: <path> [hash:<hash>]`
+ *   marker for this version → present.
+ * - If the transcript carries a hash-anchored marker for this path but for a
+ *   DIFFERENT hash → a different version is in context → NOT present (re-inject).
+ * - If the transcript carries only a legacy version-less `Instructions from: <path>`
+ *   marker (no `[hash:...]` anchor at all) → fall back to present, since there is
+ *   no version information to contradict it.
+ *
+ * `paths` lists the path spellings to try (e.g. path and realPath).
+ */
+export function transcriptHasRuleVersion(
+	transcriptText: string,
+	paths: ReadonlyArray<string>,
+	contentHash: string,
+): boolean {
+	if (paths.some((path) => transcriptText.includes(ruleMarkerLine(path, contentHash)))) {
+		return true;
+	}
+	if (paths.some((path) => transcriptText.includes(hashAnchorPrefix(path)))) {
+		// A hash anchor exists for this path but not for this hash → different version.
+		return false;
+	}
+	return paths.some((path) => transcriptText.includes(legacyMarker(path)));
+}
+
+/**
+ * Byte length of the version-less marker prefix + the "\n\n" separator that
+ * precedes each rule's body in the final output. This overhead is charged to the
+ * budget before body bytes so that rules without any remaining budget for body
+ * content are dropped entirely (no header-only ghost blocks).
+ *
+ * Intentionally version-less: the `[hash:<contentHash>]` anchor that formatRule
+ * adds for transcript-presence detection is NOT charged here. The anchor is a small
+ * fixed overhead and the hard 32K output cap downstream is the real ceiling, so
+ * keeping the per-rule budget accounting independent of the anchor avoids coupling
+ * the budget math to the content hash.
  */
 function ruleHeaderLength(path: string): number {
-	return `Instructions from: ${path}\n\n`.length;
+	return `${legacyMarker(path)}\n\n`.length;
 }
 
 function formatRule(rule: TruncatedRule): string {
+	const marker = ruleMarkerLine(rule.path, rule.contentHash);
 	const body = normalizeRuleBody(rule.body);
 	if (body.length === 0) {
-		return `Instructions from: ${rule.path}`;
+		return marker;
 	}
-	return `Instructions from: ${rule.path}\n\n${body}`;
+	return `${marker}\n\n${body}`;
 }
 
 /**
@@ -75,11 +134,13 @@ function truncateRules(
 		relativePath: rule.relativePath,
 		body: normalizeRuleBody(rule.body),
 		source: rule.source,
+		contentHash: rule.contentHash,
 	}));
 	const perRuleResultChars = Math.floor(options.maxResultChars / Math.max(1, perRuleNormalized.length));
 	const perRuleBudgeted = perRuleNormalized.map((rule) => ({
 		path: rule.path,
 		relativePath: rule.relativePath,
+		contentHash: rule.contentHash,
 		body: isNeverTruncatedRule(rule.relativePath)
 			? rule.body
 			: truncateRule(rule.body, {
@@ -131,6 +192,7 @@ function truncateRules(
 			path: sourceRule.path,
 			relativePath: budgetedRule.relativePath,
 			body: budgetedRule.body,
+			contentHash: sourceRule.contentHash,
 		});
 		emittedRules.push(originalRule);
 	}

@@ -1,3 +1,4 @@
+import { transcriptHasRuleVersion } from "./rules/index.js";
 import type { LoadedRule } from "./rules/index.js";
 import type { TranscriptSearchOptions } from "./transcript-search.js";
 import { readTranscriptSearchText } from "./transcript-search.js";
@@ -51,12 +52,9 @@ function isRuleAlreadyInTranscript(rule: LoadedRule, transcriptText: string): bo
 		return false;
 	}
 
-	const markers = [
-		`Instructions from: ${rule.path}`,
-		`Instructions from: ${rule.realPath}`,
-		rule.relativePath.length === 0 ? null : rule.relativePath,
-	].filter((marker): marker is string => marker !== null);
-	return markers.some((marker) => transcriptText.includes(marker));
+	// Anchor on the content version: an edited rule whose first 2000 chars are
+	// unchanged must NOT be mistaken for the version already in the transcript.
+	return transcriptHasRuleVersion(transcriptText, [rule.path, rule.realPath], rule.contentHash);
 }
 
 function displayFilename(rule: LoadedRule): string {
