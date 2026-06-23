@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
-import { matchRule, pathBasesForTarget } from "./rules/index.js";
+import { findProjectRoot, matchRule, pathBasesForTarget, scanRuleFiles } from "./rules/index.js";
 import { parseYamlFrontmatter } from "./rules/parser-yaml.js";
 
 const CLI_PATH = join(import.meta.dir, "cli.ts");
@@ -437,3 +437,72 @@ test("E-1 scopeDirectoryForCandidate uses lastIndexOf not indexOf", () => {
 	// The key property: scopeRelative must NOT equal projectRelative when there's a prefix collision
 	expect(bases.scopeRelative).not.toBe(bases.projectRelative);
 });
+
+// --- E-3: symlinked parent dedup — same physical rule file via two symlinked parent dirs injected only once ---
+
+test("E-3 same physical rule file reached via two symlinked parent dirs is deduplicated", () => {
+	// Construct a fixture entirely inside mktemp-created dirs:
+	//   physicalProject/  ← real project root with .claude/rules/rule.md
+	//   link1/ → physicalProject  (symlink)
+	//   link2/ → physicalProject  (symlink)
+	// Scanning .claude/rules via link1 and link2 should yield the same physical file
+	// and the scanner must return it exactly once.
+	const base = mkdtempSync(join(tmpdir(), "ri-e3-"));
+	const physicalProject = join(base, "real");
+	mkdirSync(join(physicalProject, ".claude", "rules"), { recursive: true });
+	writeFileSync(join(physicalProject, ".claude", "rules", "rule.md"), "---\nalwaysApply: true\n---\nE3_RULE_BODY\n");
+
+	const link1 = join(base, "link1");
+	const link2 = join(base, "link2");
+	symlinkSync(physicalProject, link1);
+	symlinkSync(physicalProject, link2);
+
+	// Scan via link1 rules dir
+	const files1 = scanRuleFiles({ rootDir: join(link1, ".claude", "rules") });
+	// Scan via link2 rules dir
+	const files2 = scanRuleFiles({ rootDir: join(link2, ".claude", "rules") });
+	const allFiles = [...files1, ...files2];
+
+	// All realPaths must point to the same physical file
+	const realPaths = allFiles.map((f) => f.realPath);
+	const uniqueRealPaths = new Set(realPaths);
+
+	// Without the fix: uniqueRealPaths.size === 2 (link1/...md and link2/...md both returned as realPath)
+	// With the fix: uniqueRealPaths.size === 1 (both resolve to the same physicalProject/.claude/rules/rule.md)
+	expect(uniqueRealPaths.size).toBe(1);
+
+	rmSync(base, { recursive: true, force: true });
+});
+
+// --- D-8: monorepo subdir cwd — findProjectRoot walks past nested package.json to workspace root ---
+
+test("D-8 findProjectRoot from monorepo package subdir reaches workspace root not nested package", () => {
+	// Construct a fixture:
+	//   workspaceRoot/
+	//     pnpm-workspace.yaml       ← workspace marker
+	//     package.json              ← root package.json (optional, does not stop here alone)
+	//     apps/
+	//       mobile/
+	//         package.json          ← nested package — OLD behavior stops HERE
+	// Expected: findProjectRoot("apps/mobile") returns workspaceRoot, not apps/mobile
+	const base = mkdtempSync(join(tmpdir(), "ri-d8-"));
+	const workspaceRoot = join(base, "workspace");
+	const appDir = join(workspaceRoot, "apps", "mobile");
+	mkdirSync(appDir, { recursive: true });
+
+	// Workspace root markers
+	writeFileSync(join(workspaceRoot, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\n");
+	writeFileSync(join(workspaceRoot, "package.json"), '{"name":"workspace-root"}\n');
+
+	// Nested package (was stopping point before fix)
+	writeFileSync(join(appDir, "package.json"), '{"name":"mobile"}\n');
+
+	const result = findProjectRoot(appDir);
+
+	// With the fix: should reach workspaceRoot (has pnpm-workspace.yaml)
+	// Without the fix: would return appDir (stopped at nested package.json)
+	expect(result).toBe(workspaceRoot);
+
+	rmSync(base, { recursive: true, force: true });
+});
+

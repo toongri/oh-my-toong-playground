@@ -1,4 +1,4 @@
-import { type Dirent, existsSync, lstatSync, readdirSync, realpathSync, type Stats, statSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync, realpathSync, type Stats, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
 import { DEFAULT_MAX_SCAN_FILES, RULE_FILE_EXTENSIONS, SCANNER_EXCLUDED_DIRS } from "./constants.js";
@@ -153,9 +153,7 @@ function isRuleFile(fileName: string): boolean {
 
 function resolveRealPath(filePath: string): string {
 	try {
-		const realPath = realpathSync.native(filePath);
-		const fileStats = lstatSync(filePath);
-		return fileStats.isSymbolicLink() ? realPath : filePath;
+		return realpathSync.native(filePath);
 	} catch {
 		return filePath;
 	}
