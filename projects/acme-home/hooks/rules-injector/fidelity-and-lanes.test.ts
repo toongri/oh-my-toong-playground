@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
-import { matchRule } from "./rules/index.js";
+import { matchRule, pathBasesForTarget } from "./rules/index.js";
+import { parseYamlFrontmatter } from "./rules/parser-yaml.js";
 
 const CLI_PATH = join(import.meta.dir, "cli.ts");
 
@@ -376,4 +377,63 @@ test("F17 Bash grep: PATTERN token is dropped, file path token feeds rule matchi
 	// The ts rule must fire because src/x.ts was extracted.
 	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
 	expect(additionalContext).toContain("src/x.ts");
+});
+
+// --- D-4: negative glob checked against all pathBases ---
+
+test("D-4 negative glob excludes match even when positive hits a different pathBase", () => {
+	// globs: ["foo.ts", "!src/**"]
+	// pathBases: projectRelative="src/foo.ts", basename="foo.ts"
+	// positive "foo.ts" hits basename, negative "!src/**" hits projectRelative
+	// Expected: NOT matched (negative must be checked against ALL pathBases, not just the one that hit)
+	const result = matchRule({
+		frontmatter: { globs: ["foo.ts", "!src/**"] },
+		isSingleFile: false,
+		pathBases: { projectRelative: "src/foo.ts", basename: "foo.ts" },
+	});
+	expect(result.matched).toBe(false);
+});
+
+// --- D-2: trailing whitespace in multiline list items trimmed ---
+
+test("D-2 multiline glob list item with trailing whitespace matches correctly", () => {
+	// YAML frontmatter with multiline list where items have trailing spaces after comment stripping
+	const yaml = "globs:\n  - **/*.ts  \n";
+	const frontmatter = parseYamlFrontmatter(yaml);
+	// The glob must match src/x.ts — trailing whitespace must be stripped from "**/*.ts  "
+	const result = matchRule({
+		frontmatter,
+		isSingleFile: false,
+		pathBases: { projectRelative: "src/x.ts", basename: "x.ts" },
+	});
+	expect(result.matched).toBe(true);
+});
+
+// --- E-1: scope directory uses lastIndexOf to avoid prefix collision ---
+
+test("E-1 scopeDirectoryForCandidate uses lastIndexOf not indexOf", () => {
+	// candidate.relativePath = ".claude/rules-archive/.claude/rules/rule.md"
+	// candidate.source = ".claude/rules"
+	// With indexOf: sourceIndex=0 (finds ".claude/rules" in ".claude/rules-archive" prefix)
+	//   → scopeDirectory = projectRoot → scopeRelative = same as projectRelative (WRONG)
+	// With lastIndexOf: sourceIndex=22 (finds the real ".claude/rules/" dir)
+	//   → scopeDirectory = join(projectRoot, ".claude/rules-archive/.claude") → correct scoping
+	const projectRoot = "/project";
+	const targetFile = "/project/src/main.ts";
+	const candidate = {
+		path: "/project/.claude/rules-archive/.claude/rules/rule.md",
+		realPath: "/project/.claude/rules-archive/.claude/rules/rule.md",
+		source: ".claude/rules" as const,
+		distance: 1,
+		isGlobal: false,
+		isSingleFile: false,
+		relativePath: ".claude/rules-archive/.claude/rules/rule.md",
+	};
+	const bases = pathBasesForTarget(projectRoot, targetFile, candidate);
+	// With indexOf (wrong): scopeDirectory = projectRoot, scopeRelative = "src/main.ts"
+	// With lastIndexOf (correct): scopeDirectory = "/project/.claude/rules-archive/.claude"
+	//   → scopeRelative = relative("/project/.claude/rules-archive/.claude", "/project/src/main.ts")
+	//   = "../../src/main.ts" (not "src/main.ts")
+	// The key property: scopeRelative must NOT equal projectRelative when there's a prefix collision
+	expect(bases.scopeRelative).not.toBe(bases.projectRelative);
 });
