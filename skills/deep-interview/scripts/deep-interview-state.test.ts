@@ -385,6 +385,108 @@ describe('deep-interview-state CLI main()', () => {
     const scores = r['scores'] as Record<string, unknown>;
     expect(scores['context']).toBe(0.5);
   });
+
+  // ---------------------------------------------------------------------------
+  // TODO 7: provenance per-label round-trip (D-H)
+  // ---------------------------------------------------------------------------
+
+  // Each of the 4 closed-set labels persists and reads back via the CLI.
+  // 4 separate append+get cycles, one per label.
+
+  test('provenance [from-code]: append+get round-trip persists the item', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'prov test' });
+    run(`update --append-provenance-item '{"evidence_id":"e1","label":"[from-code]"}'`);
+    const out = run('get');
+    const parsed = JSON.parse(out) as Record<string, unknown>;
+    const prov = ((parsed['state'] as Record<string, unknown>)['evidence_provenance']) as unknown[];
+    expect(prov).toHaveLength(1);
+    expect((prov[0] as Record<string, unknown>)['evidence_id']).toBe('e1');
+    expect((prov[0] as Record<string, unknown>)['label']).toBe('[from-code]');
+  });
+
+  test('provenance [from-code][auto-confirmed]: append+get round-trip persists the item', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'prov test' });
+    run(`update --append-provenance-item '{"evidence_id":"e2","label":"[from-code][auto-confirmed]"}'`);
+    const out = run('get');
+    const parsed = JSON.parse(out) as Record<string, unknown>;
+    const prov = ((parsed['state'] as Record<string, unknown>)['evidence_provenance']) as unknown[];
+    expect(prov).toHaveLength(1);
+    expect((prov[0] as Record<string, unknown>)['evidence_id']).toBe('e2');
+    expect((prov[0] as Record<string, unknown>)['label']).toBe('[from-code][auto-confirmed]');
+  });
+
+  test('provenance [from-research]: append+get round-trip persists the item', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'prov test' });
+    run(`update --append-provenance-item '{"evidence_id":"e3","label":"[from-research]"}'`);
+    const out = run('get');
+    const parsed = JSON.parse(out) as Record<string, unknown>;
+    const prov = ((parsed['state'] as Record<string, unknown>)['evidence_provenance']) as unknown[];
+    expect(prov).toHaveLength(1);
+    expect((prov[0] as Record<string, unknown>)['evidence_id']).toBe('e3');
+    expect((prov[0] as Record<string, unknown>)['label']).toBe('[from-research]');
+  });
+
+  test('provenance [from-user]: append+get round-trip persists the item', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'prov test' });
+    run(`update --append-provenance-item '{"evidence_id":"e4","label":"[from-user]"}'`);
+    const out = run('get');
+    const parsed = JSON.parse(out) as Record<string, unknown>;
+    const prov = ((parsed['state'] as Record<string, unknown>)['evidence_provenance']) as unknown[];
+    expect(prov).toHaveLength(1);
+    expect((prov[0] as Record<string, unknown>)['evidence_id']).toBe('e4');
+    expect((prov[0] as Record<string, unknown>)['label']).toBe('[from-user]');
+  });
+
+  // ---------------------------------------------------------------------------
+  // TODO 7: ordered stance-history round-trip (D-E)
+  // ---------------------------------------------------------------------------
+
+  // stance_history is ordered and NOT deduplicated (unlike challenge_modes_used).
+  test('stance-history: appends persist in insertion order; duplicate NOT deduplicated', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'stance test' });
+    run('update --append-stance Clarify');
+    run('update --append-stance Fact-ground');
+    run('update --append-stance Ontologist');
+    run('update --append-stance Clarify'); // duplicate — must NOT be deduped
+    const out = run('get');
+    const parsed = JSON.parse(out) as Record<string, unknown>;
+    const history = ((parsed['state'] as Record<string, unknown>)['stance_history']) as string[];
+    expect(history).toHaveLength(4);
+    expect(history[0]).toBe('Clarify');
+    expect(history[1]).toBe('Fact-ground');
+    expect(history[2]).toBe('Ontologist');
+    expect(history[3]).toBe('Clarify'); // preserved, not deduplicated
+  });
+
+  // ---------------------------------------------------------------------------
+  // TODO 7: Ontologist stance round-trip (D-E)
+  // ---------------------------------------------------------------------------
+  //
+  // SKILL.md is the ONLY owner of stance selection (prose-only; no selection
+  // helper exists in deep-interview-state.ts). Selector correctness (stall /
+  // late-stage trigger conditions) is guarded by the SKILL.md token-contract
+  // grep (TODO 5 AC), NOT by this state-layer test.
+  //
+  // This test guards only the state layer: a stance_history recording an
+  // Ontologist stance (as the rotation would write via --append-stance)
+  // round-trips correctly — the recorded value is defined and non-empty.
+
+  test('stance-history: Ontologist stance round-trips defined and non-empty', () => {
+    writeSeed();
+    initDeepInterviewState(SID, { initial_idea: 'Ontologist round-trip test' });
+    run('update --append-stance Ontologist');
+    const out = run('get');
+    const parsed = JSON.parse(out) as Record<string, unknown>;
+    const history = ((parsed['state'] as Record<string, unknown>)['stance_history']) as string[];
+    expect(history.length).toBeGreaterThan(0);
+    const recorded = history[history.length - 1];
+    expect(recorded).toBe('Ontologist');
+  });
 });
 
 // ---------------------------------------------------------------------------
