@@ -140,43 +140,67 @@ function stringProperty(value: Record<string, unknown>, key: string): string | u
 	return typeof property === "string" && property.length > 0 ? property : undefined;
 }
 
-function tokenizeShell(command: string): string[] {
+export function tokenizeShell(command: string): string[] {
 	const tokens: string[] = [];
 	let current = "";
 	let quote: "'" | '"' | null = null;
 	let escaped = false;
 
-	for (const character of command) {
+	const flush = () => {
+		if (current.length > 0) {
+			tokens.push(current);
+			current = "";
+		}
+	};
+
+	for (let i = 0; i < command.length; i++) {
+		const ch = command[i];
 		if (escaped) {
-			current += character;
+			current += ch;
 			escaped = false;
 			continue;
 		}
-		if (character === "\\") {
+		if (ch === "\\") {
 			escaped = true;
 			continue;
 		}
-		if ((character === "'" || character === '"') && quote === null) {
-			quote = character;
+		if ((ch === "'" || ch === '"') && quote === null) {
+			quote = ch;
 			continue;
 		}
-		if (quote === character) {
+		if (quote === ch) {
 			quote = null;
 			continue;
 		}
-		if (quote === null && /\s/.test(character)) {
-			if (current.length > 0) {
-				tokens.push(current);
-				current = "";
+		if (quote === null) {
+			// Operators: &&, ||, |, ;, and newline.
+			if (ch === "&" && command[i + 1] === "&") {
+				flush();
+				i++;
+				continue;
 			}
-			continue;
+			if (ch === "|" && command[i + 1] === "|") {
+				flush();
+				i++;
+				continue;
+			}
+			if (ch === "|") {
+				flush();
+				continue;
+			}
+			if (ch === ";" || ch === "\n") {
+				flush();
+				continue;
+			}
+			if (/\s/.test(ch)) {
+				flush();
+				continue;
+			}
 		}
-		current += character;
+		current += ch;
 	}
 
-	if (current.length > 0) {
-		tokens.push(current);
-	}
+	flush();
 	return tokens;
 }
 
