@@ -173,7 +173,10 @@ export class CodexAdapter implements PlatformAdapter {
         await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
         return;
       }
-      await syncDirectory(sourcePath, targetHookDir);
+      await syncDirectory(sourcePath, targetHookDir, {
+        exclude: ["*.test.ts"],
+        platformRoot: path.join(targetPath, this.configDir),
+      });
       logInfo(`Copied: ${displayName}/`);
       await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
     } else {
