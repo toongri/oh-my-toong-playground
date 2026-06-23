@@ -39,7 +39,7 @@ export function filterRulesNotInTranscriptText(
 }
 
 function isRuleAlreadyInTranscript(rule: LoadedRule, transcriptText: string): boolean {
-	const bodyNeedle = rule.body.trim().slice(0, 2_000);
+	const bodyNeedle = rule.body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().slice(0, 2_000);
 	if (bodyNeedle.length === 0 || !transcriptText.includes(bodyNeedle)) {
 		return false;
 	}
