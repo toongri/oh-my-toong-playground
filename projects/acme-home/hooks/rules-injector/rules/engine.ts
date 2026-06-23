@@ -55,6 +55,7 @@ export function createEngine(config: PiRulesConfig, deps: EngineDeps): Engine {
 		const findOptions: Parameters<EngineDeps["findCandidates"]>[0] = {
 			projectRoot,
 			targetFile: null,
+			cwd,
 		};
 		const disabledSources = disabledSourcesFromConfig(config);
 		if (disabledSources !== undefined) {
