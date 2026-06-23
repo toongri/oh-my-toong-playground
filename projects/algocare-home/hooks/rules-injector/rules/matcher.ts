@@ -49,7 +49,7 @@ export function matchRule(input: MatcherInput): MatchResult {
 				continue;
 			}
 
-			if (isExcluded(pathBase, negativeMatchers)) {
+			if (pathBases.some((pb) => isExcluded(pb, negativeMatchers))) {
 				return noMatch();
 			}
 

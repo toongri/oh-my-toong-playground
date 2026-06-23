@@ -119,7 +119,7 @@ function parseMultilineArray(lines: readonly string[], lineIndex: number): Parse
 		const arrayItem = lineWithoutComment.match(/^\s+-\s*(.*)$/);
 		if (arrayItem === null) break;
 
-		values.push(parseStringValue(arrayItem[1] ?? ""));
+		values.push(parseStringValue((arrayItem[1] ?? "").trimEnd()));
 		consumed += 1;
 	}
 

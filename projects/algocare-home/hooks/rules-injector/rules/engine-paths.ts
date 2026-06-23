@@ -93,7 +93,7 @@ function scopeDirectoryForCandidate(projectRoot: string, candidate: RuleCandidat
 		return dirname(candidate.path);
 	}
 
-	const sourceIndex = candidate.relativePath.indexOf(candidate.source);
+	const sourceIndex = candidate.relativePath.lastIndexOf(candidate.source);
 	if (sourceIndex === -1) {
 		return projectRoot;
 	}
