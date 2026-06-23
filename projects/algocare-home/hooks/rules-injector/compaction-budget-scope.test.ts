@@ -904,6 +904,104 @@ test("B-5: a dynamic rule dropped by budget on PostToolUse is re-injected on the
 });
 
 // ===========================================================================
+// B-6 — dynamic byte-clamp survivor: rule whose marker falls past 32K clamp
+//        must NOT be marked injected (no permanent suppression)
+// ===========================================================================
+
+test("B-6: a dynamic rule whose marker falls past the 32K byte clamp is not marked injected and re-injects on the next PostToolUse", () => {
+	// Two CJK glob rules matched by a Bash command. The char-budget (maxRuleChars /
+	// maxResultChars) is generous enough for both rules to be included by the formatter.
+	// Rule1 body is large enough (CJK chars = 3 UTF-8 bytes each) that rule1's section
+	// alone nearly fills the 32K byte cap. Rule2's marker line therefore falls past the
+	// 32K byte cut and is truncated by limitAdditionalContextText.
+	//
+	// Under the bug: codex-hook marks ALL emittedRules dynamic-injected before computing
+	// what survives the byte clamp. Rule2 gets permanently suppressed even though its
+	// marker was never actually emitted to Codex.
+	//
+	// Under the fix (mirrors static-injection.ts P2 guard):
+	//   1. Compute the clamped output via limitAdditionalContextText(normalized block).
+	//   2. Mark only rules whose ruleMarkerLine survives in that clamped string.
+	//   Rule2's marker is absent from the clamped output → not marked → re-injects next turn.
+	//
+	// Byte arithmetic:
+	//   "가" = 3 UTF-8 bytes. rule1 body = 10_500 "가" = 31_500 bytes.
+	//   Block header (~80 bytes) + rule1 marker (~90 bytes) + "\n\n" (~2 bytes) + body (31_500 bytes)
+	//   ≈ 31_672 bytes for rule1 section — close to the 32K limit.
+	//   rule2 marker line (~90 bytes) would land at ~31_762 bytes → before the clamp.
+	//
+	// To ensure rule2's marker is definitely clipped, we use 10_600 "가" = 31_800 bytes
+	// for rule1 body. With ~200 bytes of overhead, rule1 section ≈ 32_000 bytes, leaving
+	// no room for rule2's marker.
+	const sessionId = "b6-session";
+
+	const projectRoot = makeScratchDir("b6-");
+	writeFileSync(join(projectRoot, "package.json"), "{}\n");
+	const rulesDir = join(projectRoot, ".claude", "rules");
+	mkdirSync(rulesDir, { recursive: true });
+	mkdirSync(join(projectRoot, "src"), { recursive: true });
+	writeFileSync(join(projectRoot, "src", "y.ts"), "export const y = 2;\n");
+
+	// Rule1: large CJK body — fills nearly the entire 32K byte cap.
+	// 10_600 "가" = 31_800 UTF-8 bytes of body content.
+	const rule1Body = "B6-RULE1-HEAD: " + "가".repeat(10_550);
+	writeFileSync(join(rulesDir, "b6rule1.md"), `---\nglobs: ["**/*.ts"]\n---\n${rule1Body}\n`);
+
+	// Rule2: short ASCII body — its marker lands past the 32K cap after rule1 fills it.
+	const rule2Body = "B6-RULE2-BODY: must-re-inject";
+	writeFileSync(join(rulesDir, "b6rule2.md"), `---\nglobs: ["**/*.ts"]\n---\n${rule2Body}\n`);
+
+	const postToolPayload = (extraEnv: Record<string, string> = {}): { payload: Record<string, unknown>; env: Record<string, string> } => ({
+		payload: {
+			hook_event_name: "PostToolUse",
+			session_id: sessionId,
+			turn_id: "t1",
+			transcript_path: null,
+			cwd: projectRoot,
+			model: "gpt-5.5",
+			permission_mode: "default",
+			tool_name: "Bash",
+			tool_use_id: "u-b6",
+			tool_input: { command: "cat src/y.ts" },
+			tool_response: {},
+		},
+		env: {
+			// Generous char budget: both rules fit without formatter truncation.
+			// The only truncation is the 32K UTF-8 byte clamp in hook-output.ts.
+			CODEX_RULES_DYNAMIC_MAX_RULE_CHARS: "50000",
+			CODEX_RULES_DYNAMIC_MAX_RESULT_CHARS: "100000",
+			...extraEnv,
+		},
+	});
+
+	// First PostToolUse: both rules are formatter-included, but rule2's marker is
+	// truncated by the 32K byte clamp. Under the bug, both are marked injected.
+	// Under the fix, only rule1 (whose marker survives the clamp) is marked.
+	const first = postToolPayload();
+	const firstResult = runHook("post-tool-use", first.payload, first.env);
+	expect(firstResult.status).toBe(0);
+	const firstCtx = additionalContext(firstResult.stdout);
+	// The byte cap is enforced: output must not exceed 32K UTF-8 bytes.
+	expect(Buffer.byteLength(firstCtx, "utf8")).toBeLessThanOrEqual(32_000);
+	// Rule1's body is large enough to dominate the output.
+	expect(firstCtx).toContain("B6-RULE1-HEAD");
+	// Rule2's body (short ASCII) must NOT appear — the 32K clamp cuts before it.
+	expect(firstCtx).not.toContain("B6-RULE2-BODY");
+
+	// Second PostToolUse (same budget, new turn_id to avoid transcript dedup):
+	// Under the fix: rule2 was never marked (marker absent from clamped output) → emitted here.
+	// Under the bug: rule2 is already marked → permanently suppressed → empty for rule2.
+	const second = postToolPayload({ CODEX_RULES_DYNAMIC_TURN_ID: "t2" });
+	// turn_id override via env is not supported — pass it in payload overrides instead.
+	const secondPayload = { ...second.payload, turn_id: "t2" };
+	const secondResult = runHook("post-tool-use", secondPayload, second.env);
+	expect(secondResult.status).toBe(0);
+	const secondCtx = additionalContext(secondResult.stdout);
+	// Rule2 must appear on the second run (it was not validly marked on the first).
+	expect(secondCtx).toContain("B6-RULE2-BODY");
+});
+
+// ===========================================================================
 // AC3 — C-4: post-compact body block + directive share one budget
 // ===========================================================================
 
