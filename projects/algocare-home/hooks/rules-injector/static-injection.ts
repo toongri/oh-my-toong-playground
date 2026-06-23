@@ -3,12 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 import type { CodexRulesHookOptions } from "./codex-hook-options.js";
 import { configFromEnvironment } from "./config.js";
 import { withPromptBudget } from "./event-budget.js";
-import { formatAdditionalContextOutput } from "./hook-output.js";
+import { formatAdditionalContextOutput, limitAdditionalContextText } from "./hook-output.js";
 import { completePostCompactRecovery, hydrateEngineState, persistEngineState } from "./persistent-cache.js";
 import { withPostCompactBudget } from "./post-compact-budget.js";
+import type { PostCompactReadDirective } from "./post-compact-directive.js";
 import { buildPostCompactReadDirective } from "./post-compact-directive.js";
 import type { Engine } from "./rules/index.js";
-import { formatStaticBlock, hashContent, isNeverTruncatedRule, parseRule, transcriptHasRuleVersion } from "./rules/index.js";
+import { formatStaticBlock, hashContent, isNeverTruncatedRule, parseRule, ruleMarkerLine, transcriptHasRuleVersion } from "./rules/index.js";
 import type { LoadedRule, PiRulesConfig } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
 import { filterRulesAlreadyInTranscript, filterRulesNotInTranscriptText } from "./transcript-rule-filter.js";
@@ -69,11 +70,19 @@ export function runStaticInjection(
 		maxRuleChars: effectiveConfig.maxRuleChars,
 		maxResultChars: effectiveConfig.maxResultChars,
 	});
+	// P2: mark only rules whose marker survives the 32K byte clamp.
+	// The formatter char-budget (up to 40000 chars) can admit rules that the downstream
+	// byte clamp then cuts. A rule whose marker is past the 32K cut must stay pending so
+	// a later turn re-injects it. Compute the limited context first, then filter.
+	const combinedContext = combineStaticContext(block);
+	const limitedContext = limitAdditionalContextText(combinedContext.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim());
 	for (const rule of emittedRules) {
-		engine.markStaticInjected(rule);
+		if (limitedContext.includes(ruleMarkerLine(rule.path, rule.contentHash))) {
+			engine.markStaticInjected(rule);
+		}
 	}
 	persistEngineState(engine, cachePath);
-	return formatAdditionalContextOutput(eventName, combineStaticContext(block));
+	return formatAdditionalContextOutput(eventName, combinedContext);
 }
 
 interface PostCompactRecoveryInput {
@@ -120,14 +129,30 @@ function runPostCompactRecovery(input: PostCompactRecoveryInput): string {
 
 	const fullBodyRules = missingRules.filter((rule) => isNeverTruncatedRule(ruleDisplayPath(rule)));
 	const listedRules = missingRules.filter((rule) => !isNeverTruncatedRule(ruleDisplayPath(rule)));
-	const bodyBlock = fullBodyRules.length === 0 ? "" : engine.formatStatic(fullBodyRules);
+	// C1: use formatStaticBlock directly (not engine.formatStatic) to get emittedRules —
+	// the formatter may budget-drop some fullBodyRules too; only emitted ones are marked.
+	const { text: bodyBlock, emittedRules: bodyEmittedRules } = fullBodyRules.length === 0
+		? { text: "", emittedRules: [] }
+		: formatStaticBlock(fullBodyRules, {
+				maxRuleChars: effectiveConfig.maxRuleChars,
+				maxResultChars: effectiveConfig.maxResultChars,
+		  });
 	const remainingForDirective = Math.max(0, effectiveConfig.maxResultChars - bodyBlock.length);
-	const directive = buildPostCompactReadDirective(
+	const { text: directive, emittedPaths }: PostCompactReadDirective = buildPostCompactReadDirective(
 		[...listedRules.map((rule) => rule.path), ...dynamicRulePaths],
 		remainingForDirective,
 	);
-	for (const rule of missingRules) {
+	// Mark only rules actually delivered this turn. A listed rule whose path was dropped by
+	// the directive budget stays pending so a later, wider-budget turn can re-offer it.
+	// Marking a dropped rule here would let !isStaticInjected suppress it forever.
+	const emittedPathSet = new Set(emittedPaths);
+	for (const rule of bodyEmittedRules) {
 		engine.markStaticInjected(rule);
+	}
+	for (const rule of listedRules) {
+		if (emittedPathSet.has(rule.path)) {
+			engine.markStaticInjected(rule);
+		}
 	}
 	persistEngineState(engine, input.cachePath, input.channel);
 	return formatAdditionalContextOutput(input.eventName, combineStaticContext(bodyBlock, directive));

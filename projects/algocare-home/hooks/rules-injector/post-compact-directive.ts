@@ -12,13 +12,24 @@ const DIRECTIVE_HEADER = [
 const DIRECTIVE_FOOTER =
 	"\nOperating without these rules is a protocol violation. Reconstructing them from memory is NOT reading. READ THEM ALL. NO EXCUSES.";
 
-export function buildPostCompactReadDirective(rulePaths: ReadonlyArray<string>, maxChars: number): string {
+export interface PostCompactReadDirective {
+	text: string;
+	/** The subset of input paths that were actually included in the directive text.
+	 * Paths dropped by the budget are absent; only these should be marked injected. */
+	emittedPaths: string[];
+}
+
+export function buildPostCompactReadDirective(
+	rulePaths: ReadonlyArray<string>,
+	maxChars: number,
+): PostCompactReadDirective {
 	const paths = uniqueStrings([...rulePaths]);
 	if (paths.length === 0) {
-		return "";
+		return { text: "", emittedPaths: [] };
 	}
 
 	const lines: string[] = [];
+	const emittedPaths: string[] = [];
 	let usedChars = DIRECTIVE_HEADER.length + DIRECTIVE_FOOTER.length;
 	let omittedCount = 0;
 	for (const rulePath of paths) {
@@ -28,6 +39,7 @@ export function buildPostCompactReadDirective(rulePaths: ReadonlyArray<string>, 
 			continue;
 		}
 		lines.push(line);
+		emittedPaths.push(rulePath);
 		usedChars += line.length + 1;
 	}
 	if (omittedCount > 0) {
@@ -35,5 +47,5 @@ export function buildPostCompactReadDirective(rulePaths: ReadonlyArray<string>, 
 			`- (+${omittedCount} more rule files omitted - rescan the project rule directories and read those too)`,
 		);
 	}
-	return `${DIRECTIVE_HEADER}${lines.join("\n")}${DIRECTIVE_FOOTER}`;
+	return { text: `${DIRECTIVE_HEADER}${lines.join("\n")}${DIRECTIVE_FOOTER}`, emittedPaths };
 }
