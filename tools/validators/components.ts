@@ -75,8 +75,11 @@ function resolveHookComponentPath(
   projectDirName: string,
 ): string | null {
   if (component.includes(":")) {
+    // A-8: root-context (projectDirName="") cannot reference scoped hooks — mirrors
+    // resolveComponentPath which blocks scoped refs from root sync.yaml contexts.
+    if (!projectDirName) return null;
     const [scopeProject, scopeName] = component.split(":", 2);
-    if (projectDirName && scopeProject !== projectDirName) return null;
+    if (scopeProject !== projectDirName) return null;
     const path = join(rootDir, "projects", scopeProject, "hooks", scopeName);
     if (existsSync(path)) return path;
     return null;

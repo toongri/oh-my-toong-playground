@@ -87,6 +87,7 @@ const VALID_EVENTS = new Set([
   "PostCompact", // Codex-only; shared Set is harmless — non-codex platform YAML never names it
 ]);
 
+
 const VALID_HOOK_TYPES = new Set(["command", "prompt"]);
 
 const PLATFORM_ALLOWED_SECTIONS: Record<string, Set<string>> = {
@@ -370,6 +371,28 @@ function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPat
       }
       if (!isArray(value)) {
         result.errors.push(`${label}: hooks.${event}의 값은 배열이어야 합니다`);
+        continue;
+      }
+
+      // A-3: validate individual hook items are objects
+      for (let i = 0; i < (value as unknown[]).length; i++) {
+        const hookItem = (value as unknown[])[i];
+        if (!isObject(hookItem)) {
+          result.errors.push(
+            `${label}: hooks.${event}[${i}]은 object이어야 합니다 (got ${hookItem === null ? "null" : typeof hookItem})`,
+          );
+          continue;
+        }
+
+        // A-2: codex does not support type: prompt
+        if (platform === "codex") {
+          const hookType = (hookItem as Record<string, unknown>).type;
+          if (hookType === "prompt") {
+            result.warnings.push(
+              `${label}: hooks.${event}[${i}].type 'prompt'는 codex가 지원하지 않습니다 (지원: command)`,
+            );
+          }
+        }
       }
     }
   }
