@@ -1,4 +1,4 @@
-import { SOURCE_PRIORITY } from "./rules/index.js";
+import { DEFAULT_AUTO_DISABLED_SOURCES, SOURCE_PRIORITY } from "./rules/index.js";
 import { defaultConfig } from "./rules/index.js";
 import type { PiRulesConfig, RuleSource } from "./rules/index.js";
 
@@ -57,7 +57,9 @@ function isTruthy(value: string | undefined): boolean {
 
 function parsePositiveInteger(value: string | undefined): number | undefined {
 	if (value === undefined) return undefined;
-	const parsed = Number.parseInt(value.trim(), 10);
+	const trimmed = value.trim();
+	if (!/^\d+$/.test(trimmed)) return undefined;
+	const parsed = Number.parseInt(trimmed, 10);
 	return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
@@ -79,7 +81,8 @@ function parseEnabledSources(value: string | undefined, disableBundledRules: boo
 }
 
 function sourcesWithoutBundledRules(): RuleSource[] {
-	return [...SOURCE_PRIORITY.keys()].filter((source) => source !== "plugin-bundled");
+	const excluded = new Set<string>(["plugin-bundled", ...DEFAULT_AUTO_DISABLED_SOURCES]);
+	return [...SOURCE_PRIORITY.keys()].filter((source) => !excluded.has(source));
 }
 
 function toRuleSource(value: string): RuleSource | null {
