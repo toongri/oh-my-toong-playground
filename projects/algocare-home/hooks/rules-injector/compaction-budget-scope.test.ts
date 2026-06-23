@@ -537,6 +537,7 @@ test("F11: a rule planted under ~/.claude/rules is not injected by session-start
 // These tests prove the D-5/D-6 contract: per-rule/block header bytes are charged
 // to the budget before bodies. When no body survives, the block emits nothing.
 import { formatStaticBlock, formatDynamicBlock } from "./rules/formatter.js";
+import { transcriptHasContextPressureMarker } from "./context-pressure.js";
 import type { LoadedRule } from "./rules/types.js";
 
 /** Minimal LoadedRule fixture for formatter unit tests. */
@@ -783,6 +784,67 @@ test("AC3-C4: post-compact body block + directive share the budget (no double-ch
 // ===========================================================================
 // AC11 — C-7: dynamic recovery uses body-needle, not path-presence
 // ===========================================================================
+
+// ===========================================================================
+// B-11 — stale compaction marker must not suppress current-turn injection
+// ===========================================================================
+
+test("B-11: a stale 'context compacted' marker followed by new activity does not suppress injection", () => {
+	// Bug: transcriptHasContextPressureMarker scans the full transcript, so an old
+	// "context compacted" marker from a historical compaction event returns true and
+	// suppresses the current turn — even though new turns have occurred since then.
+	// Fix: scope detection to the latest compaction; if content follows the last
+	// marker, the marker is stale and must not suppress injection.
+	const { projectRoot } = makeProjectWithStaticRule(
+		"b11-rule.md",
+		"B-11 BOULDER: must appear when compaction marker is historical.",
+	);
+
+	// Transcript: old compaction at the top, followed by several new conversation turns.
+	const transcriptPath = join(projectRoot, "transcript-b11.txt");
+	writeFileSync(
+		transcriptPath,
+		[
+			"[context compacted to fit the context window]",
+			"",
+			"Human: continue working on the feature",
+			"",
+			"Assistant: Sure, let me proceed.",
+			"",
+			"Human: now add the next step",
+			"",
+			"Assistant: Done, here is what I changed.",
+		].join("\n"),
+	);
+
+	// transcriptHasContextPressureMarker should return false: the compaction marker
+	// is stale (new turns follow it), so there is no current context pressure.
+	expect(transcriptHasContextPressureMarker(transcriptPath)).toBe(false);
+});
+
+test("B-11-baseline: a compaction marker at the end of the transcript IS current pressure (suppresses injection)", () => {
+	// Positive control: if the compaction marker is the last meaningful content,
+	// the compaction is current and should suppress injection.
+	const { projectRoot } = makeProjectWithStaticRule(
+		"b11b-rule.md",
+		"B-11 BASELINE BOULDER: compaction at the end is current pressure.",
+	);
+
+	const transcriptPath = join(projectRoot, "transcript-b11b.txt");
+	writeFileSync(
+		transcriptPath,
+		[
+			"Human: do something",
+			"",
+			"Assistant: here is the result.",
+			"",
+			"[context compacted to fit the context window]",
+		].join("\n"),
+	);
+
+	// The marker is at the end (no subsequent activity) → current pressure → true.
+	expect(transcriptHasContextPressureMarker(transcriptPath)).toBe(true);
+});
 
 test("AC11-C7: dynamic recovery re-injects a rule whose path is in transcript but body is not", () => {
 	// Scenario: dynamic rule was injected in a previous turn. Post-compact fires.
