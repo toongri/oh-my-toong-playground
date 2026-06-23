@@ -82,7 +82,7 @@ A worker with nothing to expand writes `## EXPAND` then `none — <one-line reas
 
 ## Phase 0 — Decompose and intent-route
 
-Decompose the query into 3+ orthogonal axes, classify the posture and tier (see the Postures section), and open the session directory `.omt/ultraresearch/<timestamp>/` as `$SESSION_DIR`. You own the journal: you write every file in it; workers never do.
+Decompose the query into 3+ orthogonal axes, classify the posture and tier (see the Postures section), and open the session directory `$OMT_DIR/ultraresearch/<slug>-<timestamp>/` as `$SESSION_DIR` (`<slug>` is a short kebab-case label derived from the query so the run is identifiable; the `<timestamp>` suffix keeps concurrent or repeated runs from colliding). You own the journal: you write every file in it; workers never do.
 
 ## Phase 1 — Saturation wave
 
