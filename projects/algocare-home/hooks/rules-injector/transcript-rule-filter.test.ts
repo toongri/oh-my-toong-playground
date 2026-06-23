@@ -94,6 +94,29 @@ test("body and hash marker present → rule is suppressed (treated as injected)"
 });
 
 // ---------------------------------------------------------------------------
+// CRLF: rule whose body has \r\n line endings is correctly detected as
+// already-injected when the transcript contains the LF-normalised version.
+// ---------------------------------------------------------------------------
+
+test("CRLF-bodied rule already present in LF-normalised transcript is NOT re-injected", () => {
+	// Rule loaded from a Windows-checkout file: body has \r\n endings.
+	const crlfBody = "# Coding Discipline\r\n\r\nDo not touch anything you must not touch.";
+	const rule = makeRule({ body: crlfBody });
+	// The transcript contains the body as it was previously injected (LF-only, trimmed).
+	const lfBody = "# Coding Discipline\n\nDo not touch anything you must not touch.";
+	const marker = ruleMarkerLine(rule.path, rule.contentHash);
+	const transcriptText = [marker, "", lfBody].join("\n");
+
+	const markInjectedCalls: LoadedRule[] = [];
+	const pending = filterRulesNotInTranscriptText([rule], transcriptText, (r) => markInjectedCalls.push(r));
+
+	// CRLF rule is already in transcript — must be suppressed (not re-injected).
+	expect(pending).toHaveLength(0);
+	expect(markInjectedCalls).toHaveLength(1);
+	expect(markInjectedCalls[0]).toBe(rule);
+});
+
+// ---------------------------------------------------------------------------
 // Edge: rule with empty body is never suppressed regardless of transcript
 // ---------------------------------------------------------------------------
 
