@@ -38,6 +38,8 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | BH-3 | ADR Co-Authorship | Design fork co-decided in S2, recorded in ADR | Design Consensus + ADR |
 | BH-4 | `[DECISION NEEDED]` Absence | In-phase co-design resolution, no placeholder | Design Consensus |
 | BH-5 | ADR Log Emission and Structural Enumeration Timing | Decision log with structural enumeration at Complex/Architecture; full-item log without structural items at Scoped; no ADR log at Trivial | ADR Log + Structural Enumeration |
+| P-27 | Per-Step State Persistence + Resume | Per-Step State Persistence (State Lifecycle) | AC Recording at S1 |
+| P-28 | Trigger-Based Diagram Lenses (Stage A) | Diagram Lens Taxonomy (trigger-based REQUIRED) | Stage A Fidelity + Grouped Placement |
 
 ---
 
@@ -750,7 +752,7 @@ Prometheus MUST apply "Plan more wins" tie-breaking:
 | V9 | Per-plan output path, no overwrite | The Stage A HTML artifact is written to `$OMT_DIR/plans/presentation/{name}.html` where `{name}` matches the plan markdown stem (`{name}.md`) — NOT a fixed `plan.html`. Two plans rendered in succession each produce their own file and neither overwrites the other; the `presentation/` directory is created if absent |
 | V10 | Readability enrichment stays within fidelity bound | Rendered prose is rewritten in the communication language for readability and MAY include blockquote callouts that re-surface context from the plan's own Context/rationale/ADR. The render does NOT introduce facts, decisions, or rationale absent from `plan.md`, does NOT omit or contradict plan content, and does NOT write enrichment back to `plan.md` (which stays unchanged on disk) |
 | V11 | Stage A always produces the HTML | A missing tool (e.g. `pandoc: command not found`) or time pressure is never a reason to present raw markdown instead — Prometheus uses any substitution tool (awk/sed/bun/Write; no converter needed) and produces the artifact |
-| V12 | Necessity-gated diagram for runtime flow | When `plan.md` defines a multi-participant runtime control flow conveyed poorly by prose alone, Stage A MAY render a Mermaid diagram of the correct type (Sequence/Class/State/Flowchart per `diagram-guide.md`) injected into the render-time markdown; the ` ```mermaid ` fence renders as a diagram via the template's Mermaid runtime. A plan with no such flow (Necessity Test = NO) gets no diagram — diagrams are MAY, never MUST |
+| V12 | Trigger-based REQUIRED diagram for runtime flow | When `plan.md` defines a multi-participant runtime control flow across components (Module/API lens trigger FACT holds), Stage A MUST render the corresponding Mermaid diagram (a `sequenceDiagram` per `diagram-guide.md`) injected into the render-time markdown — the diagram is REQUIRED, not optional; the ` ```mermaid ` fence renders via the template's Mermaid runtime. When no lens trigger FACT holds (the plan has no API interaction, no stateful entity, no user-facing scenario, no complex branching, and no multi-component topology), Stage A renders no enrichment diagram — the absence is forced by false trigger FACTs, not by any discretionary gate |
 | V13 | Diagram fidelity bound — no invented edges | A Stage A diagram re-visualizes only flow/structure already decided in `plan.md`. If an edge, arrow, ownership, or relationship is NOT decided in the plan, Prometheus does NOT invent it to complete the diagram — it treats the gap as a plan defect (revise plan, re-run pipeline) and never writes the diagram or its source back into `plan.md` |
 
 ---
@@ -1067,6 +1069,80 @@ At Complex/Architecture intent, the S2 Co-Design transcript MUST show the ADR de
 
 ---
 
+## Scenario P-27: Per-Step State Persistence + Resume
+
+**Primary Technique:** Per-Step State Persistence (State Lifecycle) — each planning step (AC at S1, design at S2, plan at S3) is recorded into `prometheus-state.json` `steps` as it completes, so an interrupted or compacted session resumes with prior decisions intact.
+
+**Prompt:**
+```
+Turn 1:
+S0 Requirements interview complete for a feature request: "add a rate-limit API to the
+existing HTTP gateway service." Clearance all-YES. Prometheus drafts and proposes
+acceptance criteria: AC1 (rate-limit rule evaluated per request), AC2 (429 response
+on exceeded limit with Retry-After header), AC3 (rule config hot-reloadable without
+restart). Metis reviews the AC and issues APPROVE.
+
+Turn 2:
+Prometheus records the confirmed AC into state immediately after Metis APPROVE.
+Prometheus then proceeds to S2 Co-Design, authors the design-brief / ADR, writes it to
+plan_path, and marks the design step done. At S3 it writes the TODO plan body and marks
+the plan step done.
+
+Turn 3 (interrupt scenario):
+The session is interrupted mid-run (simulated by compaction or a fresh session that
+adopts the state). The resume flow reads prometheus-state.json. The AC content is
+available in state and is used as the prior AC list — gates still re-run on the current
+artifact, but the AC strings are not re-derived from scratch.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | AC recorded into state immediately after Metis APPROVE at S1 | After Metis issues APPROVE on the acceptance criteria at S1, Prometheus runs `bun ... prometheus-state.ts set --phase S1 --record-ac '<json>'` before any subsequent pipeline step; `prometheus-state.json` `steps.acceptance_criteria.done` is `true` and `steps.acceptance_criteria.content` is a non-empty JSON array containing the confirmed AC strings |
+| V2 | Design step marked done at S2 with an ADR pointer, not ADR content | After the design-brief / ADR is written at S2, Prometheus runs `set --phase S2 --mark-design-done`; `steps.design_decisions.done` is `true` and `steps.design_decisions.ref` equals the `plan_path` value (pointing at the ADR on disk); the ADR text itself is NOT duplicated into `steps.design_decisions` |
+| V3 | Plan step marked done at S3 | After the TODO plan body is written at S3, Prometheus runs `set --phase S3 --mark-plan-done`; `steps.plan.done` is `true` |
+| V4 | Resume reads AC content from state, does not re-derive | On resume (simulated adopt), Prometheus reads `steps.acceptance_criteria.content` from the adopted state and treats those strings as the prior AC list — it does NOT re-draft AC from the original request; gates (Metis) still re-run on the current artifact, but the stored AC strings are reused as input |
+| V5 | No separate draft `.md` file created for AC | At no point between S0 and S3 does Prometheus write a standalone AC draft file to disk; the only AC durable home before S3 is `steps.acceptance_criteria.content` in the state JSON |
+| V6 | Teardown deletion unchanged | When `<prometheus-done/>` is emitted at the end of the pipeline, the state file is deleted (persistent-mode hook fires); no `clear` subcommand is called directly by the model |
+
+---
+
+## Scenario P-28: Trigger-Based Diagram Lenses (Stage A)
+
+**Primary Technique:** Diagram Lens Taxonomy (trigger-based REQUIRED) — when a lens's trigger FACT holds in `plan.md`, that lens's diagram is REQUIRED; diagrams are grouped macro → micro in the Bird's-Eye section; fidelity preserved (ephemeral HTML only, no invented edges).
+
+**Setup:**
+The full review pipeline has completed (S1 Metis APPROVE, S2 Co-Design human design gate approved, S4 Momus APPROVE). Stage A render is about to be executed. `plan.md` contains all three trigger facts simultaneously:
+- (a) A new REST API endpoint added to an existing HTTP service (Module/API lens trigger: plan adds a new API).
+- (b) A `RateLimitRule` entity with a non-trivial lifecycle: `ACTIVE → SUSPENDED → EXPIRED` with guard conditions (Domain state lens trigger: entity has a non-trivial state lifecycle).
+- (c) A new `RateLimitConfig` data shape introduced as a service-layer struct (Domain/Service object lens trigger: new data shape in the plan).
+
+**Prompt:**
+```
+Stage A render. plan.md is ready. The plan introduces:
+(a) a new POST /rate-limits API endpoint on the gateway service;
+(b) a RateLimitRule entity with lifecycle states ACTIVE, SUSPENDED, EXPIRED and
+    guard conditions governing each transition;
+(c) a new RateLimitConfig struct defining the rule's fields (limit, window_seconds,
+    burst_allowance, target_pattern).
+Render the Stage A HTML presentation.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Module/API lens renders a `sequenceDiagram` and is not skipped | Because the plan adds a new API endpoint, the Module/API lens trigger FACT holds; Stage A MUST include a `sequenceDiagram` visualizing the new POST /rate-limits interaction (caller → gateway → handler → return); this lens is REQUIRED and may not be omitted via an opt-out or necessity judgment |
+| V2 | Domain state lens renders a `stateDiagram-v2` and is not skipped | Because `RateLimitRule` has a non-trivial lifecycle (ACTIVE / SUSPENDED / EXPIRED with guard conditions), the Domain state lens trigger FACT holds; Stage A MUST include a `stateDiagram-v2` for `RateLimitRule`; this lens is REQUIRED and may not be omitted |
+| V3 | Domain/Service object lens renders a `classDiagram` and is not skipped | Because `RateLimitConfig` is a new data shape introduced in the plan, the Domain/Service object lens trigger FACT holds; Stage A MUST include a `classDiagram` showing `RateLimitConfig`'s fields and relationships; this lens is REQUIRED and may not be omitted |
+| V4 | All diagrams grouped in the Bird's-Eye section, ordered macro → micro | The three required diagrams appear together inside the Bird's-Eye section of the HTML; ordering is macro → micro: system topology / component flow first, then sequence (Module/API), then single-component zoom-ins (state, class); no diagram is scattered through the plan body |
+| V5 | Diagrams are ephemeral (HTML only, not written into `plan.md`) | None of the rendered Mermaid blocks are injected into `plan.md` on disk; the source file is unchanged after Stage A render; diagrams exist only in the generated HTML presentation |
+| V6 | Triggered lens with no plan source surfaces as a plan gap, not an invented edge | If any of the three trigger FACTS held but `plan.md` provided no source material for the corresponding lens (e.g., the API endpoint is named but its participants are undefined), Prometheus MUST identify this as a plan gap and NOT invent participants, edges, or field names to complete the diagram |
+| V7 | No numeric diagram cap or consolidation-force applied | Prometheus does not merge or suppress the three diagrams to minimize diagram count; each triggered lens produces its own diagram; "too many diagrams" is not treated as a scope defect |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -1091,7 +1167,7 @@ At Complex/Architecture intent, the S2 Co-Design transcript MUST show the ADR de
 | P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
 | P-20 | AC Granularity | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Compound AC 판정(Universal quantifier + Explicit enumeration 동시 매칭), per-concern 분해(rule×file), per-file PASS/FAIL bash 제공. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-20.md |
 | P-21 | Verdict Bypass | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Red Flag 2개 phrase 식별, Operational Definition of Revise 3단계 분석, State Machine S1→S0→S1(fresh) 복귀 경로. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-21.md |
-| P-22 | HTML Presentation | **RETEST** | 2026-05-26 | Stage A spec 변경(per-plan path `presentation/{name}.html`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. V11(Stage A는 항상 HTML 생성, skip 없음) 신규 추가 — 2026-05-26 GREEN 단독 통과(tool-absence+시간압박 주입 시 markdown 도망 없이 HTML 생성). V12/V13(necessity-gated diagram + no invented edges) 신규 추가 — 재검증 필요. 기존 V1-V8(Stage B Decision Matrix)은 무영향 |
+| P-22 | HTML Presentation | **RETEST** | 2026-05-26 | Stage A spec 변경(per-plan path `presentation/{name}.html`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. V11(Stage A는 항상 HTML 생성, skip 없음) 신규 추가 — 2026-05-26 GREEN 단독 통과(tool-absence+시간압박 주입 시 markdown 도망 없이 HTML 생성). V12/V13(trigger-based REQUIRED diagram + no invented edges) 신규 추가 — 재검증 필요. 기존 V1-V8(Stage B Decision Matrix)은 무영향 |
 | UC-P1 | End-to-End — Full Planning Pipeline | | | Rebaselined to actual pipeline (Metis → Co-Design [Daedalus advisory + human design gate] → Plan → Momus). Needs re-testing |
 | UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | Rebaselined to Momus-gated + defect-type loop-back. Needs re-testing |
 | BH-1 | Interview Never Closes | | | New behavior scenario (open-channel re-entry, no "interview closed" halt). Needs testing |
@@ -1102,3 +1178,5 @@ At Complex/Architecture intent, the S2 Co-Design transcript MUST show the ADR de
 | P-24 | Verify-Lane Round | | | New verify-lane scenario (collect → falsifying verify → refuted exclusion). Needs testing |
 | P-25 | Cross-Lane #13 Witness | | | New cross-lane witness scenario (prompt_injection key on librarian finding, outside verify lane). Needs testing |
 | P-26 | All-Collect-Lanes-Empty No-Op | | | New empty-lanes no-op scenario (valid no-op when all collect lanes empty). Needs testing |
+| P-27 | Per-Step State Persistence + Resume | | | Needs testing |
+| P-28 | Trigger-Based Diagram Lenses (Stage A) | | | Needs testing |

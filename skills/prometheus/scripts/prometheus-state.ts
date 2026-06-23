@@ -6,6 +6,8 @@
  *
  * Subcommands:
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]
+ *       [--record-ac '<json-array>' | --record-ac - (reads JSON array from stdin)]
+ *       [--mark-design-done] [--mark-plan-done]
  *   get
  *   clear
  */
@@ -26,7 +28,20 @@ export interface PrometheusState {
   started_at: string;
   /** Refreshed on every write (heartbeat). Used by the GC liveness check. */
   last_touched_at: string;
+  /** Per-planning-step completion records. */
+  steps: {
+    acceptance_criteria: { done: boolean; content: string[]; recorded_at: string };
+    design_decisions: { done: boolean; ref: string };
+    plan: { done: boolean };
+  };
 }
+
+/** The fresh default for `steps` — used when prior state has no steps field. */
+const FRESH_STEPS: PrometheusState['steps'] = {
+  acceptance_criteria: { done: false, content: [], recorded_at: '' },
+  design_decisions: { done: false, ref: '' },
+  plan: { done: false },
+};
 
 // ---------------------------------------------------------------------------
 // IO helpers (safe write semantics, no import from hooks/)
@@ -45,6 +60,18 @@ function deleteFile(path: string): void {
     unlinkSync(path);
   } catch {
     // ignore missing file
+  }
+}
+
+/**
+ * Read all of stdin synchronously (fd 0). Used by `--record-ac -` so AC content
+ * can be piped via an apostrophe-safe quoted heredoc instead of shell-quoted argv.
+ */
+function readStdinSync(): string {
+  try {
+    return readFileSync(0, 'utf8');
+  } catch {
+    return '';
   }
 }
 
@@ -107,7 +134,17 @@ export function readPrometheusState(sessionId: string): PrometheusState | null {
 
 export function setPrometheusState(
   sessionId: string,
-  opts: { phase: string; plan_path?: string; resume_summary?: string }
+  opts: {
+    phase: string;
+    plan_path?: string;
+    resume_summary?: string;
+    /** Parsed AC string array — sets steps.acceptance_criteria.{done,content,recorded_at=phase}. */
+    record_ac?: string[];
+    /** Sets steps.design_decisions.{done:true, ref=current plan_path}. */
+    mark_design_done?: boolean;
+    /** Sets steps.plan.done=true. */
+    mark_plan_done?: boolean;
+  }
 ): void {
   // Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
   // (e.g. slash-command entry). No-op when the file already exists; the strict
@@ -124,13 +161,42 @@ export function setPrometheusState(
     }
   }
 
+  const resolvedPlanPath = opts.plan_path ?? prior.plan_path ?? '';
+
+  // F6: marking design done with no plan_path would persist done=true, ref="" —
+  // resume then treats design as complete but has no ADR pointer. Loud error
+  // instead of a silent ordering hazard.
+  if (opts.mark_design_done && resolvedPlanPath === '') {
+    process.stderr.write(
+      'prometheus-state: --mark-design-done requires plan_path to be set ' +
+        '(pass --plan-path or set it earlier at S2)\n'
+    );
+    process.exit(1);
+  }
+
+  const priorSteps = (prior as Partial<PrometheusState>).steps ?? FRESH_STEPS;
+
+  // Merge each step sub-object — only update the sub-object whose flag was passed.
+  const steps: PrometheusState['steps'] = {
+    acceptance_criteria: opts.record_ac !== undefined
+      ? { done: true, content: opts.record_ac, recorded_at: opts.phase }
+      : priorSteps.acceptance_criteria,
+    design_decisions: opts.mark_design_done
+      ? { done: true, ref: resolvedPlanPath }
+      : priorSteps.design_decisions,
+    plan: opts.mark_plan_done
+      ? { done: true }
+      : priorSteps.plan,
+  };
+
   const partial: Omit<PrometheusState, 'last_touched_at'> = {
     active: true,
     phase: opts.phase,
-    plan_path: opts.plan_path ?? prior.plan_path ?? '',
+    plan_path: resolvedPlanPath,
     resume_summary: normalizeResumeSummary(opts.resume_summary ?? prior.resume_summary ?? ''),
     // Preserve existing started_at on subsequent writes; seed on first write
     started_at: prior.started_at ?? seedStartedAt(),
+    steps,
   };
 
   const state = mergeWithHeartbeat(partial, {}) as PrometheusState;
@@ -197,7 +263,54 @@ function main(): void {
       const phase = String(args['phase'] ?? '');
       const planPath = args['plan-path'] !== undefined ? String(args['plan-path']) : undefined;
       const resumeSummary = args['resume-summary'] !== undefined ? String(args['resume-summary']) : undefined;
-      setPrometheusState(sessionId, { phase, plan_path: planPath, resume_summary: resumeSummary });
+
+      // --record-ac '<json-array>'  |  --record-ac -  (read JSON array from stdin)
+      let recordAc: string[] | undefined;
+      if (args['record-ac'] !== undefined) {
+        // F5: a bare flag (no value) parses to boolean true — reject loudly
+        // instead of silently no-op'ing the AC record.
+        if (args['record-ac'] === true) {
+          process.stderr.write(
+            "prometheus-state: --record-ac requires a JSON-array value or '-' for stdin\n"
+          );
+          process.exit(1);
+        }
+        const arg = String(args['record-ac']);
+        // F4: '-' means read the JSON array from stdin (apostrophe-safe heredoc input).
+        const raw = arg === '-' ? readStdinSync() : arg;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          process.stderr.write(`prometheus-state: --record-ac value is not valid JSON: ${raw}\n`);
+          process.exit(1);
+        }
+        if (!Array.isArray(parsed)) {
+          process.stderr.write(`prometheus-state: --record-ac value must be a JSON array, got: ${raw}\n`);
+          process.exit(1);
+        }
+        // F5: require a non-empty array of strings — an empty or mixed array is
+        // unusable on resume (would persist done=true with no real AC content).
+        if (parsed.length === 0 || !parsed.every((x) => typeof x === 'string')) {
+          process.stderr.write(
+            'prometheus-state: --record-ac must be a non-empty array of strings\n'
+          );
+          process.exit(1);
+        }
+        recordAc = parsed as string[];
+      }
+
+      const markDesignDone = args['mark-design-done'] === true;
+      const markPlanDone = args['mark-plan-done'] === true;
+
+      setPrometheusState(sessionId, {
+        phase,
+        plan_path: planPath,
+        resume_summary: resumeSummary,
+        record_ac: recordAc,
+        mark_design_done: markDesignDone || undefined,
+        mark_plan_done: markPlanDone || undefined,
+      });
     } else if (subcommand === 'clear') {
       clearPrometheusState(sessionId);
     } else if (subcommand === 'list-others') {
