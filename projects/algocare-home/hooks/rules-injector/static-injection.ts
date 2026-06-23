@@ -8,7 +8,7 @@ import { completePostCompactRecovery, hydrateEngineState, persistEngineState } f
 import { withPostCompactBudget } from "./post-compact-budget.js";
 import { buildPostCompactReadDirective } from "./post-compact-directive.js";
 import type { Engine } from "./rules/index.js";
-import { formatStaticBlock, isNeverTruncatedRule } from "./rules/index.js";
+import { formatStaticBlock, hashContent, isNeverTruncatedRule, parseRule, transcriptHasRuleVersion } from "./rules/index.js";
 import type { LoadedRule, PiRulesConfig } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
 import { filterRulesAlreadyInTranscript, filterRulesNotInTranscriptText } from "./transcript-rule-filter.js";
@@ -98,8 +98,14 @@ function runPostCompactRecovery(input: PostCompactRecoveryInput): string {
 
 	const loaded = engine.loadStaticRules(input.cwd);
 	const transcriptText = readRecoveryTranscriptText(input.transcriptPath);
+	// Recovery must let the TRANSCRIPT decide presence, not the session staticDedup.
+	// In the arrival-order inversion (SessionStart source=compact arriving before the
+	// matching PostCompact) the staticDedup wipe has not run yet, so a session-dedup
+	// pre-filter here would drop the very rules compaction is about to evict. Pass the
+	// loaded rules straight to the transcript check; on the PostCompact-first path the
+	// dedup is already wiped, so dropping the pre-filter is a no-op there.
 	const missingRules = filterRulesNotInTranscriptText(
-		loaded.rules.filter((rule) => !engine.isStaticInjected(rule)),
+		loaded.rules,
 		transcriptText,
 		(rule) => {
 			engine.markStaticInjected(rule);
@@ -138,20 +144,31 @@ function readRecoveryTranscriptText(transcriptPath: string | null): string | nul
 }
 
 /**
- * Returns true only when both the rule body and an "Instructions from: <path>"
- * marker are present in the transcript — meaning the rule was previously emitted
- * end-to-end and is still in context. A transcript that mentions the path but
- * omits the body (e.g. a compacted summary) does NOT qualify; the rule must be
- * re-injected in that case (body-needle gate).
+ * Returns true only when the rule's emitted body AND a content-version marker for
+ * this rule are present in the transcript — meaning this exact version was emitted
+ * end-to-end and is still in context. Two gates:
+ *
+ * - Body gate: the needle is the PARSED body (frontmatter stripped), matching what
+ *   is actually emitted. The raw file (frontmatter included) is never emitted, so a
+ *   raw needle would never match and the rule would be re-injected on every recovery.
+ *   A transcript that mentions the path but omits the body (e.g. a compacted summary)
+ *   fails this gate → re-inject.
+ * - Version gate: the marker is anchored to the content hash, so a tail-only edit of
+ *   a >2000-char rule (identical prefix, different content) is recognized as a
+ *   different version → re-inject.
+ *
+ * Any read/parse failure is absorbed as `false` (re-inject) to honor the advisory
+ * exit-0 contract.
  */
 function isDynamicRuleBodyInTranscript(rulePath: string, transcriptText: string): boolean {
-	if (!transcriptText.includes(`Instructions from: ${rulePath}`)) {
-		return false;
-	}
 	try {
-		const rawBody = readFileSync(rulePath, "utf8").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
-		const needle = rawBody.slice(0, 2_000);
-		return needle.length > 0 && transcriptText.includes(needle);
+		const raw = readFileSync(rulePath, "utf8");
+		const contentHash = hashContent(raw);
+		const needle = parseRule(raw).body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().slice(0, 2_000);
+		if (needle.length === 0 || !transcriptText.includes(needle)) {
+			return false;
+		}
+		return transcriptHasRuleVersion(transcriptText, [rulePath], contentHash);
 	} catch {
 		return false;
 	}

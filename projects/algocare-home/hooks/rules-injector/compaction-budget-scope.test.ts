@@ -617,10 +617,11 @@ test("F11: a rule planted under ~/.claude/rules is not injected by session-start
 // to the budget before bodies. When no body survives, the block emits nothing.
 import { formatStaticBlock, formatDynamicBlock } from "./rules/formatter.js";
 import { transcriptHasContextPressureMarker } from "./context-pressure.js";
+import { filterRulesNotInTranscriptText } from "./transcript-rule-filter.js";
 import type { LoadedRule } from "./rules/types.js";
 
 /** Minimal LoadedRule fixture for formatter unit tests. */
-function makeRule(overrides: { path?: string; relativePath?: string; body?: string }): LoadedRule {
+function makeRule(overrides: { path?: string; relativePath?: string; body?: string; contentHash?: string }): LoadedRule {
 	return {
 		path: overrides.path ?? "/proj/.claude/rules/test.md",
 		realPath: overrides.path ?? "/proj/.claude/rules/test.md",
@@ -630,7 +631,7 @@ function makeRule(overrides: { path?: string; relativePath?: string; body?: stri
 		distance: 0,
 		isGlobal: false,
 		isSingleFile: false,
-		contentHash: "abc123",
+		contentHash: overrides.contentHash ?? "abc123",
 		matchReason: "alwaysApply",
 		frontmatter: { alwaysApply: true },
 	};
@@ -1104,4 +1105,232 @@ test("A1-static: a normally-truncated rule (partial body + notice) is still emit
 	expect(result.emittedRules).toHaveLength(1);
 	expect(result.text).toContain("C"); // real body fragment present
 	expect(result.text).toContain("[Truncated. Full:"); // notice appended after the fragment
+});
+
+// ===========================================================================
+// A3 — recovery presence is decided by the transcript, not session staticDedup
+// ===========================================================================
+
+test("A3: arrival-order inversion (SessionStart source=compact before PostCompact) still recovers a rule that staticDedup already marks injected", () => {
+	// Inversion path: a SessionStart with source="compact" can arrive BEFORE the
+	// matching PostCompact. In that window markSessionCompacted (the staticDedup
+	// wipe) has NOT run yet, so staticDedup still carries the rule injected by the
+	// earlier startup SessionStart. The compact SessionStart takes the "not-pending
+	// + source=compact" inversion fallback and enters recovery anyway.
+	//
+	// Bug: runPostCompactRecovery pre-filters loaded.rules with
+	//   `loaded.rules.filter((rule) => !engine.isStaticInjected(rule))`
+	// BEFORE the transcript-presence check. With staticDedup still populated the
+	// rule is filtered out → missingRules empty → empty directive → the rule the
+	// compaction is about to drop is never recovered.
+	//
+	// Fix: drop the staticDedup pre-filter in the recovery path; let the transcript
+	// (here: none) decide. With no transcript the rule must surface in the directive.
+	const sessionId = "a3-inversion-session";
+	const { projectRoot, rulePath } = makeProjectWithStaticRule(
+		"a3-rule.md",
+		"A3 BOULDER: the inversion window must not swallow this rule.",
+	);
+
+	// 1. Normal startup SessionStart injects the rule and records it in staticDedup.
+	const first = runHook("session-start", sessionStartPayload(sessionId, projectRoot));
+	expect(first.status).toBe(0);
+	expect(additionalContext(first.stdout)).toContain("A3 BOULDER");
+
+	// 2. SessionStart source="compact" BEFORE any PostCompact: staticDedup is still
+	//    populated (no markSessionCompacted ran). Recovery must still surface the rule.
+	const recovery = runHook(
+		"session-start",
+		sessionStartPayload(sessionId, projectRoot, { source: "compact" }),
+	);
+	expect(recovery.status).toBe(0);
+	const recovered = additionalContext(recovery.stdout);
+	expect(recovered).toContain("POST-COMPACTION RULE RECOVERY");
+	expect(recovered).toContain(rulePath);
+});
+
+// ===========================================================================
+// A4 — dynamic recovery body-needle uses the parsed (frontmatter-stripped) body
+// ===========================================================================
+
+test("A4: dynamic recovery does NOT re-inject a rule whose frontmatter-stripped body is already present in the transcript", () => {
+	// Bug: isDynamicRuleBodyInTranscript builds its body needle from the RAW file
+	// (frontmatter included). The emitted body has the frontmatter stripped, so the
+	// raw needle (`---\nglobs: ...\n---\n...`) never appears in the transcript →
+	// includes() is always false → the rule is treated as absent and re-injected on
+	// every recovery, even though its body is fully present in context.
+	//
+	// Fix: build the needle from the PARSED body (frontmatter stripped), matching the
+	// body that was actually emitted. Present body → skip re-injection.
+	const sessionId = "a4-session";
+	const hermDataRoot = join(tempHome, ".omt", "rules-injector");
+
+	const projectRoot = makeScratchDir("a4-");
+	writeFileSync(join(projectRoot, "package.json"), "{}\n");
+	const rulesDir = join(projectRoot, ".claude", "rules");
+	mkdirSync(rulesDir, { recursive: true });
+
+	// Static rule so SessionStart has at least one rule and runs the recovery path.
+	writeFileSync(join(rulesDir, "static.md"), "---\nalwaysApply: true\n---\nSTATIC RULE BODY\n");
+
+	// The dynamic rule. Its frontmatter is `---\nglobs: "**/*.ts"\n---\n`.
+	const dynamicRulePath = join(rulesDir, "dynamic.md");
+	const dynamicRuleBody = "A4-DYNAMIC-BODY: parsed-body presence must suppress re-injection.";
+	writeFileSync(dynamicRulePath, `---\nglobs: "**/*.ts"\n---\n${dynamicRuleBody}\n`);
+
+	// Seed session state: the dynamic rule was previously injected; recovery is armed.
+	mkdirSync(hermDataRoot, { recursive: true });
+	const cachePath = join(hermDataRoot, `${sessionId}.json`);
+	writeFileSync(
+		cachePath,
+		JSON.stringify({
+			version: 1,
+			staticDedup: [],
+			dynamicDedup: { "__pi-rules-session__": [`${dynamicRulePath}::deadbeef`] },
+			postCompactPending: { static: true, dynamic: true },
+		}) + "\n",
+	);
+
+	// Transcript carries the "Instructions from:" marker AND the PARSED body (exactly
+	// what would have been emitted — no frontmatter). Under the fix this body-needle
+	// matches → rule present → NOT re-injected. Under the bug the raw needle (with
+	// frontmatter) misses → rule re-injected.
+	const transcriptPath = join(projectRoot, "transcript-a4.txt");
+	writeFileSync(transcriptPath, `Instructions from: ${dynamicRulePath}\n\n${dynamicRuleBody}\n`);
+
+	const recovery = runHook(
+		"session-start",
+		sessionStartPayload(sessionId, projectRoot, { transcript_path: transcriptPath }),
+		{ PLUGIN_DATA: hermDataRoot },
+	);
+	expect(recovery.status).toBe(0);
+	const recovered = additionalContext(recovery.stdout);
+	// The dynamic rule must NOT be re-injected: its body is already present.
+	expect(recovered).not.toContain(dynamicRulePath);
+});
+
+// ===========================================================================
+// A13 — presence is anchored to the content version, not a 2000-char prefix
+// ===========================================================================
+
+test("A13: a >2000-char rule edited only in its tail is re-injected (prefix is unchanged but content version differs)", () => {
+	// Bug: presence is decided by the first 2000 chars of the body. A rule longer
+	// than 2000 chars edited only in its tail keeps an identical prefix → "already
+	// present" → the updated rule is never re-injected.
+	//
+	// Fix: anchor presence to the content version so a tail-only edit (which changes
+	// the content) is recognized as a different version and re-injected.
+	const sessionId = "a13-session";
+	const head = "A13-HEAD: " + "P".repeat(2_500); // > 2000-char identical prefix
+	const originalBody = `${head}\nA13-TAIL-ORIGINAL`;
+	const { projectRoot, rulePath } = makeProjectWithStaticRule("a13-rule.md", originalBody);
+
+	// 1. First SessionStart emits the rule. Capture the real producer output as the
+	//    transcript — this is the exact emitted block (marker + emitted body).
+	const first = runHook("session-start", sessionStartPayload(sessionId, projectRoot));
+	expect(first.status).toBe(0);
+	const emittedBlock = additionalContext(first.stdout);
+	expect(emittedBlock).toContain("A13-HEAD");
+
+	const transcriptPath = join(projectRoot, "transcript-a13.txt");
+	writeFileSync(transcriptPath, emittedBlock + "\n");
+
+	// 2. Edit ONLY the tail — the 2000-char prefix is byte-identical, the content is not.
+	writeFileSync(rulePath, `---\nalwaysApply: true\n---\n${head}\nA13-TAIL-EDITED\n`);
+
+	// 3. Arm recovery (a fresh session so prior staticDedup doesn't interfere).
+	const sessionId2 = "a13-session2";
+	runHook("session-start", sessionStartPayload(sessionId2, projectRoot));
+	runHook("post-compact", postCompactPayload(sessionId2, projectRoot));
+
+	// 4. Recovery sees the OLD emitted block in the transcript but the rule file now
+	//    holds a NEW content version. Presence must be FALSE → the rule is recovered.
+	const recovery = runHook(
+		"session-start",
+		sessionStartPayload(sessionId2, projectRoot, { transcript_path: transcriptPath }),
+	);
+	expect(recovery.status).toBe(0);
+	const recovered = additionalContext(recovery.stdout);
+	expect(recovered).toContain("POST-COMPACTION RULE RECOVERY");
+	expect(recovered).toContain(rulePath);
+});
+
+test("A13: an unedited rule whose emitted block is in the transcript is NOT re-injected (guardrail)", () => {
+	// Guardrail companion to the tail-edit test: when the content version is
+	// unchanged, the emitted block in the transcript must still suppress recovery.
+	// This proves the content-version anchor stays GREEN for the present case and
+	// does not regress D2 into "always re-inject".
+	const sessionId = "a13-noedit-session";
+	const head = "A13-NOEDIT-HEAD: " + "Q".repeat(2_500);
+	const body = `${head}\nA13-NOEDIT-TAIL`;
+	const { projectRoot } = makeProjectWithStaticRule("a13-noedit-rule.md", body);
+
+	const first = runHook("session-start", sessionStartPayload(sessionId, projectRoot));
+	expect(first.status).toBe(0);
+	const emittedBlock = additionalContext(first.stdout);
+	expect(emittedBlock).toContain("A13-NOEDIT-HEAD");
+
+	const transcriptPath = join(projectRoot, "transcript-a13-noedit.txt");
+	writeFileSync(transcriptPath, emittedBlock + "\n");
+
+	// Fresh session, arm recovery, no edit to the rule file.
+	const sessionId2 = "a13-noedit-session2";
+	runHook("session-start", sessionStartPayload(sessionId2, projectRoot));
+	runHook("post-compact", postCompactPayload(sessionId2, projectRoot));
+
+	const recovery = runHook(
+		"session-start",
+		sessionStartPayload(sessionId2, projectRoot, { transcript_path: transcriptPath }),
+	);
+	expect(recovery.status).toBe(0);
+	// Body present + content version unchanged → no recovery directive emitted.
+	expect(additionalContext(recovery.stdout)).toBe("");
+});
+
+test("A13: producer↔consumer marker parity — formatStaticBlock output is recognized as present by the static transcript filter", () => {
+	// Producer/consumer contract: the marker the formatter EMITS and the marker the
+	// transcript filter SEEKS must agree. If the emit gains a content-version anchor
+	// but the check looks for a different one (or vice versa), presence detection
+	// silently fails and every rule is re-injected forever. This asserts the round
+	// trip: emit a rule's block, feed it back as transcript text, and the filter must
+	// mark it injected (zero rules pending).
+	const rule = makeRule({
+		path: "/proj/.claude/rules/parity.md",
+		relativePath: ".claude/rules/parity.md",
+		body: "A13-PARITY-BODY: emit and check must use the same anchor.",
+	});
+	const { text } = formatStaticBlock([rule], { maxRuleChars: 5_000, maxResultChars: 5_000 });
+	expect(text).toContain("A13-PARITY-BODY");
+
+	const marked: string[] = [];
+	const pending = filterRulesNotInTranscriptText([rule], text, (r) => marked.push(r.path));
+	// The emitted block is recognized as present: rule is marked, none left pending.
+	expect(pending).toHaveLength(0);
+	expect(marked).toEqual([rule.path]);
+});
+
+test("A13: producer↔consumer marker parity — an edited rule's block does NOT match the new content version", () => {
+	// Negative half of the parity contract: a transcript carrying the OLD emitted
+	// block must NOT register the NEW content version as present. Without a
+	// content-version anchor a tail edit (identical 2000-char prefix) would still
+	// match and suppress the updated rule.
+	const head = "A13-PARITY2-HEAD: " + "R".repeat(2_500);
+	const oldRule = makeRule({
+		path: "/proj/.claude/rules/parity2.md",
+		relativePath: ".claude/rules/parity2.md",
+		body: `${head}\nPARITY2-TAIL-OLD`,
+	});
+	const { text: oldBlock } = formatStaticBlock([oldRule], { maxRuleChars: 10_000, maxResultChars: 10_000 });
+
+	// Same path, identical 2000-char prefix, different tail → different content version.
+	const newRule = makeRule({
+		path: "/proj/.claude/rules/parity2.md",
+		relativePath: ".claude/rules/parity2.md",
+		body: `${head}\nPARITY2-TAIL-NEW`,
+		contentHash: "newversionhash",
+	});
+	const pending = filterRulesNotInTranscriptText([newRule], oldBlock, () => {});
+	// The new content version is NOT present in the old transcript → stays pending.
+	expect(pending).toHaveLength(1);
+	expect(pending[0]?.path).toBe("/proj/.claude/rules/parity2.md");
 });
