@@ -1078,9 +1078,23 @@ If no candidates exist, say so and proceed fresh. The branch never renames on it
 These directives govern how prometheus records its own pipeline state via the state CLI.
 
 - **Per each S-transition**: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the design-brief / ADR is first written during the Co-Design state — this is the first durable plan artifact on disk; the TODO plan body is appended later at S3); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
+- **S1 AC recording**: immediately after Metis APPROVE/COMMENT confirms the acceptance criteria, record the confirmed AC content into state:
+  ```
+  bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S1 --record-ac '<JSON array of the confirmed AC strings>'
+  ```
+  This persists the AC for mid-session and post-compaction resume — the AC is the one planning step that otherwise has no durable home until it folds into the plan body at S3.
+- **S2 design step**: after the design-brief / ADR is written and `--plan-path` is set, mark the design step done:
+  ```
+  bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S2 --mark-design-done
+  ```
+  The ADR is the durable design artifact pointed to by `plan_path`; state records only a done-flag plus the pointer, never a copy of the ADR.
+- **S3 plan step**: after the TODO plan body is written, mark the plan step done:
+  ```
+  bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S3 --mark-plan-done
+  ```
 - **Teardown**: At S8 dispatch and on abort, emit `<prometheus-done/>` as a standalone output token. The persistent-mode hook detects this token and performs the actual state-file deletion — the model does not call `clear` directly.
 - **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable. The CLI hard-fails with a non-zero exit when `OMT_SESSION_ID` is absent or unsafe — there is no fallback.
-- **Restore**: on restore, re-read the current plan file, restart from `resume_summary` if `plan_path` is missing, distrust any stored verdict, and re-run gates on the current artifact. A stored verdict is not a pass — re-verification is mandatory.
+- **Restore**: on restore, re-read the current plan file, restart from `resume_summary` if `plan_path` is missing, distrust any stored verdict, and re-run gates on the current artifact. A stored verdict is not a pass — re-verification is mandatory. The recorded `steps.acceptance_criteria.content` in state gives the prior AC back without re-deriving them — the stored verdict is still distrusted and gates still re-run; only the AC content is reused.
 
 ### Loop Termination Rule
 
@@ -1132,7 +1146,7 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 
 | Stage | Mandate | Detail location |
 |---|---|---|
-| **Stage A** | Render plan to a single-file, browser-openable HTML — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts + Mermaid diagram(s) — a bird's-eye component/flow diagram REQUIRED when the plan is structural (governed by `review-pipeline.md`), plus optional necessity-gated enrichment diagrams (re-visualizing flow/structure the plan already decided, never inventing edges), ALL diagrams grouped in the Bird's-Eye section (macro → micro) + a Review Digest (AC + per-AC verification, re-surfaced verbatim) before the plan body, TODO execution detail collapsed in `<details>` (never omitted) + session-derived boxes (Stage B recommendation, Pipeline State). Always produced via template substitution (no converter needed); when the plan is approved, the HTML gets made. | Exact output path, rendering invariants (6), translation invariants (3), readability enrichment, template reference in `review-pipeline.md`; diagram type-selection + authoring rules + guardrails + presentation protocol + post-draw self-audit in `diagram-guide.md` |
+| **Stage A** | Render plan to a single-file, browser-openable HTML — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts + Mermaid diagram(s) — a bird's-eye System topology diagram REQUIRED when the plan has >= 2 components (governed by `review-pipeline.md`), plus each of the six lens diagrams (System topology / Module-API / User-Actor / Domain state / Domain-Service object / Business logic, defined in `diagram-guide.md`) REQUIRED when its trigger FACT holds in `plan.md` (trigger-based, not optional; the only reason to omit a lens is that its trigger FACT is false). Every diagram shows the runtime behavior the implemented plan would produce — flows, sequences, state transitions, object structures. Diagram count scales with plan size: a larger plan warrants more diagrams because diagrams are the plan's review surface; there is no cap. Re-visualize decided content only, never inventing edges. ALL diagrams grouped in the Bird's-Eye section (macro → micro) + a Review Digest (AC + per-AC verification, re-surfaced verbatim) before the plan body, TODO execution detail collapsed in `<details>` (never omitted) + session-derived boxes (Stage B recommendation, Pipeline State). Always produced via template substitution (no converter needed); when the plan is approved, the HTML gets made. | Exact output path, rendering invariants (6), translation invariants (3), readability enrichment, template reference in `review-pipeline.md`; diagram type-selection + authoring rules + guardrails + presentation protocol + post-draw self-audit in `diagram-guide.md` |
 | **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Momus feasibility signal). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
 | **Stage C** | Execution Bridge (S7) via platform's user-prompt primitive — mode choice ONLY: 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. Execution selection is valid only against the fresh S4 verdict on the current artifact (see the S8 reachability invariant in the Pipeline State Machine). | Option formatting in `review-pipeline.md` |
 
@@ -1174,7 +1188,7 @@ This resolves the apparent paradox in the prior wording — "optional" referred 
 | Entering Acceptance Criteria drafting (Clearance all-YES, about to propose AC) | [acceptance-criteria.md](acceptance-criteria.md) | Full file, single Read call |
 | About to invoke `Write` on the plan file (`$OMT_DIR/plans/*.md`) | [plan-template.md](plan-template.md) | Full file, single Read call |
 | About to invoke a reviewer (Metis/Daedalus/Momus) OR execute Stage A/B/C | [review-pipeline.md](review-pipeline.md) | Full file, single Read call |
-| About to insert any diagram into the Stage A HTML (whether the required bird's-eye structural diagram or a necessity-gated enrichment diagram) | [diagram-guide.md](diagram-guide.md) | Full file, single Read call |
+| About to insert any diagram into the Stage A HTML (whether the required bird's-eye topology diagram or any triggered lens diagram) | [diagram-guide.md](diagram-guide.md) | Full file, single Read call |
 
 **Per-reference cache**: One full-read per session per reference is sufficient. If you have already full-read `interview.md` earlier in this session, you do not need to re-read on every subsequent interview turn — but if you did partial-read or have not read it at all, the trigger still demands full-read NOW.
 
