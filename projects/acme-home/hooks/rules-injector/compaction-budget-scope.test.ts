@@ -1055,3 +1055,53 @@ test("AC11-C7: dynamic recovery re-injects a rule whose path is in transcript bu
 	// from the transcript (body-needle check fails → rule must be re-injected).
 	expect(recovered).toContain(dynamicRulePath);
 });
+
+// ===========================================================================
+// A1 — notice-only rule (real body 0 bytes) must not be emitted or marked
+// ===========================================================================
+
+test("A1-static: a rule whose per-rule cap is below the truncation notice emits no body and is absent from emittedRules", () => {
+	// Bug: when the per-rule result budget is smaller than the truncation notice
+	// (~25 chars), truncateRule returns the notice string alone — zero real body.
+	// Its length is > 0, so it slips past the `budgetedRule.body.length === 0`
+	// drop in truncateRules and is appended to emittedRules. The caller then marks
+	// it injected, persisting a dedup key that permanently suppresses the rule even
+	// when the budget later grows.
+	//
+	// Budget arithmetic (one rule, path "/p/r.md", relativePath "r.md"):
+	//   perRuleResultChars = floor(maxResultChars / 1) = 200.
+	//   maxRuleChars = 20 → min(20, 200) = 20 < notice(25) → truncateRule returns
+	//     the 25-char notice only (no real body bytes).
+	//   header("Instructions from: /p/r.md\n\n") = 28 → bodyOnlyBudget = 200-28 = 172.
+	//   truncateBudget: remaining(172) >= body(25) → notice passes through unchanged.
+	//   Under the bug: body.length(25) !== 0 → rule emitted + added to emittedRules.
+	//   Under the fix: notice-only (zero real body) is identified and dropped.
+	const rule = makeRule({ path: "/p/r.md", relativePath: "r.md", body: "B".repeat(200) });
+	const result = formatStaticBlock([rule], { maxRuleChars: 20, maxResultChars: 200 });
+	// (a) No body content appears in the output — not even the notice as a ghost block.
+	expect(result.text).not.toContain("[Truncated. Full:");
+	expect(result.text).toBe("");
+	// (b) The rule is absent from emittedRules → caller never marks it injected →
+	//     no permanent suppression.
+	expect(result.emittedRules).toHaveLength(0);
+});
+
+test("A1-dynamic: a notice-only dynamic rule emits no body and is absent from emittedRules", () => {
+	// Same budget arithmetic as A1-static, exercised through the dynamic block.
+	const rule = makeRule({ path: "/p/r.md", relativePath: "r.md", body: "B".repeat(200) });
+	const result = formatDynamicBlock([rule], "src/x.ts", { maxRuleChars: 20, maxResultChars: 200 });
+	expect(result.text).not.toContain("[Truncated. Full:");
+	expect(result.text).toBe("");
+	expect(result.emittedRules).toHaveLength(0);
+});
+
+test("A1-static: a normally-truncated rule (partial body + notice) is still emitted", () => {
+	// Guardrail: the fix must NOT change normal truncation. With a per-rule cap of
+	// 80 (>= notice 25), truncateRule yields ~55 real body bytes + the notice.
+	// That rule has real content and must remain emitted.
+	const rule = makeRule({ path: "/p/r.md", relativePath: "r.md", body: "C".repeat(500) });
+	const result = formatStaticBlock([rule], { maxRuleChars: 80, maxResultChars: 200 });
+	expect(result.emittedRules).toHaveLength(1);
+	expect(result.text).toContain("C"); // real body fragment present
+	expect(result.text).toContain("[Truncated. Full:"); // notice appended after the fragment
+});

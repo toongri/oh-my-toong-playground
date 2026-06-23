@@ -44,8 +44,11 @@ export function truncateRule(body: string, options: { maxChars: number; relative
 	}
 
 	const notice = truncationNotice(options.relativePath);
-	if (options.maxChars < notice.length) {
-		return { body: notice, truncated: true, originalLength: body.length };
+	if (options.maxChars <= notice.length) {
+		// The cap leaves no room for real body bytes; a notice-only body carries
+		// zero content. Return an empty body so downstream budgeting drops the rule
+		// rather than emitting (and marking injected) a contentless notice block.
+		return { body: "", truncated: true, originalLength: body.length };
 	}
 
 	const sliceEnd = safeSliceEnd(body, options.maxChars - notice.length);
@@ -75,6 +78,12 @@ export function truncateBudget(input: { rules: ReadonlyArray<BudgetRule>; maxRes
 		}
 
 		const sliceEnd = safeSliceEnd(rule.body, remainingBudget - notice.length);
+		if (sliceEnd <= 0) {
+			// No real body bytes fit (e.g. a lone surrogate trimmed to zero). A
+			// notice-only entry carries zero content, so stop rather than emit it —
+			// the budget only shrinks, so no later rule would fit either.
+			break;
+		}
 		const body = `${rule.body.slice(0, sliceEnd)}${notice}`;
 		results.push({ body, truncated: true, relativePath: rule.relativePath });
 		remainingBudget -= body.length;
