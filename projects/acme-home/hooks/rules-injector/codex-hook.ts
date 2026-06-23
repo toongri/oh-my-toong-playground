@@ -226,11 +226,24 @@ export async function runPostToolUseHook(
 	// emitted, not blindly to targetPaths[0]. In a multi-target tool call the first
 	// extracted path need not be the one that triggered the rule. rules[0] is the
 	// highest-priority matched rule; the loader stamps each with the target it matched.
-	const headerTarget = (rules[0] as DynamicLoadedRule).matchedTarget;
-	const { text: block, emittedRules } = formatDynamicBlock(rules, displayPath(input.cwd, headerTarget), {
+	// However, budget-drop can remove rules[0] while a later rule with a different target
+	// survives. Derive the final header from emittedRules[0] (the actual survivor) after
+	// formatting, replacing the first line if the surviving target differs.
+	const prebudgetTarget = (rules[0] as DynamicLoadedRule).matchedTarget;
+	const { text: rawBlock, emittedRules } = formatDynamicBlock(rules, displayPath(input.cwd, prebudgetTarget), {
 		maxRuleChars: engine.config.maxRuleChars,
 		maxResultChars: engine.config.maxResultChars,
 	});
+	// P1: if budget-drop removed rules[0], the header may name the wrong target.
+	// Recompute from emittedRules[0] (the actual first-emitted rule) and patch if needed.
+	const emittedTarget = emittedRules.length > 0 ? (emittedRules[0] as DynamicLoadedRule).matchedTarget : prebudgetTarget;
+	let block = rawBlock;
+	if (emittedTarget !== prebudgetTarget && block.length > 0) {
+		// Replace only the first line (the "Additional project instructions matched for …:" header).
+		const newLine = `Additional project instructions matched for ${displayPath(input.cwd, emittedTarget)}:`;
+		const newlineIndex = block.indexOf("\n");
+		block = newlineIndex === -1 ? newLine : newLine + block.slice(newlineIndex);
+	}
 	debugTimer.lap("format", { blockChars: block.length, rules: rules.length, emittedRules: emittedRules.length });
 	if (emittedRules.length === 0) {
 		persistEngineState(engine, cachePath, completedPostCompactKind);
@@ -282,13 +295,19 @@ function unwrapShellWrapper(command: string): string {
 	const shellRe = /^(sh|bash|zsh|dash|ksh|ash|fish)$/;
 	if (!shellRe.test(shellName)) return command;
 
-	// The flag carrying the inline command always ends in 'c' (-c, -lc, -ic).
-	const flag = tokens[1];
-	if (!flag.startsWith("-") || !flag.endsWith("c")) return command;
-
-	// tokenize() already stripped the surrounding quotes from the inner command,
-	// so the third token is the inner command verbatim.
-	return tokens[2];
+	// Scan tokens[1..length-2] for the inline-command flag: a short option whose
+	// name ends in 'c' (-c, -lc, -ic). Long options like --norc are rejected because
+	// /^-[A-Za-z]*c$/ cannot match two leading dashes. Stop one before the last token
+	// so there is always a following token to return as the inner command.
+	let flagIndex = -1;
+	for (let i = 1; i < tokens.length - 1; i++) {
+		if (/^-[A-Za-z]*c$/.test(tokens[i])) {
+			flagIndex = i;
+			break;
+		}
+	}
+	if (flagIndex === -1) return command;
+	return tokens[flagIndex + 1];
 }
 
 /**
