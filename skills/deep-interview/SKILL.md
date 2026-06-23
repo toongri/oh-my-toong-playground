@@ -155,13 +155,44 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 `stance_history` is distinct from `challenge_modes_used` (which stays deduped/unordered for its existing once-each tracking of Contrarian/Simplifier/Ontologist).
 
+**Branch on the selected stance:** if the selector chose **Fact-ground**, run **Step 2-fact** below and then return to the loop head for the next round — do NOT fall through to Step 2a (a fact-grounding round produces a fact, not a user answer, so the user-answer-assuming steps 2a–2e do not apply). For all four other stances (Clarify / Contrarian / Simplifier / Ontologist), continue to Step 2a as normal.
+
+### Step 2-fact: Fact-ground Round (no user question)
+
+Taken ONLY when the selector chose Fact-ground. This round dispatches a research call instead of asking the user, then folds the new fact into the ambiguity score — there is no `AskUserQuestion`, no user answer.
+
+1. **Dispatch the facts-before-judgment call** for the weakest dimension's ungrounded fact, following the Execution_Policy dispatch rules: `explore` for codebase facts; `librarian`/`ultraresearch` (tier-capped at **Scoped (≤3 workers)**, de-duplicated per dimension) for external facts; gracefully degrade to the `explore`-only path when `ultraresearch` is unavailable.
+2. **Record the fact's provenance** via the existing CLI — label by origin (`[from-research]` for a `librarian`/`ultraresearch` external fact; `[from-code]` for a codebase read; `[from-code][auto-confirmed]` if confirmed by executed code):
+
+   ```bash
+   bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+     --append-provenance-item '{"evidence_id":"<id>","label":"<one-of-[from-research]|[from-code]|[from-code][auto-confirmed]>"}'
+   ```
+3. **Re-score ambiguity** with the new fact folded into the scoring context (same Step 2c scoring prompt and ambiguity formula), but WITHOUT any user Q&A — the transcript gains a grounding event, not a user exchange. Mark the dimension's fact as grounded so the per-dimension dedup (rotation rule #1) does not re-ground it.
+4. **Report progress** as in Step 2d, noting that this round was a grounding event (no user question asked).
+5. **Append the round in a fact-derived shape** — mark it a grounding event rather than a user Q&A exchange. Do NOT stuff the fact into the `answer` field as if a user said it; omit `question`/`answer` and record the grounded fact and its provenance label instead:
+
+   ```bash
+   bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+     --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
+   {"n":<round_number>,"kind":"fact-ground","dimension":"<weakest_dimension>","fact":"<grounded fact>","provenance":"<one-of-the-four-labels>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>},"ambiguity":<ambiguity>}
+   OMT_DI_PAYLOAD_EOF
+
+   bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+     --current-phase "deep-interview" \
+     --current-ambiguity <ambiguity>
+   ```
+
+   (For brownfield, include `context` in the `scores` object exactly as Step 2e does.) The `--append-round-stdin` payload accepts any valid JSON shape, so the fact-derived `kind:"fact-ground"` round persists alongside user Q&A rounds without a schema change.
+6. **Return to the loop head** (Step 2-head) for the next round. The fact-ground round is now part of the transcript and counts toward the soft/hard round limits in Step 2f.
+
 ### Step 2a: Generate Next Question
 
 Build the question generation prompt with:
 - The prompt-safe initial-context summary (if one was created), otherwise the user's original idea
 - Prior Q&A rounds trimmed or summarized to fit the prompt budget while preserving decisions, constraints, unresolved gaps, and ontology changes
 - Current clarity scores per dimension (which is weakest?)
-- Challenge agent mode (if activated -- see Phase 3)
+- Challenge agent template for the stance chosen at Step 2-head (Contrarian / Simplifier / Ontologist -- inject the matching Phase 3 template; for Clarify, no template)
 - Brownfield codebase context (if applicable), summarized to cited paths/symbols/patterns instead of raw dumps
 
 If any prompt input is too large, summarize it first and then continue from the summary. Do not ask the next `AskUserQuestion`, score ambiguity, or hand off to execution from an over-budget raw transcript.
@@ -323,23 +354,23 @@ OMT_DI_PAYLOAD_EOF
 - **Round 10**: Show soft warning: "We're at 10 rounds. Current ambiguity: {score}%. Continue or proceed with current clarity?"
 - **Round 20**: Hard cap: "Maximum interview rounds reached. Proceeding with current clarity level ({score}%)."
 
-## Phase 3: Challenge Agents
+## Phase 3: Challenge Agent Prompt Templates
 
-At specific round thresholds, shift the questioning perspective:
+These are the prompt-injection bodies for the Contrarian / Simplifier / Ontologist stances. They do NOT self-fire: the Step 2-head Dialectic Rhythm Guard is the sole gate that selects a stance (its rotation rules already encode the round/ambiguity conditions). When the selector chooses one of these stances, inject the matching template into the Step 2a question-generation prompt.
 
-### Round 4+: Contrarian Mode
-Inject into the question generation prompt:
+### Contrarian template
+When the selector at Step 2-head selects **Contrarian**, inject:
 > You are now in CONTRARIAN mode. Your next question should challenge the user's core assumption. Ask "What if the opposite were true?" or "What if this constraint doesn't actually exist?" The goal is to test whether the user's framing is correct or just habitual.
 
-### Round 6+: Simplifier Mode
-Inject into the question generation prompt:
+### Simplifier template
+When the selector at Step 2-head selects **Simplifier**, inject:
 > You are now in SIMPLIFIER mode. Your next question should probe whether complexity can be removed. Ask "What's the simplest version that would still be valuable?" or "Which of these constraints are actually necessary vs. assumed?" The goal is to find the minimal viable specification.
 
-### Round 8+: Ontologist Mode (if ambiguity still > 0.3)
-Inject into the question generation prompt:
-> You are now in ONTOLOGIST mode. The ambiguity is still high after 8 rounds, suggesting we may be addressing symptoms rather than the core problem. The tracked entities so far are: {current_entities_summary from latest ontology snapshot}. Ask "What IS this, really?" or "Looking at these entities, which one is the CORE concept and which are just supporting?" The goal is to find the essence by examining the ontology.
+### Ontologist template
+When the selector at Step 2-head selects **Ontologist** (via either Ontologist rotation rule — stall or late-stage), inject:
+> You are now in ONTOLOGIST mode. We may be addressing symptoms rather than the core problem. The tracked entities so far are: {current_entities_summary from latest ontology snapshot}. Ask "What IS this, really?" or "Looking at these entities, which one is the CORE concept and which are just supporting?" The goal is to find the essence by examining the ontology.
 
-Challenge modes are used ONCE each, then return to normal Socratic questioning. Track which modes have been used by invoking:
+Contrarian and Simplifier are used ONCE each (the selector's rules #4/#5 enforce this via `challenge_modes_used`), then normal Socratic questioning resumes. Track which modes have been used by invoking:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
@@ -587,7 +618,7 @@ Why bad: 45% ambiguity means nearly half the requirements are unclear. The mathe
 - **Soft warning at 10 rounds**: Offer to continue or proceed
 - **Early exit (round 3+)**: Allow with warning if ambiguity > threshold
 - **User says "stop", "cancel", "abort"**: Stop immediately, save state for resume
-- **Ambiguity stalls** (same score +-0.05 for 3 rounds): Activate Ontologist mode to reframe
+- **Ambiguity stalls** (same score +-0.05 for 3 rounds): handled by the Step 2-head Dialectic Rhythm Guard stall rotation rule (selects Ontologist) — no separate activation here
 - **All dimensions at 0.9+**: Skip to spec generation even if not at round minimum
 - **Codebase exploration fails**: Proceed as greenfield, note the limitation
 </Escalation_And_Stop_Conditions>
@@ -597,7 +628,7 @@ Why bad: 45% ambiguity means nearly half the requirements are unclear. The mathe
 - [ ] Oversized initial context/history was summarized before scoring, question generation, spec generation, or execution handoff
 - [ ] Ambiguity score displayed after every round
 - [ ] Every round explicitly names the weakest dimension and why it is the next target
-- [ ] Challenge agents activated at correct thresholds (round 4, 6, 8)
+- [ ] Challenge stances selected by the Step 2-head Dialectic Rhythm Guard at the correct rotation conditions (Contrarian round 4+, Simplifier round 6+, Ontologist on stall or round 8+ with ambiguity > 0.3)
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
 - [ ] Spec includes: goal, constraints, acceptance criteria, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
@@ -660,7 +691,7 @@ Prometheus: "Your request is quite open-ended. Would you like to run a deep inte
   [Yes, interview first] [No, expand directly]
 ```
 
-If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes and the user selects the prometheus route at the execution bridge, the spec becomes Phase 0 output and prometheus continues from planning.
+If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes, the crystallized spec routes planning/execution through `goal` at the Phase 5 execution bridge (the bridge offers no direct prometheus/sisyphus option); `goal` then orchestrates downstream and selects prometheus for decomposition when the work warrants it.
 
 ## Brownfield vs Greenfield Weights
 
@@ -675,13 +706,15 @@ Brownfield adds Context Clarity because modifying existing code safely requires 
 
 ## Challenge Agent Modes
 
-| Mode | Activates | Purpose | Prompt Injection |
-|------|-----------|---------|-----------------|
-| Contrarian | Round 4+ | Challenge assumptions | "What if the opposite were true?" |
-| Simplifier | Round 6+ | Remove complexity | "What's the simplest version?" |
-| Ontologist | Round 8+ (if ambiguity > 0.3) | Find essence | "What IS this, really?" |
+The Step 2-head Dialectic Rhythm Guard is the sole gate that selects these stances; the "Selected by guard when" column restates the rotation conditions it owns (these are NOT independent self-firing triggers). The prompt-injection bodies are the Phase 3 templates.
 
-Each mode is used exactly once, then normal Socratic questioning resumes. Modes are tracked in state to prevent repetition.
+| Mode | Selected by guard when | Purpose | Prompt Injection |
+|------|------------------------|---------|-----------------|
+| Contrarian | Round 4+, if not yet used | Challenge assumptions | "What if the opposite were true?" |
+| Simplifier | Round 6+, if not yet used | Remove complexity | "What's the simplest version?" |
+| Ontologist | Stall (±0.05 for 3 rounds) OR Round 8+ with ambiguity > 0.3 | Find essence | "What IS this, really?" |
+
+Contrarian and Simplifier are used exactly once each (tracked in `challenge_modes_used`), then normal Socratic questioning resumes; Ontologist has two named rotation entry points (stall and late-stage) and may recur via either.
 
 ## Ambiguity Score Interpretation
 
