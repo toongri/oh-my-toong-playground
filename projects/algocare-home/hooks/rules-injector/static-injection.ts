@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import type { CodexRulesHookOptions } from "./codex-hook-options.js";
 import { configFromEnvironment } from "./config.js";
@@ -8,7 +8,7 @@ import { completePostCompactRecovery, hydrateEngineState, persistEngineState } f
 import { withPostCompactBudget } from "./post-compact-budget.js";
 import { buildPostCompactReadDirective } from "./post-compact-directive.js";
 import type { Engine } from "./rules/index.js";
-import { isNeverTruncatedRule } from "./rules/index.js";
+import { formatStaticBlock, isNeverTruncatedRule } from "./rules/index.js";
 import type { LoadedRule, PiRulesConfig } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
 import { filterRulesAlreadyInTranscript, filterRulesNotInTranscriptText } from "./transcript-rule-filter.js";
@@ -65,8 +65,11 @@ export function runStaticInjection(
 		return "";
 	}
 
-	const block = engine.formatStatic(rules);
-	for (const rule of rules) {
+	const { text: block, emittedRules } = formatStaticBlock(rules, {
+		maxRuleChars: effectiveConfig.maxRuleChars,
+		maxResultChars: effectiveConfig.maxResultChars,
+	});
+	for (const rule of emittedRules) {
 		engine.markStaticInjected(rule);
 	}
 	persistEngineState(engine, cachePath);
@@ -112,9 +115,10 @@ function runPostCompactRecovery(input: PostCompactRecoveryInput): string {
 	const fullBodyRules = missingRules.filter((rule) => isNeverTruncatedRule(ruleDisplayPath(rule)));
 	const listedRules = missingRules.filter((rule) => !isNeverTruncatedRule(ruleDisplayPath(rule)));
 	const bodyBlock = fullBodyRules.length === 0 ? "" : engine.formatStatic(fullBodyRules);
+	const remainingForDirective = Math.max(0, effectiveConfig.maxResultChars - bodyBlock.length);
 	const directive = buildPostCompactReadDirective(
 		[...listedRules.map((rule) => rule.path), ...dynamicRulePaths],
-		effectiveConfig.maxResultChars,
+		remainingForDirective,
 	);
 	for (const rule of missingRules) {
 		engine.markStaticInjected(rule);
@@ -131,6 +135,26 @@ function readRecoveryTranscriptText(transcriptPath: string | null): string | nul
 		readTranscriptSearchText(transcriptPath, { latestCompactedReplacementOnly: true }) ??
 		readTranscriptSearchText(transcriptPath)
 	);
+}
+
+/**
+ * Returns true only when both the rule body and an "Instructions from: <path>"
+ * marker are present in the transcript — meaning the rule was previously emitted
+ * end-to-end and is still in context. A transcript that mentions the path but
+ * omits the body (e.g. a compacted summary) does NOT qualify; the rule must be
+ * re-injected in that case (body-needle gate).
+ */
+function isDynamicRuleBodyInTranscript(rulePath: string, transcriptText: string): boolean {
+	if (!transcriptText.includes(`Instructions from: ${rulePath}`)) {
+		return false;
+	}
+	try {
+		const rawBody = readFileSync(rulePath, "utf8").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+		const needle = rawBody.slice(0, 2_000);
+		return needle.length > 0 && transcriptText.includes(needle);
+	} catch {
+		return false;
+	}
 }
 
 function recoverDynamicRulePaths(
@@ -150,10 +174,10 @@ function recoverDynamicRulePaths(
 			if (staticRulePaths.has(rulePath)) {
 				continue;
 			}
-			if (transcriptText !== null && transcriptText.includes(rulePath)) {
+			if (!existsSync(rulePath)) {
 				continue;
 			}
-			if (!existsSync(rulePath)) {
+			if (transcriptText !== null && isDynamicRuleBodyInTranscript(rulePath, transcriptText)) {
 				continue;
 			}
 			recoveredPaths.add(rulePath);
