@@ -17,6 +17,8 @@ import {
 } from "./persistent-cache.js";
 import { withPostCompactBudget } from "./post-compact-budget.js";
 import { claimedPostCompactKind, shouldSkipPostCompactClaim } from "./post-compact-claim.js";
+import type { DynamicLoadedRule } from "./rules/engine-dynamic-loader.js";
+import { formatDynamicBlock } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
 import { runStaticInjection } from "./static-injection.js";
 import { extractCodexToolPaths } from "./tool-paths.js";
@@ -112,6 +114,13 @@ export async function runPostCompactHook(
 	input: CodexPostCompactInput,
 	options: CodexRulesHookOptions = {},
 ): Promise<string> {
+	// Kill-switch pre-gate: when the engine is disabled nothing will ever consume the
+	// armed recovery state, so arming it (which also wipes staticDedup) is pure state
+	// pollution. Return without touching session state — mirrors the disabled early-return
+	// in the SessionStart and UserPromptSubmit handlers.
+	if (configFromEnvironment(options.env).disabled) {
+		return "";
+	}
 	markSessionCompacted(sessionCachePath(input.session_id, options.pluginDataRoot));
 	return "";
 }
@@ -213,9 +222,23 @@ export async function runPostToolUseHook(
 		return "";
 	}
 
-	const block = engine.formatDynamic(rules, displayPath(input.cwd, firstTargetPath));
-	debugTimer.lap("format", { blockChars: block.length, rules: rules.length });
-	for (const rule of rules) {
+	// Attribute the injection header to the target that actually matched the rules being
+	// emitted, not blindly to targetPaths[0]. In a multi-target tool call the first
+	// extracted path need not be the one that triggered the rule. rules[0] is the
+	// highest-priority matched rule; the loader stamps each with the target it matched.
+	const headerTarget = (rules[0] as DynamicLoadedRule).matchedTarget;
+	const { text: block, emittedRules } = formatDynamicBlock(rules, displayPath(input.cwd, headerTarget), {
+		maxRuleChars: engine.config.maxRuleChars,
+		maxResultChars: engine.config.maxResultChars,
+	});
+	debugTimer.lap("format", { blockChars: block.length, rules: rules.length, emittedRules: emittedRules.length });
+	if (emittedRules.length === 0) {
+		persistEngineState(engine, cachePath, completedPostCompactKind);
+		debugTimer.lap("persist", { reason: "all-dropped" });
+		debugTimer.done({ outputBytes: 0, reason: "all-dropped" });
+		return "";
+	}
+	for (const rule of emittedRules) {
 		engine.markDynamicInjected(rule);
 	}
 	persistEngineState(engine, cachePath, completedPostCompactKind);
@@ -291,15 +314,20 @@ function tokenize(input: string): string[] {
 	for (let i = 0; i < input.length; i++) {
 		const ch = input[i];
 
-		if (escaped) {
-			current += ch;
-			hasCurrent = true;
-			escaped = false;
-			continue;
-		}
-		if (ch === "\\") {
-			escaped = true;
-			continue;
+		// Backslash escaping is suppressed inside single quotes: POSIX shells treat
+		// `\` as a literal character within `'…'` (only the closing `'` ends the run).
+		// Outside single quotes the backslash escapes the next character (e.g. `\"`).
+		if (quote !== "'") {
+			if (escaped) {
+				current += ch;
+				hasCurrent = true;
+				escaped = false;
+				continue;
+			}
+			if (ch === "\\") {
+				escaped = true;
+				continue;
+			}
 		}
 
 		if (quote) {
