@@ -627,6 +627,21 @@ test("F-7 exec_command with cmd field: shell wrapper unwrap reads cmd not comman
 
 // --- D-8: monorepo subdir cwd — findProjectRoot walks past nested package.json to workspace root ---
 
+test("A6 글로브 값 안의 # 가 주석으로 오인돼 절단되지 않아야 한다", () => {
+	// YAML 스펙상 '#'은 앞이 공백/탭이거나 줄의 시작일 때만 주석이다.
+	// 'src/#fixtures/**/*.ts' 같이 경로 안에 포함된 '#'은 그대로 보존돼야 한다.
+	const yaml = `globs: src/#fixtures/**/*.ts\ndescription: test`;
+	const result = parseYamlFrontmatter(yaml);
+	expect(result.globs).toBe("src/#fixtures/**/*.ts");
+});
+
+test("A6 trailing 주석(앞에 공백)은 여전히 제거돼야 한다", () => {
+	// 'value  # note' 처럼 앞에 공백이 있는 '#'은 주석으로 처리해 절단.
+	const yaml = `globs: src/app/**/*.ts  # 런타임 소스만\ndescription: test`;
+	const result = parseYamlFrontmatter(yaml);
+	expect(result.globs).toBe("src/app/**/*.ts");
+});
+
 test("D-8 findProjectRoot from monorepo package subdir reaches workspace root not nested package", () => {
 	// Construct a fixture:
 	//   workspaceRoot/
