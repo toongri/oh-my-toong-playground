@@ -8,14 +8,23 @@ import { sortCandidates } from "./ordering.js";
 import { disabledSourcesFromConfig } from "./sources.js";
 import type { LoadedRule, PiRulesConfig, RuleDiagnostic } from "./types.js";
 
+/**
+ * A dynamically-loaded rule annotated with the absolute target path that caused it
+ * to match. Multi-target tool calls (e.g. `cat README.md src/x.ts`) load rules
+ * across several targets; the injection header must attribute each rule to the
+ * target it actually matched rather than blindly naming targetPaths[0]. The field
+ * is additive — every consumer that only reads LoadedRule keeps working.
+ */
+export type DynamicLoadedRule = LoadedRule & { matchedTarget: string };
+
 export function loadDynamicCandidates(
 	config: PiRulesConfig,
 	deps: EngineDeps,
 	cwd: string,
 	targetPaths: ReadonlyArray<string>,
 	dynamicMatchCache: DynamicMatchCache,
-): { rules: LoadedRule[]; diagnostics: RuleDiagnostic[] } {
-	const rules: LoadedRule[] = [];
+): { rules: DynamicLoadedRule[]; diagnostics: RuleDiagnostic[] } {
+	const rules: DynamicLoadedRule[] = [];
 	const diagnostics: RuleDiagnostic[] = [];
 	const seenRules = new Set<string>();
 	const loadedRuleContent = new Map<string, LoadedRuleContent | null>();
@@ -72,7 +81,7 @@ export function loadDynamicCandidates(
 			}
 
 			seenRules.add(dedupKey);
-			rules.push({ ...loadedRule, matchReason });
+			rules.push({ ...loadedRule, matchReason, matchedTarget: targetFile });
 		}
 	}
 

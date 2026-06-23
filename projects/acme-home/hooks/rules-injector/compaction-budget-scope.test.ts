@@ -389,6 +389,34 @@ test("C2: disabled SessionStart does not consume recovering state, which is emit
 });
 
 // ===========================================================================
+// B-2 — disabled kill-switch pre-gates PostCompact: no session-state write
+// ===========================================================================
+
+test("B-2: a disabled PostCompact does not write session state (no-op exit 0)", () => {
+	// SessionStart and UserPromptSubmit both early-return on config.disabled BEFORE
+	// touching session state. PostCompact omitted this guard: runPostCompactHook called
+	// markSessionCompacted unconditionally, which writes <sid>.json (arming recovery,
+	// wiping staticDedup) even when the kill-switch is on. With the rules engine disabled
+	// nothing will ever consume that armed state, so the write is pure pollution.
+	// Fix: pre-gate runPostCompactHook on config.disabled and return "" without writing.
+	const sessionId = "b2-disabled-session";
+	const { projectRoot } = makeProjectWithStaticRule("b2-rule.md", "B-2 BOULDER: disabled post-compact must not write.");
+	const hermDataRoot = join(tempHome, ".omt", "rules-injector");
+	const statePath = join(hermDataRoot, `${sessionId}.json`);
+
+	const compact = runHook("post-compact", postCompactPayload(sessionId, projectRoot), {
+		PLUGIN_DATA: hermDataRoot,
+		CODEX_RULES_DISABLED: "1",
+	});
+	expect(compact.status).toBe(0);
+	expect(compact.stdout.trim()).toBe("");
+
+	// Under the bug, markSessionCompacted creates the session-state file. Under the fix,
+	// the disabled pre-gate returns before any write, so no file exists.
+	expect(existsSync(statePath)).toBe(false);
+});
+
+// ===========================================================================
 // C10-D2 positive control — D2 skip is non-vacuous
 // ===========================================================================
 
@@ -712,6 +740,62 @@ test("AC1-C5: a rule dropped by budget on SessionStart is re-injected on the sub
 	);
 	expect(second.status).toBe(0);
 	expect(additionalContext(second.stdout)).toContain("AC1-C5-RULE-BODY");
+});
+
+// ===========================================================================
+// B-5 — dynamic-lane budget-dropped rule must not be permanently suppressed
+// ===========================================================================
+
+test("B-5: a dynamic rule dropped by budget on PostToolUse is re-injected on the next PostToolUse (not permanently suppressed)", () => {
+	// Dynamic-lane analogue of AC1-C5. A glob rule matched by a Bash cat command is
+	// budget-dropped (body zero) on the first PostToolUse, so nothing is emitted.
+	// Under the bug, codex-hook marks ALL loaded rules dynamic-injected (formatDynamic
+	// returns a string and the marking loop iterates the full rules array), so the
+	// persisted dynamicDedup permanently suppresses the rule. A second PostToolUse with
+	// an open budget would then emit nothing.
+	// Fix: consume formatDynamicBlock's emittedRules and mark only those. A budget-dropped
+	// rule (emittedRules=[]) is not marked, so the open-budget run re-injects it.
+	const sessionId = "b5-session";
+
+	const projectRoot = makeScratchDir("b5-");
+	writeFileSync(join(projectRoot, "package.json"), "{}\n");
+	const rulesDir = join(projectRoot, ".claude", "rules");
+	mkdirSync(rulesDir, { recursive: true });
+	const ruleBody = "B5-DYNAMIC-RULE-BODY: " + "Z".repeat(1000);
+	writeFileSync(join(rulesDir, "b5rule.md"), `---\nglobs: ["**/*.ts"]\n---\n${ruleBody}\n`);
+	mkdirSync(join(projectRoot, "src"), { recursive: true });
+	writeFileSync(join(projectRoot, "src", "x.ts"), "export const x = 1;\n");
+
+	const postToolPayload = (env: Record<string, string>): { payload: Record<string, unknown>; env: Record<string, string> } => ({
+		payload: {
+			hook_event_name: "PostToolUse",
+			session_id: sessionId,
+			turn_id: "t1",
+			transcript_path: null,
+			cwd: projectRoot,
+			model: "gpt-5.5",
+			permission_mode: "default",
+			tool_name: "Bash",
+			tool_use_id: "u-b5",
+			tool_input: { command: "cat src/x.ts" },
+			tool_response: {},
+		},
+		env,
+	});
+
+	// First PostToolUse: dynamic budget so tight the header alone exhausts it → body
+	// dropped → nothing emitted. Under the bug the rule is marked injected anyway.
+	const tight = postToolPayload({ CODEX_RULES_DYNAMIC_MAX_RESULT_CHARS: "10" });
+	const first = runHook("post-tool-use", tight.payload, tight.env);
+	expect(first.status).toBe(0);
+	expect(additionalContext(first.stdout)).toBe("");
+
+	// Second PostToolUse (open budget): under the fix the rule was never marked, so it
+	// is injected here. Under the bug it stays suppressed → empty output.
+	const open = postToolPayload({ CODEX_RULES_DYNAMIC_MAX_RESULT_CHARS: "50000" });
+	const second = runHook("post-tool-use", open.payload, open.env);
+	expect(second.status).toBe(0);
+	expect(additionalContext(second.stdout)).toContain("B5-DYNAMIC-RULE-BODY");
 });
 
 // ===========================================================================

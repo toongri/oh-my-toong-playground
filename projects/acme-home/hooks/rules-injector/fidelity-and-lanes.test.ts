@@ -300,6 +300,74 @@ test("A5 zsh -lc with escaped-quote path: space-containing file is one token and
 	expect(additionalContext).toContain("a b.ts");
 });
 
+// --- B-8: single-quoted shell wrapper preserves literal backslash (POSIX) ---
+
+test("B-8 bash -c single-quoted inner: backslash is literal so the escaped-space path stays one token and its rule injects", () => {
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	// File with a space in its name. The inner shell script escapes that space with a
+	// backslash; the wrapper delimits the inner script with SINGLE quotes.
+	writeFileSync(join(projectDir, "src", "a b.ts"), "export const ab = 1;\n");
+
+	// Codex wraps the model's script in `bash -c '<script>'`. The single quotes are the
+	// wrapper's -c delimiter; inside them POSIX treats backslash as a LITERAL character.
+	// So the wrapper-peel must hand the inner script `cat src/a\ b.ts` through verbatim
+	// (backslash preserved). tool-paths.ts then re-tokenizes that inner script with its
+	// OWN shell semantics, where `a\ b.ts` is the escaped-space path `a b.ts` — one token.
+	//
+	// Under the bug, codex-hook tokenize() unescapes the backslash even inside the single
+	// quotes, peeling `cat src/a b.ts` (backslash gone). tool-paths.ts then splits on the
+	// raw space into `src/a` and `b.ts`, neither of which exists → no path → no injection.
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("b8"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u8",
+		tool_input: { command: "/bin/bash -c 'cat src/a\\ b.ts'" },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+	expect(additionalContext).toContain("a b.ts");
+});
+
+// --- M1: multi-target header names the actually-matched target, not targetPaths[0] ---
+
+test("M1 multi-target PostToolUse: injection header names the matched target (src/x.ts), not the first target (README.md)", () => {
+	const projectDir = makeProject();
+	// Rule matches only .ts files. README.md (the FIRST extracted target) does NOT match;
+	// src/x.ts (a LATER target) does.
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	writeFileSync(join(projectDir, "README.md"), "# readme\n");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	// `cat README.md src/x.ts` extracts both paths; README.md is targetPaths[0] but only
+	// src/x.ts matches the rule. The header must attribute the injection to src/x.ts.
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("m1"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u-m1",
+		tool_input: { command: "cat README.md src/x.ts" },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+	// The header line names the matched target, not the unmatched first target.
+	expect(additionalContext).toContain("matched for src/x.ts");
+	expect(additionalContext).not.toContain("matched for README.md");
+});
+
 // --- C9: A3 glob round-trip via real parser (runHook, not matchRule direct call) ---
 
 test("C9 A3 round-trip via parser: JSON-array inline glob globs:[\"*.{ts,js}\"] matches src/x.ts", () => {
