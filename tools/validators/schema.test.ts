@@ -616,6 +616,52 @@ hooks:
       const result = validatePlatformYaml(path, "claude");
       expect(result.errors).toHaveLength(0);
     });
+
+    // --- C10: non-string component/command, non-number timeout → validation 에러 ---
+    it("returns error when component is a number (non-string) in hook item via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: 123
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("component") && e.includes("string이어야 합니다"))).toBe(true);
+    });
+
+    it("returns error when command is a number (non-string) in hook item via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "codex.yaml", `
+hooks:
+  UserPromptSubmit:
+    - command: 456
+`);
+      const result = validatePlatformYaml(path, "codex");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("command") && e.includes("string이어야 합니다"))).toBe(true);
+    });
+
+    it("returns error when timeout is a string (non-number) in hook item via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  Stop:
+    - component: my-hook.sh
+      timeout: "30"
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("timeout") && e.includes("number여야 합니다"))).toBe(true);
+    });
+
+    it("valid hook item with numeric timeout does NOT error via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  Stop:
+    - component: my-hook.sh
+      timeout: 30
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
   });
 
   // --- A-2: codex-specific event/type 제약 검증 ---

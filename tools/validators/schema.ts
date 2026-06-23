@@ -384,9 +384,28 @@ function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPat
           continue;
         }
 
+        // C10: validate field value types — non-string component/command or non-number timeout
+        // causes a TypeError at resolver.ts (123).includes() outside the dry-run guard.
+        const hookObj = hookItem as Record<string, unknown>;
+        if (hookObj.component !== undefined && typeof hookObj.component !== "string") {
+          result.errors.push(
+            `${label}: hooks.${event}[${i}].component는 string이어야 합니다 (got ${typeof hookObj.component})`,
+          );
+        }
+        if (hookObj.command !== undefined && typeof hookObj.command !== "string") {
+          result.errors.push(
+            `${label}: hooks.${event}[${i}].command는 string이어야 합니다 (got ${typeof hookObj.command})`,
+          );
+        }
+        if (hookObj.timeout !== undefined && typeof hookObj.timeout !== "number") {
+          result.errors.push(
+            `${label}: hooks.${event}[${i}].timeout은 number여야 합니다 (got ${typeof hookObj.timeout})`,
+          );
+        }
+
         // A-2: codex does not support type: prompt
         if (platform === "codex") {
-          const hookType = (hookItem as Record<string, unknown>).type;
+          const hookType = hookObj.type;
           if (hookType === "prompt") {
             result.warnings.push(
               `${label}: hooks.${event}[${i}].type 'prompt'는 codex가 지원하지 않습니다 (지원: command)`,
