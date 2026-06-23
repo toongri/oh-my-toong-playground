@@ -656,3 +656,205 @@ test("C4-CJK: over-budget CJK rule body is capped to <= 32K bytes (not chars)", 
 	// This would fail if sliceToUtf8Bytes were replaced with a plain char slice.
 	expect(Buffer.byteLength(emitted, "utf8")).toBeLessThanOrEqual(32_000);
 });
+
+// ===========================================================================
+// AC1 — C-5: budget-dropped rules must not be permanently suppressed
+// ===========================================================================
+
+test("AC1-C5: a rule dropped by budget on SessionStart is re-injected on the subsequent UserPromptSubmit (not permanently suppressed)", () => {
+	// Scenario: one large rule, SessionStart budget so tight the body is dropped (body-zero).
+	// Under the bug (engine.formatStatic returns string + marks all input rules as injected):
+	//   the rule gets marked injected even though nothing was emitted → permanent suppression.
+	// Fix: call formatStaticBlock and mark only emittedRules (empty when body is dropped).
+	//
+	// Why UPS instead of a second SessionStart?
+	//   source="startup" triggers clearSessionState on every startup run, which wipes the
+	//   injected marks before the bug's suppression can take effect. UPS (UserPromptSubmit)
+	//   hydrates the persisted state directly — so the bug's spurious mark IS observable.
+	//
+	// Budget arithmetic: maxResultChars=10, one rule, any temp path.
+	//   bodyOnlyBudget = max(0, 10 - ruleHeaderLength(path)) = 0 (header >> 10).
+	//   truncateBudget(maxResultChars=0): remainingBudget=0 ≤ notice → break → rule dropped.
+	//   emittedRules = [] → bug marks all input rules; fix marks nothing.
+	const sessionId = "ac1-c5-session";
+
+	const projectRoot = makeScratchDir("r-"); // short prefix to minimize path variance
+	writeFileSync(join(projectRoot, "package.json"), "{}\n");
+	const rulesDir = join(projectRoot, ".claude", "rules");
+	mkdirSync(rulesDir, { recursive: true });
+	const ruleBody = "AC1-C5-RULE-BODY: " + "Y".repeat(1000);
+	writeFileSync(join(rulesDir, "ac1rule.md"), `---\nalwaysApply: true\n---\n${ruleBody}\n`);
+
+	// Tight budget: header alone exhausts the budget → rule body is zero → rule dropped.
+	const tightEnv = {
+		CODEX_RULES_MAX_RULE_CHARS: "5000",
+		CODEX_RULES_MAX_RESULT_CHARS: "10",
+	};
+
+	// SessionStart (source="startup") with tight budget → rule budget-dropped.
+	// additionalContext is empty. Under the bug: rule marked as injected in persisted state.
+	// Under the fix: emittedRules=[] → nothing marked → rule absent from persisted state.
+	const first = runHook("session-start", sessionStartPayload(sessionId, projectRoot), tightEnv);
+	expect(first.status).toBe(0);
+	expect(additionalContext(first.stdout)).toBe("");
+
+	// UserPromptSubmit (open budget): hydrates persisted state.
+	// Under the bug: rule is already marked → filtered out → empty output.
+	// Under the fix: rule not marked → injected here.
+	const second = runHook(
+		"user-prompt-submit",
+		userPromptPayload(sessionId, projectRoot, "continue", {}),
+		{
+			CODEX_RULES_MAX_RULE_CHARS: "5000",
+			CODEX_RULES_MAX_RESULT_CHARS: "50000",
+		},
+	);
+	expect(second.status).toBe(0);
+	expect(additionalContext(second.stdout)).toContain("AC1-C5-RULE-BODY");
+});
+
+// ===========================================================================
+// AC3 — C-4: post-compact body block + directive share one budget
+// ===========================================================================
+
+test("AC3-C4: post-compact body block + directive share the budget (no double-charge)", () => {
+	// Scenario: one never-truncated rule (hephaestus.md → goes into bodyBlock) and TWO
+	// regular listed rules (go into directive path list). Budget is set so that:
+	//   - hephaestus body block consumes ~500 chars of maxResultChars=600
+	//   - remaining for directive = 100 chars
+	//   - The MANDATORY directive header+footer alone = ~373 chars.
+	//   - path1 is always added (lines.length===0 check bypasses budget).
+	//   - path2: under shared budget (remaining=100), usedChars already >> 100 → omitted.
+	//   - path2: under double-charge bug (directive gets full 600), 373+path1+path2 ≈ 560 < 600 → included.
+	//
+	// Verification: path2 appears under bug but NOT under fix.
+	//
+	// Constants:
+	//   DIRECTIVE_HEADER = 329 chars, DIRECTIVE_FOOTER = 130 chars, usedChars_init = 459
+	//   Each listed rule path ≈ 90 chars (temp path), line ≈ 92 chars.
+	//   After path1: usedChars ≈ 459+92+1 = 552.
+	//   Bug: maxChars=700, 552+92+1=645 < 700 → path2 included.
+	//   Fix: maxChars=700-bodyBlockLen≈190; 552 >> 190 → path2 omitted.
+	const sessionId = "ac3-c4-session";
+
+	const projectRoot = makeScratchDir("ac3c4-");
+	writeFileSync(join(projectRoot, "package.json"), "{}\n");
+	const rulesDir = join(projectRoot, ".claude", "rules");
+	mkdirSync(rulesDir, { recursive: true });
+
+	// hephaestus.md: never-truncated, body consumes most of the budget.
+	// Body 400 chars. Block = "## Project Instructions\n\nInstructions from: <path>\n\n<body>" ≈ 500 chars.
+	const hephBody = "HEPHAESTUS-BODY: " + "H".repeat(383);
+	writeFileSync(join(rulesDir, "hephaestus.md"), `---\nalwaysApply: true\n---\n${hephBody}\n`);
+
+	// Two regular listed rules (not never-truncated) → go into directive path list.
+	writeFileSync(join(rulesDir, "listed1.md"), "---\nalwaysApply: true\n---\nLISTED1 RULE BODY\n");
+	writeFileSync(join(rulesDir, "listed2.md"), "---\nalwaysApply: true\n---\nLISTED2 RULE BODY\n");
+
+	const listed2Path = join(rulesDir, "listed2.md");
+
+	// First SessionStart: all three rules injected and marked.
+	const first = runHook("session-start", sessionStartPayload(sessionId, projectRoot));
+	expect(first.status).toBe(0);
+
+	// PostCompact: clears dedup, arms recovery.
+	const compact = runHook("post-compact", postCompactPayload(sessionId, projectRoot));
+	expect(compact.status).toBe(0);
+
+	// Recovery with maxResultChars=700: hephaestus body block ≈ 510 chars.
+	// Under the fix: remaining for directive = 700-510 = 190 → path2 omitted (usedChars ~552 > 190).
+	// Under the bug: directive gets full 700 → usedChars ~552 + path2(~92) = 644 < 700 → path2 included.
+	const recovery = runHook("session-start", sessionStartPayload(sessionId, projectRoot), {
+		CODEX_RULES_POST_COMPACT_MAX_RULE_CHARS: "5000",
+		CODEX_RULES_POST_COMPACT_MAX_RESULT_CHARS: "700",
+	});
+	expect(recovery.status).toBe(0);
+	const recovered = additionalContext(recovery.stdout);
+
+	// Hephaestus body appears in the body block.
+	expect(recovered).toContain("HEPHAESTUS-BODY");
+
+	// path2 (listed2.md) must NOT appear in the directive: shared budget is exhausted
+	// by the body block, leaving too little for path2.
+	// Under the double-charge bug, path2 WOULD appear since directive gets full 600 chars.
+	expect(recovered).not.toContain(listed2Path);
+});
+
+// ===========================================================================
+// AC11 — C-7: dynamic recovery uses body-needle, not path-presence
+// ===========================================================================
+
+test("AC11-C7: dynamic recovery re-injects a rule whose path is in transcript but body is not", () => {
+	// Scenario: dynamic rule was injected in a previous turn. Post-compact fires.
+	// Transcript contains the rule's "Instructions from: <path>" marker BUT NOT the body.
+	// Under the path-presence bug (transcriptText.includes(rulePath)), the path mention
+	// means "already in context" → rule is skipped → permanent loss.
+	// Under body-needle fix, body absent → rule path included in recovery directive.
+	//
+	// We seed the session state directly (via JSON file) to simulate that a dynamic rule
+	// was previously injected — bypassing CLI round-trips that require globs matching.
+	// The session state has:
+	//   - dynamicDedup: { "__pi-rules-session__": ["<rulePath>::<hash>"] }
+	//   - postCompactPending: { static: "pending" } (so recovery runs on next SessionStart)
+	//
+	// Transcript carries "Instructions from: <rulePath>" but NOT the rule body.
+	//
+	// Bug: transcriptText.includes(rulePath) = true → dynamic rule skipped from directive.
+	// Fix: isDynamicRuleBodyInTranscript checks body presence → body absent → included.
+	const sessionId = "ac11-c7-session";
+	const hermDataRoot = join(tempHome, ".omt", "rules-injector");
+
+	const projectRoot = makeScratchDir("ac11c7-");
+	writeFileSync(join(projectRoot, "package.json"), "{}\n");
+	const rulesDir = join(projectRoot, ".claude", "rules");
+	mkdirSync(rulesDir, { recursive: true });
+
+	// Static rule: needed so SessionStart has at least one rule, triggering recovery path.
+	writeFileSync(join(rulesDir, "static.md"), "---\nalwaysApply: true\n---\nSTATIC RULE BODY\n");
+
+	// The dynamic rule whose body was dropped from the compacted transcript.
+	const dynamicRulePath = join(rulesDir, "dynamic.md");
+	const dynamicRuleBody = "DYNAMIC-RULE-BODY: special instructions for TypeScript files.";
+	writeFileSync(dynamicRulePath, `---\nglobs: "**/*.ts"\n---\n${dynamicRuleBody}\n`);
+
+	// Seed the session state JSON directly.
+	// Format: { version: 1, staticDedup: [], dynamicDedup: { "__pi-rules-session__": ["<path>::<hash>"] },
+	//           postCompactPending: { static: "pending" } }
+	// The hash can be any non-empty string; recoverDynamicRulePaths only parses the path from the key.
+	mkdirSync(hermDataRoot, { recursive: true });
+	const cachePath = join(hermDataRoot, `${sessionId}.json`);
+	writeFileSync(
+		cachePath,
+		JSON.stringify({
+			version: 1,
+			staticDedup: [],
+			dynamicDedup: {
+				"__pi-rules-session__": [`${dynamicRulePath}::deadbeef`],
+			},
+			postCompactPending: { static: true, dynamic: true },
+		}) + "\n",
+	);
+
+	// Create a transcript that contains the "Instructions from: <rulePath>" marker
+	// BUT NOT the rule body — simulating a compacted summary that referenced the path
+	// header but dropped the body.
+	// Under path-presence bug: transcriptText.includes(rulePath) is true → skip.
+	// Under body-needle fix: body not in transcript → include in directive.
+	const transcriptPath = join(projectRoot, "transcript-c7.txt");
+	writeFileSync(
+		transcriptPath,
+		`Instructions from: ${dynamicRulePath}\n\n[body was here but compaction dropped it]\n`,
+	);
+
+	const recovery = runHook(
+		"session-start",
+		sessionStartPayload(sessionId, projectRoot, { transcript_path: transcriptPath }),
+		{ PLUGIN_DATA: hermDataRoot },
+	);
+	expect(recovery.status).toBe(0);
+	const recovered = additionalContext(recovery.stdout);
+
+	// The dynamic rule path must appear in the directive because the body is absent
+	// from the transcript (body-needle check fails → rule must be re-injected).
+	expect(recovered).toContain(dynamicRulePath);
+});
