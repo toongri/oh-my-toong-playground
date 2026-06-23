@@ -571,6 +571,116 @@ hooks:
     });
   });
 
+  // --- A-3: null/비객체 hook 항목 → validation 에러 ---
+  describe("A-3: null/비객체 hook 항목 검증", () => {
+    it("returns error for null entry in hook event array via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - null
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("UserPromptSubmit") || e.includes("[0]"))).toBe(true);
+    });
+
+    it("returns error for non-object (string) entry in hook event array via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  Stop:
+    - "just-a-string"
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("Stop") || e.includes("[0]"))).toBe(true);
+    });
+
+    it("returns error for null entry in codex.yaml hook event array via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "codex.yaml", `
+hooks:
+  UserPromptSubmit:
+    - null
+`);
+      const result = validatePlatformYaml(path, "codex");
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    it("valid object entries in hook array still pass via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: some-hook.sh
+  Stop:
+    - component: another.sh
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  // --- A-2: codex-specific event/type 제약 검증 ---
+  describe("A-2: codex 미지원 이벤트/타입 경고", () => {
+    it("does NOT warn for PreToolUse event in codex.yaml — codex supports all VALID_EVENTS", () => {
+      const path = writeYaml(dir, "codex.yaml", `
+hooks:
+  PreToolUse:
+    - component: some-hook.sh
+`);
+      const result = validatePlatformYaml(path, "codex");
+      const preToolWarnings = result.warnings.filter((w) => w.includes("PreToolUse") && w.includes("지원하지 않는"));
+      expect(preToolWarnings).toHaveLength(0);
+    });
+
+    it("does NOT warn for PostToolUse event in codex.yaml — codex supports all VALID_EVENTS", () => {
+      const path = writeYaml(dir, "codex.yaml", `
+hooks:
+  PostToolUse:
+    - component: some-hook.sh
+`);
+      const result = validatePlatformYaml(path, "codex");
+      const postToolWarnings = result.warnings.filter((w) => w.includes("PostToolUse") && w.includes("지원하지 않는"));
+      expect(postToolWarnings).toHaveLength(0);
+    });
+
+    it("returns warning for type:prompt hook in codex.yaml via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "codex.yaml", `
+hooks:
+  UserPromptSubmit:
+    - type: prompt
+      prompt: some prompt text
+`);
+      const result = validatePlatformYaml(path, "codex");
+      expect(result.warnings.length).toBeGreaterThan(0);
+      expect(result.warnings.some((w) => w.includes("prompt"))).toBe(true);
+    });
+
+    it("does NOT warn for supported codex events via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "codex.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: some-hook.sh
+  PostCompact:
+    - component: compact-hook.sh
+`);
+      const result = validatePlatformYaml(path, "codex");
+      const codexWarnings = result.warnings.filter(
+        (w) => w.includes("UserPromptSubmit") || w.includes("PostCompact")
+      );
+      expect(codexWarnings).toHaveLength(0);
+    });
+
+    it("PreToolUse in claude.yaml does NOT warn (only codex has the restriction)", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  PreToolUse:
+    - component: some-hook.sh
+`);
+      const result = validatePlatformYaml(path, "claude");
+      const preToolWarnings = result.warnings.filter((w) => w.includes("PreToolUse"));
+      expect(preToolWarnings).toHaveLength(0);
+    });
+  });
+
   // --- mcps 최상위 타입 검증 ---
   describe("mcps 최상위 타입 검증", () => {
     it("returns error when mcps is an array via `validatePlatformYaml`", () => {
