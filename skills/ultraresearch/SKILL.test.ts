@@ -122,6 +122,15 @@ describe('claim-ledger lock', () => {
     // Every occurrence is a disclaimer that MLflow is NOT the evidence standard here.
     expect(skill).toContain('NOT MLflow');
     expect(skill).toContain('de-MLflow');
+    // Absence: affirmative MLflow-as-backend phrasings must never appear.
+    // "MLflow run-id" appears in exactly 2 legitimate negation contexts (attribution + evidence gate);
+    // cap it at 2 so any additional affirmative reference is caught.
+    expect(count('MLflow run-id')).toBeLessThanOrEqual(2);
+    // These phrasings would only appear if someone added an affirmative instruction.
+    expect(count('use MLflow')).toBe(0);
+    expect(count('Use MLflow')).toBe(0);
+    expect(count('using MLflow')).toBe(0);
+    expect(count('MLflow as')).toBe(0);
   });
 });
 
