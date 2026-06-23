@@ -381,6 +381,134 @@ describe('get subcommand', () => {
 });
 
 // ---------------------------------------------------------------------------
+// (steps) per-planning-step persistence
+// ---------------------------------------------------------------------------
+
+describe('steps persistence', () => {
+  // (a) --record-ac records content, done=true, recorded_at=current phase
+  test('record-ac: records AC content + done + recorded_at from current phase', () => {
+    process.env.OMT_SESSION_ID = 'test-session';
+    seedFile('test-session');
+    setPrometheusState('test-session', {
+      phase: 'S1',
+      record_ac: ['AC-1: user can set phase', 'AC-2: steps preserved'],
+    });
+    const state = readPrometheusState('test-session');
+    expect(state).not.toBeNull();
+    expect(state!.steps.acceptance_criteria.done).toBe(true);
+    expect(state!.steps.acceptance_criteria.content).toEqual(['AC-1: user can set phase', 'AC-2: steps preserved']);
+    expect(state!.steps.acceptance_criteria.recorded_at).toBe('S1');
+  });
+
+  // (b) --mark-design-done sets done=true, ref=current plan_path
+  test('mark-design-done: sets design_decisions.done and ref=plan_path', () => {
+    process.env.OMT_SESSION_ID = 'test-session';
+    seedFile('test-session');
+    setPrometheusState('test-session', {
+      phase: 'S2',
+      plan_path: `${tmpDir}/plans/myplan.md`,
+      mark_design_done: true,
+    });
+    const state = readPrometheusState('test-session');
+    expect(state).not.toBeNull();
+    expect(state!.steps.design_decisions.done).toBe(true);
+    expect(state!.steps.design_decisions.ref).toBe(`${tmpDir}/plans/myplan.md`);
+  });
+
+  // (c) --mark-plan-done sets plan.done=true
+  test('mark-plan-done: sets plan.done=true', () => {
+    process.env.OMT_SESSION_ID = 'test-session';
+    seedFile('test-session');
+    setPrometheusState('test-session', { phase: 'S3', mark_plan_done: true });
+    const state = readPrometheusState('test-session');
+    expect(state).not.toBeNull();
+    expect(state!.steps.plan.done).toBe(true);
+  });
+
+  // (d) steps preserved across a later set --phase that omits step flags
+  test('steps preserved across phase-only update', () => {
+    process.env.OMT_SESSION_ID = 'test-session';
+    seedFile('test-session');
+    setPrometheusState('test-session', {
+      phase: 'S1',
+      record_ac: ['AC-1'],
+    });
+    // Phase-only update, no step flags
+    setPrometheusState('test-session', { phase: 'S2' });
+    const state = readPrometheusState('test-session');
+    expect(state).not.toBeNull();
+    expect(state!.steps.acceptance_criteria.done).toBe(true);
+    expect(state!.steps.acceptance_criteria.content).toEqual(['AC-1']);
+    expect(state!.steps.acceptance_criteria.recorded_at).toBe('S1');
+  });
+
+  // (e) fresh default steps shape present after a plain set --phase on state with no prior steps
+  test('fresh default steps shape when prior state has no steps field', () => {
+    process.env.OMT_SESSION_ID = 'test-session';
+    const path = resolveStatePath('test-session');
+    // Write a legacy state without steps
+    writeFileSync(
+      path,
+      JSON.stringify({
+        active: true,
+        phase: 'S0',
+        plan_path: '',
+        resume_summary: '',
+        started_at: new Date().toISOString().slice(0, 19),
+        last_touched_at: new Date().toISOString().slice(0, 19),
+      }),
+      'utf8'
+    );
+    setPrometheusState('test-session', { phase: 'S1' });
+    const state = readPrometheusState('test-session');
+    expect(state).not.toBeNull();
+    expect(state!.steps).toEqual({
+      acceptance_criteria: { done: false, content: [], recorded_at: '' },
+      design_decisions: { done: false, ref: '' },
+      plan: { done: false },
+    });
+  });
+
+  // (f) invalid --record-ac JSON exits non-zero (CLI test)
+  test('record-ac: invalid JSON exits non-zero with clear message', () => {
+    writePristinePromState('acErrSession');
+    let errorOutput = '';
+    try {
+      execSync(`bun ${promScript} set --phase S1 --record-ac 'not-json' 2>&1`, {
+        encoding: 'utf8',
+        env: { ...process.env, OMT_SESSION_ID: 'acErrSession', OMT_DIR: tmpDir },
+        shell: '/bin/sh',
+      });
+      expect('should have thrown').toBe('did not throw');
+    } catch (err) {
+      errorOutput = (err as { stdout?: string; stderr?: string; message?: string }).stdout
+        ?? (err as { message?: string }).message
+        ?? '';
+    }
+    expect(errorOutput).toMatch(/record-ac|JSON|array/i);
+  });
+
+  // (f2) --record-ac with valid JSON but non-array exits non-zero
+  test('record-ac: valid JSON but non-array exits non-zero', () => {
+    writePristinePromState('acErrSession2');
+    let errorOutput = '';
+    try {
+      execSync(`bun ${promScript} set --phase S1 --record-ac '{"key":"value"}' 2>&1`, {
+        encoding: 'utf8',
+        env: { ...process.env, OMT_SESSION_ID: 'acErrSession2', OMT_DIR: tmpDir },
+        shell: '/bin/sh',
+      });
+      expect('should have thrown').toBe('did not throw');
+    } catch (err) {
+      errorOutput = (err as { stdout?: string; stderr?: string; message?: string }).stdout
+        ?? (err as { message?: string }).message
+        ?? '';
+    }
+    expect(errorOutput).toMatch(/record-ac|JSON|array/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (c) no-create write: writeFileNoCreate replaces existsSync-then-write
 // ---------------------------------------------------------------------------
 
