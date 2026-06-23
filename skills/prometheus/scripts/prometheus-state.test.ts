@@ -509,6 +509,176 @@ describe('steps persistence', () => {
 });
 
 // ---------------------------------------------------------------------------
+// (F5) --record-ac input hardening: empty array / non-string elements / bare flag
+// ---------------------------------------------------------------------------
+
+/** Run the CLI capturing stdout+stderr merged; returns {code, out}. Never throws. */
+function runPromCliMerged(
+  args: string,
+  env: Record<string, string>,
+  stdin?: string
+): { code: number; out: string } {
+  try {
+    const out = execSync(`bun ${promScript} ${args} 2>&1`, {
+      encoding: 'utf8',
+      env: { ...process.env, ...env },
+      shell: '/bin/sh',
+      input: stdin,
+    });
+    return { code: 0, out };
+  } catch (err) {
+    const e = err as { status?: number; stdout?: string; message?: string };
+    return { code: e.status ?? 1, out: e.stdout ?? e.message ?? '' };
+  }
+}
+
+describe('record-ac input hardening (F5)', () => {
+  // (F5-empty) empty array is rejected — would otherwise write done=true with no usable content
+  test('record-ac: empty array exits non-zero and writes nothing', () => {
+    writePristinePromState('acEmpty');
+    const { code, out } = runPromCliMerged("set --phase S1 --record-ac '[]'", {
+      OMT_SESSION_ID: 'acEmpty',
+      OMT_DIR: tmpDir,
+    });
+    expect(code).not.toBe(0);
+    expect(out).toMatch(/record-ac|non-empty|array of strings/i);
+    // State must remain at its pristine acceptance_criteria (not recorded done=true)
+    const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-acEmpty.json`, 'utf8'));
+    expect(state.steps?.acceptance_criteria?.done ?? false).toBe(false);
+  });
+
+  // (F5-nonstring) mixed non-string elements rejected
+  test('record-ac: array with non-string elements exits non-zero', () => {
+    writePristinePromState('acMixed');
+    const { code, out } = runPromCliMerged("set --phase S1 --record-ac '[123, null]'", {
+      OMT_SESSION_ID: 'acMixed',
+      OMT_DIR: tmpDir,
+    });
+    expect(code).not.toBe(0);
+    expect(out).toMatch(/record-ac|non-empty|array of strings|string/i);
+  });
+
+  // (F5-bare) bare --record-ac (boolean true, no value) is rejected loudly, not silently no-op'd
+  test('record-ac: bare flag with no value exits non-zero', () => {
+    writePristinePromState('acBare');
+    // `--record-ac` followed by another flag → parses to boolean true
+    const { code, out } = runPromCliMerged('set --phase S1 --record-ac --mark-plan-done', {
+      OMT_SESSION_ID: 'acBare',
+      OMT_DIR: tmpDir,
+    });
+    expect(code).not.toBe(0);
+    expect(out).toMatch(/record-ac|requires|JSON-array|stdin/i);
+  });
+
+  // (F5-valid) valid argv array still records (backward compatible)
+  test('record-ac: valid argv array records done + content + recorded_at', () => {
+    writePristinePromState('acValid');
+    const { code } = runPromCliMerged(`set --phase S1 --record-ac '["AC1","AC2"]'`, {
+      OMT_SESSION_ID: 'acValid',
+      OMT_DIR: tmpDir,
+    });
+    expect(code).toBe(0);
+    const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-acValid.json`, 'utf8'));
+    expect(state.steps.acceptance_criteria.done).toBe(true);
+    expect(state.steps.acceptance_criteria.content).toEqual(['AC1', 'AC2']);
+    expect(state.steps.acceptance_criteria.recorded_at).toBe('S1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (F4) --record-ac stdin support: value '-' reads JSON array from stdin
+// ---------------------------------------------------------------------------
+
+describe('record-ac stdin support (F4)', () => {
+  // (F4-stdin-valid) `--record-ac -` reads JSON array from stdin and records it
+  test('record-ac: stdin "-" reads JSON array and records it', () => {
+    writePristinePromState('acStdin');
+    const { code } = runPromCliMerged(
+      'set --phase S2 --record-ac -',
+      { OMT_SESSION_ID: 'acStdin', OMT_DIR: tmpDir },
+      '["AC from stdin", "AC with apostrophe\'s safe"]'
+    );
+    expect(code).toBe(0);
+    const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-acStdin.json`, 'utf8'));
+    expect(state.steps.acceptance_criteria.done).toBe(true);
+    expect(state.steps.acceptance_criteria.content).toEqual([
+      'AC from stdin',
+      "AC with apostrophe's safe",
+    ]);
+    expect(state.steps.acceptance_criteria.recorded_at).toBe('S2');
+  });
+
+  // (F4-stdin-empty) stdin empty array rejected (same F5 validation)
+  test('record-ac: stdin empty array exits non-zero', () => {
+    writePristinePromState('acStdinEmpty');
+    const { code, out } = runPromCliMerged(
+      'set --phase S1 --record-ac -',
+      { OMT_SESSION_ID: 'acStdinEmpty', OMT_DIR: tmpDir },
+      '[]'
+    );
+    expect(code).not.toBe(0);
+    expect(out).toMatch(/record-ac|non-empty|array of strings/i);
+  });
+
+  // (F4-stdin-garbage) stdin invalid JSON rejected
+  test('record-ac: stdin invalid JSON exits non-zero', () => {
+    writePristinePromState('acStdinGarbage');
+    const { code, out } = runPromCliMerged(
+      'set --phase S1 --record-ac -',
+      { OMT_SESSION_ID: 'acStdinGarbage', OMT_DIR: tmpDir },
+      'not-json'
+    );
+    expect(code).not.toBe(0);
+    expect(out).toMatch(/record-ac|JSON|array/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (F6) --mark-design-done requires a non-empty plan_path
+// ---------------------------------------------------------------------------
+
+describe('mark-design-done plan_path guard (F6)', () => {
+  // (F6-empty) mark-design-done with no plan_path (seed plan_path="") exits non-zero
+  test('mark-design-done: empty plan_path exits non-zero and writes nothing', () => {
+    writePristinePromState('mdEmpty'); // plan_path = ''
+    const { code, out } = runPromCliMerged('set --phase S2 --mark-design-done', {
+      OMT_SESSION_ID: 'mdEmpty',
+      OMT_DIR: tmpDir,
+    });
+    expect(code).not.toBe(0);
+    expect(out).toMatch(/mark-design-done|plan_path|plan-path/i);
+    const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-mdEmpty.json`, 'utf8'));
+    expect(state.steps?.design_decisions?.done ?? false).toBe(false);
+  });
+
+  // (F6-arg) mark-design-done with --plan-path provided in the same call records done + ref
+  test('mark-design-done: with --plan-path in same call records done + ref', () => {
+    writePristinePromState('mdArg');
+    const { code } = runPromCliMerged(
+      `set --phase S2 --plan-path ${tmpDir}/plans/p.md --mark-design-done`,
+      { OMT_SESSION_ID: 'mdArg', OMT_DIR: tmpDir }
+    );
+    expect(code).toBe(0);
+    const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-mdArg.json`, 'utf8'));
+    expect(state.steps.design_decisions.done).toBe(true);
+    expect(state.steps.design_decisions.ref).toBe(`${tmpDir}/plans/p.md`);
+  });
+
+  // (F6-prior) mark-design-done with plan_path persisted earlier records done + ref
+  test('mark-design-done: with prior persisted plan_path records done + ref', () => {
+    writeLivePromState('mdPrior', `${tmpDir}/plans/prior.md`); // plan_path persisted
+    const { code } = runPromCliMerged('set --phase S2 --mark-design-done', {
+      OMT_SESSION_ID: 'mdPrior',
+      OMT_DIR: tmpDir,
+    });
+    expect(code).toBe(0);
+    const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-mdPrior.json`, 'utf8'));
+    expect(state.steps.design_decisions.done).toBe(true);
+    expect(state.steps.design_decisions.ref).toBe(`${tmpDir}/plans/prior.md`);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (c) no-create write: writeFileNoCreate replaces existsSync-then-write
 // ---------------------------------------------------------------------------
 

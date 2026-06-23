@@ -6,7 +6,8 @@
  *
  * Subcommands:
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]
- *       [--record-ac '<json-array>'] [--mark-design-done] [--mark-plan-done]
+ *       [--record-ac '<json-array>' | --record-ac - (reads JSON array from stdin)]
+ *       [--mark-design-done] [--mark-plan-done]
  *   get
  *   clear
  */
@@ -59,6 +60,18 @@ function deleteFile(path: string): void {
     unlinkSync(path);
   } catch {
     // ignore missing file
+  }
+}
+
+/**
+ * Read all of stdin synchronously (fd 0). Used by `--record-ac -` so AC content
+ * can be piped via an apostrophe-safe quoted heredoc instead of shell-quoted argv.
+ */
+function readStdinSync(): string {
+  try {
+    return readFileSync(0, 'utf8');
+  } catch {
+    return '';
   }
 }
 
@@ -149,6 +162,18 @@ export function setPrometheusState(
   }
 
   const resolvedPlanPath = opts.plan_path ?? prior.plan_path ?? '';
+
+  // F6: marking design done with no plan_path would persist done=true, ref="" —
+  // resume then treats design as complete but has no ADR pointer. Loud error
+  // instead of a silent ordering hazard.
+  if (opts.mark_design_done && resolvedPlanPath === '') {
+    process.stderr.write(
+      'prometheus-state: --mark-design-done requires plan_path to be set ' +
+        '(pass --plan-path or set it earlier at S2)\n'
+    );
+    process.exit(1);
+  }
+
   const priorSteps = (prior as Partial<PrometheusState>).steps ?? FRESH_STEPS;
 
   // Merge each step sub-object — only update the sub-object whose flag was passed.
@@ -239,10 +264,20 @@ function main(): void {
       const planPath = args['plan-path'] !== undefined ? String(args['plan-path']) : undefined;
       const resumeSummary = args['resume-summary'] !== undefined ? String(args['resume-summary']) : undefined;
 
-      // --record-ac '<json-array>'
+      // --record-ac '<json-array>'  |  --record-ac -  (read JSON array from stdin)
       let recordAc: string[] | undefined;
-      if (args['record-ac'] !== undefined && args['record-ac'] !== true) {
-        const raw = String(args['record-ac']);
+      if (args['record-ac'] !== undefined) {
+        // F5: a bare flag (no value) parses to boolean true — reject loudly
+        // instead of silently no-op'ing the AC record.
+        if (args['record-ac'] === true) {
+          process.stderr.write(
+            "prometheus-state: --record-ac requires a JSON-array value or '-' for stdin\n"
+          );
+          process.exit(1);
+        }
+        const arg = String(args['record-ac']);
+        // F4: '-' means read the JSON array from stdin (apostrophe-safe heredoc input).
+        const raw = arg === '-' ? readStdinSync() : arg;
         let parsed: unknown;
         try {
           parsed = JSON.parse(raw);
@@ -252,6 +287,14 @@ function main(): void {
         }
         if (!Array.isArray(parsed)) {
           process.stderr.write(`prometheus-state: --record-ac value must be a JSON array, got: ${raw}\n`);
+          process.exit(1);
+        }
+        // F5: require a non-empty array of strings — an empty or mixed array is
+        // unusable on resume (would persist done=true with no real AC content).
+        if (parsed.length === 0 || !parsed.every((x) => typeof x === 'string')) {
+          process.stderr.write(
+            'prometheus-state: --record-ac must be a non-empty array of strings\n'
+          );
           process.exit(1);
         }
         recordAc = parsed as string[];
