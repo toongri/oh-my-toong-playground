@@ -393,10 +393,9 @@ test("C9 A3 round-trip via parser: JSON-array inline glob globs:[\"*.{ts,js}\"] 
 	expect(additionalContext).toContain("TS_JS_GLOB_ROUND_TRIP_MARKER");
 });
 
-// unquoted brace glob mis-split by parser-yaml comma-split — upstream bug, defer to re-vendor.
-// parser-yaml.ts parseGlobValue: `globs: *.{ts,js}` hits the unquoted scalar path which splits
-// on commas, producing ["*.{ts", "js}"] — neither token matches a valid .ts file.
-test.skip("C9 SKIP upstream-bug: unquoted scalar brace glob globs: *.{ts,js} mis-splits on comma", () => {
+// C9: unquoted brace glob — parser-yaml now tracks brace depth in the unquoted scalar path
+// so `globs: *.{ts,js}` is no longer split on the comma inside {}.
+test("C9: unquoted scalar brace glob globs: *.{ts,js} matches .ts files", () => {
 	const projectDir = makeProject();
 	writeRule(projectDir, "ts-js-unquoted.md", "globs: *.{ts,js}", "UNQUOTED_BRACE_MARKER");
 	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");

@@ -86,13 +86,13 @@ function parseGlobValue(rawValue: string, lines: readonly string[], lineIndex: n
 	const quotedScalar = isQuotedScalar(rawValue);
 	const value = parseStringValue(rawValue);
 	if (!quotedScalar && value.includes(",")) {
-		return {
-			values: value
-				.split(",")
-				.map((item) => item.trim())
-				.filter(Boolean),
-			consumed: 1,
-		};
+		// Split on top-level commas only — commas inside brace expansions (*.{ts,js})
+		// must not produce a spurious split. We reuse splitCommaSeparated which already
+		// tracks brace depth.
+		const parts = splitCommaSeparated(value);
+		if (parts.length > 1) {
+			return { values: parts, consumed: 1 };
+		}
 	}
 
 	return { values: [value], consumed: 1 };
@@ -146,8 +146,14 @@ function parseInlineArray(value: string): string[] {
 function findClosingBracket(value: string): number {
 	let quote: string | null = null;
 	let escaped = false;
+	// depth starts at 1 for the opening [ that the caller has already consumed.
+	// We return when depth drops back to 0 (i.e. the matching outer ]).
+	// Inner [] (POSIX char-classes) and {} (brace globs) are tracked so their
+	// closing delimiters are never mistaken for the outer array's closing bracket.
+	let bracketDepth = 1;
+	let braceDepth = 0;
 
-	for (let index = 0; index < value.length; index += 1) {
+	for (let index = 1; index < value.length; index += 1) {
 		const character = value[index];
 		if (character === undefined) continue;
 
@@ -169,7 +175,18 @@ function findClosingBracket(value: string): number {
 			continue;
 		}
 
-		if (quote === null && character === "]") return index;
+		if (quote === null) {
+			if (character === "[") {
+				bracketDepth += 1;
+			} else if (character === "]") {
+				bracketDepth -= 1;
+				if (bracketDepth === 0) return index;
+			} else if (character === "{") {
+				braceDepth += 1;
+			} else if (character === "}") {
+				braceDepth -= 1;
+			}
+		}
 	}
 
 	return -1;
@@ -180,6 +197,13 @@ function splitCommaSeparated(value: string): string[] {
 	let current = "";
 	let quote: string | null = null;
 	let escaped = false;
+	// Track brace depth so commas inside *.{ts,js} do not produce a spurious split.
+	// Bracket depth ([]) is not needed here: splitCommaSeparated only operates on the
+	// content already extracted from the outer array, so [] chars are glob char-classes.
+	// We do NOT split on commas inside char-classes either — they are semantically part
+	// of the glob token — but POSIX char-classes rarely contain commas, and the outer
+	// findClosingBracket already handles the bracket-depth tracking before we are called.
+	let braceDepth = 0;
 
 	for (let index = 0; index < value.length; index += 1) {
 		const character = value[index];
@@ -206,10 +230,22 @@ function splitCommaSeparated(value: string): string[] {
 			continue;
 		}
 
-		if (quote === null && character === ",") {
-			values.push(current.trim());
-			current = "";
-			continue;
+		if (quote === null) {
+			if (character === "{") {
+				braceDepth += 1;
+				current += character;
+				continue;
+			}
+			if (character === "}") {
+				braceDepth -= 1;
+				current += character;
+				continue;
+			}
+			if (character === "," && braceDepth === 0) {
+				values.push(current.trim());
+				current = "";
+				continue;
+			}
 		}
 
 		current += character;
