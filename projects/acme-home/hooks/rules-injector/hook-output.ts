@@ -35,6 +35,17 @@ function sliceToUtf8Bytes(str: string, maxBytes: number): string {
 }
 
 function limitAdditionalContext(additionalContext: string): string {
+	return limitAdditionalContextText(additionalContext);
+}
+
+/**
+ * Returns the limited additional-context string (at most MAX_ADDITIONAL_CONTEXT_BYTES
+ * UTF-8 bytes), with a truncation notice appended when clamping occurs.
+ *
+ * Exported so callers can inspect which content actually survives the byte clamp
+ * before deciding what to mark as injected (mark-after-clamp pattern).
+ */
+export function limitAdditionalContextText(additionalContext: string): string {
 	if (Buffer.byteLength(additionalContext, "utf8") <= MAX_ADDITIONAL_CONTEXT_BYTES) return additionalContext;
 	const marker = `\n\n[Truncated hook additional context to ${MAX_ADDITIONAL_CONTEXT_BYTES} bytes to avoid Codex context overflow.]`;
 	if (Buffer.byteLength(marker, "utf8") >= MAX_ADDITIONAL_CONTEXT_BYTES) {
