@@ -1178,3 +1178,5 @@ Render the Stage A HTML presentation.
 | P-24 | Verify-Lane Round | | | New verify-lane scenario (collect → falsifying verify → refuted exclusion). Needs testing |
 | P-25 | Cross-Lane #13 Witness | | | New cross-lane witness scenario (prompt_injection key on librarian finding, outside verify lane). Needs testing |
 | P-26 | All-Collect-Lanes-Empty No-Op | | | New empty-lanes no-op scenario (valid no-op when all collect lanes empty). Needs testing |
+| P-27 | Per-Step State Persistence + Resume | | | Needs testing |
+| P-28 | Trigger-Based Diagram Lenses (Stage A) | | | Needs testing |
