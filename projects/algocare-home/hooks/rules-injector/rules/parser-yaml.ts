@@ -264,7 +264,10 @@ function stripComment(line: string): string {
 			continue;
 		}
 
-		if (quote === null && character === "#") return line.slice(0, index);
+		if (quote === null && character === "#") {
+			const prev = line[index - 1];
+			if (index === 0 || prev === " " || prev === "\t") return line.slice(0, index);
+		}
 	}
 
 	return line;
