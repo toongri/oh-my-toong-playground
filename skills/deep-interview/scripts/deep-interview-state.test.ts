@@ -464,62 +464,27 @@ describe('deep-interview-state CLI main()', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // TODO 7: stall regression (D-E — both legacy Ontologist trigger conditions)
+  // TODO 7: Ontologist stance round-trip (D-E)
   // ---------------------------------------------------------------------------
   //
   // SKILL.md is the ONLY owner of stance selection (prose-only; no selection
-  // helper exists in deep-interview-state.ts). The test therefore does NOT assert
-  // that the state machine selects Ontologist — it asserts that a stance_history
-  // recording an Ontologist stance (as the rotation would write via --append-stance)
-  // round-trips correctly: the recorded stance is defined and non-empty, for BOTH
-  // legacy trigger inputs:
-  //   (a) stall: ambiguity ±0.05 for 3 consecutive rounds → Ontologist
-  //   (b) late-stage: Round ≥ 8 AND ambiguity > 0.3 → Ontologist
+  // helper exists in deep-interview-state.ts). Selector correctness (stall /
+  // late-stage trigger conditions) is guarded by the SKILL.md token-contract
+  // grep (TODO 5 AC), NOT by this state-layer test.
   //
-  // This guards the state layer against regressions where the recorded Ontologist
-  // stance is lost, truncated, or corrupted on read-back.
+  // This test guards only the state layer: a stance_history recording an
+  // Ontologist stance (as the rotation would write via --append-stance)
+  // round-trips correctly — the recorded value is defined and non-empty.
 
-  test('stall regression (a): stall input — stance_history recording Ontologist round-trips defined', () => {
-    // Simulate a stall scenario: 3 rounds with ambiguity within ±0.05 of each other
-    // (e.g. 0.42, 0.44, 0.41 — all within ±0.05 of 0.42). The rotation resolves
-    // to Ontologist; we record it and verify it reads back as a defined non-empty string.
+  test('stance-history: Ontologist stance round-trips defined and non-empty', () => {
     writeSeed();
-    initDeepInterviewState(SID, { initial_idea: 'stall test' });
-    run(`update --append-round '{"n":5,"ambiguity":0.42}'`);
-    run(`update --append-round '{"n":6,"ambiguity":0.44}'`);
-    run(`update --append-round '{"n":7,"ambiguity":0.41}'`);
-    // Rotation fires Ontologist due to stall; record it as the prose rule mandates.
+    initDeepInterviewState(SID, { initial_idea: 'Ontologist round-trip test' });
     run('update --append-stance Ontologist');
     const out = run('get');
     const parsed = JSON.parse(out) as Record<string, unknown>;
     const history = ((parsed['state'] as Record<string, unknown>)['stance_history']) as string[];
     expect(history.length).toBeGreaterThan(0);
     const recorded = history[history.length - 1];
-    expect(typeof recorded).toBe('string');
-    expect(recorded.length).toBeGreaterThan(0);
-    expect(recorded).toBe('Ontologist');
-  });
-
-  test('stall regression (b): round-8+ input — stance_history recording Ontologist round-trips defined', () => {
-    // Simulate a late-stage scenario: Round 8+ with ambiguity > 0.3. The rotation
-    // resolves to Ontologist; we record it and verify it reads back as a defined
-    // non-empty string.
-    writeSeed();
-    initDeepInterviewState(SID, { initial_idea: 'late-stage test' });
-    // Record 8 rounds with persistently high ambiguity (>0.3)
-    for (let n = 1; n <= 8; n++) {
-      run(`update --append-round '{"n":${n},"ambiguity":0.45}'`);
-    }
-    run(`update --current-ambiguity 0.45`);
-    // Rotation fires Ontologist due to Round 8+ + ambiguity > 0.3; record it.
-    run('update --append-stance Ontologist');
-    const out = run('get');
-    const parsed = JSON.parse(out) as Record<string, unknown>;
-    const history = ((parsed['state'] as Record<string, unknown>)['stance_history']) as string[];
-    expect(history.length).toBeGreaterThan(0);
-    const recorded = history[history.length - 1];
-    expect(typeof recorded).toBe('string');
-    expect(recorded.length).toBeGreaterThan(0);
     expect(recorded).toBe('Ontologist');
   });
 });
