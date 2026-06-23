@@ -5,9 +5,29 @@ export interface WalkDirectory {
 	readonly distance: number;
 }
 
-export function getWalkDirectories(projectRoot: string, targetFile: string | null): WalkDirectory[] {
+export function getWalkDirectories(projectRoot: string, targetFile: string | null, cwd?: string): WalkDirectory[] {
 	if (targetFile === null) {
-		return [{ directory: projectRoot, distance: 0 }];
+		const startDirectory = cwd !== undefined ? resolve(cwd) : null;
+		if (startDirectory === null || !isSameOrChildPath(startDirectory, projectRoot)) {
+			return [{ directory: projectRoot, distance: 0 }];
+		}
+		// Walk from cwd up to projectRoot so each ancestor's rule subdirs are scanned.
+		const walkDirectories: WalkDirectory[] = [];
+		let currentDirectory = startDirectory;
+		let distance = 0;
+		while (true) {
+			walkDirectories.push({ directory: currentDirectory, distance });
+			if (currentDirectory === resolve(projectRoot)) {
+				break;
+			}
+			const parentDirectory = dirname(currentDirectory);
+			if (parentDirectory === currentDirectory) {
+				break;
+			}
+			currentDirectory = parentDirectory;
+			distance += 1;
+		}
+		return walkDirectories;
 	}
 
 	const startDirectory = dirname(resolve(targetFile));

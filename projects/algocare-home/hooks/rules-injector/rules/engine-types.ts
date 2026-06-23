@@ -17,6 +17,7 @@ export interface EngineDeps {
 	findCandidates: (options: {
 		projectRoot: string | null;
 		targetFile: string | null;
+		cwd?: string;
 		homeDir?: string;
 		disabledSources?: ReadonlySet<string>;
 		skipUserHome?: boolean;

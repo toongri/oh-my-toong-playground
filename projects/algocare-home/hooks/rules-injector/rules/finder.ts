@@ -28,6 +28,8 @@ export interface FinderOptions {
 	projectRoot: string | null;
 	/** Target file path (used for distance calculation in dynamic injection mode). null for static mode. */
 	targetFile: string | null;
+	/** Current working directory. Used in static mode (targetFile: null) to walk nested-package rule dirs up to projectRoot. */
+	cwd?: string;
 	/** User home directory (default: os.homedir()). Injectable for tests. */
 	homeDir?: string;
 	/** Set of disabled sources to omit from discovery. Empty by default. */
@@ -57,7 +59,7 @@ export function findRuleCandidates(options: FinderOptions): RuleCandidate[] {
 
 	if (options.projectRoot !== null) {
 		candidates.push(
-			...findProjectCandidates(options.projectRoot, options.targetFile, disabledSources, options.cache),
+			...findProjectCandidates(options.projectRoot, options.targetFile, disabledSources, options.cache, options.cwd),
 		);
 	}
 
@@ -111,9 +113,10 @@ function findProjectCandidates(
 	targetFile: string | null,
 	disabledSources: ReadonlySet<string>,
 	cache: RuleDiscoveryCache | undefined,
+	cwd?: string,
 ): RuleCandidate[] {
 	const rootDirectory = resolve(projectRoot);
-	const walkDirectories = getWalkDirectories(rootDirectory, targetFile);
+	const walkDirectories = getWalkDirectories(rootDirectory, targetFile, cwd);
 	const candidates: RuleCandidate[] = [];
 
 	for (const walkDirectory of walkDirectories) {
