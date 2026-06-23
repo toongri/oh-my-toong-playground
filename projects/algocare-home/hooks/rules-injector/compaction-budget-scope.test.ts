@@ -431,6 +431,7 @@ test("F-8: PostToolUse emits nothing under CODEX_RULES_DISABLED=1 (dynamic lane 
 	// disabled-check in runPostToolUseHook would cause the hook to proceed to path
 	// extraction and potentially inject rules, making this test RED.
 	const sessionId = "f8-session";
+	const statePath = join(tempHome, ".omt", "rules-injector", `${sessionId}.json`);
 	const projectRoot = makeScratchDir("f8-proj-");
 	writeFileSync(join(projectRoot, "package.json"), "{}\n");
 	const rulesDir = join(projectRoot, ".claude", "rules");
@@ -465,6 +466,10 @@ test("F-8: PostToolUse emits nothing under CODEX_RULES_DISABLED=1 (dynamic lane 
 	expect(result.status).toBe(0);
 	expect(result.stdout.trim()).toBe("");
 	expect(additionalContext(result.stdout)).toBe("");
+	// No-state-mutation guard: the disabled pre-gate must return before any state
+	// write. Removing the disabled check would allow sessionCachePath to be written.
+	// Mirrors the B-2 pattern (compaction-budget-scope.test.ts:421).
+	expect(existsSync(statePath)).toBe(false);
 });
 
 // ===========================================================================
@@ -709,6 +714,51 @@ test("AC2-static: emittedRules contains rule even when its body is truncated (pa
 });
 
 // ===========================================================================
+// C12 — C4 regression guard: hash-anchored header exceeds budget → rule dropped
+// ===========================================================================
+
+test("C12: a rule whose hash-anchored marker alone exceeds the budget is dropped (not emitted over-cap)", () => {
+	// Fixture: path "/proj/.claude/rules/some-rule.md", 64-char hash, body "X".
+	// Legacy header length = "Instructions from: /proj/.claude/rules/some-rule.md\n\n".length = 53.
+	// Full hash-anchored header = "Instructions from: /proj/.claude/rules/some-rule.md [hash:<64>]\n\n".length = 125.
+	// maxResultChars=90: fits the legacy marker (53) but NOT the full marker (125).
+	// Before fix: legacy charge → bodyBudget=37 → body "X" admitted → emittedRules.length===1,
+	//             text.length===125+ (over cap). After fix: full marker charged → bodyBudget<=0
+	//             → rule dropped → emittedRules empty, text==="".
+	const rule = makeRule({
+		path: "/proj/.claude/rules/some-rule.md",
+		relativePath: ".claude/rules/some-rule.md",
+		body: "X",
+		contentHash: "a".repeat(64),
+	});
+	const result = formatStaticBlock([rule], { maxRuleChars: 100, maxResultChars: 90 });
+	expect(result.emittedRules).toHaveLength(0);
+	expect(result.text).toBe("");
+	expect(result.text.length).toBeLessThanOrEqual(90);
+});
+
+// ===========================================================================
+// C5 — first-rule guard: pre-sum starvation must not suppress rule[0] that fits
+// ===========================================================================
+
+test("C5: when pre-summed headers would zero the body budget, the first rule still emits if its own body fits", () => {
+	// 8 rules with 64-char hashes → per-rule full header ~140 chars → pre-sum ~1120.
+	// maxResultChars=500: pre-sum (1120) > 500 → old bodyOnlyBudget=0 → all dropped.
+	// After fix: incremental charge → rule[0] sees 500-140=360 body budget → 40-char body fits.
+	const rules = Array.from({ length: 8 }, (_, i) =>
+		makeRule({
+			path: `/proj/.claude/rules/rule-${i}.md`,
+			relativePath: `.claude/rules/rule-${i}.md`,
+			body: "B".repeat(40),
+			contentHash: "a".repeat(64),
+		}),
+	);
+	const result = formatStaticBlock(rules, { maxRuleChars: 4000, maxResultChars: 500 });
+	expect(result.emittedRules.length).toBeGreaterThanOrEqual(1);
+	expect(result.text).toContain("B".repeat(40));
+});
+
+// ===========================================================================
 // C4-CJK — byte cap enforced for multi-byte (UTF-8) content
 // ===========================================================================
 
@@ -736,6 +786,9 @@ test("C4-CJK: over-budget CJK rule body is capped to <= 32K bytes (not chars)", 
 	// The critical assertion: UTF-8 byte length must be within the 32K cap.
 	// This would fail if sliceToUtf8Bytes were replaced with a plain char slice.
 	expect(Buffer.byteLength(emitted, "utf8")).toBeLessThanOrEqual(32_000);
+	// Boundary-safety: a naive buf.subarray(0, maxBytes).toString("utf8") sliced
+	// mid-codepoint would emit U+FFFD replacement chars. Pin the contract.
+	expect(emitted).not.toContain("�");
 });
 
 // ===========================================================================

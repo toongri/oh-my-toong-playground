@@ -82,23 +82,35 @@ export function transcriptHasRuleVersion(
 		// A hash anchor exists for this path but not for this hash → different version.
 		return false;
 	}
-	return paths.some((path) => transcriptText.includes(legacyMarker(path)));
+	// Legacy marker check with end-boundary anchor: accept only when the marker is
+	// followed by "\n" or is at end-of-string. This prevents "foo.md" matching inside
+	// "foo.mdc" (next char "c") or "a.md" inside "a.md.bak" (next char ".").
+	return paths.some((path) => {
+		const marker = legacyMarker(path);
+		let idx = transcriptText.indexOf(marker);
+		while (idx !== -1) {
+			const afterIdx = idx + marker.length;
+			if (afterIdx === transcriptText.length || transcriptText[afterIdx] === "\n") {
+				return true;
+			}
+			idx = transcriptText.indexOf(marker, afterIdx);
+		}
+		return false;
+	});
 }
 
 /**
- * Byte length of the version-less marker prefix + the "\n\n" separator that
- * precedes each rule's body in the final output. This overhead is charged to the
- * budget before body bytes so that rules without any remaining budget for body
- * content are dropped entirely (no header-only ghost blocks).
+ * Byte length of the rule's emitted marker line + the "\n\n" separator that
+ * precedes each rule's body. Charged to the budget before body bytes so a rule
+ * with no remaining body budget is dropped (no header-only ghost block).
  *
- * Intentionally version-less: the `[hash:<contentHash>]` anchor that formatRule
- * adds for transcript-presence detection is NOT charged here. The anchor is a small
- * fixed overhead and the hard 32K output cap downstream is the real ceiling, so
- * keeping the per-rule budget accounting independent of the anchor avoids coupling
- * the budget math to the content hash.
+ * Charges the FULL hash-anchored marker (the form formatRule actually emits via
+ * ruleMarkerLine), so the budget accounting matches the emitted bytes. The hash
+ * anchor is ~72 bytes per rule and is real output; charging the version-less
+ * marker undercounts and lets blocks exceed maxResultChars.
  */
-function ruleHeaderLength(path: string): number {
-	return `${legacyMarker(path)}\n\n`.length;
+function ruleHeaderLength(path: string, contentHash: string): number {
+	return `${ruleMarkerLine(path, contentHash)}\n\n`.length;
 }
 
 function formatRule(rule: TruncatedRule): string {
@@ -121,9 +133,10 @@ function formatRule(rule: TruncatedRule): string {
  * any body bytes are dropped — they produce no output and are absent from
  * emittedRules.
  *
- * The strategy: run truncateBudget on the body-only strings with a budget
- * pre-reduced by each rule's header length. Rules that get a zero-or-negative
- * body budget are excluded before reaching truncateBudget.
+ * The strategy: charge each rule's header incrementally as it is admitted (not
+ * pre-summed across all candidates), so earlier candidates' headers never starve
+ * the first rule. The first rule is always attempted against the full
+ * maxResultChars minus only its own header.
  */
 function truncateRules(
 	rules: ReadonlyArray<LoadedRule>,
@@ -149,26 +162,23 @@ function truncateRules(
 				}).body,
 	}));
 
-	// Compute per-rule header overhead and deduct it from the total budget
-	// before handing bodies to truncateBudget. Rules whose header alone would
-	// exhaust the remaining budget get no budget for their body and are excluded.
-	const headerLengths = perRuleBudgeted.map((rule) => ruleHeaderLength(rule.path));
-	const totalHeaderOverhead = headerLengths.reduce((sum, len) => sum + len, 0);
-
-	// Body-only budget: the amount available for rule bodies after all headers
-	// are charged. We pass this as the effective maxResultChars to truncateBudget.
-	// We clip at 0 to avoid negative values when headers exceed total budget.
-	const bodyOnlyBudget = Math.max(0, options.maxResultChars - totalHeaderOverhead);
-
-	// Similarly, build per-rule body-only entries for truncateBudget.
-	const bodyRules = perRuleBudgeted.map((rule) => ({
-		body: rule.body,
-		relativePath: rule.relativePath,
-	}));
-
-	const budgetedBodies = truncateBudget({
-		rules: bodyRules,
-		maxResultChars: bodyOnlyBudget,
+	// Incremental, header-aware admission: charge each rule's REAL (hash-anchored)
+	// header only when that rule is admitted, so earlier candidates' headers never
+	// pre-starve a later rule, and the first rule is always attempted against
+	// maxResultChars minus its OWN header (not minus all candidates' headers).
+	let remaining = options.maxResultChars;
+	const budgetedBodies = perRuleBudgeted.map((rule) => {
+		const headerLen = ruleHeaderLength(rule.path, rule.contentHash);
+		const bodyBudget = remaining - headerLen;
+		const fitted = truncateBudget({
+			rules: [{ body: rule.body, relativePath: rule.relativePath }],
+			maxResultChars: Math.max(0, bodyBudget),
+		})[0];
+		if (fitted === undefined || fitted.body.length === 0) {
+			return { body: "", truncated: false, relativePath: rule.relativePath };
+		}
+		remaining -= headerLen + fitted.body.length;
+		return fitted;
 	});
 
 	const truncatedRules: TruncatedRule[] = [];
