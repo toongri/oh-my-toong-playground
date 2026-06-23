@@ -1078,9 +1078,11 @@ If no candidates exist, say so and proceed fresh. The branch never renames on it
 These directives govern how prometheus records its own pipeline state via the state CLI.
 
 - **Per each S-transition**: run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the design-brief / ADR is first written during the Co-Design state — this is the first durable plan artifact on disk; the TODO plan body is appended later at S3); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
-- **S1 AC recording**: immediately after Metis APPROVE/COMMENT confirms the acceptance criteria, record the confirmed AC content into state:
+- **S1 AC recording**: immediately after Metis APPROVE/COMMENT confirms the acceptance criteria, record the confirmed AC content into state. AC strings routinely contain apostrophes (e.g. "user can't delete another user's data"), so the JSON array MUST be passed via the quoted-heredoc stdin form (`--record-ac -`), never embedded in single quotes on the argv (POSIX/zsh single quotes cannot escape an apostrophe):
   ```
-  bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S1 --record-ac '<JSON array of the confirmed AC strings>'
+  bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S1 --record-ac - <<'EOF'
+  ["AC1: ...", "AC2: user can't delete another user's data"]
+  EOF
   ```
   This persists the AC for mid-session and post-compaction resume — the AC is the one planning step that otherwise has no durable home until it folds into the plan body at S3.
 - **S2 design step**: after the design-brief / ADR is written and `--plan-path` is set, mark the design step done:
@@ -1094,7 +1096,10 @@ These directives govern how prometheus records its own pipeline state via the st
   ```
 - **Teardown**: At S8 dispatch and on abort, emit `<prometheus-done/>` as a standalone output token. The persistent-mode hook detects this token and performs the actual state-file deletion — the model does not call `clear` directly.
 - **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable. The CLI hard-fails with a non-zero exit when `OMT_SESSION_ID` is absent or unsafe — there is no fallback.
-- **Restore**: on restore, re-read the current plan file, restart from `resume_summary` if `plan_path` is missing, distrust any stored verdict, and re-run gates on the current artifact. A stored verdict is not a pass — re-verification is mandatory. The recorded `steps.acceptance_criteria.content` in state gives the prior AC back without re-deriving them — the stored verdict is still distrusted and gates still re-run; only the AC content is reused.
+- **Restore**: on restore, you MUST:
+  1. Run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" get` and read `steps.acceptance_criteria.content` from its output to recover the prior confirmed AC (do not re-derive AC that was already confirmed — use the stored content directly).
+  2. Re-read the current plan file (use `plan_path` from state; if absent, restart from `resume_summary`).
+  3. Distrust any stored verdict and re-run gates on the current artifact — a stored verdict is not a pass, re-verification is mandatory; only the AC content (step 1) is reused without re-derivation.
 
 ### Loop Termination Rule
 
