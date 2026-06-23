@@ -12,6 +12,7 @@ agents:
     - daedalus
     - argus
     - chunk-reviewer
+    - code-reviewer
     - sisyphus-junior
 
 skills:
@@ -41,6 +42,7 @@ skills:
     - technical-copywriting
     - humanizer
     - orchestrate-review
+    - review-report
     - create-slides
     - slides-review
     - collect-jd

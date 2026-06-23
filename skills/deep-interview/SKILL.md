@@ -386,87 +386,7 @@ When ambiguity ≤ threshold (or hard cap / early exit):
 1. **Generate the specification** with the prompt-safe transcript. If the full interview transcript or initial context is too large, include the summary plus all concrete decisions, acceptance criteria, unresolved gaps, and ontology snapshots; never overflow the prompt with raw oversized context.
 2. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
 
-Spec structure:
-
-```markdown
-# Deep Interview Spec: {title}
-
-## Metadata
-- Interview ID: {uuid}
-- Rounds: {count}
-- Final Ambiguity Score: {score}%
-- Type: greenfield | brownfield
-- Generated: {timestamp}
-- Threshold: {threshold}
-- Initial Context Summarized: {yes|no}
-- Status: {PASSED | BELOW_THRESHOLD_EARLY_EXIT}
-
-## Clarity Breakdown
-| Dimension | Score | Weight | Weighted |
-|-----------|-------|--------|----------|
-| Goal Clarity | {s} | {w} | {s*w} |
-| Constraint Clarity | {s} | {w} | {s*w} |
-| Success Criteria | {s} | {w} | {s*w} |
-| Context Clarity | {s} | {w} | {s*w} |
-| **Total Clarity** | | | **{total}** |
-| **Ambiguity** | | | **{1-total}** |
-
-## Goal
-{crystal-clear goal statement derived from interview}
-
-## Constraints
-- {constraint 1}
-- {constraint 2}
-- ...
-
-## Non-Goals
-- {explicitly excluded scope 1}
-- {explicitly excluded scope 2}
-
-## Acceptance Criteria
-- [ ] {testable criterion 1}
-- [ ] {testable criterion 2}
-- [ ] {testable criterion 3}
-- ...
-
-## Assumptions Exposed & Resolved
-| Assumption | Challenge | Resolution |
-|------------|-----------|------------|
-| {assumption} | {how it was questioned} | {what was decided} |
-
-## Technical Context
-{brownfield: relevant codebase findings from explore agent}
-{greenfield: technology choices and constraints}
-
-## Ontology (Key Entities)
-{Fill from the FINAL round's ontology extraction, not just crystallization-time generation}
-
-| Entity | Type | Fields | Relationships |
-|--------|------|--------|---------------|
-| {entity.name} | {entity.type} | {entity.fields} | {entity.relationships} |
-
-## Ontology Convergence
-{Show how entities stabilized across interview rounds using data from ontology_snapshots in state}
-
-| Round | Entity Count | New | Changed | Stable | Stability Ratio |
-|-------|-------------|-----|---------|--------|----------------|
-| 1 | {n} | {n} | - | - | - |
-| 2 | {n} | {new} | {changed} | {stable} | {ratio}% |
-| ... | ... | ... | ... | ... | ... |
-| {final} | {n} | {new} | {changed} | {stable} | {ratio}% |
-
-## Interview Transcript
-<details>
-<summary>Full Q&A ({n} rounds)</summary>
-
-### Round 1
-**Q:** {question}
-**A:** {answer}
-**Ambiguity:** {score}% (Goal: {g}, Constraints: {c}, Criteria: {cr})
-
-...
-</details>
-```
+**Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the output spec.** Do not write the spec from memory.
 
 3. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
 
@@ -512,106 +432,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - Challenge agent modes are prompt injections, not separate agent spawns
 </Tool_Usage>
 
-<Examples>
-<Good>
-Targeting weakest dimension:
-```
-Scores: Goal=0.9, Constraints=0.4, Criteria=0.7
-Next question targets Constraints (lowest at 0.4):
-"You mentioned this should 'work on mobile'. Does that mean a native app,
-a responsive web app, or a PWA? And are there specific devices or OS versions
-you need to support?"
-```
-Why good: Identifies weakest dimension, explains why it is now the bottleneck, asks a specific question to improve it, and doesn't batch multiple topics.
-</Good>
-
-<Good>
-Gathering codebase facts before asking:
-```
-[spawns explore agent: "find authentication implementation"]
-[receives: "Auth is in src/auth/ using JWT with passport.js"]
-
-Question: "I found JWT authentication with passport.js in `src/auth/` (pattern match from explore).
-For this new feature, should we extend the existing auth middleware or create
-a separate authentication flow?"
-```
-Why good: Explored first, cited the repo evidence that triggered the question, then asked an informed confirmation question. Never asks the user what the code already reveals.
-</Good>
-
-<Good>
-Contrarian mode activation:
-```
-Round 5 | Contrarian Mode | Ambiguity: 42%
-
-You've said this needs to support 10,000 concurrent users. What if it only
-needed to handle 100? Would the architecture change fundamentally, or is
-the 10K number an assumption rather than a measured requirement?
-```
-Why good: Challenges a specific assumption (scale requirement) that could dramatically simplify the solution.
-</Good>
-
-<Good>
-Early exit with warning:
-```
-User: "That's enough, just build it"
-System: "Current ambiguity is 35% (threshold: <resolvedThresholdPercent>). Areas still unclear:
-  - Success Criteria: 0.5 (How do we verify the search ranking algorithm works correctly?)
-  - Constraints: 0.6 (No performance targets defined yet)
-
-Proceeding may require rework. Continue anyway?"
-  [Yes, proceed] [Ask 2-3 more questions] [Cancel]
-```
-Why good: Respects user's desire to stop but transparently shows the risk.
-</Good>
-
-<Good>
-Ontology convergence tracking:
-```
-Round 3 entities: User, Task, Project (stability: N/A → 67%)
-Round 4 entities: User, Task, Project, Tag (stability: 75% — 3 stable, 1 new)
-Round 5 entities: User, Task, Project, Tag (stability: 100% — all 4 stable)
-
-"Ontology has converged — the same 4 entities appeared in 2 consecutive rounds
-with no changes. The domain model is stable."
-```
-Why good: Shows entity tracking across rounds with visible convergence. Stability ratio increases as the domain model solidifies, giving mathematical evidence that the interview is converging on a stable understanding.
-</Good>
-
-<Good>
-Ontology-style question for scope-fuzzy tasks:
-```
-Round 6 | Targeting: Goal Clarity | Why now: the core entity is still unstable across rounds, so feature questions would compound ambiguity | Ambiguity: 38%
-
-"Across the last rounds you've described this as a workflow, an inbox, and a planner. Which one is the core thing this product IS, and which ones are supporting metaphors or views?"
-```
-Why good: Uses ontology-style questioning to stabilize the core noun before drilling into features, which is the right move when the scope is fuzzy rather than merely incomplete.
-</Good>
-
-<Bad>
-Batching multiple questions:
-```
-"What's the target audience? And what tech stack? And how should auth work?
-Also, what's the deployment target?"
-```
-Why bad: Four questions at once — causes shallow answers and makes scoring inaccurate.
-</Bad>
-
-<Bad>
-Asking about codebase facts:
-```
-"What database does your project use?"
-```
-Why bad: Should have spawned explore agent to find this. Never ask the user what the code already tells you.
-</Bad>
-
-<Bad>
-Proceeding despite high ambiguity:
-```
-"Ambiguity is at 45% but we've done 5 rounds, so let's start building."
-```
-Why bad: 45% ambiguity means nearly half the requirements are unclear. The mathematical gate exists to prevent exactly this.
-</Bad>
-</Examples>
+**Question-quality calibration examples (Good/Bad): read `deep-interview-examples.md` when calibrating or debugging question quality.** Reference it before crafting interview questions if your questions feel shallow or off-target.
 
 <Escalation_And_Stop_Conditions>
 - **Hard cap at 20 rounds**: Proceed with whatever clarity exists, noting the risk
@@ -641,91 +462,16 @@ Why bad: 45% ambiguity means nearly half the requirements are unclear. The mathe
 - [ ] Spec includes Ontology (Key Entities) table and Ontology Convergence section
 </Final_Checklist>
 
-<Advanced>
-## Configuration
+**Advanced topics (resume, configuration, ambiguityThreshold, cross-session continuation, prometheus integration, weights / challenge-modes / score-interpretation tables): read `deep-interview-advanced.md` now** — do not guess at resume logic or configuration values from memory.
 
-Optional settings in `.claude/settings.json`:
+## Reference Files (on-demand)
 
-```json
-{
-  "omt": {
-    "deepInterview": {
-      "ambiguityThreshold": <resolvedThreshold>
-    }
-  }
-}
-```
+Read these files at the moment indicated — not speculatively upfront.
 
-## Resume
-
-If interrupted, run `/deep-interview` again. The skill reads state by invoking:
-
-```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get
-```
-
-and resumes from the last completed round.
-
-## Continuation Intent (cross-session adoption)
-
-When the user's invocation expresses explicit continuation intent — e.g. "하던 거 계속", "continue what I was doing", "resume the previous interview" — run:
-
-```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts list-others
-```
-
-If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's initial idea and age — purpose and idle time from the state), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
-
-- On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts adopt --src <selected-sid>`, then resume the interview from the adopted state's last completed round (read state via `get` after adoption).
-- On "start fresh": proceed to Phase 1 as a new interview.
-
-If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.
-
-## Integration with Prometheus
-
-When prometheus receives a vague input (no file paths, function names, or concrete anchors), it can redirect to deep-interview:
-
-```
-User: "prometheus build me a thing"
-Prometheus: "Your request is quite open-ended. Would you like to run a deep interview first to clarify requirements?"
-  [Yes, interview first] [No, expand directly]
-```
-
-If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes, the crystallized spec routes planning/execution through `goal` at the Phase 5 execution bridge (the bridge offers no direct prometheus/sisyphus option); `goal` then orchestrates downstream and selects prometheus for decomposition when the work warrants it.
-
-## Brownfield vs Greenfield Weights
-
-| Dimension | Greenfield | Brownfield |
-|-----------|-----------|------------|
-| Goal Clarity | 40% | 35% |
-| Constraint Clarity | 30% | 25% |
-| Success Criteria | 30% | 25% |
-| Context Clarity | N/A | 15% |
-
-Brownfield adds Context Clarity because modifying existing code safely requires understanding the system being changed.
-
-## Challenge Agent Modes
-
-The Step 2-head Dialectic Rhythm Guard is the sole gate that selects these stances; the "Selected by guard when" column restates the rotation conditions it owns (these are NOT independent self-firing triggers). The prompt-injection bodies are the Phase 3 templates.
-
-| Mode | Selected by guard when | Purpose | Prompt Injection |
-|------|------------------------|---------|-----------------|
-| Contrarian | Round 4+, if not yet used | Challenge assumptions | "What if the opposite were true?" |
-| Simplifier | Round 6+, if not yet used | Remove complexity | "What's the simplest version?" |
-| Ontologist | Stall (±0.05 for 3 rounds) OR Round 8+ with ambiguity > 0.3 | Find essence | "What IS this, really?" |
-
-Contrarian and Simplifier are used exactly once each (tracked in `challenge_modes_used`), then normal Socratic questioning resumes; Ontologist has two named rotation entry points (stall and late-stage) and may recur via either.
-
-## Ambiguity Score Interpretation
-
-| Score Range | Meaning | Action |
-|-------------|---------|--------|
-| 0.0 - 0.1 | Crystal clear | Proceed immediately |
-| At or below the resolved threshold | Clear enough | Proceed |
-| Above the resolved threshold with minor gaps | Some gaps | Continue interviewing |
-| Moderate ambiguity | Significant gaps | Focus on weakest dimensions |
-| High ambiguity | Very unclear | May need reframing (Ontologist) |
-| Extreme ambiguity | Almost nothing known | Early stages, keep going |
-</Advanced>
+| Reference file | What it contains | When to read |
+|---|---|---|
+| `deep-interview-spec-template.md` | The Phase 4 output spec markdown template | When composing the output spec (Phase 4 crystallize) |
+| `deep-interview-examples.md` | Question-quality calibration examples (Good/Bad) | When calibrating or debugging question quality |
+| `deep-interview-advanced.md` | Resume, configuration (ambiguityThreshold), cross-session continuation, prometheus integration, and the weights / challenge-modes / score-interpretation tables | When resuming, configuring, continuing across sessions, integrating with prometheus, or needing the interpretation tables |
 
 Task: {{ARGUMENTS}}
