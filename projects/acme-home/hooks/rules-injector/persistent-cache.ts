@@ -88,12 +88,20 @@ export function claimPostCompactPending(cachePath: string, kind: PostCompactPend
 	const result = withSessionStateLock(cachePath, () => {
 		const state = readSessionState(cachePath);
 		const pendingKinds = postCompactPendingKinds(state);
-		if (!pendingKinds.has(kind)) {
+		const recoveringKinds = postCompactRecoveringKinds(state);
+		// Orphaned recovery: a prior hook moved this kind pending->recovering, then
+		// died mid-recovery (e.g. OOM on the post-compaction transcript full-read)
+		// before completePostCompactRecovery cleared it. The kind is now recovering
+		// but no longer pending, so every later hook gets "not-pending" + recovery-
+		// in-progress and skips forever, wedging the session until a new compaction.
+		// Re-claim it: recovery does not hold the lock, so reaching this callback
+		// means no claim/complete is mid-flight (a genuinely in-flight one would hold
+		// the lock and yield "contended" instead), making this kind safe to retry.
+		if (!pendingKinds.has(kind) && !recoveringKinds.has(kind)) {
 			return "not-pending";
 		}
 
 		pendingKinds.delete(kind);
-		const recoveringKinds = postCompactRecoveringKinds(state);
 		recoveringKinds.add(kind);
 		writeSessionState(cachePath, stateWithPostCompactKinds(state, pendingKinds, recoveringKinds));
 		return "claimed";
