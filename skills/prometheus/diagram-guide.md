@@ -8,15 +8,27 @@ A diagram is the highest-density enrichment, so the fidelity bound is strictest:
 
 - **Ephemeral only.** Diagrams render into the HTML presentation only. NEVER write a diagram or its source into `plan.md` — Invariant 3 keeps `plan.md` the unmodified single source of truth; every re-render redraws from it. Inject the ` ```mermaid ` fence into the render-time markdown string, not into the file on disk.
 - **Re-visualize decided flow only.** Drawing an edge forces a commitment: who calls whom, in what order, which component owns what. If you cannot draw an arrow or relationship without making a decision `plan.md` did not already make, **STOP** — that is a plan defect, not a diagram opportunity. Return to revise the plan and re-run the pipeline; do not invent the missing edge at render time. A diagram can never be vaguer than the plan it visualizes.
-- **MAY, never MUST.** The Necessity Test gates existence. Most plans need no diagram. *Exception*: the Stage A bird's-eye view (ownership table + flow mermaid derived from the decision log) is REQUIRED on structural enumeration — its existence is governed by `review-pipeline.md`, not the Necessity Test. This guide still governs type selection, guardrails, and presentation for all diagrams including the bird's-eye.
+- **Diagrams are the plan's review surface.** A reviewer should be able to verify the design by reading the diagram set without reading all the prose. Diagram count therefore SHOULD scale with plan size — a large plan with many components, APIs, and stateful entities warrants many diagrams. There is no numeric cap, no consolidation-to-minimize pressure, and no "too many diagrams = scope defect" tripwire. Suppressing diagrams makes large plans unverifiable; that is the problem this rule exists to prevent.
+- **Trigger-based REQUIRED.** Each lens in §2 has a trigger FACT. When that FACT holds in `plan.md`, the lens's diagram is REQUIRED — not optional, not a judgment call. The only reason not to draw a lens is that its trigger FACT is false (the plan genuinely has no API, no stateful entity, etc.). A triggered lens with no source in `plan.md` is a plan gap to fix, not an excuse to skip the diagram.
+- **Diagrams show runtime behavior.** Every diagram renders the behavior the implemented plan would produce: flows, call sequences, state transitions, object structures. They are not illustrative; they are the commitment surface the reviewer signs off on.
 - **Grouped placement.** All diagrams for a plan render together in the generated Bird's-Eye section, ordered macro → micro (component/flow → sequence → single-component zoom-ins such as state, flowchart, or class) — never scattered through the plan body. Each diagram keeps its own Why → Diagram → Interpretation (§5). A reader verifies the whole design in one place instead of hunting for views.
 
-## Necessity Test
+## Lens Taxonomy (trigger-based REQUIRED)
 
-> "Does a diagram reveal flow or structure that prose alone cannot efficiently convey?"
-> NO -> no diagram. Prose or a blockquote callout is enough.
+Diagrams are organized by lens (the altitude or concern each diagram addresses). When a lens's trigger FACT holds in `plan.md`, that lens's diagram is REQUIRED. Use the existing four mermaid types — do not introduce new ones.
 
-**Decision-log mermaid.** Each D-item in the unified decision log records one decided commitment. An optional in-band mermaid re-visualizes the DECIDED D-items only — it MUST NOT invent ownership or edges beyond what the decided items already record. The diagram (and any mermaid derived from the log) is never a source of truth; the decided decision log in `plan.md` remains the single authority. The standard `MAY, never MUST` rule applies to discretionary enrichment diagrams: omit the mermaid if the Necessity Test returns NO. *Exception*: the Stage A bird's-eye flow mermaid's existence is governed by `review-pipeline.md` — REQUIRED on structural enumeration (Complex/Architecture flag) unless every structural (solo) D-item declares `Edges: none`; the Necessity Test does not gate it.
+| Lens / Altitude | Trigger FACT — diagram REQUIRED when this holds | Mermaid type |
+|---|---|---|
+| System topology (bird's-eye) | plan has >= 2 components | `flowchart` |
+| Module / API | plan adds or changes an API or module interaction | `sequenceDiagram` (one per API) |
+| User / Actor | a user-facing scenario exists | `sequenceDiagram` (actor) or `flowchart` (user flow) |
+| Domain state | an entity has a non-trivial lifecycle / state transitions | `stateDiagram-v2` |
+| Domain / Service object | new or changed data shapes / service structure | `classDiagram` |
+| Business logic | complex branching logic | `flowchart` |
+
+The System topology lens (bird's-eye) is additionally REQUIRED on structural enumeration as governed by `review-pipeline.md`. The trigger-based rule above and the `review-pipeline.md` mandate are consistent: both fire when the plan has >= 2 components.
+
+**Decision-log mermaid.** Each D-item in the unified decision log records one decided commitment. An optional in-band mermaid re-visualizes the DECIDED D-items only — it MUST NOT invent ownership or edges beyond what the decided items already record. The diagram is never a source of truth; the decided decision log in `plan.md` remains the single authority. The same trigger rule applies: draw it when the trigger holds, skip it only when the trigger FACT is false.
 
 ## 1. Diagram Types
 
@@ -29,6 +41,8 @@ A diagram is the highest-density enrichment, so the fidelity bound is strictest:
 
 ## 2. Selection Decision Tree
 
+This tree selects the mermaid type given a triggered lens. It is not an existence gate — use it only after confirming that a lens's trigger FACT holds. If no lens trigger holds for a given concern, no diagram is needed (the "Prose / no diagram" leaf below). The tree does not override a triggered lens.
+
 ```mermaid
 flowchart TD
     Q1{What does plan.md decide?}
@@ -37,8 +51,8 @@ flowchart TD
     Q1 -->|Behavior / control flow| Q2{Participants?}
     Q2 -->|Multiple components, time-ordered| SEQ[Sequence Diagram]
     Q2 -->|Single component, internal logic| Q3{Branch points?}
-    Q3 -->|2 or fewer| PROSE[Prose / blockquote, no diagram]
-    Q3 -->|3+ or parallel / error| FC[Flowchart]
+    Q3 -->|2 or fewer — no lens trigger applies| PROSE[Prose / blockquote, no diagram]
+    Q3 -->|3+ or parallel / error — Business-logic lens triggered| FC[Flowchart]
     SEQ --> Q4{One participant has 3+ internal branches?}
     Q4 -->|No| DONE[Sequence alone]
     Q4 -->|Yes| ZOOM[Decompose that participant into a separate Flowchart]
@@ -46,15 +60,17 @@ flowchart TD
 
 ## 3. Scenario Mapping
 
-| Scenario (already decided in plan) | Diagram | Why |
+| Scenario (already decided in plan) | Diagram | Lens triggered |
 |---|---|---|
-| Scheduler -> worker -> repo -> detector runtime flow | Sequence | time-ordered, multi-participant |
-| Order: CREATED -> PAID -> SHIPPED -> DELIVERED | State | single-entity lifecycle |
-| Module or type relationships in an architecture plan | Class | static structure |
-| Payment branching: card/bank/point + retry + partial | Flowchart | single component, 3+ branches |
-| Inter-service flow + one service's 5-branch internal logic | Sequence + Decomposition Flowchart | different abstraction levels, not duplication |
+| Plan has >= 2 components, any runtime interaction | Flowchart (system topology) | System topology lens — REQUIRED |
+| Scheduler -> worker -> repo -> detector runtime flow | Sequence | Module/API lens — REQUIRED |
+| Order: CREATED -> PAID -> SHIPPED -> DELIVERED | State | Domain state lens — REQUIRED |
+| Module or type relationships in an architecture plan | Class | Domain/Service object lens — REQUIRED |
+| Payment branching: card/bank/point + retry + partial | Flowchart | Business logic lens — REQUIRED |
+| User checkout flow with steps and decisions | Sequence (actor) or Flowchart | User/Actor lens — REQUIRED |
+| Inter-service flow + one service's 5-branch internal logic | Sequence + Decomposition Flowchart | Module/API lens + Business logic lens — both REQUIRED; different altitudes, not duplication |
 | Same flow drawn as both Sequence and Flowchart at one level | Prohibited | same-level duplication — pick one |
-| A single if-else | Prose | 2 branches, diagram is overkill |
+| A single if-else inside a component | Prose | No lens trigger holds (2 branches; Business logic lens requires complex branching) |
 
 ## 4. Guardrails
 
