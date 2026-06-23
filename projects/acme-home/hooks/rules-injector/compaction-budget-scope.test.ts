@@ -80,9 +80,14 @@ function runHook(
 	payload: Record<string, unknown>,
 	extraEnv: Record<string, string> = {},
 ): SpawnResult {
+	// F-1: pin PLUGIN_DATA to the hermetic data root by default so spawned hooks
+	// cannot inherit an ambient PLUGIN_DATA from the parent process and redirect
+	// session-state reads/writes outside the hermetic tempHome. extraEnv overrides
+	// if a test wants to supply its own hermDataRoot (e.g. C2, B-2, P9).
+	const hermDataRoot = join(tempHome, ".omt", "rules-injector");
 	const result = spawnSync("bun", ["run", CLI_PATH, "hook", sub], {
 		input: JSON.stringify(payload),
-		env: { ...process.env, HOME: tempHome, ...extraEnv },
+		env: { ...process.env, HOME: tempHome, PLUGIN_DATA: hermDataRoot, ...extraEnv },
 		encoding: "utf8",
 	});
 	return { status: result.status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
@@ -414,6 +419,52 @@ test("B-2: a disabled PostCompact does not write session state (no-op exit 0)", 
 	// Under the bug, markSessionCompacted creates the session-state file. Under the fix,
 	// the disabled pre-gate returns before any write, so no file exists.
 	expect(existsSync(statePath)).toBe(false);
+});
+
+// ===========================================================================
+// F-8 — PostToolUse (dynamic lane) is no-op under CODEX_RULES_DISABLED
+// ===========================================================================
+
+test("F-8: PostToolUse emits nothing under CODEX_RULES_DISABLED=1 (dynamic lane disabled-gate)", () => {
+	// Proves: codex-hook.ts runPostToolUseHook pre-gates on config.disabled and
+	// returns "" before any path extraction or state write. Removing the
+	// disabled-check in runPostToolUseHook would cause the hook to proceed to path
+	// extraction and potentially inject rules, making this test RED.
+	const sessionId = "f8-session";
+	const projectRoot = makeScratchDir("f8-proj-");
+	writeFileSync(join(projectRoot, "package.json"), "{}\n");
+	const rulesDir = join(projectRoot, ".claude", "rules");
+	mkdirSync(rulesDir, { recursive: true });
+	// A glob rule that would fire on src/x.ts if the kill-switch were absent.
+	writeFileSync(
+		join(rulesDir, "f8-dynamic.md"),
+		`---\nglobs: ["**/*.ts"]\n---\nF-8 DYNAMIC BOULDER: must not appear under kill-switch.\n`,
+	);
+	const srcDir = join(projectRoot, "src");
+	mkdirSync(srcDir, { recursive: true });
+	writeFileSync(join(srcDir, "x.ts"), "export const x = 1;\n");
+
+	const result = runHook(
+		"post-tool-use",
+		{
+			hook_event_name: "PostToolUse",
+			session_id: sessionId,
+			turn_id: "t1",
+			transcript_path: null,
+			cwd: projectRoot,
+			model: "gpt-5.5",
+			permission_mode: "default",
+			tool_name: "Bash",
+			tool_use_id: "u-f8",
+			tool_input: { command: "cat src/x.ts" },
+			tool_response: {},
+		},
+		{ CODEX_RULES_DISABLED: "1" },
+	);
+
+	expect(result.status).toBe(0);
+	expect(result.stdout.trim()).toBe("");
+	expect(additionalContext(result.stdout)).toBe("");
 });
 
 // ===========================================================================
