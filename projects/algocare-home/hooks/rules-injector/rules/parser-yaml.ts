@@ -162,8 +162,10 @@ function findClosingBracket(value: string): number {
 		}
 
 		if (character === '"' || character === "'") {
-			if (quote === null) quote = character;
-			else if (quote === character) quote = null;
+			const prev = value[index - 1];
+			const atBoundary = index === 0 || prev === "[" || prev === "," || prev === " " || prev === "\t";
+			if (quote === null && atBoundary) quote = character;
+			else if (quote !== null && quote === character) quote = null;
 			continue;
 		}
 
@@ -196,8 +198,10 @@ function splitCommaSeparated(value: string): string[] {
 		}
 
 		if (character === '"' || character === "'") {
-			if (quote === null) quote = character;
-			else if (quote === character) quote = null;
+			const prev = value[index - 1];
+			const atBoundary = index === 0 || prev === "," || prev === " " || prev === "\t";
+			if (quote === null && atBoundary) quote = character;
+			else if (quote !== null && quote === character) quote = null;
 			current += character;
 			continue;
 		}
@@ -222,7 +226,7 @@ function splitCommaSeparated(value: string): string[] {
 function parseStringValue(value: string): string {
 	if (value.length === 0) return "";
 	if (value.startsWith('"')) return parseJsonString(value);
-	if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1);
+	if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) return value.slice(1, -1).replace(/''/g, "'");
 	if (value.startsWith("'")) throw new RuleFrontmatterParseError("Unclosed quoted value");
 	return value;
 }
@@ -259,8 +263,10 @@ function stripComment(line: string): string {
 		}
 
 		if (character === '"' || character === "'") {
-			if (quote === null) quote = character;
-			else if (quote === character) quote = null;
+			const prev = line[index - 1];
+			const atBoundary = index === 0 || prev === " " || prev === "\t" || prev === ":" || prev === "[" || prev === ",";
+			if (quote === null && atBoundary) quote = character;
+			else if (quote !== null && quote === character) quote = null;
 			continue;
 		}
 
