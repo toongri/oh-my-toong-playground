@@ -67,7 +67,7 @@ function addPatchPayloadPaths(paths: Set<string>, input: Record<string, unknown>
 
 function addPatchHeaderPaths(paths: Set<string>, patch: string, cwd: string): void {
 	for (const line of patch.split("\n")) {
-		for (const prefix of ["*** Add File: ", "*** Update File: ", "*** Move to: "]) {
+		for (const prefix of ["*** Add File: ", "*** Update File: ", "*** Move to: ", "*** Delete File: "]) {
 			if (line.startsWith(prefix)) {
 				addPath(paths, line.slice(prefix.length).trim(), cwd, false);
 			}
@@ -186,7 +186,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFailedToolResponse(value: unknown): boolean {
 	if (!isRecord(value)) return false;
-	return (
-		value["isError"] === true || value["is_error"] === true || value["error"] === true || value["status"] === "error"
-	);
+	if (value["isError"] === true || value["is_error"] === true || value["error"] === true || value["status"] === "error") {
+		return true;
+	}
+	if (typeof value["error"] === "string" && value["error"].length > 0) {
+		return true;
+	}
+	if (typeof value["exit_code"] === "number" && value["exit_code"] !== 0) {
+		return true;
+	}
+	return false;
 }

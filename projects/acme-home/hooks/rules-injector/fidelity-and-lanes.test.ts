@@ -672,3 +672,102 @@ test("D-8 findProjectRoot from monorepo package subdir reaches workspace root no
 	rmSync(base, { recursive: true, force: true });
 });
 
+// --- A10: isFailedToolResponse — exit_code/string-error 실패 신호 ---
+
+test("A10 tool_response에 exit_code:1이 있으면 경로를 추출하지 않아 룰이 주입되지 않는다", () => {
+	// exit_code !== 0 형태의 실패 응답은 isFailedToolResponse가 실패로 판정해야 한다.
+	// 주입이 없으면 additionalContext는 빈 문자열이어야 한다.
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("a10-exit"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u-a10-exit",
+		tool_input: { command: "cat src/x.ts" },
+		tool_response: { exit_code: 1, output: "command failed" },
+	});
+
+	expect(additionalContext).not.toContain("TS_GLOB_RULE_MARKER");
+});
+
+test("A10 tool_response에 error가 비어있지 않은 string이면 경로를 추출하지 않아 룰이 주입되지 않는다", () => {
+	// error: "some message" 형태의 string 실패 응답도 isFailedToolResponse가 실패로 판정해야 한다.
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("a10-errmsg"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u-a10-errmsg",
+		tool_input: { command: "cat src/x.ts" },
+		tool_response: { error: "permission denied" },
+	});
+
+	expect(additionalContext).not.toContain("TS_GLOB_RULE_MARKER");
+});
+
+test("A10 tool_response가 정상 성공({})이면 경로를 추출해 룰이 주입된다", () => {
+	// 기존 boolean 성공 케이스 회귀 방지: {} 는 실패로 판정되면 안 된다.
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("a10-ok"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "Bash",
+		tool_use_id: "u-a10-ok",
+		tool_input: { command: "cat src/x.ts" },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+});
+
+// --- A11: addPatchHeaderPaths — *** Delete File: 헤더 누락 ---
+
+test("A11 apply_patch *** Delete File: 헤더가 있으면 해당 경로가 추출돼 룰이 주입된다", () => {
+	// addPatchHeaderPaths는 Add File / Update File / Move to 만 파싱하고
+	// Delete File 을 누락했다. 이 테스트는 그 누락이 수정됐음을 검증한다.
+	// Delete File 대상이 **/*.ts 룰에 매칭되면 룰이 주입돼야 한다.
+	const projectDir = makeProject();
+	writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
+
+	const additionalContext = runHook("post-tool-use", {
+		hook_event_name: "PostToolUse",
+		session_id: freshSessionId("a11-del"),
+		turn_id: "t1",
+		transcript_path: null,
+		cwd: projectDir,
+		model: "gpt-5",
+		permission_mode: "default",
+		tool_name: "apply_patch",
+		tool_use_id: "u-a11-del",
+		tool_input: { input: "*** Begin Patch\n*** Delete File: src/foo.ts\n*** End Patch" },
+		tool_response: {},
+	});
+
+	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
+	expect(additionalContext).toContain("src/foo.ts");
+});
+
