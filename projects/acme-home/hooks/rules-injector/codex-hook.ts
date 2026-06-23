@@ -3,7 +3,7 @@ import { configFromEnvironment } from "./config.js";
 import { hasContextPressureMarker, transcriptHasContextPressureMarker } from "./context-pressure.js";
 import { createHookDebugTimer } from "./debug-log.js";
 import { withDynamicBudget } from "./event-budget.js";
-import { formatAdditionalContextOutput } from "./hook-output.js";
+import { formatAdditionalContextOutput, limitAdditionalContextText } from "./hook-output.js";
 import { displayPath, uniqueStrings } from "./path-utils.js";
 import {
 	claimPostCompactPending,
@@ -18,7 +18,7 @@ import {
 import { withPostCompactBudget } from "./post-compact-budget.js";
 import { claimedPostCompactKind, shouldSkipPostCompactClaim } from "./post-compact-claim.js";
 import type { DynamicLoadedRule } from "./rules/engine-dynamic-loader.js";
-import { formatDynamicBlock } from "./rules/index.js";
+import { formatDynamicBlock, ruleMarkerLine } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
 import { runStaticInjection } from "./static-injection.js";
 import { extractCodexToolPaths } from "./tool-paths.js";
@@ -251,8 +251,14 @@ export async function runPostToolUseHook(
 		debugTimer.done({ outputBytes: 0, reason: "all-dropped" });
 		return "";
 	}
+	// P2 (dynamic analogue): mark only rules whose marker survives the 32K byte clamp.
+	// formatAdditionalContextOutput normalizes block then clamps to MAX_ADDITIONAL_CONTEXT_BYTES.
+	// A rule whose marker falls past the clamp must stay pending so the next turn re-injects it.
+	const limitedBlock = limitAdditionalContextText(block.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim());
 	for (const rule of emittedRules) {
-		engine.markDynamicInjected(rule);
+		if (limitedBlock.includes(ruleMarkerLine(rule.path, rule.contentHash))) {
+			engine.markDynamicInjected(rule);
+		}
 	}
 	persistEngineState(engine, cachePath, completedPostCompactKind);
 	debugTimer.lap("persist", { reason: "emit" });
