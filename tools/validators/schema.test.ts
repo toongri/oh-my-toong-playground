@@ -515,6 +515,18 @@ hooks:
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors.some((e) => e.includes("preserve") && e.includes("command-contains"))).toBe(true);
     });
+
+    it("returns error (not warning) for type: prompt hook in codex.yaml via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "codex.yaml", `
+hooks:
+  PostToolUse:
+    - type: prompt
+      command: "some-prompt"
+`);
+      const result = validatePlatformYaml(path, "codex");
+      expect(result.errors.some((e) => e.includes("prompt"))).toBe(true);
+      expect(result.warnings.some((w) => w.includes("prompt"))).toBe(false);
+    });
   });
 
   // --- mcps structure validation ---
@@ -665,7 +677,7 @@ hooks:
   });
 
   // --- A-2: codex-specific event/type 제약 검증 ---
-  describe("A-2: codex 미지원 이벤트/타입 경고", () => {
+  describe("A-2: codex 미지원 이벤트/타입 검증", () => {
     it("does NOT warn for PreToolUse event in codex.yaml — codex supports all VALID_EVENTS", () => {
       const path = writeYaml(dir, "codex.yaml", `
 hooks:
@@ -688,7 +700,7 @@ hooks:
       expect(postToolWarnings).toHaveLength(0);
     });
 
-    it("returns warning for type:prompt hook in codex.yaml via `validatePlatformYaml`", () => {
+    it("returns error for type:prompt hook in codex.yaml via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "codex.yaml", `
 hooks:
   UserPromptSubmit:
@@ -696,8 +708,9 @@ hooks:
       prompt: some prompt text
 `);
       const result = validatePlatformYaml(path, "codex");
-      expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings.some((w) => w.includes("prompt"))).toBe(true);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("prompt"))).toBe(true);
+      expect(result.warnings.some((w) => w.includes("prompt"))).toBe(false);
     });
 
     it("does NOT warn for supported codex events via `validatePlatformYaml`", () => {

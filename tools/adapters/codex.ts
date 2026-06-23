@@ -496,6 +496,19 @@ export class CodexAdapter implements PlatformAdapter {
         }
       }
 
+      // Guard: if an event had source items but all were skipped, throw rather than
+      // writing hooks: {} and silently wiping previously-synced command hooks.
+      for (const [hookEvent, items] of Object.entries(hooksMap)) {
+        if (hookEvent === "preserve") continue;
+        if (!Array.isArray(items) || items.length === 0) continue;
+        const accumulated = accumulatedHooks[hookEvent];
+        if (!accumulated || accumulated.length === 0) {
+          throw new Error(
+            `hooks.${hookEvent}: ${items.length} 개 항목이 모두 스킵되어 유효한 항목이 없습니다 — hooks.json 덮어쓰기를 거부합니다`,
+          );
+        }
+      }
+
       await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig);
       processedSections.push("hooks");
     }

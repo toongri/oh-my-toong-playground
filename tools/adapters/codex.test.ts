@@ -683,6 +683,37 @@ describe("CodexAdapter", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // updateSettings — throws when source-had-items but all were skipped
+  // ---------------------------------------------------------------------------
+
+  describe("updateSettings skip-to-empty guard", () => {
+    it("throws when syncPlatformYaml hook event had source items but all were skipped", async () => {
+      // Stage a hook dir with no index.ts or index.sh — triggers the continue/skip branch
+      const emptyHookDir = path.join(tmpDir, "source-hooks", "no-entry-hook");
+      await fs.mkdir(emptyHookDir, { recursive: true });
+      await fs.writeFile(path.join(emptyHookDir, "readme.txt"), "no entrypoint here\n");
+
+      const targetBase = path.join(tmpDir, "target-skip-guard");
+
+      const yaml = {
+        hooks: {
+          PostToolUse: [
+            {
+              component: emptyHookDir,
+              matcher: "*",
+              timeout: 10,
+            },
+          ],
+        },
+      };
+
+      await expect(adapter.syncPlatformYaml(targetBase, yaml as never, false)).rejects.toThrow(
+        /PostToolUse/,
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // syncPlatformYaml — hooks: deploys bundle + relative command
   // ---------------------------------------------------------------------------
 

@@ -407,7 +407,7 @@ function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPat
         if (platform === "codex") {
           const hookType = hookObj.type;
           if (hookType === "prompt") {
-            result.warnings.push(
+            result.errors.push(
               `${label}: hooks.${event}[${i}].type 'prompt'는 codex가 지원하지 않습니다 (지원: command)`,
             );
           }
