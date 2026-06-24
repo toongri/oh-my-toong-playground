@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { builtinModules } from "node:module";
 import { logWarn } from "../lib/logger.ts";
 
 // Single source of truth for the relative-import matcher. Used as a pattern
@@ -367,6 +368,74 @@ export async function findRelativeLibImports(
       if (absPath.startsWith(libSourceDir + path.sep) || absPath === libSourceDir) {
         offenders.push(match[1]);
       }
+    }
+  }
+
+  return offenders;
+}
+
+// Matches any static import specifier (from '...' or import '...' or import(...))
+// Used by findBareNpmImports — build a fresh RegExp per call to avoid shared lastIndex.
+const IMPORT_SPECIFIER_RE = /(?:from|import)\s*[\s(]["']([^"']+)["']/g;
+
+// Set of unprefixed Node built-in module names (e.g. "fs", "path", "crypto").
+// Kept as a Set for O(1) lookup. We also accept any specifier that starts with
+// "node:" or "bun:" regardless of whether it appears in this list.
+const BUILTIN_MODULE_SET = new Set(builtinModules);
+
+/**
+ * Find bare npm import specifiers in a single .ts file.
+ *
+ * A specifier is "bare" when it is NOT:
+ *   - a relative path (starts with "./" or "../")
+ *   - an @lib/ alias (starts with "@lib/")
+ *   - a Node builtin (unprefixed name in builtinModules, or "node:"-prefixed)
+ *   - a bun: protocol import ("bun:"-prefixed)
+ *
+ * For sub-path specifiers like "picomatch/lib/x", the root segment ("picomatch")
+ * is tested against the builtin set, so bare packages with sub-paths are caught.
+ *
+ * Returns:
+ *   - Empty array for *.test.ts files (never deployed)
+ *   - Empty array if the file cannot be read
+ *   - The raw specifier strings that are bare npm imports
+ */
+export async function findBareNpmImports(filePath: string): Promise<string[]> {
+  if (filePath.endsWith(".test.ts")) return [];
+
+  let content: string;
+  try {
+    content = await fs.readFile(filePath, "utf8");
+  } catch {
+    return [];
+  }
+
+  const re = new RegExp(IMPORT_SPECIFIER_RE.source, "g");
+  const offenders: string[] = [];
+
+  for (const line of content.split("\n")) {
+    if (line.trimStart().startsWith("//")) continue;
+
+    let match: RegExpExecArray | null;
+    re.lastIndex = 0;
+    while ((match = re.exec(line)) !== null) {
+      const specifier = match[1];
+
+      // Relative imports are fine
+      if (specifier.startsWith("./") || specifier.startsWith("../")) continue;
+
+      // @lib/ aliases (vendored or internal) are fine
+      if (specifier.startsWith("@lib/")) continue;
+
+      // node: and bun: protocol imports are fine
+      if (specifier.startsWith("node:") || specifier.startsWith("bun:")) continue;
+
+      // Check the root segment against the builtin list (handles sub-paths like "fs/promises")
+      const rootSegment = specifier.split("/")[0];
+      if (BUILTIN_MODULE_SET.has(rootSegment)) continue;
+
+      // Everything else is a bare npm import
+      offenders.push(specifier);
     }
   }
 
