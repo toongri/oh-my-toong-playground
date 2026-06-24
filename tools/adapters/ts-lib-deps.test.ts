@@ -8,6 +8,7 @@ import {
   collectRequiredLibModules,
   collectLibDataFiles,
   findRelativeLibImports,
+  findBareNpmImports,
 } from "./ts-lib-deps.ts";
 
 // ---------------------------------------------------------------------------
@@ -187,6 +188,20 @@ describe("resolveTsLibDependencies", () => {
 
     const deps = await resolveTsLibDependencies(entryFile, libDir);
     expect(deps).toEqual([fooLib]);
+  });
+
+  it("`@lib/vendor/picomatch` — .ts 없고 .js만 있을 때 .js 경로 반환 (vendor .js 아티팩트 배포 회귀 방지)", async () => {
+    // Fixture: lib/vendor/picomatch.js exists (runtime artifact), no .ts counterpart
+    const vendorDir = path.join(libDir, "vendor");
+    await fs.mkdir(vendorDir, { recursive: true });
+    const picomatchJs = path.join(vendorDir, "picomatch.js");
+    await writeFile(picomatchJs, "// bundled picomatch runtime");
+
+    const entryFile = path.join(platformDir, "entry.ts");
+    await writeFile(entryFile, 'import picomatch from "@lib/vendor/picomatch";\n');
+
+    const deps = await resolveTsLibDependencies(entryFile, libDir);
+    expect(deps).toEqual([picomatchJs]);
   });
 });
 
@@ -432,5 +447,63 @@ describe("findRelativeLibImports", () => {
     await writeFile(compFile, "import { x } from '../calibration/helper.ts';\n");
 
     expect(await findRelativeLibImports(compFile, libDir)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findBareNpmImports — comment-line skip (block comment / JSDoc)
+// ---------------------------------------------------------------------------
+
+describe("findBareNpmImports", () => {
+  it("진짜 bare npm import는 flagged됨", async () => {
+    const file = path.join(platformDir, "real.ts");
+    await writeFile(file, "import chalk from 'chalk';\n");
+
+    expect(await findBareNpmImports(file)).toEqual(["chalk"]);
+  });
+
+  it("상대경로 import는 flagged되지 않음 (regression guard)", async () => {
+    const file = path.join(platformDir, "rel.ts");
+    await writeFile(file, "import { x } from './utils';\n");
+
+    expect(await findBareNpmImports(file)).toEqual([]);
+  });
+
+  it("@lib/ alias import는 flagged되지 않음 (regression guard)", async () => {
+    const file = path.join(platformDir, "alias.ts");
+    await writeFile(file, 'import { x } from "@lib/foo";\n');
+
+    expect(await findBareNpmImports(file)).toEqual([]);
+  });
+
+  it("전체 블록 주석 안의 import는 flagged되지 않음 (`/* import chalk from 'chalk' */`)", async () => {
+    const file = path.join(platformDir, "block-comment.ts");
+    await writeFile(file, "/* import chalk from 'chalk' */\nexport const x = 1;\n");
+
+    expect(await findBareNpmImports(file)).toEqual([]);
+  });
+
+  it("JSDoc continuation line의 import는 flagged되지 않음 (` * import chalk from 'chalk'`)", async () => {
+    const file = path.join(platformDir, "jsdoc.ts");
+    await writeFile(
+      file,
+      "/**\n * Example: import chalk from 'chalk'\n */\nexport const x = 1;\n",
+    );
+
+    expect(await findBareNpmImports(file)).toEqual([]);
+  });
+
+  it("블록 주석 여는 줄(`/*`)의 import는 flagged되지 않음", async () => {
+    const file = path.join(platformDir, "block-open.ts");
+    await writeFile(file, "/* import chalk from 'chalk'\n   some more text\n*/\nexport const x = 1;\n");
+
+    expect(await findBareNpmImports(file)).toEqual([]);
+  });
+
+  it("블록 주석 닫는 줄(`*/`)의 import는 flagged되지 않음", async () => {
+    const file = path.join(platformDir, "block-close.ts");
+    await writeFile(file, "/*\n * docs\n * import chalk from 'chalk' */\nexport const x = 1;\n");
+
+    expect(await findBareNpmImports(file)).toEqual([]);
   });
 });

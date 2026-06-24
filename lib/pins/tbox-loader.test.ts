@@ -174,6 +174,26 @@ entity_types:
     );
   });
 
+  test("duplicate top-level key in tbox.yaml throws (fail-fast contract)", async () => {
+    // Bun.YAML silently kept last-wins on dup keys; parseYamlStrict must throw.
+    const p = await writeFixture("dup-key.yaml", `
+id_pattern: '^[a-z]+$'
+id_pattern: '^[a-z0-9]+$'
+enums:
+  tier: ["1"]
+  source: [github]
+  sensitivity: [shared]
+  status: [active]
+entity_types:
+  code:
+    required_axiom: [id]
+    forbidden_axiom: []
+relation_types:
+  related_to: {}
+`);
+    await expect(parseTboxYaml(p)).rejects.toThrow();
+  });
+
   test("id_pattern as number throws schema validation error mentioning id_pattern", async () => {
     const p = await writeFixture("numeric-id-pattern.yaml", `
 id_pattern: 42

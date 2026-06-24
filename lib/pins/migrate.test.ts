@@ -453,6 +453,31 @@ describe('malformed YAML isolation', () => {
   });
 });
 
+// ── Tests: duplicate-key isolation ───────────────────────────────────────────
+
+describe('duplicate-key isolation', () => {
+  test('legacy file with duplicate frontmatter key is skipped, valid neighbours still migrate', async () => {
+    // A legacy pin with a duplicate `slug:` key — parseYamlStrict must throw,
+    // and the per-file catch must continue so valid neighbours still migrate.
+    writeFileSync(
+      join(pinsDir, 'dup-key-broken.md'),
+      '---\nslug: dup-key-broken\nslug: dup-key-broken-second\nsource_url: https://example.com\nauthority: someone\ntier: "2"\ntags: "test"\nsensitivity: shared\ncreated_at: 2025-01-15T10:00:00Z\n---\n\nbody\n',
+      'utf8',
+    );
+    writeLegacyPin(pinsDir, 'notion-valid-neighbour.md', { slug: 'notion-valid-neighbour' });
+
+    // Must not throw — per-file catch continues.
+    await expect(migrate({ location: pinsDir })).resolves.toBeUndefined();
+
+    // Valid neighbour was migrated.
+    const content = readFileSync(join(pinsDir, 'notion-valid-neighbour.md'), 'utf8');
+    expect(parse(content).frontmatter.type).toBeDefined();
+
+    // Duplicate-key file was skipped (no .bak produced).
+    expect(existsSync(join(pinsDir, 'dup-key-broken.md.bak'))).toBe(false);
+  });
+});
+
 // ── Tests: dotfile exclusion ──────────────────────────────────────────────────
 
 describe('dotfile exclusion', () => {
