@@ -1,4 +1,4 @@
-VENDOR_DEPS :=
+VENDOR_DEPS := picomatch
 
 .PHONY: sync sync-dry validate validate-schema validate-components validate-lib-imports validate-tests typecheck test vendor validate-vendor pull pull-dry help
 
