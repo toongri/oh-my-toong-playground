@@ -108,6 +108,21 @@ if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ] && [ -r "$TRANSCRIPT_P
   ' "$TRANSCRIPT_PATH" 2>/dev/null) || EXTRACT=""
 fi
 
+# --- Deterministic skill skeleton. -------------------------------------------
+# Reuse the "[skill invoked: NAME]" markers already in EXTRACT (single source);
+# collect their names, dedup preserving first-seen order, and prepend one line so
+# the summarizer cannot miss or mis-name the invoked-skill list. awk '!seen[$0]++'
+# is order-preserving dedup; the second awk joins with ", " (BSD awk on macOS).
+SKILL_LIST=$(printf '%s\n' "$EXTRACT" \
+  | sed -n 's/^\[skill invoked: \(.*\)\]$/\1/p' \
+  | awk '!seen[$0]++' \
+  | awk 'NR>1{printf ", "}{printf "%s",$0}')
+if [ -n "$SKILL_LIST" ]; then
+  EXTRACT="## Skills invoked this session (deterministic, in order): ${SKILL_LIST}
+
+${EXTRACT}"
+fi
+
 # --- Min-input skip (covers missing / unreadable / empty / too-short). -------
 if [ "${#EXTRACT}" -lt "$HANDOFF_MIN_INPUT_CHARS" ]; then
   exit 0
@@ -185,11 +200,14 @@ a superseded constraint as if it still applies.
 ## 8. Key References & Delegated Work
 Paths, IDs, URLs, commands. Active/recent delegated agent sessions with task_id —
 RESUME, DON'T RESTART: use task_id to continue, don't respawn.
-List the skills or slash-commands invoked this session BY NAME (shown in the
-transcript as "[skill invoked: X]"), and for each note whether it COMPLETED or was
-still IN PROGRESS. Their full instruction bodies are NOT included here; if resuming
-work that depends on one, the next agent can re-invoke it with Skill(skill: "X") to
-restore its full instructions.
+The skills/slash-commands invoked this session are listed deterministically at the
+TOP of the transcript ("## Skills invoked this session"). Reproduce that exact list
+here; for each, state COMPLETED or IN PROGRESS and its last concrete step, one bullet
+per skill (e.g. `- code-review — COMPLETED` / `- sisyphus — IN PROGRESS, last:
+dispatched junior for the extractor change`). Their full instruction bodies are NOT
+included. If a skill was IN PROGRESS, re-invoke it with Skill(skill: "X") BEFORE
+resuming the work that depended on it, to restore its full instructions. Do NOT
+restate prometheus/goal phase here — workflow-skill state is restored separately.
 
 ## 9. All User Messages
 List every user message that is not a tool result, in order (lightly trimmed). This
