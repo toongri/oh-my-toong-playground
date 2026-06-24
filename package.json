@@ -8,6 +8,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/picomatch": "4.0.3",
+    "picomatch": "4.0.4",
     "typescript": "^5.9.3"
   },
   "dependencies": {
