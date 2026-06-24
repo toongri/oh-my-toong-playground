@@ -3,7 +3,7 @@
 # OMT PreCompact Producer Hook
 #
 # On a Claude Code compaction (manual or auto), extract the conversation arc
-# from the soon-to-be-discarded transcript, summarize it into an 8-section
+# from the soon-to-be-discarded transcript, summarize it into a 9-section
 # continuation handoff (codex first, claude-opus-4-8 fallback), and atomically
 # write it to $OMT_DIR/handoff-{sid}.md for the next SessionStart(compact) to
 # inject.
@@ -162,6 +162,9 @@ What remains — distinguish explicitly-requested from implied — and any unres
 ## 7. Constraints & Corrections (verbatim)
 User constraints and corrections quoted exactly ("don't do X", "actually I meant Y").
 These are the highest-signal items — preserve them verbatim.
+When a later correction overrides an earlier constraint, record the override explicitly
+(mark the earlier one SUPERSEDED and state which constraint is now active); never list
+a superseded constraint as if it still applies.
 
 ## 8. Key References & Delegated Work
 Paths, IDs, URLs, commands. Active/recent delegated agent sessions with task_id —
