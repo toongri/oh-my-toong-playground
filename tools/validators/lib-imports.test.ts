@@ -48,9 +48,17 @@ describe("findBareNpmImports", () => {
 
   it("flags a scoped bare package import", async () => {
     tmpDir = makeTempDir();
-    const file = writeTs(tmpDir, "bad.ts", `import { foo } from 'some-lib';\n`);
+    const file = writeTs(tmpDir, "bad.ts", `import { S3Client } from '@aws-sdk/client-s3';\n`);
     const result = await findBareNpmImports(file);
-    expect(result).toContain("some-lib");
+    expect(result).toContain("@aws-sdk/client-s3");
+  });
+
+  it("does NOT flag @lib/ alias (scoped @lib/ must not be confused with bare @scope/pkg)", async () => {
+    tmpDir = makeTempDir();
+    const file = writeTs(tmpDir, "ok.ts", `import { utils } from '@lib/utils';\n`);
+    const result = await findBareNpmImports(file);
+    expect(result).not.toContain("@lib/utils");
+    expect(result).toHaveLength(0);
   });
 
   it("flags a sub-path import whose root segment is a bare package", async () => {
@@ -190,5 +198,58 @@ describe("findLibImportViolations — bare-npm second pass", () => {
     expect(violations.some((v) => v.includes("bare-npm import not allowed"))).toBe(true);
     expect(violations.some((v) => v.includes("myhook.ts"))).toBe(true);
     expect(violations.some((v) => v.includes("some-npm-pkg"))).toBe(true);
+  });
+
+  it("flags a bare npm import in a project-local component dir (projects/<name>/hooks/)", async () => {
+    tmpDir = makeTempDir();
+    writeTs(tmpDir, "config.yaml", "");
+    const projectHooksDir = join(tmpDir, "projects", "my-project", "hooks");
+    writeTs(projectHooksDir, "local-hook.ts", `import x from 'lodash';\n`);
+
+    const violations = await findLibImportViolations(tmpDir);
+    expect(violations.some((v) => v.includes("bare-npm import not allowed"))).toBe(true);
+    expect(violations.some((v) => v.includes("local-hook.ts"))).toBe(true);
+    expect(violations.some((v) => v.includes("lodash"))).toBe(true);
+  });
+
+  it("does NOT flag project-local .test.ts files", async () => {
+    tmpDir = makeTempDir();
+    writeTs(tmpDir, "config.yaml", "");
+    const projectHooksDir = join(tmpDir, "projects", "my-project", "hooks");
+    writeTs(projectHooksDir, "local-hook.test.ts", `import x from 'lodash';\n`);
+
+    const violations = await findLibImportViolations(tmpDir);
+    const bareViolations = violations.filter((v) => v.includes("bare-npm import not allowed"));
+    expect(bareViolations).toHaveLength(0);
+  });
+
+  it("does NOT flag a .d.ts file in lib/ with a type-only typeof import", async () => {
+    tmpDir = makeTempDir();
+    writeTs(tmpDir, "config.yaml", "");
+    const libDir = join(tmpDir, "lib", "vendor");
+    writeTs(
+      libDir,
+      "picomatch.d.ts",
+      `declare const picomatch: typeof import('picomatch');\nexport default picomatch;\n`,
+    );
+
+    const violations = await findLibImportViolations(tmpDir);
+    const bareViolations = violations.filter((v) => v.includes("bare-npm import not allowed"));
+    expect(bareViolations).toHaveLength(0);
+  });
+
+  it("does NOT flag a .d.ts file in a component dir (hooks/) with a bare import", async () => {
+    tmpDir = makeTempDir();
+    writeTs(tmpDir, "config.yaml", "");
+    const hooksDir = join(tmpDir, "hooks");
+    writeTs(
+      hooksDir,
+      "types.d.ts",
+      `declare const x: typeof import('some-pkg');\nexport default x;\n`,
+    );
+
+    const violations = await findLibImportViolations(tmpDir);
+    const bareViolations = violations.filter((v) => v.includes("bare-npm import not allowed"));
+    expect(bareViolations).toHaveLength(0);
   });
 });
