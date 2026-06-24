@@ -74,6 +74,13 @@ export function hashContent(body: string): string {
 	return createHash("sha256").update(body).digest("hex");
 }
 
+/** Normalize whole-file content before hashing so trivial edits (CRLF↔LF,
+ *  trailing whitespace) do not flip the content hash and force re-injection.
+ *  Frontmatter is preserved — a frontmatter change still produces a new hash. */
+export function normalizeRuleContentForHash(content: string): string {
+	return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
 function normalizePatternList(patterns: string | string[] | undefined): string[] {
 	if (patterns === undefined) {
 		return [];

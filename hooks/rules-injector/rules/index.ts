@@ -34,7 +34,7 @@ export {
 } from "./finder.js";
 export { formatDynamicBlock, formatStaticBlock, ruleMarkerLine, transcriptHasRuleVersion } from "./formatter.js";
 export type { FormatOptions, FormatResult } from "./formatter.js";
-export { hashContent, matchRule, normalizeGlobs } from "./matcher.js";
+export { hashContent, matchRule, normalizeGlobs, normalizeRuleContentForHash } from "./matcher.js";
 export { sortCandidates } from "./ordering.js";
 export { parseRule } from "./parser.js";
 export { resolvePluginRulesRoot } from "./plugin-root.js";
