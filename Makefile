@@ -1,5 +1,6 @@
 VENDOR_DEPS := picomatch
 VENDOR_BUILD = bun build "$$dep" --target=node
+BUN_MIN := 1.2.21
 
 .PHONY: sync sync-dry validate validate-schema validate-components validate-lib-imports validate-tests typecheck test vendor validate-vendor pull pull-dry help
 
@@ -23,8 +24,8 @@ sync-dry: validate
 	@bun run tools/sync.ts --dry-run
 
 validate: validate-schema validate-components validate-lib-imports typecheck
-	@bun -e 'process.exit(typeof Bun?.YAML?.parse === "function" ? 0 : 1)' \
-	  || { printf '\033[0;31m[ERROR]\033[0m Bun.YAML 부재 — bun >= 1.2.21 필요 (현재: %s)\n' "$$(bun --version)" >&2; exit 1; }
+	@bun -e 'process.exit(Bun.semver.satisfies(Bun.version, ">=$(BUN_MIN)") ? 0 : 1)' \
+	  || { printf '\033[0;31m[ERROR]\033[0m bun >= $(BUN_MIN) 필요 (현재: %s)\n' "$$(bun --version)" >&2; exit 1; }
 	@for dep in $(VENDOR_DEPS); do \
 		if [ ! -f "lib/vendor/$$dep.js" ]; then \
 			echo "vendor file missing: lib/vendor/$$dep.js" && exit 1; \
