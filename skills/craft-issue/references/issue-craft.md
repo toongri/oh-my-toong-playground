@@ -1,6 +1,6 @@
-# Ticket Craft — Quality and Slicing Rubric
+# Issue Craft — Quality and Slicing Rubric
 
-This file is the authoritative craft rubric for the manage-ticket pipeline.
+This file is the authoritative craft rubric for the craft-issue pipeline.
 It is read at Stage 4 (record) and Stage 5 (slice). Follow it in full at each stage.
 
 ---
@@ -8,14 +8,14 @@ It is read at Stage 4 (record) and Stage 5 (slice). Follow it in full at each st
 ## 1. Best-Practice Body Shape
 
 The Standard Body Shape below is the **full menu** of sections. Two principles govern how much of
-that menu a given ticket emits — read them before the menu, because most tickets use far less than
-the full set. Sections that do not apply to a given ticket genre are omitted rather than left blank.
+that menu a given issue emits — read them before the menu, because most issues use far less than
+the full set. Sections that do not apply to a given issue genre are omitted rather than left blank.
 
 ### Working-Language Localization
 
-Section headers and standard labels render in the ticket's **working language**, not in the canonical
-English this rubric uses for universality. Match the language of the sibling tickets in the same
-project/epic — when the siblings are Korean, the new ticket is Korean, headers included. For
+Section headers and standard labels render in the issue's **working language**, not in the canonical
+English this rubric uses for universality. Match the language of the sibling issues in the same
+project/epic — when the siblings are Korean, the new issue is Korean, headers included. For
 Korean-working teams, use this canonical mapping:
 
 | Rubric (canonical EN) | Emitted header (KO) |
@@ -35,23 +35,23 @@ The observable-AC two-line shape (§2) is unchanged — only its labels localize
 
 The **default** body is the minimal set — **Problem → (사전 확인) → AC → Non-Goals → References** —
 where 사전 확인 is a single **flat bullet list** that folds supporting evidence, affected areas, and
-premises in as plain prose. This default fits most feature, transition, and improvement tickets, and
+premises in as plain prose. This default fits most feature, transition, and improvement issues, and
 is the house norm: a reader should see four-to-five short sections, not a scaffold.
 
-The heavier machinery in this rubric is **escalation** — added only when the ticket genuinely needs
+The heavier machinery in this rubric is **escalation** — added only when the issue genuinely needs
 it, never as a reflex:
 
 | Escalation section | Add only when |
 |---|---|
-| separate **Evidence** section | bug-genre ticket where logs / stack-trace / repro are the spine. Non-bug: fold the one or two facts into Problem or 사전 확인. |
-| structured 3-sub-item **Pre-Context** (Affected Areas / Premises / Blockers & Risks) | parent/umbrella ticket, or a ticket with many (>~5) cross-cutting facts a flat list would muddle. |
+| separate **Evidence** section | bug-genre issue where logs / stack-trace / repro are the spine. Non-bug: fold the one or two facts into Problem or 사전 확인. |
+| structured 3-sub-item **Pre-Context** (Affected Areas / Premises / Blockers & Risks) | parent/umbrella issue, or an issue with many (>~5) cross-cutting facts a flat list would muddle. |
 | **two-bucket** Confirmed-Facts / Needs-Verification grouping | the structured Pre-Context above is already in use AND a sub-item holds 3+ items. |
 | **Decisions Needed** | an open product/policy decision actually blocks or shapes the work. |
 | **Notes** | provenance (superseded attempts, deep-interview artifact path) that has no other home. |
 
-The test before emitting any escalation section: *would a lean sibling ticket in this epic carry it?*
+The test before emitting any escalation section: *would a lean sibling issue in this epic carry it?*
 If the house siblings stay flat, match them — do not emit scaffolding the reader skims past. A
-straightforward child ticket carrying Evidence + 3-sub-item Pre-Context + two buckets + Decisions
+straightforward child issue carrying Evidence + 3-sub-item Pre-Context + two buckets + Decisions
 Needed + Notes is over-built; collapse it to the lean default.
 
 ### Standard Body Shape
@@ -62,13 +62,13 @@ Needed + Notes is over-built; collapse it to the lean default.
 | **Evidence** | Concrete data supporting the problem: logs, error messages, screenshots, metric readings, witness accounts. Direct quotes or paste, not paraphrase. |
 | **Root Cause** | The underlying mechanism that produces the problem. Must be grounded in code, logs, or a reproducible trace — not speculation. If unknown, write `TBD — needs validation via {method}`. |
 | **Pre-Context** | Background facts on scope and risk the reader needs before implementation begins — three sub-items (**Affected Areas**, **Premises**, **Blockers & Risks**). See Pre-Context Rules below. |
-| **AC** | Acceptance criteria (see Section 2 below). At least one AC per ticket. |
-| **Non-Goals** | What this ticket explicitly does NOT address. Prevents scope creep. |
-| **References** | PRDs, design docs, Slack threads, incident records, code commits/PRs, and logs use markdown links. Related PM tickets are linked through the native relation step, not by duplicating the relationship in the body. PM-issue mentions that must appear in the body without becoming related use a form your PM tool does not auto-link into a relation, with a one-sentence note explaining why they are context rather than related-ticket links. |
+| **AC** | Acceptance criteria (see Section 2 below). At least one AC per issue. |
+| **Non-Goals** | What this issue explicitly does NOT address. Prevents scope creep. |
+| **References** | PRDs, design docs, Slack threads, incident records, code commits/PRs, and logs use markdown links. Related PM issues are linked through the native relation step, not by duplicating the relationship in the body. PM-issue mentions that must appear in the body without becoming related use a form your PM tool does not auto-link into a relation, with a one-sentence note explaining why they are context rather than related-issue links. |
 
 ### Bug-Genre Additions
 
-Bug tickets add three fields, placed between Problem and AC:
+Bug issues add three fields, placed between Problem and AC:
 
 | Field | Content |
 |---|---|
@@ -76,11 +76,11 @@ Bug tickets add three fields, placed between Problem and AC:
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
-For bug tickets the ordering is: Problem → Reproduction → Root Cause → Evidence → Pre-Context → AC → Non-Goals → References.
+For bug issues the ordering is: Problem → Reproduction → Root Cause → Evidence → Pre-Context → AC → Non-Goals → References.
 
 ### Pre-Context Rules
 
-Pre-Context applies to all ticket genres. Its **default rendering is the flat 사전 확인 list** (Lean by Default, above) — the three labeled sub-items below are the *escalated* form, used only for parent/umbrella or fact-heavy tickets. For non-code tickets, fill the context (flat list or sub-items) from gathered documents or mark `TBD — needs validation via {method}`.
+Pre-Context applies to all issue genres. Its **default rendering is the flat 사전 확인 list** (Lean by Default, above) — the three labeled sub-items below are the *escalated* form, used only for parent/umbrella or fact-heavy issues. For non-code issues, fill the context (flat list or sub-items) from gathered documents or mark `TBD — needs validation via {method}`.
 
 The three sub-items are:
 
@@ -90,16 +90,16 @@ The three sub-items are:
 
 Every sub-item must carry either an evidence citation (investigation result, document, code location, commit) or the marker `TBD — needs validation via {method}`. An unbacked assertion is a rule violation.
 
-### Parent-Ticket Body Shape
+### Parent-Issue Body Shape
 
-A parent ticket is one that remains as the umbrella after Stage 5 slicing has produced child tickets. Its body does not duplicate child bodies — it carries the shared context that children rely on and reference, not their individual Problem/Pre-Context/AC.
+A parent issue is one that remains as the umbrella after Stage 5 slicing has produced child issues. Its body does not duplicate child bodies — it carries the shared context that children rely on and reference, not their individual Problem/Pre-Context/AC.
 
-After slicing, the relationship rule is: shared context lives in the parent ONCE. Each child ticket states its own Problem, Pre-Context, AC, and Non-Goals, and references the parent for shared definitions. Children do not re-define terms or re-state scope that is already in the parent.
+After slicing, the relationship rule is: shared context lives in the parent ONCE. Each child issue states its own Problem, Pre-Context, AC, and Non-Goals, and references the parent for shared definitions. Children do not re-define terms or re-state scope that is already in the parent.
 
 | Section | Required / Conditional | Content |
 |---|---|---|
 | **Background** | Required | Why now — the motive, triggering events, and prior state that make this work necessary at this moment. One to two paragraphs. |
-| **Core Concept** | Conditional — when children share a term or model that must not drift | A single authoritative definition of the umbrella concept the children rely on. Children reference the parent for this definition instead of re-stating it. Example pattern: a new payment brand is defined once in the parent ("the umbrella bundles payment method A for personal cards and payment method B for corporate cards; method B is never retired from the platform"), so five child tickets can reference the parent rather than each carrying its own definition — preventing drift and contradiction. Omit if each child's scope is self-contained enough that no shared concept needs protection. |
+| **Core Concept** | Conditional — when children share a term or model that must not drift | A single authoritative definition of the umbrella concept the children rely on. Children reference the parent for this definition instead of re-stating it. Example pattern: a new payment brand is defined once in the parent ("the umbrella bundles payment method A for personal cards and payment method B for corporate cards; method B is never retired from the platform"), so five child issues can reference the parent rather than each carrying its own definition — preventing drift and contradiction. Omit if each child's scope is self-contained enough that no shared concept needs protection. |
 | **Pre-Context** | Required | Same three sub-items as the Standard Body Shape (**Affected Areas**, **Premises**, **Blockers & Risks**), each carrying an evidence citation or `TBD — needs validation via {method}`. Apply the two-bucket presentation rule (see below) per its own trigger condition. |
 | **Affected Areas — expected** | Required when code-touching | Where work is expected to land across the child set. Must be explicitly hedged: parent-level affected areas are forecasts as of the planning moment, not commitments — they may change as child investigation proceeds. Example: "Expected to touch `payments/gateway/` and `user/billing/`; exact scope confirmed per child." |
 | **User Value** | Conditional — user-facing work | What the user gains from the parent initiative as a whole. One to two sentences. |
@@ -116,25 +116,25 @@ When the Pre-Context section holds more than a couple of items within any one su
 - **Confirmed Facts** — each item cites the evidence that confirmed it, per the Pre-Context evidence contract above. An item belongs here only when it is backed.
 - **Needs Verification** — each item states what is open and what method would resolve it. Use the existing marker form: `TBD — needs validation via {method}`.
 
-This is a presentation rule layered on the existing per-item evidence-or-`TBD` requirement — the underlying rule is unchanged. When Pre-Context is short (two items or fewer per sub-item), the two-bucket grouping is optional. The buckets apply to both the Standard Body Shape and the Parent-Ticket Body Shape.
+This is a presentation rule layered on the existing per-item evidence-or-`TBD` requirement — the underlying rule is unchanged. When Pre-Context is short (two items or fewer per sub-item), the two-bucket grouping is optional. The buckets apply to both the Standard Body Shape and the Parent-Issue Body Shape.
 
 ### Transition-Genre Additions
 
-Tickets whose substance is a behavior or path change — migration, switchover, replacement, or a shift in the default flow — add one field, placed before AC:
+Issues whose substance is a behavior or path change — migration, switchover, replacement, or a shift in the default flow — add one field, placed before AC:
 
 | Field | Content |
 |---|---|
-| **User Flow: current → after** | A compact before/after contrast of the user-visible or system-visible path. Describe what the flow IS now and what it becomes after the ticket is complete. Keep it observational: record the path change, not the implementation that produces it. |
+| **User Flow: current → after** | A compact before/after contrast of the user-visible or system-visible path. Describe what the flow IS now and what it becomes after the issue is complete. Keep it observational: record the path change, not the implementation that produces it. |
 
 The intent ban applies: this section records what changes from the user or system perspective, not how it will be built. "Before: new users are directed to onboarding screen A. After: new users are directed to onboarding screen B" is permitted. "Implement a redirect from screen A to screen B using router hook X" is not.
 
-For parent tickets, the User Flow: current → after section captures the initiative-level path change. Child tickets may carry their own User Flow section if their individual slice represents a distinct behavior change, or omit it if the parent's section covers their scope.
+For parent issues, the User Flow: current → after section captures the initiative-level path change. Child issues may carry their own User Flow section if their individual slice represents a distinct behavior change, or omit it if the parent's section covers their scope.
 
 ### Decisions Needed
 
-A **Decisions Needed** section is a list of open product or policy decisions that block or shape work. Each entry names the decision and the ticket or owner it is delegated to for resolution.
+A **Decisions Needed** section is a list of open product or policy decisions that block or shape work. Each entry names the decision and the issue or owner it is delegated to for resolution.
 
-**Entries must not pre-solve.** The Model-A intent ban applies: naming the open question and its owner is allowed; embedding the answer is not. "Whether method B cards should be retired for existing users — delegated to `[design-ticket-id]`" is a valid entry. "Method B cards will be retired; see `[design-ticket-id]` for details" is a violation.
+**Entries must not pre-solve.** The Model-A intent ban applies: naming the open question and its owner is allowed; embedding the answer is not. "Whether method B cards should be retired for existing users — delegated to `[design-issue-id]`" is a valid entry. "Method B cards will be retired; see `[design-issue-id]` for details" is a violation.
 
 **Distinguish from `TBD`:** `TBD — needs validation via {method}` marks a missing **fact** in a body field (a premise that can be confirmed by investigation). Decisions Needed lists open **decisions** that require a product or policy call, not just investigation. The two mechanisms are complementary — a Decisions Needed entry may reference a TBD that will be resolved once the decision is made.
 
@@ -214,28 +214,40 @@ where they are not being used as a verification criterion.
 
 ---
 
-## 3. RCA Shape for Bug-Genre Tickets
+## 3. RCA Shape for Bug-Genre Issues
 
 ### Named Contract: diagnose Bug-Report shape
 
-When the ticket is a runtime bug, the Root Cause section uses this sub-template:
+When the issue is a runtime bug, the Root Cause section uses this sub-template:
 
 ```
 **Symptom**: What the caller observes.
 **Root Cause**: The actual underlying issue — not the symptom. Must be grounded at a
                specific code location, log line, or reproducible mechanism.
-**Reproduction**: Minimal steps to trigger. (For tickets that follow the §1 Bug-Genre body shape, this field is fulfilled by the top-level Reproduction section — reference it here rather than repeating the steps.)
+**Reproduction**: Minimal steps to trigger. (For issues that follow the §1 Bug-Genre body shape, this field is fulfilled by the top-level Reproduction section — reference it here rather than repeating the steps.)
 **Fix direction**: Recommended change (direction only — implementation is downstream).
 **Verification step**: How to confirm the fix worked.
 **Similar issues**: Other places the same pattern may exist.
 ```
 
-All six fields are required for bug-genre tickets. If any field cannot be filled from gathered
+All six fields are required for bug-genre issues. If any field cannot be filled from gathered
 evidence, write `TBD — needs validation via {method}` rather than omitting the field or
 speculating.
 
 The Root Cause field must be grounded — a root cause that cannot be traced to code, logs, or
 a reproducible trace is a refuse-to-file condition (see SKILL.md inline gate).
+
+**The bug issue's primary AC is the negation of its Reproduction.** In the §2 two-line shape,
+the outcome is that the Reproduction steps now yield the Expected result instead of the Symptom,
+and the Verification re-runs those steps. The Reproduction is the single source of the
+fix-verification procedure: the RCA `Verification step` above points to that same re-run rather
+than a separate check, and the AC must not fall back to a generic "works correctly" (a §2
+weasel-word violation). When the Root Cause is hypothesis-grade (`TBD — needs validation via
+{method}`), the provisionality stays on the Root Cause — **not** on the AC. The AC's Verification
+remains the Reproduction re-run: a defined, executable method that satisfies the `Un-observable AC`
+gate (SKILL.md). So a reproducible bug always carries an actionable AC even while its cause is
+unconfirmed — and a bug with no reproduction is already refused upstream by the `No consistent
+reproduction` gate, so the re-run is always available when an AC is written.
 
 ---
 
@@ -243,7 +255,7 @@ a reproducible trace is a refuse-to-file condition (see SKILL.md inline gate).
 
 ### Slice Gate
 
-INVEST is the slice gate. A ticket passes the gate if and only if it satisfies all six criteria
+INVEST is the slice gate. An issue passes the gate if and only if it satisfies all six criteria
 below. File-count and LOC atomicity are NOT the requirement-stage gate — those are Model-B
 (work decomposition) signals, which belong to `prometheus` / `sisyphus` downstream.
 
@@ -251,19 +263,19 @@ below. File-count and LOC atomicity are NOT the requirement-stage gate — those
 
 | Criterion | Question | Passes when |
 |---|---|---|
-| **I — Independent** | Can this ticket be built and released without depending on another in-flight ticket? | Yes — no hard ordering dependency on sibling tickets |
-| **N — Negotiable** | Can scope within this ticket be adjusted without invalidating the core value? | Yes — implementation approach is not locked |
-| **V — Valuable** | Does this ticket deliver observable value to a user or system stakeholder on its own? | Yes — completable unit delivers stand-alone value |
-| **E — Estimable** | Can the team form a reasonable size estimate from the ticket body alone? | Yes — enough context to size, even if rough |
-| **S — Small** | Can this ticket be completed within one iteration/sprint? | Yes — bounded enough to finish in one cycle |
-| **T — Testable** | Does the ticket carry observable ACs that can be verified by a defined method? | Yes — every AC has a Verification step |
+| **I — Independent** | Can this issue be built and released without depending on another in-flight issue? | Yes — no hard ordering dependency on sibling issues |
+| **N — Negotiable** | Can scope within this issue be adjusted without invalidating the core value? | Yes — implementation approach is not locked |
+| **V — Valuable** | Does this issue deliver observable value to a user or system stakeholder on its own? | Yes — completable unit delivers stand-alone value |
+| **E — Estimable** | Can the team form a reasonable size estimate from the issue body alone? | Yes — enough context to size, even if rough |
+| **S — Small** | Can this issue be completed within one iteration/sprint? | Yes — bounded enough to finish in one cycle |
+| **T — Testable** | Does the issue carry observable ACs that can be verified by a defined method? | Yes — every AC has a Verification step |
 
-Slice when the ticket fails **I, E, or S** (too large, too coupled, or too vague to size).
+Slice when the issue fails **I, E, or S** (too large, too coupled, or too vague to size).
 Slicing on V, N, or T alone is usually a rewrite of the body or AC rather than a structural split.
 
 ### Per-Child Stage-Check
 
-After slicing, apply this check to each child ticket independently:
+After slicing, apply this check to each child issue independently:
 
 ```
 For each child:
@@ -284,17 +296,17 @@ settled sub-units receive a handoff recommendation rather than being pre-solved.
 
 ### Named Contract: sisyphus atomicity smell heuristics + dependency-ordering
 
-When determining whether a candidate child ticket is atomic, apply these smell heuristics:
+When determining whether a candidate child issue is atomic, apply these smell heuristics:
 
 | Smell | Action |
 |---|---|
-| Ticket needs sequential delegations internally | Break into separate child tickets |
-| Ticket touches unrelated concerns | Split by concern |
-| Ticket description has "and" joining distinct deliverables | Split at the conjunction |
-| Two child tickets modify the same domain object or module | MECE violation — merge or split by responsibility |
-| Completed child tickets would not cover a requirement | Coverage gap — add a missing child |
+| Issue needs sequential delegations internally | Break into separate child issues |
+| Issue touches unrelated concerns | Split by concern |
+| Issue description has "and" joining distinct deliverables | Split at the conjunction |
+| Two child issues modify the same domain object or module | MECE violation — merge or split by responsibility |
+| Completed child issues would not cover a requirement | Coverage gap — add a missing child |
 
-Dependency ordering between child tickets uses blocked-by dependency links:
+Dependency ordering between child issues uses blocked-by dependency links:
 - A child that depends on another child's output is marked as blocked by the predecessor.
 - Independent children carry no dependency link and can be executed in parallel.
 - Circular dependency chains are forbidden.
@@ -320,6 +332,6 @@ The rule's motive: WHAT is decided here; HOW belongs to `prometheus` (planning) 
 
 When a child is at implementation-planning stage (HOW is decided):
 
-1. Record the settled decision in the child ticket body (under a "Design Decision" note, not in an implementation-path field).
-2. State in the ticket: "Handoff to `prometheus` for planning" or "Handoff to `sisyphus` for execution".
+1. Record the settled decision in the child issue body (under a "Design Decision" note, not in an implementation-path field).
+2. State in the issue: "Handoff to `prometheus` for planning" or "Handoff to `sisyphus` for execution".
 3. Do not emit fields that fix the implementation method (Model-B decomposition). The handoff target owns that decomposition. Observational pre-context already recorded in the body remains intact.
