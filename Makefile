@@ -23,6 +23,8 @@ sync-dry: validate
 	@bun run tools/sync.ts --dry-run
 
 validate: validate-schema validate-components validate-lib-imports typecheck
+	@bun -e 'process.exit(typeof Bun?.YAML?.parse === "function" ? 0 : 1)' \
+	  || { printf '\033[0;31m[ERROR]\033[0m Bun.YAML 부재 — bun >= 1.2.21 필요 (현재: %s)\n' "$$(bun --version)" >&2; exit 1; }
 	@for dep in $(VENDOR_DEPS); do \
 		if [ ! -f "lib/vendor/$$dep.js" ]; then \
 			echo "vendor file missing: lib/vendor/$$dep.js" && exit 1; \
