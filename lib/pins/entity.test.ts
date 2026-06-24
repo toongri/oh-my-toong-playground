@@ -71,6 +71,35 @@ const FIXTURES: Array<[string, Entity]> = [
   ['discovery_context present + Korean tag', FIXTURE_DISCOVERY_KOREAN_TAG],
 ];
 
+describe('parse: duplicate key rejection', () => {
+  it('frontmatter with duplicate top-level key is rejected (throws)', () => {
+    // Two `id:` keys — the second silently wins under Bun.YAML, corrupting the index.
+    // After swapping to parseYamlStrict, parse() must throw so buildIndex skips the file.
+    const dupKeyMd = [
+      '---',
+      'id: first-id',
+      'id: second-id',
+      'type: code',
+      'source: github',
+      'authority: someone',
+      'source_url: https://example.com',
+      'tier: "1"',
+      'tags: test',
+      'sensitivity: shared',
+      'status: active',
+      'updated_at: 2026-01-01T00:00:00Z',
+      'checked_at: 2026-01-01T00:00:00Z',
+      'created_at: 2026-01-01T00:00:00Z',
+      'relations: []',
+      '---',
+      '',
+      '## 한 줄 요지\n\nbody\n\n## SSOT 위치\n\nhttps://example.com\n\n## 전후 컨텍스트\n\nctx\n\n## 관련 cross-link\n\n없음',
+    ].join('\n');
+
+    expect(() => parse(dupKeyMd)).toThrow();
+  });
+});
+
 describe('entity', () => {
   it('roundtrip: parse(serialize(e)) deep-equals e', () => {
     const md = serialize(FIXTURE);
