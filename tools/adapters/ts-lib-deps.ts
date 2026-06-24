@@ -83,14 +83,21 @@ export async function resolveTsLibDependencies(
         moduleName = moduleName.slice(0, -3);
       }
 
-      const absPath = path.join(libSourceDir, `${moduleName}.ts`);
-
-      // Check existence
+      // Try .ts first (TypeScript source), fall back to .js (vendored runtime artifact).
+      // Vendor bundles are emitted as .js (+ a separate hand-written .d.ts for types)
+      // so the resolver must discover them even though the source extension is absent.
+      let absPath = path.join(libSourceDir, `${moduleName}.ts`);
       try {
         await fs.stat(absPath);
       } catch {
-        logWarn(`TS lib dependency not found, skipping: ${absPath}`);
-        continue;
+        const jsPath = path.join(libSourceDir, `${moduleName}.js`);
+        try {
+          await fs.stat(jsPath);
+          absPath = jsPath;
+        } catch {
+          logWarn(`TS lib dependency not found, skipping: ${absPath}`);
+          continue;
+        }
       }
 
       if (!visited.has(absPath)) {
@@ -414,7 +421,12 @@ export async function findBareNpmImports(filePath: string): Promise<string[]> {
   const offenders: string[] = [];
 
   for (const line of content.split("\n")) {
-    if (line.trimStart().startsWith("//")) continue;
+    const trimmed = line.trimStart();
+    // Skip single-line comments and block-comment / JSDoc lines.
+    // "/*" covers block-open and single-line /* ... */ shapes.
+    // "*" covers JSDoc continuation lines (" * ...") and block-close " */".
+    // lazy: comment-line skip only; string-literal import shapes not handled — add tokenization if a real case appears
+    if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) continue;
 
     let match: RegExpExecArray | null;
     re.lastIndex = 0;
