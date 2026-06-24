@@ -1,7 +1,7 @@
 # Diagnose Root Cause — Symptom-Report Diagnosis Sub-Pipeline
 
 This file is the complete operational procedure for **Stage 3 when the intake is a symptom report or a
-bug/regression/incident** — i.e., the cause is not yet established and the ticket cannot be written
+bug/regression/incident** — i.e., the cause is not yet established and the issue cannot be written
 until it is. The spine (SKILL.md) defers here at that point. Read every section in order.
 
 For a code-touching *feature* requirement (the cause-is-known case), the lighter Stage 3 in SKILL.md
@@ -15,7 +15,7 @@ sub-pipeline. This file is for the case where **"what is the cause?" is the open
 A symptom report tempts a fast, shallow answer: read a few files, find a plausible mechanism, write it
 down. Three specific failures recur, and each is countered by a section below:
 
-- **Prior-ticket short-circuit** — a related ticket already exists, so the diagnosis becomes
+- **Prior-issue short-circuit** — a related issue already exists, so the diagnosis becomes
   *corroboration of a stated answer* instead of independent diagnosis. The stated cause is inherited,
   not verified. (Countered by §1.)
 - **Code-reasoning without runtime proof** — the mechanism is inferred from reading code and never
@@ -29,26 +29,26 @@ spend your own turns on the runtime evidence and the synthesis only a context-ho
 
 ---
 
-## 1. Independent-Diagnosis Mandate (prior tickets are hypotheses)
+## 1. Independent-Diagnosis Mandate (prior issues are hypotheses)
 
 Diagnose the cause from the symptom and the evidence, **independently of any answer already on record.**
 
-When a prior ticket, a prior incident write-up, a teammate's Slack guess, or a code comment already
+When a prior issue, a prior incident write-up, a teammate's Slack guess, or a code comment already
 asserts a root cause:
 
 - Treat that assertion as a **candidate hypothesis to be tested**, not as the answer. Record it as one
   entry in the hypothesis ledger (§3), with the same disproof burden as every other candidate.
-- Do **not** stop diagnosis because a prior ticket "already says" the cause. Reach the cause through
+- Do **not** stop diagnosis because a prior issue "already says" the cause. Reach the cause through
   your own evidence chain (symptom → runtime evidence → code), then check whether it converges with the
   prior assertion.
 - The **duplicate decision is made *after* the cause is independently established**, not before. Once
   you hold an evidence-backed cause, apply the SKILL.md Duplicate Policy: an exact duplicate means
-  surface the existing ticket (and propose enrichments your independent diagnosis surfaced); a
+  surface the existing issue (and propose enrichments your independent diagnosis surfaced); a
   near-duplicate means file and link. Diagnosis-first, duplicate-decision-second — never the reverse.
 
 **Why:** an inherited cause carries an inherited error. The cheapest place to catch a wrong prior
 diagnosis is the second independent look — but only if the second look is actually independent. A
-diagnosis that begins "the ticket says X, let me confirm X" confirms X whether or not X is true.
+diagnosis that begins "the issue says X, let me confirm X" confirms X whether or not X is true.
 
 ---
 
@@ -82,7 +82,7 @@ confidence call are yours — a worker sees one track and cannot weigh them agai
 ## 3. Competing-Hypothesis Disproof (required artifact: the hypothesis ledger)
 
 Before any cause may be recorded as the Root Cause, produce a **hypothesis ledger** — and keep it; it
-feeds the Evidence/Notes of the ticket. The ledger is the artifact that proves you tested alternatives
+feeds the Evidence/Notes of the issue. The ledger is the artifact that proves you tested alternatives
 rather than locking onto the first plausible story.
 
 The ledger must contain **at least two candidate causes**, and for each a verdict backed by evidence:
@@ -93,7 +93,7 @@ The ledger must contain **at least two candidate causes**, and for each a verdic
     verdict: CONFIRMED — {the runtime + code evidence that establishes it}
 - H2 (competing): {a different mechanism that would produce the same symptom}
     verdict: REFUTED — {the specific evidence that rules it out}
-- H3 (competing): {another plausible cause — including any prior-ticket assertion per §1}
+- H3 (competing): {another plausible cause — including any prior-issue assertion per §1}
     verdict: REFUTED — {evidence} | or NOT-DISTINGUISHED — {what evidence would separate it from H1}
 ```
 
@@ -108,7 +108,7 @@ Rules:
 - If two hypotheses cannot be separated by available evidence, mark **NOT-DISTINGUISHED** and name the
   query/test that would separate them. An un-separated alternative caps confidence (§6) — it does not
   silently disappear.
-- The prior-ticket cause (§1) is **always** a ledger entry, never an exemption.
+- The prior-issue cause (§1) is **always** a ledger entry, never an exemption.
 
 **Why:** a cause that merely *fits* the evidence is weak; a cause that fits while named alternatives are
 *ruled out by evidence* is strong. The disproof is where "plausible" becomes "established."
@@ -155,18 +155,18 @@ table. Diagnosing only the first one found understates the blast radius.
   implementation (§2).
 - Diagnose the mechanism in **each** path — do not assume parity; verify it. Parallel implementations
   drift, and the bug may be present in one, both, or differ between them.
-- The ticket body carries a **per-path status** statement: which paths exhibit the defect and which do
+- The issue body carries a **per-path status** statement: which paths exhibit the defect and which do
   not, each backed by its own evidence. A fix scoped to one path when the defect lives in two is a
   half-fix that silently leaves half the users broken.
 
-**Why:** "I found the bug" answers *a* path; "I found every path the bug lives in" answers the ticket.
+**Why:** "I found the bug" answers *a* path; "I found every path the bug lives in" answers the issue.
 The second is what bounds the fix correctly.
 
 ---
 
 ## 6. Diagnosis Confidence Gate (Confirmed vs Hypothesis → Root Cause vs TBD)
 
-A Root Cause may be written as **Confirmed** (and the ticket filed with it) only when all hold:
+A Root Cause may be written as **Confirmed** (and the issue filed with it) only when all hold:
 
 1. **Triangulation** — at least two *independent, heterogeneous* tracks converge on the same mechanism
    (e.g., runtime evidence + code, not two code reads). Homogeneous corroboration (two reads of the same
@@ -176,8 +176,8 @@ A Root Cause may be written as **Confirmed** (and the ticket filed with it) only
    NOT-DISTINGUISHED alternative is named with the query that would resolve it).
 4. **Multi-path** — §5 coverage is complete; per-path status is known.
 
-When all four hold → write the Root Cause as established, with its evidence, into the ticket
-(ticket-craft.md Bug-Genre / RCA shape).
+When all four hold → write the Root Cause as established, with its evidence, into the issue
+(issue-craft.md Bug-Genre / RCA shape).
 
 When any fail → the cause is **hypothesis-grade**. Write `TBD — needs validation via {method}` in the
 Root Cause field and name the specific missing element (the absent runtime trace, the un-separated
@@ -185,7 +185,7 @@ alternative, the unexamined path). This connects to the SKILL.md refuse-to-file 
 runtime-evidence-free root-cause claim does not get filed as a Root Cause — it gets filed as an open
 question with the validation method named.
 
-**Confidence is graded, not binary.** State it honestly in the ticket: what is established, by which
+**Confidence is graded, not binary.** State it honestly in the issue: what is established, by which
 converging evidence, and what residual uncertainty remains (and whether that uncertainty changes the
 fix scope — often it does not).
 
@@ -193,7 +193,7 @@ fix scope — often it does not).
 
 ## 7. Output → Stage 4 wiring
 
-The sub-pipeline feeds the ticket body (ticket-craft.md) as follows:
+The sub-pipeline feeds the issue body (issue-craft.md) as follows:
 
 - **Root Cause / Symptom / Fix direction** ← the Confirmed mechanism (§6), in the RCA Bug-Report shape.
 - **Reproduction** ← the trigger sequence established during diagnosis.
@@ -211,9 +211,9 @@ Then apply the Duplicate Policy (§1: after the cause is established) and procee
 ## 8. Worked example (one, compressed)
 
 Symptom report: "member cancelled all smart subscriptions but still gets a daily card-limit-exceeded
-payment-failure alert." A prior ticket already asserted a cause.
+payment-failure alert." A prior issue already asserted a cause.
 
-- **§1 independence**: the prior ticket's cause was entered as ledger hypothesis H1, not inherited.
+- **§1 independence**: the prior issue's cause was entered as ledger hypothesis H1, not inherited.
   Diagnosis proceeded from the symptom independently; the duplicate decision was deferred to the end.
 - **§2 orchestration**: `explore` dispatched per backend (Node + Python) for the cancel path and the
   payment-batch selection query; `oracle` for cross-module causal judgment and to refute competitors;
