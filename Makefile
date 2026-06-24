@@ -1,4 +1,5 @@
 VENDOR_DEPS := picomatch
+VENDOR_BUILD = bun build "$$dep" --target=node
 
 .PHONY: sync sync-dry validate validate-schema validate-components validate-lib-imports validate-tests typecheck test vendor validate-vendor pull pull-dry help
 
@@ -23,8 +24,15 @@ sync-dry: validate
 
 validate: validate-schema validate-components validate-lib-imports typecheck
 	@for dep in $(VENDOR_DEPS); do \
-		if [ ! -f "lib/vendor/$$dep.ts" ]; then \
-			echo "vendor file missing: lib/vendor/$$dep.ts" && exit 1; \
+		if [ ! -f "lib/vendor/$$dep.js" ]; then \
+			echo "vendor file missing: lib/vendor/$$dep.js" && exit 1; \
+		fi; \
+	done
+	@for f in lib/vendor/*.js; do \
+		[ -f "$$f" ] || continue; \
+		name=$$(basename "$$f" .js); \
+		if ! echo " $(VENDOR_DEPS) " | grep -q " $$name "; then \
+			echo "unlisted vendor file: $$f (add '$$name' to VENDOR_DEPS)" && exit 1; \
 		fi; \
 	done
 
@@ -48,15 +56,15 @@ test: validate-tests
 vendor:
 	@for dep in $(VENDOR_DEPS); do \
 		mkdir -p lib/vendor && \
-		bun build "$$dep" --target=node --outfile "lib/vendor/$$dep.ts"; \
+		$(VENDOR_BUILD) --outfile "lib/vendor/$$dep.js"; \
 	done
 
 validate-vendor:
 	@for dep in $(VENDOR_DEPS); do \
 		if [ -d "node_modules/$$dep" ]; then \
 			tmp=$$(mktemp); \
-			bun build "$$dep" --target=node --outfile "$$tmp"; \
-			if ! diff -q "$$tmp" "lib/vendor/$$dep.ts" > /dev/null 2>&1; then \
+			$(VENDOR_BUILD) --outfile "$$tmp"; \
+			if ! diff -q "$$tmp" "lib/vendor/$$dep.js" > /dev/null 2>&1; then \
 				echo "vendor drift detected: $$dep" && rm -f "$$tmp" && exit 1; \
 			fi; \
 			rm -f "$$tmp"; \

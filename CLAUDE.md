@@ -172,7 +172,7 @@ OMT minimizes external dependencies to stay auditable and portable across the ru
 | Tier | Strategy | When to use |
 |------|----------|-------------|
 | **Tier 0** | Use a bun/node builtin — no dep at all | First default. See Tier-0 allowlist below. |
-| **Tier 1** | Vendor a single file into `lib/vendor/<name>.ts` via `bun build --target=node` | When a builtin cannot cover it and the dep is small enough to inline. Sync targets import only via the `@lib/` alias. |
+| **Tier 1** | Vendor a dep into `lib/vendor/<name>.js` (runtime) + `lib/vendor/<name>.d.ts` (hand-written types) via `bun build --target=node` | When a builtin cannot cover it and the dep is small enough to inline. Sync targets import only via the `@lib/` alias. The `.js` bundle is invisible to `tsc` (excluded from tsconfig); the `.d.ts` provides real types. |
 | **Tier 2** | Compile / bootstrap at policy level only | Reserved for cases where a dep is needed only during CI setup or a one-time bootstrap step, not at runtime or in deployed artifacts. |
 
 There is no Tier 3 (toolkit-proxy / installable package). OMT does not ship an installable npm package.
@@ -203,6 +203,6 @@ Scripts reachable by codex or gemini must restrict themselves to cross-runtime b
 ### Non-Goals
 
 - No installable npm package — OMT is not published to a registry.
-- No committed `node_modules` — dependencies are either builtins or vendored single files.
+- No committed `node_modules` — dependencies are either builtins or vendored as a self-contained `.js` + `.d.ts` unit.
 - No Tier-4 toolkit-proxy abstraction.
 - Install-at-runtime is a documented exception for ephemeral CI environments only — it is not a pattern to be extended.
