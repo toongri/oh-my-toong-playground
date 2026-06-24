@@ -165,17 +165,14 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 
 ## Dependency Management
 
-OMT minimizes external dependencies to stay auditable and portable across the runtimes it targets (bun, node). The policy is a 3-tier ladder — stop at the highest tier that satisfies the need.
+OMT minimizes external dependencies to stay auditable and portable across the runtimes it targets (bun, node). Reach for the simplest option first.
 
-### Tier Ladder
+### Dependency Ladder
 
-| Tier | Strategy | When to use |
-|------|----------|-------------|
-| **Tier 0** | Use a bun/node builtin — no dep at all | First default. See Tier-0 allowlist below. |
-| **Tier 1** | Vendor a dep into `lib/vendor/<name>.js` (runtime) + `lib/vendor/<name>.d.ts` (hand-written types) via `bun build --target=node` | When a builtin cannot cover it and the dep is small enough to inline. Sync targets import only via the `@lib/` alias. The `.js` bundle is invisible to `tsc` (excluded from tsconfig); the `.d.ts` provides real types. |
-| **Tier 2** | Compile / bootstrap at policy level only | Reserved for cases where a dep is needed only during CI setup or a one-time bootstrap step, not at runtime or in deployed artifacts. |
+1. **Builtin first** — use a bun/node builtin with no added dependency. See Tier-0 allowlist below.
+2. **Declared package** — add the package to `package.json` (`dependencies` or `devDependencies`) and write a plain bare `import 'pkg'` in source. `make sync` handles the rest at sync-time (see below).
 
-There is no Tier 3 (toolkit-proxy / installable package). OMT does not ship an installable npm package.
+There is no installable npm package — OMT is not published to a registry.
 
 ### Tier-0 Builtin Allowlist
 
@@ -188,21 +185,27 @@ These are pre-approved — use them without reaching for a dep:
 - `fs.glob` — file globbing
 - `module.builtinModules` — querying available builtins
 
+### Sync-Time Auto-Vendoring
+
+No vendor artifacts are committed to this repository. Instead, `make sync` bundles each declared bare dependency at sync-time:
+
+1. For every bare `import 'pkg'` found in a deployed script, the sync tool checks that `pkg` is declared in the root `package.json`.
+2. At sync-time, it runs `bun build --target=node` to produce `lib/vendor/<pkg>.js` inside each deploy target and rewrites that copy's import to a relative path. OMT source files are never mutated.
+3. Integrity rests on the committed `bun.lock` (version pins + sha512 checksums) enforced by `bun install --frozen-lockfile` — no separate byte-drift manifest is needed.
+
 ### Guards
 
 Enforcement is wired into the make targets — do not reimplement inline:
 
-- **Bare-npm import validator** (`make validate`): rejects any source file that imports a non-vendored, non-builtin package.
-- **`make vendor` + `VENDOR_DEPS` SSOT**: `VENDOR_DEPS` is the single source of truth for which packages are vendored. Adding a vendor file without updating `VENDOR_DEPS` will fail validation.
-- **`validate-vendor` byte-drift gate** (wired into `make sync`): compares the committed vendor file against a fresh build from the pinned source version; any byte drift fails the gate. An existence check also runs on every `make validate`.
+- **Bare-import guard** (`make validate`): rejects any source file that contains a bare `import 'pkg'` for a package that is NOT declared in `package.json`. A declared package passes; a sub-path import of a declared package is still rejected.
+- **`bun.lock` integrity**: version pins and sha512 checksums are committed; `bun install --frozen-lockfile` enforces them.
 
 ### Cross-Runtime Caveat
 
-Scripts reachable by codex or gemini must restrict themselves to cross-runtime builtins (i.e., Node.js built-in modules that also run under bun). Vendored dependencies are built with `--target=node` so they execute under both bun and node without modification.
+Scripts reachable by codex or gemini must restrict themselves to cross-runtime builtins (i.e., Node.js built-in modules that also run under bun). Packages bundled at sync-time use `--target=node` so they execute under both runtimes.
 
 ### Non-Goals
 
-- No installable npm package — OMT is not published to a registry.
-- No committed `node_modules` — dependencies are either builtins or vendored as a self-contained `.js` + `.d.ts` unit.
-- No Tier-4 toolkit-proxy abstraction.
-- Install-at-runtime is a documented exception for ephemeral CI environments only — it is not a pattern to be extended.
+- No committed vendor bundles in source — bundles are generated at sync-time into deploy targets only.
+- No committed `node_modules` — builtins first, declared packages second.
+- No install-at-runtime in production — `bun install --frozen-lockfile` runs at build/CI time, not at agent invocation time.
