@@ -73,10 +73,13 @@ export async function collectDirs(dir: string, rel = ""): Promise<string[]> {
  * identical output so that the post-pass is a no-op on already-rewritten files.
  *
  * Bundled bare specifiers (e.g. `import x from "picomatch"`) are repointed at
- * the vendored bundle deployed under lib/vendor/<pkg>. The match is anchored on
- * the FULL quoted specifier (D-4): `'picomatch'` matches but `'picomatch-extra'`,
- * the sub-path `'picomatch/lib/x'`, and a bare identifier `picomatchResult` do
- * not — so collisions are impossible.
+ * the vendored bundle deployed under lib/vendor/<pkg>.js. The `.js` extension is
+ * emitted explicitly: the bundle is a .js file and the deploy target carries no
+ * package.json "type", so node's ESM resolver rejects an extensionless relative
+ * specifier (bun tolerates it, node does not). The match is anchored on the FULL
+ * quoted specifier (D-4): `'picomatch'` matches but `'picomatch-extra'`, the
+ * sub-path `'picomatch/lib/x'`, and a bare identifier `picomatchResult` do not —
+ * so collisions are impossible.
  *
  * @param content         File content to rewrite
  * @param targetFile      Absolute path where the file will be written (used to compute depth)
@@ -107,9 +110,9 @@ export function rewriteLibImports(
   for (const pkg of bundledPackages) {
     result = result
       .split(`'${pkg}'`)
-      .join(`'${prefix}lib/vendor/${pkg}'`)
+      .join(`'${prefix}lib/vendor/${pkg}.js'`)
       .split(`"${pkg}"`)
-      .join(`"${prefix}lib/vendor/${pkg}"`);
+      .join(`"${prefix}lib/vendor/${pkg}.js"`);
   }
 
   return result;
