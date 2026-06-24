@@ -53,5 +53,6 @@ rules:
     - tool-usage-policy
     - work-principles
     - coding-discipline
+    - least-code
     - private-component-management
     - documentation-currency
