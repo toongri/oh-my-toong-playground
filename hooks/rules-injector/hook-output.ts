@@ -6,7 +6,7 @@ export function formatAdditionalContextOutput(
 	eventName: ContextInjectionHookEventName,
 	additionalContext: string,
 ): string {
-	const normalizedContext = limitAdditionalContext(normalizeAdditionalContext(additionalContext));
+	const normalizedContext = limitAdditionalContextText(normalizeAdditionalContext(additionalContext));
 	if (normalizedContext.length === 0) return "";
 	return `${JSON.stringify({
 		hookSpecificOutput: {
@@ -32,10 +32,6 @@ function sliceToUtf8Bytes(str: string, maxBytes: number): string {
 	// Walk back past any continuation bytes (10xxxxxx = 0x80–0xBF).
 	while (end > 0 && (buf[end]! & 0xc0) === 0x80) end--;
 	return buf.subarray(0, end).toString("utf8");
-}
-
-function limitAdditionalContext(additionalContext: string): string {
-	return limitAdditionalContextText(additionalContext);
 }
 
 /**
