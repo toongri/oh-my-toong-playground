@@ -1,6 +1,5 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import { parse as parseYaml } from "yaml";
 import type { EntityType } from "./types.ts";
 
 // ── Raw YAML shape ────────────────────────────────────────────────────────────
@@ -78,7 +77,7 @@ function assertTboxShape(raw: unknown): asserts raw is RawTbox {
 
 export async function parseTboxYaml(filePath: string): Promise<Tbox> {
   const text = readFileSync(filePath, "utf8");
-  const raw = parseYaml(text);
+  const raw = Bun.YAML.parse(text);
   assertTboxShape(raw);
   return {
     id_pattern: raw.id_pattern,

@@ -14,7 +14,6 @@
 
 import { readdirSync, copyFileSync, existsSync, readFileSync } from 'fs';
 import { join, extname, basename } from 'path';
-import { parse as parseYaml } from 'yaml';
 import { toCanonical } from './compat.ts';
 import { record } from './record.ts';
 import type { Entity, Frontmatter } from './types.ts';
@@ -118,7 +117,7 @@ function escapeRegExp(s: string): string {
 function parseFrontmatterRaw(content: string): Record<string, unknown> | null {
   const match = content.match(/^---\n([\s\S]*?)\n---\n/);
   if (!match) return null;
-  const raw = parseYaml(match[1]);
+  const raw = Bun.YAML.parse(match[1]);
   if (raw === null || typeof raw !== 'object') return null;
   return raw as Record<string, unknown>;
 }

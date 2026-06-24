@@ -1,6 +1,5 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { parse as parseYaml } from 'yaml';
 import { resolveOmtDir, resolvePinsHome, resolveProjectRoot } from '../omt-dir.ts';
 
 export interface PinsManifest {
@@ -30,7 +29,7 @@ async function readManifestAt(dir: string): Promise<PinsManifest | null> {
     if (code === 'ENOENT' || code === 'ENOTDIR') return null;
     throw err;
   }
-  const parsed = parseYaml(text);
+  const parsed = Bun.YAML.parse(text);
   if (parsed == null || typeof parsed !== 'object') return null;
   const obj = parsed as Record<string, unknown>;
   if (typeof obj.location !== 'string' || typeof obj.scope !== 'string') return null;
