@@ -162,3 +162,47 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 - **DisplayNames in tests**: Korean
 - **Method names in tests**: English with backticks
 - **Council prompts**: English (for cross-model consistency)
+
+## Dependency Management
+
+OMT minimizes external dependencies to stay auditable and portable across the runtimes it targets (bun, node). The policy is a 3-tier ladder — stop at the highest tier that satisfies the need.
+
+### Tier Ladder
+
+| Tier | Strategy | When to use |
+|------|----------|-------------|
+| **Tier 0** | Use a bun/node builtin — no dep at all | First default. See Tier-0 allowlist below. |
+| **Tier 1** | Vendor a single file into `lib/vendor/<name>.ts` via `bun build --target=node` | When a builtin cannot cover it and the dep is small enough to inline. Sync targets import only via the `@lib/` alias. |
+| **Tier 2** | Compile / bootstrap at policy level only | Reserved for cases where a dep is needed only during CI setup or a one-time bootstrap step, not at runtime or in deployed artifacts. |
+
+There is no Tier 3 (toolkit-proxy / installable package). OMT does not ship an installable npm package.
+
+### Tier-0 Builtin Allowlist
+
+These are pre-approved — use them without reaching for a dep:
+
+- `Bun.YAML` — YAML parse/serialize (requires bun ≥ 1.2.21)
+- `fetch` — HTTP requests
+- `crypto.randomUUID` — UUID generation
+- `util.parseArgs` — CLI argument parsing
+- `fs.glob` — file globbing
+- `module.builtinModules` — querying available builtins
+
+### Guards
+
+Enforcement is wired into the make targets — do not reimplement inline:
+
+- **Bare-npm import validator** (`make validate`): rejects any source file that imports a non-vendored, non-builtin package.
+- **`make vendor` + `VENDOR_DEPS` SSOT**: `VENDOR_DEPS` is the single source of truth for which packages are vendored. Adding a vendor file without updating `VENDOR_DEPS` will fail validation.
+- **`validate-vendor` byte-drift gate** (wired into `make sync`): compares the committed vendor file against a fresh build from the pinned source version; any byte drift fails the gate. An existence check also runs on every `make validate`.
+
+### Cross-Runtime Caveat
+
+Scripts reachable by codex or gemini must restrict themselves to cross-runtime builtins (i.e., Node.js built-in modules that also run under bun). Vendored dependencies are built with `--target=node` so they execute under both bun and node without modification.
+
+### Non-Goals
+
+- No installable npm package — OMT is not published to a registry.
+- No committed `node_modules` — dependencies are either builtins or vendored single files.
+- No Tier-4 toolkit-proxy abstraction.
+- Install-at-runtime is a documented exception for ephemeral CI environments only — it is not a pattern to be extended.
