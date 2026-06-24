@@ -77,4 +77,38 @@ describe('parseYamlStrict', () => {
       expect(() => parseYamlStrict(input)).toThrow();
     });
   });
+
+  describe('block scalar body is not treated as duplicate keys', () => {
+    test('literal block scalar (|) with colon-containing body does not throw', () => {
+      // "decision:" appears twice inside the block scalar body — these are
+      // prose lines, NOT mapping keys. The scanner must skip them.
+      const input = [
+        'discovery_context: |',
+        '  decision: keep the old API',
+        '  decision: also note the migration',
+        'id: proj-abc',
+      ].join('\n');
+      expect(() => parseYamlStrict(input)).not.toThrow();
+    });
+
+    test('folded block scalar (>) with colon-containing body does not throw', () => {
+      const input = [
+        'summary: >',
+        '  note: first line',
+        '  note: second line',
+        'id: proj-xyz',
+      ].join('\n');
+      expect(() => parseYamlStrict(input)).not.toThrow();
+    });
+
+    test('real duplicate mapping keys (NOT under a scalar) still throw', () => {
+      // These "decision:" lines are at the SAME level as a sibling key,
+      // not under a block scalar — they must still be caught.
+      const input = [
+        'decision: keep the old API',
+        'decision: also note the migration',
+      ].join('\n');
+      expect(() => parseYamlStrict(input)).toThrow('decision');
+    });
+  });
 });
