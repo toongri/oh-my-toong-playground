@@ -1,4 +1,6 @@
-.PHONY: sync sync-dry validate validate-schema validate-components validate-lib-imports validate-tests typecheck test pull pull-dry help
+VENDOR_DEPS :=
+
+.PHONY: sync sync-dry validate validate-schema validate-components validate-lib-imports validate-tests typecheck test vendor validate-vendor pull pull-dry help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -13,13 +15,18 @@ help:
 	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
 	@echo "  make pull-dry PROJ=<name> - 풀백 미리보기 (실제 변경 없음)"
 
-sync: validate validate-tests
+sync: validate validate-vendor validate-tests
 	@bun run tools/sync.ts
 
 sync-dry: validate
 	@bun run tools/sync.ts --dry-run
 
 validate: validate-schema validate-components validate-lib-imports typecheck
+	@for dep in $(VENDOR_DEPS); do \
+		if [ ! -f "lib/vendor/$$dep.ts" ]; then \
+			echo "vendor file missing: lib/vendor/$$dep.ts" && exit 1; \
+		fi; \
+	done
 
 validate-schema:
 	@bun run tools/validators/schema.ts
@@ -37,6 +44,26 @@ typecheck:
 	@bunx tsc --noEmit
 
 test: validate-tests
+
+vendor:
+	@for dep in $(VENDOR_DEPS); do \
+		mkdir -p lib/vendor && \
+		bun build "$$dep" --target=node --outfile "lib/vendor/$$dep.ts"; \
+	done
+
+validate-vendor:
+	@for dep in $(VENDOR_DEPS); do \
+		if [ -d "node_modules/$$dep" ]; then \
+			tmp=$$(mktemp); \
+			bun build "$$dep" --target=node --outfile "$$tmp"; \
+			if ! diff -q "$$tmp" "lib/vendor/$$dep.ts" > /dev/null 2>&1; then \
+				echo "vendor drift detected: $$dep" && rm -f "$$tmp" && exit 1; \
+			fi; \
+			rm -f "$$tmp"; \
+		else \
+			echo "vendor check skipped (node_modules/$$dep absent): $$dep"; \
+		fi; \
+	done
 
 pull:
 	@test -n "$(PROJ)" || (echo "PROJ is required. Usage: make pull PROJ=<name>" && exit 1)
