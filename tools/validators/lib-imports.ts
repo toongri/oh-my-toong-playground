@@ -16,7 +16,7 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { getRootDir } from "../lib/config.ts";
 import { collectFiles } from "../lib/sync-directory.ts";
-import { findRelativeLibImports } from "../adapters/ts-lib-deps.ts";
+import { findRelativeLibImports, findBareNpmImports } from "../adapters/ts-lib-deps.ts";
 
 // Source directories that may hold deployable .ts components.
 const COMPONENT_DIRS = ["hooks", "skills", "scripts", "agents", "commands", "rules"];
@@ -25,6 +25,7 @@ export async function findLibImportViolations(rootDir: string): Promise<string[]
   const libSourceDir = join(rootDir, "lib");
   const violations: string[] = [];
 
+  // Pass 1: relative-into-lib detection (existing pass — DO NOT alter).
   for (const dir of COMPONENT_DIRS) {
     const base = join(rootDir, dir);
     if (!existsSync(base)) continue;
@@ -34,6 +35,29 @@ export async function findLibImportViolations(rootDir: string): Promise<string[]
       const filePath = join(base, rel);
       for (const specifier of await findRelativeLibImports(filePath, libSourceDir)) {
         violations.push(`${dir}/${rel}: '${specifier}'`);
+      }
+    }
+  }
+
+  // Pass 2: bare-npm import detection.
+  // Scans lib/ + COMPONENT_DIRS (the deployed surface). tools/ is excluded: it
+  // runs where bun install exists so npm imports are legal there. .test.ts files
+  // are excluded (handled inside findBareNpmImports).
+  const bareNpmDirs: Array<{ label: string; base: string }> = [
+    { label: "lib", base: libSourceDir },
+    ...COMPONENT_DIRS.map((dir) => ({ label: dir, base: join(rootDir, dir) })),
+  ];
+
+  for (const { label, base } of bareNpmDirs) {
+    if (!existsSync(base)) continue;
+
+    for (const rel of await collectFiles(base)) {
+      if (!rel.endsWith(".ts") || rel.endsWith(".test.ts")) continue;
+      const filePath = join(base, rel);
+      for (const specifier of await findBareNpmImports(filePath)) {
+        violations.push(
+          `bare-npm import not allowed (vendor or eliminate): ${label}/${rel}: '${specifier}'`,
+        );
       }
     }
   }
