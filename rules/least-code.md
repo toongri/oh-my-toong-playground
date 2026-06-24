@@ -4,7 +4,7 @@ The best code is the code you never write. Lazy means efficient, not careless: a
 
 ## The ladder
 
-Before writing code, climb this ladder and stop at the first rung that holds:
+This ladder is a default. An explicit user instruction, a co-loaded project skill, or a project's CLAUDE.md that mandates a specific pattern outranks it on that point — the project's contract is a standing "asked for". Absent that, climb this ladder before writing code and stop at the first rung that holds:
 
 1. **Does this need to exist at all?** Speculative need — skip it, say so in one line. (YAGNI)
 2. **Already in this codebase?** A helper, util, type, or pattern that already lives here — reuse it. Re-implementing what sits a few files over is the most common slop; look before you write.
