@@ -184,6 +184,24 @@ write_fixture_transcript() {
     jq -nc '{type:"file-history-snapshot", snapshot:"FIXTURE_SNAPSHOT_LEAK_SHOULD_NOT_APPEAR"}' >> "$path"
     # 7) MACHINERY: mode (no .message — must be dropped)
     jq -nc '{type:"mode", mode:"FIXTURE_MODE_LEAK_SHOULD_NOT_APPEAR"}' >> "$path"
+    # 8) SKILL injection: isMeta user record whose content is an ARRAY of text
+    # blocks, the first beginning with the "Base directory for this skill:" marker
+    # followed by the full SKILL.md body. The body must be REPLACED by a one-line
+    # name reference; the long body text must NOT reach the summarizer.
+    local skill_body
+    skill_body=$(printf 'PROMETHEUS_SKILL_BODY_LEAK_SHOULD_NOT_APPEAR %.0s' $(seq 1 200))
+    jq -nc --arg b "Base directory for this skill: /abs/path/skills/prometheus
+
+# Prometheus
+
+$skill_body" '{type:"user", isMeta:true, message:{role:"user", content:[
+        {type:"text", text:$b}
+    ]}}' >> "$path"
+    # 9) Non-skill isMeta machinery (Trap 1): isMeta:true but NOT a skill marker —
+    # must be kept as ordinary user text, never collapsed to a skill reference.
+    jq -nc '{type:"user", isMeta:true, message:{role:"user", content:[
+        {type:"text", text:"Continue from where you left off. FIXTURE_NONSKILL_ISMETA_KEEP"}
+    ]}}' >> "$path"
 }
 
 # Build a PreCompact stdin JSON payload.
@@ -561,6 +579,46 @@ test_c3_prose_string_not_truncated() {
     return 0
 }
 
+# =============================================================================
+# SKILL-1 — an injected skill body (isMeta user record beginning with the
+# "Base directory for this skill:" marker) is replaced in the EXTRACT by a
+# one-line name reference: "[skill invoked: <name>]" appears, the full SKILL.md
+# body does NOT. A non-skill isMeta record (Trap 1) is kept as ordinary text.
+# =============================================================================
+test_skill_1_body_replaced_with_name_reference() {
+    local sid="sid-skill"
+    local tp="$TEST_TMP_DIR/transcript.jsonl"
+    write_fixture_transcript "$tp"
+
+    make_stdin "$sid" "$tp" | "$HOOK" >/dev/null 2>&1 || true
+
+    if [ ! -f "$CODEX_STDIN" ]; then
+        echo "ASSERTION FAILED: codex stub stdin was not captured"
+        return 1
+    fi
+    local fed
+    fed=$(cat "$CODEX_STDIN")
+
+    # (a) the skill name reference is present (name = last path segment).
+    if ! printf '%s' "$fed" | grep -q '\[skill invoked: prometheus\]'; then
+        echo "ASSERTION FAILED: extract must contain '[skill invoked: prometheus]'"
+        return 1
+    fi
+
+    # (b) the full SKILL.md body must NOT reach the summarizer.
+    if printf '%s' "$fed" | grep -q "PROMETHEUS_SKILL_BODY_LEAK_SHOULD_NOT_APPEAR"; then
+        echo "ASSERTION FAILED: SKILL.md body leaked into extraction"
+        return 1
+    fi
+
+    # (c) Trap 1: a non-skill isMeta record stays as ordinary user text.
+    if ! printf '%s' "$fed" | grep -q "FIXTURE_NONSKILL_ISMETA_KEEP"; then
+        echo "ASSERTION FAILED: non-skill isMeta text must be kept, not collapsed"
+        return 1
+    fi
+    return 0
+}
+
 # Helper: run the resolver block from the hook in a subprocess and print the
 # resulting CODEX_BIN.
 # $1 = PATH string for the subprocess (must include system coreutils if needed)
@@ -736,6 +794,7 @@ main() {
     run_test test_ac_t1_8_never_blocks_source_grep
     run_test test_ac_t1_9_second_run_overwrites
     run_test test_c3_prose_string_not_truncated
+    run_test test_skill_1_body_replaced_with_name_reference
     run_test test_resolver_skips_shim_picks_real
     run_test test_resolver_env_override_takes_precedence
     run_test test_resolver_no_codex_yields_empty_and_failopen

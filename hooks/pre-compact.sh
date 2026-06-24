@@ -74,10 +74,26 @@ mkdir -p "$OMT_DIR" 2>/dev/null || true
 EXTRACT=""
 if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ] && [ -r "$TRANSCRIPT_PATH" ]; then
   EXTRACT=$(jq -r --argjson n "$HANDOFF_TOOL_OUTPUT_MAX_CHARS" '
+    # An injected skill body rides in an isMeta user record whose text begins with
+    # "Base directory for this skill: <dir>" followed by the full SKILL.md. Claude
+    # Code natively re-attaches and the agent can re-invoke, so the spec is redundant
+    # to carry — replace it with a one-line name reference (last path segment). The
+    # marker (NOT isMeta alone) is the discriminator: isMeta also carries non-skill
+    # machinery like "Continue from where you left off." which must pass through.
+    def skill_marker: "Base directory for this skill: ";
+    def joined_text:
+      (.message.content) as $c
+      | if ($c | type) == "string" then $c
+        else ($c | map(select(.type == "text") | (.text // "")) | join("\n"))
+        end;
     select(.type == "user" or .type == "assistant")
     | .type as $role
     | (.message.content) as $c
-    | if ($c | type) == "string" then
+    | if (.type == "user" and (joined_text | startswith(skill_marker))) then
+        ("[skill invoked: "
+          + (joined_text | split("\n")[0] | ltrimstr(skill_marker) | split("/") | last)
+          + "]")
+      elif ($c | type) == "string" then
         ("[" + $role + "] " + $c)
       else
         ( $c[]?
@@ -169,6 +185,11 @@ a superseded constraint as if it still applies.
 ## 8. Key References & Delegated Work
 Paths, IDs, URLs, commands. Active/recent delegated agent sessions with task_id —
 RESUME, DON'T RESTART: use task_id to continue, don't respawn.
+List the skills or slash-commands invoked this session BY NAME (shown in the
+transcript as "[skill invoked: X]"), and for each note whether it COMPLETED or was
+still IN PROGRESS. Their full instruction bodies are NOT included here; if resuming
+work that depends on one, the next agent can re-invoke it with Skill(skill: "X") to
+restore its full instructions.
 
 ## 9. All User Messages
 List every user message that is not a tool result, in order (lightly trimmed). This
