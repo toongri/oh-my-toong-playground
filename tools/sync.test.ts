@@ -1993,7 +1993,7 @@ describe("rewriteLibAliases", () => {
       `import { X } from '@lib/types.ts';\nimport { Y } from "@lib/other.ts";\n`,
     );
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "index.ts"));
     expect(content).toContain("'./lib/types.ts'");
@@ -2006,7 +2006,7 @@ describe("rewriteLibAliases", () => {
       "import { X } from '@lib/types.ts';\n",
     );
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "agents", "oracle.ts"));
     expect(content).toContain("'../lib/types.ts'");
@@ -2018,7 +2018,7 @@ describe("rewriteLibAliases", () => {
       "import type { X } from '@lib/types.ts';\n",
     );
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "a", "b", "deep.ts"));
     expect(content).toContain("'../../lib/types.ts'");
@@ -2028,7 +2028,7 @@ describe("rewriteLibAliases", () => {
     const original = "import { X } from './local.ts';\n";
     await writeFile(path.join(tmpDir, "no-alias.ts"), original);
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "no-alias.ts"));
     expect(content).toBe(original);
@@ -2038,7 +2038,7 @@ describe("rewriteLibAliases", () => {
     const original = "import { X } from '@lib/types.ts';\n";
     await writeFile(path.join(tmpDir, "helper.test.ts"), original);
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "helper.test.ts"));
     expect(content).toBe(original);
@@ -2048,7 +2048,7 @@ describe("rewriteLibAliases", () => {
     const original = "import { X } from '@lib/types.ts';\n";
     await writeFile(path.join(tmpDir, "lib", "internal.ts"), original);
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "lib", "internal.ts"));
     expect(content).toBe(original);
