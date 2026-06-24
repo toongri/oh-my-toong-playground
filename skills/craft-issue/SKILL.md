@@ -1,9 +1,9 @@
 ---
-name: manage-ticket
+name: craft-issue
 description: Use when creating, refining, or managing requirement-stage PM tickets, OR when turning a raw symptom report, bug, regression, or production incident whose root cause is not yet established into a ticket. Triggers include "요구사항 티켓 만들어", "티켓 정리", "이 요구사항 이슈로", "티켓 써줘", "이 버그/증상 원인 파악해서 티켓", "장애/이슈 원인 찾아서 티켓", "이 제보 이슈화", "requirement to ticket", "manage ticket", "file this requirement", "diagnose this bug and file a ticket", "incident to ticket", "이슈로 만들어", "티켓 작성", "요구사항 이슈화".
 ---
 
-# Manage-Ticket — Requirement-Stage Ticket Pipeline
+# Craft-Issue — Requirement-Stage Ticket Pipeline
 
 A context-synthesis pipeline that turns an assigned PM ticket OR an abstract free-text requirement into a well-formed, cross-linked ticket (and INVEST-sliced sub-tickets when large), written autonomously to the PM tool.
 

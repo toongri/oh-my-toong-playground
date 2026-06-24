@@ -1,6 +1,6 @@
 # Gather + Cross-Link Procedure
 
-This file is the complete operational procedure for Stage 2 of the manage-ticket pipeline. The spine defers here for the gather bound, source-unreachable handling, gather-then-judge ordering, curation rules, and cross-link annotation format. Follow every section in sequence.
+This file is the complete operational procedure for Stage 2 of the craft-issue pipeline. The spine defers here for the gather bound, source-unreachable handling, gather-then-judge ordering, curation rules, and cross-link annotation format. Follow every section in sequence.
 
 ---
 

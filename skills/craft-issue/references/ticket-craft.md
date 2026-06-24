@@ -1,6 +1,6 @@
 # Ticket Craft — Quality and Slicing Rubric
 
-This file is the authoritative craft rubric for the manage-ticket pipeline.
+This file is the authoritative craft rubric for the craft-issue pipeline.
 It is read at Stage 4 (record) and Stage 5 (slice). Follow it in full at each stage.
 
 ---

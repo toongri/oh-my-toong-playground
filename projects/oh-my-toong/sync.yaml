@@ -33,7 +33,7 @@ skills:
     - component: code-review
       platforms: [claude]
     - make-pr
-    - component: manage-ticket
+    - component: craft-issue
       platforms: [claude]
     - technical-writing
     - technical-copywriting
