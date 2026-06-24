@@ -3,8 +3,10 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 
-import { syncPlatformConfigs, processYaml, createContext, runProjectsLoop, resolveProjectFilter, type AdapterMap } from "./sync.ts";
-import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "./lib/types.ts";
+import { createHash } from "crypto";
+
+import { syncPlatformConfigs, processYaml, createContext, syncLib, runProjectsLoop, resolveProjectFilter, type AdapterMap, type LibSourceRoots } from "./sync.ts";
+import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope, SyncContext } from "./lib/types.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { _resetConfigCache } from "./lib/config.ts";
@@ -579,5 +581,137 @@ describe("lib deployment complete after copy-time @lib/ rewrite (regression)", (
     await proc.exited;
     const stderr = await new Response(proc.stderr).text();
     expect({ exitCode: proc.exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: sync-time vendoring runs under bun AND node + same-env reproducibility
+//
+// The deploy target carries ZERO node_modules. The vendored bundle is fully
+// self-contained, so the deployed consumer must run under both runtimes. The
+// rootDir gets a package.json declaring picomatch + a node_modules symlink to
+// the real repo's installed copy so `bun build picomatch` resolves at sync time.
+// ---------------------------------------------------------------------------
+
+describe("sync-time vendoring: cross-runtime + reproducibility", () => {
+  // Repo root = parent of the tools/ dir this test file lives in.
+  const repoRoot = path.dirname(import.meta.dir);
+  const repoNodeModules = path.join(repoRoot, "node_modules");
+
+  let tmpDir: string;
+  let rootDir: string;
+  let targetPath: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "omt-e2e-vendor-"));
+    rootDir = path.join(tmpDir, "root");
+    targetPath = path.join(tmpDir, "target");
+    await fs.mkdir(rootDir, { recursive: true });
+    await fs.mkdir(targetPath, { recursive: true });
+    await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+    // syncLib early-returns unless rootDir/lib exists.
+    await fs.mkdir(path.join(rootDir, "lib"), { recursive: true });
+    // Declare picomatch + symlink the real node_modules so sync-time bundling resolves.
+    await writeFile(
+      path.join(rootDir, "package.json"),
+      JSON.stringify({ devDependencies: { picomatch: "4.0.4" } }),
+    );
+    await fs.symlink(repoNodeModules, path.join(rootDir, "node_modules"));
+    _resetConfigCache();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    _resetConfigCache();
+  });
+
+  it("the deployed picomatch consumer runs clean under BOTH bun and node (node_modules-free target)", async () => {
+    // A skill bundling a .ts consumer that imports ONLY the bare package and
+    // prints a deterministic match result. No @lib/ anywhere.
+    const skillDir = path.join(rootDir, "skills", "matcher");
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: matcher\ndescription: test skill\n---\n\nbody\n",
+    );
+    await writeFile(
+      path.join(skillDir, "run.ts"),
+      [
+        "import picomatch from 'picomatch';",
+        "const isMatch = picomatch('*.js');",
+        "console.log(isMatch('foo.js') ? 'MATCH_OK' : 'NO_MATCH');",
+        "",
+      ].join("\n"),
+    );
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(
+      syncYamlPath,
+      [`path: ${targetPath}`, "platforms: [claude]", "skills:", "  items:", "    - matcher", ""].join("\n"),
+    );
+
+    const adapters: AdapterMap = new Map<Platform, PlatformAdapter>();
+    adapters.set("claude", new ClaudeAdapter(async () => {}, async () => ({ exitCode: 0 })));
+    await processYaml(createContext(false), syncYamlPath, adapters, rootDir);
+
+    const claudeDir = path.join(targetPath, ".claude");
+    const deployedConsumer = path.join(claudeDir, "skills", "matcher", "run.ts");
+    const vendoredJs = path.join(claudeDir, "lib", "vendor", "picomatch.js");
+
+    // The vendored bundle is deployed and the consumer's import is rewritten.
+    expect(await fs.stat(vendoredJs).then(() => true).catch(() => false)).toBe(true);
+    const deployedSrc = await fs.readFile(deployedConsumer, "utf8");
+    expect(deployedSrc).not.toContain("'picomatch'");
+    expect(deployedSrc).toContain("../../lib/vendor/picomatch.js");
+
+    // The target carries NO node_modules — the bundle must be self-contained.
+    expect(await fs.stat(path.join(claudeDir, "node_modules")).then(() => true).catch(() => false)).toBe(false);
+
+    // Run the deployed consumer under BOTH runtimes; both must exit 0 with the
+    // expected match output.
+    // `node <file>` and `bun <file>` both execute the .ts entry directly (node
+    // v26 strips types; bun runs .ts natively). `node run <file>` would treat
+    // "run" as the entry, so invoke the file as the sole positional arg.
+    for (const runtime of ["bun", "node"]) {
+      const proc = Bun.spawn([runtime, deployedConsumer], {
+        cwd: claudeDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await proc.exited;
+      const stdout = (await new Response(proc.stdout).text()).trim();
+      const stderr = await new Response(proc.stderr).text();
+      expect({ runtime, exitCode: proc.exitCode, stdout, stderr }).toEqual({
+        runtime,
+        exitCode: 0,
+        stdout: "MATCH_OK",
+        stderr: "",
+      });
+    }
+  });
+
+  it("two consecutive same-env sync-time bundles of picomatch are byte-identical (sha256) — D-10 same-bun-version scope only", async () => {
+    // Drive syncLib directly twice into two separate targets and hash each
+    // vendored bundle. Reproducibility is scoped to THIS bun version only.
+    const sourceTs = path.join(rootDir, "skills", "matcher", "run.ts");
+    await writeFile(sourceTs, "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n");
+
+    const makeCtx = (): SyncContext => createContext(false);
+    const roots: LibSourceRoots = new Map([["claude", new Set([sourceTs])]]);
+
+    const sha256OfBundle = async (target: string): Promise<string> => {
+      await syncLib(makeCtx(), target, rootDir, ["claude"], roots);
+      const bundle = await fs.readFile(path.join(target, ".claude", "lib", "vendor", "picomatch.js"));
+      return createHash("sha256").update(bundle).digest("hex");
+    };
+
+    const targetA = path.join(tmpDir, "targetA");
+    const targetB = path.join(tmpDir, "targetB");
+    await fs.mkdir(targetA, { recursive: true });
+    await fs.mkdir(targetB, { recursive: true });
+
+    const hashA = await sha256OfBundle(targetA);
+    const hashB = await sha256OfBundle(targetB);
+
+    expect(hashA).toBe(hashB);
   });
 });
