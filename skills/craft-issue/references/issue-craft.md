@@ -237,6 +237,15 @@ speculating.
 The Root Cause field must be grounded — a root cause that cannot be traced to code, logs, or
 a reproducible trace is a refuse-to-file condition (see SKILL.md inline gate).
 
+**The bug issue's primary AC is the negation of its Reproduction.** In the §2 two-line shape,
+the outcome is that the Reproduction steps now yield the Expected result instead of the Symptom,
+and the Verification re-runs those steps. The Reproduction is the single source of the
+fix-verification procedure: the RCA `Verification step` above points to that same re-run rather
+than a separate check, and the AC must not fall back to a generic "works correctly" (a §2
+weasel-word violation). When the Root Cause is hypothesis-grade (`TBD — needs validation via
+{method}`), the AC's Verification inherits that provisionality — mark it `TBD` rather than
+asserting a confirmation the diagnosis cannot yet support.
+
 ---
 
 ## 4. Model A INVEST Slice Rubric
