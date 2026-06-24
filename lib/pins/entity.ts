@@ -1,4 +1,5 @@
 import type { Entity, Frontmatter } from './types';
+import { parseYamlStrict } from './yaml';
 
 /**
  * Serializes an Entity to a .md file body:
@@ -58,7 +59,7 @@ export function parse(md: string): Entity {
   }
 
   const [, yamlContent, body] = match;
-  const raw = Bun.YAML.parse(yamlContent) as Record<string, unknown>;
+  const raw = parseYamlStrict(yamlContent) as Record<string, unknown>;
 
   const frontmatter: Frontmatter = {
     id: raw.id as string,
