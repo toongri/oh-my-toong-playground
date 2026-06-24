@@ -1,13 +1,12 @@
 import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { parse as parseYaml } from 'yaml';
 
 const TBOX_PATH = join(import.meta.dir, 'tbox.yaml');
 
 function loadTbox(): Record<string, unknown> {
   const raw = readFileSync(TBOX_PATH, 'utf8');
-  return parseYaml(raw) as Record<string, unknown>;
+  return Bun.YAML.parse(raw) as Record<string, unknown>;
 }
 
 describe('schema completeness', () => {
