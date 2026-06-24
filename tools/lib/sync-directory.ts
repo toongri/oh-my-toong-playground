@@ -65,32 +65,54 @@ export async function collectDirs(dir: string, rel = ""): Promise<string[]> {
 }
 
 /**
- * Rewrites @lib/ import aliases in TypeScript source content to relative paths.
+ * Rewrites @lib/ import aliases and bundled bare specifiers in TypeScript
+ * source content to relative paths.
  *
  * This is a pure helper shared by both copy-time rewrite (syncDirectory) and
  * the post-pass rewrite (rewriteLibAliases in sync.ts). Both must produce
  * identical output so that the post-pass is a no-op on already-rewritten files.
  *
- * @param content      File content to rewrite
- * @param targetFile   Absolute path where the file will be written (used to compute depth)
- * @param platformRoot Absolute path to the platform root directory (e.g. /path/.claude/)
- * @returns            Rewritten content, or the original string if no @lib/ present
+ * Bundled bare specifiers (e.g. `import x from "picomatch"`) are repointed at
+ * the vendored bundle deployed under lib/vendor/<pkg>. The match is anchored on
+ * the FULL quoted specifier (D-4): `'picomatch'` matches but `'picomatch-extra'`,
+ * the sub-path `'picomatch/lib/x'`, and a bare identifier `picomatchResult` do
+ * not — so collisions are impossible.
+ *
+ * @param content         File content to rewrite
+ * @param targetFile      Absolute path where the file will be written (used to compute depth)
+ * @param platformRoot    Absolute path to the platform root directory (e.g. /path/.claude/)
+ * @param bundledPackages Package names whose bare specifiers are repointed at lib/vendor/<pkg>
+ * @returns               Rewritten content, or the original string if nothing rewritable present
  */
 export function rewriteLibImports(
   content: string,
   targetFile: string,
   platformRoot: string,
+  bundledPackages: Set<string>,
 ): string {
-  if (!content.includes("@lib/")) return content;
+  const hasBundled = [...bundledPackages].some(
+    (pkg) => content.includes(`'${pkg}'`) || content.includes(`"${pkg}"`),
+  );
+  if (!content.includes("@lib/") && !hasBundled) return content;
 
   const dir = path.dirname(targetFile);
   const relDir = path.relative(platformRoot, dir);
   const depth = relDir === "" ? 0 : relDir.split(path.sep).length;
   const prefix = depth === 0 ? "./" : "../".repeat(depth);
 
-  return content
+  let result = content
     .replace(/'@lib\//g, `'${prefix}lib/`)
     .replace(/"@lib\//g, `"${prefix}lib/`);
+
+  for (const pkg of bundledPackages) {
+    result = result
+      .split(`'${pkg}'`)
+      .join(`'${prefix}lib/vendor/${pkg}'`)
+      .split(`"${pkg}"`)
+      .join(`"${prefix}lib/vendor/${pkg}"`);
+  }
+
+  return result;
 }
 
 /**
@@ -122,14 +144,19 @@ export async function copyFile(source: string, target: string): Promise<void> {
  * @param options.platformRoot When provided, rewrites @lib/ aliases in .ts files at
  *                             write time so the deployed bytes are already resolved.
  *                             Must be the platform root dir (e.g. /path/.claude/).
+ * @param options.bundledPackages Package names whose bare specifiers are repointed at
+ *                             lib/vendor/<pkg> at write time. Defaults to empty — the
+ *                             real set is only known later, so the post-pass rewrite
+ *                             (rewriteLibAliases) carries it; copy-time stays a no-op.
  */
 export async function syncDirectory(
   source: string,
   target: string,
-  options?: { exclude?: string[]; platformRoot?: string }
+  options?: { exclude?: string[]; platformRoot?: string; bundledPackages?: Set<string> }
 ): Promise<void> {
   const exclude = options?.exclude ?? DEFAULT_EXCLUDE;
   const platformRoot = options?.platformRoot;
+  const bundledPackages = options?.bundledPackages ?? new Set<string>();
 
   // 1. Ensure target directory exists
   await fs.mkdir(target, { recursive: true });
@@ -153,7 +180,7 @@ export async function syncDirectory(
     if (platformRoot && tgtFile.endsWith(".ts") && !tgtFile.endsWith(".test.ts")) {
       await fs.mkdir(path.dirname(tgtFile), { recursive: true });
       const srcContent = await fs.readFile(srcFile, "utf8");
-      const rewritten = rewriteLibImports(srcContent, tgtFile, platformRoot);
+      const rewritten = rewriteLibImports(srcContent, tgtFile, platformRoot, bundledPackages);
       await fs.writeFile(tgtFile, rewritten, "utf8");
       // Preserve execute permissions
       const stat = await fs.stat(srcFile);

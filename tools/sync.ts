@@ -447,10 +447,13 @@ export async function syncPlatformConfigs(
 // ---------------------------------------------------------------------------
 
 /**
- * Rewrite @lib/* import aliases in deployed .ts files to relative paths.
- * Mirrors rewrite_lib_aliases in sync.sh:1383-1405.
+ * Rewrite @lib/* import aliases and bundled bare specifiers in deployed .ts
+ * files to relative paths. Mirrors rewrite_lib_aliases in sync.sh:1383-1405.
  */
-export async function rewriteLibAliases(platformRoot: string): Promise<void> {
+export async function rewriteLibAliases(
+  platformRoot: string,
+  bundledPackages: Set<string>,
+): Promise<void> {
   const tsFiles = await collectTsFiles(platformRoot);
   for (const filePath of tsFiles) {
     // Skip test files and lib/ itself
@@ -465,7 +468,7 @@ export async function rewriteLibAliases(platformRoot: string): Promise<void> {
       continue;
     }
 
-    const updated = rewriteLibImports(content, filePath, platformRoot);
+    const updated = rewriteLibImports(content, filePath, platformRoot, bundledPackages);
 
     if (updated !== content) {
       await fs.writeFile(filePath, updated, "utf8");
@@ -679,7 +682,7 @@ export async function syncLib(
       }
 
       logInfo(`Deployed shared lib to .${platform}/lib/`);
-      await rewriteLibAliases(platformDir);
+      await rewriteLibAliases(platformDir, bundledPackages);
     }
   }
 }
