@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { syncDirectory, copyFile } from "./sync-directory.ts";
+import { syncDirectory, copyFile, rewriteLibImports } from "./sync-directory.ts";
 
 async function writeFile(
   filePath: string,
@@ -262,6 +262,93 @@ describe("@lib/ alias rewrite at copy time (platformRoot option)", () => {
       .replace(/"@lib\//g, `"${prefix}lib/`);
 
     expect(rewritten).toBe(contentBefore);
+  });
+});
+
+describe("rewriteLibImports bare specifier rule (bundled vendor packages)", () => {
+  // Mirrors the @lib/ rewrite assertion style: not.toContain(raw) + toContain(rewritten).
+  // The platformRoot is fixed; targetFile depth is varied to assert the relative prefix.
+  const platformRoot = "/p/.claude";
+  const bundled = new Set(["picomatch"]);
+
+  it("depth 0 — bare 'picomatch' → './lib/vendor/picomatch.js'", () => {
+    const content = "import picomatch from 'picomatch';\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).not.toContain("'picomatch'");
+    expect(result).toContain("'./lib/vendor/picomatch.js'");
+  });
+
+  it("depth 1 — bare \"picomatch\" → \"../lib/vendor/picomatch.js\"", () => {
+    const content = 'import picomatch from "picomatch";\n';
+    const targetFile = path.join(platformRoot, "agents", "oracle.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).not.toContain('"picomatch"');
+    expect(result).toContain('"../lib/vendor/picomatch.js"');
+  });
+
+  it("depth 2 — bare 'picomatch' → '../../lib/vendor/picomatch.js'", () => {
+    const content = "import picomatch from 'picomatch';\n";
+    const targetFile = path.join(platformRoot, "skills", "pin-thing", "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).not.toContain("'picomatch'");
+    expect(result).toContain("'../../lib/vendor/picomatch.js'");
+  });
+
+  it("collision-safety (D-4): rewrites 'picomatch' but leaves 'picomatch-extra', the 'picomatch/lib/x' sub-path, and the bare identifier picomatchResult untouched", () => {
+    const content = [
+      "import picomatch from 'picomatch';",
+      "import extra from 'picomatch-extra';",
+      "import sub from 'picomatch/lib/x';",
+      "const picomatchResult = picomatch('*.js');",
+      "",
+    ].join("\n");
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    // Exact 'picomatch' specifier is repointed at the bundle.
+    expect(result).toContain("'./lib/vendor/picomatch.js'");
+    // Look-alikes are NOT rewritten.
+    expect(result).toContain("'picomatch-extra'");
+    expect(result).toContain("'picomatch/lib/x'");
+    expect(result).toContain("const picomatchResult = picomatch('*.js');");
+    // No quoted bare 'picomatch' specifier survives, but the look-alikes prove
+    // the rewrite did not touch them (their quoted forms differ).
+    expect(result).not.toContain("from 'picomatch';");
+  });
+
+  it("@lib/ rewrite UNREGRESSED: @lib/ still rewrites alongside a bundled bare specifier", () => {
+    const content = [
+      "import { x } from '@lib/types.ts';",
+      "import picomatch from 'picomatch';",
+      "",
+    ].join("\n");
+    const targetFile = path.join(platformRoot, "agents", "oracle.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    // @lib/ rewrite preserved at depth 1 (mirrors existing @lib/ assertions).
+    expect(result).not.toContain("@lib/");
+    expect(result).toContain("'../lib/types.ts'");
+    // Bare specifier repointed at the vendored bundle.
+    expect(result).toContain("'../lib/vendor/picomatch.js'");
+  });
+
+  it("no bundled package present — content with only an unrelated bare name is unchanged", () => {
+    const content = "import chalk from 'chalk';\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    // 'chalk' is not in the bundled set → left untouched.
+    expect(result).toBe(content);
   });
 });
 
