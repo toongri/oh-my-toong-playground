@@ -36,7 +36,12 @@ import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts"
 import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
-import { collectRequiredLibModulesFromSources, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
+import {
+  collectRequiredLibModulesFromSources,
+  collectLibDataFiles,
+  findBareNpmImports,
+  readPackageJsonDeps,
+} from "./adapters/ts-lib-deps.ts";
 import { runProvision } from "./lib/provision.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
@@ -516,6 +521,13 @@ export async function syncLib(
   // empty (notably in dry-run, where the stale prior deployment has no @lib/).
   const dataFiles = await collectLibDataFiles(libSrc);
 
+  // Declared package names (dependencies ∪ devDependencies) from the OMT repo's
+  // own package.json (rootDir IS the repo root — libSrc is rootDir/lib). Read
+  // once: only DECLARED packages are eligible for sync-time bundling, so a bare
+  // import of an undeclared package is never vendored. A root without a
+  // package.json declares nothing → zero bundling (the empty-set default).
+  const declaredPackages = await readPackageJsonDeps(rootDir).catch(() => new Set<string>());
+
   for (const platform of platforms) {
     const platformDir = path.join(targetPath, `.${platform}`);
     const libDest = path.join(platformDir, "lib");
@@ -526,9 +538,50 @@ export async function syncLib(
     const sourceRoots = libSourceRoots?.get(platform) ?? new Set<string>();
     const requiredModules = await collectRequiredLibModulesFromSources(sourceRoots, libSrc);
 
+    // Discover bare npm imports over the SAME sourceRoots the @lib/ collector
+    // scans, then intersect with declared packages: a bare `import 'picomatch'`
+    // traces through no @lib/ alias, so requiredModules never sees it. The
+    // resulting bundledPackages set names exactly the packages syncLib will
+    // `bun build` into .{platform}/lib/vendor/ below — and is the set a
+    // follow-up task threads into the @lib/ rewriter so those bare specifiers
+    // can be repointed at the vendored bundles. Only DECLARED packages bundle.
+    const bundledPackages = new Set<string>();
+    for (const root of sourceRoots) {
+      let files: string[];
+      try {
+        const stat = await fs.stat(root);
+        if (stat.isDirectory()) {
+          files = await collectTsFiles(root);
+        } else if (root.endsWith(".ts") && !root.endsWith(".test.ts")) {
+          files = [root];
+        } else {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      for (const file of files) {
+        for (const specifier of await findBareNpmImports(file)) {
+          // Reduce to the root package name (D-7: only the root package is
+          // bundled, never a sub-path): "@scope/name/x" → "@scope/name",
+          // "picomatch/lib/x" → "picomatch".
+          const segments = specifier.split("/");
+          const pkg = specifier.startsWith("@")
+            ? segments.slice(0, 2).join("/")
+            : segments[0];
+          if (declaredPackages.has(pkg)) {
+            bundledPackages.add(pkg);
+          }
+        }
+      }
+    }
+
     // Data files (e.g. pins/tbox.yaml) are runtime assets for lib modules; with
     // zero modules deployed they have no consumer, so skip the whole lib deploy.
-    if (requiredModules.size === 0) {
+    // The skip relaxes to the UNION: a platform whose only lib need is a declared
+    // bare import (zero @lib/ modules) must still deploy its lib dir so the
+    // vendored bundle below can be produced — skip only when BOTH are empty.
+    if (requiredModules.size === 0 && bundledPackages.size === 0) {
       // No @lib/ imports — remove any stale lib (dry-run: log only)
       if (context.dryRun) {
         if (existsSync(libDest)) {
@@ -555,6 +608,9 @@ export async function syncLib(
       }
       for (const file of dataFiles) {
         logDry(`  ${path.relative(libSrc, file)}`);
+      }
+      for (const pkg of bundledPackages) {
+        logDry(`  vendor/${pkg}.js (bun build --target=node)`);
       }
       logDry(`Rewrite @lib/* aliases in ${platformDir}/`);
     } else {
@@ -588,6 +644,26 @@ export async function syncLib(
           const destFile = path.join(libTmp, relPath);
           await fs.mkdir(path.dirname(destFile), { recursive: true });
           await fs.copyFile(file, destFile);
+        }
+
+        // Sync-time vendoring: bundle each declared bare-imported package into a
+        // self-contained --target=node bundle (zero node_modules at runtime),
+        // mirroring the Makefile's proven `bun build <pkg> --target=node` flags.
+        // Output path mirrors the package name (a scoped name's "/" becomes a
+        // vendor/@scope subdirectory). Inside the try-block / before the rename,
+        // so a non-zero build exit throws → the catch removes libTmp and the
+        // prior libDest stays intact (atomicity preserved).
+        for (const pkg of bundledPackages) {
+          const outFile = path.join(libTmp, "vendor", `${pkg}.js`);
+          await fs.mkdir(path.dirname(outFile), { recursive: true });
+          const proc = Bun.spawn(
+            ["bun", "build", pkg, "--target=node", "--outfile", outFile],
+            { cwd: rootDir, stdout: "inherit", stderr: "inherit" },
+          );
+          await proc.exited;
+          if (proc.exitCode !== 0) {
+            throw new Error(`bun build ${pkg} --target=node failed (exit ${proc.exitCode})`);
+          }
         }
 
         // Atomic swap: rename old out, rename new in, remove old.
