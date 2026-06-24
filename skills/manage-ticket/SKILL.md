@@ -1,6 +1,6 @@
 ---
 name: manage-ticket
-description: Use when creating, refining, or managing requirement-stage PM tickets. Triggers include "요구사항 티켓 만들어", "티켓 정리", "이 요구사항 이슈로", "티켓 써줘", "requirement to ticket", "manage ticket", "file this requirement", "이슈로 만들어", "티켓 작성", "요구사항 이슈화".
+description: Use when creating, refining, or managing requirement-stage PM tickets, OR when turning a raw symptom report, bug, regression, or production incident whose root cause is not yet established into a ticket. Triggers include "요구사항 티켓 만들어", "티켓 정리", "이 요구사항 이슈로", "티켓 써줘", "이 버그/증상 원인 파악해서 티켓", "장애/이슈 원인 찾아서 티켓", "이 제보 이슈화", "requirement to ticket", "manage ticket", "file this requirement", "diagnose this bug and file a ticket", "incident to ticket", "이슈로 만들어", "티켓 작성", "요구사항 이슈화".
 ---
 
 # Manage-Ticket — Requirement-Stage Ticket Pipeline
@@ -16,7 +16,8 @@ The pipeline runs in five sequential stages:
 ```
 intake
   → gather + cross-link   (the heart — READ references/gather-crosslink.md at this stage)
-    → investigate         (impact & premises DELEGATED to explore / oracle when requirement touches code)
+    → investigate         (impact & premises; for a symptom report / bug / regression / incident whose
+                           cause is unknown, run the diagnosis sub-pipeline — READ references/diagnose-rootcause.md)
       → record            (best-practice body — READ references/ticket-craft.md at this stage)
         → slice           (Model A INVEST — READ references/ticket-craft.md at this stage)
           → write tail    (autonomous post-hoc write to PM tool)
@@ -28,10 +29,11 @@ Each stage is described below. Refuse-to-file conditions, duplicate policy, and 
 
 ## Stage 1: Intake
 
-Identify what was handed to you. Two input modes:
+Identify what was handed to you. Three input modes:
 
 - **Assigned PM ticket**: a ticket already exists; enrich and cross-link it in place.
 - **Abstract free-text requirement**: no ticket yet; synthesize one from scratch.
+- **Symptom report (cause unknown)**: a bug, regression, incident, or support report describing wrong behavior whose root cause is not yet established. This mode routes Stage 3 to the diagnosis sub-pipeline (not the light investigation): the ticket's Root Cause cannot be written until the cause is established by evidence or explicitly marked hypothesis-grade.
 
 Collect the input text and any ambient context (conversation thread, linked documents, slack messages) before proceeding to Stage 2.
 
@@ -61,15 +63,31 @@ Read `references/gather-crosslink.md` now (using the Read tool with path `refere
 
 ## Stage 3: Investigate (Impact & Premises)
 
-When the requirement touches code — any requirement whose realization lands in the codebase, not only bugs or regressions:
+This stage has two modes, chosen by the intake genre.
+
+### Mode A — Symptom report / bug / regression / incident (cause unknown)
+
+When the open question is **"what is the cause?"** — a symptom report, bug, regression, or incident —
+Stage 3 is a full diagnosis sub-pipeline. **Read `references/diagnose-rootcause.md` now** (using the Read
+tool with path `references/diagnose-rootcause.md`) and run it in full. It enforces independent diagnosis
+(a prior ticket's stated cause is a hypothesis, not an answer), an orchestration that delegates breadth
+to `explore`/`oracle`/`librarian` while you own the runtime-evidence track, a competing-hypothesis
+disproof ledger, runtime-evidence grounding, multi-path coverage, and a confidence gate that decides
+whether the Root Cause is written as established or as `TBD — needs validation via {method}`.
+
+### Mode B — Code-touching feature requirement (cause/behavior known)
+
+When the requirement touches code but the behavior is understood and only impact mapping is needed (not
+cause-finding):
 
 - **`explore` fires by default**: facts — where in the codebase the requirement lands, current behavior of the relevant flow, related recent commits and open PRs touching the area. Investigation-confirmed file-level references are permissible observations; they record what was found, not what should be built.
 - **`oracle` fires conditionally**: judgment — change propagation, structural constraints, cross-cutting concerns — when the impact appears to cross module boundaries or an architectural risk is suspected.
+
+### Both modes
+
 - Non-code gather (docs, PM, messenger, logs) stays inline — do not route it through `explore` or `oracle`.
 - The output of this stage feeds the **Pre-Context** section at Stage 4 (sub-items: **Affected Areas**, **Premises**, **Blockers & Risks**), and additionally feeds the "Root Cause" and "Evidence" fields for bug-genre tickets.
-- **Bug-genre causal diagnosis**: for bugs, regressions, and unexpected behavior, the dispatch must additionally pursue causal diagnosis — include root-cause identification in the `explore` dispatch, or fire `oracle` regardless of the cross-module condition when the causal mechanism remains unclear after `explore` returns.
-
-When the requirement does not touch code, skip this stage. In that case, the Pre-Context section at Stage 4 is filled from gathered documents or each item is marked `TBD — needs validation via {method}`.
+- When the requirement does not touch code, skip this stage. In that case, the Pre-Context section at Stage 4 is filled from gathered documents or each item is marked `TBD — needs validation via {method}`.
 
 ---
 
@@ -115,6 +133,7 @@ Before writing, check for existing tickets covering the same issue:
 
 - **Exact or high-confidence duplicate**: refuse to file a new ticket; surface the existing issue to the caller and stop.
 - **Near-duplicate** (overlapping but distinct): create the new ticket, link it as a related item to the near-duplicate, and annotate the relationship in the body (one sentence explaining how they differ).
+- **Symptom-report intake — diagnose first**: when the intake is a symptom report (cause unknown), a prior ticket found during gather does **not** short-circuit diagnosis. Establish the cause independently first (the prior ticket's cause is one hypothesis in the ledger — see `references/diagnose-rootcause.md` §1), then apply this duplicate decision. Diagnosis-first, duplicate-decision-second.
 
 ---
 
@@ -141,4 +160,5 @@ Review is post-hoc: the ticket is written first; the caller can review and reque
 ## Reference Files
 
 - `references/gather-crosslink.md`: complete gather bound, curation rules, cross-link procedure, source-unreachable handling, impact & premises investigation delegation (§7), and cross-link annotation format. Read at Stage 2.
+- `references/diagnose-rootcause.md`: the symptom-report diagnosis sub-pipeline — independent-diagnosis mandate (prior tickets are hypotheses), delegation orchestration (explore/oracle/librarian + your own runtime-evidence track), competing-hypothesis disproof ledger, runtime-evidence gate, multi-path coverage, and the confidence gate. Read at Stage 3 when the cause is unknown.
 - `references/ticket-craft.md`: best-practice body shape, observable-AC rubric (weasel-word prohibition, Action/Expected/Verification), RCA Bug-Report shape, anti-fluff rules, Model A INVEST slice rubric with per-child stage-check and settled-child handoff. Read at Stages 4 and 5.
