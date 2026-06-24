@@ -619,6 +619,65 @@ test_skill_1_body_replaced_with_name_reference() {
     return 0
 }
 
+# =============================================================================
+# SKILL-2 — the deterministic skill skeleton: code collects every
+# "[skill invoked: NAME]" marker from the EXTRACT, dedups preserving first-seen
+# order, and prepends one line
+#   "## Skills invoked this session (deterministic, in order): <names>"
+# at the TOP of the EXTRACT (before the conversation body). A duplicate
+# invocation must collapse; first-seen order must be kept.
+# =============================================================================
+test_skill_2_deterministic_skeleton_at_top() {
+    local sid="sid-skeleton"
+    local tp="$TEST_TMP_DIR/transcript_skeleton.jsonl"
+
+    : > "$tp"
+    # Three skill injections in order: prometheus, sisyphus, prometheus (DUP).
+    # Each is an isMeta user record whose first text block begins with the marker.
+    local name
+    for name in prometheus sisyphus prometheus; do
+        jq -nc --arg b "Base directory for this skill: /abs/path/skills/$name
+
+# ${name}
+
+SKILL_BODY_${name}_SHOULD_NOT_LEAK" '{type:"user", isMeta:true, message:{role:"user", content:[
+            {type:"text", text:$b}
+        ]}}' >> "$tp"
+    done
+    # A trailing ordinary turn so the body marker (CONVERSATION_BODY_MARKER) sits
+    # AFTER the skeleton, letting us prove the skeleton is at the TOP. Padded so
+    # the EXTRACT exceeds HANDOFF_MIN_INPUT_CHARS=200 and reaches the summarizer.
+    local pad
+    pad=$(printf 'p%.0s' $(seq 1 300))
+    jq -nc --arg p "CONVERSATION_BODY_MARKER ok $pad" '{type:"assistant", message:{role:"assistant", content:[{type:"text", text:$p}]}}' >> "$tp"
+
+    make_stdin "$sid" "$tp" | "$HOOK" >/dev/null 2>&1 || true
+
+    if [ ! -f "$CODEX_STDIN" ]; then
+        echo "ASSERTION FAILED: codex stub stdin was not captured"
+        return 1
+    fi
+    local fed
+    fed=$(cat "$CODEX_STDIN")
+
+    # (a) the deterministic skeleton line is present, deduped, first-seen order.
+    if ! printf '%s' "$fed" | grep -qF '## Skills invoked this session (deterministic, in order): prometheus, sisyphus'; then
+        echo "ASSERTION FAILED: extract must contain the deduped, order-preserving skeleton line"
+        printf '%s\n' "$fed" | grep -F '## Skills invoked this session' || true
+        return 1
+    fi
+
+    # (b) the skeleton appears at the TOP — before the conversation body marker.
+    local skel_line body_line
+    skel_line=$(printf '%s\n' "$fed" | grep -nF '## Skills invoked this session' | head -1 | cut -d: -f1)
+    body_line=$(printf '%s\n' "$fed" | grep -nF 'CONVERSATION_BODY_MARKER' | head -1 | cut -d: -f1)
+    if [ -z "$skel_line" ] || [ -z "$body_line" ] || [ "$skel_line" -ge "$body_line" ]; then
+        echo "ASSERTION FAILED: skeleton (line $skel_line) must precede the conversation body (line $body_line)"
+        return 1
+    fi
+    return 0
+}
+
 # Helper: run the resolver block from the hook in a subprocess and print the
 # resulting CODEX_BIN.
 # $1 = PATH string for the subprocess (must include system coreutils if needed)
@@ -795,6 +854,7 @@ main() {
     run_test test_ac_t1_9_second_run_overwrites
     run_test test_c3_prose_string_not_truncated
     run_test test_skill_1_body_replaced_with_name_reference
+    run_test test_skill_2_deterministic_skeleton_at_top
     run_test test_resolver_skips_shim_picks_real
     run_test test_resolver_env_override_takes_precedence
     run_test test_resolver_no_codex_yields_empty_and_failopen
