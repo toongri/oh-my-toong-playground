@@ -227,7 +227,8 @@ fi
 # Compaction handoff (source==compact): read the current-sid handoff into a
 # SEPARATE variable (NOT MESSAGES) so the surgical jq -Rs encoder can handle the
 # untrusted summarizer prose on its own, leaving the restore sed path untouched.
-# Delete-on-consume: the handoff is a one-shot baton.
+# Delete-on-consume for inlined (small) handoffs; large handoffs are KEPT as a pointer
+# target and reaped later by the orphan-GC TTL arm.
 if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
   HANDOFF_FILE="$OMT_DIR/handoff-${SESSION_ID}.md"
   if [ -f "$HANDOFF_FILE" ]; then
