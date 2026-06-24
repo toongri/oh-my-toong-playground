@@ -49,11 +49,29 @@ function checkDuplicateKeys(text: string): void {
   // Stack: index = indent depth, value = Set of keys seen at that depth.
   const stack: Map<number, Set<string>> = new Map();
 
+  // Block-scalar skip state: when we encounter a key whose value is "|" or ">",
+  // we record the key's indent and skip every subsequent line whose indent is
+  // strictly greater (those are scalar body lines). We resume on the first line
+  // that is not more indented. Blank lines inside a scalar body are also skipped.
+  let blockScalarIndent: number | null = null;
+
   for (const rawLine of text.split('\n')) {
     // Skip blank lines, comments, document markers
     const trimmed = rawLine.trimEnd();
     if (trimmed === '' || trimmed.trimStart().startsWith('#') || trimmed === '---' || trimmed === '...') {
+      // Blank lines may appear inside a block scalar body — keep skipping.
       continue;
+    }
+
+    // If we are inside a block scalar body, skip lines that are more indented
+    // than the key that opened the scalar.
+    if (blockScalarIndent !== null) {
+      const lineIndent = rawLine.match(/^(\s*)/)?.[1].length ?? 0;
+      if (lineIndent > blockScalarIndent) {
+        continue; // still in scalar body
+      }
+      // Dedented back to key level or above — scalar body is over.
+      blockScalarIndent = null;
     }
 
     // Match a block mapping key: optional leading spaces, then a YAML key
@@ -109,5 +127,15 @@ function checkDuplicateKeys(text: string): void {
       );
     }
     keysAtLevel.add(keyCandidate);
+
+    // Detect block-scalar indicator on this key line: the value after the
+    // colon (trimmed) must be "|" or ">" (optionally followed by chomping /
+    // indent modifiers like "-", "+", digits, and/or a trailing comment).
+    // If so, mark that all subsequent lines indented more than this key's
+    // indent are scalar body — skip them.
+    const afterColon = trimmed.slice(match[0].length).trim().replace(/#.*$/, '').trim();
+    if (/^[|>][-+]?\d*$/.test(afterColon)) {
+      blockScalarIndent = effectiveIndent;
+    }
   }
 }
