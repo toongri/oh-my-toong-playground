@@ -12,7 +12,7 @@
  * CLI usage: bun run tools/validators/lib-imports.ts
  */
 
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { getRootDir } from "../lib/config.ts";
 import { collectFiles } from "../lib/sync-directory.ts";
@@ -21,38 +21,59 @@ import { findRelativeLibImports, findBareNpmImports } from "../adapters/ts-lib-d
 // Source directories that may hold deployable .ts components.
 const COMPONENT_DIRS = ["hooks", "skills", "scripts", "agents", "commands", "rules"];
 
+/** Returns `{ label, base }` entries for each `projects/<name>/<dir>` that exists. */
+function projectLocalDirs(rootDir: string): Array<{ label: string; base: string }> {
+  const projectsRoot = join(rootDir, "projects");
+  if (!existsSync(projectsRoot)) return [];
+  const entries: Array<{ label: string; base: string }> = [];
+  for (const name of readdirSync(projectsRoot)) {
+    for (const dir of COMPONENT_DIRS) {
+      const base = join(projectsRoot, name, dir);
+      if (existsSync(base)) {
+        entries.push({ label: `projects/${name}/${dir}`, base });
+      }
+    }
+  }
+  return entries;
+}
+
 export async function findLibImportViolations(rootDir: string): Promise<string[]> {
   const libSourceDir = join(rootDir, "lib");
   const violations: string[] = [];
 
   // Pass 1: relative-into-lib detection (existing pass — DO NOT alter).
-  for (const dir of COMPONENT_DIRS) {
-    const base = join(rootDir, dir);
+  const pass1Dirs: Array<{ label: string; base: string }> = [
+    ...COMPONENT_DIRS.map((dir) => ({ label: dir, base: join(rootDir, dir) })),
+    ...projectLocalDirs(rootDir),
+  ];
+
+  for (const { label, base } of pass1Dirs) {
     if (!existsSync(base)) continue;
 
     for (const rel of await collectFiles(base)) {
-      if (!rel.endsWith(".ts") || rel.endsWith(".test.ts")) continue;
+      if (!rel.endsWith(".ts") || rel.endsWith(".test.ts") || rel.endsWith(".d.ts")) continue;
       const filePath = join(base, rel);
       for (const specifier of await findRelativeLibImports(filePath, libSourceDir)) {
-        violations.push(`${dir}/${rel}: '${specifier}'`);
+        violations.push(`${label}/${rel}: '${specifier}'`);
       }
     }
   }
 
   // Pass 2: bare-npm import detection.
-  // Scans lib/ + COMPONENT_DIRS (the deployed surface). tools/ is excluded: it
-  // runs where bun install exists so npm imports are legal there. .test.ts files
-  // are excluded (handled inside findBareNpmImports).
+  // Scans lib/ + COMPONENT_DIRS + project-local component dirs (the deployed surface).
+  // tools/ is excluded: it runs where bun install exists so npm imports are legal there.
+  // .test.ts files are excluded (handled inside findBareNpmImports).
   const bareNpmDirs: Array<{ label: string; base: string }> = [
     { label: "lib", base: libSourceDir },
     ...COMPONENT_DIRS.map((dir) => ({ label: dir, base: join(rootDir, dir) })),
+    ...projectLocalDirs(rootDir),
   ];
 
   for (const { label, base } of bareNpmDirs) {
     if (!existsSync(base)) continue;
 
     for (const rel of await collectFiles(base)) {
-      if (!rel.endsWith(".ts") || rel.endsWith(".test.ts")) continue;
+      if (!rel.endsWith(".ts") || rel.endsWith(".test.ts") || rel.endsWith(".d.ts")) continue;
       const filePath = join(base, rel);
       for (const specifier of await findBareNpmImports(filePath)) {
         violations.push(
