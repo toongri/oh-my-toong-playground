@@ -243,8 +243,11 @@ and the Verification re-runs those steps. The Reproduction is the single source 
 fix-verification procedure: the RCA `Verification step` above points to that same re-run rather
 than a separate check, and the AC must not fall back to a generic "works correctly" (a §2
 weasel-word violation). When the Root Cause is hypothesis-grade (`TBD — needs validation via
-{method}`), the AC's Verification inherits that provisionality — mark it `TBD` rather than
-asserting a confirmation the diagnosis cannot yet support.
+{method}`), the provisionality stays on the Root Cause — **not** on the AC. The AC's Verification
+remains the Reproduction re-run: a defined, executable method that satisfies the `Un-observable AC`
+gate (SKILL.md). So a reproducible bug always carries an actionable AC even while its cause is
+unconfirmed — and a bug with no reproduction is already refused upstream by the `No consistent
+reproduction` gate, so the re-run is always available when an AC is written.
 
 ---
 
