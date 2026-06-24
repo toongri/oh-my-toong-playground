@@ -33,7 +33,7 @@ The ladder shortens the solution, never the reading. It runs *after* you underst
 
 ## What is never simplified away
 
-These are not bloat — keep them even as the rest shrinks: input validation at trust boundaries, error handling that prevents data loss, security, accessibility, and anything the user explicitly asked for. Between two same-size options, pick the one correct on edge cases — lazy means writing less code, not picking the flimsier algorithm. Non-trivial logic (a branch, a loop, a parser, a money or security path) leaves ONE runnable check behind: the smallest thing that fails if the logic breaks — an assert-based self-check or one small test. No frameworks, no fixtures unless asked. Trivial one-liners need no test.
+These are not bloat — keep them even as the rest shrinks: input validation at trust boundaries, error handling that prevents data loss, security, accessibility, and anything the user explicitly asked for. Between two same-size options, pick the one correct on edge cases — lazy means writing less code, not picking the flimsier algorithm. Non-trivial logic (a branch, a loop, a parser, a money or security path) leaves ONE runnable check behind: the smallest thing that fails if the logic breaks — an assert-based self-check or one small test. No frameworks, no fixtures unless asked. A bug fix always leaves this check, however small. Only a one-liner that changes no logic — a rename, a config value, a passthrough — skips it.
 
 ## Output and traceability
 
