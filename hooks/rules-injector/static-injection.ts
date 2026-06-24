@@ -9,7 +9,7 @@ import { withPostCompactBudget } from "./post-compact-budget.js";
 import type { PostCompactReadDirective } from "./post-compact-directive.js";
 import { buildPostCompactReadDirective } from "./post-compact-directive.js";
 import type { Engine } from "./rules/index.js";
-import { formatStaticBlock, hashContent, isNeverTruncatedRule, parseRule, ruleMarkerLine, transcriptHasRuleVersion } from "./rules/index.js";
+import { formatStaticBlock, hashContent, isNeverTruncatedRule, normalizeRuleContentForHash, parseRule, ruleMarkerLine, transcriptHasRuleVersion } from "./rules/index.js";
 import type { LoadedRule, PiRulesConfig } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
 import { filterRulesAlreadyInTranscript, filterRulesNotInTranscriptText } from "./transcript-rule-filter.js";
@@ -188,7 +188,7 @@ function readRecoveryTranscriptText(transcriptPath: string | null): string | nul
 function isDynamicRuleBodyInTranscript(rulePath: string, transcriptText: string): boolean {
 	try {
 		const raw = readFileSync(rulePath, "utf8");
-		const contentHash = hashContent(raw);
+		const contentHash = hashContent(normalizeRuleContentForHash(raw));
 		const needle = parseRule(raw).body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().slice(0, 2_000);
 		if (needle.length === 0 || !transcriptText.includes(needle)) {
 			return false;

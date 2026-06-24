@@ -1,6 +1,6 @@
 import { isCandidateWithinProjectCached } from "./engine-paths.js";
 import type { CandidateProjectMembership, EngineDeps, LoadedRuleContent } from "./engine-types.js";
-import { hashContent } from "./matcher.js";
+import { hashContent, normalizeRuleContentForHash } from "./matcher.js";
 import { parseRule } from "./parser.js";
 import type { LoadedRule, MatchReason, RuleCandidate, RuleDiagnostic } from "./types.js";
 
@@ -37,7 +37,7 @@ export function loadCandidate(
 	const loadedContent = {
 		frontmatter: parsed.frontmatter,
 		body: parsed.body,
-		contentHash: hashContent(content),
+		contentHash: hashContent(normalizeRuleContentForHash(content)),
 		...(parsed.diagnostic === undefined ? {} : { diagnostic: parsed.diagnostic }),
 	} satisfies LoadedRuleContent;
 	loadedRuleContent?.set(candidate.realPath, loadedContent);
