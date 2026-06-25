@@ -7,7 +7,7 @@
  * Validates:
  *   - YAML syntax
  *   - P2-3: Deprecated top-level sections (config, hooks, mcps, plugins) in sync.yaml → ERROR
- *   - Allowed sections in sync.yaml (agents, commands, skills, scripts, rules)
+ *   - Allowed sections in sync.yaml (agents, commands, skills, scripts, rules, provision)
  *   - Item format (string or object with component)
  *   - Platform values against valid targets
  *   - Per-platform YAML: allowed sections per platform, unknown section → WARN
@@ -45,6 +45,7 @@ const VALID_SYNC_TOP_LEVEL = new Set([
   "skills",
   "scripts",
   "rules",
+  "provision",
 ]);
 
 // P2-3: Deprecated sections that must not appear in sync.yaml
@@ -75,6 +76,8 @@ const VALID_ADD_HOOK_ITEM_FIELDS = new Set([
 ]);
 
 const VALID_GENERIC_ITEM_FIELDS = new Set(["component", "platforms"]);
+
+const VALID_PROVISION_ITEM_FIELDS = new Set(["check", "commands"]);
 
 const VALID_EVENTS = new Set([
   "SessionStart",
@@ -266,6 +269,63 @@ function validateAgentItems(
   }
 }
 
+function validateProvision(provision: unknown, result: ValidationResult): void {
+  if (provision === null || provision === undefined) return;
+
+  if (!isArray(provision)) {
+    result.errors.push(`provision: 배열 형식이어야 합니다`);
+    return;
+  }
+
+  for (let i = 0; i < provision.length; i++) {
+    const item = provision[i];
+    const ctx = `provision[${i}]`;
+
+    if (!isObject(item)) {
+      result.errors.push(`${ctx}: object 형식이어야 합니다`);
+      continue;
+    }
+
+    for (const key of Object.keys(item)) {
+      if (!VALID_PROVISION_ITEM_FIELDS.has(key)) {
+        result.errors.push(`${ctx}: 알 수 없는 필드 '${key}' (지원: ${[...VALID_PROVISION_ITEM_FIELDS].join(", ")})`);
+      }
+    }
+
+    if (item.check !== undefined && typeof item.check !== "string") {
+      result.errors.push(`${ctx}.check: string이어야 합니다 (got ${typeof item.check})`);
+    } else if (typeof item.check === "string" && item.check.trim() === "") {
+      result.errors.push(`${ctx}.check: 빈/공백 문자열은 허용되지 않습니다 (생략하려면 키 자체를 제거)`);
+    }
+
+    if (!("commands" in item)) {
+      result.errors.push(`${ctx}: commands 필드가 필요합니다`);
+      continue;
+    }
+
+    if (!isArray(item.commands)) {
+      result.errors.push(`${ctx}.commands: 배열 형식이어야 합니다`);
+      continue;
+    }
+
+    const commands = item.commands;
+
+    if (commands.length === 0) {
+      result.errors.push(`${ctx}.commands: 빈 배열은 허용되지 않습니다`);
+      continue;
+    }
+
+    for (let j = 0; j < commands.length; j++) {
+      const cmd = commands[j];
+      if (typeof cmd !== "string") {
+        result.errors.push(`${ctx}.commands[${j}]: string이어야 합니다 (got ${typeof cmd})`);
+      } else if (cmd.trim() === "") {
+        result.errors.push(`${ctx}.commands[${j}]: 빈 문자열은 허용되지 않습니다`);
+      }
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // sync.yaml validator
 // ---------------------------------------------------------------------------
@@ -292,6 +352,7 @@ function validateSyncYamlData(data: Record<string, unknown>, filePath: string, r
   validateSection(data.skills, "skills", result, VALID_GENERIC_ITEM_FIELDS);
   validateSection(data.scripts, "scripts", result, VALID_GENERIC_ITEM_FIELDS);
   validateSection(data.rules, "rules", result, VALID_GENERIC_ITEM_FIELDS);
+  validateProvision(data.provision, result);
 }
 
 export function validateSyncYaml(filePath: string): ValidationResult {

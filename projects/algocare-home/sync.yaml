@@ -1,3 +1,11 @@
 name: algocare-home
 path: ~/repos/algocare-home
 platforms: [claude]
+
+provision:
+  - check: "command -v codegraph"
+    commands:
+      - "npm i -g @colbymchenry/codegraph"
+  - check: "test -f .codegraph/codegraph.db"
+    commands:
+      - "codegraph init"

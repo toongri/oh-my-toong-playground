@@ -46,3 +46,11 @@ rules:
     - work-principles
     - coding-discipline
     - least-code
+
+provision:
+  - check: "command -v codegraph"
+    commands:
+      - "npm i -g @colbymchenry/codegraph"
+  - check: "test -f .codegraph/codegraph.db"
+    commands:
+      - "codegraph init"
