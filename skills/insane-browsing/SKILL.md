@@ -128,9 +128,9 @@ agent-browser --cdp 9242 close
 ```bash
 # Extract cookies to a file (uv provides cryptography in an isolated env):
 mkdir -p ~/.local/state/insane-browsing-cookies
-uv run --with cryptography python scripts/extract_cookies.py --browser chrome --domain youtube.com --output ~/.local/state/insane-browsing-cookies/youtube.cookies.json
+uv run --python 3.11 --with cryptography python scripts/extract_cookies.py --browser chrome --domain youtube.com --output ~/.local/state/insane-browsing-cookies/youtube.cookies.json
 # Extract and inject into the running CDP session:
-uv run --with cryptography python scripts/extract_cookies.py --browser chrome --domain youtube.com --inject --cdp 9242
+uv run --python 3.11 --with cryptography python scripts/extract_cookies.py --browser chrome --domain youtube.com --inject --cdp 9242
 ```
 
 Cookie export files are written with owner-only `0600` permissions. Do not place live auth cookies in shared temp directories or commit them to a repo. Cookie injection sends values to CDP over stdin rather than argv. Cookies apply on next navigation — reload after injecting. Google services use fingerprint-bound tokens that may not transfer across browser profiles. Full detail in [references/chrome-stealth.md](references/chrome-stealth.md).
