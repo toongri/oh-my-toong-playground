@@ -19,6 +19,8 @@
 
 # node
 node_modules/
+# sync-time auto-vendoring generates these into deploy targets only; never commit to source
+lib/vendor/
 
 # omt state directories (project root and test artifacts)
 .omt/
