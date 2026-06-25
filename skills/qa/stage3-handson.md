@@ -15,7 +15,7 @@ Verify user-facing behavior by actually running the changed code. This is not op
 | Signal in Prompt | Change Type | Action |
 |------------------|-------------|--------|
 | API endpoint, route, handler, REST, HTTP | API | Verify with `curl` |
-| UI, page, component, frontend, render | Frontend | Verify with `playwright` |
+| UI, page, component, frontend, render | Frontend | Verify with `agent-browser` (fallback: `playwright`) |
 | Mobile, app, iOS, Android, simulator, emulator | Mobile | Verify with `maestro` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
 | Refactoring, internal logic, utility, helper, config | Internal only | **Skip Stage 3** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — non-user-facing surface) |
@@ -114,11 +114,42 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 ---
 
-## Step 3.4: Frontend Verification (playwright)
+## Step 3.4: Frontend Verification (agent-browser → fallback: playwright)
 
-**Verify UI behavior with `playwright`.**
+**Verify UI behavior with `agent-browser`. Fall back to `playwright` only when an agent-browser attempt actually fails or cannot express the check — not as a preemptive capability decision.**
 
 ### Procedure
+
+**Primary path — agent-browser (attempt-then-fallback rule):**
+
+1. Check install: `command -v agent-browser || (npm i -g agent-browser && agent-browser install)`
+2. Open the affected page:
+   ```bash
+   agent-browser open <url>
+   ```
+3. Capture the accessibility-tree snapshot (interactive):
+   ```bash
+   agent-browser snapshot -i
+   ```
+4. Interact with elements using `@eN` refs from the snapshot:
+   ```bash
+   agent-browser fill @eN "<value>"   # text input
+   agent-browser click @eN            # button / link
+   agent-browser wait --load networkidle
+   ```
+5. Assert outcomes:
+   ```bash
+   agent-browser get url              # current URL after navigation
+   agent-browser get text @eN         # element text content
+   ```
+6. Close the session:
+   ```bash
+   agent-browser close
+   ```
+
+**Fallback path — playwright (only on agent-browser attempt failure or inexpressible check):**
+
+If any agent-browser step returns a non-zero exit code or the required assertion cannot be expressed via the agent-browser CLI, switch to playwright for that check. Document the failure reason in evidence.
 
 1. Ensure playwright is installed in the project (check `package.json`)
 2. Navigate to the affected page/component
