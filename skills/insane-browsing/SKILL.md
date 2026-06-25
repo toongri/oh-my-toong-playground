@@ -40,8 +40,11 @@ Read the matching reference before acting: [`references/insane-search/README.md`
 **Why first**: ~10x faster than a browser, no process spin-up; handles most "fetch this blocked page" requests via curl_cffi TLS impersonation, yt-dlp (1858 sites), Jina Reader, official public APIs, mobile URL transforms, and a Playwright real-Chrome fallback. The engine lives **inside this skill** at `engine/` and is invoked as a module.
 
 ```bash
-# Core command — auto-detects WAF, runs the full fetch grid (run from the skill dir):
-python3 -m engine "https://example.com/blocked-page"
+# Core command — auto-detects WAF, runs the full fetch grid.
+# Must cd into the skill dir: the engine is a package with relative imports (python -m engine
+# resolves them; a direct script path crashes). uv resolves deps into an isolated cached venv
+# from requirements.txt on first call (curl_cffi, beautifulsoup4, PyYAML pinned).
+(cd "$REPO/$SKILL_DIR" && uv run --python 3.10 --with-requirements requirements.txt python -m engine "https://example.com/blocked-page")
 #   add --selector "<CSS>" for positive-proof validation, --device auto|desktop|mobile,
 #   --trace to inspect every attempt, --json for machine-readable output.
 
@@ -61,6 +64,27 @@ The full engine harness (rules R1-R7, the Phase 0 official-API index, the no-sit
 ## Tier 2 — agent-reach (platform-native readers)
 
 **When**: the target is a platform with a first-class API/CLI that beats generic fetching — especially Chinese platforms that stealth browsers still cannot reach cleanly. Several channels are zero-config (Douyin, Weibo via Jina, V2EX, Reddit, Jina Reader, RSS, YouTube); others need a one-time auth you supply via environment variables if you have access.
+
+### One-time isolated setup (agent-reach)
+
+agent-reach is an external tool — not vendored here and not installed by `make sync`. Install it once, in isolation, before first use:
+
+```bash
+# Step 1: install the agent-reach tool itself (pick one; both are isolated):
+pipx install agent-reach          # recommended: pipx keeps it isolated
+# OR: uv tool install agent-reach  # uv tool alternative
+
+# Step 2: install agent-reach channel plugins:
+agent-reach install
+
+# Step 3: verify install and check cookie-channel auth prerequisites:
+agent-reach doctor
+# agent-reach doctor reports which cookie-channel logins are present and which are missing.
+# Cookie-channel logins are one-time-manual: log into the platform in a Chromium-family browser,
+# then run scripts/extract_cookies.py to capture and inject those cookies.
+```
+
+This is a one-time operator setup step, NOT an automated `make sync` step. `make sync` deploys skill files; it does not install or configure agent-reach.
 
 | Category | Platforms | Entry |
 |---|---|---|
@@ -102,11 +126,11 @@ agent-browser --cdp 9242 close
 `scripts/extract_cookies.py` reads cookies from a local Chromium-family or Firefox-family browser and optionally injects them into the running CDP session. It resolves browser profile paths and decrypts cookie values per-OS (macOS Keychain, Linux libsecret, Windows DPAPI):
 
 ```bash
-# Extract cookies to a file:
+# Extract cookies to a file (uv provides cryptography in an isolated env):
 mkdir -p ~/.local/state/insane-browsing-cookies
-python3 scripts/extract_cookies.py --browser chrome --domain youtube.com --output ~/.local/state/insane-browsing-cookies/youtube.cookies.json
+uv run --with cryptography python scripts/extract_cookies.py --browser chrome --domain youtube.com --output ~/.local/state/insane-browsing-cookies/youtube.cookies.json
 # Extract and inject into the running CDP session:
-python3 scripts/extract_cookies.py --browser chrome --domain youtube.com --inject --cdp 9242
+uv run --with cryptography python scripts/extract_cookies.py --browser chrome --domain youtube.com --inject --cdp 9242
 ```
 
 Cookie export files are written with owner-only `0600` permissions. Do not place live auth cookies in shared temp directories or commit them to a repo. Cookie injection sends values to CDP over stdin rather than argv. Cookies apply on next navigation — reload after injecting. Google services use fingerprint-bound tokens that may not transfer across browser profiles. Full detail in [references/chrome-stealth.md](references/chrome-stealth.md).
@@ -126,7 +150,8 @@ CLOAK_CDP_PORT=9242              # CloakBrowser CDP port (default 9242)
 AGENT_BROWSER_USER_AGENT="..."   # override UA to hide HeadlessChrome
 AGENT_BROWSER_HEADED=1           # show the browser window
 # agent-reach auth: set the channel-specific env vars from each tool's docs only if you have access
-# insane-search needs no env vars — it auto-installs deps on first run
+# insane-search engine deps (curl_cffi, beautifulsoup4, PyYAML) are declared in requirements.txt
+# and resolved by uv into an isolated cached venv on first call — no env var required
 ```
 
 ## Anti-patterns
