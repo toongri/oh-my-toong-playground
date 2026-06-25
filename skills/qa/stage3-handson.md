@@ -141,7 +141,7 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 ### Procedure
 
-Before proceeding, load the `using-maestro` skill (via the Skill tool) — it encodes the authoring principles (stable selectors, state isolation, condition-based waits) used in subsequent steps.
+Mobile/RN E2E는 **Maestro MCP**로 구동한다 (`run`·`inspect_screen`·`take_screenshot`·`list_devices` 툴 노출). 증거가 필요한 AC 검증 명령은 아래 CLI 절차(`--format junit --output`)를 그대로 따른다.
 
 1. Ensure `maestro` is installed (`maestro --version`); for iOS, Xcode + iOS Simulator; for Android, Android SDK + emulator
 2. Boot the target simulator/emulator before the test:
