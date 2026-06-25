@@ -9,6 +9,7 @@ import {
   collectLibDataFiles,
   findRelativeLibImports,
   findBareNpmImports,
+  readPackageJsonDeps,
 } from "./ts-lib-deps.ts";
 
 // ---------------------------------------------------------------------------
@@ -190,18 +191,20 @@ describe("resolveTsLibDependencies", () => {
     expect(deps).toEqual([fooLib]);
   });
 
-  it("`@lib/vendor/picomatch` — .ts 없고 .js만 있을 때 .js 경로 반환 (vendor .js 아티팩트 배포 회귀 방지)", async () => {
-    // Fixture: lib/vendor/picomatch.js exists (runtime artifact), no .ts counterpart
+  it("`@lib/vendor/<pkg>` — .ts 없고 .js만 있을 때 .js 경로 반환 (vendor .js 아티팩트 배포 회귀 방지)", async () => {
+    // D-9: this guards the still-live @lib/ .js-fallback resolution mechanism.
+    // The fixture is a generic self-created vendored .js (NOT the deleted
+    // committed lib/vendor/picomatch.js) so the test owns its fixture entirely.
     const vendorDir = path.join(libDir, "vendor");
     await fs.mkdir(vendorDir, { recursive: true });
-    const picomatchJs = path.join(vendorDir, "picomatch.js");
-    await writeFile(picomatchJs, "// bundled picomatch runtime");
+    const vendoredJs = path.join(vendorDir, "generic-vendored.js");
+    await writeFile(vendoredJs, "// bundled runtime artifact");
 
     const entryFile = path.join(platformDir, "entry.ts");
-    await writeFile(entryFile, 'import picomatch from "@lib/vendor/picomatch";\n');
+    await writeFile(entryFile, 'import vendored from "@lib/vendor/generic-vendored";\n');
 
     const deps = await resolveTsLibDependencies(entryFile, libDir);
-    expect(deps).toEqual([picomatchJs]);
+    expect(deps).toEqual([vendoredJs]);
   });
 });
 
@@ -505,5 +508,30 @@ describe("findBareNpmImports", () => {
     await writeFile(file, "/*\n * docs\n * import chalk from 'chalk' */\nexport const x = 1;\n");
 
     expect(await findBareNpmImports(file)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readPackageJsonDeps — declared dependency name resolution
+// ---------------------------------------------------------------------------
+
+describe("readPackageJsonDeps", () => {
+  it("선언된 devDependency(picomatch)는 포함하고, 선언되지 않은 이름은 제외", async () => {
+    await writeFile(
+      path.join(tmpDir, "package.json"),
+      JSON.stringify({
+        dependencies: { "left-pad": "1.0.0" },
+        devDependencies: { picomatch: "4.0.4" },
+      }),
+    );
+
+    const declared = await readPackageJsonDeps(tmpDir);
+
+    // devDependency is included.
+    expect(declared.has("picomatch")).toBe(true);
+    // dependency is included (union of deps ∪ devDeps).
+    expect(declared.has("left-pad")).toBe(true);
+    // a name declared nowhere is excluded.
+    expect(declared.has("definitely-not-declared")).toBe(false);
   });
 });

@@ -381,6 +381,33 @@ export async function findRelativeLibImports(
   return offenders;
 }
 
+/**
+ * Read the root package.json and return the union of `dependencies` and
+ * `devDependencies` key names as a Set<string>.
+ *
+ * Caller supplies `repoRoot` (the absolute path to the repository root) so
+ * this function stays a pure detector with no hardcoded paths — consistent
+ * with findBareNpmImports which receives its target path from the caller.
+ *
+ * `peerDependencies` and `optionalDependencies` are intentionally excluded.
+ * `@types/*` keys are included as-declared (harmless; they have no bare
+ * import targets at runtime).
+ *
+ * Reads package.json exactly once per call.
+ */
+export async function readPackageJsonDeps(repoRoot: string): Promise<Set<string>> {
+  const pkgPath = path.join(repoRoot, "package.json");
+  const raw = await fs.readFile(pkgPath, "utf8");
+  const pkg = JSON.parse(raw) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  const declared = new Set<string>();
+  for (const name of Object.keys(pkg.dependencies ?? {})) declared.add(name);
+  for (const name of Object.keys(pkg.devDependencies ?? {})) declared.add(name);
+  return declared;
+}
+
 // Matches any static import specifier (from '...' or import '...' or import(...))
 // Used by findBareNpmImports — build a fresh RegExp per call to avoid shared lastIndex.
 const IMPORT_SPECIFIER_RE = /(?:from|import)\s*[\s(]["']([^"']+)["']/g;
@@ -391,7 +418,7 @@ const IMPORT_SPECIFIER_RE = /(?:from|import)\s*[\s(]["']([^"']+)["']/g;
 const BUILTIN_MODULE_SET = new Set(builtinModules);
 
 /**
- * Find bare npm import specifiers in a single .ts file.
+ * Detect bare npm import specifiers in a string of TypeScript source.
  *
  * A specifier is "bare" when it is NOT:
  *   - a relative path (starts with "./" or "../")
@@ -399,24 +426,13 @@ const BUILTIN_MODULE_SET = new Set(builtinModules);
  *   - a Node builtin (unprefixed name in builtinModules, or "node:"-prefixed)
  *   - a bun: protocol import ("bun:"-prefixed)
  *
+ * Comment lines (starting with `//`, `/*`, or `*`) are skipped.
  * For sub-path specifiers like "picomatch/lib/x", the root segment ("picomatch")
  * is tested against the builtin set, so bare packages with sub-paths are caught.
  *
- * Returns:
- *   - Empty array for *.test.ts files (never deployed)
- *   - Empty array if the file cannot be read
- *   - The raw specifier strings that are bare npm imports
+ * Used by findBareNpmImports (file-based) and rewriteLibImports (post-condition guard).
  */
-export async function findBareNpmImports(filePath: string): Promise<string[]> {
-  if (filePath.endsWith(".test.ts")) return [];
-
-  let content: string;
-  try {
-    content = await fs.readFile(filePath, "utf8");
-  } catch {
-    return [];
-  }
-
+export function detectBareImports(content: string): string[] {
   const re = new RegExp(IMPORT_SPECIFIER_RE.source, "g");
   const offenders: string[] = [];
 
@@ -452,4 +468,27 @@ export async function findBareNpmImports(filePath: string): Promise<string[]> {
   }
 
   return offenders;
+}
+
+/**
+ * Find bare npm import specifiers in a single .ts file.
+ *
+ * Returns:
+ *   - Empty array for *.test.ts files (never deployed)
+ *   - Empty array if the file cannot be read
+ *   - The raw specifier strings that are bare npm imports
+ *
+ * See detectBareImports for the classification rules.
+ */
+export async function findBareNpmImports(filePath: string): Promise<string[]> {
+  if (filePath.endsWith(".test.ts")) return [];
+
+  let content: string;
+  try {
+    content = await fs.readFile(filePath, "utf8");
+  } catch {
+    return [];
+  }
+
+  return detectBareImports(content);
 }
