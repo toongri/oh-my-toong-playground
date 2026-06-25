@@ -45,6 +45,7 @@ const VALID_SYNC_TOP_LEVEL = new Set([
   "skills",
   "scripts",
   "rules",
+  "provision",
 ]);
 
 // P2-3: Deprecated sections that must not appear in sync.yaml
@@ -266,6 +267,57 @@ function validateAgentItems(
   }
 }
 
+function validateProvision(provision: unknown, result: ValidationResult): void {
+  if (provision === null || provision === undefined) return;
+
+  if (!isArray(provision)) {
+    result.errors.push(`provision: 배열 형식이어야 합니다`);
+    return;
+  }
+
+  for (let i = 0; i < provision.length; i++) {
+    const item = provision[i];
+    const ctx = `provision[${i}]`;
+
+    if (!isObject(item)) {
+      result.errors.push(`${ctx}: object 형식이어야 합니다`);
+      continue;
+    }
+
+    for (const key of Object.keys(item)) {
+      if (key !== "check" && key !== "commands") {
+        result.errors.push(`${ctx}: 알 수 없는 필드 '${key}' (지원: check, commands)`);
+      }
+    }
+
+    if (item.check !== undefined && typeof item.check !== "string") {
+      result.errors.push(`${ctx}.check: string이어야 합니다 (got ${typeof item.check})`);
+    }
+
+    if (!("commands" in item)) {
+      result.errors.push(`${ctx}: commands 필드가 필요합니다`);
+      continue;
+    }
+
+    if (!isArray(item.commands)) {
+      result.errors.push(`${ctx}.commands: 배열 형식이어야 합니다`);
+      continue;
+    }
+
+    if ((item.commands as unknown[]).length === 0) {
+      result.errors.push(`${ctx}.commands: 빈 배열은 허용되지 않습니다`);
+      continue;
+    }
+
+    for (let j = 0; j < (item.commands as unknown[]).length; j++) {
+      const cmd = (item.commands as unknown[])[j];
+      if (typeof cmd !== "string") {
+        result.errors.push(`${ctx}.commands[${j}]: string이어야 합니다 (got ${typeof cmd})`);
+      }
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // sync.yaml validator
 // ---------------------------------------------------------------------------
@@ -292,6 +344,7 @@ function validateSyncYamlData(data: Record<string, unknown>, filePath: string, r
   validateSection(data.skills, "skills", result, VALID_GENERIC_ITEM_FIELDS);
   validateSection(data.scripts, "scripts", result, VALID_GENERIC_ITEM_FIELDS);
   validateSection(data.rules, "rules", result, VALID_GENERIC_ITEM_FIELDS);
+  validateProvision(data.provision, result);
 }
 
 export function validateSyncYaml(filePath: string): ValidationResult {

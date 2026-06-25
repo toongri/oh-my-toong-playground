@@ -37,7 +37,7 @@ import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
 import { collectRequiredLibModulesFromSources, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
-import { provisionCodegraph } from "./lib/codegraph-provision.ts";
+import { runProvision } from "./lib/provision.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
 import { CodexAdapter } from "./adapters/codex.ts";
@@ -853,6 +853,10 @@ export async function processYaml(
     }
   }
 
+  // Per-yaml provision: run after all components deployed, at this yaml's deploy targets.
+  // Non-fatal and dryRun-safe — a missing/failed provision never breaks sync.
+  runProvision(syncYaml.provision ?? [], deployRoots, { dryRun: context.dryRun });
+
   logSuccess(`완료: ${syncYamlPath}`);
 }
 
@@ -1044,10 +1048,6 @@ if (import.meta.main) {
     const effectiveFilter = resolveProjectFilter(projectFilter, enabledProjects);
     await runProjectsLoop(rootDir, adapters, context, effectiveFilter, verbose);
 
-    // Snapshot project dirs BEFORE root sync.yaml adds ~ to processedPaths.
-    // These are the resolved deploy-target paths of all processed project sync.yamls.
-    const projectDirsForCodegraph = [...context.processedPaths];
-
     // 루트 sync.yaml 처리 (이미 처리된 path는 스킵, 프로젝트 필터 미적용)
     // projectFilter(raw CLI)가 비어있을 때만 루트 실행: CLI --projects는 "이 기기에서 이 프로젝트만" 일회성 의도이므로 글로벌 루트도 제외.
     // effectiveFilter(config enabled-projects 포함)와 다른 것은 의도된 비대칭 — config는 디바이스 프로필이라 루트(글로벌)는 항상 실행. README "루트 sync.yaml은 영향 받지 않습니다" 참조.
@@ -1082,10 +1082,6 @@ if (import.meta.main) {
         }
       }
     }
-
-    // Codegraph provisioning: ensure binary + background-init eligible project repos.
-    // Non-blocking and non-fatal — a missing binary or failed init never breaks sync.
-    provisionCodegraph(projectDirsForCodegraph, { dryRun });
 
     // 오래된 백업 정리
     const cleanupPromises: Promise<void>[] = [];
