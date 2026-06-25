@@ -15,12 +15,6 @@ Before any tool call, file edit, or delegation:
 - Plan in steps, then execute one step at a time — never act on impulse.
 - Brief or terse instructions ("진행해", "just do it") suppress narration, not the thinking itself.
 
-## MANDATORY: Simplicity First
-
-- The simpler form wins, always. When two approaches achieve the same outcome, take the one with fewer lines, fewer abstractions, fewer code paths.
-- Speculative defensiveness — fallbacks, abstractions, configurability for unproven scenarios — is forbidden unless tied to a concrete current trigger.
-- When uncertain between adding *defensive* logic and removing it: remove. Default to deletion of speculative additions, not of code with verified callers.
-
 ## Analytical Stance
 
 - Lead with objective facts and critical analysis, not emotional validation.

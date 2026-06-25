@@ -240,6 +240,24 @@ describe('pinsHome tier', () => {
   });
 });
 
+describe('corruption: multi-document project manifest surfaces error', () => {
+  test('multi-doc pins.yaml (--- separator) in projectRoot throws instead of silently falling back to another manifest', async () => {
+    const projectRoot = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    // Multi-document YAML — Bun.YAML.parse returns an array; parseYamlStrict must throw.
+    writeFileSync(
+      join(projectRoot, 'pins.yaml'),
+      'location: project-pins\nscope: project-scope\n---\nlocation: second-doc\nscope: second-scope\n',
+    );
+    // User-root has a valid manifest — must NOT be silently selected on corruption.
+    writeFileSync(join(userRoot, 'pins.yaml'), 'location: user-pins\nscope: user-scope\n');
+
+    // The corrupt project manifest must surface an error, not silently fall through.
+    await expect(resolveManifest({ projectRoot, userRoot })).rejects.toThrow();
+  });
+});
+
 describe('project root resolution', () => {
   test('resolveManifest() finds the git-root pins.yaml when cwd is a subdirectory', async () => {
     const savedCwd = process.cwd();

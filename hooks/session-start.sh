@@ -227,12 +227,27 @@ fi
 # Compaction handoff (source==compact): read the current-sid handoff into a
 # SEPARATE variable (NOT MESSAGES) so the surgical jq -Rs encoder can handle the
 # untrusted summarizer prose on its own, leaving the restore sed path untouched.
-# Delete-on-consume: the handoff is a one-shot baton.
+# Delete-on-consume for inlined (small) handoffs; large handoffs are KEPT as a pointer
+# target and reaped later by the orphan-GC TTL arm.
 if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
   HANDOFF_FILE="$OMT_DIR/handoff-${SESSION_ID}.md"
   if [ -f "$HANDOFF_FILE" ]; then
-    HANDOFF=$(cat "$HANDOFF_FILE" 2>/dev/null)
-    rm -f "$HANDOFF_FILE"
+    HANDOFF_RAW=$(cat "$HANDOFF_FILE" 2>/dev/null)
+    # additionalContext is capped ~10k chars; the rich handoff routinely exceeds it.
+    # Small handoff: inline it and consume the baton (delete). Large handoff: inject a
+    # forced-reread POINTER and KEEP the file so the agent reads the full record on
+    # disk (the orphan-GC arm reaps it later by TTL). No inline preview -- a byte-cut
+    # of multibyte (e.g. Korean) prose could emit invalid UTF-8 into the jq -Rs encoder.
+    if [ "${#HANDOFF_RAW}" -le 7000 ]; then
+      HANDOFF="$HANDOFF_RAW"
+      rm -f "$HANDOFF_FILE"
+    else
+      HANDOFF="[COMPACTION HANDOFF -- full continuation record on disk]
+
+Your context was just compacted. The COMPLETE session handoff (original request verbatim, the full arc of decisions/rejections/Q&A, exact stopping point, and all user messages) is saved at:
+  $HANDOFF_FILE
+READ THAT FILE IN FULL NOW, BEFORE ANY OTHER ACTION. It is your only memory of this session -- do not trust your recollection of prior turns. Reconstructing it from memory is NOT reading it."
+    fi
   fi
 fi
 
