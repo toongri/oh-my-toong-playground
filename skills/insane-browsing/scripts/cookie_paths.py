@@ -104,7 +104,9 @@ def resolve_cookie_db(browser: str, platform: str, base_override: Path | None = 
             raise FileNotFoundError(f"no cookies.sqlite under {profile_root}")
         case "chromium":
             for profile in CHROMIUM_PROFILE_DIRS:
-                for candidate in (profile_root / profile / "Cookies", profile_root / profile / "Network" / "Cookies"):
+                # Prefer the modern Network/Cookies DB; the legacy top-level Cookies
+                # is a stale fallback for old profiles. First-existing wins.
+                for candidate in (profile_root / profile / "Network" / "Cookies", profile_root / profile / "Cookies"):
                     if candidate.exists():
                         return candidate
             raise FileNotFoundError(f"no Cookies DB under {profile_root}")

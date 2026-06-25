@@ -33,13 +33,9 @@ from cookie_crypto import (
 from cookie_domains import domain_where_clause
 from cookie_paths import BROWSERS, BrowserSpec, UnsupportedPlatform, platform_base, resolve_cookie_db
 
-_SAMESITE = {-1: "None", 0: "None", 1: "Lax", 2: "Strict"}
-
-IMPORTANT_COOKIES = {
-    "SID", "SSID", "HSID", "APISID", "SAPISID",
-    "__Secure-1PSID", "__Secure-3PSID", "__Secure-1PSIDTS", "__Secure-3PSIDTS",
-    "LOGIN_INFO", "PREF", "VISITOR_INFO1_LIVE", "YSC", "NID", "CONSENT",
-}
+# Chromium samesite enum: -1 unspecified, 0 None, 1 Lax, 2 Strict.
+# -1 (unspecified) maps to the export-form default Lax — never the literal "None".
+_SAMESITE = {-1: "Lax", 0: "None", 1: "Lax", 2: "Strict"}
 
 
 class CookieRecord(TypedDict):
@@ -231,19 +227,19 @@ def extract_cookies(
 
 
 def inject_cookies(cookies: list[CookieRecord], cdp_port: int) -> None:
-    filtered = [c for c in cookies if c["name"] in IMPORTANT_COOKIES] or cookies
     payload: list[CdpCookie] = [
         {
             "name": c["name"],
             "value": c["value"],
-            "domain": c["domain"],
             "path": c.get("path") or "/",
             "secure": bool(c.get("secure")),
             "httpOnly": bool(c.get("httpOnly")),
             "sameSite": c.get("sameSite", "Lax"),
+            # Host-only cookies (no leading dot) must omit the domain attribute.
+            **({"domain": c["domain"]} if c.get("domain", "").startswith(".") else {}),
             **({"expires": int(c["expires"])} if c.get("expires") and int(c["expires"]) > 0 else {}),
         }
-        for c in filtered
+        for c in cookies
     ]
     proc = subprocess.run(
         ["node", "-e", _CDP_SET_COOKIES_SCRIPT, str(cdp_port)],
@@ -255,7 +251,7 @@ def inject_cookies(cookies: list[CookieRecord], cdp_port: int) -> None:
     if proc.returncode != 0:
         raise RuntimeError((proc.stderr or "CDP cookie injection failed").strip())
     ok = int((proc.stdout or "0").strip() or "0")
-    print(f"Injected {ok}/{len(filtered)} cookies into agent-browser (CDP {cdp_port})")
+    print(f"Injected {ok}/{len(cookies)} cookies into agent-browser (CDP {cdp_port})")
 
 
 def main() -> None:

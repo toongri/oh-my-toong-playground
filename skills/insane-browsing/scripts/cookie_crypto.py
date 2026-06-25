@@ -56,15 +56,23 @@ def macos_keyring_secret(safe_storage: str) -> bytes:
 
 
 def linux_keyring_secret(safe_storage: str) -> bytes:
+    # On a headless host the keyring is unreachable: secretstorage may be absent, or
+    # dbus_init() raises SecretServiceNotAvailableException (D-Bus session bus down).
+    # Return a DEFINED empty fallback (b"") the caller can detect — never crash, and
+    # never substitute a garbage key that would silently mis-decrypt the cookies.
     try:
         import secretstorage
+        from secretstorage.exceptions import SecretStorageException
     except ImportError:
-        return b"peanuts"
-    conn = secretstorage.dbus_init()
-    for item in secretstorage.get_default_collection(conn).get_all_items():
-        if item.get_label() == safe_storage:
-            return item.get_secret()
-    return b"peanuts"
+        return b""
+    try:
+        conn = secretstorage.dbus_init()
+        for item in secretstorage.get_default_collection(conn).get_all_items():
+            if item.get_label() == safe_storage:
+                return item.get_secret()
+    except SecretStorageException:
+        return b""
+    return b""
 
 
 def windows_oscrypt_key(local_state_path: Path) -> bytes:

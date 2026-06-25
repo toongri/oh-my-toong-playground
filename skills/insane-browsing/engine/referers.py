@@ -5,7 +5,12 @@ from urllib.parse import urlsplit
 
 def _self_root(url: str) -> str:
     parsed = urlsplit(url)
-    return f"{parsed.scheme}://{parsed.netloc}/"
+    # Use hostname (strips userinfo and port) instead of netloc to prevent
+    # leaking basic-auth credentials into the Referer header (F16).
+    host = parsed.hostname or ""
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    return f"{parsed.scheme}://{host}/"
 
 
 REFERER_STRATEGIES = {
