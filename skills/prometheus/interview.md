@@ -120,17 +120,23 @@ Collect the five results as five named lanes before moving to the verify step.
 
 ---
 
-### Phase-1 verify-lane falsifying verifier (per lane)
+### Phase-1 verify lane (intent-split: Complex codebase-inline + external-delegated, Architecture all-delegated)
 
-After collecting all lanes, dispatch one **falsifying verifier** subagent per non-empty lane.
-Mirrors the code-review per-candidate isolation model: each verifier reads the actual files and
-returns a **per-finding** verdict against the SKILL.md schema — each finding in the lane gets one
-record whose verdict is `corroborated` (finding stands) or `refuted` (finding does not hold).
-This is a deliberate divergence from the Review Pipeline's
-CONFIRMED/PLAUSIBLE/REFUTED ladder: only the dispatch mechanics are reused, NOT the verdict
-vocabulary. Verifiers are foreground and parallel; dispatch all non-empty lanes in ONE response.
+How the collect lanes are falsified splits by intent (see SKILL.md `#### Collect→verify contract`).
 
-For each lane, interpolate the placeholders before dispatching:
+**On Architecture intent**, dispatch one **falsifying verifier** subagent per non-empty lane —
+foreground, parallel, all non-empty lanes in ONE response — using the template below. Each verifier
+returns the per-finding verdict schema (`confidence` included); verdict semantics and the
+vocabulary-divergence rule live in SKILL.md.
+
+**On Complex intent**, do NOT dispatch verifiers for the codebase (explore aspect) lanes — the
+planner falsifies those lanes inline, using the template below as its rubric: **re-read or re-grep
+the cited `file:line` evidence yourself**, emit the same per-finding record directly, then apply the
+Exclusion rule. Zero spawns for the codebase lanes. The librarian external lane is the exception:
+dispatch its delegated verifier even at Complex (same as Architecture) — untrusted external text
+must not enter the planner context directly.
+
+For each lane (Architecture path), interpolate the placeholders before dispatching:
 
 ```
 Agent(subagent_type="general-purpose", prompt="You are an adversarial falsifying verifier for a single Phase-1 collect lane. Your job is to read the actual codebase evidence and try to falsify each lane finding — assume every finding is wrong until the cited code forces you to corroborate it.
@@ -184,7 +190,7 @@ Agent(subagent_type="librarian", prompt="I am planning {REQUEST_SUMMARY}. Extern
 ```
 
 Dispatch this in the same parallel response as the Phase-1 multi-aspect fan-out explore (above).
-Its results form the EXTERNAL collect lane, which is subject to the same falsifying verifier step.
+Its results form the EXTERNAL collect lane, which is **always falsified by a delegated verifier subagent (Complex and Architecture alike)** — untrusted external text must not enter the planner context directly (see `#### Collect→verify contract` in SKILL.md).
 
 ---
 
