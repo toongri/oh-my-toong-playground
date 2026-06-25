@@ -357,6 +357,14 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
     } catch {
       // ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
     }
+    // D-4: the code-review lane artifact must not survive a re-plan either (same ADR-3
+    // stale-vector — a prior objective's clean code-review must not false-complete a new
+    // objective). Error policy mirrors the goal-verdict unlink above exactly.
+    try {
+      unlinkSync(resolveCodeReviewArtifactPath(sessionId));
+    } catch {
+      // ignore — ENOENT (no artifact) and other transient I/O errors are both safe to skip
+    }
     // A FRESH goal (no active prior) must not inherit the dead goal's consumed iteration
     // budget; a re-plan loop-back of the SAME active goal MUST (budget accumulates across
     // re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.
@@ -636,6 +644,25 @@ interface VerdictArtifact {
   at: string;
 }
 
+// ---------------------------------------------------------------------------
+// Code-review artifact types — the SECOND independent completion lane.
+// Mirrors the verdict artifact: read/validate only, authored by a fresh
+// code-reviewer agent. The gate keys ONLY on verdict==='CONFIRMED'; `class`
+// is a reader-validated, gate-unused informational label.
+// ---------------------------------------------------------------------------
+
+interface CodeReviewFinding {
+  class: 'correctness' | 'cleanup';
+  verdict: 'CONFIRMED' | 'PLAUSIBLE';
+  ref?: string;
+}
+
+interface CodeReviewArtifact {
+  findings: CodeReviewFinding[];
+  reviewer: string;
+  at: string;
+}
+
 /**
  * Derives the verdict artifact path from the session id — mirrors the state
  * path convention (`goal-state-${sid}.json` → `goal-verdict-${sid}.json`).
@@ -683,6 +710,54 @@ function readVerdictArtifact(sessionId: string): VerdictArtifact | null {
     if (!Array.isArray(e['evidence_refs'])) return null;
   }
   return obj as VerdictArtifact;
+}
+
+/**
+ * Derives the code-review artifact path from the session id — mirrors the
+ * verdict path convention (`goal-verdict-${sid}.json` → `goal-codereview-${sid}.json`).
+ * NO path argument accepted (D-11: a path argument would be a steerable gate input).
+ */
+function resolveCodeReviewArtifactPath(sessionId: string): string {
+  return `${getOmtDir()}/goal-codereview-${sessionId}.json`;
+}
+
+/**
+ * Reads and validates the code-review artifact. Returns the parsed artifact on
+ * success, or null when the file is absent or the schema is invalid (never throws).
+ * Schema: { findings: [{class, verdict, ref?}], reviewer, at } — NO `lane` field
+ * (the path already identifies the lane).
+ * `reviewer` must be a NON-EMPTY string — one notch stricter than the verdict
+ * artifact's verifier string-check, because self-review bias is maximal at the
+ * convention boundary (D-5/D-6). Any per-finding enum violation rejects the WHOLE
+ * artifact (never-false-complete: a broken reviewer output must degrade toward
+ * block, never mask a CONFIRMED finding). `findings: []` is valid and clean.
+ */
+function readCodeReviewArtifact(sessionId: string): CodeReviewArtifact | null {
+  const content = readFileOrNull(resolveCodeReviewArtifactPath(sessionId));
+  if (!content) return null;
+  let obj: unknown;
+  try {
+    obj = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
+  const a = obj as Record<string, unknown>;
+  // Required top-level fields
+  if (!Array.isArray(a['findings'])) return null;
+  const reviewer = a['reviewer'];
+  if (typeof reviewer !== 'string' || reviewer.length === 0) return null;
+  if (typeof a['at'] !== 'string') return null;
+  // Validate each finding; any enum violation → whole artifact null
+  const VALID_CLASSES = ['correctness', 'cleanup'];
+  const VALID_FINDING_VERDICTS = ['CONFIRMED', 'PLAUSIBLE'];
+  for (const entry of a['findings'] as unknown[]) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null;
+    const e = entry as Record<string, unknown>;
+    if (!VALID_CLASSES.includes(e['class'] as string)) return null;
+    if (!VALID_FINDING_VERDICTS.includes(e['verdict'] as string)) return null;
+  }
+  return obj as CodeReviewArtifact;
 }
 
 /**
@@ -772,6 +847,19 @@ export function requestComplete(sessionId: string): boolean {
     if (entry.verdict !== 'APPROVE') {
       return false;
     }
+  }
+
+  // Code-review lane (D-3): the SECOND independent refusal lane, reached only after
+  // every argus gate above passes — so "both lanes clean" is the completion condition.
+  // Absent/invalid artifact → block (never-false-complete: degrade toward block). The
+  // gate keys ONLY on verdict==='CONFIRMED' (any class — correctness OR cleanup); `class`
+  // is informational and never branched on.
+  const codeReview = readCodeReviewArtifact(sessionId);
+  if (codeReview === null) {
+    return false;
+  }
+  if (codeReview.findings.some((f) => f.verdict === 'CONFIRMED')) {
+    return false;
   }
 
   mergeWrite(sessionId, { phase: 'complete', active: false });
