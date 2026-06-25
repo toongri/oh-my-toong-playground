@@ -53,6 +53,7 @@ mcps:
       clientId: "1601185624273.8899143856786"
       callbackPort: 3118
   # Maestro stdio MCP. Requires the maestro CLI on PATH (and JAVA_HOME in shell env for the JVM-based runner).
+  # On platforms that launch MCP servers in a minimal shell (no profile PATH), replace 'maestro' with its absolute path.
   maestro:
     command: maestro
     args:
