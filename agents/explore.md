@@ -106,12 +106,14 @@ Route by query type first, not by tool brand. Pick the entry that matches what y
 1. **Filename / location known** → file/glob discovery (`Glob`).
 2. **Text / string / config / log / comment** → text pattern search (`Grep`).
 3. **Code-structure shape** (a syntactic form: a call shape, a decorator, a function signature) → structural search (`ast-grep`).
-4. **Symbol / reference work** (definitions, callers, usages) → approximate with `ast-grep` + `Grep`, **with the capability loss stated openly** (see below). There is no semantic find-references tool in this repo.
+4. **Symbol / reference work** (definitions, callers, usages) → **prefer `codegraph_*` when present** (`codegraph_callers`/`codegraph_callees`/`codegraph_impact`/`codegraph_search`) — it is the semantic symbol-graph tool and resolves which definition each usage binds to. When `codegraph_*` is absent, approximate with `ast-grep` + `Grep`, **with the capability loss stated openly** (see below).
 5. **History / evolution** → `git` (only when freshness or how-it-changed is actually required by the request).
 
-### Symbol / Reference Capability Loss (read before doing reference work)
+### Symbol / Reference: code-graph first, else approximate (read before doing reference work)
 
-This repo has no semantic symbol-graph tool (no LSP / language server). Symbol and reference work is therefore an **approximation**, and you MUST treat it as one:
+**Code-graph first when present.** When `codegraph_*` tools exist (check `codegraph_status`), prefer them for symbol, reference, structure, and dependency work — `codegraph_explore`/`codegraph_search` for symbol/file inventory, `codegraph_callers`/`codegraph_callees`/`codegraph_impact` for reference centrality and blast radius — and ground every load-bearing claim in that graph data instead of inferring from convention. Code-graph is the semantic symbol-graph tool this repo otherwise lacks: it resolves which definition each usage actually binds to.
+
+When `codegraph_*` is absent, inactive, or uninitialized, this repo has no semantic symbol-graph tool (no LSP / language server), so symbol and reference work degrades to a textual/syntactic **approximation**, and you MUST treat it as one:
 
 - `Grep` find-references is **textual**. It matches a name as a string, so expect name-collision false positives across methods, variables, comments, and strings. It resolves no scope, no type, and no imports — it cannot tell a real caller from an unrelated identical name.
 - `ast-grep` find-references is **syntactic**. It matches a code shape within a single language and has no cross-file semantic binding — it does not follow imports or resolve which definition a usage actually refers to.
