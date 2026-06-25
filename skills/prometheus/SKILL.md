@@ -149,7 +149,7 @@ The Co-Design Daedalus advisory pass is on the mandatory path but is purely advi
 | Clearance checklist evaluation | Yes | - |
 | AC drafting & user confirmation | Yes | - |
 | Plan file writing ($OMT_DIR/plans/) | Yes | - |
-| Codebase fact gathering | NEVER | explore |
+| Codebase fact gathering | NEVER (exception: re-reading already-collected cited evidence inside the Complex inline verify lane per `#### Collect→verify contract`) | explore |
 | Architecture feasibility check | NEVER | oracle |
 | External tech research | NEVER | librarian |
 | Pre-plan gap analysis | NEVER | metis |
@@ -262,7 +262,7 @@ Anti-Patterns describe *what* goes wrong. This table targets the *reasoning* you
 | Thought | Reality |
 |---|---|
 | "explore was already done in a prior turn / prior session traces are visible" | Verify the result is in YOUR session as a tool message. If absent, re-dispatch. Trust-without-verify is a violation. |
-| "I'll just grep / Read directly — it's faster" | `Do vs Delegate Decision Matrix` is absolute: codebase fact gathering = **NEVER you, ALWAYS explore**. Efficiency does not override mandate. |
+| "I'll just grep / Read directly — it's faster" | `Do vs Delegate Decision Matrix` is absolute: codebase fact gathering = **NEVER you, ALWAYS explore**. Efficiency does not override mandate. Exception: re-reading or re-grepping an already-collected finding's cited evidence inside the Complex inline verify lane (per `#### Collect→verify contract`) is the mandated falsification action, not new fact gathering. |
 | "Clearance items all look OK" | Implicit judgment is forbidden. Per `## Clearance Checklist` ("Run after EVERY interview turn") + Red Flags STOP signal, you must output each of the 6 items YES/NO in the agent's visible reasoning every turn. This is the agent owning its own decision, not asking the user — line 204 forbids the latter, not the former. |
 | "Decomposition Formalism feels like ritual" | For Architecture/Complex intent, missing MECE/Atomicity/Anti-pattern evaluation IS the direct cause of silent regression. Skip = contract violation. |
 | "Write the plan first, create tasks later" | "From the moment intent is classified" — the timing is non-negotiable. Late TaskCreate = invisible incomplete work. |
@@ -279,7 +279,7 @@ Anti-Patterns describe *what* goes wrong. This table targets the *reasoning* you
 If any of these signals are present in YOUR own behavior, halt and reset:
 
 - STOP — Proceeding to Phase 2 without `explore` (and `librarian` for Architecture) dispatched **in this session** with results assimilated
-- STOP — About to type `grep` / `find` / Bash search yourself for codebase facts not covered by loaded `context/` files
+- STOP — About to type `grep` / `find` / Bash search yourself for codebase facts not covered by loaded `context/` files **or by the Complex inline verify lane (per `#### Collect→verify contract`), where re-reading or re-grepping an already-collected finding's cited evidence to falsify it is the mandated action — not forbidden ad-hoc gathering**
 - STOP — Clearance Checklist 6 items not written out one-by-one with YES/NO this turn
 - STOP — About to write plan without `Decomposition Self-Check` output (MECE / Atomicity 3-conditions / Anti-pattern) for Complex/Architecture intent
 - STOP — No `TaskCreate` calls visible in this session despite intent already classified
