@@ -52,6 +52,11 @@ mcps:
     oauth:
       clientId: "1601185624273.8899143856786"
       callbackPort: 3118
+  # Maestro stdio MCP. Requires the maestro CLI on PATH (and JAVA_HOME in shell env for the JVM-based runner).
+  maestro:
+    command: maestro
+    args:
+      - "mcp"
 
 plugins:
   items:

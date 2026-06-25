@@ -34,3 +34,8 @@ mcps:
       - "--prefer-offline"
       - "-y"
       - "@playwright/mcp@0.0.76"
+  # Maestro stdio MCP. Requires the maestro CLI on PATH (and JAVA_HOME in shell env for the JVM-based runner).
+  maestro:
+    command: maestro
+    args:
+      - "mcp"
