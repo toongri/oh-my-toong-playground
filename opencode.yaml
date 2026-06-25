@@ -35,6 +35,7 @@ mcps:
       - "-y"
       - "@playwright/mcp@0.0.76"
   # Maestro stdio MCP. Requires the maestro CLI on PATH (and JAVA_HOME in shell env for the JVM-based runner).
+  # On platforms that launch MCP servers in a minimal shell (no profile PATH), replace 'maestro' with its absolute path.
   maestro:
     command: maestro
     args:
