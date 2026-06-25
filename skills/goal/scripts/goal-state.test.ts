@@ -200,6 +200,7 @@ describe('goal state', () => {
       JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['proof.txt'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
       'utf8'
     );
+    writeCodeReviewArtifact(S2, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
     expect(requestComplete(S2)).toBe(true);
     // complete is terminal (active:false) so readGoalState returns null; assert on raw
     expect(rawStateOf(S2).phase).toBe('complete');
@@ -236,6 +237,7 @@ describe('goal state', () => {
     expect(rawState().phase).toBe('budget_limited');
 
     // APPROVE-backed request-complete must win over the prior budget_limited
+    writeCodeReviewArtifact(S, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
     expect(requestComplete(S)).toBe(true);
     expect(rawState().phase).toBe('complete');
     expect(rawState().active).toBe(false);
@@ -291,6 +293,7 @@ describe('goal state', () => {
       JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['p'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
       'utf8'
     );
+    writeCodeReviewArtifact(Sc, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
     requestComplete(Sc);
     expect(rawStateOf(Sc).active).toBe(false);
 
@@ -374,6 +377,7 @@ describe('goal state', () => {
       JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['a.md'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
       'utf8'
     );
+    writeCodeReviewArtifact(S, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
     expect(requestComplete(S)).toBe(true);
     expect(rawState().phase).toBe('complete');
     expect(rawState().active).toBe(false);
@@ -439,6 +443,7 @@ describe('goal state', () => {
       JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: [p1] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
       'utf8'
     );
+    writeCodeReviewArtifact(S, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
 
     // request-complete must exit 0 (no throw) now that evidence + story artifact present
     run('request-complete');
@@ -1512,6 +1517,15 @@ function writeVerdictArtifact(sid: string, obj: object): void {
   writeFileSync(verdictArtifactPath(sid), JSON.stringify(obj), 'utf8');
 }
 
+/** Code-review lane artifact path: $OMT_DIR/goal-codereview-{sid}.json (mirrors verdict path). */
+function codeReviewArtifactPath(sid: string): string {
+  return `${process.env.OMT_DIR}/goal-codereview-${sid}.json`;
+}
+
+function writeCodeReviewArtifact(sid: string, obj: object): void {
+  writeFileSync(codeReviewArtifactPath(sid), JSON.stringify(obj), 'utf8');
+}
+
 /** Build a fully-satisfied gate fixture for one session:
  *  - 2 confirmed stories (S1, S2)
  *  - evidence paths set
@@ -1527,6 +1541,9 @@ function buildSatisfiedFixture(sid: string): object {
   confirmStory(sid, 'S2');
   setGoalState(sid, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/evidence.md`] });
   setVerdict(sid, 'APPROVE');
+  // Code-review lane: a clean (no-findings) artifact so the second completion lane passes
+  // by default. Callers asserting a BLOCK overwrite this with a CONFIRMED/invalid one.
+  writeCodeReviewArtifact(sid, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
 
   // Valid artifact
   return {
@@ -1676,6 +1693,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
       verifier: 'argus',
       at: '2026-06-12T00:00:00',
     });
+    writeCodeReviewArtifact(S2, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
     expect(requestComplete(S2)).toBe(true);
     expect(rawStateOf(S2).phase).toBe('complete');
   });
@@ -1771,6 +1789,119 @@ describe('story layer: request-complete verdict gate (T4)', () => {
       verifier: 'argus',
       at: '2026-06-12T00:00:00',
     });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).not.toBe('complete');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 1: code-review 완료 레인 (두 번째 독립 거부 레인)
+// ---------------------------------------------------------------------------
+
+describe('story layer: code-review completion lane (TODO 1)', () => {
+  // AC1: a CONFIRMED finding (correctness OR cleanup) blocks completion even when
+  // the argus lane is fully green. The gate keys ONLY on verdict===CONFIRMED.
+  test('code-review CONFIRMED blocks completion (cleanup class)', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact); // argus lane fully green
+    writeCodeReviewArtifact(S, {
+      findings: [{ class: 'cleanup', verdict: 'CONFIRMED', ref: 'foo.ts:1' }],
+      reviewer: 'code-reviewer',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).toBe('pursuing');
+  });
+
+  test('code-review CONFIRMED blocks completion (correctness class)', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    writeCodeReviewArtifact(S, {
+      findings: [{ class: 'correctness', verdict: 'CONFIRMED', ref: 'foo.ts:2' }],
+      reviewer: 'code-reviewer',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).toBe('pursuing');
+  });
+
+  // AC2: a clean code-review (no findings / PLAUSIBLE-only) permits completion.
+  test('code-review clean permits completion (empty findings)', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    writeCodeReviewArtifact(S, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
+    expect(requestComplete(S)).toBe(true);
+    expect(rawState().phase).toBe('complete');
+  });
+
+  test('code-review clean permits completion (PLAUSIBLE only)', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    writeCodeReviewArtifact(S, {
+      findings: [{ class: 'cleanup', verdict: 'PLAUSIBLE', ref: 'foo.ts:3' }],
+      reviewer: 'code-reviewer',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(true);
+    expect(rawState().phase).toBe('complete');
+  });
+
+  // AC3: absent / corrupt / unknown-verdict / empty-reviewer each refuses (no throw),
+  // phase unchanged (never-false-complete: degrade toward block).
+  test('code-review invalid artifact refuses (absent)', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    rmSync(codeReviewArtifactPath(S), { force: true }); // ensure the code-review artifact is absent
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).toBe('pursuing');
+  });
+
+  test('code-review invalid artifact refuses (corrupt json)', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    writeFileSync(codeReviewArtifactPath(S), '{not json', 'utf8');
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).toBe('pursuing');
+  });
+
+  test('code-review invalid artifact refuses (unknown verdict)', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    writeCodeReviewArtifact(S, {
+      findings: [{ class: 'correctness', verdict: 'BOGUS', ref: 'foo.ts:4' }],
+      reviewer: 'code-reviewer',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).toBe('pursuing');
+  });
+
+  test('code-review invalid artifact refuses (empty reviewer)', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    writeCodeReviewArtifact(S, { findings: [], reviewer: '', at: '2026-06-12T00:00:00' });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).toBe('pursuing');
+  });
+
+  // AC8: re-plan unlinks the code-review artifact (ADR-3 stale-vector); a fresh objective
+  // cannot false-complete on a prior objective's clean code-review.
+  test('re-plan unlinks code-review artifact', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    writeCodeReviewArtifact(S, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
+    expect(existsSync(codeReviewArtifactPath(S))).toBe(true);
+
+    // Re-plan (planning transition) must invalidate the code-review artifact.
+    setGoalState(S, { phase: 'planning', outcome: '새 목표' });
+    expect(existsSync(codeReviewArtifactPath(S))).toBe(false);
+
+    // New pursuit, all argus-side gates re-satisfied, but no fresh code-review artifact.
+    const s1: Story = { id: 'S1', story: 'new', acceptance_criteria: ['ac1'], verification_surface: 'v1', status: 'unconfirmed' };
+    setStories(S, [s1]);
+    confirmStory(S, 'S1');
+    setGoalState(S, { phase: 'pursuing', completion_evidence_paths: [`${process.env.OMT_DIR}/evidence.md`] });
+    setVerdict(S, 'APPROVE');
     expect(requestComplete(S)).toBe(false);
     expect(rawState().phase).not.toBe('complete');
   });
