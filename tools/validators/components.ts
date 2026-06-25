@@ -75,8 +75,11 @@ function resolveHookComponentPath(
   projectDirName: string,
 ): string | null {
   if (component.includes(":")) {
+    // A-8: root-context (projectDirName="") cannot reference scoped hooks — mirrors
+    // resolveComponentPath which blocks scoped refs from root sync.yaml contexts.
+    if (!projectDirName) return null;
     const [scopeProject, scopeName] = component.split(":", 2);
-    if (projectDirName && scopeProject !== projectDirName) return null;
+    if (scopeProject !== projectDirName) return null;
     const path = join(rootDir, "projects", scopeProject, "hooks", scopeName);
     if (existsSync(path)) return path;
     return null;
@@ -382,8 +385,8 @@ export async function validatePlatformYamlHookComponents(
     projectDirName = basename(yamlDir);
   }
 
-  // Only claude and gemini support hooks
-  for (const platform of ["claude", "gemini"] as const) {
+  // claude, gemini, and codex support hooks
+  for (const platform of ["claude", "gemini", "codex"] as const) {
     let merged: unknown;
     if (platform === "claude" && claudeYamlPreParsed !== undefined) {
       // Pre-parsed by validateAll: skip re-parsing.
