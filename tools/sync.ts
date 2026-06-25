@@ -36,7 +36,12 @@ import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts"
 import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
-import { collectRequiredLibModulesFromSources, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
+import {
+  collectRequiredLibModulesFromSources,
+  collectLibDataFiles,
+  findBareNpmImports,
+  readPackageJsonDeps,
+} from "./adapters/ts-lib-deps.ts";
 import { runProvision } from "./lib/provision.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
@@ -442,10 +447,27 @@ export async function syncPlatformConfigs(
 // ---------------------------------------------------------------------------
 
 /**
- * Rewrite @lib/* import aliases in deployed .ts files to relative paths.
- * Mirrors rewrite_lib_aliases in sync.sh:1383-1405.
+ * Rewrite @lib/* import aliases and bundled bare specifiers in deployed .ts
+ * files to relative paths. Mirrors rewrite_lib_aliases in sync.sh:1383-1405.
+ *
+ * Scope: this function walks ALL .ts files under platformRoot, not just the
+ * files deployed in this sync invocation. That broad sweep is intentional and
+ * safe for @lib/ aliases because that alias only appears in files that OMT
+ * itself deployed — no user-authored file would reference it.
+ *
+ * Bundled bare specifiers (e.g. `picomatch`) are a different story: a user
+ * could place their own .ts file under the platform root that imports the same
+ * package. If that happens, this pass rewrites the user's import to the OMT
+ * vendor path, coupling their file to OMT's bundle. Should a later sync
+ * remove that bundle, the user's file would break. This is a known, accepted
+ * limitation: the platform root is an area OMT manages via orphan-cleanup, so
+ * the practical risk is negligible today. If a real user-file case arises,
+ * narrow the rewrite scope to only the files deployed in the current sync run.
  */
-export async function rewriteLibAliases(platformRoot: string): Promise<void> {
+export async function rewriteLibAliases(
+  platformRoot: string,
+  bundledPackages: Set<string>,
+): Promise<void> {
   const tsFiles = await collectTsFiles(platformRoot);
   for (const filePath of tsFiles) {
     // Skip test files and lib/ itself
@@ -460,7 +482,7 @@ export async function rewriteLibAliases(platformRoot: string): Promise<void> {
       continue;
     }
 
-    const updated = rewriteLibImports(content, filePath, platformRoot);
+    const updated = rewriteLibImports(content, filePath, platformRoot, bundledPackages);
 
     if (updated !== content) {
       await fs.writeFile(filePath, updated, "utf8");
@@ -516,7 +538,26 @@ export async function syncLib(
   // empty (notably in dry-run, where the stale prior deployment has no @lib/).
   const dataFiles = await collectLibDataFiles(libSrc);
 
-  for (const platform of platforms) {
+  // Declared package names (dependencies ∪ devDependencies) from the OMT repo's
+  // own package.json (rootDir IS the repo root — libSrc is rootDir/lib). Read
+  // once: only DECLARED packages are eligible for sync-time bundling, so a bare
+  // import of an undeclared package is never vendored. A root without a
+  // package.json declares nothing → zero bundling (the empty-set default).
+  const declaredPackages = await readPackageJsonDeps(rootDir).catch(() => new Set<string>());
+
+  // lib is NOT an independent deploy target — it is a dependency of whatever
+  // components landed. The resolved `platforms` cascades to ["claude"] when no
+  // feature-platforms.lib is configured, but components resolve their OWN
+  // platforms and populate libSourceRoots under each platform that received one.
+  // Iterate the UNION so a component (with a bundled bare import) deployed to a
+  // non-claude platform gets its matching lib/vendor bundle there too; otherwise
+  // its rewritten source has no vendor target → ERR_MODULE_NOT_FOUND under node.
+  // When components deploy only to claude (or nowhere), the union is exactly the
+  // resolved `platforms`, so stale-lib cleanup and the claude default are
+  // unchanged.
+  const effectivePlatforms = new Set<Platform>([...platforms, ...(libSourceRoots?.keys() ?? [])]);
+
+  for (const platform of effectivePlatforms) {
     const platformDir = path.join(targetPath, `.${platform}`);
     const libDest = path.join(platformDir, "lib");
 
@@ -526,9 +567,63 @@ export async function syncLib(
     const sourceRoots = libSourceRoots?.get(platform) ?? new Set<string>();
     const requiredModules = await collectRequiredLibModulesFromSources(sourceRoots, libSrc);
 
+    // Discover bare npm imports across BOTH scan surfaces, intersecting each hit
+    // with declared packages. A bare `import 'picomatch'` traces through no @lib/
+    // alias, so it must be found wherever it sits:
+    //   - component sourceRoots: the bare import lives directly in a component, OR
+    //   - requiredModules: the bare import lives in a `lib/` module pulled in
+    //     transitively via @lib/ (so it never appears in sourceRoots).
+    // The resulting bundledPackages set names exactly the packages syncLib will
+    // `bun build` into .{platform}/lib/vendor/ below, and is threaded into the
+    // @lib/ rewriter (see rewriteLibAliases call) so those bare specifiers in
+    // component files are repointed at the vendored bundles. Only DECLARED
+    // packages bundle.
+    const bundledPackages = new Set<string>();
+    const recordBareImports = async (file: string): Promise<void> => {
+      for (const specifier of await findBareNpmImports(file)) {
+        // Reduce to the root package name (D-7: only the root package is
+        // bundled, never a sub-path): "@scope/name/x" → "@scope/name",
+        // "picomatch/lib/x" → "picomatch".
+        const segments = specifier.split("/");
+        const pkg = specifier.startsWith("@")
+          ? segments.slice(0, 2).join("/")
+          : segments[0];
+        if (declaredPackages.has(pkg)) {
+          bundledPackages.add(pkg);
+        }
+      }
+    };
+    for (const root of sourceRoots) {
+      let files: string[];
+      try {
+        const stat = await fs.stat(root);
+        if (stat.isDirectory()) {
+          files = await collectTsFiles(root);
+        } else if (root.endsWith(".ts") && !root.endsWith(".test.ts")) {
+          files = [root];
+        } else {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      for (const file of files) {
+        await recordBareImports(file);
+      }
+    }
+    // Also scan the transitively-pulled lib modules: a declared bare import that
+    // lives ONLY inside a `lib/` module (reached via @lib/) is invisible to the
+    // sourceRoots scan above, so without this it would never be bundled.
+    for (const libModule of requiredModules) {
+      await recordBareImports(libModule);
+    }
+
     // Data files (e.g. pins/tbox.yaml) are runtime assets for lib modules; with
     // zero modules deployed they have no consumer, so skip the whole lib deploy.
-    if (requiredModules.size === 0) {
+    // The skip relaxes to the UNION: a platform whose only lib need is a declared
+    // bare import (zero @lib/ modules) must still deploy its lib dir so the
+    // vendored bundle below can be produced — skip only when BOTH are empty.
+    if (requiredModules.size === 0 && bundledPackages.size === 0) {
       // No @lib/ imports — remove any stale lib (dry-run: log only)
       if (context.dryRun) {
         if (existsSync(libDest)) {
@@ -556,6 +651,9 @@ export async function syncLib(
       for (const file of dataFiles) {
         logDry(`  ${path.relative(libSrc, file)}`);
       }
+      for (const pkg of bundledPackages) {
+        logDry(`  vendor/${pkg}.js (bun build --target=node)`);
+      }
       logDry(`Rewrite @lib/* aliases in ${platformDir}/`);
     } else {
       // Build the new lib tree in a temp sibling directory (same filesystem as
@@ -575,13 +673,27 @@ export async function syncLib(
         }
       }
 
+      // True once the live lib has been renamed to libOld but before the new
+      // tree has taken its place — the window in which a failure would leave the
+      // target with no live lib/ unless the catch restores the moved-aside copy.
+      let movedAside = false;
+
       try {
         await fs.mkdir(libTmp, { recursive: true });
         for (const dep of requiredModules) {
           const relPath = path.relative(libSrc, dep);
           const destFile = path.join(libTmp, relPath);
           await fs.mkdir(path.dirname(destFile), { recursive: true });
-          await fs.copyFile(dep, destFile);
+          // A deployed lib module may itself carry a bundled bare specifier
+          // (e.g. `import 'picomatch'`). rewriteLibAliases skips everything under
+          // lib/, so the repoint must happen here at copy time — mirroring how
+          // syncDirectory rewrites component files. Depth is computed from the
+          // module's FINAL location (libDest = platformDir/lib), so the relative
+          // prefix resolves to lib/vendor/<pkg>.js regardless of nesting.
+          const finalFile = path.join(libDest, relPath);
+          const srcContent = await fs.readFile(dep, "utf8");
+          const rewritten = rewriteLibImports(srcContent, finalFile, platformDir, bundledPackages);
+          await fs.writeFile(destFile, rewritten, "utf8");
         }
         for (const file of dataFiles) {
           const relPath = path.relative(libSrc, file);
@@ -590,20 +702,49 @@ export async function syncLib(
           await fs.copyFile(file, destFile);
         }
 
+        // Sync-time vendoring: bundle each declared bare-imported package into a
+        // self-contained --target=node bundle (zero node_modules at runtime),
+        // mirroring the Makefile's proven `bun build <pkg> --target=node` flags.
+        // Output path mirrors the package name (a scoped name's "/" becomes a
+        // vendor/@scope subdirectory). Inside the try-block / before the rename,
+        // so a non-zero build exit throws → the catch removes libTmp and the
+        // prior libDest stays intact (atomicity preserved).
+        for (const pkg of bundledPackages) {
+          const outFile = path.join(libTmp, "vendor", `${pkg}.js`);
+          await fs.mkdir(path.dirname(outFile), { recursive: true });
+          const proc = Bun.spawn(
+            ["bun", "build", pkg, "--target=node", "--outfile", outFile],
+            { cwd: rootDir, stdout: "inherit", stderr: "inherit" },
+          );
+          await proc.exited;
+          if (proc.exitCode !== 0) {
+            throw new Error(`bun build ${pkg} --target=node failed (exit ${proc.exitCode})`);
+          }
+        }
+
         // Atomic swap: rename old out, rename new in, remove old.
         if (existsSync(libDest)) {
           await fs.rename(libDest, libOld);
+          movedAside = true;
         }
         await fs.rename(libTmp, libDest);
+        movedAside = false;
         await fs.rm(libOld, { recursive: true, force: true }).catch(() => undefined);
       } catch (err) {
-        // Build failed — clean up temp, leave the original lib untouched.
+        // Clean up the temp tree. A failure BEFORE the swap (e.g. a non-zero
+        // build exit) leaves the original lib untouched. But the swap is two
+        // renames: if the second rename fails after the first moved the live lib
+        // to libOld, the target is left with no live lib/ — restore it (best
+        // effort) before re-throwing so the prior lib survives a failed swap.
         await fs.rm(libTmp, { recursive: true, force: true }).catch(() => undefined);
+        if (movedAside && !existsSync(libDest) && existsSync(libOld)) {
+          await fs.rename(libOld, libDest).catch(() => undefined);
+        }
         throw err;
       }
 
       logInfo(`Deployed shared lib to .${platform}/lib/`);
-      await rewriteLibAliases(platformDir);
+      await rewriteLibAliases(platformDir, bundledPackages);
     }
   }
 }
@@ -813,12 +954,16 @@ export async function processYaml(
         await syncCategory(context, category, syncYaml, adapters, rootDir, deployRoot, libSourceRoots);
       }
 
-      // Sync lib — only when this project deploys local component files into the
-      // platform dir (same gate as the mkdir above). An MCP-only project
-      // (shouldMkdirClaude=false) targets ~/.claude.json, so syncLib must not
-      // reach into the worktree's .{platform}/lib and delete a directory this
-      // sync never owns.
-      if (shouldMkdirClaude) {
+      // Sync lib — whenever this deploy target received deployable source. The
+      // mkdir gate (shouldMkdirClaude) only sees component sections + .claude/
+      // config, so a codex/gemini-hook-only project (hooks deployed and recorded
+      // in libSourceRoots by syncPlatformConfigs above, but shouldMkdirClaude
+      // false) would otherwise never vendor its hooks' bare imports → the
+      // deployed hook crashes at runtime with an unresolved import. An MCP-only
+      // project (shouldMkdirClaude=false AND libSourceRoots empty) keeps the gate
+      // false, so syncLib never reaches into the worktree's .{platform}/lib to
+      // delete a directory this sync never owns.
+      if (shouldMkdirClaude || libSourceRoots.size > 0) {
         await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
       }
 

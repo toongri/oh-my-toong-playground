@@ -16,7 +16,7 @@ import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { getRootDir } from "../lib/config.ts";
 import { collectFiles } from "../lib/sync-directory.ts";
-import { findRelativeLibImports, findBareNpmImports } from "../adapters/ts-lib-deps.ts";
+import { findRelativeLibImports, findBareNpmImports, readPackageJsonDeps } from "../adapters/ts-lib-deps.ts";
 
 // Source directories that may hold deployable .ts components.
 const COMPONENT_DIRS = ["hooks", "skills", "scripts", "agents", "commands", "rules"];
@@ -63,6 +63,12 @@ export async function findLibImportViolations(rootDir: string): Promise<string[]
   // Scans lib/ + COMPONENT_DIRS + project-local component dirs (the deployed surface).
   // tools/ is excluded: it runs where bun install exists so npm imports are legal there.
   // .test.ts files are excluded (handled inside findBareNpmImports).
+  //
+  // Allowed = specifiers EXACTLY matching a declared dep (deps ∪ devDeps from package.json).
+  // Sub-paths of declared packages (e.g. 'picomatch/lib/x') are still rejected because
+  // the check is strict equality against the declared root name (D-7).
+  const declaredDeps = await readPackageJsonDeps(rootDir);
+
   const bareNpmDirs: Array<{ label: string; base: string }> = [
     { label: "lib", base: libSourceDir },
     ...COMPONENT_DIRS.map((dir) => ({ label: dir, base: join(rootDir, dir) })),
@@ -76,6 +82,8 @@ export async function findLibImportViolations(rootDir: string): Promise<string[]
       if (!rel.endsWith(".ts") || rel.endsWith(".test.ts") || rel.endsWith(".d.ts")) continue;
       const filePath = join(base, rel);
       for (const specifier of await findBareNpmImports(filePath)) {
+        // Pass if the specifier is EXACTLY a declared package name (no sub-paths).
+        if (declaredDeps.has(specifier)) continue;
         violations.push(
           `bare-npm import not allowed (vendor or eliminate): ${label}/${rel}: '${specifier}'`,
         );

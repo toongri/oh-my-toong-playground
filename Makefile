@@ -1,8 +1,6 @@
-VENDOR_DEPS := picomatch
-VENDOR_BUILD = bun build "$$dep" --target=node
 BUN_MIN := 1.2.21
 
-.PHONY: sync sync-dry validate validate-schema validate-components validate-lib-imports validate-tests typecheck test vendor validate-vendor pull pull-dry help
+.PHONY: sync sync-dry install-frozen validate validate-schema validate-components validate-lib-imports validate-tests typecheck test pull pull-dry help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -17,27 +15,18 @@ help:
 	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
 	@echo "  make pull-dry PROJ=<name> - 풀백 미리보기 (실제 변경 없음)"
 
-sync: validate validate-vendor validate-tests
+sync: validate validate-tests
 	@bun run tools/sync.ts
+
+install-frozen:
+	@bun install --frozen-lockfile
 
 sync-dry: validate
 	@bun run tools/sync.ts --dry-run
 
-validate: validate-schema validate-components validate-lib-imports typecheck
+validate: install-frozen validate-schema validate-components validate-lib-imports typecheck
 	@bun -e 'process.exit(Bun.semver.satisfies(Bun.version, ">=$(BUN_MIN)") ? 0 : 1)' \
 	  || { printf '\033[0;31m[ERROR]\033[0m bun >= $(BUN_MIN) 필요 (현재: %s)\n' "$$(bun --version)" >&2; exit 1; }
-	@for dep in $(VENDOR_DEPS); do \
-		if [ ! -f "lib/vendor/$$dep.js" ]; then \
-			echo "vendor file missing: lib/vendor/$$dep.js" && exit 1; \
-		fi; \
-	done
-	@for f in lib/vendor/*.js; do \
-		[ -f "$$f" ] || continue; \
-		name=$$(basename "$$f" .js); \
-		if ! echo " $(VENDOR_DEPS) " | grep -q " $$name "; then \
-			echo "unlisted vendor file: $$f (add '$$name' to VENDOR_DEPS)" && exit 1; \
-		fi; \
-	done
 
 validate-schema:
 	@bun run tools/validators/schema.ts
@@ -55,26 +44,6 @@ typecheck:
 	@bunx tsc --noEmit
 
 test: validate-tests
-
-vendor:
-	@for dep in $(VENDOR_DEPS); do \
-		mkdir -p lib/vendor && \
-		$(VENDOR_BUILD) --outfile "lib/vendor/$$dep.js"; \
-	done
-
-validate-vendor:
-	@for dep in $(VENDOR_DEPS); do \
-		if [ -d "node_modules/$$dep" ]; then \
-			tmp=$$(mktemp); \
-			$(VENDOR_BUILD) --outfile "$$tmp"; \
-			if ! diff -q "$$tmp" "lib/vendor/$$dep.js" > /dev/null 2>&1; then \
-				echo "vendor drift detected: $$dep" && rm -f "$$tmp" && exit 1; \
-			fi; \
-			rm -f "$$tmp"; \
-		else \
-			echo "vendor check skipped (node_modules/$$dep absent): $$dep"; \
-		fi; \
-	done
 
 pull:
 	@test -n "$(PROJ)" || (echo "PROJ is required. Usage: make pull PROJ=<name>" && exit 1)

@@ -26,6 +26,20 @@ function writeTs(dir: string, name: string, content: string): string {
   return filePath;
 }
 
+/**
+ * Write a minimal package.json at the OMT-root fixture so the inverted guard's
+ * readPackageJsonDeps resolves. The inverted guard PASSES bare imports that
+ * exactly match a declared dependency name and FLAGS the rest, so each fixture
+ * declares the packages it wants treated as "allowed" via `deps`.
+ */
+function writePkg(rootDir: string, deps: Record<string, string> = {}): void {
+  writeFileSync(
+    join(rootDir, "package.json"),
+    JSON.stringify({ devDependencies: deps }),
+    "utf-8",
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Suite: findBareNpmImports — unit tests for the classifier
 // ---------------------------------------------------------------------------
@@ -103,8 +117,10 @@ describe("findBareNpmImports", () => {
   });
 
   it("does NOT flag @lib/vendor/ sub-paths", async () => {
+    // D-9: keep this @lib/vendor/ acceptance test alive but use a generic
+    // vendored name (not the deleted committed picomatch artifact).
     tmpDir = makeTempDir();
-    const file = writeTs(tmpDir, "ok.ts", `import picomatch from '@lib/vendor/picomatch';\n`);
+    const file = writeTs(tmpDir, "ok.ts", `import vendored from '@lib/vendor/generic-vendored';\n`);
     const result = await findBareNpmImports(file);
     expect(result).toHaveLength(0);
   });
@@ -153,6 +169,7 @@ describe("findLibImportViolations — bare-npm second pass", () => {
     tmpDir = makeTempDir();
     // Minimal OMT-root-like structure: config.yaml so getRootDir works
     writeTs(tmpDir, "config.yaml", "");
+    writePkg(tmpDir);
     const libDir = join(tmpDir, "lib");
     writeTs(libDir, "bad.ts", `import x from 'definitely-not-a-pkg';\n`);
 
@@ -165,6 +182,7 @@ describe("findLibImportViolations — bare-npm second pass", () => {
   it("does NOT flag a lib/ file that only uses builtins and @lib/ imports", async () => {
     tmpDir = makeTempDir();
     writeTs(tmpDir, "config.yaml", "");
+    writePkg(tmpDir);
     const libDir = join(tmpDir, "lib");
     writeTs(
       libDir,
@@ -180,6 +198,7 @@ describe("findLibImportViolations — bare-npm second pass", () => {
   it("does NOT flag .test.ts files inside lib/", async () => {
     tmpDir = makeTempDir();
     writeTs(tmpDir, "config.yaml", "");
+    writePkg(tmpDir);
     const libDir = join(tmpDir, "lib");
     writeTs(libDir, "bad.test.ts", `import x from 'definitely-not-a-pkg';\n`);
 
@@ -191,6 +210,7 @@ describe("findLibImportViolations — bare-npm second pass", () => {
   it("flags bare npm imports in COMPONENT_DIRS (e.g. hooks/)", async () => {
     tmpDir = makeTempDir();
     writeTs(tmpDir, "config.yaml", "");
+    writePkg(tmpDir);
     const hooksDir = join(tmpDir, "hooks");
     writeTs(hooksDir, "myhook.ts", `import x from 'some-npm-pkg';\n`);
 
@@ -203,6 +223,7 @@ describe("findLibImportViolations — bare-npm second pass", () => {
   it("flags a bare npm import in a project-local component dir (projects/<name>/hooks/)", async () => {
     tmpDir = makeTempDir();
     writeTs(tmpDir, "config.yaml", "");
+    writePkg(tmpDir);
     const projectHooksDir = join(tmpDir, "projects", "my-project", "hooks");
     writeTs(projectHooksDir, "local-hook.ts", `import x from 'lodash';\n`);
 
@@ -215,6 +236,7 @@ describe("findLibImportViolations — bare-npm second pass", () => {
   it("does NOT flag project-local .test.ts files", async () => {
     tmpDir = makeTempDir();
     writeTs(tmpDir, "config.yaml", "");
+    writePkg(tmpDir);
     const projectHooksDir = join(tmpDir, "projects", "my-project", "hooks");
     writeTs(projectHooksDir, "local-hook.test.ts", `import x from 'lodash';\n`);
 
@@ -226,6 +248,7 @@ describe("findLibImportViolations — bare-npm second pass", () => {
   it("does NOT flag a .d.ts file in lib/ with a type-only typeof import", async () => {
     tmpDir = makeTempDir();
     writeTs(tmpDir, "config.yaml", "");
+    writePkg(tmpDir);
     const libDir = join(tmpDir, "lib", "vendor");
     writeTs(
       libDir,
@@ -241,6 +264,7 @@ describe("findLibImportViolations — bare-npm second pass", () => {
   it("does NOT flag a .d.ts file in a component dir (hooks/) with a bare import", async () => {
     tmpDir = makeTempDir();
     writeTs(tmpDir, "config.yaml", "");
+    writePkg(tmpDir);
     const hooksDir = join(tmpDir, "hooks");
     writeTs(
       hooksDir,
@@ -251,5 +275,50 @@ describe("findLibImportViolations — bare-npm second pass", () => {
     const violations = await findLibImportViolations(tmpDir);
     const bareViolations = violations.filter((v) => v.includes("bare-npm import not allowed"));
     expect(bareViolations).toHaveLength(0);
+  });
+
+  // --- Inverted guard: declared bare imports pass, undeclared fail ---
+
+  it("does NOT flag a bare import that EXACTLY matches a declared dependency (inverted guard)", async () => {
+    tmpDir = makeTempDir();
+    writeTs(tmpDir, "config.yaml", "");
+    // picomatch IS declared → an exact `import 'picomatch'` is allowed.
+    writePkg(tmpDir, { picomatch: "4.0.4" });
+    const libDir = join(tmpDir, "lib");
+    writeTs(libDir, "ok.ts", `import picomatch from 'picomatch';\n`);
+
+    const violations = await findLibImportViolations(tmpDir);
+    const bareViolations = violations.filter((v) => v.includes("bare-npm import not allowed"));
+    expect(bareViolations).toHaveLength(0);
+  });
+
+  it("flags an UNDECLARED bare import and names the package (inverted guard)", async () => {
+    tmpDir = makeTempDir();
+    writeTs(tmpDir, "config.yaml", "");
+    // picomatch is declared but chalk is NOT → only chalk is flagged.
+    writePkg(tmpDir, { picomatch: "4.0.4" });
+    const libDir = join(tmpDir, "lib");
+    writeTs(libDir, "mixed.ts", `import picomatch from 'picomatch';\nimport chalk from 'chalk';\n`);
+
+    const violations = await findLibImportViolations(tmpDir);
+    const bareViolations = violations.filter((v) => v.includes("bare-npm import not allowed"));
+    expect(bareViolations).toHaveLength(1);
+    expect(bareViolations.some((v) => v.includes("chalk"))).toBe(true);
+    expect(bareViolations.some((v) => v.includes("picomatch"))).toBe(false);
+  });
+
+  it("flags a SUB-PATH of a declared package — strict equality only (D-7)", async () => {
+    tmpDir = makeTempDir();
+    writeTs(tmpDir, "config.yaml", "");
+    // picomatch is declared, but a sub-path 'picomatch/lib/x' is not an exact
+    // match against the declared root name → still rejected.
+    writePkg(tmpDir, { picomatch: "4.0.4" });
+    const libDir = join(tmpDir, "lib");
+    writeTs(libDir, "subpath.ts", `import x from 'picomatch/lib/x';\n`);
+
+    const violations = await findLibImportViolations(tmpDir);
+    const bareViolations = violations.filter((v) => v.includes("bare-npm import not allowed"));
+    expect(bareViolations).toHaveLength(1);
+    expect(bareViolations.some((v) => v.includes("picomatch/lib/x"))).toBe(true);
   });
 });

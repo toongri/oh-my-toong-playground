@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { detectBareImports } from "../adapters/ts-lib-deps.ts";
 
 export const DEFAULT_EXCLUDE = ["*.test.ts"];
 
@@ -65,32 +66,120 @@ export async function collectDirs(dir: string, rel = ""): Promise<string[]> {
 }
 
 /**
- * Rewrites @lib/ import aliases in TypeScript source content to relative paths.
+ * Rewrites @lib/ import aliases and bundled bare specifiers in TypeScript
+ * source content to relative paths.
  *
  * This is a pure helper shared by both copy-time rewrite (syncDirectory) and
  * the post-pass rewrite (rewriteLibAliases in sync.ts). Both must produce
  * identical output so that the post-pass is a no-op on already-rewritten files.
  *
- * @param content      File content to rewrite
- * @param targetFile   Absolute path where the file will be written (used to compute depth)
- * @param platformRoot Absolute path to the platform root directory (e.g. /path/.claude/)
- * @returns            Rewritten content, or the original string if no @lib/ present
+ * Bundled bare specifiers (e.g. `import x from "picomatch"`) are repointed at
+ * the vendored bundle deployed under lib/vendor/<pkg>.js. The `.js` extension is
+ * emitted explicitly: the bundle is a .js file and the deploy target carries no
+ * package.json "type", so node's ESM resolver rejects an extensionless relative
+ * specifier (bun tolerates it, node does not). The match is anchored on the FULL
+ * quoted specifier (D-4): `'picomatch'` matches but `'picomatch-extra'`, the
+ * sub-path `'picomatch/lib/x'`, and a bare identifier `picomatchResult` do not —
+ * so collisions are impossible.
+ *
+ * @param content         File content to rewrite
+ * @param targetFile      Absolute path where the file will be written (used to compute depth)
+ * @param platformRoot    Absolute path to the platform root directory (e.g. /path/.claude/)
+ * @param bundledPackages Package names whose bare specifiers are repointed at lib/vendor/<pkg>
+ * @returns               Rewritten content, or the original string if nothing rewritable present
+ * @throws                If any bundled package's bare import survives rewrite (post-condition invariant)
  */
 export function rewriteLibImports(
   content: string,
   targetFile: string,
   platformRoot: string,
+  bundledPackages: Set<string>,
 ): string {
-  if (!content.includes("@lib/")) return content;
+  const hasBundled = [...bundledPackages].some(
+    (pkg) => content.includes(`'${pkg}'`) || content.includes(`"${pkg}"`),
+  );
+  if (!content.includes("@lib/") && !hasBundled) return content;
 
   const dir = path.dirname(targetFile);
   const relDir = path.relative(platformRoot, dir);
   const depth = relDir === "" ? 0 : relDir.split(path.sep).length;
   const prefix = depth === 0 ? "./" : "../".repeat(depth);
 
-  return content
+  let result = content
     .replace(/'@lib\//g, `'${prefix}lib/`)
     .replace(/"@lib\//g, `"${prefix}lib/`);
+
+  for (const pkg of bundledPackages) {
+    // Anchor the rewrite to real ESM module-specifier positions only. Each
+    // alternative below ends with the FULL quoted specifier (`'pkg'`) so a
+    // sub-path (`'pkg/lib/x'`) or look-alike (`'pkg-extra'`) never matches.
+    //
+    // The static forms are anchored to the START of a line (the `m` flag makes
+    // `^` match per-line): a `from`/`import` keyword that does NOT begin the
+    // statement — because it sits inside a `//` comment, a `*` JSDoc line, or a
+    // string literal — is never matched.
+    //   ^import|export … from 'pkg'   static import / re-export
+    //   ^import 'pkg'                  bare side-effect import
+    //   import('pkg')                  dynamic import (guarded against literals)
+    // Discovery (findBareNpmImports) is ESM-only and never detects `require()`,
+    // so the rewrite must not act on `require()` either — the two sides agree.
+    //
+    // Package names may contain regex-special characters (`.`, `-`, `@`, `/`),
+    // so escape them before embedding in the pattern.
+    const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const q = `(['"])${escaped}`; // group: opening quote; specifier follows
+    const specifierPattern = new RegExp(
+      [
+        // static import/export with a `from` clause
+        `(^[ \\t]*(?:import|export)\\b[^'"\\n]*?\\bfrom[ \\t]*)${q}\\2`,
+        // bare side-effect import (statement-leading, space before the quote)
+        `(^[ \\t]*import[ \\t]+)${q}\\4`,
+        // dynamic import — preceded by a non-identifier, non-quote boundary so a
+        // `"import('pkg')"` fragment inside a string literal is not matched
+        `((?:^|[^.\\w'"\`])import[ \\t]*\\([ \\t]*)${q}\\6`,
+      ].join("|"),
+      "gm",
+    );
+    result = result.replace(
+      specifierPattern,
+      (match, p1, q1, p2, q2, p3, q3) => {
+        // Three alternatives, each a [prefix, quote] pair; exactly one fires.
+        const prefixCtx = p1 ?? p2 ?? p3;
+        const quote = q1 ?? q2 ?? q3;
+        if (prefixCtx === undefined || quote === undefined) return match;
+        return `${prefixCtx}${quote}${prefix}lib/vendor/${pkg}.js${quote}`;
+      },
+    );
+  }
+
+  // Post-condition guard: detectBareImports uses broader matching than the rewrite regex
+  // (no line-start anchor), so it catches `} from "pkg"` lines that start with `}` — the
+  // multi-line import case the rewrite misses. Filter by bundledPackages, then confirm each
+  // surviving specifier appears in a real import position (not inside a string literal) using
+  // a regex that requires no unescaped string-delimiter before the from/import keyword on
+  // the line. This avoids false-positives for patterns like `"rewrote from 'pkg'"`.
+  const candidates = detectBareImports(result).filter((s) => bundledPackages.has(s));
+  if (candidates.length > 0) {
+    // For each candidate, verify it appears outside a string literal on at least one line.
+    // The pattern `^[^"'`]*` anchors at line-start and requires no opening quote before
+    // the from/import keyword — string-embedded occurrences are excluded by this anchor.
+    const stillBare = candidates.filter((pkg) => {
+      const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // Matches: non-string-start of line, then from/import keyword, then the quoted pkg name.
+      const outsideString = new RegExp(
+        `^[^"'\`]*(?:from|import)\\s*[\\s(]['"]${escaped}['"]`,
+        "m",
+      );
+      return outsideString.test(result);
+    });
+    if (stillBare.length > 0) {
+      throw new Error(
+        `rewriteLibImports: bundled package(s) [${stillBare.join(", ")}] still have bare imports after rewrite in ${targetFile} — multi-line import not supported by the rewrite regex`,
+      );
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -153,7 +242,10 @@ export async function syncDirectory(
     if (platformRoot && tgtFile.endsWith(".ts") && !tgtFile.endsWith(".test.ts")) {
       await fs.mkdir(path.dirname(tgtFile), { recursive: true });
       const srcContent = await fs.readFile(srcFile, "utf8");
-      const rewritten = rewriteLibImports(srcContent, tgtFile, platformRoot);
+      // syncDirectory only resolves @lib/ aliases at copy time; the bundled-package
+      // set is unknown here (the post-pass rewriteLibAliases in sync.ts carries it),
+      // so pass an empty set — the bare-specifier rewrite is a no-op at this stage.
+      const rewritten = rewriteLibImports(srcContent, tgtFile, platformRoot, new Set<string>());
       await fs.writeFile(tgtFile, rewritten, "utf8");
       // Preserve execute permissions
       const stat = await fs.stat(srcFile);

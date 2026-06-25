@@ -1,9 +1,8 @@
-This file records third-party dependencies vendored into lib/vendor/.
+This file records third-party dependencies vendored into deploy targets at sync time.
 
 --------------------------------------------------------------------------------
-picomatch 4.0.4
-License: MIT
-https://github.com/micromatch/picomatch
+picomatch 4.0.4 — MIT License
+--------------------------------------------------------------------------------
 
 The MIT License (MIT)
 

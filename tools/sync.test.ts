@@ -1973,6 +1973,300 @@ describe("syncLib", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Suite: syncLib — sync-time bare-import vendoring
+//
+// These exercise the real `bun build <pkg> --target=node` bundler inside
+// syncLib. The bundler runs with cwd=rootDir, so the temp rootDir must resolve
+// picomatch: it gets a package.json declaring picomatch and a node_modules
+// symlink to the real repo's installed copy.
+// ---------------------------------------------------------------------------
+
+describe("syncLib — sync-time bare-import vendoring", () => {
+  // Repo root = parent of the tools/ dir this test file lives in.
+  const repoRoot = path.dirname(import.meta.dir);
+  const repoNodeModules = path.join(repoRoot, "node_modules");
+
+  let tmpDir: string;
+  let rootDir: string;
+  let targetPath: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-vendor-test-"));
+    rootDir = path.join(tmpDir, "root");
+    targetPath = path.join(tmpDir, "target");
+    await fs.mkdir(rootDir, { recursive: true });
+    await fs.mkdir(targetPath, { recursive: true });
+    // syncLib early-returns unless rootDir/lib exists. A bare-only target needs
+    // no .ts lib modules, but the lib source dir must be present for the deploy
+    // (and the vendored bundle written under lib/vendor/) to proceed.
+    await fs.mkdir(path.join(rootDir, "lib"), { recursive: true });
+    // Declare picomatch so readPackageJsonDeps(rootDir) marks it eligible.
+    await writeFile(
+      path.join(rootDir, "package.json"),
+      JSON.stringify({ devDependencies: { picomatch: "4.0.4" } }),
+    );
+    // Symlink the real installed node_modules so `bun build picomatch` resolves.
+    await fs.symlink(repoNodeModules, path.join(rootDir, "node_modules"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("bare-only platform (zero @lib/): vendors picomatch.js and rewrites the deployed import to a relative path", async () => {
+    // A component source that imports ONLY a bare package — no @lib/ at all.
+    const sourceTs = path.join(rootDir, "skills", "matcher", "run.ts");
+    await writeFile(sourceTs, "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n");
+
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
+
+    // The vendored bundle is deployed.
+    const vendoredJs = path.join(targetPath, ".claude", "lib", "vendor", "picomatch.js");
+    expect(await exists(vendoredJs)).toBe(true);
+
+    // Plant a deployed copy of the component still carrying the raw bare specifier;
+    // the post-pass rewrite must repoint it at the relative vendored path.
+    // (syncLib's rewriteLibAliases scans the platform dir.)
+    const deployedSkill = path.join(targetPath, ".claude", "skills", "matcher", "run.ts");
+    await writeFile(deployedSkill, "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n");
+    await rewriteLibAliases(path.join(targetPath, ".claude"), new Set(["picomatch"]));
+
+    const rewritten = await readFile(deployedSkill);
+    // skills/matcher/run.ts is two levels deep → ../../lib/vendor/picomatch.js
+    expect(rewritten).toContain("../../lib/vendor/picomatch.js");
+    // Raw bare 'picomatch' specifier is gone.
+    expect(rewritten).not.toContain("'picomatch'");
+  });
+
+  it("lib module's bare import is vendored AND the deployed lib module's specifier is rewritten (transitive @lib/ pull)", async () => {
+    // A lib MODULE (not a component) carries the bare import. It is pulled into
+    // the deploy transitively: a component imports it via @lib/, so it lands in
+    // requiredModules — NOT in sourceRoots. The bare specifier therefore traces
+    // through no sourceRoot, exercising the discovery + rewrite coverage gaps.
+    const libModule = path.join(rootDir, "lib", "matcher-helper.ts");
+    await writeFile(
+      libModule,
+      "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n",
+    );
+    // Component sits OUTSIDE lib/ and reaches the lib module only via @lib/.
+    const sourceTs = path.join(rootDir, "skills", "matcher", "run.ts");
+    await writeFile(
+      sourceTs,
+      "import { m } from '@lib/matcher-helper';\nexport const matcher = m;\n",
+    );
+
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
+
+    // (a) The lib module's bare import is discovered and vendored.
+    const vendoredJs = path.join(targetPath, ".claude", "lib", "vendor", "picomatch.js");
+    expect(await exists(vendoredJs)).toBe(true);
+
+    // (b) The DEPLOYED lib module's specifier is rewritten to the relative
+    // vendored path — lib/matcher-helper.ts is one level under the platform root,
+    // so the prefix is ../lib/vendor/picomatch.js. No raw bare specifier remains.
+    const deployedLibModule = path.join(targetPath, ".claude", "lib", "matcher-helper.ts");
+    const deployed = await readFile(deployedLibModule);
+    expect(deployed).toContain("../lib/vendor/picomatch.js");
+    expect(deployed).not.toContain("'picomatch'");
+  });
+
+  it("does not mutate OMT source: git status --porcelain is byte-identical before vs after a sync into an out-of-repo target", async () => {
+    // Source under the temp rootDir (OUTSIDE the OMT repo). We assert the OMT
+    // repo working tree is unchanged by the sync.
+    const sourceTs = path.join(rootDir, "skills", "matcher", "run.ts");
+    await writeFile(sourceTs, "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n");
+
+    const porcelain = () =>
+      execFileSync("git", ["status", "--porcelain"], { cwd: repoRoot, encoding: "utf8" });
+
+    const before = porcelain();
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
+    const after = porcelain();
+
+    expect(after).toBe(before);
+  });
+
+  it("build failure aborts clean: declared-but-uninstalled package → throws and the target lib/ is unchanged (atomicity)", async () => {
+    // Declare a package that is NOT installed in node_modules → bun build fails.
+    await writeFile(
+      path.join(rootDir, "package.json"),
+      JSON.stringify({ devDependencies: { "definitely-not-installed-xyz": "1.0.0" } }),
+    );
+    const sourceTs = path.join(rootDir, "skills", "matcher", "run.ts");
+    await writeFile(sourceTs, "import x from 'definitely-not-installed-xyz';\nexport const m = x;\n");
+
+    // Establish a known pre-sync lib/ state on the target.
+    const libDest = path.join(targetPath, ".claude", "lib");
+    await fs.mkdir(libDest, { recursive: true });
+    await writeFile(path.join(libDest, "sentinel.ts"), "export const SENTINEL = 1;\n");
+    const preState = await fs.readdir(libDest);
+    const preContent = await readFile(path.join(libDest, "sentinel.ts"));
+
+    let threw = false;
+    try {
+      await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
+    } catch {
+      threw = true;
+    }
+
+    // Build failure must surface as a non-zero exit (thrown error).
+    expect(threw).toBe(true);
+    // The target lib/ equals its pre-sync state — no partial swap.
+    expect(await fs.readdir(libDest)).toEqual(preState);
+    expect(await readFile(path.join(libDest, "sentinel.ts"))).toBe(preContent);
+  });
+
+  it("restores the original lib when the second swap rename fails after the old lib was moved aside", async () => {
+    // F3: the swap is two renames — move old lib aside (libDest → libOld), then
+    // move the freshly built tree in (libTmp → libDest). If the SECOND rename
+    // fails after the first succeeded, the catch must restore the moved-aside old
+    // lib, or the target is left with NO live lib/ at all.
+    const sourceTs = path.join(rootDir, "skills", "matcher", "run.ts");
+    await writeFile(sourceTs, "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n");
+
+    // Establish a known pre-sync lib/ state so we can prove it survives.
+    const libDest = path.join(targetPath, ".claude", "lib");
+    await fs.mkdir(libDest, { recursive: true });
+    await writeFile(path.join(libDest, "sentinel.ts"), "export const SENTINEL = 1;\n");
+    const preState = await fs.readdir(libDest);
+    const preContent = await readFile(path.join(libDest, "sentinel.ts"));
+
+    // Fail ONLY the second rename (the one whose source is the lib.tmp tree).
+    const realRename = fs.rename.bind(fs);
+    const renameSpy = spyOn(fs, "rename").mockImplementation(
+      async (from: fs2.PathLike, to: fs2.PathLike) => {
+        if (String(from).includes("lib.tmp-")) {
+          throw new Error("simulated second-rename failure");
+        }
+        return realRename(from as string, to as string);
+      },
+    );
+
+    let threw = false;
+    try {
+      await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
+    } catch {
+      threw = true;
+    } finally {
+      renameSpy.mockRestore();
+    }
+
+    // The failure must surface.
+    expect(threw).toBe(true);
+    // The original lib must have been restored — not left missing.
+    expect(await exists(libDest)).toBe(true);
+    expect(await fs.readdir(libDest)).toEqual(preState);
+    expect(await readFile(path.join(libDest, "sentinel.ts"))).toBe(preContent);
+  });
+
+  it("vendors to a NON-claude platform that received the component even when libPlatforms is the claude-only default (F3)", async () => {
+    // Reproduces F3: with no feature-platforms.lib configured, the resolved
+    // libPlatforms cascades to ["claude"]. But the component (and its bare
+    // bundled import) deployed to codex — recorded in libSourceRoots under
+    // "codex". syncLib must iterate the UNION of libPlatforms and the platforms
+    // that actually received components, or codex gets the rewritten source with
+    // NO matching vendor bundle → ERR_MODULE_NOT_FOUND at runtime under node.
+    const sourceTs = path.join(rootDir, "skills", "matcher", "run.ts");
+    await writeFile(sourceTs, "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n");
+
+    // libPlatforms = ["claude"] (the cascade default), but the component landed
+    // on codex only — so libSourceRoots is keyed under "codex", not "claude".
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("codex", sourceTs));
+
+    // The vendored bundle must exist under .codex/, the platform that got the component.
+    const codexVendoredJs = path.join(targetPath, ".codex", "lib", "vendor", "picomatch.js");
+    expect(await exists(codexVendoredJs)).toBe(true);
+
+    // The deployed component's bare import on .codex/ is rewritten to the relative
+    // vendored path. (Plant the deployed copy, then run the post-pass rewrite the
+    // way syncLib does for the platform dir.)
+    const deployedSkill = path.join(targetPath, ".codex", "skills", "matcher", "run.ts");
+    await writeFile(deployedSkill, "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n");
+    await rewriteLibAliases(path.join(targetPath, ".codex"), new Set(["picomatch"]));
+
+    const rewritten = await readFile(deployedSkill);
+    expect(rewritten).toContain("../../lib/vendor/picomatch.js");
+    expect(rewritten).not.toContain("'picomatch'");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: processYaml — bare-import vendoring for hook-only (non-claude) projects
+//
+// F1 regression: a codex/gemini-hook-only project (sync.yaml with no component
+// items, sibling codex.yaml carrying a hook that imports a bare package) deploys
+// its hook via syncPlatformConfigs and records the hook source in libSourceRoots,
+// but shouldMkdirClaude is false. The lib-vendoring gate in processYaml must run
+// whenever a deploy target received deployable source (libSourceRoots non-empty),
+// not only when shouldMkdirClaude — otherwise the deployed hook's bare import is
+// never vendored → ERR_MODULE_NOT_FOUND under node at runtime.
+// ---------------------------------------------------------------------------
+
+describe("processYaml — hook-only bare-import vendoring (F1)", () => {
+  const repoRoot = path.dirname(import.meta.dir);
+  const repoNodeModules = path.join(repoRoot, "node_modules");
+
+  let tmpDir: string;
+  let rootDir: string;
+  let targetPath: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "process-yaml-vendor-test-"));
+    rootDir = path.join(tmpDir, "root");
+    targetPath = path.join(tmpDir, "target");
+    await fs.mkdir(rootDir, { recursive: true });
+    await fs.mkdir(targetPath, { recursive: true });
+    // syncLib early-returns unless rootDir/lib exists; the vendored bundle also
+    // lands under <platform>/lib/vendor/, so the lib source dir must be present.
+    await fs.mkdir(path.join(rootDir, "lib"), { recursive: true });
+    // Declared so readPackageJsonDeps(rootDir) marks picomatch eligible to bundle.
+    await writeFile(
+      path.join(rootDir, "package.json"),
+      JSON.stringify({ devDependencies: { picomatch: "4.0.4" } }),
+    );
+    // config.yaml is read by processYaml's config cascade.
+    await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [codex]\n");
+    _resetConfigCache();
+    // Symlink the real installed node_modules so `bun build picomatch` resolves.
+    await fs.symlink(repoNodeModules, path.join(rootDir, "node_modules"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    _resetConfigCache();
+  });
+
+  it("vendors a codex-hook-only project's bare import even though shouldMkdirClaude is false", async () => {
+    // A hook component (resolves to a directory) whose .ts source imports a bare
+    // package. syncPlatformConfigs records this dir in libSourceRoots under codex.
+    const hookDir = path.join(rootDir, "hooks", "matcher-hook");
+    await writeFile(
+      path.join(hookDir, "run.ts"),
+      "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n",
+    );
+
+    // sync.yaml has NO component sections → shouldMkdirClaude is false.
+    // sibling codex.yaml carries the hook that pulls the bare import in.
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+    await writeFile(
+      path.join(rootDir, "codex.yaml"),
+      "hooks:\n  PreToolUse:\n    - component: matcher-hook\n",
+    );
+
+    const adapters = makeAdapterMap(["codex"]);
+    const context = makeContext({ dryRun: false });
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    // The bare import must be vendored under .codex/ even though no .claude/ was
+    // created (this is the hook-only, non-claude deploy shape).
+    const codexVendoredJs = path.join(targetPath, ".codex", "lib", "vendor", "picomatch.js");
+    expect(await exists(codexVendoredJs)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Suite: rewriteLibAliases
 // ---------------------------------------------------------------------------
 
@@ -1993,7 +2287,7 @@ describe("rewriteLibAliases", () => {
       `import { X } from '@lib/types.ts';\nimport { Y } from "@lib/other.ts";\n`,
     );
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "index.ts"));
     expect(content).toContain("'./lib/types.ts'");
@@ -2006,7 +2300,7 @@ describe("rewriteLibAliases", () => {
       "import { X } from '@lib/types.ts';\n",
     );
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "agents", "oracle.ts"));
     expect(content).toContain("'../lib/types.ts'");
@@ -2018,7 +2312,7 @@ describe("rewriteLibAliases", () => {
       "import type { X } from '@lib/types.ts';\n",
     );
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "a", "b", "deep.ts"));
     expect(content).toContain("'../../lib/types.ts'");
@@ -2028,7 +2322,7 @@ describe("rewriteLibAliases", () => {
     const original = "import { X } from './local.ts';\n";
     await writeFile(path.join(tmpDir, "no-alias.ts"), original);
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "no-alias.ts"));
     expect(content).toBe(original);
@@ -2038,7 +2332,7 @@ describe("rewriteLibAliases", () => {
     const original = "import { X } from '@lib/types.ts';\n";
     await writeFile(path.join(tmpDir, "helper.test.ts"), original);
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "helper.test.ts"));
     expect(content).toBe(original);
@@ -2048,7 +2342,7 @@ describe("rewriteLibAliases", () => {
     const original = "import { X } from '@lib/types.ts';\n";
     await writeFile(path.join(tmpDir, "lib", "internal.ts"), original);
 
-    await rewriteLibAliases(tmpDir);
+    await rewriteLibAliases(tmpDir, new Set());
 
     const content = await readFile(path.join(tmpDir, "lib", "internal.ts"));
     expect(content).toBe(original);
