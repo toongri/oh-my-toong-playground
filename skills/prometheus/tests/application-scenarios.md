@@ -781,7 +781,7 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 **Primary Technique:** Verify Lane — collect → falsifying verifier per non-empty lane → refuted finding excluded from plan grounding
 
 **Setup:**
-Complex/Architecture intent. Phase-1 grounding completes the collect step: 3 of the 5 explore aspect lanes are non-empty (pattern, convention, naming/registration). The librarian external lane is also non-empty. The remaining 2 aspect lanes (similar implementation, test infrastructure) are empty.
+Architecture intent (the delegated verify path — on Complex these lanes are falsified inline by the planner with no verifier dispatch). Phase-1 grounding completes the collect step: 3 of the 5 explore aspect lanes are non-empty (pattern, convention, naming/registration). The librarian external lane is also non-empty. The remaining 2 aspect lanes (similar implementation, test infrastructure) are empty.
 
 4 falsifying verifiers are dispatched in ONE parallel response — one per non-empty lane. The verifier for the naming/registration lane returns:
 
@@ -809,7 +809,7 @@ The remaining 3 verifiers return `verdict: corroborated` with `confidence: high`
 **Primary Technique:** Adversarial Evidence-Key Vocabulary — a #13 key-tag surfaces on a librarian external finding (not one of the 5 explore aspect lanes), proving the 4-key vocabulary applies uniformly across all lane types, not just the explore aspect lanes
 
 **Setup:**
-Complex/Architecture intent. Phase-1 collect dispatches a librarian agent to retrieve an external API specification for a third-party service. The librarian returns a finding about the API's authentication flow.
+Architecture intent (delegated verify path; on Complex the same 4-key tagging happens inline). Phase-1 collect dispatches a librarian agent to retrieve an external API specification for a third-party service. The librarian returns a finding about the API's authentication flow.
 
 The librarian finding is passed to the external-lane falsifying verifier (D-1 verify). While applying the D-5 adversarial 4-key checklist to the finding, the verifier tags it:
 
