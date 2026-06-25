@@ -426,17 +426,18 @@ hooks:
     });
   });
 
-  // --- codex/opencode: no hook validation ---
-  describe("codex/opencode는 hook 검증 대상이 아니다", () => {
-    it("does not validate hook components in codex.yaml via `validatePlatformYamlHookComponents`", async () => {
+  // --- codex: hook validation ---
+  describe("codex hook 컴포넌트 검증", () => {
+    it("returns error for missing hook component in codex.yaml via `validatePlatformYamlHookComponents`", async () => {
       writeYaml(root, "codex.yaml", `
 hooks:
   UserPromptSubmit:
     - component: nonexistent.sh
 `);
       const result = await validatePlatformYamlHookComponents(root, root);
-      // codex is not in the validated list (claude and gemini only)
-      expect(result.errors).toHaveLength(0);
+      // codex is in the validated list alongside claude and gemini
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("nonexistent.sh"))).toBe(true);
     });
   });
 
@@ -451,15 +452,19 @@ hooks:
 
   // --- Scoped hook component ---
   describe("scoped hook 컴포넌트", () => {
-    it("produces no errors for existing scoped hook component", async () => {
+    it("produces no errors for existing scoped hook component in project context", async () => {
+      // Scoped refs are only valid in project context (yamlDir inside projects/).
+      // This test places claude.yaml inside projects/myproject/ to use project context.
+      // A-8 fix: root-context scoped refs are now rejected (see A-8 suite below).
+      const projectDir = join(root, "projects", "myproject");
       mkdirSync(join(root, "projects", "myproject", "hooks"), { recursive: true });
       touch(join(root, "projects", "myproject", "hooks", "custom-hook.sh"));
-      writeYaml(root, "claude.yaml", `
+      writeYaml(projectDir, "claude.yaml", `
 hooks:
   UserPromptSubmit:
     - component: myproject:custom-hook.sh
 `);
-      const result = await validatePlatformYamlHookComponents(root, root);
+      const result = await validatePlatformYamlHookComponents(projectDir, root);
       expect(result.errors).toHaveLength(0);
     });
 
@@ -694,6 +699,75 @@ hooks:
     - component: keyword-detector.sh
 `);
 
+    const result = await validatePlatformYamlHookComponents(root, root);
+    expect(result.errors).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: A-8 — root-context scoped hook ref는 resolver와 대칭으로 거부된다
+// ---------------------------------------------------------------------------
+
+describe("A-8: root-context per-platform YAML scoped hook ref 거부", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = makeRoot();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("root-context claude.yaml에서 scoped hook ref는 에러를 반환한다", async () => {
+    // File exists in the project scope, but root-context cannot reference scoped hooks.
+    mkdirSync(join(root, "projects", "myproject", "hooks"), { recursive: true });
+    touch(join(root, "projects", "myproject", "hooks", "hook.sh"));
+    writeYaml(root, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: myproject:hook.sh
+`);
+    // yamlDir is root (not inside projects/), so projectDirName should be ""
+    const result = await validatePlatformYamlHookComponents(root, root);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some((e) => e.includes("myproject:hook.sh"))).toBe(true);
+  });
+
+  it("root-context codex.yaml에서 scoped hook ref는 에러를 반환한다", async () => {
+    mkdirSync(join(root, "projects", "myproject", "hooks"), { recursive: true });
+    touch(join(root, "projects", "myproject", "hooks", "hook.sh"));
+    writeYaml(root, "codex.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: myproject:hook.sh
+`);
+    const result = await validatePlatformYamlHookComponents(root, root);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some((e) => e.includes("myproject:hook.sh"))).toBe(true);
+  });
+
+  it("project-context에서 동일 project scoped ref는 여전히 통과한다 (회귀)", async () => {
+    // projects/myproject/claude.yaml references myproject:hook.sh — allowed
+    const projectDir = join(root, "projects", "myproject");
+    mkdirSync(join(root, "projects", "myproject", "hooks"), { recursive: true });
+    touch(join(root, "projects", "myproject", "hooks", "hook.sh"));
+    writeYaml(projectDir, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: myproject:hook.sh
+`);
+    const result = await validatePlatformYamlHookComponents(projectDir, root);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("root-context unscoped hook ref는 여전히 통과한다 (회귀)", async () => {
+    touch(join(root, "hooks", "global-hook.sh"));
+    writeYaml(root, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: global-hook.sh
+`);
     const result = await validatePlatformYamlHookComponents(root, root);
     expect(result.errors).toHaveLength(0);
   });

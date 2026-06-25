@@ -588,6 +588,26 @@ describe("CodexAdapter", () => {
       const libExists = await fs.stat(targetLib).then(() => true).catch(() => false);
       expect(libExists).toBe(true);
     });
+
+    it("디렉토리 훅의 @lib/ import를 배포 시 상대 경로로 재작성한다", async () => {
+      // Source dir: hooks/rules-injector/cli.ts with @lib/ import
+      const hookSrcDir = path.join(tmpDir, "hooks", "rules-injector");
+      await fs.mkdir(hookSrcDir, { recursive: true });
+      await fs.writeFile(
+        path.join(hookSrcDir, "cli.ts"),
+        'import { foo } from "@lib/utils.ts";\nconsole.log("hi");\n',
+      );
+
+      const targetBase = path.join(tmpDir, "target");
+      await adapter.syncHooksDirect(targetBase, "rules-injector", hookSrcDir, false);
+
+      // Deployed file must have @lib/ rewritten to a relative path (../../lib/)
+      // .codex/hooks/rules-injector/cli.ts is 2 dirs deep under platformRoot (.codex)
+      const deployedFile = path.join(targetBase, ".codex", "hooks", "rules-injector", "cli.ts");
+      const content = await fs.readFile(deployedFile, "utf-8");
+      expect(content).not.toContain("@lib/");
+      expect(content).toContain("../../lib/");
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -606,57 +626,178 @@ describe("CodexAdapter", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // updateSettings — hooks not supported
+  // updateSettings — writes .codex/hooks.json
   // ---------------------------------------------------------------------------
 
   describe("updateSettings", () => {
-    it("logs hooks-unsupported warning and creates no config.toml via `updateSettings`", async () => {
-      const stderrChunks: string[] = [];
-      const originalWrite = process.stderr.write.bind(process.stderr);
-      process.stderr.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
-        stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
-        return originalWrite(chunk, ...(args as Parameters<typeof originalWrite> extends [unknown, ...infer R] ? R : []));
+    it("updateSettings writes hooks.json", async () => {
+      const hooksEntries: Record<string, unknown> = {
+        PostToolUse: [{ hooks: [{ command: "echo post-tool-use" }] }],
       };
 
-      try {
-        await adapter.updateSettings(tmpDir, [{ event: "Stop", command: "echo done" }], false);
-      } finally {
-        process.stderr.write = originalWrite;
-      }
+      await adapter.updateSettings(tmpDir, hooksEntries, false);
 
-      const output = stderrChunks.join("");
-      expect(output).toContain("Codex does not support hooks");
-
-      // Must not create any files
-      const exists = await fs
-        .stat(path.join(tmpDir, ".codex", "config.toml"))
-        .then(() => true)
-        .catch(() => false);
-      expect(exists).toBe(false);
+      const hooksFile = path.join(tmpDir, ".codex", "hooks.json");
+      const raw = await fs.readFile(hooksFile, "utf-8");
+      const parsed = JSON.parse(raw) as { hooks?: { PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }> } };
+      expect(parsed.hooks?.PostToolUse?.[0]?.hooks?.[0]?.command).toBe("echo post-tool-use");
     });
 
-    it("logs hooks-unsupported warning and creates no config.toml in dry-run mode via `updateSettings`", async () => {
-      const stderrChunks: string[] = [];
-      const originalWrite = process.stderr.write.bind(process.stderr);
-      process.stderr.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
-        stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
-        return originalWrite(chunk, ...(args as Parameters<typeof originalWrite> extends [unknown, ...infer R] ? R : []));
+    it("updateSettings preserves marked foreign hooks", async () => {
+      // Seed: one FOREIGN block tagged preserve.command-contains AND one untagged OMT block
+      const hooksDir = path.join(tmpDir, ".codex");
+      await fs.mkdir(hooksDir, { recursive: true });
+      const hooksFile = path.join(hooksDir, "hooks.json");
+      const seed = {
+        hooks: {
+          PostToolUse: [
+            // Foreign block — tagged with preserve marker
+            { hooks: [{ command: "/opt/foreign/notify.sh" }] },
+            // Untagged OMT block — must be replaced
+            { hooks: [{ command: "omt-old-command" }] },
+          ],
+        },
+      };
+      await fs.writeFile(hooksFile, JSON.stringify(seed, null, 2) + "\n", "utf-8");
+
+      const freshEntries: Record<string, unknown> = {
+        PostToolUse: [{ hooks: [{ command: "omt-new-command" }] }],
       };
 
-      try {
-        await adapter.updateSettings(tmpDir, [], true);
-      } finally {
-        process.stderr.write = originalWrite;
-      }
+      await adapter.updateSettings(tmpDir, freshEntries, false, {
+        "command-contains": ["/opt/foreign/"],
+      });
 
-      const output = stderrChunks.join("");
-      expect(output).toContain("Codex does not support hooks");
+      const raw = await fs.readFile(hooksFile, "utf-8");
+      const parsed = JSON.parse(raw) as { hooks?: { PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }> } };
+      const commands = (parsed.hooks?.PostToolUse ?? [])
+        .flatMap((block) => (block.hooks ?? []).map((h) => h.command ?? ""));
 
-      const exists = await fs
-        .stat(path.join(tmpDir, ".codex", "config.toml"))
-        .then(() => true)
-        .catch(() => false);
-      expect(exists).toBe(false);
+      // Foreign block with marker survives
+      expect(commands).toContain("/opt/foreign/notify.sh");
+      // Fresh OMT entry is present
+      expect(commands).toContain("omt-new-command");
+      // Untagged old OMT entry is gone
+      expect(commands).not.toContain("omt-old-command");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // updateSettings — throws when source-had-items but all were skipped
+  // ---------------------------------------------------------------------------
+
+  describe("updateSettings skip-to-empty guard", () => {
+    it("throws when syncPlatformYaml hook event had source items but all were skipped", async () => {
+      // Stage a hook dir with no index.ts or index.sh — triggers the continue/skip branch
+      const emptyHookDir = path.join(tmpDir, "source-hooks", "no-entry-hook");
+      await fs.mkdir(emptyHookDir, { recursive: true });
+      await fs.writeFile(path.join(emptyHookDir, "readme.txt"), "no entrypoint here\n");
+
+      const targetBase = path.join(tmpDir, "target-skip-guard");
+
+      const yaml = {
+        hooks: {
+          PostToolUse: [
+            {
+              component: emptyHookDir,
+              matcher: "*",
+              timeout: 10,
+            },
+          ],
+        },
+      };
+
+      await expect(adapter.syncPlatformYaml(targetBase, yaml as never, false)).rejects.toThrow(
+        /PostToolUse/,
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // syncPlatformYaml — hooks: deploys bundle + relative command
+  // ---------------------------------------------------------------------------
+
+  describe("syncPlatformYaml hooks", () => {
+    it("deploys rules-injector bundle + relative command", async () => {
+      // Stage a synthetic rules-injector hook dir with index.ts and a test file
+      const hookSrcDir = path.join(tmpDir, "source-hooks", "rules-injector");
+      await fs.mkdir(hookSrcDir, { recursive: true });
+      await fs.writeFile(path.join(hookSrcDir, "index.ts"), "// hook entry\n");
+      await fs.writeFile(path.join(hookSrcDir, "helper.ts"), "// helper\n");
+      await fs.writeFile(path.join(hookSrcDir, "helper.test.ts"), "// test — must NOT deploy\n");
+
+      const targetBase = path.join(tmpDir, "target");
+
+      const yaml = {
+        hooks: {
+          PostToolUse: [
+            {
+              component: hookSrcDir,
+              matcher: "*",
+              timeout: 10,
+            },
+          ],
+        },
+      };
+
+      await adapter.syncPlatformYaml(targetBase, yaml as never, false);
+
+      // 1. Bundle deployed: index.ts and helper.ts must exist
+      const deployedDir = path.join(targetBase, ".codex", "hooks", "rules-injector");
+      const indexExists = await fs.stat(path.join(deployedDir, "index.ts")).then(() => true).catch(() => false);
+      const helperExists = await fs.stat(path.join(deployedDir, "helper.ts")).then(() => true).catch(() => false);
+      expect(indexExists).toBe(true);
+      expect(helperExists).toBe(true);
+
+      // 2. *.test.ts must NOT be deployed
+      const testFileExists = await fs.stat(path.join(deployedDir, "helper.test.ts")).then(() => true).catch(() => false);
+      expect(testFileExists).toBe(false);
+
+      // 3. Generated command uses the absolute path rooted at targetBase — no $-variable
+      const hooksFile = path.join(targetBase, ".codex", "hooks.json");
+      const raw = await fs.readFile(hooksFile, "utf-8");
+      const parsed = JSON.parse(raw) as {
+        hooks?: {
+          PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }>;
+        };
+      };
+      const command = parsed.hooks?.PostToolUse?.[0]?.hooks?.[0]?.command ?? "";
+      expect(command).not.toMatch(/\$/);
+      expect(command.startsWith("bun ")).toBe(true);
+      expect(command).toContain(targetBase);
+      expect(command).toBe(`bun run ${path.join(targetBase, ".codex/hooks/rules-injector/index.ts")}`);
+    });
+
+    it("rewrites custom command to absolute path", async () => {
+      const targetBase = path.join(tmpDir, "target-custom");
+
+      const yaml = {
+        hooks: {
+          SessionStart: [
+            {
+              command: "bun run .codex/hooks/rules-injector/cli.ts hook session-start",
+              matcher: "*",
+              timeout: 10,
+            },
+          ],
+        },
+      };
+
+      await adapter.syncPlatformYaml(targetBase, yaml as never, false);
+
+      const hooksFile = path.join(targetBase, ".codex", "hooks.json");
+      const raw = await fs.readFile(hooksFile, "utf-8");
+      const parsed = JSON.parse(raw) as {
+        hooks?: {
+          SessionStart?: Array<{ hooks?: Array<{ command?: string }> }>;
+        };
+      };
+      const command = parsed.hooks?.SessionStart?.[0]?.hooks?.[0]?.command ?? "";
+      expect(command).not.toMatch(/\$/);
+      expect(command).toContain(targetBase);
+      expect(command).toBe(
+        `bun run ${path.join(targetBase, ".codex/hooks/rules-injector/cli.ts")} hook session-start`,
+      );
     });
   });
 });

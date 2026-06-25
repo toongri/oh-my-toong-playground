@@ -5,7 +5,7 @@
  * Key behaviors:
  * - agents: not supported, skip with warning
  * - commands: not supported (global ~/.codex/prompts/ only), skip with warning
- * - hooks: Notification event only
+ * - hooks: supported; command is a literal relative `bun run .codex/hooks/<name>/index.ts`
  * - skills, scripts: syncDirectory
  * - rules: not supported, skip with warning
  * - config: TOML managed block in .codex/config.toml
@@ -16,7 +16,8 @@ import fs from "fs/promises";
 import path from "path";
 import { stringify } from "smol-toml";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
-import { readTextFile } from "../lib/json.ts";
+import { readTextFile, readJsonFile, writeJsonFile } from "../lib/json.ts";
+import { isPlainObject } from "../lib/deep-merge.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import type { PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
@@ -172,7 +173,10 @@ export class CodexAdapter implements PlatformAdapter {
         await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
         return;
       }
-      await syncDirectory(sourcePath, targetHookDir);
+      await syncDirectory(sourcePath, targetHookDir, {
+        exclude: ["*.test.ts"],
+        platformRoot: path.join(targetPath, this.configDir),
+      });
       logInfo(`Copied: ${displayName}/`);
       await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
     } else {
@@ -417,7 +421,103 @@ export class CodexAdapter implements PlatformAdapter {
 
     // --- hooks ---
     if (yaml.hooks != null) {
-      logWarn("Codex does not support hooks in config.toml. Skipping hooks section.");
+      const hooksMap = yaml.hooks;
+      const preserveConfig = (hooksMap as Record<string, unknown>)["preserve"] as
+        | { "command-contains"?: string[] }
+        | undefined;
+      const accumulatedHooks: Record<string, unknown[]> = {};
+
+      for (const [hookEvent, items] of Object.entries(hooksMap)) {
+        if (hookEvent === "preserve") continue;
+        if (!Array.isArray(items)) continue;
+
+        for (const item of items) {
+          const component = (item["component"] as string | undefined) ?? "";
+          const timeout = (item["timeout"] as number | undefined) ?? 10;
+          const matcher = (item["matcher"] as string | undefined) ?? "*";
+          const customCommand = (item["command"] as string | undefined) ?? "";
+
+          let displayName = "";
+          let resolvedSourcePath = "";
+
+          // If a component is specified, resolve and deploy the hook bundle
+          if (component) {
+            // component is a pre-resolved absolute path (orchestrator resolves before calling adapter)
+            displayName = path.basename(component);
+            resolvedSourcePath = component;
+
+            await this.syncHooksDirect(targetPath, displayName, resolvedSourcePath, dryRun);
+          }
+
+          // Build command string
+          let cmdPath: string;
+          if (customCommand) {
+            cmdPath = customCommand;
+          } else if (component) {
+            // Check if the source is a directory and pick index.ts or index.sh
+            let isDir = false;
+            try {
+              const stat = await fs.stat(resolvedSourcePath);
+              isDir = stat.isDirectory();
+            } catch {
+              // treat as file
+            }
+
+            if (isDir) {
+              const indexTs = path.join(resolvedSourcePath, "index.ts");
+              const indexSh = path.join(resolvedSourcePath, "index.sh");
+              let hasIndexTs = false;
+              let hasIndexSh = false;
+              try { await fs.stat(indexTs); hasIndexTs = true; } catch { /* empty */ }
+              try { await fs.stat(indexSh); hasIndexSh = true; } catch { /* empty */ }
+
+              if (hasIndexTs) {
+                cmdPath = `bun run .codex/hooks/${displayName}/index.ts`;
+              } else if (hasIndexSh) {
+                cmdPath = `bash .codex/hooks/${displayName}/index.sh`;
+              } else {
+                logWarn(`Hook 디렉토리에 index.ts/index.sh 없음: ${resolvedSourcePath} (스킵)`);
+                continue;
+              }
+            } else {
+              cmdPath = `.codex/hooks/${displayName}`;
+            }
+          } else {
+            logWarn(`Hook command 미정의: event=${hookEvent} (스킵)`);
+            continue;
+          }
+
+          // Rewrite relative `.codex/` references to absolute paths rooted at
+          // targetPath so the hook command works regardless of the cwd Codex
+          // uses when it launches (which may be a subdirectory of the repo).
+          // This is correct for both global (~/.codex) and project-local deploys
+          // because targetPath IS the deploy root in both cases.
+          cmdPath = cmdPath.replaceAll(".codex/", `${path.join(targetPath, ".codex")}/`);
+
+          const hookEntry = this.buildHookEntry(hookEvent, matcher, timeout, cmdPath);
+
+          // Accumulate hook entries per event
+          const existing = (accumulatedHooks[hookEvent] as unknown[]) ?? [];
+          const entryArray = hookEntry[hookEvent] as unknown[];
+          accumulatedHooks[hookEvent] = [...existing, ...entryArray];
+        }
+      }
+
+      // Guard: if an event had source items but all were skipped, throw rather than
+      // writing hooks: {} and silently wiping previously-synced command hooks.
+      for (const [hookEvent, items] of Object.entries(hooksMap)) {
+        if (hookEvent === "preserve") continue;
+        if (!Array.isArray(items) || items.length === 0) continue;
+        const accumulated = accumulatedHooks[hookEvent];
+        if (!accumulated || accumulated.length === 0) {
+          throw new Error(
+            `hooks.${hookEvent}: ${items.length} 개 항목이 모두 스킵되어 유효한 항목이 없습니다 — hooks.json 덮어쓰기를 거부합니다`,
+          );
+        }
+      }
+
+      await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig);
+      processedSections.push("hooks");
     }
 
     // --- plugins ---
@@ -429,15 +529,87 @@ export class CodexAdapter implements PlatformAdapter {
   }
 
   // ---------------------------------------------------------------------------
-  // updateSettings — merge hooks into .codex/config.toml
+  // buildHookEntry
   // ---------------------------------------------------------------------------
 
+  /**
+   * Build a hook entry object for hooks.json `hooks` section.
+   *
+   * Returns an object of shape: { [event]: [{ matcher, hooks: [hookDef] }] }
+   */
+  buildHookEntry(
+    event: string,
+    matcher: string,
+    timeout: number,
+    command: string,
+  ): Record<string, unknown[]> {
+    const hookDef: Record<string, unknown> = { type: "command", command, timeout };
+    return {
+      [event]: [{ matcher, hooks: [hookDef] }],
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // updateSettings — write hooks into .codex/hooks.json
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Replace the `hooks` key in .codex/hooks.json with the synced entries.
+   * Foreign hook entries whose command matches a `preserve.command-contains` marker
+   * are carried over so this full replace does not silently drop them.
+   * Mirrors the semantics of the Claude adapter's updateSettings (claude.ts:563-603)
+   * but targets `.codex/hooks.json` instead of `.claude/settings.json`.
+   */
   async updateSettings(
-    _targetPath: string,
-    _hooksEntries: unknown[],
-    _dryRun = false
+    targetPath: string,
+    hooksEntries: Record<string, unknown>,
+    dryRun = false,
+    preserve?: { "command-contains"?: string[] },
   ): Promise<void> {
-    logWarn("Codex does not support hooks in config.toml. Skipping hook entries.");
+    const hooksFile = path.join(targetPath, ".codex", "hooks.json");
+
+    if (dryRun) {
+      logDry(`Update hooks.json: ${hooksFile}`);
+      return;
+    }
+
+    await fs.mkdir(path.join(targetPath, ".codex"), { recursive: true });
+    const current = await readJsonFile(hooksFile);
+
+    // Start from the synced (OMT-authored) entries, then carry over foreign
+    // entries matching a preserve marker so the replace below keeps them.
+    const mergedHooks: Record<string, unknown[]> = {};
+    for (const [event, blocks] of Object.entries(hooksEntries)) {
+      mergedHooks[event] = Array.isArray(blocks) ? [...blocks] : (blocks as unknown[]);
+    }
+    const markers = preserve?.["command-contains"] ?? [];
+    const currentHooks = (current as { hooks?: unknown }).hooks;
+    if (markers.length > 0 && isPlainObject(currentHooks)) {
+      for (const [event, blocks] of Object.entries(currentHooks as Record<string, unknown>)) {
+        if (!Array.isArray(blocks)) continue;
+        for (const block of blocks) {
+          if (this.hookCommandMatches(block, markers)) {
+            (mergedHooks[event] ??= []).push(block);
+          }
+        }
+      }
+    }
+
+    const { hooks: _removed, ...rest } = current as { hooks?: unknown; [k: string]: unknown };
+    const updated = { ...rest, hooks: mergedHooks };
+    await writeJsonFile(hooksFile, updated);
+    logInfo(`Updated hooks.json: ${hooksFile}`);
+  }
+
+  /** True if any command in a hook block contains one of the preserve markers. */
+  private hookCommandMatches(block: unknown, markers: string[]): boolean {
+    if (!isPlainObject(block)) return false;
+    const hooks = (block as { hooks?: unknown }).hooks;
+    if (!Array.isArray(hooks)) return false;
+    return hooks.some((h) => {
+      const cmd = isPlainObject(h) ? (h as { command?: unknown }).command : undefined;
+      return typeof cmd === "string" && markers.some((m) => cmd.includes(m));
+    });
   }
 }
 

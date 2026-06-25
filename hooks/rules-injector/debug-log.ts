@@ -1,0 +1,84 @@
+import { appendFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { performance } from "node:perf_hooks";
+import { debuglog } from "node:util";
+
+type DebugFieldValue = boolean | number | string | null;
+
+type DebugFields = Record<string, DebugFieldValue>;
+
+const debug = debuglog("codex-rules");
+const noopTimer: HookDebugTimer = {
+	lap: () => {},
+	done: () => {},
+};
+
+export interface HookDebugTimer {
+	lap(phase: string, fields?: DebugFields): void;
+	done(fields?: DebugFields): void;
+}
+
+export function createHookDebugTimer(hookName: string): HookDebugTimer {
+	if (!debug.enabled) {
+		return noopTimer;
+	}
+
+	const startMs = performance.now();
+	let lastMs = startMs;
+
+	return {
+		lap: (phase, fields = {}) => {
+			const nowMs = performance.now();
+			writeDebugLine(hookName, phase, nowMs - lastMs, nowMs - startMs, fields);
+			lastMs = nowMs;
+		},
+		done: (fields = {}) => {
+			const nowMs = performance.now();
+			writeDebugLine(hookName, "done", nowMs - lastMs, nowMs - startMs, fields);
+			lastMs = nowMs;
+		},
+	};
+}
+
+function writeDebugLine(
+	hookName: string,
+	phase: string,
+	durationMs: number,
+	totalMs: number,
+	fields: DebugFields,
+): void {
+	debug(
+		"%s phase=%s ms=%s total_ms=%s%s",
+		hookName,
+		phase,
+		durationMs.toFixed(3),
+		totalMs.toFixed(3),
+		formatFields(fields),
+	);
+}
+
+function formatFields(fields: DebugFields): string {
+	const entries = Object.entries(fields);
+	if (entries.length === 0) {
+		return "";
+	}
+
+	return ` ${entries.map(([key, value]) => `${key}=${String(value)}`).join(" ")}`;
+}
+
+/**
+ * Always-on operator breadcrumb sink (advisory L2). Appends a timestamped line
+ * to `~/.omt/rules-injector/error.log` so a swallowed hook-execution error stays
+ * visible to the operator. Best-effort: never throws and never blocks the turn.
+ */
+export function writeErrorBreadcrumb(context: string, error: unknown): void {
+	try {
+		const sink = join(homedir(), ".omt", "rules-injector", "error.log");
+		mkdirSync(dirname(sink), { recursive: true });
+		const detail = error instanceof Error ? `${error.message}${error.stack ? `\n${error.stack}` : ""}` : String(error);
+		appendFileSync(sink, `[${new Date().toISOString()}] ${context}: ${detail}\n`);
+	} catch {
+		// best-effort; the error sink must never throw or block the turn
+	}
+}
