@@ -303,8 +303,10 @@ test("F2: DEFAULT_AUTO_DISABLED_SOURCES excludes AGENTS.md", () => {
 	expect(DEFAULT_AUTO_DISABLED_SOURCES).toContain("AGENTS.md");
 });
 
-test("F2: DEFAULT_AUTO_DISABLED_SOURCES excludes ~/.claude/rules", () => {
-	expect(DEFAULT_AUTO_DISABLED_SOURCES).toContain("~/.claude/rules");
+test("F2: DEFAULT_AUTO_DISABLED_SOURCES does NOT exclude ~/.claude/rules (Patch A: Codex injector enables it)", () => {
+	// Patch A: Codex does not natively read ~/.claude/rules, so disabling it was
+	// over-conservative. Removed from the auto-disabled set so the source is discoverable.
+	expect(DEFAULT_AUTO_DISABLED_SOURCES).not.toContain("~/.claude/rules");
 });
 
 test("F2: DEFAULT_AUTO_DISABLED_SOURCES excludes ~/.claude/CLAUDE.md", () => {
@@ -581,14 +583,15 @@ test("P9: spawn env pins PLUGIN_DATA to the hermetic data root so external env c
 });
 
 // ===========================================================================
-// F11 — ~/.claude/rules is excluded by DEFAULT_AUTO_DISABLED_SOURCES (behavioral)
+// F11 — ~/.claude/rules is NO LONGER excluded by DEFAULT_AUTO_DISABLED_SOURCES (Patch A)
 // ===========================================================================
 
-test("F11: a rule planted under ~/.claude/rules is not injected by session-start", () => {
-	// Proves the behavioral effect of DEFAULT_AUTO_DISABLED_SOURCES excluding
-	// "~/.claude/rules": even if the file exists and has alwaysApply:true, its
-	// body must not appear in additionalContext. Removing "~/.claude/rules" from
-	// DEFAULT_AUTO_DISABLED_SOURCES would make this test RED.
+test("F11: a rule planted under ~/.claude/rules IS injected by session-start (Patch A: source enabled)", () => {
+	// Patch A removes "~/.claude/rules" from DEFAULT_AUTO_DISABLED_SOURCES.
+	// Codex does NOT natively read ~/.claude/rules, so there is no double-inject risk.
+	// After Patch A, an alwaysApply:true rule under ~/.claude/rules MUST appear in
+	// additionalContext. Restoring "~/.claude/rules" to DEFAULT_AUTO_DISABLED_SOURCES
+	// would make this test RED.
 	const sessionId = "f11-session";
 	const { projectRoot } = makeProjectWithStaticRule(
 		"f11-proj-rule.md",
@@ -600,7 +603,7 @@ test("F11: a rule planted under ~/.claude/rules is not injected by session-start
 	mkdirSync(claudeRulesDir, { recursive: true });
 	writeFileSync(
 		join(claudeRulesDir, "f11-home-rule.md"),
-		"---\nalwaysApply: true\n---\nF11 HOME BOULDER: this must NOT appear in additionalContext.\n",
+		"---\nalwaysApply: true\n---\nF11 HOME BOULDER: this MUST appear in additionalContext (Patch A).\n",
 	);
 
 	const result = runHook("session-start", sessionStartPayload(sessionId, projectRoot));
@@ -609,8 +612,8 @@ test("F11: a rule planted under ~/.claude/rules is not injected by session-start
 
 	// Project rule IS injected (positive control — confirms injection works).
 	expect(context).toContain("F11 PROJ BOULDER");
-	// Home rule is excluded due to DEFAULT_AUTO_DISABLED_SOURCES.
-	expect(context).not.toContain("F11 HOME BOULDER");
+	// Home rule is now ENABLED (Patch A: ~/.claude/rules removed from auto-disabled set).
+	expect(context).toContain("F11 HOME BOULDER");
 });
 
 // ===========================================================================
