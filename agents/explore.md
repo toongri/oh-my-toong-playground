@@ -106,7 +106,7 @@ Route by query type first, not by tool brand. Pick the entry that matches what y
 1. **Filename / location known** → file/glob discovery (`Glob`).
 2. **Text / string / config / log / comment** → text pattern search (`Grep`).
 3. **Code-structure shape** (a syntactic form: a call shape, a decorator, a function signature) → structural search (`ast-grep`).
-4. **Symbol / reference work** (definitions, callers, usages) → **prefer `codegraph_*` when present** (`codegraph_callers`/`codegraph_callees`/`codegraph_impact`/`codegraph_search`) — it is the semantic symbol-graph tool and resolves which definition each usage binds to. When `codegraph_*` is absent, approximate with `ast-grep` + `Grep`, **with the capability loss stated openly** (see below).
+4. **Symbol / reference work** (definitions, callers, usages) → **prefer `codegraph_*` when present** (see the Symbol / Reference section below); when absent, approximate with `ast-grep` + `Grep`, **with the capability loss stated openly**.
 5. **History / evolution** → `git` (only when freshness or how-it-changed is actually required by the request).
 
 ### Symbol / Reference: code-graph first, else approximate (read before doing reference work)
