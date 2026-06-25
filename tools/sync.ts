@@ -531,7 +531,19 @@ export async function syncLib(
   // package.json declares nothing → zero bundling (the empty-set default).
   const declaredPackages = await readPackageJsonDeps(rootDir).catch(() => new Set<string>());
 
-  for (const platform of platforms) {
+  // lib is NOT an independent deploy target — it is a dependency of whatever
+  // components landed. The resolved `platforms` cascades to ["claude"] when no
+  // feature-platforms.lib is configured, but components resolve their OWN
+  // platforms and populate libSourceRoots under each platform that received one.
+  // Iterate the UNION so a component (with a bundled bare import) deployed to a
+  // non-claude platform gets its matching lib/vendor bundle there too; otherwise
+  // its rewritten source has no vendor target → ERR_MODULE_NOT_FOUND under node.
+  // When components deploy only to claude (or nowhere), the union is exactly the
+  // resolved `platforms`, so stale-lib cleanup and the claude default are
+  // unchanged.
+  const effectivePlatforms = new Set<Platform>([...platforms, ...(libSourceRoots?.keys() ?? [])]);
+
+  for (const platform of effectivePlatforms) {
     const platformDir = path.join(targetPath, `.${platform}`);
     const libDest = path.join(platformDir, "lib");
 
@@ -541,14 +553,32 @@ export async function syncLib(
     const sourceRoots = libSourceRoots?.get(platform) ?? new Set<string>();
     const requiredModules = await collectRequiredLibModulesFromSources(sourceRoots, libSrc);
 
-    // Discover bare npm imports over the SAME sourceRoots the @lib/ collector
-    // scans, then intersect with declared packages: a bare `import 'picomatch'`
-    // traces through no @lib/ alias, so requiredModules never sees it. The
-    // resulting bundledPackages set names exactly the packages syncLib will
-    // `bun build` into .{platform}/lib/vendor/ below — and is the set a
-    // follow-up task threads into the @lib/ rewriter so those bare specifiers
-    // can be repointed at the vendored bundles. Only DECLARED packages bundle.
+    // Discover bare npm imports across BOTH scan surfaces, intersecting each hit
+    // with declared packages. A bare `import 'picomatch'` traces through no @lib/
+    // alias, so it must be found wherever it sits:
+    //   - component sourceRoots: the bare import lives directly in a component, OR
+    //   - requiredModules: the bare import lives in a `lib/` module pulled in
+    //     transitively via @lib/ (so it never appears in sourceRoots).
+    // The resulting bundledPackages set names exactly the packages syncLib will
+    // `bun build` into .{platform}/lib/vendor/ below, and is threaded into the
+    // @lib/ rewriter (see rewriteLibAliases call) so those bare specifiers in
+    // component files are repointed at the vendored bundles. Only DECLARED
+    // packages bundle.
     const bundledPackages = new Set<string>();
+    const recordBareImports = async (file: string): Promise<void> => {
+      for (const specifier of await findBareNpmImports(file)) {
+        // Reduce to the root package name (D-7: only the root package is
+        // bundled, never a sub-path): "@scope/name/x" → "@scope/name",
+        // "picomatch/lib/x" → "picomatch".
+        const segments = specifier.split("/");
+        const pkg = specifier.startsWith("@")
+          ? segments.slice(0, 2).join("/")
+          : segments[0];
+        if (declaredPackages.has(pkg)) {
+          bundledPackages.add(pkg);
+        }
+      }
+    };
     for (const root of sourceRoots) {
       let files: string[];
       try {
@@ -564,19 +594,14 @@ export async function syncLib(
         continue;
       }
       for (const file of files) {
-        for (const specifier of await findBareNpmImports(file)) {
-          // Reduce to the root package name (D-7: only the root package is
-          // bundled, never a sub-path): "@scope/name/x" → "@scope/name",
-          // "picomatch/lib/x" → "picomatch".
-          const segments = specifier.split("/");
-          const pkg = specifier.startsWith("@")
-            ? segments.slice(0, 2).join("/")
-            : segments[0];
-          if (declaredPackages.has(pkg)) {
-            bundledPackages.add(pkg);
-          }
-        }
+        await recordBareImports(file);
       }
+    }
+    // Also scan the transitively-pulled lib modules: a declared bare import that
+    // lives ONLY inside a `lib/` module (reached via @lib/) is invisible to the
+    // sourceRoots scan above, so without this it would never be bundled.
+    for (const libModule of requiredModules) {
+      await recordBareImports(libModule);
     }
 
     // Data files (e.g. pins/tbox.yaml) are runtime assets for lib modules; with
@@ -640,7 +665,16 @@ export async function syncLib(
           const relPath = path.relative(libSrc, dep);
           const destFile = path.join(libTmp, relPath);
           await fs.mkdir(path.dirname(destFile), { recursive: true });
-          await fs.copyFile(dep, destFile);
+          // A deployed lib module may itself carry a bundled bare specifier
+          // (e.g. `import 'picomatch'`). rewriteLibAliases skips everything under
+          // lib/, so the repoint must happen here at copy time — mirroring how
+          // syncDirectory rewrites component files. Depth is computed from the
+          // module's FINAL location (libDest = platformDir/lib), so the relative
+          // prefix resolves to lib/vendor/<pkg>.js regardless of nesting.
+          const finalFile = path.join(libDest, relPath);
+          const srcContent = await fs.readFile(dep, "utf8");
+          const rewritten = rewriteLibImports(srcContent, finalFile, platformDir, bundledPackages);
+          await fs.writeFile(destFile, rewritten, "utf8");
         }
         for (const file of dataFiles) {
           const relPath = path.relative(libSrc, file);

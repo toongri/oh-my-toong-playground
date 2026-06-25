@@ -2038,6 +2038,38 @@ describe("syncLib — sync-time bare-import vendoring", () => {
     expect(rewritten).not.toContain("'picomatch'");
   });
 
+  it("lib module's bare import is vendored AND the deployed lib module's specifier is rewritten (transitive @lib/ pull)", async () => {
+    // A lib MODULE (not a component) carries the bare import. It is pulled into
+    // the deploy transitively: a component imports it via @lib/, so it lands in
+    // requiredModules — NOT in sourceRoots. The bare specifier therefore traces
+    // through no sourceRoot, exercising the discovery + rewrite coverage gaps.
+    const libModule = path.join(rootDir, "lib", "matcher-helper.ts");
+    await writeFile(
+      libModule,
+      "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n",
+    );
+    // Component sits OUTSIDE lib/ and reaches the lib module only via @lib/.
+    const sourceTs = path.join(rootDir, "skills", "matcher", "run.ts");
+    await writeFile(
+      sourceTs,
+      "import { m } from '@lib/matcher-helper';\nexport const matcher = m;\n",
+    );
+
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("claude", sourceTs));
+
+    // (a) The lib module's bare import is discovered and vendored.
+    const vendoredJs = path.join(targetPath, ".claude", "lib", "vendor", "picomatch.js");
+    expect(await exists(vendoredJs)).toBe(true);
+
+    // (b) The DEPLOYED lib module's specifier is rewritten to the relative
+    // vendored path — lib/matcher-helper.ts is one level under the platform root,
+    // so the prefix is ../lib/vendor/picomatch.js. No raw bare specifier remains.
+    const deployedLibModule = path.join(targetPath, ".claude", "lib", "matcher-helper.ts");
+    const deployed = await readFile(deployedLibModule);
+    expect(deployed).toContain("../lib/vendor/picomatch.js");
+    expect(deployed).not.toContain("'picomatch'");
+  });
+
   it("does not mutate OMT source: git status --porcelain is byte-identical before vs after a sync into an out-of-repo target", async () => {
     // Source under the temp rootDir (OUTSIDE the OMT repo). We assert the OMT
     // repo working tree is unchanged by the sync.
@@ -2082,6 +2114,36 @@ describe("syncLib — sync-time bare-import vendoring", () => {
     // The target lib/ equals its pre-sync state — no partial swap.
     expect(await fs.readdir(libDest)).toEqual(preState);
     expect(await readFile(path.join(libDest, "sentinel.ts"))).toBe(preContent);
+  });
+
+  it("vendors to a NON-claude platform that received the component even when libPlatforms is the claude-only default (F3)", async () => {
+    // Reproduces F3: with no feature-platforms.lib configured, the resolved
+    // libPlatforms cascades to ["claude"]. But the component (and its bare
+    // bundled import) deployed to codex — recorded in libSourceRoots under
+    // "codex". syncLib must iterate the UNION of libPlatforms and the platforms
+    // that actually received components, or codex gets the rewritten source with
+    // NO matching vendor bundle → ERR_MODULE_NOT_FOUND at runtime under node.
+    const sourceTs = path.join(rootDir, "skills", "matcher", "run.ts");
+    await writeFile(sourceTs, "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n");
+
+    // libPlatforms = ["claude"] (the cascade default), but the component landed
+    // on codex only — so libSourceRoots is keyed under "codex", not "claude".
+    await syncLib(makeContext(), targetPath, rootDir, ["claude"], libRoots("codex", sourceTs));
+
+    // The vendored bundle must exist under .codex/, the platform that got the component.
+    const codexVendoredJs = path.join(targetPath, ".codex", "lib", "vendor", "picomatch.js");
+    expect(await exists(codexVendoredJs)).toBe(true);
+
+    // The deployed component's bare import on .codex/ is rewritten to the relative
+    // vendored path. (Plant the deployed copy, then run the post-pass rewrite the
+    // way syncLib does for the platform dir.)
+    const deployedSkill = path.join(targetPath, ".codex", "skills", "matcher", "run.ts");
+    await writeFile(deployedSkill, "import picomatch from 'picomatch';\nexport const m = picomatch('*.js');\n");
+    await rewriteLibAliases(path.join(targetPath, ".codex"), new Set(["picomatch"]));
+
+    const rewritten = await readFile(deployedSkill);
+    expect(rewritten).toContain("../../lib/vendor/picomatch.js");
+    expect(rewritten).not.toContain("'picomatch'");
   });
 });
 
