@@ -29,7 +29,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
 | P-23 | Scenario Verification Principle | Scenario Verification Principle Declaration | - |
 | P-24 | Verify-Lane Round | Verify Lane: collect → falsifying verify → refuted exclusion | Phase-1 Grounding |
-| P-25 | Cross-Lane #13 Witness | Adversarial Evidence-Key: key-tag outside the verify lane | D-5 Key Vocabulary |
+| P-25 | Cross-Lane #13 Witness | Adversarial Evidence-Key: key-tag produced INSIDE the external verify lane (cross-lane uniformity across all lane types) | D-5 Key Vocabulary |
 | P-26 | All-Collect-Lanes-Empty No-Op | Verify Lane: valid no-op when every collect lane is empty | Phase-1 Grounding |
 | UC-P1 | End-to-End: Full Planning Pipeline | Full workflow integration | Classification + Interview + Clearance + AC + Metis + Co-Design (Daedalus advisory + human design gate) + Plan + Momus + Execution |
 | UC-P2 | End-to-End: Review Pipeline Rejection and Recovery | Review pipeline feedback loops | Momus REQUEST_CHANGES + defect-type loop-back + revision + re-Momus + User rejection + pipeline re-run |
@@ -40,6 +40,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | BH-5 | ADR Log Emission and Structural Enumeration Timing | Decision log with structural enumeration at Complex/Architecture; full-item log without structural items at Scoped; no ADR log at Trivial | ADR Log + Structural Enumeration |
 | P-27 | Per-Step State Persistence + Resume | Per-Step State Persistence (State Lifecycle) | AC Recording at S1 |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | Diagram Lens Taxonomy (trigger-based REQUIRED) | Stage A Fidelity + Grouped Placement |
+| P-29 | Complex Inline Verify-Lane | Verify Lane: Complex inline falsification — planner re-reads cited paths, excludes nonexistent_path finding, zero verifier spawns | Phase-1 Grounding + Collect→Verify Contract (intent-split) |
 
 ---
 
@@ -1143,6 +1144,28 @@ Render the Stage A HTML presentation.
 
 ---
 
+## Scenario P-29: Complex Inline Verify-Lane
+
+**Primary Technique:** Verify Lane — Complex inline falsification: the planner re-reads/re-greps each cited path inline (zero verifier subagent spawns), excludes findings whose cited paths do not exist, and records `verify lane: inline` in the Phase-1 Evidence block.
+
+**Setup:**
+Complex intent (the inline falsification path — on Architecture intent these lanes are handed to dispatched falsifying verifiers). Phase-1 grounding completes the collect step: 3 of the 5 explore aspect lanes are non-empty (pattern, convention, naming/registration). The librarian external lane is also non-empty. The remaining 2 aspect lanes (similar implementation, test infrastructure) are empty.
+
+The naming/registration lane returns one finding that cites `src/handlers/user_profile_handler.go:42`. The planner inline-verifies each finding by re-reading or re-grepping the cited path. On re-read, `src/handlers/user_profile_handler.go` does not exist in the repository.
+
+The other 3 non-empty lanes each return one finding citing paths that exist and corroborate on re-read.
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Zero verifier subagents spawned | The planner does NOT dispatch any falsifying verifier subagent. Zero Agent tool calls are issued for the verify step — the planner itself re-reads or re-greps each cited path inline (this is the mandated inline actor for Complex intent) |
+| V2 | Nonexistent-path finding refuted and excluded | The naming/registration finding citing `src/handlers/user_profile_handler.go:42` is refuted by the planner's own inline re-read (path does not exist → tagged `nonexistent_path`, `verdict: refuted`). It is excluded from the filtered findings that reach the interview, AC, and plan — it does NOT appear in plan grounding material |
+| V3 | Evidence line records `inline` mode | The Phase-1 Evidence block records a `verify lane: inline / 4 lanes / 1 excluded` line — the mode token is `inline`, NOT `dispatched`; the lane count is 4 (the 3 corroborated aspect lanes + the corroborated librarian lane); the excluded count is 1 |
+| V4 | Corroborated findings pass through unchanged | The 3 corroborated findings from the pattern, convention, and librarian lanes reach the interview/AC/plan grounding step unchanged — exclusion applies only to the refuted naming/registration finding |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -1176,7 +1199,8 @@ Render the Stage A HTML presentation.
 | BH-4 | `[DECISION NEEDED]` Absence | | | New behavior scenario (in-phase co-design resolution, no placeholder). Needs testing |
 | BH-5 | ADR Log Emission and Structural Enumeration Timing | | | New behavior scenario (decision log with structural D-N items before human design gate at Complex/Architecture; full-item log without structural items at Scoped; no ADR log at Trivial — the two gates are distinct). Needs testing |
 | P-24 | Verify-Lane Round | | | New verify-lane scenario (collect → falsifying verify → refuted exclusion). Needs testing |
-| P-25 | Cross-Lane #13 Witness | | | New cross-lane witness scenario (prompt_injection key on librarian finding, outside verify lane). Needs testing |
+| P-25 | Cross-Lane #13 Witness | | | New cross-lane witness scenario (prompt_injection key on librarian finding, produced inside the external verify lane — cross-lane uniformity). Needs testing |
 | P-26 | All-Collect-Lanes-Empty No-Op | | | New empty-lanes no-op scenario (valid no-op when all collect lanes empty). Needs testing |
 | P-27 | Per-Step State Persistence + Resume | | | Needs testing |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | | | Needs testing |
+| P-29 | Complex Inline Verify-Lane | | | New Complex inline verify-lane scenario (planner falsifies inline, zero verifier spawns, nonexistent_path finding excluded, Evidence line records `inline` mode). Needs testing |
