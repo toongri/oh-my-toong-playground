@@ -16,5 +16,5 @@
     }
   },
   "include": ["lib/**/*.ts", "scripts/**/*.ts", "hooks/**/*.ts", "skills/*/scripts/**/*.ts", "tools/**/*.ts"],
-  "exclude": ["hooks/rules-injector/**/*"]
+  "exclude": ["hooks/rules-injector/**/*", "lib/vendor/**"]
 }

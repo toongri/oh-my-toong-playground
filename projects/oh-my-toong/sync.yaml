@@ -24,6 +24,8 @@ skills:
       platforms: [claude]
     - component: goal
       platforms: [claude]
+    - component: ultraresearch
+      platforms: [claude]
     - agent-council
     - clarify
     - git-master
@@ -34,7 +36,7 @@ skills:
     - component: code-review
       platforms: [claude]
     - make-pr
-    - component: manage-ticket
+    - component: craft-issue
       platforms: [claude]
     - technical-writing
     - technical-copywriting
@@ -51,5 +53,6 @@ rules:
     - tool-usage-policy
     - work-principles
     - coding-discipline
+    - least-code
     - private-component-management
     - documentation-currency

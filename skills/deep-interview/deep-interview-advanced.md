@@ -50,7 +50,7 @@ Prometheus: "Your request is quite open-ended. Would you like to run a deep inte
   [Yes, interview first] [No, expand directly]
 ```
 
-If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes and the user selects the prometheus route at the execution bridge, the spec becomes Phase 0 output and prometheus continues from planning.
+If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes, the crystallized spec routes planning/execution through `goal` at the Phase 5 execution bridge (the bridge offers no direct prometheus/sisyphus option); `goal` then orchestrates downstream and selects prometheus for decomposition when the work warrants it.
 
 ## Brownfield vs Greenfield Weights
 
@@ -65,13 +65,15 @@ Brownfield adds Context Clarity because modifying existing code safely requires 
 
 ## Challenge Agent Modes
 
-| Mode | Activates | Purpose | Prompt Injection |
-|------|-----------|---------|-----------------|
-| Contrarian | Round 4+ | Challenge assumptions | "What if the opposite were true?" |
-| Simplifier | Round 6+ | Remove complexity | "What's the simplest version?" |
-| Ontologist | Round 8+ (if ambiguity > 0.3) | Find essence | "What IS this, really?" |
+The Step 2-head Dialectic Rhythm Guard is the sole gate that selects these stances; the "Selected by guard when" column restates the rotation conditions it owns (these are NOT independent self-firing triggers). The prompt-injection bodies are the Phase 3 templates.
 
-Each mode is used exactly once, then normal Socratic questioning resumes. Modes are tracked in state to prevent repetition.
+| Mode | Selected by guard when | Purpose | Prompt Injection |
+|------|------------------------|---------|-----------------|
+| Contrarian | Round 4+, if not yet used | Challenge assumptions | "What if the opposite were true?" |
+| Simplifier | Round 6+, if not yet used | Remove complexity | "What's the simplest version?" |
+| Ontologist | Stall (±0.05 for 3 rounds) OR Round 8+ with ambiguity > 0.3 | Find essence | "What IS this, really?" |
+
+Contrarian and Simplifier are used exactly once each (tracked in `challenge_modes_used`), then normal Socratic questioning resumes; Ontologist has two named rotation entry points (stall and late-stage) and may recur via either.
 
 ## Ambiguity Score Interpretation
 

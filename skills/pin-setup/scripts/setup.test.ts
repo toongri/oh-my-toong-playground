@@ -4,7 +4,6 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { parse as parseYaml } from 'yaml';
 
 const SETUP_PATH = path.join(import.meta.dirname, 'setup.ts');
 
@@ -125,7 +124,7 @@ describe('AC3.2 — no --location → manifest location field defaults to resolv
     const pinsHome = expectedPinsHome(tmpHome, tmpDir);
     const manifestPath = path.join(pinsHome, 'pins.yaml');
     const text = fs.readFileSync(manifestPath, 'utf8');
-    const parsed = parseYaml(text) as { location: string; scope: string };
+    const parsed = Bun.YAML.parse(text) as { location: string; scope: string };
     expect(parsed.location).toBe(pinsHome);
   });
 });
@@ -158,7 +157,7 @@ describe('AC3.3 — --location /custom → file at pins home, location field = c
     expect(fs.existsSync(manifestPath)).toBe(true);
 
     const text = fs.readFileSync(manifestPath, 'utf8');
-    const parsed = parseYaml(text) as { location: string; scope: string };
+    const parsed = Bun.YAML.parse(text) as { location: string; scope: string };
     expect(parsed.location).toBe(customLocation);
   });
 });
@@ -218,7 +217,7 @@ describe('C8 — special characters in location', () => {
     const pinsHome = expectedPinsHome(tmpHome, tmpDir);
     const manifestPath = path.join(pinsHome, 'pins.yaml');
     const text = fs.readFileSync(manifestPath, 'utf8');
-    const parsed = parseYaml(text) as { location: string; scope: string };
+    const parsed = Bun.YAML.parse(text) as { location: string; scope: string };
     expect(parsed.location).toBe(hashLocation);
   });
 
@@ -235,7 +234,44 @@ describe('C8 — special characters in location', () => {
     const pinsHome = expectedPinsHome(tmpHome, tmpDir);
     const manifestPath = path.join(pinsHome, 'pins.yaml');
     const text = fs.readFileSync(manifestPath, 'utf8');
-    const parsed = parseYaml(text) as { location: string; scope: string };
+    const parsed = Bun.YAML.parse(text) as { location: string; scope: string };
     expect(parsed.location).toBe(spaceLocation);
+  });
+});
+
+// ── Round-trip: write→Bun.YAML.parse deep-equal ─────────────────────────────
+
+describe('manifest round-trip — Bun.YAML.parse', () => {
+  let tmpDir: string;
+  let tmpHome: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    tmpHome = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  test('Bun.YAML.parse round-trips full manifest object written by setup', async () => {
+    const customLocation = path.join(tmpDir, 'custom-pins');
+    const { exitCode } = await runSetup(tmpDir, [
+      '--location', customLocation,
+      '--scope', 'shared',
+      '--git', 'true',
+    ], tmpHome);
+
+    expect(exitCode).toBe(0);
+    const pinsHome = expectedPinsHome(tmpHome, tmpDir);
+    const manifestPath = path.join(pinsHome, 'pins.yaml');
+    const text = fs.readFileSync(manifestPath, 'utf8');
+
+    // Strip the comment header line before parsing.
+    const body = text.replace(/^#[^\n]*\n/, '');
+    const parsed = Bun.YAML.parse(body) as { location: string; scope: string; git: boolean };
+
+    expect(parsed).toEqual({ location: customLocation, scope: 'shared', git: true });
   });
 });

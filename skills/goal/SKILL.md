@@ -40,7 +40,7 @@ A goal is only worth pursuing autonomously if "done" is decidable. **Falsifiabil
 
 On a non-falsifiable request, take exactly ONE of these two remediation outcomes:
 
-- **deep-interview supplementation** — when the objective is rich but under-specified (the verification surface can be derived through questioning), invoke `Skill(skill: "deep-interview")` to crystallize a spec whose acceptance criteria become the verification surface. Resume the Entry Gate against the crystallized spec.
+- **deep-interview supplementation** — when the objective is rich but under-specified (the verification surface can be derived through questioning), invoke `Skill(skill: "deep-interview")` passing the marker `caller=goal` to crystallize a spec whose acceptance criteria become the verification surface. The `caller=goal` marker makes deep-interview's re-entrancy guard return the crystallized spec to goal and emit NO `goal` handoff (no goal→deep-interview→goal loop). Resume the Entry Gate against the crystallized spec.
 - **ask-user** — when a single missing fact would make the objective falsifiable (the user can state the success criterion in one sentence), ask the user directly for the verification surface before proceeding.
 
 **Re-invocation refusal.** Before seeding anything, read state via `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get`. If the result is `active: true` AND `pristine: false`, REFUSE to start a second pursuit — report the active objective and its phase, and stop. A second concurrent goal is never seeded over a non-pristine active one. A `pristine: true` result means the state was freshly seeded by this very invocation's PreToolUse hook — proceed normally. (Terminal states read as inactive and do not block a fresh goal.)
@@ -132,7 +132,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts confirm-story <id>
 
 Goal does not reimplement decomposition or execution. It invokes the existing skills conditionally by request shape, then takes over with the autonomous loop during pursuit.
 
-- **Vague** (the verification surface cannot be derived without questioning the user) → `Skill(skill: "deep-interview")`. The interview crystallizes a spec at `$OMT_DIR/deep-interview/{slug}.md` and bridges to prometheus; its acceptance criteria feed the verification-surface slot.
+- **Vague** (the verification surface cannot be derived without questioning the user) → `Skill(skill: "deep-interview")` passing the marker `caller=goal`. The interview crystallizes a spec at `$OMT_DIR/deep-interview/{slug}.md`; because the `caller=goal` marker is present, deep-interview's re-entrancy guard returns that crystallized spec to goal and emits NO `goal` handoff (preventing a goal→deep-interview→goal loop). Goal receives the returned spec and routes downstream itself; the spec's acceptance criteria feed the verification-surface slot.
 - **Complex** (the objective needs decomposition into a TODO plan with waves and acceptance criteria — multi-component, 3+ files, or any non-trivial build) → `Skill(skill: "prometheus")`. Prometheus runs its full planning pipeline (its human gates UN-wrapped) and ends by dispatching to sisyphus with a plan path at `$OMT_DIR/plans/{name}.md`.
 - **Execution** (a plan or crystallized spec already exists and the objective is ready to be built) → dispatch to sisyphus for execution: `Skill(skill: "sisyphus")` with the plan path.
 

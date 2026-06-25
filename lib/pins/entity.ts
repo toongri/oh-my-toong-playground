@@ -1,5 +1,5 @@
-import { stringify, parse as yamlParse } from 'yaml';
 import type { Entity, Frontmatter } from './types';
+import { parseYamlStrict } from './yaml';
 
 /**
  * Serializes an Entity to a .md file body:
@@ -39,8 +39,11 @@ export function serialize(entity: Entity): string {
   // relations[] serialized as an array of {target, type} objects.
   ordered.relations = fm.relations;
 
-  const yamlBlock = stringify(ordered, { lineWidth: 0 });
-  return `---\n${yamlBlock}---\n\n${entity.body}\n`;
+  const yamlBlock = Bun.YAML.stringify(ordered, null, 2);
+  // Bun.YAML.stringify emits no trailing newline; guarantee exactly one so the
+  // closing fence sits on its own line and the parse regex (`\n---\n\n`) matches.
+  const block = yamlBlock.endsWith('\n') ? yamlBlock : yamlBlock + '\n';
+  return `---\n${block}---\n\n${entity.body}\n`;
 }
 
 /**
@@ -56,7 +59,7 @@ export function parse(md: string): Entity {
   }
 
   const [, yamlContent, body] = match;
-  const raw = yamlParse(yamlContent) as Record<string, unknown>;
+  const raw = parseYamlStrict(yamlContent) as Record<string, unknown>;
 
   const frontmatter: Frontmatter = {
     id: raw.id as string,

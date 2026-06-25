@@ -18,7 +18,6 @@
 
 import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { stringify as stringifyYaml } from 'yaml';
 import { migrate } from '@lib/pins/migrate';
 import { failEngine } from '@lib/pin-cli/io';
 import { resolvePinsHome } from '@lib/omt-dir';
@@ -65,7 +64,7 @@ if (import.meta.main) {
 
   const manifestObj: Record<string, unknown> = { location: dataLocation, scope };
   if (git !== null) manifestObj.git = git;
-  const manifest = `# pins.yaml — knowledge graph storage manifest\n${stringifyYaml(manifestObj)}`;
+  const manifest = `# pins.yaml — knowledge graph storage manifest\n${Bun.YAML.stringify(manifestObj, null, 2)}`;
 
   writeFileSync(manifestPath, manifest, 'utf8');
   process.stdout.write(`[pin-setup] manifest created: ${manifestPath}\n`);
