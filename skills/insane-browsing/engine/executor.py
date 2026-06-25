@@ -25,7 +25,9 @@ import subprocess
 import tempfile
 import time
 from typing import Optional
+from urllib.parse import urlparse
 
+from .curl_probe import _is_blocked_host
 from .validators import Verdict, validate
 from .waf_detector import load_profile
 from .result_schema import Attempt
@@ -194,6 +196,18 @@ def run_playwright_fallback(
     except (ValueError, AttributeError) as e:
         att.error = f"malformed_envelope:{type(e).__name__}"
         att.verdict = Verdict.UNKNOWN.value
+        return att, ""
+
+    # Defense-in-depth (the JS template's route interceptor is the primary block
+    # that stops the request from ever firing): re-check the post-redirect
+    # final_url host here too, so an internal / cloud-metadata target never
+    # yields content even if the interceptor were somehow bypassed.
+    final_host = urlparse(final_url).hostname or ""
+    if _is_blocked_host(final_host):
+        att.error = f"ssrf_final_url_blocked:{final_host}"
+        att.verdict = Verdict.UNKNOWN.value
+        att.url = final_url
+        att.status = status
         return att, ""
 
     resp = _FakeResp(html, status=status, final_url=final_url)

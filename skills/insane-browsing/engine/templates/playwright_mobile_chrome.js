@@ -11,6 +11,9 @@
  * NO-SITE-NAME RULE: same as playwright_real_chrome.js — no hostname branches.
  */
 
+const dns = require('dns');
+const net = require('net');
+
 async function readStdinJson() {
   return await new Promise((resolve, reject) => {
     let data = '';
@@ -57,6 +60,136 @@ function requireOptionalModule(moduleName) {
   return require(resolvedModule);
 }
 
+// --- SSRF guard --------------------------------------------------------------
+// Refuse navigations / subresource requests whose target resolves to a
+// non-routable or cloud-metadata address. Mirrors the curl path's host
+// classification so an attacker-influenced redirect cannot steer this fallback
+// at internal / 169.254.169.254 endpoints. Literal IPs are classified with no
+// I/O; hostnames are resolved and every address classified; an unresolvable
+// host is refused (fail closed).
+const _BLOCKED_V4 = [
+  ['0.0.0.0', 8],       // "this network"
+  ['10.0.0.0', 8],      // RFC1918 private
+  ['100.64.0.0', 10],   // CGNAT / shared
+  ['127.0.0.0', 8],     // loopback
+  ['169.254.0.0', 16],  // link-local incl. 169.254.169.254 metadata
+  ['172.16.0.0', 12],   // RFC1918 private
+  ['192.0.0.0', 24],    // IETF protocol assignments
+  ['192.0.2.0', 24],    // TEST-NET-1
+  ['192.168.0.0', 16],  // RFC1918 private
+  ['198.18.0.0', 15],   // benchmarking
+  ['198.51.100.0', 24], // TEST-NET-2
+  ['203.0.113.0', 24],  // TEST-NET-3
+  ['224.0.0.0', 4],     // multicast
+  ['240.0.0.0', 4],     // reserved + 255.255.255.255 broadcast
+];
+
+const _BLOCKED_V6 = [
+  ['::1', 128],   // loopback
+  ['::', 128],    // unspecified
+  ['fc00::', 7],  // unique local
+  ['fe80::', 10], // link-local
+  ['ff00::', 8],  // multicast
+];
+
+function _ipv4ToInt(ip) {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  let value = 0n;
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const n = Number(part);
+    if (n > 255) return null;
+    value = (value << 8n) | BigInt(n);
+  }
+  return value;
+}
+
+function _ipv6ToBigInt(ip) {
+  let s = ip;
+  // Expand an embedded IPv4 tail (e.g. ::ffff:1.2.3.4) into two hextets.
+  const v4 = s.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (v4) {
+    const n = _ipv4ToInt(v4[1]);
+    if (n === null) return null;
+    s = s.slice(0, v4.index) + ((n >> 16n) & 0xffffn).toString(16) + ':' + (n & 0xffffn).toString(16);
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  if (fill < 0) return null;
+  const groups = head.concat(Array(fill).fill('0'), tail);
+  if (groups.length !== 8) return null;
+  let value = 0n;
+  for (const g of groups) {
+    if (!/^[0-9a-fA-F]{1,4}$/.test(g)) return null;
+    value = (value << 16n) | BigInt(parseInt(g, 16));
+  }
+  return value;
+}
+
+function _matchCidr(value, baseValue, bits, totalBits) {
+  if (baseValue === null) return false;
+  const full = (1n << BigInt(totalBits)) - 1n;
+  const mask = bits === 0 ? 0n : ((full << BigInt(totalBits - bits)) & full);
+  return (value & mask) === (baseValue & mask);
+}
+
+function classifyIp(ip) {
+  if (net.isIPv4(ip)) {
+    const intVal = _ipv4ToInt(ip);
+    if (intVal === null) return true;
+    return _BLOCKED_V4.some(([base, bits]) => _matchCidr(intVal, _ipv4ToInt(base), bits, 32));
+  }
+  if (net.isIPv6(ip)) {
+    const big = _ipv6ToBigInt(ip);
+    if (big === null) return true;
+    if ((big >> 32n) === 0xffffn) {           // IPv4-mapped ::ffff:0:0/96
+      const v4 = big & 0xffffffffn;
+      return _BLOCKED_V4.some(([base, bits]) => _matchCidr(v4, _ipv4ToInt(base), bits, 32));
+    }
+    return _BLOCKED_V6.some(([base, bits]) => _matchCidr(big, _ipv6ToBigInt(base), bits, 128));
+  }
+  return true; // not a recognizable IP literal — refuse
+}
+
+async function isBlockedHost(host) {
+  if (!host) return true;
+  let h = host.toLowerCase();
+  if (h.startsWith('[') && h.endsWith(']')) h = h.slice(1, -1); // strip IPv6 brackets
+  if (h === 'localhost' || h.endsWith('.localhost')) return true;
+  if (net.isIP(h)) return classifyIp(h);
+  let addrs;
+  try {
+    addrs = await dns.promises.lookup(h, { all: true });
+  } catch (e) {
+    return true; // unresolvable — refuse rather than follow into the unknown
+  }
+  return addrs.some((a) => classifyIp(a.address));
+}
+
+async function installSsrfGuard(context) {
+  await context.route('**/*', async (route) => {
+    let host = '';
+    try {
+      const target = new URL(route.request().url());
+      if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+        return route.continue();
+      }
+      host = target.hostname;
+    } catch (e) {
+      return route.continue(); // unparseable target — let the browser reject it
+    }
+    if (await isBlockedHost(host)) {
+      process.stderr.write(`ssrf: blocked request to internal host ${host}\n`);
+      return route.abort('blockedbyclient');
+    }
+    return route.continue();
+  });
+}
+
 async function main() {
   const args = await readStdinJson();
   const url = args.url;
@@ -97,6 +230,7 @@ async function main() {
       headless,
       ...dev,
     });
+    await installSsrfGuard(ctx);
     const page = await ctx.newPage();
     const navTimeout = Math.min(timeoutMs, 90000);
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
@@ -127,4 +261,8 @@ async function main() {
   }
 }
 
-main();
+module.exports = { classifyIp, isBlockedHost, installSsrfGuard };
+
+if (require.main === module) {
+  main();
+}
