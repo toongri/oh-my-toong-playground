@@ -1,3 +1,4 @@
+import { basename, extname } from "node:path";
 import { isNeverTruncatedRule, truncateBudget, truncateRule } from "./truncator.js";
 import type { LoadedRule } from "./types.js";
 
@@ -27,7 +28,6 @@ type TruncatedRule = {
 	path: string;
 	relativePath: string;
 	body: string;
-	contentHash: string;
 };
 
 type NormalizedRule = TruncatedRule & {
@@ -65,11 +65,10 @@ export function ruleMarkerLine(path: string): string {
  *   "CLAUDE"               → "CLAUDE"
  */
 function basenameNoExt(path: string): string {
-	const normalized = path.replace(/\\/g, "/");
-	const segments = normalized.split("/").filter((s) => s.length > 0);
-	const base = segments.at(-1) ?? normalized;
-	const dot = base.lastIndexOf(".");
-	return dot > 0 ? base.slice(0, dot) : base;
+	// Normalize backslashes first: node's POSIX basename does not split on "\".
+	const base = basename(path.replace(/\\/g, "/"));
+	const ext = extname(base);
+	return ext ? base.slice(0, -ext.length) : base;
 }
 
 /**
@@ -92,28 +91,32 @@ export function transcriptHasRuleMarker(
 }
 
 /**
- * Byte overhead charged to the budget per emitted rule: the open tag plus the
- * surrounding newlines and closing tag.
- *
- * The emitted form of a rule with a non-empty body is:
- *   `${openTag}\n${body}\n</rules>`
- * So the non-body overhead is `${openTag}\n` (before body) + `\n</rules>` (after).
- * Total: openTag.length + 1 + 1 + 8 = openTag.length + 10.
+ * The closing tag (with its leading newline) that ends every rule's XML envelope.
+ * Single-sourced so formatRule (which emits it) and ruleHeaderLength (which charges
+ * its bytes to the budget) cannot drift apart.
+ */
+const RULE_BLOCK_CLOSE = "\n</rules>";
+
+/**
+ * Byte overhead charged to the budget per emitted rule: everything in the emitted
+ * envelope except the body. The non-empty-body form is
+ * `${openTag}\n${body}${RULE_BLOCK_CLOSE}`, so eliding the body leaves
+ * `${openTag}\n${RULE_BLOCK_CLOSE}` — exactly the bytes computed here.
  *
  * Charged before body bytes so a rule with no remaining body budget is dropped
  * (no open-tag-only ghost block).
  */
 function ruleHeaderLength(path: string): number {
-	return `${ruleMarkerLine(path)}\n\n</rules>`.length;
+	return `${ruleMarkerLine(path)}\n${RULE_BLOCK_CLOSE}`.length;
 }
 
 function formatRule(rule: TruncatedRule): string {
 	const openTag = ruleMarkerLine(rule.path);
 	const body = normalizeRuleBody(rule.body);
 	if (body.length === 0) {
-		return `${openTag}\n</rules>`;
+		return `${openTag}${RULE_BLOCK_CLOSE}`;
 	}
-	return `${openTag}\n${body}\n</rules>`;
+	return `${openTag}\n${body}${RULE_BLOCK_CLOSE}`;
 }
 
 /**
@@ -141,13 +144,11 @@ function truncateRules(
 		relativePath: rule.relativePath,
 		body: normalizeRuleBody(rule.body),
 		source: rule.source,
-		contentHash: rule.contentHash,
 	}));
 	const perRuleResultChars = Math.floor(options.maxResultChars / Math.max(1, perRuleNormalized.length));
 	const perRuleBudgeted = perRuleNormalized.map((rule) => ({
 		path: rule.path,
 		relativePath: rule.relativePath,
-		contentHash: rule.contentHash,
 		body: isNeverTruncatedRule(rule.relativePath)
 			? rule.body
 			: truncateRule(rule.body, {
@@ -196,7 +197,6 @@ function truncateRules(
 			path: sourceRule.path,
 			relativePath: budgetedRule.relativePath,
 			body: budgetedRule.body,
-			contentHash: sourceRule.contentHash,
 		});
 		emittedRules.push(originalRule);
 	}
