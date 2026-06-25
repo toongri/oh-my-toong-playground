@@ -728,7 +728,6 @@ test("C12: a rule whose XML header overhead alone exceeds the budget is dropped 
 		path: "/proj/.claude/rules/some-rule.md",
 		relativePath: ".claude/rules/some-rule.md",
 		body: "X",
-		contentHash: "a".repeat(64),
 	});
 	const result = formatStaticBlock([rule], { maxRuleChars: 100, maxResultChars: 20 });
 	expect(result.emittedRules).toHaveLength(0);
