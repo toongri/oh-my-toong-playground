@@ -320,5 +320,109 @@ class CookieFieldFixes(unittest.TestCase):
         self.assertEqual(resolve_cookie_db("chrome", "darwin", base_override=base), network)
 
 
+class CdpTargetSelection(unittest.TestCase):
+    """F#4: Network.setCookie must target a page, not the browser target.
+
+    The injection JS runs in a node subprocess against a live CDP endpoint, so
+    it cannot be exercised without a browser. These checks pin the structural
+    contract that fixes the bug: pick a page target from /json/list rather than
+    the browser target from /json/version, and fail loudly if none exists.
+    """
+
+    def _script(self) -> str:
+        from extract_cookies import _CDP_SET_COOKIES_SCRIPT
+
+        return _CDP_SET_COOKIES_SCRIPT
+
+    def test_connects_via_page_target_list_not_browser_version(self) -> None:
+        script = self._script()
+        self.assertIn("/json/list", script)
+        self.assertNotIn("/json/version", script)
+
+    def test_selects_page_type_target(self) -> None:
+        self.assertIn('"page"', self._script())
+
+    def test_errors_when_no_page_target(self) -> None:
+        self.assertIn("no page target", self._script().lower())
+
+    def test_still_uses_network_setcookie_payload(self) -> None:
+        # Keep the existing payload shape (no Storage.setCookies rewrite).
+        self.assertIn("Network.setCookie", self._script())
+
+
+class KeyringFallback(unittest.TestCase):
+    """F#7: an empty keyring secret must be detected, never used silently."""
+
+    def _base_with_db(self, rel: str, make: Callable[[Path], None]) -> Path:
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(str(base), ignore_errors=True))
+        db = base / rel
+        db.parent.mkdir(parents=True)
+        make(db)
+        return base
+
+    def test_linux_empty_keyring_falls_back_to_peanuts(self) -> None:
+        # Chromium on a keyring-less Linux host encrypts with the default
+        # password "peanuts"; an empty secret must derive that same key, not garbage.
+        key = derive_key("linux", b"peanuts")
+        blob = _encrypt_cbc_v10(key, "logged-in")
+        base = self._base_with_db(
+            "google-chrome/Default/Network/Cookies",
+            lambda p: _make_chromium_db(p, "SID", blob, ".youtube.com"),
+        )
+        cookies = extract_cookies(
+            "chrome", ["youtube.com"], platform="linux",
+            keyring_reader=lambda _s: b"", base_override=base,
+        )
+        self.assertEqual(len(cookies), 1)
+        self.assertEqual(cookies[0]["value"], "logged-in")
+
+    def test_darwin_empty_keyring_raises(self) -> None:
+        # macOS has no defined empty-keyring fallback: an empty secret is
+        # unrecoverable and must raise, not silently mis-decrypt.
+        base = self._base_with_db(
+            "Google/Chrome/Default/Cookies",
+            lambda p: _make_chromium_db(p, "SID", b"v10garbage", ".youtube.com"),
+        )
+        with self.assertRaises(RuntimeError):
+            extract_cookies(
+                "chrome", ["youtube.com"], platform="darwin",
+                keyring_reader=lambda _s: b"", base_override=base,
+            )
+
+
+class InjectionResultHandling(unittest.TestCase):
+    """F#5: total rejection must fail loudly, never proceed unauthenticated."""
+
+    @staticmethod
+    def _run_inject(cookies: list, stdout: str) -> None:
+        with patch("extract_cookies.subprocess.run") as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = stdout
+            run.return_value.stderr = ""
+            inject_cookies(cookies, 9242)
+
+    def test_inject_raises_when_all_cookies_rejected(self) -> None:
+        # ok=0 with non-empty cookies means the browser rejected every cookie;
+        # proceeding would run the session unauthenticated.
+        cookie = {"name": "SID", "value": "v", "domain": ".youtube.com", "path": "/",
+                  "secure": True, "httpOnly": True, "sameSite": "Lax"}
+        with self.assertRaises(RuntimeError):
+            self._run_inject([cookie], "0")
+
+    def test_inject_empty_cookie_list_is_noop_not_error(self) -> None:
+        # Nothing to inject is a no-op, not a rejection: 0/0 must not raise.
+        self._run_inject([], "0")
+
+    def test_inject_partial_success_does_not_raise(self) -> None:
+        cookies = [
+            {"name": "a", "value": "1", "domain": ".x.com", "path": "/",
+             "secure": True, "httpOnly": True, "sameSite": "Lax"},
+            {"name": "b", "value": "2", "domain": ".x.com", "path": "/",
+             "secure": True, "httpOnly": True, "sameSite": "Lax"},
+        ]
+        self._run_inject(cookies, "1")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

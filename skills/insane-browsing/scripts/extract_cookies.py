@@ -73,8 +73,17 @@ process.stdin.on("data", (chunk) => { input += chunk; });
 process.stdin.on("end", () => {
   (async () => {
   const cookies = JSON.parse(input || "[]");
-  const version = await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.json());
-  const ws = new WebSocket(version.webSocketDebuggerUrl);
+  // Network.setCookie must run against a page target; the browser-level
+  // target rejects it, so pick a page from /json/list instead.
+  const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json());
+  const page = (Array.isArray(targets) ? targets : []).find(
+    (t) => t && t.type === "page" && t.webSocketDebuggerUrl,
+  );
+  if (!page) {
+    process.stderr.write("no page target available for cookie injection (open a tab first)\n");
+    process.exit(1);
+  }
+  const ws = new WebSocket(page.webSocketDebuggerUrl);
   let nextId = 1;
   const pending = new Map();
 
@@ -222,7 +231,20 @@ def extract_cookies(
     safe_storage = spec["safe_storage"]
     if safe_storage is None:
         raise UnsupportedPlatform(f"browser {browser!r} has no keyring storage name")
-    key = derive_key(platform, reader(safe_storage))
+    secret = reader(safe_storage)
+    if not secret:
+        # linux_keyring_secret returns a defined empty b"" when the keyring is
+        # unreachable. Detect it: on Linux, Chromium itself falls back to the
+        # fixed password "peanuts", so mirror that. On other platforms there is
+        # no such fallback — raise instead of deriving a key that silently
+        # mis-decrypts every cookie.
+        if platform == "linux":
+            secret = b"peanuts"
+        else:
+            raise RuntimeError(
+                f"empty keyring secret for {browser!r} on {platform!r}; cannot decrypt cookies"
+            )
+    key = derive_key(platform, secret)
     return extract_chromium(db, domains, platform, key)
 
 
@@ -251,6 +273,11 @@ def inject_cookies(cookies: list[CookieRecord], cdp_port: int) -> None:
     if proc.returncode != 0:
         raise RuntimeError((proc.stderr or "CDP cookie injection failed").strip())
     ok = int((proc.stdout or "0").strip() or "0")
+    if cookies and ok == 0:
+        raise RuntimeError(
+            f"CDP accepted 0/{len(cookies)} cookies (port {cdp_port}); "
+            f"every cookie was rejected — refusing to proceed unauthenticated"
+        )
     print(f"Injected {ok}/{len(cookies)} cookies into agent-browser (CDP {cdp_port})")
 
 
