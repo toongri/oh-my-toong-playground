@@ -273,6 +273,18 @@ below. File-count and LOC atomicity are NOT the requirement-stage gate — those
 Slice when the issue fails **I, E, or S** (too large, too coupled, or too vague to size).
 Slicing on V, N, or T alone is usually a rewrite of the body or AC rather than a structural split.
 
+When the gate fires, slicing is a **write action**: create the children in the PM tool in the write tail (parent + blocked-by), not as a "proposed split" section in the parent body — see SKILL.md Stage 5 "Slicing means CREATING the child issues" for the loophole-closure rule and rationalization table.
+
+### Slice Unit — what one child is (and where to stop)
+
+One child = the **smallest vertical slice that still passes the value test**: *"if this child is completed and nothing else, is a user or system stakeholder observably better off?"* Yes → valid child (a story). No → it is a **task** (an implementation step with no stand-alone value): do not give it its own issue — fold it into the child whose value it serves. Few deep value-bearing children beat many shallow step-children — the deep-modules rule (`coding-discipline.md` §4) applied to issues. **This is the precise meaning of "don't over-fragment": stop slicing at the value test, not at some file/LOC count.**
+
+**Borderline default = fold.** A calc, fetch, guard, hardening, or enabler that becomes meaningful only once a sibling exists is a **task by default** — fold it into the story it serves. Give it its own child ONLY when a *recorded product decision* deliberately ships the story first and schedules this separately (e.g. "ship core push now, add dedup hardening as a separately-prioritized follow-up"). "The first version works without it", "it's a separate concern", "it's a business rule", or "the work is sequential" are NOT that decision — absent an explicit recorded deferral, fold. This default is what makes two slicers land on the same grain instead of one cutting 1 child and another cutting 3.
+
+**Cut by user/business value, never by technical layer or platform.** Splitting one feature into "mobile child + web child + backend child" (or "UI + API + DB") is the horizontal-slice anti-pattern — each piece is worthless until the last integrates, so it fails **Independent** + **Valuable** and forces sequential ordering. Slice the feature as a thin capability that runs end-to-end through whatever layers/platforms it needs. A platform/interface split is a valid issue split ONLY when each platform slice independently delivers user value as a deliberate product decision (e.g. mobile-first launch); otherwise it is ONE issue with a blocked-by ordering inside it, not two issues.
+
+**Where to cut** — find the dimension of variation that makes the issue big and reduce it to one instance: workflow step · operation (CRUD) · business-rule variation · data variation · interface/input method · simple-vs-complex · defer non-functional · spike (SPIDR / Humanizing Work patterns). **Phrasing test** (Killick): a child names a *capability* a user gains ("a buyer can find products by brand"), not a step toward a chosen solution ("build the search endpoint") — the latter is a task masquerading as a child.
+
 ### Per-Child Stage-Check
 
 After slicing, apply this check to each child issue independently:
@@ -294,17 +306,17 @@ For each child:
 A partially-settled intake splits naturally: open sub-units stay as Model-A WHAT children;
 settled sub-units receive a handoff recommendation rather than being pre-solved.
 
-### Named Contract: sisyphus atomicity smell heuristics + dependency-ordering
+### Candidate-seam heuristics (SECONDARY to the value test) + dependency-ordering
 
-When determining whether a candidate child issue is atomic, apply these smell heuristics:
+These heuristics locate where an issue *could* be divided. They are **secondary to the Slice Unit value test, never parallel to it**: a candidate seam becomes its own child ONLY if each resulting side independently passes **V**. A side that fails V is a task — fold it, even when the work is internally sequential or joined by "and". Splitting a value-less step because the work is sequential is Model-B work decomposition; it belongs to `prometheus`/`sisyphus` downstream, not to requirement-stage issue slicing.
 
-| Smell | Action |
+| Smell | Action (apply only after each side independently passes V) |
 |---|---|
-| Issue needs sequential delegations internally | Break into separate child issues |
-| Issue touches unrelated concerns | Split by concern |
-| Issue description has "and" joining distinct deliverables | Split at the conjunction |
-| Two child issues modify the same domain object or module | MECE violation — merge or split by responsibility |
-| Completed child issues would not cover a requirement | Coverage gap — add a missing child |
+| Issue needs sequential delegations internally | Candidate seam — but sequential work alone is NOT a split reason. Split only if each step independently passes V; a value-less step (calc, fetch, guard) stays folded. |
+| Issue description has "and" joining distinct deliverables | Candidate seam at the "and" — split only if BOTH sides independently pass V; otherwise one side is a task of the other. |
+| Issue touches genuinely unrelated concerns, each independently valuable | Split by concern. |
+| Two child issues modify the same domain object or module | MECE violation — merge or split by responsibility. |
+| Completed child issues would not cover a requirement | Coverage gap — add a missing child. |
 
 Dependency ordering between child issues uses blocked-by dependency links:
 - A child that depends on another child's output is marked as blocked by the predecessor.
