@@ -2,7 +2,7 @@ VENDOR_DEPS := picomatch
 VENDOR_BUILD = bun build "$$dep" --target=node
 BUN_MIN := 1.2.21
 
-.PHONY: sync sync-dry validate validate-schema validate-components validate-lib-imports validate-tests typecheck test vendor validate-vendor pull pull-dry help ensure-codegraph
+.PHONY: sync sync-dry validate validate-schema validate-components validate-lib-imports validate-tests typecheck test vendor validate-vendor pull pull-dry help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -17,7 +17,7 @@ help:
 	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
 	@echo "  make pull-dry PROJ=<name> - 풀백 미리보기 (실제 변경 없음)"
 
-sync: validate validate-vendor validate-tests ensure-codegraph
+sync: validate validate-vendor validate-tests
 	@bun run tools/sync.ts
 
 sync-dry: validate
@@ -75,13 +75,6 @@ validate-vendor:
 			echo "vendor check skipped (node_modules/$$dep absent): $$dep"; \
 		fi; \
 	done
-
-ensure-codegraph:
-	@command -v codegraph >/dev/null 2>&1 || { \
-		printf '\033[0;33m[codegraph]\033[0m binary not found — installing globally...\n'; \
-		npm i -g @colbymchenry/codegraph \
-			|| printf '\033[0;31m[codegraph]\033[0m WARN: install failed; the codegraph MCP will not start until installed manually (npm i -g @colbymchenry/codegraph)\n' >&2; \
-	}
 
 pull:
 	@test -n "$(PROJ)" || (echo "PROJ is required. Usage: make pull PROJ=<name>" && exit 1)
