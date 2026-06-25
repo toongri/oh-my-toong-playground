@@ -1,4 +1,4 @@
-import { transcriptHasRuleVersion } from "./rules/index.js";
+import { transcriptHasRuleMarker } from "./rules/index.js";
 import type { LoadedRule } from "./rules/index.js";
 import type { TranscriptSearchOptions } from "./transcript-search.js";
 import { readTranscriptSearchText } from "./transcript-search.js";
@@ -47,5 +47,5 @@ function isRuleAlreadyInTranscript(rule: LoadedRule, transcriptText: string): bo
 	// Name-based presence: confirm the rule's open tag is in the transcript.
 	// lazy: two rules with the same basename share the same tag; per-session
 	// staticDedup prevents double-injection within a session.
-	return transcriptHasRuleVersion(transcriptText, [rule.path, rule.realPath]);
+	return transcriptHasRuleMarker(transcriptText, [rule.path, rule.realPath]);
 }
