@@ -412,7 +412,10 @@ function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPat
     }
   }
 
-  if (data.hooks !== undefined && !isObject(data.hooks)) {
+  // `hooks: null` is an overlay clear marker — a local YAML drops every inherited
+  // hook (syncPlatformYaml already guards `if (yaml.hooks != null)`). Mirrors the
+  // codex `mcps.<name>: null` deletion marker handled below.
+  if (data.hooks !== undefined && data.hooks !== null && !isObject(data.hooks)) {
     result.errors.push(`${label}: hooks는 object 형식이어야 합니다`);
   } else if (isObject(data.hooks)) {
     for (const [event, value] of Object.entries(data.hooks)) {

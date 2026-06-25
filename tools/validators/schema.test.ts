@@ -444,6 +444,14 @@ mcps:
       expect(result.errors.some((e) => e.includes("mcps.notion"))).toBe(true);
     });
 
+    it("allows hooks: null as an overlay clear marker via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.local.yaml", `
+hooks: null
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+
     it("produces no errors or warnings when opencode.yaml has only allowed sections", () => {
       const path = writeYaml(dir, "opencode.yaml", `
 config:
