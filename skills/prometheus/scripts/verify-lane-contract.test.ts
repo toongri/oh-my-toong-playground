@@ -278,6 +278,19 @@ describe('SKILL.md P2-B — per-finding verdict vocabulary', () => {
     // Distinctive phrase that confirms per-finding scope of the Exclusion rule.
     expect(skillContent).toContain('Exclusion is applied **per finding**');
   });
+
+  it('P2-B-P4: Complex intent inline branch — "no verifier subagent" present (SKILL.md :388)', () => {
+    // Guards the Complex zero-spawn half of the intent-split (collect→verify contract).
+    // Paired with P2-B-I4 (Architecture dispatch invariant) — both halves must survive.
+    // Deleting the Complex branch from SKILL.md turns this RED.
+    expect(skillContent).toContain('no verifier subagent');
+  });
+
+  it('P2-B-P5: Complex intent inline branch — "Zero spawns" present (SKILL.md :390)', () => {
+    // Second anchor on the Complex zero-spawn contract. Two distinct literals means
+    // paraphrasing one literal still trips the other.
+    expect(skillContent).toContain('Zero spawns');
+  });
 });
 
 describe('interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard', () => {
@@ -303,6 +316,12 @@ describe('interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard', (
       'dispatch one **falsifying verifier** subagent per non-empty lane',
     );
   });
+
+  it('P2-B-I5: Complex zero-spawn invariant — "do NOT dispatch verifiers" present (interview.md :132)', () => {
+    // Guards the Complex half of the intent-split alongside the Architecture half above (P2-B-I4).
+    // Deleting the Complex inline-falsification prose from interview.md turns this RED.
+    expect(interviewContent).toContain('do NOT dispatch verifiers');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -313,20 +332,20 @@ describe('interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard', (
 // ---------------------------------------------------------------------------
 
 describe('scenarios P2-C — P-25 axis reframe (old absent, new present)', () => {
-  it('P2-C-A1: old framing "OUTSIDE the verify lane" is gone', () => {
-    expect(scenariosContent).not.toContain('OUTSIDE the verify lane');
+  it('P2-C-A1: old framing "outside the verify lane" is gone (case-insensitive)', () => {
+    expect(scenariosContent.toLowerCase()).not.toContain('outside the verify lane');
   });
 
-  it('P2-C-A2: old framing "not confined to the verify stage" is gone', () => {
-    expect(scenariosContent).not.toContain('not confined to the verify stage');
+  it('P2-C-A2: old framing "not confined to the verify stage" is gone (case-insensitive)', () => {
+    expect(scenariosContent.toLowerCase()).not.toContain('not confined to the verify stage');
   });
 
-  it('P2-C-A3: old framing "NOT produced inside the verify lane itself" is gone', () => {
-    expect(scenariosContent).not.toContain('NOT produced inside the verify lane itself');
+  it('P2-C-A3: old framing "not produced inside the verify lane itself" is gone (case-insensitive)', () => {
+    expect(scenariosContent.toLowerCase()).not.toContain('not produced inside the verify lane itself');
   });
 
-  it('P2-C-A4: old framing "out-of-verify-lane" is gone', () => {
-    expect(scenariosContent).not.toContain('out-of-verify-lane');
+  it('P2-C-A4: old framing "out-of-verify-lane" is gone (case-insensitive)', () => {
+    expect(scenariosContent.toLowerCase()).not.toContain('out-of-verify-lane');
   });
 
   it('P2-C-P1: new axis "applies uniformly across all lane types" is present', () => {
