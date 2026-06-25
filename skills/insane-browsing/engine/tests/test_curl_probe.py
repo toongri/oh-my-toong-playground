@@ -4,6 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -60,18 +61,18 @@ class CurlProbeRedirectGuard(unittest.TestCase):
         for target in ("http://169.254.169.254/latest/meta-data/", "http://127.0.0.1/admin"):
             with self.subTest(target=target):
                 reqs, calls = _fake_requests([
-                    _Resp(302, location=target, url="https://attacker.example/"),
+                    _Resp(302, location=target, url="http://93.184.216.34/"),
                 ])
                 with patch.dict("sys.modules", {"curl_cffi": type(sys)("curl_cffi")}):
                     sys.modules["curl_cffi"].requests = reqs  # type: ignore[attr-defined]
                     resp, err = _curl_probe(
-                        "https://attacker.example/", impersonate="chrome", referer="",
+                        "http://93.184.216.34/", impersonate="chrome", referer="",
                     )
 
                 self.assertIsNone(resp, "blocked redirect must not return a response")
                 self.assertIsNotNone(err, "blocked redirect must return an error string")
                 self.assertEqual(
-                    calls, ["https://attacker.example/"],
+                    calls, ["http://93.184.216.34/"],
                     "the internal/metadata target must never be fetched",
                 )
 
@@ -79,18 +80,36 @@ class CurlProbeRedirectGuard(unittest.TestCase):
         """A redirect to a public host is followed (no over-block)."""
         final = _Resp(200, url="http://93.184.216.34/landing", text="<html>landed</html>")
         reqs, calls = _fake_requests([
-            _Resp(302, location="http://93.184.216.34/landing", url="https://example.com/"),
+            _Resp(302, location="http://93.184.216.34/landing", url="http://93.184.216.34/"),
             final,
         ])
         with patch.dict("sys.modules", {"curl_cffi": type(sys)("curl_cffi")}):
             sys.modules["curl_cffi"].requests = reqs  # type: ignore[attr-defined]
             resp, err = _curl_probe(
-                "https://example.com/", impersonate="chrome", referer="",
+                "http://93.184.216.34/", impersonate="chrome", referer="",
             )
 
         self.assertIsNone(err)
         self.assertIs(resp, final, "public redirect target should be fetched and returned")
-        self.assertEqual(calls, ["https://example.com/", "http://93.184.216.34/landing"])
+        self.assertEqual(calls, ["http://93.184.216.34/", "http://93.184.216.34/landing"])
+
+
+class CurlProbeInitialGuard(unittest.TestCase):
+    def test_initial_url_to_private_or_metadata_blocked(self) -> None:
+        """The FIRST fetch target is classified too: an initial URL aimed at
+        loopback / cloud-metadata must be refused WITHOUT any request issued."""
+        for target in ("http://169.254.169.254/latest/meta-data/", "http://127.0.0.1/"):
+            with self.subTest(target=target):
+                reqs, calls = _fake_requests([_Resp(200, url=target)])
+                with patch.dict("sys.modules", {"curl_cffi": type(sys)("curl_cffi")}):
+                    sys.modules["curl_cffi"].requests = reqs  # type: ignore[attr-defined]
+                    resp, err = _curl_probe(target, impersonate="chrome", referer="")
+
+                self.assertIsNone(resp, "blocked initial URL must not return a response")
+                self.assertEqual(err, f"ssrf_blocked:{urlparse(target).hostname}")
+                self.assertEqual(
+                    calls, [], "the internal/metadata target must never be fetched",
+                )
 
 
 if __name__ == "__main__":
