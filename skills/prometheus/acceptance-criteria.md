@@ -22,10 +22,22 @@ When the Verification can be expressed as a runnable command, prefer one that is
 
 > Mobile ACs assume `$IOS_UDID` / `$ANDROID_SERIAL` are exported by Argus Stage 3.5 — see Executor-Provided Variables in SKILL.md.
 
-### Web UI E2E (playwright)
+### Web UI E2E (agent-browser)
 
 - [ ] **Login with valid credentials lands on Home and shows username**
-      **Verification**: `bunx playwright test tests/e2e/login.spec.ts --reporter=junit`
+      **Verification**:
+      ```bash
+      agent-browser open "$APP_URL/login"
+      agent-browser snapshot -i                        # locate email/password/submit refs
+      agent-browser fill @e3 "$TEST_EMAIL"
+      agent-browser fill @e4 "$TEST_PASSWORD"
+      agent-browser click @e5
+      agent-browser wait --load networkidle
+      agent-browser get url | grep -q "/home"          # assert redirect to /home
+      agent-browser snapshot -i                        # re-snapshot: @eN refs are scoped to one snapshot and go stale after navigation
+      agent-browser get text @e1 | grep -q "$TEST_USERNAME"  # assert username via a ref from the fresh /home snapshot
+      agent-browser close
+      ```
       (If the test mutates backend persistence, chain Query API verification or add API-symmetric cleanup — browser context reset alone doesn't restore backend state.)
 
 ### HTTP API (curl + jq)

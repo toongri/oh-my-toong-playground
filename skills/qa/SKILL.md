@@ -98,7 +98,7 @@ Evidence files are the audit trail. Downstream gates check for their existence b
 
 | Output Type | Disposition | Examples |
 |-------------|-------------|---------|
-| Objective command output | Save to file | build/test/lint logs, curl response body + status, Playwright/Maestro screenshots and test reports, CLI execution logs |
+| Objective command output | Save to file | build/test/lint logs, curl response body + status, agent-browser/Playwright/Maestro screenshots and reports, CLI execution logs |
 | Subjective judgment | Response only (no file) | Code review analysis, MUST DO checklist verdicts, Scope Boundary calculations, feedback comments |
 
 ### Evidence File Content Requirements
@@ -294,7 +294,7 @@ The two arms differ only in whether the adversarial matrix is added:
 | Change Type | Verification Method | Tool |
 |-------------|---------------------|------|
 | API endpoint | HTTP request verification | `curl` |
-| Frontend / UI | Browser interaction verification | `playwright` |
+| Frontend / UI | Browser interaction verification | `agent-browser` (fallback: `playwright`) |
 | Mobile / App | iOS Simulator / Android Emulator E2E | `maestro` |
 | CLI / TUI | Command execution verification | Interactive Bash |
 | Internal logic only, no scenarios | N/A (skip this trigger) | - |
@@ -387,7 +387,7 @@ N/M spec items fully addressed.
 ```
 Automated checks:   Build/typecheck (always) + native build (native-code-or-release) + Test + Lint + Code Quality (Security, Data Integrity)
 Spec/AC compliance: Spec/AC compliance (vs QA REQUEST Spec); "Completeness check" directive → Spec item × Status table (Addressed/Partial/Missing) + N/M summary
-Hands-on execution: user-facing change OR caller-provided scenarios → run provided scenarios verbatim + self-authored 6-category adversarial matrix (API→curl, Frontend→playwright, Mobile→maestro, CLI→interactive_bash)
+Hands-on execution: user-facing change OR caller-provided scenarios → run provided scenarios verbatim + self-authored 6-category adversarial matrix (API→curl, Frontend→agent-browser (fallback: playwright), Mobile→maestro, CLI→interactive_bash)
 
 Automated checks:    See stage1-commands.md
 Hands-on execution:  See stage3-handson.md (incl. ## Adversarial Scenario Matrix)
