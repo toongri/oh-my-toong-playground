@@ -5,6 +5,7 @@ hooks:
     - component: rules-injector
       type: command
       command: "bun run .codex/hooks/rules-injector/cli.ts hook session-start"
+    - component: codegraph-init.sh
   UserPromptSubmit:
     - component: rules-injector
       type: command
