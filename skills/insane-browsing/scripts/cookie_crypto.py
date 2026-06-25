@@ -35,13 +35,16 @@ def decrypt_chromium_value(platform: str, key: bytes, encrypted: bytes) -> str:
         return (decryptor.update(ciphertext) + decryptor.finalize()).decode("utf-8", errors="replace")
     if prefix in (b"v10", b"v11"):
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from cryptography.hazmat.primitives.padding import PKCS7
 
         decryptor = Cipher(algorithms.AES128(key), modes.CBC(b" " * 16)).decryptor()
-        decrypted = decryptor.update(encrypted[3:]) + decryptor.finalize()
-        pad = decrypted[-1]
-        if isinstance(pad, int) and 1 <= pad <= 16:
-            decrypted = decrypted[:-pad]
-        return decrypted.decode("utf-8", errors="replace")
+        padded = decryptor.update(encrypted[3:]) + decryptor.finalize()
+        # Validate PKCS7 padding instead of trusting the last byte: a wrong key or
+        # tampered ciphertext produces malformed padding and unpadder raises
+        # ValueError, so we never return a silently mis-decrypted cookie value.
+        unpadder = PKCS7(128).unpadder()
+        decrypted = unpadder.update(padded) + unpadder.finalize()
+        return decrypted.decode("utf-8")
     return encrypted.decode("utf-8", errors="replace")
 
 
