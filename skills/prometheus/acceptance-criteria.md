@@ -34,7 +34,8 @@ When the Verification can be expressed as a runnable command, prefer one that is
       agent-browser click @e5
       agent-browser wait --load networkidle
       agent-browser get url | grep -q "/home"          # assert redirect to /home
-      agent-browser get text @e1 | grep -q "$TEST_USERNAME"  # assert username visible
+      agent-browser snapshot -i                        # re-snapshot: @eN refs are scoped to one snapshot and go stale after navigation
+      agent-browser get text @e1 | grep -q "$TEST_USERNAME"  # assert username via a ref from the fresh /home snapshot
       agent-browser close
       ```
       (If the test mutates backend persistence, chain Query API verification or add API-symmetric cleanup — browser context reset alone doesn't restore backend state.)

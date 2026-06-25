@@ -122,7 +122,7 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 **Primary path — agent-browser (attempt-then-fallback rule):**
 
-1. Check install: `command -v agent-browser || (npm i -g agent-browser && agent-browser install)`
+1. Check the CLI is available: `command -v agent-browser`. If it is missing, treat that as an agent-browser attempt failure — record the reason in evidence and use the Playwright fallback path below. Do NOT install agent-browser here: the CLI is assumed pre-installed, and a QA flow must not mutate the global machine (a global install can hang or fail in offline/locked-down environments).
 2. Open the affected page:
    ```bash
    agent-browser open <url>
