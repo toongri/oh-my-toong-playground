@@ -31,3 +31,8 @@ mcps:
       - "-y"
       - "mcp-remote"
       - "https://mcp.figma.com/mcp"
+  # Maestro stdio MCP. Requires the maestro CLI on PATH (and JAVA_HOME in shell env for the JVM-based runner).
+  maestro:
+    command: maestro
+    args:
+      - "mcp"
