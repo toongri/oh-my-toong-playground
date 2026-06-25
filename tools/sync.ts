@@ -449,6 +449,20 @@ export async function syncPlatformConfigs(
 /**
  * Rewrite @lib/* import aliases and bundled bare specifiers in deployed .ts
  * files to relative paths. Mirrors rewrite_lib_aliases in sync.sh:1383-1405.
+ *
+ * Scope: this function walks ALL .ts files under platformRoot, not just the
+ * files deployed in this sync invocation. That broad sweep is intentional and
+ * safe for @lib/ aliases because that alias only appears in files that OMT
+ * itself deployed — no user-authored file would reference it.
+ *
+ * Bundled bare specifiers (e.g. `picomatch`) are a different story: a user
+ * could place their own .ts file under the platform root that imports the same
+ * package. If that happens, this pass rewrites the user's import to the OMT
+ * vendor path, coupling their file to OMT's bundle. Should a later sync
+ * remove that bundle, the user's file would break. This is a known, accepted
+ * limitation: the platform root is an area OMT manages via orphan-cleanup, so
+ * the practical risk is negligible today. If a real user-file case arises,
+ * narrow the rewrite scope to only the files deployed in the current sync run.
  */
 export async function rewriteLibAliases(
   platformRoot: string,
