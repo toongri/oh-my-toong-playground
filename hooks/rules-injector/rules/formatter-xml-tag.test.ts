@@ -17,7 +17,7 @@ import {
 	formatStaticBlock,
 	formatDynamicBlock,
 	ruleMarkerLine,
-	transcriptHasRuleVersion,
+	transcriptHasRuleMarker,
 } from "./formatter.js";
 import { filterRulesNotInTranscriptText } from "../transcript-rule-filter.js";
 import type { LoadedRule } from "./types.js";
@@ -122,42 +122,42 @@ test("formatStaticBlock: old '[hash:]' format is NOT emitted", () => {
 });
 
 // ---------------------------------------------------------------------------
-// (d) transcriptHasRuleVersion: name-based presence detection
+// (d) transcriptHasRuleMarker: name-based presence detection
 // ---------------------------------------------------------------------------
 
-test("transcriptHasRuleVersion: open tag present → true (skip re-inject)", () => {
+test("transcriptHasRuleMarker: open tag present → true (skip re-inject)", () => {
 	const openTag = '<rules name="coding-discipline">';
 	const transcript = `${openTag}\n# Coding Discipline\n\nsome body.\n</rules>`;
-	const result = transcriptHasRuleVersion(
+	const result = transcriptHasRuleMarker(
 		transcript,
 		["/repo/.claude/rules/coding-discipline.md"],
 	);
 	expect(result).toBe(true);
 });
 
-test("transcriptHasRuleVersion: open tag absent → false (inject)", () => {
+test("transcriptHasRuleMarker: open tag absent → false (inject)", () => {
 	const transcript = "Some unrelated content. No rules here.";
-	const result = transcriptHasRuleVersion(
+	const result = transcriptHasRuleMarker(
 		transcript,
 		["/repo/.claude/rules/coding-discipline.md"],
 	);
 	expect(result).toBe(false);
 });
 
-test("transcriptHasRuleVersion: different rule name not confused", () => {
+test("transcriptHasRuleMarker: different rule name not confused", () => {
 	const transcript = '<rules name="other-rule">\nsome content\n</rules>';
-	const result = transcriptHasRuleVersion(
+	const result = transcriptHasRuleMarker(
 		transcript,
 		["/repo/.claude/rules/coding-discipline.md"],
 	);
 	expect(result).toBe(false);
 });
 
-test("transcriptHasRuleVersion: checks any of the provided paths (path OR realPath)", () => {
+test("transcriptHasRuleMarker: checks any of the provided paths (path OR realPath)", () => {
 	const openTag = '<rules name="coding-discipline">';
 	const transcript = `${openTag}\nbody.\n</rules>`;
 	// realPath spelling also resolves to "coding-discipline"
-	const result = transcriptHasRuleVersion(
+	const result = transcriptHasRuleMarker(
 		transcript,
 		["/original/path/coding-discipline.md", "/real/path/coding-discipline.md"],
 	);

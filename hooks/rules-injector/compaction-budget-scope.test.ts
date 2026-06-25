@@ -741,15 +741,13 @@ test("C12: a rule whose XML header overhead alone exceeds the budget is dropped 
 // ===========================================================================
 
 test("C5: when pre-summed headers would zero the body budget, the first rule still emits if its own body fits", () => {
-	// 8 rules with 64-char hashes → per-rule full header ~140 chars → pre-sum ~1120.
-	// maxResultChars=500: pre-sum (1120) > 500 → old bodyOnlyBudget=0 → all dropped.
-	// After fix: incremental charge → rule[0] sees 500-140=360 body budget → 40-char body fits.
+	// Per-rule XML header `<rules name="rule-N">\n\n</rules>` = 31 chars (basename-derived; hash plays no role).
+	// 8 rules → pre-sum = 248. maxResultChars=500: incremental charge → rule[0] sees 500-31=469 body budget → 40-char body fits.
 	const rules = Array.from({ length: 8 }, (_, i) =>
 		makeRule({
 			path: `/proj/.claude/rules/rule-${i}.md`,
 			relativePath: `.claude/rules/rule-${i}.md`,
 			body: "B".repeat(40),
-			contentHash: "a".repeat(64),
 		}),
 	);
 	const result = formatStaticBlock(rules, { maxRuleChars: 4000, maxResultChars: 500 });

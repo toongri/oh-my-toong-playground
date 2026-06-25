@@ -84,7 +84,7 @@ function basenameNoExt(path: string): string {
  * open tag is derived solely from the basename, two paths with the same basename
  * produce the same tag and are effectively equivalent here.
  */
-export function transcriptHasRuleVersion(
+export function transcriptHasRuleMarker(
 	transcriptText: string,
 	paths: ReadonlyArray<string>,
 ): boolean {

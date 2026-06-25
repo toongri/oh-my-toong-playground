@@ -32,7 +32,7 @@ export {
 	findRuleCandidates,
 	type RuleDiscoveryCache,
 } from "./finder.js";
-export { formatDynamicBlock, formatStaticBlock, ruleMarkerLine, transcriptHasRuleVersion } from "./formatter.js";
+export { formatDynamicBlock, formatStaticBlock, ruleMarkerLine, transcriptHasRuleMarker } from "./formatter.js";
 export type { FormatOptions, FormatResult } from "./formatter.js";
 export { hashContent, matchRule, normalizeGlobs, normalizeRuleContentForHash } from "./matcher.js";
 export { sortCandidates } from "./ordering.js";
