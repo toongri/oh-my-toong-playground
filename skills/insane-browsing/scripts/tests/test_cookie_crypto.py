@@ -85,5 +85,26 @@ class HappyPathDecryption(unittest.TestCase):
         self.assertEqual(decrypt_chromium_value("linux", key, blob), "session-token-123")
 
 
+class CbcPaddingValidation(unittest.TestCase):
+    def test_wrong_key_raises_instead_of_returning_garbage(self) -> None:
+        # #6: decrypting a v10 CBC blob with the wrong key must fail loudly. The
+        # PKCS7 unpadder rejects the malformed padding produced by the wrong key,
+        # so the caller never receives a silently mis-decrypted cookie value.
+        right_key = derive_key("linux", b"secret")
+        wrong_key = derive_key("linux", b"not-the-real-password")
+        blob = _encrypt_cbc_v10(right_key, "session-token-123")
+        with self.assertRaises(ValueError):
+            decrypt_chromium_value("linux", wrong_key, blob)
+
+    def test_tampered_ciphertext_raises(self) -> None:
+        # A modified ciphertext corrupts the final plaintext block, invalidating
+        # the PKCS7 padding — decryption must raise, not return garbage.
+        key = derive_key("linux", b"secret")
+        blob = bytearray(_encrypt_cbc_v10(key, "session-token-123"))
+        blob[-1] ^= 0xFF
+        with self.assertRaises(ValueError):
+            decrypt_chromium_value("linux", key, bytes(blob))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
