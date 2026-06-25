@@ -389,14 +389,60 @@ describe("rewriteLibImports bare specifier rule (bundled vendor packages)", () =
     expect(result).toContain("'./lib/vendor/picomatch.js'");
   });
 
-  it("require('pkg') is rewritten", () => {
+  it("F4: a dynamic import() shape inside a string literal is NOT rewritten", () => {
+    const content = "const snippet = \"import('picomatch')\";\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).toBe(content);
+  });
+
+  it("require('pkg') is NOT rewritten (F5: discovery is ESM-only, no require)", () => {
+    // Discovery (findBareNpmImports) never detects require(), so the rewrite must
+    // not act on it either — the two sides must agree. The project is ESM-only.
     const content = "const m = require('picomatch');\n";
     const targetFile = path.join(platformRoot, "run.ts");
 
     const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
 
-    expect(result).not.toContain("require('picomatch')");
-    expect(result).toContain("'./lib/vendor/picomatch.js'");
+    expect(result).toBe(content);
+  });
+
+  it("F4: package name inside a // line comment is NOT rewritten", () => {
+    const content = "// import 'picomatch'\nconst noop = 1;\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).toBe(content);
+  });
+
+  it("F4: package name inside a JSDoc continuation line is NOT rewritten", () => {
+    const content = "/**\n * from 'picomatch'\n */\nconst noop = 1;\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).toBe(content);
+  });
+
+  it("F4: an import-shaped string literal is NOT rewritten", () => {
+    const content = "const example = \"import x from 'picomatch';\";\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).toBe(content);
+  });
+
+  it("F4: a 'from pkg' fragment inside a string literal is NOT rewritten", () => {
+    const content = "console.log(\"rewrote from 'picomatch'\");\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).toBe(content);
   });
 
   it("export ... from 'pkg' is rewritten", () => {

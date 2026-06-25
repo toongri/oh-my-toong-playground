@@ -108,24 +108,45 @@ export function rewriteLibImports(
     .replace(/"@lib\//g, `"${prefix}lib/`);
 
   for (const pkg of bundledPackages) {
-    // Anchor the rewrite to module-specifier positions only:
-    //   from 'pkg'        (static import / re-export)
-    //   import 'pkg'      (bare side-effect import — space before quote, not `(`)
-    //   import('pkg')     (dynamic import)
-    //   require('pkg')    (CJS require)
-    // A plain string literal like `const x = 'pkg'` is NOT preceded by any of
-    // these tokens, so it is left untouched.
+    // Anchor the rewrite to real ESM module-specifier positions only. Each
+    // alternative below ends with the FULL quoted specifier (`'pkg'`) so a
+    // sub-path (`'pkg/lib/x'`) or look-alike (`'pkg-extra'`) never matches.
+    //
+    // The static forms are anchored to the START of a line (the `m` flag makes
+    // `^` match per-line): a `from`/`import` keyword that does NOT begin the
+    // statement — because it sits inside a `//` comment, a `*` JSDoc line, or a
+    // string literal — is never matched.
+    //   ^import|export … from 'pkg'   static import / re-export
+    //   ^import 'pkg'                  bare side-effect import
+    //   import('pkg')                  dynamic import (guarded against literals)
+    // Discovery (findBareNpmImports) is ESM-only and never detects `require()`,
+    // so the rewrite must not act on `require()` either — the two sides agree.
     //
     // Package names may contain regex-special characters (`.`, `-`, `@`, `/`),
     // so escape them before embedding in the pattern.
     const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const q = `(['"])${escaped}`; // group: opening quote; specifier follows
     const specifierPattern = new RegExp(
-      `((?:from|require\\(|import\\()\\s*|import\\s+)(['"])${escaped}\\2`,
-      "g",
+      [
+        // static import/export with a `from` clause
+        `(^[ \\t]*(?:import|export)\\b[^'"\\n]*?\\bfrom[ \\t]*)${q}\\2`,
+        // bare side-effect import (statement-leading, space before the quote)
+        `(^[ \\t]*import[ \\t]+)${q}\\4`,
+        // dynamic import — preceded by a non-identifier, non-quote boundary so a
+        // `"import('pkg')"` fragment inside a string literal is not matched
+        `((?:^|[^.\\w'"\`])import[ \\t]*\\([ \\t]*)${q}\\6`,
+      ].join("|"),
+      "gm",
     );
     result = result.replace(
       specifierPattern,
-      (_, prefix_ctx, quote) => `${prefix_ctx}${quote}${prefix}lib/vendor/${pkg}.js${quote}`,
+      (match, p1, q1, p2, q2, p3, q3) => {
+        // Three alternatives, each a [prefix, quote] pair; exactly one fires.
+        const prefixCtx = p1 ?? p2 ?? p3;
+        const quote = q1 ?? q2 ?? q3;
+        if (prefixCtx === undefined || quote === undefined) return match;
+        return `${prefixCtx}${quote}${prefix}lib/vendor/${pkg}.js${quote}`;
+      },
     );
   }
 
@@ -161,19 +182,14 @@ export async function copyFile(source: string, target: string): Promise<void> {
  * @param options.platformRoot When provided, rewrites @lib/ aliases in .ts files at
  *                             write time so the deployed bytes are already resolved.
  *                             Must be the platform root dir (e.g. /path/.claude/).
- * @param options.bundledPackages Package names whose bare specifiers are repointed at
- *                             lib/vendor/<pkg> at write time. Defaults to empty — the
- *                             real set is only known later, so the post-pass rewrite
- *                             (rewriteLibAliases) carries it; copy-time stays a no-op.
  */
 export async function syncDirectory(
   source: string,
   target: string,
-  options?: { exclude?: string[]; platformRoot?: string; bundledPackages?: Set<string> }
+  options?: { exclude?: string[]; platformRoot?: string }
 ): Promise<void> {
   const exclude = options?.exclude ?? DEFAULT_EXCLUDE;
   const platformRoot = options?.platformRoot;
-  const bundledPackages = options?.bundledPackages ?? new Set<string>();
 
   // 1. Ensure target directory exists
   await fs.mkdir(target, { recursive: true });
@@ -197,7 +213,10 @@ export async function syncDirectory(
     if (platformRoot && tgtFile.endsWith(".ts") && !tgtFile.endsWith(".test.ts")) {
       await fs.mkdir(path.dirname(tgtFile), { recursive: true });
       const srcContent = await fs.readFile(srcFile, "utf8");
-      const rewritten = rewriteLibImports(srcContent, tgtFile, platformRoot, bundledPackages);
+      // syncDirectory only resolves @lib/ aliases at copy time; the bundled-package
+      // set is unknown here (the post-pass rewriteLibAliases in sync.ts carries it),
+      // so pass an empty set — the bare-specifier rewrite is a no-op at this stage.
+      const rewritten = rewriteLibImports(srcContent, tgtFile, platformRoot, new Set<string>());
       await fs.writeFile(tgtFile, rewritten, "utf8");
       // Preserve execute permissions
       const stat = await fs.stat(srcFile);
