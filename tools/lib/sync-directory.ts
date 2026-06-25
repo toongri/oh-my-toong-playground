@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 
-export const DEFAULT_EXCLUDE = ["*.test.ts"];
+export const DEFAULT_EXCLUDE = ["*.test.ts", "__pycache__", ".pytest_cache", "*.pyc"];
 
 /**
  * Checks if a filename matches any of the given glob-style exclude patterns.
@@ -22,14 +22,25 @@ export function isExcluded(filename: string, patterns: string[]): boolean {
 /**
  * Recursively collects all file paths under a directory.
  * Returns paths relative to the root dir.
+ *
+ * Excluded names are pruned DURING the walk: an excluded directory name (e.g.
+ * `__pycache__`, `.pytest_cache`) is never descended into, and excluded files
+ * (e.g. `*.pyc`) are skipped. Pruning at the walk — not only in the caller's
+ * post-filter — is what keeps the contents of a cache directory off the copy
+ * list, since the source tree is copied verbatim from disk, not from git.
  */
-export async function collectFiles(dir: string, rel = ""): Promise<string[]> {
+export async function collectFiles(
+  dir: string,
+  rel = "",
+  exclude: string[] = DEFAULT_EXCLUDE,
+): Promise<string[]> {
   const results: string[] = [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
+    if (isExcluded(entry.name, exclude)) continue;
     const relPath = rel ? `${rel}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
-      const nested = await collectFiles(path.join(dir, entry.name), relPath);
+      const nested = await collectFiles(path.join(dir, entry.name), relPath, exclude);
       results.push(...nested);
     } else if (entry.isFile()) {
       results.push(relPath);
@@ -134,8 +145,8 @@ export async function syncDirectory(
   // 1. Ensure target directory exists
   await fs.mkdir(target, { recursive: true });
 
-  // 2. Collect source files
-  const sourceFiles = await collectFiles(source);
+  // 2. Collect source files (excluded dir names are pruned during the walk)
+  const sourceFiles = await collectFiles(source, "", exclude);
 
   // 3. Determine files to copy (respecting exclude patterns)
   const includedSourceFiles = sourceFiles.filter((relPath) => {
@@ -166,8 +177,10 @@ export async function syncDirectory(
     }
   }
 
-  // 5. Collect target files and delete orphans
-  const targetFiles = await collectFiles(target);
+  // 5. Collect target files and delete orphans. Walk the full target tree
+  //    (no prune) so orphan detection sees every deployed file; the per-file
+  //    isExcluded guard below preserves excluded target-only files.
+  const targetFiles = await collectFiles(target, "", []);
   const includedSourceSet = new Set(includedSourceFiles);
 
   for (const relPath of targetFiles) {
