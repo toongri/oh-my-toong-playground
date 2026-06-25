@@ -14,10 +14,6 @@ This page covers two categories of skills. **Utility skills** support the develo
 
 The HUD displays Oh-My-Toong operational state in real time inside Claude Code's statusLine. Running `/hud setup` checks for Bun and jq, then updates the `statusLine` key in `settings.local.json` to point at the HUD script. Displayed elements include context window usage, running subagent count, Todo completion status, and the active skill name. `/hud restore` recovers the original statusLine configuration that was backed up on first setup. Because all paths are resolved via `${CLAUDE_SKILL_DIR}` self-location, the skill behaves identically whether deployed user-globally or project-locally.
 
-### using-maestro
-
-Maestro is a YAML-driven mobile E2E framework for Android and iOS apps, including React Native. Invoke this skill when writing new flows, debugging selector failures, configuring flow location, wiring CI artifact upload, or deciding whether to attach Maestro MCP for AI-assisted authoring. Four non-negotiable principles govern reliable suites: stable selectors first (`testID` > visible text > coordinates), every flow starts from a known state via `clearState`, all waits are condition-based (`extendedWaitUntil`) not timed, and flow location is resolved from `~/.config/maestro/<id>/config.yaml` or the `MAESTRO_USING_FLOW_DIR` env var — never assumed. Use MCP to accelerate authoring; use CLI for CI execution.
-
 ---
 
 ## Personal Workflow Skills

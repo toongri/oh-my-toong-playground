@@ -229,4 +229,4 @@ Pins의 권장 운용 패턴은 세 단계로 나뉜다.
 - [핵심 파이프라인 스킬](./core-pipeline.md) — prometheus / sisyphus / argus
 - [리뷰 품질 스킬](./review-quality.md) — code-review / design-review
 - [저작 스킬](./authoring.md) — technical-writing / humanizer
-- [개인 유틸리티 스킬](./utilities-personal.md) — hud / using-maestro / mock-interview
+- [개인 유틸리티 스킬](./utilities-personal.md) — hud / mock-interview
