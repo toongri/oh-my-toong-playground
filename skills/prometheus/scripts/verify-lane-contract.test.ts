@@ -42,8 +42,16 @@ describe('SKILL.md presence — verify-lane tokens', () => {
     expect(skillContent).toContain('falsifying verifier');
   });
 
-  it('P3: verify lane: Evidence-block list-marker line (replaces success-output checklist)', () => {
-    expect(skillContent).toContain('- verify lane: dispatched / N lanes / M excluded');
+  it('P3: verify lane: Evidence-block list-marker line (mixed Complex mode placeholder)', () => {
+    // The template now expresses the mixed Complex case: codebase lanes inline
+    // + external lane dispatched when present. Old single-mode form is gone.
+    expect(skillContent).toContain(
+      '- verify lane: <inline (codebase) + dispatched (external) (Complex with external lane) | inline (Complex, no external lane) | dispatched (Architecture)> / N lanes / M excluded',
+    );
+  });
+
+  it('P3-A: old mode-less verify lane line is gone (intent-split replaces it)', () => {
+    expect(skillContent).not.toContain('- verify lane: dispatched / N lanes / M excluded');
   });
 
   it('P4: stale_state key (additive)', () => {
@@ -272,6 +280,19 @@ describe('SKILL.md P2-B — per-finding verdict vocabulary', () => {
     // Distinctive phrase that confirms per-finding scope of the Exclusion rule.
     expect(skillContent).toContain('Exclusion is applied **per finding**');
   });
+
+  it('P2-B-P4: Complex intent inline branch — "no verifier subagent" present (SKILL.md :388)', () => {
+    // Guards the Complex zero-spawn half of the intent-split (collect→verify contract).
+    // Paired with P2-B-I4 (Architecture dispatch invariant) — both halves must survive.
+    // Deleting the Complex branch from SKILL.md turns this RED.
+    expect(skillContent).toContain('no verifier subagent');
+  });
+
+  it('P2-B-P5: Complex intent inline branch — "Zero spawns" present (SKILL.md :390)', () => {
+    // Second anchor on the Complex zero-spawn contract. Two distinct literals means
+    // paraphrasing one literal still trips the other.
+    expect(skillContent).toContain('Zero spawns');
+  });
 });
 
 describe('interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard', () => {
@@ -297,6 +318,69 @@ describe('interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard', (
       'dispatch one **falsifying verifier** subagent per non-empty lane',
     );
   });
+
+  it('P2-B-I5: Complex zero-spawn invariant — "do NOT dispatch verifiers" present (interview.md :132)', () => {
+    // Guards the Complex half of the intent-split alongside the Architecture half above (P2-B-I4).
+    // Deleting the Complex inline-falsification prose from interview.md turns this RED.
+    expect(interviewContent).toContain('do NOT dispatch verifiers');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Option A invariant: external lane is ALWAYS delegated (Complex and
+// Architecture alike). The planner never inline-reads external evidence.
+//
+// Presence tests: distinctive new clauses that must appear after the fix.
+// Absence tests: old "inline at Complex" phrasing for the external lane must
+// be gone — if someone reverts to external-inline, the absence half goes RED.
+// ---------------------------------------------------------------------------
+
+describe('Option A — external lane always delegated (SKILL.md + interview.md)', () => {
+  it('OA-P1: SKILL.md — external lane keeps delegated verifier at Complex (new clause)', () => {
+    // Guards the core Option A invariant in SKILL.md: the external lane is
+    // delegated even on Complex intent. Reverting to all-inline-at-Complex
+    // removes this phrase and turns this RED.
+    // Anchors on the single-line portion of the new clause (line 392 of SKILL.md):
+    // the full clause spans two lines, so we pin the distinctive single-line tail.
+    expect(skillContent).toContain(
+      'delegated falsifying-verifier subagent (Complex and Architecture alike)',
+    );
+  });
+
+  it('OA-P2: interview.md — external lane always delegated verifier subagent (new clause)', () => {
+    // Guards the Option A invariant in interview.md: the EXTERNAL collect lane
+    // is always falsified by a delegated verifier, not inline at Complex.
+    // Reverting to "(inline at Complex, delegated at Architecture)" removes this
+    // phrase and turns this RED.
+    expect(interviewContent).toContain(
+      'always falsified by a delegated verifier subagent (Complex and Architecture alike)',
+    );
+  });
+
+  it('OA-A1: interview.md — old "inline at Complex" external-lane phrasing is gone', () => {
+    // The stale phrase that made the external lane inline at Complex.
+    // Must be absent after the fix; if it survives, Option A is incomplete.
+    expect(interviewContent).not.toContain(
+      'inline at Complex, delegated at Architecture',
+    );
+  });
+
+  it('OA-A2: SKILL.md — codebase inline rule is now explicitly scoped (not unqualified "inline — no verifier subagent")', () => {
+    // The old unqualified phrase applied to ALL lanes. After the fix the rule
+    // is scoped to codebase lanes only. The unqualified form must be gone.
+    expect(skillContent).not.toContain(
+      'planner runs that same falsification inline — no verifier subagent',
+    );
+  });
+
+  it('OA-A3: SKILL.md — old Evidence-block template single-mode form is gone', () => {
+    // The old template used <inline (Complex) | dispatched (Architecture)> — a
+    // single-actor form that could not represent the mixed Complex case.
+    // After the fix it must be gone; the new mixed-mode form replaces it.
+    expect(skillContent).not.toContain(
+      '<inline (Complex) | dispatched (Architecture)>',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -307,20 +391,20 @@ describe('interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard', (
 // ---------------------------------------------------------------------------
 
 describe('scenarios P2-C — P-25 axis reframe (old absent, new present)', () => {
-  it('P2-C-A1: old framing "OUTSIDE the verify lane" is gone', () => {
-    expect(scenariosContent).not.toContain('OUTSIDE the verify lane');
+  it('P2-C-A1: old framing "outside the verify lane" is gone (case-insensitive)', () => {
+    expect(scenariosContent.toLowerCase()).not.toContain('outside the verify lane');
   });
 
-  it('P2-C-A2: old framing "not confined to the verify stage" is gone', () => {
-    expect(scenariosContent).not.toContain('not confined to the verify stage');
+  it('P2-C-A2: old framing "not confined to the verify stage" is gone (case-insensitive)', () => {
+    expect(scenariosContent.toLowerCase()).not.toContain('not confined to the verify stage');
   });
 
-  it('P2-C-A3: old framing "NOT produced inside the verify lane itself" is gone', () => {
-    expect(scenariosContent).not.toContain('NOT produced inside the verify lane itself');
+  it('P2-C-A3: old framing "not produced inside the verify lane itself" is gone (case-insensitive)', () => {
+    expect(scenariosContent.toLowerCase()).not.toContain('not produced inside the verify lane itself');
   });
 
-  it('P2-C-A4: old framing "out-of-verify-lane" is gone', () => {
-    expect(scenariosContent).not.toContain('out-of-verify-lane');
+  it('P2-C-A4: old framing "out-of-verify-lane" is gone (case-insensitive)', () => {
+    expect(scenariosContent.toLowerCase()).not.toContain('out-of-verify-lane');
   });
 
   it('P2-C-P1: new axis "applies uniformly across all lane types" is present', () => {

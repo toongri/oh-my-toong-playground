@@ -1,4 +1,4 @@
-import { transcriptHasRuleVersion } from "./rules/index.js";
+import { transcriptHasRuleMarker } from "./rules/index.js";
 import type { LoadedRule } from "./rules/index.js";
 import type { TranscriptSearchOptions } from "./transcript-search.js";
 import { readTranscriptSearchText } from "./transcript-search.js";
@@ -44,7 +44,8 @@ function isRuleAlreadyInTranscript(rule: LoadedRule, transcriptText: string): bo
 		return false;
 	}
 
-	// Anchor on the content version: an edited rule whose first 2000 chars are
-	// unchanged must NOT be mistaken for the version already in the transcript.
-	return transcriptHasRuleVersion(transcriptText, [rule.path, rule.realPath], rule.contentHash);
+	// Name-based presence: confirm the rule's open tag is in the transcript.
+	// lazy: two rules with the same basename share the same tag; per-session
+	// staticDedup prevents double-injection within a session.
+	return transcriptHasRuleMarker(transcriptText, [rule.path, rule.realPath]);
 }

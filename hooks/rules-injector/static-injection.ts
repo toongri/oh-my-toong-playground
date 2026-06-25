@@ -9,7 +9,7 @@ import { withPostCompactBudget } from "./post-compact-budget.js";
 import type { PostCompactReadDirective } from "./post-compact-directive.js";
 import { buildPostCompactReadDirective } from "./post-compact-directive.js";
 import type { Engine } from "./rules/index.js";
-import { formatStaticBlock, hashContent, isNeverTruncatedRule, normalizeRuleContentForHash, parseRule, ruleMarkerLine, transcriptHasRuleVersion } from "./rules/index.js";
+import { formatStaticBlock, isNeverTruncatedRule, parseRule, ruleMarkerLine, transcriptHasRuleMarker } from "./rules/index.js";
 import type { LoadedRule, PiRulesConfig } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
 import { filterRulesAlreadyInTranscript, filterRulesNotInTranscriptText } from "./transcript-rule-filter.js";
@@ -77,7 +77,7 @@ export function runStaticInjection(
 	const combinedContext = combineStaticContext(block);
 	const limitedContext = limitAdditionalContextText(combinedContext.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim());
 	for (const rule of emittedRules) {
-		if (limitedContext.includes(ruleMarkerLine(rule.path, rule.contentHash))) {
+		if (limitedContext.includes(ruleMarkerLine(rule.path))) {
 			engine.markStaticInjected(rule);
 		}
 	}
@@ -169,18 +169,19 @@ function readRecoveryTranscriptText(transcriptPath: string | null): string | nul
 }
 
 /**
- * Returns true only when the rule's emitted body AND a content-version marker for
- * this rule are present in the transcript — meaning this exact version was emitted
- * end-to-end and is still in context. Two gates:
+ * Returns true only when the rule's emitted body AND the rule's marker are present
+ * in the transcript — meaning this rule was emitted end-to-end and is still in
+ * context. Two gates:
  *
  * - Body gate: the needle is the PARSED body (frontmatter stripped), matching what
  *   is actually emitted. The raw file (frontmatter included) is never emitted, so a
  *   raw needle would never match and the rule would be re-injected on every recovery.
  *   A transcript that mentions the path but omits the body (e.g. a compacted summary)
  *   fails this gate → re-inject.
- * - Version gate: the marker is anchored to the content hash, so a tail-only edit of
- *   a >2000-char rule (identical prefix, different content) is recognized as a
- *   different version → re-inject.
+ * - Presence gate: transcriptHasRuleMarker checks whether the rule's name-based open
+ *   tag (<rules name="...">) is in the transcript. There is NO hash/version
+ *   granularity — an edited rule whose open tag is already present is treated as
+ *   injected (see the lazy: note on ruleMarkerLine).
  *
  * Any read/parse failure is absorbed as `false` (re-inject) to honor the advisory
  * exit-0 contract.
@@ -188,12 +189,11 @@ function readRecoveryTranscriptText(transcriptPath: string | null): string | nul
 function isDynamicRuleBodyInTranscript(rulePath: string, transcriptText: string): boolean {
 	try {
 		const raw = readFileSync(rulePath, "utf8");
-		const contentHash = hashContent(normalizeRuleContentForHash(raw));
 		const needle = parseRule(raw).body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().slice(0, 2_000);
 		if (needle.length === 0 || !transcriptText.includes(needle)) {
 			return false;
 		}
-		return transcriptHasRuleVersion(transcriptText, [rulePath], contentHash);
+		return transcriptHasRuleMarker(transcriptText, [rulePath]);
 	} catch {
 		return false;
 	}

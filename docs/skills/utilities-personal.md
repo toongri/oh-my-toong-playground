@@ -14,10 +14,6 @@
 
 HUD는 Claude Code의 statusLine에 Oh-My-Toong 운영 상태를 실시간으로 표시합니다. `/hud setup`을 실행하면 Bun과 jq의 설치 여부를 확인한 뒤 `settings.local.json`의 `statusLine` 키를 HUD 스크립트 경로로 업데이트합니다. 표시 항목은 컨텍스트 창 사용량, 실행 중인 서브에이전트 수, Todo 완료 상태, 현재 활성 스킬 이름입니다. `/hud restore`는 첫 설정 시 백업해 둔 원래 statusLine 설정을 복원합니다. `${CLAUDE_SKILL_DIR}` 기반의 자기 위치 참조(self-location) 덕분에 사용자 전역 또는 프로젝트 로컬 배포 모두 동일하게 동작합니다.
 
-### using-maestro
-
-Maestro는 YAML 기반의 모바일 E2E 테스트 프레임워크로, React Native를 포함한 Android/iOS 앱에 사용합니다. 이 스킬은 Maestro 플로우 작성, 셀렉터 실패 디버깅, 플로우 위치 설정, CI 아티팩트 업로드, Maestro MCP를 통한 AI 에이전트 통합 시에 호출합니다. 네 가지 핵심 원칙을 지킵니다: 안정적인 셀렉터 우선(`testID` > 텍스트 > 좌표), 모든 플로우는 `clearState`로 알려진 초기 상태에서 시작, 모든 대기는 시간 기반이 아닌 조건 기반(`extendedWaitUntil`), 플로우 위치는 가정하지 않고 `~/.config/maestro/<id>/config.yaml` 또는 `MAESTRO_USING_FLOW_DIR` 환경 변수로 결정합니다. MCP는 플로우 작성 가속에, CLI는 CI 실행에 사용합니다.
-
 ---
 
 ## 개인 워크플로우 스킬

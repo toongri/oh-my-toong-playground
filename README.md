@@ -54,7 +54,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 | [리뷰/품질](docs/skills/review-quality.md) | code-review · orchestrate-review · design-review · slides-review · qa · performance-optimizer |
 | [문서/콘텐츠·유틸](docs/skills/authoring.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [지식 그래프(pins)](docs/skills/knowledge-graph-pins.md) | pins 지식 그래프 — pin-setup · record · query · audit · wrap-up |
-| [유틸·개인 워크플로우](docs/skills/utilities-personal.md) | hud · using-maestro + resume · jd · mock-interview 등 |
+| [유틸·개인 워크플로우](docs/skills/utilities-personal.md) | hud · resume · jd · mock-interview 등 |
 | [프라이빗 포크 관리](docs/PRIVATE-FORK-MANAGEMENT.md) | 프라이빗 포크 운영 가이드 — 업스트림 미러링과 지속 동기화 |
 | [오케스트레이션 가이드](docs/ORCHESTRATION.md) | prometheus → sisyphus 워크플로우와 사용법 |
 
