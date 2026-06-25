@@ -63,8 +63,9 @@ def _pick_executor(capabilities: list[str], device_class: str) -> str:
 def _run_node_template(template: str, args: dict, timeout: int = 90) -> tuple[int, str, str]:
     """Run a Node.js template with args as JSON on stdin.
 
-    Template convention: reads `process.stdin` → JSON → runs fetch → writes
-    HTML to stdout; errors go to stderr with non-zero exit code.
+    Template convention: reads `process.stdin` → JSON → runs fetch → writes a
+    JSON envelope `{status, final_url, html}` to stdout; errors go to stderr
+    with non-zero exit code.
     """
     path = os.path.join(TEMPLATES_DIR, template)
     if not os.path.isfile(path):
@@ -182,11 +183,24 @@ def run_playwright_fallback(
         att.verdict = Verdict.UNKNOWN.value
         return att, ""
 
-    # stdout carries HTML. Validate with a shim.
-    resp = _FakeResp(stdout)
+    # stdout carries a JSON envelope {status, final_url, html}. Parse it so the
+    # real HTTP status (not a faked 200) and the post-redirect URL flow onto the
+    # Attempt; validators then demotes a 4xx/5xx fallback to not-ok.
+    try:
+        envelope = json.loads(stdout)
+        status = int(envelope.get("status") or 0)
+        final_url = envelope.get("final_url") or url
+        html = envelope.get("html") or ""
+    except (ValueError, AttributeError) as e:
+        att.error = f"malformed_envelope:{type(e).__name__}"
+        att.verdict = Verdict.UNKNOWN.value
+        return att, ""
+
+    resp = _FakeResp(html, status=status, final_url=final_url)
     vr = validate(resp, success_selectors=success_selectors)
-    att.status = 200
-    att.body_size = len(stdout)
+    att.status = status
+    att.url = final_url
+    att.body_size = len(html.encode("utf-8", "replace"))
     att.verdict = vr.verdict.value
     att.reasons = vr.reasons
-    return att, stdout
+    return att, html

@@ -19,12 +19,20 @@ def _write_file(path: Path, content: str) -> None:
     path.write_text(textwrap.dedent(content).lstrip(), encoding="utf-8")
 
 
+def _envelope_html(stdout: str) -> str:
+    """stdout now carries a JSON envelope {status, final_url, html}."""
+    return json.loads(stdout)["html"]
+
+
 def _install_fake_playwright(node_modules: Path) -> None:
     _write_file(
         node_modules / "playwright" / "index.js",
         """
         const page = {
-          async goto() {},
+          async goto() {
+            return { status() { return 200; } };
+          },
+          url() { return 'https://example.com/article'; },
           async waitForTimeout() {},
           async waitForSelector(selector) {
             if (process.env.PW_FAKE_SELECTOR_FAIL === '1') {
@@ -162,7 +170,7 @@ class PlaywrightTemplateErrorHandling(unittest.TestCase):
                 )
 
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("<article>ok</article>", result.stdout)
+                self.assertIn("<article>ok</article>", _envelope_html(result.stdout))
                 self.assertIn("best-effort optional module playwright-extra failed:", result.stderr)
                 self.assertIn("Cannot find module 'playwright-extra'", result.stderr)
 
@@ -180,7 +188,7 @@ class PlaywrightTemplateErrorHandling(unittest.TestCase):
                 )
 
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("<article>ok</article>", result.stdout)
+                self.assertIn("<article>ok</article>", _envelope_html(result.stdout))
                 self.assertIn("best-effort optional module puppeteer-extra-plugin-stealth failed:", result.stderr)
                 self.assertIn("Cannot find module 'puppeteer-extra-plugin-stealth'", result.stderr)
 
@@ -256,7 +264,7 @@ class PlaywrightTemplateErrorHandling(unittest.TestCase):
                 )
 
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("<article>ok</article>", result.stdout)
+                self.assertIn("<article>ok</article>", _envelope_html(result.stdout))
                 self.assertIn("best-effort waitSelector failed:", result.stderr)
                 self.assertNotIn("waitSelector article.ready", result.stderr)
 
@@ -274,7 +282,7 @@ class PlaywrightTemplateErrorHandling(unittest.TestCase):
                 )
 
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("<article>ok</article>", result.stdout)
+                self.assertIn("<article>ok</article>", _envelope_html(result.stdout))
                 self.assertIn("best-effort browser context close failed:", result.stderr)
 
 

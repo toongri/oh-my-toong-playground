@@ -118,7 +118,7 @@ async function main() {
     }
 
     // Main page — DOM loaded then give the sensor a moment.
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
     await page.waitForTimeout(2500);
 
     if (waitSelector) {
@@ -148,7 +148,8 @@ async function main() {
     }
 
     const html = await page.content();
-    process.stdout.write(html);
+    const status = response ? response.status() : 0;
+    process.stdout.write(JSON.stringify({ status, final_url: page.url(), html }));
     process.exitCode = 0;
     return;
   } catch (e) {

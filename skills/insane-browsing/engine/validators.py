@@ -134,7 +134,7 @@ def validate(
     try:
         status = int(getattr(resp, "status_code", 0) or 0)
         text = getattr(resp, "text", "") or ""
-        size = len(text)
+        size = len(text.encode("utf-8", "replace"))
     except Exception as e:
         return ValidationResult(verdict=Verdict.UNKNOWN, reasons=[f"parse_error:{e}"])
 
@@ -199,7 +199,13 @@ def validate(
     # --- Layer 3: cookie sensor state (only when no selectors to decide on) ---
     cookies = _extract_cookies(resp)
     if _abck_unresolved(cookies):
+        # Unresolved `_abck` means the session sensor was rejected. With no
+        # positive proof to offset it, demote to challenge (not-ok). The
+        # `abck_unresolved` reason distinguishes this cookie-reject from a
+        # WAF interstitial (which also yields challenge) for downstream readers.
         r.reasons.append("abck_unresolved")
+        r.verdict = Verdict.CHALLENGE
+        return r
 
     # No positive proof available — weak OK.
     r.verdict = Verdict.WEAK_OK

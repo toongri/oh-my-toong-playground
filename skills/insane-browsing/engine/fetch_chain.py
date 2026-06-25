@@ -195,6 +195,7 @@ def fetch(
                     success_selectors=success_selectors,
                     device_class=device_class,
                     force_executor=fb_name,
+                    timeout=timeout,
                 )
                 trace.append(pw_attempt)
                 if pw_attempt.verdict in (Verdict.STRONG_OK.value, Verdict.WEAK_OK.value):
