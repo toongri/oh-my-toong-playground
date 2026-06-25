@@ -15,7 +15,7 @@ help:
 	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
 	@echo "  make pull-dry PROJ=<name> - 풀백 미리보기 (실제 변경 없음)"
 
-sync: validate validate-tests install-frozen
+sync: validate validate-tests
 	@bun run tools/sync.ts
 
 install-frozen:
@@ -24,7 +24,7 @@ install-frozen:
 sync-dry: validate
 	@bun run tools/sync.ts --dry-run
 
-validate: validate-schema validate-components validate-lib-imports typecheck
+validate: install-frozen validate-schema validate-components validate-lib-imports typecheck
 	@bun -e 'process.exit(Bun.semver.satisfies(Bun.version, ">=$(BUN_MIN)") ? 0 : 1)' \
 	  || { printf '\033[0;31m[ERROR]\033[0m bun >= $(BUN_MIN) 필요 (현재: %s)\n' "$$(bun --version)" >&2; exit 1; }
 
