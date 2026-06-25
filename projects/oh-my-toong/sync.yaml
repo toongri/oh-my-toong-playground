@@ -14,6 +14,7 @@ agents:
     - chunk-reviewer
     - code-reviewer
     - sisyphus-junior
+    - hermes
 
 skills:
   items:
@@ -25,6 +26,8 @@ skills:
     - component: goal
       platforms: [claude]
     - component: ultraresearch
+      platforms: [claude]
+    - component: insane-browsing
       platforms: [claude]
     - agent-council
     - clarify
