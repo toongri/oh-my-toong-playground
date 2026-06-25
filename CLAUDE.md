@@ -197,7 +197,7 @@ No vendor artifacts are committed to this repository. Instead, `make sync` bundl
 
 Enforcement is wired into the make targets — do not reimplement inline:
 
-- **Bare-import guard** (`make validate`): rejects any source file that contains a bare `import 'pkg'` for a package that is NOT declared in `package.json`. A declared package passes; a sub-path import of a declared package is still rejected.
+- **Bare-import guard** (`make validate`): scans the deployed surface — `lib/` and the component dirs (`hooks/`, `skills/`, `scripts/`, `agents/`, `commands/`, `rules/`), plus `projects/*/` equivalents — and rejects a bare `import 'pkg'` for a package NOT declared in `package.json`. `tools/` is exempt (npm imports are legal there, where `node_modules` exists), and `*.test.ts` / `*.d.ts` files are skipped. A declared package passes; a sub-path import of a declared package is still rejected.
 - **`bun.lock` integrity**: version pins and sha512 checksums are committed; `bun install --frozen-lockfile` enforces them.
 
 ### Cross-Runtime Caveat
