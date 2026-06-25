@@ -1,4 +1,6 @@
 hooks:
+  SessionStart:
+    - component: codegraph-init.sh
   PreCompact:
     - component: pre-compact.sh
       timeout: 1200
