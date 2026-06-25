@@ -49,3 +49,10 @@ mcps:
       - "--prefer-offline"
       - "-y"
       - "@playwright/mcp@0.0.76"
+  # codegraph local code-graph MCP (Tree-sitter -> SQLite call graph; 100% local, no API key).
+  # Requires per-machine binary (`npm i -g @colbymchenry/codegraph`) and per-repo `codegraph init` to build the index.
+  codegraph:
+    command: codegraph
+    args:
+      - "serve"
+      - "--mcp"
