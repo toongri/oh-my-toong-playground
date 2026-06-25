@@ -11,7 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from engine import executor  # noqa: E402
 from engine.validators import Verdict  # noqa: E402
 
-REQUESTED_URL = "https://example.com/article"
+# Literal public IP (not a hostname) so the executor's final_url SSRF re-check
+# classifies it with no live DNS — matching the curl_probe tests' convention.
+REQUESTED_URL = "https://93.184.216.34/article"
 
 
 def _envelope(status: int, final_url: str, html: str) -> str:
@@ -44,7 +46,7 @@ class ExecutorEnvelope(unittest.TestCase):
         self.assertNotIn(att.verdict, (Verdict.STRONG_OK.value, Verdict.WEAK_OK.value))
 
     def test_attempt_final_url_from_envelope(self) -> None:
-        final_url = "https://example.com/final-after-redirect"
+        final_url = "https://93.184.216.34/final-after-redirect"
         env = _envelope(200, final_url, "<html><article>ok</article></html>")
         att, _content = _run_with_envelope(env)
 
