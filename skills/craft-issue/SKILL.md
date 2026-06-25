@@ -129,7 +129,7 @@ The ONLY thing that defers child creation when the gate fires is an **explicit c
 | "Creating them now is premature noise on the board" | Children land in Backlog, not the active cycle. The un-buildable mega-issue is the noise. |
 | "Boundaries will shift, I'd be reworking them" | Boundaries are the N (Negotiable) in INVEST; a later merge/split of a child is a cheap, normal PM edit. Deferring is the expensive state. |
 | "I'll put the slices in the parent body and offer to create them later" | The body proposal IS the failure mode. Create the issues; the parent body holds shared context, not a slice menu. |
-| "Stage 5 'slice' is just the literal reading; upper gates block it" | Refuse-to-file gates the *content of a write*, not the *existence of children*. The slice gate firing mandates the children; an open decision rides in a Decisions Needed entry. |
+| "Stage 5 'slice' is just the literal reading; upper gates block it" | The inline gates decide *whether* you write at all: when refuse-to-file or a duplicate fires, you refuse the whole write — children included — until the missing evidence is supplied. They never license writing one *un-sliced* issue: a write that clears them and is still large must be sliced into children. |
 | "Creating issues is irreversible, so defer when info-poor" | Child issues are reversible (cancel/merge). Deferring leaves the requirement un-actionable — that is the irreversible-feeling cost. Reversibility argues FOR creating. |
 
 ### Red Flags — STOP, you are deferring a required slice
