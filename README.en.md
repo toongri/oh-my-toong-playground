@@ -54,7 +54,7 @@ The details of the library's skills (33), agents (11), and commands (2) live und
 | [Review/Quality](docs/skills/review-quality.en.md) | code-review · orchestrate-review · design-review · slides-review · qa · performance-optimizer |
 | [Authoring/Utilities](docs/skills/authoring.en.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [Knowledge Graph (pins)](docs/skills/knowledge-graph-pins.en.md) | pins knowledge graph — pin-setup · record · query · audit · wrap-up |
-| [Utilities & Personal Workflows](docs/skills/utilities-personal.en.md) | hud · using-maestro + resume · jd · mock-interview, etc. |
+| [Utilities & Personal Workflows](docs/skills/utilities-personal.en.md) | hud · resume · jd · mock-interview, etc. |
 | [Private Fork Management](docs/PRIVATE-FORK-MANAGEMENT.en.md) | Operating a private fork — mirroring upstream and continuous sync |
 | [Orchestration Guide](docs/ORCHESTRATION.en.md) | prometheus → sisyphus workflow and usage |
 

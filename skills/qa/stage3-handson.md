@@ -141,7 +141,7 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 ### Procedure
 
-Before proceeding, load the `using-maestro` skill (via the Skill tool) — it encodes the authoring principles (stable selectors, state isolation, condition-based waits) used in subsequent steps.
+Mobile/RN E2E verification runs on Maestro, which exposes two surfaces. Use the **Maestro MCP** for interactive inspection while authoring or debugging a flow (e.g. `inspect_screen`, `take_screenshot`); use the **Maestro CLI** for the deterministic, evidence-producing runs in the steps below (`maestro test --format junit --output`). Do not drive both against the same device at once — they both bind port 7001 and collide (maestro issue #2921). When authoring or repairing a `.maestro` flow, keep it deterministic: stable selectors (id/text, not coordinates), condition-based waits (`extendedWaitUntil`, never fixed sleeps), and per-run state isolation (`clearState`).
 
 1. Ensure `maestro` is installed (`maestro --version`); for iOS, Xcode + iOS Simulator; for Android, Android SDK + emulator
 2. Boot the target simulator/emulator before the test:
@@ -159,7 +159,7 @@ Before proceeding, load the `using-maestro` skill (via the Skill tool) — it en
      SECONDS=0; until adb -s "$ANDROID_SERIAL" get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
      SECONDS=0; until [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
      ```
-3. Run the flow with explicit device binding and output path. `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/<task-slug>/maestro-<flow>.xml`):
+3. Run the flow with explicit device binding and output path (`.maestro/<flow>.yaml` is Maestro's repo-root default; point at the project's actual flow path if it stores flows elsewhere). `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/<task-slug>/maestro-<flow>.xml`):
    - iOS: `maestro --device "$IOS_UDID" test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
    - Android: `maestro --device "$ANDROID_SERIAL" test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
    Device binding is mandatory even in single-device sessions to keep evidence deterministic across parallel runs.

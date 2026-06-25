@@ -229,4 +229,4 @@ Session end    →  pin-wrap-up: whole-session review, record refined entities
 - [Core Pipeline Skills](./core-pipeline.en.md) — prometheus / sisyphus / argus
 - [Review Quality Skills](./review-quality.en.md) — code-review / design-review
 - [Authoring Skills](./authoring.en.md) — technical-writing / humanizer
-- [Personal Utility Skills](./utilities-personal.en.md) — hud / using-maestro / mock-interview
+- [Personal Utility Skills](./utilities-personal.en.md) — hud / mock-interview

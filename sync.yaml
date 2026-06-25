@@ -12,7 +12,6 @@ skills:
       platforms: [claude]
     - component: pin-setup
       platforms: [claude]
-    - using-maestro
     - mock-interview
     - scan-pdf-to-notes
     - component: goal
