@@ -72,16 +72,16 @@ test("C2: path-only reference using realPath spelling also does not suppress rul
 });
 
 // ---------------------------------------------------------------------------
-// Positive case: rule body + hash marker present → still suppressed (regression guard)
+// Positive case: rule body + XML open tag present → still suppressed (regression guard)
 // ---------------------------------------------------------------------------
 
-test("body and hash marker present → rule is suppressed (treated as injected)", () => {
+test("body and XML open tag present → rule is suppressed (treated as injected)", () => {
 	const rule = makeRule();
-	const marker = ruleMarkerLine(rule.path, rule.contentHash);
+	const openTag = ruleMarkerLine(rule.path);
 	const transcriptText = [
-		marker,
-		"",
+		openTag,
 		rule.body,
+		"</rules>",
 	].join("\n");
 
 	const markInjectedCalls: LoadedRule[] = [];
@@ -104,8 +104,8 @@ test("CRLF-bodied rule already present in LF-normalised transcript is NOT re-inj
 	const rule = makeRule({ body: crlfBody });
 	// The transcript contains the body as it was previously injected (LF-only, trimmed).
 	const lfBody = "# Coding Discipline\n\nDo not touch anything you must not touch.";
-	const marker = ruleMarkerLine(rule.path, rule.contentHash);
-	const transcriptText = [marker, "", lfBody].join("\n");
+	const openTag = ruleMarkerLine(rule.path);
+	const transcriptText = [openTag, lfBody, "</rules>"].join("\n");
 
 	const markInjectedCalls: LoadedRule[] = [];
 	const pending = filterRulesNotInTranscriptText([rule], transcriptText, (r) => markInjectedCalls.push(r));
@@ -122,7 +122,7 @@ test("CRLF-bodied rule already present in LF-normalised transcript is NOT re-inj
 
 test("empty-body rule is never treated as injected (pending always)", () => {
 	const rule = makeRule({ body: "" });
-	const transcriptText = ruleMarkerLine(rule.path, rule.contentHash) + "\n\n";
+	const transcriptText = ruleMarkerLine(rule.path) + "\n</rules>\n";
 
 	const markInjectedCalls: LoadedRule[] = [];
 	const pending = filterRulesNotInTranscriptText([rule], transcriptText, (r) => markInjectedCalls.push(r));

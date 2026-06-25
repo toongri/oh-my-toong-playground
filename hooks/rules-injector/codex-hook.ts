@@ -256,7 +256,7 @@ export async function runPostToolUseHook(
 	// A rule whose marker falls past the clamp must stay pending so the next turn re-injects it.
 	const limitedBlock = limitAdditionalContextText(block.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim());
 	for (const rule of emittedRules) {
-		if (limitedBlock.includes(ruleMarkerLine(rule.path, rule.contentHash))) {
+		if (limitedBlock.includes(ruleMarkerLine(rule.path))) {
 			engine.markDynamicInjected(rule);
 		}
 	}

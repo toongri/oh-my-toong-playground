@@ -210,10 +210,12 @@ test("P1 dynamic block header matches the surviving emitted rule's target after 
 	writeFileSync(join(projectDir, "src", "target-a.ts"), "const a = 1;\n");
 	writeFileSync(join(projectDir, "src", "target-b.ts"), "const b = 1;\n");
 
-	// Budget of 200 chars: rule A's body + its per-rule pre-truncation + the truncation
-	// notice together still exceed the body budget that remains after deducting rule A's
-	// ~160-char header, so truncateBudget returns empty for rule A (it is dropped).
-	// Rule B's 14-char body fits easily in the remaining budget.
+	// Budget of 75 chars: with 2 rules, perRuleResultChars = floor(75/2) = 37.
+	// Rule A's per-rule cap is min(4000, 37) = 37 chars, but the truncation notice
+	// (~46 chars) is longer than 37 → truncateRule returns "" for rule A.
+	// Rule A's XML header = "<rules name=\"rule-a\">\n\n</rules>" = 31 chars.
+	// bodyBudget for A = 75 - 31 = 44; truncateBudget([{body:""}], 44) → dropped.
+	// Rule B's body ("RULE_B_MARKER", 13 chars) fits in the remaining budget. ✓
 	const result = spawnSync(
 		"bun",
 		["run", CLI_PATH, "hook", "post-tool-use"],
@@ -236,10 +238,9 @@ test("P1 dynamic block header matches the surviving emitted rule's target after 
 				HOME: tempHome,
 				PI_RULES_DISABLE_BUNDLED: "1",
 				PLUGIN_DATA: join(tempHome, ".omt"),
-				// budget=200: rule A's header (~160 chars) leaves ~40 chars for its body;
-				// truncation notice is longer than 40 → rule A is dropped. Rule B's small
-				// body ("RULE_B_MARKER") fits fine in the still-full remaining budget.
-				CODEX_RULES_MAX_RESULT_CHARS: "200",
+				// budget=75: drops rule A (per-rule cap < truncation notice),
+				// but leaves enough for rule B's 13-char body.
+				CODEX_RULES_MAX_RESULT_CHARS: "75",
 			},
 			encoding: "utf8",
 		},
