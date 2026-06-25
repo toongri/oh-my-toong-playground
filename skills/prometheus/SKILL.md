@@ -387,17 +387,14 @@ adversarial — its job is to falsify the lane's claims, not confirm them.
 
 **On Complex intent**, the planner runs that same falsification **inline** — no verifier subagent:
 treat each finding as a claim to disprove, re-read or re-grep the cited evidence yourself, then apply
-the per-finding schema + Exclusion rule directly. Zero spawns. (Inline suits Complex's smaller finding
-count; Architecture keeps the delegated verifier because its independent re-read is what catches a
-collector that misread or cited a `nonexistent_path`.)
+the per-finding schema + Exclusion rule directly. Zero spawns.
 
-The verdict schema, Exclusion rule, no-op path, and 4-key checklist below apply to both paths — only
-the actor (planner inline vs delegated verifier) differs.
-
-Each verifier inspects **every finding** in its lane and returns a **per-finding** verdict against
-this schema (a deliberate divergence from the Review Pipeline's `CONFIRMED/PLAUSIBLE/REFUTED` ladder
-— only the dispatch mechanics are reused, NOT the verdict vocabulary). A lane may contain one or
-several findings; the verifier emits one schema record per finding, not a single lane-level summary:
+The schema, Exclusion rule, no-op path, and 4-key checklist below are one shared procedure both paths
+run — only the actor differs (delegated verifier vs inline planner). The actor inspects **every
+finding** in its lane and returns a **per-finding** verdict against this schema (a deliberate divergence
+from the Review Pipeline's `CONFIRMED/PLAUSIBLE/REFUTED` ladder — only the dispatch mechanics are
+reused, NOT the verdict vocabulary). A lane may contain one or several findings; the actor emits one
+schema record per finding, not a single lane-level summary:
 
 ```
 { verdict, evidence, confidence ∈ {high, medium, low} }
@@ -421,11 +418,9 @@ grounding proceeds.
 The `verify lane: <mode> / N lanes / M excluded` line in the Phase-1 Evidence block makes this
 stage **visible-or-violation** — the verify stage must be reported there exactly as the
 `explore dispatched THIS session` line is, so a skipped verify lane surfaces as a missing Evidence
-line, not a silent omission. `<mode>` is **`inline`** for Complex (planner self-QA) or **`dispatched`**
-for Architecture (delegated verifiers); all collect lanes empty records `no-op`. Note the unit
-difference: **N counts lanes** (one per non-empty collect lane — falsified inline at Complex, dispatched
-to a verifier at Architecture), **M counts individual findings** excluded across all lanes (the two
-units are independent and will often differ).
+line, not a silent omission. `<mode>` is the actor that ran (`inline` / `dispatched` / `no-op`). Note
+the unit difference: **N counts lanes** (one per non-empty collect lane), **M counts individual
+findings** excluded across all lanes (the two units are independent and will often differ).
 
 #### Adversarial evidence keys (#13 vocabulary)
 

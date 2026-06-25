@@ -124,18 +124,14 @@ Collect the five results as five named lanes before moving to the verify step.
 
 How the collect lanes are falsified splits by intent (see SKILL.md `#### Collect→verify contract`).
 
-**On Architecture intent**, dispatch one **falsifying verifier** subagent per non-empty lane. Mirrors
-the code-review per-candidate isolation model: each verifier reads the actual files and returns a
-**per-finding** verdict against the SKILL.md schema — `corroborated` (finding stands) or `refuted`
-(does not hold). Only the dispatch mechanics are reused, NOT the Review Pipeline's
-CONFIRMED/PLAUSIBLE/REFUTED verdict vocabulary. Verifiers are foreground and parallel; dispatch all
-non-empty lanes in ONE response.
+**On Architecture intent**, dispatch one **falsifying verifier** subagent per non-empty lane —
+foreground, parallel, all non-empty lanes in ONE response — using the template below. Each verifier
+returns the per-finding verdict schema (`confidence` included); verdict semantics and the
+vocabulary-divergence rule live in SKILL.md.
 
-**On Complex intent**, do NOT dispatch verifiers — the planner falsifies each lane inline: treat each
-finding as a claim to disprove, **re-read or re-grep the cited `file:line` evidence yourself**, apply
-the 4-key checklist, and emit the same per-finding record (`verdict`, `evidence`, `confidence`, `keys`)
-directly. Then apply the Exclusion rule below. Zero spawns; use the dispatch template below only as
-your inline rubric.
+**On Complex intent**, do NOT dispatch verifiers — the planner falsifies each lane inline, using the
+template below as its rubric: **re-read or re-grep the cited `file:line` evidence yourself**, emit the
+same per-finding record directly, then apply the Exclusion rule. Zero spawns.
 
 For each lane (Architecture path), interpolate the placeholders before dispatching:
 
