@@ -30,7 +30,7 @@ claude mcp add playwright -- npx @playwright/mcp@latest
    또는
    browser_evaluate    (특정 셀렉터 데이터 추출)
    또는
-   browser_run_code    (스크롤/페이지네이션)
+   browser_run_code_unsafe    (스크롤/페이지네이션)
 ```
 
 ### 도구별 용도
@@ -39,7 +39,7 @@ claude mcp add playwright -- npx @playwright/mcp@latest
 |------|------|
 | `browser_snapshot` | 접근성 트리 반환 — 텍스트+인터랙티브 요소 구조화. 가장 빠르고 토큰 효율적 |
 | `browser_evaluate` | `() => document.querySelector(...).innerText` 등 JS 평가 |
-| `browser_run_code` | `async ({ page }) => {...}` 풀 자동화 — 무한 스크롤, 다단계 인터랙션 |
+| `browser_run_code_unsafe` | `async ({ page }) => {...}` 풀 자동화 — 무한 스크롤, 다단계 인터랙션 |
 | `browser_network_requests` | XHR/fetch 호출 목록 — **WAF 뒤 진짜 API 엔드포인트 발견용** (→ curl_cffi로 직접 호출) |
 | `browser_console_messages` | JS 에러/로그 |
 
@@ -66,7 +66,7 @@ npx playwright install chrome
 ### 호출 (engine 내부)
 
 ```python
-from insane_search.engine.executor import run_playwright_fallback
+from engine.executor import run_playwright_fallback
 
 attempt, html = run_playwright_fallback(
     "https://example.com/path",

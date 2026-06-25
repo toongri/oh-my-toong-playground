@@ -59,4 +59,4 @@ gh issue list --repo owner/repo --json number,title --jq '.[] | "\(.number): \(.
 |-----|------|------|
 | gh CLI | agent-reach | Git 操作 |
 | zread | my-mcp-tools | 读仓库内容 |
-| context7 | my-mcp-tools | 查技术文档 |
+| context7 | mcp__plugin_context7 | 查技术文档 |
