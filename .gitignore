@@ -4,6 +4,7 @@
 # ai
 .serena/
 .claude/
+.codegraph/
 .superset/
 .playwright-mcp/
 
