@@ -1,6 +1,6 @@
 BUN_MIN := 1.2.21
 
-.PHONY: sync sync-dry validate validate-schema validate-components validate-lib-imports validate-tests typecheck test pull pull-dry help
+.PHONY: sync sync-dry install-frozen validate validate-schema validate-components validate-lib-imports validate-tests typecheck test pull pull-dry help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -15,8 +15,11 @@ help:
 	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
 	@echo "  make pull-dry PROJ=<name> - 풀백 미리보기 (실제 변경 없음)"
 
-sync: validate validate-tests
+sync: validate validate-tests install-frozen
 	@bun run tools/sync.ts
+
+install-frozen:
+	@bun install --frozen-lockfile
 
 sync-dry: validate
 	@bun run tools/sync.ts --dry-run
