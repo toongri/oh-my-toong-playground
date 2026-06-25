@@ -42,9 +42,11 @@ describe('SKILL.md presence — verify-lane tokens', () => {
     expect(skillContent).toContain('falsifying verifier');
   });
 
-  it('P3: verify lane: Evidence-block list-marker line (intent-split mode placeholder)', () => {
+  it('P3: verify lane: Evidence-block list-marker line (mixed Complex mode placeholder)', () => {
+    // The template now expresses the mixed Complex case: codebase lanes inline
+    // + external lane dispatched when present. Old single-mode form is gone.
     expect(skillContent).toContain(
-      '- verify lane: <inline (Complex) | dispatched (Architecture)> / N lanes / M excluded',
+      '- verify lane: <inline (codebase) + dispatched (external) (Complex with external lane) | inline (Complex, no external lane) | dispatched (Architecture)> / N lanes / M excluded',
     );
   });
 
@@ -321,6 +323,63 @@ describe('interview.md P2-B — per-finding schema and {LANE_FINDINGS} guard', (
     // Guards the Complex half of the intent-split alongside the Architecture half above (P2-B-I4).
     // Deleting the Complex inline-falsification prose from interview.md turns this RED.
     expect(interviewContent).toContain('do NOT dispatch verifiers');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Option A invariant: external lane is ALWAYS delegated (Complex and
+// Architecture alike). The planner never inline-reads external evidence.
+//
+// Presence tests: distinctive new clauses that must appear after the fix.
+// Absence tests: old "inline at Complex" phrasing for the external lane must
+// be gone — if someone reverts to external-inline, the absence half goes RED.
+// ---------------------------------------------------------------------------
+
+describe('Option A — external lane always delegated (SKILL.md + interview.md)', () => {
+  it('OA-P1: SKILL.md — external lane keeps delegated verifier at Complex (new clause)', () => {
+    // Guards the core Option A invariant in SKILL.md: the external lane is
+    // delegated even on Complex intent. Reverting to all-inline-at-Complex
+    // removes this phrase and turns this RED.
+    // Anchors on the single-line portion of the new clause (line 392 of SKILL.md):
+    // the full clause spans two lines, so we pin the distinctive single-line tail.
+    expect(skillContent).toContain(
+      'delegated falsifying-verifier subagent (Complex and Architecture alike)',
+    );
+  });
+
+  it('OA-P2: interview.md — external lane always delegated verifier subagent (new clause)', () => {
+    // Guards the Option A invariant in interview.md: the EXTERNAL collect lane
+    // is always falsified by a delegated verifier, not inline at Complex.
+    // Reverting to "(inline at Complex, delegated at Architecture)" removes this
+    // phrase and turns this RED.
+    expect(interviewContent).toContain(
+      'always falsified by a delegated verifier subagent (Complex and Architecture alike)',
+    );
+  });
+
+  it('OA-A1: interview.md — old "inline at Complex" external-lane phrasing is gone', () => {
+    // The stale phrase that made the external lane inline at Complex.
+    // Must be absent after the fix; if it survives, Option A is incomplete.
+    expect(interviewContent).not.toContain(
+      'inline at Complex, delegated at Architecture',
+    );
+  });
+
+  it('OA-A2: SKILL.md — codebase inline rule is now explicitly scoped (not unqualified "inline — no verifier subagent")', () => {
+    // The old unqualified phrase applied to ALL lanes. After the fix the rule
+    // is scoped to codebase lanes only. The unqualified form must be gone.
+    expect(skillContent).not.toContain(
+      'planner runs that same falsification inline — no verifier subagent',
+    );
+  });
+
+  it('OA-A3: SKILL.md — old Evidence-block template single-mode form is gone', () => {
+    // The old template used <inline (Complex) | dispatched (Architecture)> — a
+    // single-actor form that could not represent the mixed Complex case.
+    // After the fix it must be gone; the new mixed-mode form replaces it.
+    expect(skillContent).not.toContain(
+      '<inline (Complex) | dispatched (Architecture)>',
+    );
   });
 });
 
