@@ -99,7 +99,7 @@ async function main() {
     });
     const page = await ctx.newPage();
     const navTimeout = Math.min(timeoutMs, 90000);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
 
     if (waitSelector) {
       try {
@@ -110,7 +110,8 @@ async function main() {
     }
 
     const html = await page.content();
-    process.stdout.write(html);
+    const status = response ? response.status() : 0;
+    process.stdout.write(JSON.stringify({ status, final_url: page.url(), html }));
     process.exitCode = 0;
     return;
   } catch (e) {

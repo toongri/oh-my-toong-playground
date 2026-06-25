@@ -154,9 +154,9 @@ def _score_profile(profile_id: str, profile: dict, resp) -> Optional[DetectionHi
     for hit in _match_patterns(list(headers.keys()), header_pats):
         signals.append(f"header:{hit}")
 
-    # Server substring
+    # Server substring — lowercase both sides so mixed-case headers match (F22)
     for needle in detectors.get("server_contains") or []:
-        if needle.lower() in server:
+        if needle.lower() in server.lower():
             signals.append(f"server:{needle}")
 
     # Body markers
