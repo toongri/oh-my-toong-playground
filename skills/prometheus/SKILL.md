@@ -341,7 +341,7 @@ Phase 1 ritual (context loading + explore + librarian) is invisible by default �
 - Context files loaded: <list each Read path, or "missing — skipped per Graceful skip rule">
 - explore dispatched THIS session: <Agent invocation reference, or "N/A — intent is Trivial/Scoped without explore need">
 - librarian dispatched THIS session: <Agent invocation reference, or "N/A — Architecture, or Complex with design surface, not present; intent is Trivial/Scoped, or a purely mechanical refactor">
-- verify lane: dispatched / N lanes / M excluded <or "no-op / 0 lanes / 0 excluded" when all collect lanes are empty (Complex/Architecture with no findings) | "N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)">
+- verify lane: <inline (Complex) | dispatched (Architecture)> / N lanes / M excluded <or "no-op / 0 lanes / 0 excluded" when all collect lanes are empty | "N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)">
 - Results received and assimilated: <Y/N — Y requires both summary read and key findings noted>
 ```
 
@@ -371,9 +371,12 @@ collect lane scoped to its aspect. The aspect set is closed: you do not add, dro
 When the librarian default lane is present (per `### Subagent Use During Interview`), it runs in the
 same parallel response as a sixth, external collect lane alongside the 5 aspect lanes.
 
-#### Collect→verify contract (falsifying verifier)
+#### Collect→verify contract (intent-split: Complex inline, Architecture delegated)
 
-After collect, every non-empty **collect lane** is handed to its own **falsifying verifier** — one
+After collect, every non-empty **collect lane** is falsified before its findings reach grounding. How
+the falsification runs splits by intent:
+
+**On Architecture intent**, each non-empty lane is handed to its own **falsifying verifier** — one
 verifier per non-empty lane (the 5 explore aspect lanes + the librarian external lane when present),
 dispatched in **ONE parallel response**. The dispatch mechanics mirror the per-candidate verifier of
 the Review Pipeline's finder-verifier pattern: each verifier is interpolated with its own lane's
@@ -381,6 +384,15 @@ findings, dispatched in a single parallel response, and **scoped to its matched 
 request only — NEVER the full aggregate**. Per-lane isolation is deliberate: it keeps each judgment
 free of the other lanes' framing (no cross-lane anchoring) and makes the verifier structurally
 adversarial — its job is to falsify the lane's claims, not confirm them.
+
+**On Complex intent**, the planner runs that same falsification **inline** — no verifier subagent:
+treat each finding as a claim to disprove, re-read or re-grep the cited evidence yourself, then apply
+the per-finding schema + Exclusion rule directly. Zero spawns. (Inline suits Complex's smaller finding
+count; Architecture keeps the delegated verifier because its independent re-read is what catches a
+collector that misread or cited a `nonexistent_path`.)
+
+The verdict schema, Exclusion rule, no-op path, and 4-key checklist below apply to both paths — only
+the actor (planner inline vs delegated verifier) differs.
 
 Each verifier inspects **every finding** in its lane and returns a **per-finding** verdict against
 this schema (a deliberate divergence from the Review Pipeline's `CONFIRMED/PLAUSIBLE/REFUTED` ladder
@@ -406,11 +418,13 @@ not a verifier's.
 nothing to falsify, the `verify lane:` Evidence line records `no-op / 0 lanes / 0 excluded`, and
 grounding proceeds.
 
-The `verify lane: dispatched / N lanes / M excluded` line in the Phase-1 Evidence block makes this
+The `verify lane: <mode> / N lanes / M excluded` line in the Phase-1 Evidence block makes this
 stage **visible-or-violation** — the verify stage must be reported there exactly as the
 `explore dispatched THIS session` line is, so a skipped verify lane surfaces as a missing Evidence
-line, not a silent omission. Note the unit difference: **N counts lanes** (one per non-empty collect
-lane dispatched to a verifier), **M counts individual findings** excluded across all lanes (the two
+line, not a silent omission. `<mode>` is **`inline`** for Complex (planner self-QA) or **`dispatched`**
+for Architecture (delegated verifiers); all collect lanes empty records `no-op`. Note the unit
+difference: **N counts lanes** (one per non-empty collect lane — falsified inline at Complex, dispatched
+to a verifier at Architecture), **M counts individual findings** excluded across all lanes (the two
 units are independent and will often differ).
 
 #### Adversarial evidence keys (#13 vocabulary)

@@ -42,8 +42,14 @@ describe('SKILL.md presence — verify-lane tokens', () => {
     expect(skillContent).toContain('falsifying verifier');
   });
 
-  it('P3: verify lane: Evidence-block list-marker line (replaces success-output checklist)', () => {
-    expect(skillContent).toContain('- verify lane: dispatched / N lanes / M excluded');
+  it('P3: verify lane: Evidence-block list-marker line (intent-split mode placeholder)', () => {
+    expect(skillContent).toContain(
+      '- verify lane: <inline (Complex) | dispatched (Architecture)> / N lanes / M excluded',
+    );
+  });
+
+  it('P3-A: old mode-less verify lane line is gone (intent-split replaces it)', () => {
+    expect(skillContent).not.toContain('- verify lane: dispatched / N lanes / M excluded');
   });
 
   it('P4: stale_state key (additive)', () => {

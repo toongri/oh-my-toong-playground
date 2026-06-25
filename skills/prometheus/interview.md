@@ -120,17 +120,24 @@ Collect the five results as five named lanes before moving to the verify step.
 
 ---
 
-### Phase-1 verify-lane falsifying verifier (per lane)
+### Phase-1 verify lane (intent-split: Complex inline, Architecture delegated)
 
-After collecting all lanes, dispatch one **falsifying verifier** subagent per non-empty lane.
-Mirrors the code-review per-candidate isolation model: each verifier reads the actual files and
-returns a **per-finding** verdict against the SKILL.md schema — each finding in the lane gets one
-record whose verdict is `corroborated` (finding stands) or `refuted` (finding does not hold).
-This is a deliberate divergence from the Review Pipeline's
-CONFIRMED/PLAUSIBLE/REFUTED ladder: only the dispatch mechanics are reused, NOT the verdict
-vocabulary. Verifiers are foreground and parallel; dispatch all non-empty lanes in ONE response.
+How the collect lanes are falsified splits by intent (see SKILL.md `#### Collect→verify contract`).
 
-For each lane, interpolate the placeholders before dispatching:
+**On Architecture intent**, dispatch one **falsifying verifier** subagent per non-empty lane. Mirrors
+the code-review per-candidate isolation model: each verifier reads the actual files and returns a
+**per-finding** verdict against the SKILL.md schema — `corroborated` (finding stands) or `refuted`
+(does not hold). Only the dispatch mechanics are reused, NOT the Review Pipeline's
+CONFIRMED/PLAUSIBLE/REFUTED verdict vocabulary. Verifiers are foreground and parallel; dispatch all
+non-empty lanes in ONE response.
+
+**On Complex intent**, do NOT dispatch verifiers — the planner falsifies each lane inline: treat each
+finding as a claim to disprove, **re-read or re-grep the cited `file:line` evidence yourself**, apply
+the 4-key checklist, and emit the same per-finding record (`verdict`, `evidence`, `confidence`, `keys`)
+directly. Then apply the Exclusion rule below. Zero spawns; use the dispatch template below only as
+your inline rubric.
+
+For each lane (Architecture path), interpolate the placeholders before dispatching:
 
 ```
 Agent(subagent_type="general-purpose", prompt="You are an adversarial falsifying verifier for a single Phase-1 collect lane. Your job is to read the actual codebase evidence and try to falsify each lane finding — assume every finding is wrong until the cited code forces you to corroborate it.
@@ -184,7 +191,7 @@ Agent(subagent_type="librarian", prompt="I am planning {REQUEST_SUMMARY}. Extern
 ```
 
 Dispatch this in the same parallel response as the Phase-1 multi-aspect fan-out explore (above).
-Its results form the EXTERNAL collect lane, which is subject to the same falsifying verifier step.
+Its results form the EXTERNAL collect lane, which is falsified by the same verify lane (inline at Complex, delegated at Architecture).
 
 ---
 
