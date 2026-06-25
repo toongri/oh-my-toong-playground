@@ -1,7 +1,10 @@
 import fs from "fs/promises";
 import path from "path";
 
-export const DEFAULT_EXCLUDE = ["*.test.ts", "__pycache__", ".pytest_cache", "*.pyc"];
+/** Python cache patterns that are always excluded, regardless of any caller-supplied list. */
+export const PY_CACHE_EXCLUDE = ["__pycache__", ".pytest_cache", "*.pyc"];
+
+export const DEFAULT_EXCLUDE = [...PY_CACHE_EXCLUDE, "*.test.ts"];
 
 /**
  * Checks if a filename matches any of the given glob-style exclude patterns.
@@ -139,7 +142,9 @@ export async function syncDirectory(
   target: string,
   options?: { exclude?: string[]; platformRoot?: string }
 ): Promise<void> {
-  const exclude = options?.exclude ?? DEFAULT_EXCLUDE;
+  // PY_CACHE_EXCLUDE is always prepended so callers that supply a custom list
+  // (e.g. { exclude: ["*.test.ts"] }) do not accidentally lose Python cache pruning.
+  const exclude = [...PY_CACHE_EXCLUDE, ...(options?.exclude ?? ["*.test.ts"])];
   const platformRoot = options?.platformRoot;
 
   // 1. Ensure target directory exists

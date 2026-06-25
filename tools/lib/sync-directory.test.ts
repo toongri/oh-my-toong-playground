@@ -152,6 +152,36 @@ describe("syncDirectory", () => {
       expect(await exists(path.join(tgt, "pkg/__pycache__"))).toBe(false);
       expect(await exists(path.join(tgt, "pkg/__pycache__/sub.cpython-312.pyc"))).toBe(false);
     });
+
+    it("prunes python cache even when custom exclude is passed", async () => {
+      // Regression: callers like claude.ts pass { exclude: ["*.test.ts"] }.
+      // Under the old `?? DEFAULT_EXCLUDE` logic this REPLACES DEFAULT_EXCLUDE,
+      // so __pycache__/.pytest_cache/*.pyc are no longer excluded. The fix must
+      // always union PY_CACHE_EXCLUDE with the caller's list.
+      await writeFile(path.join(src, "script.sh"), "#!/bin/bash\necho hi");
+      await writeFile(path.join(src, "helper.ts"), "export const x = 1;");
+      await writeFile(path.join(src, "helper.test.ts"), "import './helper.ts'");
+      await writeFile(path.join(src, "__pycache__/mod.cpython-312.pyc"), "bytecode");
+      await writeFile(path.join(src, ".pytest_cache/CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55");
+      await writeFile(path.join(src, "pkg/sub.py"), "x = 1");
+      await writeFile(path.join(src, "pkg/__pycache__/sub.cpython-312.pyc"), "bytecode");
+
+      // Custom exclude passed — currently replaces DEFAULT_EXCLUDE (bug).
+      await syncDirectory(src, tgt, { exclude: ["*.test.ts"] });
+
+      // Regular files are still copied.
+      expect(await exists(path.join(tgt, "script.sh"))).toBe(true);
+      expect(await exists(path.join(tgt, "helper.ts"))).toBe(true);
+      expect(await exists(path.join(tgt, "pkg/sub.py"))).toBe(true);
+
+      // Custom exclude still applies.
+      expect(await exists(path.join(tgt, "helper.test.ts"))).toBe(false);
+
+      // Python cache must be pruned regardless of custom exclude.
+      expect(await exists(path.join(tgt, "__pycache__/mod.cpython-312.pyc"))).toBe(false);
+      expect(await exists(path.join(tgt, ".pytest_cache/CACHEDIR.TAG"))).toBe(false);
+      expect(await exists(path.join(tgt, "pkg/__pycache__/sub.cpython-312.pyc"))).toBe(false);
+    });
   });
 
   describe("실행 권한 보존", () => {
