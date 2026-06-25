@@ -12,7 +12,6 @@ import { join } from "node:path";
 import { buildPostCompactReadDirective } from "./post-compact-directive.js";
 import { limitAdditionalContextText } from "./hook-output.js";
 import { runStaticInjection } from "./static-injection.js";
-import { ruleMarkerLine } from "./rules/index.js";
 
 // ---------------------------------------------------------------------------
 // Hermetic scratch dir — each test gets its own
@@ -51,7 +50,6 @@ test("C1: buildPostCompactReadDirective returns emittedPaths containing only pat
 		"\nOperating without these rules is a protocol violation. Reconstructing them from memory is NOT reading. READ THEM ALL. NO EXCUSES.";
 
 	const line1 = `- ${path1}`;
-	const line2 = `- ${path2}`;
 	// Budget: header + footer + line1 + newline separator, but NOT line2.
 	const maxChars = header.length + footer.length + line1.length + 1;
 
@@ -86,23 +84,6 @@ test("C1: buildPostCompactReadDirective returns empty emittedPaths for empty inp
 // a dropped listed rule must NOT appear in staticDedup after recovery (so a subsequent
 // runStaticInjection can re-offer it).
 // ---------------------------------------------------------------------------
-
-function makeLoadedRule(opts: { path: string; body: string; contentHash?: string }): import("./rules/index.js").LoadedRule {
-	const hash = opts.contentHash ?? `hash-${opts.path}`;
-	return {
-		path: opts.path,
-		realPath: opts.path,
-		relativePath: opts.path,
-		source: ".claude/rules" as const,
-		distance: 0,
-		isGlobal: false,
-		isSingleFile: false,
-		frontmatter: { alwaysApply: true },
-		body: opts.body,
-		contentHash: hash,
-		matchReason: "alwaysApply" as const,
-	};
-}
 
 function writeCacheFile(cachePath: string, state: Record<string, unknown>): void {
 	mkdirSync(join(cachePath, ".."), { recursive: true });

@@ -1,3 +1,4 @@
+import { basename, extname } from "node:path";
 import { isNeverTruncatedRule, truncateBudget, truncateRule } from "./truncator.js";
 import type { LoadedRule } from "./types.js";
 
@@ -27,7 +28,6 @@ type TruncatedRule = {
 	path: string;
 	relativePath: string;
 	body: string;
-	contentHash: string;
 };
 
 type NormalizedRule = TruncatedRule & {
@@ -35,91 +35,88 @@ type NormalizedRule = TruncatedRule & {
 };
 
 /**
- * The "Instructions from: <path> [hash:<contentHash>]" marker line emitted ahead
- * of each rule's body. The `[hash:...]` anchor pins the marker to the rule's
- * content version, so a transcript-presence check can tell an unchanged rule
- * (skip) from an edited one whose first 2000 chars happen to be identical
- * (re-inject). Producer (formatRule) and consumers (the transcript filters) MUST
- * build this line through ruleMarkerLine so the emitted and sought markers agree.
+ * The XML open tag emitted ahead of each rule's body.
+ *
+ * Format: `<rules name="${basenameNoExt(path)}">`
+ *
+ * Producer (formatRule) and consumers (transcript filters) MUST build and seek
+ * through ruleMarkerLine so emitted and sought tags always agree.
+ *
+ * lazy: dropping the hash removes version-granularity — accepted consequences:
+ *   (1) An edited rule is NOT recognized as a new version if its open tag already
+ *       appears in the transcript; it will be skipped until session restart.
+ *   (2) Two rules with the same basename in different directories share the same
+ *       `name`, so transcript-presence detection cannot distinguish them. The
+ *       per-session path-keyed staticDedup still prevents double-injection within
+ *       a session; only the transcript-presence layer is affected.
  */
-export function ruleMarkerLine(path: string, contentHash: string): string {
-	return `Instructions from: ${path} [hash:${contentHash}]`;
-}
-
-/** The bare, version-less marker prefix kept for legacy transcripts (pre-anchor emits). */
-function legacyMarker(path: string): string {
-	return `Instructions from: ${path}`;
-}
-
-/** The hash-anchor opening for a given path, used to detect that SOME version marker exists. */
-function hashAnchorPrefix(path: string): string {
-	return `Instructions from: ${path} [hash:`;
+export function ruleMarkerLine(path: string): string {
+	return `<rules name="${basenameNoExt(path)}">`;
 }
 
 /**
- * Decide whether a transcript already carries THIS content version of a rule.
+ * Derive the rule name from a path: take the basename, then strip the last
+ * extension (everything from the final "." onward). If there is no extension,
+ * use the basename as-is.
  *
- * Version semantics (the content-version anchor):
- * - If the transcript carries the exact `Instructions from: <path> [hash:<hash>]`
- *   marker for this version → present.
- * - If the transcript carries a hash-anchored marker for this path but for a
- *   DIFFERENT hash → a different version is in context → NOT present (re-inject).
- * - If the transcript carries only a legacy version-less `Instructions from: <path>`
- *   marker (no `[hash:...]` anchor at all) → fall back to present, since there is
- *   no version information to contradict it.
- *
- * `paths` lists the path spellings to try (e.g. path and realPath).
+ * Examples:
+ *   "coding-discipline.md" → "coding-discipline"
+ *   "foo.test.md"          → "foo.test"
+ *   "CLAUDE"               → "CLAUDE"
  */
-export function transcriptHasRuleVersion(
+function basenameNoExt(path: string): string {
+	// Normalize backslashes first: node's POSIX basename does not split on "\".
+	const base = basename(path.replace(/\\/g, "/"));
+	const ext = extname(base);
+	return ext ? base.slice(0, -ext.length) : base;
+}
+
+/**
+ * Decide whether a transcript already carries the open tag for a rule.
+ *
+ * Name-based presence: returns true when ANY of the given path spellings resolves
+ * to an open tag that appears in the transcript. No hash/version logic — an edited
+ * rule whose open tag is already present is treated as injected (see lazy: note on
+ * ruleMarkerLine for the accepted trade-off).
+ *
+ * `paths` lists the path spellings to try (e.g. path and realPath). Because the
+ * open tag is derived solely from the basename, two paths with the same basename
+ * produce the same tag and are effectively equivalent here.
+ */
+export function transcriptHasRuleMarker(
 	transcriptText: string,
 	paths: ReadonlyArray<string>,
-	contentHash: string,
 ): boolean {
-	if (paths.some((path) => transcriptText.includes(ruleMarkerLine(path, contentHash)))) {
-		return true;
-	}
-	if (paths.some((path) => transcriptText.includes(hashAnchorPrefix(path)))) {
-		// A hash anchor exists for this path but not for this hash → different version.
-		return false;
-	}
-	// Legacy marker check with end-boundary anchor: accept only when the marker is
-	// followed by "\n" or is at end-of-string. This prevents "foo.md" matching inside
-	// "foo.mdc" (next char "c") or "a.md" inside "a.md.bak" (next char ".").
-	return paths.some((path) => {
-		const marker = legacyMarker(path);
-		let idx = transcriptText.indexOf(marker);
-		while (idx !== -1) {
-			const afterIdx = idx + marker.length;
-			if (afterIdx === transcriptText.length || transcriptText[afterIdx] === "\n") {
-				return true;
-			}
-			idx = transcriptText.indexOf(marker, afterIdx);
-		}
-		return false;
-	});
+	return paths.some((path) => transcriptText.includes(ruleMarkerLine(path)));
 }
 
 /**
- * Byte length of the rule's emitted marker line + the "\n\n" separator that
- * precedes each rule's body. Charged to the budget before body bytes so a rule
- * with no remaining body budget is dropped (no header-only ghost block).
- *
- * Charges the FULL hash-anchored marker (the form formatRule actually emits via
- * ruleMarkerLine), so the budget accounting matches the emitted bytes. The hash
- * anchor is ~72 bytes per rule and is real output; charging the version-less
- * marker undercounts and lets blocks exceed maxResultChars.
+ * The closing tag (with its leading newline) that ends every rule's XML envelope.
+ * Single-sourced so formatRule (which emits it) and ruleHeaderLength (which charges
+ * its bytes to the budget) cannot drift apart.
  */
-function ruleHeaderLength(path: string, contentHash: string): number {
-	return `${ruleMarkerLine(path, contentHash)}\n\n`.length;
+const RULE_BLOCK_CLOSE = "\n</rules>";
+
+/**
+ * Byte overhead charged to the budget per emitted rule: everything in the emitted
+ * envelope except the body. The non-empty-body form is
+ * `${openTag}\n${body}${RULE_BLOCK_CLOSE}`, so eliding the body leaves
+ * `${openTag}\n${RULE_BLOCK_CLOSE}` — exactly the bytes computed here.
+ *
+ * Charged before body bytes so a rule with no remaining body budget is dropped
+ * (no open-tag-only ghost block).
+ */
+function ruleHeaderLength(path: string): number {
+	return `${ruleMarkerLine(path)}\n${RULE_BLOCK_CLOSE}`.length;
 }
 
 function formatRule(rule: TruncatedRule): string {
-	const marker = ruleMarkerLine(rule.path, rule.contentHash);
+	const openTag = ruleMarkerLine(rule.path);
 	const body = normalizeRuleBody(rule.body);
 	if (body.length === 0) {
-		return marker;
+		return `${openTag}${RULE_BLOCK_CLOSE}`;
 	}
-	return `${marker}\n\n${body}`;
+	return `${openTag}\n${body}${RULE_BLOCK_CLOSE}`;
 }
 
 /**
@@ -147,13 +144,11 @@ function truncateRules(
 		relativePath: rule.relativePath,
 		body: normalizeRuleBody(rule.body),
 		source: rule.source,
-		contentHash: rule.contentHash,
 	}));
 	const perRuleResultChars = Math.floor(options.maxResultChars / Math.max(1, perRuleNormalized.length));
 	const perRuleBudgeted = perRuleNormalized.map((rule) => ({
 		path: rule.path,
 		relativePath: rule.relativePath,
-		contentHash: rule.contentHash,
 		body: isNeverTruncatedRule(rule.relativePath)
 			? rule.body
 			: truncateRule(rule.body, {
@@ -162,13 +157,13 @@ function truncateRules(
 				}).body,
 	}));
 
-	// Incremental, header-aware admission: charge each rule's REAL (hash-anchored)
-	// header only when that rule is admitted, so earlier candidates' headers never
-	// pre-starve a later rule, and the first rule is always attempted against
-	// maxResultChars minus its OWN header (not minus all candidates' headers).
+	// Incremental, header-aware admission: charge each rule's header only when that
+	// rule is admitted, so earlier candidates' headers never pre-starve a later rule,
+	// and the first rule is always attempted against maxResultChars minus its OWN
+	// header (not minus all candidates' headers).
 	let remaining = options.maxResultChars;
 	const budgetedBodies = perRuleBudgeted.map((rule) => {
-		const headerLen = ruleHeaderLength(rule.path, rule.contentHash);
+		const headerLen = ruleHeaderLength(rule.path);
 		const bodyBudget = remaining - headerLen;
 		const fitted = truncateBudget({
 			rules: [{ body: rule.body, relativePath: rule.relativePath }],
@@ -202,7 +197,6 @@ function truncateRules(
 			path: sourceRule.path,
 			relativePath: budgetedRule.relativePath,
 			body: budgetedRule.body,
-			contentHash: sourceRule.contentHash,
 		});
 		emittedRules.push(originalRule);
 	}

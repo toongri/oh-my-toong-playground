@@ -29,7 +29,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
 | P-23 | Scenario Verification Principle | Scenario Verification Principle Declaration | - |
 | P-24 | Verify-Lane Round | Verify Lane: collect → falsifying verify → refuted exclusion | Phase-1 Grounding |
-| P-25 | Cross-Lane #13 Witness | Adversarial Evidence-Key: key-tag outside the verify lane | D-5 Key Vocabulary |
+| P-25 | Cross-Lane #13 Witness | Adversarial Evidence-Key: key-tag produced INSIDE the external verify lane (cross-lane uniformity across all lane types) | D-5 Key Vocabulary |
 | P-26 | All-Collect-Lanes-Empty No-Op | Verify Lane: valid no-op when every collect lane is empty | Phase-1 Grounding |
 | UC-P1 | End-to-End: Full Planning Pipeline | Full workflow integration | Classification + Interview + Clearance + AC + Metis + Co-Design (Daedalus advisory + human design gate) + Plan + Momus + Execution |
 | UC-P2 | End-to-End: Review Pipeline Rejection and Recovery | Review pipeline feedback loops | Momus REQUEST_CHANGES + defect-type loop-back + revision + re-Momus + User rejection + pipeline re-run |
@@ -40,6 +40,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | BH-5 | ADR Log Emission and Structural Enumeration Timing | Decision log with structural enumeration at Complex/Architecture; full-item log without structural items at Scoped; no ADR log at Trivial | ADR Log + Structural Enumeration |
 | P-27 | Per-Step State Persistence + Resume | Per-Step State Persistence (State Lifecycle) | AC Recording at S1 |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | Diagram Lens Taxonomy (trigger-based REQUIRED) | Stage A Fidelity + Grouped Placement |
+| P-29 | Complex Mixed Verify-Lane | Verify Lane: Complex mixed mode — codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path finding in codebase lane excluded, Evidence line records `inline (codebase) + dispatched (external)` | Phase-1 Grounding + Collect→Verify Contract (intent-split) |
 
 ---
 
@@ -781,7 +782,7 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 **Primary Technique:** Verify Lane — collect → falsifying verifier per non-empty lane → refuted finding excluded from plan grounding
 
 **Setup:**
-Complex/Architecture intent. Phase-1 grounding completes the collect step: 3 of the 5 explore aspect lanes are non-empty (pattern, convention, naming/registration). The librarian external lane is also non-empty. The remaining 2 aspect lanes (similar implementation, test infrastructure) are empty.
+Architecture intent (the delegated verify path — on Complex these lanes are falsified inline by the planner with no verifier dispatch). Phase-1 grounding completes the collect step: 3 of the 5 explore aspect lanes are non-empty (pattern, convention, naming/registration). The librarian external lane is also non-empty. The remaining 2 aspect lanes (similar implementation, test infrastructure) are empty.
 
 4 falsifying verifiers are dispatched in ONE parallel response — one per non-empty lane. The verifier for the naming/registration lane returns:
 
@@ -809,7 +810,7 @@ The remaining 3 verifiers return `verdict: corroborated` with `confidence: high`
 **Primary Technique:** Adversarial Evidence-Key Vocabulary — a #13 key-tag surfaces on a librarian external finding (not one of the 5 explore aspect lanes), proving the 4-key vocabulary applies uniformly across all lane types, not just the explore aspect lanes
 
 **Setup:**
-Complex/Architecture intent. Phase-1 collect dispatches a librarian agent to retrieve an external API specification for a third-party service. The librarian returns a finding about the API's authentication flow.
+Architecture intent (delegated verify path; on Complex the same 4-key tagging happens inline). Phase-1 collect dispatches a librarian agent to retrieve an external API specification for a third-party service. The librarian returns a finding about the API's authentication flow.
 
 The librarian finding is passed to the external-lane falsifying verifier (D-1 verify). While applying the D-5 adversarial 4-key checklist to the finding, the verifier tags it:
 
@@ -1143,6 +1144,31 @@ Render the Stage A HTML presentation.
 
 ---
 
+## Scenario P-29: Complex Mixed Verify-Lane
+
+**Primary Technique:** Verify Lane — Complex mixed mode: the planner inline-falsifies the codebase (explore aspect) lanes (zero verifier subagents for those lanes), while the librarian external lane is delegated to exactly one falsifying verifier subagent. The nonexistent-path finding sits in a codebase lane and is refuted by the planner's own inline re-read. The Phase-1 Evidence block records `verify lane: inline (codebase) + dispatched (external)`.
+
+**Setup:**
+Complex intent. Phase-1 grounding completes the collect step: 3 of the 5 explore aspect lanes are non-empty (pattern, convention, naming/registration). The librarian external lane is also non-empty. The remaining 2 aspect lanes (similar implementation, test infrastructure) are empty.
+
+The naming/registration lane (a codebase aspect lane) returns one finding that cites `src/handlers/user_profile_handler.go:42`. For the 3 non-empty codebase aspect lanes, the planner inline-verifies each finding by re-reading or re-grepping the cited path directly — zero verifier subagent spawns for these lanes. On re-read, `src/handlers/user_profile_handler.go` does not exist in the repository, so that finding is tagged `nonexistent_path`, `verdict: refuted`, and excluded.
+
+The librarian external lane keeps its delegated falsifying-verifier subagent (untrusted external text must not enter the planner context directly; the isolation logic applies at Complex just as at Architecture). Exactly one verifier subagent is dispatched for this lane, returns a corroborated finding, and the finding passes through.
+
+The pattern and convention codebase lanes each return one finding citing paths that exist and corroborate on inline re-read.
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Zero verifier subagents for codebase lanes | For the 3 non-empty codebase aspect lanes (pattern, convention, naming/registration) the planner does NOT dispatch any falsifying verifier subagent. Zero Agent tool calls are issued for those lanes — the planner itself re-reads or re-greps each cited path inline |
+| V2 | Nonexistent-path codebase finding refuted and excluded | The naming/registration finding citing `src/handlers/user_profile_handler.go:42` is refuted by the planner's own inline re-read (path does not exist → tagged `nonexistent_path`, `verdict: refuted`). It is excluded from the filtered findings that reach the interview, AC, and plan — it does NOT appear in plan grounding material |
+| V3 | Evidence line records mixed mode | The Phase-1 Evidence block records a `verify lane: inline (codebase) + dispatched (external) / 4 lanes / 1 excluded` line — the mode token is `inline (codebase) + dispatched (external)`, NOT `inline` alone or `dispatched` alone; the lane count is 4 (the 3 non-empty codebase aspect lanes + the librarian lane); the excluded count is 1 |
+| V4 | Corroborated findings pass through unchanged | The 3 corroborated findings from the pattern, convention, and librarian lanes reach the interview/AC/plan grounding step unchanged — exclusion applies only to the refuted naming/registration finding |
+| V5 | Exactly one verifier subagent dispatched for librarian lane | Exactly one Agent tool call is issued for the librarian external lane. That verifier is scoped to its own lane's findings only — it is NOT given the codebase lanes' findings. The verifier returns a corroborated result that passes the Exclusion rule |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -1176,7 +1202,8 @@ Render the Stage A HTML presentation.
 | BH-4 | `[DECISION NEEDED]` Absence | | | New behavior scenario (in-phase co-design resolution, no placeholder). Needs testing |
 | BH-5 | ADR Log Emission and Structural Enumeration Timing | | | New behavior scenario (decision log with structural D-N items before human design gate at Complex/Architecture; full-item log without structural items at Scoped; no ADR log at Trivial — the two gates are distinct). Needs testing |
 | P-24 | Verify-Lane Round | | | New verify-lane scenario (collect → falsifying verify → refuted exclusion). Needs testing |
-| P-25 | Cross-Lane #13 Witness | | | New cross-lane witness scenario (prompt_injection key on librarian finding, outside verify lane). Needs testing |
+| P-25 | Cross-Lane #13 Witness | | | New cross-lane witness scenario (prompt_injection key on librarian finding, produced inside the external verify lane — cross-lane uniformity). Needs testing |
 | P-26 | All-Collect-Lanes-Empty No-Op | | | New empty-lanes no-op scenario (valid no-op when all collect lanes empty). Needs testing |
 | P-27 | Per-Step State Persistence + Resume | | | Needs testing |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | | | Needs testing |
+| P-29 | Complex Mixed Verify-Lane | | | New Complex mixed verify-lane scenario (codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path codebase finding excluded, Evidence line records `inline (codebase) + dispatched (external)` mode). Needs testing |

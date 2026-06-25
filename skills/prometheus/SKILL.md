@@ -149,9 +149,9 @@ The Co-Design Daedalus advisory pass is on the mandatory path but is purely advi
 | Clearance checklist evaluation | Yes | - |
 | AC drafting & user confirmation | Yes | - |
 | Plan file writing ($OMT_DIR/plans/) | Yes | - |
-| Codebase fact gathering | NEVER | explore |
+| Codebase fact gathering | NEVER (exception: re-reading already-collected cited evidence inside the Complex inline verify lane **for the codebase (explore aspect) lanes** per `#### Collect→verify contract` — the external lane is NOT excepted; it is verified by a delegated subagent even at Complex) | explore |
 | Architecture feasibility check | NEVER | oracle |
-| External tech research | NEVER | librarian |
+| External tech research | NEVER (this includes external-lane falsification — even at Complex intent, the librarian external lane is verified by the delegated verifier, never re-read inline by the planner; see `#### Collect→verify contract`) | librarian |
 | Pre-plan gap analysis | NEVER | metis |
 | In-phase design review (Co-Design, advisory) | NEVER | daedalus (MANDATORY — advisory only, never gates) |
 | Post-plan codebase verification | NEVER | momus (MANDATORY) |
@@ -262,7 +262,7 @@ Anti-Patterns describe *what* goes wrong. This table targets the *reasoning* you
 | Thought | Reality |
 |---|---|
 | "explore was already done in a prior turn / prior session traces are visible" | Verify the result is in YOUR session as a tool message. If absent, re-dispatch. Trust-without-verify is a violation. |
-| "I'll just grep / Read directly — it's faster" | `Do vs Delegate Decision Matrix` is absolute: codebase fact gathering = **NEVER you, ALWAYS explore**. Efficiency does not override mandate. |
+| "I'll just grep / Read directly — it's faster" | `Do vs Delegate Decision Matrix` is absolute: codebase fact gathering = **NEVER you, ALWAYS explore**. Efficiency does not override mandate. Exception: re-reading or re-grepping an already-collected finding's cited evidence inside the Complex inline verify lane **for the codebase (explore aspect) lanes** (per `#### Collect→verify contract`) is the mandated falsification action, not new fact gathering. The external lane is NOT covered by this exception — it is always verified by a delegated subagent. |
 | "Clearance items all look OK" | Implicit judgment is forbidden. Per `## Clearance Checklist` ("Run after EVERY interview turn") + Red Flags STOP signal, you must output each of the 6 items YES/NO in the agent's visible reasoning every turn. This is the agent owning its own decision, not asking the user — line 204 forbids the latter, not the former. |
 | "Decomposition Formalism feels like ritual" | For Architecture/Complex intent, missing MECE/Atomicity/Anti-pattern evaluation IS the direct cause of silent regression. Skip = contract violation. |
 | "Write the plan first, create tasks later" | "From the moment intent is classified" — the timing is non-negotiable. Late TaskCreate = invisible incomplete work. |
@@ -279,7 +279,7 @@ Anti-Patterns describe *what* goes wrong. This table targets the *reasoning* you
 If any of these signals are present in YOUR own behavior, halt and reset:
 
 - STOP — Proceeding to Phase 2 without `explore` (and `librarian` for Architecture) dispatched **in this session** with results assimilated
-- STOP — About to type `grep` / `find` / Bash search yourself for codebase facts not covered by loaded `context/` files
+- STOP — About to type `grep` / `find` / Bash search yourself for codebase facts not covered by loaded `context/` files **or by the Complex inline verify lane for the codebase (explore aspect) lanes (per `#### Collect→verify contract`), where re-reading or re-grepping an already-collected finding's cited evidence to falsify it is the mandated action — not forbidden ad-hoc gathering. The external lane is NOT covered here — it is always verified by a delegated subagent.**
 - STOP — Clearance Checklist 6 items not written out one-by-one with YES/NO this turn
 - STOP — About to write plan without `Decomposition Self-Check` output (MECE / Atomicity 3-conditions / Anti-pattern) for Complex/Architecture intent
 - STOP — No `TaskCreate` calls visible in this session despite intent already classified
@@ -341,7 +341,7 @@ Phase 1 ritual (context loading + explore + librarian) is invisible by default �
 - Context files loaded: <list each Read path, or "missing — skipped per Graceful skip rule">
 - explore dispatched THIS session: <Agent invocation reference, or "N/A — intent is Trivial/Scoped without explore need">
 - librarian dispatched THIS session: <Agent invocation reference, or "N/A — Architecture, or Complex with design surface, not present; intent is Trivial/Scoped, or a purely mechanical refactor">
-- verify lane: dispatched / N lanes / M excluded <or "no-op / 0 lanes / 0 excluded" when all collect lanes are empty (Complex/Architecture with no findings) | "N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)">
+- verify lane: <inline (codebase) + dispatched (external) (Complex with external lane) | inline (Complex, no external lane) | dispatched (Architecture)> / N lanes / M excluded <or "no-op / 0 lanes / 0 excluded" when all collect lanes are empty | "N/A — intent is Trivial/Scoped (verify lane is Complex/Architecture only)">
 - Results received and assimilated: <Y/N — Y requires both summary read and key findings noted>
 ```
 
@@ -371,9 +371,12 @@ collect lane scoped to its aspect. The aspect set is closed: you do not add, dro
 When the librarian default lane is present (per `### Subagent Use During Interview`), it runs in the
 same parallel response as a sixth, external collect lane alongside the 5 aspect lanes.
 
-#### Collect→verify contract (falsifying verifier)
+#### Collect→verify contract (intent-split: Complex codebase-inline + external-delegated, Architecture all-delegated)
 
-After collect, every non-empty **collect lane** is handed to its own **falsifying verifier** — one
+After collect, every non-empty **collect lane** is falsified before its findings reach grounding. How
+the falsification runs splits by intent:
+
+**On Architecture intent**, each non-empty lane is handed to its own **falsifying verifier** — one
 verifier per non-empty lane (the 5 explore aspect lanes + the librarian external lane when present),
 dispatched in **ONE parallel response**. The dispatch mechanics mirror the per-candidate verifier of
 the Review Pipeline's finder-verifier pattern: each verifier is interpolated with its own lane's
@@ -382,10 +385,20 @@ request only — NEVER the full aggregate**. Per-lane isolation is deliberate: i
 free of the other lanes' framing (no cross-lane anchoring) and makes the verifier structurally
 adversarial — its job is to falsify the lane's claims, not confirm them.
 
-Each verifier inspects **every finding** in its lane and returns a **per-finding** verdict against
-this schema (a deliberate divergence from the Review Pipeline's `CONFIRMED/PLAUSIBLE/REFUTED` ladder
-— only the dispatch mechanics are reused, NOT the verdict vocabulary). A lane may contain one or
-several findings; the verifier emits one schema record per finding, not a single lane-level summary:
+**On Complex intent**, the planner runs that same falsification **inline for the codebase (explore
+aspect) lanes** — no verifier subagent for those lanes: treat each finding as a claim to disprove,
+re-read or re-grep the cited evidence yourself, then apply the per-finding schema + Exclusion rule
+directly. Zero spawns for the codebase lanes. The **librarian external lane, when present, keeps its
+delegated falsifying-verifier subagent (Complex and Architecture alike)** — untrusted external text
+must not enter the planner context directly, so the isolation logic that protects Architecture
+applies at Complex too.
+
+The schema, Exclusion rule, no-op path, and 4-key checklist below are one shared procedure both paths
+run — only the actor differs (delegated verifier vs inline planner). The actor inspects **every
+finding** in its lane and returns a **per-finding** verdict against this schema (a deliberate divergence
+from the Review Pipeline's `CONFIRMED/PLAUSIBLE/REFUTED` ladder — only the dispatch mechanics are
+reused, NOT the verdict vocabulary). A lane may contain one or several findings; the actor emits one
+schema record per finding, not a single lane-level summary:
 
 ```
 { verdict, evidence, confidence ∈ {high, medium, low} }
@@ -406,12 +419,12 @@ not a verifier's.
 nothing to falsify, the `verify lane:` Evidence line records `no-op / 0 lanes / 0 excluded`, and
 grounding proceeds.
 
-The `verify lane: dispatched / N lanes / M excluded` line in the Phase-1 Evidence block makes this
+The `verify lane: <mode> / N lanes / M excluded` line in the Phase-1 Evidence block makes this
 stage **visible-or-violation** — the verify stage must be reported there exactly as the
 `explore dispatched THIS session` line is, so a skipped verify lane surfaces as a missing Evidence
-line, not a silent omission. Note the unit difference: **N counts lanes** (one per non-empty collect
-lane dispatched to a verifier), **M counts individual findings** excluded across all lanes (the two
-units are independent and will often differ).
+line, not a silent omission. `<mode>` is the actor that ran (`inline (codebase) + dispatched (external)` for Complex with an external lane / `inline` for Complex without an external lane / `dispatched` for Architecture / `no-op`). Note
+the unit difference: **N counts lanes** (one per non-empty collect lane), **M counts individual
+findings** excluded across all lanes (the two units are independent and will often differ).
 
 #### Adversarial evidence keys (#13 vocabulary)
 
