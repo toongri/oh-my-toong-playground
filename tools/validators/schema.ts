@@ -7,7 +7,7 @@
  * Validates:
  *   - YAML syntax
  *   - P2-3: Deprecated top-level sections (config, hooks, mcps, plugins) in sync.yaml → ERROR
- *   - Allowed sections in sync.yaml (agents, commands, skills, scripts, rules)
+ *   - Allowed sections in sync.yaml (agents, commands, skills, scripts, rules, provision)
  *   - Item format (string or object with component)
  *   - Platform values against valid targets
  *   - Per-platform YAML: allowed sections per platform, unknown section → WARN
@@ -76,6 +76,8 @@ const VALID_ADD_HOOK_ITEM_FIELDS = new Set([
 ]);
 
 const VALID_GENERIC_ITEM_FIELDS = new Set(["component", "platforms"]);
+
+const VALID_PROVISION_ITEM_FIELDS = new Set(["check", "commands"]);
 
 const VALID_EVENTS = new Set([
   "SessionStart",
@@ -285,13 +287,15 @@ function validateProvision(provision: unknown, result: ValidationResult): void {
     }
 
     for (const key of Object.keys(item)) {
-      if (key !== "check" && key !== "commands") {
-        result.errors.push(`${ctx}: 알 수 없는 필드 '${key}' (지원: check, commands)`);
+      if (!VALID_PROVISION_ITEM_FIELDS.has(key)) {
+        result.errors.push(`${ctx}: 알 수 없는 필드 '${key}' (지원: ${[...VALID_PROVISION_ITEM_FIELDS].join(", ")})`);
       }
     }
 
     if (item.check !== undefined && typeof item.check !== "string") {
       result.errors.push(`${ctx}.check: string이어야 합니다 (got ${typeof item.check})`);
+    } else if (typeof item.check === "string" && item.check.trim() === "") {
+      result.errors.push(`${ctx}.check: 빈/공백 문자열은 허용되지 않습니다 (생략하려면 키 자체를 제거)`);
     }
 
     if (!("commands" in item)) {
@@ -304,15 +308,19 @@ function validateProvision(provision: unknown, result: ValidationResult): void {
       continue;
     }
 
-    if ((item.commands as unknown[]).length === 0) {
+    const commands = item.commands;
+
+    if (commands.length === 0) {
       result.errors.push(`${ctx}.commands: 빈 배열은 허용되지 않습니다`);
       continue;
     }
 
-    for (let j = 0; j < (item.commands as unknown[]).length; j++) {
-      const cmd = (item.commands as unknown[])[j];
+    for (let j = 0; j < commands.length; j++) {
+      const cmd = commands[j];
       if (typeof cmd !== "string") {
         result.errors.push(`${ctx}.commands[${j}]: string이어야 합니다 (got ${typeof cmd})`);
+      } else if (cmd.trim() === "") {
+        result.errors.push(`${ctx}.commands[${j}]: 빈 문자열은 허용되지 않습니다`);
       }
     }
   }

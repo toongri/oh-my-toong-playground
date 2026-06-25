@@ -1086,6 +1086,174 @@ enabled-projects: "bad"
 });
 
 // ---------------------------------------------------------------------------
+// Suite: validateSyncYaml — provision 검증
+// ---------------------------------------------------------------------------
+
+describe("validateSyncYaml — provision 검증", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  describe("유효한 provision", () => {
+    it("check 없이 commands만 있는 항목은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - commands:
+      - echo hello
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("check와 commands 둘 다 있는 항목은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - check: which codegraph
+    commands:
+      - npm install -g codegraph
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("provision 구조 오류", () => {
+    it("provision이 배열이 아니면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  check: which foo
+  commands:
+    - foo install
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("provision") && e.includes("배열"))).toBe(true);
+    });
+
+    it("provision 항목이 object가 아니면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - "just a string"
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("provision[0]") && e.includes("object"))).toBe(true);
+    });
+
+    it("알 수 없는 필드는 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - commands:
+      - echo hello
+    unknown-field: value
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("unknown-field"))).toBe(true);
+    });
+
+    it("commands가 없으면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - check: which foo
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("commands 필드가 필요합니다"))).toBe(true);
+    });
+
+    it("commands가 빈 배열이면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - commands: []
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("commands") && e.includes("빈 배열"))).toBe(true);
+    });
+
+    it("commands 원소가 string이 아니면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - commands:
+      - 123
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("commands[0]") && e.includes("string이어야 합니다"))).toBe(true);
+    });
+
+    it("check가 string이 아니면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - check: 123
+    commands:
+      - foo install
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("check") && e.includes("string이어야 합니다"))).toBe(true);
+    });
+  });
+
+  describe("#3: 빈/공백 문자열 거부", () => {
+    it("check가 빈 문자열이면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - check: ""
+    commands:
+      - echo hello
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("check") && e.includes("빈"))).toBe(true);
+    });
+
+    it("check가 공백-only 문자열이면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - check: "   "
+    commands:
+      - echo hello
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("check") && e.includes("빈"))).toBe(true);
+    });
+
+    it("commands 원소가 빈 문자열이면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - commands:
+      - ""
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("commands[0]") && e.includes("빈 문자열"))).toBe(true);
+    });
+
+    it("commands 원소가 공백-only 문자열이면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+provision:
+  - commands:
+      - "   "
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.some((e) => e.includes("commands[0]") && e.includes("빈 문자열"))).toBe(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Suite: validateAll — local yaml 파일 탐색
 // ---------------------------------------------------------------------------
 
