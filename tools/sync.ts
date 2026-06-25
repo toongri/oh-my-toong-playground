@@ -37,6 +37,7 @@ import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
 import { collectRequiredLibModulesFromSources, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
+import { runProvision } from "./lib/provision.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
 import { CodexAdapter } from "./adapters/codex.ts";
@@ -851,6 +852,10 @@ export async function processYaml(
       context.failedTargets.push(deployRoot);
     }
   }
+
+  // Per-yaml provision: run after all components deployed, at this yaml's deploy targets.
+  // Non-fatal and dryRun-safe — a missing/failed provision never breaks sync.
+  runProvision(syncYaml.provision ?? [], deployRoots, { dryRun: context.dryRun });
 
   logSuccess(`완료: ${syncYamlPath}`);
 }

@@ -49,6 +49,13 @@ mcps:
       - "--prefer-offline"
       - "-y"
       - "@playwright/mcp@0.0.76"
+  # codegraph local code-graph MCP (Tree-sitter -> SQLite call graph; 100% local, no API key).
+  # Requires per-machine binary (`npm i -g @colbymchenry/codegraph`) and per-repo `codegraph init` to build the index.
+  codegraph:
+    command: codegraph
+    args:
+      - "serve"
+      - "--mcp"
   # Maestro stdio MCP. Requires the maestro CLI on PATH (and JAVA_HOME in shell env for the JVM-based runner).
   # On platforms that launch MCP servers in a minimal shell (no profile PATH), replace 'maestro' with its absolute path.
   maestro:
