@@ -30,6 +30,11 @@ export type SyncSection = {
   items?: SyncItem[];
 };
 
+export type ProvisionItem = {
+  check?: string;
+  commands: string[];
+};
+
 export type SyncYaml = {
   path?: string;
   name?: string;
@@ -39,6 +44,7 @@ export type SyncYaml = {
   skills?: SyncSection;
   scripts?: SyncSection;
   rules?: SyncSection;
+  provision?: ProvisionItem[];
 };
 
 export type PlatformYamlHookItem = {
