@@ -128,6 +128,30 @@ describe("syncDirectory", () => {
       expect(await exists(path.join(tgt, "script.sh"))).toBe(true);
       expect(await exists(path.join(tgt, "readme.md"))).toBe(false);
     });
+
+    it("excludes python cache artifacts", async () => {
+      // A local pytest run leaves __pycache__/.pytest_cache + *.pyc on disk.
+      // sync copies directories verbatim (not from git), so .gitignore does not
+      // protect the walk — these must be pruned during the FS walk.
+      await writeFile(path.join(src, "mod.py"), "print('hi')");
+      await writeFile(path.join(src, "__pycache__/mod.cpython-312.pyc"), "bytecode");
+      await writeFile(path.join(src, ".pytest_cache/CACHEDIR.TAG"), "tag");
+      await writeFile(path.join(src, "pkg/sub.py"), "x = 1");
+      await writeFile(path.join(src, "pkg/__pycache__/sub.cpython-312.pyc"), "bytecode");
+
+      await syncDirectory(src, tgt);
+
+      // Legitimate .py source is still deployed (prune scoping).
+      expect(await exists(path.join(tgt, "mod.py"))).toBe(true);
+      expect(await exists(path.join(tgt, "pkg/sub.py"))).toBe(true);
+
+      // Cache directories and their *.pyc contents are pruned during the walk.
+      expect(await exists(path.join(tgt, "__pycache__"))).toBe(false);
+      expect(await exists(path.join(tgt, "__pycache__/mod.cpython-312.pyc"))).toBe(false);
+      expect(await exists(path.join(tgt, ".pytest_cache"))).toBe(false);
+      expect(await exists(path.join(tgt, "pkg/__pycache__"))).toBe(false);
+      expect(await exists(path.join(tgt, "pkg/__pycache__/sub.cpython-312.pyc"))).toBe(false);
+    });
   });
 
   describe("실행 권한 보존", () => {
