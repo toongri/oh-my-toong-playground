@@ -753,7 +753,7 @@ describe("CodexAdapter", () => {
       const testFileExists = await fs.stat(path.join(deployedDir, "helper.test.ts")).then(() => true).catch(() => false);
       expect(testFileExists).toBe(false);
 
-      // 3. Generated command is a literal relative string — no absolute path, no $-variable
+      // 3. Generated command uses the absolute path rooted at targetBase — no $-variable
       const hooksFile = path.join(targetBase, ".codex", "hooks.json");
       const raw = await fs.readFile(hooksFile, "utf-8");
       const parsed = JSON.parse(raw) as {
@@ -762,11 +762,42 @@ describe("CodexAdapter", () => {
         };
       };
       const command = parsed.hooks?.PostToolUse?.[0]?.hooks?.[0]?.command ?? "";
-      expect(command).not.toMatch(/\/Users\//);
-      expect(command).not.toMatch(/\/home\//);
       expect(command).not.toMatch(/\$/);
       expect(command.startsWith("bun ")).toBe(true);
-      expect(command).toBe("bun run .codex/hooks/rules-injector/index.ts");
+      expect(command).toContain(targetBase);
+      expect(command).toBe(`bun run ${path.join(targetBase, ".codex/hooks/rules-injector/index.ts")}`);
+    });
+
+    it("rewrites custom command to absolute path", async () => {
+      const targetBase = path.join(tmpDir, "target-custom");
+
+      const yaml = {
+        hooks: {
+          SessionStart: [
+            {
+              command: "bun run .codex/hooks/rules-injector/cli.ts hook session-start",
+              matcher: "*",
+              timeout: 10,
+            },
+          ],
+        },
+      };
+
+      await adapter.syncPlatformYaml(targetBase, yaml as never, false);
+
+      const hooksFile = path.join(targetBase, ".codex", "hooks.json");
+      const raw = await fs.readFile(hooksFile, "utf-8");
+      const parsed = JSON.parse(raw) as {
+        hooks?: {
+          SessionStart?: Array<{ hooks?: Array<{ command?: string }> }>;
+        };
+      };
+      const command = parsed.hooks?.SessionStart?.[0]?.hooks?.[0]?.command ?? "";
+      expect(command).not.toMatch(/\$/);
+      expect(command).toContain(targetBase);
+      expect(command).toBe(
+        `bun run ${path.join(targetBase, ".codex/hooks/rules-injector/cli.ts")} hook session-start`,
+      );
     });
   });
 });

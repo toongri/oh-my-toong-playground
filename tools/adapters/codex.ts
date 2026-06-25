@@ -487,6 +487,13 @@ export class CodexAdapter implements PlatformAdapter {
             continue;
           }
 
+          // Rewrite relative `.codex/` references to absolute paths rooted at
+          // targetPath so the hook command works regardless of the cwd Codex
+          // uses when it launches (which may be a subdirectory of the repo).
+          // This is correct for both global (~/.codex) and project-local deploys
+          // because targetPath IS the deploy root in both cases.
+          cmdPath = cmdPath.replaceAll(".codex/", `${path.join(targetPath, ".codex")}/`);
+
           const hookEntry = this.buildHookEntry(hookEvent, matcher, timeout, cmdPath);
 
           // Accumulate hook entries per event
