@@ -94,7 +94,7 @@ f5_big_ip:
 aws_waf:
   detectors:
     cookie: ["aws-waf-token"]
-    header: ["x-amzn-requestid", "x-amzn-errortype", "x-amzn-waf-*"]
+    header: ["x-amzn-waf-*"]
   capabilities_needed:
     - needs_real_tls_stack
   tls_impersonate_candidates:
