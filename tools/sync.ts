@@ -659,6 +659,11 @@ export async function syncLib(
         }
       }
 
+      // True once the live lib has been renamed to libOld but before the new
+      // tree has taken its place — the window in which a failure would leave the
+      // target with no live lib/ unless the catch restores the moved-aside copy.
+      let movedAside = false;
+
       try {
         await fs.mkdir(libTmp, { recursive: true });
         for (const dep of requiredModules) {
@@ -706,12 +711,21 @@ export async function syncLib(
         // Atomic swap: rename old out, rename new in, remove old.
         if (existsSync(libDest)) {
           await fs.rename(libDest, libOld);
+          movedAside = true;
         }
         await fs.rename(libTmp, libDest);
+        movedAside = false;
         await fs.rm(libOld, { recursive: true, force: true }).catch(() => undefined);
       } catch (err) {
-        // Build failed — clean up temp, leave the original lib untouched.
+        // Clean up the temp tree. A failure BEFORE the swap (e.g. a non-zero
+        // build exit) leaves the original lib untouched. But the swap is two
+        // renames: if the second rename fails after the first moved the live lib
+        // to libOld, the target is left with no live lib/ — restore it (best
+        // effort) before re-throwing so the prior lib survives a failed swap.
         await fs.rm(libTmp, { recursive: true, force: true }).catch(() => undefined);
+        if (movedAside && !existsSync(libDest) && existsSync(libOld)) {
+          await fs.rename(libOld, libDest).catch(() => undefined);
+        }
         throw err;
       }
 
@@ -926,12 +940,16 @@ export async function processYaml(
         await syncCategory(context, category, syncYaml, adapters, rootDir, deployRoot, libSourceRoots);
       }
 
-      // Sync lib — only when this project deploys local component files into the
-      // platform dir (same gate as the mkdir above). An MCP-only project
-      // (shouldMkdirClaude=false) targets ~/.claude.json, so syncLib must not
-      // reach into the worktree's .{platform}/lib and delete a directory this
-      // sync never owns.
-      if (shouldMkdirClaude) {
+      // Sync lib — whenever this deploy target received deployable source. The
+      // mkdir gate (shouldMkdirClaude) only sees component sections + .claude/
+      // config, so a codex/gemini-hook-only project (hooks deployed and recorded
+      // in libSourceRoots by syncPlatformConfigs above, but shouldMkdirClaude
+      // false) would otherwise never vendor its hooks' bare imports → the
+      // deployed hook crashes at runtime with an unresolved import. An MCP-only
+      // project (shouldMkdirClaude=false AND libSourceRoots empty) keeps the gate
+      // false, so syncLib never reaches into the worktree's .{platform}/lib to
+      // delete a directory this sync never owns.
+      if (shouldMkdirClaude || libSourceRoots.size > 0) {
         await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
       }
 
