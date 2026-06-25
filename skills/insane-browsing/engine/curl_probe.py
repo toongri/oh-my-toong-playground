@@ -78,13 +78,18 @@ def _curl_probe(
     if referer:
         headers["Referer"] = referer
 
-    # Manual redirect loop: validate every hop's target before following so an
-    # attacker-influenced page cannot steer the fetch at internal / cloud-metadata
-    # endpoints (SSRF). curl auto-follow is disabled; each Location is resolved and
-    # its host classified before the next request is issued.
+    # Manual redirect loop: classify every request target's host BEFORE issuing
+    # the fetch — the initial caller-supplied URL and each redirect Location
+    # alike — so an attacker-steered (or simply malicious) URL cannot reach
+    # internal / cloud-metadata endpoints (SSRF). curl auto-follow is disabled;
+    # each Location is resolved against the current URL and re-checked at the top
+    # of the next iteration.
     current_url = url
     try:
         for _ in range(_MAX_REDIRECTS + 1):
+            host = urlparse(current_url).hostname or ""
+            if _is_blocked_host(host):
+                return None, f"ssrf_blocked:{host}"
             resp = cffi_requests.get(
                 current_url,
                 impersonate=impersonate,
@@ -97,11 +102,7 @@ def _curl_probe(
             location = resp.headers.get("location")
             if not location:
                 return resp, None
-            next_url = urljoin(current_url, location)
-            host = urlparse(next_url).hostname or ""
-            if _is_blocked_host(host):
-                return None, f"ssrf_redirect_blocked:{host}"
-            current_url = next_url
+            current_url = urljoin(current_url, location)
         return None, "too_many_redirects"
     except cffi_requests.exceptions.RequestException as e:
         return None, f"{type(e).__name__}:{str(e)[:200]}"
