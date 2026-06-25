@@ -350,6 +350,101 @@ describe("rewriteLibImports bare specifier rule (bundled vendor packages)", () =
     // 'chalk' is not in the bundled set → left untouched.
     expect(result).toBe(content);
   });
+
+  it("non-import string literal with same name is NOT rewritten", () => {
+    // F4 anchor fix: a plain string literal that is NOT a module specifier must
+    // not be touched, even though it contains the exact same quoted text.
+    const content = [
+      "import picomatch from 'picomatch';",
+      "const packageName = 'picomatch';",
+      "",
+    ].join("\n");
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    // The import specifier is rewritten.
+    expect(result).toContain("'./lib/vendor/picomatch.js'");
+    // The plain string literal is NOT rewritten.
+    expect(result).toContain("const packageName = 'picomatch';");
+  });
+
+  it("side-effect import 'pkg' is rewritten", () => {
+    const content = "import 'picomatch';\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).not.toContain("import 'picomatch'");
+    expect(result).toContain("'./lib/vendor/picomatch.js'");
+  });
+
+  it("dynamic import('pkg') is rewritten", () => {
+    const content = "const m = import('picomatch');\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).not.toContain("import('picomatch')");
+    expect(result).toContain("'./lib/vendor/picomatch.js'");
+  });
+
+  it("require('pkg') is rewritten", () => {
+    const content = "const m = require('picomatch');\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).not.toContain("require('picomatch')");
+    expect(result).toContain("'./lib/vendor/picomatch.js'");
+  });
+
+  it("export ... from 'pkg' is rewritten", () => {
+    const content = "export { default } from 'picomatch';\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).not.toContain("from 'picomatch'");
+    expect(result).toContain("'./lib/vendor/picomatch.js'");
+  });
+
+  it("double-quoted import specifier is rewritten", () => {
+    const content = 'import picomatch from "picomatch";\n';
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).not.toContain('"picomatch"');
+    expect(result).toContain('"./lib/vendor/picomatch.js"');
+  });
+
+  it("double-quoted non-import literal is NOT rewritten", () => {
+    const content = [
+      'import picomatch from "picomatch";',
+      'const pkg = "picomatch";',
+      "",
+    ].join("\n");
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).toContain('"./lib/vendor/picomatch.js"');
+    expect(result).toContain('const pkg = "picomatch";');
+  });
+
+  it("regex-special chars in package name are escaped (e.g. @scope/pkg)", () => {
+    const scopedBundled = new Set(["@scope/some.pkg"]);
+    const content = "import x from '@scope/some.pkg';\nconst s = '@scope/some.pkg';\n";
+    const targetFile = path.join(platformRoot, "run.ts");
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, scopedBundled);
+
+    // import is rewritten
+    expect(result).toContain("'./lib/vendor/@scope/some.pkg.js'");
+    // plain literal is NOT rewritten
+    expect(result).toContain("const s = '@scope/some.pkg';");
+  });
 });
 
 describe("copyFile", () => {

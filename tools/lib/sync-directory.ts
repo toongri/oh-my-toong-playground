@@ -108,11 +108,25 @@ export function rewriteLibImports(
     .replace(/"@lib\//g, `"${prefix}lib/`);
 
   for (const pkg of bundledPackages) {
-    result = result
-      .split(`'${pkg}'`)
-      .join(`'${prefix}lib/vendor/${pkg}.js'`)
-      .split(`"${pkg}"`)
-      .join(`"${prefix}lib/vendor/${pkg}.js"`);
+    // Anchor the rewrite to module-specifier positions only:
+    //   from 'pkg'        (static import / re-export)
+    //   import 'pkg'      (bare side-effect import — space before quote, not `(`)
+    //   import('pkg')     (dynamic import)
+    //   require('pkg')    (CJS require)
+    // A plain string literal like `const x = 'pkg'` is NOT preceded by any of
+    // these tokens, so it is left untouched.
+    //
+    // Package names may contain regex-special characters (`.`, `-`, `@`, `/`),
+    // so escape them before embedding in the pattern.
+    const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const specifierPattern = new RegExp(
+      `((?:from|require\\(|import\\()\\s*|import\\s+)(['"])${escaped}\\2`,
+      "g",
+    );
+    result = result.replace(
+      specifierPattern,
+      (_, prefix_ctx, quote) => `${prefix_ctx}${quote}${prefix}lib/vendor/${pkg}.js${quote}`,
+    );
   }
 
   return result;
