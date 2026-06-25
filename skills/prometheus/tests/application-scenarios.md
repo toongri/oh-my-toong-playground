@@ -40,7 +40,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | BH-5 | ADR Log Emission and Structural Enumeration Timing | Decision log with structural enumeration at Complex/Architecture; full-item log without structural items at Scoped; no ADR log at Trivial | ADR Log + Structural Enumeration |
 | P-27 | Per-Step State Persistence + Resume | Per-Step State Persistence (State Lifecycle) | AC Recording at S1 |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | Diagram Lens Taxonomy (trigger-based REQUIRED) | Stage A Fidelity + Grouped Placement |
-| P-29 | Complex Inline Verify-Lane | Verify Lane: Complex inline falsification — planner re-reads cited paths, excludes nonexistent_path finding, zero verifier spawns | Phase-1 Grounding + Collect→Verify Contract (intent-split) |
+| P-29 | Complex Mixed Verify-Lane | Verify Lane: Complex mixed mode — codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path finding in codebase lane excluded, Evidence line records `inline (codebase) + dispatched (external)` | Phase-1 Grounding + Collect→Verify Contract (intent-split) |
 
 ---
 
@@ -1144,25 +1144,28 @@ Render the Stage A HTML presentation.
 
 ---
 
-## Scenario P-29: Complex Inline Verify-Lane
+## Scenario P-29: Complex Mixed Verify-Lane
 
-**Primary Technique:** Verify Lane — Complex inline falsification: the planner re-reads/re-greps each cited path inline (zero verifier subagent spawns), excludes findings whose cited paths do not exist, and records `verify lane: inline` in the Phase-1 Evidence block.
+**Primary Technique:** Verify Lane — Complex mixed mode: the planner inline-falsifies the codebase (explore aspect) lanes (zero verifier subagents for those lanes), while the librarian external lane is delegated to exactly one falsifying verifier subagent. The nonexistent-path finding sits in a codebase lane and is refuted by the planner's own inline re-read. The Phase-1 Evidence block records `verify lane: inline (codebase) + dispatched (external)`.
 
 **Setup:**
-Complex intent (the inline falsification path — on Architecture intent these lanes are handed to dispatched falsifying verifiers). Phase-1 grounding completes the collect step: 3 of the 5 explore aspect lanes are non-empty (pattern, convention, naming/registration). The librarian external lane is also non-empty. The remaining 2 aspect lanes (similar implementation, test infrastructure) are empty.
+Complex intent. Phase-1 grounding completes the collect step: 3 of the 5 explore aspect lanes are non-empty (pattern, convention, naming/registration). The librarian external lane is also non-empty. The remaining 2 aspect lanes (similar implementation, test infrastructure) are empty.
 
-The naming/registration lane returns one finding that cites `src/handlers/user_profile_handler.go:42`. The planner inline-verifies each finding by re-reading or re-grepping the cited path. On re-read, `src/handlers/user_profile_handler.go` does not exist in the repository.
+The naming/registration lane (a codebase aspect lane) returns one finding that cites `src/handlers/user_profile_handler.go:42`. For the 3 non-empty codebase aspect lanes, the planner inline-verifies each finding by re-reading or re-grepping the cited path directly — zero verifier subagent spawns for these lanes. On re-read, `src/handlers/user_profile_handler.go` does not exist in the repository, so that finding is tagged `nonexistent_path`, `verdict: refuted`, and excluded.
 
-The other 3 non-empty lanes each return one finding citing paths that exist and corroborate on re-read.
+The librarian external lane keeps its delegated falsifying-verifier subagent (untrusted external text must not enter the planner context directly; the isolation logic applies at Complex just as at Architecture). Exactly one verifier subagent is dispatched for this lane, returns a corroborated finding, and the finding passes through.
+
+The pattern and convention codebase lanes each return one finding citing paths that exist and corroborate on inline re-read.
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Zero verifier subagents spawned | The planner does NOT dispatch any falsifying verifier subagent. Zero Agent tool calls are issued for the verify step — the planner itself re-reads or re-greps each cited path inline (this is the mandated inline actor for Complex intent) |
-| V2 | Nonexistent-path finding refuted and excluded | The naming/registration finding citing `src/handlers/user_profile_handler.go:42` is refuted by the planner's own inline re-read (path does not exist → tagged `nonexistent_path`, `verdict: refuted`). It is excluded from the filtered findings that reach the interview, AC, and plan — it does NOT appear in plan grounding material |
-| V3 | Evidence line records `inline` mode | The Phase-1 Evidence block records a `verify lane: inline / 4 lanes / 1 excluded` line — the mode token is `inline`, NOT `dispatched`; the lane count is 4 (the 3 corroborated aspect lanes + the corroborated librarian lane); the excluded count is 1 |
+| V1 | Zero verifier subagents for codebase lanes | For the 3 non-empty codebase aspect lanes (pattern, convention, naming/registration) the planner does NOT dispatch any falsifying verifier subagent. Zero Agent tool calls are issued for those lanes — the planner itself re-reads or re-greps each cited path inline |
+| V2 | Nonexistent-path codebase finding refuted and excluded | The naming/registration finding citing `src/handlers/user_profile_handler.go:42` is refuted by the planner's own inline re-read (path does not exist → tagged `nonexistent_path`, `verdict: refuted`). It is excluded from the filtered findings that reach the interview, AC, and plan — it does NOT appear in plan grounding material |
+| V3 | Evidence line records mixed mode | The Phase-1 Evidence block records a `verify lane: inline (codebase) + dispatched (external) / 4 lanes / 1 excluded` line — the mode token is `inline (codebase) + dispatched (external)`, NOT `inline` alone or `dispatched` alone; the lane count is 4 (the 3 non-empty codebase aspect lanes + the librarian lane); the excluded count is 1 |
 | V4 | Corroborated findings pass through unchanged | The 3 corroborated findings from the pattern, convention, and librarian lanes reach the interview/AC/plan grounding step unchanged — exclusion applies only to the refuted naming/registration finding |
+| V5 | Exactly one verifier subagent dispatched for librarian lane | Exactly one Agent tool call is issued for the librarian external lane. That verifier is scoped to its own lane's findings only — it is NOT given the codebase lanes' findings. The verifier returns a corroborated result that passes the Exclusion rule |
 
 ---
 
@@ -1203,4 +1206,4 @@ The other 3 non-empty lanes each return one finding citing paths that exist and 
 | P-26 | All-Collect-Lanes-Empty No-Op | | | New empty-lanes no-op scenario (valid no-op when all collect lanes empty). Needs testing |
 | P-27 | Per-Step State Persistence + Resume | | | Needs testing |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | | | Needs testing |
-| P-29 | Complex Inline Verify-Lane | | | New Complex inline verify-lane scenario (planner falsifies inline, zero verifier spawns, nonexistent_path finding excluded, Evidence line records `inline` mode). Needs testing |
+| P-29 | Complex Mixed Verify-Lane | | | New Complex mixed verify-lane scenario (codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path codebase finding excluded, Evidence line records `inline (codebase) + dispatched (external)` mode). Needs testing |
