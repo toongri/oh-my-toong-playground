@@ -64,3 +64,4 @@ rules:
     - least-code
     - private-component-management
     - documentation-currency
+    - agent-browser-usage

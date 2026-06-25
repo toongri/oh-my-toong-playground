@@ -312,11 +312,11 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: src/api/profile.ts, src/pages/ProfilePage.tsx
 - Junior's summary: "Added profile API and profile page"
 
-**Expected Behavior:** Hands-on execution 트리거 적용 조건에서 API + Frontend 복합 신호 감지 → curl과 playwright 모두 사용. 서버 기동 → curl로 API 확인 → playwright로 UI 확인 → 서버 종료. 각각 독립적으로 결과 기록.
+**Expected Behavior:** Hands-on execution 트리거 적용 조건에서 API + Frontend 복합 신호 감지 → curl과 agent-browser 모두 사용. 서버 기동 → curl로 API 확인 → agent-browser로 UI 확인 (실패 또는 표현 불가 시 playwright 폴백) → 서버 종료. 각각 독립적으로 결과 기록.
 
 **Verification Points:**
 1. API와 Frontend 신호를 모두 감지한다
-2. curl과 playwright 두 가지 검증을 모두 수행한다
+2. curl과 agent-browser(또는 폴백 playwright) 두 가지 검증을 모두 수행한다
 3. 각 검증 결과를 독립적으로 기록한다
 4. 하나라도 실패하면 REQUEST_CHANGES
 
@@ -524,7 +524,7 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 | A-8 | API endpoint → curl 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API 신호 감지, curl 절차, 서버 라이프사이클, 출력 포맷 모두 정확. |
 | A-9 | Internal refactoring → "user-facing changes, no scenarios" 스킵 | PASS | 2026-02-23 | 4VP 전부 충족. internal 분류, "user-facing changes, no scenarios" 스킵, "SKIPPED (internal logic only)" 문서화, code quality check 진행 확인. |
 | A-10 | CLI command → interactive_bash | | | A-8과 동일 패턴 (적용 조건 분기). 미테스트. |
-| A-11 | API + Frontend → 복합 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API+Frontend 양 타입 감지, curl+playwright 독립 검증, 공유 라이프사이클. |
+| A-11 | API + Frontend → 복합 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API+Frontend 양 타입 감지, curl+agent-browser(폴백 playwright) 독립 검증, 공유 라이프사이클. |
 | A-12 | Server start 실패 → REQUEST_CHANGES | | | 실제 서버 환경 필요. 미테스트. |
 | A-15 | Composable Trigger Activation — 트리거 조합 결정 | | | |
 | A-16 | Self-Discovery — 검증 방법 자동 발견 | | | |

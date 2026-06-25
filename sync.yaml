@@ -16,3 +16,4 @@ skills:
     - scan-pdf-to-notes
     - component: goal
       platforms: [claude]
+    - agent-browser
