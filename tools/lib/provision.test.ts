@@ -13,7 +13,7 @@ function mktemp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "provision-test-"));
 }
 
-// Write a marker file at <dir>/<name> with given content
+// Resolve the marker path <dir>/<name> (does not create the file)
 function markerPath(dir: string, name: string): string {
   return path.join(dir, name);
 }
@@ -100,18 +100,7 @@ describe("runProvision", () => {
     const nonExistent = path.join(os.tmpdir(), "provision-noexist-" + Math.random().toString(36).slice(2));
 
     // Should not throw; simply skip
-    let threw = false;
-    try {
-      runProvision(
-        [{ commands: ["true"] }],
-        [nonExistent],
-        { dryRun: false },
-      );
-    } catch {
-      threw = true;
-    }
-
-    expect(threw).toBe(false);
+    expect(() => runProvision([{ commands: ["true"] }], [nonExistent], { dryRun: false })).not.toThrow();
   });
 
   it("(f) multiple items run in order", () => {
