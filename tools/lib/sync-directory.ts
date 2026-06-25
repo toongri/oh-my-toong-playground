@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { detectBareImports } from "../adapters/ts-lib-deps.ts";
 
 export const DEFAULT_EXCLUDE = ["*.test.ts"];
 
@@ -86,6 +87,7 @@ export async function collectDirs(dir: string, rel = ""): Promise<string[]> {
  * @param platformRoot    Absolute path to the platform root directory (e.g. /path/.claude/)
  * @param bundledPackages Package names whose bare specifiers are repointed at lib/vendor/<pkg>
  * @returns               Rewritten content, or the original string if nothing rewritable present
+ * @throws                If any bundled package's bare import survives rewrite (post-condition invariant)
  */
 export function rewriteLibImports(
   content: string,
@@ -148,6 +150,33 @@ export function rewriteLibImports(
         return `${prefixCtx}${quote}${prefix}lib/vendor/${pkg}.js${quote}`;
       },
     );
+  }
+
+  // Post-condition guard: detectBareImports uses broader matching than the rewrite regex
+  // (no line-start anchor), so it catches `} from "pkg"` lines that start with `}` — the
+  // multi-line import case the rewrite misses. Filter by bundledPackages, then confirm each
+  // surviving specifier appears in a real import position (not inside a string literal) using
+  // a regex that requires no unescaped string-delimiter before the from/import keyword on
+  // the line. This avoids false-positives for patterns like `"rewrote from 'pkg'"`.
+  const candidates = detectBareImports(result).filter((s) => bundledPackages.has(s));
+  if (candidates.length > 0) {
+    // For each candidate, verify it appears outside a string literal on at least one line.
+    // The pattern `^[^"'`]*` anchors at line-start and requires no opening quote before
+    // the from/import keyword — string-embedded occurrences are excluded by this anchor.
+    const stillBare = candidates.filter((pkg) => {
+      const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // Matches: non-string-start of line, then from/import keyword, then the quoted pkg name.
+      const outsideString = new RegExp(
+        `^[^"'\`]*(?:from|import)\\s*[\\s(]['"]${escaped}['"]`,
+        "m",
+      );
+      return outsideString.test(result);
+    });
+    if (stillBare.length > 0) {
+      throw new Error(
+        `rewriteLibImports: bundled package(s) [${stillBare.join(", ")}] still have bare imports after rewrite in ${targetFile} — multi-line import not supported by the rewrite regex`,
+      );
+    }
   }
 
   return result;

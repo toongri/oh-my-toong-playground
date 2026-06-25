@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { syncDirectory, copyFile, rewriteLibImports } from "./sync-directory.ts";
+import { detectBareImports } from "../adapters/ts-lib-deps.ts";
 
 async function writeFile(
   filePath: string,
@@ -490,6 +491,91 @@ describe("rewriteLibImports bare specifier rule (bundled vendor packages)", () =
     expect(result).toContain("'./lib/vendor/@scope/some.pkg.js'");
     // plain literal is NOT rewritten
     expect(result).toContain("const s = '@scope/some.pkg';");
+  });
+});
+
+describe("rewriteLibImports post-condition guard (fail-fast on unrewritten bare bundled import)", () => {
+  const platformRoot = "/p/.claude";
+  const bundled = new Set(["picomatch"]);
+  const targetFile = path.join(platformRoot, "run.ts");
+
+  it("(a) multi-line static import of bundled package throws after rewrite", () => {
+    // `} from "picomatch"` line starts with `}` — rewrite regex misses it.
+    const content = [
+      "import {",
+      "  foo,",
+      '} from "picomatch";',
+      "",
+    ].join("\n");
+
+    expect(() => rewriteLibImports(content, targetFile, platformRoot, bundled)).toThrow(
+      /picomatch/,
+    );
+  });
+
+  it("(b) single-line import rewrites normally — no throw", () => {
+    const content = 'import picomatch from "picomatch";\n';
+
+    const result = rewriteLibImports(content, targetFile, platformRoot, bundled);
+
+    expect(result).toContain('"./lib/vendor/picomatch.js"');
+    expect(result).not.toContain('"picomatch"');
+  });
+
+  it("(c) package name only in a // comment — no throw (false-positive guard)", () => {
+    // detectBareImports skips comment lines, so the guard must not fire here.
+    const content = "// import picomatch from 'picomatch'\nconst noop = 1;\n";
+
+    expect(() => rewriteLibImports(content, targetFile, platformRoot, bundled)).not.toThrow();
+  });
+
+  it("(c2) package name only in a string literal — no throw (false-positive guard)", () => {
+    const content = 'const s = "picomatch";\n';
+
+    expect(() => rewriteLibImports(content, targetFile, platformRoot, bundled)).not.toThrow();
+  });
+});
+
+describe("detectBareImports (content-based bare import detection)", () => {
+  it("(d1) single-line import returns the package name", () => {
+    const content = "import picomatch from 'picomatch';\n";
+    expect(detectBareImports(content)).toEqual(["picomatch"]);
+  });
+
+  it("(d2) multi-line import — `} from 'pkg'` line — returns the package name", () => {
+    const content = ["import {", "  foo,", "} from 'picomatch';", ""].join("\n");
+    expect(detectBareImports(content)).toContain("picomatch");
+  });
+
+  it("(d3) comment lines are excluded", () => {
+    const content = "// import x from 'picomatch'\n/* from 'picomatch' */\nconst n = 1;\n";
+    expect(detectBareImports(content)).toEqual([]);
+  });
+
+  it("(d4) relative paths are excluded", () => {
+    const content = "import x from './local.ts';\nimport y from '../utils.ts';\n";
+    expect(detectBareImports(content)).toEqual([]);
+  });
+
+  it("(d5) @lib/ aliases are excluded", () => {
+    const content = "import { x } from '@lib/types.ts';\n";
+    expect(detectBareImports(content)).toEqual([]);
+  });
+
+  it("(d6) node: and bun: builtins are excluded", () => {
+    const content = "import fs from 'node:fs';\nimport { serve } from 'bun:test';\n";
+    expect(detectBareImports(content)).toEqual([]);
+  });
+
+  it("(d7) unprefixed node builtins are excluded", () => {
+    const content = "import fs from 'fs';\nimport path from 'path';\n";
+    expect(detectBareImports(content)).toEqual([]);
+  });
+
+  it("(d8) already-rewritten vendor path (relative) does not fire", () => {
+    // After rewrite, 'picomatch' → './lib/vendor/picomatch.js' (relative path).
+    const content = "import picomatch from './lib/vendor/picomatch.js';\n";
+    expect(detectBareImports(content)).toEqual([]);
   });
 });
 
