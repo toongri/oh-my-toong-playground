@@ -45,14 +45,16 @@ test("parsePositiveInteger: ' 12 ' (whitespace-padded) is accepted", () => {
 	expect(config.maxRuleChars).toBe(12);
 });
 
-// ── C6: DISABLE_BUNDLED=1 must not re-enable auto-disabled ~/.claude/rules ───
+// ── C6: DISABLE_BUNDLED=1 enables ~/.claude/rules (Patch A: no longer auto-disabled) ─
 
-test("C6: DISABLE_BUNDLED=1 with auto mode does not enable ~/.claude/rules", () => {
+test("C6: DISABLE_BUNDLED=1 with auto mode INCLUDES ~/.claude/rules (Patch A: source enabled)", () => {
+	// Patch A removes "~/.claude/rules" from DEFAULT_AUTO_DISABLED_SOURCES.
+	// sourcesWithoutBundledRules() excludes plugin-bundled + DEFAULT_AUTO_DISABLED_SOURCES,
+	// but now ~/.claude/rules is NOT in that exclusion set, so it appears in the list.
 	const config = configFromEnvironment({ CODEX_RULES_DISABLE_BUNDLED: "1" });
-	// enabledSources must be a concrete list (not "auto") and must NOT include ~/.claude/rules
 	expect(config.enabledSources).not.toBe("auto");
 	const list = config.enabledSources as string[];
-	expect(list).not.toContain("~/.claude/rules");
+	expect(list).toContain("~/.claude/rules");
 });
 
 test("C6: DISABLE_BUNDLED=1 with auto mode does not include plugin-bundled", () => {

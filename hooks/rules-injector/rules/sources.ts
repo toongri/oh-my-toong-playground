@@ -1,7 +1,7 @@
 import { SOURCE_PRIORITY } from "./constants.js";
 import type { PiRulesConfig } from "./types.js";
 
-export const DEFAULT_AUTO_DISABLED_SOURCES: readonly string[] = ["AGENTS.md", "~/.claude/rules", "~/.claude/CLAUDE.md"];
+export const DEFAULT_AUTO_DISABLED_SOURCES: readonly string[] = ["AGENTS.md", "~/.claude/CLAUDE.md"];
 
 export function disabledSourcesFromConfig(config: PiRulesConfig): ReadonlySet<string> | undefined {
 	if (config.enabledSources === "auto") {

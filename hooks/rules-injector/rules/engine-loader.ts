@@ -1,6 +1,6 @@
 import { isCandidateWithinProjectCached } from "./engine-paths.js";
 import type { CandidateProjectMembership, EngineDeps, LoadedRuleContent } from "./engine-types.js";
-import { hashContent, normalizeRuleContentForHash } from "./matcher.js";
+import { hashContent, normalizeGlobs, normalizeRuleContentForHash } from "./matcher.js";
 import { parseRule } from "./parser.js";
 import type { LoadedRule, MatchReason, RuleCandidate, RuleDiagnostic } from "./types.js";
 
@@ -55,6 +55,14 @@ export function staticMatchReason(rule: LoadedRule): MatchReason | null {
 
 	if (rule.isSingleFile) {
 		return "single-file";
+	}
+
+	// No-frontmatter always-on: alwaysApply absent (undefined) AND no glob/path/applyTo
+	// patterns → treat as always-on, matching Claude Code's native semantics where a
+	// .claude/rules/*.md file with no paths: frontmatter loads unconditionally.
+	// alwaysApply: false (explicit opt-out) is !== undefined, so it still returns null.
+	if (rule.frontmatter.alwaysApply === undefined && normalizeGlobs(rule.frontmatter).length === 0) {
+		return "alwaysApply";
 	}
 
 	return null;
