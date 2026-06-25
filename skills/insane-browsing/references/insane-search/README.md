@@ -123,7 +123,7 @@
 ### 단일 진입점
 
 ```python
-from insane_search.engine import fetch
+from engine import fetch
 
 result = fetch(
     "https://example.com/path",

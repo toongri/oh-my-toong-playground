@@ -158,27 +158,27 @@ curl -s "https://www.v2ex.com/api/replies/show.json?topic_id=TOPIC_ID&page=1" -H
 curl -s "https://www.v2ex.com/api/members/show.json?username=USERNAME" -H "User-Agent: agent-reach/1.0"
 ```
 
-### Python 调用示例
+### curl 调用示例
 
-```python
-from agent_reach.channels.v2ex import V2EXChannel
+```bash
+# 热门帖子（完整 JSON）
+curl -s "https://www.v2ex.com/api/topics/hot.json" | python3 -c "
+import sys, json
+for t in json.load(sys.stdin)[:10]:
+    print(f\"[{t['node']['title']}] {t['title']} ({t['replies']} 回复)\")
+"
 
-ch = V2EXChannel()
+# 节点帖子
+curl -s "https://www.v2ex.com/api/topics/show.json?node_name=python&page=1"
 
-# 获取热门帖子
-topics = ch.get_hot_topics(limit=10)
-for t in topics:
-    print(f"[{t['node_title']}] {t['title']} ({t['replies']} 回复)")
+# 帖子详情
+curl -s "https://www.v2ex.com/api/topics/show.json?id=1234567"
 
-# 获取节点帖子
-node_topics = ch.get_node_topics("python", limit=5)
+# 帖子回复
+curl -s "https://www.v2ex.com/api/replies/show.json?topic_id=1234567&page=1"
 
-# 获取帖子详情 + 回复
-topic = ch.get_topic(1234567)
-print(topic["title"], "—", topic["author"])
-
-# 获取用户信息
-user = ch.get_user("Livid")
+# 用户信息
+curl -s "https://www.v2ex.com/api/members/show.json?username=Livid"
 ```
 
 > **节点列表**: https://www.v2ex.com/planes
