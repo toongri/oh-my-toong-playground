@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from cookie_domains import CookieDomainError, normalize_cookie_domain  # noqa: E402
 from extract_cookies import extract_cookies  # noqa: E402
 
 
@@ -46,6 +47,26 @@ def _make_firefox_db(path: Path, rows: list[tuple[str, str, str]]) -> None:
     )
     conn.commit()
     conn.close()
+
+
+class PublicSuffixGuard(unittest.TestCase):
+    def test_rejects_bare_tld(self) -> None:
+        for bare in ("com", "net", "org", ".com", "COM"):
+            with self.assertRaises(CookieDomainError):
+                normalize_cookie_domain(bare)
+
+    def test_rejects_known_multi_label_public_suffix(self) -> None:
+        for suffix in ("co.uk", "com.au", "co.kr"):
+            with self.assertRaises(CookieDomainError):
+                normalize_cookie_domain(suffix)
+
+    def test_accepts_legitimate_etld_plus_one(self) -> None:
+        self.assertEqual(normalize_cookie_domain("youtube.com"), "youtube.com")
+        self.assertEqual(normalize_cookie_domain("github.com"), "github.com")
+
+    def test_accepts_registrable_domain_under_public_suffix(self) -> None:
+        self.assertEqual(normalize_cookie_domain("example.co.uk"), "example.co.uk")
+        self.assertEqual(normalize_cookie_domain("login.example.com"), "login.example.com")
 
 
 class DomainFilter(unittest.TestCase):
@@ -104,6 +125,14 @@ class DomainFilter(unittest.TestCase):
 
         self.assertEqual(near, [])
         self.assertEqual({cookie["name"] for cookie in exact}, {"exact", "near", "sub"})
+
+    def test_extract_cookies_fails_closed_on_bare_tld(self) -> None:
+        base = self._base_with_db(
+            "Firefox/Profiles/abc.default/cookies.sqlite",
+            lambda p: _make_firefox_db(p, [("exact", "exact-value", "example.com")]),
+        )
+        with self.assertRaises(CookieDomainError):
+            extract_cookies("firefox", ["com"], platform="darwin", base_override=base)
 
 
 if __name__ == "__main__":
