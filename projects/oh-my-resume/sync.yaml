@@ -37,3 +37,11 @@ rules:
     - coding-discipline
     - least-code
     - resume-workflow
+
+provision:
+  - check: "command -v codegraph"
+    commands:
+      - "npm i -g @colbymchenry/codegraph"
+  - check: "test -f .codegraph/codegraph.db"
+    commands:
+      - "codegraph init"
