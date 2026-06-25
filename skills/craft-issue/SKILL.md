@@ -111,6 +111,36 @@ Read `references/issue-craft.md` (already loaded in Stage 4 — re-read only if 
 
 INVEST is the slice gate. File-count or LOC atomicity is NOT the gate.
 
+### Slicing means CREATING the child issues — not proposing them
+
+When the gate fires, "slice into child issues" is a **write action in the PM tool**, not a section in the parent body. In the write tail (Stage 6) you **create each child as a real issue**, set its `parentId`, and wire `blockedBy` dependency links. A parent body that lists the slices as a "proposed split / 구현 분할 제안 / slice candidates / 잠정 슬라이스 후보" section **instead of** creating the children is a gate **FAILURE**, not compliance — the requirement stays one un-buildable mega-issue and the caller has to re-ask for the split.
+
+**Violating the letter (not materializing the children) is violating the spirit (the requirement stays un-decomposed and un-actionable).**
+
+The ONLY thing that defers child creation when the gate fires is an **explicit caller instruction not to create sub-issues**. Nothing else. In particular, slice and create even when the spec is a draft, the caller said "organize/정리 this ticket", product decisions are still open, the parent already sits in a sprint, or you fear the boundaries will shift — handle each per the table below, then create the children.
+
+**Rationalization table — every excuse below means "slice and create the children now":**
+
+| Rationalization | Reality |
+|---|---|
+| "Spec is a draft / 초안, so I'll wait to slice" | Draft = solution-open = the home of Model-A WHAT-children. The per-child stage-check exists *for* draft-stage children. Slice now. |
+| "Caller said *organize this one ticket*, not *split it*" | Organizing a gate-failing requirement IS slicing it. You enrich the parent in place AND add its children under it — both, not either. |
+| "Open product decisions make child ACs into TBD shells" | A child may carry its own Decisions Needed plus an AC for the settled part. Open decisions are *recorded*, never a reason to keep one mega-issue. |
+| "Creating them now is premature noise on the board" | Children land in Backlog, not the active cycle. The un-buildable mega-issue is the noise. |
+| "Boundaries will shift, I'd be reworking them" | Boundaries are the N (Negotiable) in INVEST; a later merge/split of a child is a cheap, normal PM edit. Deferring is the expensive state. |
+| "I'll put the slices in the parent body and offer to create them later" | The body proposal IS the failure mode. Create the issues; the parent body holds shared context, not a slice menu. |
+| "Stage 5 'slice' is just the literal reading; upper gates block it" | Refuse-to-file gates the *content of a write*, not the *existence of children*. The slice gate firing mandates the children; an open decision rides in a Decisions Needed entry. |
+| "Creating issues is irreversible, so defer when info-poor" | Child issues are reversible (cancel/merge). Deferring leaves the requirement un-actionable — that is the irreversible-feeling cost. Reversibility argues FOR creating. |
+
+### Red Flags — STOP, you are deferring a required slice
+
+- You're writing a "구현 분할 (제안)" / "proposed slices" / "slice candidates" section in the parent body.
+- You're about to end with "원하면 자식 이슈로 만들어 드릴게요 / I can spin these out when ready".
+- You're citing "draft / 초안", "정리 / organize", "premature", "sprint board", or "open decisions" as a reason NOT to create children.
+- The gate fired (fails I / E / S) but your write tail touches only one issue.
+
+**All of these mean: create the child issues now (parent + blocked-by), per Stage 6. The only exemption is an explicit caller instruction not to.**
+
 ---
 
 ## Inline Gates
