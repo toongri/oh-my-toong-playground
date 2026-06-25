@@ -18,7 +18,7 @@ from cookie_paths import UnsupportedPlatform, resolve_cookie_db  # noqa: E402
 from extract_cookies import extract_cookies, inject_cookies, write_cookie_file  # noqa: E402
 
 
-def _make_chromium_db(path: Path, name: str, encrypted_value: bytes, host: str) -> None:
+def _make_chromium_db(path: Path, name: str, encrypted_value: bytes, host: str, samesite: int = 1) -> None:
     conn = sqlite3.connect(str(path))
     conn.execute(
         "CREATE TABLE cookies (name TEXT, encrypted_value BLOB, host_key TEXT, path TEXT, "
@@ -26,7 +26,7 @@ def _make_chromium_db(path: Path, name: str, encrypted_value: bytes, host: str) 
     )
     conn.execute(
         "INSERT INTO cookies VALUES (?,?,?,?,?,?,?,?)",
-        (name, encrypted_value, host, "/", 13_300_000_000_000_000, 1, 1, 1),
+        (name, encrypted_value, host, "/", 13_300_000_000_000_000, 1, 1, samesite),
     )
     conn.commit()
     conn.close()
@@ -239,6 +239,85 @@ class SecretHandling(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertNotIn("secret-token", command)
         self.assertIn("secret-token", run.call_args.kwargs["input"])
+
+
+class CookieFieldFixes(unittest.TestCase):
+    """F9/F10/F11/F14: SameSite, inject-all, host-only domain, cookie-path order."""
+
+    def _base_with_db(self, rel: str, make: Callable[[Path], None]) -> Path:
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(str(base), ignore_errors=True))
+        db = base / rel
+        db.parent.mkdir(parents=True)
+        make(db)
+        return base
+
+    @staticmethod
+    def _inject_payload(cookies: list) -> list:
+        import json
+
+        captured: dict = {}
+        with patch("extract_cookies.subprocess.run") as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = str(len(cookies))
+            run.return_value.stderr = ""
+            inject_cookies(cookies, 9242)
+            captured["input"] = run.call_args.kwargs["input"]
+        return json.loads(captured["input"])
+
+    def test_samesite_minus_one_is_lax_not_none(self) -> None:
+        # F9: SameSite -1 must map to "Lax" for the export form, never "None".
+        key = derive_key("darwin", b"secret")
+        blob = _encrypt_cbc_v10(key, "logged-in")
+        base = self._base_with_db(
+            "Google/Chrome/Default/Cookies",
+            lambda p: _make_chromium_db(p, "SID", blob, ".youtube.com", samesite=-1),
+        )
+        cookies = extract_cookies(
+            "chrome", ["youtube.com"], platform="darwin",
+            keyring_reader=lambda _s: b"secret", base_override=base,
+        )
+        self.assertEqual(len(cookies), 1)
+        self.assertEqual(cookies[0]["sameSite"], "Lax")
+        self.assertNotEqual(cookies[0]["sameSite"], "None")
+
+    def test_inject_includes_non_important_cookies(self) -> None:
+        # F10: ALL cookies are injected, not only IMPORTANT-flagged ones.
+        cookies = [
+            {"name": "SID", "value": "v1", "domain": ".youtube.com", "path": "/",
+             "secure": True, "httpOnly": True, "sameSite": "Lax"},
+            {"name": "csrf_token", "value": "v2", "domain": ".youtube.com", "path": "/",
+             "secure": True, "httpOnly": False, "sameSite": "Lax"},
+        ]
+        payload = self._inject_payload(cookies)
+        names = {c["name"] for c in payload}
+        self.assertIn("csrf_token", names)
+        self.assertEqual(len(payload), 2)
+
+    def test_host_only_cookie_omits_domain(self) -> None:
+        # F11: host-only cookies (no leading dot) omit the domain attribute.
+        cookies = [
+            {"name": "host_only", "value": "v", "domain": "example.com", "path": "/",
+             "secure": True, "httpOnly": False, "sameSite": "Lax"},
+            {"name": "wide", "value": "v", "domain": ".example.com", "path": "/",
+             "secure": True, "httpOnly": False, "sameSite": "Lax"},
+        ]
+        payload = self._inject_payload(cookies)
+        by_name = {c["name"]: c for c in payload}
+        self.assertNotIn("domain", by_name["host_only"])
+        self.assertEqual(by_name["wide"]["domain"], ".example.com")
+
+    def test_prefers_network_cookies_over_legacy(self) -> None:
+        # F14: prefer Network/Cookies over the legacy Cookies path when both exist.
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(str(base), ignore_errors=True))
+        legacy = base / "Google/Chrome/Default/Cookies"
+        network = base / "Google/Chrome/Default/Network/Cookies"
+        legacy.parent.mkdir(parents=True)
+        network.parent.mkdir(parents=True)
+        legacy.write_bytes(b"")
+        network.write_bytes(b"")
+        self.assertEqual(resolve_cookie_db("chrome", "darwin", base_override=base), network)
 
 
 if __name__ == "__main__":

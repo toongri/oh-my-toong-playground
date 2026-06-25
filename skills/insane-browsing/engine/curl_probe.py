@@ -1,11 +1,50 @@
 from __future__ import annotations
 
+import ipaddress
+import socket
 import time
 from typing import Iterable, Mapping, Protocol
+from urllib.parse import urljoin, urlparse
 
 from .referers import REFERER_STRATEGIES
 from .result_schema import Attempt
 from .validators import Verdict, validate
+
+# Max redirect hops to follow before giving up (matches curl's default).
+_MAX_REDIRECTS = 30
+
+
+def _is_blocked_host(host: str) -> bool:
+    """True if `host` resolves to a non-routable / cloud-metadata address.
+
+    Blocks the standard SSRF target classes: private (RFC1918), loopback
+    (127/8, ::1), link-local (169.254/16 incl. the 169.254.169.254 metadata
+    endpoint, and fe80::/10), plus reserved/unspecified as a safety belt. A
+    host is blocked if ANY of its resolved addresses falls in those classes.
+    """
+    if not host:
+        return True
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        # Unresolvable host: refuse rather than follow into the unknown.
+        return True
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            return True
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_unspecified
+            or ip.is_multicast
+        ):
+            return True
+    return False
 
 
 class _CookieItem(Protocol):
@@ -39,15 +78,31 @@ def _curl_probe(
     if referer:
         headers["Referer"] = referer
 
+    # Manual redirect loop: validate every hop's target before following so an
+    # attacker-influenced page cannot steer the fetch at internal / cloud-metadata
+    # endpoints (SSRF). curl auto-follow is disabled; each Location is resolved and
+    # its host classified before the next request is issued.
+    current_url = url
     try:
-        resp = cffi_requests.get(
-            url,
-            impersonate=impersonate,
-            headers=headers,
-            timeout=timeout,
-            allow_redirects=True,
-        )
-        return resp, None
+        for _ in range(_MAX_REDIRECTS + 1):
+            resp = cffi_requests.get(
+                current_url,
+                impersonate=impersonate,
+                headers=headers,
+                timeout=timeout,
+                allow_redirects=False,
+            )
+            if resp.status_code not in (301, 302, 303, 307, 308):
+                return resp, None
+            location = resp.headers.get("location")
+            if not location:
+                return resp, None
+            next_url = urljoin(current_url, location)
+            host = urlparse(next_url).hostname or ""
+            if _is_blocked_host(host):
+                return None, f"ssrf_redirect_blocked:{host}"
+            current_url = next_url
+        return None, "too_many_redirects"
     except cffi_requests.exceptions.RequestException as e:
         return None, f"{type(e).__name__}:{str(e)[:200]}"
 
