@@ -15,6 +15,7 @@
  */
 
 import fs from "node:fs";
+import { logDry, logInfo, logWarn } from "./logger.ts";
 import type { ProvisionItem } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -58,7 +59,7 @@ export function runProvision(
   for (const dir of targetDirs) {
     // Skip non-existent dirs
     if (!fs.existsSync(dir)) {
-      process.stderr.write(`[provision] skip (dir not found): ${dir}\n`);
+      logInfo(`provision skip (dir not found): ${dir}`);
       continue;
     }
 
@@ -66,10 +67,10 @@ export function runProvision(
       // Check phase
       if (item.check) {
         if (opts.dryRun) {
-          process.stderr.write(`[provision] would check: ${item.check} @ ${dir}\n`);
+          logDry(`provision would check: ${item.check} @ ${dir}`);
           // In dryRun we don't know what check would return; report both paths as intent.
           for (const cmd of item.commands) {
-            process.stderr.write(`[provision] would run (if check fails): ${cmd} @ ${dir}\n`);
+            logDry(`provision would run (if check fails): ${cmd} @ ${dir}`);
           }
           continue;
         }
@@ -85,7 +86,7 @@ export function runProvision(
         }
 
         if (checkPassed) {
-          process.stderr.write(`[provision] skip (check passed): ${item.check} @ ${dir}\n`);
+          logInfo(`provision skip (check passed): ${item.check} @ ${dir}`);
           continue;
         }
       }
@@ -93,19 +94,17 @@ export function runProvision(
       // Commands phase
       for (const cmd of item.commands) {
         if (opts.dryRun) {
-          process.stderr.write(`[provision] would run: ${cmd} @ ${dir}\n`);
+          logDry(`provision would run: ${cmd} @ ${dir}`);
           continue;
         }
 
         try {
           const result = runCommandSync(cmd, dir);
           if (result.exitCode !== 0) {
-            process.stderr.write(
-              `[provision] command exited with status ${result.exitCode} (non-fatal): ${cmd} @ ${dir}\n`,
-            );
+            logWarn(`provision command exited with status ${result.exitCode} (non-fatal): ${cmd} @ ${dir}`);
           }
         } catch (err) {
-          process.stderr.write(`[provision] command failed (non-fatal): ${cmd} @ ${dir}: ${err}\n`);
+          logWarn(`provision command failed (non-fatal): ${cmd} @ ${dir}: ${err}`);
         }
       }
     }
