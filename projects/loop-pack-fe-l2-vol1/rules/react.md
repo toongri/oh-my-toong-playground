@@ -1,5 +1,5 @@
 ---
-paths: ["**/*.tsx", "**/*.jsx"]
+paths: ["**/*.tsx", "**/*.jsx", "**/use*.ts"]
 ---
 
 # React 판단 규칙
