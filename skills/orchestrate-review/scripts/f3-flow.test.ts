@@ -48,7 +48,7 @@ function makeJobFixture(dir: string): void {
   }
 }
 
-describe('F3-flow: usage-summary harvest must precede clean', () => {
+describe('F3-flow: usage-summary 하베스트는 clean보다 먼저 실행돼야 한다', () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -60,7 +60,7 @@ describe('F3-flow: usage-summary harvest must precede clean', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('summarizeUsage returns known non-zero aggregate BEFORE members/ is deleted', () => {
+  test('`summarizeUsage`는 members/ 삭제 전에 알려진 비-0 합산값을 반환한다', () => {
     const result = summarizeUsage(tmpDir);
 
     expect(result.memberCount).toBe(2);
@@ -69,7 +69,7 @@ describe('F3-flow: usage-summary harvest must precede clean', () => {
     expect(result.usage.cached_input_tokens).toBe(FIXTURE_CACHED_TOKENS);
   });
 
-  test('summarizeUsage returns zero aggregate AFTER members/ is deleted (simulates clean)', () => {
+  test('`summarizeUsage`는 members/ 삭제 후 빈 합산값을 반환한다 (clean 시뮬레이션)', () => {
     // Mirror generic-job.ts:867 — rmSync on the members subdir simulates what clean does
     // to the data summarizeUsage reads. The job dir shell survives; only member data is gone.
     fs.rmSync(path.join(tmpDir, 'members'), { recursive: true, force: true });
@@ -80,7 +80,7 @@ describe('F3-flow: usage-summary harvest must precede clean', () => {
     expect(result.usage).toEqual({});
   });
 
-  test('SKILL.md conductor steps include "Find Token Usage" before the clean teardown reference', () => {
+  test('SKILL.md 지휘자 단계에서 "Find Token Usage"는 clean 정리 참조보다 앞에 위치한다', () => {
     const skill = fs.readFileSync(SKILL_MD_PATH, 'utf8');
 
     // "Find Token Usage" is the labelled block the conductor appends to returned text.

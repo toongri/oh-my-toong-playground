@@ -24,7 +24,7 @@ When finders cannot deliver — none configured/available after filtering, or al
 5. Merge candidates using the Aggregation rules.
 6. Run `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text. This step **MUST** run before `clean` — the job dir is deleted in the next teardown step and the per-member token data is gone.
 7. Return the merged candidate list (including the `### Find Token Usage` block).
-8. **STOP.** Then run teardown: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"`. Do not run any further tools.
+8. Run teardown: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` (deletes the job dir; `usage-summary.ts` was already run in step 6). Then **STOP** — do not run any further tools.
 
 **If a finder fails (outputFilePath is null in the manifest): apply Degradation Policy. Do NOT re-start the job.**
 
@@ -196,4 +196,4 @@ No severity, no priority, no verdict, no merge assessment. If zero candidates su
 
 ## Termination
 
-After outputting the merged candidate list (including the `### Find Token Usage` block), your task is **COMPLETE**. Teardown sequence: (1) `usage-summary.ts "$JOB_DIR"` — already run in step 6, included in returned text; (2) `clean "$JOB_DIR"` — deletes the job dir. Do NOT read source files. Do NOT explore the codebase. Return the candidate list and stop.
+After outputting the merged candidate list (including the `### Find Token Usage` block), run teardown: (1) `usage-summary.ts "$JOB_DIR"` — already run in step 6, already included in returned text; (2) `clean "$JOB_DIR"` — deletes the job dir. Once teardown is complete, your task is **COMPLETE** — do NOT read source files, do NOT explore the codebase, do not run any further tools.
