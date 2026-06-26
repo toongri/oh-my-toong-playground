@@ -34,15 +34,18 @@ export interface UsageSummary {
  * Cross-runtime safe: uses only fs + path (Node built-ins).
  */
 export function summarizeUsage(jobDir: string): UsageSummary {
-  const membersDir = path.join(path.resolve(jobDir), 'members');
+  const membersDir = path.resolve(jobDir, 'members');
   const aggregate: Record<string, number> = {};
   let memberCount = 0;
 
-  if (!fs.existsSync(membersDir)) {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(membersDir);
+  } catch {
     return { memberCount: 0, usage: {} };
   }
 
-  for (const entry of fs.readdirSync(membersDir)) {
+  for (const entry of entries) {
     const statusPath = path.join(membersDir, entry, 'status.json');
     let status: unknown;
     try {
