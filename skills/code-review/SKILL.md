@@ -416,9 +416,9 @@ Omit the last argument when `findTokenUsage` is unavailable. A D=0 review (zero 
 **Find-inclusion rule:**
 
 Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user):
-- Resolve `omt.codeReview.findInclusionThreshold` into `<findInclusionThreshold>`; if undefined, use `0.5`
+- Resolve `omt.codeReview.findInclusionThreshold` into `<findInclusionThreshold>`; if undefined, use `50000` (output tokens)
 
-After writing the sink, if `findTokenUsage` is available, compute `findShare = findTokenUsage.usage.output_tokens / totalReviewOutputTokens`. If `findShare >= omt.codeReview.findInclusionThreshold`, append a note to the Phase 3 report: "Find token share `{findShare}` >= threshold `{findInclusionThreshold}` — find-phase redesign is in scope as a follow-up (Story 2)." This rule is measurement-only in v1 — it does not block the review or change any verdict.
+After writing the sink, if `findTokenUsage` is available, compare `findTokenUsage.usage.output_tokens` directly against `findInclusionThreshold` as an absolute output-token count. (v1 note: verify/synthesis tokens are not measured in v1, so a true share-of-total-review-tokens ratio is not computable; this threshold is an absolute cost signal instead.) If `findTokenUsage.usage.output_tokens >= findInclusionThreshold`, append a note to the Phase 3 report: "Find output tokens `{findTokenUsage.usage.output_tokens}` >= threshold `{findInclusionThreshold}` tokens — find-phase redesign is in scope as a follow-up (Story 2)." This rule is measurement-only in v1 — it does not block the review or change any verdict.
 
 ## Step 6: Verification + Synthesis
 
@@ -433,7 +433,7 @@ Finders surface candidates; they do not judge them. You judge each deduped candi
 Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user):
 - Resolve `omt.codeReview.escalationConfidenceThreshold` into `<threshold>`; if undefined, use `0.35`
 - Resolve `omt.codeReview.escalationKCap` into `<k>`; if undefined, use `3`
-- Resolve `omt.codeReview.findInclusionThreshold` into `<findInclusionThreshold>`; if undefined, use `0.5` (also resolved in the Find Phase Sink above)
+- Resolve `omt.codeReview.findInclusionThreshold` into `<findInclusionThreshold>`; if undefined, use `50000` (output tokens; also resolved in the Find Phase Sink above)
 
 **Inline judgment steps:**
 
