@@ -467,6 +467,7 @@ async function executeOneTurn(
     message: runResultRecord.message ?? null,
     finishedAt: runResultRecord.finishedAt ?? new Date().toISOString(),
     workerEnv: builtCmd.env,
+    usage: parsed?.usage ?? null,
   });
 
   return { state, sessionID, text, exitCode };
