@@ -103,8 +103,11 @@ if (import.meta.main) {
   const deduped = Number(dedupedStr);
   const dispatched = Number(dispatchedStr);
 
-  if (!Number.isInteger(found) || !Number.isInteger(deduped) || !Number.isInteger(dispatched)) {
-    process.stderr.write('durable-sink: found/deduped/dispatched must be integers\n');
+  if (
+    !Number.isInteger(found) || !Number.isInteger(deduped) || !Number.isInteger(dispatched) ||
+    found < 0 || deduped < 0 || dispatched < 0
+  ) {
+    process.stderr.write('durable-sink: found/deduped/dispatched must be non-negative integers\n');
     process.exit(1);
   }
 
@@ -118,8 +121,8 @@ if (import.meta.main) {
         process.stderr.write(`durable-sink: findTokenUsageJson is not a JSON object — writing null\n`);
       }
     } catch {
-      process.stderr.write(`durable-sink: invalid findTokenUsageJson — writing null\n`);
-      process.exit(2);
+      process.stderr.write(`durable-sink: invalid findTokenUsageJson — recording usage as null\n`);
+      // fall through: leave findTokenUsage undefined → writeDurableSink records null
     }
   }
 
