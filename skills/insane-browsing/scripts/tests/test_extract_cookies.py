@@ -307,6 +307,24 @@ class CookieFieldFixes(unittest.TestCase):
         self.assertNotIn("domain", by_name["host_only"])
         self.assertEqual(by_name["wide"]["domain"], ".example.com")
 
+    def test_host_only_cookie_supplies_url_so_cdp_can_derive_origin(self) -> None:
+        # F#1 (Codex P2): host-only cookies carry no domain, so CDP needs a url
+        # to derive the origin; domain cookies keep domain and must not also
+        # send url. The url path mirrors the cookie path.
+        cookies = [
+            {"name": "host_only", "value": "v", "domain": "example.com", "path": "/account",
+             "secure": True, "httpOnly": False, "sameSite": "Lax"},
+            {"name": "wide", "value": "v", "domain": ".example.com", "path": "/",
+             "secure": True, "httpOnly": False, "sameSite": "Lax"},
+        ]
+        payload = self._inject_payload(cookies)
+        by_name = {c["name"]: c for c in payload}
+        self.assertIn("url", by_name["host_only"])
+        self.assertEqual(by_name["host_only"]["url"], "https://example.com/account")
+        self.assertNotIn("domain", by_name["host_only"])
+        self.assertNotIn("url", by_name["wide"])
+        self.assertEqual(by_name["wide"]["domain"], ".example.com")
+
     def test_prefers_network_cookies_over_legacy(self) -> None:
         # F14: prefer Network/Cookies over the legacy Cookies path when both exist.
         base = Path(tempfile.mkdtemp())
