@@ -48,9 +48,14 @@ export interface DurableSinkParams {
 /**
  * Writes candidates.json and usage-summary.json to
  * ${OMT_DIR}/code-review/${runId}/.
+ *
+ * Returns the absolute path to the sink directory so callers can log it
+ * without re-deriving the path independently (K-3).
  */
-export function writeDurableSink(params: DurableSinkParams): void {
+export function writeDurableSink(params: DurableSinkParams): string {
   const { runId, found, deduped, dispatched, findTokenUsage } = params;
+
+  if (!runId) throw new Error('writeDurableSink: runId must be non-empty');
 
   const sinkDir = join(getOmtDir(), 'code-review', runId);
   mkdirSync(sinkDir, { recursive: true });
@@ -66,6 +71,8 @@ export function writeDurableSink(params: DurableSinkParams): void {
     JSON.stringify({ findTokenUsage: findTokenUsage ?? null }, null, 2),
     'utf8'
   );
+
+  return sinkDir;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +87,12 @@ export function writeDurableSink(params: DurableSinkParams): void {
 if (import.meta.main) {
   const [, , runId, foundStr, dedupedStr, dispatchedStr, findTokenUsageJson] = process.argv;
 
-  if (!runId || foundStr === undefined || dedupedStr === undefined || dispatchedStr === undefined) {
+  if (
+    !runId ||
+    foundStr === undefined || foundStr === '' ||
+    dedupedStr === undefined || dedupedStr === '' ||
+    dispatchedStr === undefined || dispatchedStr === ''
+  ) {
     process.stderr.write(
       'usage: durable-sink.ts <runId> <found> <deduped> <dispatched> [<findTokenUsageJson>]\n'
     );
@@ -91,7 +103,7 @@ if (import.meta.main) {
   const deduped = Number(dedupedStr);
   const dispatched = Number(dispatchedStr);
 
-  if (!Number.isFinite(found) || !Number.isFinite(deduped) || !Number.isFinite(dispatched)) {
+  if (!Number.isInteger(found) || !Number.isInteger(deduped) || !Number.isInteger(dispatched)) {
     process.stderr.write('durable-sink: found/deduped/dispatched must be integers\n');
     process.exit(1);
   }
@@ -99,12 +111,18 @@ if (import.meta.main) {
   let findTokenUsage: object | undefined;
   if (findTokenUsageJson && findTokenUsageJson.trim() !== '') {
     try {
-      findTokenUsage = JSON.parse(findTokenUsageJson) as object;
+      const parsed: unknown = JSON.parse(findTokenUsageJson);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        findTokenUsage = parsed as object;
+      } else {
+        process.stderr.write(`durable-sink: findTokenUsageJson is not a JSON object — writing null\n`);
+      }
     } catch {
       process.stderr.write(`durable-sink: invalid findTokenUsageJson — writing null\n`);
+      process.exit(2);
     }
   }
 
-  writeDurableSink({ runId, found, deduped, dispatched, findTokenUsage });
-  process.stdout.write(`durable-sink: wrote ${join(getOmtDir(), 'code-review', runId)}/\n`);
+  const sinkDir = writeDurableSink({ runId, found, deduped, dispatched, findTokenUsage });
+  process.stdout.write(`durable-sink: wrote ${sinkDir}/\n`);
 }
