@@ -233,11 +233,52 @@ describe('C-3: 비객체 JSON은 `findTokenUsage`를 null로 기록한다', () =
 });
 
 // ---------------------------------------------------------------------------
-// C-5: 잘못된 JSON 파싱 시 exit 2
+// C-5: 잘못된 JSON — exit 0으로 fall-through, null 기록, stderr 경고
+//   (round-2 exit(2)는 plan TODO-7 "persist what is available" 위반이었으므로 제거)
 // ---------------------------------------------------------------------------
-describe('C-5: 잘못된 JSON 파싱 시 exit 2를 반환한다', () => {
-  test('malformed JSON은 exit 2를 반환한다', () => {
+describe('C-5: malformed findTokenUsageJson은 null로 기록하고 exit 0을 반환한다', () => {
+  test('malformed JSON은 exit 0을 반환한다', () => {
     const { exitCode } = runCLI(['run-id', '5', '3', '3', '{bad json}']);
-    expect(exitCode).toBe(2);
+    expect(exitCode).toBe(0);
+  });
+
+  test('malformed JSON이어도 candidates.json이 기록된다', () => {
+    runCLI(['run-id', '5', '3', '3', '{bad json}']);
+    const candidatesPath = join(tmpDir, 'code-review', 'run-id', 'candidates.json');
+    expect(existsSync(candidatesPath)).toBe(true);
+  });
+
+  test('malformed JSON이면 usage-summary.json의 findTokenUsage가 null로 기록된다', () => {
+    runCLI(['run-id', '5', '3', '3', '{bad json}']);
+    const usagePath = join(tmpDir, 'code-review', 'run-id', 'usage-summary.json');
+    const parsed = JSON.parse(readFileSync(usagePath, 'utf8'));
+    expect(parsed.findTokenUsage).toBeNull();
+  });
+
+  test('malformed JSON은 stderr에 경고 메시지를 출력한다', () => {
+    const { stderr } = runCLI(['run-id', '5', '3', '3', '{bad json}']);
+    expect(stderr).toContain('invalid findTokenUsageJson');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-2b: 음수 인자 — exit 1 (non-negative 보장)
+// ---------------------------------------------------------------------------
+describe('C-2b: 음수 인자는 exit 1을 반환한다', () => {
+  test('음수 `found` 인자는 exit 1을 반환하고 파일을 기록하지 않는다', () => {
+    const { exitCode } = runCLI(['run-id', '-3', '3', '3']);
+    expect(exitCode).toBe(1);
+    const candidatesPath = join(tmpDir, 'code-review', 'run-id', 'candidates.json');
+    expect(existsSync(candidatesPath)).toBe(false);
+  });
+
+  test('음수 `deduped` 인자는 exit 1을 반환한다', () => {
+    const { exitCode } = runCLI(['run-id', '5', '-1', '3']);
+    expect(exitCode).toBe(1);
+  });
+
+  test('음수 `dispatched` 인자는 exit 1을 반환한다', () => {
+    const { exitCode } = runCLI(['run-id', '5', '3', '-2']);
+    expect(exitCode).toBe(1);
   });
 });
