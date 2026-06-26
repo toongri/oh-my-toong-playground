@@ -41,11 +41,12 @@ These premises must be reflected in the chunk-reviewer dispatch prompt — see S
 | Evidence Verification (build/test/lint) | Yes | - |
 | Chunking decision | Yes | - |
 | Findings synthesis (rank/class verified findings) | Yes | - |
-| Individual candidate verification (Phase 2) | NEVER | verifier subagent (one per candidate) |
+| Individual candidate judgment inline (Phase 2) | Yes | - |
+| Escalation verification (candidates below confidence threshold) | - | verifier subagent (one per escalated candidate) |
 | Individual chunk review | NEVER | chunk-reviewer |
 | Code modification | NEVER | (forbidden entirely) |
 
-**RULE**: Orchestration, synthesis, and decisions = Do directly. Per-candidate verification = DELEGATE to verifier subagents (one per candidate). Multi-angle finding = DELEGATE to chunk-reviewer. Code modification = FORBIDDEN.
+**RULE**: Orchestration, synthesis, and decisions = Do directly. Per-candidate inline judgment = Do directly in Phase 2 (reasoning → confidence → verdict + enrichment). Escalated candidates (confidence below threshold) = DELEGATE to verifier subagents (one per candidate). Multi-angle finding = DELEGATE to chunk-reviewer. Code modification = FORBIDDEN.
 
 ### Role Separation
 
@@ -58,22 +59,23 @@ digraph role_separation {
     "Codebase" [shape=cylinder];
     "Orchestrator" -> "chunk-reviewer" [label="dispatch with {DIFF_COMMAND}"];
     "chunk-reviewer" -> "Orchestrator" [label="candidate findings"];
-    "Orchestrator" -> "verifier" [label="dispatch one per candidate"];
+    "Orchestrator" -> "Codebase" [label="Read/Grep inline (Phase 2)"];
+    "Orchestrator" -> "verifier" [label="dispatch per escalated candidate"];
     "verifier" -> "Codebase" [label="Read/Grep to verify"];
-    "verifier" -> "Orchestrator" [label="verdict + enriched finding"];
+    "verifier" -> "Orchestrator" [label="verdict (supersedes inline)"];
 }
 ```
 
 **Your role as orchestrator:**
 - Dispatch chunk-reviewer agents with diff command strings (each fans out the angle finders)
-- Dispatch one verifier subagent per candidate; collect their verdicts and drop REFUTED
+- Judge each deduped candidate inline in Phase 2 (reasoning → confidence → verdict + enrichment); enrich kept findings directly
+- Escalate only candidates below the confidence threshold to verifier subagents; collect their final verdicts; supersede inline tentative verdicts with verifier verdicts in Phase 3
 - Synthesize the kept findings into a ranked findings report (text only)
 - Make chunking decisions and rank the verified findings (no merge verdict — this review reports, it does not gate)
 
 **NOT your role:**
 - Modifying any source files
-- Running the raw `git diff` command (chunk-reviewers and verifiers execute the diff)
-- Judging candidates in your own context — each candidate goes to its own verifier subagent
+- Running the raw `git diff` command (chunk-reviewers execute the diff)
 
 ### Context Budget
 
@@ -84,17 +86,18 @@ digraph role_separation {
 - CLAUDE.md file content
 - Step 3 evidence summary (structured table — build/test/lint status + test coverage mapping, truncated to summary on success / last 30 lines on failure)
 - chunk-reviewer results (candidate findings)
-- Verifier subagent verdicts + enriched findings (Phase 2)
+- Phase 2 inline judgment output (reasoning, verdicts, enriched findings for non-escalated candidates)
+- Escalated verifier subagent verdicts + enriched findings (Phase 2, candidates below confidence threshold)
+- Code reading via Read/Grep for Phase 2 inline candidate judgment
 
 **Forbidden in orchestrator context:**
-- Running the raw `git diff` command (chunk-reviewers and verifiers execute the diff, not you)
-- Reading code to verify candidates in your own context (each candidate goes to its own verifier subagent)
+- Running the raw `git diff` command (chunk-reviewers execute the diff, not you)
 - Modifying any source files
 
 **Context management:**
-- Per-candidate code reading happens inside verifier subagents, not your context — see Phase 2 cap & batching
+- Phase 2 inline judgment reads candidate code directly in your context (non-escalated candidates); only escalated candidates' code reading moves into verifier subagent contexts
 
-**RULE**: Per-candidate verification is delegated to verifier subagents. You CANNOT run the raw diff command or modify files.
+**RULE**: Inline judgment for non-escalated candidates runs in your context. Only escalated candidates are delegated to verifier subagents. You CANNOT run the raw diff command or modify files.
 
 ## Step 0: Intent and Context Acquisition
 
@@ -385,28 +388,59 @@ After all re-dispatches complete, merge all chunk results (original + re-dispatc
 
 ## Step 6: Verification + Synthesis
 
-After all chunk-reviewers return, produce the final findings in two phases: per-candidate verification via a verifier fan-out (Phase 2), and findings synthesis (Phase 3). The terminal deliverable is the **Phase 3 findings text** — no walkthrough, no diagrams, no HTML.
+After all chunk-reviewers return, produce the final findings in two phases: per-candidate inline judgment with selective escalation (Phase 2), and findings synthesis (Phase 3). The terminal deliverable is the **Phase 3 findings text** — no walkthrough, no diagrams, no HTML.
 
 ### Phase 2: Candidate Verification (MANDATORY)
 
-Finders surface candidates; they do not judge them — and **you do not judge them in your own context either**. You dispatch **one verifier subagent per candidate**. Each verifier reads the actual code in isolation and returns exactly one verdict. Per-candidate isolation is deliberate: it keeps each judgment free of the other candidates' framing (no anchoring) and gives each verifier a clean context to read deeply. This is the precision gate — finders ran wide for recall; verification narrows to what is real. A candidate is real or it is not, at a stated confidence.
+Finders surface candidates; they do not judge them. You judge each deduped candidate **inline** — reasoning through the evidence, reading the relevant code in your context, and issuing a confidence score and verdict. Inline judgment eliminates the multi-candidate batch-output parse hazard, and the orchestrator's context (already holding chunk-reviewer results and diff stat) is a clean enough frame for accurate triage: no anchoring from the authoring context, because this is already a separate review session.
 
-**Dispatch:**
+**Config resolution:**
 
-1. **Dedup near-duplicates first** (same defect, same location, same reason → keep one, merging the `found by` angles and keeping the most concrete failure scenario). Verifying duplicates wastes verifier slots.
-2. **MANDATORY READ: `references/verifier-prompt.md`** — the per-candidate verifier contract. Read it now before dispatching.
-3. For each remaining candidate, interpolate the placeholders:
-   - {RANGE} ← the review range from Step 1
-   - {CANDIDATE_FILE} / {CANDIDATE_LINE} / {CANDIDATE_SUMMARY} / {CANDIDATE_FAILURE_SCENARIO} / {CANDIDATE_FOUND_BY} ← the candidate's fields
-   - {INTENT} ← Step 0 intent/requirements (or "N/A — code-quality-only review")
-4. Dispatch a `general-purpose` subagent per candidate via the Task tool (`subagent_type: "general-purpose"`) with the interpolated prompt. **All candidates in ONE response** — parallel, foreground.
-5. **Collect** each verifier's verdict. **Keep CONFIRMED and PLAUSIBLE; drop REFUTED.** You do not re-judge a verdict — the verifier read the code; you collect.
+Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user):
+- Resolve `omt.codeReview.escalationConfidenceThreshold` into `<threshold>`; if undefined, use `0.35`
+- Resolve `omt.codeReview.escalationKCap` into `<k>`; if undefined, use `3`
 
-**Cap & batching:** verify at most **25 candidates per batch**. If more survive dedup, batch by file proximity, **correctness candidates first**, and state how many were deferred — never silently drop.
+**Inline judgment steps:**
 
-**The verdict ladder, the verification method, and the read-only constraint all live in `references/verifier-prompt.md`** — that is the contract each verifier applies. Keep it as the single source; do not restate the ladder here.
+1. **Dedup near-duplicates first** (same defect, same location, same reason → keep one, merging the `found by` angles and keeping the most concrete failure scenario). Deduplication reduces the judgment workload before it starts.
+2. **MANDATORY READ: `references/verifier-prompt.md`** — read it before beginning judgment. The verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), verification method, and 9-field output contract all live there. Escalated candidates reuse this file as their dispatch prompt.
+3. For each remaining candidate, in order:
 
-**Enrichment arrives with the verdict.** Each kept verifier returns the enriched finding (current code, what's wrong, failure scenario, fix, blast radius) because it had to read the code to decide. Phase 3 assembles these directly — there is no separate enrichment pass.
+   **REASONING** — read the code at the issue location (Read/Grep on the candidate file), trace the call chain from the entry point, and check the execution context (threading, dispatch model, runtime configuration). Apply the verdict ladder from `references/verifier-prompt.md`. Reason explicitly before issuing a score.
+
+   **CONFIDENCE** — assign a numeric value in **0.0–1.0** reflecting certainty that the finding is real (1.0 = no doubt, 0.0 = clearly not a bug). This value is **internal only**: it drives the escalation comparison and candidate ranking but is **never serialized into any artifact**.
+
+   **VERDICT** — exactly one of CONFIRMED / PLAUSIBLE / REFUTED (ladder in `references/verifier-prompt.md`).
+
+   For **CONFIRMED** or **PLAUSIBLE** (kept findings), emit the full 9-field enrichment inline:
+
+   ```
+   VERDICT: <CONFIRMED | PLAUSIBLE>
+   TITLE: <short finding title>
+   LOCATION: <file>:<line> — <section / function name>
+   CURRENT CODE:
+   <5-15 lines centered on the issue>
+   WHAT'S WRONG: <the problem, grounded in the quoted line>
+   FAILURE SCENARIO: <concrete inputs/state -> wrong output, crash, or lost effect; for a cleanup finding, the concrete cost>
+   FIX: <concrete diff, or design direction if structural>
+   BLAST RADIUS: <grep/reference evidence — what else references this, or "This location only">
+   FOUND BY: <angle(s)>
+   ```
+
+   For **REFUTED**, emit a one-line note:
+
+   ```
+   VERDICT: REFUTED — <one line quoting the line/guard/invariant that proves it is not a bug>
+   ```
+
+4. **Escalation** — after all inline judgments complete, collect candidates where `confidence < omt.codeReview.escalationConfidenceThreshold`:
+   - If the count exceeds `omt.codeReview.escalationKCap`, take the `<k>` lowest-confidence candidates for escalation; the overflow candidates **keep their inline verdict** and are **surfaced in Phase 3** — never silently dropped.
+   - For each escalated candidate, interpolate `references/verifier-prompt.md` with the candidate's fields and dispatch a `general-purpose` subagent via the Task tool (`subagent_type: "general-purpose"`). **All escalated candidates in ONE response** — parallel, foreground.
+   - The escalated verifier's verdict is **FINAL** and **supersedes** the inline tentative verdict in Phase 3.
+
+**Cap & batching:** judge at most **25 candidates per batch** inline. If more survive dedup, batch by file proximity, **correctness candidates first**, and state how many were deferred — never silently drop.
+
+**The verdict ladder, verification method, and 9-field output contract all live in `references/verifier-prompt.md`** — that is the single source; the inline judgment mirrors this contract directly.
 
 ### Phase 3: Findings Synthesis (report-only)
 
@@ -432,7 +466,7 @@ This is a **report**. You surface verified findings, ranked by what matters most
 
 This is a **report**. It does not gate. There is no Assessment / "Ready to merge" section, and there is no HTML — the deliverable is the Phase 3 findings as terminal text.
 
-Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup), `file:line`, and the verifier's enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the shape returned by `references/verifier-prompt.md`). Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by `review-report` when it dispatches a code-reviewer agent that runs this skill — do not invent a different format.
+Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup), `file:line`, and enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the 9-field shape from `references/verifier-prompt.md`, produced inline for non-escalated findings or by the escalated verifier for superseded ones). Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by `review-report` when it dispatches a code-reviewer agent that runs this skill — do not invent a different format.
 
 ## Reference Files (on-demand)
 
