@@ -49,6 +49,22 @@ describe('codex AgentDriver', () => {
     expect(result!.terminal).toBe('error');
   });
 
+  // F1: usage extraction
+  test('`parseStdout` - turn.completed의 usage가 ParseResult.usage로 반환됨', () => {
+    const stdout = readFixture('codex-trivial.ndjson');
+    const result = codexDriver.parseStdout(stdout);
+    expect(result).not.toBeNull();
+    expect(result!.usage).toBeDefined();
+    expect(result!.usage!.input_tokens).toBe(46369);
+  });
+
+  test('`parseStdout` - turn.completed 없을 때 usage는 undefined (turn.failed)', () => {
+    const stdout = readFixture('codex-turn-failed.ndjson');
+    const result = codexDriver.parseStdout(stdout);
+    expect(result).not.toBeNull();
+    expect(result!.usage).toBeUndefined();
+  });
+
   // -------------------------------------------------------------------------
   // parseStdout — synthesized NDJSON
   // -------------------------------------------------------------------------
