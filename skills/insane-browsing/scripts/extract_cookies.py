@@ -58,6 +58,7 @@ class CdpCookie(TypedDict):
     httpOnly: bool
     sameSite: str
     expires: NotRequired[int]
+    url: NotRequired[str]
 
 
 _CDP_SET_COOKIES_SCRIPT = r"""
@@ -257,8 +258,14 @@ def inject_cookies(cookies: list[CookieRecord], cdp_port: int) -> None:
             "secure": bool(c.get("secure")),
             "httpOnly": bool(c.get("httpOnly")),
             "sameSite": c.get("sameSite", "Lax"),
-            # Host-only cookies (no leading dot) must omit the domain attribute.
-            **({"domain": c["domain"]} if c.get("domain", "").startswith(".") else {}),
+            # Domain cookies (leading dot) carry the domain; host-only cookies
+            # carry no domain, so supply a url instead — CDP needs one or the
+            # other to derive the cookie's origin. Never both.
+            **(
+                {"domain": c["domain"]}
+                if c.get("domain", "").startswith(".")
+                else {"url": f"https://{c['domain']}{c.get('path') or '/'}"}
+            ),
             **({"expires": int(c["expires"])} if c.get("expires") and int(c["expires"]) > 0 else {}),
         }
         for c in cookies
