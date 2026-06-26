@@ -1,0 +1,9 @@
+name: loop-pack-fe-l2-vol1
+path: ~/repos/loop-pack-fe-l2-vol1/main
+
+rules:
+  items:
+    - react
+    - component-design
+    - testing
+    - typescript
