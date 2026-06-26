@@ -732,7 +732,7 @@ function resolveCodeReviewArtifactPath(sessionId: string): string {
  * artifact (never-false-complete: a broken reviewer output must degrade toward
  * block, never mask a CONFIRMED finding). `findings: []` is valid and clean.
  */
-function readCodeReviewArtifact(sessionId: string): CodeReviewArtifact | null {
+export function readCodeReviewArtifact(sessionId: string): CodeReviewArtifact | null {
   const content = readFileOrNull(resolveCodeReviewArtifactPath(sessionId));
   if (!content) return null;
   let obj: unknown;
