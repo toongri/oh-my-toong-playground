@@ -75,12 +75,12 @@ const REDESIGN_FINDINGS: Array<{ class: string; verdict: string; ref: string }> 
   { class: 'cleanup',     verdict: 'CONFIRMED',  ref: 'tools/adapters/claude.ts:88' },
 ];
 
-describe('V8: code-review artifact enum-contract preservation (redesign path)', () => {
+describe('V8: code-review 아티팩트 열거형 계약 보존 (redesign 경로)', () => {
   // -------------------------------------------------------------------------
   // AC 1: real readCodeReviewArtifact returns non-null — R1 fail-closed gate
   // -------------------------------------------------------------------------
   test(
-    'valid schema: readCodeReviewArtifact returns non-null for redesign-path artifact (R1 fail-closed)',
+    '유효한 스키마: `readCodeReviewArtifact`가 redesign 경로 아티팩트에 대해 null이 아닌 값 반환 (R1 fail-closed)',
     () => {
       writeArtifact(SID, {
         findings: REDESIGN_FINDINGS,
@@ -97,7 +97,7 @@ describe('V8: code-review artifact enum-contract preservation (redesign path)', 
   // AC 2: every finding verdict in {CONFIRMED, PLAUSIBLE}
   // -------------------------------------------------------------------------
   test(
-    'every finding verdict in {CONFIRMED, PLAUSIBLE} — enum contract preserved across redesign path',
+    '모든 finding verdict가 {CONFIRMED, PLAUSIBLE}에 속함 — redesign 경로에서 열거형 계약 보존',
     () => {
       writeArtifact(SID, {
         findings: REDESIGN_FINDINGS,
@@ -117,7 +117,7 @@ describe('V8: code-review artifact enum-contract preservation (redesign path)', 
   // AC 3: every finding class in {correctness, cleanup}
   // -------------------------------------------------------------------------
   test(
-    'every finding class in {correctness, cleanup} — enum contract preserved across redesign path',
+    '모든 finding class가 {correctness, cleanup}에 속함 — redesign 경로에서 열거형 계약 보존',
     () => {
       writeArtifact(SID, {
         findings: REDESIGN_FINDINGS,
@@ -148,8 +148,7 @@ describe('V8: code-review artifact enum-contract preservation (redesign path)', 
   // raw-file scan did.
   // -------------------------------------------------------------------------
   test(
-    'CRITICAL: zero confidence in raw serialized finding strings ' +
-    '(readCodeReviewArtifact ignores extra keys — raw scan is the only guard, T5/ADR-D3/R1)',
+    'CRITICAL: 직렬화된 finding 문자열에 confidence 없음 (`readCodeReviewArtifact`는 추가 키 무시 — raw 스캔이 유일한 보호, T5/ADR-D3/R1)',
     () => {
       writeArtifact(SID, {
         findings: REDESIGN_FINDINGS,
