@@ -100,7 +100,7 @@ When delegating to sisyphus-junior, refer to the Load Skills table in the `<skil
 
 ### Model: Junior always runs Sonnet
 
-sisyphus-junior runs on Sonnet — always. Do NOT pass `model="opus"` to junior. Junior is the generation agent, and generation errors are caught downstream by verification (argus, tests). If an implementation seems to need more capability, strengthen the verification, not the generator — never escalate the generator to Opus.
+sisyphus-junior runs on Sonnet — always. Do NOT pass `model="opus"` to junior. Junior is the generation agent; its output is checked by junior's own mandatory tests, and by argus only when the orchestrator creates an explicit verify task — implement tasks get no automatic argus pass. If an implementation seems to need more capability, tighten junior's required tests or add an explicit verify task — never escalate the generator to Opus.
 
 ---
 
