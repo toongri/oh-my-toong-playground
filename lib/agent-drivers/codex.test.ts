@@ -104,6 +104,16 @@ describe('codex AgentDriver', () => {
     expect(result!.terminal).toBe('stop');
   });
 
+  test('`parseStdout` - turn.completed의 usage가 배열이면 ParseResult.usage는 undefined (배열 가드)', () => {
+    const lines = [
+      JSON.stringify({ type: 'thread.started', thread_id: 'aaaaaaaa-0000-0000-0000-000000000001' }),
+      JSON.stringify({ type: 'turn.completed', usage: [1000, 500] }),
+    ].join('\n');
+    const result = codexDriver.parseStdout(lines);
+    expect(result).not.toBeNull();
+    expect(result!.usage).toBeUndefined();
+  });
+
   test('`parseStdout` - 완전히 잘못된 입력은 null 반환', () => {
     const result = codexDriver.parseStdout('garbage\nnot json at all\n{}broken');
     expect(result).toBeNull();
