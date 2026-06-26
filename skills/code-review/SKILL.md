@@ -384,7 +384,41 @@ Each chunk-reviewer scans its whole assigned diff through every angle and report
 
 Re-dispatch a chunk-reviewer for its chunk only when its response signals an infrastructure failure: a "Partial review"/"Limited review" degradation notice, an Angle Coverage entry marked `Unavailable`, or a reported diff-command failure.
 Cap: maximum 1 re-dispatch per original chunk; if the re-dispatch also fails, accept partial coverage.
-After all re-dispatches complete, merge all chunk results (original + re-dispatched) before proceeding to Step 6.
+After all re-dispatches complete, merge all chunk results (original + re-dispatched) before proceeding to the Find Phase Sink.
+
+## Find Phase Sink
+
+**Establish `runId` before dispatching chunk-reviewers (Step 5):**
+
+- Running under `/goal` (a `goal-codereview-{sid}.json` artifact path is active for the current session): `runId = {sid}`
+- Otherwise: `runId = crypto.randomUUID()` (Tier-0 builtin — no dependency required)
+
+**After all chunk-reviewers return and before Phase 2 begins, write the durable sink:**
+
+Parse the conductor's returned text for:
+- `found` — sum of per-angle counts from the Angle Coverage block (each angle's `K candidates` value)
+- `deduped` — the N in `### Candidate Findings ({N}/from M angles)` header
+- `findTokenUsage` — raw JSON object from the `### Find Token Usage` block (omit when unavailable — do not block the sink write)
+
+Compute `dispatched`:
+- v1: `dispatched = deduped` — no inline cap exists; the field records verify load for the find-inclusion gate and diverges only if a later inline cap or pre-filter is added
+
+Invoke the sink helper:
+
+```bash
+bun "${CLAUDE_SKILL_DIR}/scripts/durable-sink.ts" \
+  "<runId>" <found> <deduped> <dispatched> \
+  '<findTokenUsageJson>'
+```
+
+Omit the last argument when `findTokenUsage` is unavailable. A D=0 review (zero candidates) still invokes the sink — `candidates.json` is written with zeros.
+
+**Find-inclusion rule:**
+
+Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user):
+- Resolve `omt.codeReview.findInclusionThreshold` into `<findInclusionThreshold>`; if undefined, use `0.5`
+
+After writing the sink, if `findTokenUsage` is available, compute `findShare = findTokenUsage.usage.output_tokens / totalReviewOutputTokens`. If `findShare >= omt.codeReview.findInclusionThreshold`, append a note to the Phase 3 report: "Find token share `{findShare}` >= threshold `{findInclusionThreshold}` — find-phase redesign is in scope as a follow-up (Story 2)." This rule is measurement-only in v1 — it does not block the review or change any verdict.
 
 ## Step 6: Verification + Synthesis
 
@@ -399,6 +433,7 @@ Finders surface candidates; they do not judge them. You judge each deduped candi
 Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user):
 - Resolve `omt.codeReview.escalationConfidenceThreshold` into `<threshold>`; if undefined, use `0.35`
 - Resolve `omt.codeReview.escalationKCap` into `<k>`; if undefined, use `3`
+- Resolve `omt.codeReview.findInclusionThreshold` into `<findInclusionThreshold>`; if undefined, use `0.5` (also resolved in the Find Phase Sink above)
 
 **Inline judgment steps:**
 
