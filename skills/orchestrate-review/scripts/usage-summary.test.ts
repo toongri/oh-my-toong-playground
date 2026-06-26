@@ -120,4 +120,29 @@ describe('`summarizeUsage` (F3-unit)', () => {
     expect(result.memberCount).toBe(0);
     expect(result.usage).toEqual({});
   });
+
+  // C-1: array-valued status.json must not inflate memberCount
+  test('`status.json`이 JSON 배열이면 `memberCount`를 증가시키지 않고 usage에 기여하지 않는다', () => {
+    const membersDir = path.join(tmpDir, 'members');
+    fs.mkdirSync(path.join(membersDir, 'bad-array'), { recursive: true });
+    fs.writeFileSync(path.join(membersDir, 'bad-array', 'status.json'), '[]');
+
+    const result = summarizeUsage(tmpDir);
+
+    expect(result.memberCount).toBe(0);
+    expect(result.usage).toEqual({});
+  });
+
+  // C-5: prototype-key "constructor" in usage must sum to a number
+  test('`usage` 키가 "constructor"인 경우 숫자로 올바르게 합산된다', () => {
+    makeFixture(tmpDir, [
+      { name: 'eve', status: { member: 'eve', state: 'done', usage: { constructor: 5 } } },
+    ]);
+
+    const result = summarizeUsage(tmpDir);
+
+    expect(result.memberCount).toBe(1);
+    expect(typeof result.usage['constructor']).toBe('number');
+    expect(result.usage['constructor']).toBe(5);
+  });
 });

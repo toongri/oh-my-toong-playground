@@ -35,7 +35,7 @@ export interface UsageSummary {
  */
 export function summarizeUsage(jobDir: string): UsageSummary {
   const membersDir = path.resolve(jobDir, 'members');
-  const aggregate: Record<string, number> = {};
+  const aggregate = Object.create(null) as Record<string, number>;
   let memberCount = 0;
 
   let entries: string[];
@@ -53,7 +53,7 @@ export function summarizeUsage(jobDir: string): UsageSummary {
     } catch {
       continue;
     }
-    if (!status || typeof status !== 'object') continue;
+    if (!status || typeof status !== 'object' || Array.isArray(status)) continue;
 
     memberCount++;
 
