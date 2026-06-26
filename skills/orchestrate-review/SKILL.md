@@ -91,8 +91,8 @@ Response JSON (not done — re-run this step):
 ### Step 3 — Read Outputs
 Use the Read tool to read each finder's `outputFilePath` from the manifest.
 
-### Step 4 — Merge & Return
-Merge all finder candidate lists per the Aggregation rules, return the merged candidate list, then STOP.
+### Step 4 — Merge, Teardown & Return
+Merge all finder candidate lists per the Aggregation rules. Run `usage-summary.ts "$JOB_DIR"` and append the `### Find Token Usage` block to the merged text. Return the merged candidate list (including the `### Find Token Usage` block), then run teardown: `clean "$JOB_DIR"`, then STOP.
 
 ## Worker Output Contract
 
