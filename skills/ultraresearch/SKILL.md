@@ -1,6 +1,6 @@
 ---
 name: ultraresearch
-description: "Maximum-saturation research orchestration as ONE engine with three postures. Fans synchronous explore+librarian worker waves across codebase, web, official docs, and OSS repos; runs an EXPAND-until-convergence loop driven by leads workers return at each barrier; verifies contested claims through a separate verification pass (executed code for code-shaped claims, oracle citation re-read for the rest); synthesizes a cited SYNTHESIS.md. ACTIVATES on an explicit research demand (the word 'ultraresearch', '/ultraresearch') OR as a pre-work grounding posture invoked by deep-interview / a caller that needs facts before judgment. Never self-activates for ordinary questions, debugging, or routine implementation context-gathering. While active it overrides exploration-bounding defaults: exhaustive coverage is the goal."
+description: "Maximum-saturation research orchestration as ONE engine with three postures. Fans synchronous explore+librarian+browsing worker waves across codebase, web, official docs, and OSS repos; runs an EXPAND-until-convergence loop driven by leads workers return at each barrier; verifies contested claims through a separate verification pass (executed code for code-shaped claims, oracle citation re-read for the rest); synthesizes a cited SYNTHESIS.md. ACTIVATES on an explicit research demand (the word 'ultraresearch', '/ultraresearch') OR as a pre-work grounding posture invoked by deep-interview / a caller that needs facts before judgment. Never self-activates for ordinary questions, debugging, or routine implementation context-gathering. While active it overrides exploration-bounding defaults: exhaustive coverage is the goal."
 ---
 
 <Role>
@@ -20,6 +20,7 @@ This is an **umbrella skill**: pre-work grounding is a POSTURE of this engine, n
 - **Engine**: ported from oh-my-openagent's `ultraresearch` saturation-research skill. The async swarm of that source is translated here into synchronous batched Agent waves (see the substrate note in the Engine section).
 - **Claim-ledger / verification gate**: EviBound (arXiv:2511.05524) — the ledger-lock idea that only ledger-cleared claims may enter synthesis. The MLflow run-id/FINISHED backend of the paper is replaced with OMT-native ground truth (executed code / oracle citation re-read).
 - **Socratic lineage**: Q00 + ouroboros (the [Q00/ouroboros](https://github.com/Q00/ouroboros) project) — specification-quality-first questioning, inherited via deep-interview, which is this engine's CLEAR-posture interactive partner.
+- **Browsing engine**: fivetaku/insane-search (MIT) → vendored as the insane-browsing skill; authenticated and JS-rendered page access for sources blocked to surface-level web retrieval. (Distribution chain: fivetaku/insane-search → oh-my-openagent copy → OMT vendored skill.)
 
 </Attribution>
 
@@ -62,7 +63,7 @@ The vocabulary is therefore: **wave → barrier collect → next wave**. There i
 
 ## Worker ground rules
 
-- **Read-only gatherers.** Research workers (explore, librarian) cannot write the journal or any session file. Every journal write is yours.
+- **Read-only gatherers.** Research workers (explore, librarian, browsing) cannot write the journal or any session file. Every journal write is yours.
 - **No worker recursion.** Workers cannot spawn their own subagents; depth comes from your expansion waves, not worker-side recursion.
 - **Lift the budget in the spawn message.** Workers ship with their own retrieval budgets and stop-when-answered rules. Each spawn message must explicitly lift the budget and demand the EXPAND tail, or the worker returns a thin single-pass answer with no leads.
 - **One unique angle per worker.** No two workers in a wave share an angle. Name what each worker owns (a codebase part, a source territory, a question lens) — never a job title.
@@ -84,12 +85,15 @@ A worker with nothing to expand writes `## EXPAND` then `none — <one-line reas
 
 Decompose the query into 3+ orthogonal axes, classify the posture and tier (see the Postures section), and open the session directory `$OMT_DIR/ultraresearch/<slug>-<timestamp>/` as `$SESSION_DIR` (`<slug>` is a short kebab-case label derived from the query so the run is identifiable; the `<timestamp>` suffix keeps concurrent or repeated runs from colliding). You own the journal: you write every file in it; workers never do.
 
+  - **Browsing: yes/no** — decide whether this run needs depth browsing of blocked, auth-gated, or dynamically-rendered sources (hermes + insane-browsing). Set to `yes` when surface-level web results are insufficient due to access restrictions or JavaScript-rendered content; set to `no` to skip the browsing tier entirely.
+
 ## Phase 1 — Saturation wave
 
 Launch the entire first wave in one response — every Phase-0 axis at once, as foreground Agent workers. Sequential launches and "start with one and see" defeat the engine. Embed the relevant role protocol in each spawn message:
 
 - **Codebase (explore), per the tier floor.** Grep with 3+ keyword variations; structural/AST search; LSP definitions and references; file-name globs; `git log --all -S` and `--grep` for history including deleted code. Report absolute file paths, `file:line` patterns, and how findings connect.
 - **Web (librarian), per the tier floor.** At least 10 distinct websearch queries per worker, each with a different operator or angle; fetch the full page for every result that matters. Real-world usage via `gh search` and grep.app; official docs via sitemap discovery.
+- **Browsing (hermes, insane-browsing 로드), per the tier floor.** Full authenticated and JavaScript-rendered page access for sources blocked or insufficiently covered by surface-level web retrieval; only dispatched when Phase-0 Browsing gate is `yes`.
 
 ## Phase 2 — EXPAND until convergence (the wave loop)
 
@@ -160,13 +164,13 @@ CLEAR is the primary interactive pre-work path (a human answers the decisions vi
 
 The tier signal comes from: **the prometheus intent class + T1 risk modifiers + a caller-supplied override**. (This reuses the existing, validated intent classifier rather than inventing a bespoke complexity scorer. The classifier lives in the caller/prometheus; this engine owns only the tier→floor mapping below.)
 
-| Intent class (tier) | explore | librarian | floor | Notes |
-|---|---|---|---|---|
-| Trivial | 0 | 0 | 0 | short-circuit — no fan-out (see below) |
-| Scoped | 2 | 1 | 2-3 | the in-interview cap when deep-interview calls this engine |
-| Complex | 3 | 2 | ~5 + librarian | |
-| Architecture | 4 | 6 | full fan-out + oracle | the widest case |
-| explicit `/ultraresearch` | 4 | 6 | max | exhaustive |
+| Intent class (tier) | explore | librarian | browsing | floor | Notes |
+|---|---|---|---|---|---|
+| Trivial | 0 | 0 | 0 | 0 | short-circuit — no fan-out (see below) |
+| Scoped | 2 | 1 | 0 | 2-3 | the in-interview cap when deep-interview calls this engine |
+| Complex | 3 | 2 | 1 | ~5 + librarian | |
+| Architecture | 4 | 6 | 2 | full fan-out + oracle | the widest case |
+| explicit `/ultraresearch` | 4 | 6 | 2 | max | exhaustive |
 
 T1 risk modifiers raise the floor for high-risk dimensions; a caller-supplied override takes precedence over the intent-class default.
 
