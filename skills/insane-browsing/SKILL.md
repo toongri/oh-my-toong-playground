@@ -57,6 +57,17 @@ yt-dlp --write-sub --write-auto-sub --sub-lang "en,ko" --skip-download -o "/tmp/
 
 The full engine harness (rules R1-R7, the Phase 0 official-API index, the no-site-name rule, and the `references/insane-search/*.md` deep-dives for TLS, Playwright routing, Naver, media, etc.) is in [`references/insane-search/README.md`](references/insane-search/README.md). Read it before tuning the engine or adding a WAF profile.
 
+### Playwright fallback — one-time setup
+
+The Playwright real-Chrome fallback (`playwright_real_chrome.js` / `playwright_mobile_chrome.js`) is invoked via Node.js with `cwd=engine/templates/`. Node's `require('playwright')` resolves from that directory upward — **not** from npm's global prefix — so `npm i -g` does not work. Install locally into `engine/templates/`:
+
+```bash
+# Run once from the skill dir (engine/templates/package.json already declares the deps):
+(cd "$REPO/$SKILL_DIR/engine/templates" && npm install && npx playwright install chrome)
+```
+
+`engine/templates/package.json` declares `playwright`, `playwright-extra`, and `puppeteer-extra-plugin-stealth`; `npm install` (no flags) is all that is needed.
+
 ### Escalate to Tier 2 or Tier 3 when
 - The target is a Chinese / social platform with a native reader -> Tier 2.
 - insane-search returns empty/partial, or the page needs JS interaction, a screenshot, a persistent login, or media playback -> Tier 3.

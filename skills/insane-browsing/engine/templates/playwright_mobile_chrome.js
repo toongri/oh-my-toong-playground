@@ -9,6 +9,10 @@
  * iPad Pro 11, etc.). When in doubt, omit `device` — default is iPhone 13 Pro.
  *
  * NO-SITE-NAME RULE: same as playwright_real_chrome.js — no hostname branches.
+ *
+ * Dependencies (install once in engine/templates/ — node runs with cwd=engine/templates/,
+ * so require('playwright') resolves from there; npm global prefix is NOT searched):
+ *   cd engine/templates && npm install && npx playwright install chrome
  */
 
 const dns = require('dns');
