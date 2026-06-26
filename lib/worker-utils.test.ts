@@ -939,7 +939,7 @@ describe('executeOneTurn state/message/workerEnv regression', () => {
   });
 
   // F2: usage from ParseResult is written into status.json
-  test('usage field from ParseResult is written into status.json', async () => {
+  test('`ParseResult`의 usage 필드가 status.json에 기록됨', async () => {
     const memberDir = join(tmpDir, 'f2-usage');
     mkdirSync(memberDir, { recursive: true });
 
@@ -959,7 +959,7 @@ describe('executeOneTurn state/message/workerEnv regression', () => {
   });
 
   // F2: usage is null (not {}) when driver returns no usage
-  test('usage is null in status.json when driver returns no usage', async () => {
+  test('driver가 usage를 반환하지 않을 때 status.json의 usage가 null임', async () => {
     const memberDir = join(tmpDir, 'f2-no-usage');
     mkdirSync(memberDir, { recursive: true });
 
