@@ -937,6 +937,46 @@ describe('executeOneTurn state/message/workerEnv regression', () => {
     // JSON.parse of null gives null, undefined key gives undefined — must be null
     expect(status.message).toBe(null);
   });
+
+  // F2: usage from ParseResult is written into status.json
+  test('usage field from ParseResult is written into status.json', async () => {
+    const memberDir = join(tmpDir, 'f2-usage');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_f2', terminal: 'stop', text: 'body', rawEvents: [],
+      usage: { input_tokens: 12345, output_tokens: 42 },
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('body', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.usage.input_tokens).toBe(12345);
+  });
+
+  // F2: usage is null (not {}) when driver returns no usage
+  test('usage is null in status.json when driver returns no usage', async () => {
+    const memberDir = join(tmpDir, 'f2-no-usage');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_f2b', terminal: 'stop', text: 'body', rawEvents: [],
+      // no usage field
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('body', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.usage).toBe(null);
+  });
 });
 
 // ---------------------------------------------------------------------------
