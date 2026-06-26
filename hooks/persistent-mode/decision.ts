@@ -119,12 +119,13 @@ ${truncatedObjective}
 
 Tokens consumed: not measured (this loop is bounded by iterations, not tokens).
 
-INSTRUCTIONS (behavioral steering):
-1. Take the next concrete action that moves the objective forward.
-2. Do NOT call request-complete on proxy signals (e.g. tests-green, build-passing); those are NOT objective completion.
-3. When uncertain whether the objective is met, keep pursuing — do not stop early.
+INSTRUCTIONS (behavioral steering) — match your state to ONE branch:
 
-Gate: only complete once the objective is genuinely achieved; if you are truly blocked with no actionable next step, report the blocker and stop.
+A) Work remains → take the next concrete action toward the objective. Do NOT call request-complete on proxy signals (e.g. tests-green, build-passing); those are NOT objective completion.
+
+B) You believe the objective is MET → do NOT stop here. Your 'done' is a claim to disprove — not trusted until verified. Completion is never self-declared and never happens by stopping. Run the completion gate defined in the goal skill — the objective-level argus lane AND the independent code-review lane — then run the request-complete sequence. If either lane is non-clean, that is remaining work → branch A.
+
+Completion fires ONLY through request-complete. Stopping without it does NOT complete the objective. If you are truly blocked with no actionable next step, report the blocker and stop.
 
 </goal-continuation>
 

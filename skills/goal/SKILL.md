@@ -172,7 +172,7 @@ Re-plan (`set --phase planning`) preserves `stories[]` including per-story statu
 
 After a sisyphus pass, completion is NOT self-declared. Invoke an objective-level **argus** (a fresh instance, with no prior-verdict context), presenting the **verification surface as PROSE requirements** — a completeness Spec. This is the objective-scope completeness check: argus verifies that every prose-stated requirement in the verification surface is reflected in the deliverable, and renders an APPROVE / REQUEST_CHANGES / COMMENT verdict.
 
-**Inject the completion-audit rubric INTO the argus invocation** (it lives in the argus prompt, never in any continuation prompt). The rubric forces an evidence-based verdict and asserts each element independently:
+**Inject the completion-audit rubric, project conventions, and project-specific scenarios INTO the argus invocation** (they live in the argus prompt, never in any continuation prompt). Argus (= the qa skill) runs its **full battery**: automated checks (build / test / lint) AND the hands-on adversarial matrix — not the completeness-audit rubric alone. The rubric forces an evidence-based verdict and asserts each element independently:
 
 - **prompt-to-artifact mapping** — argus must map every explicit requirement, numbered item, named file, command, test, gate, and deliverable in the verification surface to concrete evidence; an unmapped requirement is incomplete.
 - **proxy-signal refusal** — argus must refuse proxy signals as completion by themselves: passing tests, a green build, a complete manifest, or substantial effort count only insofar as they cover every requirement in the verification surface.
@@ -196,9 +196,25 @@ After a sisyphus pass, completion is NOT self-declared. Invoke an objective-leve
 
 For each non-retired story, argus maps the story's acceptance criteria and verification surface to concrete evidence and renders an `APPROVE` or `REQUEST_CHANGES` per-story verdict. A single non-APPROVE per-story entry blocks completion regardless of the `objective_verdict` field — `objective_verdict === 'APPROVE'` alone is never sufficient.
 
-`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). When all checks pass, `request-complete` writes `phase=complete` and `active=false`.
+`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). As a second structural refusal lane, `request-complete` also reads the code-review artifact (`goal-codereview-{sid}.json`) from its conventional path internally (no path argument) and refuses if that artifact is absent, schema-invalid, or contains any `CONFIRMED` finding (see code-review lane below); this refusal is structural — it runs inside `request-complete` itself independent of the orchestrator loop, so completion is blocked even if the loop misbehaves. When all checks pass, `request-complete` writes `phase=complete` and `active=false`.
 
 <!-- story-layer:end -->
+
+**Code-review lane (runs alongside argus).** After each sisyphus pass, an independent code-review lane runs alongside the argus lane. Dispatch a fresh **code-reviewer** agent independently of the builder (sisyphus); self-review by the builder is forbidden. The code-reviewer writes `$OMT_DIR/goal-codereview-{sid}.json` directly (it has file tools); the orchestrator passes only the session-derived path and never transcribes finding content. The artifact schema the code-reviewer must emit:
+
+```json
+{
+  "findings": [
+    { "class": "correctness|cleanup", "verdict": "CONFIRMED|PLAUSIBLE", "ref": "<file:line>" }
+  ],
+  "reviewer": "<reviewer id>",
+  "at": "<ISO timestamp>"
+}
+```
+
+**Pass signal:** any finding where `verdict === "CONFIRMED"` blocks completion — whether `class` is `correctness` or `cleanup`. `PLAUSIBLE` findings are non-blocking; they are reported but do not prevent completion. `class` is an informational label the gate does not key on (the gate keys solely on `verdict === "CONFIRMED"`).
+
+A blocking code-review finding (any CONFIRMED) routes back to sisyphus re-dispatch targeted at those specific findings — the same concrete-progress shape as an argus REQUEST_CHANGES verdict.
 
 **Completion fires ONLY on argus APPROVE AND an objective-scope Evidence Audit pass.** A **COMMENT verdict is NOT sufficient** for completion — COMMENT means MEDIUM gaps remain. The Evidence Audit reuses the verify-the-verifier shape: confirm argus's verdict HOLDS UP by reading the evidence argus saved (does it demonstrate the verification surface was met?) — auditing, never re-running a command and never rendering your own verdict. If the evidence is missing or does not demonstrate the verification surface, it is an Evidence Gap → re-invoke argus, do not complete.
 
@@ -216,7 +232,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts request-complete
 
 APPROVE alone does NOT leave the goal pursuing/active — the `request-complete` handoff is what transitions to terminal `complete` (and it is structurally gated on completion-evidence, so a write that never reached the gate cannot false-complete).
 
-**No design/architecture lane gates completion.** The only gate on the completion path is this objective-level argus — which also re-derives per-WHAT-slice verdicts and authors the verdict artifact at `$OMT_DIR/goal-verdict-{sid}.json`. There is no design-review or daedalus pass between pursuit and completion — design is plan-time advisory only.
+**Two lanes gate completion: argus and code-review.** The completion path runs both the objective-level argus lane (correctness, completeness, and evidence audit) and the independent code-review lane (static quality and conventions) — both must be clean for `request-complete` to pass. No design or architecture lane gates completion: daedalus and design-review are plan-time advisory only, not completion gates. Code-review is a completion-time quality lane and is distinct from design-review — the two must not be conflated.
 
 ### Concrete progress action per non-APPROVE verdict
 
@@ -225,6 +241,7 @@ Every non-APPROVE verdict drives a concrete progress action — never action-les
 - **REQUEST_CHANGES naming incomplete work items** (tactical — the work is unfinished, the plan is sound) → re-dispatch `Skill(skill: "sisyphus")` on the named incomplete TODOs. This stays inside sisyphus's junior loop; phase remains `pursuing`.
 - **Strategic plan inadequacy** (the plan itself cannot reach the objective — the decomposition is wrong, not merely unfinished) → re-plan via `Skill(skill: "prometheus")`: run `set --phase planning` first (which clears the verdict), let prometheus's human design gates run un-wrapped, then `set --phase pursuing` after the fresh sisyphus dispatch.
 - **COMMENT (MEDIUM gaps only)** → re-dispatch `Skill(skill: "sisyphus")` to fix the argus-named MEDIUM gaps; do NOT `request-complete` on a COMMENT.
+- **Code-review lane: any CONFIRMED finding** → re-dispatch `Skill(skill: "sisyphus")` on the specific findings in `goal-codereview-{sid}.json`. Phase remains `pursuing`; run a fresh code-review dispatch after sisyphus resolves the findings.
 
 ### Blocked-stop
 

@@ -565,13 +565,94 @@ describe('makeDecision', () => {
 
       expect(result.decision).toBe('block');
       const reason = result.reason!;
-      // behavioral steering: next concrete action + proxy-signal refusal + when-uncertain-keep-going
+      // behavioral steering: next concrete action + proxy-signal refusal
       expect(reason.toLowerCase()).toContain('next');
       expect(reason.toLowerCase()).toContain('proxy');
-      expect(reason.toLowerCase()).toContain('uncertain');
       // NO audit rubric leaked into the continuation (ADR-5: rubric lives in argus)
       expect(reason.toLowerCase()).not.toContain('prompt-to-artifact');
       expect(reason.toLowerCase()).not.toContain('verify-the-verifier');
+    });
+
+    it('continuation branch-A: next concrete action toward objective; proxy-signal completion rejected', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 1,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      const reason = result.reason!;
+      // Branch A: asserts next concrete action
+      expect(reason.toLowerCase()).toContain('next concrete action');
+      // Branch A: proxy-signal refusal — named explicitly
+      expect(reason).toContain('proxy signals');
+      expect(reason).toContain('NOT objective completion');
+    });
+
+    it('continuation branch-B: claim-to-disprove framing for done belief', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 1,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      const reason = result.reason!;
+      // Branch B: claim-to-disprove framing
+      expect(reason).toMatch(/claim to disprove|not trusted until verified/i);
+    });
+
+    it('continuation branch-B: names both completion-gate lanes (argus + code-review) and request-complete', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 1,
+        max_iterations: 10,
+        outcome: 'goal objective text',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      const reason = result.reason!;
+      // Branch B: redirects to completion gate naming BOTH lanes
+      expect(reason.toLowerCase()).toContain('argus');
+      expect(reason.toLowerCase()).toContain('code-review');
+      // Branch B: names request-complete
+      expect(reason).toContain('request-complete');
+    });
+
+    it('continuation envelope is unchanged: GOAL-ITERATION header and untrusted_objective block preserved', async () => {
+      await writeGoal({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: '',
+        iteration: 2,
+        max_iterations: 10,
+        outcome: 'SENTINEL_OBJECTIVE_TEXT',
+      });
+
+      const result = makeDecision(createContext());
+
+      expect(result.decision).toBe('block');
+      const reason = result.reason!;
+      // Envelope: iteration header unchanged
+      expect(reason).toContain('[GOAL - ITERATION 3/10]');
+      // Envelope: untrusted_objective wrap unchanged
+      expect(reason).toContain('<untrusted_objective>');
+      expect(reason).toContain('</untrusted_objective>');
+      expect(reason).toContain('SENTINEL_OBJECTIVE_TEXT');
     });
 
     it('continuation has complete-blocked gate', async () => {
