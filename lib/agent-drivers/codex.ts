@@ -52,7 +52,7 @@ export const codexDriver: AgentDriver = {
 
       if (ev.type === 'turn.completed') {
         hasTurnCompleted = true;
-        if (ev.usage && typeof ev.usage === 'object') {
+        if (ev.usage && typeof ev.usage === 'object' && !Array.isArray(ev.usage)) {
           usage = ev.usage as Record<string, number>;
         }
       }
