@@ -32,7 +32,7 @@ function makeFixture(
 // F3-unit: summarizeUsage
 // ---------------------------------------------------------------------------
 
-describe('summarizeUsage (F3-unit)', () => {
+describe('`summarizeUsage` (F3-unit)', () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -43,7 +43,7 @@ describe('summarizeUsage (F3-unit)', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('sums usage across two members with known fixture', () => {
+  test('알려진 픽스처로 두 멤버의 `usage`를 합산한다', () => {
     makeFixture(tmpDir, [
       { name: 'alice', status: { member: 'alice', state: 'done', usage: { input_tokens: 100, output_tokens: 50 } } },
       { name: 'bob',   status: { member: 'bob',   state: 'done', usage: { input_tokens: 200, output_tokens: 80 } } },
@@ -56,7 +56,7 @@ describe('summarizeUsage (F3-unit)', () => {
     expect(result.usage.output_tokens).toBe(130);
   });
 
-  test('member missing usage field contributes 0 (no throw)', () => {
+  test('`usage` 필드가 없는 멤버는 0으로 기여하며 예외를 던지지 않는다', () => {
     makeFixture(tmpDir, [
       { name: 'charlie', status: { member: 'charlie', state: 'error' } },
     ]);
@@ -67,7 +67,7 @@ describe('summarizeUsage (F3-unit)', () => {
     expect(result.usage).toEqual({});
   });
 
-  test('null usage contributes 0 (no throw)', () => {
+  test('`null` `usage`는 0으로 기여하며 예외를 던지지 않는다', () => {
     makeFixture(tmpDir, [
       { name: 'dana', status: { member: 'dana', state: 'error', usage: null } },
     ]);
@@ -78,7 +78,7 @@ describe('summarizeUsage (F3-unit)', () => {
     expect(result.usage).toEqual({});
   });
 
-  test('missing members dir does not throw, returns zero aggregate', () => {
+  test('`members` 디렉터리가 없어도 예외를 던지지 않고 빈 집계를 반환한다', () => {
     // tmpDir exists but members/ subdir does not
     const result = summarizeUsage(tmpDir);
 
@@ -86,7 +86,7 @@ describe('summarizeUsage (F3-unit)', () => {
     expect(result.usage).toEqual({});
   });
 
-  test('empty members dir produces zero aggregate', () => {
+  test('`members` 디렉터리가 비어 있으면 빈 집계를 반환한다', () => {
     fs.mkdirSync(path.join(tmpDir, 'members'));
 
     const result = summarizeUsage(tmpDir);
@@ -95,7 +95,7 @@ describe('summarizeUsage (F3-unit)', () => {
     expect(result.usage).toEqual({});
   });
 
-  test('mixed members — some with usage, some without — sums only present numeric fields', () => {
+  test('`usage`가 있는 멤버와 없는 멤버가 섞여 있을 때 숫자 필드만 합산한다', () => {
     makeFixture(tmpDir, [
       { name: 'alice', status: { member: 'alice', state: 'done', usage: { input_tokens: 100, output_tokens: 50, cached_input_tokens: 20 } } },
       { name: 'bob',   status: { member: 'bob',   state: 'done', usage: { input_tokens: 200 } } },
@@ -110,7 +110,7 @@ describe('summarizeUsage (F3-unit)', () => {
     expect(result.usage.cached_input_tokens).toBe(20);
   });
 
-  test('member dir lacking status.json is skipped silently, does not increment memberCount', () => {
+  test('`status.json`이 없는 멤버 디렉터리는 조용히 건너뛰고 `memberCount`를 증가시키지 않는다', () => {
     const membersDir = path.join(tmpDir, 'members');
     fs.mkdirSync(path.join(membersDir, 'ghost'), { recursive: true });
     // no status.json written
