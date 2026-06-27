@@ -18,7 +18,6 @@ agents:
     - momus
     - oracle
     - daedalus
-    - argus
     - chunk-reviewer
     - code-reviewer
     - sisyphus-junior
@@ -68,3 +67,4 @@ rules:
     - private-component-management
     - documentation-currency
     - agent-browser-usage
+    - codebase-grounding
