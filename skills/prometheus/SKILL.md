@@ -107,8 +107,9 @@ digraph prometheus_flow {
     "Human design gate?" -> "Write plan to $OMT_DIR/plans/*.md" [label="design approved by human"];
     "Write plan to $OMT_DIR/plans/*.md" -> "Momus review";
     "Momus review" -> "Momus verdict?";
-    "Momus verdict?" -> "Requirements Interview" [label="REQUEST_CHANGES\n(requirements defect → earliest affected = requirements phase → re-Metis → … → re-Momus)"];
-    "Momus verdict?" -> "Co-Design Interview\n(in-phase Daedalus advisory folded in)" [label="REQUEST_CHANGES\n(design defect → earliest affected = design phase → human gate → re-plan → re-Momus)"];
+    "Momus verdict?" -> "Momus review" [label="REQUEST_CHANGES (default: scoped re-review)\nrevise plan → re-run only Momus (fresh instance), upstream preserved"];
+    "Momus verdict?" -> "Requirements Interview" [label="REQUEST_CHANGES (exception)\nrequirements root cause → re-Metis → … → re-Momus"];
+    "Momus verdict?" -> "Co-Design Interview\n(in-phase Daedalus advisory folded in)" [label="REQUEST_CHANGES (exception)\ndesign root cause → human gate → re-plan → re-Momus"];
     "Momus verdict?" -> "Stage A: HTML Render" [label="APPROVE/COMMENT"];
     "Stage A: HTML Render" -> "Stage B: Execution Recommendation";
     "Stage B: Execution Recommendation" -> "Stage C: Execution Bridge";
@@ -119,15 +120,15 @@ digraph prometheus_flow {
 }
 ```
 
-**Flowchart Enforcement Rule**: The verdict review loops (Metis and Momus bounce back to the earliest affected phase on REQUEST_CHANGES) are MANDATORY loops, not advisory paths.
+**Flowchart Enforcement Rule**: The verdict review loops on REQUEST_CHANGES are MANDATORY loops, not advisory paths — a Metis REQUEST_CHANGES always re-walks from the requirements phase; a Momus REQUEST_CHANGES is scoped re-review by default (re-run only Momus on the revised plan), with an earliest-affected re-walk only on an upstream root cause.
 Proceeding past a Metis/Momus REQUEST_CHANGES without resolution violates the planning contract.
 Skipping any stage — including the in-phase Co-Design Daedalus advisory pass and the human design gate — is likewise a violation.
 
-**Two distinct loop-back triggers.** A *reviewer-triggered* REQUEST_CHANGES routes Momus's verdict back to the **earliest affected phase**: a requirements problem re-walks from the requirements phase (re-Metis → … → re-Momus); a design problem re-walks from the design phase (human gate → re-plan → re-Momus). This routing is forced by the reviewer, not chosen by the user. Separately, the *user-initiated* S7→S0 "Revise plan" edge lets the user re-open the requirements interview on their own initiative after the plan is presented — a complementary mechanism with a different trigger (user choice, not a reviewer verdict).
+**Two distinct loop-back triggers.** A *reviewer-triggered* REQUEST_CHANGES is **scoped re-review by default** — revise the rejected artifact and re-run only the failed gate (fresh Momus), upstream preserved — and routes Momus's verdict back to the **earliest affected phase** only as the exception, when the defect's root cause requires re-deciding an upstream artifact: a requirements root cause re-walks from the requirements phase (re-Metis → … → re-Momus); a design root cause re-walks from the design phase (human gate → re-plan → re-Momus). This routing is forced by the reviewer, not chosen by the user. Separately, the *user-initiated* S7→S0 "Revise plan" edge lets the user re-open the requirements interview on their own initiative after the plan is presented — a complementary mechanism with a different trigger (user choice, not a reviewer verdict).
 
 The Co-Design Daedalus advisory pass is on the mandatory path but is purely advisory: it emits no gating signal and never bounces the plan back on its own. Its design input is folded into the design phase per `## Design Consensus` before the human design gate and the plan write.
 
-**S8 reachability invariant.** No transition reaches S8 except the user's S7 selection (option 1 or 2) taken against a **fresh S4 (Momus) APPROVE/COMMENT verdict** on the current artifact. There is NO plan-mutation-after-S4 path that reaches S8: any change after S4 is a defect that routes back to its earliest affected phase and forces a fresh Momus re-review before S7 can offer execution again.
+**S8 reachability invariant.** No transition reaches S8 except the user's S7 selection (option 1 or 2) taken against a **fresh S4 (Momus) APPROVE/COMMENT verdict** on the current artifact. There is NO plan-mutation-after-S4 path that reaches S8: any change after S4 is a defect that routes to re-review (scoped by default — re-run only Momus, upstream preserved; earliest-affected re-walk only on an upstream root cause) and forces a fresh Momus re-review before S7 can offer execution again.
 
 ## Subagent Selection Guide
 
@@ -482,7 +483,7 @@ A phase task is complete only when its reviewer signal is received:
 | Daedalus | Advisory design input received and folded into the design phase per `## Design Consensus` (advisory only — proceed to the human design gate, then plan write) |
 | Momus | Verdict = APPROVE or COMMENT (proceed to user presentation) |
 
-REQUEST_CHANGES from a verdict-emitting reviewer (Metis or Momus) means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received. A Momus REQUEST_CHANGES routes back to the **earliest affected phase** (requirements problem → requirements phase → re-Metis; design problem → design phase → human gate → re-plan), and the full downstream walk including a fresh Momus re-review must complete again.
+REQUEST_CHANGES from a verdict-emitting reviewer (Metis or Momus) means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received. A Momus REQUEST_CHANGES is, by default, **scoped re-review**: revise the rejected plan and re-run only the Momus gate (fresh instance), preserving the upstream interview/AC/design artifacts. Only when the defect's root cause requires re-deciding an upstream artifact does it route to the **earliest affected phase** (requirements root cause → requirements phase → re-Metis; design root cause → design phase → human gate → re-plan), re-walking the full downstream including a fresh Momus re-review.
 
 Starting a downstream phase task while a prior verdict phase remains in REQUEST_CHANGES state is a planning contract violation.
 
@@ -589,7 +590,7 @@ Each phase has its own next gate, and readiness is measured against that gate:
 - **S2 Co-Design** is ready when the design is co-decided with the user — the readiness condition for the **human** design gate.
 - **S3 Plan Generation** is ready when the written plan passes self-review — the readiness condition for the **Momus** gate.
 
-The channel can **REOPEN** at any time: whenever a later phase surfaces a new question (Metis flags a gap, the human raises a design fork, Momus requests changes), the interview re-opens at the earliest affected phase and runs again. There is no point at which the dialogue is permanently done.
+The channel can **REOPEN** at any time: whenever a later phase surfaces a new question (Metis flags a gap, the human raises a design fork, or a Momus REQUEST_CHANGES traces to an upstream root cause), the interview re-opens at the earliest affected phase and runs again. (A Momus REQUEST_CHANGES whose root cause is in the plan alone is handled by scoped re-review — re-run Momus on the revised plan — and does NOT re-open the interview.) There is no point at which the dialogue is permanently done.
 
 ### Progress Reporting (after each answer)
 
@@ -717,13 +718,13 @@ Defensive Cleanup guard for unset IDs: `[ -n "$id" ] && curl -X DELETE ".../$id"
 
 ### Executor-Provided Variables
 
-AC may reference ambient variables exported by Argus Stage 3:
+AC may reference ambient variables exported by the QA executor (the qa skill, or sisyphus's inline verify):
 
 | Variable | Scope | Source |
 |---|---|---|
-| `$API_BASE_URL` | HTTP API ACs | Stage 3, Step 3.2 (server boot) |
-| `$IOS_UDID` | iOS mobile ACs | Stage 3, Step 3.5 (simulator boot) |
-| `$ANDROID_SERIAL` | Android mobile ACs | Stage 3, Step 3.5 (emulator boot) |
+| `$API_BASE_URL` | HTTP API ACs | QA executor (server boot) |
+| `$IOS_UDID` | iOS mobile ACs | QA executor (simulator boot) |
+| `$ANDROID_SERIAL` | Android mobile ACs | QA executor (emulator boot) |
 | `$evidence_xml` | Tool ACs emitting a report file | Stage 3, per-AC (resolved before each verification) |
 
 Adding a new variable requires (1) updating this table and (2) ensuring executor exports it. Introduce only when ≥2 AC kinds reference.
@@ -1057,16 +1058,16 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | **S1: Metis Invocation** | 3-Section prompt to Metis (requirements gate) | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
 | **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / co-authored decision log, including the structural enumeration of D-items per `## Plan Structure > ADR` | → S3 on human design-gate approval; advisory Daedalus input folded in per `## Design Consensus` (no gating signal — the human gate gates this state) |
 | **S3: Plan Generation** | Writing the TODO plan to `$OMT_DIR/plans/{name}.md` from the approved design | → S4 on self-review pass |
-| **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; on REQUEST_CHANGES → earliest affected phase: → S0 on a requirements problem (re-Metis → … → re-Momus), → S2 on a design problem (human gate → re-plan → re-Momus) |
+| **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; on REQUEST_CHANGES → **scoped re-review by default**: revise the plan and re-run only S4 (fresh Momus), upstream preserved. Earliest-affected re-walk is the exception, taken only on an upstream root cause: → S0 on a requirements root cause (re-Metis → … → re-Momus), → S2 on a design root cause (human gate → re-plan → re-Momus) |
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
 | **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
 | **S7: Execution Bridge** | Stage C mode choice ONLY — present the 3 execution options (Full orchestration / Focused execution / Revise plan) and capture the user's selection | → S8 on execution selection (option 1 or 2), valid ONLY against the fresh S4 APPROVE/COMMENT on the current artifact; → S0 on "Revise plan" (user-initiated) |
 | **S8: Execution Dispatch** | Invoke skill per selection | (terminal) |
 
-**S8 reachability invariant:** S8 is reachable ONLY from an S7 execution selection taken against a **fresh S4 (Momus) APPROVE/COMMENT** on the current artifact. There is no plan-mutation-after-S4 → S8 path: any artifact change after S4 is a defect that routes to its earliest affected phase (S0 for a requirements problem, S2 for a design problem) and forces a fresh S4 re-review before S7 can offer execution again.
+**S8 reachability invariant:** S8 is reachable ONLY from an S7 execution selection taken against a **fresh S4 (Momus) APPROVE/COMMENT** on the current artifact. There is no plan-mutation-after-S4 → S8 path: any artifact change after S4 is a defect that routes to re-review — scoped by default (re-run only S4 Momus, upstream preserved), or to its earliest affected phase on an upstream root cause (S0 for a requirements root cause, S2 for a design root cause) — and forces a fresh S4 re-review before S7 can offer execution again.
 
 **Two loop-back triggers, distinguished:**
-- **Reviewer-triggered routing** — a Momus (S4) REQUEST_CHANGES is routed *by the reviewer's verdict* to the earliest affected phase. A **requirements problem** re-walks from S0 (re-Metis → … → re-Momus); a **design problem** re-walks from S2 (human design gate → re-plan → re-Momus). The router classifies the defect, not the user.
+- **Reviewer-triggered routing (scoped re-review by default)** — a Momus (S4) REQUEST_CHANGES is first classified by **where its root cause lives**: in the plan alone, or in an upstream artifact (the Metis-cleared AC or the co-designed design). **Default — scoped re-review:** when the upstream artifacts remain correct and only the plan must change to satisfy them (a wording fix, a corrected citation, a mis-ordered step, a task the existing AC already requires but the plan omitted), revise the plan and re-run ONLY the rejected gate — a fresh Momus on the revised plan. The upstream artifacts (the interview summary, the Metis-cleared AC, the co-designed ADR) are preserved and NOT re-walked. **Exception — earliest-affected re-walk:** when the defect reveals an upstream artifact is itself wrong or incomplete — the AC never specified a requirement the plan now needs (a **requirements** root cause → re-walk from S0: re-Metis → … → re-Momus), or a design decision must be re-made (a **design** root cause → re-walk from S2: human design gate → re-plan → re-Momus) — the verdict routes to the earliest affected phase. The test is the **location of the root cause**, NOT whether text can be appended to the plan (almost anything can): a missing guardrail whose requirement the AC already states is scoped; a missing guardrail the AC never specified is an upstream requirements defect. Either way the failed gate is always re-run on a fresh reviewer instance — scoped re-review narrows what re-runs upstream, never which gate must re-approve. The router classifies the defect, not the user.
 - **User-initiated revise** — the S7 → S0 "Revise plan" edge is a complementary mechanism: after the plan is presented, the user may on their own initiative choose "Revise plan" to re-open the requirements interview, and the full pipeline re-runs. Same destination (S0), different trigger (user choice vs reviewer verdict).
 
 **Deferred-then-revised design decision:** a design decision that was previously deferred to its recommended default and is *later revised* is classified as a **design problem** (a design defect), NOT a routine edit. It therefore routes to S2 (the design phase) → human design gate → re-plan → fresh S4 Momus re-review. Re-review is forced by construction; it does not depend on the user choosing "Revise plan".
