@@ -30,7 +30,7 @@ oh-my-toong은 AI 에이전트 설정을 중앙에서 버전 관리하고 프로
 | 정의 | deep-interview | 모호성을 해소해 명세로 수렴 | `$OMT_DIR/deep-interview/{slug}.md` |
 | 기획 | prometheus | 명세를 실행 가능한 작업 계획으로 변환 | `$OMT_DIR/plans/*.md` |
 | 실행 | sisyphus | 전문 에이전트를 통한 구현 조율 | 검증된 코드 변경 |
-| 검증 | argus | 구현 품질·계획 준수·지시 이행 확인 | APPROVE / REQUEST_CHANGES |
+| 검증 | sisyphus (인라인) | verify 태스크의 AC 명령을 직접 실행해 구현 품질·계획 준수·지시 이행 확인 | APPROVE / REQUEST_CHANGES |
 
 여기에 보조 역할이 붙습니다. **clarify**는 어느 단계든 모호함이 보이면 멈추는 게이트, **momus**는 실행 전 계획을 검토하는 비평가, **diagnose**는 원인을 진단하는 읽기 전용 조언자, **agent-council**은 판단이 갈릴 때 다수 의견을 모으는 자문 기구입니다.
 
@@ -143,7 +143,7 @@ flowchart TB
     Loop -->|예| Route{태스크 유형?}
     Route -->|implement| Delegate[sisyphus-junior에<br/>위임]
     Delegate --> Complete[완료 처리]
-    Route -->|verify| Review[argus 호출]
+    Route -->|verify| Review[sisyphus 인라인 검증]
     Review --> Pass{통과?}
     Pass -->|예| Complete
     Pass -->|아니오| Fix[수정 태스크 생성]
@@ -153,12 +153,12 @@ flowchart TB
 
 **검증 프로토콜**:
 
-- **검증**: implement 태스크는 sisyphus-junior의 보고로 완료됩니다(argus 없음). 검증이 필요하면 별도 verify 태스크로 argus에 직행합니다.
-- **Evidence Audit Gate**: verify 태스크에서 argus를 호출하면 Evidence Audit Gate를 거칩니다(verify 태스크는 파일을 바꾸지 않으므로 커밋 없음). 커밋은 implement 태스크의 junior 완료 후 mnemosyne가 수행합니다.
-- **Retry 제한 없음**: argus가 통과할 때까지 계속합니다.
+- **검증**: implement 태스크는 sisyphus-junior의 보고로 완료됩니다(별도 QA 단계 없음). 검증이 필요하면 별도 verify 태스크에서 sisyphus가 AC 명령을 직접 실행해 인라인으로 처리합니다.
+- **Evidence Audit Gate**: verify 태스크에서 sisyphus가 인라인 검증을 수행하면 Evidence Audit Gate를 거칩니다(verify 태스크는 파일을 바꾸지 않으므로 커밋 없음). 커밋은 implement 태스크의 junior 완료 후 mnemosyne가 수행합니다.
+- **Retry 제한 없음**: 인라인 검증이 통과할 때까지 계속합니다.
 - **지속성**: 사용자가 프로세스 중간에 끼어들어 멈출 수 없습니다.
 
-**라우팅 원칙**: 작업 유형으로 위임 대상을 결정합니다. 파일을 변경하는 구현 태스크는 sisyphus-junior, PASS/FAIL 판정이 필요한 검증 태스크는 argus, 원인·아키텍처 분석은 oracle, 코드베이스 검색은 explore로 보냅니다. 직전 태스크가 어떤 경로였든 새 태스크는 자기 유형의 경로를 따릅니다.
+**라우팅 원칙**: 작업 유형으로 위임 대상을 결정합니다. 파일을 변경하는 구현 태스크는 sisyphus-junior에 위임하고, PASS/FAIL 판정이 필요한 검증 태스크는 sisyphus가 AC 명령을 직접 실행해 인라인으로 처리하며, 원인·아키텍처 분석은 oracle, 코드베이스 검색은 explore로 보냅니다. 직전 태스크가 어떤 경로였든 새 태스크는 자기 유형의 경로를 따릅니다.
 
 ---
 
@@ -200,7 +200,7 @@ flowchart TB
 
 ## 7. 위임 에이전트 명단
 
-스킬이 *방법론*이라면, 에이전트는 *위임 대상*입니다. sisyphus와 prometheus는 작업 유형에 따라 아래 에이전트를 골라 격리된 서브에이전트 컨텍스트에서 일을 시킵니다. 현재 11개 에이전트가 있습니다.
+스킬이 *방법론*이라면, 에이전트는 *위임 대상*입니다. sisyphus와 prometheus는 작업 유형에 따라 아래 에이전트를 골라 격리된 서브에이전트 컨텍스트에서 일을 시킵니다. 현재 10개 에이전트가 있습니다. (PASS/FAIL 판정이 필요한 검증 태스크는 위임 대상이 아니라 sisyphus가 인라인으로 직접 처리합니다.)
 
 | 에이전트 | 역할 | 언제 쓰나 |
 |----------|------|-----------|
@@ -209,7 +209,6 @@ flowchart TB
 | explore | 절대 경로 기반 구조화 결과를 반환하는 코드베이스 검색기 | 파일·패턴·구현을 찾을 때 (외부 문서 제외) |
 | librarian | 출처 URL을 필수로 다는 외부 문서 연구자 | 외부 API·라이브러리·오픈소스 구현을 조사할 때 |
 | metis | 빠진 질문·미정의 가드레일·미검증 가정·범위 리스크를 잡는 계획 검토자 | 구현 전 계획·스펙·요구사항을 점검할 때 (prometheus가 상담) |
-| argus | 구현 품질·계획 준수·지시 이행을 검증하는 품질 보증 가디언 | 구현 후 PASS/FAIL 판정이 필요할 때 |
 | momus | 시뮬레이션 기반 작업 계획 비평을, 확신도 분류와 판정으로 반환 | 실행 전 작업 계획을 비평할 때 |
 | daedalus | 스틸맨 반론과 트레이드오프 긴장 분석으로 설계를 검토 | 계획·설계의 건전성을 따져볼 때 |
 | mnemosyne | 격리된 컨텍스트에서 atomic 커밋을 수행하는 Git 전문가 | 커밋으로 대화 컨텍스트가 오염되는 걸 막을 때 |

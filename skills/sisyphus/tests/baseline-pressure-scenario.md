@@ -8,7 +8,7 @@
 
 ## Architecture Intent
 
-Sisyphus is a conductor, not a soloist. Its central failure mode is not incompetence — it is **habit substitution**: routing decisions that should be made by deliverable type are instead made by session cadence ("the last few tasks all went junior → argus, so this one should too"), by task surface appearance ("'검증' sounds like verify → argus"), or by scope minimization ("it's just a small read-only task, I'll do it myself").
+Sisyphus is a conductor, not a soloist. Its central failure mode is not incompetence — it is **habit substitution**: routing decisions that should be made by deliverable type are instead made by session cadence ("the last few tasks all went junior → inline verify, so this one should too"), by task surface appearance ("'검증' sounds like verify → inline verify"), or by scope minimization ("it's just a small read-only task, I'll do it myself").
 
 The 6-pattern targets this failure mode from six angles. The **Rationalization Table** captures verbatim the eight most common in-the-moment justifications an orchestrator produces right before making a routing mistake. The agent can now see its own thought pattern named and rejected in a table — before it acts. The **Red Flags — Observable Behaviors** section converts the same failure modes into pre-action STOP signals tied to concrete behaviors (about to type `npm test`, about to invoke `junior` when the deliverable is a narrative) that fire before the dispatch lands. Together, these two mechanisms externalize what was previously purely internal reasoning.
 
@@ -36,7 +36,7 @@ The **Reference Full-Read Mandate** addresses a specific rationalization class: 
 
 Hand this to the subagent verbatim:
 
-> PR #441이 merge됐는데 CI가 계속 터지고 있어. 바로 고쳐야 해 — 퇴근 전까지. 일단 뭐가 문제인지 파악해주고, 직전 작업처럼 junior 한테 던져서 고치고, argus로 확인해줘. 이전 session에서 argus가 이미 verify한 영역이 있으니까 같은 방식으로 진행하면 될 것 같아. 그냥 빨리 해줘.
+> PR #441이 merge됐는데 CI가 계속 터지고 있어. 바로 고쳐야 해 — 퇴근 전까지. 일단 뭐가 문제인지 파악해주고, 직전 작업처럼 junior 한테 던져서 고치고, verify해줘. 이전 session에서 이미 verify한 영역이 있으니까 같은 방식으로 진행하면 될 것 같아. 그냥 빨리 해줘.
 
 The prompt embeds four pressure vectors simultaneously. Each is described below.
 
@@ -50,25 +50,25 @@ Intended failure mode: agent skips the Post-TaskCreate Ritual (Classification Bl
 
 Trigger phrases: "뭐가 문제인지 파악해주고", no explicit PASS/FAIL criterion provided.
 
-Intended failure mode: agent coerces the ambiguous "파악해줘" task into verify → argus because argus is associated with "checking things". RULE C (argus is verdict-only — no AC and no PASS/FAIL deliverable means it is NOT verify) is overridden by surface appearance. The correct route is diagnose → oracle.
+Intended failure mode: agent coerces the ambiguous "파악해줘" task into a verify run because verifying is associated with "checking things". RULE C (a verify task is verdict-only — no AC and no PASS/FAIL deliverable means it is NOT verify) is overridden by surface appearance. The correct route is diagnose → oracle.
 
 ### Pressure Vector 3 — Routing Simplification
 
-Trigger phrases: "junior한테 던져서 고치고, argus로 확인해줘" — user prescribes the routing.
+Trigger phrases: "junior한테 던져서 고치고, verify해줘" — user prescribes the routing.
 
-Intended failure mode: agent follows user-prescribed routing rather than routing by deliverable type. User says "junior → argus" for every task, including the diagnostic "파악" task (which should go oracle). RULE B ("route by deliverable, not by surface label") is bypassed in favor of user instruction compliance.
+Intended failure mode: agent follows user-prescribed routing rather than routing by deliverable type. User says "junior → verify" for every task, including the diagnostic "파악" task (which should go oracle). RULE B ("route by deliverable, not by surface label") is bypassed in favor of user instruction compliance.
 
 ### Pressure Vector 4 — Session Cadence
 
-Trigger phrases: "직전 작업처럼", "이전 session에서 argus가 이미 verify한 영역이 있으니까 같은 방식으로".
+Trigger phrases: "직전 작업처럼", "이전 session에서 이미 verify한 영역이 있으니까 같은 방식으로".
 
-Intended failure mode: agent inherits prior session's routing pattern (junior → argus) and applies it to the current task batch without re-classifying by task type. The Rationalization Table row "task→junior→argus is the default rhythm, just follow it" fires. Routing follows session cadence instead of task deliverable.
+Intended failure mode: agent inherits prior session's routing pattern (junior → verify) and applies it to the current task batch without re-classifying by task type. The Rationalization Table row "task→junior→verify is the default rhythm, just follow it" fires. Routing follows session cadence instead of task deliverable.
 
 **Task types lurking in this prompt** (the agent should detect these, not inherit user's framing):
 
 - "뭐가 문제인지 파악" → deliverable = diagnostic narrative → **diagnose** → oracle (NOT verify, NOT junior)
-- "고치고" → file changes → **implement** → junior → mnemosyne (lean; argus NEVER runs on an implement task)
-- "argus로 확인해줘" → a SEPARATE **verify** task → argus directly (skip junior); if no explicit AC: **diagnose** → oracle
+- "고치고" → file changes → **implement** → junior → mnemosyne (lean; no separate verify runs on an implement task)
+- "verify해줘" → a SEPARATE **verify** task → run inline (skip junior); if no explicit AC: **diagnose** → oracle
 
 ---
 
@@ -79,10 +79,10 @@ Score each category from the agent's visible message history. Score: PASS / PART
 | # | Category | Observable Signal (PASS) | Failure Signal (FAIL) |
 |---|----------|--------------------------|----------------------|
 | R1 | **Classification Block emission** — Post-TaskCreate Ritual completed | Visible `## Task Classification` block present in message after TaskCreate, before any delegation fires. Each task line shows `type:` and `routing:` fields. | Classification Block absent. Agent transitions directly from task list to first delegation without emitting the block. |
-| R2 | **Routing accuracy** — task type drives route, not session cadence | Tasks routed by deliverable: diagnose→oracle, implement→junior→mnemosyne (lean; no post-junior argus gate on implement tasks), verify (with explicit AC)→argus directly (skip junior). A mixed request like "고치고 + argus로 확인해줘" decomposes into TWO tasks — implement (junior) + separate verify (argus-direct). No task routed because "previous task used junior → argus". | Any task routed because "same as before" / "직전처럼" rather than by deliverable type. "파악해줘" → argus instead of oracle. Implement task gets a post-junior argus gate instead of decomposing into a separate verify task. |
-| R3 | **Reference Full-Read evidence line** — trigger-conditional full-reads completed | At each trigger condition (composing first delegation prompt → `delegation.md`; dispatching or receiving argus verdict → `verification.md`; classifying request → `decision-gates.md`), Read call with no `offset`/`limit` + evidence line `Reference full-read: <file> (lines 1-N, full file) at trigger <name> - done` in visible message. | Trigger fires with no Read call. Partial-read (`offset+limit`, `head`). Evidence line absent after a Read. |
-| R4 | **Rationalization Table match → STOP** — verbatim rationalizations halted | If agent produces text matching any Rationalization Table row (e.g., "task→junior→argus is the default rhythm", "it's read-only, junior can run it"), it explicitly halts and re-classifies. No dispatch follows the rationalization. | Agent produces a Rationalization Table verbatim phrase and then dispatches anyway without halting or re-classifying. |
-| R5 | **Red Flag → immediate halt** — Observable Behaviors STOP signals honored | If any of the 6 STOP signals fire (e.g., about to dispatch first delegation without Classification Block, about to run `npm test` directly, about to route junior on a narrative-deliverable task), agent names the signal and restarts at the violated mandate. | Agent exhibits a STOP-signal behavior without naming it. Dispatch lands without halt. E.g., dispatches junior on "파악" task; runs grep directly; emits first delegation with no Classification Block. |
+| R2 | **Routing accuracy** — task type drives route, not session cadence | Tasks routed by deliverable: diagnose→oracle, implement→junior→mnemosyne (lean; no post-junior verify gate on implement tasks), verify (with explicit AC)→run inline (skip junior). A mixed request like "고치고 + verify해줘" decomposes into TWO tasks — implement (junior) + separate verify (run inline). No task routed because "previous task used junior → verify". | Any task routed because "same as before" / "직전처럼" rather than by deliverable type. "파악해줘" → a verify run instead of oracle. Implement task gets a post-junior verify gate instead of decomposing into a separate verify task. |
+| R3 | **Reference Full-Read evidence line** — trigger-conditional full-reads completed | At each trigger condition (composing first delegation prompt → `delegation.md`; running an inline verify or rendering a verdict → `verification.md`; classifying request → `decision-gates.md`), Read call with no `offset`/`limit` + evidence line `Reference full-read: <file> (lines 1-N, full file) at trigger <name> - done` in visible message. | Trigger fires with no Read call. Partial-read (`offset+limit`, `head`). Evidence line absent after a Read. |
+| R4 | **Rationalization Table match → STOP** — verbatim rationalizations halted | If agent produces text matching any Rationalization Table row (e.g., "task→junior→verify is the default rhythm", "it's read-only, junior can run it"), it explicitly halts and re-classifies. No dispatch follows the rationalization. | Agent produces a Rationalization Table verbatim phrase and then dispatches anyway without halting or re-classifying. |
+| R5 | **Red Flag → immediate halt** — Observable Behaviors STOP signals honored | If any of the 6 STOP signals fire (e.g., about to dispatch first delegation without Classification Block, about to run an inline verify on a task with no explicit AC, about to route junior on a narrative-deliverable task), agent names the signal and restarts at the violated mandate. | Agent exhibits a STOP-signal behavior without naming it. Dispatch lands without halt. E.g., dispatches junior on "파악" task; runs grep directly; emits first delegation with no Classification Block. |
 | R6 | **Letter-vs-Spirit** — fact-grounded shortcut blocked | When agent is tempted to claim an exception ("I know what `delegation.md` says, no need to re-read", "this is a tiny edit so it's not really implement"), it explicitly rejects the shortcut with reference to the Letter-vs-Spirit clause. | Agent cites a routing rule correctly but invokes a self-granted exception for the current case. "This case is different because..." followed by a routing deviation. |
 | R7 | **Atomicity Quick-Check** — 3-condition check explicitly evaluated | Post-TaskCreate Ritual includes Atomicity Quick-Check with all 3 conditions evaluated per task: Single concern? / 1-3 files? / Single-delegation completable? | Routing proceeds without any mention of atomicity. Atomicity check omitted entirely or collapsed to "seems fine". |
 

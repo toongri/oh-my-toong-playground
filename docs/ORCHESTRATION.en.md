@@ -41,7 +41,7 @@ Oh-My-Toong solves this by clearly separating roles:
 | **Planning** | prometheus | Strategic planning, NEVER writes code |
 | **Execution** | sisyphus | Orchestrates via delegation, NEVER works alone |
 | **Implementation** | sisyphus-junior | Writes code (delegated by sisyphus) |
-| **Quality Assurance** | argus | Validates implementation quality, plan compliance, and instruction fulfillment |
+| **Quality Assurance** | sisyphus (inline verify) | Runs a verify task's AC commands itself to validate implementation quality, plan compliance, and instruction fulfillment |
 
 ---
 
@@ -70,7 +70,7 @@ flowchart TD
         PlanFile --> Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
         Junior --> Done((Done))
-        Sisyphus -->|verify task| QA[argus<br/>Quality Assurance]
+        Sisyphus -->|verify task| QA[Inline verify<br/>sisyphus runs it]
         QA -->|Pass| Done
         QA -->|REQUEST_CHANGES| Junior
     end
@@ -99,7 +99,7 @@ flowchart TD
 
 - **Role**: Execution and delegation
 - **Constraint**: **NEVER works alone**. ALL code changes = DELEGATE to sisyphus-junior.
-- **Verification**: argus handles verify tasks (a PASS/FAIL verdict, routed directly, skip junior). An implement task completes on sisyphus-junior's report — argus does not run on implement tasks.
+- **Verification**: sisyphus handles verify tasks inline (explicit AC + PASS/FAIL verdict) by running the AC commands itself, skipping junior — there is no separate QA agent. An implement task completes on sisyphus-junior's report — no QA step runs on the implement path.
 
 ### sisyphus-junior (The Implementer)
 
@@ -107,11 +107,12 @@ flowchart TD
 - **Constraint**: Works ALONE. No delegation to other agents.
 - **Discipline**: Strict task focus, immediate completion marking
 
-### argus (Quality Assurance Guardian)
+### Inline verify (performed by sisyphus itself)
 
-- **Role**: Validates implementation quality, plan compliance, and instruction fulfillment
-- **Function**: Runs build/test/lint, evaluates code quality, verifies plan completion
+- **Role**: Validates a verify task's implementation quality, plan compliance, and instruction fulfillment — sisyphus does this itself, with no separate QA agent
+- **Function**: Runs the build/test/lint commands named in the AC directly, saves evidence, then renders a verdict
 - **Verdict**: APPROVE, REQUEST_CHANGES, or COMMENT
+- **Manual QA**: For explicit or heavy verification, the `qa` skill can be invoked directly (it is just no longer wrapped by a dedicated agent)
 
 ---
 
@@ -140,7 +141,7 @@ With a plan ready, use `/sisyphus`:
 
 1. **Task Creation**: Breaks plan into TaskCreate items
 2. **Delegation**: Assigns tasks to sisyphus-junior
-3. **Quality Assurance**: a verify task routes to argus directly (skip junior) for a PASS/FAIL verdict; implement tasks complete on sisyphus-junior's report (no argus)
+3. **Quality Assurance**: a verify task is handled inline by sisyphus (skip junior) — it runs the AC commands itself for a PASS/FAIL verdict; implement tasks complete on sisyphus-junior's report (no separate QA step)
 4. **Iteration**: Continues until all tasks pass review
 
 ---
@@ -164,7 +165,7 @@ Even "simple" tasks benefit from brief planning. The time invested in planning s
 
 ### 2. Trust the Verification Protocol
 
-When argus requests changes, fix them. Don't argue or skip. The protocol exists to catch real issues.
+When the inline verify requests changes, fix them. Don't argue or skip. The protocol exists to catch real issues.
 
 ### 3. Use Interview Mode for Unclear Requirements
 
@@ -172,7 +173,7 @@ If you find yourself repeatedly clarifying requirements during prometheus, answe
 
 ### 4. Let Agents Do Their Jobs
 
-- Don't manually verify sisyphus-junior's work (that's argus's job)
+- Don't manually verify sisyphus-junior's work — junior self-verifies with build/typecheck/tests, and a separate verify task is handled inline by sisyphus
 - Don't ask prometheus to "just write the code" (it can't and won't)
 - Don't interrupt sisyphus mid-execution (it will persist anyway)
 
@@ -188,11 +189,11 @@ Contain all TODOs in one plan file. This prevents context fragmentation and make
 |---------|----------|
 | Prometheus keeps interviewing | It needs more context. Answer thoroughly or say "generate plan now". |
 | Sisyphus won't stop | This is by design. It persists until verification passes. |
-| argus keeps failing | Review the feedback carefully. The issues are real. |
+| Inline verify keeps failing | Review the feedback carefully. The issues are real. |
 
 ---
 
 ## See Also
 
 - [README](../README.en.md) - Project overview
-- [Core Pipeline Skills](skills/core-pipeline.en.md) - deep-interview · prometheus · sisyphus · argus details
+- [Core Pipeline Skills](skills/core-pipeline.en.md) - deep-interview · prometheus · sisyphus details

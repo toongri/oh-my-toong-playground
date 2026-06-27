@@ -21,7 +21,7 @@ agents_dispatched: <count + role>
 files_touched:   <count or list>
 total_line_delta: <+N>
 destructive_deletions: <N>
-argus_verdict:   <APPROVE / REQUEST_CHANGES / COMMENT>
+inline_verify_verdict:   <APPROVE / REQUEST_CHANGES / COMMENT>
 pid:             <int>
 rules_yaml_sha8: <short sha>
 ```
@@ -498,7 +498,7 @@ Skill lacked the rule: "items where the listing-visible metadata (anchor text = 
 
 ### Verification
 - sisyphus-junior compound delegation (3-file coherent edit)
-- argus QA verdict: **APPROVE** (C-1 through C-5 all PASS)
+- inline verify verdict: **APPROVE** (C-1 through C-5 all PASS)
   - C-1 new sections exist / C-2 destructive edits = 0 / C-3 spec core elements (3-tier + flowchart + loopholes + T11 counterexample + 4 CRITICAL bullets) / C-4 line count matches / C-5 no .tmp files remaining
 - 1 LOW item (scenario final_state field convention = GREEN; spec's RED requirement is non-blocking given prevailing convention)
 - `.claude/skills/collect-jd/` deploy sync complete (`diff -q` returns 0)
@@ -513,10 +513,10 @@ Skill lacked the rule: "items where the listing-visible metadata (anchor text = 
 | Field | Value |
 |---|---|
 | observed_at: | `2026-04-25` |
-| method: | `writing_skills_tdd+parallel_subagent_editing+argus_qa` |
+| method: | `writing_skills_tdd+parallel_subagent_editing+inline_verify` |
 | command: | `N/A — historical artifact (spec writing session, no shell commands)` |
 | exit_code: | `N/A — historical artifact` |
-| key_output: | `S27–S30 RED scenarios added; Full Coverage Ingest Protocol section added to rules.md + SKILL.md; argus APPROVE (C-1~C-5 PASS); deploy sync diff-q returns 0` |
+| key_output: | `S27–S30 RED scenarios added; Full Coverage Ingest Protocol section added to rules.md + SKILL.md; inline verify APPROVE (C-1~C-5 PASS); deploy sync diff-q returns 0` |
 | verdict: | `GREEN_SPEC` |
 
 Extension:
@@ -524,7 +524,7 @@ Extension:
 | Field | Value |
 |---|---|
 | `files_touched` | `3 (pressure-scenarios.md +110, rules.md, SKILL.md)` |
-| `argus_verdict` | `APPROVE` |
+| `inline_verify_verdict` | `APPROVE` |
 
 ---
 
@@ -579,7 +579,7 @@ Diagnostic rule: JD never evaluated = Full Coverage defect; JD wrongly evaluated
 ### Verification
 
 - 5 sisyphus-junior agents dispatched in parallel (T11-d-A..E), each 1-3 files single-concern atomic edits
-- argus QA verdict: **APPROVE** — C-1~C-6 PASS, 0 issues
+- inline verify verdict: **APPROVE** — C-1~C-6 PASS, 0 issues
   - C-1 all new inserts land at correct anchors
   - C-2 line counts exact (295/1548/147/122/90/177/176/707/453)
   - C-3 zero destructive deletion — all pre-existing sections retained
@@ -599,21 +599,21 @@ Diagnostic rule: JD never evaluated = Full Coverage defect; JD wrongly evaluated
 | Field | Value |
 |---|---|
 | observed_at: | `2026-04-25` |
-| method: | `parallel_subagent_editing+argus_qa` |
+| method: | `parallel_subagent_editing+inline_verify` |
 | command: | `N/A — historical artifact (spec writing session, no shell commands)` |
 | exit_code: | `N/A — historical artifact` |
-| key_output: | `9 files edited (2 inserts + 7 translations); +149 lines; argus APPROVE C-1~C-6 PASS; deploy sync diff-q zero output` |
+| key_output: | `9 files edited (2 inserts + 7 translations); +149 lines; inline verify APPROVE C-1~C-6 PASS; deploy sync diff-q zero output` |
 | verdict: | `GREEN_LIVE` |
 
 Extension:
 
 | Field | Value |
 |---|---|
-| `agents_dispatched` | `5 sisyphus-junior + 1 argus` |
+| `agents_dispatched` | `5 sisyphus-junior (verify run inline by sisyphus, not dispatched)` |
 | `files_touched` | `9 (2 inserts + 7 translations)` |
 | `total_line_delta` | `+149 (SKILL.md +27, rules.md +122, others line-count-preserving)` |
 | `destructive_deletions` | `0` |
-| `argus_verdict` | `APPROVE` |
+| `inline_verify_verdict` | `APPROVE` |
 
 ---
 
@@ -660,10 +660,10 @@ User interview via `/superpowers:writing-skills` raised three pressure-scenario 
 ### Verification
 
 - 4 sisyphus-junior agents dispatched in parallel (T11-e-A/B/C/D). T-B/C/D completed clean. T-A first dispatch user-rejected (storage layout not yet confirmed); re-dispatched after Option C confirmation.
-- argus QA verdict on T-A re-dispatch: **REQUEST_CHANGES** — 6 findings (3 HIGH / 1 MEDIUM / 2 LOW) all related to cross-section terminology sweep (HWM word survival outside the new sections, deprecated schema example in Sources Registration, `coverage_verification` field name not renamed in the Coverage Verification section).
+- inline verify verdict on T-A re-dispatch: **REQUEST_CHANGES** — 6 findings (3 HIGH / 1 MEDIUM / 2 LOW) all related to cross-section terminology sweep (HWM word survival outside the new sections, deprecated schema example in Sources Registration, `coverage_verification` field name not renamed in the Coverage Verification section).
 - T11-e-A-fix dispatched: junior partial-completed (stream timeout) but cleared 5/6 findings before timeout. Orchestrator directly cleared remaining LOW-6 (graphviz node id rename `hwm_update` → `crawl_memory_update` via single `replace_all`).
 - Final grep sweep: 0 occurrences of `Source HWM Update` / `by HWM` / `update HWM` / `hwm_update` (graph node id). Intentional retentions: `marker_type` / `last_seen_marker` / `coverage_verification` survive only inside Migration Mapping rows and explicit deprecation loophole bullets — historical references by design.
-- Spec invariant compliance (argus 6-item table) all PASS within new sections; cross-section sweep now also PASS.
+- Spec invariant compliance (inline verify 6-item table) all PASS within new sections; cross-section sweep now also PASS.
 
 ### Outstanding Work
 
@@ -676,21 +676,21 @@ User interview via `/superpowers:writing-skills` raised three pressure-scenario 
 | Field | Value |
 |---|---|
 | observed_at: | `2026-04-25` |
-| method: | `interview_then_parallel_subagent_with_argus_qa_loop` |
+| method: | `interview_then_parallel_subagent_with_inline_verify_loop` |
 | command: | `N/A — historical artifact (spec writing + state migration session)` |
 | exit_code: | `N/A — historical artifact` |
-| key_output: | `4 skill files + 2 state files updated; S31/S32/S33 RED added; argus APPROVE after T-A-fix; 6 findings cleared; final grep sweep 0 stale occurrences` |
+| key_output: | `4 skill files + 2 state files updated; S31/S32/S33 RED added; inline verify APPROVE after T-A-fix; 6 findings cleared; final grep sweep 0 stale occurrences` |
 | verdict: | `GREEN_SPEC` |
 
 Extension:
 
 | Field | Value |
 |---|---|
-| `agents_dispatched` | `5 sisyphus-junior (T-A initial + T-A redispatch + T-A-fix + T-B + T-C + T-D) + 1 argus` |
+| `agents_dispatched` | `5 sisyphus-junior (T-A initial + T-A redispatch + T-A-fix + T-B + T-C + T-D); verify run inline by sisyphus` |
 | `files_touched` | `4 skill files + 2 state files (sources.yaml, seen.jsonl)` |
 | `total_line_delta` | `+391 (SKILL.md +66, rules.md +214, frontmatter +29, pressure-scenarios +82)` |
 | `destructive_deletions` | `0 (legacy keys preserved as historical references)` |
-| `argus_verdict` | `APPROVE (after T-A-fix)` |
+| `inline_verify_verdict` | `APPROVE (after T-A-fix)` |
 
 ---
 
@@ -733,11 +733,11 @@ User questioned "분기처리가 많아진 느낌인데 일관되게 처리할 �
 ### Verification
 
 - 3 sisyphus-junior agents dispatched in parallel (U-1 RED + U-2 GREEN + U-3 migration). All 3 completed clean.
-- argus QA round 1 (10 invariants I-1~I-10): **REQUEST_CHANGES** — 2 HIGH (Sources Registration schema example still flat / RED scenarios `rule_added` TBD).
+- inline verify round 1 (10 invariants I-1~I-10): **REQUEST_CHANGES** — 2 HIGH (Sources Registration schema example still flat / RED scenarios `rule_added` TBD).
 - U-2-fix dispatched: junior cleared both HIGH findings.
-- argus QA round 2: **COMMENT** — 1 MEDIUM (line numbers in citations off by 4 due to schema example expansion in same fix round).
-- U-2-fix2 dispatched: junior applied argus's recommended Option 2 (remove `(line N)` parentheticals; preserve row-text quotation as semantic anchor — drift-resistant).
-- argus QA round 3 (spotcheck): **APPROVE** — 3 invariants pass, no further issues.
+- inline verify round 2: **COMMENT** — 1 MEDIUM (line numbers in citations off by 4 due to schema example expansion in same fix round).
+- U-2-fix2 dispatched: junior applied the inline verify's recommended Option 2 (remove `(line N)` parentheticals; preserve row-text quotation as semantic anchor — drift-resistant).
+- inline verify round 3 (spotcheck): **APPROVE** — 3 invariants pass, no further issues.
 
 ### Outstanding Work
 
@@ -750,18 +750,18 @@ User questioned "분기처리가 많아진 느낌인데 일관되게 처리할 �
 | Field | Value |
 |---|---|
 | observed_at: | `2026-04-26` |
-| method: | `oracle_architecture_verdict_then_parallel_subagent_with_argus_qa_loop` |
+| method: | `oracle_architecture_verdict_then_parallel_subagent_with_inline_verify_loop` |
 | command: | `N/A — historical artifact (oracle design review + spec writing session)` |
 | exit_code: | `N/A — historical artifact` |
-| key_output: | `3 skill files updated; S34/S35/S36 RED added; pagination.how γ schema + 11 sub-sections; argus APPROVE round 3; 2 HIGH + 1 MEDIUM cleared across fix rounds` |
+| key_output: | `3 skill files updated; S34/S35/S36 RED added; pagination.how γ schema + 11 sub-sections; inline verify APPROVE round 3; 2 HIGH + 1 MEDIUM cleared across fix rounds` |
 | verdict: | `GREEN_SPEC` |
 
 Extension:
 
 | Field | Value |
 |---|---|
-| `agents_dispatched` | `1 oracle + 4 sisyphus-junior (U-1 + U-2 + U-3 + 2 fix rounds) + 3 argus rounds` |
+| `agents_dispatched` | `1 oracle + 4 sisyphus-junior (U-1 + U-2 + U-3 + 2 fix rounds); 3 inline verify rounds by sisyphus` |
 | `files_touched` | `3 skill files (SKILL.md, dedup-and-discovery.md, pressure-scenarios.md) + 1 state file (sources.yaml)` |
 | `total_line_delta` | `+249 (SKILL.md +9, dedup-and-discovery.md +168, pressure-scenarios.md +72) + state +5` |
 | `destructive_deletions` | `0 (legacy pagination.method field dropped per oracle decision; old flat keys converted to γ schema params)` |
-| `argus_verdict` | `APPROVE (round 3 final)` |
+| `inline_verify_verdict` | `APPROVE (round 3 final)` |

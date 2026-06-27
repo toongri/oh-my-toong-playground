@@ -104,7 +104,7 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 
 ### qa
 
-**Purpose**: Quality assurance guardian that verifies implementation correctness. Named after Argus Panoptes — the hundred-eyed giant who never sleeps — this skill operates under the principle: "Nothing ships without proof."
+**Purpose**: Quality assurance guardian that verifies implementation correctness. This skill operates under the principle: "Nothing ships without proof."
 
 **What it verifies**:
 - Automated checks — build, typecheck, tests, lint

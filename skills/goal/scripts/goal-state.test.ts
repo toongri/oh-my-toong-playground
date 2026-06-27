@@ -197,7 +197,7 @@ describe('goal state', () => {
     setVerdict(S2, 'APPROVE');
     writeFileSync(
       `${tmpDir}/goal-verdict-${S2}.json`,
-      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['proof.txt'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['proof.txt'] }], verifier: 'orchestrator', at: '2026-06-12T00:00:00' }),
       'utf8'
     );
     writeCodeReviewArtifact(S2, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
@@ -230,7 +230,7 @@ describe('goal state', () => {
     setVerdict(S, 'APPROVE');
     writeFileSync(
       `${tmpDir}/goal-verdict-${S}.json`,
-      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['done.md'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['done.md'] }], verifier: 'orchestrator', at: '2026-06-12T00:00:00' }),
       'utf8'
     );
     setBudgetLimited(S);
@@ -290,7 +290,7 @@ describe('goal state', () => {
     setVerdict(Sc, 'APPROVE');
     writeFileSync(
       `${tmpDir}/goal-verdict-${Sc}.json`,
-      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['p'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['p'] }], verifier: 'orchestrator', at: '2026-06-12T00:00:00' }),
       'utf8'
     );
     writeCodeReviewArtifact(Sc, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
@@ -374,7 +374,7 @@ describe('goal state', () => {
     setVerdict(S, 'APPROVE');
     writeFileSync(
       `${tmpDir}/goal-verdict-${S}.json`,
-      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['a.md'] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['a.md'] }], verifier: 'orchestrator', at: '2026-06-12T00:00:00' }),
       'utf8'
     );
     writeCodeReviewArtifact(S, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
@@ -440,7 +440,7 @@ describe('goal state', () => {
     // Write the verdict artifact so the story gate passes
     writeFileSync(
       `${tmpDir}/goal-verdict-${S}.json`,
-      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: [p1] }], verifier: 'argus', at: '2026-06-12T00:00:00' }),
+      JSON.stringify({ objective_verdict: 'APPROVE', stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: [p1] }], verifier: 'orchestrator', at: '2026-06-12T00:00:00' }),
       'utf8'
     );
     writeCodeReviewArtifact(S, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
@@ -1552,7 +1552,7 @@ function buildSatisfiedFixture(sid: string): object {
       { id: 'S1', verdict: 'APPROVE', evidence_refs: ['evidence.md'] },
       { id: 'S2', verdict: 'APPROVE', evidence_refs: ['evidence.md'] },
     ],
-    verifier: 'argus',
+    verifier: 'orchestrator',
     at: '2026-06-12T10:00:00',
   };
 }
@@ -1563,7 +1563,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
     buildSatisfiedFixture(S);
 
     // Malformed: missing required fields (no `stories` array)
-    writeVerdictArtifact(S, { objective_verdict: 'APPROVE', verifier: 'argus', at: '2026-06-12T00:00:00' });
+    writeVerdictArtifact(S, { objective_verdict: 'APPROVE', verifier: 'orchestrator', at: '2026-06-12T00:00:00' });
     expect(requestComplete(S)).toBe(false);
     expect(rawState().phase).not.toBe('complete');
 
@@ -1574,7 +1574,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
         { id: 'S1', verdict: 'APPROVE', evidence_refs: [] },
         { id: 'UNKNOWN', verdict: 'APPROVE', evidence_refs: [] },  // unknown
       ],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     expect(requestComplete(S)).toBe(false);
@@ -1599,7 +1599,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
         { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
         { id: 'S2', verdict: 'REQUEST_CHANGES', evidence_refs: [] },  // one non-APPROVE
       ],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     // state objective_verdict === 'APPROVE' but one story entry is REQUEST_CHANGES
@@ -1620,7 +1620,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
     writeVerdictArtifact(S, {
       objective_verdict: 'APPROVE',
       stories: [{ id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] }],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     expect(requestComplete(S)).toBe(false);
@@ -1645,7 +1645,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
         { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
         { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
       ],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     // S2 is unconfirmed — gate must refuse
@@ -1664,7 +1664,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
         { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
         // S2 entry deliberately omitted
       ],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     expect(requestComplete(S)).toBe(false);
@@ -1690,7 +1690,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
         { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
         { id: 'S2', verdict: 'APPROVE', evidence_refs: [] },  // retired story — ignored
       ],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     writeCodeReviewArtifact(S2, { findings: [], reviewer: 'code-reviewer', at: '2026-06-12T00:00:00' });
@@ -1720,7 +1720,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
     writeVerdictArtifact(S, {
       objective_verdict: 'APPROVE',
       stories: [],  // no entries for retired story (correct — retired is ignored)
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     expect(requestComplete(S)).toBe(false);
@@ -1737,7 +1737,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
         { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },    // 중복 — 현재 last-wins
         { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
       ],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     expect(requestComplete(S)).toBe(false);
@@ -1754,7 +1754,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
         { id: 'S1', verdict: 'REQUEST_CHANGES', evidence_refs: [] },  // 중복
         { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
       ],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     expect(requestComplete(S)).toBe(false);
@@ -1770,7 +1770,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
         { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
         { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
       ],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     expect(requestComplete(S)).toBe(false);
@@ -1786,7 +1786,7 @@ describe('story layer: request-complete verdict gate (T4)', () => {
         { id: 'S1', verdict: 'APPROVE', evidence_refs: ['e.md'] },
         { id: 'S2', verdict: 'APPROVE', evidence_refs: ['e.md'] },
       ],
-      verifier: 'argus',
+      verifier: 'orchestrator',
       at: '2026-06-12T00:00:00',
     });
     expect(requestComplete(S)).toBe(false);
@@ -1800,10 +1800,10 @@ describe('story layer: request-complete verdict gate (T4)', () => {
 
 describe('story layer: code-review completion lane (TODO 1)', () => {
   // AC1: a CONFIRMED finding (correctness OR cleanup) blocks completion even when
-  // the argus lane is fully green. The gate keys ONLY on verdict===CONFIRMED.
+  // the objective lane is fully green. The gate keys ONLY on verdict===CONFIRMED.
   test('code-review CONFIRMED blocks completion (cleanup class)', () => {
     const artifact = buildSatisfiedFixture(S);
-    writeVerdictArtifact(S, artifact); // argus lane fully green
+    writeVerdictArtifact(S, artifact); // objective lane fully green
     writeCodeReviewArtifact(S, {
       findings: [{ class: 'cleanup', verdict: 'CONFIRMED', ref: 'foo.ts:1' }],
       reviewer: 'code-reviewer',
@@ -1896,7 +1896,7 @@ describe('story layer: code-review completion lane (TODO 1)', () => {
     setGoalState(S, { phase: 'planning', outcome: '새 목표' });
     expect(existsSync(codeReviewArtifactPath(S))).toBe(false);
 
-    // New pursuit, all argus-side gates re-satisfied, but no fresh code-review artifact.
+    // New pursuit, all objective-side gates re-satisfied, but no fresh code-review artifact.
     const s1: Story = { id: 'S1', story: 'new', acceptance_criteria: ['ac1'], verification_surface: 'v1', status: 'unconfirmed' };
     setStories(S, [s1]);
     confirmStory(S, 'S1');

@@ -378,7 +378,9 @@ N/M spec items fully addressed.
 | Spec/AC compliance: Completeness Missing/Partial (blocking) | **REQUEST_CHANGES** (spec items unaddressed) |
 | Hands-on execution FAIL (provided scenario or adversarial matrix) | **REQUEST_CHANGES** (hands-on verification failed) |
 | Code quality (Security / Data Integrity) CRITICAL | **REQUEST_CHANGES** (quality issues) |
-| LOW only or no issues | **APPROVE** |
+| LOW only or no issues | **APPROVE** (or **COMMENT** to surface the LOW notes — see *On COMMENT* below) |
+
+**On COMMENT.** The decision above is binary — APPROVE or REQUEST_CHANGES. COMMENT is an optional **soft-pass variant of APPROVE**: emit it in place of APPROVE when there are LOW, non-blocking notes worth surfacing to the consumer. It carries **no MEDIUM tier** — severity is CRITICAL / LOW only — and it is never a partial or "almost" verdict. Consumers read COMMENT as approve-with-notes: a per-task verifier closes the task after its evidence gate; an objective-level completion gate still requires an explicit APPROVE (the never-false-complete invariant), so a COMMENT there prompts addressing the notes and re-verifying toward APPROVE, never completion.
 
 ---
 

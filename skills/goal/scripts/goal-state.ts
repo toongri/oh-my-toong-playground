@@ -628,7 +628,7 @@ export function confirmStory(sessionId: string, storyId: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Verdict artifact types (T4 — read/validate only; authorship is argus's job)
+// Verdict artifact types (T4 — read/validate only; authorship is the orchestrator's job)
 // ---------------------------------------------------------------------------
 
 interface ArtifactStoryEntry {
@@ -810,7 +810,7 @@ export function requestComplete(sessionId: string): boolean {
   }
 
   // Gate 2 (artifact objective_verdict): the artifact is the trust anchor written by
-  // argus directly — its objective_verdict must itself be 'APPROVE'. COMMENT also blocks
+  // the orchestrator directly — its objective_verdict must itself be 'APPROVE'. COMMENT also blocks
   // (never-false-complete invariant). This is independent of the state objective_verdict
   // checked by the dual gate above.
   if (artifact.objective_verdict !== 'APPROVE') {
@@ -850,7 +850,7 @@ export function requestComplete(sessionId: string): boolean {
   }
 
   // Code-review lane (D-3): the SECOND independent refusal lane, reached only after
-  // every argus gate above passes — so "both lanes clean" is the completion condition.
+  // every objective-lane gate above passes — so "both lanes clean" is the completion condition.
   // Absent/invalid artifact → block (never-false-complete: degrade toward block). The
   // gate keys ONLY on verdict==='CONFIRMED' (any class — correctness OR cleanup); `class`
   // is informational and never branched on.
