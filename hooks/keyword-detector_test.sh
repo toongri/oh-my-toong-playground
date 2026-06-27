@@ -263,10 +263,10 @@ test_ultrawork_blocked_excuses_has_simplified_pattern() {
 
 test_ultrawork_blocked_excuses_has_cant_verify_pattern() {
     # INPUT: ultrawork 프롬프트
-    # EXPECTED: 검증 불가 변명 차단 + argus 대체 행동 포함
+    # EXPECTED: 검증 불가 변명 차단 + 인라인 검증 대체 행동 포함
     local output=$(run_keyword_detector "ultrawork test the hooks" "$TEST_TMP_DIR")
-    assert_output_contains "$output" "argus" \
-        "Should reference argus as recovery action for can't-verify excuse" || return 1
+    assert_output_contains "$output" "capture evidence" \
+        "Should reference inline verification as recovery action for can't-verify excuse" || return 1
 }
 
 test_ultrawork_blocked_excuses_has_leave_for_user_pattern() {
