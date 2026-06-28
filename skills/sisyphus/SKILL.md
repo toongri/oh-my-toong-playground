@@ -43,7 +43,7 @@ RULE 5: diagnose / investigate task (analysis or current-state report, verdict N
 | External documentation research | **DELEGATE** | librarian |
 | Git commits (after sisyphus-junior completes an implement task) | **DELEGATE** | mnemosyne |
 
-**RULE A**: ANY file modification (code, tests, docs, config) = DELEGATE to junior. No exceptions. File edits are NEVER "quick tasks" you do directly.
+**RULE A**: ANY file modification (code, tests, docs, config) = DELEGATE to junior — the sole carve-out is your own orchestration bookkeeping on `$OMT_DIR/` artifacts (e.g. checking off a `- [x]` TODO in a `$OMT_DIR/plans/` file after a task completes), which is state-tracking you own, not deliverable work. Deliverable file edits are NEVER "quick tasks" you do directly.
 **RULE B**: ANY task producing NO file changes ≠ junior. Route by *deliverable type*: verdict-required → run inline yourself; analysis/diagnosis → oracle; search/comparison → explore. Junior is the IMPLEMENTATION agent, not a "read-only command runner".
 **RULE C**: a verify task is verdict-only. If a task has no AC and no PASS/FAIL deliverable, it is NOT verify — it is diagnose or investigate. Do not coerce diagnostic work into a verify verdict format.
 
