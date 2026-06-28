@@ -64,9 +64,10 @@ export function findAcRulesDrift(rootDir: string): string | null {
     return `'${HEADING}' 블록 또는 소스 파일 누락: ${missing.map((b) => b.rel).join(", ")}`;
   }
 
-  // An emptied block is identity-equal to another emptied block, so a simultaneous
-  // deletion in both files would slip past the byte-identity check below — guard it.
-  const empty = blocks.filter((b) => b.block === "");
+  // An emptied (or whitespace-only) block is identity-equal to another such block, so a
+  // simultaneous deletion in both files — even one that leaves blank lines under the heading —
+  // would slip past the byte-identity check below. Trim so whitespace-only bodies also fail.
+  const empty = blocks.filter((b) => b.block !== null && b.block.trim() === "");
   if (empty.length > 0) {
     return `'${HEADING}' 블록이 비어 있음: ${empty.map((b) => b.rel).join(", ")}`;
   }
