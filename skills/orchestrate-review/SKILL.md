@@ -23,8 +23,8 @@ When finders cannot deliver — none configured/available after filtering, or al
 4. Read each finder's output file via the Read tool.
 5. Merge candidates using the Aggregation rules.
 6. Run `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text. This step **MUST** run before `clean` — the job dir is deleted in the next teardown step and the per-member token data is gone.
-7. Return the merged candidate list (including the `### Find Token Usage` block).
-8. Run teardown: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` (deletes the job dir; `usage-summary.ts` was already run in step 6). Then **STOP** — do not run any further tools.
+7. Run teardown: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` (deletes the job dir; `usage-summary.ts` was already run in step 6).
+8. Return the merged candidate list (including the `### Find Token Usage` block) as the final response, then **STOP** — do not run any further tools.
 
 **If a finder fails (outputFilePath is null in the manifest): apply Degradation Policy. Do NOT re-start the job.**
 
@@ -92,7 +92,7 @@ Response JSON (not done — re-run this step):
 Use the Read tool to read each finder's `outputFilePath` from the manifest.
 
 ### Step 4 — Merge, Teardown & Return
-Merge all finder candidate lists per the Aggregation rules. Run `usage-summary.ts "$JOB_DIR"` and append the `### Find Token Usage` block to the merged text. Return the merged candidate list (including the `### Find Token Usage` block), then run teardown: `clean "$JOB_DIR"`, then STOP.
+Merge all finder candidate lists per the Aggregation rules. Run `usage-summary.ts "$JOB_DIR"` and append the `### Find Token Usage` block to the merged text. Run teardown: `clean "$JOB_DIR"`. Then return the merged candidate list (including the `### Find Token Usage` block) as the final response, then STOP.
 
 ## Worker Output Contract
 
@@ -196,4 +196,4 @@ No severity, no priority, no verdict, no merge assessment. If zero candidates su
 
 ## Termination
 
-After outputting the merged candidate list (including the `### Find Token Usage` block), run teardown: (1) `usage-summary.ts "$JOB_DIR"` — already run in step 6, already included in returned text; (2) `clean "$JOB_DIR"` — deletes the job dir. Once teardown is complete, your task is **COMPLETE** — do NOT read source files, do NOT explore the codebase, do not run any further tools.
+Run teardown before returning: (1) `usage-summary.ts "$JOB_DIR"` — harvest and append `### Find Token Usage` to the merged text (step 6); (2) `clean "$JOB_DIR"` — deletes the job dir. Once teardown is complete, return the merged candidate list (including the `### Find Token Usage` block) as the final response — your task is **COMPLETE** — do NOT read source files, do NOT explore the codebase, do not run any further tools.
