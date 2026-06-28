@@ -20,7 +20,7 @@ When the Verification can be expressed as a runnable command, prefer one that is
       **Verification**: `maestro --device "$ANDROID_SERIAL" test .maestro/auth/login_happy.yaml --format junit --output "$evidence_xml"`
       (Same Setup/Cleanup notes as iOS above.)
 
-> Mobile ACs assume `$IOS_UDID` / `$ANDROID_SERIAL` are exported by Argus Stage 3.5 — see Executor-Provided Variables in SKILL.md.
+> Mobile ACs assume `$IOS_UDID` / `$ANDROID_SERIAL` are exported by the QA executor — see Executor-Provided Variables in SKILL.md.
 
 ### Web UI E2E (agent-browser)
 

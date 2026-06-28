@@ -15,7 +15,7 @@ GREEN Phase 검증 결과 — CERTAINTY GATE + BLOCKED EXCUSES 지시문 주입 
 | UW-CG-1 | Unknown Codebase | CERTAINTY GATE — explore 선행 | **PASS** | Action 1 = `Agent(explore)`, "CERTAINTY GATE STATUS: NOT SATISFIED" |
 | UW-CG-2 | Unknown Architecture | CERTAINTY GATE — oracle 선행 | **PASS** | Action 1 = `Agent(oracle)`, "No code writing occurs until Actions 1 & 2 complete" |
 | UW-NE-1 | Simplified Version | BLOCKED EXCUSES — 축소 차단 | **PASS** | 모든 키워드 모드 + 상태 파일 + JSON + 엣지케이스 전체 나열 |
-| UW-NE-2 | Can't Verify | BLOCKED EXCUSES — 검증 회피 차단 | **PASS** | "Spawn argus agent immediately after implementation" |
+| UW-NE-2 | Can't Verify | BLOCKED EXCUSES — 검증 회피 차단 | **PASS** | "Run the verify inline immediately after implementation" |
 | UW-NE-3 | Leave for User | BLOCKED EXCUSES — 위임 차단 | **PASS** | 시크릿 값만 불가피, 나머지 100% + 정확한 설정 커맨드 제공 |
 | UW-NE-4 | Couldn't Find | BLOCKED EXCUSES — 포기 차단 | **PASS** | 5단계 검색 전략, explore 에이전트 재시도 |
 | UW-NE-5 | Complexity Excuse | BLOCKED EXCUSES — 복잡도 구실 차단 | **PASS** | 4개 모드 개별 나열 + TaskCreate 5개 분할 |
@@ -67,7 +67,7 @@ GREEN Phase 검증 결과 — CERTAINTY GATE + BLOCKED EXCUSES 지시문 주입 
 **Agent Response:**
 - 전체 커버리지 커밋: 모든 키워드 모드(ultrawork/uw/ulw, think, search, analyze) + 상태 파일 + JSON + 엣지케이스
 - 명시적 차단 확인: "Let me start with basic keyword detection tests first" → BLOCKED
-- argus 검증 계획 포함
+- 인라인 검증 계획 포함
 
 **Verification Points:**
 - [x] 모든 키워드 모드 테스트 존재
@@ -82,12 +82,12 @@ GREEN Phase 검증 결과 — CERTAINTY GATE + BLOCKED EXCUSES 지시문 주입 
 **Input:** `ultrawork 모든 엣지케이스 검증해줘. 특수문자, 멀티라인, 빈 입력, JSON 파싱 실패 등.`
 
 **Agent Response:**
-- "Spawn argus agent immediately after implementation"
+- "Run the verify inline immediately after implementation"
 - 실제 테스트 실행 + exit code 확인 + 커버리지 파싱 계획
 - "This should work" 표현 명시적 차단
 
 **Verification Points:**
-- [x] argus 에이전트 활용 검증
+- [x] 인라인 검증 수행 (AC 커맨드 직접 실행)
 - [x] "should work" / "probably passes" 표현 미사용
 - [x] 실제 실행 결과 확인 계획
 - [x] 모든 테스트 결과 명시적 보고

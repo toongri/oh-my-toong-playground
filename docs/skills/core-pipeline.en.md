@@ -30,7 +30,7 @@ The core pipeline prevents this by separating concerns. Each stage of **define â
 | Define | deep-interview | Resolve ambiguity, converge to a spec | `$OMT_DIR/deep-interview/{slug}.md` |
 | Plan | prometheus | Turn the spec into an executable work plan | `$OMT_DIR/plans/*.md` |
 | Execute | sisyphus | Orchestrate implementation via specialist agents | Verified code changes |
-| Verify | argus | Confirm implementation quality, plan compliance, instruction fulfillment | APPROVE / REQUEST_CHANGES |
+| Verify | sisyphus (inline) | Run a verify task's AC commands to confirm implementation quality, plan compliance, instruction fulfillment | APPROVE / REQUEST_CHANGES |
 
 Supporting roles attach to this spine. **clarify** is a gate that halts whenever ambiguity appears at any stage; **momus** is a critic that reviews plans before execution; **diagnose** is a read-only advisor that diagnoses root causes; **agent-council** is an advisory body that gathers multiple opinions when judgment is split.
 
@@ -143,7 +143,7 @@ flowchart TB
     Loop -->|Yes| Route{Task type?}
     Route -->|implement| Delegate[Delegate to<br/>sisyphus-junior]
     Delegate --> Complete[Mark complete]
-    Route -->|verify| Review[Invoke argus]
+    Route -->|verify| Review[sisyphus inline verify]
     Review --> Pass{Pass?}
     Pass -->|Yes| Complete
     Pass -->|No| Fix[Create fix task]
@@ -153,12 +153,12 @@ flowchart TB
 
 **Verification protocol**:
 
-- **Verification**: an implement task completes on sisyphus-junior's report (no argus). When verification is needed, it is a separate verify task routed directly to argus.
-- **Evidence Audit Gate**: when argus runs (a verify task), it proceeds through the Evidence Audit Gate (a verify task changes no files, so it does not commit). Commits are performed by mnemosyne after junior completes an implement task.
-- **No retry limit**: it continues until argus passes.
+- **Verification**: an implement task completes on sisyphus-junior's report (no separate QA step). When verification is needed, it is a separate verify task that sisyphus handles inline by running the AC commands itself.
+- **Evidence Audit Gate**: when sisyphus runs an inline verify (a verify task), it proceeds through the Evidence Audit Gate (a verify task changes no files, so it does not commit). Commits are performed by mnemosyne after junior completes an implement task.
+- **No retry limit**: it continues until the inline verify passes.
 - **Persistence**: the user cannot interrupt the process to stop it midway.
 
-**Routing principle**: The delegation target is decided by task type. Implementation tasks that change files go to sisyphus-junior, verification tasks needing a PASS/FAIL verdict go to argus, root-cause/architecture analysis goes to oracle, and codebase search goes to explore. Whatever path the previous task took, a new task follows the path of its own type.
+**Routing principle**: The delegation target is decided by task type. Implementation tasks that change files go to sisyphus-junior, verification tasks needing a PASS/FAIL verdict are handled inline by sisyphus (it runs the AC commands itself), root-cause/architecture analysis goes to oracle, and codebase search goes to explore. Whatever path the previous task took, a new task follows the path of its own type.
 
 ---
 
@@ -200,7 +200,7 @@ flowchart TB
 
 ## 7. Delegation Agent Roster
 
-If skills are the *methodologies*, agents are the *delegation targets*. sisyphus and prometheus pick from the agents below by task type and have them work in isolated subagent contexts. There are currently 11 agents.
+If skills are the *methodologies*, agents are the *delegation targets*. sisyphus and prometheus pick from the agents below by task type and have them work in isolated subagent contexts. There are currently 10 agents. (A verify task needing a PASS/FAIL verdict is not a delegation target â€” sisyphus handles it inline itself.)
 
 | Agent | Role | When used |
 |-------|------|-----------|
@@ -209,7 +209,6 @@ If skills are the *methodologies*, agents are the *delegation targets*. sisyphus
 | explore | Codebase searcher returning structured results with absolute paths | When finding files, patterns, or implementations (not external docs) |
 | librarian | External documentation researcher with mandatory source URLs | When researching external APIs, libraries, or open-source implementations |
 | metis | Plan reviewer that catches missing questions, undefined guardrails, unvalidated assumptions, and scope risks | When checking plans/specs/requirements before implementation (consulted by prometheus) |
-| argus | Quality Assurance guardian verifying implementation quality, plan compliance, instruction fulfillment | When a PASS/FAIL verdict is needed after implementation |
 | momus | Returns simulation-based work-plan critique with certainty-classified findings and a verdict | When critiquing a work plan before execution |
 | daedalus | Reviews designs with steelman antithesis and tradeoff tension analysis | When weighing the soundness of a plan/design |
 | mnemosyne | Git specialist performing atomic commits in an isolated context | When preventing commits from polluting the conversation context |
