@@ -937,6 +937,46 @@ describe('executeOneTurn state/message/workerEnv regression', () => {
     // JSON.parse of null gives null, undefined key gives undefined — must be null
     expect(status.message).toBe(null);
   });
+
+  // F2: usage from ParseResult is written into status.json
+  test('`ParseResult`의 usage 필드가 status.json에 기록됨', async () => {
+    const memberDir = join(tmpDir, 'f2-usage');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_f2', terminal: 'stop', text: 'body', rawEvents: [],
+      usage: { input_tokens: 12345, output_tokens: 42 },
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('body', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.usage.input_tokens).toBe(12345);
+  });
+
+  // F2: usage is null (not {}) when driver returns no usage
+  test('driver가 usage를 반환하지 않을 때 status.json의 usage가 null임', async () => {
+    const memberDir = join(tmpDir, 'f2-no-usage');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_f2b', terminal: 'stop', text: 'body', rawEvents: [],
+      // no usage field
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('body', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.usage).toBe(null);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -953,6 +993,138 @@ function makeNullParseDriver(): AgentDriver {
     resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
   };
 }
+
+// ---------------------------------------------------------------------------
+// P2 regression: resume turns must accumulate usage across turns
+// ---------------------------------------------------------------------------
+
+describe('resumeOneTurn usage 누적', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'usage-accum-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // P2-main: two-turn flow — final status.json usage is the per-key sum of both turns
+  test('두 턴에 걸친 usage가 최종 status.json에 합산됨', async () => {
+    const memberDir = join(tmpDir, 'two-turns');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Turn 1: initial runOneTurn with output_tokens=100, input_tokens=1000
+    const turn1Driver = makeOneTurnMockDriver({
+      sessionID: 'ses_accum', terminal: 'stop', text: 'turn1', rawEvents: [],
+      usage: { output_tokens: 100, input_tokens: 1000 },
+    });
+    const turn1RunOnce = makeFlexibleMockRunOnce('turn1', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => turn1Driver,
+      runOnceFn: turn1RunOnce,
+    }));
+
+    // Verify turn 1 wrote usage correctly
+    const statusAfterTurn1 = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(statusAfterTurn1.usage.output_tokens).toBe(100);
+
+    // Simulate cmdResumeMember: increment resume_count before calling resumeOneTurn
+    writeFileSync(
+      join(memberDir, 'status.json'),
+      JSON.stringify({ ...statusAfterTurn1, resume_count: 1 }),
+    );
+
+    // Turn 2: resumeOneTurn with output_tokens=50, input_tokens=2000
+    const turn2Driver = makeOneTurnMockDriver({
+      sessionID: 'ses_accum', terminal: 'stop', text: 'turn2', rawEvents: [],
+      usage: { output_tokens: 50, input_tokens: 2000 },
+    });
+    const turn2RunOnce = makeFlexibleMockRunOnce('turn2', { state: 'done', exitCode: 0 });
+
+    await resumeOneTurn('ses_accum', makeOneTurnOpts(memberDir, {
+      driverFactory: () => turn2Driver,
+      runOnceFn: turn2RunOnce,
+    }));
+
+    const finalStatus = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    // Must be sum of both turns
+    expect(finalStatus.usage.output_tokens).toBe(150);
+    expect(finalStatus.usage.input_tokens).toBe(3000);
+  });
+
+  // P2-carry: resume turn whose current usage is undefined carries prior usage forward
+  test('현재 턴의 usage가 없을 때 이전 usage를 유지함 (null로 초기화 금지)', async () => {
+    const memberDir = join(tmpDir, 'carry-forward');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Turn 1: initial runOneTurn with usage
+    const turn1Driver = makeOneTurnMockDriver({
+      sessionID: 'ses_carry', terminal: 'stop', text: 'turn1', rawEvents: [],
+      usage: { output_tokens: 77, input_tokens: 500 },
+    });
+    const turn1RunOnce = makeFlexibleMockRunOnce('turn1', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => turn1Driver,
+      runOnceFn: turn1RunOnce,
+    }));
+
+    const statusAfterTurn1 = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    // Simulate cmdResumeMember increment
+    writeFileSync(
+      join(memberDir, 'status.json'),
+      JSON.stringify({ ...statusAfterTurn1, resume_count: 1 }),
+    );
+
+    // Turn 2: resume turn with NO usage (e.g. turn.failed with no turn.completed)
+    const turn2Driver = makeOneTurnMockDriver({
+      sessionID: 'ses_carry', terminal: 'stop', text: 'turn2', rawEvents: [],
+      // no usage field
+    });
+    const turn2RunOnce = makeFlexibleMockRunOnce('turn2', { state: 'done', exitCode: 0 });
+
+    await resumeOneTurn('ses_carry', makeOneTurnOpts(memberDir, {
+      driverFactory: () => turn2Driver,
+      runOnceFn: turn2RunOnce,
+    }));
+
+    const finalStatus = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    // Prior usage must be preserved, not replaced with null
+    expect(finalStatus.usage).not.toBe(null);
+    expect(finalStatus.usage.output_tokens).toBe(77);
+  });
+
+  // P2-initial: initial (non-resume) turn still uses last-write-wins — no accumulation
+  test('초기 턴(비재개)은 기존 status.json의 usage를 누적하지 않음', async () => {
+    const memberDir = join(tmpDir, 'initial-no-accum');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Pre-populate status.json with some usage from a completely different unrelated run
+    writeFileSync(join(memberDir, 'status.json'), JSON.stringify({
+      member: 'x', state: 'done', resume_count: 0,
+      usage: { output_tokens: 9999, input_tokens: 9999 },
+    }));
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_init', terminal: 'stop', text: 'body', rawEvents: [],
+      usage: { output_tokens: 10, input_tokens: 20 },
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('body', { state: 'done', exitCode: 0 });
+
+    // runOneTurn = initial turn: must NOT add 9999 to 10
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    // Must be exactly the current turn's usage — no 9999 double-count
+    expect(status.usage.output_tokens).toBe(10);
+    expect(status.usage.input_tokens).toBe(20);
+  });
+});
 
 describe('executeOneTurn parsed===null with driver — process state preservation (P1-1)', () => {
   let tmpDir: string;

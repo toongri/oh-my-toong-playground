@@ -40,6 +40,7 @@ export const codexDriver: AgentDriver = {
     let hasTurnCompleted = false;
     let hasTurnFailed = false;
     let hasItemCompleted = false;
+    let usage: Record<string, number> | undefined;
 
     for (const event of rawEvents) {
       if (!event || typeof event !== 'object') continue;
@@ -51,6 +52,9 @@ export const codexDriver: AgentDriver = {
 
       if (ev.type === 'turn.completed') {
         hasTurnCompleted = true;
+        if (ev.usage && typeof ev.usage === 'object' && !Array.isArray(ev.usage)) {
+          usage = ev.usage as Record<string, number>;
+        }
       }
 
       if (ev.type === 'turn.failed') {
@@ -82,6 +86,7 @@ export const codexDriver: AgentDriver = {
       terminal,
       text: textParts.join(''),
       rawEvents,
+      usage,
     };
   },
 
