@@ -100,13 +100,13 @@ When delegating to sisyphus-junior, refer to the Load Skills table in the `<skil
 
 ### Model: Junior always runs Sonnet
 
-sisyphus-junior runs on Sonnet — always. Do NOT pass `model="opus"` to junior. Junior is the generation agent; its output is checked by junior's own mandatory tests, and by argus only when the orchestrator creates an explicit verify task — implement tasks get no automatic argus pass. If an implementation seems to need more capability, tighten junior's required tests or add an explicit verify task — never escalate the generator to Opus.
+sisyphus-junior runs on Sonnet — always. Do NOT pass `model="opus"` to junior. Junior is the generation agent; its output is checked by junior's own mandatory tests, and re-checked by the orchestrator's inline verify only when the orchestrator creates an explicit verify task — implement tasks get no automatic verify pass. If an implementation seems to need more capability, tighten junior's required tests or add an explicit verify task — never escalate the generator to Opus.
 
 ---
 
 ## Mnemosyne Delegation Template
 
-Invoke mnemosyne after sisyphus-junior completes an implement task (argus does not run on implement tasks; verify tasks change no files and never commit):
+Invoke mnemosyne after sisyphus-junior completes an implement task (no separate verify runs on implement tasks; verify tasks change no files and never commit):
 
 ```markdown
 ## 1. TASK

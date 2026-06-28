@@ -150,7 +150,7 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 | Code implementation | sisyphus-junior |
 | Pre-planning analysis | metis |
 | Plan review | momus |
-| Quality Assurance | argus |
+| Quality Assurance | qa skill |
 
 ### sync.yaml Paths Are Machine-Specific
 

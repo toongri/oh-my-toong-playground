@@ -50,12 +50,13 @@ digraph workflow {
     }
 
     subgraph cluster_phase3 {
-        label="Phase 3: Verification";
-        build [label="Run build/lint"];
-        imports [label="Check imports"];
+        label="Phase 3: Self-Verification";
+        build [label="Run build/lint/typecheck"];
+        tests [label="Run targeted tests"];
+        evidence [label="Capture verification evidence"];
         all_done [label="All tasks completed?"];
 
-        build -> imports -> all_done;
+        build -> tests -> evidence -> all_done;
     }
 
     sequence -> todos;
@@ -131,13 +132,17 @@ If no methodology skill is specified, implement directly following task requirem
 
 ## Verification Before Done
 
+Self-verify before reporting done — your work is independently re-verified by the orchestrator, who treats "done" as a claim to disprove. Anticipate that: run the checks yourself and report the evidence.
+
 Task NOT complete without:
-- [ ] Build passes (if applicable)
+- [ ] Build / typecheck passes (when applicable)
 - [ ] No broken imports
+- [ ] Targeted tests for the changed surface pass — run them; document any pre-existing failures
 - [ ] All tasks marked completed
 - [ ] Changes match original request
+- [ ] Verification evidence captured (command → result) in the output
 
-**ANY unchecked = CONTINUE WORKING**
+**ANY unchecked = CONTINUE WORKING. No evidence = not complete.**
 
 ## Output Format
 
@@ -147,7 +152,8 @@ Task NOT complete without:
 - `file2.ts:108`: [what changed and why]
 
 ## Verification
-- Build: [pass/fail]
+- Build/Typecheck: `[command]` → [pass/fail]
+- Tests: `[command]` → [pass/fail] (note any pre-existing failures)
 - Imports: [verified/issues]
 
 ## Summary

@@ -226,7 +226,7 @@ Session end    →  pin-wrap-up: whole-session review, record refined entities
 ## See Also
 
 - [README](../../README.en.md) — full project overview
-- [Core Pipeline Skills](./core-pipeline.en.md) — prometheus / sisyphus / argus
+- [Core Pipeline Skills](./core-pipeline.en.md) — deep-interview / prometheus / sisyphus
 - [Review Quality Skills](./review-quality.en.md) — code-review / design-review
 - [Authoring Skills](./authoring.en.md) — technical-writing / humanizer
 - [Personal Utility Skills](./utilities-personal.en.md) — hud / mock-interview

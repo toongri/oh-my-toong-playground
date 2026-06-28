@@ -568,7 +568,7 @@ describe('makeDecision', () => {
       // behavioral steering: next concrete action + proxy-signal refusal
       expect(reason.toLowerCase()).toContain('next');
       expect(reason.toLowerCase()).toContain('proxy');
-      // NO audit rubric leaked into the continuation (ADR-5: rubric lives in argus)
+      // NO audit rubric leaked into the continuation (ADR-5: rubric lives in the goal skill)
       expect(reason.toLowerCase()).not.toContain('prompt-to-artifact');
       expect(reason.toLowerCase()).not.toContain('verify-the-verifier');
     });
@@ -612,7 +612,7 @@ describe('makeDecision', () => {
       expect(reason).toMatch(/claim to disprove|not trusted until verified/i);
     });
 
-    it('continuation branch-B: names both completion-gate lanes (argus + code-review) and request-complete', async () => {
+    it('continuation branch-B: names both completion-gate lanes (objective self-check + code-review) and request-complete', async () => {
       await writeGoal({
         active: true,
         phase: 'pursuing',
@@ -627,7 +627,7 @@ describe('makeDecision', () => {
       expect(result.decision).toBe('block');
       const reason = result.reason!;
       // Branch B: redirects to completion gate naming BOTH lanes
-      expect(reason.toLowerCase()).toContain('argus');
+      expect(reason.toLowerCase()).toContain('self-check');
       expect(reason.toLowerCase()).toContain('code-review');
       // Branch B: names request-complete
       expect(reason).toContain('request-complete');
