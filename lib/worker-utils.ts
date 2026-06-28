@@ -384,10 +384,21 @@ async function executeOneTurn(
   try { fs.writeFileSync(path.join(memberDir, 'error.txt'), '', 'utf8'); } catch { /* ignore absent */ }
 
   // Read existing status.json to preserve resume_count (legacy files may not have it)
+  // and to accumulate usage across resume turns (per-key sum when resume_count > 0).
   let existingResumeCount = 0;
+  let priorUsage: Record<string, number> | null = null;
   try {
     const existing = JSON.parse(fs.readFileSync(path.join(memberDir, 'status.json'), 'utf8')) as Record<string, unknown>;
     existingResumeCount = typeof existing.resume_count === 'number' ? existing.resume_count : 0;
+    if (existingResumeCount > 0) {
+      const u = existing.usage;
+      if (u && typeof u === 'object' && !Array.isArray(u)) {
+        priorUsage = Object.create(null) as Record<string, number>;
+        for (const [k, v] of Object.entries(u as Record<string, unknown>)) {
+          if (typeof v === 'number') priorUsage[k] = v;
+        }
+      }
+    }
   } catch { /* absent or invalid → default 0 */ }
 
   const runResult = await runOnceFn({
@@ -456,6 +467,26 @@ async function executeOneTurn(
     text = rawStdout;
   }
 
+  // Accumulate usage across resume turns. On the initial turn (priorUsage===null)
+  // this is last-write-wins. On resume turns, per-key sum of prior + current.
+  // input_tokens over-counts re-fed context on resume but is not read by any gate;
+  // output_tokens is exactly correct under summation (each turn's new output).
+  const currentUsage = parsed?.usage;
+  let accumulatedUsage: Record<string, number> | null;
+  if (priorUsage === null) {
+    // Initial turn: no accumulation
+    accumulatedUsage = currentUsage ?? null;
+  } else if (currentUsage === undefined) {
+    // Resume turn with no usage reported (e.g. turn.failed): carry prior forward unchanged
+    accumulatedUsage = priorUsage;
+  } else {
+    // Resume turn with usage: per-key sum
+    const merged = Object.create(null) as Record<string, number>;
+    for (const [k, v] of Object.entries(priorUsage)) merged[k] = v;
+    for (const [k, v] of Object.entries(currentUsage)) merged[k] = (merged[k] ?? 0) + v;
+    accumulatedUsage = merged;
+  }
+
   const runResultRecord = runResult as Record<string, unknown>;
   atomicWriteJson(path.join(memberDir, 'status.json'), {
     member,
@@ -467,7 +498,7 @@ async function executeOneTurn(
     message: runResultRecord.message ?? null,
     finishedAt: runResultRecord.finishedAt ?? new Date().toISOString(),
     workerEnv: builtCmd.env,
-    usage: parsed?.usage ?? null,
+    usage: accumulatedUsage,
   });
 
   return { state, sessionID, text, exitCode };
