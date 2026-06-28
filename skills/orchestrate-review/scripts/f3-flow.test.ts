@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * F3-flow: proves the usage-summary harvest must precede clean.
+ * F3-flow: proves the usage-summary harvest must precede clean, and clean must precede return.
  *
  * Three tests together establish the ordering constraint:
  *   1. summarizeUsage on a fixture job dir returns a known non-zero aggregate (harvest works).
@@ -8,10 +8,10 @@
  *      (harvest is impossible post-clean — proves the window closes).
  *   3. SKILL.md conductor execution steps mention "Find Token Usage" (the label appended
  *      to the returned text) BEFORE the `clean` teardown reference — enforcing the prose
- *      correctly sequences harvest → return → clean.
+ *      correctly sequences harvest → clean → return (final response).
  *
  * Tests 1 & 2 are green from the start (summarizeUsage already implemented in T3).
- * Test 3 is the RED gate: it fails until SKILL.md wires usage-summary before clean.
+ * Test 3 is the RED gate: it fails until SKILL.md wires usage-summary before clean before return.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
@@ -80,11 +80,11 @@ describe('F3-flow: usage-summary 하베스트는 clean보다 먼저 실행돼야
     expect(result.usage).toEqual({});
   });
 
-  test('SKILL.md 지휘자 단계에서 "Find Token Usage"는 clean 정리 참조보다 앞에 위치한다', () => {
+  test('SKILL.md 지휘자 단계에서 "Find Token Usage"는 `clean` 앞에, `clean`은 최종 return 앞에 위치한다', () => {
     const skill = fs.readFileSync(SKILL_MD_PATH, 'utf8');
 
     // "Find Token Usage" is the labelled block the conductor appends to returned text.
-    // It must appear inside the CRITICAL: Execution Constraint section, before the STOP/clean step.
+    // It must appear inside the CRITICAL: Execution Constraint section, before the clean step.
     const execConstraintStart = skill.indexOf('## CRITICAL: Execution Constraint');
     expect(execConstraintStart).toBeGreaterThan(-1);
 
@@ -95,11 +95,16 @@ describe('F3-flow: usage-summary 하베스트는 clean보다 먼저 실행돼야
       : skill.slice(execConstraintStart);
 
     const findTokenUsagePos = execSection.indexOf('Find Token Usage');
-    expect(findTokenUsagePos).toBeGreaterThan(-1); // RED until SKILL.md is updated
+    expect(findTokenUsagePos).toBeGreaterThan(-1);
 
-    // clean must also appear in this section, AFTER the Find Token Usage step
+    // clean must appear in this section, AFTER the Find Token Usage step
     const cleanAfterPos = execSection.indexOf('`clean`', findTokenUsagePos);
     expect(cleanAfterPos).toBeGreaterThan(-1);
     expect(findTokenUsagePos).toBeLessThan(cleanAfterPos);
+
+    // The final "Return" step must appear AFTER the clean step — teardown before return
+    const returnAfterCleanPos = execSection.indexOf('Return', cleanAfterPos);
+    expect(returnAfterCleanPos).toBeGreaterThan(-1);
+    expect(cleanAfterPos).toBeLessThan(returnAfterCleanPos);
   });
 });
