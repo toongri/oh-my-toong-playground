@@ -21,6 +21,7 @@ export interface ParseResult {
   terminal: TerminalSignal;
   text: string;            // concatenated agent_message/text events only (NDJSON noise stripped)
   rawEvents: unknown[];    // for events-turn-N.jsonl audit log
+  usage?: Record<string, number>; // token counts from turn.completed; undefined when no turn.completed seen
 }
 
 export interface InitialCommandOpts {

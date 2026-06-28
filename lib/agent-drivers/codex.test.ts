@@ -49,6 +49,22 @@ describe('codex AgentDriver', () => {
     expect(result!.terminal).toBe('error');
   });
 
+  // F1: usage extraction
+  test('`parseStdout` - turn.completed의 usage가 ParseResult.usage로 반환됨', () => {
+    const stdout = readFixture('codex-trivial.ndjson');
+    const result = codexDriver.parseStdout(stdout);
+    expect(result).not.toBeNull();
+    expect(result!.usage).toBeDefined();
+    expect(result!.usage!.input_tokens).toBe(46369);
+  });
+
+  test('`parseStdout` - turn.completed 없을 때 usage는 undefined (turn.failed)', () => {
+    const stdout = readFixture('codex-turn-failed.ndjson');
+    const result = codexDriver.parseStdout(stdout);
+    expect(result).not.toBeNull();
+    expect(result!.usage).toBeUndefined();
+  });
+
   // -------------------------------------------------------------------------
   // parseStdout — synthesized NDJSON
   // -------------------------------------------------------------------------
@@ -86,6 +102,16 @@ describe('codex AgentDriver', () => {
     expect(result!.text).not.toContain('tool output content');
     expect(result!.text).toContain('agent reply');
     expect(result!.terminal).toBe('stop');
+  });
+
+  test('`parseStdout` - turn.completed의 usage가 배열이면 ParseResult.usage는 undefined (배열 가드)', () => {
+    const lines = [
+      JSON.stringify({ type: 'thread.started', thread_id: 'aaaaaaaa-0000-0000-0000-000000000001' }),
+      JSON.stringify({ type: 'turn.completed', usage: [1000, 500] }),
+    ].join('\n');
+    const result = codexDriver.parseStdout(lines);
+    expect(result).not.toBeNull();
+    expect(result!.usage).toBeUndefined();
   });
 
   test('`parseStdout` - 완전히 잘못된 입력은 null 반환', () => {
