@@ -186,11 +186,11 @@ When synthesizing, weight each model's opinion based on the question domain:
 |--------|-------------------|-------------------|
 | claude | Nuanced trade-off reasoning, instruction coherence across long context, risk/impact assessment | Architecture decisions, requirement ambiguity resolution, risk evaluation |
 | codex | Code-level feasibility analysis, implementation cost/complexity estimation, API contract design | "Is this buildable?" questions, implementation approach choices, technical debt evaluation |
-| gemini | Broad factual grounding, alternative solution discovery, edge case identification | Technology comparisons, "what are we missing?" questions, assumption challenges |
+| glm | Independent reasoning from a different model lineage, alternative solution discovery, assumption challenges | Technology comparisons, "what are we missing?" questions, cross-checking consensus |
 
 **Application rules:**
 - On **consensus**: model strengths are irrelevant — report agreement as-is
-- On **divergence**: reference the table above. If the question is about implementation feasibility and codex disagrees with claude and gemini, state: "Codex's position carries additional weight here as an implementation feasibility question (see Model Characteristics)"
+- On **divergence**: reference the table above. If the question is about implementation feasibility and codex disagrees with claude and glm, state: "Codex's position carries additional weight here as an implementation feasibility question (see Model Characteristics)"
 - On **contradiction with table**: if a model gives a strong argument outside its listed strengths, the argument's quality overrides the table. Strengths are tie-breakers, not vetoes
 - **Never discard** a model's opinion solely because the domain doesn't match its listed strengths
 
