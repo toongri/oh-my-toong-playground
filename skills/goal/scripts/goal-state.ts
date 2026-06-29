@@ -852,7 +852,7 @@ export function requestComplete(sessionId: string): boolean {
   // Code-review lane (D-3): the SECOND independent refusal lane, reached only after
   // every objective-lane gate above passes — so "both lanes clean" is the completion condition.
   // Absent/invalid artifact → block (never-false-complete: degrade toward block). The
-  // gate keys ONLY on verdict==='CONFIRMED' (any class — correctness OR cleanup); `class`
+  // gate keys ONLY on verdict==='CONFIRMED' (any class — correctness, cleanup, or requirement-gap); `class`
   // is informational and never branched on.
   const codeReview = readCodeReviewArtifact(sessionId);
   if (codeReview === null) {
@@ -867,7 +867,7 @@ export function requestComplete(sessionId: string): boolean {
 }
 
 /**
- * Formats all CONFIRMED (non-retired) stories as a requirements block:
+ * Formats all confirmed stories as a requirements block:
  * one line per story — `[id] story — AC: a1; a2 — verify: surface` — with a
  * trailing newline. Zero confirmed stories → empty string (empty block).
  * Feeds the code-review lane's `{REQUIREMENTS}` input (Hop B).
