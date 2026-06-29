@@ -17,7 +17,7 @@ chunk-review:
     # if codex rejects `gpt-5.5`, fall back to `gpt-5.4`.
     # Change one member's `model`/`command` to run that angle on a different model/CLI.
     #
-    # Angle set (single lean mode): 3 correctness lenses + 1 cleanup lens.
+    # Angle set: 3 correctness lenses + 1 cleanup lens + 1 security lens + 1 requirements-coverage lens.
     - name: line-scan
       command: codex exec
       model: gpt-5.5
