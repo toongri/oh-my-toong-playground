@@ -652,7 +652,7 @@ interface VerdictArtifact {
 // ---------------------------------------------------------------------------
 
 interface CodeReviewFinding {
-  class: 'correctness' | 'cleanup';
+  class: 'correctness' | 'cleanup' | 'requirement-gap';
   verdict: 'CONFIRMED' | 'PLAUSIBLE';
   ref?: string;
 }
@@ -749,7 +749,7 @@ function readCodeReviewArtifact(sessionId: string): CodeReviewArtifact | null {
   if (typeof reviewer !== 'string' || reviewer.length === 0) return null;
   if (typeof a['at'] !== 'string') return null;
   // Validate each finding; any enum violation → whole artifact null
-  const VALID_CLASSES = ['correctness', 'cleanup'];
+  const VALID_CLASSES = ['correctness', 'cleanup', 'requirement-gap'];
   const VALID_FINDING_VERDICTS = ['CONFIRMED', 'PLAUSIBLE'];
   for (const entry of a['findings'] as unknown[]) {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null;
@@ -864,6 +864,23 @@ export function requestComplete(sessionId: string): boolean {
 
   mergeWrite(sessionId, { phase: 'complete', active: false });
   return true;
+}
+
+/**
+ * Formats all CONFIRMED (non-retired) stories as a requirements block:
+ * one line per story — `[id] story — AC: a1; a2 — verify: surface` — with a
+ * trailing newline. Zero confirmed stories → empty string (empty block).
+ * Feeds the code-review lane's `{REQUIREMENTS}` input (Hop B).
+ */
+export function serializeRequirements(sessionId: string): string {
+  const state = readGoalState(sessionId);
+  const stories: Story[] = state?.stories ?? [];
+  const confirmed = stories.filter((s) => s.status === 'confirmed');
+  if (confirmed.length === 0) return '';
+  const lines = confirmed.map(
+    (s) => `[${s.id}] ${s.story} — AC: ${s.acceptance_criteria.join('; ')} — verify: ${s.verification_surface}`
+  );
+  return lines.join('\n') + '\n';
 }
 
 // ---------------------------------------------------------------------------
@@ -1064,9 +1081,11 @@ function main(): void {
         process.exit(1);
       }
       retireStory(sessionId, rawId);
+    } else if (subcommand === 'serialize-requirements') {
+      process.stdout.write(serializeRequirements(sessionId));
     } else {
       process.stderr.write(
-        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story> [options]\n'
+        'Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story|serialize-requirements> [options]\n'
       );
       process.exit(1);
     }
