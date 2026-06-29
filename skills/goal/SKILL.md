@@ -202,19 +202,19 @@ For each non-retired story, map the story's acceptance criteria and verification
 
 <!-- story-layer:end -->
 
-**Code-review lane (runs alongside the objective self-check).** After each sisyphus pass, an independent code-review lane runs alongside the objective lane. Dispatch a fresh **code-reviewer** agent independently of the builder (sisyphus); self-review by the builder is forbidden. This lane is the autonomous loop's one genuinely independent gate — a fresh instance, not the orchestrator — so it carries the structural anti-anchoring teeth the objective self-check no longer provides. The code-reviewer writes `$OMT_DIR/goal-codereview-{sid}.json` directly (it has file tools); the orchestrator passes only the session-derived path and never transcribes finding content. The artifact schema the code-reviewer must emit:
+**Code-review lane (runs alongside the objective self-check).** After each sisyphus pass, an independent code-review lane runs alongside the objective lane. Dispatch a fresh **code-reviewer** agent independently of the builder (sisyphus); self-review by the builder is forbidden. This lane is the autonomous loop's one genuinely independent gate — a fresh instance, not the orchestrator — so it carries the structural anti-anchoring teeth the objective self-check no longer provides. Before dispatching the code-reviewer, the orchestrator runs `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts serialize-requirements` and feeds its stdout block into the reviewer's `{REQUIREMENTS}` input so the reviewer can detect requirement-gap findings (stories the diff does not satisfy). The code-reviewer writes `$OMT_DIR/goal-codereview-{sid}.json` directly (it has file tools); the orchestrator passes only the session-derived path and never transcribes finding content. The artifact schema the code-reviewer must emit:
 
 ```json
 {
   "findings": [
-    { "class": "correctness|cleanup", "verdict": "CONFIRMED|PLAUSIBLE", "ref": "<file:line>" }
+    { "class": "correctness|cleanup|requirement-gap", "verdict": "CONFIRMED|PLAUSIBLE", "ref": "<file:line>" }
   ],
   "reviewer": "<reviewer id>",
   "at": "<ISO timestamp>"
 }
 ```
 
-**Pass signal:** any finding where `verdict === "CONFIRMED"` blocks completion — whether `class` is `correctness` or `cleanup`. `PLAUSIBLE` findings are non-blocking; they are reported but do not prevent completion. `class` is an informational label the gate does not key on (the gate keys solely on `verdict === "CONFIRMED"`).
+**Pass signal:** any finding where `verdict === "CONFIRMED"` blocks completion — whether `class` is `correctness`, `cleanup`, or `requirement-gap`. `PLAUSIBLE` findings are non-blocking; they are reported but do not prevent completion. `class` is an informational label the gate does not key on (the gate keys solely on `verdict === "CONFIRMED"`).
 
 A blocking code-review finding (any CONFIRMED) routes back to sisyphus re-dispatch targeted at those specific findings — the same concrete-progress shape as an objective-lane REQUEST_CHANGES verdict.
 

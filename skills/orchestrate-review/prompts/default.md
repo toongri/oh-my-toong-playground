@@ -40,6 +40,14 @@ Diff-only review is insufficient. The working directory reflects the post-change
 - **Reuse / Simplification / Efficiency / Altitude** — re-implemented helpers (name the existing one), unnecessary complexity (name the simpler form), wasted work (name the cheaper alternative), fragile special-cases on shared infrastructure (generalize instead).
 - **Speculative complexity** — unrequested features/abstractions/config, single-use abstractions, error handling for impossible states, backwards-compat shims with no removal date.
 
+**Security (the change introduces an exploitable weakness):**
+
+- **OWASP-aligned scan** — for each changed or touched function, ask whether an attacker can control an input that reaches an unsafe sink, bypass an authz check, recover a secret, or exploit weak crypto: injection (SQL/shell/prompt — unsanitized input concatenated into a query, command, or LLM prompt; eval of user-supplied data), broken authz/authn (missing or bypassable gate on a new route/handler, a check skipped for a subset of inputs, IDOR exposing another user's data), secret/credential/PII exposure (logged, returned in a response, or hardcoded), crypto misuse (weak/deprecated algorithm, hardcoded IV/salt, predictable RNG for a security-sensitive use).
+
+**Requirements coverage (an acceptance criterion is unmet):**
+
+- **Per-AC mapping** — only when your review context carries acceptance criteria / requirements. Enumerate each criterion and check whether the diff implements and/or tests it (new logic covering the stated behaviour, test assertions verifying it, required config/schema changes); surface any criterion with no clear supporting evidence, and do not silently drop partial coverage. If no acceptance criteria are present (the common standalone-review case), skip this angle and report nothing — do not invent criteria.
+
 ## Output Format
 
 ```
@@ -49,7 +57,7 @@ Diff-only review is insufficient. The working directory reflects the post-change
 
 - **{file}:{line}** — {summary: one sentence on what is wrong, or for cleanup the better form}
   - failure_scenario: {concrete inputs/state → wrong output, crash, or lost effect (for a dropped side-effect, name the effect that no longer fires and what downstream depends on it — no crash or visible-output change required); for cleanup, the concrete cost — what is duplicated, wasted, or harder to maintain}
-  - found by: {line-scan | removed-behavior | cross-file | cleanup}
+  - found by: {line-scan | removed-behavior | cross-file | cleanup | security | requirements-coverage}
 
 ### Angle Coverage
 One line per angle: how many candidates it produced, or "found nothing".
