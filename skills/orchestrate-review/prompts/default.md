@@ -49,7 +49,7 @@ Diff-only review is insufficient. The working directory reflects the post-change
 
 - **{file}:{line}** — {summary: one sentence on what is wrong, or for cleanup the better form}
   - failure_scenario: {concrete inputs/state → wrong output, crash, or lost effect (for a dropped side-effect, name the effect that no longer fires and what downstream depends on it — no crash or visible-output change required); for cleanup, the concrete cost — what is duplicated, wasted, or harder to maintain}
-  - found by: {line-scan | removed-behavior | cross-file | cleanup}
+  - found by: {line-scan | removed-behavior | cross-file | cleanup | security | requirements-coverage}
 
 ### Angle Coverage
 One line per angle: how many candidates it produced, or "found nothing".
