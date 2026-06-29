@@ -19,6 +19,7 @@ import {
   reviseStory,
   addStory,
   retireStory,
+  serializeRequirements,
   type GoalPhase,
   type Story,
 } from './goal-state.ts';
@@ -1904,6 +1905,102 @@ describe('story layer: code-review completion lane (TODO 1)', () => {
     setVerdict(S, 'APPROVE');
     expect(requestComplete(S)).toBe(false);
     expect(rawState().phase).not.toBe('complete');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TODO 6: requirement-gap class (Hop E) + serialize-requirements (Hop B)
+// ---------------------------------------------------------------------------
+
+describe('requirement-gap class: validator accepts and gate keys on verdict', () => {
+  // AC18: requirement-gap must be in BOTH the class union AND VALID_CLASSES.
+  // A PLAUSIBLE requirement-gap finding must NOT block completion — the gate
+  // keys only on verdict===CONFIRMED, class is informational.
+  // RED: currently VALID_CLASSES=['correctness','cleanup'] → artifact null → false (not true).
+  test('PLAUSIBLE requirement-gap finding does not block completion', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    writeCodeReviewArtifact(S, {
+      findings: [{ class: 'requirement-gap', verdict: 'PLAUSIBLE', ref: 'foo.ts:1' }],
+      reviewer: 'code-reviewer',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(true);
+    expect(rawState().phase).toBe('complete');
+  });
+
+  // A CONFIRMED requirement-gap finding must block completion (verdict gate).
+  // Currently also false (wrong reason: class unknown → artifact null).
+  // After fix: false for right reason (CONFIRMED verdict).
+  test('CONFIRMED requirement-gap finding blocks completion', () => {
+    const artifact = buildSatisfiedFixture(S);
+    writeVerdictArtifact(S, artifact);
+    writeCodeReviewArtifact(S, {
+      findings: [{ class: 'requirement-gap', verdict: 'CONFIRMED', ref: 'foo.ts:2' }],
+      reviewer: 'code-reviewer',
+      at: '2026-06-12T00:00:00',
+    });
+    expect(requestComplete(S)).toBe(false);
+    expect(rawState().phase).toBe('pursuing');
+  });
+});
+
+describe('serialize-requirements subcommand', () => {
+  // Exact format: [id] story — AC: a1; a2 — verify: surface, one line per story + trailing newline.
+  // RED: serializeRequirements does not exist yet.
+  test('exact output for a confirmed multi-AC story', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'ship it' });
+    const story: Story = {
+      id: 'S1',
+      story: 'ship the feature',
+      acceptance_criteria: ['the UI renders', 'data persists'],
+      verification_surface: 'playwright e2e green',
+      status: 'unconfirmed',
+    };
+    setStories(S, [story]);
+    confirmStory(S, 'S1');
+    const out = serializeRequirements(S);
+    expect(out).toBe('[S1] ship the feature — AC: the UI renders; data persists — verify: playwright e2e green\n');
+  });
+
+  // Zero-confirmed / all-retired → empty string (empty block).
+  test('empty output when all stories are retired', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'ship it' });
+    const s1: Story = {
+      id: 'S1',
+      story: 'old story',
+      acceptance_criteria: ['ac'],
+      verification_surface: 'v',
+      status: 'unconfirmed',
+    };
+    setStories(S, [s1]);
+    retireStory(S, 'S1');
+    const out = serializeRequirements(S);
+    expect(out).toBe('');
+  });
+
+  // Zero stories → empty string.
+  test('empty output when no stories exist', () => {
+    const out = serializeRequirements(S);
+    expect(out).toBe('');
+  });
+
+  // CLI dispatch: serialize-requirements subcommand prints the confirmed story block.
+  test('CLI dispatch prints confirmed story block', () => {
+    setGoalState(S, { phase: 'planning', outcome: 'ship it' });
+    const story: Story = {
+      id: 'S1',
+      story: 'ship the feature',
+      acceptance_criteria: ['green', 'deployed'],
+      verification_surface: 'smoke test',
+      status: 'unconfirmed',
+    };
+    setStories(S, [story]);
+    confirmStory(S, 'S1');
+    const out = runCli('serialize-requirements');
+    expect(out).toContain('[S1] ship the feature');
+    expect(out).toContain('AC: green; deployed');
+    expect(out).toContain('verify: smoke test');
   });
 });
 
