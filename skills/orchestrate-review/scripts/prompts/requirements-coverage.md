@@ -46,7 +46,7 @@ A list of candidate findings, one per unmet or partially-met acceptance criterio
 For each candidate:
 
 - **ac**: the acceptance criterion text (quoted or paraphrased from `{REQUIREMENTS}`)
-- **file**: `path/to/file.ext` most relevant to the gap (omit if the gap is not file-specific)
+- **file**: `path/to/file.ext` most relevant to the gap — the file where the missing behaviour should live, or the closest existing file the criterion concerns. Always provide one: downstream verification builds `git diff {RANGE} -- {file}` from this field and cannot consume a fileless candidate.
 - **line**: line number (omit if not line-specific)
 - **summary**: one sentence stating which criterion is unmet and why the diff does not satisfy it
 - **failure_scenario**: the concrete user action, input, or runtime path that would expose the missing coverage → the wrong outcome or absent behaviour
