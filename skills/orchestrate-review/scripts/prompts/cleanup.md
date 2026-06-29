@@ -24,6 +24,7 @@ Locate `## Diff Command` in the REVIEW CONTENT and run it via Bash. If it fails 
 - **Simplification**: unnecessary complexity the change adds — redundant or derivable state, copy-paste with slight variation, deep nesting, dead code left behind. Name the simpler form that does the same job.
 - **Efficiency**: wasted work the change introduces — redundant computation or repeated I/O, independent operations run sequentially, blocking work added to startup or hot paths. Name the cheaper alternative.
 - **Altitude**: fragile bandaids — special cases layered on shared infrastructure are a sign the fix is not deep enough. Prefer generalizing the underlying mechanism over adding special cases.
+- **Conventions**: code that deviates from patterns or guidelines visible in the review context (`{REQUIREMENTS}`, `{PROJECT_CONTEXT}`) or the surrounding codebase — name the prevailing pattern the change diverges from.
 - **Speculative complexity** (this project values minimum code that solves the problem, nothing speculative): a feature/abstraction/config/option not asked for; an abstraction introduced for a path with exactly one caller; flexibility or configurability added for a hypothetical future; error handling for a state that cannot occur given the surrounding contract; a backwards-compatibility shim for an old format/API with no documented removal date.
 
 ## Scope
