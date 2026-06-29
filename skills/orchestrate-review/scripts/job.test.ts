@@ -112,6 +112,14 @@ describe('parseChunkReviewConfig', () => {
     const result = await parseChunkReviewConfig(configPath);
     expect(result['chunk-review'].members[0].env).toEqual({ KIMI_API_KEY: 'test-key', KIMI_MODEL: 'kimi-k2' });
   });
+
+  test('real config registers security and requirements-coverage members', async () => {
+    const realPath = path.join(import.meta.dirname, '..', 'orchestrate-review.config.yaml');
+    const result = await parseChunkReviewConfig(realPath);
+    const names = result['chunk-review'].members.map((r: { name: string }) => r.name);
+    expect(names.includes('security')).toBeTruthy();
+    expect(names.includes('requirements-coverage')).toBeTruthy();
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -185,6 +185,8 @@ Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quor
 - removed-behavior: {…}
 - cross-file: {…}
 - cleanup: {…}
+- security: {…}
+- requirements-coverage: {…}
 
 ### Find Token Usage
 ```json

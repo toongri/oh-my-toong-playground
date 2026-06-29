@@ -17,7 +17,7 @@ chunk-review:
     # if codex rejects `gpt-5.5`, fall back to `gpt-5.4`.
     # Change one member's `model`/`command` to run that angle on a different model/CLI.
     #
-    # Angle set (single lean mode): 3 correctness lenses + 1 cleanup lens.
+    # Angle set: 3 correctness lenses + 1 cleanup lens + 1 security lens + 1 requirements-coverage lens.
     - name: line-scan
       command: codex exec
       model: gpt-5.5
@@ -44,6 +44,20 @@ chunk-review:
       model: gpt-5.5
       emoji: "\U0001F9F9"
       color: "YELLOW"
+      effort_level: xhigh
+      output_format: json
+    - name: security
+      command: codex exec
+      model: gpt-5.5
+      emoji: "\U0001F512"
+      color: "RED"
+      effort_level: xhigh
+      output_format: json
+    - name: requirements-coverage
+      command: codex exec
+      model: gpt-5.5
+      emoji: "\U0001F4CB"
+      color: "GREEN"
       effort_level: xhigh
       output_format: json
   settings:

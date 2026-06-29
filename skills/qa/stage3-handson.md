@@ -142,7 +142,11 @@ curl -s http://localhost:{port}/endpoint | jq .
    agent-browser get url              # current URL after navigation
    agent-browser get text @eN         # element text content
    ```
-6. Close the session:
+6. **Capture a screenshot** (mandatory — attach as visual evidence for the review):
+   ```bash
+   agent-browser screenshot
+   ```
+7. Close the session:
    ```bash
    agent-browser close
    ```
@@ -163,6 +167,9 @@ If any agent-browser step returns a non-zero exit code or the required assertion
 | Page loads | No console errors, expected elements visible |
 | Interaction | Click/input produces expected result |
 | Navigation | Routes resolve to correct pages |
+| Screenshot captured | At least one screenshot taken and referenced in evidence |
+| CJK / glyph rendering | CJK characters, emoji, and non-ASCII glyphs render without replacement boxes or mojibake |
+| Layout overflow | No element overflows its container; horizontal scroll width does not exceed viewport width |
 
 ---
 
@@ -311,13 +318,13 @@ If ANY verification fails:
 
 ## Adversarial Scenario Matrix
 
-Hands-on verification is not "run the happy path once." A change is only verified when it survives hostile probing. After the modality procedures above confirm the happy path, run the adversarial checks below. Each category names what a hostile check looks like so a verifier running hands-on knows what to probe — pick the rows that apply to the change under review and actually execute them, do not reason about them on paper.
+Hands-on verification is not "run the happy path once." A change is only verified when it survives hostile probing. When running these checks, adopt the mindset of a malicious or careless user: someone who ignores documentation, pastes garbage data, skips required fields, and actively tries to confuse or break the system. After the modality procedures above confirm the happy path, run the adversarial checks below. Each category names what a hostile check looks like so a verifier running hands-on knows what to probe — pick the rows that apply to the change under review and actually execute them, do not reason about them on paper.
 
 | # | Category | What the adversarial check probes |
 |---|----------|-----------------------------------|
 | 1 | **Error / failure paths** | Force the failure branch (unreachable dependency, denied permission, invalid auth, exhausted quota) and assert it fails *safely*: no partial writes, a clear error message, and the correct status/exit code. A failure that silently half-completes is a defect. |
-| 2 | **Boundary / malformed input** | Probe the `boundary\|malformed` surface: feed empty, oversized, wrong-type, encoding-edge (UTF-8 / null bytes / emoji), and off-by-one boundary values. Assert each is rejected or handled deterministically rather than crashing or coercing silently. |
+| 2 | **Boundary / malformed input** | Probe the `boundary\|malformed` surface: feed empty, zero, negative, oversized, wrong-type, encoding-edge (UTF-8 / null bytes / emoji), and off-by-one boundary values. Assert each is rejected or handled deterministically rather than crashing or coercing silently. |
 | 3 | **Injection** | Send SQL / command / prompt injection payloads through every user-controlled field (query params, body, headers, file names, LLM prompts). Assert the payload is neutralized, not interpreted. |
-| 4 | **Interruption–cancel–resume + dirty initial state** | Kill or cancel the operation mid-flight, then re-run it; also start it from a dirty/partial prior state (leftover lock file, half-written record, stale session). Assert it recovers to a consistent state rather than compounding corruption. |
+| 4 | **Interruption–cancel–resume + dirty initial state** | Kill or cancel the operation mid-flight, then re-run it; trigger concurrent executions, rapid repeated calls, and out-of-order sequencing; also start it from a dirty/partial prior state (leftover lock file, half-written record, stale session). Assert it recovers to a consistent state rather than compounding corruption. |
 | 5 | **Misleading success** (OWASP LLM09) | Distrust a green check / `200` / `"done"` that does not reflect real success. Verify the *actual effect* — the row was written, the file changed on disk, the message was delivered — not the success signal the system reports. An overconfident success claim is itself the bug. |
 | 6 | **Idempotency / re-run** | Run the operation twice with identical inputs and assert no duplicate records, double charges, or corruption. **By-design exception**: some operations are intentionally non-idempotent (append-only logs, "send another reminder", incrementing counters). When the spec marks an operation as intended to differ on re-run, repeated effects are an acceptable exception, not a defect — confirm against the intended behavior rather than flagging it. |
