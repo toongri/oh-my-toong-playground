@@ -25,6 +25,7 @@ Korean-working teams, use this canonical mapping:
 | AC | 완료 조건 |
 | (AC) Verification | 검증 |
 | Non-Goals | 범위 제외 |
+| Post-Release Observation | 배포 후 관찰 |
 | User Flow: current → after | 전환 방식 / 동선 변화 |
 | Decisions Needed | 결정 필요 |
 | References | References (그대로 둔다) |
@@ -48,6 +49,7 @@ it, never as a reflex:
 | **two-bucket** Confirmed-Facts / Needs-Verification grouping | the structured Pre-Context above is already in use AND a sub-item holds 3+ items. |
 | **Decisions Needed** | an open product/policy decision actually blocks or shapes the work. |
 | **Notes** | provenance (superseded attempts, deep-interview artifact path) that has no other home. |
+| **Post-Release Observation** | the issue moves a measurable outcome (adoption, conversion, adherence, latency, error rate — Form 1), OR the change implies a checkable expectation about logs / data / state to confirm after release (Form 2). Omit only when neither holds — a pure capability / readability refactor / infra issue whose value is fully delivered the moment its ACs pass. |
 
 The test before emitting any escalation section: *would a lean sibling issue in this epic carry it?*
 If the house siblings stay flat, match them — do not emit scaffolding the reader skims past. A
@@ -63,6 +65,7 @@ Needed + Notes is over-built; collapse it to the lean default.
 | **Root Cause** | The underlying mechanism that produces the problem. Must be grounded in code, logs, or a reproducible trace — not speculation. If unknown, write `TBD — needs validation via {method}`. |
 | **Pre-Context** | Background facts on scope and risk the reader needs before implementation begins — three sub-items (**Affected Areas**, **Premises**, **Blockers & Risks**). See Pre-Context Rules below. |
 | **AC** | Acceptance criteria (see Section 2 below). At least one AC per issue. |
+| **Post-Release Observation** | What is watched after release — an aspirational outcome metric and/or a falsifiable predicted post-release state (value, movement, invariant, or success log) — distinct from AC, which only confirms the change was built. Escalation section; see Post-Release Observation Section below. |
 | **Non-Goals** | What this issue explicitly does NOT address. Prevents scope creep. |
 | **References** | PRDs, design docs, Slack threads, incident records, code commits/PRs, and logs use markdown links. Related PM issues are linked through the native relation step, not by duplicating the relationship in the body. PM-issue mentions that must appear in the body without becoming related use a form your PM tool does not auto-link into a relation, with a one-sentence note explaining why they are context rather than related-issue links. |
 
@@ -129,6 +132,81 @@ Issues whose substance is a behavior or path change — migration, switchover, r
 The intent ban applies: this section records what changes from the user or system perspective, not how it will be built. "Before: new users are directed to onboarding screen A. After: new users are directed to onboarding screen B" is permitted. "Implement a redirect from screen A to screen B using router hook X" is not.
 
 For parent issues, the User Flow: current → after section captures the initiative-level path change. Child issues may carry their own User Flow section if their individual slice represents a distinct behavior change, or omit it if the parent's section covers their scope.
+
+### Post-Release Observation Section
+
+An AC confirms the change was **built** (acceptance-time: run the command, the state holds). It does **not**
+confirm what happens **after release** — an issue can pass every AC and still fail to move the outcome it
+exists for, or fail to shift production data the way the change predicts. That gap is filled by a
+**Post-Release Observation** section (KO header: 배포 후 관찰). This is a body section, **not an AC**: its
+observation happens after release, over a window, so it cannot gate acceptance and must not be forced into the
+§2 two-line AC shape.
+
+It takes one of **two forms**, and an issue may carry both:
+
+**Form 1 — Outcome metric (결과 지표, aspirational).** Used when the issue's purpose is to move a product or
+system value outcome. Records, all at the WHAT level:
+
+- **Outcome metric** — the observable signal whose movement proves the value materialized (e.g., "daily
+  adherence rate among targeted users", "checkout conversion", "p95 latency", "error-rate of the affected
+  endpoint").
+- **Target / direction** — a threshold or a direction-vs-baseline. Concrete figure when one is set; otherwise
+  `TBD — needs validation via {method}`. The §2 weasel-word prohibition applies — "improves" alone is not a
+  target; "increases vs. the pre-release baseline" is.
+- **Observation method + window** — how and when the metric is read after release (e.g., "Amplitude cohort
+  comparison vs. the prior 4 weeks, read 4 weeks post-rollout").
+
+**Form 2 — Predicted post-release state (예측된 배포 후 상태, falsifiable).** Used when the change implies a
+*checkable expectation about logs, data, or state* after release — the expectation is **derived from the
+change**, and a query or log read confirms it over a window. This is a correctness check, not a value
+judgment. It takes one or more of these shapes (usually a conjunction):
+
+- **reaches a value / state** — "field X becomes 'Balance'", "the legacy-row count becomes 0", "the daily
+  discrepancy count converges to ~0".
+- **moves by a derived magnitude** — "weekly trigger count rises by ≈ N (computed from a pre-deploy snapshot),
+  then returns to the prior baseline".
+- **holds an invariant (does not change)** — "rows that do not match the condition are left unchanged".
+- **executes / logs success** — "the nightly job logs a success completion on every scheduled run". This is
+  the *weakest* shape alone — it confirms the job ran, not that the data is right; when the data effect is
+  queryable, pair it with a value/invariant check rather than resting on the log. For a recurring job,
+  "keeps logging success across the window" is a real ongoing confirmation (it can silently stop in prod),
+  distinct from the one-time "it ran once" you check at acceptance.
+
+Records, whichever shapes apply:
+
+- **Expected condition** — the post-release state, derived from the change (value / magnitude / invariant /
+  success-log, usually combined).
+- **Confirmation query or log + window** — the concrete query or log read that confirms it after release, and
+  the window to read it over (e.g., "OpenSearch daily discrepancy-count over 7–14 days post-deploy"; "DB count
+  of legacy rows right after the migration job's success log").
+- **Falsification clause** — if the observed state does not match the expectation (beyond a stated tolerance
+  where a magnitude is involved), the change did **not** behave as designed → investigate. (Contrast Form 1,
+  where missing the target is a value disappointment, not a defect.)
+- **Pairs with an acceptance-time AC** when a baseline or expected value must be captured before deploy: make
+  "compute and record the expected value/delta from query Z before deploy" an AC (it is runnable now), and let
+  Form 2 assert the post-release state against it.
+
+Beware a **self-referential** Form-2 signal: when the change both produces and measures it (a job that
+corrects the very count it reports), convergence proves the mechanism ran, not that the value moved — pair it
+with a Form 1 outcome.
+
+Distinguish Form 2 from `TBD — needs validation via {method}`: a `TBD` marks a **fact missing at filing
+time**; a Form-2 prediction is a **stated expectation to confirm after release**. They are different states —
+do not collapse a prediction into a TBD.
+
+**Model-A boundary** (both forms). The section names the metric/prediction and how it will be observed — it
+does **not** specify instrumentation, event schemas, or dashboard construction ("add event E with property P",
+"build dashboard D" is HOW — Model-B work for `prometheus` / `sisyphus` downstream). And — **for Form 1
+only** — a "the code ran" count is not a value outcome: a sent push or a fired trigger proves the feature
+executed, not that adherence or conversion moved, so do not pass an execution count off as a Form-1 metric.
+(In Form 2 a success log is a legitimate confirmation shape — just the weakest, per its bullet above.)
+
+For a **bug-genre** issue, the observation is the production symptom rate falling to its expected floor (e.g.,
+"the stack-trace count for this error drops to ~0 in OpenSearch over 7 days post-deploy"), distinct from the
+acceptance-time AC (the Reproduction re-run now passes).
+
+For a **sliced initiative**, the initiative-level observation lives once in the parent (like Core Concept);
+children reference it rather than each re-declaring it, unless a child owns a distinct sub-outcome.
 
 ### Decisions Needed
 
