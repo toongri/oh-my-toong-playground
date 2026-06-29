@@ -22,8 +22,9 @@ When finders cannot deliver — none configured/available after filtering, or al
 3. Collect: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
 4. Read each finder's output file via the Read tool.
 5. Merge candidates using the Aggregation rules.
-6. Return the merged candidate list.
-7. **STOP.** Do not run any further tools beyond the prescribed teardown (`clean`).
+6. Run `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text. This step **MUST** run before `clean` — the job dir is deleted in the next teardown step and the per-member token data is gone.
+7. Run teardown: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` (deletes the job dir; `usage-summary.ts` was already run in step 6).
+8. Return the merged candidate list (including the `### Find Token Usage` block) as the final response, then **STOP** — do not run any further tools.
 
 **If a finder fails (outputFilePath is null in the manifest): apply Degradation Policy. Do NOT re-start the job.**
 
@@ -35,7 +36,8 @@ You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — start a review job
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete finder to a complete answer (see Member Resume Policy; cap 3 attempts)
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir; teardown step, run only after everything is complete
+- `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` — harvest per-member token usage; **run BEFORE `clean`** (job dir is deleted by clean)
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir; teardown step, run only after usage-summary and everything else is complete
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -89,8 +91,8 @@ Response JSON (not done — re-run this step):
 ### Step 3 — Read Outputs
 Use the Read tool to read each finder's `outputFilePath` from the manifest.
 
-### Step 4 — Merge & Return
-Merge all finder candidate lists per the Aggregation rules, return the merged candidate list, then STOP.
+### Step 4 — Merge, Teardown & Return
+Merge all finder candidate lists per the Aggregation rules. Run `usage-summary.ts "$JOB_DIR"` and append the `### Find Token Usage` block to the merged text. Run teardown: `clean "$JOB_DIR"`. Then return the merged candidate list (including the `### Find Token Usage` block) as the final response, then STOP.
 
 ## Worker Output Contract
 
@@ -125,7 +127,7 @@ These constraints govern the orchestration path — while dispatched finders are
 
 **Member Resume Policy (`resume-member`):**
 
-Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), fall back to in-session per the trigger logic below. Once every finder is finished, run `clean`.
+Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), fall back to in-session per the trigger logic below. Once every finder is finished, run `usage-summary.ts` (harvest token counts), then run `clean`.
 
 ```
 bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your candidate list."
@@ -133,7 +135,7 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member
 
 The prompt is written by the Conductor to fit the situation. The above is a reference example only.
 
-`clean` deletes the job dir (needed by `resume-member`), so it is the last step — only after everything is complete.
+`usage-summary.ts` harvests token counts from `members/*/status.json` (see step 6 above). `clean` deletes the job dir (needed by `resume-member`), so it is the last step — only after `usage-summary.ts` and everything else is complete.
 
 ## Aggregation
 
@@ -185,10 +187,15 @@ Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quor
 - cleanup: {…}
 - security: {…}
 - requirements-coverage: {…}
+
+### Find Token Usage
+```json
+{ "memberCount": N, "usage": { "input_tokens": N, "output_tokens": N, … } }
+```
 ```
 
-No severity, no priority, no verdict, no merge assessment. If zero candidates survived across all angles, return the Angle Coverage block with an empty Candidate Findings list.
+No severity, no priority, no verdict, no merge assessment. If zero candidates survived across all angles, return the Angle Coverage block with an empty Candidate Findings list. Always include the `### Find Token Usage` block (append the JSON output of `usage-summary.ts` verbatim).
 
 ## Termination
 
-After outputting the merged candidate list, your task is **COMPLETE**. Do NOT run any additional tools beyond the prescribed teardown (`clean`). Do NOT read source files. Do NOT explore the codebase. Return the candidate list and stop.
+Run teardown before returning: (1) `usage-summary.ts "$JOB_DIR"` — harvest and append `### Find Token Usage` to the merged text (step 6); (2) `clean "$JOB_DIR"` — deletes the job dir. Once teardown is complete, return the merged candidate list (including the `### Find Token Usage` block) as the final response — your task is **COMPLETE** — do NOT read source files, do NOT explore the codebase, do not run any further tools.
