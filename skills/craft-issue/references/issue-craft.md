@@ -79,7 +79,7 @@ Bug issues add three fields, placed between Problem and AC:
 | **Root Cause** | (promoted from standard, filled from Stage 3 code investigation output) |
 | **Evidence** | Logs, stack traces, error output, or metric anomalies that confirm the symptom. |
 
-For bug issues the ordering is: Problem → Reproduction → Root Cause → Evidence → Pre-Context → AC → Non-Goals → References.
+For bug issues the ordering is: Problem → Reproduction → Root Cause → Evidence → Pre-Context → AC → Post-Release Observation → Non-Goals → References. Post-Release Observation appears only when its escalation trigger holds — for a bug, the production symptom-rate floor (see the Post-Release Observation Section); omit it when the fix's value is fully delivered the moment the Reproduction re-run passes.
 
 ### Pre-Context Rules
 
@@ -108,6 +108,7 @@ After slicing, the relationship rule is: shared context lives in the parent ONCE
 | **User Value** | Conditional — user-facing work | What the user gains from the parent initiative as a whole. One to two sentences. |
 | **User Flow: current → after** | Conditional — transition genre (see Transition-Genre Additions below) | A compact before/after contrast of the user-visible or system-visible path, applied at the parent level when the initiative as a whole is a behavior change or migration. |
 | **Scope of Application** | Conditional — transition genre (see Transition-Genre Additions below) | Who or what converts to the new path and who or what intentionally stays on the old path. Must be explicit on both sides — "new registrations use the new path; existing users keep the old path, no forced migration" is the pattern. Omit neither side. |
+| **Post-Release Observation** | Conditional — the initiative as a whole moves a shared outcome, or has a shared predicted post-release state | The initiative-level observation (Form 1 and/or Form 2 per the Post-Release Observation Section), declared once in the parent like Core Concept; children reference it rather than each re-declaring, unless a child owns a distinct sub-outcome. Omit when no shared post-release observation applies. |
 | **Decisions Needed** | Required when open decisions exist | Open product or policy decisions that block or shape child work (see Decisions Needed definition below). Omit when no open decisions remain at the time of filing. |
 | **Notes** | Optional | Provenance, superseded prior attempts, and context that does not fit elsewhere. |
 | **References** | Required | Per the existing References rules in the Standard Body Shape. |
