@@ -183,6 +183,8 @@ Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quor
 - removed-behavior: {…}
 - cross-file: {…}
 - cleanup: {…}
+- security: {…}
+- requirements-coverage: {…}
 ```
 
 No severity, no priority, no verdict, no merge assessment. If zero candidates survived across all angles, return the Angle Coverage block with an empty Candidate Findings list.
