@@ -57,3 +57,16 @@ test("`disabledSourcesFromConfig`: auto mode still disables ~/.claude/CLAUDE.md"
 	const disabled = disabledSourcesFromConfig(autoConfig());
 	expect(disabled!.has("~/.claude/CLAUDE.md")).toBe(true);
 });
+
+// ── omo 제외: .omo/rules / ~/.omo/rules가 auto 모드에서 비활성 ──────────────
+
+test("`DEFAULT_AUTO_DISABLED_SOURCES`: contains .omo/rules and ~/.omo/rules", () => {
+	expect(DEFAULT_AUTO_DISABLED_SOURCES).toContain(".omo/rules");
+	expect(DEFAULT_AUTO_DISABLED_SOURCES).toContain("~/.omo/rules");
+});
+
+test("`disabledSourcesFromConfig`: auto mode disables .omo/rules and ~/.omo/rules", () => {
+	const disabled = disabledSourcesFromConfig(autoConfig());
+	expect(disabled!.has(".omo/rules")).toBe(true);
+	expect(disabled!.has("~/.omo/rules")).toBe(true);
+});
