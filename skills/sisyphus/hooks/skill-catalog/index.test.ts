@@ -111,4 +111,36 @@ describe('main (통합)', () => {
     expect(joined).toContain('<skill-catalog>');
     expect(joined).toContain('</skill-catalog>');
   });
+
+  it('main stdout is byte-identical across two consecutive invocations (AC1c)', async () => {
+    // Controls: fake HOME with two known enabled plugins + no skill dirs,
+    // so both invocations see the same environment and filesystem state.
+    // This test documents the guarantee that Set/Map iteration order in
+    // readEnabledPlugins / buildCatalog never introduces session-to-session variance.
+    const fakeHome = join(tempDir, 'fakehome');
+    await mkdir(join(fakeHome, '.claude'), { recursive: true });
+    await writeFile(
+      join(fakeHome, '.claude', 'settings.json'),
+      JSON.stringify({
+        enabledPlugins: {
+          'superpowers@claude-plugins-official': true,
+          'frontend-design@claude-plugins-official': true,
+        },
+      }),
+    );
+    process.env.HOME = fakeHome;
+
+    // First invocation — consoleOutput is captured via the shared beforeEach console.log patch
+    consoleOutput = [];
+    await main();
+    const first = [...consoleOutput];
+
+    // Second invocation
+    consoleOutput = [];
+    await main();
+    const second = [...consoleOutput];
+
+    expect(first.length).toBeGreaterThan(0);
+    expect(first).toEqual(second);
+  });
 });
