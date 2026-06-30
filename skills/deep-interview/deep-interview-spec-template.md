@@ -52,7 +52,11 @@
 - **Rationale:** {why the selected approach was chosen over alternatives}
 - **Tradeoffs:** {what is gained and what is given up with this approach}
 
-Downstream (prometheus) consumes this as a FIXED input — does not re-decide the approach.
+Downstream (prometheus) consumes this as a FIXED input — does not re-decide the approach. When a user-forced exit left a load-bearing HOW-fork unresolved, do NOT invent a Selected approach — record the fork under **Risks & Unresolved Forks** below.
+
+## Risks & Unresolved Forks
+- **Unresolved approach forks:** {load-bearing HOW-decisions left open at a user-forced exit — name the fork and its divergent options; empty if all forks were resolved}
+- **Risks / open questions:** {known risks, advisory spec-reviewer notes carried forward, or assumptions not fully validated}
 
 ## Technical Context
 {brownfield: relevant codebase findings from explore agent}
