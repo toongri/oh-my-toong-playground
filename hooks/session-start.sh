@@ -127,11 +127,6 @@ if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
     if [ "$PROM_ACTIVE" = "true" ]; then
       PROM_PHASE=$(echo "$PROMETHEUS_STATE" | jq -r '.phase // ""' 2>/dev/null)
       PROM_PLAN_PATH=$(echo "$PROMETHEUS_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
-      PROM_RESUME=$(echo "$PROMETHEUS_STATE" | jq -r '.resume_summary // ""' 2>/dev/null)
-      # Escape backslashes so the value is safe to embed in a hand-built JSON string.
-      # Must happen here (data field only) — not at the final sed — to avoid doubling
-      # the intentional \n newline markers already present in the MESSAGES template.
-      PROM_RESUME=$(printf '%s' "$PROM_RESUME" | sed 's/\\/\\\\/g')
 
       # Determine whether the plan file is available on disk.
       # Unavailable means: plan_path empty/null, OR plan_path set but file missing.
@@ -140,19 +135,12 @@ if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
         PROM_PLAN_AVAILABLE=true
       fi
 
-      PROM_PLAN_NOTE=""
       PROM_INSTRUCTION=""
       if [ "$PROM_PLAN_AVAILABLE" = "true" ]; then
         PROM_INSTRUCTION="\nRe-read the current plan from disk and distrust stored verdicts -- re-run all gates on the current artifact.\n"
-      else
-        if [ -n "$PROM_RESUME" ] && [ "$PROM_RESUME" != "null" ]; then
-          PROM_PLAN_NOTE="\nPlan file not available on disk. Resume from this bookmark: ${PROM_RESUME}\n"
-        else
-          PROM_PLAN_NOTE="\nPlan file not available on disk yet.\n"
-        fi
       fi
 
-      MESSAGES="$MESSAGES<session-restore>\n\n[PROMETHEUS RESTORED]\n\nYou have an active prometheus session.\nPhase: $PROM_PHASE\nPlan path: $PROM_PLAN_PATH\n$PROM_PLAN_NOTE$PROM_INSTRUCTION\n</session-restore>\n\n---\n\n"
+      MESSAGES="$MESSAGES<session-restore>\n\n[PROMETHEUS RESTORED]\n\nYou have an active prometheus session.\nPhase: $PROM_PHASE\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/prometheus-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\n$PROM_INSTRUCTION\n</session-restore>\n\n---\n\n"
     fi
   fi
 fi
@@ -178,10 +166,6 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
 
       if [ "$GOAL_IS_PRISTINE" = "false" ]; then
         GOAL_PLAN_PATH=$(echo "$GOAL_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
-        GOAL_RESUME=$(echo "$GOAL_STATE" | jq -r '.resume_summary // ""' 2>/dev/null)
-        GOAL_RESUME=$(printf '%s' "$GOAL_RESUME" | sed 's/\\/\\\\/g')
-        GOAL_ITERATION=$(echo "$GOAL_STATE" | jq -r '.iteration // 0' 2>/dev/null)
-        GOAL_MAX_ITER=$(echo "$GOAL_STATE" | jq -r '.max_iterations // 10' 2>/dev/null)
 
         # Determine whether the plan file is available on disk.
         GOAL_PLAN_AVAILABLE=false
@@ -189,36 +173,21 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
           GOAL_PLAN_AVAILABLE=true
         fi
 
-        # Escape backslashes so the value is safe to embed in a hand-built JSON string.
-        # Must happen after the -f existence check (which needs the raw path) and before
-        # $GOAL_PLAN_PATH is interpolated into MESSAGES.
-        GOAL_PLAN_PATH=$(printf '%s' "$GOAL_PLAN_PATH" | sed 's/\\/\\\\/g')
-
-        GOAL_PLAN_NOTE=""
         GOAL_INSTRUCTION=""
         if [ "$GOAL_PHASE" = "planning" ]; then
           # Planning-resume: guide the AI to continue co-designing the plan
           if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
             GOAL_INSTRUCTION="\nRe-read the current plan from disk and continue the planning process where you left off.\n"
-          else
-            if [ -n "$GOAL_RESUME" ] && [ "$GOAL_RESUME" != "null" ]; then
-              GOAL_PLAN_NOTE="\nPlan file not available on disk. Resume from this bookmark: ${GOAL_RESUME}\n"
-            else
-              GOAL_PLAN_NOTE="\nPlan file not available on disk yet. Continue planning from the beginning.\n"
-            fi
           fi
         else
           # Pursuing-resume: guide the AI to continue autonomous pursuit
-          GOAL_INSTRUCTION="\nIteration: $GOAL_ITERATION/$GOAL_MAX_ITER. Continue pursuing the objective autonomously.\n"
+          GOAL_INSTRUCTION="\nContinue pursuing the objective autonomously.\n"
           if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
             GOAL_INSTRUCTION="${GOAL_INSTRUCTION}Re-read the current plan from disk before continuing.\n"
           fi
-          if [ -n "$GOAL_RESUME" ] && [ "$GOAL_RESUME" != "null" ]; then
-            GOAL_PLAN_NOTE="\nLast checkpoint: ${GOAL_RESUME}\n"
-          fi
         fi
 
-        MESSAGES="$MESSAGES<session-restore>\n\n[GOAL RESTORED]\n\nYou have an active goal session (phase: $GOAL_PHASE).\nPlan path: $GOAL_PLAN_PATH\n$GOAL_PLAN_NOTE$GOAL_INSTRUCTION\nIMPORTANT: Invoking the goal skill again while a goal is already active is refused. Continue the existing goal, do not start a new one.\n\n</session-restore>\n\n---\n\n"
+        MESSAGES="$MESSAGES<session-restore>\n\n[GOAL RESTORED]\n\nYou have an active goal session (phase: $GOAL_PHASE).\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/goal-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\n$GOAL_INSTRUCTION\nIMPORTANT: Invoking the goal skill again while a goal is already active is refused. Continue the existing goal, do not start a new one.\n\n</session-restore>\n\n---\n\n"
       fi
     fi
   fi
@@ -244,9 +213,10 @@ if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
     else
       HANDOFF="[COMPACTION HANDOFF -- full continuation record on disk]
 
-Your context was just compacted. The COMPLETE session handoff (original request verbatim, the full arc of decisions/rejections/Q&A, exact stopping point, and all user messages) is saved at:
-  $HANDOFF_FILE
-READ THAT FILE IN FULL NOW, BEFORE ANY OTHER ACTION. It is your only memory of this session -- do not trust your recollection of prior turns. Reconstructing it from memory is NOT reading it."
+Your context was just compacted. The COMPLETE session handoff (original request verbatim, the full arc of decisions/rejections/Q&A, exact stopping point, and all user messages) is on disk. Run this command NOW, BEFORE ANY OTHER ACTION:
+  cat \"\$OMT_DIR/handoff-\$OMT_SESSION_ID.md\"
+(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)
+It is your only memory of this session -- do not trust your recollection of prior turns. Reconstructing it from memory is NOT reading it."
     fi
   fi
 fi
@@ -276,7 +246,7 @@ for todo_path in "$OMT_DIR/todos.json" "$DIRECTORY/.claude/todos.json"; do
 done
 
 if [ "$INCOMPLETE_COUNT" -gt 0 ]; then
-  MESSAGES="$MESSAGES<session-restore>\n\n[PENDING TASKS DETECTED]\n\nYou have $INCOMPLETE_COUNT incomplete tasks from a previous session.\nPlease continue working on these tasks.\n\n</session-restore>\n\n---\n\n"
+  MESSAGES="$MESSAGES<session-restore>\n\n[PENDING TASKS DETECTED]\n\nYou have incomplete tasks from a previous session.\nPlease continue working on these tasks.\n\n</session-restore>\n\n---\n\n"
 fi
 
 # Output message if we have any restore content OR a consumed handoff.
