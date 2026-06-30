@@ -21,7 +21,6 @@ Deep Interview implements Ouroboros-inspired Socratic questioning with mathemati
 
 <Do_Not_Use_When>
 - User has a detailed, specific request with file paths, function names, or acceptance criteria -- execute directly
-- User wants to explore options or brainstorm -- use `prometheus` skill instead
 - User wants a quick fix or single change -- delegate to executor or sisyphus-junior
 - User says "just do it" or "skip the questions" -- respect their intent
 - User already has a PRD or plan file -- use prometheus or sisyphus with that plan
@@ -123,7 +122,7 @@ The `init` subcommand performs a strict overlay of the rich state shape into the
 
 ## Phase 2: Interview Loop
 
-Repeat until `ambiguity ≤ threshold` OR user exits early:
+Repeat until `ambiguity ≤ threshold` AND the how-readiness gate is met, OR until the user exits early:
 
 ### Step 2-head: Dialectic Rhythm Guard (pre-question stance selector)
 
@@ -381,14 +380,34 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 ## Phase 4: Crystallize Spec
 
-When ambiguity ≤ threshold (or hard cap / early exit):
+When `ambiguity ≤ threshold` AND how-readiness gate is met (or an escape hatch fires):
 
-1. **Generate the specification** with the prompt-safe transcript. If the full interview transcript or initial context is too large, include the summary plus all concrete decisions, acceptance criteria, unresolved gaps, and ontology snapshots; never overflow the prompt with raw oversized context.
-2. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
+**Design-fork detection** (orthogonal to Step-2 stance): scan the transcript for load-bearing design forks — multiple viable approaches that are hard-to-reverse or cross-cutting. Trivial and single-approach situations do NOT trigger daedalus. On a load-bearing fork, dispatch `daedalus`:
 
-**Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the output spec.** Do not write the spec from memory.
+```
+## Evidence
+$OMT_DIR/deep-interview/{slug}-notes.md  (interview transcript + decisions)
 
-3. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
+## Focus
+- Enumerate 2–3 viable approaches; steelman each.
+- Surface tradeoff tensions. Recommend one with rationale.
+```
+
+Present the recommended approach via `AskUserQuestion` (tag "(Recommended)"). Record the chosen approach in the spec's Approach section.
+
+**Per-section approval loop**: Draft each spec section (Goal → Constraints → Success Criteria → Approach → ...) one at a time; present it and collect per-section approval before continuing. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing any section.** Do not write the spec from memory.
+
+**Whole-spec gate**: After all per-section approvals, assemble the draft and present the whole spec for final confirmation before writing.
+
+1. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
+
+**2-layer review** (after writing):
+
+Inline self-review (4 checks): placeholder / consistency / scope / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, no ambiguous text remains.
+
+Dispatch `spec-reviewer` — pass the spec path only. On issues found: one round of fix + re-review; if issues persist, record a risk-note and proceed (advisory, non-gating).
+
+2. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
 
 ## Phase 5: Execution Bridge
 
@@ -440,7 +459,8 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - **Early exit (round 3+)**: Allow with warning if ambiguity > threshold
 - **User says "stop", "cancel", "abort"**: Stop immediately, save state for resume
 - **Ambiguity stalls** (same score +-0.05 for 3 rounds): handled by the Step 2-head Dialectic Rhythm Guard stall rotation rule (selects Ontologist) — no separate activation here
-- **All dimensions at 0.9+**: Skip to spec generation even if not at round minimum
+- **how-readiness gate**: Normal-path exit requires `ambiguity ≤ threshold` AND no unresolved load-bearing HOW-decision (hard-to-reverse, cross-cutting, or multiple genuinely divergent approaches). User-forced escape hatches (hard-cap, early-exit, user-stop) bypass the gate but fold the unresolved fork into the spec's risk-note.
+- **All dimensions at 0.9+**: Skip to spec generation ONLY IF the how-readiness gate is clear; if a load-bearing HOW-fork is unresolved, resolve it via design-fork detection first
 - **Codebase exploration fails**: Proceed as greenfield, note the limitation
 </Escalation_And_Stop_Conditions>
 
