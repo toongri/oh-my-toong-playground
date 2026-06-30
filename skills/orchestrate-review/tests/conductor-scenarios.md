@@ -20,13 +20,13 @@
 
 ### CD-2: Single-angle candidate (one angle, others silent)
 
-**Given**: only `removed-behavior` flags a dropped error path at `OrderService.kt:88`; the other angles do not.
+**Given**: only `regression` flags a dropped error path at `OrderService.kt:88`; the other angles do not.
 
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | The candidate is carried through (not dropped for lacking corroboration) |
-| V2 | `found by` lists `removed-behavior` only |
+| V2 | `found by` lists `regression` only |
 | V3 | The other angles are simply not attributed — no "did not identify" judgment is needed |
 
 ### CD-3: Weak candidate is kept
