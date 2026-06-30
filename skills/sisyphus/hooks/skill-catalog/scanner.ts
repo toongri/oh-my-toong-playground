@@ -39,7 +39,8 @@ export async function scanSkillDirectories(cwd: string): Promise<string[]> {
     }
   }
 
-  return result;
+  // Sort deterministically so output is session- and machine-invariant
+  return result.sort((l, r) => l.localeCompare(r));
 }
 
 // Read enabled plugin IDs from ~/.claude/settings.json
