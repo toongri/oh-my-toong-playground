@@ -46,6 +46,14 @@
 |------------|-----------|------------|
 | {assumption} | {how it was questioned} | {what was decided} |
 
+## Approach & Design Decisions
+- **Selected approach:** {chosen implementation direction}
+- **Rejected alternatives:** {options considered but ruled out, and why}
+- **Rationale:** {why the selected approach was chosen over alternatives}
+- **Tradeoffs:** {what is gained and what is given up with this approach}
+
+Downstream (prometheus) consumes this as a FIXED input — does not re-decide the approach.
+
 ## Technical Context
 {brownfield: relevant codebase findings from explore agent}
 {greenfield: technology choices and constraints}
