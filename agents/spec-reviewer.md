@@ -32,6 +32,9 @@ Approve unless there are serious gaps that would lead to a flawed plan.
 
 ## Output Format
 
+Emit exactly this structure:
+
+```markdown
 ## Spec Review
 
 **Status:** Approved | Issues Found
@@ -41,3 +44,4 @@ Approve unless there are serious gaps that would lead to a flawed plan.
 
 **Recommendations (advisory, do not block approval):**
 - [suggestions for improvement]
+```
