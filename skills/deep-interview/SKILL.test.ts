@@ -31,7 +31,19 @@ describe('new-prose: daedalus dispatch', () => {
 
 describe('new-prose: design-fork detection', () => {
   test('design-fork detection mention is present', () => {
-    expect(skillMd).toContain('fork');
+    expect(skillMd).toContain('load-bearing design forks');
+  });
+});
+
+describe('new-prose: Use_When design approach trigger', () => {
+  test('Use_When block advertises load-bearing design approach resolution', () => {
+    expect(skillMd).toContain('load-bearing design approach');
+  });
+});
+
+describe('new-prose: pressure loophole closed at Step 2-exit gate', () => {
+  test('"be quick" instruction is NOT a user-forced escape hatch', () => {
+    expect(skillMd).toContain('NOT a user-forced escape hatch');
   });
 });
 
