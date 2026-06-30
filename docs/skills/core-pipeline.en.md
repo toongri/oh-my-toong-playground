@@ -214,7 +214,7 @@ If skills are the *methodologies*, agents are the *delegation targets*. sisyphus
 | mnemosyne | Git specialist performing atomic commits in an isolated context | When preventing commits from polluting the conversation context |
 | chunk-reviewer | Reviews a completed major step against the original plan and coding standards | When wrapping up a large step and running a review round |
 | tech-claim-examiner | CTO-perspective examiner evaluating resume technical claims with a 5-axis framework | When verifying technical claims on a resume |
-| spec-reviewer | deep-interview-dispatched advisory that reviews a draft spec for gaps, contradictions, and underspecified ACs before handoff to prometheus | Dispatched by deep-interview mid-session to validate a spec (not a sisyphus/prometheus delegation target) |
+| spec-reviewer | deep-interview-dispatched advisory that reviews a draft spec for gaps, contradictions, and underspecified ACs before handoff to prometheus | Dispatched by deep-interview during Phase 4 spec crystallization to validate the draft spec before handoff (not a sisyphus/prometheus delegation target) |
 
 ---
 
