@@ -2,7 +2,7 @@
 name: code-reviewer
 description: |
   Use when dispatching a pure code review to obtain findings in an isolated context. Runs the full code-review skill — intent acquisition, evidence verification, chunk-reviewer dispatch, per-candidate verifier fan-out, and findings synthesis — and returns the verified findings as render-time markdown finding cards (the render-time markdown finding contract).
-model: sonnet
+model: opus
 skills: code-review
 ---
 
