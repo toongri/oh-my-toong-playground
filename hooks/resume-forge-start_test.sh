@@ -136,7 +136,7 @@ EOF
 }
 
 test_one_state_file_shows_scenario_summary() {
-    # State with 1 passed out of 3 total → shows 1/3
+    # State with 1 passed out of 3 total → shows qualitative "in progress"
     cat > "$TEST_OMT_DIR/state/resume-forge-abc123.json" << 'EOF'
 {
   "session_id": "abc123",
@@ -154,8 +154,8 @@ EOF
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session"}' \
         | "$SCRIPT_DIR/resume-forge-start.sh" 2>&1) || true
 
-    assert_output_contains "$output" "1/3" \
-        "Should show 1 passed out of 3 total" || return 1
+    assert_output_contains "$output" "in progress" \
+        "Should show 'in progress' when some (not all) scenarios passed" || return 1
 }
 
 # =============================================================================
@@ -191,10 +191,11 @@ EOF
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session"}' \
         | "$SCRIPT_DIR/resume-forge-start.sh" 2>&1) || true
 
-    # The newer file has 0/1 passed (loop2 pending), older has 2/2 passed
-    # So checking for 0/1 confirms we picked the newer file
-    assert_output_contains "$output" "0/1" \
-        "Should pick the most recent state file (0/1 passed)" || return 1
+    # The newer file has 0/1 passed (loop2 pending) → "not started"
+    # The older file has 2/2 passed → "complete"
+    # So checking for "not started" confirms we picked the newer file
+    assert_output_contains "$output" "not started" \
+        "Should pick the most recent state file (0/1 passed = not started)" || return 1
 }
 
 # =============================================================================
@@ -221,8 +222,8 @@ EOF
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session"}' \
         | "$SCRIPT_DIR/resume-forge-start.sh" 2>&1) || true
 
-    assert_output_contains "$output" "4/4" \
-        "Should show 4/4 when all scenarios passed" || return 1
+    assert_output_contains "$output" "complete" \
+        "Should show 'complete' when all scenarios passed" || return 1
 }
 
 # =============================================================================
@@ -248,8 +249,93 @@ EOF
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session"}' \
         | "$SCRIPT_DIR/resume-forge-start.sh" 2>&1) || true
 
-    assert_output_contains "$output" "2/3" \
-        "Should show 2/3 for mixed status" || return 1
+    assert_output_contains "$output" "in progress" \
+        "Should show 'in progress' for mixed status (2 of 3 passed)" || return 1
+}
+
+# =============================================================================
+# AC10: Session-invariant restore block (no filename, no digit/digit)
+# =============================================================================
+
+test_ac10_no_filename_no_digits_byte_invariant() {
+    # Part 1: restore block must contain no resume-forge filename and no digit/digit progress
+    cat > "$TEST_OMT_DIR/state/resume-forge-session-xyz.json" << 'EOF'
+{
+  "session_id": "xyz",
+  "created_at": "2026-04-10T12:00:00",
+  "scenarios": [
+    {"id": "c1", "loop1": {"status": "passed"}, "loop2": {"status": "passed"}},
+    {"id": "c2", "loop1": {"status": "passed"}, "loop2": {"status": "pending"}},
+    {"id": "c3", "loop1": {"status": "pending"}, "loop2": {"status": "pending"}}
+  ]
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session"}' \
+        | "$SCRIPT_DIR/resume-forge-start.sh" 2>&1) || true
+
+    assert_output_not_contains "$output" "resume-forge-" \
+        "restore block must not contain resume-forge filename" || return 1
+
+    if echo "$output" | grep -qE "[0-9]+/[0-9]+"; then
+        echo "ASSERTION FAILED: restore block must not contain digit/digit progress"
+        echo "  Output: $output"
+        return 1
+    fi
+
+    assert_output_contains "$output" "resume-forge skill" \
+        "restore block must retain resume-forge skill instruction" || return 1
+
+    # Part 2: two in-progress files (different names + counts) must produce byte-identical output
+    for f in "$TEST_OMT_DIR/state"/resume-forge-*.json; do
+        [ -f "$f" ] && rm -f "$f"
+    done
+
+    # File A: 1/3 passed (in progress)
+    cat > "$TEST_OMT_DIR/state/resume-forge-sess-a.json" << 'EOF'
+{
+  "session_id": "sess-a",
+  "created_at": "2026-04-10T12:00:00",
+  "scenarios": [
+    {"id": "c1", "loop1": {"status": "passed"}, "loop2": {"status": "passed"}},
+    {"id": "c2", "loop1": {"status": "passed"}, "loop2": {"status": "pending"}},
+    {"id": "c3", "loop1": {"status": "pending"}, "loop2": {"status": "pending"}}
+  ]
+}
+EOF
+    local output_a
+    output_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session"}' \
+        | "$SCRIPT_DIR/resume-forge-start.sh" 2>&1) || true
+
+    for f in "$TEST_OMT_DIR/state"/resume-forge-*.json; do
+        [ -f "$f" ] && rm -f "$f"
+    done
+
+    # File B: 2/5 passed (in progress — different name, different count, same bucket)
+    cat > "$TEST_OMT_DIR/state/resume-forge-sess-b.json" << 'EOF'
+{
+  "session_id": "sess-b",
+  "created_at": "2026-04-10T12:00:00",
+  "scenarios": [
+    {"id": "c1", "loop1": {"status": "passed"}, "loop2": {"status": "passed"}},
+    {"id": "c2", "loop1": {"status": "passed"}, "loop2": {"status": "passed"}},
+    {"id": "c3", "loop1": {"status": "pending"}, "loop2": {"status": "pending"}},
+    {"id": "c4", "loop1": {"status": "pending"}, "loop2": {"status": "pending"}},
+    {"id": "c5", "loop1": {"status": "pending"}, "loop2": {"status": "pending"}}
+  ]
+}
+EOF
+    local output_b
+    output_b=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session"}' \
+        | "$SCRIPT_DIR/resume-forge-start.sh" 2>&1) || true
+
+    if [ "$output_a" != "$output_b" ]; then
+        echo "ASSERTION FAILED: same-bucket files with different names+counts must produce byte-identical output"
+        echo "  Output A (sess-a, 1/3): $output_a"
+        echo "  Output B (sess-b, 2/5): $output_b"
+        return 1
+    fi
 }
 
 # =============================================================================
@@ -316,6 +402,9 @@ main() {
 
     # Mixed status
     run_test test_mixed_status_shows_correct_ratio
+
+    # AC10: Session-invariant restore block
+    run_test test_ac10_no_filename_no_digits_byte_invariant
 
     # CLAUDE_ENV_FILE exports
     run_test test_exports_omt_dir_via_claude_env_file

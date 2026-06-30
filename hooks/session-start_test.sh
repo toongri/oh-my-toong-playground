@@ -237,10 +237,10 @@ test_session_start_uses_project_root_variable() {
 }
 
 # =============================================================================
-# Tests: Prometheus restore — resume_summary surfaced when plan file unavailable
+# Tests: Prometheus restore — resume_summary omitted (cat pointer emitted) when plan file unavailable
 # =============================================================================
 
-test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable() {
+test_session_start_prometheus_omits_resume_summary_and_emits_pointer_when_plan_unavailable() {
     local sid="test-prometheus-resume"
 
     # Active prometheus state: resume_summary set, plan_path empty (never written)
@@ -263,9 +263,18 @@ EOF
         return 1
     fi
 
-    # additionalContext must contain the bookmark text
-    assert_output_contains "$output" "Working on feature X" "additionalContext should contain resume_summary text" || return 1
-    assert_output_contains "$output" "Resume from this bookmark" "additionalContext should contain bookmark label" || return 1
+    # resume_summary is NO LONGER embedded directly — it is recoverable via the cat pointer.
+    assert_output_not_contains "$output" "Working on feature X" "resume_summary text must NOT be embedded directly (now via cat pointer)" || return 1
+    assert_output_not_contains "$output" "Resume from this bookmark" "PROM_PLAN_NOTE bookmark must NOT appear (orphan removed)" || return 1
+
+    # cat pointer must be present in additionalContext
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx" | grep -qF 'cat "$OMT_DIR/prometheus-state-$OMT_SESSION_ID.json"'; then
+        echo "ASSERTION FAILED: additionalContext must contain UNEXPANDED cat pointer"
+        echo "  ctx: ${ctx:0:500}"
+        return 1
+    fi
 }
 
 test_session_start_prometheus_resume_summary_backslash_produces_valid_json() {
@@ -291,25 +300,23 @@ EOF
         return 1
     fi
 
-    # (b) the parsed additionalContext must contain backslashes intact
+    # (b) resume_summary is NOT embedded directly — recoverable via cat pointer
     local ctx
     ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
 
     if echo "$ctx" | grep -qF 'C:\tmp\plan'; then
-        : # good
-    else
-        echo "ASSERTION FAILED: additionalContext should preserve backslash path C:\\tmp\\plan"
+        echo "ASSERTION FAILED: backslash resume_summary must NOT be embedded directly (now via cat pointer)"
         echo "  additionalContext: ${ctx:0:500}"
         return 1
     fi
 
-    if echo "$ctx" | grep -qF '\d+'; then
-        : # good
-    else
-        echo "ASSERTION FAILED: additionalContext should preserve backslash regex \\d+"
+    # (c) cat pointer must be present
+    if ! echo "$ctx" | grep -qF 'cat "$OMT_DIR/prometheus-state-$OMT_SESSION_ID.json"'; then
+        echo "ASSERTION FAILED: additionalContext must contain UNEXPANDED cat pointer"
         echo "  additionalContext: ${ctx:0:500}"
         return 1
     fi
+    return 0
 }
 
 # =============================================================================
@@ -479,6 +486,75 @@ EOF
     assert_output_not_contains "$output" "Re-read the current plan from disk" "pursuing without plan file: must NOT inject re-read instruction" || return 1
     # Must still surface iteration info
     assert_output_contains "$output" "GOAL RESTORED" "pursuing without plan file: should still inject GOAL RESTORED" || return 1
+}
+
+# Fix B: planning + no plan file → session-invariant guidance text emitted
+test_session_start_goal_planning_no_plan_emits_guidance_and_is_invariant() {
+    local ts
+    ts=$(date "+%Y-%m-%dT%H:%M:%S")
+    local sid_a="plan-nofile-sid-alpha"
+    local sid_b="plan-nofile-sid-beta"
+
+    # Non-pristine planning states (outcome set) with empty plan_path — no plan file on disk.
+    # resume_summary differs between the two sids to prove it is NOT visible in output.
+    cat > "$TEST_OMT_DIR/goal-state-${sid_a}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "plan_path": "",
+  "resume_summary": "Alpha planning summary - should not appear in output.",
+  "outcome": "Build feature X",
+  "iteration": 1,
+  "started_at": "${ts}",
+  "last_touched_at": "${ts}"
+}
+EOF
+
+    cat > "$TEST_OMT_DIR/goal-state-${sid_b}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "plan_path": "",
+  "resume_summary": "Beta planning summary - totally different text.",
+  "outcome": "Build feature X",
+  "iteration": 1,
+  "started_at": "${ts}",
+  "last_touched_at": "${ts}"
+}
+EOF
+
+    local out_a out_b
+    out_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_a"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    out_b=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_b"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # Guidance text must be present: new defer-to-read-state wording
+    local ctx_a
+    ctx_a=$(echo "$out_a" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx_a" | grep -q "from the state you just read"; then
+        echo "ASSERTION FAILED: planning+no-plan must emit 'from the state you just read' guidance"
+        echo "  ctx_a: ${ctx_a:0:500}"
+        return 1
+    fi
+    if ! echo "$ctx_a" | grep -q "resume_summary"; then
+        echo "ASSERTION FAILED: planning+no-plan guidance must reference the 'resume_summary' field"
+        echo "  ctx_a: ${ctx_a:0:500}"
+        return 1
+    fi
+
+    # Regression guard: must NOT contain the old unconditional restart directive
+    if echo "$ctx_a" | grep -q "Continue planning from the beginning"; then
+        echo "ASSERTION FAILED (regression): planning+no-plan must NOT emit 'Continue planning from the beginning' directive"
+        echo "  ctx_a: ${ctx_a:0:500}"
+        return 1
+    fi
+
+    # Output is session-invariant: byte-identical across two sids with different resume_summary
+    if [ "$out_a" != "$out_b" ]; then
+        echo "ASSERTION FAILED (Fix B): planning+no-plan guidance must be session-invariant (byte-identical across sids)"
+        echo "  out_a: ${out_a:0:500}"
+        echo "  out_b: ${out_b:0:500}"
+        return 1
+    fi
 }
 
 test_session_start_goal_plan_path_backslash_produces_valid_json() {
@@ -1070,11 +1146,12 @@ test_session_start_encoder_invariants_in_source() {
         return 1
     fi
 
-    # Exactly 3 per-field backslash escapers (PROM_RESUME, GOAL_RESUME, GOAL_PLAN_PATH)
+    # Exactly 0 per-field backslash escapers: PROM_RESUME, GOAL_RESUME, GOAL_PLAN_PATH
+    # are no longer embedded in MESSAGES — all 3 escapers have been removed (cache-safe TODO 3).
     local escaper_count
-    escaper_count=$(grep -cF "sed 's/\\\\/\\\\\\\\/g'" "$SCRIPT_DIR/session-start.sh" 2>/dev/null || echo 0)
-    if [ "$escaper_count" -ne 3 ]; then
-        echo "ASSERTION FAILED: expected exactly 3 per-field backslash escapers, found $escaper_count"
+    escaper_count=$(grep -cF "sed 's/\\\\/\\\\\\\\/g'" "$SCRIPT_DIR/session-start.sh" 2>/dev/null || true)
+    if [ "$escaper_count" -ne 0 ]; then
+        echo "ASSERTION FAILED: expected 0 per-field backslash escapers after cache-safe refactor, found $escaper_count"
         grep -n "sed 's/\\\\" "$SCRIPT_DIR/session-start.sh"
         return 1
     fi
@@ -1266,6 +1343,490 @@ EOF
 }
 
 # =============================================================================
+# Tests: Cache-safe restore — TODO 3 (AC2a–AC6)
+# session-start.sh must emit UNEXPANDED literal cat pointers so the SessionStart
+# additionalContext block is session-invariant and cache-safe.
+# =============================================================================
+
+# Shared sentinel state helpers — use fresh timestamps so GC does not reap other-session files
+_write_prom_sentinel_state() {
+    local sid="$1"
+    local ts
+    ts=$(date "+%Y-%m-%dT%H:%M:%S")
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "S3",
+  "plan_path": "/SENTINEL_PP_zzqqxx/plan.md",
+  "resume_summary": "SENTINEL_RS_zzqqxx",
+  "started_at": "${ts}",
+  "last_touched_at": "${ts}",
+  "steps": {"acceptance_criteria": {"done": false, "content": [], "recorded_at": ""}, "design_decisions": {"done": false, "ref": ""}, "plan": {"done": false}}
+}
+EOF
+}
+
+_write_goal_sentinel_state() {
+    local sid="$1"
+    local ts
+    ts=$(date "+%Y-%m-%dT%H:%M:%S")
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "plan_path": "/SENTINEL_PP_zzqqxx/plan.md",
+  "resume_summary": "SENTINEL_RS_zzqqxx",
+  "outcome": "Test objective",
+  "iteration": 3,
+  "max_iterations": 10,
+  "started_at": "${ts}",
+  "last_touched_at": "${ts}"
+}
+EOF
+}
+
+# AC2a: plan_path and resume_summary sentinels must NOT appear in prometheus stdout
+test_cache_safe_prom_sentinel_not_in_stdout() {
+    local sid="prom-sentinel-zzqqxx"
+    _write_prom_sentinel_state "$sid"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local pp_count rs_count
+    pp_count=$(echo "$output" | grep -c "SENTINEL_PP_zzqqxx" 2>/dev/null || true)
+    rs_count=$(echo "$output" | grep -c "SENTINEL_RS_zzqqxx" 2>/dev/null || true)
+
+    if [ "${pp_count:-0}" -ne 0 ]; then
+        echo "ASSERTION FAILED (AC2a): plan_path sentinel must not appear in stdout (count=$pp_count)"
+        return 1
+    fi
+    if [ "${rs_count:-0}" -ne 0 ]; then
+        echo "ASSERTION FAILED (AC2a): resume_summary sentinel must not appear in stdout (count=$rs_count)"
+        return 1
+    fi
+}
+
+# AC2b: prometheus stdout contains UNEXPANDED cat pointer + run-now imperative;
+#        static instruction and PROM_PLAN_AVAILABLE branch retained;
+#        orphan PROM_PLAN_NOTE removed from source.
+test_cache_safe_prom_pointer_and_imperative() {
+    local sid="prom-ptr-zzqqxx"
+    _write_prom_sentinel_state "$sid"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED (AC2b): hook stdout must be valid JSON"
+        echo "  output: ${output:0:500}"
+        return 1
+    fi
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    # Exactly 1 UNEXPANDED cat pointer
+    local ptr_count
+    ptr_count=$(echo "$ctx" | grep -cF 'cat "$OMT_DIR/prometheus-state-$OMT_SESSION_ID.json"' 2>/dev/null || true)
+    if [ "${ptr_count:-0}" -ne 1 ]; then
+        echo "ASSERTION FAILED (AC2b): additionalContext should contain exactly 1 cat pointer (found ${ptr_count:-0})"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+
+    # run-now imperative
+    if ! echo "$ctx" | grep -qiE 'now, before any other action|run .*now|before resuming'; then
+        echo "ASSERTION FAILED (AC2b): additionalContext should contain run-now imperative"
+        return 1
+    fi
+
+    # Static instruction retained
+    if ! echo "$ctx" | grep -q "PROMETHEUS RESTORED"; then
+        echo "ASSERTION FAILED (AC2b): PROMETHEUS RESTORED header must be retained"
+        return 1
+    fi
+
+    # PROM_PLAN_AVAILABLE=true branch works: create a real plan file and verify instruction fires
+    local plan_file="$TEST_OMT_DIR/test-prom-plan.md"
+    echo "# Plan" > "$plan_file"
+    local sid2="prom-ptr-planok"
+    local ts2
+    ts2=$(date "+%Y-%m-%dT%H:%M:%S")
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid2}.json" << EOF
+{
+  "active": true,
+  "phase": "S4",
+  "plan_path": "${plan_file}",
+  "resume_summary": "checkpoint",
+  "started_at": "${ts2}",
+  "last_touched_at": "${ts2}",
+  "steps": {"acceptance_criteria": {"done": false, "content": [], "recorded_at": ""}, "design_decisions": {"done": false, "ref": ""}, "plan": {"done": false}}
+}
+EOF
+    local out2
+    out2=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid2"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    local ctx2
+    ctx2=$(echo "$out2" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx2" | grep -q "Re-read the current plan from disk and distrust stored verdicts"; then
+        echo "ASSERTION FAILED (AC2b): PROM_PLAN_AVAILABLE=true branch must emit re-read instruction"
+        echo "  ctx2: ${ctx2:0:600}"
+        return 1
+    fi
+
+    # PROM_PLAN_NOTE orphan removed from source
+    if grep -q 'PROM_PLAN_NOTE' "$SCRIPT_DIR/session-start.sh"; then
+        echo "ASSERTION FAILED (AC2b): PROM_PLAN_NOTE must be removed from session-start.sh source"
+        return 1
+    fi
+}
+
+# AC2c: round-trip — source hook-produced CLAUDE_ENV_FILE, execute emitted cat, recover fields
+test_cache_safe_prom_round_trip() {
+    local sid="prom-rt-zzqqxx"
+    _write_prom_sentinel_state "$sid"
+
+    # (pre) stdout must be valid JSON
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED (AC2c-pre): hook stdout must be valid JSON"
+        return 1
+    fi
+
+    # Run with TEMP CLAUDE_ENV_FILE (hook-produced, NOT a test self-export)
+    local tmp_env
+    tmp_env=$(mktemp)
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' \
+        | CLAUDE_ENV_FILE="$tmp_env" "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    # Source hook-produced file (not a test self-export)
+    # shellcheck source=/dev/null
+    source "$tmp_env"
+    rm -f "$tmp_env"
+
+    # Execute the emitted cat and verify fields are recoverable
+    local state_out
+    state_out=$(cat "$OMT_DIR/prometheus-state-$OMT_SESSION_ID.json" 2>/dev/null) || true
+    if ! echo "$state_out" | jq -e '.plan_path,.resume_summary' > /dev/null 2>&1; then
+        echo "ASSERTION FAILED (AC2c): round-trip cat must recover plan_path and resume_summary (non-empty)"
+        echo "  state_out: ${state_out:0:300}"
+        return 1
+    fi
+}
+
+# AC3a: goal plan_path, resume_summary, iteration sentinels must NOT appear in stdout
+test_cache_safe_goal_sentinel_not_in_stdout() {
+    local sid="goal-sentinel-zzqqxx"
+    _write_goal_sentinel_state "$sid"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local pp_count rs_count
+    pp_count=$(echo "$output" | grep -c "SENTINEL_PP_zzqqxx" 2>/dev/null || true)
+    rs_count=$(echo "$output" | grep -c "SENTINEL_RS_zzqqxx" 2>/dev/null || true)
+
+    if [ "${pp_count:-0}" -ne 0 ]; then
+        echo "ASSERTION FAILED (AC3a): goal plan_path sentinel must not appear in stdout (count=$pp_count)"
+        return 1
+    fi
+    if [ "${rs_count:-0}" -ne 0 ]; then
+        echo "ASSERTION FAILED (AC3a): goal resume_summary sentinel must not appear in stdout (count=$rs_count)"
+        return 1
+    fi
+
+    # No iteration digit pattern
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if echo "$ctx" | grep -qE 'Iteration:? *[0-9]+/[0-9]+'; then
+        echo "ASSERTION FAILED (AC3a): iteration digit pattern must not appear in stdout"
+        return 1
+    fi
+}
+
+# AC3b: goal cat pointer + run-now; retained sentences; GOAL_PLAN_AVAILABLE branch.
+#        Must NOT introduce new "Invoke the goal skill" imperative.
+test_cache_safe_goal_pointer_and_imperative() {
+    local sid="goal-ptr-zzqqxx"
+    _write_goal_sentinel_state "$sid"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED (AC3b): hook stdout must be valid JSON"
+        return 1
+    fi
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    # Exactly 1 UNEXPANDED cat pointer
+    local ptr_count
+    ptr_count=$(echo "$ctx" | grep -cF 'cat "$OMT_DIR/goal-state-$OMT_SESSION_ID.json"' 2>/dev/null || true)
+    if [ "${ptr_count:-0}" -ne 1 ]; then
+        echo "ASSERTION FAILED (AC3b): additionalContext should contain exactly 1 goal cat pointer (found ${ptr_count:-0})"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+
+    # run-now imperative
+    if ! echo "$ctx" | grep -qiE 'now, before any other action|run .*now|before resuming'; then
+        echo "ASSERTION FAILED (AC3b): additionalContext should contain run-now imperative"
+        return 1
+    fi
+
+    # "Continue pursuing the objective autonomously" retained
+    if ! echo "$ctx" | grep -q "Continue pursuing the objective autonomously"; then
+        echo "ASSERTION FAILED (AC3b): 'Continue pursuing the objective autonomously' must be retained"
+        return 1
+    fi
+
+    # "refused" sentence retained (distinct substring)
+    if ! echo "$ctx" | grep -q "refused"; then
+        echo "ASSERTION FAILED (AC3b): re-invocation refused sentence must be retained"
+        return 1
+    fi
+
+    # GOAL RESTORED retained
+    if ! echo "$ctx" | grep -q "GOAL RESTORED"; then
+        echo "ASSERTION FAILED (AC3b): GOAL RESTORED header must be retained"
+        return 1
+    fi
+
+    # No new "Invoke the goal skill" imperative (D-4)
+    if echo "$ctx" | grep -qiE 'invoke the goal skill|run the goal skill|restart.*goal'; then
+        echo "ASSERTION FAILED (AC3b/D-4): must NOT introduce a new 'Invoke the goal skill' imperative"
+        return 1
+    fi
+
+    # GOAL_PLAN_AVAILABLE=true branch works
+    local plan_file="$TEST_OMT_DIR/test-goal-plan.md"
+    echo "# Plan" > "$plan_file"
+    local sid2="goal-ptr-planok"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+    cat > "$TEST_OMT_DIR/goal-state-${sid2}.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "plan_path": "${plan_file}",
+  "resume_summary": "checkpoint",
+  "outcome": "Test objective",
+  "iteration": 2,
+  "max_iterations": 10,
+  "started_at": "${now_ts}"
+}
+EOF
+    local out2
+    out2=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid2"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    local ctx2
+    ctx2=$(echo "$out2" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx2" | grep -q "Re-read the current plan from disk before continuing"; then
+        echo "ASSERTION FAILED (AC3b): GOAL_PLAN_AVAILABLE=true branch must emit re-read instruction"
+        echo "  ctx2: ${ctx2:0:600}"
+        return 1
+    fi
+}
+
+# AC3c: goal round-trip via sourced CLAUDE_ENV_FILE
+test_cache_safe_goal_round_trip() {
+    local sid="goal-rt-zzqqxx"
+    _write_goal_sentinel_state "$sid"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED (AC3c-pre): hook stdout must be valid JSON"
+        return 1
+    fi
+
+    local tmp_env
+    tmp_env=$(mktemp)
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' \
+        | CLAUDE_ENV_FILE="$tmp_env" "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    # shellcheck source=/dev/null
+    source "$tmp_env"
+    rm -f "$tmp_env"
+
+    local state_out
+    state_out=$(cat "$OMT_DIR/goal-state-$OMT_SESSION_ID.json" 2>/dev/null) || true
+    if ! echo "$state_out" | jq -e '.plan_path,.resume_summary,.iteration' > /dev/null 2>&1; then
+        echo "ASSERTION FAILED (AC3c): round-trip cat must recover plan_path, resume_summary, iteration"
+        echo "  state_out: ${state_out:0:300}"
+        return 1
+    fi
+}
+
+# AC4: INCOMPLETE_COUNT 7 vs 3 → pending block byte-identical, no digit
+test_cache_safe_incomplete_count_existence_only() {
+    local todos_dir="$TEST_HOME/.claude/todos"
+    mkdir -p "$todos_dir"
+
+    # 7 incomplete tasks
+    printf '[{"id":"1","status":"pending"},{"id":"2","status":"pending"},{"id":"3","status":"pending"},{"id":"4","status":"pending"},{"id":"5","status":"pending"},{"id":"6","status":"pending"},{"id":"7","status":"pending"}]' \
+        > "$todos_dir/test-todos.json"
+
+    local out_7
+    out_7=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "count-test"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # 3 incomplete tasks (same file, different count)
+    printf '[{"id":"1","status":"pending"},{"id":"2","status":"pending"},{"id":"3","status":"pending"}]' \
+        > "$todos_dir/test-todos.json"
+
+    local out_3
+    out_3=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "count-test"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # Byte-identical outputs
+    if [ "$out_7" != "$out_3" ]; then
+        echo "ASSERTION FAILED (AC4): incomplete task count should produce byte-identical output for 7 vs 3"
+        echo "  out_7: ${out_7:0:300}"
+        echo "  out_3: ${out_3:0:300}"
+        return 1
+    fi
+
+    # Pending block is present
+    local ctx
+    ctx=$(echo "$out_7" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx" | grep -q "PENDING TASKS DETECTED"; then
+        echo "ASSERTION FAILED (AC4): PENDING TASKS DETECTED block must be present"
+        return 1
+    fi
+
+    # No digit in the message
+    if echo "$ctx" | grep -qE 'have [0-9]+ incomplete'; then
+        echo "ASSERTION FAILED (AC4): pending message must not contain a digit count"
+        return 1
+    fi
+}
+
+# AC5: large handoff (>7000 chars) emits UNEXPANDED cat pointer; no expanded abs path;
+#      run-now retained; large-handoff file PRESERVED; round-trip cat returns non-empty.
+test_cache_safe_handoff_large_pointer() {
+    local sid="handoff-large-ptr"
+    local handoff_file="$TEST_OMT_DIR/handoff-${sid}.md"
+
+    # Create >7000-char handoff file
+    yes 'LARGE_HANDOFF_FILLER_LINE_1234567890_ABCDEFGHIJ' 2>/dev/null | head -c 7200 > "$handoff_file" 2>/dev/null || true
+    # Fallback if yes/head -c not available
+    if [ ! -s "$handoff_file" ] || [ "$(wc -c < "$handoff_file" 2>/dev/null || echo 0)" -lt 7001 ]; then
+        python3 -c "print('X' * 7200)" > "$handoff_file" 2>/dev/null || true
+    fi
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # (i) stdout valid JSON
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED (AC5): hook stdout must be valid JSON"
+        echo "  output: ${output:0:500}"
+        return 1
+    fi
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    # (i) UNEXPANDED cat pointer for handoff
+    if ! echo "$ctx" | grep -qF 'cat "$OMT_DIR/handoff-$OMT_SESSION_ID.md"'; then
+        echo "ASSERTION FAILED (AC5-i): additionalContext must contain UNEXPANDED handoff cat pointer"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+
+    # (i) NO expanded absolute path — check for the actual handoff_file path
+    if echo "$ctx" | grep -qF "${handoff_file}"; then
+        echo "ASSERTION FAILED (AC5-i): large-handoff must NOT emit expanded absolute path"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+
+    # (ii) run-now imperative retained
+    if ! echo "$ctx" | grep -qiE 'now, before any other action'; then
+        echo "ASSERTION FAILED (AC5-ii): run-now imperative must be retained beside pointer"
+        return 1
+    fi
+
+    # (iii) large-handoff file PRESERVED (not deleted)
+    if [ ! -f "$handoff_file" ]; then
+        echo "ASSERTION FAILED (AC5-iii): large handoff file must be preserved (delete fires only on <=7000 path)"
+        return 1
+    fi
+
+    # (iii) round-trip: source env file and execute cat
+    local tmp_env
+    tmp_env=$(mktemp)
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' \
+        | CLAUDE_ENV_FILE="$tmp_env" "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    # shellcheck source=/dev/null
+    source "$tmp_env"
+    rm -f "$tmp_env"
+
+    local cat_result
+    cat_result=$(cat "$OMT_DIR/handoff-$OMT_SESSION_ID.md" 2>/dev/null) || true
+    if [ -z "$cat_result" ]; then
+        echo "ASSERTION FAILED (AC5-iii): round-trip cat of large handoff must return non-empty"
+        return 1
+    fi
+}
+
+# AC6: prometheus restore output is byte-identical across two different session IDs,
+# even when resume_summary differs — proving resume_summary is not embedded in output.
+test_cache_safe_prom_session_invariant() {
+    local ts
+    ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    local sid_a="aaaa-session-inv"
+    local sid_b="zzqqxx-session-inv"
+
+    # Different resume_summary per sid: if resume_summary were still embedded, outputs would differ.
+    echo '{"active":true,"phase":"S3","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_alpha","started_at":"'"$ts"'","last_touched_at":"'"$ts"'","steps":{"acceptance_criteria":{"done":false,"content":[],"recorded_at":""},"design_decisions":{"done":false,"ref":""},"plan":{"done":false}}}' \
+        > "$TEST_OMT_DIR/prometheus-state-${sid_a}.json"
+    echo '{"active":true,"phase":"S3","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_beta","started_at":"'"$ts"'","last_touched_at":"'"$ts"'","steps":{"acceptance_criteria":{"done":false,"content":[],"recorded_at":""},"design_decisions":{"done":false,"ref":""},"plan":{"done":false}}}' \
+        > "$TEST_OMT_DIR/prometheus-state-${sid_b}.json"
+
+    local out_a out_b
+    out_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_a"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    out_b=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_b"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if [ "$out_a" != "$out_b" ]; then
+        echo "ASSERTION FAILED (AC6-prom): prometheus restore output must be byte-identical across session IDs"
+        echo "  out_a: ${out_a:0:500}"
+        echo "  out_b: ${out_b:0:500}"
+        return 1
+    fi
+}
+
+# AC6: goal restore output is byte-identical across two different session IDs,
+# even when resume_summary differs — proving resume_summary is not embedded in output.
+test_cache_safe_goal_session_invariant() {
+    local ts
+    ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    local sid_a="aaaa-goal-inv"
+    local sid_b="zzqqxx-goal-inv"
+
+    # Different resume_summary per sid: if resume_summary were still embedded, outputs would differ.
+    echo '{"active":true,"phase":"pursuing","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_alpha","outcome":"Test objective","iteration":3,"max_iterations":10,"started_at":"'"$ts"'","last_touched_at":"'"$ts"'"}' \
+        > "$TEST_OMT_DIR/goal-state-${sid_a}.json"
+    echo '{"active":true,"phase":"pursuing","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_beta","outcome":"Test objective","iteration":3,"max_iterations":10,"started_at":"'"$ts"'","last_touched_at":"'"$ts"'"}' \
+        > "$TEST_OMT_DIR/goal-state-${sid_b}.json"
+
+    local out_a out_b
+    out_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_a"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    out_b=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_b"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if [ "$out_a" != "$out_b" ]; then
+        echo "ASSERTION FAILED (AC6-goal): goal restore output must be byte-identical across session IDs"
+        echo "  out_a: ${out_a:0:500}"
+        echo "  out_b: ${out_b:0:500}"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -1291,7 +1852,7 @@ main() {
     run_test test_session_start_uses_project_root_variable
 
     # Prometheus restore: resume_summary surfaced when plan file unavailable
-    run_test test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable
+    run_test test_session_start_prometheus_omits_resume_summary_and_emits_pointer_when_plan_unavailable
 
     # Prometheus restore: backslashes in resume_summary produce valid JSON and are preserved
     run_test test_session_start_prometheus_resume_summary_backslash_produces_valid_json
@@ -1302,6 +1863,7 @@ main() {
     run_test test_session_start_terminal_goal_state_not_restored
     run_test test_session_start_goal_pursuing_resume_rereads_plan
     run_test test_session_start_goal_pursuing_resume_no_plan_file
+    run_test test_session_start_goal_planning_no_plan_emits_guidance_and_is_invariant
 
     # Goal state restore: backslash in plan_path produces valid JSON
     run_test test_session_start_goal_plan_path_backslash_produces_valid_json
@@ -1345,6 +1907,18 @@ main() {
     run_test test_gc_handoff_dash_sid_matched_exactly
     run_test test_gc_handoff_arm_does_not_call_is_current_session
     run_test test_gc_handoff_arm_does_not_disturb_json_state_gc
+
+    # Cache-safe restore — TODO 3 (AC2a–AC6)
+    run_test test_cache_safe_prom_sentinel_not_in_stdout
+    run_test test_cache_safe_prom_pointer_and_imperative
+    run_test test_cache_safe_prom_round_trip
+    run_test test_cache_safe_goal_sentinel_not_in_stdout
+    run_test test_cache_safe_goal_pointer_and_imperative
+    run_test test_cache_safe_goal_round_trip
+    run_test test_cache_safe_incomplete_count_existence_only
+    run_test test_cache_safe_handoff_large_pointer
+    run_test test_cache_safe_prom_session_invariant
+    run_test test_cache_safe_goal_session_invariant
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
