@@ -75,7 +75,7 @@ export async function runSessionStartHook(
 	input: CodexSessionStartInput,
 	options: CodexRulesHookOptions = {},
 ): Promise<string> {
-	const config = configFromEnvironment(options.env);
+	const config = configFromEnvironment(options.env, input.cwd);
 	if (config.disabled || config.mode === "off" || config.mode === "dynamic") {
 		return "";
 	}
@@ -118,7 +118,7 @@ export async function runPostCompactHook(
 	// armed recovery state, so arming it (which also wipes staticDedup) is pure state
 	// pollution. Return without touching session state — mirrors the disabled early-return
 	// in the SessionStart and UserPromptSubmit handlers.
-	if (configFromEnvironment(options.env).disabled) {
+	if (configFromEnvironment(options.env, input.cwd).disabled) {
 		return "";
 	}
 	markSessionCompacted(sessionCachePath(input.session_id, options.pluginDataRoot));
@@ -129,7 +129,7 @@ export async function runUserPromptSubmitHook(
 	input: CodexUserPromptSubmitInput,
 	options: CodexRulesHookOptions = {},
 ): Promise<string> {
-	const config = configFromEnvironment(options.env);
+	const config = configFromEnvironment(options.env, input.cwd);
 	if (config.disabled || config.mode === "off" || config.mode === "dynamic") {
 		return "";
 	}
@@ -162,7 +162,7 @@ export async function runPostToolUseHook(
 	options: CodexRulesHookOptions = {},
 ): Promise<string> {
 	const debugTimer = createHookDebugTimer("PostToolUse");
-	const config = configFromEnvironment(options.env);
+	const config = configFromEnvironment(options.env, input.cwd);
 	debugTimer.lap("config", { disabled: config.disabled, mode: config.mode });
 	if (config.disabled || config.mode === "off" || config.mode === "static") {
 		debugTimer.done({ outputBytes: 0, reason: "disabled" });
