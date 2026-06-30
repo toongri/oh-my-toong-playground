@@ -58,12 +58,7 @@ test("`disabledSourcesFromConfig`: auto mode still disables ~/.claude/CLAUDE.md"
 	expect(disabled!.has("~/.claude/CLAUDE.md")).toBe(true);
 });
 
-// ── omo 제외: .omo/rules / ~/.omo/rules가 auto 모드에서 비활성 ──────────────
-
-test("`DEFAULT_AUTO_DISABLED_SOURCES`: contains .omo/rules and ~/.omo/rules", () => {
-	expect(DEFAULT_AUTO_DISABLED_SOURCES).toContain(".omo/rules");
-	expect(DEFAULT_AUTO_DISABLED_SOURCES).toContain("~/.omo/rules");
-});
+// ── omo 제외: auto 모드 리졸버가 omo 소스를 disabled로 내는지 ───────────────
 
 test("`disabledSourcesFromConfig`: auto mode disables .omo/rules and ~/.omo/rules", () => {
 	const disabled = disabledSourcesFromConfig(autoConfig());
