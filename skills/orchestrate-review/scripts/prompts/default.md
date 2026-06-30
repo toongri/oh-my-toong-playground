@@ -28,6 +28,12 @@ Locate `## Diff Command` in the REVIEW CONTENT and run it via Bash. If it fails 
 - **Reuse / Simplification / Efficiency / Altitude**: re-implemented helpers, unnecessary complexity, wasted work, fragile special-cases on shared infrastructure, and work that fails at scale — N+1, query-in-loop, O(n²) on realistic input.
 - **Speculative complexity**: unrequested features/abstractions/config, single-use abstractions, error handling for impossible states, backwards-compat shims with no removal date.
 
+**Security (the change introduces an exploitable weakness):**
+- **OWASP-aligned scan**: for each changed or touched function, ask whether an attacker can control an input that reaches an unsafe sink, bypass an authz check, recover a secret, or exploit weak crypto — injection (SQL/shell/prompt: unsanitized input concatenated into a query, command, or LLM prompt; eval of user-supplied data), broken authz/authn (missing or bypassable gate on a new route/handler, a check skipped for a subset of inputs, IDOR exposing another user's data), secret/credential/PII exposure (logged, returned in a response, or hardcoded), crypto misuse (weak/deprecated algorithm, hardcoded IV/salt, predictable RNG for a security-sensitive use).
+
+**Coverage (verification coverage = AC coverage + test quality):**
+- **Per-AC mapping + test quality**: when the review context carries acceptance criteria, enumerate each and check whether the diff implements and/or tests it (logic covering the stated behaviour, assertions verifying it, required config/schema changes); surface any criterion with no clear supporting evidence. If no acceptance criteria are present, skip the AC mapping (do not invent criteria) and fall through to test quality — this angle is never a full no-op. Flag weak tests in any case: tautological asserts, tests that don't exercise the changed path, tests asserting mocks instead of behavior, missing boundary/error-case tests, or flaky constructs (order-, time-, or random-dependent tests).
+
 ## Scope
 
 Surface candidates ONLY for files listed in `## Review Scope`. Files outside the list are reference material you read to understand the change.
