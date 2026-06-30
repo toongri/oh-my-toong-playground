@@ -19,7 +19,7 @@ These scenarios test whether the **orchestrate-review skill's** Finder Conductor
 
 ## Scenario OR-A1: Full Angle-Finder Fan-out + Merge (Happy Path)
 
-**Given:** the conductor receives an interpolated prompt with `{DIFF_COMMAND}`, 8 changed files, and review context. All four angle finders (line-scan, removed-behavior, cross-file, cleanup) are available and return candidates.
+**Given:** the conductor receives an interpolated prompt with `{DIFF_COMMAND}`, 8 changed files, and review context. All four angle finders (line-scan, regression, cross-file, cleanup) are available and return candidates.
 
 **Then:**
 

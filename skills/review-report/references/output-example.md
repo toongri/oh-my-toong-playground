@@ -134,7 +134,7 @@ sequenceDiagram
 - **Failure scenario**: If a PaymentIntent's amount can be influenced below the order total (client-tampered create path, or a partial-capture flow), the order is marked PAID for less than owed. Whether the create path is influenceable is not provable from this diff — realistic but unconfirmed, hence PLAUSIBLE. Confirm by checking that `PaymentIntentCreateParams.amount` is server-derived only.
 - **Fix**: In `handleWebhook()`, load the order and assert `event.amount == order.totalMinorUnits` before transitioning to PAID; reject and alert on mismatch.
 - **Blast Radius**: webhook path only; `verifyWebhookSignature()` already runs first.
-- **Found by**: removed-behavior
+- **Found by**: regression
 
 ### Cleanup
 
