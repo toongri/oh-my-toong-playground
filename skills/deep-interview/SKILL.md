@@ -122,7 +122,22 @@ The `init` subcommand performs a strict overlay of the rich state shape into the
 
 ## Phase 2: Interview Loop
 
-Repeat until `ambiguity ≤ threshold` AND the how-readiness gate is met, OR until the user exits early:
+Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the how-readiness gate check before exiting Phase 2: if no unresolved load-bearing HOW-decision exists, proceed to Phase 4; if one exists, run the Design-fork detection gate below, record the chosen approach, then proceed to Phase 4. User-forced exits bypass this gate and carry any unresolved fork into the spec risk-note.
+
+### Step 2-exit: Design-fork detection gate
+
+Run this ONLY after `ambiguity ≤ threshold` and before Phase 2 exits. This design-fork detection is orthogonal to the Step-2 stance selector: scan the accumulated interview state and transcript summary for load-bearing design forks — multiple viable approaches that are hard-to-reverse or cross-cutting. Trivial and single-approach situations clear the how-readiness gate without daedalus. On a load-bearing fork, dispatch `daedalus` with the evidence block defined below. Present the recommended approach via `AskUserQuestion` (tag "(Recommended)"), record the chosen approach for the spec's Approach section, then treat the how-readiness gate as clear for Phase 4.
+
+```
+## Evidence
+- State JSON: output of `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get`
+- Interview packet prepared by the main agent: prompt-safe transcript summary, explicit user decisions, unresolved HOW-fork candidates, constraints, success criteria, ontology snapshots, and relevant evidence provenance labels.
+
+## Focus
+- Enumerate 2–3 viable approaches for the unresolved HOW-fork; steelman each.
+- Surface tradeoff tensions and hard-to-reverse consequences.
+- Recommend one approach with rationale, using only the evidence packet and state JSON above.
+```
 
 ### Step 2-head: Dialectic Rhythm Guard (pre-question stance selector)
 
@@ -380,20 +395,9 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 ## Phase 4: Crystallize Spec
 
-When `ambiguity ≤ threshold` AND how-readiness gate is met (or an escape hatch fires):
+When Phase 2 has exited with `ambiguity ≤ threshold` and the how-readiness gate clear, or when a user-forced escape hatch fires:
 
-**Design-fork detection** (orthogonal to Step-2 stance): scan the transcript for load-bearing design forks — multiple viable approaches that are hard-to-reverse or cross-cutting. Trivial and single-approach situations do NOT trigger daedalus. On a load-bearing fork, dispatch `daedalus`:
-
-```
-## Evidence
-$OMT_DIR/deep-interview/{slug}-notes.md  (interview transcript + decisions)
-
-## Focus
-- Enumerate 2–3 viable approaches; steelman each.
-- Surface tradeoff tensions. Recommend one with rationale.
-```
-
-Present the recommended approach via `AskUserQuestion` (tag "(Recommended)"). Record the chosen approach in the spec's Approach section.
+The Design-fork detection gate has already run at Phase 2 exit for the normal path. In Phase 4, use the recorded chosen approach when drafting the Approach section; on a user-forced escape hatch with an unresolved fork, include the fork as a risk-note instead of dispatching daedalus here.
 
 **Per-section approval loop**: Draft each spec section (Goal → Constraints → Success Criteria → Approach → ...) one at a time; present it and collect per-section approval before continuing. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing any section.** Do not write the spec from memory.
 
@@ -460,18 +464,22 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - **User says "stop", "cancel", "abort"**: Stop immediately, save state for resume
 - **Ambiguity stalls** (same score +-0.05 for 3 rounds): handled by the Step 2-head Dialectic Rhythm Guard stall rotation rule (selects Ontologist) — no separate activation here
 - **how-readiness gate**: Normal-path exit requires `ambiguity ≤ threshold` AND no unresolved load-bearing HOW-decision (hard-to-reverse, cross-cutting, or multiple genuinely divergent approaches). User-forced escape hatches (hard-cap, early-exit, user-stop) bypass the gate but fold the unresolved fork into the spec's risk-note.
-- **All dimensions at 0.9+**: Skip to spec generation ONLY IF the how-readiness gate is clear; if a load-bearing HOW-fork is unresolved, resolve it via design-fork detection first
+- **All dimensions at 0.9+**: Skip to spec generation ONLY after the Phase 2 how-readiness gate is clear; if a load-bearing HOW-fork is unresolved, resolve it via the Phase 2 Design-fork detection gate first.
 - **Codebase exploration fails**: Proceed as greenfield, note the limitation
 </Escalation_And_Stop_Conditions>
 
 <Final_Checklist>
-- [ ] Interview completed (ambiguity ≤ threshold OR user chose early exit)
+- [ ] Interview completed (ambiguity ≤ threshold AND how-readiness gate clear, OR user chose early exit)
 - [ ] Oversized initial context/history was summarized before scoring, question generation, spec generation, or execution handoff
 - [ ] Ambiguity score displayed after every round
 - [ ] Every round explicitly names the weakest dimension and why it is the next target
 - [ ] Challenge stances selected by the Step 2-head Dialectic Rhythm Guard at the correct rotation conditions (Contrarian round 4+, Simplifier round 6+, Ontologist on stall or round 8+ with ambiguity > 0.3)
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
-- [ ] Spec includes: goal, constraints, acceptance criteria, clarity breakdown, transcript
+- [ ] Per-section approval loop performed (each spec section approved before continuing)
+- [ ] Whole-spec gate: full spec confirmed before writing
+- [ ] Inline self-review (4 checks: placeholder / consistency / scope / ambiguity) performed
+- [ ] Spec-reviewer dispatched (advisory) and issues addressed or risk-noted
+- [ ] Spec includes: goal, constraints, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
 - [ ] Execution bridge presented via AskUserQuestion
 - [ ] Selected execution mode invoked via Skill() (never direct implementation)
