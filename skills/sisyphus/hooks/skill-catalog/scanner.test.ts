@@ -95,6 +95,39 @@ describe('scanSkillDirectories', () => {
     const skills = await scanSkillDirectories(projectDir);
     expect(skills).toEqual(['real-skill']);
   });
+
+  it('returns skills in alphabetical order regardless of creation order', async () => {
+    const projectDir = join(tempDir, 'project');
+    const skillsDir = join(projectDir, '.claude', 'skills');
+
+    // Create in reverse alphabetical order to expose unsorted readdir
+    await mkdir(join(skillsDir, 'zebra-skill'), { recursive: true });
+    await mkdir(join(skillsDir, 'aardvark-skill'), { recursive: true });
+
+    const fakeHome = join(tempDir, 'fakehome');
+    await mkdir(fakeHome, { recursive: true });
+    process.env.HOME = fakeHome;
+
+    const skills = await scanSkillDirectories(projectDir);
+    expect(skills[0]).toBe('aardvark-skill');
+  });
+
+  it('returns identical arrays on repeated calls (stable output)', async () => {
+    const projectDir = join(tempDir, 'project');
+    const skillsDir = join(projectDir, '.claude', 'skills');
+    // Create in non-alphabetical order to expose unsorted readdir
+    await mkdir(join(skillsDir, 'zeta'), { recursive: true });
+    await mkdir(join(skillsDir, 'alpha'), { recursive: true });
+    await mkdir(join(skillsDir, 'mu'), { recursive: true });
+
+    const fakeHome = join(tempDir, 'fakehome');
+    await mkdir(fakeHome, { recursive: true });
+    process.env.HOME = fakeHome;
+
+    const first = await scanSkillDirectories(projectDir);
+    const second = await scanSkillDirectories(projectDir);
+    expect(first).toEqual(second);
+  });
 });
 
 describe('readEnabledPlugins', () => {
