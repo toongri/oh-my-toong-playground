@@ -17,6 +17,7 @@ Deep Interview implements Ouroboros-inspired Socratic questioning with mathemati
 - User wants to avoid "that's not what I meant" outcomes from autonomous execution
 - Task is complex enough that jumping to code would waste cycles on scope discovery
 - User wants mathematically-validated clarity before committing to execution
+- User knows roughly WHAT they want but a load-bearing design approach (HOW) is unresolved -- multiple viable, hard-to-reverse approaches must be decided before the spec is actionable
 </Use_When>
 
 <Do_Not_Use_When>
@@ -126,7 +127,7 @@ Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the h
 
 ### Step 2-exit: Design-fork detection gate
 
-Run this ONLY after `ambiguity ≤ threshold` and before Phase 2 exits. This design-fork detection is orthogonal to the Step-2 stance selector: scan the accumulated interview state and transcript summary for load-bearing design forks — multiple viable approaches that are hard-to-reverse or cross-cutting. Trivial and single-approach situations clear the how-readiness gate without daedalus. On a load-bearing fork, dispatch `daedalus` with the evidence block defined below. Present the recommended approach via `AskUserQuestion` (tag "(Recommended)"), record the chosen approach for the spec's Approach section, then treat the how-readiness gate as clear for Phase 4.
+Run this ONLY after `ambiguity ≤ threshold` and before Phase 2 exits. This design-fork detection is orthogonal to the Step-2 stance selector: scan the accumulated interview state and transcript summary for load-bearing design forks — multiple viable approaches that are hard-to-reverse or cross-cutting. Trivial and single-approach situations clear the how-readiness gate without daedalus. On a load-bearing fork, dispatch `daedalus` with the evidence block defined below. Present the recommended approach via `AskUserQuestion` (tag "(Recommended)"), record the chosen approach for the spec's Approach section, then treat the how-readiness gate as clear for Phase 4. A user instruction to be quick or not over-think the design is NOT a user-forced escape hatch unless it is a literal stop/abort/early-exit signal; when the threshold was met on the normal path, resolve the load-bearing fork via the single daedalus + AskUserQuestion step (which already honors the hurry) rather than bypassing it.
 
 ```
 ## Evidence
