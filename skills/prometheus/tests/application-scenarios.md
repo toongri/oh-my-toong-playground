@@ -41,6 +41,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-27 | Per-Step State Persistence + Resume | Per-Step State Persistence (State Lifecycle) | AC Recording at S1 |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | Diagram Lens Taxonomy (trigger-based REQUIRED) | Stage A Fidelity + Grouped Placement |
 | P-29 | Complex Mixed Verify-Lane | Verify Lane: Complex mixed mode — codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path finding in codebase lane excluded, Evidence line records `inline (codebase) + dispatched (external)` | Phase-1 Grounding + Collect→Verify Contract (intent-split) |
+| P-30 | Clearance Fast-Converge on Clean Spec | Spec Source Retrieval + Clearance fast-converge: resolved forks not re-opened; min-1 question targets genuinely-open items only | Kinds of Unknowns (Preferences) + Clearance Checklist |
 
 ---
 
@@ -1169,6 +1170,163 @@ The pattern and convention codebase lanes each return one finding citing paths t
 
 ---
 
+## Scenario P-30: Clearance Fast-Converge on Clean Incoming Spec
+
+**Primary Technique:** Spec Source Retrieval + Clearance fast-converge — when an incoming spec already resolves all design forks, prometheus consumes it as ground-truth input (SKILL.md:622 Spec Source Retrieval) and Clearance (SKILL.md:208-217) passes quickly on the resolved content. Prometheus does NOT re-open (re-derive) any fork the spec already decided, while still asking its mandatory minimum-1 question against a genuinely-open item.
+
+**Property Under Test:**
+
+(a) ZERO questions re-open a design fork the fixture spec already resolved.
+(b) EVERY question prometheus asks the user maps to a genuinely-open item listed in this scenario.
+
+---
+
+### Fixture (shared — E0 baseline probe and E2 GREEN check)
+
+This single fixture is used for both the E0 baseline probe (k=3, pre-edit) and the later E2 GREEN check (post-edit, if any). Only the prometheus version under test differs between the two runs; the fixture is identical.
+
+Hand the following spec to a fresh prometheus subagent (paste it inline as the user message, or save it to a file and provide the path so Spec Source Retrieval fires per SKILL.md:622):
+
+```
+# Spec: Notification Delivery Gateway
+
+## Status: DESIGN-COMPLETE
+
+## Objective
+Add an async notification delivery gateway that dispatches transactional
+emails on behalf of internal application services. Scope is backend only —
+no mobile push, no in-app notifications, no templating engine (plain-text
+first, no HTML rendering layer).
+
+## Resolved Forks
+
+All design-coverage decisions below are FINAL. No further deliberation is
+required on these items.
+
+| Fork ID | Decision Question | Decision Made |
+|---------|------------------|---------------|
+| RF-1 | Email transport layer | **AWS SES via SMTP.** SES is already provisioned for the org; no new vendor or credentials. Self-hosted SMTP and SendGrid are rejected. |
+| RF-2 | Async queue backing | **SQS FIFO.** Provides at-least-once delivery and per-MessageGroupId ordering. SQS is already in the org infra. Kafka, SNS-only, and no-queue are rejected. |
+| RF-3 | Retry policy | **Exponential backoff, exactly 3 retries** (delays: 1 s, 4 s, 16 s). On third failure the job routes to DLQ. Infinite retry and same-time immediate retry are rejected. |
+| RF-4 | Delivery deduplication mechanism | **Redis idempotency key**, 24-hour TTL, keyed on (recipient, notification_type, reference_id). Redis is already in the org infra. Postgres unique-constraint dedup and no-dedup are rejected. |
+| RF-5 | Per-user email rate cap | **Redis sliding-window counter, cap 100 emails per user per 24 h.** Enforced at enqueue time; over-cap enqueue returns HTTP 429 and the job is NOT enqueued. Per-tenant capping and no-capping are rejected. |
+
+## Architecture
+
+Single `notification-gateway` service:
+- Enqueue API: HTTP POST `/notifications` (internal network only, not public-facing)
+- Worker: SQS FIFO consumer, `notification-jobs` queue
+- Transport: AWS SES SMTP adapter
+- State stores: Redis (dedup key + rate counter). No new Postgres tables.
+
+## Components
+
+| Component | Single Responsibility | Dependencies |
+|-----------|----------------------|--------------|
+| Enqueue handler | Validate payload, enforce rate cap, publish to SQS FIFO | Redis (rate), SQS |
+| SQS worker | Consume job, check dedup key, call SES adapter | Redis (dedup), SES adapter |
+| SES adapter | Deliver email via AWS SES SMTP endpoint | AWS SES |
+| Redis client | Atomic rate-counter increment + dedup key set/check | Redis |
+
+## Data Flow
+
+Caller → POST /notifications → Enqueue handler → Redis rate-cap check →
+SQS FIFO publish → SQS worker poll → Redis dedup check → SES adapter →
+AWS SES → recipient inbox
+
+## Error Handling
+
+| Failure Scenario | Handling |
+|-----------------|----------|
+| Rate cap exceeded at enqueue | Return 429 to caller; job NOT enqueued |
+| SES transient failure (5xx) | SQS visibility-timeout retry, up to 3 times (RF-3) |
+| SES permanent failure (4xx) | Skip retries; route to DLQ immediately |
+| Dedup key already set | Worker silently drops the job (idempotent delivery) |
+| DLQ message | Manual operator review; no automatic DLQ re-drive |
+
+## Testing
+
+- Unit: enqueue handler rate-cap logic against a mocked Redis client
+- Unit: worker dedup logic against a mocked Redis client
+- Integration: end-to-end POST → SQS → worker → SES stub delivery confirmation
+- No live SES calls in CI (SES stub via env flag or localstack)
+
+## Open Items
+
+The following items are intentionally left unresolved and require input
+from the human planner before AC can be finalized:
+
+| Item ID | Open Question | Why It Remains Open |
+|---------|--------------|---------------------|
+| OI-1 | Sender display name for outbound emails (e.g., "AlgoCare" vs "AlgoCare Notifications" vs another brand string) | Brand/UX preference; not determinable from codebase or industry best practice alone |
+| OI-2 | DLQ CloudWatch alarm threshold: alert ops at queue depth ≥ 1 message vs ≥ 5 messages vs no alarm | Ops/team preference; depends on alert-fatigue tolerance specific to this team |
+```
+
+---
+
+### Resolved Forks (flat list — for mechanical scoring)
+
+A prometheus question **re-opens a resolved fork** if it asks the user to re-decide any of the following items (variant phrasings included — "which queue?", "how should we retry?", "what dedup approach?" all map to the corresponding RF item):
+
+1. **RF-1** — Email transport = AWS SES via SMTP (decided; alternatives rejected in spec)
+2. **RF-2** — Queue backing = SQS FIFO (decided; alternatives rejected in spec)
+3. **RF-3** — Retry policy = exponential backoff, exactly 3 retries, DLQ on failure (decided)
+4. **RF-4** — Deduplication = Redis idempotency key, 24-hour TTL (decided; alternatives rejected in spec)
+5. **RF-5** — Rate cap = Redis sliding-window counter, 100 emails/user/24 h (decided)
+
+### Genuinely-Open Items (flat list — for mechanical scoring)
+
+Legitimate targets for prometheus interview questions. A question targeting either of these items is NOT a re-open violation:
+
+1. **OI-1** — Sender display name for outbound emails (brand/UX preference; user-supplied)
+2. **OI-2** — DLQ CloudWatch alarm threshold (ops/team preference; user-supplied)
+
+---
+
+### Verification Points
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | No re-open of RF-1 | Prometheus does NOT ask the user about email transport (AWS SES vs alternatives) — RF-1 is already decided in the spec |
+| V2 | No re-open of RF-2 | Prometheus does NOT ask the user about queue backing (SQS vs Kafka vs SNS vs no queue) — RF-2 is already decided |
+| V3 | No re-open of RF-3 | Prometheus does NOT ask the user about retry policy, retry count, or backoff strategy — RF-3 is already decided |
+| V4 | No re-open of RF-4 | Prometheus does NOT ask the user about the deduplication mechanism (Redis vs Postgres vs none) — RF-4 is already decided |
+| V5 | No re-open of RF-5 | Prometheus does NOT ask the user about rate-cap mechanism, storage choice for the cap, or cap value — RF-5 is already decided |
+| V6 | Every question targets an open item or a genuine gap | Every user-directed question targets OI-1 (sender display name), OI-2 (DLQ alarm threshold), or an item verifiably absent from all RF-1–RF-5 decisions — prometheus does not introduce re-derived forks on already-decided topics |
+| V7 | Minimum-1 question preserved | Prometheus asks at least one question — targeting OI-1, OI-2, or a genuine gap — before advancing to AC drafting; the min-1 interview mandate is not bypassed |
+| V8 | Mandatory pipeline stages present | Clearance evaluation is visible in the transcript; AC drafting follows Clearance all-YES; Metis is invoked before S2 Co-Design; the human design gate is not bypassed |
+
+**Scoring rule for V6 — "genuine gap":** A question is a genuine gap if its subject is not covered by any RF decision and is not answerable from the spec's Architecture, Components, Data Flow, Error Handling, or Testing sections. A question is a re-open violation if its subject is the same decision already answered by an RF item. Variant phrasings count: "which queue technology should we use?", "what backoff scheme works here?", "should we use Redis or Postgres for dedup?" all map to the respective RF item and are re-opens.
+
+---
+
+### k=3 Baseline Probe Protocol (E0)
+
+Run against the **current (pre-edit) prometheus SKILL.md** to establish the E0 baseline before any prometheus changes.
+
+1. Spawn a **fresh prometheus subagent** (no memory of this scenario's design) with the current prometheus SKILL.md loaded.
+2. Hand it the **Fixture spec** verbatim — paste it as the user message, or save it to a file and tell prometheus the path so Spec Source Retrieval fires (SKILL.md:622). Phrase the request naturally: e.g., "I have the spec for a new backend feature ready. Here it is: [paste fixture]. Please plan this."
+3. **Let the agent run through its full pipeline** — Spec Source Retrieval, Clearance-gated interview (SKILL.md:208-217), AC drafting, Metis, S2 Co-Design (Daedalus advisory + human design gate), plan Write, Momus. Do NOT stop early; V8 requires later stages to be observable. Do NOT hand-hold the agent toward compliance.
+4. Collect every interview question the agent directs to the user. For each question, check it against the Resolved Forks List (RF-1–RF-5) using the V6 scoring rule. A question re-opens a resolved fork if its subject is the same decision already answered by the matching RF item.
+5. Repeat steps 1–4 independently **three times**.
+6. **Classify the E0 outcome:**
+   - **RED** — ANY of the three runs contains ≥ 1 question that re-opens an RF-1–RF-5 resolved fork.
+   - **GREEN** — All three runs contain ZERO resolved-fork re-opens AND every user-directed question maps to OI-1, OI-2, or a genuine gap.
+7. Record each run's user-directed questions and the overall classification in `$OMT_DIR/evidence/deep-interview-prometheus-boundary-reshape/e0-probe/run{1,2,3}.md`.
+
+**Test discipline:** Do NOT hint to the agent that forks are already resolved. Do NOT remind it of mandates. If it re-derives an RF item, let it happen and score accordingly. The probe measures natural behavior on a clean spec, not coached compliance.
+
+**Fixture self-consistency check** (run before E0 to rule out a spurious RED caused by an ambiguous fixture):
+
+```bash
+grep -c "RF-[1-5]" <fixture-file>   # expect 5 — one entry per row in the Resolved Forks table
+grep -c "OI-[1-9]" <fixture-file>   # expect ≥ 2 — OI-1 and OI-2 present
+```
+
+If any RF row lacks an explicit Decision column value, that fork is not actually resolved — a RED result on it would be spurious. Fix the fixture before running E0.
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -1207,3 +1365,4 @@ The pattern and convention codebase lanes each return one finding citing paths t
 | P-27 | Per-Step State Persistence + Resume | | | Needs testing |
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | | | Needs testing |
 | P-29 | Complex Mixed Verify-Lane | | | New Complex mixed verify-lane scenario (codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path codebase finding excluded, Evidence line records `inline (codebase) + dispatched (external)` mode). Needs testing |
+| P-30 | Clearance Fast-Converge on Clean Spec | | | E0 baseline probe k=3 pending (RED iff any run re-opens an RF-1–RF-5 resolved fork, else GREEN). |

@@ -17,11 +17,11 @@ Deep Interview implements Ouroboros-inspired Socratic questioning with mathemati
 - User wants to avoid "that's not what I meant" outcomes from autonomous execution
 - Task is complex enough that jumping to code would waste cycles on scope discovery
 - User wants mathematically-validated clarity before committing to execution
+- User knows roughly WHAT they want but a load-bearing design approach (HOW) is unresolved -- multiple viable, costly-to-change approaches must be decided before the spec is actionable
 </Use_When>
 
 <Do_Not_Use_When>
 - User has a detailed, specific request with file paths, function names, or acceptance criteria -- execute directly
-- User wants to explore options or brainstorm -- use `prometheus` skill instead
 - User wants a quick fix or single change -- delegate to executor or sisyphus-junior
 - User says "just do it" or "skip the questions" -- respect their intent
 - User already has a PRD or plan file -- use prometheus or sisyphus with that plan
@@ -72,6 +72,10 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - If the initial context is oversized or likely to crowd out downstream prompts, produce a concise prompt-safe summary that preserves user intent, decisions, constraints, unknowns, cited files/symbols, and any explicit non-goals.
    - Treat the summary as the canonical `initial_idea` and store the raw oversized material only as external/advisory context if it can be referenced safely; do not paste the raw oversized context into question-generation, ambiguity-scoring, spec-crystallization, or execution-handoff prompts.
    - Wait until the summary exists before ambiguity scoring, weakest-dimension selection, brownfield exploration prompts, or any bridge to prometheus or sisyphus.
+3.7. **Detect multi-subsystem mega-idea (propose-only decomposition gate)**:
+   - Assess whether the parsed idea spans ≥2 independent subsystems — two subsystems are independent when neither forces the other to be built first (cross-cutting integration glue such as webhooks, shared identity, or event wiring is NOT a build-order dependency, and a suggested interview/build order is not one either). Judge this for brownfield from both the user's framing and the step-3 explore summary (codebase coupling); for greenfield (no explore), judge it from the idea prose alone.
+   - If yes: PROPOSE a decomposition — name each subsystem, describe how they relate, and suggest an interview order — then ask the user which subsystem to address first via `AskUserQuestion`. Interview ONLY that first subsystem in this session. Do NOT auto-split into multiple specs and do NOT add any new state fields; this gate is propose-only and narrows the scope to one slice before continuing.
+   - If no (single-system scope): continue without decomposition.
 4. **Initialize state** by invoking the CLI:
 
 ```bash
@@ -123,7 +127,22 @@ The `init` subcommand performs a strict overlay of the rich state shape into the
 
 ## Phase 2: Interview Loop
 
-Repeat until `ambiguity ≤ threshold` OR user exits early:
+Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the how-readiness gate check before exiting Phase 2: if no unresolved load-bearing HOW-decision exists, proceed to Phase 4; if one exists, run the Design-fork detection gate below, record the chosen approach, then proceed to Phase 4. User-forced early exits (hard-cap, early-exit) bypass this gate and carry any unresolved fork into the spec risk-note; a literal user stop/cancel/abort instead halts and saves state, crystallizing no spec.
+
+### Step 2-exit: Design-fork detection gate
+
+Run this ONLY after `ambiguity ≤ threshold` and before Phase 2 exits. This design-fork detection is orthogonal to the Step-2 stance selector: scan the accumulated interview state and transcript summary for load-bearing design forks — multiple viable approaches that are costly-to-change or cross-cutting. Trivial and single-approach situations clear the how-readiness gate without daedalus. On a load-bearing fork, dispatch `daedalus` with the evidence block defined below — `daedalus` is a consultation helper reserved for DIFFICULT or COMPLEX load-bearing forks (hard cross-cutting choices that warrant steelman antithesis and tradeoff tension analysis); routine multi-viable forks that arose during the interview are resolved in-loop via Step 2-alt (below) and do NOT reach this gate. Present the recommended approach via `AskUserQuestion` (tag "(Recommended)"), record the chosen approach for the spec's Approach section, then treat the how-readiness gate as clear for Phase 4. A user instruction to be quick or not over-think the design is NOT a user-forced escape hatch unless it is a literal stop/abort/early-exit signal; when the threshold was met on the normal path, resolve the load-bearing fork via the single daedalus + AskUserQuestion step (which already honors the hurry) rather than bypassing it.
+
+```
+## Evidence
+- State JSON: output of `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get`
+- Interview packet prepared by the main agent: prompt-safe transcript summary, explicit user decisions, unresolved HOW-fork candidates, constraints, success criteria, ontology snapshots, and relevant evidence provenance labels.
+
+## Focus
+- Enumerate 2–3 viable approaches for the unresolved HOW-fork; steelman each.
+- Surface tradeoff tensions and costly-to-change consequences.
+- Recommend one approach with rationale, using only the evidence packet and state JSON above.
+```
 
 ### Step 2-head: Dialectic Rhythm Guard (pre-question stance selector)
 
@@ -212,6 +231,24 @@ If any prompt input is too large, summarize it first and then continue from the 
 | Success Criteria | "How do we know it works?" | "If I showed you the finished product, what would make you say 'yes, that's it'?" |
 | Context Clarity (brownfield) | "How does this fit?" | "I found JWT auth middleware in `src/auth/` (pattern: passport + JWT). Should this feature extend that path or intentionally diverge from it?" |
 | Scope-fuzzy / ontology stress | "What IS the core thing here?" | "You have named Tasks, Projects, and Workspaces across the last rounds. Which one is the core entity, and which are supporting views or containers?" |
+
+After generating the question (above), check whether the topic reveals a **multi-viable design choice** — if yes, run Step 2-alt below instead of Step 2b.
+
+### Step 2-alt: Multi-viable alternative presentation (fires in-loop)
+
+**Trigger:** question generation reveals a design choice with ≥2 viable approaches.
+
+**Multi-viable design choice (definition):** both conditions must hold: (1) ≥2 approaches each materially shape the spec — affecting architecture, data model, API contract, or user flow in a non-trivial way — AND (2) codebase facts and external research cannot decide between them; the choice requires human judgment.
+
+**Excluded — do not manufacture alternatives:** single-viable situations (one approach is forced by the codebase, a constraint, or an established fact) and pure factual questions. Example: if the codebase already mandates one auth path via a shared middleware, do NOT generate "JWT vs cookies vs API keys" — that is a strawman.
+
+**Presentation rule:** present 2-3 approaches via `AskUserQuestion`, tag one option `(Recommended)` with a brief rationale, and ask the user to choose. Do not silently default to any approach.
+
+**Main skill owns routine presentation — `daedalus` is for difficult/complex cases only.** For straightforward trade-offs with well-understood options, present the alternatives directly without dispatching `daedalus`. Reserve `daedalus` for choices that are genuinely hard or cross-cutting — where steelman antithesis and deep tradeoff tension analysis add value beyond a direct listing. `daedalus` is a consultation helper, NOT a gate and NOT the default enumerator for every multi-viable fork.
+
+**Seam note — no double-fire with the Phase-2-exit backstop:** The Step-2-exit Design-fork detection gate is a BACKSTOP that fires ONLY when an unresolved load-bearing fork remains at Phase-2 exit. Because Step 2-alt resolves multi-viable forks as they arise IN-LOOP, the backstop normally has nothing left to fire on when the threshold is reached. There is no double-fire: the backstop fires only on forks that slipped through (e.g., a fork that emerged very late in the interview or a user-forced early exit that bypassed in-loop resolution).
+
+After the user selects an approach, record the decision, then proceed to Step 2c (skip Step 2b — the `AskUserQuestion` in this step served as the question for this round).
 
 ### Step 2b: Ask the Question
 
@@ -381,14 +418,23 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 ## Phase 4: Crystallize Spec
 
-When ambiguity ≤ threshold (or hard cap / early exit):
+When Phase 2 has exited with `ambiguity ≤ threshold` and the how-readiness gate clear, or when a user-forced escape hatch fires:
 
-1. **Generate the specification** with the prompt-safe transcript. If the full interview transcript or initial context is too large, include the summary plus all concrete decisions, acceptance criteria, unresolved gaps, and ontology snapshots; never overflow the prompt with raw oversized context.
-2. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
+The Design-fork detection gate has already run at Phase 2 exit for the normal path. In Phase 4, use the recorded chosen approach when drafting the Approach section; on a user-forced escape hatch with an unresolved fork, include the fork as a risk-note instead of dispatching daedalus here.
 
-**Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the output spec.** Do not write the spec from memory.
+**Per-section approval loop**: Draft each spec section (Goal → Constraints → Success Criteria → Approach → ...) one at a time; present it and collect per-section approval before continuing. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing any section.** Do not write the spec from memory.
 
-3. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
+**Whole-spec gate**: After all per-section approvals, assemble the draft and present the whole spec for final confirmation before writing.
+
+1. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
+
+**2-layer review** (after writing):
+
+Inline self-review (4 checks): placeholder / consistency / scope / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, no ambiguous text remains.
+
+Dispatch `spec-reviewer` — pass the spec path only. This loop is GATING on the reviewer's `Status`: while it returns `Status: Issues Found`, fix the named Issues and re-dispatch `spec-reviewer`, repeating until it returns `Status: Approved`. Do NOT emit the handoff token while any Issue remains — there is no advisory proceed-anyway / risk-note escape from an unresolved Issue. Only **Issues** gate; **Recommendations** are advisory and never block — carry any unaddressed ones into the spec's Risks section.
+
+2. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
 
 ## Phase 5: Execution Bridge
 
@@ -440,18 +486,23 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - **Early exit (round 3+)**: Allow with warning if ambiguity > threshold
 - **User says "stop", "cancel", "abort"**: Stop immediately, save state for resume
 - **Ambiguity stalls** (same score +-0.05 for 3 rounds): handled by the Step 2-head Dialectic Rhythm Guard stall rotation rule (selects Ontologist) — no separate activation here
-- **All dimensions at 0.9+**: Skip to spec generation even if not at round minimum
+- **how-readiness gate**: Normal-path exit requires `ambiguity ≤ threshold` AND no unresolved load-bearing HOW-decision (costly-to-change, cross-cutting, or multiple genuinely divergent approaches). User-forced early exits (hard-cap, early-exit) bypass the gate but fold the unresolved fork into the spec's risk-note. A literal user stop/cancel/abort is NOT such an exit — it halts and saves state for resume per the rule above, crystallizing no spec.
+- **All dimensions at 0.9+**: Skip to spec generation ONLY after the Phase 2 how-readiness gate is clear; if a load-bearing HOW-fork is unresolved, resolve it via the Phase 2 Design-fork detection gate first.
 - **Codebase exploration fails**: Proceed as greenfield, note the limitation
 </Escalation_And_Stop_Conditions>
 
 <Final_Checklist>
-- [ ] Interview completed (ambiguity ≤ threshold OR user chose early exit)
+- [ ] Interview completed (ambiguity ≤ threshold AND how-readiness gate clear, OR user chose early exit)
 - [ ] Oversized initial context/history was summarized before scoring, question generation, spec generation, or execution handoff
 - [ ] Ambiguity score displayed after every round
 - [ ] Every round explicitly names the weakest dimension and why it is the next target
 - [ ] Challenge stances selected by the Step 2-head Dialectic Rhythm Guard at the correct rotation conditions (Contrarian round 4+, Simplifier round 6+, Ontologist on stall or round 8+ with ambiguity > 0.3)
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
-- [ ] Spec includes: goal, constraints, acceptance criteria, clarity breakdown, transcript
+- [ ] Per-section approval loop performed (each spec section approved before continuing)
+- [ ] Whole-spec gate: full spec confirmed before writing
+- [ ] Inline self-review (4 checks: placeholder / consistency / scope / ambiguity) performed
+- [ ] Spec-reviewer returned `Status: Approved` (fix→re-review loop ran until no Issues remain; Recommendations may be risk-noted)
+- [ ] Spec includes: goal, constraints, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
 - [ ] Execution bridge presented via AskUserQuestion
 - [ ] Selected execution mode invoked via Skill() (never direct implementation)
