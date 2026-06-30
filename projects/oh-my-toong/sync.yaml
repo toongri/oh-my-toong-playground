@@ -22,6 +22,7 @@ agents:
     - code-reviewer
     - sisyphus-junior
     - hermes
+    - spec-reviewer
 
 skills:
   items:

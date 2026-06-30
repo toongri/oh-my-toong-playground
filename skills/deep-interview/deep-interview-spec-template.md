@@ -46,9 +46,36 @@
 |------------|-----------|------------|
 | {assumption} | {how it was questioned} | {what was decided} |
 
+## Approach & Design Decisions
+- **Selected approach:** {chosen implementation direction}
+- **Rejected alternatives:** {options considered but ruled out, and why}
+- **Rationale:** {why the selected approach was chosen over alternatives}
+- **Tradeoffs:** {what is gained and what is given up with this approach}
+
+Downstream (prometheus) consumes this as a FIXED input — does not re-decide the approach. When a user-forced exit left a load-bearing HOW-fork unresolved, do NOT invent a Selected approach — record the fork under **Risks & Unresolved Forks** below.
+
+## Risks & Unresolved Forks
+- **Unresolved approach forks:** {load-bearing HOW-decisions left open at a user-forced exit — name the fork and its divergent options; empty if all forks were resolved}
+- **Risks / open questions:** {known risks, advisory spec-reviewer notes carried forward, or assumptions not fully validated}
+
 ## Technical Context
 {brownfield: relevant codebase findings from explore agent}
 {greenfield: technology choices and constraints}
+
+## Architecture
+{overall structure: how the major components are arranged and how they relate to each other}
+
+## Components
+{each component: its single responsibility and direct dependencies}
+
+## Data Flow
+{sources → transformations → sinks: trace data from ingestion to output}
+
+## Error Handling
+{failure modes and their responses: what can go wrong and how the system handles it}
+
+## Testing
+{what is verified: behaviors, boundaries, and invariants covered by the test suite}
 
 ## Ontology (Key Entities)
 {Fill from the FINAL round's ontology extraction, not just crystallization-time generation}
