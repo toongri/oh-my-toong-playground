@@ -1,6 +1,6 @@
 ---
 name: orchestrate-review
-description: Code review orchestration skill - fans out angle finders across AI models and merges their raw candidate findings
+description: Code review orchestration skill - fans out angle finders across review angles and merges their raw candidate findings
 ---
 
 ## Role Declaration
@@ -182,11 +182,11 @@ Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quor
 
 ### Angle Coverage
 - line-scan: {K candidates | found nothing | Unavailable ([state])}
-- removed-behavior: {…}
+- regression: {…}
 - cross-file: {…}
 - cleanup: {…}
 - security: {…}
-- requirements-coverage: {…}
+- coverage: {…}
 
 ### Find Token Usage
 ```json

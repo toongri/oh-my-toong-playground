@@ -21,11 +21,11 @@ Locate `## Diff Command` in the REVIEW CONTENT and run it via Bash. If it fails 
 
 **Correctness (the change behaves wrong):**
 - **Line-by-line scan**: read each hunk and its enclosing function for inverted/wrong conditions, off-by-one, null/undefined deref, falsy-zero, missing `await`, wrong-variable copy-paste, swallowed errors, unescaped regex, language footguns.
-- **Removed behavior**: for every deleted/replaced line, name the invariant it enforced and find where it is re-established; if it is not, flag the removed guard / dropped error path / loosened validation / deleted test / a side-effect the system performed that no longer happens (analytics/telemetry, audit/log, notification, cache invalidation, callback/hook) even when the visible output stays correct.
+- **Regression**: for every deleted/replaced line, name the invariant it enforced and find where it is re-established; if it is not, flag the removed guard / dropped error path / loosened validation / deleted test / a side-effect the system performed that no longer happens (analytics/telemetry, audit/log, notification, cache invalidation, callback/hook) even when the visible output stays correct; or a persisted-state/data guarantee dropped — a migration that loses data, an irreversible migration, a backfill missing rows, or dual-store write skew (e.g. Postgres↔DynamoDB).
 - **Cross-file**: Grep callers of changed symbols and check for broken preconditions, changed return shapes, new exceptions, ordering/concurrency assumptions (verify the caller's real execution model first); check wrapper/proxy types route to the wrapped instance.
 
 **Cleanup (the change behaves correctly but is low quality):**
-- **Reuse / Simplification / Efficiency / Altitude**: re-implemented helpers, unnecessary complexity, wasted work, fragile special-cases on shared infrastructure.
+- **Reuse / Simplification / Efficiency / Altitude**: re-implemented helpers, unnecessary complexity, wasted work, fragile special-cases on shared infrastructure, and work that fails at scale — N+1, query-in-loop, O(n²) on realistic input.
 - **Speculative complexity**: unrequested features/abstractions/config, single-use abstractions, error handling for impossible states, backwards-compat shims with no removal date.
 
 ## Scope

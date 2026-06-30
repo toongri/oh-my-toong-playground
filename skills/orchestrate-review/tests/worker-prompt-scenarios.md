@@ -38,7 +38,7 @@ Run a single chunk against a known diff and inspect each member's `assembled-pro
 **Files in scope**: `src/auth/login.ts` (added), `src/auth/middleware.ts` (added)
 
 **Seeded so each angle has something to find or correctly stay silent on**:
-- removed expiry check on the verify path (correctness — line-scan / removed-behavior)
+- removed expiry check on the verify path (correctness — line-scan / regression)
 - a caller that now passes an unvalidated token shape (correctness — cross-file)
 - re-implemented base64url helper when `utils/encoding.ts` already has one (cleanup — reuse)
 
