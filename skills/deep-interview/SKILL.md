@@ -62,10 +62,6 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - Run `explore` agent: check if cwd has existing source code, package files, or git history
    - If source files exist AND the user's idea references modifying/extending something: **brownfield**
    - Otherwise: **greenfield**
-2.5. **Detect multi-subsystem mega-idea (propose-only decomposition gate)**:
-   - Assess whether the parsed idea spans ≥2 independent subsystems. Two subsystems are independent when each could be specced, built, and tested without depending on the other being built first.
-   - If yes: PROPOSE a decomposition — name each subsystem, describe how they relate, and suggest an interview order — then ask the user which subsystem to address first via `AskUserQuestion`. Interview ONLY that first subsystem in this session. Do NOT auto-split into multiple specs and do NOT add any new state fields; this gate is propose-only and narrows the scope to one slice before continuing.
-   - If no (single-system scope): continue without decomposition.
 3. **For brownfield**: Run `explore` agent to map relevant codebase areas; pass the summary as `--codebase-context` in the `init` call (step 4)
 3.5. **Load runtime settings**:
    - Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user)
@@ -76,6 +72,10 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - If the initial context is oversized or likely to crowd out downstream prompts, produce a concise prompt-safe summary that preserves user intent, decisions, constraints, unknowns, cited files/symbols, and any explicit non-goals.
    - Treat the summary as the canonical `initial_idea` and store the raw oversized material only as external/advisory context if it can be referenced safely; do not paste the raw oversized context into question-generation, ambiguity-scoring, spec-crystallization, or execution-handoff prompts.
    - Wait until the summary exists before ambiguity scoring, weakest-dimension selection, brownfield exploration prompts, or any bridge to prometheus or sisyphus.
+3.7. **Detect multi-subsystem mega-idea (propose-only decomposition gate)**:
+   - Assess whether the parsed idea spans ≥2 independent subsystems. For brownfield, independence is assessed using both the user's framing and the step-3 explore summary (codebase coupling): two subsystems are independent only if neither the user's framing NOR the codebase coupling forces one to be built before the other. For greenfield (no explore), independence is assessed from the idea prose alone.
+   - If yes: PROPOSE a decomposition — name each subsystem, describe how they relate, and suggest an interview order — then ask the user which subsystem to address first via `AskUserQuestion`. Interview ONLY that first subsystem in this session. Do NOT auto-split into multiple specs and do NOT add any new state fields; this gate is propose-only and narrows the scope to one slice before continuing.
+   - If no (single-system scope): continue without decomposition.
 4. **Initialize state** by invoking the CLI:
 
 ```bash
