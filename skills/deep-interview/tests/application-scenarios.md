@@ -28,8 +28,9 @@ Reference behaviors are anchored by section heading in brainstorming SKILL.md (`
 **How to run:**
 1. Save Fixture i (below) verbatim to: `$OMT_DIR/evidence/deep-interview-prometheus-boundary-reshape/red-a2/fixture-i.md`
 2. Save Fixture ii (below) to: `$OMT_DIR/evidence/deep-interview-prometheus-boundary-reshape/red-a2/fixture-ii.md`
-3. Dispatch a fresh spec-reviewer subagent for each fixture, passing only the fixture file path as context. Let it run to its final verdict. Do NOT guide or interrupt.
-4. Score each run against the Verification Points below.
+3. Save Fixture iii (below) to: `$OMT_DIR/evidence/deep-interview-prometheus-boundary-reshape/red-a2/fixture-iii.md`
+4. Dispatch a fresh spec-reviewer subagent for each fixture, passing only the fixture file path as context. Let it run to its final verdict. Do NOT guide or interrupt.
+5. Score each run against the Verification Points below.
 
 **Test discipline:** Do NOT tell spec-reviewer what to look for. Let it apply its current rubric. The point is to observe what the current rubric catches.
 
@@ -183,6 +184,31 @@ Single HTTP endpoint added to the monorepo's `admin-api` service: `POST /export/
 
 ---
 
+### Fixture iii — Present-But-Insubstantial Design Sections
+
+Identical to Fixture i with the five design-coverage sections replaced as follows. All other sections (Metadata through Technical Context, and Ontology onward) remain exactly as in Fixture i. All five sections are NON-EMPTY but substantively inadequate: each section lacks the specific content that the TODO-4 design-coverage check requires.
+
+```markdown
+## Architecture
+We'll build it as a service in the existing monorepo.
+
+## Components
+- ExportController
+- ExportService
+- PDFGenerator
+
+## Data Flow
+Data flows from the request through the service and back.
+
+## Error Handling
+Errors are handled appropriately and returned to the caller.
+
+## Testing
+The service is covered by tests.
+```
+
+---
+
 ### Verification Points
 
 #### For Fixture i (header-only) — scored against spec-reviewer output:
@@ -203,14 +229,32 @@ Single HTTP endpoint added to the monorepo's `admin-api` service: `POST /export/
 | V7 | Verdict is Approved | Final verdict token is "Approved" |
 | V8 | No false flags on design sections | None of the five section names (Architecture, Components, Data Flow, Error Handling, Testing) appear in Issues Found |
 
+#### For Fixture iii (present-but-insubstantial) — scored against spec-reviewer output:
+
+| # | Check | Expected GREEN Behavior |
+|---|-------|------------------------|
+| V9 | Substantive gap in `## Architecture` flagged | Response names "Architecture" in Issues Found with a substance complaint (does not name structure or component relations); complaint does not reference emptiness; verdict is NOT "Approved" |
+| V10 | Substantive gap in `## Components` flagged | Response names "Components" in Issues Found with a substance complaint (does not name responsibilities or dependencies per component); complaint does not reference emptiness |
+| V11 | Substantive gap in `## Data Flow` flagged | Response names "Data Flow" in Issues Found with a substance complaint (does not name concrete sources or sinks); complaint does not reference emptiness |
+| V12 | Substantive gap in `## Error Handling` flagged | Response names "Error Handling" in Issues Found with a substance complaint (does not name failure modes or response codes); complaint does not reference emptiness |
+| V13 | Substantive gap in `## Testing` flagged | Response names "Testing" in Issues Found with a substance complaint (does not name what is verified); complaint does not reference emptiness |
+| V14 | Verdict is not Approved | Final verdict token is NOT "Approved" |
+
 ### RED-Result Note
 
-**Predicted baseline behavior (before TODO 4 — spec-reviewer design-coverage check):**
-The current `agents/spec-reviewer.md` What-to-Check rubric covers Completeness, Consistency, Clarity, Scope, and YAGNI — it has no design-coverage row. When dispatched against Fixture i, spec-reviewer returns Approved or Issues Found that do NOT name the empty design-coverage sections. The five empty headings are invisible to the current rubric.
+**Fixture i — CHARACTERIZATION (not TRUE RED):**
+A baseline run against Fixture i confirmed that spec-reviewer already flags the five empty design sections via its existing Completeness rubric ("empty section headers read as unfinished") — NOT via a dedicated design-coverage substantive check. V1 through V5 all PASS at baseline (false-GREEN): the empty-header condition is already caught, so a GREEN result on V1-V5 after TODO 4 cannot prove TODO 4 added anything. Fixture i is retained as a characterization of baseline Completeness behavior only.
 
-Fixture ii run: spec-reviewer also returns Approved (same result as Fixture i — the substantive content makes no difference because no design-coverage check exists yet).
+Evidence: `$OMT_DIR/evidence/deep-interview-prometheus-boundary-reshape/red-a2/baseline-review-fixture-i.md`
 
-**RED confirmation target:** V1 through V5 all FAIL on the baseline spec-reviewer run against Fixture i.
+**Fixture iii — TRUE RED (isolates substantive design-coverage check):**
+Fixture iii's five design sections are NON-EMPTY, so the baseline Completeness rubric does NOT flag them as missing content. The current spec-reviewer has no design-coverage row in its What-to-Check rubric, so it passes Fixture iii's present-but-vacuous sections without naming substantive gaps. V9 through V13 all FAIL at baseline.
+
+After TODO 4 adds the substantive per-section design-coverage check, each of the five sections fails the new check — the reviewer names each as substantively inadequate (not merely empty). V9 through V13 all PASS.
+
+**RED confirmation target:** V9 through V13 all FAIL on the baseline spec-reviewer run against Fixture iii. The A2 RED→GREEN is anchored on Fixture iii.
+
+**Fixture ii — GREEN sanity check:** spec-reviewer returns Approved with no false flags on the five design sections (V7 and V8 pass). This confirms the substantive check does not over-flag adequate content.
 
 Evidence path: `$OMT_DIR/evidence/deep-interview-prometheus-boundary-reshape/red-a2/`
 
