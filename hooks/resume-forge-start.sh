@@ -89,13 +89,21 @@ MESSAGES=""
 
 if [ -n "$MOST_RECENT_FILE" ] && [ -f "$MOST_RECENT_FILE" ]; then
   STATE_CONTENT=$(cat "$MOST_RECENT_FILE")
-  STATE_FILENAME=$(basename "$MOST_RECENT_FILE")
 
   # Count total scenarios and passed (loop2.status == "passed")
   TOTAL=$(echo "$STATE_CONTENT" | jq '.scenarios | length' 2>/dev/null || echo "0")
   PASSED=$(echo "$STATE_CONTENT" | jq '[.scenarios[] | select(.loop2.status == "passed")] | length' 2>/dev/null || echo "0")
 
-  MESSAGES="<session-restore>\n\n[RESUME FORGE SESSION DETECTED]\nState file: ${STATE_FILENAME}\nScenarios: ${PASSED}/${TOTAL} completed\nResume with resume-forge skill to continue.\n\n</session-restore>"
+  # Coarsen to qualitative phrase — avoids session-varying digit bytes in prompt-cache prefix
+  if [ "$PASSED" -eq 0 ]; then
+    PROGRESS_PHRASE="not started"
+  elif [ "$PASSED" -ge "$TOTAL" ]; then
+    PROGRESS_PHRASE="complete"
+  else
+    PROGRESS_PHRASE="in progress"
+  fi
+
+  MESSAGES="<session-restore>\n\n[RESUME FORGE SESSION DETECTED]\nScenarios: ${PROGRESS_PHRASE}\nResume with resume-forge skill to continue.\n\n</session-restore>"
 fi
 
 # Output result
