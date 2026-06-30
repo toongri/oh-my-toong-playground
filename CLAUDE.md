@@ -156,6 +156,36 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 
 `sync.yaml:path` contains absolute paths to target projects. These are local to each developer's machine — do not commit personal paths in PRs.
 
+### Cache-Safe Context Injection
+
+Hook and skill authors who emit injected context (SessionStart stdout, keyword-detector payloads, skill `` !`command` `` macro output) MUST follow these constraints. The goal: bytes that land in the PREFIX segment of the conversation must be session-invariant so the KV cache is not evicted on every new session. A single varying byte anywhere in the prefix evicts the entire downstream cache.
+
+- **No per-request volatile values in PREFIX-position injected context.** Timestamps, PIDs, ephemeral counters, or any value that changes between requests must not appear in context injected into the conversation prefix.
+
+- **Sort collections (deterministic ordering) before emitting.** Any list, set, or map serialized into injected context must be sorted before output. Insertion-order or filesystem-order enumerations are non-deterministic across sessions and defeat caching.
+
+- **Session-varying values: coarsen OR use a static state-file pointer.** If a value legitimately varies by session but must appear in injected context, either coarsen it to a stable category (e.g., a count bucket rather than an exact count), or emit a static shell read command — `cat "$OMT_DIR/<state>-$OMT_SESSION_ID.json"` — with a run-now imperative. The pointer string itself is static; the actual read happens in TAIL position, not PREFIX.
+
+- **SessionStart stdout = static; route dynamic/volatile data to stderr or on-demand reads.** The SessionStart hook's stdout is injected directly into the conversation prefix. Keep it fully static. Emit diagnostic or session-varying information to stderr (logged, not injected) or defer it to an on-demand read instruction executed later in the conversation body.
+
+- **Skill-body `` !`command` `` macro output must be deterministic + session-invariant.** Command substitutions embedded in SKILL.md via the `` !`...` `` macro are evaluated at skill-load time and injected into the prefix. Their output must be bit-for-bit identical across sessions; any path, timestamp, or environment-specific value disqualifies a command from macro use.
+
+#### Accepted unavoidable
+
+These items deviate from the constraints above but are retained because fixing them would break correctness or routing:
+
+- **(i) Small-handoff payload** — Compaction already cold-starts the prefix, so marginal cache loss at the handoff boundary is zero. The size threshold governing this payload is a capacity axis (the `additionalContext` field cap), not a cache axis. Accepted as-is.
+
+- **(ii) rules-injector `targetRelativePath` / post-compact paths** — Codex resolves tool paths per-tool and per-compact; the path values are data-driven and must reflect the actual runtime location. Static-izing them would break routing. Accepted as session-specific by necessity.
+
+- **(iii) Pin count/location** — Pin data is determined by actual filesystem state at session start. The values are data-driven and deterministic given identical pin state, not per-request volatile. Accepted as data-driven deterministic.
+
+- **(iv) `decision.ts` Stop-reason numbers** — These values appear in TAIL-position (the Stop hook output), not in the conversation prefix. Tail-position content has zero cache impact. Retained for behavioral signal.
+
+#### Harness assumption
+
+`CLAUDE_ENV_FILE` exports (`OMT_DIR`, `OMT_SESSION_ID`) reach the agent's Bash-tool environment at runtime. Hook round-trip acceptance criteria verify hook write/emit consistency only — the "Claude Code sources the env file so agent Bash tools see these variables" leg is a documented assumption, not something the OMT test suite verifies.
+
 ## Language Conventions
 
 - **Commit messages**: Korean (한국어) with 명사형 종결
