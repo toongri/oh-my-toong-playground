@@ -17,7 +17,7 @@ Deep Interview implements Ouroboros-inspired Socratic questioning with mathemati
 - User wants to avoid "that's not what I meant" outcomes from autonomous execution
 - Task is complex enough that jumping to code would waste cycles on scope discovery
 - User wants mathematically-validated clarity before committing to execution
-- User knows roughly WHAT they want but a load-bearing design approach (HOW) is unresolved -- multiple viable, hard-to-reverse approaches must be decided before the spec is actionable
+- User knows roughly WHAT they want but a load-bearing design approach (HOW) is unresolved -- multiple viable, costly-to-change approaches must be decided before the spec is actionable
 </Use_When>
 
 <Do_Not_Use_When>
@@ -62,6 +62,10 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - Run `explore` agent: check if cwd has existing source code, package files, or git history
    - If source files exist AND the user's idea references modifying/extending something: **brownfield**
    - Otherwise: **greenfield**
+2.5. **Detect multi-subsystem mega-idea (propose-only decomposition gate)**:
+   - Assess whether the parsed idea spans ≥2 independent subsystems. Two subsystems are independent when each could be specced, built, and tested without depending on the other being built first.
+   - If yes: PROPOSE a decomposition — name each subsystem, describe how they relate, and suggest an interview order — then ask the user which subsystem to address first via `AskUserQuestion`. Interview ONLY that first subsystem in this session. Do NOT auto-split into multiple specs and do NOT add any new state fields; this gate is propose-only and narrows the scope to one slice before continuing.
+   - If no (single-system scope): continue without decomposition.
 3. **For brownfield**: Run `explore` agent to map relevant codebase areas; pass the summary as `--codebase-context` in the `init` call (step 4)
 3.5. **Load runtime settings**:
    - Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user)
@@ -127,7 +131,7 @@ Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the h
 
 ### Step 2-exit: Design-fork detection gate
 
-Run this ONLY after `ambiguity ≤ threshold` and before Phase 2 exits. This design-fork detection is orthogonal to the Step-2 stance selector: scan the accumulated interview state and transcript summary for load-bearing design forks — multiple viable approaches that are hard-to-reverse or cross-cutting. Trivial and single-approach situations clear the how-readiness gate without daedalus. On a load-bearing fork, dispatch `daedalus` with the evidence block defined below. Present the recommended approach via `AskUserQuestion` (tag "(Recommended)"), record the chosen approach for the spec's Approach section, then treat the how-readiness gate as clear for Phase 4. A user instruction to be quick or not over-think the design is NOT a user-forced escape hatch unless it is a literal stop/abort/early-exit signal; when the threshold was met on the normal path, resolve the load-bearing fork via the single daedalus + AskUserQuestion step (which already honors the hurry) rather than bypassing it.
+Run this ONLY after `ambiguity ≤ threshold` and before Phase 2 exits. This design-fork detection is orthogonal to the Step-2 stance selector: scan the accumulated interview state and transcript summary for load-bearing design forks — multiple viable approaches that are costly-to-change or cross-cutting. Trivial and single-approach situations clear the how-readiness gate without daedalus. On a load-bearing fork, dispatch `daedalus` with the evidence block defined below — `daedalus` is a consultation helper reserved for DIFFICULT or COMPLEX load-bearing forks (hard cross-cutting choices that warrant steelman antithesis and tradeoff tension analysis); routine multi-viable forks that arose during the interview are resolved in-loop via Step 2-alt (below) and do NOT reach this gate. Present the recommended approach via `AskUserQuestion` (tag "(Recommended)"), record the chosen approach for the spec's Approach section, then treat the how-readiness gate as clear for Phase 4. A user instruction to be quick or not over-think the design is NOT a user-forced escape hatch unless it is a literal stop/abort/early-exit signal; when the threshold was met on the normal path, resolve the load-bearing fork via the single daedalus + AskUserQuestion step (which already honors the hurry) rather than bypassing it.
 
 ```
 ## Evidence
@@ -136,7 +140,7 @@ Run this ONLY after `ambiguity ≤ threshold` and before Phase 2 exits. This des
 
 ## Focus
 - Enumerate 2–3 viable approaches for the unresolved HOW-fork; steelman each.
-- Surface tradeoff tensions and hard-to-reverse consequences.
+- Surface tradeoff tensions and costly-to-change consequences.
 - Recommend one approach with rationale, using only the evidence packet and state JSON above.
 ```
 
@@ -227,6 +231,24 @@ If any prompt input is too large, summarize it first and then continue from the 
 | Success Criteria | "How do we know it works?" | "If I showed you the finished product, what would make you say 'yes, that's it'?" |
 | Context Clarity (brownfield) | "How does this fit?" | "I found JWT auth middleware in `src/auth/` (pattern: passport + JWT). Should this feature extend that path or intentionally diverge from it?" |
 | Scope-fuzzy / ontology stress | "What IS the core thing here?" | "You have named Tasks, Projects, and Workspaces across the last rounds. Which one is the core entity, and which are supporting views or containers?" |
+
+After generating the question (above), check whether the topic reveals a **multi-viable design choice** — if yes, run Step 2-alt below instead of Step 2b.
+
+### Step 2-alt: Multi-viable alternative presentation (fires in-loop)
+
+**Trigger:** question generation reveals a design choice with ≥2 viable approaches.
+
+**Multi-viable design choice (definition):** both conditions must hold: (1) ≥2 approaches each materially shape the spec — affecting architecture, data model, API contract, or user flow in a non-trivial way — AND (2) codebase facts and external research cannot decide between them; the choice requires human judgment.
+
+**Excluded — do not manufacture alternatives:** single-viable situations (one approach is forced by the codebase, a constraint, or an established fact) and pure factual questions. Example: if the codebase already mandates one auth path via a shared middleware, do NOT generate "JWT vs cookies vs API keys" — that is a strawman.
+
+**Presentation rule:** present 2-3 approaches via `AskUserQuestion`, tag one option `(Recommended)` with a brief rationale, and ask the user to choose. Do not silently default to any approach.
+
+**Main skill owns routine presentation — `daedalus` is for difficult/complex cases only.** For straightforward trade-offs with well-understood options, present the alternatives directly without dispatching `daedalus`. Reserve `daedalus` for choices that are genuinely hard or cross-cutting — where steelman antithesis and deep tradeoff tension analysis add value beyond a direct listing. `daedalus` is a consultation helper, NOT a gate and NOT the default enumerator for every multi-viable fork.
+
+**Seam note — no double-fire with the Phase-2-exit backstop:** The Step-2-exit Design-fork detection gate is a BACKSTOP that fires ONLY when an unresolved load-bearing fork remains at Phase-2 exit. Because Step 2-alt resolves multi-viable forks as they arise IN-LOOP, the backstop normally has nothing left to fire on when the threshold is reached. There is no double-fire: the backstop fires only on forks that slipped through (e.g., a fork that emerged very late in the interview or a user-forced early exit that bypassed in-loop resolution).
+
+After the user selects an approach, record the decision, then proceed to Step 2c (skip Step 2b — the `AskUserQuestion` in this step served as the question for this round).
 
 ### Step 2b: Ask the Question
 
@@ -464,7 +486,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - **Early exit (round 3+)**: Allow with warning if ambiguity > threshold
 - **User says "stop", "cancel", "abort"**: Stop immediately, save state for resume
 - **Ambiguity stalls** (same score +-0.05 for 3 rounds): handled by the Step 2-head Dialectic Rhythm Guard stall rotation rule (selects Ontologist) — no separate activation here
-- **how-readiness gate**: Normal-path exit requires `ambiguity ≤ threshold` AND no unresolved load-bearing HOW-decision (hard-to-reverse, cross-cutting, or multiple genuinely divergent approaches). User-forced escape hatches (hard-cap, early-exit, user-stop) bypass the gate but fold the unresolved fork into the spec's risk-note.
+- **how-readiness gate**: Normal-path exit requires `ambiguity ≤ threshold` AND no unresolved load-bearing HOW-decision (costly-to-change, cross-cutting, or multiple genuinely divergent approaches). User-forced escape hatches (hard-cap, early-exit, user-stop) bypass the gate but fold the unresolved fork into the spec's risk-note.
 - **All dimensions at 0.9+**: Skip to spec generation ONLY after the Phase 2 how-readiness gate is clear; if a load-bearing HOW-fork is unresolved, resolve it via the Phase 2 Design-fork detection gate first.
 - **Codebase exploration fails**: Proceed as greenfield, note the limitation
 </Escalation_And_Stop_Conditions>
