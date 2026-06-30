@@ -127,7 +127,7 @@ The `init` subcommand performs a strict overlay of the rich state shape into the
 
 ## Phase 2: Interview Loop
 
-Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the how-readiness gate check before exiting Phase 2: if no unresolved load-bearing HOW-decision exists, proceed to Phase 4; if one exists, run the Design-fork detection gate below, record the chosen approach, then proceed to Phase 4. User-forced exits bypass this gate and carry any unresolved fork into the spec risk-note.
+Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the how-readiness gate check before exiting Phase 2: if no unresolved load-bearing HOW-decision exists, proceed to Phase 4; if one exists, run the Design-fork detection gate below, record the chosen approach, then proceed to Phase 4. User-forced early exits (hard-cap, early-exit) bypass this gate and carry any unresolved fork into the spec risk-note; a literal user stop/cancel/abort instead halts and saves state, crystallizing no spec.
 
 ### Step 2-exit: Design-fork detection gate
 
@@ -486,7 +486,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - **Early exit (round 3+)**: Allow with warning if ambiguity > threshold
 - **User says "stop", "cancel", "abort"**: Stop immediately, save state for resume
 - **Ambiguity stalls** (same score +-0.05 for 3 rounds): handled by the Step 2-head Dialectic Rhythm Guard stall rotation rule (selects Ontologist) — no separate activation here
-- **how-readiness gate**: Normal-path exit requires `ambiguity ≤ threshold` AND no unresolved load-bearing HOW-decision (costly-to-change, cross-cutting, or multiple genuinely divergent approaches). User-forced escape hatches (hard-cap, early-exit, user-stop) bypass the gate but fold the unresolved fork into the spec's risk-note.
+- **how-readiness gate**: Normal-path exit requires `ambiguity ≤ threshold` AND no unresolved load-bearing HOW-decision (costly-to-change, cross-cutting, or multiple genuinely divergent approaches). User-forced early exits (hard-cap, early-exit) bypass the gate but fold the unresolved fork into the spec's risk-note. A literal user stop/cancel/abort is NOT such an exit — it halts and saves state for resume per the rule above, crystallizing no spec.
 - **All dimensions at 0.9+**: Skip to spec generation ONLY after the Phase 2 how-readiness gate is clear; if a load-bearing HOW-fork is unresolved, resolve it via the Phase 2 Design-fork detection gate first.
 - **Codebase exploration fails**: Proceed as greenfield, note the limitation
 </Escalation_And_Stop_Conditions>
