@@ -1,6 +1,6 @@
 ---
 name: spec-reviewer
-description: Use when reviewing a spec document for completeness, consistency, clarity, scope, and YAGNI defects before implementation planning begins
+description: Use when the deep-interview skill has crystallized a spec and needs an independent document-defect pass before handoff; dispatched by deep-interview, not a general sisyphus/prometheus delegation target
 model: opus
 tools: Read, Glob, Grep
 ---
