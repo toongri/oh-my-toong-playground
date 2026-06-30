@@ -237,7 +237,7 @@ test_session_start_uses_project_root_variable() {
 }
 
 # =============================================================================
-# Tests: Prometheus restore — resume_summary surfaced when plan file unavailable
+# Tests: Prometheus restore — resume_summary omitted (cat pointer emitted) when plan file unavailable
 # =============================================================================
 
 test_session_start_prometheus_omits_resume_summary_and_emits_pointer_when_plan_unavailable() {
