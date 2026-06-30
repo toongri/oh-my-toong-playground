@@ -179,7 +179,7 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
           if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
             GOAL_INSTRUCTION="\nRe-read the current plan from disk and continue the planning process where you left off.\n"
           else
-            GOAL_INSTRUCTION="\nPlan file not available on disk yet. Continue planning from the beginning.\n"
+            GOAL_INSTRUCTION="\nNo plan file on disk yet. Continue planning from the state you just read above — resume from its resume_summary checkpoint if present, otherwise begin planning afresh.\n"
           fi
         else
           # Pursuing-resume: guide the AI to continue autonomous pursuit
