@@ -432,7 +432,7 @@ The Design-fork detection gate has already run at Phase 2 exit for the normal pa
 
 Inline self-review (4 checks): placeholder / consistency / scope / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, no ambiguous text remains.
 
-Dispatch `spec-reviewer` — pass the spec path only. On issues found: one round of fix + re-review; if issues persist, record a risk-note and proceed (advisory, non-gating).
+Dispatch `spec-reviewer` — pass the spec path only. This loop is GATING on the reviewer's `Status`: while it returns `Status: Issues Found`, fix the named Issues and re-dispatch `spec-reviewer`, repeating until it returns `Status: Approved`. Do NOT emit the handoff token while any Issue remains — there is no advisory proceed-anyway / risk-note escape from an unresolved Issue. Only **Issues** gate; **Recommendations** are advisory and never block — carry any unaddressed ones into the spec's Risks section.
 
 2. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
 
@@ -501,7 +501,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - [ ] Per-section approval loop performed (each spec section approved before continuing)
 - [ ] Whole-spec gate: full spec confirmed before writing
 - [ ] Inline self-review (4 checks: placeholder / consistency / scope / ambiguity) performed
-- [ ] Spec-reviewer dispatched (advisory) and issues addressed or risk-noted
+- [ ] Spec-reviewer returned `Status: Approved` (fix→re-review loop ran until no Issues remain; Recommendations may be risk-noted)
 - [ ] Spec includes: goal, constraints, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
 - [ ] Execution bridge presented via AskUserQuestion
