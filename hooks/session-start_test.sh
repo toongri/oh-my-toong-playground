@@ -527,11 +527,23 @@ EOF
     out_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_a"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
     out_b=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_b"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
 
-    # Guidance text must be present (Fix B: this fails when GOAL_INSTRUCTION is empty)
+    # Guidance text must be present: new defer-to-read-state wording
     local ctx_a
     ctx_a=$(echo "$out_a" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-    if ! echo "$ctx_a" | grep -q "Continue planning from the beginning"; then
-        echo "ASSERTION FAILED (Fix B): planning+no-plan must emit 'Continue planning from the beginning' guidance"
+    if ! echo "$ctx_a" | grep -q "from the state you just read"; then
+        echo "ASSERTION FAILED: planning+no-plan must emit 'from the state you just read' guidance"
+        echo "  ctx_a: ${ctx_a:0:500}"
+        return 1
+    fi
+    if ! echo "$ctx_a" | grep -q "resume_summary"; then
+        echo "ASSERTION FAILED: planning+no-plan guidance must reference the 'resume_summary' field"
+        echo "  ctx_a: ${ctx_a:0:500}"
+        return 1
+    fi
+
+    # Regression guard: must NOT contain the old unconditional restart directive
+    if echo "$ctx_a" | grep -q "Continue planning from the beginning"; then
+        echo "ASSERTION FAILED (regression): planning+no-plan must NOT emit 'Continue planning from the beginning' directive"
         echo "  ctx_a: ${ctx_a:0:500}"
         return 1
     fi
