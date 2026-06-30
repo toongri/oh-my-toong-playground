@@ -58,6 +58,21 @@ Downstream (prometheus) consumes this as a FIXED input — does not re-decide th
 {brownfield: relevant codebase findings from explore agent}
 {greenfield: technology choices and constraints}
 
+## Architecture
+{overall structure: how the major components are arranged and how they relate to each other}
+
+## Components
+{each component: its single responsibility and direct dependencies}
+
+## Data Flow
+{sources → transformations → sinks: trace data from ingestion to output}
+
+## Error Handling
+{failure modes and their responses: what can go wrong and how the system handles it}
+
+## Testing
+{what is verified: behaviors, boundaries, and invariants covered by the test suite}
+
 ## Ontology (Key Entities)
 {Fill from the FINAL round's ontology extraction, not just crystallization-time generation}
 
