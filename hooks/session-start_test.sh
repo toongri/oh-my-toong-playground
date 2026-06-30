@@ -240,7 +240,7 @@ test_session_start_uses_project_root_variable() {
 # Tests: Prometheus restore — resume_summary surfaced when plan file unavailable
 # =============================================================================
 
-test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable() {
+test_session_start_prometheus_omits_resume_summary_and_emits_pointer_when_plan_unavailable() {
     local sid="test-prometheus-resume"
 
     # Active prometheus state: resume_summary set, plan_path empty (never written)
@@ -486,6 +486,63 @@ EOF
     assert_output_not_contains "$output" "Re-read the current plan from disk" "pursuing without plan file: must NOT inject re-read instruction" || return 1
     # Must still surface iteration info
     assert_output_contains "$output" "GOAL RESTORED" "pursuing without plan file: should still inject GOAL RESTORED" || return 1
+}
+
+# Fix B: planning + no plan file → session-invariant guidance text emitted
+test_session_start_goal_planning_no_plan_emits_guidance_and_is_invariant() {
+    local ts
+    ts=$(date "+%Y-%m-%dT%H:%M:%S")
+    local sid_a="plan-nofile-sid-alpha"
+    local sid_b="plan-nofile-sid-beta"
+
+    # Non-pristine planning states (outcome set) with empty plan_path — no plan file on disk.
+    # resume_summary differs between the two sids to prove it is NOT visible in output.
+    cat > "$TEST_OMT_DIR/goal-state-${sid_a}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "plan_path": "",
+  "resume_summary": "Alpha planning summary - should not appear in output.",
+  "outcome": "Build feature X",
+  "iteration": 1,
+  "started_at": "${ts}",
+  "last_touched_at": "${ts}"
+}
+EOF
+
+    cat > "$TEST_OMT_DIR/goal-state-${sid_b}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "plan_path": "",
+  "resume_summary": "Beta planning summary - totally different text.",
+  "outcome": "Build feature X",
+  "iteration": 1,
+  "started_at": "${ts}",
+  "last_touched_at": "${ts}"
+}
+EOF
+
+    local out_a out_b
+    out_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_a"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+    out_b=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_b"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    # Guidance text must be present (Fix B: this fails when GOAL_INSTRUCTION is empty)
+    local ctx_a
+    ctx_a=$(echo "$out_a" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+    if ! echo "$ctx_a" | grep -q "Continue planning from the beginning"; then
+        echo "ASSERTION FAILED (Fix B): planning+no-plan must emit 'Continue planning from the beginning' guidance"
+        echo "  ctx_a: ${ctx_a:0:500}"
+        return 1
+    fi
+
+    # Output is session-invariant: byte-identical across two sids with different resume_summary
+    if [ "$out_a" != "$out_b" ]; then
+        echo "ASSERTION FAILED (Fix B): planning+no-plan guidance must be session-invariant (byte-identical across sids)"
+        echo "  out_a: ${out_a:0:500}"
+        echo "  out_b: ${out_b:0:500}"
+        return 1
+    fi
 }
 
 test_session_start_goal_plan_path_backslash_produces_valid_json() {
@@ -1703,18 +1760,20 @@ test_cache_safe_handoff_large_pointer() {
     fi
 }
 
-# AC6: prometheus restore output is byte-identical across two different session IDs
+# AC6: prometheus restore output is byte-identical across two different session IDs,
+# even when resume_summary differs — proving resume_summary is not embedded in output.
 test_cache_safe_prom_session_invariant() {
     local ts
     ts=$(date "+%Y-%m-%dT%H:%M:%S")
-    local state_body
-    state_body='{"active":true,"phase":"S3","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_variant_A","started_at":"'"$ts"'","last_touched_at":"'"$ts"'","steps":{"acceptance_criteria":{"done":false,"content":[],"recorded_at":""},"design_decisions":{"done":false,"ref":""},"plan":{"done":false}}}'
 
     local sid_a="aaaa-session-inv"
     local sid_b="zzqqxx-session-inv"
 
-    echo "$state_body" > "$TEST_OMT_DIR/prometheus-state-${sid_a}.json"
-    echo "$state_body" > "$TEST_OMT_DIR/prometheus-state-${sid_b}.json"
+    # Different resume_summary per sid: if resume_summary were still embedded, outputs would differ.
+    echo '{"active":true,"phase":"S3","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_alpha","started_at":"'"$ts"'","last_touched_at":"'"$ts"'","steps":{"acceptance_criteria":{"done":false,"content":[],"recorded_at":""},"design_decisions":{"done":false,"ref":""},"plan":{"done":false}}}' \
+        > "$TEST_OMT_DIR/prometheus-state-${sid_a}.json"
+    echo '{"active":true,"phase":"S3","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_beta","started_at":"'"$ts"'","last_touched_at":"'"$ts"'","steps":{"acceptance_criteria":{"done":false,"content":[],"recorded_at":""},"design_decisions":{"done":false,"ref":""},"plan":{"done":false}}}' \
+        > "$TEST_OMT_DIR/prometheus-state-${sid_b}.json"
 
     local out_a out_b
     out_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_a"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
@@ -1728,18 +1787,20 @@ test_cache_safe_prom_session_invariant() {
     fi
 }
 
-# AC6: goal restore output is byte-identical across two different session IDs
+# AC6: goal restore output is byte-identical across two different session IDs,
+# even when resume_summary differs — proving resume_summary is not embedded in output.
 test_cache_safe_goal_session_invariant() {
     local ts
     ts=$(date "+%Y-%m-%dT%H:%M:%S")
-    local state_body
-    state_body='{"active":true,"phase":"pursuing","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_variant_B","outcome":"Test objective","iteration":3,"max_iterations":10,"started_at":"'"$ts"'","last_touched_at":"'"$ts"'"}'
 
     local sid_a="aaaa-goal-inv"
     local sid_b="zzqqxx-goal-inv"
 
-    echo "$state_body" > "$TEST_OMT_DIR/goal-state-${sid_a}.json"
-    echo "$state_body" > "$TEST_OMT_DIR/goal-state-${sid_b}.json"
+    # Different resume_summary per sid: if resume_summary were still embedded, outputs would differ.
+    echo '{"active":true,"phase":"pursuing","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_alpha","outcome":"Test objective","iteration":3,"max_iterations":10,"started_at":"'"$ts"'","last_touched_at":"'"$ts"'"}' \
+        > "$TEST_OMT_DIR/goal-state-${sid_a}.json"
+    echo '{"active":true,"phase":"pursuing","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_beta","outcome":"Test objective","iteration":3,"max_iterations":10,"started_at":"'"$ts"'","last_touched_at":"'"$ts"'"}' \
+        > "$TEST_OMT_DIR/goal-state-${sid_b}.json"
 
     local out_a out_b
     out_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_a"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
@@ -1779,7 +1840,7 @@ main() {
     run_test test_session_start_uses_project_root_variable
 
     # Prometheus restore: resume_summary surfaced when plan file unavailable
-    run_test test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable
+    run_test test_session_start_prometheus_omits_resume_summary_and_emits_pointer_when_plan_unavailable
 
     # Prometheus restore: backslashes in resume_summary produce valid JSON and are preserved
     run_test test_session_start_prometheus_resume_summary_backslash_produces_valid_json
@@ -1790,6 +1851,7 @@ main() {
     run_test test_session_start_terminal_goal_state_not_restored
     run_test test_session_start_goal_pursuing_resume_rereads_plan
     run_test test_session_start_goal_pursuing_resume_no_plan_file
+    run_test test_session_start_goal_planning_no_plan_emits_guidance_and_is_invariant
 
     # Goal state restore: backslash in plan_path produces valid JSON
     run_test test_session_start_goal_plan_path_backslash_produces_valid_json
