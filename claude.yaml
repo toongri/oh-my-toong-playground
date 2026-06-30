@@ -34,6 +34,11 @@ mcps:
     command: uvx
     args:
       - "opensearch-mcp-server-py"
+  # Notion hosted MCP. Streamable HTTP; the server allows DCR, so a bare url triggers
+  # OAuth automatically (authenticate via /mcp). Replaces the claude.ai web connector.
+  notion:
+    type: http
+    url: "https://mcp.notion.com/mcp"
   playwright:
     command: npx
     args:
