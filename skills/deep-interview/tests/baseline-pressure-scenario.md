@@ -21,6 +21,7 @@
    |---------|----------------|
    | A2 (Fixture i) | spec-reviewer emits a final verdict (Approved or Issues Found) |
    | A2 (Fixture ii) | spec-reviewer emits a final verdict |
+   | A2 (Fixture iii) | spec-reviewer emits a final verdict (Approved or Issues Found) |
    | B1 | deep-interview reaches Phase 4 (spec file written) or presents the execution bridge |
    | B2 | deep-interview reaches Phase 4 or execution bridge |
    | D1 | deep-interview reaches Phase 4 on the first-slice spec |
@@ -44,6 +45,7 @@
 |---------|----------------|-------|--------------------------|
 | A2 — Fixture i | application-scenarios.md § A2 Fixture i | spec-reviewer | Full response text; final verdict line; Issues Found section |
 | A2 — Fixture ii | application-scenarios.md § A2 Fixture ii | spec-reviewer | Full response text; final verdict line |
+| A2 — Fixture iii | application-scenarios.md § A2 Fixture iii | spec-reviewer | Full response text; final verdict line; per-section substance flags |
 | B1 | application-scenarios.md § B1 Fixture Prompt | deep-interview | Full message transcript; all AskUserQuestion calls; `(Recommended)` tag presence per question |
 | B2 | application-scenarios.md § B2 Fixture Prompt | deep-interview | Tool call history (daedalus Agent calls); all AskUserQuestion calls |
 | D1 | application-scenarios.md § D1 Fixture Prompt | deep-interview | First 2 assistant turns; all AskUserQuestion round questions |
@@ -66,6 +68,12 @@ Score each line against the agent's **entire** visible message history. For B2 t
 | A2-F1iv | Empty `## Error Handling` flagged (Fixture i) | Response names "Error Handling" in Issues Found | Same |
 | A2-F1v | Empty `## Testing` flagged (Fixture i) | Response names "Testing" in Issues Found | Same |
 | A2-F2 | Substantive sections pass on Fixture ii | Final verdict on Fixture ii is "Approved"; none of the five section names appear in Issues Found | Fixture ii dispatched; all five sections have real content |
+| A2-F3i | Architecture flagged as substantively inadequate (Fixture iii) | Response names "Architecture" in Issues Found with a substance complaint (names a placement but no structure or component relationships); complaint does not reference emptiness; verdict is NOT "Approved" | Fixture iii dispatched; Architecture section present but vacuous |
+| A2-F3ii | Components flagged as substantively inadequate (Fixture iii) | Response names "Components" in Issues Found with a substance complaint (lists names but no responsibilities or dependencies per component); complaint does not reference emptiness | Fixture iii dispatched; Components section present but vacuous |
+| A2-F3iii | Data Flow flagged as substantively inadequate (Fixture iii) | Response names "Data Flow" in Issues Found with a substance complaint (no concrete sources or sinks named); complaint does not reference emptiness | Fixture iii dispatched; Data Flow section present but vacuous |
+| A2-F3iv | Error Handling flagged as substantively inadequate (Fixture iii) | Response names "Error Handling" in Issues Found with a substance complaint (no failure modes or response codes named); complaint does not reference emptiness | Fixture iii dispatched; Error Handling section present but vacuous |
+| A2-F3v | Testing flagged as substantively inadequate (Fixture iii) | Response names "Testing" in Issues Found with a substance complaint (names nothing that is verified); complaint does not reference emptiness | Fixture iii dispatched; Testing section present but vacuous |
+| A2-F3verdict | Fixture iii verdict is NOT "Approved" | Final verdict on Fixture iii is NOT "Approved" (Issues Found) | Fixture iii dispatched; all five sections are present but substantively inadequate |
 
 ### B1 — Always-Propose-Alternatives
 
@@ -103,7 +111,7 @@ These are the gaps identified during plan authoring. A fresh baseline run should
 
 | Scenario | Rubric # | Predicted Baseline Behavior | Root Cause |
 |---------|----------|----------------------------|------------|
-| A2 | A2-F1i through A2-F1v | spec-reviewer returns Approved on Fixture i without naming any empty design section | `agents/spec-reviewer.md` What-to-Check has no design-coverage row; the five section headings are invisible to the current rubric (the sections do not exist in the current spec template either) |
+| A2 | A2-F3i through A2-F3v, A2-F3verdict | Fixture i (empty headers) is CHARACTERIZATION — spec-reviewer already flags empty design sections via its generic Completeness rubric; A2-F1i through A2-F1v PASS at baseline and are NOT the RED isolation. TRUE RED is Fixture iii: spec-reviewer returns "Approved" on present-but-insubstantial sections because `agents/spec-reviewer.md` has no substantive design-coverage row; A2-F3i through A2-F3v and A2-F3verdict all FAIL at baseline | `agents/spec-reviewer.md` What-to-Check has no design-coverage row; the current Completeness rubric catches emptiness ("empty section headers read as unfinished") but does NOT catch vacuous non-empty content |
 | B1 | B1-V1, B1-V2 | deep-interview asks about storage and scan processing but does NOT structure those questions as 2-3-option AskUserQuestion with `(Recommended)` | Current SKILL.md has no always-propose-alternatives mechanism; the Phase-2-exit design-fork gate may present one fork at exit via daedalus but does NOT guarantee structured 2-3-option coverage of EVERY multi-viable choice during the interview loop |
 | B2 | B2-V1, B2-V2 | daedalus dispatch is not selectively absent for SIMPLE-1 and present for COMPLEX-1; the simple/complex distinction is not encoded | Current SKILL.md design-fork gate uses load-bearing / cross-cutting criteria but applies them uniformly to any unresolved fork — no "simple multi-approach" class that explicitly excludes daedalus |
 | D1 | D1-V1 | No decomposition proposal emitted; deep-interview begins the interview loop covering all three subsystems without proposing a split | Current SKILL.md Phase 1 has no scope-decomposition detect-and-propose gate; Phase 1 only performs brownfield/greenfield detection |
@@ -118,6 +126,7 @@ After applying TODO 4 (spec-reviewer design-coverage check) and TODO 5 (deep-int
 
 - **A2-F1i through A2-F1v**: spec-reviewer's Issues Found output will name each empty design section. Verified mechanically: grep the response for "Architecture", "Components", "Data Flow", "Error Handling", "Testing" in the Issues context.
 - **A2-F2**: spec-reviewer returns "Approved" on the substantive Fixture ii without false flags. Verified: verdict token = "Approved".
+- **A2-F3i through A2-F3v and A2-F3verdict**: post-change spec-reviewer names each of the five design sections (Architecture, Components, Data Flow, Error Handling, Testing) as substantively inadequate in Issues Found — not merely as empty — and the verdict is NOT "Approved". Verified: grep Issues Found for each section name plus a substance complaint; confirm verdict is "Issues Found" not "Approved".
 - **B1-V1 and B1-V2**: always-propose-alternatives encodes the 2-3-option `(Recommended)` AskUserQuestion for every multi-viable choice during the interview. Verified: `grep -c "(Recommended)"` across transcript ≥ 2.
 - **B1-V4 and B1-V5**: the "multi-viable definition" gate excludes single-viable choices. Verified: no auth-system-alternatives AskUserQuestion in transcript.
 - **B2-V1 and B2-V2**: the daedalus reframe + "simple vs difficult/complex" distinction make dispatch selective. Verified: zero daedalus calls for SIMPLE-1; one daedalus call for COMPLEX-1.
