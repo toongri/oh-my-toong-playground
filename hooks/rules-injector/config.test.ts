@@ -67,3 +67,20 @@ test("C6: DISABLE_BUNDLED=0 (unset) keeps enabledSources as auto", () => {
 	const config = configFromEnvironment({});
 	expect(config.enabledSources).toBe("auto");
 });
+
+// ── D-7: sessionStateTtlDays / errorLogMaxBytes defaults + env override ─────
+
+test("session-state TTL and error-log cap defaults + override", () => {
+	const defaults = configFromEnvironment({});
+	expect(defaults.sessionStateTtlDays).toBe(7);
+	expect(defaults.errorLogMaxBytes).toBe(5_242_880);
+
+	const ttlOverride = configFromEnvironment({ CODEX_RULES_SESSION_STATE_TTL_DAYS: "3" });
+	expect(ttlOverride.sessionStateTtlDays).toBe(3);
+
+	const errorLogOverride = configFromEnvironment({ PI_RULES_ERROR_LOG_MAX_BYTES: "1000" });
+	expect(errorLogOverride.errorLogMaxBytes).toBe(1000);
+
+	const invalidFallback = configFromEnvironment({ CODEX_RULES_SESSION_STATE_TTL_DAYS: "abc" });
+	expect(invalidFallback.sessionStateTtlDays).toBe(7);
+});

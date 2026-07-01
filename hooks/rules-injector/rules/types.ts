@@ -107,7 +107,6 @@ export interface TruncationResult {
  */
 export interface PiRulesConfig {
 	disabled: boolean;
-	mode: "static" | "dynamic" | "both" | "off";
 	maxRuleChars: number;
 	maxResultChars: number;
 	postCompactMaxRuleChars: number;
@@ -117,6 +116,8 @@ export interface PiRulesConfig {
 	promptMaxRuleChars: number;
 	promptMaxResultChars: number;
 	enabledSources: RuleSource[] | "auto";
+	sessionStateTtlDays: number;
+	errorLogMaxBytes: number;
 }
 
 /**
