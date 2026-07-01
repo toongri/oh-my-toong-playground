@@ -91,6 +91,7 @@ Downstream (prometheus) consumes this as a FIXED input — does not re-decide th
 ```mermaid
 erDiagram
     %% Fill from the FINAL round's ontology: one entity per ontology entity, one edge per relationship.
+    %% Entity names with spaces or punctuation MUST be double-quoted, e.g. "Discount Code" — an unquoted spaced name renders an error SVG in mermaid.
     %% Zero entities: replace this entire block with the literal text "no entities yet" — do NOT emit this example or a bare erDiagram.
     ENTITY_A ||--o{ ENTITY_B : "relationship label"
 ```
