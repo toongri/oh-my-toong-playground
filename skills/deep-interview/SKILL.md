@@ -402,6 +402,17 @@ Once Phase 2 exits (via the residual-ambiguity seam, above) toward design work, 
 
 **Fact vs. strawman boundary:** a point the codebase or an external constraint already forces onto a single path is a **fact** — ground it with `explore`/`librarian` and state it as settled, do not manufacture a **strawman** alternative around it. Only present alternatives where a real choice exists; naming options nobody would pick is not a decision.
 
+**Persist each decision to state:** after the user answers a design question (or a forced point is fact-grounded), append the decision to interview state *before* moving to the next question — the same mechanism Step 2e and Step 2-fact use, so the resume path (`get`/`adopt`) and Phase 4 crystallization recover the chosen alternatives even across a session interruption. Without this, the decision lives only in the in-context transcript and is lost on cross-session resume. The existing `--append-round-stdin` accepts this shape with no schema change (exactly as the `fact-ground` round does), marked as a design round so it is distinguishable from requirements Q&A:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
+{"n":<round_number>,"kind":"design","decision":"<design question>","choice":"<chosen alternative>","alternatives":[<offered alternatives>],"rationale":"<why chosen>"}
+OMT_DI_PAYLOAD_EOF
+```
+
+The same JSON-encoding rule as Step 2e applies: the heredoc guards shell quoting only; all substituted string values must be JSON-encoded (`\"`, `\\`, newlines as `\n`).
+
 Continue this loop until **all design branches** are resolved — no open decision, alternative, or design-facing gap remains.
 
 **Design-completion exit:** when all design branches are resolved, do not bare-announce completion. Run the residual-ambiguity seam (Step 2-exit, above): reflect the residual ambiguity left in the design (any unresolved tension, edge case, or soft spot), then ask the user via `AskUserQuestion` whether to continue resolving design branches or proceed to Phase 4 (Crystallize).

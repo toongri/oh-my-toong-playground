@@ -213,6 +213,28 @@ describe('new-prose: residual-ambiguity seam on both exits', () => {
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: Design Interview persists each decision to state (resume-safety)
+// (must FAIL before the persistence step is added to SKILL.md — RED)
+// ---------------------------------------------------------------------------
+
+describe('new-prose: Design Interview persists decisions to state', () => {
+  // Extract the Design Interview section: from its H2 heading to the next H2.
+  const start = skillMd.indexOf('## Design Interview');
+  const rest = skillMd.slice(start + '## Design Interview'.length);
+  const nextH2 = rest.indexOf('\n## ');
+  const designSection = nextH2 === -1 ? rest : rest.slice(0, nextH2);
+
+  test('persists each decision via the state CLI append', () => {
+    expect(designSection).toContain('deep-interview-state.ts update');
+    expect(designSection).toContain('--append-round-stdin');
+  });
+
+  test('persisted design round is marked kind:"design"', () => {
+    expect(designSection).toContain('"kind":"design"');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // REGRESSION GUARD (must PASS before AND after edits — invariant)
 // ---------------------------------------------------------------------------
 
