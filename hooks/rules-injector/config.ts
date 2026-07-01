@@ -47,6 +47,12 @@ export function configFromEnvironment(env: NodeJS.ProcessEnv = process.env, cwd?
 		firstEnv(env, "CODEX_RULES_ENABLED_SOURCES", "PI_RULES_ENABLED_SOURCES"),
 		disableBundledRules,
 	);
+	config.sessionStateTtlDays =
+		parsePositiveInteger(firstEnv(env, "CODEX_RULES_SESSION_STATE_TTL_DAYS", "PI_RULES_SESSION_STATE_TTL_DAYS")) ??
+		config.sessionStateTtlDays;
+	config.errorLogMaxBytes =
+		parsePositiveInteger(firstEnv(env, "CODEX_RULES_ERROR_LOG_MAX_BYTES", "PI_RULES_ERROR_LOG_MAX_BYTES")) ??
+		config.errorLogMaxBytes;
 	return config;
 }
 

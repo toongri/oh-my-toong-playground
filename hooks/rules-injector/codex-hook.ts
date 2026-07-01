@@ -76,7 +76,7 @@ export async function runSessionStartHook(
 	options: CodexRulesHookOptions = {},
 ): Promise<string> {
 	const config = configFromEnvironment(options.env, input.cwd);
-	if (config.disabled || config.mode === "off" || config.mode === "dynamic") {
+	if (config.disabled) {
 		return "";
 	}
 	const cachePath = sessionCachePath(input.session_id, options.pluginDataRoot);
@@ -130,7 +130,7 @@ export async function runUserPromptSubmitHook(
 	options: CodexRulesHookOptions = {},
 ): Promise<string> {
 	const config = configFromEnvironment(options.env, input.cwd);
-	if (config.disabled || config.mode === "off" || config.mode === "dynamic") {
+	if (config.disabled) {
 		return "";
 	}
 	if (hasContextPressureMarker(input.prompt)) {
@@ -163,8 +163,8 @@ export async function runPostToolUseHook(
 ): Promise<string> {
 	const debugTimer = createHookDebugTimer("PostToolUse");
 	const config = configFromEnvironment(options.env, input.cwd);
-	debugTimer.lap("config", { disabled: config.disabled, mode: config.mode });
-	if (config.disabled || config.mode === "off" || config.mode === "static") {
+	debugTimer.lap("config", { disabled: config.disabled });
+	if (config.disabled) {
 		debugTimer.done({ outputBytes: 0, reason: "disabled" });
 		return "";
 	}

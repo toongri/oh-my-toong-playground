@@ -12,7 +12,6 @@ import type { PiRulesConfig } from "./types.js";
 function autoConfig(): PiRulesConfig {
 	return {
 		disabled: false,
-		mode: "both",
 		maxRuleChars: 12000,
 		maxResultChars: 40000,
 		postCompactMaxRuleChars: 3500,
@@ -22,6 +21,8 @@ function autoConfig(): PiRulesConfig {
 		promptMaxRuleChars: 6000,
 		promptMaxResultChars: 16000,
 		enabledSources: "auto",
+		sessionStateTtlDays: 7,
+		errorLogMaxBytes: 5_242_880,
 	};
 }
 

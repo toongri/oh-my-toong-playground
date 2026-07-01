@@ -27,7 +27,7 @@ export function runStaticInjection(
 	model?: string,
 ): string {
 	const config = configFromEnvironment(options.env);
-	if (config.disabled || config.mode === "off" || config.mode === "dynamic") {
+	if (config.disabled) {
 		if (completedPostCompactChannel !== undefined) {
 			completePostCompactRecovery(cachePath, completedPostCompactChannel);
 		}
