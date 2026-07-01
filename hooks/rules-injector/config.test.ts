@@ -84,3 +84,29 @@ test("session-state TTL and error-log cap defaults + override", () => {
 	const invalidFallback = configFromEnvironment({ CODEX_RULES_SESSION_STATE_TTL_DAYS: "abc" });
 	expect(invalidFallback.sessionStateTtlDays).toBe(7);
 });
+
+test("session-state TTL: PI_RULES_ alias also overrides", () => {
+	const ttlOverride = configFromEnvironment({ PI_RULES_SESSION_STATE_TTL_DAYS: "4" });
+	expect(ttlOverride.sessionStateTtlDays).toBe(4);
+});
+
+test("error-log cap: CODEX_RULES_ alias also overrides", () => {
+	const errorLogOverride = configFromEnvironment({ CODEX_RULES_ERROR_LOG_MAX_BYTES: "2000" });
+	expect(errorLogOverride.errorLogMaxBytes).toBe(2000);
+});
+
+test("session-state TTL: CODEX_RULES_ takes precedence over PI_RULES_ when both set", () => {
+	const config = configFromEnvironment({
+		CODEX_RULES_SESSION_STATE_TTL_DAYS: "5",
+		PI_RULES_SESSION_STATE_TTL_DAYS: "9",
+	});
+	expect(config.sessionStateTtlDays).toBe(5);
+});
+
+test("error-log cap: CODEX_RULES_ takes precedence over PI_RULES_ when both set", () => {
+	const config = configFromEnvironment({
+		CODEX_RULES_ERROR_LOG_MAX_BYTES: "3000",
+		PI_RULES_ERROR_LOG_MAX_BYTES: "6000",
+	});
+	expect(config.errorLogMaxBytes).toBe(3000);
+});

@@ -213,3 +213,117 @@ test("SessionStart hook runs sweep and rotate", () => {
 		rmSync(projectDir, { recursive: true, force: true });
 	}
 });
+
+// ── Fix-round T1-AC5: GC pre-step must not perturb compact recovery ──────────
+//
+// Combines a post-compact SessionStart (source: "compact", the real recovery
+// path) with GC-triggering conditions (an aged sibling <sid>.json + an
+// oversized error.log) in the same hermetic HOME. Proves the D-6 GC pre-step
+// (own-mtime touch -> sweep -> rotate) coexists with recovery without
+// altering it: both the GC side effects AND the unchanged recovery
+// additionalContext must be observed from the same hook run.
+
+test("SessionStart compact-source recovery is unchanged by GC pre-step", () => {
+	const pluginDataDir = join(tempHome, ".omt");
+	mkdirSync(pluginDataDir, { recursive: true });
+
+	const projectDir = mkdtempSync(join(tmpdir(), "rules-injector-gc-recovery-proj-"));
+	try {
+		const rulesDir = join(projectDir, ".claude", "rules");
+		mkdirSync(rulesDir, { recursive: true });
+		const rulePath = join(rulesDir, "recovery.md");
+		writeFileSync(join(projectDir, "package.json"), '{"name":"ri-gc-recovery-fixture"}\n');
+		writeFileSync(rulePath, "---\nalwaysApply: true\n---\nGC_RECOVERY_MARKER\n");
+
+		const sessionId = "gc-recovery-session";
+		const baseEnv = {
+			...process.env,
+			HOME: tempHome,
+			PI_RULES_DISABLE_BUNDLED: "1",
+			PLUGIN_DATA: pluginDataDir,
+		};
+
+		// 1. Normal startup SessionStart injects the rule and records staticDedup.
+		//    No GC-triggering conditions exist yet, so this run is a plain baseline
+		//    that seeds the state the compact-source recovery below depends on.
+		const first = spawnSync("bun", ["run", CLI_PATH, "hook", "session-start"], {
+			input: JSON.stringify({
+				hook_event_name: "SessionStart",
+				session_id: sessionId,
+				transcript_path: null,
+				cwd: projectDir,
+				model: "gpt-5",
+				permission_mode: "default",
+				source: "startup",
+			}),
+			env: baseEnv,
+			encoding: "utf8",
+		});
+		expect(first.status).toBe(0);
+		expect(first.stderr).toBe("");
+		const firstParsed = JSON.parse(first.stdout.trim()) as {
+			hookSpecificOutput?: { additionalContext?: string };
+		};
+		expect(firstParsed.hookSpecificOutput?.additionalContext ?? "").toContain("GC_RECOVERY_MARKER");
+
+		// 2. Seed GC-triggering conditions: an aged sibling session-state file (must
+		//    be swept given the 1-day TTL override below) and an oversized error.log
+		//    (rotateErrorLog derives its sink from homedir() directly, ignoring
+		//    PLUGIN_DATA, so it always lives at HOME/.omt/rules-injector/error.log).
+		// The GC pre-step in step 1 already touched pluginDataDir's own 24h sweep
+		// throttle marker (it runs unconditionally on every SessionStart, even with
+		// nothing to sweep), so age that marker back out of the throttle window —
+		// otherwise step 3's sweep would be silently skipped and this test would
+		// prove nothing about the sweep actually running on the compact-source call.
+		age(join(pluginDataDir, "last-swept"), 2 * 24 * 60 * 60 * 1000);
+
+		const staleSiblingPath = join(pluginDataDir, "stale-sibling.json");
+		writeFileSync(staleSiblingPath, "{}");
+		age(staleSiblingPath, 2 * 24 * 60 * 60 * 1000);
+
+		const errorLogPath = join(tempHome, ".omt", "rules-injector", "error.log");
+		mkdirSync(dirname(errorLogPath), { recursive: true });
+		writeFileSync(errorLogPath, "x".repeat(50));
+
+		// 3. SessionStart source="compact": no PostCompact ran for this session, so
+		//    this takes the arrival-order inversion fallback (staticDedup is still
+		//    populated from step 1) and recovers the rule — the real post-compact
+		//    recovery path this AC guards. The GC pre-step runs first on this same
+		//    call, so this is the exact combination the requirement gap named.
+		const recovery = spawnSync("bun", ["run", CLI_PATH, "hook", "session-start"], {
+			input: JSON.stringify({
+				hook_event_name: "SessionStart",
+				session_id: sessionId,
+				transcript_path: null,
+				cwd: projectDir,
+				model: "gpt-5",
+				permission_mode: "default",
+				source: "compact",
+			}),
+			env: {
+				...baseEnv,
+				PI_RULES_SESSION_STATE_TTL_DAYS: "1",
+				PI_RULES_ERROR_LOG_MAX_BYTES: "10",
+			},
+			encoding: "utf8",
+		});
+
+		expect(recovery.status).toBe(0);
+		expect(recovery.stderr).toBe("");
+		const recoveredParsed = JSON.parse(recovery.stdout.trim()) as {
+			hookSpecificOutput?: { additionalContext?: string };
+		};
+		const recoveredContext = recoveredParsed.hookSpecificOutput?.additionalContext ?? "";
+
+		// GC pre-step effects landed: aged sibling swept, oversized error.log
+		// truncated.
+		expect(existsSync(staleSiblingPath)).toBe(false);
+		expect(statSync(errorLogPath).size).toBe(0);
+
+		// Recovery output present and unchanged by the GC pre-step running first.
+		expect(recoveredContext).toContain("POST-COMPACTION RULE RECOVERY");
+		expect(recoveredContext).toContain(rulePath);
+	} finally {
+		rmSync(projectDir, { recursive: true, force: true });
+	}
+});
