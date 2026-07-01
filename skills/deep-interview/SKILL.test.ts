@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 // ---------------------------------------------------------------------------
@@ -85,6 +85,48 @@ describe('new-prose: brainstorm-delegation phrase removal', () => {
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: mermaid visualization render-orchestration (must FAIL — RED)
+// ---------------------------------------------------------------------------
+
+describe('new-prose: spec-presentation render target', () => {
+  test('spec-presentation.html render target is present', () => {
+    expect(skillMd).toContain('spec-presentation.html');
+  });
+
+  test('{slug}.html output naming is present', () => {
+    expect(skillMd).toContain('{slug}.html');
+  });
+
+  test('"open it in a browser" instruction is present', () => {
+    expect(skillMd).toContain('open it in a browser');
+  });
+});
+
+describe('new-prose: ontology-preview on-demand render', () => {
+  test('ontology-preview.html render target is present', () => {
+    expect(skillMd).toContain('ontology-preview.html');
+  });
+
+  test('on-demand ontology render mention is present', () => {
+    expect(skillMd).toContain('on-demand ontology render');
+  });
+
+  test('"see, preview, or visualize the model" trigger phrase is present', () => {
+    expect(skillMd).toContain('see, preview, or visualize the model');
+  });
+
+  test('"no entities yet" guard is present', () => {
+    expect(skillMd).toContain('no entities yet');
+  });
+});
+
+describe('new-prose: render-assembly reference', () => {
+  test('render-assembly.md reference is present', () => {
+    expect(skillMd).toContain('render-assembly.md');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // REGRESSION GUARD (must PASS before AND after edits — invariant)
 // ---------------------------------------------------------------------------
 
@@ -105,5 +147,33 @@ describe('regression-guard', () => {
 describe('template: approach and design decisions section', () => {
   test('"## Approach & Design Decisions" is present in template', () => {
     expect(template).toContain('## Approach & Design Decisions');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TEMPLATE: mermaid ontology erDiagram slot (must FAIL — RED)
+// ---------------------------------------------------------------------------
+
+describe('template: mermaid ontology erDiagram slot', () => {
+  test('erDiagram is present in template', () => {
+    expect(template).toContain('erDiagram');
+  });
+
+  test('"clearer than prose" rationale is present in template', () => {
+    expect(template).toContain('clearer than prose');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FILE-EXISTENCE: mermaid visualization assets (must FAIL — RED)
+// ---------------------------------------------------------------------------
+
+describe('file-existence: mermaid visualization assets', () => {
+  test('templates/spec-presentation.html exists', () => {
+    expect(existsSync(join(import.meta.dir, 'templates/spec-presentation.html'))).toBe(true);
+  });
+
+  test('references/render-assembly.md exists', () => {
+    expect(existsSync(join(import.meta.dir, 'references/render-assembly.md'))).toBe(true);
   });
 });
