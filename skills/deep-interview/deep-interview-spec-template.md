@@ -1,6 +1,6 @@
 # Deep Interview Spec Template
 
-```markdown
+````markdown
 # Deep Interview Spec: {title}
 
 ## Metadata
@@ -80,6 +80,22 @@ Downstream (prometheus) consumes this as a FIXED input — does not re-decide th
 ## Ontology (Key Entities)
 {Fill from the FINAL round's ontology extraction, not just crystallization-time generation}
 
+**Entity-relationship diagram (REQUIRED):** Render the final entities and their relationships as a mermaid `erDiagram`. Map cardinality from the relationship phrase — "has many" → `||--o{`, "has one" → `||--||`, "has zero or one" → `||--o|`; draw each relationship ONCE (skip the inverse "belongs to" restatement). Put each entity's key fields inside its block. Replace the example below with the interview's actual entities.
+
+```mermaid
+erDiagram
+    USER ||--o{ ORDER : "has many"
+    ORDER ||--|| PAYMENTMETHOD : "paid via"
+    USER {
+        string id
+        string email
+    }
+    ORDER {
+        datetime createdAt
+        money total
+    }
+```
+
 | Entity | Type | Fields | Relationships |
 |--------|------|--------|---------------|
 | {entity.name} | {entity.type} | {entity.fields} | {entity.relationships} |
@@ -105,4 +121,4 @@ Downstream (prometheus) consumes this as a FIXED input — does not re-decide th
 
 ...
 </details>
-```
+````
