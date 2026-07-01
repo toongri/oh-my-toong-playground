@@ -1,6 +1,6 @@
 import { test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -145,4 +145,71 @@ test("sweep error is swallowed", () => {
 	const errorLogPath = join(tempHome, ".omt", "rules-injector", "error.log");
 	expect(existsSync(errorLogPath)).toBe(true);
 	expect(readFileSync(errorLogPath, "utf8")).toContain("sweepStaleSessionStates");
+});
+
+// ── TODO5 / D-6: SessionStart wiring end-to-end ──────────────────────────────
+//
+// Exercises the real CLI (not the in-process sweep function) so it proves the
+// GC pre-step is actually reachable from runSessionStartHook: an aged sibling
+// <sid>.json under the resolved cachePath dir is swept, an oversized error.log
+// is truncated, and the normal additionalContext injection is unaffected.
+
+const CLI_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "cli.ts");
+
+test("SessionStart hook runs sweep and rotate", () => {
+	const pluginDataDir = join(tempHome, ".omt");
+	mkdirSync(pluginDataDir, { recursive: true });
+
+	// Aged sibling session-state file: must be swept given the 1-day TTL override below.
+	const staleSiblingPath = join(pluginDataDir, "stale-sibling.json");
+	writeFileSync(staleSiblingPath, "{}");
+	age(staleSiblingPath, 2 * 24 * 60 * 60 * 1000);
+
+	// Oversized error.log: rotateErrorLog derives its sink from homedir() directly
+	// (ignores PLUGIN_DATA), so it always lives at HOME/.omt/rules-injector/error.log.
+	const errorLogPath = join(tempHome, ".omt", "rules-injector", "error.log");
+	mkdirSync(dirname(errorLogPath), { recursive: true });
+	writeFileSync(errorLogPath, "x".repeat(50));
+
+	const projectDir = mkdtempSync(join(tmpdir(), "rules-injector-gc-proj-"));
+	try {
+		mkdirSync(join(projectDir, ".claude", "rules"), { recursive: true });
+		writeFileSync(join(projectDir, "package.json"), '{"name":"ri-gc-fixture"}\n');
+		writeFileSync(
+			join(projectDir, ".claude", "rules", "always.md"),
+			"---\nalwaysApply: true\n---\nGC_SESSION_START_MARKER\n",
+		);
+
+		const result = spawnSync("bun", ["run", CLI_PATH, "hook", "session-start"], {
+			input: JSON.stringify({
+				hook_event_name: "SessionStart",
+				session_id: "gc-e2e-session",
+				transcript_path: null,
+				cwd: projectDir,
+				model: "gpt-5",
+				permission_mode: "default",
+				source: "startup",
+			}),
+			env: {
+				...process.env,
+				HOME: tempHome,
+				PI_RULES_DISABLE_BUNDLED: "1",
+				PLUGIN_DATA: pluginDataDir,
+				PI_RULES_SESSION_STATE_TTL_DAYS: "1",
+				PI_RULES_ERROR_LOG_MAX_BYTES: "10",
+			},
+			encoding: "utf8",
+		});
+
+		expect(result.status).toBe(0);
+		expect(result.stderr).toBe("");
+		const stdout = result.stdout.trim();
+		const parsed = JSON.parse(stdout) as { hookSpecificOutput?: { additionalContext?: string } };
+		expect(parsed.hookSpecificOutput?.additionalContext ?? "").toContain("GC_SESSION_START_MARKER");
+
+		expect(existsSync(staleSiblingPath)).toBe(false);
+		expect(statSync(errorLogPath).size).toBe(0);
+	} finally {
+		rmSync(projectDir, { recursive: true, force: true });
+	}
 });

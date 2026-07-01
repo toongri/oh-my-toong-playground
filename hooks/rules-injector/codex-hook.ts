@@ -1,7 +1,10 @@
+import { existsSync, utimesSync } from "node:fs";
+import { dirname } from "node:path";
+
 import type { CodexRulesHookOptions } from "./codex-hook-options.js";
 import { configFromEnvironment } from "./config.js";
 import { hasContextPressureMarker, transcriptHasContextPressureMarker } from "./context-pressure.js";
-import { createHookDebugTimer } from "./debug-log.js";
+import { createHookDebugTimer, rotateErrorLog } from "./debug-log.js";
 import { withDynamicBudget } from "./event-budget.js";
 import { formatAdditionalContextOutput, limitAdditionalContextText } from "./hook-output.js";
 import { displayPath, uniqueStrings } from "./path-utils.js";
@@ -14,6 +17,7 @@ import {
 	markSessionCompacted,
 	persistEngineState,
 	sessionCachePath,
+	sweepStaleSessionStates,
 } from "./persistent-cache.js";
 import { withPostCompactBudget } from "./post-compact-budget.js";
 import { claimedPostCompactKind, shouldSkipPostCompactClaim } from "./post-compact-claim.js";
@@ -80,6 +84,24 @@ export async function runSessionStartHook(
 		return "";
 	}
 	const cachePath = sessionCachePath(input.session_id, options.pluginDataRoot);
+
+	// D-6: best-effort GC pre-step, run before any clear/recovery logic so it can
+	// never perturb recovery. Order matters: touch our own mtime FIRST — a
+	// concurrent-resume session must never look stale to the sibling sweep that
+	// follows in the same call. Days->ms conversion happens here at the call site;
+	// sweepStaleSessionStates/rotateErrorLog already swallow their own errors, so
+	// only the touch step needs its own try/catch.
+	try {
+		if (existsSync(cachePath)) {
+			const now = new Date();
+			utimesSync(cachePath, now, now);
+		}
+	} catch {
+		// best-effort; must never throw into the hook
+	}
+	sweepStaleSessionStates(dirname(cachePath), config.sessionStateTtlDays * 86_400_000, cachePath);
+	rotateErrorLog(config.errorLogMaxBytes);
+
 	if (input.source === "clear") {
 		clearSessionState(cachePath);
 	} else if (input.source !== "resume" && input.source !== "compact" && !hasPostCompactPending(cachePath)) {
