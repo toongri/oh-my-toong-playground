@@ -19,7 +19,7 @@ import { readTranscriptSearchText } from "./transcript-search.js";
 export function runStaticInjection(
 	cwd: string,
 	transcriptPath: string | null,
-	eventName: "SessionStart" | "UserPromptSubmit",
+	eventName: "SessionStart" | "UserPromptSubmit" | "PostToolUse",
 	cachePath: string,
 	options: CodexRulesHookOptions,
 	completedPostCompactChannel?: "static",
@@ -88,7 +88,7 @@ export function runStaticInjection(
 interface PostCompactRecoveryInput {
 	cwd: string;
 	transcriptPath: string | null;
-	eventName: "SessionStart" | "UserPromptSubmit";
+	eventName: "SessionStart" | "UserPromptSubmit" | "PostToolUse";
 	cachePath: string;
 	options: CodexRulesHookOptions;
 	channel: "static";

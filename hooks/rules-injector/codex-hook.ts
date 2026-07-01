@@ -169,6 +169,38 @@ export async function runPostToolUseHook(
 		return "";
 	}
 
+	const cachePath = sessionCachePath(input.session_id, options.pluginDataRoot);
+
+	// D-1/D-2 (Option C): one-shot static reclaim in the autonomous post-compaction
+	// window. Gated behind the lock-free hasPostCompactPending pre-check (a single
+	// unlocked read) so the steady-state hot path (the overwhelming majority of tool
+	// calls — no compaction pending) never pays for claimPostCompactPending's
+	// write-lock cycle. Runs before the no-target early-return so a no-target
+	// PostToolUse still reclaims (T1-AC7); after the disabled gate so the
+	// kill-switch is honored (T1-AC8). Reuses runStaticInjection's existing
+	// recovery path (buildPostCompactReadDirective / runPostCompactRecovery in
+	// static-injection.ts) rather than forking a parallel injector. Recovery
+	// completes the static channel in this one turn (no recovering-hold, lease
+	// freed); a budget-overflow tail stays un-marked in staticDedup and self-heals
+	// via the next UserPromptSubmit's existing normal static path.
+	let staticReclaimText = "";
+	if (hasPostCompactPending(cachePath)) {
+		const staticClaim = claimPostCompactPending(cachePath, "static");
+		if (staticClaim === "claimed") {
+			const staticOutput = runStaticInjection(
+				input.cwd,
+				input.transcript_path,
+				"PostToolUse",
+				cachePath,
+				options,
+				"static",
+				{ latestCompactedReplacementOnly: true },
+				input.model,
+			);
+			staticReclaimText = extractAdditionalContext(staticOutput);
+		}
+	}
+
 	const targetPaths = extractCodexToolPaths(unwrapShellCommandInput(input), input.cwd);
 	debugTimer.lap("extract", {
 		targets: targetPaths.length,
@@ -177,20 +209,22 @@ export async function runPostToolUseHook(
 	});
 	const firstTargetPath = targetPaths[0];
 	if (firstTargetPath === undefined) {
-		debugTimer.done({ outputBytes: 0, reason: "no-target" });
-		return "";
+		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
+		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "no-target" });
+		return output;
 	}
 
-	const cachePath = sessionCachePath(input.session_id, options.pluginDataRoot);
 	const postCompactClaim = claimPostCompactPending(cachePath, "dynamic");
 	if (postCompactClaim === "not-pending" && transcriptHasContextPressureMarker(input.transcript_path)) {
-		debugTimer.done({ outputBytes: 0, reason: "context-pressure-transcript" });
-		return "";
+		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
+		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "context-pressure-transcript" });
+		return output;
 	}
 	const completedPostCompactKind = claimedPostCompactKind(postCompactClaim, "dynamic");
 	if (shouldSkipPostCompactClaim(postCompactClaim, isPostCompactRecoveryInProgress(cachePath, "dynamic"))) {
-		debugTimer.done({ outputBytes: 0, reason: "post-compact-recovery-in-progress" });
-		return "";
+		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
+		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "post-compact-recovery-in-progress" });
+		return output;
 	}
 	const dynamicConfig = withDynamicBudget(config);
 	const engine = createRulesEngine(
@@ -218,8 +252,9 @@ export async function runPostToolUseHook(
 	if (rules.length === 0) {
 		persistEngineState(engine, cachePath, completedPostCompactKind);
 		debugTimer.lap("persist", { reason: "no-rules" });
-		debugTimer.done({ outputBytes: 0, reason: "no-rules" });
-		return "";
+		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
+		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "no-rules" });
+		return output;
 	}
 
 	// Attribute the injection header to the target that actually matched the rules being
@@ -248,8 +283,9 @@ export async function runPostToolUseHook(
 	if (emittedRules.length === 0) {
 		persistEngineState(engine, cachePath, completedPostCompactKind);
 		debugTimer.lap("persist", { reason: "all-dropped" });
-		debugTimer.done({ outputBytes: 0, reason: "all-dropped" });
-		return "";
+		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
+		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "all-dropped" });
+		return output;
 	}
 	// P2 (dynamic analogue): mark only rules whose marker survives the 32K byte clamp.
 	// formatAdditionalContextOutput normalizes block then clamps to MAX_ADDITIONAL_CONTEXT_BYTES.
@@ -262,9 +298,35 @@ export async function runPostToolUseHook(
 	}
 	persistEngineState(engine, cachePath, completedPostCompactKind);
 	debugTimer.lap("persist", { reason: "emit" });
-	const output = formatAdditionalContextOutput("PostToolUse", block);
+	// D-2 merge seam: the static directive goes first (budget-sensitive, not
+	// cosmetic) and both raw strings are combined once at the tail into a single
+	// hookSpecificOutput envelope.
+	const output = formatAdditionalContextOutput("PostToolUse", combineContext(staticReclaimText, block));
 	debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "emit" });
 	return output;
+}
+
+/**
+ * D-2 merge seam: runStaticInjection always returns a fully wrapped hook JSON
+ * envelope (or ""), which is its correct contract for its other two callers
+ * (SessionStart, UserPromptSubmit — untouched). The PostToolUse static reclaim
+ * needs the raw additionalContext text so it can be combined with the dynamic
+ * block into a single envelope before the tail formatAdditionalContextOutput
+ * call. Unwrapping here keeps that merge local to the one caller that needs it.
+ */
+function extractAdditionalContext(wrappedOutput: string): string {
+	if (wrappedOutput.length === 0) return "";
+	try {
+		const parsed = JSON.parse(wrappedOutput) as { hookSpecificOutput?: { additionalContext?: string } };
+		return parsed.hookSpecificOutput?.additionalContext ?? "";
+	} catch {
+		return "";
+	}
+}
+
+/** Joins non-empty raw context blocks with a blank line, dropping empties. */
+function combineContext(...parts: readonly string[]): string {
+	return parts.filter((part) => part.trim().length > 0).join("\n\n");
 }
 
 /** Tool names whose payload carries a raw shell command that may be wrapper-wrapped. */
