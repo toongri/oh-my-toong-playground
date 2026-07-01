@@ -436,3 +436,74 @@ Current deep-interview Phase 1 performs only brownfield/greenfield detection and
 **RED confirmation target:** V1 FAILS — no decomposition proposal is visible in the first 2 assistant turns.
 
 Evidence path: `$OMT_DIR/evidence/deep-interview-prometheus-boundary-reshape/red-d1/`
+
+---
+
+## Scenario E1: Ontology Mermaid ER Diagram Embedding & Browser Render
+
+**Target Agent:** deep-interview
+**Primary Behavior:** At Phase 4 crystallization, deep-interview embeds a REQUIRED ontology `erDiagram` (mermaid) in `spec.md` — in addition to the existing Ontology (Key Entities) table — and writes a `{slug}.html` browser-render artifact under `$OMT_DIR/deep-interview/`. Mid-interview, an on-demand ontology-preview request issued while the ontology is still empty must show the literal state "no entities yet" rather than an empty or invalid `erDiagram`.
+**Reference behavior:** deep-interview spec-crystallization contract — the Ontology (Key Entities) section requires a rendered entity-relationship diagram (mermaid `erDiagram`) alongside the table, plus a browser-viewable render of the crystallized spec and an on-demand ontology preview during the interview.
+
+**How to run:**
+1. Dispatch a fresh deep-interview subagent with Fixture Prompt A (below) verbatim as the user's idea. Let it run to Phase 4 spec crystallization. Do NOT guide it toward producing a diagram or a render.
+2. Locate the crystallized `spec.md` and score it against Verification Point a. Locate `$OMT_DIR/deep-interview/` and score it against Verification Point b.
+3. Separately, dispatch a SECOND fresh deep-interview subagent (clean session) with Fixture Prompt B (below): the same idea, immediately followed by an on-demand preview request BEFORE answering any interview question. Score the resulting preview output against Verification Point c.
+4. Do NOT guide either session toward mermaid, HTML, or the phrase "no entities yet" — record whatever the baseline agent actually produces.
+
+**Test discipline:** Do NOT tell deep-interview to draw a diagram, render anything, or use the words "mermaid" or "no entities yet". If it answers the preview request with plain prose describing an empty ontology instead of the literal contract phrase, record that as FAIL on point c — that is the RED observation.
+
+---
+
+### Fixture Prompt A (crystallization run — for points a and b)
+
+Hand to the fresh deep-interview agent verbatim:
+
+> We want to add a loyalty points redemption feature to our e-commerce platform. Customers earn loyalty points on purchases, and can redeem points for rewards — either a discount code or a free product from a fixed rewards catalog. Each redemption should be logged so we can audit point balances later. Points expire after 12 months if unused.
+
+### Fixture Prompt B (empty-ontology probe — for point c)
+
+Hand to a SEPARATE fresh deep-interview agent verbatim, as the first two turns of the session, in order:
+
+> Turn 1 (idea): We want to add a loyalty points redemption feature to our e-commerce platform. Customers earn loyalty points on purchases, and can redeem points for rewards — either a discount code or a free product from a fixed rewards catalog. Each redemption should be logged so we can audit point balances later. Points expire after 12 months if unused.
+>
+> Turn 2 (sent immediately, before answering any interview question the agent asks): Before we go any further — can you show me a preview of the ontology model so far?
+
+---
+
+### Entity Manifest (for scoring point a)
+
+The fixture domain names these entities; at least 3 must appear (case-insensitive) inside the mermaid block for point a to PASS:
+
+| Entity | Role |
+|--------|------|
+| Customer | initiates redemptions, holds a LoyaltyAccount |
+| LoyaltyAccount | holds a point balance for a Customer |
+| Reward | catalog item redeemable for points (discount code or free product) |
+| Redemption | audit record linking a Customer/LoyaltyAccount to a Reward |
+
+---
+
+### Verification Points
+
+| # | Check | Expected GREEN Behavior | How to Measure |
+|---|-------|------------------------|----------------|
+| a | Crystallized `spec.md` contains an ontology `erDiagram` | The spec.md produced by Fixture Prompt A contains a ` ```mermaid ` fenced block whose body contains `erDiagram`, and that block names at least 3 of the entities in the Entity Manifest above | `grep -A40 '```mermaid' <spec.md>` extracted, then `grep -c 'erDiagram'` on that extract must be ≥ 1; grep the same extract for entity names, count of distinct manifest entities found must be ≥ 3 |
+| b | `{slug}.html` render artifact exists | A non-empty `.html` file exists under `$OMT_DIR/deep-interview/` produced by the Fixture Prompt A run | `ls "$OMT_DIR/deep-interview/"*.html` returns at least one path; `test -s <path>` on that file succeeds (non-empty) |
+| c | Empty-ontology on-demand preview shows literal "no entities yet" | The response to Turn 2 of Fixture Prompt B (issued before any entity has been extracted) contains the literal string `no entities yet`, and does NOT contain an `erDiagram` fence with zero entity blocks inside it | `grep -c "no entities yet"` on the Turn-2 response must be ≥ 1; if the response contains a ` ```mermaid ` fence, it must also contain at least one entity block — a bare `erDiagram` with no entity definitions is a FAIL |
+
+### RED-Result Note
+
+**TRUE RED (current skill emits neither the diagram nor the render):**
+The current deep-interview skill and spec template produce only the existing "Ontology (Key Entities)" markdown table (see the table format used throughout Scenario A2's fixtures) — there is no mermaid `erDiagram` embedding step anywhere in the crystallization flow, no HTML render step of any kind, and no on-demand ontology-preview affordance. Baseline predictions:
+- Point a FAILS: `spec.md` contains the Ontology table only; no ` ```mermaid ` fence exists anywhere in the file.
+- Point b FAILS: no `.html` file is ever written by deep-interview; `$OMT_DIR/deep-interview/` may not even exist as a directory.
+- Point c FAILS: deep-interview has no concept of a "preview" request. Turn 2 of Fixture Prompt B most likely receives either a refusal, a plain-prose restatement of the idea, or a bare description of "no entities extracted yet" in the agent's own words — never the literal contract string `no entities yet`, and never any erDiagram concept at all.
+
+**False-GREEN this note must guard against — do not let a pre-existing check masquerade as coverage of this new behavior:**
+1. The pre-existing Ontology (Key Entities) *table* already appears in crystallized specs today. Its presence is NOT evidence for point a — point a requires the additional mermaid `erDiagram` fenced block, not the table that already exists independently of this scenario.
+2. `skills/deep-interview/SKILL.test.ts` already contains static string-presence assertions (`new-prose: spec-presentation render target`, `new-prose: ontology-preview on-demand render`, `template: mermaid ontology erDiagram slot`, `file-existence: mermaid visualization assets`) that grep SKILL.md and the template source files for phrases like `erDiagram`, `{slug}.html`, `ontology-preview.html`, and `no entities yet`. Those are a SEPARATE, purely static prose-contract layer scored by `bun test` against the skill's own instruction text — they do not run a subagent and cannot prove that a live interview session actually produces the artifacts. A future edit that merely inserts these phrases into SKILL.md would turn `SKILL.test.ts` green without making any of points a, b, or c here true; conversely this scenario can still fail even after `SKILL.test.ts` passes, if the agent does not follow through at runtime. GREEN on `SKILL.test.ts` must never be cited as GREEN on this scenario.
+
+**RED confirmation target:** a, b, and c all FAIL on an unmodified deep-interview skill.
+
+Evidence path: `$OMT_DIR/evidence/deep-interview-prometheus-boundary-reshape/red-e1/`
