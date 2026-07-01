@@ -17,7 +17,7 @@ Deep Interview implements Ouroboros-inspired Socratic questioning with mathemati
 - User wants to avoid "that's not what I meant" outcomes from autonomous execution
 - Task is complex enough that jumping to code would waste cycles on scope discovery
 - User wants mathematically-validated clarity before committing to execution
-- User knows roughly WHAT they want but a load-bearing design approach (HOW) is unresolved -- multiple viable, costly-to-change approaches must be decided before the spec is actionable
+- User wants every design decision interrogated with alternatives before building -- not just requirements clarified
 </Use_When>
 
 <Do_Not_Use_When>
@@ -127,22 +127,16 @@ The `init` subcommand performs a strict overlay of the rich state shape into the
 
 ## Phase 2: Interview Loop
 
-Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the how-readiness gate check before exiting Phase 2: if no unresolved load-bearing HOW-decision exists, proceed to Phase 4; if one exists, run the Design-fork detection gate below, record the chosen approach, then proceed to Phase 4. User-forced early exits (hard-cap, early-exit) bypass this gate and carry any unresolved fork into the spec risk-note; a literal user stop/cancel/abort instead halts and saves state, crystallizing no spec.
+Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the residual-ambiguity seam (Step 2-exit, below) to decide whether to keep clarifying requirements or move on to the Design Interview phase. User-forced early exits (hard-cap, early-exit) and a literal user stop/cancel/abort are handled by the seam itself, as described there.
 
-### Step 2-exit: Design-fork detection gate
+### Step 2-exit: Residual-Ambiguity Seam
 
-Run this ONLY after `ambiguity ≤ threshold` and before Phase 2 exits. This design-fork detection is orthogonal to the Step-2 stance selector: scan the accumulated interview state and transcript summary for load-bearing design forks — multiple viable approaches that are costly-to-change or cross-cutting. Trivial and single-approach situations clear the how-readiness gate without daedalus. On a load-bearing fork, dispatch `daedalus` with the evidence block defined below — `daedalus` is a consultation helper reserved for DIFFICULT or COMPLEX load-bearing forks (hard cross-cutting choices that warrant steelman antithesis and tradeoff tension analysis); routine multi-viable forks that arose during the interview are resolved in-loop via Step 2-alt (below) and do NOT reach this gate. Present the recommended approach via `AskUserQuestion` (tag "(Recommended)"), record the chosen approach for the spec's Approach section, then treat the how-readiness gate as clear for Phase 4. A user instruction to be quick or not over-think the design is NOT a user-forced escape hatch unless it is a literal stop/abort/early-exit signal; when the threshold was met on the normal path, resolve the load-bearing fork via the single daedalus + AskUserQuestion step (which already honors the hurry) rather than bypassing it.
+This is the single reusable stopping-and-checking pattern used at every phase exit in this skill — defined once here, referenced by both the requirements-threshold exit (Step 2d, below) and the design-completion exit (Design Interview phase, below). Do not bare-announce completion at either exit. Instead:
 
-```
-## Evidence
-- State JSON: output of `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get`
-- Interview packet prepared by the main agent: prompt-safe transcript summary, explicit user decisions, unresolved HOW-fork candidates, constraints, success criteria, ontology snapshots, and relevant evidence provenance labels.
+1. Reflect the residual ambiguity that remains — name any unresolved gap, weak dimension, or open design point, however small, instead of declaring the interview simply "done".
+2. Ask the user, via `AskUserQuestion`, whether to continue (keep clarifying requirements, or keep resolving design branches) or proceed to the next phase.
 
-## Focus
-- Enumerate 2–3 viable approaches for the unresolved HOW-fork; steelman each.
-- Surface tradeoff tensions and costly-to-change consequences.
-- Recommend one approach with rationale, using only the evidence packet and state JSON above.
-```
+User-forced early exits (hard-cap, early-exit) skip the interactive question and proceed directly, folding the residual ambiguity into the spec's risk-note instead. A literal user stop/cancel/abort halts and saves state for resume, crystallizing no spec.
 
 ### Step 2-head: Dialectic Rhythm Guard (pre-question stance selector)
 
@@ -231,24 +225,6 @@ If any prompt input is too large, summarize it first and then continue from the 
 | Success Criteria | "How do we know it works?" | "If I showed you the finished product, what would make you say 'yes, that's it'?" |
 | Context Clarity (brownfield) | "How does this fit?" | "I found JWT auth middleware in `src/auth/` (pattern: passport + JWT). Should this feature extend that path or intentionally diverge from it?" |
 | Scope-fuzzy / ontology stress | "What IS the core thing here?" | "You have named Tasks, Projects, and Workspaces across the last rounds. Which one is the core entity, and which are supporting views or containers?" |
-
-After generating the question (above), check whether the topic reveals a **multi-viable design choice** — if yes, run Step 2-alt below instead of Step 2b.
-
-### Step 2-alt: Multi-viable alternative presentation (fires in-loop)
-
-**Trigger:** question generation reveals a design choice with ≥2 viable approaches.
-
-**Multi-viable design choice (definition):** both conditions must hold: (1) ≥2 approaches each materially shape the spec — affecting architecture, data model, API contract, or user flow in a non-trivial way — AND (2) codebase facts and external research cannot decide between them; the choice requires human judgment.
-
-**Excluded — do not manufacture alternatives:** single-viable situations (one approach is forced by the codebase, a constraint, or an established fact) and pure factual questions. Example: if the codebase already mandates one auth path via a shared middleware, do NOT generate "JWT vs cookies vs API keys" — that is a strawman.
-
-**Presentation rule:** present 2-3 approaches via `AskUserQuestion`, tag one option `(Recommended)` with a brief rationale, and ask the user to choose. Do not silently default to any approach.
-
-**Main skill owns routine presentation — `daedalus` is for difficult/complex cases only.** For straightforward trade-offs with well-understood options, present the alternatives directly without dispatching `daedalus`. Reserve `daedalus` for choices that are genuinely hard or cross-cutting — where steelman antithesis and deep tradeoff tension analysis add value beyond a direct listing. `daedalus` is a consultation helper, NOT a gate and NOT the default enumerator for every multi-viable fork.
-
-**Seam note — no double-fire with the Phase-2-exit backstop:** The Step-2-exit Design-fork detection gate is a BACKSTOP that fires ONLY when an unresolved load-bearing fork remains at Phase-2 exit. Because Step 2-alt resolves multi-viable forks as they arise IN-LOOP, the backstop normally has nothing left to fire on when the threshold is reached. There is no double-fire: the backstop fires only on forks that slipped through (e.g., a fork that emerged very late in the interview or a user-forced early exit that bypassed in-loop resolution).
-
-After the user selects an approach, record the decision, then proceed to Step 2c (skip Step 2b — the `AskUserQuestion` in this step served as the question for this round).
 
 ### Step 2b: Ask the Question
 
@@ -354,7 +330,7 @@ Round {n} complete.
 
 **Next target:** {weakest_dimension} — {weakest_dimension_rationale}
 
-{score <= threshold ? "Clarity threshold met! Ready to proceed." : "Focusing next question on: {weakest_dimension}"}
+{score <= threshold ? "Threshold met — reflecting residual ambiguity via the Step 2-exit seam before proceeding." : "Focusing next question on: {weakest_dimension}"}
 ```
 
 ### Step 2e: Update State
@@ -416,29 +392,46 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 (Duplicate names are silently deduped; safe to call even if the mode was already recorded.)
 
+## Design Interview
+
+Once Phase 2 exits (via the residual-ambiguity seam, above) toward design work, interrogate the design **relentlessly** — probe **every aspect** of the design until reaching **shared understanding** with the user, going beyond requirements clarity.
+
+**Pacing:** ask design questions **one at a time**, exactly as in the requirements loop — never batch. For each question, offer a recommended answer so the user can accept or override it quickly. Before asking, check whether the codebase can already answer it — if so, run `explore` first and fold the finding into the question instead of asking the user to rediscover it.
+
+**Per-decision alternatives:** for **every design decision** — every point where the implementation genuinely could go more than one way — present **2-3 alternatives** with a recommendation, via `AskUserQuestion`. This isn't limited to costly-to-change choices: every real decision earns alternatives, not just the hardest ones.
+
+**Fact vs. strawman boundary:** a point the codebase or an external constraint already forces onto a single path is a **fact** — ground it with `explore`/`librarian` and state it as settled, do not manufacture a **strawman** alternative around it. Only present alternatives where a real choice exists; naming options nobody would pick is not a decision.
+
+**Persist each decision to state:** after the user answers a design question (or a forced point is fact-grounded), append the decision to interview state *before* moving to the next question — the same mechanism Step 2e and Step 2-fact use, so the resume path (`get`/`adopt`) and Phase 4 crystallization recover the chosen alternatives even across a session interruption. Without this, the decision lives only in the in-context transcript and is lost on cross-session resume. The existing `--append-round-stdin` accepts this shape with no schema change (exactly as the `fact-ground` round does), marked as a design round so it is distinguishable from requirements Q&A:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
+{"n":<round_number>,"kind":"design","decision":"<design question>","choice":"<chosen alternative>","alternatives":[<offered alternatives>],"rationale":"<why chosen>"}
+OMT_DI_PAYLOAD_EOF
+```
+
+The same JSON-encoding rule as Step 2e applies: the heredoc guards shell quoting only; all substituted string values must be JSON-encoded (`\"`, `\\`, newlines as `\n`).
+
+Continue this loop until **all design branches** are resolved — no open decision, alternative, or design-facing gap remains.
+
+**Design-completion exit:** when all design branches are resolved, do not bare-announce completion. Run the residual-ambiguity seam (Step 2-exit, above): reflect the residual ambiguity left in the design (any unresolved tension, edge case, or soft spot), then ask the user via `AskUserQuestion` whether to continue resolving design branches or proceed to Phase 4 (Crystallize).
+
 ## Phase 4: Crystallize Spec
 
-When Phase 2 has exited with `ambiguity ≤ threshold` and the how-readiness gate clear, or when a user-forced escape hatch fires:
+When the Design Interview phase has exited with all design branches resolved, or when a user-forced escape hatch fires:
 
-The Design-fork detection gate has already run at Phase 2 exit for the normal path. In Phase 4, use the recorded chosen approach when drafting the Approach section; on a user-forced escape hatch with an unresolved fork, include the fork as a risk-note instead of dispatching daedalus here.
+1. **Generate the specification** with the prompt-safe transcript, using the design decisions recorded during the Design Interview phase for the Approach section; on a user-forced escape hatch, include any unresolved requirements gap or design branch as a risk-note instead. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
 
-**Per-section approval loop**: Draft each spec section (Goal → Constraints → Success Criteria → Approach → ...) one at a time; present it and collect per-section approval before continuing. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing any section.** Do not write the spec from memory.
+**Diagram-authoring guidance**: the Ontology (Key Entities) `erDiagram` is REQUIRED. Self-audit every mermaid block before writing it (see `render-assembly.md`'s mermaid-validity note: no raw `;` in diagram text).
 
-**Whole-spec gate**: After all per-section approvals, assemble the draft and present the whole spec for final confirmation before writing.
+2. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
 
-**Diagram-authoring guidance**: the Ontology (Key Entities) `erDiagram` is REQUIRED; the Architecture / Components / Data Flow / Error Handling diagrams are discretionary — add one only when it is clearer than prose. Self-audit every mermaid block before writing it (see `render-assembly.md`'s mermaid-validity note: no raw `;` in diagram text).
+**Inline self-review** (after writing), 4 checks: placeholder / consistency / scope / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, no ambiguous text remains.
 
-1. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
+3. **Render to HTML**: **You MUST read `references/render-assembly.md` first** — it is the single owner of the close-tag escape, the active-placeholder HTML-escape, and the prose-fragment guard; apply its full guard set before substituting. Fill `templates/spec-presentation.html` with the assembled spec markdown and the placeholder values, then write the render to `$OMT_DIR/deep-interview/{slug}.html` — reuse the SAME `{slug}` from the just-written `{slug}.md`; do NOT re-derive the slug. Tell the user to open it in a browser. If the final ontology has zero entities, the Ontology (Key Entities) `erDiagram` slot must render a `no entities yet` state rather than an empty/invalid erDiagram. **Lifecycle**: this render HTML is never auto-deleted, same as the `.md` spec.
 
-**2-layer review** (after writing):
-
-Inline self-review (4 checks): placeholder / consistency / scope / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, no ambiguous text remains.
-
-Dispatch `spec-reviewer` — pass the spec path only. This loop is GATING on the reviewer's `Status`: while it returns `Status: Issues Found`, fix the named Issues and re-dispatch `spec-reviewer`, repeating until it returns `Status: Approved`. Do NOT emit the handoff token while any Issue remains — there is no advisory proceed-anyway / risk-note escape from an unresolved Issue. Only **Issues** gate; **Recommendations** are advisory and never block — carry any unaddressed ones into the spec's Risks section.
-
-2. **Render to HTML**: **You MUST read `references/render-assembly.md` first** — it is the single owner of the close-tag escape, the active-placeholder HTML-escape, and the prose-fragment guard; apply its full guard set before substituting. Fill `templates/spec-presentation.html` with the assembled spec markdown and the placeholder values, then write the render to `$OMT_DIR/deep-interview/{slug}.html` — reuse the SAME `{slug}` from the just-written `{slug}.md`; do NOT re-derive the slug. Tell the user to open it in a browser. If the final ontology has zero entities, the Ontology (Key Entities) `erDiagram` slot must render a `no entities yet` state rather than an empty/invalid erDiagram. **Lifecycle**: this render HTML is never auto-deleted, same as the `.md` spec.
-
-3. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
+4. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
 
 ### On-demand ontology render
 
@@ -501,22 +494,19 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - **Early exit (round 3+)**: Allow with warning if ambiguity > threshold
 - **User says "stop", "cancel", "abort"**: Stop immediately, save state for resume
 - **Ambiguity stalls** (same score +-0.05 for 3 rounds): handled by the Step 2-head Dialectic Rhythm Guard stall rotation rule (selects Ontologist) — no separate activation here
-- **how-readiness gate**: Normal-path exit requires `ambiguity ≤ threshold` AND no unresolved load-bearing HOW-decision (costly-to-change, cross-cutting, or multiple genuinely divergent approaches). User-forced early exits (hard-cap, early-exit) bypass the gate but fold the unresolved fork into the spec's risk-note. A literal user stop/cancel/abort is NOT such an exit — it halts and saves state for resume per the rule above, crystallizing no spec.
-- **All dimensions at 0.9+**: Skip to spec generation ONLY after the Phase 2 how-readiness gate is clear; if a load-bearing HOW-fork is unresolved, resolve it via the Phase 2 Design-fork detection gate first.
+- **Threshold reached**: `ambiguity ≤ threshold` routes to the residual-ambiguity seam (Step 2-exit) rather than straight to Phase 4 — the seam decides whether to keep clarifying requirements or move to the Design Interview phase.
+- **All dimensions at 0.9+**: Route through the residual-ambiguity seam (Step 2-exit) the same as ordinary threshold-reached handling.
 - **Codebase exploration fails**: Proceed as greenfield, note the limitation
 </Escalation_And_Stop_Conditions>
 
 <Final_Checklist>
-- [ ] Interview completed (ambiguity ≤ threshold AND how-readiness gate clear, OR user chose early exit)
+- [ ] Interview completed (ambiguity ≤ threshold with all design branches resolved via the Design Interview phase, OR user chose early exit)
 - [ ] Oversized initial context/history was summarized before scoring, question generation, spec generation, or execution handoff
 - [ ] Ambiguity score displayed after every round
 - [ ] Every round explicitly names the weakest dimension and why it is the next target
 - [ ] Challenge stances selected by the Step 2-head Dialectic Rhythm Guard at the correct rotation conditions (Contrarian round 4+, Simplifier round 6+, Ontologist on stall or round 8+ with ambiguity > 0.3)
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
-- [ ] Per-section approval loop performed (each spec section approved before continuing)
-- [ ] Whole-spec gate: full spec confirmed before writing
 - [ ] Inline self-review (4 checks: placeholder / consistency / scope / ambiguity) performed
-- [ ] Spec-reviewer returned `Status: Approved` (fix→re-review loop ran until no Issues remain; Recommendations may be risk-noted)
 - [ ] Spec includes: goal, constraints, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
 - [ ] Execution bridge presented via AskUserQuestion
