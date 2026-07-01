@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import type { CodexRulesHookOptions } from "./codex-hook-options.js";
 import { configFromEnvironment } from "./config.js";
 import { hasContextPressureMarker, transcriptHasContextPressureMarker } from "./context-pressure.js";
-import { createHookDebugTimer, rotateErrorLog } from "./debug-log.js";
+import { createHookDebugTimer, rotateErrorLog, writeErrorBreadcrumb } from "./debug-log.js";
 import { withDynamicBudget } from "./event-budget.js";
 import { formatAdditionalContextOutput, limitAdditionalContextText } from "./hook-output.js";
 import { displayPath, uniqueStrings } from "./path-utils.js";
@@ -13,6 +13,7 @@ import {
 	clearSessionState,
 	hasPostCompactPending,
 	hydrateEngineState,
+	isPostCompactPending,
 	isPostCompactRecoveryInProgress,
 	markSessionCompacted,
 	persistEngineState,
@@ -24,7 +25,7 @@ import { claimedPostCompactKind, shouldSkipPostCompactClaim } from "./post-compa
 import type { DynamicLoadedRule } from "./rules/engine-dynamic-loader.js";
 import { formatDynamicBlock, ruleMarkerLine } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
-import { runStaticInjection } from "./static-injection.js";
+import { combineStaticContext, runStaticInjection } from "./static-injection.js";
 import { extractCodexToolPaths } from "./tool-paths.js";
 import { filterRulesAlreadyInTranscript } from "./transcript-rule-filter.js";
 
@@ -194,19 +195,28 @@ export async function runPostToolUseHook(
 	const cachePath = sessionCachePath(input.session_id, options.pluginDataRoot);
 
 	// D-1/D-2 (Option C): one-shot static reclaim in the autonomous post-compaction
-	// window. Gated behind the lock-free hasPostCompactPending pre-check (a single
-	// unlocked read) so the steady-state hot path (the overwhelming majority of tool
-	// calls — no compaction pending) never pays for claimPostCompactPending's
-	// write-lock cycle. Runs before the no-target early-return so a no-target
-	// PostToolUse still reclaims (T1-AC7); after the disabled gate so the
-	// kill-switch is honored (T1-AC8). Reuses runStaticInjection's existing
-	// recovery path (buildPostCompactReadDirective / runPostCompactRecovery in
-	// static-injection.ts) rather than forking a parallel injector. Recovery
-	// completes the static channel in this one turn (no recovering-hold, lease
-	// freed); a budget-overflow tail stays un-marked in staticDedup and self-heals
-	// via the next UserPromptSubmit's existing normal static path.
+	// window. Gated behind a lock-free pre-check (two unlocked reads: is STATIC
+	// specifically pending, or already mid-recovery) so the steady-state hot path (the
+	// overwhelming majority of tool calls — no compaction pending) never pays for
+	// claimPostCompactPending's write-lock cycle. The check is narrowed to the static
+	// kind specifically: hasPostCompactPending(cachePath) would also be true when only
+	// DYNAMIC is pending, and claimPostCompactPending(cachePath, "static") would still
+	// pay for the write-lock cycle on a doomed "not-pending" claim in that case. Runs
+	// before the no-target early-return so a no-target PostToolUse still reclaims
+	// (T1-AC7); after the disabled gate so the kill-switch is honored (T1-AC8). Reuses
+	// runStaticInjection's existing recovery path (buildPostCompactReadDirective /
+	// runPostCompactRecovery in static-injection.ts) rather than forking a parallel
+	// injector. Recovery completes the static channel in this one turn (no
+	// recovering-hold, lease freed); a budget-overflow tail stays un-marked in
+	// staticDedup and self-heals via the next UserPromptSubmit's existing normal static
+	// path.
 	let staticReclaimText = "";
-	if (hasPostCompactPending(cachePath)) {
+	const returnStaticOnly = (reason: string): string => {
+		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
+		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason });
+		return output;
+	};
+	if (isPostCompactPending(cachePath, "static") || isPostCompactRecoveryInProgress(cachePath, "static")) {
 		const staticClaim = claimPostCompactPending(cachePath, "static");
 		if (staticClaim === "claimed") {
 			const staticOutput = runStaticInjection(
@@ -231,22 +241,16 @@ export async function runPostToolUseHook(
 	});
 	const firstTargetPath = targetPaths[0];
 	if (firstTargetPath === undefined) {
-		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
-		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "no-target" });
-		return output;
+		return returnStaticOnly("no-target");
 	}
 
 	const postCompactClaim = claimPostCompactPending(cachePath, "dynamic");
 	if (postCompactClaim === "not-pending" && transcriptHasContextPressureMarker(input.transcript_path)) {
-		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
-		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "context-pressure-transcript" });
-		return output;
+		return returnStaticOnly("context-pressure-transcript");
 	}
 	const completedPostCompactKind = claimedPostCompactKind(postCompactClaim, "dynamic");
 	if (shouldSkipPostCompactClaim(postCompactClaim, isPostCompactRecoveryInProgress(cachePath, "dynamic"))) {
-		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
-		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "post-compact-recovery-in-progress" });
-		return output;
+		return returnStaticOnly("post-compact-recovery-in-progress");
 	}
 	const dynamicConfig = withDynamicBudget(config);
 	const engine = createRulesEngine(
@@ -274,9 +278,7 @@ export async function runPostToolUseHook(
 	if (rules.length === 0) {
 		persistEngineState(engine, cachePath, completedPostCompactKind);
 		debugTimer.lap("persist", { reason: "no-rules" });
-		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
-		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "no-rules" });
-		return output;
+		return returnStaticOnly("no-rules");
 	}
 
 	// Attribute the injection header to the target that actually matched the rules being
@@ -305,25 +307,26 @@ export async function runPostToolUseHook(
 	if (emittedRules.length === 0) {
 		persistEngineState(engine, cachePath, completedPostCompactKind);
 		debugTimer.lap("persist", { reason: "all-dropped" });
-		const output = formatAdditionalContextOutput("PostToolUse", staticReclaimText);
-		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "all-dropped" });
-		return output;
+		return returnStaticOnly("all-dropped");
 	}
-	// P2 (dynamic analogue): mark only rules whose marker survives the 32K byte clamp.
-	// formatAdditionalContextOutput normalizes block then clamps to MAX_ADDITIONAL_CONTEXT_BYTES.
-	// A rule whose marker falls past the clamp must stay pending so the next turn re-injects it.
-	const limitedBlock = limitAdditionalContextText(block.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim());
+	// P2 (dynamic analogue): mark only rules whose marker survives the 32K byte clamp
+	// applied to the ACTUAL emitted text. D-2 merge seam: the real output is
+	// staticReclaimText + block combined and clamped TOGETHER (formatAdditionalContextOutput
+	// below), not `block` clamped alone — clamping block alone under-counts the static
+	// prefix's bytes and can mark a rule "injected" whose marker the combined clamp
+	// actually cuts, silently dropping it forever. Compute the combined string once, mark
+	// against ITS clamp, then emit that same combined string (re-clamping an
+	// already-under-limit string is idempotent).
+	const combined = combineStaticContext(staticReclaimText, block);
+	const limitedCombined = limitAdditionalContextText(combined.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim());
 	for (const rule of emittedRules) {
-		if (limitedBlock.includes(ruleMarkerLine(rule.path))) {
+		if (limitedCombined.includes(ruleMarkerLine(rule.path))) {
 			engine.markDynamicInjected(rule);
 		}
 	}
 	persistEngineState(engine, cachePath, completedPostCompactKind);
 	debugTimer.lap("persist", { reason: "emit" });
-	// D-2 merge seam: the static directive goes first (budget-sensitive, not
-	// cosmetic) and both raw strings are combined once at the tail into a single
-	// hookSpecificOutput envelope.
-	const output = formatAdditionalContextOutput("PostToolUse", combineContext(staticReclaimText, block));
+	const output = formatAdditionalContextOutput("PostToolUse", combined);
 	debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "emit" });
 	return output;
 }
@@ -341,14 +344,14 @@ function extractAdditionalContext(wrappedOutput: string): string {
 	try {
 		const parsed = JSON.parse(wrappedOutput) as { hookSpecificOutput?: { additionalContext?: string } };
 		return parsed.hookSpecificOutput?.additionalContext ?? "";
-	} catch {
+	} catch (error) {
+		// A non-empty, non-JSON result here means runStaticInjection's envelope contract
+		// (fully wrapped hook JSON or "") broke — swallowing that silently would mask a
+		// real regression as a merely-empty static reclaim. Leave the breadcrumb; the
+		// advisory exit-0 contract still holds (this hook must never throw).
+		writeErrorBreadcrumb("extractAdditionalContext:parse", error);
 		return "";
 	}
-}
-
-/** Joins non-empty raw context blocks with a blank line, dropping empties. */
-function combineContext(...parts: readonly string[]): string {
-	return parts.filter((part) => part.trim().length > 0).join("\n\n");
 }
 
 /** Tool names whose payload carries a raw shell command that may be wrapper-wrapped. */
