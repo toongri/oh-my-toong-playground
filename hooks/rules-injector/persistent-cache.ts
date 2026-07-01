@@ -223,7 +223,7 @@ export function sweepStaleSessionStates(dir: string, ttlMs: number, ownCachePath
 				continue;
 			}
 			try {
-				if (!isStale(siblingPath, ttlMs) || hasLiveLockHolder(siblingPath)) {
+				if (!isStale(siblingPath, ttlMs) || !isSessionStateFile(siblingPath) || hasLiveLockHolder(siblingPath)) {
 					continue;
 				}
 				clearSessionState(siblingPath);
@@ -267,6 +267,20 @@ function isStale(path: string, ttlMs: number): boolean {
 function hasLiveLockHolder(cachePath: string): boolean {
 	const pid = readLockHolderPid(`${cachePath}.lock`);
 	return pid !== undefined && isPidAlive(pid);
+}
+
+// Positively identify one of our own <sid>.json records before deleting. When
+// pluginDataRoot points at a directory shared with unrelated JSON (a config or
+// package.json), a stale `.json` sibling that is NOT a session-state record must
+// never be reaped. Mirrors readSessionState's discriminator (version + shape);
+// a corrupt/foreign file fails it and is left untouched rather than deleted.
+function isSessionStateFile(path: string): boolean {
+	try {
+		const parsed = JSON.parse(readFileSync(path, "utf8"));
+		return isRecord(parsed) && parsed["version"] === STATE_VERSION && isSerializedSessionState(parsed);
+	} catch {
+		return false;
+	}
 }
 
 function readSessionState(cachePath: string): SerializedSessionState {

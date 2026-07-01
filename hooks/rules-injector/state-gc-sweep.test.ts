@@ -46,12 +46,17 @@ function age(path: string, ageMs: number): void {
 	utimesSync(path, seconds, seconds);
 }
 
+// A minimal but valid <sid>.json payload: the sweep only reaps files that parse
+// as one of our session-state records (version + dedup shape), so "should be
+// swept" fixtures must carry this shape, not a bare `{}`.
+const SESSION_STATE_JSON = JSON.stringify({ version: 1, staticDedup: [], dynamicDedup: {} });
+
 test("sweeps stale sibling json and lock", () => {
 	const ownCachePath = join(scratchDir, "own.json");
 	writeFileSync(ownCachePath, "{}");
 
 	const siblingPath = join(scratchDir, "sibling.json");
-	writeFileSync(siblingPath, "{}");
+	writeFileSync(siblingPath, SESSION_STATE_JSON);
 	age(siblingPath, 10_000);
 	const lockPath = `${siblingPath}.lock`;
 	mkdirSync(lockPath);
@@ -63,12 +68,36 @@ test("sweeps stale sibling json and lock", () => {
 	expect(existsSync(ownCachePath)).toBe(true);
 });
 
+test("preserves stale foreign json that is not a session-state record", () => {
+	const ownCachePath = join(scratchDir, "own.json");
+	writeFileSync(ownCachePath, SESSION_STATE_JSON);
+
+	// A stale, unrelated JSON sibling (e.g. a package.json when pluginDataRoot
+	// points at a directory shared with other tools): lacks our version + dedup
+	// shape, so the sweep must leave it untouched even though its mtime is well
+	// past the TTL. Deleting it would be data loss outside our ownership.
+	const foreignPath = join(scratchDir, "package.json");
+	writeFileSync(foreignPath, JSON.stringify({ name: "unrelated", dependencies: {} }));
+	age(foreignPath, 10_000);
+
+	// A stale, corrupt/truncated .json: also not positively one of our records,
+	// so preserved rather than deleted (leak over destroy on ambiguity).
+	const corruptPath = join(scratchDir, "corrupt.json");
+	writeFileSync(corruptPath, "{ not valid json");
+	age(corruptPath, 10_000);
+
+	sweepStaleSessionStates(scratchDir, TTL_MS, ownCachePath);
+
+	expect(existsSync(foreignPath)).toBe(true);
+	expect(existsSync(corruptPath)).toBe(true);
+});
+
 test("preserves fresh sibling", () => {
 	const ownCachePath = join(scratchDir, "own.json");
 	writeFileSync(ownCachePath, "{}");
 
 	const freshSiblingPath = join(scratchDir, "fresh-sibling.json");
-	writeFileSync(freshSiblingPath, "{}");
+	writeFileSync(freshSiblingPath, SESSION_STATE_JSON);
 
 	sweepStaleSessionStates(scratchDir, TTL_MS, ownCachePath);
 
@@ -94,7 +123,7 @@ test("ignores non-session files and respects 24h throttle", () => {
 	age(errorLogPath, 10_000);
 
 	const firstSiblingPath = join(scratchDir, "sibling-a.json");
-	writeFileSync(firstSiblingPath, "{}");
+	writeFileSync(firstSiblingPath, SESSION_STATE_JSON);
 	age(firstSiblingPath, 10_000);
 
 	sweepStaleSessionStates(scratchDir, TTL_MS, ownCachePath);
@@ -105,7 +134,7 @@ test("ignores non-session files and respects 24h throttle", () => {
 	expect(existsSync(firstSiblingPath)).toBe(false);
 
 	const secondSiblingPath = join(scratchDir, "sibling-b.json");
-	writeFileSync(secondSiblingPath, "{}");
+	writeFileSync(secondSiblingPath, SESSION_STATE_JSON);
 	age(secondSiblingPath, 10_000);
 
 	sweepStaleSessionStates(scratchDir, TTL_MS, ownCachePath);
@@ -162,7 +191,7 @@ test("SessionStart hook runs sweep and rotate", () => {
 
 	// Aged sibling session-state file: must be swept given the 1-day TTL override below.
 	const staleSiblingPath = join(pluginDataDir, "stale-sibling.json");
-	writeFileSync(staleSiblingPath, "{}");
+	writeFileSync(staleSiblingPath, SESSION_STATE_JSON);
 	age(staleSiblingPath, 2 * 24 * 60 * 60 * 1000);
 
 	// Oversized error.log: rotateErrorLog derives its sink from homedir() directly
@@ -278,7 +307,7 @@ test("SessionStart compact-source recovery is unchanged by GC pre-step", () => {
 		age(join(pluginDataDir, "last-swept"), 2 * 24 * 60 * 60 * 1000);
 
 		const staleSiblingPath = join(pluginDataDir, "stale-sibling.json");
-		writeFileSync(staleSiblingPath, "{}");
+		writeFileSync(staleSiblingPath, SESSION_STATE_JSON);
 		age(staleSiblingPath, 2 * 24 * 60 * 60 * 1000);
 
 		const errorLogPath = join(tempHome, ".omt", "rules-injector", "error.log");
