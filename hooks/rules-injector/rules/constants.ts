@@ -104,6 +104,16 @@ export const DEFAULT_PROMPT_MAX_RULE_CHARS = 6000;
 export const DEFAULT_PROMPT_MAX_RESULT_CHARS = 16000;
 
 /**
+ * Session-state cache TTL, in days (default).
+ */
+export const DEFAULT_SESSION_STATE_TTL_DAYS = 7;
+
+/**
+ * Error log file size cap, in bytes (default).
+ */
+export const DEFAULT_ERROR_LOG_MAX_BYTES = 5_242_880;
+
+/**
  * Truncation marker template. `{path}` is replaced with the relative path.
  */
 export const TRUNCATION_NOTICE = "\n\n[Truncated. Full: {path}]";

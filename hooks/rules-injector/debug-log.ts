@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -80,5 +80,22 @@ export function writeErrorBreadcrumb(context: string, error: unknown): void {
 		appendFileSync(sink, `[${new Date().toISOString()}] ${context}: ${detail}\n`);
 	} catch {
 		// best-effort; the error sink must never throw or block the turn
+	}
+}
+
+/**
+ * Best-effort rotation for the error.log breadcrumb sink (D-5). If the log has
+ * grown past `maxBytes`, truncate it to empty — no generation kept, no
+ * rename/backup. Never throws; a missing file or stat/write fault is a silent
+ * no-op, mirroring `writeErrorBreadcrumb`'s never-throw discipline.
+ */
+export function rotateErrorLog(maxBytes: number): void {
+	try {
+		const sink = join(homedir(), ".omt", "rules-injector", "error.log");
+		if (statSync(sink).size > maxBytes) {
+			writeFileSync(sink, "");
+		}
+	} catch {
+		// best-effort; rotation must never throw or block the turn
 	}
 }

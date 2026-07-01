@@ -9,12 +9,14 @@ import {
 import {
 	DEFAULT_DYNAMIC_MAX_RESULT_CHARS,
 	DEFAULT_DYNAMIC_MAX_RULE_CHARS,
+	DEFAULT_ERROR_LOG_MAX_BYTES,
 	DEFAULT_MAX_RESULT_CHARS,
 	DEFAULT_MAX_RULE_CHARS,
 	DEFAULT_POST_COMPACT_MAX_RESULT_CHARS,
 	DEFAULT_POST_COMPACT_MAX_RULE_CHARS,
 	DEFAULT_PROMPT_MAX_RESULT_CHARS,
 	DEFAULT_PROMPT_MAX_RULE_CHARS,
+	DEFAULT_SESSION_STATE_TTL_DAYS,
 } from "./constants.js";
 import { loadDynamicCandidates } from "./engine-dynamic-loader.js";
 import { loadStaticCandidates } from "./engine-static-loader.js";
@@ -28,7 +30,6 @@ export type { Engine, EngineDeps } from "./engine-types.js";
 export function defaultConfig(): PiRulesConfig {
 	return {
 		disabled: false,
-		mode: "both",
 		maxRuleChars: DEFAULT_MAX_RULE_CHARS,
 		maxResultChars: DEFAULT_MAX_RESULT_CHARS,
 		postCompactMaxRuleChars: DEFAULT_POST_COMPACT_MAX_RULE_CHARS,
@@ -38,6 +39,8 @@ export function defaultConfig(): PiRulesConfig {
 		promptMaxRuleChars: DEFAULT_PROMPT_MAX_RULE_CHARS,
 		promptMaxResultChars: DEFAULT_PROMPT_MAX_RESULT_CHARS,
 		enabledSources: "auto",
+		sessionStateTtlDays: DEFAULT_SESSION_STATE_TTL_DAYS,
+		errorLogMaxBytes: DEFAULT_ERROR_LOG_MAX_BYTES,
 	};
 }
 
@@ -47,7 +50,7 @@ export function createEngine(config: PiRulesConfig, deps: EngineDeps): Engine {
 
 	function loadStaticRules(cwd: string): { rules: LoadedRule[]; diagnostics: RuleDiagnostic[] } {
 		state.cwd = cwd;
-		if (config.disabled || config.mode === "off" || config.mode === "dynamic") {
+		if (config.disabled) {
 			return emptyLoadResult(state);
 		}
 
@@ -72,7 +75,7 @@ export function createEngine(config: PiRulesConfig, deps: EngineDeps): Engine {
 		targetPaths: ReadonlyArray<string>,
 	): { rules: LoadedRule[]; diagnostics: RuleDiagnostic[] } {
 		state.cwd = cwd;
-		if (config.disabled || config.mode === "off" || config.mode === "static" || targetPaths.length === 0) {
+		if (config.disabled || targetPaths.length === 0) {
 			return emptyLoadResult(state);
 		}
 
