@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="{{LANG_CODE}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{HTML_TITLE}}</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js" integrity="sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I" crossorigin="anonymous"></script>
+<style>
+:root {
+  --bg: #fafafa;
+  --panel: #ffffff;
+  --text: #1a1a1a;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #2563eb;
+  --accent-bg: #eff6ff;
+  --code-bg: #f3f4f6;
+  --ok: #059669;
+  --warn: #d97706;
+  --info: #7c3aed;
+  --danger: #dc2626;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --panel: #161921;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --border: #2a2f3a;
+    --accent: #60a5fa;
+    --accent-bg: #1e293b;
+    --code-bg: #1a1f2b;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --info: #a78bfa;
+    --danger: #f87171;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+}
+.layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
+nav.toc {
+  position: sticky; top: 0;
+  height: 100vh; overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  padding: 20px 16px;
+  font-size: 13px;
+}
+nav.toc .title { font-weight: 700; color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: 1px; margin-bottom: 12px; }
+nav.toc ul { list-style: none; padding: 0; margin: 0; }
+nav.toc li { margin: 4px 0; }
+nav.toc a { color: var(--muted); text-decoration: none; display: block; padding: 3px 6px; border-radius: 4px; }
+nav.toc a:hover { background: var(--accent-bg); color: var(--accent); }
+nav.toc .lvl-2 { padding-left: 0; }
+nav.toc .lvl-3 { padding-left: 14px; font-size: 12px; }
+nav.toc .lvl-4 { padding-left: 28px; font-size: 11.5px; color: var(--muted); }
+main { padding: 32px 48px 80px; max-width: 960px; }
+header.hero { border-bottom: 1px solid var(--border); margin-bottom: 24px; padding-bottom: 20px; }
+header.hero .kicker { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+header.hero h1 { font-size: 28px; margin: 4px 0 4px; }
+header.hero .meta { color: var(--muted); font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+header.hero .meta .pill { background: var(--accent-bg); color: var(--accent); padding: 2px 10px; border-radius: 12px; font-weight: 600; }
+article#spec-content { padding-top: 8px; }
+article h1 { display: none; }
+article h2 { font-size: 22px; margin-top: 40px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+article h3 { font-size: 17px; margin-top: 28px; }
+article h4 { font-size: 14.5px; margin-top: 20px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+article code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; font-size: 0.9em; font-family: ui-monospace, SF Mono, Menlo, monospace; }
+article pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px; padding: 12px 14px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+article pre code { background: transparent; padding: 0; }
+article table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px; }
+article th, article td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+article th { background: var(--code-bg); font-weight: 600; }
+article blockquote { border-left: 3px solid var(--accent); background: var(--accent-bg); margin: 14px 0; padding: 10px 14px; color: var(--text); }
+article hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+article ul, article ol { padding-left: 22px; }
+article li { margin: 3px 0; }
+article li input[type="checkbox"] { margin-right: 6px; }
+article a { color: var(--accent); }
+article .mermaid { display: block; margin: 22px 0; text-align: center; }
+article .mermaid svg { max-width: 100%; height: auto; }
+.footer-note { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { position: relative; height: auto; max-height: 300px; }
+  main { padding: 20px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc"><div class="title">{{TOC_TITLE}}</div><ul id="toc"></ul></nav>
+<main>
+<header class="hero">
+  <div class="kicker">{{SPEC_TITLE}}</div>
+  <h1>{{HTML_TITLE}}</h1>
+  <div class="meta">
+    <span class="pill">{{AMBIGUITY_SCORE}}</span>
+    <span class="pill">{{ROUND_COUNT}}</span>
+    <span>{{SPEC_FILE_PATH}}</span>
+  </div>
+</header>
+
+<article id="spec-content"></article>
+
+<div class="footer-note">{{FOOTER_NOTE}}</div>
+
+</main>
+</div>
+
+<script type="application/json" id="spec-md">{{SPEC_MARKDOWN_JSON}}</script>
+<script>
+(function() {
+  const md = JSON.parse(document.getElementById('spec-md').textContent);
+  marked.setOptions({ gfm: true, breaks: false });
+  const container = document.getElementById('spec-content');
+  container.innerHTML = marked.parse(md);
+  // Diagram enrichment: marked renders a ```mermaid fence as <pre><code class="language-mermaid">.
+  // Convert each into a <div class="mermaid"> that the Mermaid runtime renders into SVG.
+  container.querySelectorAll('pre > code.language-mermaid').forEach(code => {
+    const div = document.createElement('div');
+    div.className = 'mermaid';
+    div.textContent = code.textContent;
+    code.parentElement.replaceWith(div);
+  });
+  if (window.mermaid) {
+    const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'strict' });
+    mermaid.run({ querySelector: '.mermaid' });
+  }
+  const toc = document.getElementById('toc');
+  const headings = container.querySelectorAll('h2, h3, h4');
+  const slugify = (t) => t.toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s+/g, '-') || 'sec';
+  const used = new Set();
+  headings.forEach(h => {
+    let id = h.id || slugify(h.textContent);
+    let base = id, i = 2;
+    while (used.has(id)) { id = base + '-' + i; i++; }
+    used.add(id);
+    h.id = id;
+    const lvl = parseInt(h.tagName.substring(1));
+    const li = document.createElement('li');
+    li.className = 'lvl-' + lvl;
+    const a = document.createElement('a');
+    a.href = '#' + id;
+    a.textContent = h.textContent;
+    li.appendChild(a);
+    toc.appendChild(li);
+  });
+})();
+</script>
+</body>
+</html>

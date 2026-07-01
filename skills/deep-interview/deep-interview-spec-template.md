@@ -1,6 +1,6 @@
 # Deep Interview Spec Template
 
-```markdown
+````markdown
 # Deep Interview Spec: {title}
 
 ## Metadata
@@ -65,20 +65,34 @@ Downstream (prometheus) consumes this as a FIXED input — does not re-decide th
 ## Architecture
 {overall structure: how the major components are arranged and how they relate to each other}
 
+> Add a diagram here when it is clearer than prose: state the reason, embed a ```mermaid fence, then interpret it.
+
 ## Components
 {each component: its single responsibility and direct dependencies}
+
+> Add a diagram here when it is clearer than prose: state the reason, embed a ```mermaid fence, then interpret it.
 
 ## Data Flow
 {sources → transformations → sinks: trace data from ingestion to output}
 
+> Add a diagram here when it is clearer than prose: state the reason, embed a ```mermaid fence, then interpret it.
+
 ## Error Handling
 {failure modes and their responses: what can go wrong and how the system handles it}
+
+> Add a diagram here when it is clearer than prose: state the reason, embed a ```mermaid fence, then interpret it.
 
 ## Testing
 {what is verified: behaviors, boundaries, and invariants covered by the test suite}
 
 ## Ontology (Key Entities)
 {Fill from the FINAL round's ontology extraction, not just crystallization-time generation}
+
+```mermaid
+erDiagram
+    %% Fill from the FINAL round's ontology: one entity per ontology entity, one edge per relationship.
+    ENTITY_A ||--o{ ENTITY_B : "relationship label"
+```
 
 | Entity | Type | Fields | Relationships |
 |--------|------|--------|---------------|
@@ -105,4 +119,4 @@ Downstream (prometheus) consumes this as a FIXED input — does not re-decide th
 
 ...
 </details>
-```
+````
