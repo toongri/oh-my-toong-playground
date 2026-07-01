@@ -31,7 +31,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;',
 
 ## Mermaid Validity
 
-**Mermaid validity**: mermaid treats `;` as a statement separator — a raw `;` inside sequence-message text (e.g. `mkdir -p; rm`) silently splits the line and the whole diagram renders as an error SVG. mermaid source MUST be syntactically valid: keep sequence-message text free of raw `;` (rephrase to `then`, a comma, or omit).
+**Mermaid validity**: mermaid treats `;` as a statement separator — a raw `;` inside sequence-message text (e.g. `mkdir -p; rm`) silently splits the line and the whole diagram renders as an error SVG. mermaid source MUST be syntactically valid: keep sequence-message text free of raw `;` (rephrase to `then`, a comma, or omit). In `erDiagram` blocks, any entity name containing a space or punctuation MUST be double-quoted (e.g. `"Discount Code" ||--o{ "Free Product" : grants`) — an unquoted spaced name (common for ontology entity names) renders an error SVG; verified against mermaid@11.4.1 (the `NAME["label"]` alias form is invalid in ER diagrams — quote the name directly).
 
 ## Placeholder Table
 
