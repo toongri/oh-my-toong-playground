@@ -103,6 +103,8 @@ Add a `## References` section to the issue body. The rendering form differs by a
 
 **Sole-authority invariant**: the curated native-relation set (§6a) is the sole authority for related-issue relations. The body must never be a second, implicit relation channel. Any PM-issue body reference that is not intended to become a native related relation must use a form your PM tool does not auto-link into a relation.
 
+**Reconciliation with Tiered Shared-Context Placement** (`references/issue-craft.md`): the §6b class split above turns on one axis — is the artifact a related *issue*, or not — not on where it physically lives. A Tier-C canonical shared-context document (e.g., a Notion spec, a Linear Document, a Project description) is a document, not an issue, so it is always linked passively via the ordinary markdown-link References form above, never through the curated native-relation channel — including when it happens to live inside the PM tool itself (e.g., a Linear Document or a Project description). This holds regardless of physical location, because the native-relation channel is reserved for related issues specifically; the sole-authority invariant stays intact.
+
 Format each entry using the appropriate form:
 
 ```

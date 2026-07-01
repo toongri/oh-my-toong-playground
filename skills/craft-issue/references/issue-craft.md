@@ -95,23 +95,43 @@ Every sub-item must carry either an evidence citation (investigation result, doc
 
 ### Parent-Issue Body Shape
 
-A parent issue is one that remains as the umbrella after Stage 5 slicing has produced child issues. Its body does not duplicate child bodies — it carries the shared context that children rely on and reference, not their individual Problem/Pre-Context/AC.
-
-After slicing, the relationship rule is: shared context lives in the parent ONCE. Each child issue states its own Problem, Pre-Context, AC, and Non-Goals, and references the parent for shared definitions. Children do not re-define terms or re-state scope that is already in the parent.
+A parent issue is one that remains as the umbrella after Stage 5 slicing has produced child issues. Its body does not duplicate child bodies — it carries only what a slim rollup needs (see Parent Identity Invariant below), not each child's individual Problem/Pre-Context/AC.
 
 | Section | Required / Conditional | Content |
 |---|---|---|
 | **Background** | Required | Why now — the motive, triggering events, and prior state that make this work necessary at this moment. One to two paragraphs. |
-| **Core Concept** | Conditional — when children share a term or model that must not drift | A single authoritative definition of the umbrella concept the children rely on. Children reference the parent for this definition instead of re-stating it. Example pattern: a new payment brand is defined once in the parent ("the umbrella bundles payment method A for personal cards and payment method B for corporate cards; method B is never retired from the platform"), so five child issues can reference the parent rather than each carrying its own definition — preventing drift and contradiction. Omit if each child's scope is self-contained enough that no shared concept needs protection. |
+| **Core Concept** | Conditional — when children share a term or model that must not drift | A single authoritative definition of the umbrella concept the children rely on, placed per the **Tiered Shared-Context Placement** rule below: Tier A (small, stable) states the definition inline here; Tier C (substantial or evolving) states a one-line summary + link to the canonical document instead of the full definition. Children reference the parent (Tier A) or the canonical document (Tier C) rather than each re-stating it. Example pattern (Tier A): a new payment brand is defined once in the parent ("the umbrella bundles payment method A for personal cards and payment method B for corporate cards; method B is never retired from the platform"), so five child issues can reference the parent rather than each carrying its own definition — preventing drift and contradiction. Omit if each child's scope is self-contained enough that no shared concept needs protection. |
 | **Pre-Context** | Required | Same three sub-items as the Standard Body Shape (**Affected Areas**, **Premises**, **Blockers & Risks**), each carrying an evidence citation or `TBD — needs validation via {method}`. Apply the two-bucket presentation rule (see below) per its own trigger condition. |
 | **Affected Areas — expected** | Required when code-touching | Where work is expected to land across the child set. Must be explicitly hedged: parent-level affected areas are forecasts as of the planning moment, not commitments — they may change as child investigation proceeds. Example: "Expected to touch `payments/gateway/` and `user/billing/`; exact scope confirmed per child." |
 | **User Value** | Conditional — user-facing work | What the user gains from the parent initiative as a whole. One to two sentences. |
 | **User Flow: current → after** | Conditional — transition genre (see Transition-Genre Additions below) | A compact before/after contrast of the user-visible or system-visible path, applied at the parent level when the initiative as a whole is a behavior change or migration. |
 | **Scope of Application** | Conditional — transition genre (see Transition-Genre Additions below) | Who or what converts to the new path and who or what intentionally stays on the old path. Must be explicit on both sides — "new registrations use the new path; existing users keep the old path, no forced migration" is the pattern. Omit neither side. |
-| **Post-Release Observation** | Conditional — the initiative as a whole moves a shared outcome, or has a shared predicted post-release state | The initiative-level observation (Form 1 and/or Form 2 per the Post-Release Observation Section), declared once in the parent like Core Concept; children reference it rather than each re-declaring, unless a child owns a distinct sub-outcome. Omit when no shared post-release observation applies. |
+| **Post-Release Observation** | Conditional — the initiative as a whole moves a shared outcome, or has a shared predicted post-release state | The initiative-level observation (Form 1 and/or Form 2 per the Post-Release Observation Section), placed per the **Tiered Shared-Context Placement** rule below: Tier A (small, stable) declares it here in the parent; Tier C (substantial or evolving, e.g. a shared metric/dashboard spec) states a one-line summary + link to the canonical document. Children reference the parent (Tier A) or the canonical document (Tier C) rather than each re-declaring, unless a child owns a distinct sub-outcome. Omit when no shared post-release observation applies. |
 | **Decisions Needed** | Required when open decisions exist | Open product or policy decisions that block or shape child work (see Decisions Needed definition below). Omit when no open decisions remain at the time of filing. |
 | **Notes** | Optional | Provenance, superseded prior attempts, and context that does not fit elsewhere. |
 | **References** | Required | Per the existing References rules in the Standard Body Shape. |
+
+### Tiered Shared-Context Placement
+
+After slicing, shared context that multiple children rely on is placed by a **tiered rule**, not dumped into the parent by default. Two independent axes are in play. Where the context *lives* — Tier A vs Tier C — is decided by the context's own properties: size and stability for this initiative's lifetime, not by habit. How many children reuse it is irrelevant to this choice: reuse is intrinsic to all shared context (Tier A and Tier C alike), so it never discriminates between them. Together, A and C form a total partition of hoisted shared context: anything that clears the Tier-A bar (small and stable) is Tier A; everything else is Tier C.
+
+Tier B sits on a separate axis and is not a peer of A/C on the size/stability partition above — it is a **per-child override**: it fires when one specific child needs to survive divorce from the parent (a cross-team or external handoff), regardless of whether that context's home tier is A or C. **Precedence**: the shared context still lives at its A/C tier for the rest of the tree; Tier B only means that one handoff child *additionally* restates the context in full — it never relocates the context away from its A/C home for the other children.
+
+| Tier | Trigger | Placement |
+|---|---|---|
+| **A — Parent-inline** | Small, stable for this initiative's lifetime, unlikely to change — regardless of how many children reuse it | A brief statement in the parent body. This is the ONLY case the parent body carries **hoisted, cross-child shared context** — kept short. It does not touch the parent's own Required rows (its own Background, Pre-Context, etc.), which sit outside this rule. |
+| **C — Canonical document (default for substantial)** | Not clearly small-and-stable — i.e. fails the Tier-A bar: substantial, more than a fixed one-or-two-sentence fact, or likely to change. Default branch: any hoisted shared context that isn't Tier A is Tier C. | Lives in a canonical document (tool-agnostic — e.g., a Notion spec, a Linear Document, or a Project description; these are examples, not a required binding). The parent carries a one-line summary + link, not the full hoist. |
+| **B — Full duplication (per-child override, not a peer of A/C)** | A given child must survive divorce from the parent — a cross-team or external-contractor handoff | That child restates the full context in addition to whatever A/C tier the context otherwise lives at. Not a default; use only for the specific child where the divorce condition holds — the rest of the tree keeps the A/C placement unchanged. |
+
+**Worked examples (A vs C boundary):**
+- *Tier A*: five children all rely on one sentence — "this initiative retires the legacy discount-code path; no child re-implements it" — the sentence is fixed once the initiative starts and no child needs more than that one fact. Keep it inline in the parent.
+- *Tier C*: the initiative's five children all need the same multi-field data-migration mapping, and the mapping is still being revised by another team during the initiative. It is substantial and change-prone — it belongs in a canonical document (e.g., a Notion spec), with the parent linking to it rather than pasting it in.
+
+**Child self-containment invariant**: every child issue must be independently workable. A child links to the canonical location (the Tier-A parent, or the Tier-C document) AND writes its own task-specific delta (what is different or additional for this child) — a reader of the child alone must never be forced to traverse up to the top of the tree just to understand the child's own delta/task. Following a link for *shared* context is expected; what is forbidden is being unable to grasp the child's specific work without reconstructing it from the parent.
+
+**Parent identity invariant**: the parent is a slim rollup — such as Background, a short summary, links, and a rollup of its children, plus its own Required rows per the table above — with its own completable/umbrella identity. It is not a shared-context dumping ground. If a parent's only remaining content would be hoisted shared context, that context belongs in a Tier-C document instead, and the parent stays slim.
+
+Each child issue states its own Problem, Pre-Context, AC, and Non-Goals, and references the canonical location (the parent for Tier A, the canonical document for Tier C) for shared definitions. Children do not re-define terms or re-state scope already recorded there — except a Tier-B handoff child, which restates the shared context in full.
 
 ### Two-Bucket Pre-Context Presentation Rule
 
@@ -206,8 +226,11 @@ For a **bug-genre** issue, the observation is the production symptom rate fallin
 "the stack-trace count for this error drops to ~0 in OpenSearch over 7 days post-deploy"), distinct from the
 acceptance-time AC (the Reproduction re-run now passes).
 
-For a **sliced initiative**, the initiative-level observation lives once in the parent (like Core Concept);
-children reference it rather than each re-declaring it, unless a child owns a distinct sub-outcome.
+For a **sliced initiative**, the initiative-level observation is placed per the **Tiered Shared-Context
+Placement** rule (see Tiered Shared-Context Placement above): Tier A (small, stable) states it once in the parent;
+Tier C (substantial or evolving) lives in a canonical document with a one-line summary + link in the parent.
+Children reference the parent or the canonical document rather than each re-declaring it, unless a child
+owns a distinct sub-outcome.
 
 ### Decisions Needed
 
