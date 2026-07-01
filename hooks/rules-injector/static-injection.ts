@@ -232,6 +232,6 @@ function ruleDisplayPath(rule: LoadedRule): string {
 	return rule.relativePath.length > 0 ? rule.relativePath : rule.path;
 }
 
-function combineStaticContext(...blocks: readonly string[]): string {
+export function combineStaticContext(...blocks: readonly string[]): string {
 	return blocks.filter((block) => block.trim().length > 0).join("\n\n");
 }
