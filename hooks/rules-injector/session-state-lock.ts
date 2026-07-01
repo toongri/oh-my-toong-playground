@@ -62,7 +62,7 @@ function isLockStealable(lockPath: string): boolean {
 	return lockMtimeMs(lockPath) + LOCK_STALE_TTL_MS < Date.now();
 }
 
-function readLockHolderPid(lockPath: string): number | undefined {
+export function readLockHolderPid(lockPath: string): number | undefined {
 	try {
 		const pid = Number.parseInt(readFileSync(join(lockPath, "pid"), "utf8").trim(), 10);
 		return Number.isInteger(pid) && pid > 0 ? pid : undefined;

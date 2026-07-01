@@ -19,6 +19,7 @@ import {
 } from "./recovery-lease.js";
 import type { Engine } from "./rules/index.js";
 import {
+	readLockHolderPid,
 	SESSION_STATE_LOCK_CONTENDED,
 	type SessionStateLockResult,
 	withSessionStateLock,
@@ -261,16 +262,11 @@ function isStale(path: string, ttlMs: number): boolean {
 	return statSync(path).mtimeMs + ttlMs < Date.now();
 }
 
-// Mirrors session-state-lock.ts's readLockHolderPid + isPidAlive check: a sibling
-// whose `.lock/pid` names a still-running process is being actively recovered and
-// must not be reaped out from under it.
+// A sibling whose `.lock/pid` names a still-running process is being actively
+// recovered and must not be reaped out from under it.
 function hasLiveLockHolder(cachePath: string): boolean {
-	try {
-		const pid = Number.parseInt(readFileSync(join(`${cachePath}.lock`, "pid"), "utf8").trim(), 10);
-		return Number.isInteger(pid) && pid > 0 && isPidAlive(pid);
-	} catch {
-		return false;
-	}
+	const pid = readLockHolderPid(`${cachePath}.lock`);
+	return pid !== undefined && isPidAlive(pid);
 }
 
 function readSessionState(cachePath: string): SerializedSessionState {
