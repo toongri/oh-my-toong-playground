@@ -2,6 +2,7 @@
 
 - [Injection Guard (close-tag escape)](#injection-guard-close-tag-escape)
 - [Active-Placeholder HTML-Escape](#active-placeholder-html-escape)
+- [Injection Guard (prose)](#injection-guard-prose)
 - [Mermaid Validity](#mermaid-validity)
 - [Placeholder Table](#placeholder-table)
 - [Write Command](#write-command)
@@ -23,6 +24,10 @@ JSON.stringify(md).replace(/<\/(script)([\s/>])/gi, '<\\/$1$2')
 ```js
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 ```
+
+## Injection Guard (prose)
+
+**Injection guard — prose fields too**: The render sink is `container.innerHTML = marked.parse(md)` with NO DOM sanitizer (marked removed its `sanitize` option in v8). The rendered spec BODY — the interview transcript and ontology entity names — is USER-AUTHORED and may contain fragments like `</script>` or `<img src=x onerror=BOOM>`; unlike the close-tag escape above (which only protects the inert JSON container), a fragment echoed bare in the rendered spec prose reaches innerHTML as LIVE markup. Every code-derived fragment echoed in rendered spec prose MUST be wrapped in an inline-code span (backticks) so marked escapes it as code — or HTML-escaped if an inline-code span does not fit. If the fragment itself contains a backtick, delimit the span with a longer backtick run (CommonMark matches an inline-code span on an equal-length backtick run). NEVER echo a code fragment bare in spec prose.
 
 ## Mermaid Validity
 
