@@ -55,7 +55,8 @@ Escape each active value, then write the substituted HTML:
 
 ```bash
 mkdir -p $OMT_DIR/deep-interview
-# write to: $OMT_DIR/deep-interview/{slug}.html
+# write to the render path chosen by the caller (SKILL.md owns the path):
+#   Phase 4 final render → {slug}.html   |   on-demand ontology render → ontology-preview.html
 ```
 
 `{{SPEC_MARKDOWN_JSON}}` is exempt from the HTML-escape — it sits in the inert `<script type="application/json">` container and already carries the close-tag escape above.

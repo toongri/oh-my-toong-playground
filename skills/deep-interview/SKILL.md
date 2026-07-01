@@ -447,7 +447,7 @@ At any point during the interview — not gated to Phase 4 — recognize a natur
 1. Read current state via `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get` and take the latest `ontology_snapshots` entry.
 2. Compose an ontology-only markdown `erDiagram` from that snapshot's entities and relationships. If the latest snapshot's entities are absent or empty, emit a `no entities yet` state instead of an empty/invalid erDiagram.
 3. **You MUST read `references/render-assembly.md` first** and apply its full guard set — the same close-tag escape, active-placeholder HTML-escape, and prose-fragment guard it defines.
-4. Write the render to `$OMT_DIR/deep-interview/ontology-preview.html`.
+4. Fill the SAME `templates/spec-presentation.html` template used by the Phase 4 render: the ontology-only markdown becomes `{{SPEC_MARKDOWN_JSON}}`. For the mid-interview meta placeholders, source values from current state rather than final-spec values — `{{AMBIGUITY_SCORE}}` and `{{ROUND_COUNT}}` from the latest state, `{{SPEC_TITLE}}` and `{{HTML_TITLE}}` = "Ontology Preview", `{{SPEC_FILE_PATH}}` = the preview path. Write the render to `$OMT_DIR/deep-interview/ontology-preview.html`.
 
 This on-demand ontology render is a lightweight, ontology-only preview, distinct from the Phase 4 final render (which embeds the full spec).
 
