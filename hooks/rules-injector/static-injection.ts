@@ -19,7 +19,7 @@ import { readTranscriptSearchText } from "./transcript-search.js";
 export function runStaticInjection(
 	cwd: string,
 	transcriptPath: string | null,
-	eventName: "SessionStart" | "UserPromptSubmit",
+	eventName: "SessionStart" | "UserPromptSubmit" | "PostToolUse",
 	cachePath: string,
 	options: CodexRulesHookOptions,
 	completedPostCompactChannel?: "static",
@@ -27,7 +27,7 @@ export function runStaticInjection(
 	model?: string,
 ): string {
 	const config = configFromEnvironment(options.env);
-	if (config.disabled || config.mode === "off" || config.mode === "dynamic") {
+	if (config.disabled) {
 		if (completedPostCompactChannel !== undefined) {
 			completePostCompactRecovery(cachePath, completedPostCompactChannel);
 		}
@@ -88,7 +88,7 @@ export function runStaticInjection(
 interface PostCompactRecoveryInput {
 	cwd: string;
 	transcriptPath: string | null;
-	eventName: "SessionStart" | "UserPromptSubmit";
+	eventName: "SessionStart" | "UserPromptSubmit" | "PostToolUse";
 	cachePath: string;
 	options: CodexRulesHookOptions;
 	channel: "static";
@@ -232,6 +232,6 @@ function ruleDisplayPath(rule: LoadedRule): string {
 	return rule.relativePath.length > 0 ? rule.relativePath : rule.path;
 }
 
-function combineStaticContext(...blocks: readonly string[]): string {
+export function combineStaticContext(...blocks: readonly string[]): string {
 	return blocks.filter((block) => block.trim().length > 0).join("\n\n");
 }

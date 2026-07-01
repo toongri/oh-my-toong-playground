@@ -67,3 +67,46 @@ test("C6: DISABLE_BUNDLED=0 (unset) keeps enabledSources as auto", () => {
 	const config = configFromEnvironment({});
 	expect(config.enabledSources).toBe("auto");
 });
+
+// ── D-7: sessionStateTtlDays / errorLogMaxBytes defaults + env override ─────
+
+test("session-state TTL and error-log cap defaults + override", () => {
+	const defaults = configFromEnvironment({});
+	expect(defaults.sessionStateTtlDays).toBe(7);
+	expect(defaults.errorLogMaxBytes).toBe(5_242_880);
+
+	const ttlOverride = configFromEnvironment({ CODEX_RULES_SESSION_STATE_TTL_DAYS: "3" });
+	expect(ttlOverride.sessionStateTtlDays).toBe(3);
+
+	const errorLogOverride = configFromEnvironment({ PI_RULES_ERROR_LOG_MAX_BYTES: "1000" });
+	expect(errorLogOverride.errorLogMaxBytes).toBe(1000);
+
+	const invalidFallback = configFromEnvironment({ CODEX_RULES_SESSION_STATE_TTL_DAYS: "abc" });
+	expect(invalidFallback.sessionStateTtlDays).toBe(7);
+});
+
+test("session-state TTL: PI_RULES_ alias also overrides", () => {
+	const ttlOverride = configFromEnvironment({ PI_RULES_SESSION_STATE_TTL_DAYS: "4" });
+	expect(ttlOverride.sessionStateTtlDays).toBe(4);
+});
+
+test("error-log cap: CODEX_RULES_ alias also overrides", () => {
+	const errorLogOverride = configFromEnvironment({ CODEX_RULES_ERROR_LOG_MAX_BYTES: "2000" });
+	expect(errorLogOverride.errorLogMaxBytes).toBe(2000);
+});
+
+test("session-state TTL: CODEX_RULES_ takes precedence over PI_RULES_ when both set", () => {
+	const config = configFromEnvironment({
+		CODEX_RULES_SESSION_STATE_TTL_DAYS: "5",
+		PI_RULES_SESSION_STATE_TTL_DAYS: "9",
+	});
+	expect(config.sessionStateTtlDays).toBe(5);
+});
+
+test("error-log cap: CODEX_RULES_ takes precedence over PI_RULES_ when both set", () => {
+	const config = configFromEnvironment({
+		CODEX_RULES_ERROR_LOG_MAX_BYTES: "3000",
+		PI_RULES_ERROR_LOG_MAX_BYTES: "6000",
+	});
+	expect(config.errorLogMaxBytes).toBe(3000);
+});

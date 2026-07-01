@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { type Dirent, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { writeErrorBreadcrumb } from "./debug-log.js";
 import {
 	type PostCompactPendingKind,
 	type PostCompactPendingState,
@@ -11,12 +12,14 @@ import {
 } from "./post-compact-state.js";
 import {
 	type RecoveryLease,
+	isPidAlive,
 	isRecoveryLease,
 	isRecoveryLeaseActive,
 	newRecoveryLease,
 } from "./recovery-lease.js";
 import type { Engine } from "./rules/index.js";
 import {
+	readLockHolderPid,
 	SESSION_STATE_LOCK_CONTENDED,
 	type SessionStateLockResult,
 	withSessionStateLock,
@@ -178,6 +181,106 @@ export function completePostCompactRecovery(cachePath: string, kind: PostCompact
 export function sessionCachePath(sessionId: string, pluginDataRoot?: string): string {
 	const root = pluginDataRoot ?? join(homedir(), ".omt", "rules-injector");
 	return join(root, `${safePathSegment(sessionId)}.json`);
+}
+
+// Reused as the leaked-directory backstop below: no legitimate lock hold lasts a
+// full day (the lock only wraps in-memory RMW), so this also doubles as the sweep
+// throttle window — at most once per `dir` per day, bounding the readdir+stat cost
+// on the pathological thousands-of-files dir this sweep targets.
+const STALE_SESSION_SWEEP_THROTTLE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Best-effort GC: deletes sibling `<sid>.json` session-state files (plus their
+ * `.lock` dir, via `clearSessionState`) whose mtime is older than `ttlMs`, except
+ * `ownCachePath` (self-preservation — a stale-mtime resume must never delete its
+ * own pending recovery state) and any sibling whose `.lock/pid` names a live
+ * process (never break mutual exclusion out from under an active holder).
+ * Throttled by a `last-swept` marker file so it runs at most once per 24h per
+ * `dir`. Every fs op is wrapped; on error it records a breadcrumb and continues.
+ * Never throws.
+ */
+export function sweepStaleSessionStates(dir: string, ttlMs: number, ownCachePath: string): void {
+	try {
+		if (isSweepThrottled(dir)) {
+			return;
+		}
+		touchSweepMarker(dir);
+
+		let entries: Dirent[];
+		try {
+			entries = readdirSync(dir, { withFileTypes: true });
+		} catch (error) {
+			writeErrorBreadcrumb("sweepStaleSessionStates:readdir", error);
+			return;
+		}
+
+		for (const entry of entries) {
+			if (!entry.isFile() || !entry.name.endsWith(".json")) {
+				continue;
+			}
+			const siblingPath = join(dir, entry.name);
+			if (siblingPath === ownCachePath) {
+				continue;
+			}
+			try {
+				if (!isStale(siblingPath, ttlMs) || !isSessionStateFile(siblingPath) || hasLiveLockHolder(siblingPath)) {
+					continue;
+				}
+				clearSessionState(siblingPath);
+			} catch (error) {
+				writeErrorBreadcrumb("sweepStaleSessionStates:entry", error);
+			}
+		}
+	} catch (error) {
+		writeErrorBreadcrumb("sweepStaleSessionStates", error);
+	}
+}
+
+function sweepMarkerPath(dir: string): string {
+	return join(dir, "last-swept");
+}
+
+function isSweepThrottled(dir: string): boolean {
+	try {
+		return Date.now() - statSync(sweepMarkerPath(dir)).mtimeMs < STALE_SESSION_SWEEP_THROTTLE_MS;
+	} catch {
+		// No marker yet (or unreadable): not throttled.
+		return false;
+	}
+}
+
+function touchSweepMarker(dir: string): void {
+	try {
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(sweepMarkerPath(dir), "");
+	} catch (error) {
+		writeErrorBreadcrumb("sweepStaleSessionStates:marker", error);
+	}
+}
+
+function isStale(path: string, ttlMs: number): boolean {
+	return statSync(path).mtimeMs + ttlMs < Date.now();
+}
+
+// A sibling whose `.lock/pid` names a still-running process is being actively
+// recovered and must not be reaped out from under it.
+function hasLiveLockHolder(cachePath: string): boolean {
+	const pid = readLockHolderPid(`${cachePath}.lock`);
+	return pid !== undefined && isPidAlive(pid);
+}
+
+// Positively identify one of our own <sid>.json records before deleting. When
+// pluginDataRoot points at a directory shared with unrelated JSON (a config or
+// package.json), a stale `.json` sibling that is NOT a session-state record must
+// never be reaped. Mirrors readSessionState's discriminator (version + shape);
+// a corrupt/foreign file fails it and is left untouched rather than deleted.
+function isSessionStateFile(path: string): boolean {
+	try {
+		const parsed = JSON.parse(readFileSync(path, "utf8"));
+		return isRecord(parsed) && parsed["version"] === STATE_VERSION && isSerializedSessionState(parsed);
+	} catch {
+		return false;
+	}
 }
 
 function readSessionState(cachePath: string): SerializedSessionState {
