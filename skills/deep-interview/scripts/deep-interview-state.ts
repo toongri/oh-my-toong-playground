@@ -53,13 +53,18 @@ export function resolveStatePath(sessionId: string): string {
 // Internal IO
 // ---------------------------------------------------------------------------
 
+/** True iff `value` is a non-null, non-array object (i.e. a JSON "object"). */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function readRaw(path: string): Record<string, unknown> | null {
   if (!existsSync(path)) return null;
   try {
     const content = readFileSync(path, 'utf8');
-    const parsed = JSON.parse(content) as unknown;
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-    return parsed as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(content);
+    if (!isRecord(parsed)) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -151,10 +156,10 @@ export function initDeepInterviewState(
   }
 
   // Build the state object: merge with any existing state content
-  const priorState =
-    typeof prior['state'] === 'object' && prior['state'] !== null && !Array.isArray(prior['state'])
-      ? (prior['state'] as DeepInterviewStateContent)
-      : {};
+  const priorState: DeepInterviewStateContent = isRecord(prior['state'])
+    ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: state file content is written exclusively by this module's own writers (never externally supplied); trusted structural pass-through
+      (prior['state'] as DeepInterviewStateContent)
+    : {};
 
   const newState: DeepInterviewStateContent = {
     interview_id: payload.interview_id ?? priorState.interview_id,
@@ -171,12 +176,13 @@ export function initDeepInterviewState(
     stance_history: priorState.stance_history ?? [],
   };
 
-  const overlay: DeepInterviewState = {
-    current_phase: payload.current_phase ?? (prior['current_phase'] as string | undefined) ?? 'deep-interview',
+  const priorCurrentPhase = typeof prior['current_phase'] === 'string' ? prior['current_phase'] : undefined;
+  const overlay: Record<string, unknown> = {
+    current_phase: payload.current_phase ?? priorCurrentPhase ?? 'deep-interview',
     state: newState,
   };
 
-  const next = mergeWithHeartbeat(prior, overlay as Record<string, unknown>);
+  const next = mergeWithHeartbeat(prior, overlay);
   writeFileNoCreate(path, JSON.stringify(next, null, 2));
 }
 
@@ -233,10 +239,7 @@ export function updateDeepInterviewState(
 
   if (needsStateOverlay) {
     // current_ambiguity lives under state per the SKILL.md rich shape
-    const priorState =
-      typeof prior['state'] === 'object' && prior['state'] !== null && !Array.isArray(prior['state'])
-        ? (prior['state'] as Record<string, unknown>)
-        : {};
+    const priorState: Record<string, unknown> = isRecord(prior['state']) ? prior['state'] : {};
 
     const updatedState: Record<string, unknown> = { ...priorState };
 
@@ -244,33 +247,33 @@ export function updateDeepInterviewState(
       updatedState['current_ambiguity'] = partial.current_ambiguity;
     }
     if (partial.append_round !== undefined) {
-      const existing = Array.isArray(priorState['rounds']) ? (priorState['rounds'] as unknown[]) : [];
+      const existing: unknown[] = Array.isArray(priorState['rounds']) ? priorState['rounds'] : [];
       updatedState['rounds'] = [...existing, partial.append_round];
     }
     if (partial.append_ontology_snapshot !== undefined) {
-      const existing = Array.isArray(priorState['ontology_snapshots'])
-        ? (priorState['ontology_snapshots'] as unknown[])
+      const existing: unknown[] = Array.isArray(priorState['ontology_snapshots'])
+        ? priorState['ontology_snapshots']
         : [];
       updatedState['ontology_snapshots'] = [...existing, partial.append_ontology_snapshot];
     }
     if (partial.challenge_mode !== undefined) {
-      const existing = Array.isArray(priorState['challenge_modes_used'])
-        ? (priorState['challenge_modes_used'] as string[])
+      const existing: string[] = Array.isArray(priorState['challenge_modes_used'])
+        ? priorState['challenge_modes_used']
         : [];
       if (!existing.includes(partial.challenge_mode)) {
         updatedState['challenge_modes_used'] = [...existing, partial.challenge_mode];
       }
     }
     if (partial.append_provenance_item !== undefined) {
-      const existing = Array.isArray(priorState['evidence_provenance'])
-        ? (priorState['evidence_provenance'] as EvidenceProvenanceItem[])
+      const existing: EvidenceProvenanceItem[] = Array.isArray(priorState['evidence_provenance'])
+        ? priorState['evidence_provenance']
         : [];
       updatedState['evidence_provenance'] = [...existing, partial.append_provenance_item];
     }
     if (partial.append_stance !== undefined) {
       // Ordered, NOT deduplicated — preserves insertion order for Dialectic Rhythm Guard (D-E).
-      const existing = Array.isArray(priorState['stance_history'])
-        ? (priorState['stance_history'] as string[])
+      const existing: string[] = Array.isArray(priorState['stance_history'])
+        ? priorState['stance_history']
         : [];
       updatedState['stance_history'] = [...existing, partial.append_stance];
     }
@@ -320,6 +323,10 @@ function str(v: string | boolean | undefined): string | undefined {
   return v !== undefined && v !== true ? String(v) : undefined;
 }
 
+function asInterviewType(v: string | undefined): 'greenfield' | 'brownfield' | undefined {
+  return v === 'greenfield' || v === 'brownfield' ? v : undefined;
+}
+
 function main(): void {
   let sessionId: string;
   try {
@@ -338,7 +345,7 @@ function main(): void {
       initDeepInterviewState(sessionId, {
         initial_idea: str(args['initial-idea']),
         interview_id: str(args['interview-id']),
-        type: str(args['type']) as 'greenfield' | 'brownfield' | undefined,
+        type: asInterviewType(str(args['type'])),
         current_phase: str(args['current-phase']),
         threshold: threshold !== undefined ? Number(threshold) : undefined,
         codebase_context: str(args['codebase-context']),
@@ -371,8 +378,13 @@ function main(): void {
     // Validate JSON flags before any write
     let appendRound: unknown;
     if (appendRoundStdin) {
+      if (stdinText === undefined) {
+        // Unreachable: appendRoundStdin implies the stdin-read block above ran and either
+        // set stdinText or exited the process on failure.
+        throw new Error('deep-interview-state update: internal error: stdin was not read');
+      }
       try {
-        appendRound = JSON.parse(stdinText!);
+        appendRound = JSON.parse(stdinText);
       } catch {
         process.stderr.write(
           `deep-interview-state update: --append-round-stdin: invalid JSON from stdin\n`
@@ -391,8 +403,13 @@ function main(): void {
     }
     let appendSnapshot: unknown;
     if (appendSnapshotStdin) {
+      if (stdinText === undefined) {
+        // Unreachable: appendSnapshotStdin implies the stdin-read block above ran and either
+        // set stdinText or exited the process on failure.
+        throw new Error('deep-interview-state update: internal error: stdin was not read');
+      }
       try {
-        appendSnapshot = JSON.parse(stdinText!);
+        appendSnapshot = JSON.parse(stdinText);
       } catch {
         process.stderr.write(
           `deep-interview-state update: --append-ontology-snapshot-stdin: invalid JSON from stdin\n`
@@ -422,17 +439,17 @@ function main(): void {
         process.exit(1);
       }
       if (
-        typeof parsed !== 'object' ||
-        parsed === null ||
-        typeof (parsed as Record<string, unknown>)['evidence_id'] !== 'string' ||
-        typeof (parsed as Record<string, unknown>)['label'] !== 'string'
+        !isRecord(parsed) ||
+        typeof parsed['evidence_id'] !== 'string' ||
+        typeof parsed['label'] !== 'string'
       ) {
         process.stderr.write(
           `deep-interview-state update: --append-provenance-item: must be {"evidence_id":"<str>","label":"<label>"}\n`
         );
         process.exit(1);
       }
-      appendProvenanceItem = parsed as EvidenceProvenanceItem;
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque CLI JSON boundary: shape-validated above (evidence_id/label present as strings); the closed label-value set is a documentation-level contract (SKILL.md), not runtime-enforced here, matching prior behavior
+      appendProvenanceItem = parsed as unknown as EvidenceProvenanceItem;
     }
 
     try {
