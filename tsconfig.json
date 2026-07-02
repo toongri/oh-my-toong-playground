@@ -15,6 +15,5 @@
       "@lib/*": ["lib/*"]
     }
   },
-  "include": ["lib/**/*.ts", "scripts/**/*.ts", "hooks/**/*.ts", "skills/*/scripts/**/*.ts", "tools/**/*.ts"],
-  "exclude": ["hooks/rules-injector/**/*"]
+  "include": ["lib/**/*.ts", "scripts/**/*.ts", "hooks/**/*.ts", "skills/*/scripts/**/*.ts", "tools/**/*.ts"]
 }
