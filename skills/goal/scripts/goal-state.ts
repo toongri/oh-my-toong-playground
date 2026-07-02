@@ -118,6 +118,21 @@ function readFileOrNull(path: string): string | null {
   }
 }
 
+/** True iff `value` is a non-null, non-array object (i.e. a JSON "object"). */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** True iff `err` is an Error-shaped value carrying a Node.js `code` field. */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return typeof err === 'object' && err !== null && 'code' in err;
+}
+
+/** Type guard: true iff `value` is a string appearing in `options`; narrows to the literal union of `options`. */
+function isOneOf<T extends readonly string[]>(value: unknown, options: T): value is T[number] {
+  return typeof value === 'string' && options.includes(value);
+}
+
 // ---------------------------------------------------------------------------
 // Path resolution — identical dir resolution as prometheus-state
 // ---------------------------------------------------------------------------
@@ -145,7 +160,13 @@ function seedStartedAt(): string {
 }
 
 function normalize(s: string): string {
-  return s.replace(/[\x00-\x1F]/g, ' ');
+  // Loop rather than a /[\x00-\x1F]/ regex (no-control-regex) — same UTF-16-code-unit
+  // replacement semantics as the regex it replaces.
+  let result = '';
+  for (let i = 0; i < s.length; i++) {
+    result += s.charCodeAt(i) <= 0x1f ? ' ' : s[i];
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +177,9 @@ function readPrior(sessionId: string): Partial<GoalState> {
   const content = readFileOrNull(resolveStatePath(sessionId));
   if (!content) return {};
   try {
-    return JSON.parse(content) as Partial<GoalState>;
+    // JSON.parse's return type is already `any`; assigning it to the declared
+    // `Partial<GoalState>` return type needs no assertion.
+    return JSON.parse(content);
   } catch {
     return {};
   }
@@ -208,15 +231,16 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
     // confirmStory, retireStory.
     stories: next.stories ?? prior.stories ?? [],
   };
-  const state = mergeWithHeartbeat(partial, {}) as GoalState;
+  const state: GoalState = mergeWithHeartbeat(partial, {});
   try {
     writeFileNoCreate(stateFilePath, JSON.stringify(state, null, 2));
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+    if (isErrnoException(err) && err.code === 'ENOENT') {
       throw new Error(
         `goal-state: state file absent for session "${sessionId}". ` +
           `Possible causes: state adopted by another session, or seed missing. ` +
-          `Re-invoke the goal skill to re-seed.`
+          `Re-invoke the goal skill to re-seed.`,
+        { cause: err }
       );
     }
     throw err;
@@ -232,7 +256,9 @@ export function readGoalState(sessionId: string): GoalState | null {
   const content = readFileOrNull(resolveStatePath(sessionId));
   if (!content) return null;
   try {
-    const state = JSON.parse(content) as GoalState;
+    // JSON.parse's return type is already `any`; the field-by-field schema guard below
+    // performs the actual validation, so no assertion to GoalState is needed here.
+    const state = JSON.parse(content);
     // Schema guard: mirrors readGoalStateRaw in hooks/persistent-mode/state.ts so the
     // two readers never disagree on whether a goal is active (finding A-4). Validate the
     // load-bearing fields BEFORE the active-fold; a corrupt file (e.g. active:"true",
@@ -240,7 +266,7 @@ export function readGoalState(sessionId: string): GoalState | null {
     const VALID_PHASES: string[] = ['planning', 'pursuing', 'budget_limited', 'blocked', 'complete'];
     if (
       typeof state.active !== 'boolean' ||
-      !VALID_PHASES.includes(state.phase as string) ||
+      !VALID_PHASES.includes(state.phase) ||
       !Number.isInteger(state.iteration) || state.iteration < 0 ||
       !Number.isInteger(state.max_iterations) || state.max_iterations < 1
     ) {
@@ -264,7 +290,10 @@ export function readGoalState(sessionId: string): GoalState | null {
 export function readGoalGet(sessionId: string): (GoalState & { pristine: boolean }) | null {
   const state = readGoalState(sessionId);
   if (state === null) return null;
-  const pristine = isPristine('goal', state as unknown as Record<string, unknown>);
+  // Fresh object literal (via spread) satisfies Record<string, unknown> structurally —
+  // no assertion needed, unlike casting the already-typed `state` reference directly.
+  const stateAsRecord: Record<string, unknown> = { ...state };
+  const pristine = isPristine('goal', stateAsRecord);
   // Default stories to [] when absent (backward-compatible with pre-story states)
   return { ...state, stories: state.stories ?? [], pristine };
 }
@@ -277,7 +306,12 @@ export function deriveStatus(state: Pick<GoalState, 'phase'>): GoalPhase {
 }
 
 export interface SetGoalOpts {
-  phase: GoalPhase;
+  /**
+   * Raw untrusted phase string (CLI/caller-supplied). `setGoalState` is the runtime
+   * validator — it narrows this to `GoalPhase` via the SETTABLE_PHASES guard below and
+   * throws (with the original string preserved in the message) when it isn't planning|pursuing.
+   */
+  phase: string;
   outcome?: string;
   verification_surface?: string;
   constraints?: string;
@@ -304,7 +338,10 @@ export interface SetGoalOpts {
  *     across re-plans.
  */
 export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
-  if (!SETTABLE_PHASES.includes(opts.phase)) {
+  // Runtime-validated narrowing: opts.phase is `string` in the type until this guard
+  // passes, after which it is narrowed to GoalPhase (SETTABLE_PHASES' element type) for
+  // the rest of the function.
+  if (!isOneOf(opts.phase, SETTABLE_PHASES)) {
     throw new Error(
       `set: phase must be one of ${SETTABLE_PHASES.join('|')} (got "${opts.phase}"). ` +
         `complete is request-complete-only; budget_limited/blocked are system-only.`
@@ -446,7 +483,7 @@ export function setStories(sessionId: string, stories: Story[]): void {
     seenIds.add(s.id);
   }
   // Normalize: force every status to unconfirmed (full-replace semantics, D-6)
-  const normalized: Story[] = stories.map((s) => ({ ...s, status: 'unconfirmed' as StoryStatus }));
+  const normalized: Story[] = stories.map((s): Story => ({ ...s, status: 'unconfirmed' }));
   mergeWrite(sessionId, { stories: normalized });
 }
 
@@ -565,7 +602,7 @@ export function retireStory(sessionId: string, storyId: string): void {
     );
   }
 
-  const updatedStories = stories.map((s, i) => (i === idx ? { ...s, status: 'retired' as StoryStatus } : s));
+  const updatedStories = stories.map((s, i): Story => (i === idx ? { ...s, status: 'retired' } : s));
   mergeWrite(sessionId, { stories: updatedStories });
 }
 
@@ -621,8 +658,8 @@ export function confirmStory(sessionId: string, storyId: string): void {
   if (stories[idx].status === 'confirmed') {
     return;
   }
-  const updated: Story[] = stories.map((s) =>
-    s.id === storyId ? { ...s, status: 'confirmed' as StoryStatus } : s
+  const updated: Story[] = stories.map((s): Story =>
+    s.id === storyId ? { ...s, status: 'confirmed' } : s
   );
   mergeWrite(sessionId, { stories: updated });
 }
@@ -673,6 +710,36 @@ function resolveVerdictArtifactPath(sessionId: string): string {
 }
 
 /**
+ * Type predicate backing readVerdictArtifact — validates the same schema/enum/dup-id
+ * rules the prior cast-based implementation checked, without asserting the type.
+ * On success, `value` narrows to VerdictArtifact IN PLACE (the original parsed object,
+ * with any extra JSON keys intact) rather than a reconstructed copy.
+ */
+function isVerdictArtifact(value: unknown): value is VerdictArtifact {
+  if (!isRecord(value)) return false;
+  const VALID_OBJ_VERDICTS = ['APPROVE', 'REQUEST_CHANGES', 'COMMENT'];
+  if (!isOneOf(value['objective_verdict'], VALID_OBJ_VERDICTS)) return false;
+  if (!Array.isArray(value['stories'])) return false;
+  if (typeof value['verifier'] !== 'string') return false;
+  if (typeof value['at'] !== 'string') return false;
+  // Validate each story entry and reject duplicate ids (duplicate id makes the
+  // artifact ambiguous — a forged pair [RC, APPROVE] could mask a non-APPROVE verdict
+  // via last-wins Map semantics in the caller)
+  const VALID_STORY_VERDICTS = ['APPROVE', 'REQUEST_CHANGES'];
+  const seenIds = new Set<string>();
+  for (const entry of value['stories']) {
+    if (!isRecord(entry)) return false;
+    const id = entry['id'];
+    if (typeof id !== 'string') return false;
+    if (seenIds.has(id)) return false;
+    seenIds.add(id);
+    if (!isOneOf(entry['verdict'], VALID_STORY_VERDICTS)) return false;
+    if (!Array.isArray(entry['evidence_refs'])) return false;
+  }
+  return true;
+}
+
+/**
  * Reads and validates the verdict artifact. Returns the parsed artifact on
  * success, or null when the file is absent or the schema is invalid.
  * Schema: { objective_verdict, stories: [{id, verdict, evidence_refs[]}], verifier, at }
@@ -687,29 +754,7 @@ function readVerdictArtifact(sessionId: string): VerdictArtifact | null {
   } catch {
     return null;
   }
-  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
-  const a = obj as Record<string, unknown>;
-  // Required top-level fields
-  const VALID_OBJ_VERDICTS = ['APPROVE', 'REQUEST_CHANGES', 'COMMENT'];
-  if (!VALID_OBJ_VERDICTS.includes(a['objective_verdict'] as string)) return null;
-  if (!Array.isArray(a['stories'])) return null;
-  if (typeof a['verifier'] !== 'string') return null;
-  if (typeof a['at'] !== 'string') return null;
-  // Validate each story entry and reject duplicate ids (duplicate id makes the
-  // artifact ambiguous — a forged pair [RC, APPROVE] could mask a non-APPROVE verdict
-  // via last-wins Map semantics in the caller)
-  const VALID_STORY_VERDICTS = ['APPROVE', 'REQUEST_CHANGES'];
-  const seenIds = new Set<string>();
-  for (const entry of a['stories'] as unknown[]) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null;
-    const e = entry as Record<string, unknown>;
-    if (typeof e['id'] !== 'string') return null;
-    if (seenIds.has(e['id'] as string)) return null;
-    seenIds.add(e['id'] as string);
-    if (!VALID_STORY_VERDICTS.includes(e['verdict'] as string)) return null;
-    if (!Array.isArray(e['evidence_refs'])) return null;
-  }
-  return obj as VerdictArtifact;
+  return isVerdictArtifact(obj) ? obj : null;
 }
 
 /**
@@ -719,6 +764,32 @@ function readVerdictArtifact(sessionId: string): VerdictArtifact | null {
  */
 function resolveCodeReviewArtifactPath(sessionId: string): string {
   return `${getOmtDir()}/goal-codereview-${sessionId}.json`;
+}
+
+/**
+ * Type predicate backing readCodeReviewArtifact — validates the same schema/enum rules
+ * the prior cast-based implementation checked, without asserting the type. On success,
+ * `value` narrows to CodeReviewArtifact IN PLACE (the original parsed object, with any
+ * extra JSON keys intact — e.g. a leaked `confidence` key on a finding is still readable
+ * off `artifact.findings`, matching the pre-existing pass-through contract relied on by
+ * goal-state-codereview-contract.test.ts's raw-key-leak guard).
+ */
+function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
+  if (!isRecord(value)) return false;
+  // Required top-level fields
+  if (!Array.isArray(value['findings'])) return false;
+  const reviewer = value['reviewer'];
+  if (typeof reviewer !== 'string' || reviewer.length === 0) return false;
+  if (typeof value['at'] !== 'string') return false;
+  // Validate each finding; any enum violation → whole artifact null
+  const VALID_CLASSES = ['correctness', 'cleanup', 'requirement-gap'];
+  const VALID_FINDING_VERDICTS = ['CONFIRMED', 'PLAUSIBLE'];
+  for (const entry of value['findings']) {
+    if (!isRecord(entry)) return false;
+    if (!isOneOf(entry['class'], VALID_CLASSES)) return false;
+    if (!isOneOf(entry['verdict'], VALID_FINDING_VERDICTS)) return false;
+  }
+  return true;
 }
 
 /**
@@ -741,23 +812,7 @@ export function readCodeReviewArtifact(sessionId: string): CodeReviewArtifact | 
   } catch {
     return null;
   }
-  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
-  const a = obj as Record<string, unknown>;
-  // Required top-level fields
-  if (!Array.isArray(a['findings'])) return null;
-  const reviewer = a['reviewer'];
-  if (typeof reviewer !== 'string' || reviewer.length === 0) return null;
-  if (typeof a['at'] !== 'string') return null;
-  // Validate each finding; any enum violation → whole artifact null
-  const VALID_CLASSES = ['correctness', 'cleanup', 'requirement-gap'];
-  const VALID_FINDING_VERDICTS = ['CONFIRMED', 'PLAUSIBLE'];
-  for (const entry of a['findings'] as unknown[]) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null;
-    const e = entry as Record<string, unknown>;
-    if (!VALID_CLASSES.includes(e['class'] as string)) return null;
-    if (!VALID_FINDING_VERDICTS.includes(e['verdict'] as string)) return null;
-  }
-  return obj as CodeReviewArtifact;
+  return isCodeReviewArtifact(obj) ? obj : null;
 }
 
 /**
@@ -955,7 +1010,8 @@ function main(): void {
       const completionEvidence =
         evidence !== undefined ? evidence.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
       setGoalState(sessionId, {
-        phase: String(args['phase'] ?? '') as GoalPhase,
+        // Raw untrusted string — setGoalState's SETTABLE_PHASES guard validates it.
+        phase: String(args['phase'] ?? ''),
         outcome: str(args['outcome']),
         verification_surface: str(args['verification-surface']),
         constraints: str(args['constraints']),
@@ -969,11 +1025,11 @@ function main(): void {
     } else if (subcommand === 'set-verdict') {
       const v = String(args['verdict'] ?? 'absent');
       const allowed: ObjectiveVerdict[] = ['APPROVE', 'REQUEST_CHANGES', 'COMMENT', 'absent'];
-      if (!allowed.includes(v as ObjectiveVerdict)) {
+      if (!isOneOf(v, allowed)) {
         process.stderr.write(`set-verdict: invalid --verdict "${v}" (one of ${allowed.join('|')})\n`);
         process.exit(1);
       }
-      setVerdict(sessionId, v as ObjectiveVerdict);
+      setVerdict(sessionId, v);
     } else if (subcommand === 'set-budget-limited') {
       setBudgetLimited(sessionId);
     } else if (subcommand === 'set-blocked') {
@@ -1024,7 +1080,7 @@ function main(): void {
         }
         let parsed: Story[];
         try {
-          parsed = JSON.parse(jsonArg) as Story[];
+          parsed = JSON.parse(jsonArg);
           if (!Array.isArray(parsed)) throw new Error('expected JSON array');
         } catch (e) {
           process.stderr.write(`set-stories: invalid JSON — ${String(e)}\n`);
@@ -1046,7 +1102,7 @@ function main(): void {
       }
       let patch: Partial<Story>;
       try {
-        patch = JSON.parse(jsonArg) as Partial<Story>;
+        patch = JSON.parse(jsonArg);
         if (typeof patch !== 'object' || Array.isArray(patch) || patch === null) {
           throw new Error('expected JSON object');
         }
@@ -1064,7 +1120,7 @@ function main(): void {
       }
       let parsed: Story;
       try {
-        parsed = JSON.parse(jsonArg) as Story;
+        parsed = JSON.parse(jsonArg);
         if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
           throw new Error('expected JSON object');
         }
