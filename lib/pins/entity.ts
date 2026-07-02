@@ -59,26 +59,31 @@ export function parse(md: string): Entity {
   }
 
   const [, yamlContent, body] = match;
-  const raw = parseYamlStrict(yamlContent) as Record<string, unknown>;
+  // Opaque parse boundary: parseYamlStrict returns unknown YAML content, and
+  // the shape (correct fields/types) is validated downstream by validator.ts
+  // against tbox.yaml, not here. One assertion at this single boundary stands
+  // in for per-field trust instead of asserting each field individually.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque YAML→Frontmatter boundary; shape is validated downstream by validator.ts, not here by design
+  const raw = parseYamlStrict(yamlContent) as Frontmatter;
 
   const frontmatter: Frontmatter = {
-    id: raw.id as string,
-    type: raw.type as Frontmatter['type'],
-    source: raw.source as Frontmatter['source'],
-    authority: raw.authority as string,
-    source_url: raw.source_url as string,
-    tier: raw.tier as Frontmatter['tier'],
-    tags: raw.tags as string,
-    sensitivity: raw.sensitivity as Frontmatter['sensitivity'],
-    status: raw.status as Frontmatter['status'],
-    updated_at: raw.updated_at as string,
-    checked_at: raw.checked_at as string,
-    created_at: raw.created_at as string,
-    relations: (raw.relations as Array<{ target: string; type: string }>) ?? [],
+    id: raw.id,
+    type: raw.type,
+    source: raw.source,
+    authority: raw.authority,
+    source_url: raw.source_url,
+    tier: raw.tier,
+    tags: raw.tags,
+    sensitivity: raw.sensitivity,
+    status: raw.status,
+    updated_at: raw.updated_at,
+    checked_at: raw.checked_at,
+    created_at: raw.created_at,
+    relations: raw.relations ?? [],
   };
 
   if (raw.discovery_context !== undefined) {
-    frontmatter.discovery_context = raw.discovery_context as string;
+    frontmatter.discovery_context = raw.discovery_context;
   }
 
   return { frontmatter, body };
