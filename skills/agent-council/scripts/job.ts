@@ -7,6 +7,7 @@ import {
   exitWithError,
   detectHostRole,
   resolveChairmanExclusion,
+  normalizeBool,
   ensureDir,
   atomicWriteJson,
   parseArgs,
@@ -30,6 +31,22 @@ import {
 } from '@lib/generic-job';
 
 import { getOmtDir } from '@lib/omt-dir';
+
+// ---------------------------------------------------------------------------
+// Type-safe narrowing helpers (avoid unsound `as` assertions on unknown data)
+// ---------------------------------------------------------------------------
+
+function isNullish(value: unknown): value is null | undefined {
+  return value === null || value === undefined;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Council JobConfig
@@ -62,8 +79,27 @@ function resolveDefaultConfigFile() {
   return SKILL_CONFIG_FILE;
 }
 
-async function parseCouncilConfig(configPath: string) {
-  const fallback = {
+interface CouncilMemberConfig {
+  name?: unknown;
+  command?: unknown;
+  emoji?: unknown;
+  color?: unknown;
+  model?: unknown;
+  effort_level?: unknown;
+  output_format?: unknown;
+  env?: Record<string, string>;
+}
+
+interface CouncilConfig {
+  council: {
+    chairman: Record<string, unknown>;
+    members: CouncilMemberConfig[];
+    settings: Record<string, unknown>;
+  };
+}
+
+async function parseCouncilConfig(configPath: string): Promise<CouncilConfig> {
+  const fallback: CouncilConfig = {
     council: {
       chairman: { role: 'auto' },
       members: [
@@ -78,25 +114,25 @@ async function parseCouncilConfig(configPath: string) {
   if (!fs.existsSync(configPath)) return fallback;
 
   const fileText = fs.readFileSync(configPath, 'utf8');
-  let parsed: Record<string, any>;
+  let parsed: unknown;
   try {
-    parsed = Bun.YAML.parse(fileText) as Record<string, any>;
+    parsed = Bun.YAML.parse(fileText);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     exitWithError(`Invalid YAML in ${configPath}: ${message}`);
   }
 
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  if (!isPlainObject(parsed)) {
     exitWithError(`Invalid config in ${configPath}: expected a YAML mapping/object at the document root`);
   }
   if (!parsed.council) {
     exitWithError(`Invalid config in ${configPath}: missing required top-level key 'council:'`);
   }
-  if (typeof parsed.council !== 'object' || Array.isArray(parsed.council)) {
+  if (!isPlainObject(parsed.council)) {
     exitWithError(`Invalid config in ${configPath}: 'council' must be a mapping/object`);
   }
 
-  const merged: { council: { chairman: Record<string, any>; members: any[]; settings: Record<string, any> } } = {
+  const merged: CouncilConfig = {
     council: {
       chairman: { ...fallback.council.chairman },
       members: Array.isArray(fallback.council.members) ? [...fallback.council.members] : [],
@@ -106,22 +142,23 @@ async function parseCouncilConfig(configPath: string) {
 
   const council = parsed.council;
 
-  if (council.chairman != null) {
-    if (typeof council.chairman !== 'object' || Array.isArray(council.chairman)) {
+  if (!isNullish(council.chairman)) {
+    if (!isPlainObject(council.chairman)) {
       exitWithError(`Invalid config in ${configPath}: 'council.chairman' must be a mapping/object`);
     }
     merged.council.chairman = { ...merged.council.chairman, ...council.chairman };
   }
 
   if (Object.prototype.hasOwnProperty.call(council, 'members')) {
-    if (!Array.isArray(council.members)) {
+    const rawMembers = council.members;
+    if (!Array.isArray(rawMembers)) {
       exitWithError(`Invalid config in ${configPath}: 'council.members' must be a list/array`);
     }
-    merged.council.members = council.members;
+    merged.council.members = rawMembers;
   }
 
-  if (council.settings != null) {
-    if (typeof council.settings !== 'object' || Array.isArray(council.settings)) {
+  if (!isNullish(council.settings)) {
+    if (!isPlainObject(council.settings)) {
       exitWithError(`Invalid config in ${configPath}: 'council.settings' must be a mapping/object`);
     }
     merged.council.settings = { ...merged.council.settings, ...council.settings };
@@ -134,6 +171,15 @@ async function parseCouncilConfig(configPath: string) {
 // Council-specific computeStatus wrapper (maps reviewers -> members in output)
 // ---------------------------------------------------------------------------
 
+interface CouncilMemberStatus {
+  member: string;
+  state: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  exitCode: number | null;
+  message: string | null;
+}
+
 // Arrow function wrapping framework's computeStatus — framework now returns `members` directly.
 const computeStatus = async (jobDir: string): Promise<{
   jobDir: string;
@@ -141,10 +187,10 @@ const computeStatus = async (jobDir: string): Promise<{
   chairmanRole: string | null;
   overallState: string;
   counts: Record<string, number>;
-  members: any[];
+  members: CouncilMemberStatus[];
 }> => {
   const result = await frameworkComputeStatus(jobDir, COUNCIL_CONFIG);
-  return result as any;
+  return result;
 };
 
 // Council-specific UI strings
@@ -164,24 +210,41 @@ const COUNCIL_UI_STRINGS = {
 // Council-specific buildUiPayload wrapper (accepts members[] in statusPayload)
 // ---------------------------------------------------------------------------
 
+interface CouncilMemberStatusInput {
+  member?: unknown;
+  state?: unknown;
+  exitCode?: unknown;
+}
+
+interface CodexPlanStep {
+  step: string;
+  status: string;
+}
+
+interface ClaudeTodo {
+  content: string;
+  status: string;
+  activeForm: string;
+}
+
 // Arrow function wrapping framework's buildUiPayload — adapts `members` field and patches UI strings.
 const buildUiPayload = (statusPayload: {
   overallState?: string;
   counts?: Record<string, number>;
-  members?: any[];
+  members?: CouncilMemberStatusInput[];
 }): {
   progress: { done: number; total: number; overallState: string };
-  codex: { update_plan: { plan: any[] } };
-  claude: { todo_write: { todos: any[] } };
+  codex: { update_plan: { plan: CodexPlanStep[] } };
+  claude: { todo_write: { todos: ClaudeTodo[] } };
 } => {
   // Pass members directly to framework
   const adapted = {
     overallState: statusPayload.overallState,
     counts: statusPayload.counts,
-    members: (statusPayload.members || []).map((m: any) => ({
-      member: m && m.member != null ? m.member : null,
-      state: m && m.state != null ? m.state : 'unknown',
-      exitCode: m && m.exitCode != null ? m.exitCode : null,
+    members: (statusPayload.members || []).map((m) => ({
+      member: m && !isNullish(m.member) ? m.member : null,
+      state: m && !isNullish(m.state) ? m.state : 'unknown',
+      exitCode: m && !isNullish(m.exitCode) ? m.exitCode : null,
     })),
   };
   const result = frameworkBuildUiPayload(adapted, COUNCIL_CONFIG);
@@ -249,7 +312,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string) {
             : state
               ? '[!]'
               : '[ ]';
-      const exitInfo = m.exitCode != null ? ` (exit ${m.exitCode})` : '';
+      const exitInfo = !isNullish(m.exitCode) ? ` (exit ${m.exitCode})` : '';
       process.stdout.write(`${mark} ${m.member} \u2014 ${state}${exitInfo}\n`);
     }
     return;
@@ -261,7 +324,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string) {
     process.stdout.write(`members ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
     if (options.verbose) {
       for (const m of payload.members) {
-        process.stdout.write(`- ${m.member}: ${m.state}${m.exitCode != null ? ` (exit ${m.exitCode})` : ''}\n`);
+        process.stdout.write(`- ${m.member}: ${m.state}${!isNullish(m.exitCode) ? ` (exit ${m.exitCode})` : ''}\n`);
       }
     }
     return;
@@ -271,27 +334,36 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string) {
 }
 
 async function cmdStart(options: Record<string, unknown>, prompt: string) {
-  const configPath = (options.config as string | undefined) || process.env.COUNCIL_CONFIG || resolveDefaultConfigFile();
+  const configPath = asOptionalString(options.config) || process.env.COUNCIL_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
-    (options['jobs-dir'] as string | undefined) || process.env.COUNCIL_JOBS_DIR || path.join(getOmtDir(), 'jobs');
+    asOptionalString(options['jobs-dir']) || process.env.COUNCIL_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, COUNCIL_CONFIG);
 
   const hostRole = detectHostRole(SKILL_DIR);
   const config = await parseCouncilConfig(configPath);
-  const chairmanRoleRaw = (options.chairman as string | undefined) || process.env.COUNCIL_CHAIRMAN || config.council.chairman.role || 'auto';
+  const chairmanRoleRaw = asOptionalString(options.chairman) || process.env.COUNCIL_CHAIRMAN || asOptionalString(config.council.chairman.role) || 'auto';
+
+  // Pre-normalize via the same normalizeBool the framework applies internally, so passing an
+  // already-normalized boolean|null through is idempotent (identical outcome for every input shape)
+  // while satisfying resolveChairmanExclusion's `boolean | null | undefined` parameter type.
+  const rawExcludeSetting = config.council.settings.exclude_chairman_from_members;
+  const configExcludeSetting: boolean | null | undefined =
+    typeof rawExcludeSetting === 'boolean' ? rawExcludeSetting : normalizeBool(rawExcludeSetting);
 
   const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
     options,
-    configExcludeSetting: config.council.settings.exclude_chairman_from_members,
+    configExcludeSetting,
     hostRole,
     chairmanRoleRaw,
   });
 
   const timeoutSetting = Number(config.council.settings.timeout || 0);
-  const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
-  const timeoutSec = Number.isFinite(timeoutOverride!) && timeoutOverride! > 0 ? timeoutOverride! : timeoutSetting > 0 ? timeoutSetting : 0;
+  const timeoutOverride = !isNullish(options.timeout) ? Number(options.timeout) : null;
+  const timeoutSec = timeoutOverride !== null && Number.isFinite(timeoutOverride) && timeoutOverride > 0
+    ? timeoutOverride
+    : timeoutSetting > 0 ? timeoutSetting : 0;
 
   const requestedMembers = config.council.members || [];
   const members = requestedMembers.filter(filterMember);
@@ -314,7 +386,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
       excludeChairmanFromMembers,
       timeoutSec: timeoutSec || null,
     },
-    members: members.map((m: any) => ({
+    members: members.map((m) => ({
       name: String(m.name),
       command: String(m.command),
       emoji: m.emoji ? String(m.emoji) : null,
@@ -405,7 +477,7 @@ async function main() {
   if (command === 'clean') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('clean: missing jobDir');
-    const defaultJobsDir = options['jobs-dir'] as string | undefined
+    const defaultJobsDir = asOptionalString(options['jobs-dir'])
       || process.env.COUNCIL_JOBS_DIR
       || path.join(getOmtDir(), 'jobs');
     frameworkCmdClean(options, jobDir, COUNCIL_CONFIG, defaultJobsDir);
