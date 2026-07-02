@@ -1,16 +1,33 @@
 import fs from "fs/promises";
 import path from "path";
 
-import type { Platform, PlatformConfigResult, PlatformYaml, PluginObjectItem, PluginScope } from "../lib/types.ts";
+import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
-import { deepMerge, isPlainObject } from "../lib/deep-merge.ts";
+import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isGlobalSync } from "../lib/path-utils.ts";
 import { deriveClaudeProjectKey } from "../lib/git-key.ts";
+
+// =============================================================================
+// Local narrowing helpers (avoid `as` casts on loosely-typed YAML/JSON data)
+// =============================================================================
+
+/** Type-guard version of the plain-object check (mirrors deep-merge.ts's isPlainObject, but narrows). */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function pickString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v): v is string => typeof v === "string");
+}
 
 // =============================================================================
 // Plugin installer type (for DI in tests)
@@ -101,16 +118,19 @@ export class ClaudeAdapter implements PlatformAdapter {
 
     // Inject add-hooks into frontmatter (and deploy hook files)
     if (addHooks && addHooks.length > 0) {
-      const hooks = addHooks as Array<{
-        source_path?: string;
-        display_name?: string;
-        event: string;
-        matcher?: string;
-        type?: string;
-        command?: string;
-        prompt?: string;
-        timeout?: number;
-      }>;
+      const hooks = addHooks.map((h) => {
+        const rec = isRecord(h) ? h : {};
+        return {
+          source_path: pickString(rec["source_path"]),
+          display_name: pickString(rec["display_name"]),
+          event: pickString(rec["event"]) ?? "",
+          matcher: pickString(rec["matcher"]),
+          type: pickString(rec["type"]),
+          command: pickString(rec["command"]),
+          prompt: pickString(rec["prompt"]),
+          timeout: typeof rec["timeout"] === "number" ? rec["timeout"] : undefined,
+        };
+      });
 
       // Deploy hook component files first
       for (const hook of hooks) {
@@ -191,7 +211,7 @@ export class ClaudeAdapter implements PlatformAdapter {
     // or the directory hook itself (its .sh files resolve deps relative to it).
     const hooksSourceDir = path.dirname(sourcePath);
 
-    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
       stat = await fs.stat(sourcePath);
     } catch {
@@ -278,7 +298,7 @@ export class ClaudeAdapter implements PlatformAdapter {
   ): Promise<void> {
     const targetDir = path.join(targetPath, ".claude", "scripts");
 
-    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
       stat = await fs.stat(sourcePath);
     } catch {
@@ -353,17 +373,24 @@ export class ClaudeAdapter implements PlatformAdapter {
     const processedSections: string[] = [];
 
     // --- config ---
-    if (yaml.config != null) {
+    if (yaml.config !== null && yaml.config !== undefined) {
       await this.syncConfig(targetPath, yaml.config, dryRun);
       processedSections.push("config");
     }
 
     // --- hooks ---
-    if (yaml.hooks != null) {
+    if (yaml.hooks !== null && yaml.hooks !== undefined) {
       const hooksMap = yaml.hooks;
-      const preserveConfig = (hooksMap as Record<string, unknown>)["preserve"] as
-        | { "command-contains"?: string[] }
-        | undefined;
+      // "preserve" is a reserved key smuggled into the hooks map with a shape
+      // (`{ "command-contains"?: string[] }`) that PlatformYaml.hooks doesn't
+      // model (its declared value type is PlatformYamlHookItem[]). Widen to
+      // unknown and narrow with guards instead of trusting the declared type.
+      const hooksMapUnknown: unknown = hooksMap;
+      const preserveRaw = isRecord(hooksMapUnknown) ? hooksMapUnknown["preserve"] : undefined;
+      const preserveCommandContains = isRecord(preserveRaw) ? preserveRaw["command-contains"] : undefined;
+      const preserveConfig: { "command-contains"?: string[] } | undefined = isRecord(preserveRaw)
+        ? { "command-contains": isStringArray(preserveCommandContains) ? preserveCommandContains : undefined }
+        : undefined;
       const accumulatedHooks: Record<string, unknown[]> = {};
 
       for (const [hookEvent, items] of Object.entries(hooksMap)) {
@@ -371,12 +398,14 @@ export class ClaudeAdapter implements PlatformAdapter {
         if (!Array.isArray(items)) continue;
 
         for (const item of items) {
-          const component = (item["component"] as string | undefined) ?? "";
-          const timeout = (item["timeout"] as number | undefined) ?? 10;
-          const matcher = (item["matcher"] as string | undefined) ?? "*";
-          const hookType = (item["type"] as string | undefined) ?? "command";
-          const customCommand = (item["command"] as string | undefined) ?? "";
-          const promptText = (item["prompt"] as string | undefined) ?? "";
+          // component/timeout/matcher are declared fields on PlatformYamlHookItem;
+          // type/command/prompt fall through its index signature as `unknown`.
+          const component = item.component ?? "";
+          const timeout = item.timeout ?? 10;
+          const matcher = item.matcher ?? "*";
+          const hookType = pickString(item["type"]) ?? "command";
+          const customCommand = pickString(item["command"]) ?? "";
+          const promptText = pickString(item["prompt"]) ?? "";
 
           let displayName = "";
           let resolvedSourcePath = "";
@@ -396,8 +425,8 @@ export class ClaudeAdapter implements PlatformAdapter {
             );
           }
 
-          // Build hook entry
-          let hookEntry: Record<string, unknown>;
+          // Build hook entry (buildHookEntry always returns Record<string, unknown[]>)
+          let hookEntry: Record<string, unknown[]>;
 
           if (hookType === "prompt") {
             if (!promptText) {
@@ -468,8 +497,8 @@ export class ClaudeAdapter implements PlatformAdapter {
           }
 
           // Accumulate hook entries per event
-          const existing = (accumulatedHooks[hookEvent] as unknown[]) ?? [];
-          const entryArray = hookEntry[hookEvent] as unknown[];
+          const existing = accumulatedHooks[hookEvent] ?? [];
+          const entryArray = hookEntry[hookEvent] ?? [];
           accumulatedHooks[hookEvent] = [...existing, ...entryArray];
         }
       }
@@ -479,7 +508,7 @@ export class ClaudeAdapter implements PlatformAdapter {
     }
 
     // --- mcps ---
-    if (yaml.mcps != null) {
+    if (yaml.mcps !== null && yaml.mcps !== undefined) {
       for (const [name, serverJson] of Object.entries(yaml.mcps)) {
         await this.syncMcpsMerge(targetPath, name, serverJson, dryRun, scope === "project" ? "local" : undefined);
       }
@@ -487,13 +516,13 @@ export class ClaudeAdapter implements PlatformAdapter {
     }
 
     // --- plugins ---
-    if (yaml.plugins?.items != null) {
+    if (yaml.plugins?.items !== null && yaml.plugins?.items !== undefined) {
       const pluginScope = scope ?? "user";
       for (const item of yaml.plugins.items) {
         if (typeof item === "string" && item) {
           await this._installPluginSafe(item, targetPath, dryRun, pluginScope);
         } else if (typeof item === "object" && item !== null) {
-          const obj = item as PluginObjectItem;
+          const obj = item;
           if (!obj.name) { logWarn("플러그인 항목에 name 필드 없음 (스킵)"); continue; }
           await this._installPluginObjectSafe(obj.name, obj.check, obj["pre-commands"], targetPath, dryRun, pluginScope);
         }
@@ -502,7 +531,7 @@ export class ClaudeAdapter implements PlatformAdapter {
     }
 
     // --- statusLine ---
-    if (yaml.statusLine != null) {
+    if (yaml.statusLine !== null && yaml.statusLine !== undefined) {
       await this.setStatusline(targetPath, yaml.statusLine, dryRun);
       processedSections.push("statusLine");
     }
@@ -550,11 +579,11 @@ export class ClaudeAdapter implements PlatformAdapter {
 
   /** True if any command in a hook block contains one of the preserve markers. */
   private hookCommandMatches(block: unknown, markers: string[]): boolean {
-    if (!isPlainObject(block)) return false;
-    const hooks = (block as { hooks?: unknown }).hooks;
+    if (!isRecord(block)) return false;
+    const hooks = block["hooks"];
     if (!Array.isArray(hooks)) return false;
     return hooks.some((h) => {
-      const cmd = isPlainObject(h) ? (h as { command?: unknown }).command : undefined;
+      const cmd = isRecord(h) ? h["command"] : undefined;
       return typeof cmd === "string" && markers.some((m) => cmd.includes(m));
     });
   }
@@ -586,12 +615,17 @@ export class ClaudeAdapter implements PlatformAdapter {
     // entries matching a preserve marker so the replace below keeps them.
     const mergedHooks: Record<string, unknown[]> = {};
     for (const [event, blocks] of Object.entries(hooksEntries)) {
+      // hooksEntries is typed Record<string, unknown> (looser than the
+      // Record<string, unknown[]> every real caller passes), so the
+      // non-array branch has no runtime-derivable array type; preserved
+      // verbatim to match the caller's loose contract.
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- non-array branch value has no statically-derivable array type; preserved as-is per hooksEntries' declared `unknown` value type
       mergedHooks[event] = Array.isArray(blocks) ? [...blocks] : (blocks as unknown[]);
     }
     const markers = preserve?.["command-contains"] ?? [];
-    const currentHooks = (current as { hooks?: unknown }).hooks;
-    if (markers.length > 0 && isPlainObject(currentHooks)) {
-      for (const [event, blocks] of Object.entries(currentHooks as Record<string, unknown>)) {
+    const currentHooks = current["hooks"];
+    if (markers.length > 0 && isRecord(currentHooks)) {
+      for (const [event, blocks] of Object.entries(currentHooks)) {
         if (!Array.isArray(blocks)) continue;
         for (const block of blocks) {
           if (this.hookCommandMatches(block, markers)) {
@@ -601,7 +635,7 @@ export class ClaudeAdapter implements PlatformAdapter {
       }
     }
 
-    const { hooks: _removed, ...rest } = current as { hooks?: unknown; [k: string]: unknown };
+    const { hooks: _removed, ...rest } = current;
     const updated = { ...rest, hooks: mergedHooks };
     await writeJsonFile(settingsFile, updated);
     logInfo(`Updated ${settingsFilename}: ${settingsFile}`);
@@ -698,9 +732,9 @@ export class ClaudeAdapter implements PlatformAdapter {
         return;
       }
       const current = await readJsonFile(claudeUserConfig);
-      const projects = (current["projects"] as Record<string, unknown>) ?? {};
-      const projectEntry = (projects[projectKey] as Record<string, unknown>) ?? {};
-      const mcpServers = (projectEntry["mcpServers"] as Record<string, unknown>) ?? {};
+      const projects = isRecord(current["projects"]) ? current["projects"] : {};
+      const projectEntry = isRecord(projects[projectKey]) ? projects[projectKey] : {};
+      const mcpServers = isRecord(projectEntry["mcpServers"]) ? projectEntry["mcpServers"] : {};
       mcpServers[serverName] = serverJson;
       projects[projectKey] = { ...projectEntry, mcpServers };
       await writeJsonFile(claudeUserConfig, { ...current, projects });
@@ -711,7 +745,7 @@ export class ClaudeAdapter implements PlatformAdapter {
         return;
       }
       const current = await readJsonFile(claudeUserConfig);
-      const mcpServers = (current["mcpServers"] as Record<string, unknown>) ?? {};
+      const mcpServers = isRecord(current["mcpServers"]) ? current["mcpServers"] : {};
       mcpServers[serverName] = serverJson;
       await writeJsonFile(claudeUserConfig, { ...current, mcpServers });
       logInfo(`MCP merged: ${serverName} -> ~/.claude.json (user scope)`);
@@ -791,23 +825,24 @@ export class ClaudeAdapter implements PlatformAdapter {
     //         - type: command
     //           command: "..."
     //           timeout: 60
-    const existingHooks =
-      (frontmatter["hooks"] as Record<string, unknown[]>) ?? {};
+    const existingHooks = isRecord(frontmatter["hooks"]) ? frontmatter["hooks"] : {};
 
     for (const h of hooks) {
-      const eventHooks = (existingHooks[h.event] as Array<Record<string, unknown>>) ?? [];
+      const eventHooksRaw = existingHooks[h.event];
+      const eventHooks: Array<Record<string, unknown>> = Array.isArray(eventHooksRaw)
+        ? eventHooksRaw.filter(isRecord)
+        : [];
       const hookDef: Record<string, unknown> =
         h.type === "prompt"
           ? { type: "prompt", prompt: h.prompt ?? "", timeout: h.timeout }
           : { type: "command", command: h.command ?? "", timeout: h.timeout };
 
       // Find existing matcher group or create new one
-      const matcherGroup = eventHooks.find(
-        (g) => g["matcher"] === h.matcher,
-      ) as Record<string, unknown> | undefined;
+      const matcherGroup = eventHooks.find((g) => g["matcher"] === h.matcher);
 
       if (matcherGroup) {
-        const inner = (matcherGroup["hooks"] as unknown[]) ?? [];
+        const innerRaw = matcherGroup["hooks"];
+        const inner = Array.isArray(innerRaw) ? innerRaw : [];
         inner.push(hookDef);
         matcherGroup["hooks"] = inner;
       } else {
