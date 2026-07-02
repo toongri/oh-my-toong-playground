@@ -63,7 +63,7 @@ function parseStdout(stdout: string): ParseResult | null {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
-      const parsed = JSON.parse(trimmed) as OpencodeEvent;
+      const parsed: OpencodeEvent = JSON.parse(trimmed);
       events.push(parsed);
     } catch {
       // non-JSON lines (e.g. "exit=0") silently skipped — audit caller can inspect rawEvents
@@ -130,7 +130,7 @@ function parseStdout(stdout: string): ParseResult | null {
     sessionID,
     terminal,
     text,
-    rawEvents: events as unknown[],
+    rawEvents: events,
   };
 }
 

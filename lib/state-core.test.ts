@@ -7,7 +7,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, rmSync, renameSync } from 'fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -598,7 +598,7 @@ describe('adopt', () => {
     expect(existsSync(join(omtDir, 'goal-state-A.json'))).toBe(false);
     expect(readFileSync(join(omtDir, 'goal-state-B.json'), 'utf8')).toBe(curBefore);
     // No extra files
-    const files = require('fs').readdirSync(omtDir) as string[];
+    const files = readdirSync(omtDir);
     expect(files.filter((f: string) => f.startsWith('goal-state-')).sort()).toEqual(['goal-state-B.json']);
   });
 

@@ -82,7 +82,7 @@ export const claudeDriver: AgentDriver = {
 
     let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(firstLine) as Record<string, unknown>;
+      parsed = JSON.parse(firstLine);
     } catch {
       return null;
     }

@@ -2,6 +2,7 @@ import { describe, it, test, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdirSync, rmSync, readFileSync, existsSync, mkdtempSync, readdirSync, writeFileSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { EventEmitter } from 'events';
 import {
   splitCommand,
   atomicWriteJson,
@@ -306,7 +307,7 @@ function createCapturingSpawnFn() {
   const captured: { env?: Record<string, string> } = {};
   const mockSpawn = (_program: string, _args: string[], options: any) => {
     captured.env = options?.env;
-    const child = new (require('events').EventEmitter)();
+    const child = new EventEmitter();
     const stdin = { write: () => true, end: () => {}, on: () => stdin } as any;
     (child as any).stdin = stdin;
     (child as any).stdout = null;
@@ -380,8 +381,6 @@ describe('runOnce 환경 변수 전파', () => {
 // ---------------------------------------------------------------------------
 // retry 시 output 정제
 // ---------------------------------------------------------------------------
-
-import type { ResumeCommandOpts } from './agent-drivers/types.ts';
 
 // ---------------------------------------------------------------------------
 // runOneTurn / resumeOneTurn helpers
