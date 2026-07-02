@@ -1,5 +1,5 @@
 import { loadTbox } from "./tbox-loader.ts";
-import type { Entity } from "./types.ts";
+import type { Entity, Frontmatter } from "./types.ts";
 
 // ── Reason codes ──────────────────────────────────────────────────────────────
 
@@ -20,6 +20,19 @@ export type ValidationResult =
   | { valid: false; reason: ValidationReason; message: string };
 
 // ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Reads a dynamically-named field off a Frontmatter object.
+ *
+ * Field names come from tbox.yaml (required_axiom / forbidden_axiom / enum
+ * keys) and are not known at compile time, so Frontmatter — which has no
+ * index signature — cannot be indexed by `field` without stepping outside
+ * the static type. This is the single, isolated boundary where that happens.
+ */
+function getFrontmatterField(fm: Frontmatter, field: string): unknown {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- dynamic field name from tbox.yaml schema; Frontmatter has no index signature to type this lookup
+  return (fm as unknown as Record<string, unknown>)[field];
+}
 
 /**
  * Validate a single CANONICAL (new-shape) entity against the T-Box schema.
@@ -52,7 +65,7 @@ export async function validate(
   const fm = entity.frontmatter;
 
   // 1. Unknown type
-  const typeDef = tbox.entity_types[fm.type as string];
+  const typeDef = tbox.entity_types[fm.type];
   if (!typeDef) {
     return {
       valid: false,
@@ -63,7 +76,7 @@ export async function validate(
 
   // 2. Forbidden fields must be absent
   for (const field of typeDef.forbidden_axiom) {
-    if (field in (fm as unknown as Record<string, unknown>)) {
+    if (field in fm) {
       return {
         valid: false,
         reason: "forbidden_field",
@@ -74,7 +87,7 @@ export async function validate(
 
   // 3. Required fields must be present and non-empty
   for (const field of typeDef.required_axiom) {
-    const value = (fm as unknown as Record<string, unknown>)[field];
+    const value = getFrontmatterField(fm, field);
     if (value === undefined || value === null || String(value).trim() === "") {
       return {
         valid: false,
@@ -85,11 +98,10 @@ export async function validate(
   }
 
   // 4. Closure enum constraints
-  const enumFields = Object.keys(tbox.enums) as (keyof typeof tbox.enums)[];
-  for (const field of enumFields) {
-    const value = (fm as unknown as Record<string, unknown>)[field];
+  const enumEntries: [string, string[]][] = Object.entries(tbox.enums);
+  for (const [field, allowed] of enumEntries) {
+    const value = getFrontmatterField(fm, field);
     if (value === undefined || value === null) continue; // absent → missing_field already caught or optional
-    const allowed = tbox.enums[field];
     if (!allowed.includes(String(value))) {
       return {
         valid: false,
@@ -116,7 +128,7 @@ export async function validate(
     // If no domain defined, relation is unconstrained
     if (!relDef.domain || relDef.domain.length === 0) continue;
 
-    if (!relDef.domain.includes(fm.type as any)) {
+    if (!relDef.domain.includes(fm.type)) {
       return {
         valid: false,
         reason: "relation_domain_violation",
@@ -127,7 +139,11 @@ export async function validate(
     // Range check — only when caller supplies a target-type resolver
     if (targetTypes && relDef.range && relDef.range.length > 0) {
       const targetType = targetTypes.get(relation.target);
-      if (targetType !== undefined && !relDef.range.includes(targetType as any)) {
+      // relDef.range is EntityType[]; targetType is a plain string resolved
+      // at runtime from caller-supplied data, not guaranteed to be a member
+      // of EntityType — widen to string[] for the membership check.
+      const range: string[] = relDef.range;
+      if (targetType !== undefined && !range.includes(targetType)) {
         return {
           valid: false,
           reason: "relation_range_violation",
