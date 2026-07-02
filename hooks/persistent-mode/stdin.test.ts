@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test';
 import { readStdin, parseInput } from './stdin.ts';
-import type { HookInput, ParsedInput } from './types.ts';
+import type { HookInput } from './types.ts';
 import { PassThrough } from 'stream';
 
 // Save original stdin

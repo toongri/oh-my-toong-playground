@@ -47,6 +47,7 @@ export async function main(): Promise<void> {
     }
 
     // Output JSON result
+    // eslint-disable-next-line no-console -- Stop 훅 stdout 프로토콜
     console.log(JSON.stringify(output));
     logEnd();
   } catch (error) {
@@ -54,6 +55,7 @@ export async function main(): Promise<void> {
     const errorMessage = error instanceof Error ? error.message : String(error);
     try { logError(`error: ${errorMessage}`); } catch { /* logger not initialized */ }
     console.error('persistent-mode error:', error);
+    // eslint-disable-next-line no-console -- Stop 훅 stdout 프로토콜(fail-open)
     console.log('{"continue": true}');
     try { logEnd(); } catch { /* logger not initialized */ }
   }

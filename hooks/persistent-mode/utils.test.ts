@@ -7,7 +7,7 @@ import {
   deleteFile,
   generateAttemptId,
 } from './utils.ts';
-import { mkdir, rm, writeFile, readFile, stat } from 'fs/promises';
+import { mkdir, rm, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';

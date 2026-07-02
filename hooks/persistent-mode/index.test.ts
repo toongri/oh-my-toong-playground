@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from 'bun:test';
 import { main } from './index.ts';
 import * as stdinMod from './stdin.ts';
-import { mkdir, writeFile, rm, readFile, access } from 'fs/promises';
+import { mkdir, writeFile, rm, readFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { Readable } from 'stream';
@@ -13,8 +13,8 @@ describe('main entry point', () => {
   const omtDir = join(projectRoot, '.omt');
 
   // Save original process methods
-  const originalStdin = process.stdin;
   const originalCwd = process.cwd;
+  // eslint-disable-next-line no-console -- console.log 후킹(테스트 하네스가 훅 stdout 캡처)
   const originalLog = console.log;
   const originalError = console.error;
   const savedOmtDir = process.env.OMT_DIR;
@@ -36,6 +36,7 @@ describe('main entry point', () => {
     process.env.OMT_DIR = omtDir;
     capturedOutput = [];
     capturedErrors = [];
+    // eslint-disable-next-line no-console -- console.log 후킹(테스트 하네스가 훅 stdout 캡처)
     console.log = (...args: unknown[]) => {
       capturedOutput.push(args.map(String).join(' '));
     };
@@ -50,6 +51,7 @@ describe('main entry point', () => {
     } else {
       process.env.OMT_DIR = savedOmtDir;
     }
+    // eslint-disable-next-line no-console -- console.log 후킹 복원
     console.log = originalLog;
     console.error = originalError;
   });

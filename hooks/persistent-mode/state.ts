@@ -28,7 +28,7 @@ export function readDeepInterviewState(sessionId: string): DeepInterviewState | 
   if (!content) return null;
 
   try {
-    const state = JSON.parse(content) as DeepInterviewState;
+    const state: DeepInterviewState = JSON.parse(content);
     return state.active ? state : null;
   } catch {
     return null;
@@ -45,7 +45,8 @@ export function readDeepInterviewStateRaw(sessionId: string): DeepInterviewState
   if (!content) return null;
 
   try {
-    return JSON.parse(content) as DeepInterviewState;
+    const state: DeepInterviewState = JSON.parse(content);
+    return state;
   } catch {
     return null;
   }
@@ -61,7 +62,7 @@ export function readPrometheusState(sessionId: string): PrometheusState | null {
   if (!content) return null;
 
   try {
-    const state = JSON.parse(content) as PrometheusState;
+    const state: PrometheusState = JSON.parse(content);
     return state.active ? state : null;
   } catch {
     return null;
@@ -88,7 +89,7 @@ export function readGoalStateRaw(sessionId: string): GoalState | null {
   if (!content) return null;
 
   try {
-    const s = JSON.parse(content) as GoalState;
+    const s: GoalState = JSON.parse(content);
     // Schema guard: a structurally partial/corrupt state must read as absent (null) —
     // never let garbage drive the loop (cap bypass) or suppress baseline-todo. Validate
     // only the load-bearing fields the decision tree branches/arithmetic on; a VALID
@@ -96,7 +97,7 @@ export function readGoalStateRaw(sessionId: string): GoalState | null {
     const phases = ['planning', 'pursuing', 'budget_limited', 'blocked', 'complete'];
     if (
       typeof s.active !== 'boolean' ||
-      !phases.includes(s.phase as string) ||
+      !phases.includes(s.phase) ||
       !Number.isInteger(s.iteration) || s.iteration < 0 ||
       !Number.isInteger(s.max_iterations) || s.max_iterations < 1
     ) {
@@ -121,7 +122,7 @@ export function updateGoalState(sessionId: string, partial: Partial<GoalState>):
 
   let raw: Record<string, unknown>;
   try {
-    raw = JSON.parse(content) as Record<string, unknown>;
+    raw = JSON.parse(content);
   } catch {
     return;
   }
@@ -135,7 +136,7 @@ export function updateGoalState(sessionId: string, partial: Partial<GoalState>):
   try {
     writeFileNoCreate(path, JSON.stringify({ ...raw, ...partial, last_touched_at: nowStamp() }, null, 2));
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    if (err !== null && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') return;
     throw err;
   }
 }
