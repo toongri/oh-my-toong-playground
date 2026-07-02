@@ -148,10 +148,9 @@ function findClosingBracket(value: string): number {
 	let escaped = false;
 	// depth starts at 1 for the opening [ that the caller has already consumed.
 	// We return when depth drops back to 0 (i.e. the matching outer ]).
-	// Inner [] (POSIX char-classes) and {} (brace globs) are tracked so their
-	// closing delimiters are never mistaken for the outer array's closing bracket.
+	// Inner [] (POSIX char-classes) are tracked so their closing delimiters
+	// are never mistaken for the outer array's closing bracket.
 	let bracketDepth = 1;
-	let braceDepth = 0;
 
 	for (let index = 1; index < value.length; index += 1) {
 		const character = value[index];
@@ -181,10 +180,6 @@ function findClosingBracket(value: string): number {
 			} else if (character === "]") {
 				bracketDepth -= 1;
 				if (bracketDepth === 0) return index;
-			} else if (character === "{") {
-				braceDepth += 1;
-			} else if (character === "}") {
-				braceDepth -= 1;
 			}
 		}
 	}

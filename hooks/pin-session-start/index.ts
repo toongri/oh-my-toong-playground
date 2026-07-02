@@ -31,7 +31,7 @@ async function readStdin(): Promise<string> {
 
 function parseInput(raw: string): HookInput {
   try {
-    return JSON.parse(raw) as HookInput;
+    return JSON.parse(raw);
   } catch {
     return {};
   }
@@ -74,11 +74,13 @@ export async function main(): Promise<void> {
       },
     };
 
+    // eslint-disable-next-line no-console -- SessionStart stdout 주입: 이 출력이 hookSpecificOutput 컨텍스트로 소비됨
     console.log(JSON.stringify(output));
   } catch (error) {
     // Fail-open: never block the session
     const msg = error instanceof Error ? error.message : String(error);
     process.stderr.write(`[pin-session-start] ERROR: ${msg}\n`);
+    // eslint-disable-next-line no-console -- SessionStart stdout 주입: fail-open 시에도 빈 hook 출력 계약 유지
     console.log('{}');
   }
 }

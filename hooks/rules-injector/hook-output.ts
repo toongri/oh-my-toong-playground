@@ -30,7 +30,7 @@ function sliceToUtf8Bytes(str: string, maxBytes: number): string {
 	if (buf.byteLength <= maxBytes) return str;
 	let end = maxBytes;
 	// Walk back past any continuation bytes (10xxxxxx = 0x80–0xBF).
-	while (end > 0 && (buf[end]! & 0xc0) === 0x80) end--;
+	while (end > 0 && (buf[end] & 0xc0) === 0x80) end--;
 	return buf.subarray(0, end).toString("utf8");
 }
 
