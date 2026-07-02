@@ -1876,7 +1876,6 @@ describe('cmdResumeMember', () => {
     });
 
     expect(capturedOpts).not.toBeNull();
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(capturedOpts!.workerEnv).toEqual({
       CLAUDECODE: '',
       CLAUDE_CODE_EFFORT_LEVEL: 'xhigh',
