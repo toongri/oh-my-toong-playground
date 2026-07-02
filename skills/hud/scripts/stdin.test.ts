@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'bun:test';
 import { readStdin } from './stdin.ts';
 import type { StdinInput } from './types.ts';
-import { Readable, PassThrough } from 'stream';
+import { PassThrough } from 'stream';
 
 // Save original stdin
 const originalStdin = process.stdin;

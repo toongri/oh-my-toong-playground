@@ -14,7 +14,7 @@ export async function readStdin(): Promise<StdinInput | null> {
 
     process.stdin.on('end', () => {
       try {
-        const parsed = JSON.parse(data) as StdinInput;
+        const parsed: StdinInput = JSON.parse(data);
         resolve(parsed);
       } catch {
         resolve(null);

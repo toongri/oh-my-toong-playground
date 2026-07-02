@@ -27,6 +27,7 @@ export async function main(): Promise<void> {
 
     if (!input) {
       // Minimal fallback when no input
+      // eslint-disable-next-line no-console -- HUD stdout 렌더링
       console.log(toNonBreakingSpaces(formatMinimalStatus(null)));
       return;
     }
@@ -57,7 +58,9 @@ export async function main(): Promise<void> {
 
     // Log rejected results with function names
     results.forEach((result, index) => {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- heterogeneous allSettled tuple; forEach widens each element to a union that isFulfilled's generic T can't unify against, so a boundary cast to a shared shape is required
       if (!isFulfilled(result as PromiseSettledResult<unknown>)) {
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- same heterogeneous-tuple boundary; result is a rejected settlement here, but its static type still spans all Promise.allSettled element types
         logError(`HUD data source failed: ${functionNames[index]} - ${(result as PromiseRejectedResult).reason}`);
       }
     });
@@ -89,12 +92,14 @@ export async function main(): Promise<void> {
     };
 
     // Format and output with non-breaking spaces for terminal alignment
+    // eslint-disable-next-line no-console -- HUD stdout 렌더링
     console.log(toNonBreakingSpaces(formatStatusLineV2(hudData)));
     logEnd();
   } catch (error) {
     // Log error and graceful fallback
     const errorMessage = error instanceof Error ? error.message : String(error);
     logError(`HUD error: ${errorMessage}`);
+    // eslint-disable-next-line no-console -- HUD stdout 렌더링
     console.log(toNonBreakingSpaces(formatMinimalStatus(null)));
   }
 }

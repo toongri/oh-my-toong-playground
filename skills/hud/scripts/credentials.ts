@@ -14,7 +14,7 @@ interface ClaudeCredentials {
 
 export const KEYCHAIN_BACKOFF_MS = 60_000;
 
-let config = {
+const config = {
   backoffFile: join(homedir(), '.omt', 'cache', 'keychain-backoff'),
   backoffDir: join(homedir(), '.omt', 'cache'),
   credentialsPath: join(homedir(), '.claude', '.credentials.json'),
@@ -24,10 +24,13 @@ export function initCredentials(overrides: Partial<typeof config>): void {
   Object.assign(config, overrides);
 }
 
+function hasNumericCode(error: Error): error is Error & { code?: number } {
+  return 'code' in error;
+}
+
 export function isMissingKeychainItemError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  const code = (error as NodeJS.ErrnoException & { code?: number }).code;
-  if (code === 44) return true;
+  if (hasNumericCode(error) && error.code === 44) return true;
   return error.message.includes('could not be found in the keychain');
 }
 
@@ -54,7 +57,7 @@ export function recordKeychainBackoff(): void {
 export async function getTokenFromFile(): Promise<string | null> {
   try {
     const content = await readFile(config.credentialsPath, 'utf8');
-    const creds = JSON.parse(content) as ClaudeCredentials;
+    const creds: ClaudeCredentials = JSON.parse(content);
     if (creds.claudeAiOauth?.accessToken) {
       return creds.claudeAiOauth.accessToken;
     }
@@ -83,7 +86,7 @@ export async function getOAuthToken(): Promise<string | null> {
   // Try macOS Keychain
   try {
     const stdout = await readKeychainCredentials();
-    const creds = JSON.parse(stdout.trim()) as ClaudeCredentials;
+    const creds: ClaudeCredentials = JSON.parse(stdout.trim());
     if (creds.claudeAiOauth?.accessToken) {
       return creds.claudeAiOauth.accessToken;
     }
