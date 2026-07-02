@@ -1,7 +1,6 @@
-import { jest, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { tmpdir } from 'os';
-import type { StdinInput, RateLimitData } from './types.ts';
-import type { TranscriptResult } from './transcript.ts';
+import type { RateLimitData } from './types.ts';
 import * as stdinMod from './stdin.ts';
 import * as stateMod from './state.ts';
 import * as transcriptMod from './transcript.ts';

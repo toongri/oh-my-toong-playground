@@ -28,12 +28,12 @@ function readStore(): CacheStore {
   const path = getCachePath();
   try {
     const raw = readFileSync(path, 'utf8');
-    const parsed = JSON.parse(raw);
+    const parsed: CacheStore = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       throw new Error('Invalid cache format');
     }
-    return parsed as CacheStore;
-  } catch (err) {
+    return parsed;
+  } catch {
     if (existsSync(path)) {
       console.warn(`[cache] Corrupt cache file, deleting: ${path}`);
       try { unlinkSync(path); } catch { /* ignore */ }
@@ -62,6 +62,7 @@ export function getCached<T>(key: string): T | null {
     writeStore(store);
     return null;
   }
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque cache boundary: entry.data is stored as unknown across arbitrary key/T pairs; caller-supplied T is trusted, matching prior behavior
   return entry.data as T;
 }
 

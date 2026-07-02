@@ -37,6 +37,10 @@ export function formatResetTime(resetsAt: string | null): string {
   return `${minutes}m`;
 }
 
+function hasErrnoCode(err: unknown): err is NodeJS.ErrnoException {
+  return typeof err === 'object' && err !== null && 'code' in err;
+}
+
 export function acquireLock(lockPath: string): 'acquired' | 'busy' {
   // Check if existing lock is stale
   if (existsSync(lockPath)) {
@@ -61,7 +65,7 @@ export function acquireLock(lockPath: string): 'acquired' | 'busy' {
     closeSync(fd);
     return 'acquired';
   } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'EEXIST') {
+    if (hasErrnoCode(err) && err.code === 'EEXIST') {
       return 'busy';
     }
     return 'busy';
@@ -140,7 +144,7 @@ export async function fetchRateLimits(): Promise<RateLimitData | null> {
       return null;
     }
 
-    const data = await response.json() as UsageResponse;
+    const data: UsageResponse = await response.json();
 
     const result: RateLimitData = {
       fiveHour: data.five_hour ? {

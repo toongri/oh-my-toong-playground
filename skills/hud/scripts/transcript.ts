@@ -64,7 +64,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
 
     for await (const line of rl) {
       try {
-        const entry = JSON.parse(line) as TranscriptEntry;
+        const entry: TranscriptEntry = JSON.parse(line);
 
         // Track earliest timestamp for sessionStartedAt
         if (entry.timestamp) {

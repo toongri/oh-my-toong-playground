@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { formatStatusLine, formatMinimalStatus, formatStatusLineV2 } from './formatter.ts';
-import { ANSI, type HudData, type HudDataV2, type AgentInfo } from './types.ts';
+import { ANSI, type HudData, type HudDataV2 } from './types.ts';
 
 describe('formatStatusLine', () => {
   const emptyData: HudData = {
