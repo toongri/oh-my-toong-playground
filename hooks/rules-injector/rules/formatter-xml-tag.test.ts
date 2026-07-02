@@ -47,22 +47,22 @@ function makeRule(overrides: Partial<LoadedRule> = {}): LoadedRule {
 // (a) ruleMarkerLine produces the XML open tag
 // ---------------------------------------------------------------------------
 
-test("ruleMarkerLine: 코딩규율 파일 → `<rules name=\"coding-discipline\">`", () => {
+test('ruleMarkerLine: 코딩규율 파일 → `<rules name="coding-discipline">`', () => {
 	const result = ruleMarkerLine("/repo/.claude/rules/coding-discipline.md");
 	expect(result).toBe('<rules name="coding-discipline">');
 });
 
-test("ruleMarkerLine: `work-principles.md` → `<rules name=\"work-principles\">`", () => {
+test('ruleMarkerLine: `work-principles.md` → `<rules name="work-principles">`', () => {
 	const result = ruleMarkerLine("/Users/toong/.claude/rules/work-principles.md");
 	expect(result).toBe('<rules name="work-principles">');
 });
 
-test("ruleMarkerLine: double extension `foo.test.md` strips only last extension → `<rules name=\"foo.test\">`", () => {
+test('ruleMarkerLine: double extension `foo.test.md` strips only last extension → `<rules name="foo.test">`', () => {
 	const result = ruleMarkerLine("/path/to/foo.test.md");
 	expect(result).toBe('<rules name="foo.test">');
 });
 
-test("ruleMarkerLine: no extension `CLAUDE` → `<rules name=\"CLAUDE\">`", () => {
+test('ruleMarkerLine: no extension `CLAUDE` → `<rules name="CLAUDE">`', () => {
 	const result = ruleMarkerLine("/path/to/CLAUDE");
 	expect(result).toBe('<rules name="CLAUDE">');
 });
@@ -83,7 +83,7 @@ test("이름 추출: basename without parent path", () => {
 // (c) formatRule / formatStaticBlock: wraps in XML tags
 // ---------------------------------------------------------------------------
 
-test("formatStaticBlock: rule body wrapped in `<rules name=\"...\">` ... `</rules>`", () => {
+test('formatStaticBlock: rule body wrapped in `<rules name="...">` ... `</rules>`', () => {
 	const rule = makeRule();
 	const { text } = formatStaticBlock([rule], { maxRuleChars: 5000, maxResultChars: 5000 });
 	const openTag = '<rules name="coding-discipline">';
@@ -97,7 +97,7 @@ test("formatStaticBlock: rule body wrapped in `<rules name=\"...\">` ... `</rule
 	expect(bodyIdx).toBeLessThan(closeIdx);
 });
 
-test("formatStaticBlock: XML 구조 — `<rules name=\"coding-discipline\">\\n{body}\\n</rules>`", () => {
+test('formatStaticBlock: XML 구조 — `<rules name="coding-discipline">\\n{body}\\n</rules>`', () => {
 	const rule = makeRule({ body: "body text here." });
 	const { text } = formatStaticBlock([rule], { maxRuleChars: 5000, maxResultChars: 5000 });
 	expect(text).toContain('<rules name="coding-discipline">\nbody text here.\n</rules>');
@@ -105,7 +105,10 @@ test("formatStaticBlock: XML 구조 — `<rules name=\"coding-discipline\">\\n{b
 
 test("formatDynamicBlock: 동적 블록도 XML 태그로 래핑됨", () => {
 	const rule = makeRule({ body: "dynamic body." });
-	const { text } = formatDynamicBlock([rule], "src/index.ts", { maxRuleChars: 5000, maxResultChars: 5000 });
+	const { text } = formatDynamicBlock([rule], "src/index.ts", {
+		maxRuleChars: 5000,
+		maxResultChars: 5000,
+	});
 	expect(text).toContain('<rules name="coding-discipline">\ndynamic body.\n</rules>');
 });
 
@@ -128,28 +131,19 @@ test("formatStaticBlock: old '[hash:]' format is NOT emitted", () => {
 test("transcriptHasRuleMarker: open tag present → true (skip re-inject)", () => {
 	const openTag = '<rules name="coding-discipline">';
 	const transcript = `${openTag}\n# Coding Discipline\n\nsome body.\n</rules>`;
-	const result = transcriptHasRuleMarker(
-		transcript,
-		["/repo/.claude/rules/coding-discipline.md"],
-	);
+	const result = transcriptHasRuleMarker(transcript, ["/repo/.claude/rules/coding-discipline.md"]);
 	expect(result).toBe(true);
 });
 
 test("transcriptHasRuleMarker: open tag absent → false (inject)", () => {
 	const transcript = "Some unrelated content. No rules here.";
-	const result = transcriptHasRuleMarker(
-		transcript,
-		["/repo/.claude/rules/coding-discipline.md"],
-	);
+	const result = transcriptHasRuleMarker(transcript, ["/repo/.claude/rules/coding-discipline.md"]);
 	expect(result).toBe(false);
 });
 
 test("transcriptHasRuleMarker: different rule name not confused", () => {
 	const transcript = '<rules name="other-rule">\nsome content\n</rules>';
-	const result = transcriptHasRuleMarker(
-		transcript,
-		["/repo/.claude/rules/coding-discipline.md"],
-	);
+	const result = transcriptHasRuleMarker(transcript, ["/repo/.claude/rules/coding-discipline.md"]);
 	expect(result).toBe(false);
 });
 
@@ -157,10 +151,10 @@ test("transcriptHasRuleMarker: checks any of the provided paths (path OR realPat
 	const openTag = '<rules name="coding-discipline">';
 	const transcript = `${openTag}\nbody.\n</rules>`;
 	// realPath spelling also resolves to "coding-discipline"
-	const result = transcriptHasRuleMarker(
-		transcript,
-		["/original/path/coding-discipline.md", "/real/path/coding-discipline.md"],
-	);
+	const result = transcriptHasRuleMarker(transcript, [
+		"/original/path/coding-discipline.md",
+		"/real/path/coding-discipline.md",
+	]);
 	expect(result).toBe(true);
 });
 

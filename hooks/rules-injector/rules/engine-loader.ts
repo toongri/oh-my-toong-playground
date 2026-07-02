@@ -29,7 +29,11 @@ export function loadCandidate(
 	const content = deps.readFile(candidate.path);
 	if (content === null) {
 		loadedRuleContent?.set(candidate.realPath, null);
-		diagnostics.push({ severity: "warning", source: candidate.path, message: "Unable to read rule file" });
+		diagnostics.push({
+			severity: "warning",
+			source: candidate.path,
+			message: "Unable to read rule file",
+		});
 		return null;
 	}
 
@@ -74,7 +78,11 @@ function loadedRuleFromContent(
 	diagnostics: RuleDiagnostic[],
 ): (LoadedRule & { matchReason: MatchReason }) | null {
 	if (content === null) {
-		diagnostics.push({ severity: "warning", source: candidate.path, message: "Unable to read rule file" });
+		diagnostics.push({
+			severity: "warning",
+			source: candidate.path,
+			message: "Unable to read rule file",
+		});
 		return null;
 	}
 

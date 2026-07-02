@@ -16,11 +16,11 @@ import { getRootDir } from "./lib/config.ts";
 import { CATEGORIES, SUPPORTED_CATEGORIES } from "./sync.ts";
 import { resolvePlatforms } from "./lib/resolver.ts";
 import {
-  FILE_BASED_CATEGORIES,
-  resolveDeployedPath,
-  resolveSourcePath,
-  reversePlatformPaths,
-  stripInjectedFrontmatter,
+	FILE_BASED_CATEGORIES,
+	resolveDeployedPath,
+	resolveSourcePath,
+	reversePlatformPaths,
+	stripInjectedFrontmatter,
 } from "./lib/pull-utils.ts";
 import { DEFAULT_EXCLUDE, isExcluded, collectFiles, collectDirs } from "./lib/sync-directory.ts";
 import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
@@ -30,12 +30,12 @@ import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 // ---------------------------------------------------------------------------
 
 export type PullOptions = {
-  projectName: string;
-  platform: Platform;
-  categoryFilter?: Category;
-  componentFilter?: string;
-  dryRun: boolean;
-  rootDir: string;
+	projectName: string;
+	platform: Platform;
+	categoryFilter?: Category;
+	componentFilter?: string;
+	dryRun: boolean;
+	rootDir: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -48,96 +48,106 @@ const PLATFORM_VALUES: readonly string[] = Object.keys(SUPPORTED_CATEGORIES);
 const CATEGORY_VALUES: readonly string[] = CATEGORIES;
 
 function isPlatform(value: string): value is Platform {
-  return PLATFORM_VALUES.includes(value);
+	return PLATFORM_VALUES.includes(value);
 }
 
 function isCategory(value: string): value is Category {
-  return CATEGORY_VALUES.includes(value);
+	return CATEGORY_VALUES.includes(value);
 }
 
 export function printUsage(): void {
-  process.stderr.write(
-    [
-      "Usage: bun tools/pull.ts <project-name> [options]",
-      "",
-      "Arguments:",
-      "  <project-name>         Directory name under projects/ (required)",
-      "",
-      "Options:",
-      "  --platform <name>      Target platform (default: claude)",
-      "  --category <name>      Pull only this category",
-      "  --component <name>     Pull only this component (requires --category)",
-      "  --dry-run              Preview changes without writing files",
-      "  --help                 Show this help message",
-      "",
-    ].join("\n"),
-  );
+	process.stderr.write(
+		[
+			"Usage: bun tools/pull.ts <project-name> [options]",
+			"",
+			"Arguments:",
+			"  <project-name>         Directory name under projects/ (required)",
+			"",
+			"Options:",
+			"  --platform <name>      Target platform (default: claude)",
+			"  --category <name>      Pull only this category",
+			"  --component <name>     Pull only this component (requires --category)",
+			"  --dry-run              Preview changes without writing files",
+			"  --help                 Show this help message",
+			"",
+		].join("\n"),
+	);
 }
 
 export function parseCliArgs(args: string[]): {
-  projectName: string;
-  platform: Platform;
-  categoryFilter?: Category;
-  componentFilter?: string;
-  dryRun: boolean;
+	projectName: string;
+	platform: Platform;
+	categoryFilter?: Category;
+	componentFilter?: string;
+	dryRun: boolean;
 } {
-  let projectName = "";
-  let platform: Platform = "claude";
-  let categoryFilter: Category | undefined;
-  let componentFilter: string | undefined;
-  let dryRun = false;
+	let projectName = "";
+	let platform: Platform = "claude";
+	let categoryFilter: Category | undefined;
+	let componentFilter: string | undefined;
+	let dryRun = false;
 
-  let i = 0;
-  while (i < args.length) {
-    const arg = args[i];
+	let i = 0;
+	while (i < args.length) {
+		const arg = args[i];
 
-    if (arg === "--dry-run") {
-      dryRun = true;
-    } else if (arg === "--platform") {
-      const value = args[i + 1];
-      if (!value || value.startsWith("--")) {
-        process.stderr.write("[ERROR] --platform 플래그에 값이 필요합니다 (예: --platform gemini)\n");
-        process.exit(1);
-      }
-      if (!isPlatform(value)) {
-        process.stderr.write(`[ERROR] 유효하지 않은 platform: ${value} (허용: ${PLATFORM_VALUES.join(", ")})\n`);
-        process.exit(1);
-      }
-      platform = value;
-      i++;
-    } else if (arg === "--category") {
-      const value = args[i + 1];
-      if (!value || value.startsWith("--")) {
-        process.stderr.write("[ERROR] --category 플래그에 값이 필요합니다 (예: --category skills)\n");
-        process.exit(1);
-      }
-      if (!isCategory(value)) {
-        process.stderr.write(`[ERROR] 유효하지 않은 category: ${value} (허용: ${CATEGORIES.join(", ")})\n`);
-        process.exit(1);
-      }
-      categoryFilter = value;
-      i++;
-    } else if (arg === "--component") {
-      const value = args[i + 1];
-      if (!value || value.startsWith("--")) {
-        process.stderr.write("[ERROR] --component 플래그에 값이 필요합니다 (예: --component oracle)\n");
-        process.exit(1);
-      }
-      componentFilter = value;
-      i++;
-    } else if (arg === "--help") {
-      printUsage();
-      process.exit(0);
-    } else if (arg.startsWith("--")) {
-      process.stderr.write(`[WARN] 알 수 없는 플래그: ${arg}\n`);
-    } else if (!projectName) {
-      projectName = arg;
-    }
+		if (arg === "--dry-run") {
+			dryRun = true;
+		} else if (arg === "--platform") {
+			const value = args[i + 1];
+			if (!value || value.startsWith("--")) {
+				process.stderr.write(
+					"[ERROR] --platform 플래그에 값이 필요합니다 (예: --platform gemini)\n",
+				);
+				process.exit(1);
+			}
+			if (!isPlatform(value)) {
+				process.stderr.write(
+					`[ERROR] 유효하지 않은 platform: ${value} (허용: ${PLATFORM_VALUES.join(", ")})\n`,
+				);
+				process.exit(1);
+			}
+			platform = value;
+			i++;
+		} else if (arg === "--category") {
+			const value = args[i + 1];
+			if (!value || value.startsWith("--")) {
+				process.stderr.write(
+					"[ERROR] --category 플래그에 값이 필요합니다 (예: --category skills)\n",
+				);
+				process.exit(1);
+			}
+			if (!isCategory(value)) {
+				process.stderr.write(
+					`[ERROR] 유효하지 않은 category: ${value} (허용: ${CATEGORIES.join(", ")})\n`,
+				);
+				process.exit(1);
+			}
+			categoryFilter = value;
+			i++;
+		} else if (arg === "--component") {
+			const value = args[i + 1];
+			if (!value || value.startsWith("--")) {
+				process.stderr.write(
+					"[ERROR] --component 플래그에 값이 필요합니다 (예: --component oracle)\n",
+				);
+				process.exit(1);
+			}
+			componentFilter = value;
+			i++;
+		} else if (arg === "--help") {
+			printUsage();
+			process.exit(0);
+		} else if (arg.startsWith("--")) {
+			process.stderr.write(`[WARN] 알 수 없는 플래그: ${arg}\n`);
+		} else if (!projectName) {
+			projectName = arg;
+		}
 
-    i++;
-  }
+		i++;
+	}
 
-  return { projectName, platform, categoryFilter, componentFilter, dryRun };
+	return { projectName, platform, categoryFilter, componentFilter, dryRun };
 }
 
 // ---------------------------------------------------------------------------
@@ -145,65 +155,69 @@ export function parseCliArgs(args: string[]): {
 // ---------------------------------------------------------------------------
 
 async function writeContent(destPath: string, content: string): Promise<void> {
-  await fs.mkdir(path.dirname(destPath), { recursive: true });
-  await fs.writeFile(destPath, content, "utf8");
+	await fs.mkdir(path.dirname(destPath), { recursive: true });
+	await fs.writeFile(destPath, content, "utf8");
 }
 
 /**
  * Recursively copy a directory, applying reversePlatformPaths to .md files.
  */
 async function copyDirectory(
-  deployedDir: string,
-  sourceDir: string,
-  platform: Platform,
+	deployedDir: string,
+	sourceDir: string,
+	platform: Platform,
 ): Promise<void> {
-  await fs.mkdir(sourceDir, { recursive: true });
-  const entries = await fs.readdir(deployedDir, { withFileTypes: true });
-  for (const entry of entries) {
-    const deployedEntry = path.join(deployedDir, entry.name);
-    const sourceEntry = path.join(sourceDir, entry.name);
-    if (entry.isDirectory()) {
-      await copyDirectory(deployedEntry, sourceEntry, platform);
-    } else if (entry.isFile()) {
-      if (entry.name.endsWith(".md")) {
-        let content = await fs.readFile(deployedEntry, "utf8");
-        content = reversePlatformPaths(content, platform);
-        await writeContent(sourceEntry, content);
-      } else {
-        await fs.copyFile(deployedEntry, sourceEntry);
-      }
-    }
-  }
+	await fs.mkdir(sourceDir, { recursive: true });
+	const entries = await fs.readdir(deployedDir, { withFileTypes: true });
+	for (const entry of entries) {
+		const deployedEntry = path.join(deployedDir, entry.name);
+		const sourceEntry = path.join(sourceDir, entry.name);
+		if (entry.isDirectory()) {
+			await copyDirectory(deployedEntry, sourceEntry, platform);
+		} else if (entry.isFile()) {
+			if (entry.name.endsWith(".md")) {
+				let content = await fs.readFile(deployedEntry, "utf8");
+				content = reversePlatformPaths(content, platform);
+				await writeContent(sourceEntry, content);
+			} else {
+				await fs.copyFile(deployedEntry, sourceEntry);
+			}
+		}
+	}
 }
 
 /**
  * Removes files in sourceDir that are not present in deployedDir, unless they
  * match an exclusion pattern. Also removes empty directories after cleanup.
  */
-async function removeOrphans(sourceDir: string, deployedDir: string, exclude: string[]): Promise<void> {
-  const sourceFiles = await collectFiles(sourceDir);
-  const deployedFiles = new Set(await collectFiles(deployedDir));
+async function removeOrphans(
+	sourceDir: string,
+	deployedDir: string,
+	exclude: string[],
+): Promise<void> {
+	const sourceFiles = await collectFiles(sourceDir);
+	const deployedFiles = new Set(await collectFiles(deployedDir));
 
-  // Delete source orphans (not in deployed and not excluded)
-  for (const relPath of sourceFiles) {
-    if (!deployedFiles.has(relPath) && !isExcluded(path.basename(relPath), exclude)) {
-      await fs.unlink(path.join(sourceDir, relPath));
-    }
-  }
+	// Delete source orphans (not in deployed and not excluded)
+	for (const relPath of sourceFiles) {
+		if (!deployedFiles.has(relPath) && !isExcluded(path.basename(relPath), exclude)) {
+			await fs.unlink(path.join(sourceDir, relPath));
+		}
+	}
 
-  // Remove empty directories in source (deepest first)
-  const sourceDirs = await collectDirs(sourceDir);
-  for (const relDir of sourceDirs) {
-    const absDir = path.join(sourceDir, relDir);
-    try {
-      const contents = await fs.readdir(absDir);
-      if (contents.length === 0) {
-        await fs.rmdir(absDir);
-      }
-    } catch {
-      // Directory may have already been removed
-    }
-  }
+	// Remove empty directories in source (deepest first)
+	const sourceDirs = await collectDirs(sourceDir);
+	for (const relDir of sourceDirs) {
+		const absDir = path.join(sourceDir, relDir);
+		try {
+			const contents = await fs.readdir(absDir);
+			if (contents.length === 0) {
+				await fs.rmdir(absDir);
+			}
+		} catch {
+			// Directory may have already been removed
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -215,152 +229,161 @@ async function removeOrphans(sourceDir: string, deployedDir: string, exclude: st
  * Reads a project's sync.yaml and pulls deployed files back to oh-my-toong source.
  */
 export async function pullProject(options: PullOptions): Promise<void> {
-  const { projectName, platform, categoryFilter, componentFilter, dryRun, rootDir } = options;
+	const { projectName, platform, categoryFilter, componentFilter, dryRun, rootDir } = options;
 
-  const syncYamlPath = path.join(rootDir, "projects", projectName, "sync.yaml");
+	const syncYamlPath = path.join(rootDir, "projects", projectName, "sync.yaml");
 
-  // Validate project exists
-  if (!existsSync(syncYamlPath)) {
-    process.stderr.write(`[ERROR] Project not found: projects/${projectName}/sync.yaml\n`);
-    process.exit(1);
-  }
+	// Validate project exists
+	if (!existsSync(syncYamlPath)) {
+		process.stderr.write(`[ERROR] Project not found: projects/${projectName}/sync.yaml\n`);
+		process.exit(1);
+	}
 
-  // Parse sync.yaml
-  let syncYaml: SyncYaml;
-  try {
-    const result = await readAndExpandSyncYaml(syncYamlPath);
-    if (result === null) {
-      process.stderr.write(`[ERROR] sync.yaml이 객체가 아님: ${syncYamlPath}\n`);
-      process.exit(1);
-    }
-    syncYaml = result;
-  } catch (err) {
-    process.stderr.write(`[ERROR] YAML 파싱 실패: ${syncYamlPath}: ${err}\n`);
-    process.exit(1);
-  }
+	// Parse sync.yaml
+	let syncYaml: SyncYaml;
+	try {
+		const result = await readAndExpandSyncYaml(syncYamlPath);
+		if (result === null) {
+			process.stderr.write(`[ERROR] sync.yaml이 객체가 아님: ${syncYamlPath}\n`);
+			process.exit(1);
+		}
+		syncYaml = result;
+	} catch (err) {
+		process.stderr.write(`[ERROR] YAML 파싱 실패: ${syncYamlPath}: ${err}\n`);
+		process.exit(1);
+	}
 
-  const targetPath = syncYaml.path;
-  if (!targetPath) {
-    process.stderr.write(`[ERROR] path가 정의되지 않음: ${syncYamlPath}\n`);
-    process.exit(1);
-  }
+	const targetPath = syncYaml.path;
+	if (!targetPath) {
+		process.stderr.write(`[ERROR] path가 정의되지 않음: ${syncYamlPath}\n`);
+		process.exit(1);
+	}
 
-  if (dryRun) {
-    process.stderr.write("[WARN] ========== DRY-RUN 모드 (실제 변경 없음) ==========\n");
-  }
+	if (dryRun) {
+		process.stderr.write("[WARN] ========== DRY-RUN 모드 (실제 변경 없음) ==========\n");
+	}
 
-  // Iterate categories
-  for (const category of CATEGORIES) {
-    // Check platform supports this category
-    const supported = SUPPORTED_CATEGORIES[platform];
-    if (!supported || !supported.has(category)) {
-      continue;
-    }
+	// Iterate categories
+	for (const category of CATEGORIES) {
+		// Check platform supports this category
+		const supported = SUPPORTED_CATEGORIES[platform];
+		if (!supported || !supported.has(category)) {
+			continue;
+		}
 
-    // Apply category filter
-    if (categoryFilter && category !== categoryFilter) {
-      continue;
-    }
+		// Apply category filter
+		if (categoryFilter && category !== categoryFilter) {
+			continue;
+		}
 
-    const section = syncYaml[category];
+		const section = syncYaml[category];
 
-    if (!section || !Array.isArray(section.items) || section.items.length === 0) {
-      continue;
-    }
+		if (!section || !Array.isArray(section.items) || section.items.length === 0) {
+			continue;
+		}
 
-    for (const item of section.items) {
-      // Normalize item to get componentRef and componentName
-      let componentRef: string;
-      let syncItem: SyncItem;
+		for (const item of section.items) {
+			// Normalize item to get componentRef and componentName
+			let componentRef: string;
+			let syncItem: SyncItem;
 
-      if (typeof item === "string") {
-        componentRef = item;
-        syncItem = item;
-      } else {
-        componentRef = item.component;
-        syncItem = item;
-      }
+			if (typeof item === "string") {
+				componentRef = item;
+				syncItem = item;
+			} else {
+				componentRef = item.component;
+				syncItem = item;
+			}
 
-      // Extract just the component name (strip project prefix for matching)
-      const componentName = componentRef.includes(":")
-        ? componentRef.slice(componentRef.indexOf(":") + 1)
-        : componentRef;
+			// Extract just the component name (strip project prefix for matching)
+			const componentName = componentRef.includes(":")
+				? componentRef.slice(componentRef.indexOf(":") + 1)
+				: componentRef;
 
-      // Apply component filter (match against parsed component name)
-      if (componentFilter && componentName !== componentFilter) {
-        continue;
-      }
+			// Apply component filter (match against parsed component name)
+			if (componentFilter && componentName !== componentFilter) {
+				continue;
+			}
 
-      // Check format compatibility: gemini commands use .toml format which cannot be reversed
-      if (platform === "gemini" && category === "commands") {
-        process.stderr.write(`[WARN] gemini 커맨드 .toml 형식 미지원 (스킵): ${componentName}\n`);
-        continue;
-      }
+			// Check format compatibility: gemini commands use .toml format which cannot be reversed
+			if (platform === "gemini" && category === "commands") {
+				process.stderr.write(`[WARN] gemini 커맨드 .toml 형식 미지원 (스킵): ${componentName}\n`);
+				continue;
+			}
 
-      // Check platform cascade: skip items not targeting the current platform
-      const itemPlatforms = await resolvePlatforms(syncItem, section.platforms, syncYaml.platforms, category);
-      if (!itemPlatforms.includes(platform)) {
-        continue;
-      }
+			// Check platform cascade: skip items not targeting the current platform
+			const itemPlatforms = await resolvePlatforms(
+				syncItem,
+				section.platforms,
+				syncYaml.platforms,
+				category,
+			);
+			if (!itemPlatforms.includes(platform)) {
+				continue;
+			}
 
-      // Resolve paths
-      const deployedPath = resolveDeployedPath(targetPath, platform, category, componentName);
-      const sourcePath = resolveSourcePath(componentRef, category, rootDir, projectName);
-      if (typeof sourcePath === "object" && "error" in sourcePath) {
-        process.stderr.write(`[WARN] ${category}/${componentRef}: ${sourcePath.error}\n`);
-        continue;
-      }
+			// Resolve paths
+			const deployedPath = resolveDeployedPath(targetPath, platform, category, componentName);
+			const sourcePath = resolveSourcePath(componentRef, category, rootDir, projectName);
+			if (typeof sourcePath === "object" && "error" in sourcePath) {
+				process.stderr.write(`[WARN] ${category}/${componentRef}: ${sourcePath.error}\n`);
+				continue;
+			}
 
-      // Check deployed path exists
-      if (!existsSync(deployedPath)) {
-        process.stderr.write(`[WARN] 배포된 컴포넌트 없음 (스킵): ${deployedPath}\n`);
-        continue;
-      }
+			// Check deployed path exists
+			if (!existsSync(deployedPath)) {
+				process.stderr.write(`[WARN] 배포된 컴포넌트 없음 (스킵): ${deployedPath}\n`);
+				continue;
+			}
 
-      // Log or perform the pull
-      const arrow = "→";
-      if (dryRun) {
-        process.stderr.write(`[DRY-RUN] [${category}] ${componentName}: ${deployedPath} ${arrow} ${sourcePath}\n`);
-        continue;
-      }
+			// Log or perform the pull
+			const arrow = "→";
+			if (dryRun) {
+				process.stderr.write(
+					`[DRY-RUN] [${category}] ${componentName}: ${deployedPath} ${arrow} ${sourcePath}\n`,
+				);
+				continue;
+			}
 
-      // Perform file copy
-      if (FILE_BASED_CATEGORIES.has(category)) {
-        // File-based: read, transform, write
-        let deployedContent = await fs.readFile(deployedPath, "utf8");
-        deployedContent = reversePlatformPaths(deployedContent, platform);
+			// Perform file copy
+			if (FILE_BASED_CATEGORIES.has(category)) {
+				// File-based: read, transform, write
+				let deployedContent = await fs.readFile(deployedPath, "utf8");
+				deployedContent = reversePlatformPaths(deployedContent, platform);
 
-        // For agents: strip injected frontmatter if add-skills/add-hooks present
-        if (category === "agents") {
-          let sourceContent = "";
-          if (existsSync(sourcePath)) {
-            sourceContent = await fs.readFile(sourcePath, "utf8");
-          }
-          deployedContent = stripInjectedFrontmatter(deployedContent, sourceContent, syncItem);
-        }
+				// For agents: strip injected frontmatter if add-skills/add-hooks present
+				if (category === "agents") {
+					let sourceContent = "";
+					if (existsSync(sourcePath)) {
+						sourceContent = await fs.readFile(sourcePath, "utf8");
+					}
+					deployedContent = stripInjectedFrontmatter(deployedContent, sourceContent, syncItem);
+				}
 
-        await writeContent(sourcePath, deployedContent);
-      } else {
-        // Non-file-based categories (skills, scripts): could be file or directory
-        const stat = await fs.stat(deployedPath);
-        if (stat.isDirectory()) {
-          // Directory: copy deployed files to source, then remove orphans
-          // (preserving source files that match exclusion patterns like *.test.ts)
-          await copyDirectory(deployedPath, sourcePath, platform);
-          await removeOrphans(sourcePath, deployedPath, DEFAULT_EXCLUDE);
-        } else {
-          // Single file (e.g., scripts/deploy.sh): read, transform if .md, write
-          let content = await fs.readFile(deployedPath, "utf8");
-          if (deployedPath.endsWith(".md")) {
-            content = reversePlatformPaths(content, platform);
-          }
-          await writeContent(sourcePath, content);
-        }
-      }
+				await writeContent(sourcePath, deployedContent);
+			} else {
+				// Non-file-based categories (skills, scripts): could be file or directory
+				const stat = await fs.stat(deployedPath);
+				if (stat.isDirectory()) {
+					// Directory: copy deployed files to source, then remove orphans
+					// (preserving source files that match exclusion patterns like *.test.ts)
+					await copyDirectory(deployedPath, sourcePath, platform);
+					await removeOrphans(sourcePath, deployedPath, DEFAULT_EXCLUDE);
+				} else {
+					// Single file (e.g., scripts/deploy.sh): read, transform if .md, write
+					let content = await fs.readFile(deployedPath, "utf8");
+					if (deployedPath.endsWith(".md")) {
+						content = reversePlatformPaths(content, platform);
+					}
+					await writeContent(sourcePath, content);
+				}
+			}
 
-      process.stderr.write(`[${category}] ${componentName}: ${deployedPath} ${arrow} ${sourcePath}\n`);
-    }
-  }
+			process.stderr.write(
+				`[${category}] ${componentName}: ${deployedPath} ${arrow} ${sourcePath}\n`,
+			);
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -368,34 +391,34 @@ export async function pullProject(options: PullOptions): Promise<void> {
 // ---------------------------------------------------------------------------
 
 if (import.meta.main) {
-  const args = process.argv.slice(2);
-  const { projectName, platform, categoryFilter, componentFilter, dryRun } = parseCliArgs(args);
+	const args = process.argv.slice(2);
+	const { projectName, platform, categoryFilter, componentFilter, dryRun } = parseCliArgs(args);
 
-  if (!projectName) {
-    process.stderr.write("[ERROR] <project-name>이 필요합니다\n");
-    printUsage();
-    process.exit(1);
-  }
+	if (!projectName) {
+		process.stderr.write("[ERROR] <project-name>이 필요합니다\n");
+		printUsage();
+		process.exit(1);
+	}
 
-  if (componentFilter && !categoryFilter) {
-    process.stderr.write("[ERROR] --component는 --category가 필요합니다\n");
-    process.exit(1);
-  }
+	if (componentFilter && !categoryFilter) {
+		process.stderr.write("[ERROR] --component는 --category가 필요합니다\n");
+		process.exit(1);
+	}
 
-  const rootDir = getRootDir();
-  if (!rootDir) {
-    process.stderr.write("[ERROR] config.yaml를 찾을 수 없음. 실행 위치를 확인하세요.\n");
-    process.exit(1);
-  }
+	const rootDir = getRootDir();
+	if (!rootDir) {
+		process.stderr.write("[ERROR] config.yaml를 찾을 수 없음. 실행 위치를 확인하세요.\n");
+		process.exit(1);
+	}
 
-  await pullProject({
-    projectName,
-    platform,
-    categoryFilter,
-    componentFilter,
-    dryRun,
-    rootDir,
-  });
+	await pullProject({
+		projectName,
+		platform,
+		categoryFilter,
+		componentFilter,
+		dryRun,
+		rootDir,
+	});
 
-  process.exit(0);
+	process.exit(0);
 }

@@ -35,35 +35,40 @@ import { getFeaturePlatforms } from "./config.ts";
  *   6. Hardcoded fallback: ["claude"]
  */
 export async function resolvePlatforms(
-  item: SyncItem,
-  sectionPlatforms: Platform[] | undefined,
-  syncYamlPlatforms: Platform[] | undefined,
-  category: string,
+	item: SyncItem,
+	sectionPlatforms: Platform[] | undefined,
+	syncYamlPlatforms: Platform[] | undefined,
+	category: string,
 ): Promise<Platform[]> {
-  // Level 1: item-level platforms
-  if (typeof item === "object" && item !== null && Array.isArray(item.platforms) && item.platforms.length > 0) {
-    return item.platforms;
-  }
+	// Level 1: item-level platforms
+	if (
+		typeof item === "object" &&
+		item !== null &&
+		Array.isArray(item.platforms) &&
+		item.platforms.length > 0
+	) {
+		return item.platforms;
+	}
 
-  // Level 2: section-level platforms
-  if (Array.isArray(sectionPlatforms) && sectionPlatforms.length > 0) {
-    return sectionPlatforms;
-  }
+	// Level 2: section-level platforms
+	if (Array.isArray(sectionPlatforms) && sectionPlatforms.length > 0) {
+		return sectionPlatforms;
+	}
 
-  // Level 3: sync.yaml top-level platforms
-  if (Array.isArray(syncYamlPlatforms) && syncYamlPlatforms.length > 0) {
-    return syncYamlPlatforms;
-  }
+	// Level 3: sync.yaml top-level platforms
+	if (Array.isArray(syncYamlPlatforms) && syncYamlPlatforms.length > 0) {
+		return syncYamlPlatforms;
+	}
 
-  // Level 4: feature-platforms from config.yaml
-  // getFeaturePlatforms() already falls back to getDefaultPlatforms() internally
-  // when no feature entry exists, so using it directly here is correct for level
-  // 4 — it may equal the level-5 default when no feature entry exists, which is
-  // fine, since that's the same result level 5 would have produced.
-  const featurePlatforms = await getFeaturePlatforms(category);
-  return featurePlatforms;
+	// Level 4: feature-platforms from config.yaml
+	// getFeaturePlatforms() already falls back to getDefaultPlatforms() internally
+	// when no feature entry exists, so using it directly here is correct for level
+	// 4 — it may equal the level-5 default when no feature entry exists, which is
+	// fine, since that's the same result level 5 would have produced.
+	const featurePlatforms = await getFeaturePlatforms(category);
+	return featurePlatforms;
 
-  // Levels 5 and 6 are handled inside getFeaturePlatforms → getDefaultPlatforms → ["claude"].
+	// Levels 5 and 6 are handled inside getFeaturePlatforms → getDefaultPlatforms → ["claude"].
 }
 
 // ---------------------------------------------------------------------------
@@ -94,69 +99,69 @@ export type ResolutionError = { error: string };
  *   - Cross-project refs (different projectDirName) are blocked.
  */
 export function resolveComponentPath(
-  componentRef: string,
-  category: string,
-  rootDir: string,
-  projectDirName?: string,
+	componentRef: string,
+	category: string,
+	rootDir: string,
+	projectDirName?: string,
 ): ResolvedComponent | ResolutionError {
-  // Parse optional project prefix
-  let parsedProject = "";
-  let parsedItem = componentRef;
+	// Parse optional project prefix
+	let parsedProject = "";
+	let parsedItem = componentRef;
 
-  if (componentRef.includes(":")) {
-    const colonIndex = componentRef.indexOf(":");
-    parsedProject = componentRef.slice(0, colonIndex);
-    parsedItem = componentRef.slice(colonIndex + 1);
-  }
+	if (componentRef.includes(":")) {
+		const colonIndex = componentRef.indexOf(":");
+		parsedProject = componentRef.slice(0, colonIndex);
+		parsedItem = componentRef.slice(colonIndex + 1);
+	}
 
-  const displayName = parsedItem;
-  const isRootYaml = projectDirName === undefined;
+	const displayName = parsedItem;
+	const isRootYaml = projectDirName === undefined;
 
-  // === Cross-project validation ===
-  if (parsedProject !== "") {
-    if (isRootYaml) {
-      return {
-        error: `Root sync.yaml cannot reference project components: ${componentRef} (use global components only)`,
-      };
-    }
-    if (parsedProject !== projectDirName) {
-      return {
-        error: `Cross-project reference not allowed: ${componentRef} (current project: ${projectDirName})`,
-      };
-    }
-    // Same-project prefix — treat as own project lookup below
-  }
+	// === Cross-project validation ===
+	if (parsedProject !== "") {
+		if (isRootYaml) {
+			return {
+				error: `Root sync.yaml cannot reference project components: ${componentRef} (use global components only)`,
+			};
+		}
+		if (parsedProject !== projectDirName) {
+			return {
+				error: `Cross-project reference not allowed: ${componentRef} (current project: ${projectDirName})`,
+			};
+		}
+		// Same-project prefix — treat as own project lookup below
+	}
 
-  // === Path resolution ===
-  if (projectDirName === undefined) {
-    const resolved = tryResolveInDir(join(rootDir, category), parsedItem, category);
-    if (resolved !== null) {
-      return { path: resolved, displayName };
-    }
-    return {
-      error: `Component not found in global: ${category}/${parsedItem}.md`,
-    };
-  }
+	// === Path resolution ===
+	if (projectDirName === undefined) {
+		const resolved = tryResolveInDir(join(rootDir, category), parsedItem, category);
+		if (resolved !== null) {
+			return { path: resolved, displayName };
+		}
+		return {
+			error: `Component not found in global: ${category}/${parsedItem}.md`,
+		};
+	}
 
-  // Project yaml: own project first
-  const projectBase = join(rootDir, "projects", projectDirName, category);
-  const projectResolved = tryResolveInDir(projectBase, parsedItem, category);
-  if (projectResolved !== null) {
-    return { path: projectResolved, displayName };
-  }
+	// Project yaml: own project first
+	const projectBase = join(rootDir, "projects", projectDirName, category);
+	const projectResolved = tryResolveInDir(projectBase, parsedItem, category);
+	if (projectResolved !== null) {
+		return { path: projectResolved, displayName };
+	}
 
-  // Global fallback (only when ref is unscoped)
-  if (parsedProject === "") {
-    const globalBase = join(rootDir, category);
-    const globalResolved = tryResolveInDir(globalBase, parsedItem, category);
-    if (globalResolved !== null) {
-      return { path: globalResolved, displayName };
-    }
-  }
+	// Global fallback (only when ref is unscoped)
+	if (parsedProject === "") {
+		const globalBase = join(rootDir, category);
+		const globalResolved = tryResolveInDir(globalBase, parsedItem, category);
+		if (globalResolved !== null) {
+			return { path: globalResolved, displayName };
+		}
+	}
 
-  return {
-    error: `Component not found in project '${projectDirName}' or global: ${category}/${parsedItem}.md`,
-  };
+	return {
+		error: `Component not found in project '${projectDirName}' or global: ${category}/${parsedItem}.md`,
+	};
 }
 
 /**
@@ -169,25 +174,25 @@ export function resolveComponentPath(
  *   3. {dir}/{name}/SKILL.md  (skills only)
  */
 export function tryResolveInDir(dir: string, name: string, category: string): string | null {
-  // 1. Direct file
-  const filePath = join(dir, `${name}.md`);
-  if (existsSync(filePath)) return filePath;
+	// 1. Direct file
+	const filePath = join(dir, `${name}.md`);
+	if (existsSync(filePath)) return filePath;
 
-  // 2. Folder with index.md
-  const indexPath = join(dir, name, "index.md");
-  if (existsSync(indexPath)) return indexPath;
+	// 2. Folder with index.md
+	const indexPath = join(dir, name, "index.md");
+	if (existsSync(indexPath)) return indexPath;
 
-  // 3. Skills-specific SKILL.md → return the containing directory
-  if (category === "skills") {
-    const skillPath = join(dir, name, "SKILL.md");
-    if (existsSync(skillPath)) return join(dir, name);
-  }
+	// 3. Skills-specific SKILL.md → return the containing directory
+	if (category === "skills") {
+		const skillPath = join(dir, name, "SKILL.md");
+		if (existsSync(skillPath)) return join(dir, name);
+	}
 
-  // 4. Directory (for scripts, hooks with no file extension)
-  const dirPath = join(dir, name);
-  if (existsSync(dirPath)) return dirPath;
+	// 4. Directory (for scripts, hooks with no file extension)
+	const dirPath = join(dir, name);
+	if (existsSync(dirPath)) return dirPath;
 
-  return null;
+	return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -195,9 +200,9 @@ export function tryResolveInDir(dir: string, name: string, category: string): st
 // ---------------------------------------------------------------------------
 
 export type ProjectContext = {
-  projectName: string;
-  projectDir: string;
-  isRootYaml: boolean;
+	projectName: string;
+	projectDir: string;
+	isRootYaml: boolean;
 };
 
 /**
@@ -211,24 +216,25 @@ export type ProjectContext = {
  * a `projects/` subdirectory. The caller passes `rootDir` for this check.
  */
 export function setProjectContext(
-  syncYaml: SyncYaml,
-  syncYamlPath: string,
-  rootDir: string,
+	syncYaml: SyncYaml,
+	syncYamlPath: string,
+	rootDir: string,
 ): ProjectContext {
-  const dir = dirname(syncYamlPath);
+	const dir = dirname(syncYamlPath);
 
-  // Check if this is a project-level yaml by seeing if its directory is inside
-  // {rootDir}/projects/
-  const projectsDir = join(rootDir, "projects");
-  const isInsideProjects = dir.startsWith(projectsDir + "/") || dir === projectsDir;
+	// Check if this is a project-level yaml by seeing if its directory is inside
+	// {rootDir}/projects/
+	const projectsDir = join(rootDir, "projects");
+	const isInsideProjects = dir.startsWith(projectsDir + "/") || dir === projectsDir;
 
-  if (!isInsideProjects) {
-    return { projectName: "", projectDir: "", isRootYaml: true };
-  }
+	if (!isInsideProjects) {
+		return { projectName: "", projectDir: "", isRootYaml: true };
+	}
 
-  const projectDir = basename(dir);
-  const nameField = syncYaml.name;
-  const projectName = typeof nameField === "string" && nameField.trim() !== "" ? nameField : projectDir;
+	const projectDir = basename(dir);
+	const nameField = syncYaml.name;
+	const projectName =
+		typeof nameField === "string" && nameField.trim() !== "" ? nameField : projectDir;
 
-  return { projectName, projectDir, isRootYaml: false };
+	return { projectName, projectDir, isRootYaml: false };
 }

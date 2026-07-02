@@ -12,33 +12,33 @@
  *  - Result truncated to 64 characters (trailing hyphens trimmed again after truncation)
  */
 export function slugify(input: string): string {
-  // Step 1: NFKD → combining diacritic 제거 → NFC
-  //   Hangul: NFKD가 음절을 jamo로 분해하나 NFC가 재조합 → 보존
-  //   Latin: precomposed (é, ü) → base + combining mark, mark 제거 후 base만 남음
-  let s = input
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036F]/g, '')
-    .normalize('NFC');
+	// Step 1: NFKD → combining diacritic 제거 → NFC
+	//   Hangul: NFKD가 음절을 jamo로 분해하나 NFC가 재조합 → 보존
+	//   Latin: precomposed (é, ü) → base + combining mark, mark 제거 후 base만 남음
+	let s = input
+		.normalize("NFKD")
+		.replace(/[\u0300-\u036F]/g, "")
+		.normalize("NFC");
 
-  // Step 2: lowercase Latin characters
-  s = s.toLowerCase();
+	// Step 2: lowercase Latin characters
+	s = s.toLowerCase();
 
-  // Step 3: whitespace → hyphen
-  s = s.replace(/\s+/g, '-');
+	// Step 3: whitespace → hyphen
+	s = s.replace(/\s+/g, "-");
 
-  // Step 4: remove characters outside allowed set [a-z0-9가-힣-]
-  s = s.replace(/[^a-z0-9가-힣-]/g, '');
+	// Step 4: remove characters outside allowed set [a-z0-9가-힣-]
+	s = s.replace(/[^a-z0-9가-힣-]/g, "");
 
-  // Step 5: collapse consecutive hyphens
-  s = s.replace(/-+/g, '-');
+	// Step 5: collapse consecutive hyphens
+	s = s.replace(/-+/g, "-");
 
-  // Step 6: trim leading/trailing hyphens
-  s = s.replace(/^-+|-+$/g, '');
+	// Step 6: trim leading/trailing hyphens
+	s = s.replace(/^-+|-+$/g, "");
 
-  // Step 7: truncate to 64 characters, then trim trailing hyphens again
-  if (s.length > 64) {
-    s = s.slice(0, 64).replace(/-+$/, '');
-  }
+	// Step 7: truncate to 64 characters, then trim trailing hyphens again
+	if (s.length > 64) {
+		s = s.slice(0, 64).replace(/-+$/, "");
+	}
 
-  return s;
+	return s;
 }

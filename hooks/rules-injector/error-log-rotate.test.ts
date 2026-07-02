@@ -11,7 +11,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // spawns a fresh `bun` subprocess with HOME pinned to a temp dir at spawn
 // time — the only way to make homedir() observe the override — keeping the
 // real ~/.omt/rules-injector/error.log untouched.
-const DEBUG_LOG_URL = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "debug-log.ts")).href;
+const DEBUG_LOG_URL = pathToFileURL(
+	join(dirname(fileURLToPath(import.meta.url)), "debug-log.ts"),
+).href;
 
 function sinkFor(home: string): string {
 	return join(home, ".omt", "rules-injector", "error.log");
@@ -20,7 +22,10 @@ function sinkFor(home: string): string {
 function runRotate(home: string, maxBytes: number): void {
 	const result = spawnSync(
 		"bun",
-		["-e", `const { rotateErrorLog } = await import(${JSON.stringify(DEBUG_LOG_URL)}); rotateErrorLog(${maxBytes});`],
+		[
+			"-e",
+			`const { rotateErrorLog } = await import(${JSON.stringify(DEBUG_LOG_URL)}); rotateErrorLog(${maxBytes});`,
+		],
 		{ env: { ...process.env, HOME: home }, encoding: "utf-8" },
 	);
 	if (result.status !== 0) {

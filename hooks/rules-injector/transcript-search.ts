@@ -4,7 +4,10 @@ export interface TranscriptSearchOptions {
 	readonly latestCompactedReplacementOnly?: boolean;
 }
 
-export function readTranscriptSearchText(transcriptPath: string, options: TranscriptSearchOptions = {}): string | null {
+export function readTranscriptSearchText(
+	transcriptPath: string,
+	options: TranscriptSearchOptions = {},
+): string | null {
 	try {
 		const rawTranscript = readFileSync(transcriptPath, "utf8");
 		if (options.latestCompactedReplacementOnly === true) {

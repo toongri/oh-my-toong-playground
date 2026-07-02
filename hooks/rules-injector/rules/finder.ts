@@ -9,7 +9,11 @@ import {
 	USER_HOME_RULE_SUBDIRS,
 	USER_HOME_SINGLE_FILES,
 } from "./constants.js";
-import { type RuleDiscoveryCache, scanRuleFilesCached, singleFileInfoCached } from "./finder-cache.js";
+import {
+	type RuleDiscoveryCache,
+	scanRuleFilesCached,
+	singleFileInfoCached,
+} from "./finder-cache.js";
 import { getWalkDirectories, toRelativePath } from "./finder-paths.js";
 import {
 	toProjectRuleSource,
@@ -59,7 +63,13 @@ export function findRuleCandidates(options: FinderOptions): RuleCandidate[] {
 
 	if (options.projectRoot !== null) {
 		candidates.push(
-			...findProjectCandidates(options.projectRoot, options.targetFile, disabledSources, options.cache, options.cwd),
+			...findProjectCandidates(
+				options.projectRoot,
+				options.targetFile,
+				disabledSources,
+				options.cache,
+				options.cwd,
+			),
 		);
 	}
 
@@ -78,7 +88,9 @@ export function findRuleCandidates(options: FinderOptions): RuleCandidate[] {
 	return candidates;
 }
 
-export function findPluginBundledCandidates(options: PluginBundledFinderOptions = {}): RuleCandidate[] {
+export function findPluginBundledCandidates(
+	options: PluginBundledFinderOptions = {},
+): RuleCandidate[] {
 	if (options.disabledSources?.has("plugin-bundled") === true) {
 		return [];
 	}
@@ -104,7 +116,10 @@ export function findPluginBundledCandidates(options: PluginBundledFinderOptions 
 	return candidates;
 }
 
-function isPluginBundledCandidateEnabled(candidate: RuleCandidate, platform: NodeJS.Platform): boolean {
+function isPluginBundledCandidateEnabled(
+	candidate: RuleCandidate,
+	platform: NodeJS.Platform,
+): boolean {
 	return candidate.relativePath !== WINDOWS_GIT_BASH_BUNDLED_RULE_PATH || platform === "win32";
 }
 

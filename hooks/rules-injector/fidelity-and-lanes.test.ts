@@ -1,6 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -51,7 +61,10 @@ function makeProject(): string {
 }
 
 function writeRule(projectDir: string, fileName: string, frontmatter: string, body: string): void {
-	writeFileSync(join(projectDir, ".claude", "rules", fileName), `---\n${frontmatter}\n---\n${body}\n`);
+	writeFileSync(
+		join(projectDir, ".claude", "rules", fileName),
+		`---\n${frontmatter}\n---\n${body}\n`,
+	);
 }
 
 function freshSessionId(prefix: string): string {
@@ -60,12 +73,20 @@ function freshSessionId(prefix: string): string {
 }
 
 /** Spawn the CLI hook under the isolated HOME and return parsed additionalContext (or ""). */
-function runHook(subcommand: "session-start" | "post-tool-use", payload: Record<string, unknown>): string {
+function runHook(
+	subcommand: "session-start" | "post-tool-use",
+	payload: Record<string, unknown>,
+): string {
 	const result = spawnSync("bun", ["run", CLI_PATH, "hook", subcommand], {
 		input: JSON.stringify(payload),
 		// P9: pin PLUGIN_DATA to the hermetic temp dir so external env cannot override the
 		// session-state data root.  Delete any inherited PLUGIN_DATA first, then set our own.
-		env: { ...process.env, HOME: tempHome, PI_RULES_DISABLE_BUNDLED: "1", PLUGIN_DATA: join(tempHome, ".omt") },
+		env: {
+			...process.env,
+			HOME: tempHome,
+			PI_RULES_DISABLE_BUNDLED: "1",
+			PLUGIN_DATA: join(tempHome, ".omt"),
+		},
 		encoding: "utf8",
 	});
 	const stdout = result.stdout.trim();
@@ -78,10 +99,18 @@ function runHook(subcommand: "session-start" | "post-tool-use", payload: Record<
 
 /** Raw spawn variant that returns the full SpawnSyncReturns without parsing stdout as JSON.
  * Used for tests that assert on side-effects (breadcrumb file, exit code) rather than hook output. */
-function runHookRaw(subcommand: "session-start" | "post-tool-use", stdinPayload: string): ReturnType<typeof spawnSync> {
+function runHookRaw(
+	subcommand: "session-start" | "post-tool-use",
+	stdinPayload: string,
+): ReturnType<typeof spawnSync> {
 	return spawnSync("bun", ["run", CLI_PATH, "hook", subcommand], {
 		input: stdinPayload,
-		env: { ...process.env, HOME: tempHome, PI_RULES_DISABLE_BUNDLED: "1", PLUGIN_DATA: join(tempHome, ".omt") },
+		env: {
+			...process.env,
+			HOME: tempHome,
+			PI_RULES_DISABLE_BUNDLED: "1",
+			PLUGIN_DATA: join(tempHome, ".omt"),
+		},
 		encoding: "utf8",
 	});
 }
@@ -92,7 +121,8 @@ function pathBases(relative: string): { projectRelative: string; basename: strin
 }
 
 function matched(globs: string[], relative: string): boolean {
-	return matchRule({ frontmatter: { globs }, isSingleFile: false, pathBases: pathBases(relative) }).matched;
+	return matchRule({ frontmatter: { globs }, isSingleFile: false, pathBases: pathBases(relative) })
+		.matched;
 }
 
 // --- A3: glob fidelity via matchRule (no spawn) ---
@@ -148,7 +178,9 @@ test("B1 SessionStart injects alwaysApply rule body and mutates no project file"
  */
 function snapshotTree(dir: string, prefix = ""): string[] {
 	const entries: string[] = [];
-	for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+	for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+		a.name.localeCompare(b.name),
+	)) {
 		const relative = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
 		const fullPath = join(dir, entry.name);
 		if (entry.isDirectory()) {
@@ -179,7 +211,9 @@ test("C1 apply_patch Add File injects the **/*.ts rule for the new path", () => 
 		permission_mode: "default",
 		tool_name: "apply_patch",
 		tool_use_id: "u1",
-		tool_input: { input: "*** Begin Patch\n*** Add File: src/x.ts\n+export const x = 1;\n*** End Patch" },
+		tool_input: {
+			input: "*** Begin Patch\n*** Add File: src/x.ts\n+export const x = 1;\n*** End Patch",
+		},
 		tool_response: {},
 	});
 
@@ -228,7 +262,12 @@ for (const shellCase of shellCases) {
 	test(`H1 ${shellCase.name} unwraps to inner path: src/x.ts rule injects, shell-binary rule does not`, () => {
 		const projectDir = makeProject();
 		writeRule(projectDir, "ts.md", 'globs: ["**/*.ts"]', "TS_GLOB_RULE_MARKER");
-		writeRule(projectDir, "shell.md", 'globs: ["**/sh", "**/bash", "**/zsh"]', "SHELL_BINARY_RULE_MARKER");
+		writeRule(
+			projectDir,
+			"shell.md",
+			'globs: ["**/sh", "**/bash", "**/zsh"]',
+			"SHELL_BINARY_RULE_MARKER",
+		);
 		writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
 
 		const additionalContext = runHook("post-tool-use", {
@@ -370,7 +409,7 @@ test("M1 multi-target PostToolUse: injection header names the matched target (sr
 
 // --- C9: A3 glob round-trip via real parser (runHook, not matchRule direct call) ---
 
-test("C9 A3 round-trip via parser: JSON-array inline glob globs:[\"*.{ts,js}\"] matches src/x.ts", () => {
+test('C9 A3 round-trip via parser: JSON-array inline glob globs:["*.{ts,js}"] matches src/x.ts', () => {
 	const projectDir = makeProject();
 	// JSON-array inline form — parseInlineArray path in parser-yaml.ts, no comma-split bug.
 	writeRule(projectDir, "ts-js.md", 'globs: ["*.{ts,js}"]', "TS_JS_GLOB_ROUND_TRIP_MARKER");
@@ -517,7 +556,10 @@ test("E-3 same physical rule file reached via two symlinked parent dirs is dedup
 	const base = mkdtempSync(join(tmpdir(), "ri-e3-"));
 	const physicalProject = join(base, "real");
 	mkdirSync(join(physicalProject, ".claude", "rules"), { recursive: true });
-	writeFileSync(join(physicalProject, ".claude", "rules", "rule.md"), "---\nalwaysApply: true\n---\nE3_RULE_BODY\n");
+	writeFileSync(
+		join(physicalProject, ".claude", "rules", "rule.md"),
+		"---\nalwaysApply: true\n---\nE3_RULE_BODY\n",
+	);
 
 	const link1 = join(base, "link1");
 	const link2 = join(base, "link2");
@@ -773,4 +815,3 @@ test("A11 apply_patch *** Delete File: 헤더가 있으면 해당 경로가 추�
 	expect(additionalContext).toContain("TS_GLOB_RULE_MARKER");
 	expect(additionalContext).toContain("src/foo.ts");
 });
-

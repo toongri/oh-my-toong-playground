@@ -1,4 +1,12 @@
-import { type Dirent, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	type Dirent,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -107,7 +115,10 @@ export function markSessionCompacted(cachePath: string): void {
 // lock contention (all retries exhausted) it falls back to a single unlocked RMW so a
 // write is never silently dropped — no worse than the pre-lock behavior, but the
 // common path is now serialized.
-function updateSessionState(cachePath: string, fn: (state: SerializedSessionState) => SerializedSessionState): void {
+function updateSessionState(
+	cachePath: string,
+	fn: (state: SerializedSessionState) => SerializedSessionState,
+): void {
 	const result = withSessionStateLock(cachePath, () => {
 		writeSessionState(cachePath, fn(readSessionState(cachePath)));
 	});
@@ -125,44 +136,56 @@ export function isPostCompactPending(cachePath: string, kind: PostCompactPending
 	return postCompactPendingKinds(readSessionState(cachePath)).has(kind);
 }
 
-export function claimPostCompactPending(cachePath: string, kind: PostCompactPendingKind): PostCompactClaimResult {
-	const result = withSessionStateLock(cachePath, (): SessionStateLockResult<PostCompactClaimResult> => {
-		const state = readSessionState(cachePath);
-		const pendingKinds = postCompactPendingKinds(state);
-		const recoveringKinds = postCompactRecoveringKinds(state);
-		const leaseRecord = recoveryLeaseRecord(state);
+export function claimPostCompactPending(
+	cachePath: string,
+	kind: PostCompactPendingKind,
+): PostCompactClaimResult {
+	const result = withSessionStateLock(
+		cachePath,
+		(): SessionStateLockResult<PostCompactClaimResult> => {
+			const state = readSessionState(cachePath);
+			const pendingKinds = postCompactPendingKinds(state);
+			const recoveringKinds = postCompactRecoveringKinds(state);
+			const leaseRecord = recoveryLeaseRecord(state);
 
-		if (!pendingKinds.has(kind) && !recoveringKinds.has(kind)) {
-			return "not-pending";
-		}
-
-		// Orphaned recovery: the kind is recovering but no longer pending — a prior hook
-		// moved it pending->recovering, and either completed (cleared) or died mid-flight.
-		// A boolean marker alone cannot tell an in-flight recovery from a dead orphan
-		// (#8/#14), so consult the lease the owner stamped on its claim. If the lease is
-		// still ACTIVE (owner alive OR not yet expired), a genuine recovery is in flight —
-		// refuse, surfaced as "contended" so the wedge gate skips this turn. Only when the
-		// lease is absent/stale do we re-claim, healing a session that would otherwise
-		// wedge forever waiting on a dead recoverer.
-		if (!pendingKinds.has(kind)) {
-			const lease = leaseRecord[kind];
-			if (lease !== undefined && isRecoveryLeaseActive(lease)) {
-				return SESSION_STATE_LOCK_CONTENDED;
+			if (!pendingKinds.has(kind) && !recoveringKinds.has(kind)) {
+				return "not-pending";
 			}
-		}
 
-		pendingKinds.delete(kind);
-		recoveringKinds.add(kind);
-		// Stamp a fresh lease: THIS hook now owns recovery of this kind, so a later
-		// racing hook can detect the in-flight work and refuse to double-recover.
-		const nextLease: RecoveryLeaseRecord = { ...leaseRecord, [kind]: newRecoveryLease() };
-		writeSessionState(cachePath, stateWithPostCompactKinds(state, pendingKinds, recoveringKinds, nextLease));
-		return "claimed";
-	});
+			// Orphaned recovery: the kind is recovering but no longer pending — a prior hook
+			// moved it pending->recovering, and either completed (cleared) or died mid-flight.
+			// A boolean marker alone cannot tell an in-flight recovery from a dead orphan
+			// (#8/#14), so consult the lease the owner stamped on its claim. If the lease is
+			// still ACTIVE (owner alive OR not yet expired), a genuine recovery is in flight —
+			// refuse, surfaced as "contended" so the wedge gate skips this turn. Only when the
+			// lease is absent/stale do we re-claim, healing a session that would otherwise
+			// wedge forever waiting on a dead recoverer.
+			if (!pendingKinds.has(kind)) {
+				const lease = leaseRecord[kind];
+				if (lease !== undefined && isRecoveryLeaseActive(lease)) {
+					return SESSION_STATE_LOCK_CONTENDED;
+				}
+			}
+
+			pendingKinds.delete(kind);
+			recoveringKinds.add(kind);
+			// Stamp a fresh lease: THIS hook now owns recovery of this kind, so a later
+			// racing hook can detect the in-flight work and refuse to double-recover.
+			const nextLease: RecoveryLeaseRecord = { ...leaseRecord, [kind]: newRecoveryLease() };
+			writeSessionState(
+				cachePath,
+				stateWithPostCompactKinds(state, pendingKinds, recoveringKinds, nextLease),
+			);
+			return "claimed";
+		},
+	);
 	return result === SESSION_STATE_LOCK_CONTENDED ? "contended" : result;
 }
 
-export function isPostCompactRecoveryInProgress(cachePath: string, kind: PostCompactPendingKind): boolean {
+export function isPostCompactRecoveryInProgress(
+	cachePath: string,
+	kind: PostCompactPendingKind,
+): boolean {
 	return postCompactRecoveringKinds(readSessionState(cachePath)).has(kind);
 }
 
@@ -223,7 +246,11 @@ export function sweepStaleSessionStates(dir: string, ttlMs: number, ownCachePath
 				continue;
 			}
 			try {
-				if (!isStale(siblingPath, ttlMs) || !isSessionStateFile(siblingPath) || hasLiveLockHolder(siblingPath)) {
+				if (
+					!isStale(siblingPath, ttlMs) ||
+					!isSessionStateFile(siblingPath) ||
+					hasLiveLockHolder(siblingPath)
+				) {
 					continue;
 				}
 				clearSessionState(siblingPath);
@@ -277,7 +304,9 @@ function hasLiveLockHolder(cachePath: string): boolean {
 function isSessionStateFile(path: string): boolean {
 	try {
 		const parsed = JSON.parse(readFileSync(path, "utf8"));
-		return isRecord(parsed) && parsed["version"] === STATE_VERSION && isSerializedSessionState(parsed);
+		return (
+			isRecord(parsed) && parsed["version"] === STATE_VERSION && isSerializedSessionState(parsed)
+		);
 	} catch {
 		return false;
 	}
@@ -392,7 +421,11 @@ function safePathSegment(value: string): string {
 }
 
 function isSerializedSessionState(value: unknown): value is SerializedSessionState {
-	if (!isRecord(value) || !Array.isArray(value["staticDedup"]) || !isRecord(value["dynamicDedup"])) {
+	if (
+		!isRecord(value) ||
+		!Array.isArray(value["staticDedup"]) ||
+		!isRecord(value["dynamicDedup"])
+	) {
 		return false;
 	}
 	const staticDedup = value["staticDedup"];

@@ -34,7 +34,10 @@ function safeSliceEnd(body: string, end: number): number {
 	return end;
 }
 
-export function truncateRule(body: string, options: { maxChars: number; relativePath: string }): TruncationResult {
+export function truncateRule(
+	body: string,
+	options: { maxChars: number; relativePath: string },
+): TruncationResult {
 	if (isNeverTruncatedRule(options.relativePath)) {
 		return { body, truncated: false, originalLength: body.length };
 	}
@@ -52,10 +55,17 @@ export function truncateRule(body: string, options: { maxChars: number; relative
 	}
 
 	const sliceEnd = safeSliceEnd(body, options.maxChars - notice.length);
-	return { body: `${body.slice(0, sliceEnd)}${notice}`, truncated: true, originalLength: body.length };
+	return {
+		body: `${body.slice(0, sliceEnd)}${notice}`,
+		truncated: true,
+		originalLength: body.length,
+	};
 }
 
-export function truncateBudget(input: { rules: ReadonlyArray<BudgetRule>; maxResultChars: number }): BudgetResult[] {
+export function truncateBudget(input: {
+	rules: ReadonlyArray<BudgetRule>;
+	maxResultChars: number;
+}): BudgetResult[] {
 	const results: BudgetResult[] = [];
 	let remainingBudget = input.maxResultChars;
 

@@ -19,8 +19,8 @@
  * validation, recording, querying, and parsing all stay in lib/pins/.
  */
 
-import { resolveManifest, type PinsManifest } from '../pins/manifest';
-import type { Entity } from '../pins/types';
+import { resolveManifest, type PinsManifest } from "../pins/manifest";
+import type { Entity } from "../pins/types";
 
 /**
  * Process exit codes for the pin scripts.
@@ -31,14 +31,13 @@ import type { Entity } from '../pins/types';
  *   ENGINE_ERROR (1) — an engine call (validation, record, query, ...) threw.
  */
 export const EXIT = {
-  SUCCESS: 0,
-  MALFORMED_INPUT: 1,
-  ENGINE_ERROR: 1,
+	SUCCESS: 0,
+	MALFORMED_INPUT: 1,
+	ENGINE_ERROR: 1,
 } as const;
 
 /** Exact STDOUT line shown when no pins manifest exists in the project (D7). */
-export const ABSENT_MESSAGE =
-  'No pins manifest in this project — run pin-setup to initialize.';
+export const ABSENT_MESSAGE = "No pins manifest in this project — run pin-setup to initialize.";
 
 /**
  * Resolve the pins manifest or take the clean-absent exit path (D7).
@@ -53,41 +52,41 @@ export const ABSENT_MESSAGE =
  * default to the engine's git-root-then-$OMT_DIR search).
  */
 export async function requireManifest(
-  options?: Parameters<typeof resolveManifest>[0],
+	options?: Parameters<typeof resolveManifest>[0],
 ): Promise<PinsManifest> {
-  const result = await resolveManifest(options);
+	const result = await resolveManifest(options);
 
-  if (result.kind === 'absent') {
-    // Caller-facing, not a diagnostic: stdout + clean exit 0.
-    process.stdout.write(`${ABSENT_MESSAGE}\n`);
-    process.exit(EXIT.SUCCESS);
-  }
+	if (result.kind === "absent") {
+		// Caller-facing, not a diagnostic: stdout + clean exit 0.
+		process.stdout.write(`${ABSENT_MESSAGE}\n`);
+		process.exit(EXIT.SUCCESS);
+	}
 
-  return result.manifest;
+	return result.manifest;
 }
 
 /** Read all of STDIN to a string. */
 function readStdin(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (chunk) => {
-      data += chunk;
-    });
-    process.stdin.on('end', () => resolve(data));
-    process.stdin.on('error', reject);
-  });
+	return new Promise((resolve, reject) => {
+		let data = "";
+		process.stdin.setEncoding("utf8");
+		process.stdin.on("data", (chunk) => {
+			data += chunk;
+		});
+		process.stdin.on("end", () => resolve(data));
+		process.stdin.on("error", reject);
+	});
 }
 
 /** Whether `value` has the structural shape of an {@link Entity}. */
 function isEntityShape(value: unknown): value is Entity {
-  if (value === null || typeof value !== 'object') return false;
-  if (!('frontmatter' in value) || !('body' in value)) return false;
-  return (
-    typeof value.frontmatter === 'object' &&
-    value.frontmatter !== null &&
-    typeof value.body === 'string'
-  );
+	if (value === null || typeof value !== "object") return false;
+	if (!("frontmatter" in value) || !("body" in value)) return false;
+	return (
+		typeof value.frontmatter === "object" &&
+		value.frontmatter !== null &&
+		typeof value.body === "string"
+	);
 }
 
 /**
@@ -102,30 +101,30 @@ function isEntityShape(value: unknown): value is Entity {
  * (id/type/source/...) stays in the engine's record path.
  */
 export async function readEntityFromStdin(): Promise<Entity> {
-  const raw = await readStdin();
+	const raw = await readStdin();
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return failMalformed(`stdin is not valid JSON: ${detail}`);
-  }
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		return failMalformed(`stdin is not valid JSON: ${detail}`);
+	}
 
-  if (!isEntityShape(parsed)) {
-    return failMalformed(
-      "stdin JSON is missing required Entity keys 'frontmatter' (object) and 'body' (string)",
-    );
-  }
+	if (!isEntityShape(parsed)) {
+		return failMalformed(
+			"stdin JSON is missing required Entity keys 'frontmatter' (object) and 'body' (string)",
+		);
+	}
 
-  // C11: normalize missing relations to [] so the engine's relation iteration
-  // never throws a TypeError. The disk-read path (entity.ts:parse) already
-  // applies `?? []`; stdin bypasses that, so we do it here instead.
-  if (parsed.frontmatter.relations === undefined) {
-    parsed.frontmatter.relations = [];
-  }
+	// C11: normalize missing relations to [] so the engine's relation iteration
+	// never throws a TypeError. The disk-read path (entity.ts:parse) already
+	// applies `?? []`; stdin bypasses that, so we do it here instead.
+	if (parsed.frontmatter.relations === undefined) {
+		parsed.frontmatter.relations = [];
+	}
 
-  return parsed;
+	return parsed;
 }
 
 /**
@@ -135,8 +134,8 @@ export async function readEntityFromStdin(): Promise<Entity> {
  * function that must otherwise produce a value.
  */
 function failMalformed(message: string): never {
-  process.stderr.write(`[pin] malformed input: ${message}\n`);
-  process.exit(EXIT.MALFORMED_INPUT);
+	process.stderr.write(`[pin] malformed input: ${message}\n`);
+	process.exit(EXIT.MALFORMED_INPUT);
 }
 
 /**
@@ -146,6 +145,6 @@ function failMalformed(message: string): never {
  * with a clear message and a non-zero status instead of an unhandled rejection.
  */
 export function failEngine(message: string): never {
-  process.stderr.write(`[pin] engine error: ${message}\n`);
-  process.exit(EXIT.ENGINE_ERROR);
+	process.stderr.write(`[pin] engine error: ${message}\n`);
+	process.exit(EXIT.ENGINE_ERROR);
 }

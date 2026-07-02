@@ -14,19 +14,28 @@ export function getOpeningDelimiterLength(content: string): number {
 	const newlineIndex = content.indexOf("\n");
 	if (newlineIndex === -1) return 0;
 	// Strip the optional \r before \n.
-	const firstLine = content.slice(0, newlineIndex).replace(/\r$/, "").replace(/[ \t]+$/, "");
+	const firstLine = content
+		.slice(0, newlineIndex)
+		.replace(/\r$/, "")
+		.replace(/[ \t]+$/, "");
 	if (firstLine !== "---") return 0;
 	return newlineIndex + 1;
 }
 
-export function findClosingDelimiter(content: string, openingLength: number): ClosingDelimiter | null {
+export function findClosingDelimiter(
+	content: string,
+	openingLength: number,
+): ClosingDelimiter | null {
 	let lineStart = openingLength;
 
 	while (lineStart <= content.length) {
 		const nextNewline = content.indexOf("\n", lineStart);
 		const lineEnd = nextNewline === -1 ? content.length : nextNewline;
 		// Strip \r and trailing spaces/tabs before comparing to "---".
-		const line = content.slice(lineStart, lineEnd).replace(/\r$/, "").replace(/[ \t]+$/, "");
+		const line = content
+			.slice(lineStart, lineEnd)
+			.replace(/\r$/, "")
+			.replace(/[ \t]+$/, "");
 
 		if (line === "---") {
 			return {

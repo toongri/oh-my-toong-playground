@@ -23,12 +23,12 @@ import type { ProvisionItem } from "./types.ts";
 // ---------------------------------------------------------------------------
 
 function runCommandSync(command: string, cwd: string): { exitCode: number } {
-  const proc = Bun.spawnSync(["bash", "-c", command], {
-    cwd,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  return { exitCode: proc.exitCode ?? 1 };
+	const proc = Bun.spawnSync(["bash", "-c", command], {
+		cwd,
+		stdout: "inherit",
+		stderr: "inherit",
+	});
+	return { exitCode: proc.exitCode ?? 1 };
 }
 
 // ---------------------------------------------------------------------------
@@ -50,63 +50,65 @@ function runCommandSync(command: string, cwd: string): { exitCode: number } {
  * dryRun=true: log intended actions only, execute nothing.
  */
 export function runProvision(
-  items: ProvisionItem[],
-  targetDirs: string[],
-  opts: { dryRun: boolean },
+	items: ProvisionItem[],
+	targetDirs: string[],
+	opts: { dryRun: boolean },
 ): void {
-  if (items.length === 0) return;
+	if (items.length === 0) return;
 
-  for (const dir of targetDirs) {
-    // Skip non-existent dirs
-    if (!fs.existsSync(dir)) {
-      logInfo(`provision skip (dir not found): ${dir}`);
-      continue;
-    }
+	for (const dir of targetDirs) {
+		// Skip non-existent dirs
+		if (!fs.existsSync(dir)) {
+			logInfo(`provision skip (dir not found): ${dir}`);
+			continue;
+		}
 
-    for (const item of items) {
-      // Check phase
-      if (item.check) {
-        if (opts.dryRun) {
-          logDry(`provision would check: ${item.check} @ ${dir}`);
-          // In dryRun we don't know what check would return; report both paths as intent.
-          for (const cmd of item.commands) {
-            logDry(`provision would run (if check fails): ${cmd} @ ${dir}`);
-          }
-          continue;
-        }
+		for (const item of items) {
+			// Check phase
+			if (item.check) {
+				if (opts.dryRun) {
+					logDry(`provision would check: ${item.check} @ ${dir}`);
+					// In dryRun we don't know what check would return; report both paths as intent.
+					for (const cmd of item.commands) {
+						logDry(`provision would run (if check fails): ${cmd} @ ${dir}`);
+					}
+					continue;
+				}
 
-        let checkPassed = false;
-        try {
-          const result = runCommandSync(item.check, dir);
-          if (result.exitCode === 0) {
-            checkPassed = true;
-          }
-        } catch {
-          // Check itself errored → treat as not satisfied → run commands
-        }
+				let checkPassed = false;
+				try {
+					const result = runCommandSync(item.check, dir);
+					if (result.exitCode === 0) {
+						checkPassed = true;
+					}
+				} catch {
+					// Check itself errored → treat as not satisfied → run commands
+				}
 
-        if (checkPassed) {
-          logInfo(`provision skip (check passed): ${item.check} @ ${dir}`);
-          continue;
-        }
-      }
+				if (checkPassed) {
+					logInfo(`provision skip (check passed): ${item.check} @ ${dir}`);
+					continue;
+				}
+			}
 
-      // Commands phase
-      for (const cmd of item.commands) {
-        if (opts.dryRun) {
-          logDry(`provision would run: ${cmd} @ ${dir}`);
-          continue;
-        }
+			// Commands phase
+			for (const cmd of item.commands) {
+				if (opts.dryRun) {
+					logDry(`provision would run: ${cmd} @ ${dir}`);
+					continue;
+				}
 
-        try {
-          const result = runCommandSync(cmd, dir);
-          if (result.exitCode !== 0) {
-            logWarn(`provision command exited with status ${result.exitCode} (non-fatal): ${cmd} @ ${dir}`);
-          }
-        } catch (err) {
-          logWarn(`provision command failed (non-fatal): ${cmd} @ ${dir}: ${err}`);
-        }
-      }
-    }
-  }
+				try {
+					const result = runCommandSync(cmd, dir);
+					if (result.exitCode !== 0) {
+						logWarn(
+							`provision command exited with status ${result.exitCode} (non-fatal): ${cmd} @ ${dir}`,
+						);
+					}
+				} catch (err) {
+					logWarn(`provision command failed (non-fatal): ${cmd} @ ${dir}: ${err}`);
+				}
+			}
+		}
+	}
 }

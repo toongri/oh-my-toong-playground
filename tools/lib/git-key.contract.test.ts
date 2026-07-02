@@ -46,50 +46,50 @@ import { deriveClaudeProjectKey } from "./git-key.ts";
 // ---------------------------------------------------------------------------
 
 function claudePresent(): boolean {
-  const r = spawnSync("command", ["-v", "claude"], { shell: true });
-  return r.status === 0;
+	const r = spawnSync("command", ["-v", "claude"], { shell: true });
+	return r.status === 0;
 }
 
 // Evaluated once at module load so all three tests share the same skip decision.
 const HAS_CLAUDE = claudePresent();
 
 function mktemp(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "git-key-contract-"));
+	return fs.mkdtempSync(path.join(os.tmpdir(), "git-key-contract-"));
 }
 
 function git(args: string[], cwd: string): void {
-  execFileSync("git", args, { cwd, stdio: "pipe" });
+	execFileSync("git", args, { cwd, stdio: "pipe" });
 }
 
 const GIT_ENV = {
-  ...process.env,
-  GIT_AUTHOR_NAME: "T",
-  GIT_AUTHOR_EMAIL: "t@t.com",
-  GIT_COMMITTER_NAME: "T",
-  GIT_COMMITTER_EMAIL: "t@t.com",
+	...process.env,
+	GIT_AUTHOR_NAME: "T",
+	GIT_AUTHOR_EMAIL: "t@t.com",
+	GIT_COMMITTER_NAME: "T",
+	GIT_COMMITTER_EMAIL: "t@t.com",
 };
 
 /**
  * Seeds an empty commit into a bare repo so worktrees can be added.
  */
 function seedBareRepo(bareDir: string): void {
-  const tmpWt = fs.mkdtempSync(path.join(os.tmpdir(), "git-key-seed-"));
-  try {
-    execFileSync(
-      "git",
-      ["--git-dir", bareDir, "worktree", "add", "--orphan", "-b", "main", tmpWt],
-      { stdio: "pipe", env: GIT_ENV },
-    );
-    execFileSync("git", ["-C", tmpWt, "commit", "--allow-empty", "-m", "init"], {
-      stdio: "pipe",
-      env: GIT_ENV,
-    });
-    fs.rmSync(tmpWt, { recursive: true, force: true });
-    execFileSync("git", ["--git-dir", bareDir, "worktree", "prune"], { stdio: "pipe" });
-  } catch {
-    fs.rmSync(tmpWt, { recursive: true, force: true });
-    throw new Error("Failed to seed bare repo");
-  }
+	const tmpWt = fs.mkdtempSync(path.join(os.tmpdir(), "git-key-seed-"));
+	try {
+		execFileSync(
+			"git",
+			["--git-dir", bareDir, "worktree", "add", "--orphan", "-b", "main", tmpWt],
+			{ stdio: "pipe", env: GIT_ENV },
+		);
+		execFileSync("git", ["-C", tmpWt, "commit", "--allow-empty", "-m", "init"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		fs.rmSync(tmpWt, { recursive: true, force: true });
+		execFileSync("git", ["--git-dir", bareDir, "worktree", "prune"], { stdio: "pipe" });
+	} catch {
+		fs.rmSync(tmpWt, { recursive: true, force: true });
+		throw new Error("Failed to seed bare repo");
+	}
 }
 
 /**
@@ -100,56 +100,56 @@ function seedBareRepo(bareDir: string): void {
  * Throws if claude exits non-zero or the key cannot be found.
  */
 function runClaudeMcpAdd(configDir: string, cwd: string): string {
-  const serverName = `contract-probe-${Date.now()}`;
-  const result = spawnSync(
-    "claude",
-    ["mcp", "add", "--scope", "local", serverName, "--", "echo", "hello"],
-    {
-      cwd,
-      env: { ...process.env, CLAUDE_CONFIG_DIR: configDir },
-      stdio: "pipe",
-      encoding: "utf8",
-    },
-  );
+	const serverName = `contract-probe-${Date.now()}`;
+	const result = spawnSync(
+		"claude",
+		["mcp", "add", "--scope", "local", serverName, "--", "echo", "hello"],
+		{
+			cwd,
+			env: { ...process.env, CLAUDE_CONFIG_DIR: configDir },
+			stdio: "pipe",
+			encoding: "utf8",
+		},
+	);
 
-  if (result.status !== 0) {
-    const stderr = typeof result.stderr === "string" ? result.stderr : "";
-    const stdout = typeof result.stdout === "string" ? result.stdout : "";
-    throw new Error(
-      `claude mcp add failed (exit ${result.status}):\nstdout: ${stdout}\nstderr: ${stderr}`,
-    );
-  }
+	if (result.status !== 0) {
+		const stderr = typeof result.stderr === "string" ? result.stderr : "";
+		const stdout = typeof result.stdout === "string" ? result.stdout : "";
+		throw new Error(
+			`claude mcp add failed (exit ${result.status}):\nstdout: ${stdout}\nstderr: ${stderr}`,
+		);
+	}
 
-  const configFile = path.join(configDir, ".claude.json");
-  if (!fs.existsSync(configFile)) {
-    throw new Error(`Expected ${configFile} to exist after claude mcp add`);
-  }
+	const configFile = path.join(configDir, ".claude.json");
+	if (!fs.existsSync(configFile)) {
+		throw new Error(`Expected ${configFile} to exist after claude mcp add`);
+	}
 
-  const raw = fs.readFileSync(configFile, "utf8");
-  const parsed: unknown = JSON.parse(raw);
+	const raw = fs.readFileSync(configFile, "utf8");
+	const parsed: unknown = JSON.parse(raw);
 
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    !("projects" in parsed) ||
-    typeof (parsed as Record<string, unknown>).projects !== "object"
-  ) {
-    throw new Error(`Unexpected .claude.json shape: ${raw.slice(0, 200)}`);
-  }
+	if (
+		typeof parsed !== "object" ||
+		parsed === null ||
+		!("projects" in parsed) ||
+		typeof (parsed as Record<string, unknown>).projects !== "object"
+	) {
+		throw new Error(`Unexpected .claude.json shape: ${raw.slice(0, 200)}`);
+	}
 
-  const projects = (parsed as { projects: Record<string, unknown> }).projects;
-  const keys = Object.keys(projects);
+	const projects = (parsed as { projects: Record<string, unknown> }).projects;
+	const keys = Object.keys(projects);
 
-  if (keys.length === 0) {
-    throw new Error("No project keys written to .claude.json by claude mcp add");
-  }
-  if (keys.length > 1) {
-    // More than one key means claude picked up a pre-existing config — unexpected
-    // since configDir is a fresh tmp dir. Surface as error.
-    throw new Error(`Multiple project keys found: ${keys.join(", ")} — expected exactly 1`);
-  }
+	if (keys.length === 0) {
+		throw new Error("No project keys written to .claude.json by claude mcp add");
+	}
+	if (keys.length > 1) {
+		// More than one key means claude picked up a pre-existing config — unexpected
+		// since configDir is a fresh tmp dir. Surface as error.
+		throw new Error(`Multiple project keys found: ${keys.join(", ")} — expected exactly 1`);
+	}
 
-  return keys[0]!;
+	return keys[0]!;
 }
 
 /**
@@ -158,16 +158,16 @@ function runClaudeMcpAdd(configDir: string, cwd: string): string {
  * differences and definitively catches any real-file pollution.
  */
 function assertKeyAbsentFromRealConfig(keyString: string): void {
-  const realConfig = path.join(os.homedir(), ".claude.json");
-  if (!fs.existsSync(realConfig)) return;
+	const realConfig = path.join(os.homedir(), ".claude.json");
+	if (!fs.existsSync(realConfig)) return;
 
-  const raw = fs.readFileSync(realConfig, "utf8");
-  if (raw.includes(keyString)) {
-    throw new Error(
-      `ISOLATION BREACH: key "${keyString}" found in real $HOME/.claude.json — ` +
-        `CLAUDE_CONFIG_DIR isolation failed!`,
-    );
-  }
+	const raw = fs.readFileSync(realConfig, "utf8");
+	if (raw.includes(keyString)) {
+		throw new Error(
+			`ISOLATION BREACH: key "${keyString}" found in real $HOME/.claude.json — ` +
+				`CLAUDE_CONFIG_DIR isolation failed!`,
+		);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -175,147 +175,147 @@ function assertKeyAbsentFromRealConfig(keyString: string): void {
 // ---------------------------------------------------------------------------
 
 describe("deriveClaudeProjectKey (contract: live claude binary)", () => {
-  const tmpdirs: string[] = [];
+	const tmpdirs: string[] = [];
 
-  afterEach(() => {
-    for (const d of tmpdirs.splice(0)) {
-      try {
-        fs.rmSync(d, { recursive: true, force: true });
-      } catch {
-        // best-effort cleanup
-      }
-    }
-  });
+	afterEach(() => {
+		for (const d of tmpdirs.splice(0)) {
+			try {
+				fs.rmSync(d, { recursive: true, force: true });
+			} catch {
+				// best-effort cleanup
+			}
+		}
+	});
 
-  // AC-A.1
-  it.skipIf(!HAS_CLAUDE)("contract standalone", () => {
-    // Build fixture: plain `git init` repo
-    const root = mktemp();
-    tmpdirs.push(root);
-    git(["init", root], os.tmpdir());
+	// AC-A.1
+	it.skipIf(!HAS_CLAUDE)("contract standalone", () => {
+		// Build fixture: plain `git init` repo
+		const root = mktemp();
+		tmpdirs.push(root);
+		git(["init", root], os.tmpdir());
 
-    const configDir = mktemp();
-    tmpdirs.push(configDir);
+		const configDir = mktemp();
+		tmpdirs.push(configDir);
 
-    // Run the REAL claude mcp add from the standalone repo root
-    const claudeKey = runClaudeMcpAdd(configDir, root);
-    const derivedKey = deriveClaudeProjectKey(root);
+		// Run the REAL claude mcp add from the standalone repo root
+		const claudeKey = runClaudeMcpAdd(configDir, root);
+		const derivedKey = deriveClaudeProjectKey(root);
 
-    // Primary contract assertion: byte-match
-    expect(derivedKey).toBe(claudeKey);
+		// Primary contract assertion: byte-match
+		expect(derivedKey).toBe(claudeKey);
 
-    // Key must be present in the tmp config
-    const raw = fs.readFileSync(path.join(configDir, ".claude.json"), "utf8");
-    expect(raw).toContain(claudeKey);
+		// Key must be present in the tmp config
+		const raw = fs.readFileSync(path.join(configDir, ".claude.json"), "utf8");
+		expect(raw).toContain(claudeKey);
 
-    // Key must NOT appear in the real $HOME/.claude.json
-    assertKeyAbsentFromRealConfig(claudeKey);
-  });
+		// Key must NOT appear in the real $HOME/.claude.json
+		assertKeyAbsentFromRealConfig(claudeKey);
+	});
 
-  // AC-A.2
-  it.skipIf(!HAS_CLAUDE)("contract bare worktree", () => {
-    // Build fixture: bare+worktree pattern
-    // Layout: <container>/.bare (bare repo) + <container>/wt (registered worktree)
-    // Claude runs from the WORKTREE. The worktree has a .git FILE created by git
-    // pointing at the bare dir. Expected key = realpath(<container>/.bare).
-    const container = mktemp();
-    tmpdirs.push(container);
+	// AC-A.2
+	it.skipIf(!HAS_CLAUDE)("contract bare worktree", () => {
+		// Build fixture: bare+worktree pattern
+		// Layout: <container>/.bare (bare repo) + <container>/wt (registered worktree)
+		// Claude runs from the WORKTREE. The worktree has a .git FILE created by git
+		// pointing at the bare dir. Expected key = realpath(<container>/.bare).
+		const container = mktemp();
+		tmpdirs.push(container);
 
-    const bareDir = path.join(container, ".bare");
-    const wtDir = path.join(container, "wt");
+		const bareDir = path.join(container, ".bare");
+		const wtDir = path.join(container, "wt");
 
-    git(["init", "--bare", bareDir], os.tmpdir());
-    seedBareRepo(bareDir);
+		git(["init", "--bare", bareDir], os.tmpdir());
+		seedBareRepo(bareDir);
 
-    fs.mkdirSync(wtDir, { recursive: true });
-    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wtDir], {
-      stdio: "pipe",
-      env: GIT_ENV,
-    });
+		fs.mkdirSync(wtDir, { recursive: true });
+		execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wtDir], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
 
-    const configDir = mktemp();
-    tmpdirs.push(configDir);
+		const configDir = mktemp();
+		tmpdirs.push(configDir);
 
-    // Run claude mcp add from the WORKTREE (not from the bare dir)
-    const claudeKey = runClaudeMcpAdd(configDir, wtDir);
-    const derivedKey = deriveClaudeProjectKey(wtDir);
+		// Run claude mcp add from the WORKTREE (not from the bare dir)
+		const claudeKey = runClaudeMcpAdd(configDir, wtDir);
+		const derivedKey = deriveClaudeProjectKey(wtDir);
 
-    // Primary contract assertion: byte-match
-    expect(derivedKey).toBe(claudeKey);
+		// Primary contract assertion: byte-match
+		expect(derivedKey).toBe(claudeKey);
 
-    // Key must be present in the tmp config
-    const raw = fs.readFileSync(path.join(configDir, ".claude.json"), "utf8");
-    expect(raw).toContain(claudeKey);
+		// Key must be present in the tmp config
+		const raw = fs.readFileSync(path.join(configDir, ".claude.json"), "utf8");
+		expect(raw).toContain(claudeKey);
 
-    // Key must NOT appear in the real $HOME/.claude.json
-    assertKeyAbsentFromRealConfig(claudeKey);
-  });
+		// Key must NOT appear in the real $HOME/.claude.json
+		assertKeyAbsentFromRealConfig(claudeKey);
+	});
 
-  // AC-A.3
-  it.skipIf(!HAS_CLAUDE)("contract container", () => {
-    // Build fixture: two worktrees off a bare repo.
-    // The "container" shape is a directory that has a .git FILE (not a directory),
-    // created by `git worktree add`, pointing at the bare dir. This is the same
-    // physical structure as algocare-home/<worktree-name>: a dir with .git FILE
-    // whose content is "gitdir: <path-to-bare>".
-    //
-    // Layout:
-    //   <container>/.bare  (bare repo)
-    //   <container>/wt1    (first worktree — used to seed)
-    //   <container>/wt2    (second worktree — the "container" shape being tested)
-    //
-    // Claude runs from wt2. Both wt1 and wt2 have a .git FILE (gitfile shape).
-    // Expected: key = realpath(<container>/.bare) — ends with "/.bare".
-    //
-    // Live oracle: projects["/Users/toong/repos/algocare-home/.bare"] was written
-    // when Claude ran from algocare-home/<worktree-name> (a gitfile-shape dir).
-    const container = mktemp();
-    tmpdirs.push(container);
+	// AC-A.3
+	it.skipIf(!HAS_CLAUDE)("contract container", () => {
+		// Build fixture: two worktrees off a bare repo.
+		// The "container" shape is a directory that has a .git FILE (not a directory),
+		// created by `git worktree add`, pointing at the bare dir. This is the same
+		// physical structure as algocare-home/<worktree-name>: a dir with .git FILE
+		// whose content is "gitdir: <path-to-bare>".
+		//
+		// Layout:
+		//   <container>/.bare  (bare repo)
+		//   <container>/wt1    (first worktree — used to seed)
+		//   <container>/wt2    (second worktree — the "container" shape being tested)
+		//
+		// Claude runs from wt2. Both wt1 and wt2 have a .git FILE (gitfile shape).
+		// Expected: key = realpath(<container>/.bare) — ends with "/.bare".
+		//
+		// Live oracle: projects["/Users/toong/repos/algocare-home/.bare"] was written
+		// when Claude ran from algocare-home/<worktree-name> (a gitfile-shape dir).
+		const container = mktemp();
+		tmpdirs.push(container);
 
-    const bareDir = path.join(container, ".bare");
-    const wt1Dir = path.join(container, "wt1");
-    const wt2Dir = path.join(container, "wt2");
+		const bareDir = path.join(container, ".bare");
+		const wt1Dir = path.join(container, "wt1");
+		const wt2Dir = path.join(container, "wt2");
 
-    git(["init", "--bare", bareDir], os.tmpdir());
-    seedBareRepo(bareDir);
+		git(["init", "--bare", bareDir], os.tmpdir());
+		seedBareRepo(bareDir);
 
-    // Add first worktree (for branch creation)
-    execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wt1Dir], {
-      stdio: "pipe",
-      env: GIT_ENV,
-    });
+		// Add first worktree (for branch creation)
+		execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wt1Dir], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
 
-    // Add second worktree — this is the "container" shape
-    execFileSync(
-      "git",
-      ["--git-dir", bareDir, "worktree", "add", "-b", "container-branch", wt2Dir],
-      { stdio: "pipe", env: GIT_ENV },
-    );
+		// Add second worktree — this is the "container" shape
+		execFileSync(
+			"git",
+			["--git-dir", bareDir, "worktree", "add", "-b", "container-branch", wt2Dir],
+			{ stdio: "pipe", env: GIT_ENV },
+		);
 
-    // Verify wt2 has a .git FILE (gitfile shape, not a directory)
-    const wt2GitPath = path.join(wt2Dir, ".git");
-    const wt2GitStat = fs.statSync(wt2GitPath);
-    expect(wt2GitStat.isFile()).toBe(true); // must be a FILE, not a dir
+		// Verify wt2 has a .git FILE (gitfile shape, not a directory)
+		const wt2GitPath = path.join(wt2Dir, ".git");
+		const wt2GitStat = fs.statSync(wt2GitPath);
+		expect(wt2GitStat.isFile()).toBe(true); // must be a FILE, not a dir
 
-    const configDir = mktemp();
-    tmpdirs.push(configDir);
+		const configDir = mktemp();
+		tmpdirs.push(configDir);
 
-    // Run claude mcp add from the second worktree (gitfile-shape "container")
-    const claudeKey = runClaudeMcpAdd(configDir, wt2Dir);
-    const derivedKey = deriveClaudeProjectKey(wt2Dir);
+		// Run claude mcp add from the second worktree (gitfile-shape "container")
+		const claudeKey = runClaudeMcpAdd(configDir, wt2Dir);
+		const derivedKey = deriveClaudeProjectKey(wt2Dir);
 
-    // Primary contract assertion: byte-match
-    expect(derivedKey).toBe(claudeKey);
+		// Primary contract assertion: byte-match
+		expect(derivedKey).toBe(claudeKey);
 
-    // Key must end with "/.bare" — the bare dir name
-    // This cross-checks the live oracle pattern.
-    expect(claudeKey.endsWith("/.bare")).toBe(true);
+		// Key must end with "/.bare" — the bare dir name
+		// This cross-checks the live oracle pattern.
+		expect(claudeKey.endsWith("/.bare")).toBe(true);
 
-    // Key must be present in the tmp config
-    const raw = fs.readFileSync(path.join(configDir, ".claude.json"), "utf8");
-    expect(raw).toContain(claudeKey);
+		// Key must be present in the tmp config
+		const raw = fs.readFileSync(path.join(configDir, ".claude.json"), "utf8");
+		expect(raw).toContain(claudeKey);
 
-    // Key must NOT appear in the real $HOME/.claude.json
-    assertKeyAbsentFromRealConfig(claudeKey);
-  });
+		// Key must NOT appear in the real $HOME/.claude.json
+		assertKeyAbsentFromRealConfig(claudeKey);
+	});
 });

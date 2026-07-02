@@ -17,7 +17,10 @@ const LOCK_SLEEP_VIEW = new Int32Array(new SharedArrayBuffer(4));
 // check is the fast path and the TTL is only the PID-reuse backstop.
 const LOCK_STALE_TTL_MS = recoveryLeaseTtlMs();
 
-export function withSessionStateLock<T>(cachePath: string, callback: () => T): SessionStateLockResult<T> {
+export function withSessionStateLock<T>(
+	cachePath: string,
+	callback: () => T,
+): SessionStateLockResult<T> {
 	const lockPath = `${cachePath}.lock`;
 	mkdirSync(dirname(cachePath), { recursive: true });
 	for (let attempt = 0; attempt < LOCK_RETRY_COUNT; attempt += 1) {

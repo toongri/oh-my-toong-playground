@@ -9,7 +9,10 @@ import { PROJECT_MARKERS } from "./constants.js";
  */
 const WORKSPACE_MARKERS: readonly string[] = ["pnpm-workspace.yaml", "turbo.json", ".git"];
 
-export function findProjectRoot(startPath: string, markers: ReadonlyArray<string> = PROJECT_MARKERS): string | null {
+export function findProjectRoot(
+	startPath: string,
+	markers: ReadonlyArray<string> = PROJECT_MARKERS,
+): string | null {
 	const resolvedStartPath = resolve(startPath);
 
 	if (!existsSync(resolvedStartPath)) {

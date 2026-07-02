@@ -20,17 +20,17 @@
  *   { "memberCount": N, "usage": { "input_tokens": N, "output_tokens": N, … } }
  */
 
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 
 export interface UsageSummary {
-  memberCount: number;
-  /** Aggregate token counts across all members. Keys mirror ParseResult.usage keys. */
-  usage: Record<string, number>;
+	memberCount: number;
+	/** Aggregate token counts across all members. Keys mirror ParseResult.usage keys. */
+	usage: Record<string, number>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -38,47 +38,47 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * Cross-runtime safe: uses only fs + path (Node built-ins).
  */
 export function summarizeUsage(jobDir: string): UsageSummary {
-  const membersDir = path.resolve(jobDir, 'members');
-  const aggregate: Record<string, number> = Object.create(null);
-  let memberCount = 0;
+	const membersDir = path.resolve(jobDir, "members");
+	const aggregate: Record<string, number> = Object.create(null);
+	let memberCount = 0;
 
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(membersDir);
-  } catch {
-    return { memberCount: 0, usage: {} };
-  }
+	let entries: string[];
+	try {
+		entries = fs.readdirSync(membersDir);
+	} catch {
+		return { memberCount: 0, usage: {} };
+	}
 
-  for (const entry of entries) {
-    const statusPath = path.join(membersDir, entry, 'status.json');
-    let status: unknown;
-    try {
-      status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-    } catch {
-      continue;
-    }
-    if (!isPlainObject(status)) continue;
+	for (const entry of entries) {
+		const statusPath = path.join(membersDir, entry, "status.json");
+		let status: unknown;
+		try {
+			status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
+		} catch {
+			continue;
+		}
+		if (!isPlainObject(status)) continue;
 
-    memberCount++;
+		memberCount++;
 
-    const usage = status.usage;
-    if (isPlainObject(usage)) {
-      for (const [key, val] of Object.entries(usage)) {
-        if (typeof val === 'number') {
-          aggregate[key] = (aggregate[key] ?? 0) + val;
-        }
-      }
-    }
-  }
+		const usage = status.usage;
+		if (isPlainObject(usage)) {
+			for (const [key, val] of Object.entries(usage)) {
+				if (typeof val === "number") {
+					aggregate[key] = (aggregate[key] ?? 0) + val;
+				}
+			}
+		}
+	}
 
-  return { memberCount, usage: aggregate };
+	return { memberCount, usage: aggregate };
 }
 
 if (import.meta.main) {
-  const jobDir = process.argv[2];
-  if (!jobDir) {
-    process.stderr.write('usage-summary: missing jobDir argument\n');
-    process.exit(1);
-  }
-  process.stdout.write(JSON.stringify(summarizeUsage(jobDir), null, 2) + '\n');
+	const jobDir = process.argv[2];
+	if (!jobDir) {
+		process.stderr.write("usage-summary: missing jobDir argument\n");
+		process.exit(1);
+	}
+	process.stdout.write(JSON.stringify(summarizeUsage(jobDir), null, 2) + "\n");
 }

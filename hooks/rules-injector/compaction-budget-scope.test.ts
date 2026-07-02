@@ -226,7 +226,11 @@ test("D3: a context_length_exceeded marker in the prompt suppresses all injectio
 
 	const suppressed = runHook(
 		"user-prompt-submit",
-		userPromptPayload(sessionId, projectRoot, "the model reported context_length_exceeded mid-turn"),
+		userPromptPayload(
+			sessionId,
+			projectRoot,
+			"the model reported context_length_exceeded mid-turn",
+		),
 	);
 	expect(suppressed.status).toBe(0);
 	expect(suppressed.stdout.trim()).toBe("");
@@ -289,7 +293,10 @@ test("E2: the same rule is omitted on the second hook run of the same session", 
 
 	// Run 2: a later turn (UserPromptSubmit) hydrates that state, sees the rule's
 	// realPath+contentHash already injected, and omits it.
-	const second = runHook("user-prompt-submit", userPromptPayload(sessionId, projectRoot, "continue"));
+	const second = runHook(
+		"user-prompt-submit",
+		userPromptPayload(sessionId, projectRoot, "continue"),
+	);
 	expect(second.status).toBe(0);
 	expect(second.stdout.trim()).toBe("");
 	expect(additionalContext(second.stdout)).not.toContain(ruleBody);
@@ -340,7 +347,9 @@ test("F4: a forced uncaught throw is swallowed (exit 0) and leaves an error.log 
 	expect(result.status).toBe(0);
 	const log = errorLogPath();
 	expect(existsSync(log)).toBe(true);
-	const lines = readFileSync(log, "utf8").split("\n").filter((line) => line.trim().length > 0);
+	const lines = readFileSync(log, "utf8")
+		.split("\n")
+		.filter((line) => line.trim().length > 0);
 	expect(lines.length).toBeGreaterThanOrEqual(1);
 });
 
@@ -407,7 +416,10 @@ test("B-2: a disabled PostCompact does not write session state (no-op exit 0)", 
 	// nothing will ever consume that armed state, so the write is pure pollution.
 	// Fix: pre-gate runPostCompactHook on config.disabled and return "" without writing.
 	const sessionId = "b2-disabled-session";
-	const { projectRoot } = makeProjectWithStaticRule("b2-rule.md", "B-2 BOULDER: disabled post-compact must not write.");
+	const { projectRoot } = makeProjectWithStaticRule(
+		"b2-rule.md",
+		"B-2 BOULDER: disabled post-compact must not write.",
+	);
 	const hermDataRoot = join(tempHome, ".omt", "rules-injector");
 	const statePath = join(hermDataRoot, `${sessionId}.json`);
 
@@ -543,7 +555,11 @@ test("C10-D3: UPS injects without pressure marker (baseline), then is suppressed
 	const sessionId2 = "c10d3-session2";
 	const suppressedRun = runHook(
 		"user-prompt-submit",
-		userPromptPayload(sessionId2, projectRoot, "the model reported context_length_exceeded mid-turn"),
+		userPromptPayload(
+			sessionId2,
+			projectRoot,
+			"the model reported context_length_exceeded mid-turn",
+		),
 	);
 	expect(suppressedRun.status).toBe(0);
 	expect(additionalContext(suppressedRun.stdout)).toBe("");
@@ -629,7 +645,12 @@ import { filterRulesNotInTranscriptText } from "./transcript-rule-filter.js";
 import type { LoadedRule } from "./rules/types.js";
 
 /** Minimal LoadedRule fixture for formatter unit tests. */
-function makeRule(overrides: { path?: string; relativePath?: string; body?: string; contentHash?: string }): LoadedRule {
+function makeRule(overrides: {
+	path?: string;
+	relativePath?: string;
+	body?: string;
+	contentHash?: string;
+}): LoadedRule {
 	return {
 		path: overrides.path ?? "/proj/.claude/rules/test.md",
 		realPath: overrides.path ?? "/proj/.claude/rules/test.md",
@@ -690,7 +711,10 @@ test("AC2-dynamic: emittedRules contains only rules that survived budget", () =>
 	// Same budget arithmetic as AC2-static.
 	const rule1 = makeRule({ path: "/p/r1.md", relativePath: "r1.md", body: "A".repeat(50) });
 	const rule2 = makeRule({ path: "/p/r2.md", relativePath: "r2.md", body: "B".repeat(300) });
-	const result = formatDynamicBlock([rule1, rule2], "src/x.ts", { maxRuleChars: 300, maxResultChars: 110 });
+	const result = formatDynamicBlock([rule1, rule2], "src/x.ts", {
+		maxRuleChars: 300,
+		maxResultChars: 110,
+	});
 	expect(result.emittedRules).toHaveLength(1);
 	expect(result.emittedRules[0]?.path).toBe("/p/r1.md");
 });
@@ -867,7 +891,9 @@ test("B-5: a dynamic rule dropped by budget on PostToolUse is re-injected on the
 	mkdirSync(join(projectRoot, "src"), { recursive: true });
 	writeFileSync(join(projectRoot, "src", "x.ts"), "export const x = 1;\n");
 
-	const postToolPayload = (env: Record<string, string>): { payload: Record<string, unknown>; env: Record<string, string> } => ({
+	const postToolPayload = (
+		env: Record<string, string>,
+	): { payload: Record<string, unknown>; env: Record<string, string> } => ({
 		payload: {
 			hook_event_name: "PostToolUse",
 			session_id: sessionId,
@@ -947,7 +973,9 @@ test("B-6: a dynamic rule whose marker falls past the 32K byte clamp is not mark
 	const rule2Body = "B6-RULE2-BODY: must-re-inject";
 	writeFileSync(join(rulesDir, "b6rule2.md"), `---\nglobs: ["**/*.ts"]\n---\n${rule2Body}\n`);
 
-	const postToolPayload = (extraEnv: Record<string, string> = {}): { payload: Record<string, unknown>; env: Record<string, string> } => ({
+	const postToolPayload = (
+		extraEnv: Record<string, string> = {},
+	): { payload: Record<string, unknown>; env: Record<string, string> } => ({
 		payload: {
 			hook_event_name: "PostToolUse",
 			session_id: sessionId,
@@ -1472,7 +1500,10 @@ test("A13: name-based parity — edited rule IS suppressed if its name tag is in
 		relativePath: ".claude/rules/parity2.md",
 		body: `${head}\nPARITY2-TAIL-OLD`,
 	});
-	const { text: oldBlock } = formatStaticBlock([oldRule], { maxRuleChars: 10_000, maxResultChars: 10_000 });
+	const { text: oldBlock } = formatStaticBlock([oldRule], {
+		maxRuleChars: 10_000,
+		maxResultChars: 10_000,
+	});
 
 	// Same path (same basename → same tag), different tail → still suppressed by tag match.
 	const newRule = makeRule({

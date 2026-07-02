@@ -13,9 +13,9 @@ import path from "path";
  *   empty      → returned as-is
  */
 export function expandTilde(p: string): string {
-  if (p === "~") return os.homedir();
-  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
-  return p;
+	if (p === "~") return os.homedir();
+	if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
+	return p;
 }
 
 /**
@@ -24,5 +24,5 @@ export function expandTilde(p: string): string {
  * Symlinked homedir is not followed — uses path.resolve only. If needed later, switch to fs.realpathSync.
  */
 export function isGlobalSync(targetPath: string): boolean {
-  return path.resolve(expandTilde(targetPath)) === path.resolve(os.homedir());
+	return path.resolve(expandTilde(targetPath)) === path.resolve(os.homedir());
 }

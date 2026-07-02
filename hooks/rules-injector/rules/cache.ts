@@ -51,7 +51,11 @@ export function isStaticInjected(state: SessionState, rule: LoadedRule): boolean
 }
 
 export function isDynamicInjected(state: SessionState, rule: LoadedRule): boolean {
-	return state.dynamicDedup.get(DYNAMIC_SESSION_KEY)?.has(dynamicDedupKey(rule.realPath, rule.contentHash)) === true;
+	return (
+		state.dynamicDedup
+			.get(DYNAMIC_SESSION_KEY)
+			?.has(dynamicDedupKey(rule.realPath, rule.contentHash)) === true
+	);
 }
 
 export function clearSession(state: SessionState): void {

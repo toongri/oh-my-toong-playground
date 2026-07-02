@@ -4,15 +4,28 @@ import type { CodexRulesHookOptions } from "./codex-hook-options.js";
 import { configFromEnvironment } from "./config.js";
 import { withPromptBudget } from "./event-budget.js";
 import { formatAdditionalContextOutput, limitAdditionalContextText } from "./hook-output.js";
-import { completePostCompactRecovery, hydrateEngineState, persistEngineState } from "./persistent-cache.js";
+import {
+	completePostCompactRecovery,
+	hydrateEngineState,
+	persistEngineState,
+} from "./persistent-cache.js";
 import { withPostCompactBudget } from "./post-compact-budget.js";
 import type { PostCompactReadDirective } from "./post-compact-directive.js";
 import { buildPostCompactReadDirective } from "./post-compact-directive.js";
 import type { Engine } from "./rules/index.js";
-import { formatStaticBlock, isNeverTruncatedRule, parseRule, ruleMarkerLine, transcriptHasRuleMarker } from "./rules/index.js";
+import {
+	formatStaticBlock,
+	isNeverTruncatedRule,
+	parseRule,
+	ruleMarkerLine,
+	transcriptHasRuleMarker,
+} from "./rules/index.js";
 import type { LoadedRule, PiRulesConfig } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
-import { filterRulesAlreadyInTranscript, filterRulesNotInTranscriptText } from "./transcript-rule-filter.js";
+import {
+	filterRulesAlreadyInTranscript,
+	filterRulesNotInTranscriptText,
+} from "./transcript-rule-filter.js";
 import type { TranscriptSearchOptions } from "./transcript-search.js";
 import { readTranscriptSearchText } from "./transcript-search.js";
 
@@ -75,7 +88,9 @@ export function runStaticInjection(
 	// byte clamp then cuts. A rule whose marker is past the 32K cut must stay pending so
 	// a later turn re-injects it. Compute the limited context first, then filter.
 	const combinedContext = combineStaticContext(block);
-	const limitedContext = limitAdditionalContextText(combinedContext.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim());
+	const limitedContext = limitAdditionalContextText(
+		combinedContext.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim(),
+	);
 	for (const rule of emittedRules) {
 		if (limitedContext.includes(ruleMarkerLine(rule.path))) {
 			engine.markStaticInjected(rule);
@@ -113,13 +128,9 @@ function runPostCompactRecovery(input: PostCompactRecoveryInput): string {
 	// pre-filter here would drop the very rules compaction is about to evict. Pass the
 	// loaded rules straight to the transcript check; on the PostCompact-first path the
 	// dedup is already wiped, so dropping the pre-filter is a no-op there.
-	const missingRules = filterRulesNotInTranscriptText(
-		loaded.rules,
-		transcriptText,
-		(rule) => {
-			engine.markStaticInjected(rule);
-		},
-	);
+	const missingRules = filterRulesNotInTranscriptText(loaded.rules, transcriptText, (rule) => {
+		engine.markStaticInjected(rule);
+	});
 	const dynamicRulePaths = recoverDynamicRulePaths(engine, transcriptText, loaded.rules);
 
 	if (missingRules.length === 0 && dynamicRulePaths.length === 0) {
@@ -131,12 +142,13 @@ function runPostCompactRecovery(input: PostCompactRecoveryInput): string {
 	const listedRules = missingRules.filter((rule) => !isNeverTruncatedRule(ruleDisplayPath(rule)));
 	// C1: use formatStaticBlock directly (not engine.formatStatic) to get emittedRules —
 	// the formatter may budget-drop some fullBodyRules too; only emitted ones are marked.
-	const { text: bodyBlock, emittedRules: bodyEmittedRules } = fullBodyRules.length === 0
-		? { text: "", emittedRules: [] }
-		: formatStaticBlock(fullBodyRules, {
-				maxRuleChars: effectiveConfig.maxRuleChars,
-				maxResultChars: effectiveConfig.maxResultChars,
-		  });
+	const { text: bodyBlock, emittedRules: bodyEmittedRules } =
+		fullBodyRules.length === 0
+			? { text: "", emittedRules: [] }
+			: formatStaticBlock(fullBodyRules, {
+					maxRuleChars: effectiveConfig.maxRuleChars,
+					maxResultChars: effectiveConfig.maxResultChars,
+				});
 	const remainingForDirective = Math.max(0, effectiveConfig.maxResultChars - bodyBlock.length);
 	const { text: directive, emittedPaths }: PostCompactReadDirective = buildPostCompactReadDirective(
 		[...listedRules.map((rule) => rule.path), ...dynamicRulePaths],
@@ -189,7 +201,11 @@ function readRecoveryTranscriptText(transcriptPath: string | null): string | nul
 function isDynamicRuleBodyInTranscript(rulePath: string, transcriptText: string): boolean {
 	try {
 		const raw = readFileSync(rulePath, "utf8");
-		const needle = parseRule(raw).body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().slice(0, 2_000);
+		const needle = parseRule(raw)
+			.body.replace(/\r\n/g, "\n")
+			.replace(/\r/g, "\n")
+			.trim()
+			.slice(0, 2_000);
 		if (needle.length === 0 || !transcriptText.includes(needle)) {
 			return false;
 		}

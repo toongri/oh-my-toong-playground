@@ -128,7 +128,8 @@ describe("#13 patch-header scanning gated on apply_patch tool_name", () => {
 			{
 				tool_name: "apply_patch",
 				tool_input: {
-					input: "*** Add File: src/new-file.ts\n--- src/new-file.ts\n+++ src/new-file.ts\n+const x = 1;\n",
+					input:
+						"*** Add File: src/new-file.ts\n--- src/new-file.ts\n+++ src/new-file.ts\n+const x = 1;\n",
 				},
 				tool_response: {},
 			},

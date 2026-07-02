@@ -32,14 +32,14 @@ function makeRule(overrides: Partial<LoadedRule>): LoadedRule {
 
 // ── 기존 동작: alwaysApply: true ────────────────────────────────────────────
 
-test("`staticMatchReason`: alwaysApply:true → \"alwaysApply\"", () => {
+test('`staticMatchReason`: alwaysApply:true → "alwaysApply"', () => {
 	const rule = makeRule({ frontmatter: { alwaysApply: true } });
 	expect(staticMatchReason(rule)).toBe("alwaysApply");
 });
 
 // ── 기존 동작: isSingleFile ──────────────────────────────────────────────────
 
-test("`staticMatchReason`: isSingleFile:true → \"single-file\"", () => {
+test('`staticMatchReason`: isSingleFile:true → "single-file"', () => {
 	const rule = makeRule({ isSingleFile: true, frontmatter: {} });
 	expect(staticMatchReason(rule)).toBe("single-file");
 });
@@ -65,14 +65,14 @@ test("`staticMatchReason`: paths present, alwaysApply absent → null (dynamic-o
 
 // ── Patch B: frontmatter 없음 (alwaysApply absent, glob 없음) → "alwaysApply" ─
 
-test("`staticMatchReason`: no frontmatter (empty object) → \"alwaysApply\" (no-frontmatter always-on)", () => {
+test('`staticMatchReason`: no frontmatter (empty object) → "alwaysApply" (no-frontmatter always-on)', () => {
 	// A .claude/rules/*.md file with NO YAML frontmatter parses as empty frontmatter.
 	// Claude Code's native behavior: no paths: = always-on. Patch B must match.
 	const rule = makeRule({ frontmatter: {} });
 	expect(staticMatchReason(rule)).toBe("alwaysApply");
 });
 
-test("`staticMatchReason`: description only (no globs, no alwaysApply) → \"alwaysApply\"", () => {
+test('`staticMatchReason`: description only (no globs, no alwaysApply) → "alwaysApply"', () => {
 	// description: is purely informational and must not suppress always-on semantics.
 	const rule = makeRule({ frontmatter: { description: "my rule" } });
 	expect(staticMatchReason(rule)).toBe("alwaysApply");

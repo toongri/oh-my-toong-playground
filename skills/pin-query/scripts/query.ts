@@ -16,46 +16,49 @@
  *   1 — engine error
  */
 
-import { query, type QueryCriteria } from '@lib/pins/query';
-import { requireManifest, failEngine } from '@lib/pin-cli/io';
+import { query, type QueryCriteria } from "@lib/pins/query";
+import { requireManifest, failEngine } from "@lib/pin-cli/io";
 
 if (import.meta.main) {
-  const args = process.argv.slice(2);
+	const args = process.argv.slice(2);
 
-  // Parse --flag value pairs
-  const flags: Record<string, string> = {};
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg.startsWith('--') && i + 1 < args.length) {
-      flags[arg.slice(2)] = args[i + 1];
-      i++;
-    }
-  }
+	// Parse --flag value pairs
+	const flags: Record<string, string> = {};
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg.startsWith("--") && i + 1 < args.length) {
+			flags[arg.slice(2)] = args[i + 1];
+			i++;
+		}
+	}
 
-  // requireManifest handles the absent case: prints the absent line + exits 0
-  const manifest = await requireManifest();
+	// requireManifest handles the absent case: prints the absent line + exits 0
+	const manifest = await requireManifest();
 
-  const criteria: QueryCriteria = {};
-  if (flags['type'] !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- unvalidated CLI arg; an invalid value simply matches no entries downstream
-    criteria.type = flags['type'] as QueryCriteria['type'];
-  }
-  if (flags['tags'] !== undefined) {
-    criteria.tags = flags['tags'].split(',').map((t) => t.trim()).filter(Boolean);
-  }
-  if (flags['source'] !== undefined) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- unvalidated CLI arg; an invalid value simply matches no entries downstream
-    criteria.source = flags['source'] as QueryCriteria['source'];
-  }
+	const criteria: QueryCriteria = {};
+	if (flags["type"] !== undefined) {
+		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- unvalidated CLI arg; an invalid value simply matches no entries downstream
+		criteria.type = flags["type"] as QueryCriteria["type"];
+	}
+	if (flags["tags"] !== undefined) {
+		criteria.tags = flags["tags"]
+			.split(",")
+			.map((t) => t.trim())
+			.filter(Boolean);
+	}
+	if (flags["source"] !== undefined) {
+		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- unvalidated CLI arg; an invalid value simply matches no entries downstream
+		criteria.source = flags["source"] as QueryCriteria["source"];
+	}
 
-  let results;
-  try {
-    results = query(manifest.location, criteria);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    failEngine(message);
-  }
+	let results;
+	try {
+		results = query(manifest.location, criteria);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		failEngine(message);
+	}
 
-  // eslint-disable-next-line no-console -- CLI tool output contract: results are printed to stdout as JSON, not a debug log
-  console.log(JSON.stringify(results, null, 2));
+	// eslint-disable-next-line no-console -- CLI tool output contract: results are printed to stdout as JSON, not a debug log
+	console.log(JSON.stringify(results, null, 2));
 }

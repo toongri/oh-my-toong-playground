@@ -13,57 +13,62 @@
  */
 
 import type {
-  AgentDriver,
-  ParseResult,
-  TerminalSignal,
-  InitialCommandOpts,
-  ResumeCommandOpts,
-  BuiltCommand,
-} from './types';
-import { registerDriver } from './types';
+	AgentDriver,
+	ParseResult,
+	TerminalSignal,
+	InitialCommandOpts,
+	ResumeCommandOpts,
+	BuiltCommand,
+} from "./types";
+import { registerDriver } from "./types";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
 function stopReasonToSignal(stopReason: string): TerminalSignal {
-  switch (stopReason) {
-    case 'end_turn':   return 'stop';
-    case 'tool_use':   return 'tool-calls';
-    case 'pause_turn': return 'pause_turn';
-    case 'refusal':    return 'error';
-    default:           return 'unknown_pause';
-  }
+	switch (stopReason) {
+		case "end_turn":
+			return "stop";
+		case "tool_use":
+			return "tool-calls";
+		case "pause_turn":
+			return "pause_turn";
+		case "refusal":
+			return "error";
+		default:
+			return "unknown_pause";
+	}
 }
 
 /** Strip existing --resume <value> pair from args array. */
 function stripResumePair(args: string[]): string[] {
-  const out: string[] = [];
-  let i = 0;
-  while (i < args.length) {
-    if (args[i] === '--resume') {
-      i += 2; // skip flag and its value
-    } else {
-      out.push(args[i]);
-      i++;
-    }
-  }
-  return out;
+	const out: string[] = [];
+	let i = 0;
+	while (i < args.length) {
+		if (args[i] === "--resume") {
+			i += 2; // skip flag and its value
+		} else {
+			out.push(args[i]);
+			i++;
+		}
+	}
+	return out;
 }
 
 /** Strip existing --output-format <value> pair from args array. */
 function stripOutputFormatPair(args: string[]): string[] {
-  const out: string[] = [];
-  let i = 0;
-  while (i < args.length) {
-    if (args[i] === '--output-format') {
-      i += 2;
-    } else {
-      out.push(args[i]);
-      i++;
-    }
-  }
-  return out;
+	const out: string[] = [];
+	let i = 0;
+	while (i < args.length) {
+		if (args[i] === "--output-format") {
+			i += 2;
+		} else {
+			out.push(args[i]);
+			i++;
+		}
+	}
+	return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,42 +76,42 @@ function stripOutputFormatPair(args: string[]): string[] {
 // ---------------------------------------------------------------------------
 
 export const claudeDriver: AgentDriver = {
-  cli: 'claude',
+	cli: "claude",
 
-  parseStdout(stdout: string): ParseResult | null {
-    if (!stdout || !stdout.trim()) return null;
+	parseStdout(stdout: string): ParseResult | null {
+		if (!stdout || !stdout.trim()) return null;
 
-    // Parse the first non-empty line as JSON.
-    const firstLine = stdout.split('\n').find(l => l.trim().length > 0);
-    if (!firstLine) return null;
+		// Parse the first non-empty line as JSON.
+		const firstLine = stdout.split("\n").find((l) => l.trim().length > 0);
+		if (!firstLine) return null;
 
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(firstLine);
-    } catch {
-      return null;
-    }
+		let parsed: Record<string, unknown>;
+		try {
+			parsed = JSON.parse(firstLine);
+		} catch {
+			return null;
+		}
 
-    const text = typeof parsed.result === 'string' ? parsed.result : '';
-    const sessionID = typeof parsed.session_id === 'string' ? parsed.session_id : null;
-    const stopReason = typeof parsed.stop_reason === 'string' ? parsed.stop_reason : '';
-    const terminal = stopReasonToSignal(stopReason);
+		const text = typeof parsed.result === "string" ? parsed.result : "";
+		const sessionID = typeof parsed.session_id === "string" ? parsed.session_id : null;
+		const stopReason = typeof parsed.stop_reason === "string" ? parsed.stop_reason : "";
+		const terminal = stopReasonToSignal(stopReason);
 
-    return { sessionID, terminal, text, rawEvents: [parsed] };
-  },
+		return { sessionID, terminal, text, rawEvents: [parsed] };
+	},
 
-  initialCommand(opts: InitialCommandOpts): BuiltCommand {
-    const stripped = stripOutputFormatPair([...opts.baseArgs]);
-    const args = [...stripped, '--output-format', 'json'];
-    return { program: opts.baseCommand, args, env: opts.workerEnv };
-  },
+	initialCommand(opts: InitialCommandOpts): BuiltCommand {
+		const stripped = stripOutputFormatPair([...opts.baseArgs]);
+		const args = [...stripped, "--output-format", "json"];
+		return { program: opts.baseCommand, args, env: opts.workerEnv };
+	},
 
-  resumeCommand(opts: ResumeCommandOpts): BuiltCommand {
-    // Strip existing --resume pair and --output-format pair, then re-inject both.
-    const stripped = stripOutputFormatPair(stripResumePair([...opts.baseArgs]));
-    const args = [...stripped, '--resume', opts.sessionID, '--output-format', 'json'];
-    return { program: opts.baseCommand, args, env: opts.workerEnv };
-  },
+	resumeCommand(opts: ResumeCommandOpts): BuiltCommand {
+		// Strip existing --resume pair and --output-format pair, then re-inject both.
+		const stripped = stripOutputFormatPair(stripResumePair([...opts.baseArgs]));
+		const args = [...stripped, "--resume", opts.sessionID, "--output-format", "json"];
+		return { program: opts.baseCommand, args, env: opts.workerEnv };
+	},
 };
 
-registerDriver('claude', claudeDriver);
+registerDriver("claude", claudeDriver);

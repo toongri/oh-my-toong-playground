@@ -21,7 +21,9 @@ export function hasContextPressureMarker(text: string): boolean {
  * (non-empty lines) follows it. A historical marker that precedes subsequent
  * conversation turns is stale and must not suppress injection.
  */
-export function transcriptHasContextPressureMarker(transcriptPath: string | null | undefined): boolean {
+export function transcriptHasContextPressureMarker(
+	transcriptPath: string | null | undefined,
+): boolean {
 	if (transcriptPath === undefined || transcriptPath === null) return false;
 	try {
 		const text = readFileSync(transcriptPath, "utf8");

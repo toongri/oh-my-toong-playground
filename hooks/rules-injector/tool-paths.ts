@@ -49,7 +49,11 @@ export function extractCodexToolPaths(input: CodexPostToolUseLike, cwd: string):
 	return [...paths];
 }
 
-function addCommonPathFields(paths: Set<string>, input: Record<string, unknown>, cwd: string): void {
+function addCommonPathFields(
+	paths: Set<string>,
+	input: Record<string, unknown>,
+	cwd: string,
+): void {
 	for (const key of ["path", "filePath", "file_path", "target", "targetPath", "target_path"]) {
 		addPath(paths, input[key], cwd, false);
 	}
@@ -58,7 +62,11 @@ function addCommonPathFields(paths: Set<string>, input: Record<string, unknown>,
 	}
 }
 
-function addPatchPayloadPaths(paths: Set<string>, input: Record<string, unknown>, cwd: string): void {
+function addPatchPayloadPaths(
+	paths: Set<string>,
+	input: Record<string, unknown>,
+	cwd: string,
+): void {
 	for (const key of ["input", "patch", "command", "cmd"]) {
 		const value = input[key];
 		if (typeof value === "string") {
@@ -69,7 +77,12 @@ function addPatchPayloadPaths(paths: Set<string>, input: Record<string, unknown>
 
 function addPatchHeaderPaths(paths: Set<string>, patch: string, cwd: string): void {
 	for (const line of patch.split("\n")) {
-		for (const prefix of ["*** Add File: ", "*** Update File: ", "*** Move to: ", "*** Delete File: "]) {
+		for (const prefix of [
+			"*** Add File: ",
+			"*** Update File: ",
+			"*** Move to: ",
+			"*** Delete File: ",
+		]) {
 			if (line.startsWith(prefix)) {
 				addPath(paths, line.slice(prefix.length).trim(), cwd, false);
 			}
@@ -257,7 +270,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFailedToolResponse(value: unknown): boolean {
 	if (!isRecord(value)) return false;
-	if (value["isError"] === true || value["is_error"] === true || value["error"] === true || value["status"] === "error") {
+	if (
+		value["isError"] === true ||
+		value["is_error"] === true ||
+		value["error"] === true ||
+		value["status"] === "error"
+	) {
 		return true;
 	}
 	if (typeof value["error"] === "string" && value["error"].length > 0) {

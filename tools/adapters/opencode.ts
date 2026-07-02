@@ -17,11 +17,8 @@ import { readJsonFile, writeJsonFile } from "../lib/json.ts";
  * Apply a model map to resolve a model string to its mapped value.
  * Returns the mapped value if found, or the original string if not.
  */
-export function applyModelMap(
-  modelMap: Record<string, string>,
-  model: string,
-): string {
-  return modelMap[model] ?? model;
+export function applyModelMap(modelMap: Record<string, string>, model: string): string {
+	return modelMap[model] ?? model;
 }
 
 // =============================================================================
@@ -37,30 +34,30 @@ export function applyModelMap(
  * Uses parseFrontmatter/serializeFrontmatter to preserve body `---` lines (P2-4 fix).
  */
 export function translateAgentFrontmatter(
-  content: string,
-  modelMap?: Record<string, string>,
+	content: string,
+	modelMap?: Record<string, string>,
 ): string {
-  const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content);
+	const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content);
 
-  if (!hasFrontmatter) {
-    return content;
-  }
+	if (!hasFrontmatter) {
+		return content;
+	}
 
-  // Remove add-skills
-  delete frontmatter["add-skills"];
+	// Remove add-skills
+	delete frontmatter["add-skills"];
 
-  // Convert subagent_type -> mode: "subagent"
-  if ("subagent_type" in frontmatter) {
-    frontmatter["mode"] = "subagent";
-    delete frontmatter["subagent_type"];
-  }
+	// Convert subagent_type -> mode: "subagent"
+	if ("subagent_type" in frontmatter) {
+		frontmatter["mode"] = "subagent";
+		delete frontmatter["subagent_type"];
+	}
 
-  // P2-5: Apply model map to model field if provided
-  if (modelMap && typeof frontmatter["model"] === "string") {
-    frontmatter["model"] = applyModelMap(modelMap, frontmatter["model"]);
-  }
+	// P2-5: Apply model map to model field if provided
+	if (modelMap && typeof frontmatter["model"] === "string") {
+		frontmatter["model"] = applyModelMap(modelMap, frontmatter["model"]);
+	}
 
-  return serializeFrontmatter(frontmatter, body);
+	return serializeFrontmatter(frontmatter, body);
 }
 
 // =============================================================================
@@ -68,259 +65,276 @@ export function translateAgentFrontmatter(
 // =============================================================================
 
 export const opencodeAdapter: PlatformAdapter = {
-  platform: "opencode",
-  configDir: ".opencode",
-  contextFile: "AGENTS.md",
+	platform: "opencode",
+	configDir: ".opencode",
+	contextFile: "AGENTS.md",
 
-  async syncAgentsDirect(
-    targetPath: string,
-    displayName: string,
-    sourcePath: string,
-    addSkills?: string[],
-    _addHooks?: unknown[],
-    dryRun?: boolean,
-    modelMap?: Record<string, string>,
-  ): Promise<void> {
-    const targetDir = path.join(targetPath, ".opencode", "agents");
-    const targetFile = path.join(targetDir, `${displayName}.md`);
+	async syncAgentsDirect(
+		targetPath: string,
+		displayName: string,
+		sourcePath: string,
+		addSkills?: string[],
+		_addHooks?: unknown[],
+		dryRun?: boolean,
+		modelMap?: Record<string, string>,
+	): Promise<void> {
+		const targetDir = path.join(targetPath, ".opencode", "agents");
+		const targetFile = path.join(targetDir, `${displayName}.md`);
 
-    let stat;
-    try { stat = await fs.stat(sourcePath); } catch { logWarn(`Agent file not found: ${sourcePath}`); return; }
-    if (!stat.isFile()) { logWarn(`Agent path is not a file: ${sourcePath}`); return; }
+		let stat;
+		try {
+			stat = await fs.stat(sourcePath);
+		} catch {
+			logWarn(`Agent file not found: ${sourcePath}`);
+			return;
+		}
+		if (!stat.isFile()) {
+			logWarn(`Agent path is not a file: ${sourcePath}`);
+			return;
+		}
 
-    if (dryRun) {
-      logDry(`Copy: ${sourcePath} -> ${targetFile}`);
-      return;
-    }
+		if (dryRun) {
+			logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+			return;
+		}
 
-    await fs.mkdir(targetDir, { recursive: true });
-    await fs.copyFile(sourcePath, targetFile);
-    logInfo(`Copied: ${displayName}.md`);
+		await fs.mkdir(targetDir, { recursive: true });
+		await fs.copyFile(sourcePath, targetFile);
+		logInfo(`Copied: ${displayName}.md`);
 
-    // Translate frontmatter for OpenCode compatibility (P2-5: pass modelMap)
-    try {
-      const content = await fs.readFile(targetFile, "utf-8");
-      const translated = translateAgentFrontmatter(content, modelMap);
-      await fs.writeFile(targetFile, translated, "utf-8");
-    } catch {
-      logWarn(`Failed to translate frontmatter for: ${sourcePath}. Copying as-is.`);
-      await fs.copyFile(sourcePath, targetFile);
-    }
+		// Translate frontmatter for OpenCode compatibility (P2-5: pass modelMap)
+		try {
+			const content = await fs.readFile(targetFile, "utf-8");
+			const translated = translateAgentFrontmatter(content, modelMap);
+			await fs.writeFile(targetFile, translated, "utf-8");
+		} catch {
+			logWarn(`Failed to translate frontmatter for: ${sourcePath}. Copying as-is.`);
+			await fs.copyFile(sourcePath, targetFile);
+		}
 
-    // add-skills not supported — log if provided
-    if (addSkills && addSkills.length > 0) {
-      logInfo(
-        `OpenCode does not support add-skills. Skipping add-skills for: ${displayName}`,
-      );
-    }
-  },
+		// add-skills not supported — log if provided
+		if (addSkills && addSkills.length > 0) {
+			logInfo(`OpenCode does not support add-skills. Skipping add-skills for: ${displayName}`);
+		}
+	},
 
-  async syncCommandsDirect(
-    targetPath: string,
-    displayName: string,
-    sourcePath: string,
-    dryRun?: boolean,
-  ): Promise<void> {
-    const targetDir = path.join(targetPath, ".opencode", "commands");
-    const targetFile = path.join(targetDir, `${displayName}.md`);
+	async syncCommandsDirect(
+		targetPath: string,
+		displayName: string,
+		sourcePath: string,
+		dryRun?: boolean,
+	): Promise<void> {
+		const targetDir = path.join(targetPath, ".opencode", "commands");
+		const targetFile = path.join(targetDir, `${displayName}.md`);
 
-    let stat;
-    try { stat = await fs.stat(sourcePath); } catch { logWarn(`Command file not found: ${sourcePath}`); return; }
-    if (!stat.isFile()) { logWarn(`Command path is not a file: ${sourcePath}`); return; }
+		let stat;
+		try {
+			stat = await fs.stat(sourcePath);
+		} catch {
+			logWarn(`Command file not found: ${sourcePath}`);
+			return;
+		}
+		if (!stat.isFile()) {
+			logWarn(`Command path is not a file: ${sourcePath}`);
+			return;
+		}
 
-    if (dryRun) {
-      logDry(`Copy: ${sourcePath} -> ${targetFile}`);
-      return;
-    }
+		if (dryRun) {
+			logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+			return;
+		}
 
-    await fs.mkdir(targetDir, { recursive: true });
-    await fs.copyFile(sourcePath, targetFile);
-    logInfo(`Copied: ${displayName}.md`);
-  },
+		await fs.mkdir(targetDir, { recursive: true });
+		await fs.copyFile(sourcePath, targetFile);
+		logInfo(`Copied: ${displayName}.md`);
+	},
 
-  async syncSkillsDirect(
-    targetPath: string,
-    displayName: string,
-    sourcePath: string,
-    dryRun?: boolean,
-  ): Promise<void> {
-    const targetDir = path.join(targetPath, ".opencode", "skills");
-    const targetSkillDir = path.join(targetDir, displayName);
+	async syncSkillsDirect(
+		targetPath: string,
+		displayName: string,
+		sourcePath: string,
+		dryRun?: boolean,
+	): Promise<void> {
+		const targetDir = path.join(targetPath, ".opencode", "skills");
+		const targetSkillDir = path.join(targetDir, displayName);
 
-    try {
-      const stat = await fs.stat(sourcePath);
-      if (!stat.isDirectory()) {
-        logWarn(`Skill directory not found: ${sourcePath}`);
-        return;
-      }
-    } catch {
-      logWarn(`Skill directory not found: ${sourcePath}`);
-      return;
-    }
+		try {
+			const stat = await fs.stat(sourcePath);
+			if (!stat.isDirectory()) {
+				logWarn(`Skill directory not found: ${sourcePath}`);
+				return;
+			}
+		} catch {
+			logWarn(`Skill directory not found: ${sourcePath}`);
+			return;
+		}
 
-    if (dryRun) {
-      logDry(`Copy (directory): ${sourcePath} -> ${targetSkillDir}`);
-      return;
-    }
+		if (dryRun) {
+			logDry(`Copy (directory): ${sourcePath} -> ${targetSkillDir}`);
+			return;
+		}
 
-    await fs.mkdir(targetDir, { recursive: true });
-    await syncDirectory(sourcePath, targetSkillDir);
-    logInfo(`Copied: ${displayName}/`);
-  },
+		await fs.mkdir(targetDir, { recursive: true });
+		await syncDirectory(sourcePath, targetSkillDir);
+		logInfo(`Copied: ${displayName}/`);
+	},
 
-  async syncScriptsDirect(
-    targetPath: string,
-    displayName: string,
-    sourcePath: string,
-    dryRun?: boolean,
-  ): Promise<void> {
-    const targetDir = path.join(targetPath, ".opencode", "scripts");
+	async syncScriptsDirect(
+		targetPath: string,
+		displayName: string,
+		sourcePath: string,
+		dryRun?: boolean,
+	): Promise<void> {
+		const targetDir = path.join(targetPath, ".opencode", "scripts");
 
-    let isDir = false;
-    let exists = true;
-    try {
-      const stat = await fs.stat(sourcePath);
-      isDir = stat.isDirectory();
-    } catch {
-      exists = false;
-    }
+		let isDir = false;
+		let exists = true;
+		try {
+			const stat = await fs.stat(sourcePath);
+			isDir = stat.isDirectory();
+		} catch {
+			exists = false;
+		}
 
-    if (!exists) {
-      logWarn(`Script not found: ${sourcePath}`);
-      return;
-    }
+		if (!exists) {
+			logWarn(`Script not found: ${sourcePath}`);
+			return;
+		}
 
-    if (isDir) {
-      const targetScriptDir = path.join(targetDir, displayName);
-      if (dryRun) {
-        logDry(`Copy (directory): ${sourcePath} -> ${targetScriptDir}/`);
-      } else {
-        await fs.mkdir(targetScriptDir, { recursive: true });
-        await syncDirectory(sourcePath, targetScriptDir);
-        logInfo(`Copied: ${displayName}/`);
-      }
-    } else {
-      const targetFile = path.join(targetDir, displayName);
-      if (dryRun) {
-        logDry(`Copy: ${sourcePath} -> ${targetFile}`);
-      } else {
-        await fs.mkdir(targetDir, { recursive: true });
-        await copyFile(sourcePath, targetFile);
-        logInfo(`Copied: ${displayName}`);
-      }
-    }
-  },
+		if (isDir) {
+			const targetScriptDir = path.join(targetDir, displayName);
+			if (dryRun) {
+				logDry(`Copy (directory): ${sourcePath} -> ${targetScriptDir}/`);
+			} else {
+				await fs.mkdir(targetScriptDir, { recursive: true });
+				await syncDirectory(sourcePath, targetScriptDir);
+				logInfo(`Copied: ${displayName}/`);
+			}
+		} else {
+			const targetFile = path.join(targetDir, displayName);
+			if (dryRun) {
+				logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+			} else {
+				await fs.mkdir(targetDir, { recursive: true });
+				await copyFile(sourcePath, targetFile);
+				logInfo(`Copied: ${displayName}`);
+			}
+		}
+	},
 
-  async syncRulesDirect(
-    targetPath: string,
-    displayName: string,
-    sourcePath: string,
-    dryRun?: boolean,
-  ): Promise<void> {
-    const targetDir = path.join(targetPath, ".opencode", "rules");
-    const targetFile = path.join(targetDir, `${displayName}.md`);
-    const configFile = path.join(targetPath, ".opencode", "opencode.json");
-    const globEntry = ".opencode/rules/*.md";
+	async syncRulesDirect(
+		targetPath: string,
+		displayName: string,
+		sourcePath: string,
+		dryRun?: boolean,
+	): Promise<void> {
+		const targetDir = path.join(targetPath, ".opencode", "rules");
+		const targetFile = path.join(targetDir, `${displayName}.md`);
+		const configFile = path.join(targetPath, ".opencode", "opencode.json");
+		const globEntry = ".opencode/rules/*.md";
 
-    let stat;
-    try { stat = await fs.stat(sourcePath); } catch { logWarn(`Rule file not found: ${sourcePath}`); return; }
-    if (!stat.isFile()) { logWarn(`Rule path is not a file: ${sourcePath}`); return; }
+		let stat;
+		try {
+			stat = await fs.stat(sourcePath);
+		} catch {
+			logWarn(`Rule file not found: ${sourcePath}`);
+			return;
+		}
+		if (!stat.isFile()) {
+			logWarn(`Rule path is not a file: ${sourcePath}`);
+			return;
+		}
 
-    if (dryRun) {
-      logDry(`Copy: ${sourcePath} -> ${targetFile}`);
-      logDry(`Ensure instructions glob in: ${configFile}`);
-      return;
-    }
+		if (dryRun) {
+			logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+			logDry(`Ensure instructions glob in: ${configFile}`);
+			return;
+		}
 
-    // Copy rule file
-    await fs.mkdir(targetDir, { recursive: true });
-    await fs.copyFile(sourcePath, targetFile);
-    logInfo(`Copied: ${displayName}.md`);
+		// Copy rule file
+		await fs.mkdir(targetDir, { recursive: true });
+		await fs.copyFile(sourcePath, targetFile);
+		logInfo(`Copied: ${displayName}.md`);
 
-    // Ensure opencode.json has instructions glob (idempotent)
-    const config = await readJsonFile(configFile);
+		// Ensure opencode.json has instructions glob (idempotent)
+		const config = await readJsonFile(configFile);
 
-    const instructions = Array.isArray(config["instructions"])
-      ? config["instructions"]
-      : [];
+		const instructions = Array.isArray(config["instructions"]) ? config["instructions"] : [];
 
-    if (!instructions.includes(globEntry)) {
-      config["instructions"] = [...instructions, globEntry];
-      await writeJsonFile(configFile, config);
-      if (instructions.length === 0) {
-        logInfo("Created: opencode.json with instructions glob");
-      } else {
-        logInfo("Updated: opencode.json instructions glob added");
-      }
-    }
-    // else: already present — idempotent, skip
-  },
+		if (!instructions.includes(globEntry)) {
+			config["instructions"] = [...instructions, globEntry];
+			await writeJsonFile(configFile, config);
+			if (instructions.length === 0) {
+				logInfo("Created: opencode.json with instructions glob");
+			} else {
+				logInfo("Updated: opencode.json instructions glob added");
+			}
+		}
+		// else: already present — idempotent, skip
+	},
 
-  async syncHooksDirect(
-    _targetPath: string,
-    displayName: string,
-    _sourcePath: string,
-    _dryRun?: boolean,
-  ): Promise<void> {
-    logWarn(`OpenCode does not support hooks. Skipping: ${displayName || "hook"}`);
-  },
+	async syncHooksDirect(
+		_targetPath: string,
+		displayName: string,
+		_sourcePath: string,
+		_dryRun?: boolean,
+	): Promise<void> {
+		logWarn(`OpenCode does not support hooks. Skipping: ${displayName || "hook"}`);
+	},
 
-  async syncPlatformYaml(
-    targetPath: string,
-    yaml: PlatformYaml,
-    dryRun: boolean,
-    _scope?: PluginScope,
-  ): Promise<PlatformConfigResult> {
-    const processedSections: string[] = [];
-    let modelMap: Record<string, string> | undefined;
+	async syncPlatformYaml(
+		targetPath: string,
+		yaml: PlatformYaml,
+		dryRun: boolean,
+		_scope?: PluginScope,
+	): Promise<PlatformConfigResult> {
+		const processedSections: string[] = [];
+		let modelMap: Record<string, string> | undefined;
 
-    // 1. model-map (must be processed before config)
-    if (yaml["model-map"] !== undefined && yaml["model-map"] !== null) {
-      modelMap = yaml["model-map"];
-      processedSections.push("model-map");
-    }
+		// 1. model-map (must be processed before config)
+		if (yaml["model-map"] !== undefined && yaml["model-map"] !== null) {
+			modelMap = yaml["model-map"];
+			processedSections.push("model-map");
+		}
 
-    // 2. config — apply model-map to model and small_model fields, then merge
-    if (yaml.config !== undefined && yaml.config !== null) {
-      const configObj = { ...yaml.config };
+		// 2. config — apply model-map to model and small_model fields, then merge
+		if (yaml.config !== undefined && yaml.config !== null) {
+			const configObj = { ...yaml.config };
 
-      if (modelMap) {
-        if (typeof configObj["model"] === "string") {
-          configObj["model"] = applyModelMap(modelMap, configObj["model"]);
-        }
-        if (typeof configObj["small_model"] === "string") {
-          configObj["small_model"] = applyModelMap(
-            modelMap,
-            configObj["small_model"],
-          );
-        }
-      }
+			if (modelMap) {
+				if (typeof configObj["model"] === "string") {
+					configObj["model"] = applyModelMap(modelMap, configObj["model"]);
+				}
+				if (typeof configObj["small_model"] === "string") {
+					configObj["small_model"] = applyModelMap(modelMap, configObj["small_model"]);
+				}
+			}
 
-      await syncConfig(targetPath, configObj, dryRun);
-      processedSections.push("config");
-    }
+			await syncConfig(targetPath, configObj, dryRun);
+			processedSections.push("config");
+		}
 
-    // 3. hooks — not supported, log and skip
-    if (yaml.hooks !== undefined && yaml.hooks !== null) {
-      logWarn("OpenCode does not support hooks. Skipping hooks section.");
-      processedSections.push("hooks");
-    }
+		// 3. hooks — not supported, log and skip
+		if (yaml.hooks !== undefined && yaml.hooks !== null) {
+			logWarn("OpenCode does not support hooks. Skipping hooks section.");
+			processedSections.push("hooks");
+		}
 
-    // 4. mcps — iterate items and merge each server
-    if (yaml.mcps !== undefined && yaml.mcps !== null) {
-      for (const [name, serverDef] of Object.entries(yaml.mcps)) {
-        await syncMcpsMerge(targetPath, name, serverDef, dryRun);
-      }
-      processedSections.push("mcps");
-    }
+		// 4. mcps — iterate items and merge each server
+		if (yaml.mcps !== undefined && yaml.mcps !== null) {
+			for (const [name, serverDef] of Object.entries(yaml.mcps)) {
+				await syncMcpsMerge(targetPath, name, serverDef, dryRun);
+			}
+			processedSections.push("mcps");
+		}
 
-    // 5. plugins — not supported, log and skip
-    if (yaml.plugins?.items !== undefined && yaml.plugins?.items !== null) {
-      logWarn("OpenCode does not support plugins. Skipping plugins section.");
-    }
+		// 5. plugins — not supported, log and skip
+		if (yaml.plugins?.items !== undefined && yaml.plugins?.items !== null) {
+			logWarn("OpenCode does not support plugins. Skipping plugins section.");
+		}
 
-    return { processedSections, modelMap };
-  },
+		return { processedSections, modelMap };
+	},
 };
 
 // =============================================================================
@@ -331,21 +345,21 @@ export const opencodeAdapter: PlatformAdapter = {
  * Deep merge configObj into .opencode/opencode.json (new values win on conflict).
  */
 export async function syncConfig(
-  targetPath: string,
-  configObj: Record<string, unknown>,
-  dryRun: boolean,
+	targetPath: string,
+	configObj: Record<string, unknown>,
+	dryRun: boolean,
 ): Promise<void> {
-  const configFile = path.join(targetPath, ".opencode", "opencode.json");
+	const configFile = path.join(targetPath, ".opencode", "opencode.json");
 
-  if (dryRun) {
-    logDry(`Config merge: ${JSON.stringify(configObj)} -> ${configFile}`);
-    return;
-  }
+	if (dryRun) {
+		logDry(`Config merge: ${JSON.stringify(configObj)} -> ${configFile}`);
+		return;
+	}
 
-  const current = await readJsonFile(configFile);
-  const merged = deepMerge(current, configObj);
-  await writeJsonFile(configFile, merged);
-  logInfo(`Config merged: ${configFile}`);
+	const current = await readJsonFile(configFile);
+	const merged = deepMerge(current, configObj);
+	await writeJsonFile(configFile, merged);
+	logInfo(`Config merged: ${configFile}`);
 }
 
 // =============================================================================
@@ -361,32 +375,30 @@ export async function syncConfig(
  * - If `command` is already an array and `type` is present: pass through as-is
  * - `env` field → renamed to `environment`
  */
-export function transformMcpServerDef(
-  serverDef: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...serverDef };
+export function transformMcpServerDef(serverDef: Record<string, unknown>): Record<string, unknown> {
+	const result: Record<string, unknown> = { ...serverDef };
 
-  // Transform command string + args array → type: "local", command: array
-  if (typeof result["command"] === "string" && Array.isArray(result["args"])) {
-    const cmd = result["command"];
-    const args = result["args"];
-    result["type"] = "local";
-    result["command"] = [cmd, ...args];
-    delete result["args"];
-  }
+	// Transform command string + args array → type: "local", command: array
+	if (typeof result["command"] === "string" && Array.isArray(result["args"])) {
+		const cmd = result["command"];
+		const args = result["args"];
+		result["type"] = "local";
+		result["command"] = [cmd, ...args];
+		delete result["args"];
+	}
 
-  // Rename env → environment
-  if ("env" in result) {
-    result["environment"] = result["env"];
-    delete result["env"];
-  }
+	// Rename env → environment
+	if ("env" in result) {
+		result["environment"] = result["env"];
+		delete result["env"];
+	}
 
-  return result;
+	return result;
 }
 
 /** Type guard: is `value` a plain JSON object (not an array, not null)? */
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -395,31 +407,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Removes stale top-level `env` key if present.
  */
 export async function syncMcpsMerge(
-  targetPath: string,
-  serverName: string,
-  serverDef: Record<string, unknown>,
-  dryRun: boolean,
+	targetPath: string,
+	serverName: string,
+	serverDef: Record<string, unknown>,
+	dryRun: boolean,
 ): Promise<void> {
-  const configFile = path.join(targetPath, ".opencode", "opencode.json");
-  const transformed = transformMcpServerDef(serverDef);
+	const configFile = path.join(targetPath, ".opencode", "opencode.json");
+	const transformed = transformMcpServerDef(serverDef);
 
-  if (dryRun) {
-    logDry(`MCP merge: ${serverName} -> ${configFile}`);
-    logDry(`Server config: ${JSON.stringify(transformed)}`);
-    return;
-  }
+	if (dryRun) {
+		logDry(`MCP merge: ${serverName} -> ${configFile}`);
+		logDry(`Server config: ${JSON.stringify(transformed)}`);
+		return;
+	}
 
-  const current = await readJsonFile(configFile);
-  const mcp: Record<string, unknown> = isRecord(current["mcp"]) ? current["mcp"] : {};
-  mcp[serverName] = transformed;
-  current["mcp"] = mcp;
+	const current = await readJsonFile(configFile);
+	const mcp: Record<string, unknown> = isRecord(current["mcp"]) ? current["mcp"] : {};
+	mcp[serverName] = transformed;
+	current["mcp"] = mcp;
 
-  // Remove stale top-level env key if present
-  if ("env" in current) {
-    delete current["env"];
-  }
+	// Remove stale top-level env key if present
+	if ("env" in current) {
+		delete current["env"];
+	}
 
-  await writeJsonFile(configFile, current);
-  logInfo(`MCP merged: ${serverName} -> ${configFile}`);
+	await writeJsonFile(configFile, current);
+	logInfo(`MCP merged: ${serverName} -> ${configFile}`);
 }
-

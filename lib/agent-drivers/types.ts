@@ -10,49 +10,49 @@
  */
 
 export type TerminalSignal =
-  | 'stop'              // model ended cleanly, deliverable expected
-  | 'tool-calls'        // opencode mid-step (more steps follow); claude tool_use; codex item.completed without turn.completed
-  | 'pause_turn'        // claude server-tool loop cap (theoretical for -p)
-  | 'error'             // explicit error event in stream
-  | 'unknown_pause';    // no terminal event seen; heuristic fallback
+	| "stop" // model ended cleanly, deliverable expected
+	| "tool-calls" // opencode mid-step (more steps follow); claude tool_use; codex item.completed without turn.completed
+	| "pause_turn" // claude server-tool loop cap (theoretical for -p)
+	| "error" // explicit error event in stream
+	| "unknown_pause"; // no terminal event seen; heuristic fallback
 
 export interface ParseResult {
-  sessionID: string | null;
-  terminal: TerminalSignal;
-  text: string;            // concatenated agent_message/text events only (NDJSON noise stripped)
-  rawEvents: unknown[];    // for events-turn-N.jsonl audit log
-  usage?: Record<string, number>; // token counts from turn.completed; undefined when no turn.completed seen
+	sessionID: string | null;
+	terminal: TerminalSignal;
+	text: string; // concatenated agent_message/text events only (NDJSON noise stripped)
+	rawEvents: unknown[]; // for events-turn-N.jsonl audit log
+	usage?: Record<string, number>; // token counts from turn.completed; undefined when no turn.completed seen
 }
 
 export interface InitialCommandOpts {
-  prompt: string;
-  baseCommand: string;
-  baseArgs: string[];
-  workerEnv: Record<string, string>;
+	prompt: string;
+	baseCommand: string;
+	baseArgs: string[];
+	workerEnv: Record<string, string>;
 }
 
 export interface ResumeCommandOpts {
-  sessionID: string;
-  prompt: string;
-  baseCommand: string;
-  baseArgs: string[];
-  workerEnv: Record<string, string>;
+	sessionID: string;
+	prompt: string;
+	baseCommand: string;
+	baseArgs: string[];
+	workerEnv: Record<string, string>;
 }
 
 export interface BuiltCommand {
-  program: string;
-  args: string[];
-  env: Record<string, string>;
+	program: string;
+	args: string[];
+	env: Record<string, string>;
 }
 
 export interface AgentDriver {
-  readonly cli: 'opencode' | 'claude' | 'codex';
-  initialCommand(opts: InitialCommandOpts): BuiltCommand;
-  resumeCommand(opts: ResumeCommandOpts): BuiltCommand;
-  parseStdout(stdout: string): ParseResult | null;  // null = parse failure → caller triggers multi_turn_degraded
+	readonly cli: "opencode" | "claude" | "codex";
+	initialCommand(opts: InitialCommandOpts): BuiltCommand;
+	resumeCommand(opts: ResumeCommandOpts): BuiltCommand;
+	parseStdout(stdout: string): ParseResult | null; // null = parse failure → caller triggers multi_turn_degraded
 }
 
-export type CliType = 'opencode' | 'claude' | 'codex' | 'gemini' | 'unknown';
+export type CliType = "opencode" | "claude" | "codex" | "gemini" | "unknown";
 
 /**
  * Factory returning the driver for a detected CLI type, or null when no driver
@@ -63,15 +63,15 @@ export type CliType = 'opencode' | 'claude' | 'codex' | 'gemini' | 'unknown';
  * Drivers will be registered here by their implementing modules.
  */
 export function pickDriver(cliType: CliType): AgentDriver | null {
-  // Drivers register themselves by importing this module and pushing into REGISTRY.
-  // For now (T2-only land), the registry is empty.
-  const driver = REGISTRY.get(cliType);
-  return driver ?? null;
+	// Drivers register themselves by importing this module and pushing into REGISTRY.
+	// For now (T2-only land), the registry is empty.
+	const driver = REGISTRY.get(cliType);
+	return driver ?? null;
 }
 
 const REGISTRY = new Map<CliType, AgentDriver>();
 
 /** Registration helper for driver modules to call at module load time. */
 export function registerDriver(cliType: CliType, driver: AgentDriver): void {
-  REGISTRY.set(cliType, driver);
+	REGISTRY.set(cliType, driver);
 }
