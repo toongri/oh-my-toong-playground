@@ -18,7 +18,6 @@ import type {
   Platform,
   Category,
   PlatformYaml,
-  SyncItem,
   SyncYaml,
   SyncContext,
   PluginScope,
@@ -35,7 +34,7 @@ import { generateBackupSessionId, backupCategory, cleanupOldBackups } from "./li
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
-import { syncDirectory, rewriteLibImports } from "./lib/sync-directory.ts";
+import { rewriteLibImports } from "./lib/sync-directory.ts";
 import {
   collectRequiredLibModulesFromSources,
   collectLibDataFiles,
@@ -101,12 +100,12 @@ export function deploysToClaudeDotDir(
 ): boolean {
   const hasComponentSections = CATEGORIES.some((cat) => {
     const section = syncYamlData[cat];
-    if (section == null || typeof section !== "object") return false;
-    const items = (section as Record<string, unknown>)["items"];
+    if (section === null || section === undefined || typeof section !== "object") return false;
+    const items = "items" in section ? section.items : undefined;
     return Array.isArray(items) && items.length > 0;
   });
   const hasClaudeDotFileDeploy =
-    parsedClaudeYaml != null && Object.keys(parsedClaudeYaml).some((k) => k !== "mcps");
+    parsedClaudeYaml !== null && Object.keys(parsedClaudeYaml).some((k) => k !== "mcps");
   return hasComponentSections || hasClaudeDotFileDeploy;
 }
 
@@ -142,9 +141,7 @@ export async function syncCategory(
   deployRoot: string,
   libSourceRoots?: LibSourceRoots,
 ): Promise<void> {
-  const section = syncYaml[category as keyof SyncYaml] as
-    | { platforms?: Platform[]; items?: SyncItem[] }
-    | undefined;
+  const section = syncYaml[category];
   if (!section || !Array.isArray(section.items) || section.items.length === 0) {
     return;
   }
@@ -197,7 +194,7 @@ export async function syncCategory(
       if (!Array.isArray(rawSkillsValue)) {
         logWarn(`add-skills must be an array, got ${typeof rawSkillsValue}. Skipping.`);
       } else {
-        const rawSkills = rawSkillsValue as string[];
+        const rawSkills = rawSkillsValue;
         const resolvedSkills: string[] = [];
         for (const skillRef of rawSkills) {
           const skillResolved = resolveComponentPath(
@@ -225,10 +222,10 @@ export async function syncCategory(
       if (!Array.isArray(rawHooksValue)) {
         logWarn(`add-hooks must be an array, got ${typeof rawHooksValue}. Skipping.`);
       } else {
-        const rawHooks = rawHooksValue as Array<Record<string, unknown>>;
+        const rawHooks = rawHooksValue;
         const resolvedHooks: Array<Record<string, unknown>> = [];
         for (const hook of rawHooks) {
-          const hookComponent = (hook["component"] as string | undefined) ?? "";
+          const hookComponent = hook.component ?? "";
           if (!hookComponent) {
             // No component field — pass through as-is (command: field hooks)
             resolvedHooks.push(hook);
@@ -273,8 +270,14 @@ export async function syncCategory(
       if (libSourceRoots) {
         addLibSourceRoot(libSourceRoots, platform, sourcePath);
         if (category === "agents" && Array.isArray(addHooks)) {
-          for (const hook of addHooks as Array<{ source_path?: string }>) {
-            if (typeof hook.source_path === "string" && hook.source_path) {
+          for (const hook of addHooks) {
+            if (
+              typeof hook === "object" &&
+              hook !== null &&
+              "source_path" in hook &&
+              typeof hook.source_path === "string" &&
+              hook.source_path
+            ) {
               addLibSourceRoot(libSourceRoots, platform, hook.source_path);
             }
           }
@@ -386,7 +389,7 @@ export async function syncPlatformConfigs(
     const parsedYaml: PlatformYaml = merged;
 
     // Pre-resolve hook component paths before passing to adapter
-    if (parsedYaml.hooks != null) {
+    if (parsedYaml.hooks !== null && parsedYaml.hooks !== undefined) {
       const hooksMap = parsedYaml.hooks;
       for (const [hookEvent, items] of Object.entries(hooksMap)) {
         if (!Array.isArray(items)) continue;
@@ -418,26 +421,23 @@ export async function syncPlatformConfigs(
       }
     }
 
-    try {
-      const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
-      const result = await adapter.syncPlatformYaml(targetPath, parsedYaml, context.dryRun, pluginScope);
+    // No local try/catch here: any error from syncPlatformYaml propagates
+    // straight to the per-worktree catch in processYaml, which records this
+    // deploy root in failedTargets so the CLI exits non-zero. A swallowed
+    // config/hooks/plugins error meant a worktree's .claude was silently left
+    // unsynced while the run reported success — the warn-and-continue here
+    // was a pre-fan-out relic. (ProjectKeyError also propagates for the same
+    // reason — a local MCP not written to ~/.claude.json.)
+    const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
+    const result = await adapter.syncPlatformYaml(targetPath, parsedYaml, context.dryRun, pluginScope);
 
-      if (result.processedSections.length > 0) {
-        context.platformYamlSections.set(platform, result.processedSections);
-        logInfo(`${platform}.yaml 처리 완료: ${result.processedSections.join(", ")}`);
-      }
+    if (result.processedSections.length > 0) {
+      context.platformYamlSections.set(platform, result.processedSections);
+      logInfo(`${platform}.yaml 처리 완료: ${result.processedSections.join(", ")}`);
+    }
 
-      if (result.modelMap) {
-        context.modelMaps.set(platform, result.modelMap);
-      }
-    } catch (err) {
-      // Rethrow so the per-worktree catch in processYaml records this deploy root
-      // in failedTargets and the CLI exits non-zero. A swallowed config/hooks/
-      // plugins error meant a worktree's .claude was silently left unsynced while
-      // the run reported success — the warn-and-continue here was a pre-fan-out
-      // relic. (ProjectKeyError is rethrown for the same reason — a local MCP not
-      // written to ~/.claude.json.)
-      throw err;
+    if (result.modelMap) {
+      context.modelMaps.set(platform, result.modelMap);
     }
   }
 }
@@ -497,7 +497,7 @@ async function collectTsFiles(dir: string): Promise<string[]> {
   const results: string[] = [];
   let entries: import("fs").Dirent[];
   try {
-    entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
+    entries = await fs.readdir(dir, { withFileTypes: true });
   } catch {
     return results;
   }
@@ -664,7 +664,7 @@ export async function syncLib(
       const libOld = path.join(platformDir, `lib.old-${suffix}`);
 
       // Remove any leftover temp dirs from prior crashed runs.
-      const platformEntries = await fs.readdir(platformDir).catch(() => [] as string[]);
+      const platformEntries = await fs.readdir(platformDir).catch(() => []);
       for (const entry of platformEntries) {
         if (entry.startsWith("lib.tmp-") || entry.startsWith("lib.old-")) {
           await fs.rm(path.join(platformDir, entry), { recursive: true, force: true }).catch(
@@ -788,7 +788,7 @@ async function collectMdFiles(dir: string): Promise<string[]> {
   const results: string[] = [];
   let entries: import("fs").Dirent[];
   try {
-    entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
+    entries = await fs.readdir(dir, { withFileTypes: true });
   } catch {
     return results;
   }
@@ -874,7 +874,7 @@ export async function processYaml(
   let syncYaml: SyncYaml;
   try {
     const result = await readAndExpandSyncYaml(syncYamlPath);
-    if (result == null) {
+    if (result === null) {
       logWarn(`YAML이 비어 있거나 유효한 객체가 아님: ${syncYamlPath}`);
       return;
     }
@@ -913,12 +913,12 @@ export async function processYaml(
 
   // Resolve platforms for lib sync using the full cascade (item, section, syncYaml,
   // feature-platforms.lib, use-platforms, hardcoded ["claude"]).
-  const libPlatforms = await resolvePlatforms({} as SyncItem, undefined, syncYaml.platforms, "lib");
+  const libPlatforms = await resolvePlatforms({ component: "" }, undefined, syncYaml.platforms, "lib");
 
   // Parse claude.yaml once (it is colocated with sync.yaml in yamlDir, shared by
   // every worktree) so the per-worktree mkdir gate need not re-read it.
   const claudeYaml = await parseAndMergePlatformYaml(yamlDir, "claude");
-  const shouldMkdirClaude = deploysToClaudeDotDir(syncYaml as Record<string, unknown>, claudeYaml);
+  const shouldMkdirClaude = deploysToClaudeDotDir(syncYaml, claudeYaml);
 
   // Fan-out (D-1): a bare-structure container deploys into EVERY linked
   // worktree's .claude/; a plain path resolves to [path] (today's behavior).
@@ -974,7 +974,8 @@ export async function processYaml(
       context.backupRoots.add(deployRoot);
 
       // Rewrite platform paths for non-claude platforms
-      for (const platform of (["gemini", "codex", "opencode"] as Platform[])) {
+      const nonClaudePlatforms: Platform[] = ["gemini", "codex", "opencode"];
+      for (const platform of nonClaudePlatforms) {
         const platformDir = path.join(deployRoot, `.${platform}`);
         if (existsSync(platformDir)) {
           if (context.dryRun) {
@@ -1125,7 +1126,7 @@ export async function runProjectsLoop(
       let syncYaml: SyncYaml;
       try {
         const result = await readAndExpandSyncYaml(projectSyncYaml);
-        if (result == null) continue;
+        if (result === null) continue;
         syncYaml = result;
       } catch {
         continue;
