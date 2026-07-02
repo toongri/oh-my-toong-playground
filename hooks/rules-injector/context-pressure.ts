@@ -48,8 +48,9 @@ export function transcriptHasContextPressureMarker(transcriptPath: string | null
 		const afterMarkerLine = newlineIdx === -1 ? "" : afterMarkerChar.slice(newlineIdx + 1);
 		const hasNewActivity = afterMarkerLine.split("\n").some((line) => line.trim().length > 0);
 		return !hasNewActivity;
-	} catch (error) {
-		if (error instanceof Error) return false;
-		throw error;
+	} catch {
+		// Never-throw contract (advisory L2): a missing or unreadable transcript must
+		// not propagate — treat it as "no pressure marker" and let injection proceed.
+		return false;
 	}
 }

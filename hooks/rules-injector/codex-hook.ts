@@ -331,6 +331,10 @@ export async function runPostToolUseHook(
 	return output;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * D-2 merge seam: runStaticInjection always returns a fully wrapped hook JSON
  * envelope (or ""), which is its correct contract for its other two callers
@@ -342,8 +346,14 @@ export async function runPostToolUseHook(
 function extractAdditionalContext(wrappedOutput: string): string {
 	if (wrappedOutput.length === 0) return "";
 	try {
-		const parsed = JSON.parse(wrappedOutput) as { hookSpecificOutput?: { additionalContext?: string } };
-		return parsed.hookSpecificOutput?.additionalContext ?? "";
+		const parsed: unknown = JSON.parse(wrappedOutput);
+		if (isRecord(parsed)) {
+			const inner = parsed["hookSpecificOutput"];
+			if (isRecord(inner) && typeof inner["additionalContext"] === "string") {
+				return inner["additionalContext"];
+			}
+		}
+		return "";
 	} catch (error) {
 		// A non-empty, non-JSON result here means runStaticInjection's envelope contract
 		// (fully wrapped hook JSON or "") broke — swallowing that silently would mask a

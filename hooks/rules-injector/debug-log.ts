@@ -9,10 +9,10 @@ type DebugFieldValue = boolean | number | string | null;
 type DebugFields = Record<string, DebugFieldValue>;
 
 const debug = debuglog("codex-rules");
-const noopTimer: HookDebugTimer = {
+const noopTimer = {
 	lap: () => {},
 	done: () => {},
-};
+} as const satisfies HookDebugTimer;
 
 export interface HookDebugTimer {
 	lap(phase: string, fields?: DebugFields): void;
