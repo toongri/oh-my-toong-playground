@@ -32,6 +32,25 @@ import { pickDriver, type CliType } from './agent-drivers/types';
 import { resumeOneTurn, runOnce, splitCommand, type RunOneTurnOpts, type OneTurnResult } from './worker-utils';
 
 // ---------------------------------------------------------------------------
+// Internal narrowing helpers (not exported — safe to type precisely)
+// ---------------------------------------------------------------------------
+
+/** Narrow an unknown JSON-decoded value to a plain object for safe property access. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** Parse a status/job-meta timestamp field to epoch ms; NaN for anything not string|number. */
+function toEpochMs(value: unknown): number {
+  return typeof value === 'string' || typeof value === 'number' ? new Date(value).getTime() : NaN;
+}
+
+/** Narrow detectCliType's loose `string` result to the CliType union pickDriver expects. */
+function isCliType(value: string): value is CliType {
+  return value === 'opencode' || value === 'claude' || value === 'codex' || value === 'gemini' || value === 'unknown';
+}
+
+// ---------------------------------------------------------------------------
 // JobConfig type
 // ---------------------------------------------------------------------------
 
@@ -58,13 +77,16 @@ export interface JobConfig {
 
 export interface CmdResultsHooks {
   /** Extra top-level fields to add to JSON output (e.g., specName, prompt) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public hook signature (consumer-facing); narrowing would break existing hook implementations across consumers
   extraTopLevel?: (jobDir: string, jobMeta: any) => Record<string, unknown>;
   /** Extra per-member fields. Receives the raw member object (includes stderr, output, safeName, all status.json fields). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public hook signature (consumer-facing); narrowing would break existing hook implementations across consumers
   extraMemberFields?: (rawMember: any) => Record<string, unknown>;
 }
 
 export interface CmdWaitHooks {
   /** Transform the wait payload before output (e.g., add specName) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public hook signature (consumer-facing); narrowing would break existing hook implementations across consumers
   transformPayload?: (payload: any) => any;
   /** Override default timeout-ms (framework default: 600000). Set 0 for infinite. */
   defaultTimeoutMs?: number;
@@ -197,15 +219,15 @@ export function gcStaleJobs(jobsDir: string, config: JobConfig): void {
       const isUnder = !relative.startsWith('..') && !path.isAbsolute(relative);
       if (!isUnder) continue;
 
-      let jobMeta: any;
+      let jobMeta: unknown;
       try {
         jobMeta = readJsonIfExists(path.join(candidatePath, 'job.json'));
       } catch {
         continue;
       }
-      if (!jobMeta || !(jobMeta as any).createdAt) continue;
+      if (!isRecord(jobMeta) || !jobMeta.createdAt) continue;
 
-      const createdAtMs = new Date((jobMeta as any).createdAt).getTime();
+      const createdAtMs = toEpochMs(jobMeta.createdAt);
       if (Number.isNaN(createdAtMs)) continue;
 
       const age = Date.now() - createdAtMs;
@@ -230,6 +252,7 @@ export function spawnWorkers({
   timeoutSec,
   config,
 }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported signature; entity shape is consumer-defined YAML-derived data
   entities: any[];
   workerPath: string;
   jobDir: string;
@@ -315,34 +338,38 @@ export async function computeStatus(
   chairmanRole: string | null;
   overallState: string;
   counts: Record<string, number>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported return type; members shape is intentionally loose for downstream JSON serialization
   members: any[];
 }> {
   const resolvedJobDir = path.resolve(jobDir);
   if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
 
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
-  if (!jobMeta) exitWithError(`job.json not found: ${path.join(resolvedJobDir, 'job.json')}`);
+  const jobMetaRaw = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
+  if (!isRecord(jobMetaRaw)) exitWithError(`job.json not found: ${path.join(resolvedJobDir, 'job.json')}`);
+  const jobMeta = jobMetaRaw;
 
   const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
   if (!fs.existsSync(entitiesRoot)) exitWithError(`${config.entityDirName} folder not found: ${entitiesRoot}`);
 
   // Staleness threshold: Math.max(2 * timeoutSec, 120) seconds
-  const timeoutSec = (jobMeta.settings && Number.isFinite(Number(jobMeta.settings.timeoutSec)))
-    ? Number(jobMeta.settings.timeoutSec)
+  const jobSettings = isRecord(jobMeta.settings) ? jobMeta.settings : undefined;
+  const timeoutSec = (jobSettings && Number.isFinite(Number(jobSettings.timeoutSec)))
+    ? Number(jobSettings.timeoutSec)
     : 0;
   const stalenessThresholdMs = Math.max(2 * timeoutSec, 120) * 1000;
 
-  const members: any[] = [];
+  const members: Record<string, unknown>[] = [];
   for (const entry of fs.readdirSync(entitiesRoot)) {
     const statusPath = path.join(entitiesRoot, entry, 'status.json');
-    let status = readJsonIfExists(statusPath) as any;
-    if (!status) continue;
+    const statusRaw = readJsonIfExists(statusPath);
+    if (!isRecord(statusRaw)) continue;
+    let status: Record<string, unknown> = statusRaw;
 
     // Staleness check for queued entities
     if (status.state === 'queued') {
       let queuedTs: number;
       if (status.queuedAt) {
-        queuedTs = new Date(status.queuedAt).getTime();
+        queuedTs = toEpochMs(status.queuedAt);
       } else {
         // Fallback to file mtime
         try { queuedTs = fs.statSync(statusPath).mtimeMs; } catch { queuedTs = Date.now(); }
@@ -351,8 +378,8 @@ export async function computeStatus(
       if (elapsed > stalenessThresholdMs) {
         // CAS pattern: sleep then re-read to avoid race with worker startup
         await sleepMs(250);
-        const recheck = readJsonIfExists(statusPath) as any;
-        if (recheck && recheck.state === 'queued') {
+        const recheck = readJsonIfExists(statusPath);
+        if (isRecord(recheck) && recheck.state === 'queued') {
           const errorPayload = {
             ...recheck,
             state: 'error',
@@ -360,7 +387,7 @@ export async function computeStatus(
           };
           atomicWriteJson(statusPath, errorPayload);
           status = errorPayload;
-        } else if (recheck) {
+        } else if (isRecord(recheck)) {
           status = recheck;
         }
       }
@@ -368,17 +395,17 @@ export async function computeStatus(
 
     // Staleness check for running entities (heartbeat-based)
     if (status.state === 'running') {
-      let isStale = false;
+      let isStale: boolean;
       let startTs: number;
       if (status.lastHeartbeat) {
         // heartbeat present: stale if older than HEARTBEAT_STALE_THRESHOLD_MS
-        const heartbeatAge = Date.now() - new Date(status.lastHeartbeat).getTime();
+        const heartbeatAge = Date.now() - toEpochMs(status.lastHeartbeat);
         isStale = heartbeatAge > HEARTBEAT_STALE_THRESHOLD_MS;
-        startTs = new Date(status.lastHeartbeat).getTime();
+        startTs = toEpochMs(status.lastHeartbeat);
       } else {
         // no heartbeat yet: grace period based on startedAt or file mtime
         if (status.startedAt) {
-          startTs = new Date(status.startedAt).getTime();
+          startTs = toEpochMs(status.startedAt);
         } else {
           try { startTs = fs.statSync(statusPath).mtimeMs; } catch { startTs = Date.now(); }
         }
@@ -388,14 +415,14 @@ export async function computeStatus(
       if (isStale) {
         // CAS pattern: sleep then re-read to avoid race with legitimate completion
         await sleepMs(250);
-        const recheck = readJsonIfExists(statusPath) as any;
-        if (recheck && recheck.state === 'running') {
+        const recheck = readJsonIfExists(statusPath);
+        if (isRecord(recheck) && recheck.state === 'running') {
           // Recompute elapsed using recheck fields (post-CAS)
           let recheckStartTs: number;
           if (recheck.lastHeartbeat) {
-            recheckStartTs = new Date(recheck.lastHeartbeat).getTime();
+            recheckStartTs = toEpochMs(recheck.lastHeartbeat);
           } else if (recheck.startedAt) {
-            recheckStartTs = new Date(recheck.startedAt).getTime();
+            recheckStartTs = toEpochMs(recheck.startedAt);
           } else {
             try { recheckStartTs = fs.statSync(statusPath).mtimeMs; } catch { recheckStartTs = startTs; }
           }
@@ -409,7 +436,7 @@ export async function computeStatus(
           };
           atomicWriteJson(statusPath, errorPayload);
           status = errorPayload;
-        } else if (recheck) {
+        } else if (isRecord(recheck)) {
           status = recheck;
         }
       }
@@ -438,8 +465,8 @@ export async function computeStatus(
 
   return {
     jobDir: resolvedJobDir,
-    id: jobMeta.id || null,
-    chairmanRole: jobMeta.chairmanRole || null,
+    id: typeof jobMeta.id === 'string' ? jobMeta.id : null,
+    chairmanRole: typeof jobMeta.chairmanRole === 'string' ? jobMeta.chairmanRole : null,
     overallState,
     counts: { total: members.length, ...totals },
     members: members
@@ -448,7 +475,7 @@ export async function computeStatus(
         state: r.state,
         startedAt: r.startedAt || null,
         finishedAt: r.finishedAt || null,
-        exitCode: r.exitCode != null ? r.exitCode : null,
+        exitCode: r.exitCode !== undefined && r.exitCode !== null ? r.exitCode : null,
         message: r.message || null,
       }))
       .sort((a, b) => String(a.member).localeCompare(String(b.member))),
@@ -475,12 +502,15 @@ export function buildUiPayload(
   statusPayload: {
     overallState?: string;
     counts?: Record<string, number>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported signature; members come straight from computeStatus's loose members: any[]
     members?: any[];
   },
   config: JobConfig,
 ): {
   progress: { done: number; total: number; overallState: string };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported return type (codex update_plan / claude todo_write consumer contract)
   codex: { update_plan: { plan: any[] } };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported return type (codex update_plan / claude todo_write consumer contract)
   claude: { todo_write: { todos: any[] } };
 } {
   const counts = statusPayload.counts || {};
@@ -494,9 +524,9 @@ export function buildUiPayload(
   const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
   const sortedMembers = membersArray
     .map((r) => ({
-      entity: r && r.member != null ? String(r.member) : '',
-      state: r && r.state != null ? String(r.state) : 'unknown',
-      exitCode: r && r.exitCode != null ? r.exitCode : null,
+      entity: r && r.member !== undefined && r.member !== null ? String(r.member) : '',
+      state: r && r.state !== undefined && r.state !== null ? String(r.state) : 'unknown',
+      exitCode: r && r.exitCode !== undefined && r.exitCode !== null ? r.exitCode : null,
     }))
     .filter((r) => r.entity)
     .sort((a, b) => a.entity.localeCompare(b.entity));
@@ -567,7 +597,7 @@ export function buildUiPayload(
 // Wait payload (internal helper)
 // ---------------------------------------------------------------------------
 
-function asWaitPayload(statusPayload: any, config: JobConfig): any {
+function asWaitPayload(statusPayload: Awaited<ReturnType<typeof computeStatus>>, config: JobConfig): Record<string, unknown> {
   const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
 
   return {
@@ -576,10 +606,10 @@ function asWaitPayload(statusPayload: any, config: JobConfig): any {
     chairmanRole: statusPayload.chairmanRole,
     overallState: statusPayload.overallState,
     counts: statusPayload.counts,
-    [config.entityPlural]: membersArray.map((r: any) => ({
+    [config.entityPlural]: membersArray.map((r) => ({
       member: r.member,
       state: r.state,
-      exitCode: r.exitCode != null ? r.exitCode : null,
+      exitCode: r.exitCode !== undefined && r.exitCode !== null ? r.exitCode : null,
       message: r.message || null,
     })),
     ui: buildUiPayload(statusPayload, config),
@@ -593,25 +623,29 @@ function asWaitPayload(statusPayload: any, config: JobConfig): any {
 export function buildManifest(
   jobDir: string,
   config: JobConfig,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported return type; manifest entity shape is intentionally loose for downstream JSON serialization
 ): { id: string; [key: string]: any } {
   const resolvedJobDir = path.resolve(jobDir);
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
+  const jobMetaRaw = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
+  const jobMeta = isRecord(jobMetaRaw) ? jobMetaRaw : undefined;
   const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
 
-  const jobId = jobMeta ? jobMeta.id : 'unknown';
-  const entities: any[] = [];
+  const jobId = jobMeta && typeof jobMeta.id === 'string' ? jobMeta.id : 'unknown';
+  const entities: Record<string, unknown>[] = [];
   if (fs.existsSync(entitiesRoot)) {
     for (const entry of fs.readdirSync(entitiesRoot)) {
       const statusPath = path.join(entitiesRoot, entry, 'status.json');
-      const status = readJsonIfExists(statusPath) as any;
-      if (!status) continue;
+      const status = readJsonIfExists(statusPath);
+      if (!isRecord(status)) continue;
       const outputPath = path.join(entitiesRoot, entry, 'output.txt');
       const outputExists = fs.existsSync(outputPath);
-      const isReadable = status.state === 'done' && (status.size_bytes ?? Infinity) > 0;
+      const sizeBytes = typeof status.size_bytes === 'number' ? status.size_bytes : undefined;
+      const isReadable = status.state === 'done' && (sizeBytes ?? Infinity) > 0;
+      const statusError = isRecord(status.error) ? status.error : undefined;
       entities.push({
         member: status.member,
         outputFilePath: outputExists && isReadable ? outputPath : null,
-        errorMessage: outputExists && isReadable ? null : (status.message || status.error?.type || status.error?.message || status.state),
+        errorMessage: outputExists && isReadable ? null : (status.message || statusError?.type || statusError?.message || status.state),
         size_bytes: status.size_bytes ?? null,
         attempts: status.attempts ?? null,
         error: status.error ?? null,
@@ -623,8 +657,8 @@ export function buildManifest(
   return {
     id: jobId,
     [config.entityPlural]: entities
-      .map(({ _safeName, ...rest }: any) => rest)
-      .sort((a: any, b: any) => String(a.member).localeCompare(String(b.member))),
+      .map(({ _safeName, ...rest }) => rest)
+      .sort((a, b) => String(a.member).localeCompare(String(b.member))),
   };
 }
 
@@ -641,23 +675,24 @@ export async function cmdWait(
   const resolvedJobDir = path.resolve(jobDir);
   const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
   const prevCursorRaw =
-    options.cursor != null
+    options.cursor !== undefined && options.cursor !== null
       ? String(options.cursor)
       : fs.existsSync(cursorFilePath)
         ? String(fs.readFileSync(cursorFilePath, 'utf8')).trim()
         : '';
   const prevCursor = parseWaitCursor(prevCursorRaw);
 
-  const intervalMsRaw = options['interval-ms'] != null ? options['interval-ms'] : 250;
+  const intervalMsRaw = options['interval-ms'] !== undefined && options['interval-ms'] !== null ? options['interval-ms'] : 250;
   const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
 
   const defaultTimeout = hooks?.defaultTimeoutMs ?? 600000;
-  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : defaultTimeout;
+  const timeoutMsRaw = options['timeout-ms'] !== undefined && options['timeout-ms'] !== null ? options['timeout-ms'] : defaultTimeout;
   const timeoutMs = Math.trunc(Number(timeoutMsRaw));
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
 
-  const applyHook = (p: any) => hooks?.transformPayload ? hooks.transformPayload(p) : p;
+  const applyHook = (p: Record<string, unknown>): Record<string, unknown> =>
+    hooks?.transformPayload ? hooks.transformPayload(p) : p;
 
   let payload = await computeStatus(jobDir, config);
   const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
@@ -718,17 +753,18 @@ export function cmdResults(
   hooks?: CmdResultsHooks,
 ): void {
   const resolvedJobDir = path.resolve(jobDir);
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
+  const jobMetaRaw = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
+  const jobMeta = isRecord(jobMetaRaw) ? jobMetaRaw : undefined;
   const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
 
-  const reviewers: any[] = [];
+  const reviewers: Record<string, unknown>[] = [];
   if (fs.existsSync(entitiesRoot)) {
     for (const entry of fs.readdirSync(entitiesRoot)) {
       const statusPath = path.join(entitiesRoot, entry, 'status.json');
       const outputPath = path.join(entitiesRoot, entry, 'output.txt');
       const errorPath = path.join(entitiesRoot, entry, 'error.txt');
-      const status = readJsonIfExists(statusPath) as any;
-      if (!status) continue;
+      const status = readJsonIfExists(statusPath);
+      if (!isRecord(status)) continue;
       const output = fs.existsSync(outputPath) ? stripAnsi(fs.readFileSync(outputPath, 'utf8')) : '';
       const stderr = fs.existsSync(errorPath) ? stripAnsi(fs.readFileSync(errorPath, 'utf8')) : '';
       reviewers.push({ safeName: entry, ...status, output, stderr });
@@ -753,7 +789,7 @@ export function cmdResults(
             .map((r) => ({
               member: r.member,
               state: r.state,
-              exitCode: r.exitCode != null ? r.exitCode : null,
+              exitCode: r.exitCode !== undefined && r.exitCode !== null ? r.exitCode : null,
               message: r.message || null,
               output: r.output,
               ...(hooks?.extraMemberFields ? hooks.extraMemberFields(r) : {}),
@@ -770,10 +806,10 @@ export function cmdResults(
   for (const r of reviewers.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
     process.stdout.write(`\n=== ${r.member} (${r.state}) ===\n`);
     if (r.message) process.stdout.write(`${r.message}\n`);
-    process.stdout.write(r.output || '');
+    process.stdout.write(String(r.output || ''));
     if (!r.output && r.stderr) {
       process.stdout.write('\n');
-      process.stdout.write(r.stderr);
+      process.stdout.write(String(r.stderr));
     }
     process.stdout.write('\n');
   }
@@ -795,8 +831,8 @@ export function cmdStop(
   let stoppedAny = false;
   for (const entry of fs.readdirSync(entitiesRoot)) {
     const statusPath = path.join(entitiesRoot, entry, 'status.json');
-    const status = readJsonIfExists(statusPath) as any;
-    if (!status) continue;
+    const status = readJsonIfExists(statusPath);
+    if (!isRecord(status)) continue;
     if (status.state !== 'running') continue;
     if (!status.pid) continue;
 
@@ -824,9 +860,8 @@ export function cmdClean(
   const resolvedJobDir = path.resolve(jobDir);
 
   // Primary: use explicit jobs-dir from options/env/default
-  const configuredJobsDir = path.resolve(
-    (options['jobs-dir'] as string | undefined) || defaultJobsDir,
-  );
+  const jobsDirOption = typeof options['jobs-dir'] === 'string' ? options['jobs-dir'] : undefined;
+  const configuredJobsDir = path.resolve(jobsDirOption || defaultJobsDir);
 
   // Path traversal guard: check if target is under the configured jobs directory
   const relative = path.relative(configuredJobsDir, resolvedJobDir);
@@ -850,8 +885,10 @@ export function cmdClean(
       try {
         activeEntries = fs.readdirSync(entitiesDir).filter((e) => {
           const statusPath = path.join(entitiesDir, e, 'status.json');
-          const status = readJsonIfExists(statusPath) as { state?: string } | null;
-          return status != null && activeMemberStates.has(status.state ?? '');
+          const status = readJsonIfExists(statusPath);
+          if (!isRecord(status)) return false;
+          const state = typeof status.state === 'string' ? status.state : '';
+          return activeMemberStates.has(state);
         });
       } catch {
         // If we can't read the entities dir, proceed; the path-traversal guard already validated.
@@ -880,7 +917,7 @@ export async function cmdCollect(
   jobDir: string,
   config: JobConfig,
 ): Promise<void> {
-  const timeoutMsRaw = options['timeout-ms'] != null ? Number(options['timeout-ms']) : 150000;
+  const timeoutMsRaw = options['timeout-ms'] !== undefined && options['timeout-ms'] !== null ? Number(options['timeout-ms']) : 150000;
   const timeoutMs = Math.min(
     Math.max(0, Number.isFinite(timeoutMsRaw) ? Math.trunc(timeoutMsRaw) : 150000),
     COLLECT_TIMEOUT_HARDCAP_MS,
@@ -930,7 +967,7 @@ export async function cmdResumeMember(
   // Read status.json
   let status: Record<string, unknown>;
   try {
-    status = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+    status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
   } catch {
     throw new Error('no resumable session');
   }
@@ -946,20 +983,23 @@ export async function cmdResumeMember(
   }
 
   // Restore workerEnv saved by executeOneTurn (P1-4: preserve cross-CLI env contract across resume).
-  const storedWorkerEnv =
-    status.workerEnv && typeof status.workerEnv === 'object' && status.workerEnv !== null
-      ? (status.workerEnv as Record<string, string>)
-      : {};
+  const storedWorkerEnv: Record<string, string> = {};
+  if (isRecord(status.workerEnv)) {
+    for (const [envKey, envValue] of Object.entries(status.workerEnv)) {
+      if (typeof envValue === 'string') storedWorkerEnv[envKey] = envValue;
+    }
+  }
 
   // Preflight: validate CLI type, driver, and command BEFORE reserving the cap slot so that
   // misconfigured commands do not burn a resume_count increment (item 4).
   const command = status.command;
   const cliType = detectCliType(command);
   if (cliType === 'unknown') throw new Error('unknown cli type');
+  if (!isCliType(cliType)) throw new Error('unknown cli type');
 
   // Driver lookup
   const driverFactory = opts.driverFactory ?? pickDriver;
-  const driver = driverFactory(cliType as CliType);
+  const driver = driverFactory(cliType);
   if (!driver) throw new Error(`no driver for ${cliType}`);
 
   // P1-3: parse status.command to restore original program+args (preserve --agent/--model/-p/run/etc.)
@@ -981,8 +1021,8 @@ export async function cmdResumeMember(
   // P2-1: read timeoutSec from job.json instead of hardcoding
   let timeoutSec = 300;
   try {
-    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8')) as Record<string, unknown>;
-    const settings = jobMeta.settings as Record<string, unknown> | undefined;
+    const jobMeta: Record<string, unknown> = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8'));
+    const settings = isRecord(jobMeta.settings) ? jobMeta.settings : undefined;
     if (settings && typeof settings.timeoutSec === 'number' && settings.timeoutSec >= 0) {
       timeoutSec = settings.timeoutSec;
     }
@@ -1000,9 +1040,9 @@ export async function cmdResumeMember(
     memberDir,
     command: cmdStr,
     timeoutSec,
-    cliType: cliType as RunOneTurnOpts['cliType'],
+    cliType,
     workerEnv: storedWorkerEnv,
-    driverFactory: opts.driverFactory as RunOneTurnOpts['driverFactory'],
+    driverFactory: opts.driverFactory,
     runOnceFn: opts.runOnceFn,
   });
 }
