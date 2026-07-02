@@ -29,24 +29,24 @@
  * derived from the FILENAME only, never from file content).
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { getOmtDir } from '@lib/omt-dir';
+import { readFileSync, existsSync } from "fs";
+import { getOmtDir } from "@lib/omt-dir";
 import {
-  resolveSessionIdOrThrow,
-  mergeWithHeartbeat,
-  writeFileNoCreate,
-  STATE_PREFIX,
-  listOthers,
-  adopt,
-  ensureSeed,
-} from '@lib/state-core';
+	resolveSessionIdOrThrow,
+	mergeWithHeartbeat,
+	writeFileNoCreate,
+	STATE_PREFIX,
+	listOthers,
+	adopt,
+	ensureSeed,
+} from "@lib/state-core";
 
 // ---------------------------------------------------------------------------
 // Path resolution
 // ---------------------------------------------------------------------------
 
 export function resolveStatePath(sessionId: string): string {
-  return `${getOmtDir()}/${STATE_PREFIX['deep-interview']}${sessionId}.json`;
+	return `${getOmtDir()}/${STATE_PREFIX["deep-interview"]}${sessionId}.json`;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,19 +55,19 @@ export function resolveStatePath(sessionId: string): string {
 
 /** True iff `value` is a non-null, non-array object (i.e. a JSON "object"). */
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readRaw(path: string): Record<string, unknown> | null {
-  if (!existsSync(path)) return null;
-  try {
-    const content = readFileSync(path, 'utf8');
-    const parsed: unknown = JSON.parse(content);
-    if (!isRecord(parsed)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+	if (!existsSync(path)) return null;
+	try {
+		const content = readFileSync(path, "utf8");
+		const parsed: unknown = JSON.parse(content);
+		if (!isRecord(parsed)) return null;
+		return parsed;
+	} catch {
+		return null;
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -79,48 +79,45 @@ function readRaw(path: string): Record<string, unknown> | null {
  * Each evidence item carries exactly one label recording where it entered.
  */
 export type EvidenceProvenanceLabel =
-  | '[from-code]'
-  | '[from-code][auto-confirmed]'
-  | '[from-research]'
-  | '[from-user]';
+	"[from-code]" | "[from-code][auto-confirmed]" | "[from-research]" | "[from-user]";
 
 /** A single evidence provenance record: one item → one origin label. */
 export interface EvidenceProvenanceItem {
-  evidence_id: string;
-  label: EvidenceProvenanceLabel;
+	evidence_id: string;
+	label: EvidenceProvenanceLabel;
 }
 
 export interface DeepInterviewStateContent {
-  interview_id?: string;
-  type?: 'greenfield' | 'brownfield';
-  initial_idea?: string;
-  initial_context_summary?: string | null;
-  rounds?: unknown[];
-  current_ambiguity?: number;
-  threshold?: number;
-  codebase_context?: unknown;
-  challenge_modes_used?: string[];
-  ontology_snapshots?: unknown[];
-  /**
-   * Per-evidence provenance tags (D-H). Each entry records the origin label of
-   * one evidence item at the moment it entered the interview.
-   * Distinct from challenge_modes_used: this is evidence-scoped, not stance-scoped.
-   */
-  evidence_provenance?: EvidenceProvenanceItem[];
-  /**
-   * Ordered stance-history (D-E, Dialectic Rhythm Guard). Records the sequence
-   * of stances selected at round head — ordered, NOT deduplicated. Distinct from
-   * challenge_modes_used which is deduped/unordered and tracks modes ever used.
-   */
-  stance_history?: string[];
+	interview_id?: string;
+	type?: "greenfield" | "brownfield";
+	initial_idea?: string;
+	initial_context_summary?: string | null;
+	rounds?: unknown[];
+	current_ambiguity?: number;
+	threshold?: number;
+	codebase_context?: unknown;
+	challenge_modes_used?: string[];
+	ontology_snapshots?: unknown[];
+	/**
+	 * Per-evidence provenance tags (D-H). Each entry records the origin label of
+	 * one evidence item at the moment it entered the interview.
+	 * Distinct from challenge_modes_used: this is evidence-scoped, not stance-scoped.
+	 */
+	evidence_provenance?: EvidenceProvenanceItem[];
+	/**
+	 * Ordered stance-history (D-E, Dialectic Rhythm Guard). Records the sequence
+	 * of stances selected at round head — ordered, NOT deduplicated. Distinct from
+	 * challenge_modes_used which is deduped/unordered and tracks modes ever used.
+	 */
+	stance_history?: string[];
 }
 
 export interface DeepInterviewState {
-  active?: boolean;
-  current_phase?: string;
-  started_at?: string;
-  last_touched_at?: string;
-  state?: DeepInterviewStateContent;
+	active?: boolean;
+	current_phase?: string;
+	started_at?: string;
+	last_touched_at?: string;
+	state?: DeepInterviewStateContent;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,58 +129,59 @@ export interface DeepInterviewState {
  * Absent file → throws (ADR-7). Never writes a sessionId field.
  */
 export function initDeepInterviewState(
-  sessionId: string,
-  payload: {
-    initial_idea?: string;
-    interview_id?: string;
-    type?: 'greenfield' | 'brownfield';
-    current_phase?: string;
-    threshold?: number;
-    codebase_context?: string;
-  }
+	sessionId: string,
+	payload: {
+		initial_idea?: string;
+		interview_id?: string;
+		type?: "greenfield" | "brownfield";
+		current_phase?: string;
+		threshold?: number;
+		codebase_context?: string;
+	},
 ): void {
-  // Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
-  // (e.g. slash-command entry). No-op when the file already exists.
-  ensureSeed('deep-interview', sessionId);
-  const path = resolveStatePath(sessionId);
-  const prior = readRaw(path);
-  if (prior === null) {
-    throw new Error(
-      `deep-interview-state: no state file found at "${path}". ` +
-        'Either the seed is missing (re-invoke the deep-interview skill) ' +
-        'or this session was adopted by another session.'
-    );
-  }
+	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
+	// (e.g. slash-command entry). No-op when the file already exists.
+	ensureSeed("deep-interview", sessionId);
+	const path = resolveStatePath(sessionId);
+	const prior = readRaw(path);
+	if (prior === null) {
+		throw new Error(
+			`deep-interview-state: no state file found at "${path}". ` +
+				"Either the seed is missing (re-invoke the deep-interview skill) " +
+				"or this session was adopted by another session.",
+		);
+	}
 
-  // Build the state object: merge with any existing state content
-  const priorState: DeepInterviewStateContent = isRecord(prior['state'])
-    ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: state file content is written exclusively by this module's own writers (never externally supplied); trusted structural pass-through
-      (prior['state'] as DeepInterviewStateContent)
-    : {};
+	// Build the state object: merge with any existing state content
+	const priorState: DeepInterviewStateContent = isRecord(prior["state"])
+		? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: state file content is written exclusively by this module's own writers (never externally supplied); trusted structural pass-through
+			(prior["state"] as DeepInterviewStateContent)
+		: {};
 
-  const newState: DeepInterviewStateContent = {
-    interview_id: payload.interview_id ?? priorState.interview_id,
-    type: payload.type ?? priorState.type,
-    initial_idea: payload.initial_idea ?? priorState.initial_idea,
-    initial_context_summary: priorState.initial_context_summary ?? null,
-    rounds: priorState.rounds ?? [],
-    current_ambiguity: priorState.current_ambiguity ?? 1.0,
-    threshold: payload.threshold ?? priorState.threshold,
-    codebase_context: payload.codebase_context ?? priorState.codebase_context ?? null,
-    challenge_modes_used: priorState.challenge_modes_used ?? [],
-    ontology_snapshots: priorState.ontology_snapshots ?? [],
-    evidence_provenance: priorState.evidence_provenance ?? [],
-    stance_history: priorState.stance_history ?? [],
-  };
+	const newState: DeepInterviewStateContent = {
+		interview_id: payload.interview_id ?? priorState.interview_id,
+		type: payload.type ?? priorState.type,
+		initial_idea: payload.initial_idea ?? priorState.initial_idea,
+		initial_context_summary: priorState.initial_context_summary ?? null,
+		rounds: priorState.rounds ?? [],
+		current_ambiguity: priorState.current_ambiguity ?? 1.0,
+		threshold: payload.threshold ?? priorState.threshold,
+		codebase_context: payload.codebase_context ?? priorState.codebase_context ?? null,
+		challenge_modes_used: priorState.challenge_modes_used ?? [],
+		ontology_snapshots: priorState.ontology_snapshots ?? [],
+		evidence_provenance: priorState.evidence_provenance ?? [],
+		stance_history: priorState.stance_history ?? [],
+	};
 
-  const priorCurrentPhase = typeof prior['current_phase'] === 'string' ? prior['current_phase'] : undefined;
-  const overlay: Record<string, unknown> = {
-    current_phase: payload.current_phase ?? priorCurrentPhase ?? 'deep-interview',
-    state: newState,
-  };
+	const priorCurrentPhase =
+		typeof prior["current_phase"] === "string" ? prior["current_phase"] : undefined;
+	const overlay: Record<string, unknown> = {
+		current_phase: payload.current_phase ?? priorCurrentPhase ?? "deep-interview",
+		state: newState,
+	};
 
-  const next = mergeWithHeartbeat(prior, overlay);
-  writeFileNoCreate(path, JSON.stringify(next, null, 2));
+	const next = mergeWithHeartbeat(prior, overlay);
+	writeFileNoCreate(path, JSON.stringify(next, null, 2));
 }
 
 /**
@@ -198,98 +196,98 @@ export function initDeepInterviewState(
  * challenge_mode: appended to state.challenge_modes_used (deduplicated).
  */
 export function updateDeepInterviewState(
-  sessionId: string,
-  partial: {
-    current_phase?: string;
-    current_ambiguity?: number;
-    append_round?: unknown;
-    append_ontology_snapshot?: unknown;
-    challenge_mode?: string;
-    /** Append one provenance record (evidence_id + label) to evidence_provenance. */
-    append_provenance_item?: EvidenceProvenanceItem;
-    /** Append one stance string to stance_history (ordered, NOT deduped). */
-    append_stance?: string;
-  }
+	sessionId: string,
+	partial: {
+		current_phase?: string;
+		current_ambiguity?: number;
+		append_round?: unknown;
+		append_ontology_snapshot?: unknown;
+		challenge_mode?: string;
+		/** Append one provenance record (evidence_id + label) to evidence_provenance. */
+		append_provenance_item?: EvidenceProvenanceItem;
+		/** Append one stance string to stance_history (ordered, NOT deduped). */
+		append_stance?: string;
+	},
 ): void {
-  // Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
-  // (e.g. slash-command entry). No-op when the file already exists.
-  ensureSeed('deep-interview', sessionId);
-  const path = resolveStatePath(sessionId);
-  const prior = readRaw(path);
-  if (prior === null) {
-    throw new Error(
-      `deep-interview-state: no state file found at "${path}". ` +
-        'Either the seed is missing (re-invoke the deep-interview skill) ' +
-        'or this session was adopted by another session.'
-    );
-  }
+	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
+	// (e.g. slash-command entry). No-op when the file already exists.
+	ensureSeed("deep-interview", sessionId);
+	const path = resolveStatePath(sessionId);
+	const prior = readRaw(path);
+	if (prior === null) {
+		throw new Error(
+			`deep-interview-state: no state file found at "${path}". ` +
+				"Either the seed is missing (re-invoke the deep-interview skill) " +
+				"or this session was adopted by another session.",
+		);
+	}
 
-  const overlay: Record<string, unknown> = {};
-  if (partial.current_phase !== undefined) {
-    overlay['current_phase'] = partial.current_phase;
-  }
+	const overlay: Record<string, unknown> = {};
+	if (partial.current_phase !== undefined) {
+		overlay["current_phase"] = partial.current_phase;
+	}
 
-  const needsStateOverlay =
-    partial.current_ambiguity !== undefined ||
-    partial.append_round !== undefined ||
-    partial.append_ontology_snapshot !== undefined ||
-    partial.challenge_mode !== undefined ||
-    partial.append_provenance_item !== undefined ||
-    partial.append_stance !== undefined;
+	const needsStateOverlay =
+		partial.current_ambiguity !== undefined ||
+		partial.append_round !== undefined ||
+		partial.append_ontology_snapshot !== undefined ||
+		partial.challenge_mode !== undefined ||
+		partial.append_provenance_item !== undefined ||
+		partial.append_stance !== undefined;
 
-  if (needsStateOverlay) {
-    // current_ambiguity lives under state per the SKILL.md rich shape
-    const priorState: Record<string, unknown> = isRecord(prior['state']) ? prior['state'] : {};
+	if (needsStateOverlay) {
+		// current_ambiguity lives under state per the SKILL.md rich shape
+		const priorState: Record<string, unknown> = isRecord(prior["state"]) ? prior["state"] : {};
 
-    const updatedState: Record<string, unknown> = { ...priorState };
+		const updatedState: Record<string, unknown> = { ...priorState };
 
-    if (partial.current_ambiguity !== undefined) {
-      updatedState['current_ambiguity'] = partial.current_ambiguity;
-    }
-    if (partial.append_round !== undefined) {
-      const existing: unknown[] = Array.isArray(priorState['rounds']) ? priorState['rounds'] : [];
-      updatedState['rounds'] = [...existing, partial.append_round];
-    }
-    if (partial.append_ontology_snapshot !== undefined) {
-      const existing: unknown[] = Array.isArray(priorState['ontology_snapshots'])
-        ? priorState['ontology_snapshots']
-        : [];
-      updatedState['ontology_snapshots'] = [...existing, partial.append_ontology_snapshot];
-    }
-    if (partial.challenge_mode !== undefined) {
-      const existing: string[] = Array.isArray(priorState['challenge_modes_used'])
-        ? priorState['challenge_modes_used']
-        : [];
-      if (!existing.includes(partial.challenge_mode)) {
-        updatedState['challenge_modes_used'] = [...existing, partial.challenge_mode];
-      }
-    }
-    if (partial.append_provenance_item !== undefined) {
-      const existing: EvidenceProvenanceItem[] = Array.isArray(priorState['evidence_provenance'])
-        ? priorState['evidence_provenance']
-        : [];
-      updatedState['evidence_provenance'] = [...existing, partial.append_provenance_item];
-    }
-    if (partial.append_stance !== undefined) {
-      // Ordered, NOT deduplicated — preserves insertion order for Dialectic Rhythm Guard (D-E).
-      const existing: string[] = Array.isArray(priorState['stance_history'])
-        ? priorState['stance_history']
-        : [];
-      updatedState['stance_history'] = [...existing, partial.append_stance];
-    }
+		if (partial.current_ambiguity !== undefined) {
+			updatedState["current_ambiguity"] = partial.current_ambiguity;
+		}
+		if (partial.append_round !== undefined) {
+			const existing: unknown[] = Array.isArray(priorState["rounds"]) ? priorState["rounds"] : [];
+			updatedState["rounds"] = [...existing, partial.append_round];
+		}
+		if (partial.append_ontology_snapshot !== undefined) {
+			const existing: unknown[] = Array.isArray(priorState["ontology_snapshots"])
+				? priorState["ontology_snapshots"]
+				: [];
+			updatedState["ontology_snapshots"] = [...existing, partial.append_ontology_snapshot];
+		}
+		if (partial.challenge_mode !== undefined) {
+			const existing: string[] = Array.isArray(priorState["challenge_modes_used"])
+				? priorState["challenge_modes_used"]
+				: [];
+			if (!existing.includes(partial.challenge_mode)) {
+				updatedState["challenge_modes_used"] = [...existing, partial.challenge_mode];
+			}
+		}
+		if (partial.append_provenance_item !== undefined) {
+			const existing: EvidenceProvenanceItem[] = Array.isArray(priorState["evidence_provenance"])
+				? priorState["evidence_provenance"]
+				: [];
+			updatedState["evidence_provenance"] = [...existing, partial.append_provenance_item];
+		}
+		if (partial.append_stance !== undefined) {
+			// Ordered, NOT deduplicated — preserves insertion order for Dialectic Rhythm Guard (D-E).
+			const existing: string[] = Array.isArray(priorState["stance_history"])
+				? priorState["stance_history"]
+				: [];
+			updatedState["stance_history"] = [...existing, partial.append_stance];
+		}
 
-    overlay['state'] = updatedState;
-  }
+		overlay["state"] = updatedState;
+	}
 
-  const next = mergeWithHeartbeat(prior, overlay);
-  writeFileNoCreate(path, JSON.stringify(next, null, 2));
+	const next = mergeWithHeartbeat(prior, overlay);
+	writeFileNoCreate(path, JSON.stringify(next, null, 2));
 }
 
 /**
  * Reads the raw state. Returns null if absent or malformed.
  */
 export function readDeepInterviewState(sessionId: string): Record<string, unknown> | null {
-  return readRaw(resolveStatePath(sessionId));
+	return readRaw(resolveStatePath(sessionId));
 }
 
 // ---------------------------------------------------------------------------
@@ -297,218 +295,218 @@ export function readDeepInterviewState(sessionId: string): Record<string, unknow
 // ---------------------------------------------------------------------------
 
 function parseArgs(args: string[]): Record<string, string | boolean> {
-  const result: Record<string, string | boolean> = {};
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg.startsWith('--')) {
-      const key = arg.slice(2);
-      const next = args[i + 1];
-      if (next !== undefined && !next.startsWith('--')) {
-        result[key] = next;
-        i++;
-      } else {
-        result[key] = true;
-      }
-    } else if (!result['_subcommand']) {
-      // First non-flag token = subcommand; subsequent positional args are ignored
-      // (A3: no positional arg may redirect the filename)
-      result['_subcommand'] = arg;
-    }
-    // Subsequent positional args after subcommand are silently dropped (A3)
-  }
-  return result;
+	const result: Record<string, string | boolean> = {};
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg.startsWith("--")) {
+			const key = arg.slice(2);
+			const next = args[i + 1];
+			if (next !== undefined && !next.startsWith("--")) {
+				result[key] = next;
+				i++;
+			} else {
+				result[key] = true;
+			}
+		} else if (!result["_subcommand"]) {
+			// First non-flag token = subcommand; subsequent positional args are ignored
+			// (A3: no positional arg may redirect the filename)
+			result["_subcommand"] = arg;
+		}
+		// Subsequent positional args after subcommand are silently dropped (A3)
+	}
+	return result;
 }
 
 function str(v: string | boolean | undefined): string | undefined {
-  return v !== undefined && v !== true ? String(v) : undefined;
+	return v !== undefined && v !== true ? String(v) : undefined;
 }
 
-function asInterviewType(v: string | undefined): 'greenfield' | 'brownfield' | undefined {
-  return v === 'greenfield' || v === 'brownfield' ? v : undefined;
+function asInterviewType(v: string | undefined): "greenfield" | "brownfield" | undefined {
+	return v === "greenfield" || v === "brownfield" ? v : undefined;
 }
 
 function main(): void {
-  let sessionId: string;
-  try {
-    sessionId = resolveSessionIdOrThrow();
-  } catch (e) {
-    process.stderr.write(`deep-interview-state: ${String(e)}\n`);
-    process.exit(1);
-  }
+	let sessionId: string;
+	try {
+		sessionId = resolveSessionIdOrThrow();
+	} catch (e) {
+		process.stderr.write(`deep-interview-state: ${String(e)}\n`);
+		process.exit(1);
+	}
 
-  const args = parseArgs(process.argv.slice(2));
-  const subcommand = args['_subcommand'];
+	const args = parseArgs(process.argv.slice(2));
+	const subcommand = args["_subcommand"];
 
-  if (subcommand === 'init') {
-    const threshold = str(args['threshold']);
-    try {
-      initDeepInterviewState(sessionId, {
-        initial_idea: str(args['initial-idea']),
-        interview_id: str(args['interview-id']),
-        type: asInterviewType(str(args['type'])),
-        current_phase: str(args['current-phase']),
-        threshold: threshold !== undefined ? Number(threshold) : undefined,
-        codebase_context: str(args['codebase-context']),
-      });
-    } catch (e) {
-      process.stderr.write(`deep-interview-state init: ${String(e)}\n`);
-      process.exit(1);
-    }
-  } else if (subcommand === 'update') {
-    const ambiguity = str(args['current-ambiguity']);
-    const appendRoundRaw = str(args['append-round']);
-    const appendSnapshotRaw = str(args['append-ontology-snapshot']);
-    const appendRoundStdin = args['append-round-stdin'] === true;
-    const appendSnapshotStdin = args['append-ontology-snapshot-stdin'] === true;
-    const challengeMode = str(args['challenge-mode']);
-    const appendProvenanceItemRaw = str(args['append-provenance-item']);
-    const appendStance = str(args['append-stance']);
+	if (subcommand === "init") {
+		const threshold = str(args["threshold"]);
+		try {
+			initDeepInterviewState(sessionId, {
+				initial_idea: str(args["initial-idea"]),
+				interview_id: str(args["interview-id"]),
+				type: asInterviewType(str(args["type"])),
+				current_phase: str(args["current-phase"]),
+				threshold: threshold !== undefined ? Number(threshold) : undefined,
+				codebase_context: str(args["codebase-context"]),
+			});
+		} catch (e) {
+			process.stderr.write(`deep-interview-state init: ${String(e)}\n`);
+			process.exit(1);
+		}
+	} else if (subcommand === "update") {
+		const ambiguity = str(args["current-ambiguity"]);
+		const appendRoundRaw = str(args["append-round"]);
+		const appendSnapshotRaw = str(args["append-ontology-snapshot"]);
+		const appendRoundStdin = args["append-round-stdin"] === true;
+		const appendSnapshotStdin = args["append-ontology-snapshot-stdin"] === true;
+		const challengeMode = str(args["challenge-mode"]);
+		const appendProvenanceItemRaw = str(args["append-provenance-item"]);
+		const appendStance = str(args["append-stance"]);
 
-    // Read stdin once if any stdin flag is present (avoids double-read)
-    let stdinText: string | undefined;
-    if (appendRoundStdin || appendSnapshotStdin) {
-      try {
-        stdinText = readFileSync(0, 'utf8').trim();
-      } catch (e) {
-        process.stderr.write(`deep-interview-state update: failed to read stdin: ${String(e)}\n`);
-        process.exit(1);
-      }
-    }
+		// Read stdin once if any stdin flag is present (avoids double-read)
+		let stdinText: string | undefined;
+		if (appendRoundStdin || appendSnapshotStdin) {
+			try {
+				stdinText = readFileSync(0, "utf8").trim();
+			} catch (e) {
+				process.stderr.write(`deep-interview-state update: failed to read stdin: ${String(e)}\n`);
+				process.exit(1);
+			}
+		}
 
-    // Validate JSON flags before any write
-    let appendRound: unknown;
-    if (appendRoundStdin) {
-      if (stdinText === undefined) {
-        // Unreachable: appendRoundStdin implies the stdin-read block above ran and either
-        // set stdinText or exited the process on failure.
-        throw new Error('deep-interview-state update: internal error: stdin was not read');
-      }
-      try {
-        appendRound = JSON.parse(stdinText);
-      } catch {
-        process.stderr.write(
-          `deep-interview-state update: --append-round-stdin: invalid JSON from stdin\n`
-        );
-        process.exit(1);
-      }
-    } else if (appendRoundRaw !== undefined) {
-      try {
-        appendRound = JSON.parse(appendRoundRaw);
-      } catch {
-        process.stderr.write(
-          `deep-interview-state update: --append-round: invalid JSON: ${appendRoundRaw}\n`
-        );
-        process.exit(1);
-      }
-    }
-    let appendSnapshot: unknown;
-    if (appendSnapshotStdin) {
-      if (stdinText === undefined) {
-        // Unreachable: appendSnapshotStdin implies the stdin-read block above ran and either
-        // set stdinText or exited the process on failure.
-        throw new Error('deep-interview-state update: internal error: stdin was not read');
-      }
-      try {
-        appendSnapshot = JSON.parse(stdinText);
-      } catch {
-        process.stderr.write(
-          `deep-interview-state update: --append-ontology-snapshot-stdin: invalid JSON from stdin\n`
-        );
-        process.exit(1);
-      }
-    } else if (appendSnapshotRaw !== undefined) {
-      try {
-        appendSnapshot = JSON.parse(appendSnapshotRaw);
-      } catch {
-        process.stderr.write(
-          `deep-interview-state update: --append-ontology-snapshot: invalid JSON: ${appendSnapshotRaw}\n`
-        );
-        process.exit(1);
-      }
-    }
+		// Validate JSON flags before any write
+		let appendRound: unknown;
+		if (appendRoundStdin) {
+			if (stdinText === undefined) {
+				// Unreachable: appendRoundStdin implies the stdin-read block above ran and either
+				// set stdinText or exited the process on failure.
+				throw new Error("deep-interview-state update: internal error: stdin was not read");
+			}
+			try {
+				appendRound = JSON.parse(stdinText);
+			} catch {
+				process.stderr.write(
+					`deep-interview-state update: --append-round-stdin: invalid JSON from stdin\n`,
+				);
+				process.exit(1);
+			}
+		} else if (appendRoundRaw !== undefined) {
+			try {
+				appendRound = JSON.parse(appendRoundRaw);
+			} catch {
+				process.stderr.write(
+					`deep-interview-state update: --append-round: invalid JSON: ${appendRoundRaw}\n`,
+				);
+				process.exit(1);
+			}
+		}
+		let appendSnapshot: unknown;
+		if (appendSnapshotStdin) {
+			if (stdinText === undefined) {
+				// Unreachable: appendSnapshotStdin implies the stdin-read block above ran and either
+				// set stdinText or exited the process on failure.
+				throw new Error("deep-interview-state update: internal error: stdin was not read");
+			}
+			try {
+				appendSnapshot = JSON.parse(stdinText);
+			} catch {
+				process.stderr.write(
+					`deep-interview-state update: --append-ontology-snapshot-stdin: invalid JSON from stdin\n`,
+				);
+				process.exit(1);
+			}
+		} else if (appendSnapshotRaw !== undefined) {
+			try {
+				appendSnapshot = JSON.parse(appendSnapshotRaw);
+			} catch {
+				process.stderr.write(
+					`deep-interview-state update: --append-ontology-snapshot: invalid JSON: ${appendSnapshotRaw}\n`,
+				);
+				process.exit(1);
+			}
+		}
 
-    let appendProvenanceItem: EvidenceProvenanceItem | undefined;
-    if (appendProvenanceItemRaw !== undefined) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(appendProvenanceItemRaw);
-      } catch {
-        process.stderr.write(
-          `deep-interview-state update: --append-provenance-item: invalid JSON: ${appendProvenanceItemRaw}\n`
-        );
-        process.exit(1);
-      }
-      if (
-        !isRecord(parsed) ||
-        typeof parsed['evidence_id'] !== 'string' ||
-        typeof parsed['label'] !== 'string'
-      ) {
-        process.stderr.write(
-          `deep-interview-state update: --append-provenance-item: must be {"evidence_id":"<str>","label":"<label>"}\n`
-        );
-        process.exit(1);
-      }
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque CLI JSON boundary: shape-validated above (evidence_id/label present as strings); the closed label-value set is a documentation-level contract (SKILL.md), not runtime-enforced here, matching prior behavior
-      appendProvenanceItem = parsed as unknown as EvidenceProvenanceItem;
-    }
+		let appendProvenanceItem: EvidenceProvenanceItem | undefined;
+		if (appendProvenanceItemRaw !== undefined) {
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(appendProvenanceItemRaw);
+			} catch {
+				process.stderr.write(
+					`deep-interview-state update: --append-provenance-item: invalid JSON: ${appendProvenanceItemRaw}\n`,
+				);
+				process.exit(1);
+			}
+			if (
+				!isRecord(parsed) ||
+				typeof parsed["evidence_id"] !== "string" ||
+				typeof parsed["label"] !== "string"
+			) {
+				process.stderr.write(
+					`deep-interview-state update: --append-provenance-item: must be {"evidence_id":"<str>","label":"<label>"}\n`,
+				);
+				process.exit(1);
+			}
+			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque CLI JSON boundary: shape-validated above (evidence_id/label present as strings); the closed label-value set is a documentation-level contract (SKILL.md), not runtime-enforced here, matching prior behavior
+			appendProvenanceItem = parsed as unknown as EvidenceProvenanceItem;
+		}
 
-    try {
-      updateDeepInterviewState(sessionId, {
-        current_phase: str(args['current-phase']),
-        current_ambiguity: ambiguity !== undefined ? Number(ambiguity) : undefined,
-        append_round: appendRound,
-        append_ontology_snapshot: appendSnapshot,
-        challenge_mode: challengeMode,
-        append_provenance_item: appendProvenanceItem,
-        append_stance: appendStance,
-      });
-    } catch (e) {
-      process.stderr.write(`deep-interview-state update: ${String(e)}\n`);
-      process.exit(1);
-    }
-  } else if (subcommand === 'get') {
-    const result = readDeepInterviewState(sessionId);
-    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-  } else if (subcommand === 'list-others') {
-    const candidates = listOthers('deep-interview');
-    for (const c of candidates) {
-      const shortSid = c.sid.slice(0, 8);
-      process.stdout.write(
-        `${shortSid}\t${c.sid}\t${c.purpose}\t${c.startedAt}\t${c.idleSeconds}s\n`
-      );
-    }
-  } else if (subcommand === 'adopt') {
-    const srcSid = str(args['src']);
-    if (!srcSid) {
-      process.stderr.write('adopt: --src <sid> is required\n');
-      process.exit(1);
-    }
-    try {
-      adopt('deep-interview', srcSid);
-    } catch (e) {
-      process.stderr.write(`deep-interview-state adopt: ${String(e)}\n`);
-      process.exit(1);
-    }
-  } else {
-    process.stderr.write(
-      'Usage: deep-interview-state.ts <init|update|get|list-others|adopt> [options]\n' +
-        '  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n' +
-        '         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n' +
-        "  update [--current-phase <phase>] [--current-ambiguity <n>]\n" +
-        "         [--append-round '<json>'] [--append-ontology-snapshot '<json>']\n" +
-        "         [--append-round-stdin]            (recommended for free-text: read JSON from stdin)\n" +
-        "         [--append-ontology-snapshot-stdin] (recommended for free-text: read JSON from stdin)\n" +
-        '         [--challenge-mode <name>]\n' +
-        "         [--append-provenance-item '{\"evidence_id\":\"<id>\",\"label\":\"<label>\"}']\n" +
-        '         [--append-stance <stance>]  (ordered, not deduped; for Dialectic Rhythm Guard)\n' +
-        '  get\n' +
-        '  list-others\n' +
-        '  adopt --src <sid>\n'
-    );
-    process.exit(1);
-  }
+		try {
+			updateDeepInterviewState(sessionId, {
+				current_phase: str(args["current-phase"]),
+				current_ambiguity: ambiguity !== undefined ? Number(ambiguity) : undefined,
+				append_round: appendRound,
+				append_ontology_snapshot: appendSnapshot,
+				challenge_mode: challengeMode,
+				append_provenance_item: appendProvenanceItem,
+				append_stance: appendStance,
+			});
+		} catch (e) {
+			process.stderr.write(`deep-interview-state update: ${String(e)}\n`);
+			process.exit(1);
+		}
+	} else if (subcommand === "get") {
+		const result = readDeepInterviewState(sessionId);
+		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+	} else if (subcommand === "list-others") {
+		const candidates = listOthers("deep-interview");
+		for (const c of candidates) {
+			const shortSid = c.sid.slice(0, 8);
+			process.stdout.write(
+				`${shortSid}\t${c.sid}\t${c.purpose}\t${c.startedAt}\t${c.idleSeconds}s\n`,
+			);
+		}
+	} else if (subcommand === "adopt") {
+		const srcSid = str(args["src"]);
+		if (!srcSid) {
+			process.stderr.write("adopt: --src <sid> is required\n");
+			process.exit(1);
+		}
+		try {
+			adopt("deep-interview", srcSid);
+		} catch (e) {
+			process.stderr.write(`deep-interview-state adopt: ${String(e)}\n`);
+			process.exit(1);
+		}
+	} else {
+		process.stderr.write(
+			"Usage: deep-interview-state.ts <init|update|get|list-others|adopt> [options]\n" +
+				"  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n" +
+				"         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n" +
+				"  update [--current-phase <phase>] [--current-ambiguity <n>]\n" +
+				"         [--append-round '<json>'] [--append-ontology-snapshot '<json>']\n" +
+				"         [--append-round-stdin]            (recommended for free-text: read JSON from stdin)\n" +
+				"         [--append-ontology-snapshot-stdin] (recommended for free-text: read JSON from stdin)\n" +
+				"         [--challenge-mode <name>]\n" +
+				'         [--append-provenance-item \'{"evidence_id":"<id>","label":"<label>"}\']\n' +
+				"         [--append-stance <stance>]  (ordered, not deduped; for Dialectic Rhythm Guard)\n" +
+				"  get\n" +
+				"  list-others\n" +
+				"  adopt --src <sid>\n",
+		);
+		process.exit(1);
+	}
 }
 
 if (import.meta.main) {
-  main();
+	main();
 }

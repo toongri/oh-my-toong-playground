@@ -42,7 +42,10 @@ function makeProject(): string {
 }
 
 function writeRule(projectDir: string, fileName: string, frontmatter: string, body: string): void {
-	writeFileSync(join(projectDir, ".claude", "rules", fileName), `---\n${frontmatter}\n---\n${body}\n`);
+	writeFileSync(
+		join(projectDir, ".claude", "rules", fileName),
+		`---\n${frontmatter}\n---\n${body}\n`,
+	);
 }
 
 function freshSessionId(prefix: string): string {
@@ -50,10 +53,18 @@ function freshSessionId(prefix: string): string {
 	return `${prefix}-${sessionCounter}`;
 }
 
-function runHook(subcommand: "session-start" | "post-tool-use", payload: Record<string, unknown>): string {
+function runHook(
+	subcommand: "session-start" | "post-tool-use",
+	payload: Record<string, unknown>,
+): string {
 	const result = spawnSync("bun", ["run", CLI_PATH, "hook", subcommand], {
 		input: JSON.stringify(payload),
-		env: { ...process.env, HOME: tempHome, PI_RULES_DISABLE_BUNDLED: "1", PLUGIN_DATA: join(tempHome, ".omt") },
+		env: {
+			...process.env,
+			HOME: tempHome,
+			PI_RULES_DISABLE_BUNDLED: "1",
+			PLUGIN_DATA: join(tempHome, ".omt"),
+		},
 		encoding: "utf8",
 	});
 	const stdout = result.stdout.trim();
@@ -216,35 +227,31 @@ test("P1 dynamic block header matches the surviving emitted rule's target after 
 	// Rule A's XML header = "<rules name=\"rule-a\">\n\n</rules>" = 31 chars.
 	// bodyBudget for A = 75 - 31 = 44; truncateBudget([{body:""}], 44) → dropped.
 	// Rule B's body ("RULE_B_MARKER", 13 chars) fits in the remaining budget. ✓
-	const result = spawnSync(
-		"bun",
-		["run", CLI_PATH, "hook", "post-tool-use"],
-		{
-			input: JSON.stringify({
-				hook_event_name: "PostToolUse",
-				session_id: freshSessionId("p1"),
-				turn_id: "t1",
-				transcript_path: null,
-				cwd: projectDir,
-				model: "gpt-5",
-				permission_mode: "default",
-				tool_name: "Bash",
-				tool_use_id: "u-p1",
-				tool_input: { command: "cat src/target-a.ts src/target-b.ts" },
-				tool_response: {},
-			}),
-			env: {
-				...process.env,
-				HOME: tempHome,
-				PI_RULES_DISABLE_BUNDLED: "1",
-				PLUGIN_DATA: join(tempHome, ".omt"),
-				// budget=75: drops rule A (per-rule cap < truncation notice),
-				// but leaves enough for rule B's 13-char body.
-				CODEX_RULES_MAX_RESULT_CHARS: "75",
-			},
-			encoding: "utf8",
+	const result = spawnSync("bun", ["run", CLI_PATH, "hook", "post-tool-use"], {
+		input: JSON.stringify({
+			hook_event_name: "PostToolUse",
+			session_id: freshSessionId("p1"),
+			turn_id: "t1",
+			transcript_path: null,
+			cwd: projectDir,
+			model: "gpt-5",
+			permission_mode: "default",
+			tool_name: "Bash",
+			tool_use_id: "u-p1",
+			tool_input: { command: "cat src/target-a.ts src/target-b.ts" },
+			tool_response: {},
+		}),
+		env: {
+			...process.env,
+			HOME: tempHome,
+			PI_RULES_DISABLE_BUNDLED: "1",
+			PLUGIN_DATA: join(tempHome, ".omt"),
+			// budget=75: drops rule A (per-rule cap < truncation notice),
+			// but leaves enough for rule B's 13-char body.
+			CODEX_RULES_MAX_RESULT_CHARS: "75",
 		},
-	);
+		encoding: "utf8",
+	});
 
 	const stdout = result.stdout.trim();
 	const parsed = JSON.parse(stdout) as { hookSpecificOutput?: { additionalContext?: string } };

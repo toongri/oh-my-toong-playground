@@ -8,10 +8,10 @@
  * 3. Fallback to basename(cwd) when not in a git repo
  */
 
-import { execSync } from 'child_process';
-import { mkdirSync } from 'fs';
-import { homedir } from 'os';
-import { basename, dirname, resolve } from 'path';
+import { execSync } from "child_process";
+import { mkdirSync } from "fs";
+import { homedir } from "os";
+import { basename, dirname, resolve } from "path";
 
 /**
  * Returns the OMT working directory for the current project.
@@ -19,9 +19,9 @@ import { basename, dirname, resolve } from 'path';
  * Creates the directory if it does not exist.
  */
 export function getOmtDir(): string {
-  const dir = resolveOmtDir();
-  mkdirSync(dir, { recursive: true });
-  return dir;
+	const dir = resolveOmtDir();
+	mkdirSync(dir, { recursive: true });
+	return dir;
 }
 
 /**
@@ -35,12 +35,12 @@ export function getOmtDir(): string {
  *              working directory rather than the hook process's own cwd.
  */
 export function resolveOmtDir(cwd: string = process.cwd()): string {
-  if (process.env.OMT_DIR) {
-    return process.env.OMT_DIR;
-  }
+	if (process.env.OMT_DIR) {
+		return process.env.OMT_DIR;
+	}
 
-  const projectName = deriveProjectName(cwd);
-  return `${homedir()}/.omt/${projectName}`;
+	const projectName = deriveProjectName(cwd);
+	return `${homedir()}/.omt/${projectName}`;
 }
 
 /**
@@ -56,8 +56,8 @@ export function resolveOmtDir(cwd: string = process.cwd()): string {
  * @param cwd - Directory to derive project name from. Defaults to process.cwd().
  */
 export function resolvePinsHome(cwd: string = process.cwd()): string {
-  const projectName = deriveProjectName(cwd);
-  return `${homedir()}/.pins/${projectName}`;
+	const projectName = deriveProjectName(cwd);
+	return `${homedir()}/.pins/${projectName}`;
 }
 
 /**
@@ -71,46 +71,46 @@ export function resolvePinsHome(cwd: string = process.cwd()): string {
  * @param cwd - Directory to resolve from. Defaults to process.cwd().
  */
 export function resolveProjectRoot(cwd: string = process.cwd()): string {
-  try {
-    return execSync('git rev-parse --show-toplevel', {
-      cwd,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-  } catch {
-    return cwd;
-  }
+	try {
+		return execSync("git rev-parse --show-toplevel", {
+			cwd,
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "pipe"],
+		}).trim();
+	} catch {
+		return cwd;
+	}
 }
 
 function deriveProjectName(cwd: string): string {
-  try {
-    const gitCommonDir = execSync('git rev-parse --git-common-dir', {
-      cwd,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
+	try {
+		const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+			cwd,
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "pipe"],
+		}).trim();
 
-    let name: string;
+		let name: string;
 
-    if (gitCommonDir !== '.git') {
-      // Worktree or subdirectory: resolve relative path against cwd
-      const resolved = resolve(cwd, gitCommonDir);
-      name = basename(dirname(resolved));
-    } else {
-      // Standard repo: use toplevel directory name
-      const toplevel = execSync('git rev-parse --show-toplevel', {
-        cwd,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }).trim();
-      name = basename(toplevel);
-    }
+		if (gitCommonDir !== ".git") {
+			// Worktree or subdirectory: resolve relative path against cwd
+			const resolved = resolve(cwd, gitCommonDir);
+			name = basename(dirname(resolved));
+		} else {
+			// Standard repo: use toplevel directory name
+			const toplevel = execSync("git rev-parse --show-toplevel", {
+				cwd,
+				encoding: "utf-8",
+				stdio: ["pipe", "pipe", "pipe"],
+			}).trim();
+			name = basename(toplevel);
+		}
 
-    return name.replace(/ /g, '-');
-  } catch {
-    // Not a git repo — fall back to basename of cwd
-    const name = basename(cwd).replace(/ /g, '-');
-    console.warn(`omt-dir: non-canonical project '${name}' from non-git path ${cwd}`);
-    return name;
-  }
+		return name.replace(/ /g, "-");
+	} catch {
+		// Not a git repo — fall back to basename of cwd
+		const name = basename(cwd).replace(/ /g, "-");
+		console.warn(`omt-dir: non-canonical project '${name}' from non-git path ${cwd}`);
+		return name;
+	}
 }

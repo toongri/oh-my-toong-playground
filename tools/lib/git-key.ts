@@ -11,19 +11,19 @@ import path from "node:path";
  * failure class for this tool.
  */
 function hasStderr(err: unknown): err is { stderr?: Buffer | string } {
-  return typeof err === "object" && err !== null && "stderr" in err;
+	return typeof err === "object" && err !== null && "stderr" in err;
 }
 
 export class ProjectKeyError extends Error {
-  constructor(targetPath: string, cause: unknown) {
-    super(
-      `Failed to derive Claude project key for ${targetPath}: git command failed. ` +
-        `Ensure git >= 2.31 is installed and check repository ownership ` +
-        `(e.g. git config --global --add safe.directory). Original error: ${cause}`,
-      { cause },
-    );
-    this.name = "ProjectKeyError";
-  }
+	constructor(targetPath: string, cause: unknown) {
+		super(
+			`Failed to derive Claude project key for ${targetPath}: git command failed. ` +
+				`Ensure git >= 2.31 is installed and check repository ownership ` +
+				`(e.g. git config --global --add safe.directory). Original error: ${cause}`,
+			{ cause },
+		);
+		this.name = "ProjectKeyError";
+	}
 }
 
 /**
@@ -51,39 +51,39 @@ export class ProjectKeyError extends Error {
  *   process.env). Exposed for testing only — callers should omit this parameter.
  */
 export function deriveClaudeProjectKey(
-  targetPath: string,
-  env: NodeJS.ProcessEnv = process.env,
+	targetPath: string,
+	env: NodeJS.ProcessEnv = process.env,
 ): string {
-  let stdout: string;
+	let stdout: string;
 
-  try {
-    const result = execFileSync(
-      "git",
-      ["-C", targetPath, "rev-parse", "--path-format=absolute", "--git-common-dir"],
-      { stdio: ["pipe", "pipe", "pipe"], env },
-    );
-    stdout = result.toString();
-  } catch (err: unknown) {
-    const stderr = hasStderr(err) && err.stderr ? err.stderr.toString() : "";
+	try {
+		const result = execFileSync(
+			"git",
+			["-C", targetPath, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+			{ stdio: ["pipe", "pipe", "pipe"], env },
+		);
+		stdout = result.toString();
+	} catch (err: unknown) {
+		const stderr = hasStderr(err) && err.stderr ? err.stderr.toString() : "";
 
-    if (stderr.includes("not a git repository")) {
-      // Branch (c): not a git repo — resolve symlinks on the input path
-      return fs.realpathSync(targetPath);
-    }
+		if (stderr.includes("not a git repository")) {
+			// Branch (c): not a git repo — resolve symlinks on the input path
+			return fs.realpathSync(targetPath);
+		}
 
-    // Branch (d): git failure for another reason — must throw loudly
-    throw new ProjectKeyError(targetPath, err);
-  }
+		// Branch (d): git failure for another reason — must throw loudly
+		throw new ProjectKeyError(targetPath, err);
+	}
 
-  const commonDir = stdout.trim();
+	const commonDir = stdout.trim();
 
-  if (path.basename(commonDir) === ".git") {
-    // Branch (a): standard repo or linked-worktree off standalone
-    // common-dir = <root>/.git → return the repo root
-    return path.dirname(commonDir);
-  }
+	if (path.basename(commonDir) === ".git") {
+		// Branch (a): standard repo or linked-worktree off standalone
+		// common-dir = <root>/.git → return the repo root
+		return path.dirname(commonDir);
+	}
 
-  // Branch (b): bare-pattern repo (e.g. .bare)
-  // common-dir is the bare dir itself — return it as-is
-  return commonDir;
+	// Branch (b): bare-pattern repo (e.g. .bare)
+	// common-dir is the bare dir itself — return it as-is
+	return commonDir;
 }

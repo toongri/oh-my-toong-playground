@@ -44,7 +44,11 @@ describe("getWalkDirectories — static path (targetFile: null)", () => {
 describe("getWalkDirectories — dynamic path (targetFile non-null)", () => {
 	test("cwd param is ignored when targetFile is provided; walks from targetFile dir", () => {
 		const projectRoot = "/repo";
-		const result = getWalkDirectories(projectRoot, "/repo/apps/web/src/foo.ts", "/repo/packages/ui");
+		const result = getWalkDirectories(
+			projectRoot,
+			"/repo/apps/web/src/foo.ts",
+			"/repo/packages/ui",
+		);
 		expect(result).toEqual([
 			{ directory: "/repo/apps/web/src", distance: 0 },
 			{ directory: "/repo/apps/web", distance: 1 },

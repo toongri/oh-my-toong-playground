@@ -22,34 +22,34 @@
  *   1 — malformed stdin, validation failure, or engine error
  */
 
-import { validate } from '@lib/pins/validator';
-import { record } from '@lib/pins/record';
-import { requireManifest, readEntityFromStdin, failEngine } from '@lib/pin-cli/io';
+import { validate } from "@lib/pins/validator";
+import { record } from "@lib/pins/record";
+import { requireManifest, readEntityFromStdin, failEngine } from "@lib/pin-cli/io";
 
 if (import.meta.main) {
-  const entity = await readEntityFromStdin();
-  const manifest = await requireManifest();
+	const entity = await readEntityFromStdin();
+	const manifest = await requireManifest();
 
-  let result;
-  try {
-    result = await validate(entity);
-  } catch (err) {
-    failEngine(err instanceof Error ? err.message : String(err));
-  }
+	let result;
+	try {
+		result = await validate(entity);
+	} catch (err) {
+		failEngine(err instanceof Error ? err.message : String(err));
+	}
 
-  if (!result.valid) {
-    // D5: report and stop — do NOT call record()
-    process.stdout.write(
-      JSON.stringify({ valid: false, reason: result.reason, message: result.message }) + '\n',
-    );
-    process.exit(1);
-  }
+	if (!result.valid) {
+		// D5: report and stop — do NOT call record()
+		process.stdout.write(
+			JSON.stringify({ valid: false, reason: result.reason, message: result.message }) + "\n",
+		);
+		process.exit(1);
+	}
 
-  try {
-    await record(entity, { location: manifest.location });
-  } catch (err) {
-    failEngine(err instanceof Error ? err.message : String(err));
-  }
+	try {
+		await record(entity, { location: manifest.location });
+	} catch (err) {
+		failEngine(err instanceof Error ? err.message : String(err));
+	}
 
-  process.stdout.write(JSON.stringify({ id: entity.frontmatter.id, status: 'recorded' }) + '\n');
+	process.stdout.write(JSON.stringify({ id: entity.frontmatter.id, status: "recorded" }) + "\n");
 }

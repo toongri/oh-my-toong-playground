@@ -4,274 +4,277 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  generateBackupSessionId,
-  backupCategory,
-  backupConfigFile,
-  cleanupOldBackups,
+	generateBackupSessionId,
+	backupCategory,
+	backupConfigFile,
+	cleanupOldBackups,
 } from "./backup.ts";
 
 describe("backup 모듈", () => {
-  let tmpDir: string;
+	let tmpDir: string;
 
-  beforeAll(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "omt-backup-test-"));
-  });
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "omt-backup-test-"));
+	});
 
-  afterAll(async () => {
-    const { rm } = await import("node:fs/promises");
-    await rm(tmpDir, { recursive: true, force: true });
-  });
+	afterAll(async () => {
+		const { rm } = await import("node:fs/promises");
+		await rm(tmpDir, { recursive: true, force: true });
+	});
 
-  describe("generateBackupSessionId", () => {
-    it("returns a 16-character hex string", () => {
-      const id = generateBackupSessionId();
-      expect(id).toMatch(/^[0-9a-f]{16}$/);
-    });
+	describe("generateBackupSessionId", () => {
+		it("returns a 16-character hex string", () => {
+			const id = generateBackupSessionId();
+			expect(id).toMatch(/^[0-9a-f]{16}$/);
+		});
 
-    it("generates a unique value on each call", () => {
-      const ids = new Set(Array.from({ length: 20 }, () => generateBackupSessionId()));
-      expect(ids.size).toBe(20);
-    });
-  });
+		it("generates a unique value on each call", () => {
+			const ids = new Set(Array.from({ length: 20 }, () => generateBackupSessionId()));
+			expect(ids.size).toBe(20);
+		});
+	});
 
-  describe("backupCategory", () => {
-    it("copies source directory to .sync-backup/{sessionId}/{platform}/{category}/", async () => {
-      const targetPath = join(tmpDir, "backup-category-basic");
-      const platform = "claude";
-      const category = "agents";
-      const sessionId = "test-session-01";
+	describe("backupCategory", () => {
+		it("copies source directory to .sync-backup/{sessionId}/{platform}/{category}/", async () => {
+			const targetPath = join(tmpDir, "backup-category-basic");
+			const platform = "claude";
+			const category = "agents";
+			const sessionId = "test-session-01";
 
-      // Create source files
-      const sourceDir = join(targetPath, `.${platform}`, category);
-      await mkdir(sourceDir, { recursive: true });
-      await writeFile(join(sourceDir, "oracle.md"), "# Oracle");
-      await writeFile(join(sourceDir, "sisyphus.md"), "# Sisyphus");
+			// Create source files
+			const sourceDir = join(targetPath, `.${platform}`, category);
+			await mkdir(sourceDir, { recursive: true });
+			await writeFile(join(sourceDir, "oracle.md"), "# Oracle");
+			await writeFile(join(sourceDir, "sisyphus.md"), "# Sisyphus");
 
-      await backupCategory(targetPath, platform, category, sessionId);
+			await backupCategory(targetPath, platform, category, sessionId);
 
-      const destDir = join(targetPath, ".sync-backup", sessionId, platform, category);
-      const files = await readdir(destDir);
-      expect(files).toContain("oracle.md");
-      expect(files).toContain("sisyphus.md");
-    });
+			const destDir = join(targetPath, ".sync-backup", sessionId, platform, category);
+			const files = await readdir(destDir);
+			expect(files).toContain("oracle.md");
+			expect(files).toContain("sisyphus.md");
+		});
 
-    it("does nothing when source directory is missing", async () => {
-      const targetPath = join(tmpDir, "backup-category-missing");
-      await mkdir(targetPath, { recursive: true });
+		it("does nothing when source directory is missing", async () => {
+			const targetPath = join(tmpDir, "backup-category-missing");
+			await mkdir(targetPath, { recursive: true });
 
-      // Should not throw
-      await backupCategory(targetPath, "claude", "skills", "sess-missing");
+			// Should not throw
+			await backupCategory(targetPath, "claude", "skills", "sess-missing");
 
-      // No .sync-backup directory should be created
-      let exists = true;
-      try {
-        await stat(join(targetPath, ".sync-backup"));
-      } catch {
-        exists = false;
-      }
-      expect(exists).toBe(false);
-    });
+			// No .sync-backup directory should be created
+			let exists = true;
+			try {
+				await stat(join(targetPath, ".sync-backup"));
+			} catch {
+				exists = false;
+			}
+			expect(exists).toBe(false);
+		});
 
-    it("creates destination even when intermediate directories are absent", async () => {
-      const targetPath = join(tmpDir, "backup-category-deep");
-      const platform = "gemini";
-      const category = "commands";
-      const sessionId = "deep-sess";
+		it("creates destination even when intermediate directories are absent", async () => {
+			const targetPath = join(tmpDir, "backup-category-deep");
+			const platform = "gemini";
+			const category = "commands";
+			const sessionId = "deep-sess";
 
-      const sourceDir = join(targetPath, `.${platform}`, category);
-      await mkdir(sourceDir, { recursive: true });
-      await writeFile(join(sourceDir, "cmd.md"), "# cmd");
+			const sourceDir = join(targetPath, `.${platform}`, category);
+			await mkdir(sourceDir, { recursive: true });
+			await writeFile(join(sourceDir, "cmd.md"), "# cmd");
 
-      await backupCategory(targetPath, platform, category, sessionId);
+			await backupCategory(targetPath, platform, category, sessionId);
 
-      const destDir = join(targetPath, ".sync-backup", sessionId, platform, category);
-      const files = await readdir(destDir);
-      expect(files).toContain("cmd.md");
-    });
+			const destDir = join(targetPath, ".sync-backup", sessionId, platform, category);
+			const files = await readdir(destDir);
+			expect(files).toContain("cmd.md");
+		});
 
-    it("selects the correct dot-directory for each platform", async () => {
-      const targetPath = join(tmpDir, "backup-category-platform");
-      const sessionId = "platform-sess";
+		it("selects the correct dot-directory for each platform", async () => {
+			const targetPath = join(tmpDir, "backup-category-platform");
+			const sessionId = "platform-sess";
 
-      for (const platform of ["claude", "gemini", "codex"]) {
-        const sourceDir = join(targetPath, `.${platform}`, "skills");
-        await mkdir(sourceDir, { recursive: true });
-        await writeFile(join(sourceDir, `${platform}.md`), `# ${platform}`);
+			for (const platform of ["claude", "gemini", "codex"]) {
+				const sourceDir = join(targetPath, `.${platform}`, "skills");
+				await mkdir(sourceDir, { recursive: true });
+				await writeFile(join(sourceDir, `${platform}.md`), `# ${platform}`);
 
-        await backupCategory(targetPath, platform, "skills", sessionId);
+				await backupCategory(targetPath, platform, "skills", sessionId);
 
-        const destDir = join(targetPath, ".sync-backup", sessionId, platform, "skills");
-        const files = await readdir(destDir);
-        expect(files).toContain(`${platform}.md`);
-      }
-    });
+				const destDir = join(targetPath, ".sync-backup", sessionId, platform, "skills");
+				const files = await readdir(destDir);
+				expect(files).toContain(`${platform}.md`);
+			}
+		});
 
-    it("propagates non-ENOENT stat errors (e.g., EACCES)", async () => {
-      const targetPath = join(tmpDir, "backup-category-eacces");
-      const platformDir = join(targetPath, ".claude");
-      await mkdir(platformDir, { recursive: true });
+		it("propagates non-ENOENT stat errors (e.g., EACCES)", async () => {
+			const targetPath = join(tmpDir, "backup-category-eacces");
+			const platformDir = join(targetPath, ".claude");
+			await mkdir(platformDir, { recursive: true });
 
-      // Remove execute permission on the platform directory so stat of its
-      // children returns EACCES (code !== "ENOENT") → must rethrow
-      await chmod(platformDir, 0o000);
+			// Remove execute permission on the platform directory so stat of its
+			// children returns EACCES (code !== "ENOENT") → must rethrow
+			await chmod(platformDir, 0o000);
 
-      try {
-        await expect(
-          backupCategory(targetPath, "claude", "agents", "sess-eacces")
-        ).rejects.toThrow();
-      } finally {
-        await chmod(platformDir, 0o755);
-      }
-    });
-  });
+			try {
+				await expect(
+					backupCategory(targetPath, "claude", "agents", "sess-eacces"),
+				).rejects.toThrow();
+			} finally {
+				await chmod(platformDir, 0o755);
+			}
+		});
+	});
 
-  describe("backupConfigFile", () => {
-    it("copies file into the backup directory", async () => {
-      const targetPath = join(tmpDir, "backup-file-basic");
-      const backupDir = join(targetPath, ".sync-backup", "sess01", "claude");
+	describe("backupConfigFile", () => {
+		it("copies file into the backup directory", async () => {
+			const targetPath = join(tmpDir, "backup-file-basic");
+			const backupDir = join(targetPath, ".sync-backup", "sess01", "claude");
 
-      const srcFile = join(targetPath, "settings.json");
-      await mkdir(targetPath, { recursive: true });
-      await writeFile(srcFile, '{"key": "value"}');
+			const srcFile = join(targetPath, "settings.json");
+			await mkdir(targetPath, { recursive: true });
+			await writeFile(srcFile, '{"key": "value"}');
 
-      await backupConfigFile(srcFile, backupDir);
+			await backupConfigFile(srcFile, backupDir);
 
-      const destFile = join(backupDir, "settings.json");
-      const stats = await stat(destFile);
-      expect(stats.isFile()).toBe(true);
-    });
+			const destFile = join(backupDir, "settings.json");
+			const stats = await stat(destFile);
+			expect(stats.isFile()).toBe(true);
+		});
 
-    it("does nothing when file does not exist", async () => {
-      const missingFile = join(tmpDir, "nonexistent", "settings.json");
-      const backupDir = join(tmpDir, "backup-file-missing");
+		it("does nothing when file does not exist", async () => {
+			const missingFile = join(tmpDir, "nonexistent", "settings.json");
+			const backupDir = join(tmpDir, "backup-file-missing");
 
-      // Should not throw
-      await backupConfigFile(missingFile, backupDir);
+			// Should not throw
+			await backupConfigFile(missingFile, backupDir);
 
-      // backupDir should not be created
-      let exists = true;
-      try {
-        await stat(backupDir);
-      } catch {
-        exists = false;
-      }
-      expect(exists).toBe(false);
-    });
+			// backupDir should not be created
+			let exists = true;
+			try {
+				await stat(backupDir);
+			} catch {
+				exists = false;
+			}
+			expect(exists).toBe(false);
+		});
 
-    it("auto-creates the backup directory when it does not exist", async () => {
-      const targetPath = join(tmpDir, "backup-file-mkdir");
-      const backupDir = join(targetPath, "deep", "nested", "dir");
+		it("auto-creates the backup directory when it does not exist", async () => {
+			const targetPath = join(tmpDir, "backup-file-mkdir");
+			const backupDir = join(targetPath, "deep", "nested", "dir");
 
-      await mkdir(targetPath, { recursive: true });
-      const srcFile = join(targetPath, "config.toml");
-      await writeFile(srcFile, '[config]\nkey = "val"');
+			await mkdir(targetPath, { recursive: true });
+			const srcFile = join(targetPath, "config.toml");
+			await writeFile(srcFile, '[config]\nkey = "val"');
 
-      await backupConfigFile(srcFile, backupDir);
+			await backupConfigFile(srcFile, backupDir);
 
-      const destFile = join(backupDir, "config.toml");
-      const stats = await stat(destFile);
-      expect(stats.isFile()).toBe(true);
-    });
+			const destFile = join(backupDir, "config.toml");
+			const stats = await stat(destFile);
+			expect(stats.isFile()).toBe(true);
+		});
 
-    it("propagates non-ENOENT stat errors (e.g., EACCES)", async () => {
-      const targetPath = join(tmpDir, "backup-file-eacces");
-      await mkdir(targetPath, { recursive: true });
+		it("propagates non-ENOENT stat errors (e.g., EACCES)", async () => {
+			const targetPath = join(tmpDir, "backup-file-eacces");
+			await mkdir(targetPath, { recursive: true });
 
-      // Remove execute permission on the parent directory so stat of a child
-      // file returns EACCES (code !== "ENOENT") → must rethrow
-      await chmod(targetPath, 0o000);
+			// Remove execute permission on the parent directory so stat of a child
+			// file returns EACCES (code !== "ENOENT") → must rethrow
+			await chmod(targetPath, 0o000);
 
-      try {
-        await expect(
-          backupConfigFile(join(targetPath, "settings.json"), join(tmpDir, "backup-file-eacces-dest"))
-        ).rejects.toThrow();
-      } finally {
-        await chmod(targetPath, 0o755);
-      }
-    });
-  });
+			try {
+				await expect(
+					backupConfigFile(
+						join(targetPath, "settings.json"),
+						join(tmpDir, "backup-file-eacces-dest"),
+					),
+				).rejects.toThrow();
+			} finally {
+				await chmod(targetPath, 0o755);
+			}
+		});
+	});
 
-  describe("cleanupOldBackups", () => {
-    it("does nothing when .sync-backup directory does not exist", async () => {
-      const targetPath = join(tmpDir, "cleanup-no-dir");
-      await mkdir(targetPath, { recursive: true });
+	describe("cleanupOldBackups", () => {
+		it("does nothing when .sync-backup directory does not exist", async () => {
+			const targetPath = join(tmpDir, "cleanup-no-dir");
+			await mkdir(targetPath, { recursive: true });
 
-      // Should not throw
-      await cleanupOldBackups(targetPath, 7);
-    });
+			// Should not throw
+			await cleanupOldBackups(targetPath, 7);
+		});
 
-    it("deletes all session directories when retentionDays is 0", async () => {
-      const targetPath = join(tmpDir, "cleanup-zero");
-      const backupDir = join(targetPath, ".sync-backup");
+		it("deletes all session directories when retentionDays is 0", async () => {
+			const targetPath = join(tmpDir, "cleanup-zero");
+			const backupDir = join(targetPath, ".sync-backup");
 
-      for (const session of ["sess-a", "sess-b", "sess-c"]) {
-        await mkdir(join(backupDir, session), { recursive: true });
-        await writeFile(join(backupDir, session, "file.txt"), "data");
-      }
+			for (const session of ["sess-a", "sess-b", "sess-c"]) {
+				await mkdir(join(backupDir, session), { recursive: true });
+				await writeFile(join(backupDir, session, "file.txt"), "data");
+			}
 
-      await cleanupOldBackups(targetPath, 0);
+			await cleanupOldBackups(targetPath, 0);
 
-      const remaining = await readdir(backupDir);
-      expect(remaining).toHaveLength(0);
-    });
+			const remaining = await readdir(backupDir);
+			expect(remaining).toHaveLength(0);
+		});
 
-    it("preserves sessions within retentionDays", async () => {
-      const targetPath = join(tmpDir, "cleanup-retain");
-      const backupDir = join(targetPath, ".sync-backup");
+		it("preserves sessions within retentionDays", async () => {
+			const targetPath = join(tmpDir, "cleanup-retain");
+			const backupDir = join(targetPath, ".sync-backup");
 
-      // Create a session directory (mtime = now)
-      const recentSession = join(backupDir, "recent-sess");
-      await mkdir(recentSession, { recursive: true });
+			// Create a session directory (mtime = now)
+			const recentSession = join(backupDir, "recent-sess");
+			await mkdir(recentSession, { recursive: true });
 
-      await cleanupOldBackups(targetPath, 7);
+			await cleanupOldBackups(targetPath, 7);
 
-      // Recent session should survive
-      const remaining = await readdir(backupDir);
-      expect(remaining).toContain("recent-sess");
-    });
+			// Recent session should survive
+			const remaining = await readdir(backupDir);
+			expect(remaining).toContain("recent-sess");
+		});
 
-    it("leaves plain files (non-directories) untouched", async () => {
-      const targetPath = join(tmpDir, "cleanup-files");
-      const backupDir = join(targetPath, ".sync-backup");
-      await mkdir(backupDir, { recursive: true });
+		it("leaves plain files (non-directories) untouched", async () => {
+			const targetPath = join(tmpDir, "cleanup-files");
+			const backupDir = join(targetPath, ".sync-backup");
+			await mkdir(backupDir, { recursive: true });
 
-      // Place a plain file in .sync-backup (not a directory)
-      const orphanFile = join(backupDir, "orphan.txt");
-      await writeFile(orphanFile, "stray");
+			// Place a plain file in .sync-backup (not a directory)
+			const orphanFile = join(backupDir, "orphan.txt");
+			await writeFile(orphanFile, "stray");
 
-      await cleanupOldBackups(targetPath, 0);
+			await cleanupOldBackups(targetPath, 0);
 
-      // Plain file should remain untouched
-      const s = await stat(orphanFile);
-      expect(s.isFile()).toBe(true);
-    });
+			// Plain file should remain untouched
+			const s = await stat(orphanFile);
+			expect(s.isFile()).toBe(true);
+		});
 
-    it("does not throw and processes all entries when rm() fails on some", async () => {
-      const targetPath = join(tmpDir, "cleanup-rm-fail");
-      const backupDir = join(targetPath, ".sync-backup");
+		it("does not throw and processes all entries when rm() fails on some", async () => {
+			const targetPath = join(tmpDir, "cleanup-rm-fail");
+			const backupDir = join(targetPath, ".sync-backup");
 
-      // Create three session directories to delete (retentionDays=0)
-      for (const name of ["sess-rm-a", "sess-rm-b", "sess-rm-c"]) {
-        const sessDir = join(backupDir, name);
-        await mkdir(sessDir, { recursive: true });
-        await writeFile(join(sessDir, "file.txt"), "data");
-      }
+			// Create three session directories to delete (retentionDays=0)
+			for (const name of ["sess-rm-a", "sess-rm-b", "sess-rm-c"]) {
+				const sessDir = join(backupDir, name);
+				await mkdir(sessDir, { recursive: true });
+				await writeFile(join(sessDir, "file.txt"), "data");
+			}
 
-      // Remove write permission from .sync-backup so all rm() calls fail
-      // (deleting a child entry requires write on the parent directory)
-      await chmod(backupDir, 0o555);
+			// Remove write permission from .sync-backup so all rm() calls fail
+			// (deleting a child entry requires write on the parent directory)
+			await chmod(backupDir, 0o555);
 
-      try {
-        // Key invariant: does not throw even though rm() fails for every entry
-        await cleanupOldBackups(targetPath, 0);
-      } finally {
-        await chmod(backupDir, 0o755);
-      }
+			try {
+				// Key invariant: does not throw even though rm() fails for every entry
+				await cleanupOldBackups(targetPath, 0);
+			} finally {
+				await chmod(backupDir, 0o755);
+			}
 
-      // All three entries survive (rm failed for each), confirming the loop
-      // ran through all entries without aborting on the first failure
-      const remaining = await readdir(backupDir);
-      expect(remaining).toHaveLength(3);
-    });
-  });
+			// All three entries survive (rm failed for each), confirming the loop
+			// ran through all entries without aborting on the first failure
+			const remaining = await readdir(backupDir);
+			expect(remaining).toHaveLength(3);
+		});
+	});
 });

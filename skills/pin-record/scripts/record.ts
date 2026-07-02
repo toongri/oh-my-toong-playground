@@ -18,27 +18,27 @@
  *   1 — malformed stdin, or engine error
  */
 
-import { record } from '@lib/pins/record';
-import { requireManifest, readEntityFromStdin, failEngine } from '@lib/pin-cli/io';
-import { existsSync, statSync } from 'fs';
-import { join } from 'path';
+import { record } from "@lib/pins/record";
+import { requireManifest, readEntityFromStdin, failEngine } from "@lib/pin-cli/io";
+import { existsSync, statSync } from "fs";
+import { join } from "path";
 
 if (import.meta.main) {
-  const entity = await readEntityFromStdin();
-  const manifest = await requireManifest();
+	const entity = await readEntityFromStdin();
+	const manifest = await requireManifest();
 
-  const escapePath = join(manifest.location, '.escape.jsonl');
-  const escapeSizeBefore = existsSync(escapePath) ? statSync(escapePath).size : 0;
+	const escapePath = join(manifest.location, ".escape.jsonl");
+	const escapeSizeBefore = existsSync(escapePath) ? statSync(escapePath).size : 0;
 
-  try {
-    await record(entity, { location: manifest.location });
-  } catch (err) {
-    failEngine(err instanceof Error ? err.message : String(err));
-  }
+	try {
+		await record(entity, { location: manifest.location });
+	} catch (err) {
+		failEngine(err instanceof Error ? err.message : String(err));
+	}
 
-  const id = entity.frontmatter.id;
-  const escapeSizeAfter = existsSync(escapePath) ? statSync(escapePath).size : 0;
-  const status = escapeSizeAfter > escapeSizeBefore ? 'escaped' : 'recorded';
+	const id = entity.frontmatter.id;
+	const escapeSizeAfter = existsSync(escapePath) ? statSync(escapePath).size : 0;
+	const status = escapeSizeAfter > escapeSizeBefore ? "escaped" : "recorded";
 
-  process.stdout.write(JSON.stringify({ id, status }) + '\n');
+	process.stdout.write(JSON.stringify({ id, status }) + "\n");
 }

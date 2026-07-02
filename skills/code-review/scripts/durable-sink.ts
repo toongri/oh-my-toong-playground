@@ -19,30 +19,30 @@
  * via process.env.OMT_DIR = tmpDir.
  */
 
-import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
-import { getOmtDir } from '@lib/omt-dir';
+import { mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
+import { getOmtDir } from "@lib/omt-dir";
 
 export interface DurableSinkParams {
-  /** Injected by caller — never generated inside this function. */
-  runId: string;
-  /** Total candidates surfaced across all angles (sum of per-angle counts). */
-  found: number;
-  /** Candidates surviving deduplication (total-surviving header). */
-  deduped: number;
-  /**
-   * Candidates entering inline verification.
-   * v1: dispatched === deduped (no inline cap exists yet).
-   * The field records verify load for the find-inclusion gate and diverges
-   * only if a later inline cap or pre-filter is added.
-   */
-  dispatched: number;
-  /**
-   * Raw JSON object from the `### Find Token Usage` block in the conductor's
-   * returned text (T4, commit 84d67d02). Omit or pass undefined when the
-   * aggregate is unavailable — the write proceeds without blocking.
-   */
-  findTokenUsage?: object;
+	/** Injected by caller — never generated inside this function. */
+	runId: string;
+	/** Total candidates surfaced across all angles (sum of per-angle counts). */
+	found: number;
+	/** Candidates surviving deduplication (total-surviving header). */
+	deduped: number;
+	/**
+	 * Candidates entering inline verification.
+	 * v1: dispatched === deduped (no inline cap exists yet).
+	 * The field records verify load for the find-inclusion gate and diverges
+	 * only if a later inline cap or pre-filter is added.
+	 */
+	dispatched: number;
+	/**
+	 * Raw JSON object from the `### Find Token Usage` block in the conductor's
+	 * returned text (T4, commit 84d67d02). Omit or pass undefined when the
+	 * aggregate is unavailable — the write proceeds without blocking.
+	 */
+	findTokenUsage?: object;
 }
 
 /**
@@ -53,26 +53,26 @@ export interface DurableSinkParams {
  * without re-deriving the path independently (K-3).
  */
 export function writeDurableSink(params: DurableSinkParams): string {
-  const { runId, found, deduped, dispatched, findTokenUsage } = params;
+	const { runId, found, deduped, dispatched, findTokenUsage } = params;
 
-  if (!runId) throw new Error('writeDurableSink: runId must be non-empty');
+	if (!runId) throw new Error("writeDurableSink: runId must be non-empty");
 
-  const sinkDir = join(getOmtDir(), 'code-review', runId);
-  mkdirSync(sinkDir, { recursive: true });
+	const sinkDir = join(getOmtDir(), "code-review", runId);
+	mkdirSync(sinkDir, { recursive: true });
 
-  writeFileSync(
-    join(sinkDir, 'candidates.json'),
-    JSON.stringify({ found, deduped, dispatched }, null, 2),
-    'utf8'
-  );
+	writeFileSync(
+		join(sinkDir, "candidates.json"),
+		JSON.stringify({ found, deduped, dispatched }, null, 2),
+		"utf8",
+	);
 
-  writeFileSync(
-    join(sinkDir, 'usage-summary.json'),
-    JSON.stringify({ findTokenUsage: findTokenUsage ?? null }, null, 2),
-    'utf8'
-  );
+	writeFileSync(
+		join(sinkDir, "usage-summary.json"),
+		JSON.stringify({ findTokenUsage: findTokenUsage ?? null }, null, 2),
+		"utf8",
+	);
 
-  return sinkDir;
+	return sinkDir;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,47 +85,56 @@ export function writeDurableSink(params: DurableSinkParams): string {
 //   Omit or pass '' when the aggregate is unavailable.
 // ---------------------------------------------------------------------------
 if (import.meta.main) {
-  const [, , runId, foundStr, dedupedStr, dispatchedStr, findTokenUsageJson] = process.argv;
+	const [, , runId, foundStr, dedupedStr, dispatchedStr, findTokenUsageJson] = process.argv;
 
-  if (
-    !runId ||
-    foundStr === undefined || foundStr === '' ||
-    dedupedStr === undefined || dedupedStr === '' ||
-    dispatchedStr === undefined || dispatchedStr === ''
-  ) {
-    process.stderr.write(
-      'usage: durable-sink.ts <runId> <found> <deduped> <dispatched> [<findTokenUsageJson>]\n'
-    );
-    process.exit(1);
-  }
+	if (
+		!runId ||
+		foundStr === undefined ||
+		foundStr === "" ||
+		dedupedStr === undefined ||
+		dedupedStr === "" ||
+		dispatchedStr === undefined ||
+		dispatchedStr === ""
+	) {
+		process.stderr.write(
+			"usage: durable-sink.ts <runId> <found> <deduped> <dispatched> [<findTokenUsageJson>]\n",
+		);
+		process.exit(1);
+	}
 
-  const found = Number(foundStr);
-  const deduped = Number(dedupedStr);
-  const dispatched = Number(dispatchedStr);
+	const found = Number(foundStr);
+	const deduped = Number(dedupedStr);
+	const dispatched = Number(dispatchedStr);
 
-  if (
-    !Number.isInteger(found) || !Number.isInteger(deduped) || !Number.isInteger(dispatched) ||
-    found < 0 || deduped < 0 || dispatched < 0
-  ) {
-    process.stderr.write('durable-sink: found/deduped/dispatched must be non-negative integers\n');
-    process.exit(1);
-  }
+	if (
+		!Number.isInteger(found) ||
+		!Number.isInteger(deduped) ||
+		!Number.isInteger(dispatched) ||
+		found < 0 ||
+		deduped < 0 ||
+		dispatched < 0
+	) {
+		process.stderr.write("durable-sink: found/deduped/dispatched must be non-negative integers\n");
+		process.exit(1);
+	}
 
-  let findTokenUsage: object | undefined;
-  if (findTokenUsageJson && findTokenUsageJson.trim() !== '') {
-    try {
-      const parsed: unknown = JSON.parse(findTokenUsageJson);
-      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        findTokenUsage = parsed;
-      } else {
-        process.stderr.write(`durable-sink: findTokenUsageJson is not a JSON object — writing null\n`);
-      }
-    } catch {
-      process.stderr.write(`durable-sink: invalid findTokenUsageJson — recording usage as null\n`);
-      // fall through: leave findTokenUsage undefined → writeDurableSink records null
-    }
-  }
+	let findTokenUsage: object | undefined;
+	if (findTokenUsageJson && findTokenUsageJson.trim() !== "") {
+		try {
+			const parsed: unknown = JSON.parse(findTokenUsageJson);
+			if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+				findTokenUsage = parsed;
+			} else {
+				process.stderr.write(
+					`durable-sink: findTokenUsageJson is not a JSON object — writing null\n`,
+				);
+			}
+		} catch {
+			process.stderr.write(`durable-sink: invalid findTokenUsageJson — recording usage as null\n`);
+			// fall through: leave findTokenUsage undefined → writeDurableSink records null
+		}
+	}
 
-  const sinkDir = writeDurableSink({ runId, found, deduped, dispatched, findTokenUsage });
-  process.stdout.write(`durable-sink: wrote ${sinkDir}/\n`);
+	const sinkDir = writeDurableSink({ runId, found, deduped, dispatched, findTokenUsage });
+	process.stdout.write(`durable-sink: wrote ${sinkDir}/\n`);
 }

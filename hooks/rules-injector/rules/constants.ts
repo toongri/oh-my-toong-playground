@@ -28,12 +28,19 @@ export const PROJECT_RULE_SUBDIRS: ReadonlyArray<readonly [string, string]> = [
 /**
  * Single-file project rules (always apply, frontmatter optional).
  */
-export const PROJECT_SINGLE_FILES: readonly string[] = [".github/copilot-instructions.md", "CONTEXT.md"];
+export const PROJECT_SINGLE_FILES: readonly string[] = [
+	".github/copilot-instructions.md",
+	"CONTEXT.md",
+];
 
 /**
  * User-home rule directories.
  */
-export const USER_HOME_RULE_SUBDIRS: readonly string[] = [".omo/rules", ".opencode/rules", ".claude/rules"];
+export const USER_HOME_RULE_SUBDIRS: readonly string[] = [
+	".omo/rules",
+	".opencode/rules",
+	".claude/rules",
+];
 
 /**
  * User-home single-file rules. The first one to exist wins per "first-match" semantics.

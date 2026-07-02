@@ -5,7 +5,9 @@ import { PROJECT_SINGLE_FILES } from "./constants.js";
 import type { CandidateProjectMembership } from "./engine-types.js";
 import type { RuleCandidate } from "./types.js";
 
-const ROOT_SINGLE_FILE_SOURCES = new Set(PROJECT_SINGLE_FILES.filter((source) => !source.includes("/")));
+const ROOT_SINGLE_FILE_SOURCES = new Set(
+	PROJECT_SINGLE_FILES.filter((source) => !source.includes("/")),
+);
 
 export function isCandidateWithinProjectCached(
 	candidate: RuleCandidate,
@@ -29,11 +31,18 @@ export function isCandidateWithinProjectCached(
 
 export function isSameOrChildPath(childPath: string, parentPath: string): boolean {
 	const childRelativePath = relative(parentPath, resolve(childPath));
-	return childRelativePath === "" || (!childRelativePath.startsWith("..") && !isAbsolute(childRelativePath));
+	return (
+		childRelativePath === "" ||
+		(!childRelativePath.startsWith("..") && !isAbsolute(childRelativePath))
+	);
 }
 
 export function isRootSingleFile(candidate: RuleCandidate): boolean {
-	return candidate.distance === 0 && candidate.isSingleFile && ROOT_SINGLE_FILE_SOURCES.has(candidate.source);
+	return (
+		candidate.distance === 0 &&
+		candidate.isSingleFile &&
+		ROOT_SINGLE_FILE_SOURCES.has(candidate.source)
+	);
 }
 
 export function pathBasesForTarget(
@@ -72,8 +81,13 @@ function isCandidateWithinProject(candidate: RuleCandidate, projectRoot: string 
 		return false;
 	}
 
-	const relativeRealPath = relative(realPathOrResolved(projectRoot), realPathOrResolved(candidate.realPath));
-	return relativeRealPath === "" || (!relativeRealPath.startsWith("..") && !isAbsolute(relativeRealPath));
+	const relativeRealPath = relative(
+		realPathOrResolved(projectRoot),
+		realPathOrResolved(candidate.realPath),
+	);
+	return (
+		relativeRealPath === "" || (!relativeRealPath.startsWith("..") && !isAbsolute(relativeRealPath))
+	);
 }
 
 function realPathOrResolved(path: string): string {
@@ -99,5 +113,7 @@ function scopeDirectoryForCandidate(projectRoot: string, candidate: RuleCandidat
 	}
 
 	const scopeRelativeDirectory = candidate.relativePath.slice(0, sourceIndex).replace(/\/$/, "");
-	return scopeRelativeDirectory.length === 0 ? projectRoot : join(projectRoot, scopeRelativeDirectory);
+	return scopeRelativeDirectory.length === 0
+		? projectRoot
+		: join(projectRoot, scopeRelativeDirectory);
 }

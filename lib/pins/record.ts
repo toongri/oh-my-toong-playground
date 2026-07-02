@@ -1,12 +1,20 @@
-import { writeFileSync, appendFileSync, mkdirSync, readFileSync, existsSync, renameSync, unlinkSync } from 'fs';
-import { join, dirname } from 'path';
-import { validate } from './validator.ts';
-import { serialize, parse } from './entity.ts';
-import type { Entity } from './types.ts';
-import type { ValidationResult } from './validator.ts';
+import {
+	writeFileSync,
+	appendFileSync,
+	mkdirSync,
+	readFileSync,
+	existsSync,
+	renameSync,
+	unlinkSync,
+} from "fs";
+import { join, dirname } from "path";
+import { validate } from "./validator.ts";
+import { serialize, parse } from "./entity.ts";
+import type { Entity } from "./types.ts";
+import type { ValidationResult } from "./validator.ts";
 
 export interface RecordTarget {
-  location: string;
+	location: string;
 }
 
 /**
@@ -23,48 +31,45 @@ export interface RecordTarget {
  * Does NOT depend on index correctness.
  * Does NOT hard-code any path — uses manifest.location exclusively.
  */
-export async function record(
-  entity: Entity,
-  target: RecordTarget,
-): Promise<void> {
-  const result = await validate(entity);
+export async function record(entity: Entity, target: RecordTarget): Promise<void> {
+	const result = await validate(entity);
 
-  if (!result.valid) {
-    appendEscapeEntry(target.location, entity, result);
-    return;
-  }
+	if (!result.valid) {
+		appendEscapeEntry(target.location, entity, result);
+		return;
+	}
 
-  const fm = entity.frontmatter;
-  const existingPath = join(target.location, `${fm.id}.md`);
+	const fm = entity.frontmatter;
+	const existingPath = join(target.location, `${fm.id}.md`);
 
-  // Resolve timestamps
-  let createdAt = fm.created_at;
-  if (existsSync(existingPath)) {
-    // Update path: preserve the original created_at from the file on disk
-    try {
-      const existing = parse(readFileSync(existingPath, 'utf8'));
-      createdAt = existing.frontmatter.created_at;
-    } catch (err) {
-      console.error('[pins] failed to parse existing pin file, using fresh defaults:', err);
-    }
-  }
+	// Resolve timestamps
+	let createdAt = fm.created_at;
+	if (existsSync(existingPath)) {
+		// Update path: preserve the original created_at from the file on disk
+		try {
+			const existing = parse(readFileSync(existingPath, "utf8"));
+			createdAt = existing.frontmatter.created_at;
+		} catch (err) {
+			console.error("[pins] failed to parse existing pin file, using fresh defaults:", err);
+		}
+	}
 
-  // Apply defaults for fresh writes (status and updated_at may be missing)
-  const status = fm.status ?? 'active';
-  const updatedAt = fm.updated_at ?? createdAt;
+	// Apply defaults for fresh writes (status and updated_at may be missing)
+	const status = fm.status ?? "active";
+	const updatedAt = fm.updated_at ?? createdAt;
 
-  const finalEntity: Entity = {
-    frontmatter: {
-      ...fm,
-      created_at: createdAt,
-      status,
-      updated_at: updatedAt,
-    },
-    body: entity.body,
-  };
+	const finalEntity: Entity = {
+		frontmatter: {
+			...fm,
+			created_at: createdAt,
+			status,
+			updated_at: updatedAt,
+		},
+		body: entity.body,
+	};
 
-  const content = serialize(finalEntity);
-  writePinAtomically(target.location, fm.id, content);
+	const content = serialize(finalEntity);
+	writePinAtomically(target.location, fm.id, content);
 }
 
 // ── Atomic write ──────────────────────────────────────────────────────────────
@@ -81,73 +86,69 @@ export async function record(
  *
  * Any other fs error is re-thrown.
  */
-function writePinAtomically(
-  targetDir: string,
-  id: string,
-  content: string,
-): void {
-  mkdirSync(targetDir, { recursive: true });
-  const basePath = join(targetDir, `${id}.md`);
+function writePinAtomically(targetDir: string, id: string, content: string): void {
+	mkdirSync(targetDir, { recursive: true });
+	const basePath = join(targetDir, `${id}.md`);
 
-  // Attempt atomic create; if the file already exists we take the update path
-  try {
-    writeFileSync(basePath, content, { flag: 'wx', encoding: 'utf-8' });
-    return;
-  } catch (err: unknown) {
-    const code = err instanceof Error && 'code' in err ? err.code : undefined;
-    if (code !== 'EEXIST') throw err;
-  }
+	// Attempt atomic create; if the file already exists we take the update path
+	try {
+		writeFileSync(basePath, content, { flag: "wx", encoding: "utf-8" });
+		return;
+	} catch (err: unknown) {
+		const code = err instanceof Error && "code" in err ? err.code : undefined;
+		if (code !== "EEXIST") throw err;
+	}
 
-  // File exists: atomic update via temp file + rename
-  const tempPath = join(
-    targetDir,
-    `${id}.md.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`,
-  );
-  try {
-    writeFileSync(tempPath, content, { flag: 'wx', encoding: 'utf-8' });
-    renameSync(tempPath, basePath);
-  } catch (err) {
-    // Clean up temp file if it was created, then re-throw so caller sees the failure
-    try {
-      unlinkSync(tempPath);
-    } catch {
-      // ignore — temp may not exist yet
-    }
-    throw err;
-  }
+	// File exists: atomic update via temp file + rename
+	const tempPath = join(
+		targetDir,
+		`${id}.md.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`,
+	);
+	try {
+		writeFileSync(tempPath, content, { flag: "wx", encoding: "utf-8" });
+		renameSync(tempPath, basePath);
+	} catch (err) {
+		// Clean up temp file if it was created, then re-throw so caller sees the failure
+		try {
+			unlinkSync(tempPath);
+		} catch {
+			// ignore — temp may not exist yet
+		}
+		throw err;
+	}
 }
 
 // ── Escape log ────────────────────────────────────────────────────────────────
 
-const ESCAPE_FILE = '.escape.jsonl';
+const ESCAPE_FILE = ".escape.jsonl";
 const RAW_MAX_BYTES = 1500;
 
 function truncateRaw(raw: string): string {
-  const buf = Buffer.from(raw, 'utf-8');
-  if (buf.length <= RAW_MAX_BYTES) return raw;
-  const suffix = '...';
-  const keep = RAW_MAX_BYTES - Buffer.byteLength(suffix);
-  return buf.slice(0, keep).toString('utf-8') + suffix;
+	const buf = Buffer.from(raw, "utf-8");
+	if (buf.length <= RAW_MAX_BYTES) return raw;
+	const suffix = "...";
+	const keep = RAW_MAX_BYTES - Buffer.byteLength(suffix);
+	return buf.slice(0, keep).toString("utf-8") + suffix;
 }
 
 function appendEscapeEntry(
-  location: string,
-  entity: Entity,
-  result: Extract<ValidationResult, { valid: false }>,
+	location: string,
+	entity: Entity,
+	result: Extract<ValidationResult, { valid: false }>,
 ): void {
-  try {
-    const escapePath = join(location, ESCAPE_FILE);
-    mkdirSync(dirname(escapePath), { recursive: true });
+	try {
+		const escapePath = join(location, ESCAPE_FILE);
+		mkdirSync(dirname(escapePath), { recursive: true });
 
-    const entry = {
-      ts: new Date().toISOString(),
-      id: entity.frontmatter.id,
-      reason: result.reason,
-      message: result.message,
-      raw: truncateRaw(JSON.stringify(entity.frontmatter)),
-    };
-    appendFileSync(escapePath, JSON.stringify(entry) + '\n', 'utf-8');
-  } catch (err) {
-    console.error('[pins] escape log write failed:', err);
-  }
+		const entry = {
+			ts: new Date().toISOString(),
+			id: entity.frontmatter.id,
+			reason: result.reason,
+			message: result.message,
+			raw: truncateRaw(JSON.stringify(entity.frontmatter)),
+		};
+		appendFileSync(escapePath, JSON.stringify(entry) + "\n", "utf-8");
+	} catch (err) {
+		console.error("[pins] escape log write failed:", err);
+	}
 }

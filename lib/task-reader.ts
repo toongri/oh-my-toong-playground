@@ -3,19 +3,19 @@
  * Reads Claude Code task files from ~/.claude/tasks/{session_id}/
  */
 
-import { readdir, readFile } from 'fs/promises';
-import { join } from 'path';
+import { readdir, readFile } from "fs/promises";
+import { join } from "path";
 
 export interface Task {
-  id: string;
-  subject: string;
-  description?: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  activeForm?: string;
-  owner?: string;
-  blocks?: string[];
-  blockedBy?: string[];
-  metadata?: Record<string, unknown>;
+	id: string;
+	subject: string;
+	description?: string;
+	status: "pending" | "in_progress" | "completed";
+	activeForm?: string;
+	owner?: string;
+	blocks?: string[];
+	blockedBy?: string[];
+	metadata?: Record<string, unknown>;
 }
 
 /**
@@ -24,30 +24,30 @@ export interface Task {
  * @returns Array of Task objects
  */
 export async function readTasksFromDirectory(directoryPath: string): Promise<Task[]> {
-  let files: string[];
-  try {
-    files = await readdir(directoryPath);
-  } catch {
-    // Directory not found - return empty array
-    return [];
-  }
+	let files: string[];
+	try {
+		files = await readdir(directoryPath);
+	} catch {
+		// Directory not found - return empty array
+		return [];
+	}
 
-  const tasks: Task[] = [];
+	const tasks: Task[] = [];
 
-  for (const file of files) {
-    if (!file.endsWith('.json')) continue;
+	for (const file of files) {
+		if (!file.endsWith(".json")) continue;
 
-    const filePath = join(directoryPath, file);
-    try {
-      const content = await readFile(filePath, 'utf-8');
-      const task: Task = JSON.parse(content);
-      tasks.push(task);
-    } catch {
-      console.error(`Warning: Failed to parse task file: ${file}`);
-    }
-  }
+		const filePath = join(directoryPath, file);
+		try {
+			const content = await readFile(filePath, "utf-8");
+			const task: Task = JSON.parse(content);
+			tasks.push(task);
+		} catch {
+			console.error(`Warning: Failed to parse task file: ${file}`);
+		}
+	}
 
-  return tasks;
+	return tasks;
 }
 
 /**
@@ -56,9 +56,7 @@ export async function readTasksFromDirectory(directoryPath: string): Promise<Tas
  * @returns Number of incomplete tasks
  */
 export function countIncompleteTasks(tasks: Task[]): number {
-  return tasks.filter(
-    (task) => task.status === 'pending' || task.status === 'in_progress'
-  ).length;
+	return tasks.filter((task) => task.status === "pending" || task.status === "in_progress").length;
 }
 
 /**
@@ -67,5 +65,5 @@ export function countIncompleteTasks(tasks: Task[]): number {
  * @returns First in_progress task or null if none found
  */
 export function getInProgressTask(tasks: Task[]): Task | null {
-  return tasks.find((task) => task.status === 'in_progress') ?? null;
+	return tasks.find((task) => task.status === "in_progress") ?? null;
 }

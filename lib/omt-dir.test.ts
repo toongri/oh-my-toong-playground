@@ -1,499 +1,481 @@
-import { rm, mkdir } from 'fs/promises';
-import { existsSync, readdirSync } from 'fs';
-import { execSync } from 'child_process';
-import { join } from 'path';
-import { tmpdir, homedir } from 'os';
-import { basename, dirname, resolve } from 'path';
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from 'bun:test';
+import { rm, mkdir } from "fs/promises";
+import { existsSync, readdirSync } from "fs";
+import { execSync } from "child_process";
+import { join } from "path";
+import { tmpdir, homedir } from "os";
+import { basename, dirname, resolve } from "path";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from "bun:test";
 
-import { getOmtDir, resolveOmtDir, resolveProjectRoot, resolvePinsHome } from './omt-dir.ts';
+import { getOmtDir, resolveOmtDir, resolveProjectRoot, resolvePinsHome } from "./omt-dir.ts";
 
-const testTmpBase = join(tmpdir(), 'omt-dir-test-' + Date.now());
+const testTmpBase = join(tmpdir(), "omt-dir-test-" + Date.now());
 
 beforeAll(async () => {
-  await mkdir(testTmpBase, { recursive: true });
+	await mkdir(testTmpBase, { recursive: true });
 });
 
 afterAll(async () => {
-  await rm(testTmpBase, { recursive: true, force: true });
+	await rm(testTmpBase, { recursive: true, force: true });
 });
 
-describe('getOmtDir', () => {
-  let originalOmtDir: string | undefined;
-  let originalCwd: string;
-  let createdOmtDirs: string[] = [];
-  let preExistingDirs: Set<string>;
+describe("getOmtDir", () => {
+	let originalOmtDir: string | undefined;
+	let originalCwd: string;
+	let createdOmtDirs: string[] = [];
+	let preExistingDirs: Set<string>;
 
-  beforeEach(() => {
-    originalOmtDir = process.env.OMT_DIR;
-    originalCwd = process.cwd();
-    createdOmtDirs = [];
-    const omtBase = `${homedir()}/.omt`;
-    preExistingDirs = new Set(
-      existsSync(omtBase)
-        ? readdirSync(omtBase).map(d => `${omtBase}/${d}`)
-        : []
-    );
-  });
+	beforeEach(() => {
+		originalOmtDir = process.env.OMT_DIR;
+		originalCwd = process.cwd();
+		createdOmtDirs = [];
+		const omtBase = `${homedir()}/.omt`;
+		preExistingDirs = new Set(
+			existsSync(omtBase) ? readdirSync(omtBase).map((d) => `${omtBase}/${d}`) : [],
+		);
+	});
 
-  afterEach(async () => {
-    if (originalOmtDir === undefined) {
-      delete process.env.OMT_DIR;
-    } else {
-      process.env.OMT_DIR = originalOmtDir;
-    }
-    process.chdir(originalCwd);
+	afterEach(async () => {
+		if (originalOmtDir === undefined) {
+			delete process.env.OMT_DIR;
+		} else {
+			process.env.OMT_DIR = originalOmtDir;
+		}
+		process.chdir(originalCwd);
 
-    for (const dir of createdOmtDirs) {
-      if (
-        dir.startsWith(`${homedir()}/.omt/`) &&
-        !preExistingDirs.has(dir) &&
-        existsSync(dir)
-      ) {
-        await rm(dir, { recursive: true, force: true });
-      }
-    }
-  });
+		for (const dir of createdOmtDirs) {
+			if (dir.startsWith(`${homedir()}/.omt/`) && !preExistingDirs.has(dir) && existsSync(dir)) {
+				await rm(dir, { recursive: true, force: true });
+			}
+		}
+	});
 
-  it('env var present: returns OMT_DIR and creates directory', () => {
-    const envDir = join(testTmpBase, 'from-env-var');
-    process.env.OMT_DIR = envDir;
+	it("env var present: returns OMT_DIR and creates directory", () => {
+		const envDir = join(testTmpBase, "from-env-var");
+		process.env.OMT_DIR = envDir;
 
-    const result = getOmtDir();
+		const result = getOmtDir();
 
-    expect(result).toBe(envDir);
-    expect(existsSync(envDir)).toBe(true);
-  });
+		expect(result).toBe(envDir);
+		expect(existsSync(envDir)).toBe(true);
+	});
 
-  it('env var absent with git repo: returns $HOME/.omt/{repo-name}', () => {
-    delete process.env.OMT_DIR;
+	it("env var absent with git repo: returns $HOME/.omt/{repo-name}", () => {
+		delete process.env.OMT_DIR;
 
-    // Use this repo itself as a known git directory
-    const repoDir = join(import.meta.dir, '..');
-    process.chdir(repoDir);
+		// Use this repo itself as a known git directory
+		const repoDir = join(import.meta.dir, "..");
+		process.chdir(repoDir);
 
-    const result = getOmtDir();
-    createdOmtDirs.push(result);
+		const result = getOmtDir();
+		createdOmtDirs.push(result);
 
-    // Should be under $HOME/.omt/
-    expect(result.startsWith(`${homedir()}/.omt/`)).toBe(true);
-    expect(existsSync(result)).toBe(true);
+		// Should be under $HOME/.omt/
+		expect(result.startsWith(`${homedir()}/.omt/`)).toBe(true);
+		expect(existsSync(result)).toBe(true);
 
-    // Derive expected name using the same logic as omt-dir.ts and session-start.sh
-    const gitCommonDir = execSync('git rev-parse --git-common-dir', {
-      cwd: repoDir,
-      encoding: 'utf-8',
-    }).trim();
+		// Derive expected name using the same logic as omt-dir.ts and session-start.sh
+		const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+			cwd: repoDir,
+			encoding: "utf-8",
+		}).trim();
 
-    let expectedName: string;
-    if (gitCommonDir !== '.git') {
-      // Worktree or subdirectory: resolve relative path against cwd
-      const resolved = resolve(repoDir, gitCommonDir);
-      expectedName = basename(dirname(resolved));
-    } else {
-      const toplevel = execSync('git rev-parse --show-toplevel', {
-        cwd: repoDir,
-        encoding: 'utf-8',
-      }).trim();
-      expectedName = basename(toplevel);
-    }
-    expectedName = expectedName.replace(/ /g, '-');
+		let expectedName: string;
+		if (gitCommonDir !== ".git") {
+			// Worktree or subdirectory: resolve relative path against cwd
+			const resolved = resolve(repoDir, gitCommonDir);
+			expectedName = basename(dirname(resolved));
+		} else {
+			const toplevel = execSync("git rev-parse --show-toplevel", {
+				cwd: repoDir,
+				encoding: "utf-8",
+			}).trim();
+			expectedName = basename(toplevel);
+		}
+		expectedName = expectedName.replace(/ /g, "-");
 
-    expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
-  });
+		expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
+	});
 
-  it('env var absent without git: falls back to basename(cwd)', async () => {
-    delete process.env.OMT_DIR;
+	it("env var absent without git: falls back to basename(cwd)", async () => {
+		delete process.env.OMT_DIR;
 
-    // Create a temp dir that is NOT a git repo
-    const nonGitDir = join(testTmpBase, 'non-git-dir');
-    await mkdir(nonGitDir, { recursive: true });
-    process.chdir(nonGitDir);
+		// Create a temp dir that is NOT a git repo
+		const nonGitDir = join(testTmpBase, "non-git-dir");
+		await mkdir(nonGitDir, { recursive: true });
+		process.chdir(nonGitDir);
 
-    const result = getOmtDir();
-    createdOmtDirs.push(result);
+		const result = getOmtDir();
+		createdOmtDirs.push(result);
 
-    const expectedName = basename(nonGitDir).replace(/ /g, '-');
-    expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
-    expect(existsSync(result)).toBe(true);
-  });
+		const expectedName = basename(nonGitDir).replace(/ /g, "-");
+		expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
+		expect(existsSync(result)).toBe(true);
+	});
 
-  it('path equivalence with session-start.sh logic: standard repo', () => {
-    delete process.env.OMT_DIR;
+	it("path equivalence with session-start.sh logic: standard repo", () => {
+		delete process.env.OMT_DIR;
 
-    const repoDir = join(import.meta.dir, '..');
-    process.chdir(repoDir);
+		const repoDir = join(import.meta.dir, "..");
+		process.chdir(repoDir);
 
-    // Replicate session-start.sh lines 52-68 manually
-    let gitCommonDir: string;
-    try {
-      gitCommonDir = execSync('git rev-parse --git-common-dir', {
-        cwd: repoDir,
-        encoding: 'utf-8',
-      }).trim();
-    } catch {
-      gitCommonDir = '';
-    }
+		// Replicate session-start.sh lines 52-68 manually
+		let gitCommonDir: string;
+		try {
+			gitCommonDir = execSync("git rev-parse --git-common-dir", {
+				cwd: repoDir,
+				encoding: "utf-8",
+			}).trim();
+		} catch {
+			gitCommonDir = "";
+		}
 
-    let shellProjectName: string;
-    if (gitCommonDir && gitCommonDir !== '.git') {
-      const resolved = resolve(repoDir, gitCommonDir);
-      shellProjectName = basename(dirname(resolved));
-    } else if (gitCommonDir === '.git') {
-      const toplevel = execSync('git rev-parse --show-toplevel', {
-        cwd: repoDir,
-        encoding: 'utf-8',
-      }).trim();
-      shellProjectName = basename(toplevel);
-    } else {
-      shellProjectName = basename(repoDir);
-    }
-    shellProjectName = shellProjectName.replace(/ /g, '-');
+		let shellProjectName: string;
+		if (gitCommonDir && gitCommonDir !== ".git") {
+			const resolved = resolve(repoDir, gitCommonDir);
+			shellProjectName = basename(dirname(resolved));
+		} else if (gitCommonDir === ".git") {
+			const toplevel = execSync("git rev-parse --show-toplevel", {
+				cwd: repoDir,
+				encoding: "utf-8",
+			}).trim();
+			shellProjectName = basename(toplevel);
+		} else {
+			shellProjectName = basename(repoDir);
+		}
+		shellProjectName = shellProjectName.replace(/ /g, "-");
 
-    const expectedPath = `${homedir()}/.omt/${shellProjectName}`;
-    const result = getOmtDir();
-    createdOmtDirs.push(result);
+		const expectedPath = `${homedir()}/.omt/${shellProjectName}`;
+		const result = getOmtDir();
+		createdOmtDirs.push(result);
 
-    expect(result).toBe(expectedPath);
-  });
+		expect(result).toBe(expectedPath);
+	});
 
-  it('env var absent from git repo subdirectory: returns correct $HOME/.omt/{repo-name}', async () => {
-    delete process.env.OMT_DIR;
+	it("env var absent from git repo subdirectory: returns correct $HOME/.omt/{repo-name}", async () => {
+		delete process.env.OMT_DIR;
 
-    // Use a subdirectory of this repo — git rev-parse --git-common-dir returns relative "../.git"
-    const subDir = join(import.meta.dir, '..', 'lib');
-    process.chdir(subDir);
+		// Use a subdirectory of this repo — git rev-parse --git-common-dir returns relative "../.git"
+		const subDir = join(import.meta.dir, "..", "lib");
+		process.chdir(subDir);
 
-    const result = getOmtDir();
-    createdOmtDirs.push(result);
+		const result = getOmtDir();
+		createdOmtDirs.push(result);
 
-    // Derive expected name: resolve relative gitCommonDir against subDir
-    const gitCommonDir = execSync('git rev-parse --git-common-dir', {
-      cwd: subDir,
-      encoding: 'utf-8',
-    }).trim();
+		// Derive expected name: resolve relative gitCommonDir against subDir
+		const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+			cwd: subDir,
+			encoding: "utf-8",
+		}).trim();
 
-    let expectedName: string;
-    if (gitCommonDir !== '.git') {
-      const resolved = resolve(subDir, gitCommonDir);
-      expectedName = basename(dirname(resolved));
-    } else {
-      const toplevel = execSync('git rev-parse --show-toplevel', {
-        cwd: subDir,
-        encoding: 'utf-8',
-      }).trim();
-      expectedName = basename(toplevel);
-    }
-    expectedName = expectedName.replace(/ /g, '-');
+		let expectedName: string;
+		if (gitCommonDir !== ".git") {
+			const resolved = resolve(subDir, gitCommonDir);
+			expectedName = basename(dirname(resolved));
+		} else {
+			const toplevel = execSync("git rev-parse --show-toplevel", {
+				cwd: subDir,
+				encoding: "utf-8",
+			}).trim();
+			expectedName = basename(toplevel);
+		}
+		expectedName = expectedName.replace(/ /g, "-");
 
-    expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
-    // Must not be the home directory itself (the bug: basename(dirname("../.git")) === "..")
-    expect(result).not.toBe(`${homedir()}/.omt/..`);
-    expect(existsSync(result)).toBe(true);
-  });
+		expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
+		// Must not be the home directory itself (the bug: basename(dirname("../.git")) === "..")
+		expect(result).not.toBe(`${homedir()}/.omt/..`);
+		expect(existsSync(result)).toBe(true);
+	});
 
-  it('spaces in directory name are replaced with hyphens', async () => {
-    delete process.env.OMT_DIR;
+	it("spaces in directory name are replaced with hyphens", async () => {
+		delete process.env.OMT_DIR;
 
-    // Create a non-git dir with spaces in name
-    const spacedDir = join(testTmpBase, 'my project name');
-    await mkdir(spacedDir, { recursive: true });
-    process.chdir(spacedDir);
+		// Create a non-git dir with spaces in name
+		const spacedDir = join(testTmpBase, "my project name");
+		await mkdir(spacedDir, { recursive: true });
+		process.chdir(spacedDir);
 
-    const result = getOmtDir();
-    createdOmtDirs.push(result);
+		const result = getOmtDir();
+		createdOmtDirs.push(result);
 
-    expect(result).toBe(`${homedir()}/.omt/my-project-name`);
-    expect(existsSync(result)).toBe(true);
-  });
+		expect(result).toBe(`${homedir()}/.omt/my-project-name`);
+		expect(existsSync(result)).toBe(true);
+	});
 });
 
-describe('no-mkdir sibling path matches getOmtDir', () => {
-  let originalOmtDir: string | undefined;
-  let originalCwd: string;
-  let createdOmtDirs: string[] = [];
-  let preExistingDirs: Set<string>;
+describe("no-mkdir sibling path matches getOmtDir", () => {
+	let originalOmtDir: string | undefined;
+	let originalCwd: string;
+	let createdOmtDirs: string[] = [];
+	let preExistingDirs: Set<string>;
 
-  beforeEach(() => {
-    originalOmtDir = process.env.OMT_DIR;
-    originalCwd = process.cwd();
-    createdOmtDirs = [];
-    const omtBase = `${homedir()}/.omt`;
-    preExistingDirs = new Set(
-      existsSync(omtBase)
-        ? readdirSync(omtBase).map(d => `${omtBase}/${d}`)
-        : []
-    );
-  });
+	beforeEach(() => {
+		originalOmtDir = process.env.OMT_DIR;
+		originalCwd = process.cwd();
+		createdOmtDirs = [];
+		const omtBase = `${homedir()}/.omt`;
+		preExistingDirs = new Set(
+			existsSync(omtBase) ? readdirSync(omtBase).map((d) => `${omtBase}/${d}`) : [],
+		);
+	});
 
-  afterEach(async () => {
-    if (originalOmtDir === undefined) {
-      delete process.env.OMT_DIR;
-    } else {
-      process.env.OMT_DIR = originalOmtDir;
-    }
-    process.chdir(originalCwd);
+	afterEach(async () => {
+		if (originalOmtDir === undefined) {
+			delete process.env.OMT_DIR;
+		} else {
+			process.env.OMT_DIR = originalOmtDir;
+		}
+		process.chdir(originalCwd);
 
-    for (const dir of createdOmtDirs) {
-      if (
-        dir.startsWith(`${homedir()}/.omt/`) &&
-        !preExistingDirs.has(dir) &&
-        existsSync(dir)
-      ) {
-        await rm(dir, { recursive: true, force: true });
-      }
-    }
-  });
+		for (const dir of createdOmtDirs) {
+			if (dir.startsWith(`${homedir()}/.omt/`) && !preExistingDirs.has(dir) && existsSync(dir)) {
+				await rm(dir, { recursive: true, force: true });
+			}
+		}
+	});
 
-  it('OMT_DIR set: returns same path as getOmtDir without creating a new directory', () => {
-    const envDir = join(testTmpBase, 'resolve-env-branch');
-    process.env.OMT_DIR = envDir;
+	it("OMT_DIR set: returns same path as getOmtDir without creating a new directory", () => {
+		const envDir = join(testTmpBase, "resolve-env-branch");
+		process.env.OMT_DIR = envDir;
 
-    // Precondition: dir does NOT exist yet
-    expect(existsSync(envDir)).toBe(false);
+		// Precondition: dir does NOT exist yet
+		expect(existsSync(envDir)).toBe(false);
 
-    const resolved = resolveOmtDir();
+		const resolved = resolveOmtDir();
 
-    // resolveOmtDir must NOT have created the directory (no-mkdir contract)
-    expect(existsSync(envDir)).toBe(false);
+		// resolveOmtDir must NOT have created the directory (no-mkdir contract)
+		expect(existsSync(envDir)).toBe(false);
 
-    const fromGetOmtDir = getOmtDir();
-    createdOmtDirs.push(fromGetOmtDir);
+		const fromGetOmtDir = getOmtDir();
+		createdOmtDirs.push(fromGetOmtDir);
 
-    // Path must match
-    expect(resolved).toBe(fromGetOmtDir);
-    expect(resolved).toBe(envDir);
-  });
+		// Path must match
+		expect(resolved).toBe(fromGetOmtDir);
+		expect(resolved).toBe(envDir);
+	});
 
-  it('OMT_DIR unset: returns same path as getOmtDir without creating directory', async () => {
-    delete process.env.OMT_DIR;
+	it("OMT_DIR unset: returns same path as getOmtDir without creating directory", async () => {
+		delete process.env.OMT_DIR;
 
-    // Use a non-git tmp dir so the derived name is deterministic and won't pre-exist
-    const nonGitDir = join(testTmpBase, 'resolve-non-git-' + Date.now());
-    await mkdir(nonGitDir, { recursive: true });
-    process.chdir(nonGitDir);
+		// Use a non-git tmp dir so the derived name is deterministic and won't pre-exist
+		const nonGitDir = join(testTmpBase, "resolve-non-git-" + Date.now());
+		await mkdir(nonGitDir, { recursive: true });
+		process.chdir(nonGitDir);
 
-    const expectedName = basename(nonGitDir).replace(/ /g, '-');
-    const expectedPath = `${homedir()}/.omt/${expectedName}`;
+		const expectedName = basename(nonGitDir).replace(/ /g, "-");
+		const expectedPath = `${homedir()}/.omt/${expectedName}`;
 
-    // Precondition: expected dir does NOT exist before we call resolveOmtDir
-    expect(existsSync(expectedPath)).toBe(false);
+		// Precondition: expected dir does NOT exist before we call resolveOmtDir
+		expect(existsSync(expectedPath)).toBe(false);
 
-    const resolved = resolveOmtDir();
+		const resolved = resolveOmtDir();
 
-    // resolveOmtDir must NOT have created the directory (no-mkdir contract)
-    expect(existsSync(expectedPath)).toBe(false);
+		// resolveOmtDir must NOT have created the directory (no-mkdir contract)
+		expect(existsSync(expectedPath)).toBe(false);
 
-    // Path must match what getOmtDir would return
-    const fromGetOmtDir = getOmtDir();
-    createdOmtDirs.push(fromGetOmtDir);
+		// Path must match what getOmtDir would return
+		const fromGetOmtDir = getOmtDir();
+		createdOmtDirs.push(fromGetOmtDir);
 
-    expect(resolved).toBe(fromGetOmtDir);
-    expect(resolved).toBe(expectedPath);
-  });
+		expect(resolved).toBe(fromGetOmtDir);
+		expect(resolved).toBe(expectedPath);
+	});
 
-  it('custom cwd: resolveOmtDir(customCwd) uses customCwd for derivation, not process.cwd()', async () => {
-    delete process.env.OMT_DIR;
+	it("custom cwd: resolveOmtDir(customCwd) uses customCwd for derivation, not process.cwd()", async () => {
+		delete process.env.OMT_DIR;
 
-    // Create two distinct non-git tmp dirs
-    const customCwd = join(testTmpBase, 'custom-cwd-dir-' + Date.now());
-    const processCwdDir = join(testTmpBase, 'process-cwd-dir-' + Date.now());
-    await mkdir(customCwd, { recursive: true });
-    await mkdir(processCwdDir, { recursive: true });
+		// Create two distinct non-git tmp dirs
+		const customCwd = join(testTmpBase, "custom-cwd-dir-" + Date.now());
+		const processCwdDir = join(testTmpBase, "process-cwd-dir-" + Date.now());
+		await mkdir(customCwd, { recursive: true });
+		await mkdir(processCwdDir, { recursive: true });
 
-    // Set process.cwd() to processCwdDir — different from customCwd
-    process.chdir(processCwdDir);
+		// Set process.cwd() to processCwdDir — different from customCwd
+		process.chdir(processCwdDir);
 
-    const customName = basename(customCwd).replace(/ /g, '-');
-    const expectedPath = `${homedir()}/.omt/${customName}`;
+		const customName = basename(customCwd).replace(/ /g, "-");
+		const expectedPath = `${homedir()}/.omt/${customName}`;
 
-    const resolved = resolveOmtDir(customCwd);
+		const resolved = resolveOmtDir(customCwd);
 
-    // Must use customCwd, not process.cwd()
-    expect(resolved).toBe(expectedPath);
-    expect(resolved).not.toBe(`${homedir()}/.omt/${basename(processCwdDir).replace(/ /g, '-')}`);
+		// Must use customCwd, not process.cwd()
+		expect(resolved).toBe(expectedPath);
+		expect(resolved).not.toBe(`${homedir()}/.omt/${basename(processCwdDir).replace(/ /g, "-")}`);
 
-    // Must NOT create the directory
-    expect(existsSync(expectedPath)).toBe(false);
-  });
+		// Must NOT create the directory
+		expect(existsSync(expectedPath)).toBe(false);
+	});
 });
 
-describe('non-canonical warn', () => {
-  let originalOmtDir: string | undefined;
-  let originalCwd: string;
-  let createdOmtDirs: string[] = [];
-  let preExistingDirs: Set<string>;
-  let warnSpy: ReturnType<typeof spyOn> | null = null;
+describe("non-canonical warn", () => {
+	let originalOmtDir: string | undefined;
+	let originalCwd: string;
+	let createdOmtDirs: string[] = [];
+	let preExistingDirs: Set<string>;
+	let warnSpy: ReturnType<typeof spyOn> | null = null;
 
-  beforeEach(() => {
-    originalOmtDir = process.env.OMT_DIR;
-    originalCwd = process.cwd();
-    createdOmtDirs = [];
-    const omtBase = `${homedir()}/.omt`;
-    preExistingDirs = new Set(
-      existsSync(omtBase)
-        ? readdirSync(omtBase).map(d => `${omtBase}/${d}`)
-        : []
-    );
-  });
+	beforeEach(() => {
+		originalOmtDir = process.env.OMT_DIR;
+		originalCwd = process.cwd();
+		createdOmtDirs = [];
+		const omtBase = `${homedir()}/.omt`;
+		preExistingDirs = new Set(
+			existsSync(omtBase) ? readdirSync(omtBase).map((d) => `${omtBase}/${d}`) : [],
+		);
+	});
 
-  afterEach(async () => {
-    if (warnSpy) {
-      warnSpy.mockRestore();
-      warnSpy = null;
-    }
-    if (originalOmtDir === undefined) {
-      delete process.env.OMT_DIR;
-    } else {
-      process.env.OMT_DIR = originalOmtDir;
-    }
-    process.chdir(originalCwd);
+	afterEach(async () => {
+		if (warnSpy) {
+			warnSpy.mockRestore();
+			warnSpy = null;
+		}
+		if (originalOmtDir === undefined) {
+			delete process.env.OMT_DIR;
+		} else {
+			process.env.OMT_DIR = originalOmtDir;
+		}
+		process.chdir(originalCwd);
 
-    for (const dir of createdOmtDirs) {
-      if (
-        dir.startsWith(`${homedir()}/.omt/`) &&
-        !preExistingDirs.has(dir) &&
-        existsSync(dir)
-      ) {
-        await rm(dir, { recursive: true, force: true });
-      }
-    }
-  });
+		for (const dir of createdOmtDirs) {
+			if (dir.startsWith(`${homedir()}/.omt/`) && !preExistingDirs.has(dir) && existsSync(dir)) {
+				await rm(dir, { recursive: true, force: true });
+			}
+		}
+	});
 
-  it('no-git cwd: emits console.warn with non-canonical message and returns correct path', async () => {
-    delete process.env.OMT_DIR;
+	it("no-git cwd: emits console.warn with non-canonical message and returns correct path", async () => {
+		delete process.env.OMT_DIR;
 
-    const nonGitDir = join(testTmpBase, 'non-canonical-warn-' + Date.now());
-    await mkdir(nonGitDir, { recursive: true });
-    process.chdir(nonGitDir);
+		const nonGitDir = join(testTmpBase, "non-canonical-warn-" + Date.now());
+		await mkdir(nonGitDir, { recursive: true });
+		process.chdir(nonGitDir);
 
-    const warnMessages: string[] = [];
-    warnSpy = spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-      warnMessages.push(args.map(String).join(' '));
-    });
+		const warnMessages: string[] = [];
+		warnSpy = spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+			warnMessages.push(args.map(String).join(" "));
+		});
 
-    const result = resolveOmtDir(nonGitDir);
-    createdOmtDirs.push(`${homedir()}/.omt/${basename(nonGitDir).replace(/ /g, '-')}`);
+		const result = resolveOmtDir(nonGitDir);
+		createdOmtDirs.push(`${homedir()}/.omt/${basename(nonGitDir).replace(/ /g, "-")}`);
 
-    const expectedName = basename(nonGitDir).replace(/ /g, '-');
-    expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
-    expect(warnMessages.length).toBeGreaterThan(0);
-    expect(warnMessages[0]).toContain('non-canonical');
-    expect(warnMessages[0]).toContain(expectedName);
-  });
+		const expectedName = basename(nonGitDir).replace(/ /g, "-");
+		expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
+		expect(warnMessages.length).toBeGreaterThan(0);
+		expect(warnMessages[0]).toContain("non-canonical");
+		expect(warnMessages[0]).toContain(expectedName);
+	});
 
-  it('canonical path (git repo): emits NO console.warn', () => {
-    delete process.env.OMT_DIR;
+	it("canonical path (git repo): emits NO console.warn", () => {
+		delete process.env.OMT_DIR;
 
-    const repoDir = join(import.meta.dir, '..');
+		const repoDir = join(import.meta.dir, "..");
 
-    const warnMessages: string[] = [];
-    warnSpy = spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-      warnMessages.push(args.map(String).join(' '));
-    });
+		const warnMessages: string[] = [];
+		warnSpy = spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+			warnMessages.push(args.map(String).join(" "));
+		});
 
-    const result = resolveOmtDir(repoDir);
+		const result = resolveOmtDir(repoDir);
 
-    expect(result.startsWith(`${homedir()}/.omt/`)).toBe(true);
-    expect(warnMessages).toHaveLength(0);
-  });
+		expect(result.startsWith(`${homedir()}/.omt/`)).toBe(true);
+		expect(warnMessages).toHaveLength(0);
+	});
 });
 
-describe('resolveProjectRoot', () => {
-  it('git repo subdirectory: returns the worktree top-level', () => {
-    const repoRoot = execSync('git rev-parse --show-toplevel', {
-      cwd: import.meta.dir,
-      encoding: 'utf-8',
-    }).trim();
+describe("resolveProjectRoot", () => {
+	it("git repo subdirectory: returns the worktree top-level", () => {
+		const repoRoot = execSync("git rev-parse --show-toplevel", {
+			cwd: import.meta.dir,
+			encoding: "utf-8",
+		}).trim();
 
-    // A nested subdirectory of this repo must still resolve to the repo root
-    const subDir = join(import.meta.dir, 'pins');
-    expect(resolveProjectRoot(subDir)).toBe(repoRoot);
-  });
+		// A nested subdirectory of this repo must still resolve to the repo root
+		const subDir = join(import.meta.dir, "pins");
+		expect(resolveProjectRoot(subDir)).toBe(repoRoot);
+	});
 
-  it('non-git directory: falls back to the given cwd', async () => {
-    const nonGitDir = join(testTmpBase, 'resolve-project-root-non-git-' + Date.now());
-    await mkdir(nonGitDir, { recursive: true });
+	it("non-git directory: falls back to the given cwd", async () => {
+		const nonGitDir = join(testTmpBase, "resolve-project-root-non-git-" + Date.now());
+		await mkdir(nonGitDir, { recursive: true });
 
-    expect(resolveProjectRoot(nonGitDir)).toBe(nonGitDir);
-  });
+		expect(resolveProjectRoot(nonGitDir)).toBe(nonGitDir);
+	});
 });
 
-describe('resolvePinsHome', () => {
-  let originalOmtDir: string | undefined;
+describe("resolvePinsHome", () => {
+	let originalOmtDir: string | undefined;
 
-  beforeEach(() => {
-    originalOmtDir = process.env.OMT_DIR;
-  });
+	beforeEach(() => {
+		originalOmtDir = process.env.OMT_DIR;
+	});
 
-  afterEach(() => {
-    if (originalOmtDir === undefined) {
-      delete process.env.OMT_DIR;
-    } else {
-      process.env.OMT_DIR = originalOmtDir;
-    }
-  });
+	afterEach(() => {
+		if (originalOmtDir === undefined) {
+			delete process.env.OMT_DIR;
+		} else {
+			process.env.OMT_DIR = originalOmtDir;
+		}
+	});
 
-  it('AC1.1: returns ${homedir()}/.pins/${deriveProjectName(cwd)}', () => {
-    // Use the current repo dir — derive expected name via the same git-common-dir logic
-    const repoDir = join(import.meta.dir, '..');
+	it("AC1.1: returns ${homedir()}/.pins/${deriveProjectName(cwd)}", () => {
+		// Use the current repo dir — derive expected name via the same git-common-dir logic
+		const repoDir = join(import.meta.dir, "..");
 
-    const gitCommonDir = execSync('git rev-parse --git-common-dir', {
-      cwd: repoDir,
-      encoding: 'utf-8',
-    }).trim();
+		const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+			cwd: repoDir,
+			encoding: "utf-8",
+		}).trim();
 
-    let expectedName: string;
-    if (gitCommonDir !== '.git') {
-      const resolved = resolve(repoDir, gitCommonDir);
-      expectedName = basename(dirname(resolved));
-    } else {
-      const toplevel = execSync('git rev-parse --show-toplevel', {
-        cwd: repoDir,
-        encoding: 'utf-8',
-      }).trim();
-      expectedName = basename(toplevel);
-    }
-    expectedName = expectedName.replace(/ /g, '-');
+		let expectedName: string;
+		if (gitCommonDir !== ".git") {
+			const resolved = resolve(repoDir, gitCommonDir);
+			expectedName = basename(dirname(resolved));
+		} else {
+			const toplevel = execSync("git rev-parse --show-toplevel", {
+				cwd: repoDir,
+				encoding: "utf-8",
+			}).trim();
+			expectedName = basename(toplevel);
+		}
+		expectedName = expectedName.replace(/ /g, "-");
 
-    const result = resolvePinsHome(repoDir);
+		const result = resolvePinsHome(repoDir);
 
-    expect(result).toBe(`${homedir()}/.pins/${expectedName}`);
-  });
+		expect(result).toBe(`${homedir()}/.pins/${expectedName}`);
+	});
 
-  it('AC1.2: this bare+worktree repo yields basename oh-my-toong-playground, not main', () => {
-    const repoDir = join(import.meta.dir, '..');
+	it("AC1.2: this bare+worktree repo yields basename oh-my-toong-playground, not main", () => {
+		const repoDir = join(import.meta.dir, "..");
 
-    const result = resolvePinsHome(repoDir);
+		const result = resolvePinsHome(repoDir);
 
-    // The worktree-aware logic must resolve to the bare repo name, not the worktree dir name
-    expect(result).toBe(`${homedir()}/.pins/oh-my-toong-playground`);
-    expect(result).not.toContain('/main');
-  });
+		// The worktree-aware logic must resolve to the bare repo name, not the worktree dir name
+		expect(result).toBe(`${homedir()}/.pins/oh-my-toong-playground`);
+		expect(result).not.toContain("/main");
+	});
 
-  it('AC1.3: ignores $OMT_DIR — result is always under ~/.pins, never under $OMT_DIR', () => {
-    process.env.OMT_DIR = '/tmp/x-omt-override';
+	it("AC1.3: ignores $OMT_DIR — result is always under ~/.pins, never under $OMT_DIR", () => {
+		process.env.OMT_DIR = "/tmp/x-omt-override";
 
-    const repoDir = join(import.meta.dir, '..');
-    const result = resolvePinsHome(repoDir);
+		const repoDir = join(import.meta.dir, "..");
+		const result = resolvePinsHome(repoDir);
 
-    expect(result.startsWith(`${homedir()}/.pins/`)).toBe(true);
-    expect(result).not.toContain('/tmp/x-omt-override');
-  });
+		expect(result.startsWith(`${homedir()}/.pins/`)).toBe(true);
+		expect(result).not.toContain("/tmp/x-omt-override");
+	});
 
-  it('QA-asymmetry: resolvePinsHome uses ~/.pins while resolveOmtDir still uses $OMT_DIR', () => {
-    process.env.OMT_DIR = '/tmp/x-omt-override';
+	it("QA-asymmetry: resolvePinsHome uses ~/.pins while resolveOmtDir still uses $OMT_DIR", () => {
+		process.env.OMT_DIR = "/tmp/x-omt-override";
 
-    const repoDir = join(import.meta.dir, '..');
+		const repoDir = join(import.meta.dir, "..");
 
-    const pinsResult = resolvePinsHome(repoDir);
-    const omtResult = resolveOmtDir(repoDir);
+		const pinsResult = resolvePinsHome(repoDir);
+		const omtResult = resolveOmtDir(repoDir);
 
-    // resolvePinsHome must contain /.pins/ and never /tmp/x-omt-override
-    expect(pinsResult).toContain('/.pins/');
-    expect(pinsResult).not.toContain('/tmp/x-omt-override');
+		// resolvePinsHome must contain /.pins/ and never /tmp/x-omt-override
+		expect(pinsResult).toContain("/.pins/");
+		expect(pinsResult).not.toContain("/tmp/x-omt-override");
 
-    // resolveOmtDir must still honor $OMT_DIR
-    expect(omtResult).toBe('/tmp/x-omt-override');
-  });
+		// resolveOmtDir must still honor $OMT_DIR
+		expect(omtResult).toBe("/tmp/x-omt-override");
+	});
 });

@@ -74,7 +74,11 @@ function parseBooleanValue(value: string, lineNumber: number): boolean {
 	throw new RuleFrontmatterParseError(`Expected boolean on line ${lineNumber}`);
 }
 
-function parseGlobValue(rawValue: string, lines: readonly string[], lineIndex: number): ParsedGlobValue {
+function parseGlobValue(
+	rawValue: string,
+	lines: readonly string[],
+	lineIndex: number,
+): ParsedGlobValue {
 	if (rawValue.startsWith("[")) {
 		return { values: parseInlineArray(rawValue), consumed: 1 };
 	}
@@ -168,7 +172,8 @@ function findClosingBracket(value: string): number {
 
 		if (character === '"' || character === "'") {
 			const prev = value[index - 1];
-			const atBoundary = index === 0 || prev === "[" || prev === "," || prev === " " || prev === "\t";
+			const atBoundary =
+				index === 0 || prev === "[" || prev === "," || prev === " " || prev === "\t";
 			if (quote === null && atBoundary) quote = character;
 			else if (quote !== null && quote === character) quote = null;
 			continue;
@@ -257,7 +262,8 @@ function splitCommaSeparated(value: string): string[] {
 function parseStringValue(value: string): string {
 	if (value.length === 0) return "";
 	if (value.startsWith('"')) return parseJsonString(value);
-	if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) return value.slice(1, -1).replace(/''/g, "'");
+	if (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
+		return value.slice(1, -1).replace(/''/g, "'");
 	if (value.startsWith("'")) throw new RuleFrontmatterParseError("Unclosed quoted value");
 	return value;
 }
@@ -295,7 +301,13 @@ function stripComment(line: string): string {
 
 		if (character === '"' || character === "'") {
 			const prev = line[index - 1];
-			const atBoundary = index === 0 || prev === " " || prev === "\t" || prev === ":" || prev === "[" || prev === ",";
+			const atBoundary =
+				index === 0 ||
+				prev === " " ||
+				prev === "\t" ||
+				prev === ":" ||
+				prev === "[" ||
+				prev === ",";
 			if (quote === null && atBoundary) quote = character;
 			else if (quote !== null && quote === character) quote = null;
 			continue;

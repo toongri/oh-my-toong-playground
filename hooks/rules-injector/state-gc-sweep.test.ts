@@ -1,6 +1,15 @@
 import { test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +21,10 @@ import { sweepStaleSessionStates } from "./persistent-cache.js";
 // asserting on the writeErrorBreadcrumb sink requires setting HOME before spawn —
 // same reason cli.ts's breadcrumb path is only ever tested via spawnSync elsewhere
 // in this suite, e.g. fidelity-and-lanes.test.ts's "C1" test).
-const PERSISTENT_CACHE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "persistent-cache.ts");
+const PERSISTENT_CACHE_PATH = resolve(
+	dirname(fileURLToPath(import.meta.url)),
+	"persistent-cache.ts",
+);
 
 // HERMETIC HOME: sweepStaleSessionStates records forced-fault errors via
 // writeErrorBreadcrumb, which appends to $HOME/.omt/rules-injector/error.log. A
