@@ -12,6 +12,11 @@ import type { CliType } from '@lib/agent-drivers/types';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
 
+/** Type-predicate over CliType's members — narrows detectCliType's `string` return without an `as` assertion. */
+function isCliType(value: string): value is CliType {
+  return value === 'opencode' || value === 'claude' || value === 'codex' || value === 'gemini' || value === 'unknown';
+}
+
 function main() {
   const options = parseArgs(process.argv);
   const jobDir = options['job-dir'];
@@ -35,21 +40,21 @@ function main() {
     }
   }
 
-  if (!jobDir) { logError('missing --job-dir'); logEnd(); exitWithError('worker: missing --job-dir'); }
-  if (!member) { logError('missing --member'); logEnd(); exitWithError('worker: missing --member'); }
-  if (!command) { logError('missing --command'); logEnd(); exitWithError('worker: missing --command'); }
+  if (typeof jobDir !== 'string' || !jobDir) { logError('missing --job-dir'); logEnd(); exitWithError('worker: missing --job-dir'); }
+  if (typeof member !== 'string' || !member) { logError('missing --member'); logEnd(); exitWithError('worker: missing --member'); }
+  if (typeof command !== 'string' || !command) { logError('missing --command'); logEnd(); exitWithError('worker: missing --command'); }
 
   logInfo(`worker start: member=${member} command=${command} timeout=${timeoutSec}`);
 
-  const membersRoot = path.join(jobDir as string, 'members');
-  const memberDir = path.join(membersRoot, member as string);
+  const membersRoot = path.join(jobDir, 'members');
+  const memberDir = path.join(membersRoot, member);
 
-  const promptPath = path.join(jobDir as string, 'prompt.txt');
+  const promptPath = path.join(jobDir, 'prompt.txt');
   const promptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
   const EXECUTION_INSTRUCTION = 'Execute the diff command from REVIEW CONTENT. Review ONLY the files listed in Review Scope. Produce your full analysis following system instructions.';
 
-  const tokens = splitCommand(command as string);
+  const tokens = splitCommand(command);
   if (!tokens || tokens.length === 0) {
     logError(`invalid command string: ${command}`);
     const statusPath = path.join(memberDir, 'status.json');
@@ -64,9 +69,12 @@ function main() {
   const program = tokens[0];
   const args = tokens.slice(1);
 
+  const detectedCliType = detectCliType(command);
+  const cliType: CliType = isCliType(detectedCliType) ? detectedCliType : 'unknown';
+
   runOneTurn({
-    program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member: member as string, memberDir, command: command as string, timeoutSec, workerEnv,
-    cliType: detectCliType(command) as CliType,
+    program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member, memberDir, command, timeoutSec, workerEnv,
+    cliType,
     promptsDir: PROMPTS_DIR,
   }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
