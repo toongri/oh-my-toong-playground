@@ -4,6 +4,11 @@ export interface FrontmatterResult {
   hasFrontmatter: boolean;
 }
 
+/** True for anything but null/undefined — mirrors the `?? {}` fallback this replaces. */
+function isPresent(value: unknown): value is Record<string, unknown> {
+  return value !== null && value !== undefined;
+}
+
 /**
  * Parses markdown frontmatter from content.
  *
@@ -37,8 +42,8 @@ export function parseFrontmatter(content: string): FrontmatterResult {
   // Preserve leading newline separator between --- and body
   const body = bodyLines.join('\n');
 
-  const parsed = Bun.YAML.parse(yamlContent) as Record<string, unknown> | null;
-  const frontmatter = parsed ?? {};
+  const parsed = Bun.YAML.parse(yamlContent);
+  const frontmatter = isPresent(parsed) ? parsed : {};
 
   return { frontmatter, body, hasFrontmatter: true };
 }

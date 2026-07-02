@@ -15,7 +15,7 @@
 import { existsSync } from "fs";
 import { join, basename, dirname } from "path";
 import type { Platform, SyncItem, SyncYaml } from "./types.ts";
-import { getDefaultPlatforms, getFeaturePlatforms } from "./config.ts";
+import { getFeaturePlatforms } from "./config.ts";
 
 // ---------------------------------------------------------------------------
 // resolvePlatforms
@@ -56,21 +56,11 @@ export async function resolvePlatforms(
   }
 
   // Level 4: feature-platforms from config.yaml
+  // getFeaturePlatforms() already falls back to getDefaultPlatforms() internally
+  // when no feature entry exists, so using it directly here is correct for level
+  // 4 — it may equal the level-5 default when no feature entry exists, which is
+  // fine, since that's the same result level 5 would have produced.
   const featurePlatforms = await getFeaturePlatforms(category);
-  // getFeaturePlatforms already falls back to getDefaultPlatforms internally,
-  // so we must distinguish "feature entry defined" from "fell back to default".
-  // We re-check config here to determine if a feature entry actually exists.
-  // Because getFeaturePlatforms() delegates to getDefaultPlatforms() when not found,
-  // we use it directly for level 4 — if it returns more than the default it means
-  // a feature entry was present, but we can't distinguish that without re-reading.
-  // Instead we call getDefaultPlatforms() ourselves for comparison at level 5.
-  const defaultPlatforms = await getDefaultPlatforms();
-
-  // If featurePlatforms differs from defaultPlatforms, a feature entry was found.
-  // If they are identical in value, getFeaturePlatforms may have fallen back.
-  // To properly distinguish level 4 vs level 5, we need to check config directly.
-  // The simplest correct approach: use featurePlatforms for level 4 (it may equal
-  // defaultPlatforms when no feature entry exists, which is fine — same result).
   return featurePlatforms;
 
   // Levels 5 and 6 are handled inside getFeaturePlatforms → getDefaultPlatforms → ["claude"].
@@ -138,7 +128,7 @@ export function resolveComponentPath(
   }
 
   // === Path resolution ===
-  if (isRootYaml) {
+  if (projectDirName === undefined) {
     const resolved = tryResolveInDir(join(rootDir, category), parsedItem, category);
     if (resolved !== null) {
       return { path: resolved, displayName };
@@ -149,7 +139,7 @@ export function resolveComponentPath(
   }
 
   // Project yaml: own project first
-  const projectBase = join(rootDir, "projects", projectDirName!, category);
+  const projectBase = join(rootDir, "projects", projectDirName, category);
   const projectResolved = tryResolveInDir(projectBase, parsedItem, category);
   if (projectResolved !== null) {
     return { path: projectResolved, displayName };

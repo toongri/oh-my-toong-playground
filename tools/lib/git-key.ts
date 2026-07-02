@@ -10,6 +10,10 @@ import path from "node:path";
  * exit) — silently mis-keying a local MCP into ~/.claude.json is the worst
  * failure class for this tool.
  */
+function hasStderr(err: unknown): err is { stderr?: Buffer | string } {
+  return typeof err === "object" && err !== null && "stderr" in err;
+}
+
 export class ProjectKeyError extends Error {
   constructor(targetPath: string, cause: unknown) {
     super(
@@ -60,8 +64,7 @@ export function deriveClaudeProjectKey(
     );
     stdout = result.toString();
   } catch (err: unknown) {
-    const spawnErr = err as { stderr?: Buffer | string };
-    const stderr = spawnErr.stderr ? spawnErr.stderr.toString() : "";
+    const stderr = hasStderr(err) && err.stderr ? err.stderr.toString() : "";
 
     if (stderr.includes("not a git repository")) {
       // Branch (c): not a git repo — resolve symlinks on the input path

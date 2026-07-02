@@ -9,6 +9,10 @@ type YamlReadResult =
   | { kind: "empty" }
   | { kind: "object"; value: Record<string, unknown> };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 async function readYamlResult(filePath: string): Promise<YamlReadResult> {
   let text: string;
   try {
@@ -17,8 +21,8 @@ async function readYamlResult(filePath: string): Promise<YamlReadResult> {
     return { kind: "missing" };
   }
   const parsed = Bun.YAML.parse(text);
-  if (parsed == null || typeof parsed !== "object") return { kind: "empty" };
-  return { kind: "object", value: parsed as Record<string, unknown> };
+  if (!isRecord(parsed)) return { kind: "empty" };
+  return { kind: "object", value: parsed };
 }
 
 export async function readAndExpandSyncYaml(
@@ -40,11 +44,13 @@ export async function readAndExpandSyncYaml(
 
   if (baseObj === undefined && localObj === undefined) return null;
 
-  const merged = deepMergeOverlay(
-    baseObj as Record<string, unknown>,
-    localObj as Record<string, unknown>,
-  ) as SyncYaml;
+  const merged = deepMergeOverlay(baseObj ?? {}, localObj ?? {});
 
-  if (merged.path) merged.path = expandTilde(merged.path);
-  return merged;
+  // Merged YAML content is trusted to match SyncYaml's shape; no runtime
+  // schema validation exists for the merged config tree.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- untyped YAML → domain type boundary, no runtime validator available
+  const result = merged as SyncYaml;
+
+  if (result.path) result.path = expandTilde(result.path);
+  return result;
 }
