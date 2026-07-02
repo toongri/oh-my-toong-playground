@@ -20,6 +20,14 @@ export interface DecisionContext {
   activeSubagentCount: number;
 }
 
+// isPristine (lib/state-core) takes an untyped Record<string, unknown> since the
+// on-disk state may carry SKILL-only fields beyond the hook's minimal interface.
+// A shallow own-property copy re-shapes the typed state into that record without
+// a type assertion.
+function toRecord(value: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value));
+}
+
 function formatBlockOutput(reason: string): HookOutput {
   return {
     decision: 'block',
@@ -230,7 +238,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
     // (non-falsifiable objective), the seed lingers. A pristine state is INERT to all
     // consumers — it must not suppress baseline-todo and must not be kept alive by a
     // heartbeat refresh. The orphan ages toward ACTIVE TTL and is GC'd naturally.
-    if (!isPristine('goal', goalRaw as unknown as Record<string, unknown>)) {
+    if (!isPristine('goal', toRecord(goalRaw))) {
       goalSuppressesBaselineTodo = true;
       // ADR-8 (C2): every suppression read IS a use — refresh the heartbeat so an
       // in-use terminal state does not age toward TERMINAL_TTL while still functioning.
@@ -251,7 +259,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
       cleanupDeepInterviewState(sessionId);
     } else if (detectDeepInterviewDone(lastAssistantMessage)) {
       cleanupDeepInterviewState(sessionId);
-    } else if (!isPristine('deep-interview', deepInterviewStateRaw as unknown as Record<string, unknown>)) {
+    } else if (!isPristine('deep-interview', toRecord(deepInterviewStateRaw))) {
       // Pristine exception: a seed-only file (no rich `state` object) was written by the
       // PreToolUse hook before the skill prose ran. If the skill died before `init`
       // (permission denial, ESC, crash), the seed lingers. A pristine state is INERT to
