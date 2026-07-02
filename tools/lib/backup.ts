@@ -12,6 +12,13 @@ export function generateBackupSessionId(): string {
 }
 
 /**
+ * Returns true if `err` is a Node.js errno exception (has a `code` field).
+ */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && "code" in err;
+}
+
+/**
  * Backs up a single category directory from a platform's dot-directory.
  * Source: {targetPath}/.{platform}/{category}/
  * Destination: {targetPath}/.sync-backup/{sessionId}/{platform}/{category}/
@@ -28,7 +35,7 @@ export async function backupCategory(
   try {
     await stat(sourceDir);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isErrnoException(err) && err.code === "ENOENT") {
       return;
     }
     throw err;
@@ -57,7 +64,7 @@ export async function backupConfigFile(
   try {
     await stat(filePath);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isErrnoException(err) && err.code === "ENOENT") {
       return;
     }
     throw err;
@@ -85,7 +92,7 @@ export async function cleanupOldBackups(
   try {
     await stat(backupDir);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isErrnoException(err) && err.code === "ENOENT") {
       return;
     }
     throw err;
@@ -102,7 +109,7 @@ export async function cleanupOldBackups(
     try {
       entryStats = await stat(entryPath);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      if (isErrnoException(err) && err.code === "ENOENT") {
         continue;
       }
       throw err;

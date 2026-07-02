@@ -15,7 +15,7 @@ const EXACT_REGISTRY = new Map<string, KeyExtractor>([
 function pluginsItemsKey(entry: unknown): string {
   if (typeof entry === "string") return entry;
   if (typeof entry === "object" && entry !== null && "name" in entry) {
-    return String((entry as Record<string, unknown>).name);
+    return String(entry.name);
   }
   return JSON.stringify(entry);
 }
@@ -23,7 +23,7 @@ function pluginsItemsKey(entry: unknown): string {
 function syncItemsKey(entry: unknown): string {
   if (typeof entry === "string") return entry;
   if (typeof entry === "object" && entry !== null && "component" in entry) {
-    return String((entry as Record<string, unknown>).component);
+    return String(entry.component);
   }
   return JSON.stringify(entry);
 }
@@ -34,9 +34,8 @@ function selfKey(entry: unknown): string {
 
 function hooksKey(entry: unknown): string {
   if (typeof entry === "object" && entry !== null) {
-    const e = entry as Record<string, unknown>;
-    const component = e.component !== undefined ? String(e.component) : undefined;
-    const matcher = e.matcher !== undefined ? String(e.matcher) : undefined;
+    const component = "component" in entry && entry.component !== undefined ? String(entry.component) : undefined;
+    const matcher = "matcher" in entry && entry.matcher !== undefined ? String(entry.matcher) : undefined;
     if (component !== undefined && matcher !== undefined) {
       return JSON.stringify({ component, matcher });
     }
