@@ -7,6 +7,10 @@ export const PY_CACHE_EXCLUDE = ["__pycache__", ".pytest_cache", "*.pyc"];
 
 export const DEFAULT_EXCLUDE = [...PY_CACHE_EXCLUDE, "*.test.ts"];
 
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return typeof err === "object" && err !== null && "code" in err;
+}
+
 /**
  * Checks if a filename matches any of the given glob-style exclude patterns.
  * Only supports simple "*.ext" wildcard prefix patterns.
@@ -61,9 +65,9 @@ export async function collectDirs(dir: string, rel = ""): Promise<string[]> {
   const results: string[] = [];
   let entries: import("fs").Dirent[];
   try {
-    entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
+    entries = await fs.readdir(dir, { withFileTypes: true });
   } catch (err: unknown) {
-    if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isErrnoException(err) && err.code === "ENOENT") {
       return results;
     }
     throw err;

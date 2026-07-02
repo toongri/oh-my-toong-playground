@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn, mock } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
 import { resolvePlatforms, resolveComponentPath, setProjectContext } from "./resolver.ts";
 import { _resetConfigCache } from "./config.ts";
-import type { SyncItem, Platform, SyncYaml } from "./types.ts";
+import type { SyncItem, SyncYaml } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

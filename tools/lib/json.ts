@@ -2,13 +2,17 @@ import fs from "fs/promises";
 import path from "path";
 import { logError } from "./logger.ts";
 
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return typeof err === "object" && err !== null && "code" in err;
+}
+
 /** Read JSON file or return {} if missing. */
 export async function readJsonFile(filePath: string): Promise<Record<string, unknown>> {
   try {
     const text = await fs.readFile(filePath, "utf8");
-    return JSON.parse(text) as Record<string, unknown>;
+    return JSON.parse(text);
   } catch (err: unknown) {
-    if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isErrnoException(err) && err.code === "ENOENT") {
       return {};
     }
     logError(`JSON 파싱 실패: ${filePath}: ${err instanceof Error ? err.message : err}`);
@@ -27,7 +31,7 @@ export async function readTextFile(filePath: string): Promise<string> {
   try {
     return await fs.readFile(filePath, "utf8");
   } catch (err: unknown) {
-    if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isErrnoException(err) && err.code === "ENOENT") {
       return "";
     }
     throw err;

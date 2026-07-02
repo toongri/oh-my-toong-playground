@@ -1,5 +1,4 @@
 import path from "path";
-import { existsSync } from "fs";
 
 import { parseFrontmatter, serializeFrontmatter } from "./frontmatter.ts";
 import type { Category, Platform, SyncItem } from "./types.ts";
