@@ -106,6 +106,7 @@ if (import.meta.main) {
 
   if (missing.length > 0) {
     for (const h of missing) {
+      // eslint-disable-next-line no-console -- CLI contract (see file header): offending heading literals printed to stdout for the invoking skill to read
       console.log(h);
     }
     process.exit(1);
