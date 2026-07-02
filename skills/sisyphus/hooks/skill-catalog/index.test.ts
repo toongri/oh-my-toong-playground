@@ -44,8 +44,10 @@ describe('main (통합)', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'skill-catalog-integration-'));
     originalHome = process.env.HOME;
+    // eslint-disable-next-line no-console -- 카탈로그 stdout 캡처용 모킹
     originalLog = console.log;
     consoleOutput = [];
+    // eslint-disable-next-line no-console -- 카탈로그 stdout 캡처용 모킹
     console.log = (...args: unknown[]) => {
       consoleOutput.push(args.map(String).join(' '));
     };
@@ -53,6 +55,7 @@ describe('main (통합)', () => {
 
   afterEach(async () => {
     process.env.HOME = originalHome;
+    // eslint-disable-next-line no-console -- 카탈로그 stdout 캡처용 모킹 원복
     console.log = originalLog;
     await rm(tempDir, { recursive: true, force: true });
   });

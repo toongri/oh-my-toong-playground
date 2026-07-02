@@ -549,7 +549,7 @@ describe('computeStatus', () => {
       fs.mkdirSync(memberDir, { recursive: true });
       // Write status with both `reviewer` (framework-expected field) and `member` (backward compat)
       const status = { ...m.status };
-      if (status.member != null && status.reviewer == null) {
+      if (status.member !== null && status.member !== undefined && (status.reviewer === null || status.reviewer === undefined)) {
         status.reviewer = status.member;
       }
       fs.writeFileSync(path.join(memberDir, 'status.json'), JSON.stringify(status), 'utf8');

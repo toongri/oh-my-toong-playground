@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, renameSync, appendFileSync, unlinkSync } from 'fs';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -930,7 +930,6 @@ describe('mergeWrite uses writeFileNoCreate (no TOCTOU race)', () => {
   test('F10-no-create-after-adopt: merge-write refused after adopt-away (no resurrection)', () => {
     setGoalState(S, { phase: 'planning', outcome: 'test' });
     const src = resolveStatePath(S);
-    const { renameSync, appendFileSync } = require('fs');
     renameSync(src, src + '.adopted');
     appendFileSync(`${tmpDir}/adoption.log`, `2026-06-16T12:00:00+09:00 goal ${S} -> OTHER\n`, 'utf8');
     // Now session S tries to write — must be refused, not silently recreated
@@ -1450,7 +1449,6 @@ describe('story layer: mutations', () => {
     const priorContent = readFileSync(resolveStatePath(S), 'utf8');
 
     // Simulate write failure: remove the state file so writeFileNoCreate throws ENOENT
-    const { unlinkSync } = require('fs');
     unlinkSync(resolveStatePath(S));
 
     // All three mutation subcommands must fail nonzero when the file is absent
@@ -2016,7 +2014,6 @@ describe('re-plan 시 verdict 아티팩트 무효화', () => {
     const artifact = buildSatisfiedFixture(S);
     writeVerdictArtifact(S, artifact);
     // 아티팩트 파일이 존재하는지 확인
-    const { existsSync } = require('fs');
     expect(existsSync(verdictArtifactPath(S))).toBe(true);
 
     // Phase 2 — re-plan (planning 전환)

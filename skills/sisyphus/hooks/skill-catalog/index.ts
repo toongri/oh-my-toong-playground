@@ -33,9 +33,11 @@ export async function main(): Promise<void> {
     // Format catalog text
     const additionalContext = formatCatalog(entries);
 
+    // eslint-disable-next-line no-console -- 카탈로그 stdout 주입
     console.log(additionalContext);
   } catch {
     // Fail open on any error
+    // eslint-disable-next-line no-console -- 카탈로그 stdout 주입
     console.log(formatCatalog([]));
   }
 }
