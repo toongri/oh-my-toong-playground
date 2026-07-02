@@ -29,13 +29,17 @@ export interface UsageSummary {
   usage: Record<string, number>;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Traverse members/<entry>/status.json files under jobDir and aggregate usage.
  * Cross-runtime safe: uses only fs + path (Node built-ins).
  */
 export function summarizeUsage(jobDir: string): UsageSummary {
   const membersDir = path.resolve(jobDir, 'members');
-  const aggregate = Object.create(null) as Record<string, number>;
+  const aggregate: Record<string, number> = Object.create(null);
   let memberCount = 0;
 
   let entries: string[];
@@ -53,13 +57,13 @@ export function summarizeUsage(jobDir: string): UsageSummary {
     } catch {
       continue;
     }
-    if (!status || typeof status !== 'object' || Array.isArray(status)) continue;
+    if (!isPlainObject(status)) continue;
 
     memberCount++;
 
-    const usage = (status as Record<string, unknown>).usage;
-    if (usage && typeof usage === 'object' && !Array.isArray(usage)) {
-      for (const [key, val] of Object.entries(usage as Record<string, unknown>)) {
+    const usage = status.usage;
+    if (isPlainObject(usage)) {
+      for (const [key, val] of Object.entries(usage)) {
         if (typeof val === 'number') {
           aggregate[key] = (aggregate[key] ?? 0) + val;
         }

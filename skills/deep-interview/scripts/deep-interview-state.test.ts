@@ -65,7 +65,7 @@ describe('deep-interview state', () => {
     expect((afterInit['state'] as Record<string, unknown>)['initial_idea']).toBe('build X');
     expect(afterInit['current_phase']).toBe('deep-interview');
     // Still one file
-    const files = require('fs').readdirSync(tmpDir).filter((f: string) => f.startsWith('deep-interview-active-state-'));
+    const files = readdirSync(tmpDir).filter((f: string) => f.startsWith('deep-interview-active-state-'));
     expect(files).toHaveLength(1);
     expect(files[0]).toBe(`deep-interview-active-state-${SID}.json`);
 
@@ -85,7 +85,7 @@ describe('deep-interview state', () => {
     // last_touched_at advanced
     expect(afterUpdate['last_touched_at']).not.toBe(ltaBefore);
     // Still one file
-    const files2 = require('fs').readdirSync(tmpDir).filter((f: string) => f.startsWith('deep-interview-active-state-'));
+    const files2 = readdirSync(tmpDir).filter((f: string) => f.startsWith('deep-interview-active-state-'));
     expect(files2).toHaveLength(1);
   });
 

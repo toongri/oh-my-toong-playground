@@ -116,7 +116,7 @@ if (import.meta.main) {
     try {
       const parsed: unknown = JSON.parse(findTokenUsageJson);
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        findTokenUsage = parsed as object;
+        findTokenUsage = parsed;
       } else {
         process.stderr.write(`durable-sink: findTokenUsageJson is not a JSON object — writing null\n`);
       }

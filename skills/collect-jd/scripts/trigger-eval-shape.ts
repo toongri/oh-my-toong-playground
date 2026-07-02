@@ -22,6 +22,10 @@ const ALLOWED_FIELDS = new Set(['query', 'should_trigger', 'expected_skill']);
 const MIN_POSITIVE = 10;
 const MIN_NEGATIVE = 10;
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function validateTriggerEvalShape(data: unknown): ShapeValidationResult {
   const errors: ShapeValidationResult['errors'] = [];
 
@@ -42,12 +46,12 @@ export function validateTriggerEvalShape(data: unknown): ShapeValidationResult {
   for (let i = 0; i < data.length; i++) {
     const item = data[i];
 
-    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+    if (!isPlainObject(item)) {
       errors.push({ code: 'WRONG_TYPE', message: `item at index ${i} must be an object`, index: i });
       continue;
     }
 
-    const obj = item as Record<string, unknown>;
+    const obj = item;
 
     // Check for extra fields
     for (const key of Object.keys(obj)) {
