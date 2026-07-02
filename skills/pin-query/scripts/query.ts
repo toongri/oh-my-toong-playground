@@ -37,12 +37,14 @@ if (import.meta.main) {
 
   const criteria: QueryCriteria = {};
   if (flags['type'] !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- unvalidated CLI arg; an invalid value simply matches no entries downstream
     criteria.type = flags['type'] as QueryCriteria['type'];
   }
   if (flags['tags'] !== undefined) {
     criteria.tags = flags['tags'].split(',').map((t) => t.trim()).filter(Boolean);
   }
   if (flags['source'] !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- unvalidated CLI arg; an invalid value simply matches no entries downstream
     criteria.source = flags['source'] as QueryCriteria['source'];
   }
 
@@ -54,5 +56,6 @@ if (import.meta.main) {
     failEngine(message);
   }
 
+  // eslint-disable-next-line no-console -- CLI tool output contract: results are printed to stdout as JSON, not a debug log
   console.log(JSON.stringify(results, null, 2));
 }

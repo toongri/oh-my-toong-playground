@@ -94,7 +94,8 @@ function writePinAtomically(
     writeFileSync(basePath, content, { flag: 'wx', encoding: 'utf-8' });
     return;
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+    const code = err instanceof Error && 'code' in err ? err.code : undefined;
+    if (code !== 'EEXIST') throw err;
   }
 
   // File exists: atomic update via temp file + rename

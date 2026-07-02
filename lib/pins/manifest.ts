@@ -26,16 +26,16 @@ async function readManifestAt(dir: string): Promise<PinsManifest | null> {
   try {
     text = await fs.readFile(filePath, 'utf8');
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
+    const code = err instanceof Error && 'code' in err ? err.code : undefined;
     if (code === 'ENOENT' || code === 'ENOTDIR') return null;
     throw err;
   }
   const parsed = parseYamlStrict(text);
-  if (parsed == null || typeof parsed !== 'object') return null;
-  const obj = parsed as Record<string, unknown>;
-  if (typeof obj.location !== 'string' || typeof obj.scope !== 'string') return null;
-  const git = typeof obj.git === 'boolean' ? obj.git : false;
-  return { location: obj.location, scope: obj.scope, git };
+  if (parsed === null || parsed === undefined || typeof parsed !== 'object') return null;
+  if (!('location' in parsed) || !('scope' in parsed)) return null;
+  if (typeof parsed.location !== 'string' || typeof parsed.scope !== 'string') return null;
+  const git = 'git' in parsed && typeof parsed.git === 'boolean' ? parsed.git : false;
+  return { location: parsed.location, scope: parsed.scope, git };
 }
 
 /**

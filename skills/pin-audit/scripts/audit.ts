@@ -12,5 +12,6 @@ if (import.meta.main) {
     failEngine(err instanceof Error ? err.message : String(err));
   }
 
+  // eslint-disable-next-line no-console -- CLI tool output contract: findings are printed to stdout as JSON, not a debug log
   console.log(JSON.stringify(result.findings, null, 2));
 }
