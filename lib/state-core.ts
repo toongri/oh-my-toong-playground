@@ -191,16 +191,40 @@ function statePath(type: StateType, sid: string): string {
   return join(getOmtDir(), `${STATE_PREFIX[type]}${sid}.json`);
 }
 
+/** True iff `value` is a non-null, non-array object (i.e. a JSON "object"). */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** True iff `err` is an Error-shaped value carrying a Node.js `code` field. */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return typeof err === 'object' && err !== null && 'code' in err;
+}
+
 /** Reads and parses a state file. Returns null on missing or malformed. */
 function readParsed(path: string): Record<string, unknown> | null {
   try {
     const raw = readFileSync(path, 'utf8');
-    const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-    return parsed as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isPlainObject(parsed)) return null;
+    return parsed;
   } catch {
     return null;
   }
+}
+
+/**
+ * Narrows a parsed state record down to the shape isStateLive expects, without
+ * an unsafe cast. Fields with the wrong runtime type are treated as absent —
+ * matches how isStateLive already only ever receives well-formed state files
+ * written by this module.
+ */
+function toLivenessShape(parsed: Record<string, unknown>): { active?: boolean; last_touched_at?: string; started_at?: string } {
+  return {
+    active: typeof parsed['active'] === 'boolean' ? parsed['active'] : undefined,
+    last_touched_at: typeof parsed['last_touched_at'] === 'string' ? parsed['last_touched_at'] : undefined,
+    started_at: typeof parsed['started_at'] === 'string' ? parsed['started_at'] : undefined,
+  };
 }
 
 /** Returns the purpose string for a candidate, per type. */
@@ -215,8 +239,8 @@ function purposeFor(type: StateType, parsed: Record<string, unknown>): string {
   }
   if (type === 'deep-interview') {
     const state = parsed['state'];
-    if (typeof state === 'object' && state !== null && !Array.isArray(state)) {
-      return String((state as Record<string, unknown>)['initial_idea'] ?? '');
+    if (isPlainObject(state)) {
+      return String(state['initial_idea'] ?? '');
     }
     return '';
   }
@@ -329,7 +353,7 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
     if (parsed === null) continue;
     // Only ACTIVE-live candidates (r7 source filter)
     if (parsed['active'] !== true) continue;
-    if (!isStateLive(parsed as { active?: boolean; last_touched_at?: string; started_at?: string }, now)) continue;
+    if (!isStateLive(toLivenessShape(parsed), now)) continue;
     // Pristine seeds are INERT to consumers (f9f3242): skip empty-purpose seeds
     if (isPristine(type, parsed)) continue;
     const lta = String(parsed['last_touched_at'] ?? '');
@@ -360,7 +384,10 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
  */
 export function restampAfterAdopt(path: string): void {
   const content = readFileSync(path, 'utf8');
-  const parsed = JSON.parse(content) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(content);
+  if (!isPlainObject(parsed)) {
+    throw new Error(`restampAfterAdopt: "${path}" does not contain a JSON object`);
+  }
   const stamped = { ...parsed, last_touched_at: nowStamp() };
   writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
 }
@@ -420,7 +447,7 @@ export function adopt(type: StateType, srcSid: string): void {
   if (srcParsed['active'] !== true) {
     throw new Error(`adopt: source "${srcPath}" is not ACTIVE (r7: TERMINAL sources are refused)`);
   }
-  if (!isStateLive(srcParsed as { active?: boolean; last_touched_at?: string; started_at?: string }, now)) {
+  if (!isStateLive(toLivenessShape(srcParsed), now)) {
     throw new Error(`adopt: source "${srcPath}" failed the liveness check (r7: TTL-expired or no parseable timestamp — only live sources are adoptable)`);
   }
 
@@ -455,11 +482,12 @@ export function adopt(type: StateType, srcSid: string): void {
   try {
     renameSync(srcPath, dstPath);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
+    const code = isErrnoException(err) ? err.code : undefined;
     if (code === 'ENOENT') {
       throw new Error(
         `adopt: source "${srcPath}" vanished before rename (lost race — another session adopted it first). ` +
-          `No mutation occurred.`
+          `No mutation occurred.`,
+        { cause: err }
       );
     }
     throw err;
@@ -587,7 +615,7 @@ export function ensureSeed(type: StateType, sessionId: string): void {
     const buf = Buffer.from(content, 'utf8');
     writeSync(fd, buf, 0, buf.length, 0);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return; // lost the create race — fine
+    if (isErrnoException(err) && err.code === 'EEXIST') return; // lost the create race — fine
     throw err;
   } finally {
     if (fd !== undefined) closeSync(fd);
