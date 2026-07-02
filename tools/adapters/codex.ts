@@ -20,7 +20,12 @@ import { readTextFile, readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isPlainObject } from "../lib/deep-merge.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
-import type { PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
+import type {
+  PlatformConfigResult,
+  PlatformYaml,
+  PlatformYamlHookItem,
+  PluginScope,
+} from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 
 // =============================================================================
@@ -101,6 +106,15 @@ export function buildMcpTomlContent(
 }
 
 // =============================================================================
+// Type Guards
+// =============================================================================
+
+/** Type-predicate wrapper around isPlainObject, used to narrow `unknown` without a cast. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return isPlainObject(value);
+}
+
+// =============================================================================
 // CodexAdapter
 // =============================================================================
 
@@ -158,7 +172,7 @@ export class CodexAdapter implements PlatformAdapter {
     const targetDir = path.join(targetPath, this.configDir, "hooks");
     const hooksSourceDir = path.dirname(sourcePath);
 
-    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
       stat = await fs.stat(sourcePath);
     } catch {
@@ -208,7 +222,7 @@ export class CodexAdapter implements PlatformAdapter {
     const targetDir = path.join(targetPath, this.configDir, "skills");
     const targetSkillDir = path.join(targetDir, displayName);
 
-    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
       stat = await fs.stat(sourcePath);
     } catch {
@@ -242,7 +256,7 @@ export class CodexAdapter implements PlatformAdapter {
   ): Promise<void> {
     const targetDir = path.join(targetPath, this.configDir, "scripts");
 
-    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
       stat = await fs.stat(sourcePath);
     } catch {
@@ -389,21 +403,19 @@ export class CodexAdapter implements PlatformAdapter {
     this.resetMcpAccumulator();
 
     // --- config ---
-    if (yaml.config != null) {
+    if (yaml.config !== undefined && yaml.config !== null) {
       await this.syncConfig(targetPath, yaml.config, dryRun);
       processedSections.push("config");
     }
 
     // --- mcps ---
-    if (yaml.mcps != null) {
+    if (yaml.mcps !== undefined && yaml.mcps !== null) {
       // After overlay merge a server value can be null: a local override file
       // uses `<name>: null` as a deletion marker to drop a server inherited from
       // the base config. Skip those so the managed block omits them entirely.
-      const entries = Object.entries(yaml.mcps) as Array<
-        [string, Record<string, unknown> | null]
-      >;
+      const entries = Object.entries<Record<string, unknown> | null>(yaml.mcps);
       for (const [name, server] of entries) {
-        if (server == null) continue;
+        if (server === undefined || server === null) continue;
         this.accumulateMcp(name, server);
         if (!dryRun) {
           logInfo(`MCP accumulated: ${name}`);
@@ -414,28 +426,34 @@ export class CodexAdapter implements PlatformAdapter {
     }
 
     // --- model-map ---
-    if (yaml["model-map"] != null) {
+    if (yaml["model-map"] !== undefined && yaml["model-map"] !== null) {
       modelMap = yaml["model-map"];
       processedSections.push("model-map");
     }
 
     // --- hooks ---
-    if (yaml.hooks != null) {
+    if (yaml.hooks !== undefined && yaml.hooks !== null) {
       const hooksMap = yaml.hooks;
-      const preserveConfig = (hooksMap as Record<string, unknown>)["preserve"] as
-        | { "command-contains"?: string[] }
-        | undefined;
+      // "preserve" is not a hook-items array; it carries a sibling config shape.
+      // Read it via a widened Object.entries generic (instead of a cast) so the
+      // declared Record<string, PlatformYamlHookItem[]> type can still hold it.
+      const hooksEntries = Object.entries<
+        PlatformYamlHookItem[] | { "command-contains"?: string[] }
+      >(hooksMap);
+      const preserveValue = hooksEntries.find(([key]) => key === "preserve")?.[1];
+      const preserveConfig = Array.isArray(preserveValue) ? undefined : preserveValue;
       const accumulatedHooks: Record<string, unknown[]> = {};
 
-      for (const [hookEvent, items] of Object.entries(hooksMap)) {
+      for (const [hookEvent, items] of hooksEntries) {
         if (hookEvent === "preserve") continue;
         if (!Array.isArray(items)) continue;
 
         for (const item of items) {
-          const component = (item["component"] as string | undefined) ?? "";
-          const timeout = (item["timeout"] as number | undefined) ?? 10;
-          const matcher = (item["matcher"] as string | undefined) ?? "*";
-          const customCommand = (item["command"] as string | undefined) ?? "";
+          const component = item.component ?? "";
+          const timeout = item.timeout ?? 10;
+          const matcher = item.matcher ?? "*";
+          const commandRaw = item["command"];
+          const customCommand = typeof commandRaw === "string" ? commandRaw : "";
 
           let displayName = "";
           let resolvedSourcePath = "";
@@ -497,8 +515,8 @@ export class CodexAdapter implements PlatformAdapter {
           const hookEntry = this.buildHookEntry(hookEvent, matcher, timeout, cmdPath);
 
           // Accumulate hook entries per event
-          const existing = (accumulatedHooks[hookEvent] as unknown[]) ?? [];
-          const entryArray = hookEntry[hookEvent] as unknown[];
+          const existing = accumulatedHooks[hookEvent] ?? [];
+          const entryArray = hookEntry[hookEvent];
           accumulatedHooks[hookEvent] = [...existing, ...entryArray];
         }
       }
@@ -521,7 +539,7 @@ export class CodexAdapter implements PlatformAdapter {
     }
 
     // --- plugins ---
-    if (yaml.plugins != null) {
+    if (yaml.plugins !== undefined && yaml.plugins !== null) {
       logWarn("Codex does not support plugins. Skipping plugins section.");
     }
 
@@ -580,12 +598,15 @@ export class CodexAdapter implements PlatformAdapter {
     // entries matching a preserve marker so the replace below keeps them.
     const mergedHooks: Record<string, unknown[]> = {};
     for (const [event, blocks] of Object.entries(hooksEntries)) {
-      mergedHooks[event] = Array.isArray(blocks) ? [...blocks] : (blocks as unknown[]);
+      mergedHooks[event] = Array.isArray(blocks)
+        ? [...blocks]
+        : // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- hooksEntries is declared Record<string, unknown>; a non-array value here is carried through as-is (defensive passthrough for an already-untyped boundary), matching prior behavior
+          (blocks as unknown[]);
     }
     const markers = preserve?.["command-contains"] ?? [];
-    const currentHooks = (current as { hooks?: unknown }).hooks;
-    if (markers.length > 0 && isPlainObject(currentHooks)) {
-      for (const [event, blocks] of Object.entries(currentHooks as Record<string, unknown>)) {
+    const currentHooks = current.hooks;
+    if (markers.length > 0 && isRecord(currentHooks)) {
+      for (const [event, blocks] of Object.entries(currentHooks)) {
         if (!Array.isArray(blocks)) continue;
         for (const block of blocks) {
           if (this.hookCommandMatches(block, markers)) {
@@ -595,7 +616,7 @@ export class CodexAdapter implements PlatformAdapter {
       }
     }
 
-    const { hooks: _removed, ...rest } = current as { hooks?: unknown; [k: string]: unknown };
+    const { hooks: _removed, ...rest } = current;
     const updated = { ...rest, hooks: mergedHooks };
     await writeJsonFile(hooksFile, updated);
     logInfo(`Updated hooks.json: ${hooksFile}`);
@@ -603,11 +624,11 @@ export class CodexAdapter implements PlatformAdapter {
 
   /** True if any command in a hook block contains one of the preserve markers. */
   private hookCommandMatches(block: unknown, markers: string[]): boolean {
-    if (!isPlainObject(block)) return false;
-    const hooks = (block as { hooks?: unknown }).hooks;
+    if (!isRecord(block)) return false;
+    const hooks = block.hooks;
     if (!Array.isArray(hooks)) return false;
     return hooks.some((h) => {
-      const cmd = isPlainObject(h) ? (h as { command?: unknown }).command : undefined;
+      const cmd = isRecord(h) ? h.command : undefined;
       return typeof cmd === "string" && markers.some((m) => cmd.includes(m));
     });
   }
