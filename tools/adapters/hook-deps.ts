@@ -115,7 +115,7 @@ export async function syncShellDepsForDir(
 ): Promise<void> {
   let entries: import("fs").Dirent[];
   try {
-    entries = (await fs.readdir(hookDir, { withFileTypes: true })) as import("fs").Dirent[];
+    entries = await fs.readdir(hookDir, { withFileTypes: true });
   } catch {
     return;
   }

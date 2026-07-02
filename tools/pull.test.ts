@@ -214,8 +214,7 @@ describe("pullProject", () => {
       "# Deployed\n",
     );
 
-    let output = "";
-    output = await captureStderr(async () => {
+    const output = await captureStderr(async () => {
       await pullProject(makeOptions({ dryRun: true }));
     });
 
@@ -380,8 +379,7 @@ describe("pullProject", () => {
       "# Updated Present\n",
     );
 
-    let output = "";
-    output = await captureStderr(async () => {
+    const output = await captureStderr(async () => {
       await pullProject(makeOptions());
     });
 
@@ -418,8 +416,7 @@ describe("pullProject", () => {
       "# Updated Gemini\n",
     );
 
-    let output = "";
-    output = await captureStderr(async () => {
+    const output = await captureStderr(async () => {
       await pullProject(makeOptions({ platform: "gemini", categoryFilter: "agents" }));
     });
 
@@ -446,8 +443,7 @@ describe("pullProject", () => {
 
     // No deployed file in .gemini/commands/ — guard skips before existsSync check
 
-    let output = "";
-    output = await captureStderr(async () => {
+    const output = await captureStderr(async () => {
       await pullProject(makeOptions({ platform: "gemini", categoryFilter: "commands" }));
     });
 
