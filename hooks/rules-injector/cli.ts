@@ -27,7 +27,7 @@ if (command === "hook" && subcommand === "session-start") {
 } else if (command === "hook" && subcommand === "post-compact") {
 	await runHookCli("PostCompact");
 } else {
-	process.stderr.write("Usage: omo-rules hook [session-start|user-prompt-submit|post-tool-use|post-compact]\n");
+	process.stderr.write("Usage: rules-injector hook [session-start|user-prompt-submit|post-tool-use|post-compact]\n");
 	process.exitCode = 1;
 }
 
