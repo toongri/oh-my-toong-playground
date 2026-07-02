@@ -2869,3 +2869,76 @@ describe("start + collect integration", () => {
 		}
 	}, 30000);
 });
+
+// ---------------------------------------------------------------------------
+// exclude_chairman_from_members: YAML 1.2 문자열 "no" 회귀 (Bug fix)
+// Bun.YAML.parse는 YAML 1.2라 `no`/`off`는 boolean이 아닌 문자열로 파싱된다.
+// `optionalBoolean()`로 걸러버리면 undefined가 되어 기본값(true, chairman 제외)으로
+// 역전된다 — configExcludeSetting은 normalizeBool로 사전 정규화해서 넘겨야 한다.
+// ---------------------------------------------------------------------------
+
+describe('exclude_chairman_from_members: 문자열 "no" (YAML 1.2) 회귀', () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test('설정값이 문자열 `"no"`이면 CLI 오버라이드 없이도 chairman이 유지된다', () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: claude",
+				"  members:",
+				"    - name: claude",
+				"      command: echo claude",
+				"    - name: gemini",
+				"      command: echo gemini",
+				"  settings:",
+				"    exclude_chairman_from_members: no",
+				"    timeout: 10",
+			].join("\n"),
+		);
+
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		const result = execFileSync(
+			process.execPath,
+			[
+				SCRIPT,
+				"start",
+				"--config",
+				configPath,
+				"--jobs-dir",
+				jobsDir,
+				"--chairman",
+				"claude",
+				"--json",
+				"test prompt",
+			],
+			{ stdio: "pipe" },
+		);
+
+		const output = JSON.parse(result.toString());
+		const memberNames = output.members.map((r: { name: string }) => r.name);
+		expect(output.settings.excludeChairmanFromMembers).toBe(false);
+		expect(memberNames.includes("claude")).toBe(true);
+
+		// cleanup spawned workers
+		try {
+			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
+		} catch {}
+		try {
+			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+		} catch {}
+	});
+});
