@@ -76,6 +76,23 @@ const CHUNK_REVIEW_BOOLEAN_FLAGS = new Set([
 ]);
 
 // ---------------------------------------------------------------------------
+// Type-narrowing helpers — parseArgs/YAML values arrive as unknown; these
+// convert without an `as` assertion (consistent-type-assertions: 'never').
+// ---------------------------------------------------------------------------
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Wrapper functions — pre-apply CHUNK_REVIEW_JOB_CONFIG for test compatibility
 // ---------------------------------------------------------------------------
 
@@ -135,7 +152,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
             : state
               ? '[!]'
               : '[ ]';
-      const exitInfo = r.exitCode != null ? ` (exit ${r.exitCode})` : '';
+      const exitInfo = r.exitCode !== null && r.exitCode !== undefined ? ` (exit ${r.exitCode})` : '';
       process.stdout.write(`${mark} ${r.member} \u2014 ${state}${exitInfo}\n`);
     }
     return;
@@ -147,7 +164,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
     process.stdout.write(`members ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
     if (options.verbose) {
       for (const r of payload.members) {
-        process.stdout.write(`- ${r.member}: ${r.state}${r.exitCode != null ? ` (exit ${r.exitCode})` : ''}\n`);
+        process.stdout.write(`- ${r.member}: ${r.state}${r.exitCode !== null && r.exitCode !== undefined ? ` (exit ${r.exitCode})` : ''}\n`);
       }
     }
     return;
@@ -178,7 +195,7 @@ function cmdClean(options: Record<string, unknown>, jobDir: string): void {
   initLoggerFromJobDir(jobDir);
   logInfo(`clean: ${path.resolve(jobDir)}`);
   const configuredJobsDir = path.resolve(
-    (options['jobs-dir'] as string | undefined) || process.env.CHUNK_REVIEW_JOBS_DIR || DEFAULT_JOBS_DIR,
+    optionalString(options['jobs-dir']) || process.env.CHUNK_REVIEW_JOBS_DIR || DEFAULT_JOBS_DIR,
   );
   _cmdClean(options, jobDir, CHUNK_REVIEW_JOB_CONFIG, configuredJobsDir);
 }
@@ -193,8 +210,18 @@ function resolveDefaultConfigFile(): string {
   return SKILL_CONFIG_FILE;
 }
 
-function parseChunkReviewConfig(configPath: string): Record<string, any> {
-  const fallback = {
+interface ChunkReviewSection {
+  chairman: Record<string, unknown>;
+  members: unknown[];
+  settings: Record<string, unknown>;
+}
+
+interface ChunkReviewConfig {
+  'chunk-review': ChunkReviewSection;
+}
+
+function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
+  const fallback: ChunkReviewConfig = {
     'chunk-review': {
       chairman: { role: 'auto' },
       members: [
@@ -207,25 +234,26 @@ function parseChunkReviewConfig(configPath: string): Record<string, any> {
 
   if (!fs.existsSync(configPath)) return fallback;
 
-  let parsed: any;
+  let parsed: unknown;
   try {
     parsed = Bun.YAML.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch (error: any) {
-    const message = error && error.message ? error.message : String(error);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     exitWithError(`Invalid YAML in ${configPath}: ${message}`);
   }
 
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     exitWithError(`Invalid config in ${configPath}: expected a YAML mapping/object at the document root`);
   }
-  if (!parsed['chunk-review']) {
+  const chunkReviewRaw = parsed['chunk-review'];
+  if (!chunkReviewRaw) {
     exitWithError(`Invalid config in ${configPath}: missing required top-level key 'chunk-review:'`);
   }
-  if (typeof parsed['chunk-review'] !== 'object' || Array.isArray(parsed['chunk-review'])) {
+  if (!isRecord(chunkReviewRaw)) {
     exitWithError(`Invalid config in ${configPath}: 'chunk-review' must be a mapping/object`);
   }
 
-  const merged: Record<string, any> = {
+  const merged: ChunkReviewConfig = {
     'chunk-review': {
       chairman: { ...fallback['chunk-review'].chairman },
       members: Array.isArray(fallback['chunk-review'].members) ? [...fallback['chunk-review'].members] : [],
@@ -233,10 +261,10 @@ function parseChunkReviewConfig(configPath: string): Record<string, any> {
     },
   };
 
-  const chunkReview = parsed['chunk-review'];
+  const chunkReview = chunkReviewRaw;
 
-  if (chunkReview.chairman != null) {
-    if (typeof chunkReview.chairman !== 'object' || Array.isArray(chunkReview.chairman)) {
+  if (chunkReview.chairman !== null && chunkReview.chairman !== undefined) {
+    if (!isRecord(chunkReview.chairman)) {
       exitWithError(`Invalid config in ${configPath}: 'chunk-review.chairman' must be a mapping/object`);
     }
     merged['chunk-review'].chairman = { ...merged['chunk-review'].chairman, ...chunkReview.chairman };
@@ -249,8 +277,8 @@ function parseChunkReviewConfig(configPath: string): Record<string, any> {
     merged['chunk-review'].members = chunkReview.members;
   }
 
-  if (chunkReview.settings != null) {
-    if (typeof chunkReview.settings !== 'object' || Array.isArray(chunkReview.settings)) {
+  if (chunkReview.settings !== null && chunkReview.settings !== undefined) {
+    if (!isRecord(chunkReview.settings)) {
       exitWithError(`Invalid config in ${configPath}: 'chunk-review.settings' must be a mapping/object`);
     }
     merged['chunk-review'].settings = { ...merged['chunk-review'].settings, ...chunkReview.settings };
@@ -282,30 +310,40 @@ Notes:
 }
 
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
-  const configPath = (options.config as string | undefined) || process.env.CHUNK_REVIEW_CONFIG || resolveDefaultConfigFile();
+  const configPath = optionalString(options.config) || process.env.CHUNK_REVIEW_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
-    (options['jobs-dir'] as string | undefined) || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
+    optionalString(options['jobs-dir']) || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir);
 
   const hostRole = detectHostRole(SKILL_DIR);
   const config = parseChunkReviewConfig(configPath);
-  const chairmanRoleRaw = (options.chairman as string | undefined) || process.env.CHUNK_REVIEW_CHAIRMAN || config['chunk-review'].chairman.role || 'auto';
+  const chairmanRoleRaw =
+    optionalString(options.chairman) ||
+    process.env.CHUNK_REVIEW_CHAIRMAN ||
+    optionalString(config['chunk-review'].chairman.role) ||
+    'auto';
 
   const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
     options,
-    configExcludeSetting: config['chunk-review'].settings.exclude_chairman_from_members,
+    configExcludeSetting: optionalBoolean(config['chunk-review'].settings.exclude_chairman_from_members),
     hostRole,
     chairmanRoleRaw,
   });
 
   const timeoutSetting = Number(config['chunk-review'].settings.timeout || 0);
-  const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
-  const timeoutSec = Number.isFinite(timeoutOverride!) && timeoutOverride! > 0 ? timeoutOverride! : timeoutSetting > 0 ? timeoutSetting : 0;
+  const timeoutOverride =
+    options.timeout !== null && options.timeout !== undefined ? Number(options.timeout) : null;
+  const timeoutSec =
+    timeoutOverride !== null && Number.isFinite(timeoutOverride) && timeoutOverride > 0
+      ? timeoutOverride
+      : timeoutSetting > 0
+        ? timeoutSetting
+        : 0;
 
   const requestedMembers = config['chunk-review'].members || [];
-  const members = requestedMembers.filter(filterMember);
+  const members = requestedMembers.filter(isRecord).filter(filterMember);
 
   assertMembersOrExit(members, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
@@ -331,7 +369,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
       excludeChairmanFromMembers,
       timeoutSec: timeoutSec || null,
     },
-    members: members.map((r: any) => ({
+    members: members.map((r) => ({
       name: String(r.name),
       command: String(r.command),
       emoji: r.emoji ? String(r.emoji) : null,
@@ -352,7 +390,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
     timeoutSec,
     config: CHUNK_REVIEW_JOB_CONFIG,
   });
-  logInfo(`workers spawned: ${members.map((r: any) => String(r.name)).join(', ')}`);
+  logInfo(`workers spawned: ${members.map((r) => String(r.name)).join(', ')}`);
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);
@@ -386,7 +424,7 @@ async function main(): Promise<void> {
       const filePath = String(options['prompt-file']);
       try {
         prompt = fs.readFileSync(filePath, 'utf8');
-      } catch (e) {
+      } catch {
         exitWithError(`start: cannot read --prompt-file: ${filePath}`);
       }
     } else if (options.stdin) {
@@ -429,11 +467,11 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'resume-member') {
-    const jobDirArg = options.job as string | undefined;
+    const jobDirArg = optionalString(options.job);
     if (!jobDirArg) exitWithError('--job required');
-    const nameArg = options.member as string | undefined;
+    const nameArg = optionalString(options.member);
     if (!nameArg) exitWithError('--member required');
-    const promptArg = options.prompt as string | undefined;
+    const promptArg = optionalString(options.prompt);
     if (!promptArg) exitWithError('--prompt required');
     try {
       await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG);

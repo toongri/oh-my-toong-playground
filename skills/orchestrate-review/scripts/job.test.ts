@@ -49,7 +49,7 @@ describe('parseChunkReviewConfig', () => {
 
   test('fallback contains default members (claude, codex)', async () => {
     const result = await parseChunkReviewConfig(path.join(tmpDir, 'nope.yaml'));
-    const names = result['chunk-review'].members.map((r: { name: string }) => r.name);
+    const names = result['chunk-review'].members.map((r) => (r as { name: string }).name);
     expect(names.includes('claude')).toBeTruthy();
     expect(names.includes('codex')).toBeTruthy();
     expect(names.includes('gemini')).toBeFalsy();
@@ -76,7 +76,7 @@ describe('parseChunkReviewConfig', () => {
     const result = await parseChunkReviewConfig(configPath);
     expect(result['chunk-review'].chairman.role).toBe('gemini');
     expect(result['chunk-review'].members.length).toBe(1);
-    expect(result['chunk-review'].members[0].name).toBe('alice');
+    expect((result['chunk-review'].members[0] as { name: string }).name).toBe('alice');
     expect(result['chunk-review'].settings.timeout).toBe(600);
   });
 
@@ -110,13 +110,13 @@ describe('parseChunkReviewConfig', () => {
       '        KIMI_MODEL: kimi-k2',
     ].join('\n'));
     const result = await parseChunkReviewConfig(configPath);
-    expect(result['chunk-review'].members[0].env).toEqual({ KIMI_API_KEY: 'test-key', KIMI_MODEL: 'kimi-k2' });
+    expect((result['chunk-review'].members[0] as { env: unknown }).env).toEqual({ KIMI_API_KEY: 'test-key', KIMI_MODEL: 'kimi-k2' });
   });
 
   test('real config registers security and coverage members', async () => {
     const realPath = path.join(import.meta.dirname, '..', 'orchestrate-review.config.yaml');
     const result = await parseChunkReviewConfig(realPath);
-    const names = result['chunk-review'].members.map((r: { name: string }) => r.name);
+    const names = result['chunk-review'].members.map((r) => (r as { name: string }).name);
     expect(names.includes('security')).toBeTruthy();
     expect(names.includes('coverage')).toBeTruthy();
   });
