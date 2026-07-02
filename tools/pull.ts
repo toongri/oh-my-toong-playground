@@ -42,6 +42,19 @@ export type PullOptions = {
 // CLI helpers
 // ---------------------------------------------------------------------------
 
+// Widened to `readonly string[]` so `.includes()` can be called with a plain
+// `string` (e.g. a CLI arg) without an `as` cast at the call site.
+const PLATFORM_VALUES: readonly string[] = Object.keys(SUPPORTED_CATEGORIES);
+const CATEGORY_VALUES: readonly string[] = CATEGORIES;
+
+function isPlatform(value: string): value is Platform {
+  return PLATFORM_VALUES.includes(value);
+}
+
+function isCategory(value: string): value is Category {
+  return CATEGORY_VALUES.includes(value);
+}
+
 export function printUsage(): void {
   process.stderr.write(
     [
@@ -86,12 +99,11 @@ export function parseCliArgs(args: string[]): {
         process.stderr.write("[ERROR] --platform 플래그에 값이 필요합니다 (예: --platform gemini)\n");
         process.exit(1);
       }
-      const validPlatforms = Object.keys(SUPPORTED_CATEGORIES);
-      if (!validPlatforms.includes(value)) {
-        process.stderr.write(`[ERROR] 유효하지 않은 platform: ${value} (허용: ${validPlatforms.join(", ")})\n`);
+      if (!isPlatform(value)) {
+        process.stderr.write(`[ERROR] 유효하지 않은 platform: ${value} (허용: ${PLATFORM_VALUES.join(", ")})\n`);
         process.exit(1);
       }
-      platform = value as Platform;
+      platform = value;
       i++;
     } else if (arg === "--category") {
       const value = args[i + 1];
@@ -99,11 +111,11 @@ export function parseCliArgs(args: string[]): {
         process.stderr.write("[ERROR] --category 플래그에 값이 필요합니다 (예: --category skills)\n");
         process.exit(1);
       }
-      if (!CATEGORIES.includes(value as Category)) {
+      if (!isCategory(value)) {
         process.stderr.write(`[ERROR] 유효하지 않은 category: ${value} (허용: ${CATEGORIES.join(", ")})\n`);
         process.exit(1);
       }
-      categoryFilter = value as Category;
+      categoryFilter = value;
       i++;
     } else if (arg === "--component") {
       const value = args[i + 1];
@@ -217,7 +229,7 @@ export async function pullProject(options: PullOptions): Promise<void> {
   let syncYaml: SyncYaml;
   try {
     const result = await readAndExpandSyncYaml(syncYamlPath);
-    if (result == null) {
+    if (result === null) {
       process.stderr.write(`[ERROR] sync.yaml이 객체가 아님: ${syncYamlPath}\n`);
       process.exit(1);
     }
@@ -250,9 +262,7 @@ export async function pullProject(options: PullOptions): Promise<void> {
       continue;
     }
 
-    const section = syncYaml[category as keyof SyncYaml] as
-      | { platforms?: Platform[]; items?: SyncItem[] }
-      | undefined;
+    const section = syncYaml[category];
 
     if (!section || !Array.isArray(section.items) || section.items.length === 0) {
       continue;

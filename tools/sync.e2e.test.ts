@@ -84,7 +84,7 @@ type PlatformFixture = {
 
 const PLATFORMS = ["claude", "gemini", "codex", "opencode"] as const;
 
-function buildFixtures(targetPath: string): Record<string, PlatformFixture> {
+function buildFixtures(): Record<string, PlatformFixture> {
   return {
     claude: {
       base: [
@@ -187,7 +187,7 @@ describe("4-platform overlay E2E", () => {
   });
 
   it("모든 플랫폼에 병합된 config가 전달됨 — scalar override, object deep-merge, array concat+dedup", async () => {
-    const fixtures = buildFixtures(targetPath);
+    const fixtures = buildFixtures();
 
     for (const platform of PLATFORMS) {
       await writeFile(path.join(yamlDir, `${platform}.yaml`), fixtures[platform].base);

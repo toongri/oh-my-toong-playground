@@ -35,6 +35,12 @@ const parseYaml = (filePath: string) => _parseYaml(filePath, "YAML 문법 오류
 
 const VALID_PLATFORMS = ["claude", "gemini", "codex", "opencode"] as const;
 type Platform = (typeof VALID_PLATFORMS)[number];
+// Widened to `readonly string[]` so `.includes()` can be called with a plain
+// `string` without an `as` cast at the call site.
+const VALID_PLATFORM_VALUES: readonly string[] = VALID_PLATFORMS;
+function isValidPlatform(value: string): value is Platform {
+  return VALID_PLATFORM_VALUES.includes(value);
+}
 
 const VALID_SYNC_TOP_LEVEL = new Set([
   "name",
@@ -111,7 +117,7 @@ function validatePlatformValues(
 ): void {
   if (!isArray(platforms)) return;
   for (const p of platforms) {
-    if (typeof p === "string" && !VALID_PLATFORMS.includes(p as Platform)) {
+    if (typeof p === "string" && !isValidPlatform(p)) {
       result.errors.push(`${context}: 잘못된 플랫폼 '${p}' (지원: ${VALID_PLATFORMS.join(", ")})`);
     }
   }
@@ -423,8 +429,8 @@ function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPat
         if (!isObject(value)) {
           result.errors.push(`${label}: hooks.preserve는 object 형식이어야 합니다`);
         } else {
-          const cc = (value as Record<string, unknown>)["command-contains"];
-          if (cc !== undefined && (!isArray(cc) || !(cc as unknown[]).every((x) => typeof x === "string"))) {
+          const cc = value["command-contains"];
+          if (cc !== undefined && (!isArray(cc) || !cc.every((x) => typeof x === "string"))) {
             result.errors.push(`${label}: hooks.preserve.command-contains는 string 배열이어야 합니다`);
           }
         }
@@ -439,8 +445,8 @@ function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPat
       }
 
       // A-3: validate individual hook items are objects
-      for (let i = 0; i < (value as unknown[]).length; i++) {
-        const hookItem = (value as unknown[])[i];
+      for (let i = 0; i < value.length; i++) {
+        const hookItem = value[i];
         if (!isObject(hookItem)) {
           result.errors.push(
             `${label}: hooks.${event}[${i}]은 object이어야 합니다 (got ${hookItem === null ? "null" : typeof hookItem})`,
@@ -450,7 +456,7 @@ function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPat
 
         // C10: validate field value types — non-string component/command or non-number timeout
         // causes a TypeError at resolver.ts (123).includes() outside the dry-run guard.
-        const hookObj = hookItem as Record<string, unknown>;
+        const hookObj = hookItem;
         if (hookObj.component !== undefined && typeof hookObj.component !== "string") {
           result.errors.push(
             `${label}: hooks.${event}[${i}].component는 string이어야 합니다 (got ${typeof hookObj.component})`,

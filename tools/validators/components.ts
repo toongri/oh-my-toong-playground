@@ -37,6 +37,12 @@ import { resolveDeployTargets } from "../lib/resolve-deploy-targets.ts";
 
 const PLATFORMS = ["claude", "gemini", "codex", "opencode"] as const;
 type Platform = (typeof PLATFORMS)[number];
+// Widened to `readonly string[]` so `.includes()` can be called with a plain
+// `string` without an `as` cast at the call site.
+const PLATFORM_VALUES: readonly string[] = PLATFORMS;
+function isPlatform(value: string): value is Platform {
+  return PLATFORM_VALUES.includes(value);
+}
 
 // CLI project file per platform
 const CLI_PROJECT_FILE: Record<Platform, string> = {
@@ -108,8 +114,8 @@ function collectUsedPlatforms(data: Record<string, unknown>): Set<Platform> {
   function addPlatforms(val: unknown): void {
     if (!isArray(val)) return;
     for (const p of val) {
-      if (typeof p === "string" && PLATFORMS.includes(p as Platform)) {
-        used.add(p as Platform);
+      if (typeof p === "string" && isPlatform(p)) {
+        used.add(p);
       }
     }
   }
@@ -150,7 +156,7 @@ function validateCliProjectFiles(
 
   for (const platform of usedPlatforms) {
     const projectFile = CLI_PROJECT_FILE[platform];
-    let found = false;
+    let found: boolean;
 
     if (platform === "claude") {
       // The MCP-only skip is Claude-only: an MCP-only Claude project writes to
@@ -189,6 +195,12 @@ type ClaudeYamlPreParsed =
   | { ok: true; value: unknown }   // successfully parsed (value may be null = no file)
   | { ok: false };                 // parse failed; error already recorded in caller
 
+// sync.yaml's top-level `hooks` section is deprecated (P2-3, rejected by schema.ts)
+// and absent from the SyncYaml type, but any leftover items under it still get
+// component-existence checks here — so the working type widens SyncYaml by that
+// one legacy field.
+type SyncYamlWithLegacyHooks = SyncYaml & { hooks?: unknown };
+
 export async function validateSyncYamlComponents(
   filePath: string,
   rootDir: string,
@@ -208,9 +220,8 @@ export async function validateSyncYamlComponents(
     return result;
   }
   if (syncYaml === null) return result;
-
-  const data = syncYaml as unknown as Record<string, unknown>;
-  if (!isObject(data)) return result;
+  if (!isObject(syncYaml)) return result;
+  const data: SyncYamlWithLegacyHooks = syncYaml;
 
   const ctx = setProjectContext(syncYaml, filePath, rootDir);
   const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
@@ -234,7 +245,7 @@ export async function validateSyncYamlComponents(
   let claudeYaml: Record<string, unknown> | null;
   if (claudeYamlPreParsed !== undefined) {
     if (!claudeYamlPreParsed.ok) return result; // parse failed upstream; error already recorded
-    claudeYaml = claudeYamlPreParsed.value as Record<string, unknown> | null;
+    claudeYaml = isObject(claudeYamlPreParsed.value) ? claudeYamlPreParsed.value : null;
   } else {
     try {
       claudeYaml = await parseAndMergePlatformYaml(dirname(filePath), "claude");
@@ -265,7 +276,7 @@ export async function validateSyncYamlComponents(
   }
 
   // Category definitions: [category, extension]
-  type CategoryDef = { category: string; ext: string };
+  type CategoryDef = { category: "agents" | "commands" | "skills" | "scripts" | "rules"; ext: string };
   const categories: CategoryDef[] = [
     { category: "agents", ext: ".md" },
     { category: "commands", ext: ".md" },
@@ -274,7 +285,7 @@ export async function validateSyncYamlComponents(
     { category: "rules", ext: ".md" },
   ];
 
-  for (const { category, ext } of categories) {
+  for (const { category } of categories) {
     const sectionData = data[category];
     if (!isObject(sectionData)) continue;
 
@@ -403,9 +414,8 @@ export async function validatePlatformYamlHookComponents(
       }
     }
     if (merged === null) continue;
-
-    const data = merged as unknown as Record<string, unknown>;
-    if (!isObject(data)) continue;
+    if (!isObject(merged)) continue;
+    const data = merged;
 
     const hooks = data.hooks;
     if (!isObject(hooks)) continue;

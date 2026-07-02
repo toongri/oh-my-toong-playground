@@ -238,7 +238,7 @@ async function collectTsFiles(dir: string, root: string): Promise<string[]> {
   const results: string[] = [];
   let entries: import("fs").Dirent[];
   try {
-    entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
+    entries = await fs.readdir(dir, { withFileTypes: true });
   } catch {
     return results;
   }
@@ -398,10 +398,10 @@ export async function findRelativeLibImports(
 export async function readPackageJsonDeps(repoRoot: string): Promise<Set<string>> {
   const pkgPath = path.join(repoRoot, "package.json");
   const raw = await fs.readFile(pkgPath, "utf8");
-  const pkg = JSON.parse(raw) as {
+  const pkg: {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
-  };
+  } = JSON.parse(raw);
   const declared = new Set<string>();
   for (const name of Object.keys(pkg.dependencies ?? {})) declared.add(name);
   for (const name of Object.keys(pkg.devDependencies ?? {})) declared.add(name);
