@@ -1,0 +1,17 @@
+node_modules
+dist
+coverage
+bun.lock
+**/vendor/**
+
+# gitignore된 배포 타깃/생성 디렉터리 (prettier는 .gitignore를 읽지 않음)
+.claude/
+.codex/
+.gemini/
+.opencode/
+.serena/
+.codegraph/
+.superset/
+.playwright-mcp/
+.omt/
+.sync-backup/
