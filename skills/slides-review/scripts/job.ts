@@ -59,6 +59,19 @@ function resolveDefaultConfigFile() {
 }
 
 // ---------------------------------------------------------------------------
+// Type-narrowing helpers — parseArgs/YAML values arrive as unknown; these
+// convert without an `as` assertion (consistent-type-assertions: 'never').
+// ---------------------------------------------------------------------------
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Help
 // ---------------------------------------------------------------------------
 
@@ -82,9 +95,9 @@ Usage:
 // ---------------------------------------------------------------------------
 
 async function cmdStart(options: Record<string, unknown>, prompt: string) {
-  const configPath = (options.config as string | undefined) || process.env.REVIEW_CONFIG || resolveDefaultConfigFile();
+  const configPath = optionalString(options.config) || process.env.REVIEW_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
-    (options['jobs-dir'] as string | undefined) || process.env.REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
+    optionalString(options['jobs-dir']) || process.env.REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, REVIEW_CONFIG);
@@ -101,14 +114,23 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
   };
 
   const fileText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
-  let parsed: Record<string, RawReviewConfig>;
-  try {
-    parsed = (fileText ? Bun.YAML.parse(fileText) : { [REVIEW_CONFIG.configTopLevelKey]: defaultReview }) as Record<string, RawReviewConfig>;
-  } catch (e) {
-    exitWithError(`Invalid YAML in ${configPath}: ${e instanceof Error ? e.message : String(e)}`);
+  let parsedRaw: unknown = { [REVIEW_CONFIG.configTopLevelKey]: defaultReview };
+  if (fileText) {
+    try {
+      parsedRaw = Bun.YAML.parse(fileText);
+    } catch (e) {
+      exitWithError(`Invalid YAML in ${configPath}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
-  const pr = parsed![REVIEW_CONFIG.configTopLevelKey] ?? {};
+  const parsed = isRecord(parsedRaw) ? parsedRaw : {};
+  const prRaw = parsed[REVIEW_CONFIG.configTopLevelKey];
+  const pr: RawReviewConfig = isRecord(prRaw)
+    ? {
+        members: Array.isArray(prRaw.members) ? prRaw.members.filter(isRecord) : undefined,
+        settings: isRecord(prRaw.settings) ? prRaw.settings : undefined,
+      }
+    : {};
   const reviewConfig: RawReviewConfig = {
     members: pr.members ?? defaultReview.members,
     settings: { ...defaultReview.settings, ...pr.settings },
@@ -223,7 +245,7 @@ async function main() {
   if (command === 'clean') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('clean: missing jobDir');
-    const defaultJobsDir = options['jobs-dir'] as string | undefined
+    const defaultJobsDir = optionalString(options['jobs-dir'])
       || process.env.REVIEW_JOBS_DIR
       || path.join(getOmtDir(), 'jobs');
     frameworkCmdClean(options, jobDir, REVIEW_CONFIG, defaultJobsDir);
