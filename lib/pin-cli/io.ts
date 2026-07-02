@@ -82,11 +82,11 @@ function readStdin(): Promise<string> {
 /** Whether `value` has the structural shape of an {@link Entity}. */
 function isEntityShape(value: unknown): value is Entity {
   if (value === null || typeof value !== 'object') return false;
-  const obj = value as Record<string, unknown>;
+  if (!('frontmatter' in value) || !('body' in value)) return false;
   return (
-    typeof obj.frontmatter === 'object' &&
-    obj.frontmatter !== null &&
-    typeof obj.body === 'string'
+    typeof value.frontmatter === 'object' &&
+    value.frontmatter !== null &&
+    typeof value.body === 'string'
   );
 }
 
@@ -121,8 +121,9 @@ export async function readEntityFromStdin(): Promise<Entity> {
   // C11: normalize missing relations to [] so the engine's relation iteration
   // never throws a TypeError. The disk-read path (entity.ts:parse) already
   // applies `?? []`; stdin bypasses that, so we do it here instead.
-  const fm = parsed.frontmatter as unknown as Record<string, unknown>;
-  if (fm.relations === undefined) fm.relations = [];
+  if (parsed.frontmatter.relations === undefined) {
+    parsed.frontmatter.relations = [];
+  }
 
   return parsed;
 }

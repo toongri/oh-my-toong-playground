@@ -46,7 +46,7 @@ export function buildIndex(pinsDir: string): PinsIndex {
     files = readdirSync(pinsDir)
       .filter((f) => f.endsWith('.md') && !f.endsWith('.bak') && !f.startsWith('.'))
       .sort(); // deterministic order
-  } catch (err) {
+  } catch {
     // Unreadable directory — return empty index
     return { entries, skipped };
   }

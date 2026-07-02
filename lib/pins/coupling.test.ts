@@ -122,7 +122,6 @@ describe('3-way coupling', () => {
 
     if (!existsSync(skillPath)) {
       // SKILL.md not yet authored — skip this leg.
-      console.log('[coupling] skills/pin-record/SKILL.md not found — leg 3 skipped');
       return;
     }
 

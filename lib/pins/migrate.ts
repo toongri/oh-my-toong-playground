@@ -61,6 +61,9 @@ export async function migrate(options: MigrateOptions): Promise<void> {
     // Legacy file: must have `slug`.
     if (typeof raw.slug !== 'string') continue;
 
+    // Trust boundary: raw is unvalidated YAML from a legacy .md file (schema
+    // is enforced downstream by toCanonical/validate, not here).
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque legacy YAML→FrontmatterSchema boundary; shape trusted by caller checks above (raw.type undefined, raw.slug string)
     const legacy = raw as unknown as FrontmatterSchema;
 
     // 1. Write .bak sibling (original legacy content preserved).
@@ -85,7 +88,7 @@ export async function migrate(options: MigrateOptions): Promise<void> {
 
     // 3. Build the Entity: set checked_at = created_at (migration default).
     const frontmatter: Frontmatter = {
-      ...(compat as unknown as Frontmatter),
+      ...compat,
       status: 'active',
       updated_at: compat.created_at,
       checked_at: compat.created_at,
@@ -120,6 +123,7 @@ function parseFrontmatterRaw(content: string): Record<string, unknown> | null {
   if (!match) return null;
   const raw = parseYamlStrict(match[1]);
   if (raw === null || typeof raw !== 'object') return null;
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque YAML parse boundary; downstream callers validate individual fields before trusting them
   return raw as Record<string, unknown>;
 }
 

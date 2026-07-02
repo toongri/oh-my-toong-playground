@@ -58,6 +58,9 @@ export function toCanonical(legacy: FrontmatterSchema): CompatFrontmatter {
     source,
     authority: legacy.authority,
     source_url: legacy.source_url,
+    // legacy.tier is untyped string (see legacy-types.ts TODO: not yet enumerated
+    // to 'L1'|'L2'|'L3'); this boundary crossing is unavoidable until that lands.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- legacy.tier is plain string pending enum narrowing in legacy-types.ts
     tier: legacy.tier as Tier,
     tags: legacy.tags,
     sensitivity: legacy.sensitivity,
