@@ -15,6 +15,14 @@ import {
   BuiltCommand,
 } from './types';
 
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null;
+}
+
+function isUsageRecord(x: unknown): x is Record<string, number> {
+  return isRecord(x) && !Array.isArray(x);
+}
+
 export const codexDriver: AgentDriver = {
   cli: 'codex',
 
@@ -22,13 +30,12 @@ export const codexDriver: AgentDriver = {
     const lines = stdout.split('\n').filter((l) => l.trim() !== '');
 
     const rawEvents: unknown[] = [];
-    let parseErrors = 0;
 
     for (const line of lines) {
       try {
         rawEvents.push(JSON.parse(line));
       } catch {
-        parseErrors++;
+        // non-JSON line — skipped
       }
     }
 
@@ -43,8 +50,8 @@ export const codexDriver: AgentDriver = {
     let usage: Record<string, number> | undefined;
 
     for (const event of rawEvents) {
-      if (!event || typeof event !== 'object') continue;
-      const ev = event as Record<string, unknown>;
+      if (!isRecord(event)) continue;
+      const ev = event;
 
       if (ev.type === 'thread.started' && typeof ev.thread_id === 'string') {
         sessionID = ev.thread_id;
@@ -52,8 +59,8 @@ export const codexDriver: AgentDriver = {
 
       if (ev.type === 'turn.completed') {
         hasTurnCompleted = true;
-        if (ev.usage && typeof ev.usage === 'object' && !Array.isArray(ev.usage)) {
-          usage = ev.usage as Record<string, number>;
+        if (isUsageRecord(ev.usage)) {
+          usage = ev.usage;
         }
       }
 
@@ -63,8 +70,8 @@ export const codexDriver: AgentDriver = {
 
       if (ev.type === 'item.completed') {
         hasItemCompleted = true;
-        const item = ev.item as Record<string, unknown> | undefined;
-        if (item && item.type === 'agent_message' && typeof item.text === 'string') {
+        const item = ev.item;
+        if (isRecord(item) && item.type === 'agent_message' && typeof item.text === 'string') {
           textParts.push(item.text);
         }
       }

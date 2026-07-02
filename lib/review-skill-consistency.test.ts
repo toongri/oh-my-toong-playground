@@ -52,7 +52,7 @@ function jobSkills(): JobSkill[] {
  * mis-read. Returns null when the error matches neither (no resume-member CLI).
  */
 function implResumeForm(jobTs: string): ArgForm | null {
-  let stderr = "";
+  let stderr: string;
   try {
     execFileSync(process.execPath, [jobTs, "resume-member"], {
       stdio: ["ignore", "ignore", "pipe"],

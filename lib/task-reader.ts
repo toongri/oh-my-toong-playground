@@ -40,7 +40,7 @@ export async function readTasksFromDirectory(directoryPath: string): Promise<Tas
     const filePath = join(directoryPath, file);
     try {
       const content = await readFile(filePath, 'utf-8');
-      const task = JSON.parse(content) as Task;
+      const task: Task = JSON.parse(content);
       tasks.push(task);
     } catch {
       console.error(`Warning: Failed to parse task file: ${file}`);
