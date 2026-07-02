@@ -241,7 +241,7 @@ export const opencodeAdapter: PlatformAdapter = {
     const config = await readJsonFile(configFile);
 
     const instructions = Array.isArray(config["instructions"])
-      ? (config["instructions"] as unknown[])
+      ? config["instructions"]
       : [];
 
     if (!instructions.includes(globEntry)) {
@@ -275,14 +275,14 @@ export const opencodeAdapter: PlatformAdapter = {
     let modelMap: Record<string, string> | undefined;
 
     // 1. model-map (must be processed before config)
-    if (yaml["model-map"] != null) {
+    if (yaml["model-map"] !== undefined && yaml["model-map"] !== null) {
       modelMap = yaml["model-map"];
       processedSections.push("model-map");
     }
 
     // 2. config — apply model-map to model and small_model fields, then merge
-    if (yaml.config != null) {
-      let configObj = { ...yaml.config };
+    if (yaml.config !== undefined && yaml.config !== null) {
+      const configObj = { ...yaml.config };
 
       if (modelMap) {
         if (typeof configObj["model"] === "string") {
@@ -301,13 +301,13 @@ export const opencodeAdapter: PlatformAdapter = {
     }
 
     // 3. hooks — not supported, log and skip
-    if (yaml.hooks != null) {
+    if (yaml.hooks !== undefined && yaml.hooks !== null) {
       logWarn("OpenCode does not support hooks. Skipping hooks section.");
       processedSections.push("hooks");
     }
 
     // 4. mcps — iterate items and merge each server
-    if (yaml.mcps != null) {
+    if (yaml.mcps !== undefined && yaml.mcps !== null) {
       for (const [name, serverDef] of Object.entries(yaml.mcps)) {
         await syncMcpsMerge(targetPath, name, serverDef, dryRun);
       }
@@ -315,7 +315,7 @@ export const opencodeAdapter: PlatformAdapter = {
     }
 
     // 5. plugins — not supported, log and skip
-    if (yaml.plugins?.items != null) {
+    if (yaml.plugins?.items !== undefined && yaml.plugins?.items !== null) {
       logWarn("OpenCode does not support plugins. Skipping plugins section.");
     }
 
@@ -368,8 +368,8 @@ export function transformMcpServerDef(
 
   // Transform command string + args array → type: "local", command: array
   if (typeof result["command"] === "string" && Array.isArray(result["args"])) {
-    const cmd = result["command"] as string;
-    const args = result["args"] as unknown[];
+    const cmd = result["command"];
+    const args = result["args"];
     result["type"] = "local";
     result["command"] = [cmd, ...args];
     delete result["args"];
@@ -382,6 +382,11 @@ export function transformMcpServerDef(
   }
 
   return result;
+}
+
+/** Type guard: is `value` a plain JSON object (not an array, not null)? */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -405,7 +410,7 @@ export async function syncMcpsMerge(
   }
 
   const current = await readJsonFile(configFile);
-  const mcp = (current["mcp"] as Record<string, unknown> | undefined) ?? {};
+  const mcp: Record<string, unknown> = isRecord(current["mcp"]) ? current["mcp"] : {};
   mcp[serverName] = transformed;
   current["mcp"] = mcp;
 

@@ -32,7 +32,7 @@ export function detectHostRole(skillDir: string): string {
 }
 
 export function normalizeBool(value: unknown): boolean | null {
-  if (value == null) return null;
+  if (value === null || value === undefined) return null;
   const v = String(value).trim().toLowerCase();
   if (['1', 'true', 'yes', 'y', 'on'].includes(v)) return true;
   if (['0', 'false', 'no', 'n', 'off'].includes(v)) return false;
@@ -153,7 +153,7 @@ export function parseArgs(
     }
 
     const next = args[i + 1];
-    if (next == null || next.startsWith('--')) {
+    if (next === null || next === undefined || next.startsWith('--')) {
       out[normalizedKey] = true;
       continue;
     }
@@ -210,9 +210,9 @@ export function resolveBucketSize(
   total: number,
   prevCursor: WaitCursor | null,
 ): number {
-  const raw = options.bucket != null ? options.bucket : options['bucket-size'];
+  const raw = options.bucket !== null && options.bucket !== undefined ? options.bucket : options['bucket-size'];
 
-  if (raw == null || raw === true) {
+  if (raw === null || raw === undefined || raw === true) {
     if (prevCursor && prevCursor.bucketSize) return prevCursor.bucketSize;
   } else {
     const asString = String(raw).trim().toLowerCase();
@@ -294,7 +294,7 @@ export function resolveChairmanExclusion(input: ChairmanExclusionInput): Chairma
   const includeChairman = includeChairmanValue === true;
 
   const excludeChairmanOverride =
-    options['exclude-chairman'] != null
+    options['exclude-chairman'] !== null && options['exclude-chairman'] !== undefined
       ? normalizeBool(options['exclude-chairman'])
       : includeChairman
         ? false
@@ -306,9 +306,9 @@ export function resolveChairmanExclusion(input: ChairmanExclusionInput): Chairma
       : normalizeBool(configExcludeSetting);
 
   const excludeChairmanFromMembers =
-    excludeChairmanOverride != null
+    excludeChairmanOverride !== null && excludeChairmanOverride !== undefined
       ? excludeChairmanOverride
-      : excludeSetting != null
+      : excludeSetting !== null && excludeSetting !== undefined
         ? excludeSetting
         : true;
 
@@ -329,6 +329,7 @@ export function resolveChairmanExclusion(input: ChairmanExclusionInput): Chairma
 // ---------------------------------------------------------------------------
 
 // Covers SGR sequences, OSC (BEL and ST terminated), and CSI via 0x9B
+// eslint-disable-next-line no-control-regex -- matching literal ANSI control bytes (ESC/BEL) is the entire purpose of this pattern
 const ANSI_PATTERN = /\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?(\x07|\x1b\\)|\x9b[0-9;]*[A-Za-z]/g;
 
 export function stripAnsi(text: string): string {

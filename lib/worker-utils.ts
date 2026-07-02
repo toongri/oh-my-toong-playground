@@ -23,6 +23,20 @@ import './agent-drivers/codex';
 
 export const HEARTBEAT_INTERVAL_MS = 10_000;
 
+/** True iff `value` is a non-null, non-array object (i.e. a JSON "object"). */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Reads `key` off `record` as a string, or undefined if absent/non-string. */
+function stringField(record: Record<string, unknown>, key: string): string | undefined {
+  const v = record[key];
+  return typeof v === 'string' ? v : undefined;
+}
+
+/** runOnce states that must be preserved verbatim rather than collapsed to 'error'. */
+const PRESERVED_RUN_STATES = new Set(['missing_cli', 'timed_out', 'canceled']);
+
 // ---------------------------------------------------------------------------
 // Command parsing
 // ---------------------------------------------------------------------------
@@ -217,10 +231,9 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
         env: { ...process.env, NO_COLOR: '1', TERM: 'dumb', FORCE_COLOR: '0', ...workerEnv },
       });
     } catch (error: unknown) {
-      const err = error as Error | undefined;
       const result = {
         member, state: 'error',
-        message: err && err.message ? err.message : 'Failed to spawn command',
+        message: error instanceof Error && error.message ? error.message : 'Failed to spawn command',
         finishedAt: new Date().toISOString(), command, attempt,
       };
       try { atomicWriteJson(statusPath, result); } catch { /* ignore */ }
@@ -255,8 +268,8 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 
     let heartbeatHandle: ReturnType<typeof setInterval> | null = setInterval(() => {
       try {
-        const current = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
-        if (current.state !== 'running') return;
+        const current: unknown = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        if (!isRecord(current) || current.state !== 'running') return;
         atomicWriteJson(statusPath, { ...current, lastHeartbeat: new Date().toISOString() });
       } catch { /* ignore */ }
     }, heartbeatIntervalMs);
@@ -270,10 +283,14 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
     if (Number.isFinite(timeoutSec) && timeoutSec > 0) {
       timeoutHandle = setTimeout(() => {
         timeoutTriggered = true;
-        try { process.kill(child.pid!, 'SIGTERM'); } catch { /* ignore */ }
+        if (child.pid !== undefined) {
+          try { process.kill(child.pid, 'SIGTERM'); } catch { /* ignore */ }
+        }
         // SIGKILL escalation after 5s grace period
         const killHandle = setTimeout(() => {
-          try { process.kill(child.pid!, 'SIGKILL'); } catch { /* ignore */ }
+          if (child.pid !== undefined) {
+            try { process.kill(child.pid, 'SIGKILL'); } catch { /* ignore */ }
+          }
         }, 5000);
         killHandle.unref();
       }, timeoutSec * 1000);
@@ -388,14 +405,17 @@ async function executeOneTurn(
   let existingResumeCount = 0;
   let priorUsage: Record<string, number> | null = null;
   try {
-    const existing = JSON.parse(fs.readFileSync(path.join(memberDir, 'status.json'), 'utf8')) as Record<string, unknown>;
-    existingResumeCount = typeof existing.resume_count === 'number' ? existing.resume_count : 0;
-    if (existingResumeCount > 0) {
-      const u = existing.usage;
-      if (u && typeof u === 'object' && !Array.isArray(u)) {
-        priorUsage = Object.create(null) as Record<string, number>;
-        for (const [k, v] of Object.entries(u as Record<string, unknown>)) {
-          if (typeof v === 'number') priorUsage[k] = v;
+    const existing: unknown = JSON.parse(fs.readFileSync(path.join(memberDir, 'status.json'), 'utf8'));
+    if (isRecord(existing)) {
+      existingResumeCount = typeof existing.resume_count === 'number' ? existing.resume_count : 0;
+      if (existingResumeCount > 0) {
+        const u = existing.usage;
+        if (isRecord(u)) {
+          const usage: Record<string, number> = Object.create(null);
+          for (const [k, v] of Object.entries(u)) {
+            if (typeof v === 'number') usage[k] = v;
+          }
+          priorUsage = usage;
         }
       }
     }
@@ -437,7 +457,7 @@ async function executeOneTurn(
       state = 'non_retryable';
     } else if (
       ['tool-calls', 'pause_turn', 'unknown_pause'].includes(parsed.terminal) &&
-      (runResult.state as string) === 'done'
+      runResult.state === 'done'
     ) {
       // Non-final pause signal with clean exit: process exited 0 but the turn is not complete.
       // Must NOT report 'done' — the caller needs to resume.
@@ -445,24 +465,22 @@ async function executeOneTurn(
     } else {
       // Preserve concrete process-level state from runOnce (missing_cli/timed_out/canceled);
       // only fall to 'error' if runOnce reported a generic non-zero exit without a specific state.
-      state = (runResult.state as string) ?? (exitCode === 0 ? 'done' : 'error');
+      state = stringField(runResult, 'state') ?? (exitCode === 0 ? 'done' : 'error');
     }
     sessionID = parsed.sessionID;
     text = parsed.text;
     fs.writeFileSync(outputPath, parsed.text, 'utf8');
   } else if (driverInstance === null) {
     // No driver registered for cliType: trust runOnce state directly.
-    state = runResult.state as string ?? 'done';
+    state = stringField(runResult, 'state') ?? 'done';
     sessionID = null;
     text = rawStdout;
   } else {
     // Driver present but parseStdout returned null.
     // Preserve concrete process-level states (missing_cli/timed_out/canceled) from runOnce;
     // fall back to 'error' only for genuine parse failures with no specific process state.
-    const runState = runResult.state as string;
-    state = (['missing_cli', 'timed_out', 'canceled'] as const).includes(
-      runState as 'missing_cli' | 'timed_out' | 'canceled'
-    ) ? runState : 'error';
+    const runState = stringField(runResult, 'state');
+    state = runState !== undefined && PRESERVED_RUN_STATES.has(runState) ? runState : 'error';
     sessionID = null;
     text = rawStdout;
   }
@@ -481,13 +499,12 @@ async function executeOneTurn(
     accumulatedUsage = priorUsage;
   } else {
     // Resume turn with usage: per-key sum
-    const merged = Object.create(null) as Record<string, number>;
+    const merged: Record<string, number> = Object.create(null);
     for (const [k, v] of Object.entries(priorUsage)) merged[k] = v;
     for (const [k, v] of Object.entries(currentUsage)) merged[k] = (merged[k] ?? 0) + v;
     accumulatedUsage = merged;
   }
 
-  const runResultRecord = runResult as Record<string, unknown>;
   atomicWriteJson(path.join(memberDir, 'status.json'), {
     member,
     state,
@@ -495,8 +512,8 @@ async function executeOneTurn(
     resume_count: existingResumeCount,
     exitCode,
     command,
-    message: runResultRecord.message ?? null,
-    finishedAt: runResultRecord.finishedAt ?? new Date().toISOString(),
+    message: runResult.message ?? null,
+    finishedAt: runResult.finishedAt ?? new Date().toISOString(),
     workerEnv: builtCmd.env,
     usage: accumulatedUsage,
   });

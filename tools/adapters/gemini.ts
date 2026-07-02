@@ -129,7 +129,7 @@ export class GeminiAdapter implements PlatformAdapter {
 
     // Extract frontmatter description
     const content = await fs.readFile(sourcePath, "utf8");
-    let frontmatter: Record<string, unknown> = {};
+    let frontmatter: Record<string, unknown>;
     try {
       ({ frontmatter } = parseFrontmatter(content));
     } catch (err) {
@@ -163,7 +163,7 @@ export class GeminiAdapter implements PlatformAdapter {
     const targetDir = path.join(targetPath, ".gemini", "hooks");
     const hooksSourceDir = path.dirname(sourcePath);
 
-    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
       stat = await fs.stat(sourcePath);
     } catch {
@@ -243,7 +243,7 @@ export class GeminiAdapter implements PlatformAdapter {
   ): Promise<void> {
     const targetDir = path.join(targetPath, ".gemini", "scripts");
 
-    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
       stat = await fs.stat(sourcePath);
     } catch {
@@ -442,13 +442,13 @@ export class GeminiAdapter implements PlatformAdapter {
     const processedSections: string[] = [];
 
     // --- config ---
-    if (yaml.config != null) {
+    if (yaml.config !== undefined && yaml.config !== null) {
       await this.syncConfig(targetPath, yaml.config, dryRun);
       processedSections.push("config");
     }
 
     // --- hooks ---
-    if (yaml.hooks != null) {
+    if (yaml.hooks !== undefined && yaml.hooks !== null) {
       const hooksMap = yaml.hooks;
       const accumulatedHooks: Record<string, unknown[]> = {};
 
@@ -456,12 +456,15 @@ export class GeminiAdapter implements PlatformAdapter {
         if (!Array.isArray(items)) continue;
 
         for (const item of items) {
-          const component = (item["component"] as string | undefined) ?? "";
-          const timeout = (item["timeout"] as number | undefined) ?? 10;
-          const matcher = (item["matcher"] as string | undefined) ?? "*";
-          const hookType = (item["type"] as string | undefined) ?? "command";
-          const customCommand = (item["command"] as string | undefined) ?? "";
-          const promptText = (item["prompt"] as string | undefined) ?? "";
+          const component = item.component ?? "";
+          const timeout = item.timeout ?? 10;
+          const matcher = item.matcher ?? "*";
+          const typeField = item["type"];
+          const hookType = typeof typeField === "string" ? typeField : "command";
+          const commandField = item["command"];
+          const customCommand = typeof commandField === "string" ? commandField : "";
+          const promptField = item["prompt"];
+          const promptText = typeof promptField === "string" ? promptField : "";
 
           let displayName = "";
           let resolvedSourcePath = "";
@@ -551,8 +554,8 @@ export class GeminiAdapter implements PlatformAdapter {
           }
 
           // Accumulate hook entries per event
-          const existing = (accumulatedHooks[hookEvent] as unknown[]) ?? [];
-          const entryArray = hookEntry[hookEvent] as unknown[];
+          const existing = accumulatedHooks[hookEvent] ?? [];
+          const entryArray = hookEntry[hookEvent];
           accumulatedHooks[hookEvent] = [...existing, ...entryArray];
         }
       }
@@ -562,19 +565,19 @@ export class GeminiAdapter implements PlatformAdapter {
     }
 
     // --- mcps ---
-    if (yaml.mcps != null) {
+    if (yaml.mcps !== undefined && yaml.mcps !== null) {
       await this.syncMcpsMerge(targetPath, yaml.mcps, dryRun);
       processedSections.push("mcps");
     }
 
     // --- plugins (extensions) ---
-    if (yaml.plugins?.items != null) {
+    if (yaml.plugins?.items !== undefined && yaml.plugins?.items !== null) {
       for (const item of yaml.plugins.items) {
         if (typeof item === "string" && item) {
           await this._installExtensionSafe(item, dryRun);
         } else if (typeof item === "object" && item !== null) {
           await this._installExtensionObjectSafe(
-            item as PluginObjectItem,
+            item,
             targetPath,
             dryRun,
           );
