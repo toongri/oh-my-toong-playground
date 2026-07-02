@@ -14,6 +14,7 @@ import {
 	generateJobId,
 	findProjectRoot,
 	resolveChairmanExclusion,
+	normalizeBool,
 } from "@lib/job-utils";
 
 import { initLogger, logInfo, logStart, logEnd } from "@lib/logging";
@@ -94,10 +95,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function optionalString(value: unknown): string | undefined {
 	return typeof value === "string" ? value : undefined;
-}
-
-function optionalBoolean(value: unknown): boolean | undefined {
-	return typeof value === "boolean" ? value : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -357,11 +354,16 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 		optionalString(config["chunk-review"].chairman.role) ||
 		"auto";
 
+	// Pre-normalize via the same normalizeBool the framework applies internally, so passing an
+	// already-normalized boolean|null through is idempotent (identical outcome for every input shape)
+	// while satisfying resolveChairmanExclusion's `boolean | null | undefined` parameter type.
+	const rawExcludeSetting = config["chunk-review"].settings.exclude_chairman_from_members;
+	const configExcludeSetting: boolean | null | undefined =
+		typeof rawExcludeSetting === "boolean" ? rawExcludeSetting : normalizeBool(rawExcludeSetting);
+
 	const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
 		options,
-		configExcludeSetting: optionalBoolean(
-			config["chunk-review"].settings.exclude_chairman_from_members,
-		),
+		configExcludeSetting,
 		hostRole,
 		chairmanRoleRaw,
 	});
