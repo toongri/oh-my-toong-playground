@@ -26,8 +26,9 @@ function mergeArrays(base: unknown[], local: unknown[], path: string): unknown[]
 
   for (const localEntry of local) {
     const key = getIdentityKey(path, localEntry);
-    if (baseIndexByKey.has(key)) {
-      result[baseIndexByKey.get(key)!] = localEntry;
+    const idx = baseIndexByKey.get(key);
+    if (idx !== undefined) {
+      result[idx] = localEntry;
     } else {
       result.push(localEntry);
     }
@@ -40,10 +41,10 @@ export function deepMergeOverlay(
   local: Record<string, unknown>,
   path = "root",
 ): Record<string, unknown> {
-  if (local == null || (isPlainObject(local) && Object.keys(local).length === 0)) {
+  if (local === undefined || local === null || (isPlainObject(local) && Object.keys(local).length === 0)) {
     return deepClone(base ?? {});
   }
-  if (base == null) {
+  if (base === undefined || base === null) {
     return deepClone(local);
   }
 
@@ -57,8 +58,8 @@ export function deepMergeOverlay(
       result[key] = mergeArrays(baseVal, localVal, childPath);
     } else if (isPlainObject(baseVal) && isPlainObject(localVal)) {
       result[key] = deepMergeOverlay(
-        baseVal as Record<string, unknown>,
-        localVal as Record<string, unknown>,
+        baseVal,
+        localVal,
         childPath,
       );
     } else {

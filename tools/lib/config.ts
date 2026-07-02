@@ -8,12 +8,14 @@
 import { join, dirname } from "path";
 import type { Platform } from "./types.ts";
 import { deepMergeOverlay } from "./deep-merge-overlay.ts";
+import { isPlainObject } from "./deep-merge.ts";
 
 type ConfigYaml = {
   "use-platforms"?: Platform[];
   "feature-platforms"?: Record<string, Platform[]>;
   "enabled-projects"?: string[];
   backup_retention_days?: number;
+  [key: string]: unknown;
 };
 
 // Module-level cache
@@ -73,7 +75,8 @@ export async function loadConfig(): Promise<ConfigYaml | null> {
     return cachedConfig;
   }
 
-  const base = Bun.YAML.parse(text) as ConfigYaml;
+  const parsedBase: unknown = Bun.YAML.parse(text);
+  const base: ConfigYaml = isPlainObject(parsedBase) ? parsedBase : {};
 
   const localPath = join(rootDir, "config.local.yaml");
   const localFile = Bun.file(localPath);
@@ -85,11 +88,10 @@ export async function loadConfig(): Promise<ConfigYaml | null> {
       localText = "";
     }
     if (localText) {
-      const local = Bun.YAML.parse(localText) as ConfigYaml;
-      cachedConfig = deepMergeOverlay(
-        base as Record<string, unknown>,
-        local as Record<string, unknown>,
-      ) as ConfigYaml;
+      const parsedLocal: unknown = Bun.YAML.parse(localText);
+      const local: ConfigYaml = isPlainObject(parsedLocal) ? parsedLocal : {};
+      const merged: unknown = deepMergeOverlay(base, local);
+      cachedConfig = isPlainObject(merged) ? merged : {};
       cachePopulated = true;
       return cachedConfig;
     }
