@@ -1,11 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs/promises";
 import fs2 from "fs";
 import path from "path";
 import os from "os";
-import { existsSync } from "fs";
 const parseYaml = Bun.YAML.parse;
-const stringifyYaml = (v: unknown) => Bun.YAML.stringify(v, null, 2);
 
 import {
   syncCategory,
@@ -383,7 +381,7 @@ describe("syncCategory", () => {
     expect(agentCall).toBeDefined();
     // addHooks should be undefined since the only hook failed to resolve
     const addHooks = agentCall!.args[4] as unknown[] | undefined;
-    expect(addHooks == null || addHooks.length === 0).toBe(true);
+    expect(addHooks === null || addHooks === undefined || addHooks.length === 0).toBe(true);
   });
 
   it("warns and skips add-skills when value is a scalar string (P2-7)", async () => {
@@ -414,7 +412,7 @@ describe("syncCategory", () => {
     expect(agentCall).toBeDefined();
     // addSkills (4th arg, index 3) should be absent since scalar was skipped
     const addSkills = agentCall!.args[3] as string[] | undefined;
-    expect(addSkills == null || addSkills.length === 0).toBe(true);
+    expect(addSkills === null || addSkills === undefined || addSkills.length === 0).toBe(true);
   });
 
   it("warns and skips add-hooks when value is a scalar string (P2-7)", async () => {
@@ -445,7 +443,7 @@ describe("syncCategory", () => {
     expect(agentCall).toBeDefined();
     // addHooks (5th arg, index 4) should be absent since scalar was skipped
     const addHooks = agentCall!.args[4] as unknown[] | undefined;
-    expect(addHooks == null || addHooks.length === 0).toBe(true);
+    expect(addHooks === null || addHooks === undefined || addHooks.length === 0).toBe(true);
   });
 
   it("does not wipe the rules directory (P1-3)", async () => {
@@ -533,8 +531,6 @@ describe("syncCategory", () => {
   it("SUPPORTED_CATEGORIES covers all 4 platforms with correct categories", async () => {
     // Import the map indirectly by verifying behavior for each platform×category.
     // Supported: claude=all5, opencode=all5, gemini=commands/skills/scripts, codex=skills/scripts
-    const allCategories: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
-
     const expectedSupported: Record<string, Category[]> = {
       claude: ["agents", "commands", "skills", "scripts", "rules"],
       opencode: ["agents", "commands", "skills", "scripts", "rules"],
@@ -1405,7 +1401,7 @@ describe("프로젝트별 오류 격리", () => {
       try {
         const text = await fs.readFile(projectSyncYaml, "utf8");
         const parsed = parseYaml(text);
-        if (parsed == null || typeof parsed !== "object") continue;
+        if (parsed === null || parsed === undefined || typeof parsed !== "object") continue;
         syncYaml = parsed as SyncYaml;
       } catch {
         continue;
@@ -2945,7 +2941,7 @@ describe("component fan-out", () => {
     // so the recursive rm can traverse and delete every directory.
     async function chmodTree(dir: string): Promise<void> {
       await fs.chmod(dir, 0o755).catch(() => {});
-      let entries: import("fs").Dirent[] = [];
+      let entries: import("fs").Dirent[];
       try {
         entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
       } catch {
