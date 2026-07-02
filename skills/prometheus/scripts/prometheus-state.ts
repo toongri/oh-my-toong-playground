@@ -63,6 +63,16 @@ function deleteFile(path: string): void {
   }
 }
 
+/** True iff `err` is an Error-shaped value carrying a Node.js `code` field. */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return typeof err === 'object' && err !== null && 'code' in err;
+}
+
+/** True iff every element of `value` is a string. */
+function isStringArray(value: unknown[]): value is string[] {
+  return value.every((x) => typeof x === 'string');
+}
+
 /**
  * Read all of stdin synchronously (fd 0). Used by `--record-ac -` so AC content
  * can be piped via an apostrophe-safe quoted heredoc instead of shell-quoted argv.
@@ -113,6 +123,7 @@ function seedStartedAt(): string {
 // ---------------------------------------------------------------------------
 
 function normalizeResumeSummary(s: string): string {
+  // eslint-disable-next-line no-control-regex -- intentional: sanitizes literal control chars to spaces
   return s.replace(/[\x00-\x1F]/g, ' ');
 }
 
@@ -125,7 +136,9 @@ export function readPrometheusState(sessionId: string): PrometheusState | null {
   const content = readFileOrNull(path);
   if (!content) return null;
   try {
-    const state = JSON.parse(content) as PrometheusState;
+    // JSON.parse's return type is already `any`; the caller only relies on
+    // `.active`, so no assertion to PrometheusState is needed here.
+    const state = JSON.parse(content);
     return state.active ? state : null;
   } catch {
     return null;
@@ -155,7 +168,9 @@ export function setPrometheusState(
   let prior: Partial<PrometheusState> = {};
   if (existing) {
     try {
-      prior = JSON.parse(existing) as Partial<PrometheusState>;
+      // `prior` is already typed Partial<PrometheusState>; JSON.parse's `any`
+      // return assigns without a cast.
+      prior = JSON.parse(existing);
     } catch {
       // corrupt file; start fresh from empty prior
     }
@@ -174,7 +189,7 @@ export function setPrometheusState(
     process.exit(1);
   }
 
-  const priorSteps = (prior as Partial<PrometheusState>).steps ?? FRESH_STEPS;
+  const priorSteps = prior.steps ?? FRESH_STEPS;
 
   // Merge each step sub-object — only update the sub-object whose flag was passed.
   const steps: PrometheusState['steps'] = {
@@ -199,7 +214,9 @@ export function setPrometheusState(
     steps,
   };
 
-  const state = mergeWithHeartbeat(partial, {}) as PrometheusState;
+  // mergeWithHeartbeat<T>'s return type (T & { last_touched_at: string }) is
+  // structurally a PrometheusState already — no assertion needed.
+  const state = mergeWithHeartbeat(partial, {});
   // ADR-7 (strict no-create): writeFileNoCreate throws ENOENT when the file is
   // absent — no existsSync check required. Eliminates the TOCTOU window where
   // an adopt-rename between existsSync and write could resurrect an orphan.
@@ -207,12 +224,13 @@ export function setPrometheusState(
   try {
     writeFileNoCreate(path, JSON.stringify(state, null, 2));
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
+    const code = isErrnoException(err) ? err.code : undefined;
     if (code === 'ENOENT') {
       throw new Error(
         `prometheus-state: state file absent for session "${sessionId}". ` +
           `Possible causes: state adopted by another session, or seed missing. ` +
-          `Re-invoke the prometheus skill to re-seed.`
+          `Re-invoke the prometheus skill to re-seed.`,
+        { cause: err }
       );
     }
     throw err;
@@ -291,13 +309,13 @@ function main(): void {
         }
         // F5: require a non-empty array of strings — an empty or mixed array is
         // unusable on resume (would persist done=true with no real AC content).
-        if (parsed.length === 0 || !parsed.every((x) => typeof x === 'string')) {
+        if (parsed.length === 0 || !isStringArray(parsed)) {
           process.stderr.write(
             'prometheus-state: --record-ac must be a non-empty array of strings\n'
           );
           process.exit(1);
         }
-        recordAc = parsed as string[];
+        recordAc = parsed;
       }
 
       const markDesignDone = args['mark-design-done'] === true;
@@ -344,7 +362,8 @@ function main(): void {
       if (existsSync(dstPath)) {
         try {
           const content = readFileSync(dstPath, 'utf8');
-          const parsed = JSON.parse(content) as Partial<PrometheusState>;
+          // JSON.parse's `any` return assigns to the annotated variable without a cast.
+          const parsed: Partial<PrometheusState> = JSON.parse(content);
           const planPath = parsed.plan_path;
           if (planPath && planPath !== '') {
             try {

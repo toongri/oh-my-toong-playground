@@ -109,6 +109,7 @@ describe('prometheus state', () => {
     const state = readPrometheusState('test-session');
     expect(state).not.toBeNull();
     // No characters in U+0000-U+001F should remain
+    // eslint-disable-next-line no-control-regex -- asserting the sanitizer strips this exact control-char range
     const hasBadChars = /[\x00-\x1F]/.test(state!.resume_summary);
     expect(hasBadChars).toBe(false);
   });
