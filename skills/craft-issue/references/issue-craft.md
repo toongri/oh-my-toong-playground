@@ -28,9 +28,79 @@ Korean-working teams, use this canonical mapping:
 | Post-Release Observation | 배포 후 관찰 |
 | User Flow: current → after | 전환 방식 / 동선 변화 |
 | Decisions Needed | 결정 필요 |
+| Evidence | 증거 |
+| Root Cause | 근본 원인 |
+| Confidence | 확신도 |
+| Affected Areas | 영향 범위 |
+| Premises | 전제 조건 |
+| Blockers & Risks | 블로커 및 리스크 |
+| Confirmed Facts | 확인된 사실 |
+| Needs Verification | 검증 필요 |
+| Reproduction | 재현 |
+| Symptom | 증상 |
+| Fix direction | 수정 방향 |
+| Verification step | 검증 단계 |
+| Similar issues | 유사 사례 |
+| Background | 배경 |
+| Core Concept | 핵심 개념 |
+| User Value | 사용자 가치 |
+| Scope of Application | 적용 범위 |
+| Notes | 메모 |
+| per-path status | 경로별 상태 |
 | References | References (그대로 둔다) |
 
 The observable-AC two-line shape (§2) is unchanged — only its labels localize: `**[결과]**` + `**검증**`.
+
+Every emittable header across this rubric's tables — Standard Body Shape, Bug-Genre Additions,
+Parent-Issue Body Shape, Transition-Genre Additions, the Two-Bucket bucket labels, and the RCA
+Bug-Report shape (§3 below; wired from `references/diagnose-rootcause.md`) — must have an entry in
+the mapping table above. A header with no entry above is a rubric bug, not a license to emit its raw
+canonical English name.
+
+### Render Contract
+
+A row in any Body Shape table below packs three different things into one line: the label to render,
+when to include the section, and how to write its content. Only the first ever reaches the issue body.
+
+- What renders as the section heading is **the localized label above — and nothing else**: not the
+  Required/Conditional marker, not its trigger condition, not a hedge or placement instruction, not an
+  internal separator baked into a row's name for the author's benefit (e.g., a row named
+  `Affected Areas — expected` still renders as `Affected Areas`; the `— expected` is a cue to the
+  author, not text to emit).
+- The **Required / Conditional** and **Content** columns of every table below are addressed to the
+  author — they decide *whether* to include a section and *what* to write in it. Neither is ever
+  copied into the emitted heading, as prose, or as a parenthetical subtitle.
+
+**Wrong** (rubric prose copied into the heading):
+```
+## Core Concept (Conditional — when children share a term or model that must not drift)
+```
+
+**Right** (only the localized label renders):
+```
+## 핵심 개념
+```
+
+### Symbol-Gloss Contract
+
+A code symbol (function, module, file, service, or constant) named in the issue body is not
+self-explanatory to the PM reader who is reading the issue, not the code. Every such symbol carries
+a one-clause what/where/does gloss at its **first occurrence** in the body; later occurrences in the
+same body may appear bare.
+
+**Form**: name the symbol, then attach file/module + role in a parenthetical or trailing clause —
+for example, `` `confirmOrder`(order.service.ts의 주문 확정 함수 — PG 승인 후 주문을 확정) ``. The
+gloss states what the symbol is, where it lives, and what it does — not just one of the three.
+
+**Banned**: a symbol's first appearance with no gloss; a run of bare symbol names joined by `,` or
+`/` with a gloss attached to none of them (e.g., `` `order.service.ts`(a / b / c) `` gives no reader
+a foothold on any one of the names it lists).
+
+**Scope**: this contract governs symbols rendered into the **final issue body** the PM reader sees —
+not Stage 2/3 gather-and-investigate internal notes. `references/gather-crosslink.md` §6b already
+requires reader-orientation for References entries ("a reader should understand why this entry
+exists without opening it"); this contract generalizes that same principle to code symbols named in
+body prose.
 
 ### Lean by Default, Escalate on Need
 
@@ -55,6 +125,11 @@ The test before emitting any escalation section: *would a lean sibling issue in 
 If the house siblings stay flat, match them — do not emit scaffolding the reader skims past. A
 straightforward child issue carrying Evidence + 3-sub-item Pre-Context + two buckets + Decisions
 Needed + Notes is over-built; collapse it to the lean default.
+
+**Red flag**: several Conditional sections (Core Concept, Pre-Context sub-items, Decisions Needed,
+Notes, User Flow / Scope of Application) landing in the same issue at once is a signal to stop and
+re-check each one's own trigger individually — being a parent issue is not a blanket license for
+every Conditional row in its table to fire together.
 
 ### Standard Body Shape
 
@@ -97,12 +172,15 @@ Every sub-item must carry either an evidence citation (investigation result, doc
 
 A parent issue is one that remains as the umbrella after Stage 5 slicing has produced child issues. Its body does not duplicate child bodies — it carries only what a slim rollup needs (see Parent Identity Invariant below), not each child's individual Problem/Pre-Context/AC.
 
+As with the Standard Body Shape table above, the **Section** column below is the canonical label — it
+renders only via the Render Contract and the Working-Language Localization table above, never
+alongside the Required/Conditional or Content columns.
+
 | Section | Required / Conditional | Content |
 |---|---|---|
 | **Background** | Required | Why now — the motive, triggering events, and prior state that make this work necessary at this moment. One to two paragraphs. |
 | **Core Concept** | Conditional — when children share a term or model that must not drift | A single authoritative definition of the umbrella concept the children rely on, placed per the **Tiered Shared-Context Placement** rule below: Tier A (small, stable) states the definition inline here; Tier C (substantial or evolving) states a one-line summary + link to the canonical document instead of the full definition. Children reference the parent (Tier A) or the canonical document (Tier C) rather than each re-stating it. Example pattern (Tier A): a new payment brand is defined once in the parent ("the umbrella bundles payment method A for personal cards and payment method B for corporate cards; method B is never retired from the platform"), so five child issues can reference the parent rather than each carrying its own definition — preventing drift and contradiction. Omit if each child's scope is self-contained enough that no shared concept needs protection. |
-| **Pre-Context** | Required | Same three sub-items as the Standard Body Shape (**Affected Areas**, **Premises**, **Blockers & Risks**), each carrying an evidence citation or `TBD — needs validation via {method}`. Apply the two-bucket presentation rule (see below) per its own trigger condition. |
-| **Affected Areas — expected** | Required when code-touching | Where work is expected to land across the child set. Must be explicitly hedged: parent-level affected areas are forecasts as of the planning moment, not commitments — they may change as child investigation proceeds. Example: "Expected to touch `payments/gateway/` and `user/billing/`; exact scope confirmed per child." |
+| **Pre-Context** | Required | Same three sub-items as the Standard Body Shape (**Affected Areas**, **Premises**, **Blockers & Risks**), each carrying an evidence citation or `TBD — needs validation via {method}`. Apply the two-bucket presentation rule (see below) per its own trigger condition. For a code-touching parent, the **Affected Areas** sub-item is stated as a hedged forecast — parent-level affected areas are forecasts as of the planning moment, not commitments (they may change as child investigation proceeds); e.g. "Expected to touch `payments/gateway/` and `user/billing/`; exact scope confirmed per child." |
 | **User Value** | Conditional — user-facing work | What the user gains from the parent initiative as a whole. One to two sentences. |
 | **User Flow: current → after** | Conditional — transition genre (see Transition-Genre Additions below) | A compact before/after contrast of the user-visible or system-visible path, applied at the parent level when the initiative as a whole is a behavior change or migration. |
 | **Scope of Application** | Conditional — transition genre (see Transition-Genre Additions below) | Who or what converts to the new path and who or what intentionally stays on the old path. Must be explicit on both sides — "new registrations use the new path; existing users keep the old path, no forced migration" is the pattern. Omit neither side. |
@@ -147,6 +225,11 @@ This is a presentation rule layered on the existing per-item evidence-or-`TBD` r
 ### Transition-Genre Additions
 
 Issues whose substance is a behavior or path change — migration, switchover, replacement, or a shift in the default flow — add one field, placed before AC:
+
+**Trigger boundary**: a pure internal refactor or structural reorganization — no visible change to
+the user-facing or system-facing path — is not a transition. Do not emit User Flow: current → after
+or Scope of Application (Parent-Issue Body Shape) for it; both fire only when the actual traversed
+path or default flow changes, not merely how the existing path is implemented underneath.
 
 | Field | Content |
 |---|---|
@@ -333,6 +416,12 @@ When the issue is a runtime bug, the Root Cause section uses this sub-template:
 **Verification step**: How to confirm the fix worked.
 **Similar issues**: Other places the same pattern may exist.
 ```
+
+These six field labels — `Symptom`, `Root Cause`, `Reproduction`, `Fix direction`, `Verification
+step`, `Similar issues` — are canonical English, exactly like every other section name in this
+rubric: per the Render Contract and Working-Language Localization table in Section 1, they render in
+the issue body as their localized label (증상 / 근본 원인 / 재현 / 수정 방향 / 검증 단계 / 유사
+사례) when the working language is Korean, never as raw English.
 
 All six fields are required for bug-genre issues. If any field cannot be filled from gathered
 evidence, write `TBD — needs validation via {method}` rather than omitting the field or

@@ -123,6 +123,8 @@ Format each entry using the appropriate form:
 
 **Key content inline**: the short title (or issue-key summary) must convey the substance of the artifact — what it says that matters for this issue — not just its file name or issue number. A reader should understand why this entry exists without opening it.
 
+**Symbol-gloss cross-reference**: this same reader-orientation requirement generalizes to code symbols named in body prose — see `references/issue-craft.md`'s Symbol-Gloss Contract for the first-mention what/where/does gloss rule applied there.
+
 **Per-entry justification**: every entry ends with a one-line justification (`One-line justification: ...`) stating the specific reason this artifact is related to this issue. Justifications are not optional.
 
 **code-VCS artifacts**: commits and PRs that pass curation are included as `관련 논의:` entries using the markdown-link form (they are non-PM, so passive links are safe).
