@@ -7,3 +7,5 @@ rules:
     - component-design
     - testing
     - typescript
+    - hook-design
+    - feature-boundary
