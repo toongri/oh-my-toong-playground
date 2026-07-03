@@ -19,6 +19,7 @@ import {
 	runProjectsLoop,
 	allTargetsProcessed,
 	isFatalSyncError,
+	deploysToClaudeDotDir,
 	type AdapterMap,
 	type LibSourceRoots,
 } from "./sync.ts";
@@ -127,6 +128,40 @@ function makeContext(overrides?: Partial<SyncContext>): SyncContext {
 function libRoots(platform: Platform, ...sourcePaths: string[]): LibSourceRoots {
 	return new Map([[platform, new Set(sourcePaths)]]);
 }
+
+// ---------------------------------------------------------------------------
+// Suite: deploysToClaudeDotDir
+// ---------------------------------------------------------------------------
+
+describe("deploysToClaudeDotDir", () => {
+	// Regression: the caller only ever passes `PlatformYaml | null` today, but the
+	// predicate must defensively tolerate `undefined` too (e.g. a future caller
+	// that omits the arg) instead of throwing on `Object.keys(undefined)`.
+	it("returns false for undefined parsedClaudeYaml instead of throwing (regression)", () => {
+		expect(() =>
+			deploysToClaudeDotDir({}, undefined as unknown as Record<string, unknown> | null),
+		).not.toThrow();
+		expect(deploysToClaudeDotDir({}, undefined as unknown as Record<string, unknown> | null)).toBe(
+			false,
+		);
+	});
+
+	it("returns false for null parsedClaudeYaml and no component sections", () => {
+		expect(deploysToClaudeDotDir({}, null)).toBe(false);
+	});
+
+	it("returns true when a component section has items", () => {
+		expect(deploysToClaudeDotDir({ skills: { items: ["oracle"] } }, null)).toBe(true);
+	});
+
+	it("returns true when parsedClaudeYaml has a key other than mcps", () => {
+		expect(deploysToClaudeDotDir({}, { config: { theme: "dark" } })).toBe(true);
+	});
+
+	it("returns false when parsedClaudeYaml has only mcps", () => {
+		expect(deploysToClaudeDotDir({}, { mcps: {} })).toBe(false);
+	});
+});
 
 // ---------------------------------------------------------------------------
 // Suite: syncCategory
