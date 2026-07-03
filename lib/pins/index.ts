@@ -8,25 +8,25 @@
  * Rebuilding from the same .md set always yields an identical output.
  */
 
-import { readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
-import { parse } from './entity.ts';
-import type { Frontmatter } from './types.ts';
+import { readdirSync, readFileSync } from "fs";
+import { join } from "path";
+import { parse } from "./entity.ts";
+import type { Frontmatter } from "./types.ts";
 
 export interface IndexEntry {
-  id: string;
-  file: string;
-  frontmatter: Frontmatter;
+	id: string;
+	file: string;
+	frontmatter: Frontmatter;
 }
 
 export interface SkippedEntry {
-  file: string;
-  reason: string;
+	file: string;
+	reason: string;
 }
 
 export interface PinsIndex {
-  entries: Record<string, IndexEntry>;
-  skipped: SkippedEntry[];
+	entries: Record<string, IndexEntry>;
+	skipped: SkippedEntry[];
 }
 
 /**
@@ -38,50 +38,50 @@ export interface PinsIndex {
  * - Duplicate ids: first file (alphabetical order) wins; subsequent are skipped.
  */
 export function buildIndex(pinsDir: string): PinsIndex {
-  const entries: Record<string, IndexEntry> = {};
-  const skipped: SkippedEntry[] = [];
+	const entries: Record<string, IndexEntry> = {};
+	const skipped: SkippedEntry[] = [];
 
-  let files: string[];
-  try {
-    files = readdirSync(pinsDir)
-      .filter((f) => f.endsWith('.md') && !f.endsWith('.bak') && !f.startsWith('.'))
-      .sort(); // deterministic order
-  } catch (err) {
-    // Unreadable directory — return empty index
-    return { entries, skipped };
-  }
+	let files: string[];
+	try {
+		files = readdirSync(pinsDir)
+			.filter((f) => f.endsWith(".md") && !f.endsWith(".bak") && !f.startsWith("."))
+			.sort(); // deterministic order
+	} catch {
+		// Unreadable directory — return empty index
+		return { entries, skipped };
+	}
 
-  for (const file of files) {
-    const filePath = join(pinsDir, file);
-    let content: string;
-    try {
-      content = readFileSync(filePath, 'utf8');
-    } catch (err) {
-      skipped.push({ file, reason: `Could not read file: ${String(err)}` });
-      continue;
-    }
+	for (const file of files) {
+		const filePath = join(pinsDir, file);
+		let content: string;
+		try {
+			content = readFileSync(filePath, "utf8");
+		} catch (err) {
+			skipped.push({ file, reason: `Could not read file: ${String(err)}` });
+			continue;
+		}
 
-    let entity;
-    try {
-      entity = parse(content);
-    } catch (err) {
-      skipped.push({ file, reason: `Parse error: ${String(err)}` });
-      continue;
-    }
+		let entity;
+		try {
+			entity = parse(content);
+		} catch (err) {
+			skipped.push({ file, reason: `Parse error: ${String(err)}` });
+			continue;
+		}
 
-    const id = entity.frontmatter.id;
-    if (!id) {
-      skipped.push({ file, reason: 'Missing id in frontmatter' });
-      continue;
-    }
+		const id = entity.frontmatter.id;
+		if (!id) {
+			skipped.push({ file, reason: "Missing id in frontmatter" });
+			continue;
+		}
 
-    if (entries[id]) {
-      skipped.push({ file, reason: `Duplicate id: ${id} (already seen in ${entries[id].file})` });
-      continue;
-    }
+		if (entries[id]) {
+			skipped.push({ file, reason: `Duplicate id: ${id} (already seen in ${entries[id].file})` });
+			continue;
+		}
 
-    entries[id] = { id, file, frontmatter: entity.frontmatter };
-  }
+		entries[id] = { id, file, frontmatter: entity.frontmatter };
+	}
 
-  return { entries, skipped };
+	return { entries, skipped };
 }

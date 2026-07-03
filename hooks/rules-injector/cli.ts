@@ -27,7 +27,9 @@ if (command === "hook" && subcommand === "session-start") {
 } else if (command === "hook" && subcommand === "post-compact") {
 	await runHookCli("PostCompact");
 } else {
-	process.stderr.write("Usage: omo-rules hook [session-start|user-prompt-submit|post-tool-use|post-compact]\n");
+	process.stderr.write(
+		"Usage: rules-injector hook [session-start|user-prompt-submit|post-tool-use|post-compact]\n",
+	);
 	process.exitCode = 1;
 }
 
@@ -48,12 +50,18 @@ async function runHookCli(eventName: HookCliEventName): Promise<void> {
 	}
 }
 
-async function runHook(eventName: HookCliEventName, parsed: unknown, options: CodexRulesHookOptions): Promise<string> {
+async function runHook(
+	eventName: HookCliEventName,
+	parsed: unknown,
+	options: CodexRulesHookOptions,
+): Promise<string> {
 	switch (eventName) {
 		case "SessionStart":
 			return isCodexSessionStartInput(parsed) ? await runSessionStartHook(parsed, options) : "";
 		case "UserPromptSubmit":
-			return isCodexUserPromptSubmitInput(parsed) ? await runUserPromptSubmitHook(parsed, options) : "";
+			return isCodexUserPromptSubmitInput(parsed)
+				? await runUserPromptSubmitHook(parsed, options)
+				: "";
 		case "PostToolUse":
 			return isCodexPostToolUseInput(parsed) ? await runPostToolUseHook(parsed, options) : "";
 		case "PostCompact":

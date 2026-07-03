@@ -24,10 +24,7 @@ import { getRootDir } from "../lib/config.ts";
 
 const HEADING = "## AC Quality Detail Rules";
 
-const SOURCES = [
-  "agents/metis.md",
-  "skills/momus/SKILL.md",
-] as const;
+const SOURCES = ["agents/metis.md", "skills/momus/SKILL.md"] as const;
 
 /**
  * Extract the body of the AC Quality Detail Rules block: every line after the
@@ -35,15 +32,15 @@ const SOURCES = [
  * heading. Returns null when the heading is absent.
  */
 export function extractAcRulesBlock(content: string): string | null {
-  const lines = content.split("\n");
-  const start = lines.findIndex((l) => l.trim() === HEADING);
-  if (start === -1) return null;
-  const body: string[] = [];
-  for (let i = start + 1; i < lines.length; i++) {
-    if (lines[i].startsWith("## ")) break;
-    body.push(lines[i]);
-  }
-  return body.join("\n");
+	const lines = content.split("\n");
+	const start = lines.findIndex((l) => l.trim() === HEADING);
+	if (start === -1) return null;
+	const body: string[] = [];
+	for (let i = start + 1; i < lines.length; i++) {
+		if (lines[i].startsWith("## ")) break;
+		body.push(lines[i]);
+	}
+	return body.join("\n");
 }
 
 /**
@@ -51,54 +48,54 @@ export function extractAcRulesBlock(content: string): string | null {
  * carry a byte-identical block.
  */
 export function findAcRulesDrift(rootDir: string): string | null {
-  const blocks = SOURCES.map((rel) => {
-    const path = join(rootDir, rel);
-    // A missing source file is treated as a missing block, reported below with a
-    // clean actionable message rather than an uncaught readFileSync stack trace.
-    const content = existsSync(path) ? readFileSync(path, "utf8") : null;
-    return { rel, block: content === null ? null : extractAcRulesBlock(content) };
-  });
+	const blocks = SOURCES.map((rel) => {
+		const path = join(rootDir, rel);
+		// A missing source file is treated as a missing block, reported below with a
+		// clean actionable message rather than an uncaught readFileSync stack trace.
+		const content = existsSync(path) ? readFileSync(path, "utf8") : null;
+		return { rel, block: content === null ? null : extractAcRulesBlock(content) };
+	});
 
-  const missing = blocks.filter((b) => b.block === null);
-  if (missing.length > 0) {
-    return `'${HEADING}' 블록 또는 소스 파일 누락: ${missing.map((b) => b.rel).join(", ")}`;
-  }
+	const missing = blocks.filter((b) => b.block === null);
+	if (missing.length > 0) {
+		return `'${HEADING}' 블록 또는 소스 파일 누락: ${missing.map((b) => b.rel).join(", ")}`;
+	}
 
-  // An emptied (or whitespace-only) block is identity-equal to another such block, so a
-  // simultaneous deletion in both files — even one that leaves blank lines under the heading —
-  // would slip past the byte-identity check below. Trim so whitespace-only bodies also fail.
-  const empty = blocks.filter((b) => b.block !== null && b.block.trim() === "");
-  if (empty.length > 0) {
-    return `'${HEADING}' 블록이 비어 있음: ${empty.map((b) => b.rel).join(", ")}`;
-  }
+	// An emptied (or whitespace-only) block is identity-equal to another such block, so a
+	// simultaneous deletion in both files — even one that leaves blank lines under the heading —
+	// would slip past the byte-identity check below. Trim so whitespace-only bodies also fail.
+	const empty = blocks.filter((b) => b.block !== null && b.block.trim() === "");
+	if (empty.length > 0) {
+		return `'${HEADING}' 블록이 비어 있음: ${empty.map((b) => b.rel).join(", ")}`;
+	}
 
-  const [a, b] = blocks;
-  if (a.block !== b.block) {
-    return `'${HEADING}' 블록이 ${a.rel} 와(과) ${b.rel} 사이에서 불일치 — 두 게이트가 같은 AC를 다른 규칙으로 심사함`;
-  }
-  return null;
+	const [a, b] = blocks;
+	if (a.block !== b.block) {
+		return `'${HEADING}' 블록이 ${a.rel} 와(과) ${b.rel} 사이에서 불일치 — 두 게이트가 같은 AC를 다른 규칙으로 심사함`;
+	}
+	return null;
 }
 
 function main(): void {
-  const rootDir = getRootDir();
-  if (!rootDir) {
-    process.stderr.write("[AC-SSOT] config.yaml를 찾을 수 없습니다\n");
-    process.exit(1);
-  }
+	const rootDir = getRootDir();
+	if (!rootDir) {
+		process.stderr.write("[AC-SSOT] config.yaml를 찾을 수 없습니다\n");
+		process.exit(1);
+	}
 
-  const drift = findAcRulesDrift(rootDir);
-  if (drift) {
-    process.stderr.write(
-      `\x1b[0;31m[ERROR]\x1b[0m AC Quality Detail Rules SSOT 검증 실패: ${drift} ` +
-        `(두 사본을 byte-identical로 유지하세요)\n`,
-    );
-    process.exit(1);
-  }
+	const drift = findAcRulesDrift(rootDir);
+	if (drift) {
+		process.stderr.write(
+			`\x1b[0;31m[ERROR]\x1b[0m AC Quality Detail Rules SSOT 검증 실패: ${drift} ` +
+				`(두 사본을 byte-identical로 유지하세요)\n`,
+		);
+		process.exit(1);
+	}
 
-  process.stderr.write(`\x1b[0;32m[AC-SSOT]\x1b[0m AC Quality Detail Rules SSOT 검증 통과\n`);
-  process.exit(0);
+	process.stderr.write(`\x1b[0;32m[AC-SSOT]\x1b[0m AC Quality Detail Rules SSOT 검증 통과\n`);
+	process.exit(0);
 }
 
 if (import.meta.main) {
-  main();
+	main();
 }

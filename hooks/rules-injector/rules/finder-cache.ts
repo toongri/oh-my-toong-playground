@@ -18,7 +18,10 @@ export function createRuleDiscoveryCache(): RuleDiscoveryCache {
 	return { scannedRuleFiles: new Map(), singleFileInfo: new Map() };
 }
 
-export function scanRuleFilesCached(rootDir: string, cache: RuleDiscoveryCache | undefined): ScannedRuleFiles {
+export function scanRuleFilesCached(
+	rootDir: string,
+	cache: RuleDiscoveryCache | undefined,
+): ScannedRuleFiles {
 	if (cache === undefined) {
 		return scanRuleFiles({ rootDir });
 	}
@@ -33,7 +36,10 @@ export function scanRuleFilesCached(rootDir: string, cache: RuleDiscoveryCache |
 	return scannedFiles;
 }
 
-export function singleFileInfoCached(filePath: string, cache: RuleDiscoveryCache | undefined): SingleFileInfo | null {
+export function singleFileInfoCached(
+	filePath: string,
+	cache: RuleDiscoveryCache | undefined,
+): SingleFileInfo | null {
 	if (cache === undefined) {
 		return readSingleFileInfo(filePath);
 	}

@@ -90,7 +90,10 @@ export function createEngine(config: PiRulesConfig, deps: EngineDeps): Engine {
 		loadStaticRules,
 		loadDynamicRules,
 		formatStatic: (rules) =>
-			formatStaticBlock(rules, { maxRuleChars: config.maxRuleChars, maxResultChars: config.maxResultChars }).text,
+			formatStaticBlock(rules, {
+				maxRuleChars: config.maxRuleChars,
+				maxResultChars: config.maxResultChars,
+			}).text,
 		formatDynamic: (rules, target) =>
 			formatDynamicBlock(rules, target, {
 				maxRuleChars: config.maxRuleChars,
@@ -121,7 +124,10 @@ function storeLastLoad(
 	state.diagnostics.push(...diagnostics);
 }
 
-function emptyLoadResult(state: SessionState): { rules: LoadedRule[]; diagnostics: RuleDiagnostic[] } {
+function emptyLoadResult(state: SessionState): {
+	rules: LoadedRule[];
+	diagnostics: RuleDiagnostic[];
+} {
 	storeLastLoad(state, [], []);
 	return { rules: [], diagnostics: [] };
 }

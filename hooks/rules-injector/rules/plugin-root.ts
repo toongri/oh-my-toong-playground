@@ -2,7 +2,10 @@ import { statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export function resolvePluginRulesRoot(pluginRoot: string | undefined, moduleUrl = import.meta.url): string {
+export function resolvePluginRulesRoot(
+	pluginRoot: string | undefined,
+	moduleUrl = import.meta.url,
+): string {
 	const configuredRoot = pluginRoot ?? process.env["PLUGIN_ROOT"];
 	if (configuredRoot !== undefined && configuredRoot.trim().length > 0) {
 		return resolveRulesComponentRoot(resolve(configuredRoot));

@@ -7,7 +7,10 @@ export function displayPath(cwd: string, filePath: string): string {
 
 export function isSameOrChildPath(childPath: string, parentPath: string): boolean {
 	const childRelativePath = relative(parentPath, resolve(childPath));
-	return childRelativePath === "" || (!childRelativePath.startsWith("..") && !isAbsolute(childRelativePath));
+	return (
+		childRelativePath === "" ||
+		(!childRelativePath.startsWith("..") && !isAbsolute(childRelativePath))
+	);
 }
 
 export function toPosixPath(path: string): string {

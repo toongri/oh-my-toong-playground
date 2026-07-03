@@ -5,7 +5,11 @@ export interface WalkDirectory {
 	readonly distance: number;
 }
 
-export function getWalkDirectories(projectRoot: string, targetFile: string | null, cwd?: string): WalkDirectory[] {
+export function getWalkDirectories(
+	projectRoot: string,
+	targetFile: string | null,
+	cwd?: string,
+): WalkDirectory[] {
 	if (targetFile === null) {
 		const startDirectory = cwd !== undefined ? resolve(cwd) : null;
 		if (startDirectory === null || !isSameOrChildPath(startDirectory, projectRoot)) {
@@ -63,5 +67,8 @@ export function toRelativePath(rootDirectory: string, filePath: string): string 
 
 function isSameOrChildPath(childPath: string, parentPath: string): boolean {
 	const childRelativePath = relative(parentPath, childPath);
-	return childRelativePath === "" || (!childRelativePath.startsWith("..") && !childRelativePath.startsWith("/"));
+	return (
+		childRelativePath === "" ||
+		(!childRelativePath.startsWith("..") && !childRelativePath.startsWith("/"))
+	);
 }

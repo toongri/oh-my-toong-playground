@@ -9,10 +9,10 @@ type DebugFieldValue = boolean | number | string | null;
 type DebugFields = Record<string, DebugFieldValue>;
 
 const debug = debuglog("codex-rules");
-const noopTimer: HookDebugTimer = {
+const noopTimer = {
 	lap: () => {},
 	done: () => {},
-};
+} as const satisfies HookDebugTimer;
 
 export interface HookDebugTimer {
 	lap(phase: string, fields?: DebugFields): void;
@@ -76,7 +76,10 @@ export function writeErrorBreadcrumb(context: string, error: unknown): void {
 	try {
 		const sink = join(homedir(), ".omt", "rules-injector", "error.log");
 		mkdirSync(dirname(sink), { recursive: true });
-		const detail = error instanceof Error ? `${error.message}${error.stack ? `\n${error.stack}` : ""}` : String(error);
+		const detail =
+			error instanceof Error
+				? `${error.message}${error.stack ? `\n${error.stack}` : ""}`
+				: String(error);
 		appendFileSync(sink, `[${new Date().toISOString()}] ${context}: ${detail}\n`);
 	} catch {
 		// best-effort; the error sink must never throw or block the turn

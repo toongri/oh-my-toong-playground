@@ -12,17 +12,17 @@
  * Does NOT modify live ~/.omt data — the target dir is parameterized.
  */
 
-import { readdirSync, copyFileSync, existsSync, readFileSync } from 'fs';
-import { join, extname, basename } from 'path';
-import { toCanonical } from './compat.ts';
-import { parseYamlStrict } from './yaml';
-import { record } from './record.ts';
-import type { Entity, Frontmatter } from './types.ts';
-import type { FrontmatterSchema } from './legacy-types';
+import { readdirSync, copyFileSync, existsSync, readFileSync } from "fs";
+import { join, extname, basename } from "path";
+import { toCanonical } from "./compat.ts";
+import { parseYamlStrict } from "./yaml";
+import { record } from "./record.ts";
+import type { Entity, Frontmatter } from "./types.ts";
+import type { FrontmatterSchema } from "./legacy-types";
 
 export interface MigrateOptions {
-  /** The pins directory to scan (manifest-resolved location). */
-  location: string;
+	/** The pins directory to scan (manifest-resolved location). */
+	location: string;
 }
 
 /**
@@ -32,73 +32,76 @@ export interface MigrateOptions {
  * Each legacy file gets a .bak sibling written before the canonical rewrite.
  */
 export async function migrate(options: MigrateOptions): Promise<void> {
-  const { location } = options;
+	const { location } = options;
 
-  const entries = readdirSync(location);
+	const entries = readdirSync(location);
 
-  for (const entry of entries) {
-    // Only process .md files; skip .bak, .jsonl, etc.
-    if (extname(entry) !== '.md') continue;
+	for (const entry of entries) {
+		// Only process .md files; skip .bak, .jsonl, etc.
+		if (extname(entry) !== ".md") continue;
 
-    // Skip dotfiles — matches buildIndex's !f.startsWith('.') policy.
-    if (entry.startsWith('.')) continue;
+		// Skip dotfiles — matches buildIndex's !f.startsWith('.') policy.
+		if (entry.startsWith(".")) continue;
 
-    const filePath = join(location, entry);
-    const content = readFileSync(filePath, 'utf8');
+		const filePath = join(location, entry);
+		const content = readFileSync(filePath, "utf8");
 
-    // Isolate per-file parse errors so a malformed file cannot abort the run.
-    let raw: Record<string, unknown> | null;
-    try {
-      raw = parseFrontmatterRaw(content);
-    } catch {
-      continue;
-    }
-    if (raw === null) continue;
+		// Isolate per-file parse errors so a malformed file cannot abort the run.
+		let raw: Record<string, unknown> | null;
+		try {
+			raw = parseFrontmatterRaw(content);
+		} catch {
+			continue;
+		}
+		if (raw === null) continue;
 
-    // If `type` is present, this is already canonical — skip.
-    if (raw.type !== undefined) continue;
+		// If `type` is present, this is already canonical — skip.
+		if (raw.type !== undefined) continue;
 
-    // Legacy file: must have `slug`.
-    if (typeof raw.slug !== 'string') continue;
+		// Legacy file: must have `slug`.
+		if (typeof raw.slug !== "string") continue;
 
-    const legacy = raw as unknown as FrontmatterSchema;
+		// Trust boundary: raw is unvalidated YAML from a legacy .md file (schema
+		// is enforced downstream by toCanonical/validate, not here).
+		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque legacy YAML→FrontmatterSchema boundary; shape trusted by caller checks above (raw.type undefined, raw.slug string)
+		const legacy = raw as unknown as FrontmatterSchema;
 
-    // 1. Write .bak sibling (original legacy content preserved).
-    const bakPath = join(location, `${entry}.bak`);
-    if (!existsSync(bakPath)) {
-      copyFileSync(filePath, bakPath);
-    }
+		// 1. Write .bak sibling (original legacy content preserved).
+		const bakPath = join(location, `${entry}.bak`);
+		if (!existsSync(bakPath)) {
+			copyFileSync(filePath, bakPath);
+		}
 
-    // 2. Convert legacy → canonical via compat reader (sets id = slug).
-    const compat = toCanonical(legacy);
+		// 2. Convert legacy → canonical via compat reader (sets id = slug).
+		const compat = toCanonical(legacy);
 
-    // 2b. Collision id-derivation: when this file's stem carries the legacy
-    //     collision suffix (`{slug}-HHMMSS` or `{slug}-HHMMSS-N`, produced by
-    //     the write-time counter retry), same-slug legacy files would all
-    //     collapse to id = slug and overwrite one another. Override the id with
-    //     the stem VERBATIM so each lands in its own canonical file.
-    const stem = basename(entry, '.md');
-    const collisionShape = new RegExp(`^${escapeRegExp(legacy.slug)}-\\d{6}(-\\d+)?$`);
-    if (collisionShape.test(stem)) {
-      compat.id = stem;
-    }
+		// 2b. Collision id-derivation: when this file's stem carries the legacy
+		//     collision suffix (`{slug}-HHMMSS` or `{slug}-HHMMSS-N`, produced by
+		//     the write-time counter retry), same-slug legacy files would all
+		//     collapse to id = slug and overwrite one another. Override the id with
+		//     the stem VERBATIM so each lands in its own canonical file.
+		const stem = basename(entry, ".md");
+		const collisionShape = new RegExp(`^${escapeRegExp(legacy.slug)}-\\d{6}(-\\d+)?$`);
+		if (collisionShape.test(stem)) {
+			compat.id = stem;
+		}
 
-    // 3. Build the Entity: set checked_at = created_at (migration default).
-    const frontmatter: Frontmatter = {
-      ...(compat as unknown as Frontmatter),
-      status: 'active',
-      updated_at: compat.created_at,
-      checked_at: compat.created_at,
-    };
+		// 3. Build the Entity: set checked_at = created_at (migration default).
+		const frontmatter: Frontmatter = {
+			...compat,
+			status: "active",
+			updated_at: compat.created_at,
+			checked_at: compat.created_at,
+		};
 
-    // Preserve body from original file (strip frontmatter block).
-    const body = extractBody(content);
+		// Preserve body from original file (strip frontmatter block).
+		const body = extractBody(content);
 
-    const entity: Entity = { frontmatter, body };
+		const entity: Entity = { frontmatter, body };
 
-    // 4. Write canonical via record() (handles validation + atomic write).
-    await record(entity, { location });
-  }
+		// 4. Write canonical via record() (handles validation + atomic write).
+		await record(entity, { location });
+	}
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -108,7 +111,7 @@ export async function migrate(options: MigrateOptions): Promise<void> {
  * into the collision-shape pattern.
  */
 function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -116,11 +119,12 @@ function escapeRegExp(s: string): string {
  * Returns null if the file doesn't start with a `---` fence.
  */
 function parseFrontmatterRaw(content: string): Record<string, unknown> | null {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n/);
-  if (!match) return null;
-  const raw = parseYamlStrict(match[1]);
-  if (raw === null || typeof raw !== 'object') return null;
-  return raw as Record<string, unknown>;
+	const match = content.match(/^---\n([\s\S]*?)\n---\n/);
+	if (!match) return null;
+	const raw = parseYamlStrict(match[1]);
+	if (raw === null || typeof raw !== "object") return null;
+	// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque YAML parse boundary; downstream callers validate individual fields before trusting them
+	return raw as Record<string, unknown>;
 }
 
 /**
@@ -128,7 +132,7 @@ function parseFrontmatterRaw(content: string): Record<string, unknown> | null {
  * Strips any leading blank lines that may follow the closing --- fence.
  */
 function extractBody(content: string): string {
-  const match = content.match(/^---\n[\s\S]*?\n---\n\n?([\s\S]*?)\n?$/);
-  if (!match) return '';
-  return match[1];
+	const match = content.match(/^---\n[\s\S]*?\n---\n\n?([\s\S]*?)\n?$/);
+	if (!match) return "";
+	return match[1];
 }

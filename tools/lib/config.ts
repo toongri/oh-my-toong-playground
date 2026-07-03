@@ -8,12 +8,14 @@
 import { join, dirname } from "path";
 import type { Platform } from "./types.ts";
 import { deepMergeOverlay } from "./deep-merge-overlay.ts";
+import { isPlainObject } from "./deep-merge.ts";
 
 type ConfigYaml = {
-  "use-platforms"?: Platform[];
-  "feature-platforms"?: Record<string, Platform[]>;
-  "enabled-projects"?: string[];
-  backup_retention_days?: number;
+	"use-platforms"?: Platform[];
+	"feature-platforms"?: Record<string, Platform[]>;
+	"enabled-projects"?: string[];
+	backup_retention_days?: number;
+	[key: string]: unknown;
 };
 
 // Module-level cache
@@ -26,23 +28,23 @@ let cachePopulated = false;
  * Returns null if config.yaml is not found.
  */
 export function getRootDir(): string | null {
-  if (cachedRootDir !== null) return cachedRootDir;
+	if (cachedRootDir !== null) return cachedRootDir;
 
-  let dir = dirname(new URL(import.meta.url).pathname);
+	let dir = dirname(new URL(import.meta.url).pathname);
 
-  // Walk up a reasonable number of levels
-  for (let i = 0; i < 10; i++) {
-    const candidate = join(dir, "config.yaml");
-    if (Bun.file(candidate).size > 0) {
-      cachedRootDir = dir;
-      return cachedRootDir;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break; // Reached filesystem root
-    dir = parent;
-  }
+	// Walk up a reasonable number of levels
+	for (let i = 0; i < 10; i++) {
+		const candidate = join(dir, "config.yaml");
+		if (Bun.file(candidate).size > 0) {
+			cachedRootDir = dir;
+			return cachedRootDir;
+		}
+		const parent = dirname(dir);
+		if (parent === dir) break; // Reached filesystem root
+		dir = parent;
+	}
 
-  return null;
+	return null;
 }
 
 /**
@@ -51,53 +53,53 @@ export function getRootDir(): string | null {
  * Throws if config.yaml exists but contains invalid YAML syntax.
  */
 export async function loadConfig(): Promise<ConfigYaml | null> {
-  if (cachePopulated) return cachedConfig;
+	if (cachePopulated) return cachedConfig;
 
-  const rootDir = getRootDir();
-  if (rootDir === null) {
-    cachePopulated = true;
-    cachedConfig = null;
-    return null;
-  }
+	const rootDir = getRootDir();
+	if (rootDir === null) {
+		cachePopulated = true;
+		cachedConfig = null;
+		return null;
+	}
 
-  const configPath = join(rootDir, "config.yaml");
-  const file = Bun.file(configPath);
+	const configPath = join(rootDir, "config.yaml");
+	const file = Bun.file(configPath);
 
-  let text: string;
-  try {
-    text = await file.text();
-  } catch {
-    // File unreadable (ENOENT, permission) — treat as missing
-    cachedConfig = null;
-    cachePopulated = true;
-    return cachedConfig;
-  }
+	let text: string;
+	try {
+		text = await file.text();
+	} catch {
+		// File unreadable (ENOENT, permission) — treat as missing
+		cachedConfig = null;
+		cachePopulated = true;
+		return cachedConfig;
+	}
 
-  const base = Bun.YAML.parse(text) as ConfigYaml;
+	const parsedBase: unknown = Bun.YAML.parse(text);
+	const base: ConfigYaml = isPlainObject(parsedBase) ? parsedBase : {};
 
-  const localPath = join(rootDir, "config.local.yaml");
-  const localFile = Bun.file(localPath);
-  if (localFile.size > 0) {
-    let localText: string;
-    try {
-      localText = await localFile.text();
-    } catch {
-      localText = "";
-    }
-    if (localText) {
-      const local = Bun.YAML.parse(localText) as ConfigYaml;
-      cachedConfig = deepMergeOverlay(
-        base as Record<string, unknown>,
-        local as Record<string, unknown>,
-      ) as ConfigYaml;
-      cachePopulated = true;
-      return cachedConfig;
-    }
-  }
+	const localPath = join(rootDir, "config.local.yaml");
+	const localFile = Bun.file(localPath);
+	if (localFile.size > 0) {
+		let localText: string;
+		try {
+			localText = await localFile.text();
+		} catch {
+			localText = "";
+		}
+		if (localText) {
+			const parsedLocal: unknown = Bun.YAML.parse(localText);
+			const local: ConfigYaml = isPlainObject(parsedLocal) ? parsedLocal : {};
+			const merged: unknown = deepMergeOverlay(base, local);
+			cachedConfig = isPlainObject(merged) ? merged : {};
+			cachePopulated = true;
+			return cachedConfig;
+		}
+	}
 
-  cachedConfig = base;
-  cachePopulated = true;
-  return cachedConfig;
+	cachedConfig = base;
+	cachePopulated = true;
+	return cachedConfig;
 }
 
 /**
@@ -105,12 +107,12 @@ export async function loadConfig(): Promise<ConfigYaml | null> {
  * Falls back to ["claude"] if the field is missing or config.yaml is unavailable.
  */
 export async function getDefaultPlatforms(): Promise<Platform[]> {
-  const config = await loadConfig();
-  const platforms = config?.["use-platforms"];
-  if (Array.isArray(platforms) && platforms.length > 0) {
-    return platforms;
-  }
-  return ["claude"];
+	const config = await loadConfig();
+	const platforms = config?.["use-platforms"];
+	if (Array.isArray(platforms) && platforms.length > 0) {
+		return platforms;
+	}
+	return ["claude"];
 }
 
 /**
@@ -118,12 +120,16 @@ export async function getDefaultPlatforms(): Promise<Platform[]> {
  * Falls back to getDefaultPlatforms() if the category is not defined.
  */
 export async function getFeaturePlatforms(category: string): Promise<Platform[]> {
-  const config = await loadConfig();
-  const featurePlatforms = config?.["feature-platforms"];
-  if (featurePlatforms && Array.isArray(featurePlatforms[category]) && featurePlatforms[category].length > 0) {
-    return featurePlatforms[category];
-  }
-  return getDefaultPlatforms();
+	const config = await loadConfig();
+	const featurePlatforms = config?.["feature-platforms"];
+	if (
+		featurePlatforms &&
+		Array.isArray(featurePlatforms[category]) &&
+		featurePlatforms[category].length > 0
+	) {
+		return featurePlatforms[category];
+	}
+	return getDefaultPlatforms();
 }
 
 /**
@@ -131,12 +137,12 @@ export async function getFeaturePlatforms(category: string): Promise<Platform[]>
  * Defaults to 3 if the field is missing or config.yaml is unavailable.
  */
 export async function getBackupRetentionDays(): Promise<number> {
-  const config = await loadConfig();
-  const days = config?.backup_retention_days;
-  if (typeof days === "number" && days > 0) {
-    return days;
-  }
-  return 3;
+	const config = await loadConfig();
+	const days = config?.backup_retention_days;
+	if (typeof days === "number" && days > 0) {
+		return days;
+	}
+	return 3;
 }
 
 /**
@@ -145,19 +151,19 @@ export async function getBackupRetentionDays(): Promise<number> {
  * undefined as "all projects active".
  */
 export async function getEnabledProjects(): Promise<string[] | undefined> {
-  const config = await loadConfig();
-  const projects = config?.["enabled-projects"];
-  if (Array.isArray(projects) && projects.length > 0) {
-    return projects;
-  }
-  return undefined;
+	const config = await loadConfig();
+	const projects = config?.["enabled-projects"];
+	if (Array.isArray(projects) && projects.length > 0) {
+		return projects;
+	}
+	return undefined;
 }
 
 /**
  * Reset the internal cache. Used in tests to isolate test cases.
  */
 export function _resetConfigCache(): void {
-  cachedRootDir = null;
-  cachedConfig = null;
-  cachePopulated = false;
+	cachedRootDir = null;
+	cachedConfig = null;
+	cachePopulated = false;
 }

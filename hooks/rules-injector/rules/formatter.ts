@@ -145,7 +145,9 @@ function truncateRules(
 		body: normalizeRuleBody(rule.body),
 		source: rule.source,
 	}));
-	const perRuleResultChars = Math.floor(options.maxResultChars / Math.max(1, perRuleNormalized.length));
+	const perRuleResultChars = Math.floor(
+		options.maxResultChars / Math.max(1, perRuleNormalized.length),
+	);
 	const perRuleBudgeted = perRuleNormalized.map((rule) => ({
 		path: rule.path,
 		relativePath: rule.relativePath,
@@ -204,7 +206,10 @@ function truncateRules(
 	return { truncatedRules, emittedRules };
 }
 
-export function formatStaticBlock(rules: ReadonlyArray<LoadedRule>, options: FormatOptions): FormatResult {
+export function formatStaticBlock(
+	rules: ReadonlyArray<LoadedRule>,
+	options: FormatOptions,
+): FormatResult {
 	if (rules.length === 0) {
 		return { text: "", emittedRules: [] };
 	}
@@ -219,7 +224,9 @@ export function formatStaticBlock(rules: ReadonlyArray<LoadedRule>, options: For
 		return { text: "", emittedRules: [] };
 	}
 
-	const text = ["## Project Instructions", "", truncatedRules.map(formatRule).join("\n\n")].join("\n");
+	const text = ["## Project Instructions", "", truncatedRules.map(formatRule).join("\n\n")].join(
+		"\n",
+	);
 	return { text, emittedRules };
 }
 
@@ -255,7 +262,11 @@ function uniqueRulesByBody(rules: ReadonlyArray<LoadedRule>): LoadedRule[] {
 	const userDescriptions = new Set<string>();
 	for (const rule of rules) {
 		const descriptionKey = rule.frontmatter.description?.trim();
-		if (rule.source === "plugin-bundled" && descriptionKey !== undefined && userDescriptions.has(descriptionKey)) {
+		if (
+			rule.source === "plugin-bundled" &&
+			descriptionKey !== undefined &&
+			userDescriptions.has(descriptionKey)
+		) {
 			continue;
 		}
 

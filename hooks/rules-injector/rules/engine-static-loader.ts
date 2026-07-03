@@ -38,6 +38,9 @@ export function loadStaticCandidates(
 	return { rules: sortCandidates(rules), diagnostics };
 }
 
-function isDedupedRootSingleFile(candidate: RuleCandidate, rootSingleFileSelected: boolean): boolean {
+function isDedupedRootSingleFile(
+	candidate: RuleCandidate,
+	rootSingleFileSelected: boolean,
+): boolean {
 	return rootSingleFileSelected && isRootSingleFile(candidate);
 }

@@ -5,71 +5,71 @@
  * Mirrors the behavior of hooks/lib/logging.sh
  */
 
-import { mkdirSync, appendFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { mkdirSync, appendFileSync, existsSync } from "fs";
+import { join, dirname } from "path";
 
 // Log level constants
 export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
+	DEBUG = 0,
+	INFO = 1,
+	WARN = 2,
+	ERROR = 3,
 }
 
 // State variables
 let initialized = false;
-let logFile = '';
-let componentName = '';
+let logFile = "";
+let componentName = "";
 
 /**
  * Parse log level from environment variable
  */
 function getLogLevel(): LogLevel {
-  const levelStr = process.env.OMT_LOG_LEVEL?.toUpperCase();
-  switch (levelStr) {
-    case 'DEBUG':
-      return LogLevel.DEBUG;
-    case 'INFO':
-      return LogLevel.INFO;
-    case 'WARN':
-      return LogLevel.WARN;
-    case 'ERROR':
-      return LogLevel.ERROR;
-    default:
-      return LogLevel.INFO; // Default to INFO
-  }
+	const levelStr = process.env.OMT_LOG_LEVEL?.toUpperCase();
+	switch (levelStr) {
+		case "DEBUG":
+			return LogLevel.DEBUG;
+		case "INFO":
+			return LogLevel.INFO;
+		case "WARN":
+			return LogLevel.WARN;
+		case "ERROR":
+			return LogLevel.ERROR;
+		default:
+			return LogLevel.INFO; // Default to INFO
+	}
 }
 
 /**
  * Check if a message at the given level should be logged
  */
 function shouldLog(level: LogLevel): boolean {
-  return level >= getLogLevel();
+	return level >= getLogLevel();
 }
 
 /**
  * Get level name from level enum
  */
 function levelName(level: LogLevel): string {
-  switch (level) {
-    case LogLevel.DEBUG:
-      return 'DEBUG';
-    case LogLevel.INFO:
-      return 'INFO';
-    case LogLevel.WARN:
-      return 'WARN';
-    case LogLevel.ERROR:
-      return 'ERROR';
-    default:
-      return 'UNKNOWN';
-  }
+	switch (level) {
+		case LogLevel.DEBUG:
+			return "DEBUG";
+		case LogLevel.INFO:
+			return "INFO";
+		case LogLevel.WARN:
+			return "WARN";
+		case LogLevel.ERROR:
+			return "ERROR";
+		default:
+			return "UNKNOWN";
+	}
 }
 
 /**
  * Get current timestamp in ISO format
  */
 function timestamp(): string {
-  return new Date().toISOString();
+	return new Date().toISOString();
 }
 
 /**
@@ -77,39 +77,39 @@ function timestamp(): string {
  * Replaces non-alphanumeric characters with hyphens
  */
 function sanitizeSessionId(sessionId: string): string {
-  return sessionId.replace(/[^a-zA-Z0-9-]/g, '-');
+	return sessionId.replace(/[^a-zA-Z0-9-]/g, "-");
 }
 
 /**
  * Core log function
  */
 function log(level: LogLevel, message: string): void {
-  // Check if initialized
-  if (!initialized || !logFile) {
-    return;
-  }
+	// Check if initialized
+	if (!initialized || !logFile) {
+		return;
+	}
 
-  // Check if this level should be logged
-  if (!shouldLog(level)) {
-    return;
-  }
+	// Check if this level should be logged
+	if (!shouldLog(level)) {
+		return;
+	}
 
-  // Ensure directory exists
-  const logDir = dirname(logFile);
-  try {
-    if (!existsSync(logDir)) {
-      mkdirSync(logDir, { recursive: true });
-    }
+	// Ensure directory exists
+	const logDir = dirname(logFile);
+	try {
+		if (!existsSync(logDir)) {
+			mkdirSync(logDir, { recursive: true });
+		}
 
-    // Format and write log entry
-    const ts = timestamp();
-    const lvl = levelName(level);
-    const entry = `[${ts}] [${lvl}] [${componentName}] ${message}\n`;
+		// Format and write log entry
+		const ts = timestamp();
+		const lvl = levelName(level);
+		const entry = `[${ts}] [${lvl}] [${componentName}] ${message}\n`;
 
-    appendFileSync(logFile, entry, 'utf-8');
-  } catch {
-    // Silent fail on disk errors
-  }
+		appendFileSync(logFile, entry, "utf-8");
+	} catch {
+		// Silent fail on disk errors
+	}
 }
 
 /**
@@ -120,60 +120,60 @@ function log(level: LogLevel, message: string): void {
  * @param sessionId - Optional session ID (defaults to 'default')
  */
 export function initLogger(component: string, omtDir: string, sessionId?: string): void {
-  // Skip logging silently if omtDir is missing
-  if (!omtDir) {
-    initialized = false;
-    return;
-  }
+	// Skip logging silently if omtDir is missing
+	if (!omtDir) {
+		initialized = false;
+		return;
+	}
 
-  componentName = component;
-  const sanitizedSession = sanitizeSessionId(sessionId || 'default');
+	componentName = component;
+	const sanitizedSession = sanitizeSessionId(sessionId || "default");
 
-  // Set log file path: logs/{component}-{sessionId}.log
-  const logDir = join(omtDir, 'logs');
-  logFile = join(logDir, `${component}-${sanitizedSession}.log`);
+	// Set log file path: logs/{component}-{sessionId}.log
+	const logDir = join(omtDir, "logs");
+	logFile = join(logDir, `${component}-${sanitizedSession}.log`);
 
-  initialized = true;
+	initialized = true;
 }
 
 /**
  * Log at DEBUG level
  */
 export function logDebug(message: string): void {
-  log(LogLevel.DEBUG, message);
+	log(LogLevel.DEBUG, message);
 }
 
 /**
  * Log at INFO level
  */
 export function logInfo(message: string): void {
-  log(LogLevel.INFO, message);
+	log(LogLevel.INFO, message);
 }
 
 /**
  * Log at WARN level
  */
 export function logWarn(message: string): void {
-  log(LogLevel.WARN, message);
+	log(LogLevel.WARN, message);
 }
 
 /**
  * Log at ERROR level
  */
 export function logError(message: string): void {
-  log(LogLevel.ERROR, message);
+	log(LogLevel.ERROR, message);
 }
 
 /**
  * Log start marker
  */
 export function logStart(): void {
-  logInfo('========== START ==========');
+	logInfo("========== START ==========");
 }
 
 /**
  * Log end marker
  */
 export function logEnd(): void {
-  logInfo('========== END ==========');
+	logInfo("========== END ==========");
 }

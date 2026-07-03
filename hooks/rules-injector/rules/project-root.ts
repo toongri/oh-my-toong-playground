@@ -9,7 +9,10 @@ import { PROJECT_MARKERS } from "./constants.js";
  */
 const WORKSPACE_MARKERS: readonly string[] = ["pnpm-workspace.yaml", "turbo.json", ".git"];
 
-export function findProjectRoot(startPath: string, markers: ReadonlyArray<string> = PROJECT_MARKERS): string | null {
+export function findProjectRoot(
+	startPath: string,
+	markers: ReadonlyArray<string> = PROJECT_MARKERS,
+): string | null {
 	const resolvedStartPath = resolve(startPath);
 
 	if (!existsSync(resolvedStartPath)) {
@@ -61,7 +64,7 @@ export function findProjectRoot(startPath: string, markers: ReadonlyArray<string
 function hasWorkspacesField(packageJsonPath: string): boolean {
 	try {
 		const content = readFileSync(packageJsonPath, "utf8");
-		const parsed = JSON.parse(content) as unknown;
+		const parsed: unknown = JSON.parse(content);
 		return (
 			typeof parsed === "object" &&
 			parsed !== null &&

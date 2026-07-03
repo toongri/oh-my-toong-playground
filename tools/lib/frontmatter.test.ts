@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from "bun:test";
 
-import { parseFrontmatter, serializeFrontmatter } from './frontmatter.ts';
+import { parseFrontmatter, serializeFrontmatter } from "./frontmatter.ts";
 
-describe('parseFrontmatter', () => {
-  it('parses standard frontmatter and body', () => {
-    const content = `---
+describe("parseFrontmatter", () => {
+	it("parses standard frontmatter and body", () => {
+		const content = `---
 name: oracle
 model: sonnet
 ---
@@ -13,17 +13,17 @@ model: sonnet
 
 Body text here.`;
 
-    const result = parseFrontmatter(content);
+		const result = parseFrontmatter(content);
 
-    expect(result.hasFrontmatter).toBe(true);
-    expect(result.frontmatter).toEqual({ name: 'oracle', model: 'sonnet' });
-    expect(result.body).toBe('\n# Oracle\n\nBody text here.');
-  });
+		expect(result.hasFrontmatter).toBe(true);
+		expect(result.frontmatter).toEqual({ name: "oracle", model: "sonnet" });
+		expect(result.body).toBe("\n# Oracle\n\nBody text here.");
+	});
 
-  it('preserves --- horizontal rules in body (P2-4 regression)', () => {
-    // Mirrors the real structure of agents/metis.md which has 7 `---` horizontal
-    // rules in the body. The buggy awk pattern consumed ALL of them.
-    const content = `---
+	it("preserves --- horizontal rules in body (P2-4 regression)", () => {
+		// Mirrors the real structure of agents/metis.md which has 7 `---` horizontal
+		// rules in the body. The buggy awk pattern consumed ALL of them.
+		const content = `---
 name: metis
 model: opus
 ---
@@ -44,93 +44,90 @@ Content B.
 
 Content C.`;
 
-    const result = parseFrontmatter(content);
+		const result = parseFrontmatter(content);
 
-    expect(result.hasFrontmatter).toBe(true);
-    expect(result.frontmatter).toEqual({ name: 'metis', model: 'opus' });
+		expect(result.hasFrontmatter).toBe(true);
+		expect(result.frontmatter).toEqual({ name: "metis", model: "opus" });
 
-    // Both --- horizontal rules must survive in body
-    const bodyLines = result.body.split('\n');
-    const hrCount = bodyLines.filter((line) => line === '---').length;
-    expect(hrCount).toBe(2);
+		// Both --- horizontal rules must survive in body
+		const bodyLines = result.body.split("\n");
+		const hrCount = bodyLines.filter((line) => line === "---").length;
+		expect(hrCount).toBe(2);
 
-    expect(result.body).toContain('Content A.');
-    expect(result.body).toContain('Content B.');
-    expect(result.body).toContain('Content C.');
-  });
+		expect(result.body).toContain("Content A.");
+		expect(result.body).toContain("Content B.");
+		expect(result.body).toContain("Content C.");
+	});
 
-  it('returns hasFrontmatter=false when first line is not ---', () => {
-    const content = `# Just a markdown doc
+	it("returns hasFrontmatter=false when first line is not ---", () => {
+		const content = `# Just a markdown doc
 
 No frontmatter here.`;
 
-    const result = parseFrontmatter(content);
+		const result = parseFrontmatter(content);
 
-    expect(result.hasFrontmatter).toBe(false);
-    expect(result.frontmatter).toEqual({});
-    expect(result.body).toBe(content);
-  });
+		expect(result.hasFrontmatter).toBe(false);
+		expect(result.frontmatter).toEqual({});
+		expect(result.body).toBe(content);
+	});
 
-  it('parses empty frontmatter block', () => {
-    const content = `---
+	it("parses empty frontmatter block", () => {
+		const content = `---
 ---
 body content`;
 
-    const result = parseFrontmatter(content);
+		const result = parseFrontmatter(content);
 
-    expect(result.hasFrontmatter).toBe(true);
-    expect(result.frontmatter).toEqual({});
-    expect(result.body).toBe('body content');
-  });
+		expect(result.hasFrontmatter).toBe(true);
+		expect(result.frontmatter).toEqual({});
+		expect(result.body).toBe("body content");
+	});
 
-  it('normalizes \\r\\n line endings', () => {
-    const content = '---\r\nname: test\r\n---\r\nbody line';
+	it("normalizes \\r\\n line endings", () => {
+		const content = "---\r\nname: test\r\n---\r\nbody line";
 
-    const result = parseFrontmatter(content);
+		const result = parseFrontmatter(content);
 
-    expect(result.hasFrontmatter).toBe(true);
-    expect(result.frontmatter).toEqual({ name: 'test' });
-    expect(result.body).toBe('body line');
-  });
+		expect(result.hasFrontmatter).toBe(true);
+		expect(result.frontmatter).toEqual({ name: "test" });
+		expect(result.body).toBe("body line");
+	});
 });
 
-describe('serializeFrontmatter', () => {
-  it('serializes frontmatter and body', () => {
-    const frontmatter = { name: 'oracle', model: 'sonnet' };
-    const body = '\n# Oracle\n\nBody text.';
+describe("serializeFrontmatter", () => {
+	it("serializes frontmatter and body", () => {
+		const frontmatter = { name: "oracle", model: "sonnet" };
+		const body = "\n# Oracle\n\nBody text.";
 
-    const result = serializeFrontmatter(frontmatter, body);
+		const result = serializeFrontmatter(frontmatter, body);
 
-    expect(result).toMatch(/^---\n/);
-    expect(result).toContain('name: oracle');
-    expect(result).toContain('model: sonnet');
-    expect(result).toContain('\n---\n');
-    expect(result).toContain('# Oracle');
-  });
+		expect(result).toMatch(/^---\n/);
+		expect(result).toContain("name: oracle");
+		expect(result).toContain("model: sonnet");
+		expect(result).toContain("\n---\n");
+		expect(result).toContain("# Oracle");
+	});
 
-  it('emits block-style YAML with trailing newline before closing fence (AC7.1)', () => {
-    // Regression guard: Bun.YAML.stringify defaults to flow style and omits trailing
-    // newline. Both breaks serializeFrontmatter's template `---\n${yaml}---\n${body}`.
-    const result = serializeFrontmatter(
-      { name: 'oracle', tools: ['Read', 'Bash'] },
-      '\nbody',
-    );
+	it("emits block-style YAML with trailing newline before closing fence (AC7.1)", () => {
+		// Regression guard: Bun.YAML.stringify defaults to flow style and omits trailing
+		// newline. Both breaks serializeFrontmatter's template `---\n${yaml}---\n${body}`.
+		const result = serializeFrontmatter({ name: "oracle", tools: ["Read", "Bash"] }, "\nbody");
 
-    // Closing fence must be on its own line (trailing newline before it)
-    expect(result).toContain('\n---\n');
-    // Block style: `name: oracle` NOT flow style `{name: oracle, ...}`
-    expect(result).toContain('name: oracle\n');
-    // Array must be in block style (each item on its own line with `- `)
-    expect(result).toContain('- Read\n');
-    // No flow-style brace in the YAML section (before the closing ---)
-    const yamlSection = result.split('\n---\n')[0];
-    expect(yamlSection).not.toContain('{');
-  });
+		// Closing fence must be on its own line (trailing newline before it)
+		expect(result).toContain("\n---\n");
+		// Block style: `name: oracle` NOT flow style `{name: oracle, ...}`
+		expect(result).toContain("name: oracle\n");
+		// Array must be in block style (each item on its own line with `- `)
+		expect(result).toContain("- Read\n");
+		// No flow-style brace in the YAML section (before the closing ---)
+		const yamlSection = result.split("\n---\n")[0];
+		expect(yamlSection).not.toContain("{");
+	});
 });
 
-describe('왕복 변환 (parseFrontmatter → serializeFrontmatter)', () => {
-  it('produces equivalent output after `parseFrontmatter` then `serializeFrontmatter`', () => {
-    const original = `---
+describe("왕복 변환 (parseFrontmatter → serializeFrontmatter)", () => {
+	it("produces equivalent output after `parseFrontmatter` then `serializeFrontmatter`", () => {
+		const original = `---
 name: metis
 model: opus
 tools: Read, Glob
@@ -147,21 +144,21 @@ Content here.
 More content.
 `;
 
-    const { frontmatter, body } = parseFrontmatter(original);
-    const roundTripped = serializeFrontmatter(frontmatter, body);
+		const { frontmatter, body } = parseFrontmatter(original);
+		const roundTripped = serializeFrontmatter(frontmatter, body);
 
-    // Re-parse the round-tripped result
-    const reparsed = parseFrontmatter(roundTripped);
+		// Re-parse the round-tripped result
+		const reparsed = parseFrontmatter(roundTripped);
 
-    expect(reparsed.hasFrontmatter).toBe(true);
-    expect(reparsed.frontmatter['name']).toBe('metis');
-    expect(reparsed.frontmatter['model']).toBe('opus');
+		expect(reparsed.hasFrontmatter).toBe(true);
+		expect(reparsed.frontmatter["name"]).toBe("metis");
+		expect(reparsed.frontmatter["model"]).toBe("opus");
 
-    // Body --- horizontal rules must still be present after round-trip
-    const hrCount = reparsed.body.split('\n').filter((l) => l === '---').length;
-    expect(hrCount).toBe(1);
+		// Body --- horizontal rules must still be present after round-trip
+		const hrCount = reparsed.body.split("\n").filter((l) => l === "---").length;
+		expect(hrCount).toBe(1);
 
-    expect(reparsed.body).toContain('Content here.');
-    expect(reparsed.body).toContain('More content.');
-  });
+		expect(reparsed.body).toContain("Content here.");
+		expect(reparsed.body).toContain("More content.");
+	});
 });

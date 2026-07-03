@@ -3,7 +3,10 @@ import { dirname } from "node:path";
 
 import type { CodexRulesHookOptions } from "./codex-hook-options.js";
 import { configFromEnvironment } from "./config.js";
-import { hasContextPressureMarker, transcriptHasContextPressureMarker } from "./context-pressure.js";
+import {
+	hasContextPressureMarker,
+	transcriptHasContextPressureMarker,
+} from "./context-pressure.js";
 import { createHookDebugTimer, rotateErrorLog, writeErrorBreadcrumb } from "./debug-log.js";
 import { withDynamicBudget } from "./event-budget.js";
 import { formatAdditionalContextOutput, limitAdditionalContextText } from "./hook-output.js";
@@ -24,6 +27,7 @@ import { withPostCompactBudget } from "./post-compact-budget.js";
 import { claimedPostCompactKind, shouldSkipPostCompactClaim } from "./post-compact-claim.js";
 import type { DynamicLoadedRule } from "./rules/engine-dynamic-loader.js";
 import { formatDynamicBlock, ruleMarkerLine } from "./rules/index.js";
+import type { LoadedRule } from "./rules/index.js";
 import { createRulesEngine } from "./rules-engine-factory.js";
 import { combineStaticContext, runStaticInjection } from "./static-injection.js";
 import { extractCodexToolPaths } from "./tool-paths.js";
@@ -105,10 +109,15 @@ export async function runSessionStartHook(
 
 	if (input.source === "clear") {
 		clearSessionState(cachePath);
-	} else if (input.source !== "resume" && input.source !== "compact" && !hasPostCompactPending(cachePath)) {
+	} else if (
+		input.source !== "resume" &&
+		input.source !== "compact" &&
+		!hasPostCompactPending(cachePath)
+	) {
 		clearSessionState(cachePath);
 	}
-	const postCompactClaim = input.source === "clear" ? "not-pending" : claimPostCompactPending(cachePath, "static");
+	const postCompactClaim =
+		input.source === "clear" ? "not-pending" : claimPostCompactPending(cachePath, "static");
 	const completedPostCompactKind =
 		claimedPostCompactKind(postCompactClaim, "static") ??
 		(input.source === "compact" && postCompactClaim === "not-pending" ? "static" : undefined);
@@ -161,11 +170,19 @@ export async function runUserPromptSubmitHook(
 	}
 	const cachePath = sessionCachePath(input.session_id, options.pluginDataRoot);
 	const postCompactClaim = claimPostCompactPending(cachePath, "static");
-	if (postCompactClaim === "not-pending" && transcriptHasContextPressureMarker(input.transcript_path)) {
+	if (
+		postCompactClaim === "not-pending" &&
+		transcriptHasContextPressureMarker(input.transcript_path)
+	) {
 		return "";
 	}
 	const completedPostCompactKind = claimedPostCompactKind(postCompactClaim, "static");
-	if (shouldSkipPostCompactClaim(postCompactClaim, isPostCompactRecoveryInProgress(cachePath, "static"))) {
+	if (
+		shouldSkipPostCompactClaim(
+			postCompactClaim,
+			isPostCompactRecoveryInProgress(cachePath, "static"),
+		)
+	) {
 		return "";
 	}
 	return runStaticInjection(
@@ -216,7 +233,10 @@ export async function runPostToolUseHook(
 		debugTimer.done({ outputBytes: Buffer.byteLength(output), reason });
 		return output;
 	};
-	if (isPostCompactPending(cachePath, "static") || isPostCompactRecoveryInProgress(cachePath, "static")) {
+	if (
+		isPostCompactPending(cachePath, "static") ||
+		isPostCompactRecoveryInProgress(cachePath, "static")
+	) {
 		const staticClaim = claimPostCompactPending(cachePath, "static");
 		if (staticClaim === "claimed") {
 			const staticOutput = runStaticInjection(
@@ -245,18 +265,29 @@ export async function runPostToolUseHook(
 	}
 
 	const postCompactClaim = claimPostCompactPending(cachePath, "dynamic");
-	if (postCompactClaim === "not-pending" && transcriptHasContextPressureMarker(input.transcript_path)) {
+	if (
+		postCompactClaim === "not-pending" &&
+		transcriptHasContextPressureMarker(input.transcript_path)
+	) {
 		return returnStaticOnly("context-pressure-transcript");
 	}
 	const completedPostCompactKind = claimedPostCompactKind(postCompactClaim, "dynamic");
-	if (shouldSkipPostCompactClaim(postCompactClaim, isPostCompactRecoveryInProgress(cachePath, "dynamic"))) {
+	if (
+		shouldSkipPostCompactClaim(
+			postCompactClaim,
+			isPostCompactRecoveryInProgress(cachePath, "dynamic"),
+		)
+	) {
 		return returnStaticOnly("post-compact-recovery-in-progress");
 	}
 	const dynamicConfig = withDynamicBudget(config);
 	const engine = createRulesEngine(
 		options,
 		completedPostCompactKind !== undefined
-			? withPostCompactBudget(dynamicConfig, { model: input.model, transcriptPath: input.transcript_path })
+			? withPostCompactBudget(dynamicConfig, {
+					model: input.model,
+					transcriptPath: input.transcript_path,
+				})
 			: dynamicConfig,
 	);
 	hydrateEngineState(engine, cachePath);
@@ -265,9 +296,14 @@ export async function runPostToolUseHook(
 		staticDedup: engine.state.staticDedup.size,
 	});
 	const loaded = engine.loadDynamicRules(input.cwd, uniqueStrings(targetPaths));
-	debugTimer.lap("load", { diagnostics: loaded.diagnostics.length, loadedRules: loaded.rules.length });
+	debugTimer.lap("load", {
+		diagnostics: loaded.diagnostics.length,
+		loadedRules: loaded.rules.length,
+	});
 	const rules = filterRulesAlreadyInTranscript(
-		loaded.rules.filter((rule) => !engine.isStaticInjected(rule) && !engine.isDynamicInjected(rule)),
+		loaded.rules.filter(
+			(rule) => !engine.isStaticInjected(rule) && !engine.isDynamicInjected(rule),
+		),
 		input.transcript_path,
 		(rule) => {
 			engine.markDynamicInjected(rule);
@@ -288,14 +324,19 @@ export async function runPostToolUseHook(
 	// However, budget-drop can remove rules[0] while a later rule with a different target
 	// survives. Derive the final header from emittedRules[0] (the actual survivor) after
 	// formatting, replacing the first line if the surviving target differs.
-	const prebudgetTarget = (rules[0] as DynamicLoadedRule).matchedTarget;
-	const { text: rawBlock, emittedRules } = formatDynamicBlock(rules, displayPath(input.cwd, prebudgetTarget), {
-		maxRuleChars: engine.config.maxRuleChars,
-		maxResultChars: engine.config.maxResultChars,
-	});
+	const prebudgetTarget = matchedTargetOf(rules[0]);
+	const { text: rawBlock, emittedRules } = formatDynamicBlock(
+		rules,
+		displayPath(input.cwd, prebudgetTarget),
+		{
+			maxRuleChars: engine.config.maxRuleChars,
+			maxResultChars: engine.config.maxResultChars,
+		},
+	);
 	// P1: if budget-drop removed rules[0], the header may name the wrong target.
 	// Recompute from emittedRules[0] (the actual first-emitted rule) and patch if needed.
-	const emittedTarget = emittedRules.length > 0 ? (emittedRules[0] as DynamicLoadedRule).matchedTarget : prebudgetTarget;
+	const emittedTarget =
+		emittedRules.length > 0 ? matchedTargetOf(emittedRules[0]) : prebudgetTarget;
 	let block = rawBlock;
 	if (emittedTarget !== prebudgetTarget && block.length > 0) {
 		// Replace only the first line (the "Additional project instructions matched for …:" header).
@@ -303,7 +344,11 @@ export async function runPostToolUseHook(
 		const newlineIndex = block.indexOf("\n");
 		block = newlineIndex === -1 ? newLine : newLine + block.slice(newlineIndex);
 	}
-	debugTimer.lap("format", { blockChars: block.length, rules: rules.length, emittedRules: emittedRules.length });
+	debugTimer.lap("format", {
+		blockChars: block.length,
+		rules: rules.length,
+		emittedRules: emittedRules.length,
+	});
 	if (emittedRules.length === 0) {
 		persistEngineState(engine, cachePath, completedPostCompactKind);
 		debugTimer.lap("persist", { reason: "all-dropped" });
@@ -318,7 +363,9 @@ export async function runPostToolUseHook(
 	// against ITS clamp, then emit that same combined string (re-clamping an
 	// already-under-limit string is idempotent).
 	const combined = combineStaticContext(staticReclaimText, block);
-	const limitedCombined = limitAdditionalContextText(combined.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim());
+	const limitedCombined = limitAdditionalContextText(
+		combined.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim(),
+	);
 	for (const rule of emittedRules) {
 		if (limitedCombined.includes(ruleMarkerLine(rule.path))) {
 			engine.markDynamicInjected(rule);
@@ -329,6 +376,27 @@ export async function runPostToolUseHook(
 	const output = formatAdditionalContextOutput("PostToolUse", combined);
 	debugTimer.done({ outputBytes: Buffer.byteLength(output), reason: "emit" });
 	return output;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The transcript filter and formatter accept/return the base `LoadedRule` type
+ * (they don't know about the dynamic-loader's `matchedTarget` extension), so the
+ * `matchedTarget` field is erased from the static type even though it survives at
+ * runtime (these rules always originate from loadDynamicRules). Narrow it back via
+ * an `in` check instead of asserting the type; fall back to `path` in the
+ * structurally-unreachable case where the field is missing, matching this file's
+ * never-throw contract.
+ */
+function hasMatchedTarget(rule: LoadedRule): rule is DynamicLoadedRule {
+	return "matchedTarget" in rule && typeof rule.matchedTarget === "string";
+}
+
+function matchedTargetOf(rule: LoadedRule): string {
+	return hasMatchedTarget(rule) ? rule.matchedTarget : rule.path;
 }
 
 /**
@@ -342,8 +410,14 @@ export async function runPostToolUseHook(
 function extractAdditionalContext(wrappedOutput: string): string {
 	if (wrappedOutput.length === 0) return "";
 	try {
-		const parsed = JSON.parse(wrappedOutput) as { hookSpecificOutput?: { additionalContext?: string } };
-		return parsed.hookSpecificOutput?.additionalContext ?? "";
+		const parsed: unknown = JSON.parse(wrappedOutput);
+		if (isRecord(parsed)) {
+			const inner = parsed["hookSpecificOutput"];
+			if (isRecord(inner) && typeof inner["additionalContext"] === "string") {
+				return inner["additionalContext"];
+			}
+		}
+		return "";
 	} catch (error) {
 		// A non-empty, non-JSON result here means runStaticInjection's envelope contract
 		// (fully wrapped hook JSON or "") broke — swallowing that silently would mask a
@@ -366,13 +440,16 @@ const SHELL_COMMAND_TOOL_NAMES = new Set(["bash", "shell_command", "exec_command
  */
 function unwrapShellCommandInput(input: CodexPostToolUseInput): CodexPostToolUseInput {
 	if (!SHELL_COMMAND_TOOL_NAMES.has(input.tool_name.toLowerCase())) return input;
-	if (typeof input.tool_input !== "object" || input.tool_input === null || Array.isArray(input.tool_input)) return input;
-	const ti = input.tool_input as Record<string, unknown>;
-	const key = typeof ti["command"] === "string" ? "command" : typeof ti["cmd"] === "string" ? "cmd" : undefined;
-	if (key === undefined) return input;
-	const inner = unwrapShellWrapper(ti[key] as string);
-	if (inner === ti[key]) return input;
-	return { ...input, tool_input: { ...ti, [key]: inner } };
+	if (!isRecord(input.tool_input)) return input;
+	const ti = input.tool_input;
+	for (const key of ["command", "cmd"] as const) {
+		const raw = ti[key];
+		if (typeof raw !== "string") continue;
+		const inner = unwrapShellWrapper(raw);
+		if (inner === raw) return input;
+		return { ...input, tool_input: { ...ti, [key]: inner } };
+	}
+	return input;
 }
 
 /**

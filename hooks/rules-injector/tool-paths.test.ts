@@ -119,9 +119,7 @@ describe("tokenizeShell", () => {
 
 // #13: addPatchPayloadPaths gated on apply_patch only
 describe("#13 patch-header scanning gated on apply_patch tool_name", () => {
-	let cwd: string;
-
-	cwd = mkdtempSync(join(tmpdir(), "tp-test-"));
+	const cwd = mkdtempSync(join(tmpdir(), "tp-test-"));
 	mkdirSync(join(cwd, "src"), { recursive: true });
 	writeFileSync(join(cwd, "src", "x.ts"), "const x = 1;\n");
 
@@ -130,7 +128,8 @@ describe("#13 patch-header scanning gated on apply_patch tool_name", () => {
 			{
 				tool_name: "apply_patch",
 				tool_input: {
-					input: "*** Add File: src/new-file.ts\n--- src/new-file.ts\n+++ src/new-file.ts\n+const x = 1;\n",
+					input:
+						"*** Add File: src/new-file.ts\n--- src/new-file.ts\n+++ src/new-file.ts\n+const x = 1;\n",
 				},
 				tool_response: {},
 			},
