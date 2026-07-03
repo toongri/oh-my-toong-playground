@@ -14,6 +14,7 @@ import { ClaudeAdapter } from "./claude.ts";
 import { deriveClaudeProjectKey } from "../lib/git-key.ts";
 import baseline from "./__fixtures__/claude-project-baseline.json";
 import type { PlatformYaml } from "../lib/types.ts";
+import { parseFrontmatter } from "../lib/frontmatter.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -670,6 +671,35 @@ describe("syncAgentsDirect - add-hooks 프론트매터 주입", () => {
 		const content = await fs.readFile(agentFile, "utf8");
 		expect(content).toContain("prompt");
 		expect(content).toContain("Please summarize what you did.");
+	});
+
+	// Regression: a quoted numeric-string `timeout: "60"` in sync.yaml (legacy
+	// add-hooks entries) must still resolve to 60, not silently fall back to the
+	// `?? 10` default.
+	it('resolves a numeric-string timeout ("60") to 60, not the default (regression)', async () => {
+		const sourceFile = path.join(tmpDir, "agent.md");
+		await writeFile(sourceFile, "---\nname: agent\n---\n\n# Agent\n");
+
+		const addHooks = [
+			{
+				event: "SubagentStop",
+				matcher: "*",
+				type: "command",
+				command: "$CLAUDE_PROJECT_DIR/.claude/hooks/my-hook.sh",
+				timeout: "60",
+				display_name: "my-hook.sh",
+			},
+		];
+
+		await adapter.syncAgentsDirect(targetPath, "agent", sourceFile, [], addHooks);
+
+		const agentFile = path.join(targetPath, ".claude", "agents", "agent.md");
+		const content = await fs.readFile(agentFile, "utf8");
+		const parsed = parseFrontmatter(content);
+		const hooks = (parsed.frontmatter["hooks"] as Record<string, unknown>)[
+			"SubagentStop"
+		] as Array<{ hooks: Array<{ timeout: number }> }>;
+		expect(hooks[0]!.hooks[0]!.timeout).toBe(60);
 	});
 });
 

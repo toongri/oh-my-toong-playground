@@ -134,7 +134,14 @@ export class ClaudeAdapter implements PlatformAdapter {
 					type: pickString(rec["type"]),
 					command: pickString(rec["command"]),
 					prompt: pickString(rec["prompt"]),
-					timeout: typeof rec["timeout"] === "number" ? rec["timeout"] : undefined,
+					timeout:
+						typeof rec["timeout"] === "number"
+							? rec["timeout"]
+							: typeof rec["timeout"] === "string" &&
+								  rec["timeout"].trim() !== "" &&
+								  Number.isFinite(Number(rec["timeout"]))
+								? Number(rec["timeout"])
+								: undefined,
 				};
 			});
 
