@@ -85,7 +85,7 @@ function runHook(
 			...process.env,
 			HOME: tempHome,
 			PI_RULES_DISABLE_BUNDLED: "1",
-			PLUGIN_DATA: join(tempHome, ".omt"),
+			PLUGIN_DATA: join(tempHome, ".omt", "rules-injector"),
 		},
 		encoding: "utf8",
 	});
@@ -109,7 +109,7 @@ function runHookRaw(
 			...process.env,
 			HOME: tempHome,
 			PI_RULES_DISABLE_BUNDLED: "1",
-			PLUGIN_DATA: join(tempHome, ".omt"),
+			PLUGIN_DATA: join(tempHome, ".omt", "rules-injector"),
 		},
 		encoding: "utf8",
 	});

@@ -5,12 +5,15 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-// HERMETIC HOME: rotateErrorLog derives its sink from node:os homedir(), which
-// under Bun is resolved once at process start and does NOT follow a mutation
-// of process.env.HOME within the same process (unlike Node). So each test
-// spawns a fresh `bun` subprocess with HOME pinned to a temp dir at spawn
-// time — the only way to make homedir() observe the override — keeping the
-// real ~/.omt/rules-injector/error.log untouched.
+// HERMETIC HOME: rotateErrorLog derives its sink from resolveErrorLogSink()
+// (PLUGIN_DATA ?? homedir()/.omt/rules-injector), and homedir() under Bun is
+// resolved once at process start and does NOT follow a mutation of
+// process.env.HOME within the same process (unlike Node). So each test spawns
+// a fresh `bun` subprocess with HOME pinned to a temp dir at spawn time — the
+// only way to make homedir() observe the override — and with any inherited
+// PLUGIN_DATA deleted, so the subprocess falls back to the homedir-derived
+// sink instead of an ambient PLUGIN_DATA override, keeping the real
+// ~/.omt/rules-injector/error.log untouched.
 const DEBUG_LOG_URL = pathToFileURL(
 	join(dirname(fileURLToPath(import.meta.url)), "debug-log.ts"),
 ).href;
@@ -20,13 +23,17 @@ function sinkFor(home: string): string {
 }
 
 function runRotate(home: string, maxBytes: number): void {
+	// Delete inherited PLUGIN_DATA so external env cannot override the
+	// homedir-derived sink under test.
+	const env: Record<string, string | undefined> = { ...process.env, HOME: home };
+	delete env.PLUGIN_DATA;
 	const result = spawnSync(
 		"bun",
 		[
 			"-e",
 			`const { rotateErrorLog } = await import(${JSON.stringify(DEBUG_LOG_URL)}); rotateErrorLog(${maxBytes});`,
 		],
-		{ env: { ...process.env, HOME: home }, encoding: "utf-8" },
+		{ env, encoding: "utf-8" },
 	);
 	if (result.status !== 0) {
 		throw new Error(`rotateErrorLog subprocess failed: ${result.stderr}`);
