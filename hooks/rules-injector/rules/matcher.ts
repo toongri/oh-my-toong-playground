@@ -134,7 +134,10 @@ function createGlobMatcher(pattern: string): (path: string) => boolean {
 	return picomatch(normalizePath(pattern), { bash: true, dot: true });
 }
 
-function isExcluded(pathBase: string, negativeMatchers: ReadonlyArray<(path: string) => boolean>): boolean {
+function isExcluded(
+	pathBase: string,
+	negativeMatchers: ReadonlyArray<(path: string) => boolean>,
+): boolean {
 	for (const isMatch of negativeMatchers) {
 		if (isMatch(pathBase)) {
 			return true;

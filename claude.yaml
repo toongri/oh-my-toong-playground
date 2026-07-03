@@ -9,6 +9,7 @@ config:
   includeCoAuthoredBy: false
   env:
     CLAUDE_CODE_AUTO_COMPACT_WINDOW: "400000"
+    CLAUDE_AFK_TIMEOUT_MS: "600000"
   attribution:
     commit: ""
     pr: ""

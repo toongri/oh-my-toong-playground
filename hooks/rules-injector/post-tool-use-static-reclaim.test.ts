@@ -20,7 +20,12 @@ import type {
 	CodexSessionStartInput,
 	CodexUserPromptSubmitInput,
 } from "./codex-hook.js";
-import { runPostCompactHook, runPostToolUseHook, runSessionStartHook, runUserPromptSubmitHook } from "./codex-hook.js";
+import {
+	runPostCompactHook,
+	runPostToolUseHook,
+	runSessionStartHook,
+	runUserPromptSubmitHook,
+} from "./codex-hook.js";
 import { displayPath } from "./path-utils.js";
 import { claimPostCompactPending, sessionCachePath } from "./persistent-cache.js";
 import { ruleMarkerLine } from "./rules/index.js";
@@ -56,7 +61,10 @@ function writeTarget(): void {
 	writeFileSync(join(projectDir, "src", "x.ts"), "export const x = 1;\n");
 }
 
-function sessionStartInput(sessionId: string, overrides: Partial<CodexSessionStartInput> = {}): CodexSessionStartInput {
+function sessionStartInput(
+	sessionId: string,
+	overrides: Partial<CodexSessionStartInput> = {},
+): CodexSessionStartInput {
 	return {
 		session_id: sessionId,
 		transcript_path: null,
@@ -69,7 +77,10 @@ function sessionStartInput(sessionId: string, overrides: Partial<CodexSessionSta
 	};
 }
 
-function postCompactInput(sessionId: string, overrides: Partial<CodexPostCompactInput> = {}): CodexPostCompactInput {
+function postCompactInput(
+	sessionId: string,
+	overrides: Partial<CodexPostCompactInput> = {},
+): CodexPostCompactInput {
 	return {
 		session_id: sessionId,
 		turn_id: "compact-1",
@@ -82,7 +93,10 @@ function postCompactInput(sessionId: string, overrides: Partial<CodexPostCompact
 	};
 }
 
-function postToolUseInput(sessionId: string, overrides: Partial<CodexPostToolUseInput> = {}): CodexPostToolUseInput {
+function postToolUseInput(
+	sessionId: string,
+	overrides: Partial<CodexPostToolUseInput> = {},
+): CodexPostToolUseInput {
 	return {
 		session_id: sessionId,
 		turn_id: "t1",
@@ -133,7 +147,11 @@ function dataOptions(env?: Record<string, string>): CodexRulesHookOptions {
 
 test("first PostToolUse emits static recovery", async () => {
 	const sessionId = "ac1-session";
-	const rulePath = writeRule("ac1-rule.md", "alwaysApply: true", "AC1_BOULDER: recovered via PostToolUse.");
+	const rulePath = writeRule(
+		"ac1-rule.md",
+		"alwaysApply: true",
+		"AC1_BOULDER: recovered via PostToolUse.",
+	);
 	writeTarget();
 
 	const first = await runSessionStartHook(sessionStartInput(sessionId), dataOptions());
@@ -160,8 +178,16 @@ test("first PostToolUse emits static recovery", async () => {
 
 test("overflow tail re-emitted on next UserPromptSubmit, not drained by intervening PostToolUse", async () => {
 	const sessionId = "ac2-session";
-	const rule1Path = writeRule("ac2-a-rule1.md", "alwaysApply: true", "AC2_RULE1_BODY: recovered directly.");
-	const rule2Path = writeRule("ac2-b-rule2.md", "alwaysApply: true", "AC2_RULE2_BODY: overflow tail.");
+	const rule1Path = writeRule(
+		"ac2-a-rule1.md",
+		"alwaysApply: true",
+		"AC2_RULE1_BODY: recovered directly.",
+	);
+	const rule2Path = writeRule(
+		"ac2-b-rule2.md",
+		"alwaysApply: true",
+		"AC2_RULE2_BODY: overflow tail.",
+	);
 	writeTarget();
 
 	await runSessionStartHook(sessionStartInput(sessionId), dataOptions());
@@ -211,7 +237,11 @@ test("overflow tail re-emitted on next UserPromptSubmit, not drained by interven
 
 test("static reclaim excludes dynamic body", async () => {
 	const sessionId = "ac3a-session";
-	const rulePath = writeRule("ac3a-rule.md", "alwaysApply: true", "AC3A_STATIC_BODY: pointer only.");
+	const rulePath = writeRule(
+		"ac3a-rule.md",
+		"alwaysApply: true",
+		"AC3A_STATIC_BODY: pointer only.",
+	);
 
 	await runSessionStartHook(sessionStartInput(sessionId), dataOptions());
 	await runPostCompactHook(postCompactInput(sessionId), dataOptions());
@@ -243,7 +273,11 @@ test("static reclaim excludes dynamic body", async () => {
 
 test("dynamic injection still fires alongside static directive", async () => {
 	const sessionId = "ac3b-session";
-	const staticRulePath = writeRule("ac3b-static.md", "alwaysApply: true", "AC3B_STATIC_BODY: recovered pointer.");
+	const staticRulePath = writeRule(
+		"ac3b-static.md",
+		"alwaysApply: true",
+		"AC3B_STATIC_BODY: recovered pointer.",
+	);
 	writeRule("ac3b-dynamic.md", 'globs: ["**/*.ts"]', "AC3B_DYNAMIC_MARKER: matched target file.");
 	writeTarget();
 
@@ -259,7 +293,9 @@ test("dynamic injection still fires alongside static directive", async () => {
 	// ... AND the dynamic glob rule matched by the same tool call still injects, in
 	// the SAME hook return (single merged envelope, static directive first).
 	expect(ctx).toContain("AC3B_DYNAMIC_MARKER");
-	expect(ctx.indexOf("POST-COMPACTION RULE RECOVERY")).toBeLessThan(ctx.indexOf("AC3B_DYNAMIC_MARKER"));
+	expect(ctx.indexOf("POST-COMPACTION RULE RECOVERY")).toBeLessThan(
+		ctx.indexOf("AC3B_DYNAMIC_MARKER"),
+	);
 });
 
 // ---------------------------------------------------------------------------
@@ -287,7 +323,10 @@ test("no double static recovery under race", async () => {
 	// by the existing (untouched) lease/contended guard — no double recovery, and no
 	// silent regression to the untouched UPS caller (the exact hazard that refuted
 	// Option A in D-1).
-	const result = await runUserPromptSubmitHook(userPromptInput(sessionId, "continue"), dataOptions());
+	const result = await runUserPromptSubmitHook(
+		userPromptInput(sessionId, "continue"),
+		dataOptions(),
+	);
 	expect(parseContext(result)).toBe("");
 });
 
@@ -328,7 +367,11 @@ test("no static when not post-compact", async () => {
 
 test("reclaim fires when PostToolUse has no path", async () => {
 	const sessionId = "ac7-session";
-	const rulePath = writeRule("ac7-rule.md", "alwaysApply: true", "AC7_BOULDER: no-target still reclaims.");
+	const rulePath = writeRule(
+		"ac7-rule.md",
+		"alwaysApply: true",
+		"AC7_BOULDER: no-target still reclaims.",
+	);
 
 	await runSessionStartHook(sessionStartInput(sessionId), dataOptions());
 	await runPostCompactHook(postCompactInput(sessionId), dataOptions());

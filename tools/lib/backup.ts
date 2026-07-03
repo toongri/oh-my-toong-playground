@@ -8,7 +8,14 @@ import { logWarn } from "./logger.ts";
  * Uses 8 random bytes → 16 hex characters.
  */
 export function generateBackupSessionId(): string {
-  return randomBytes(8).toString("hex");
+	return randomBytes(8).toString("hex");
+}
+
+/**
+ * Returns true if `err` is a Node.js errno exception (has a `code` field).
+ */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+	return err instanceof Error && "code" in err;
 }
 
 /**
@@ -18,57 +25,48 @@ export function generateBackupSessionId(): string {
  * Skips silently if the source directory does not exist.
  */
 export async function backupCategory(
-  targetPath: string,
-  platform: string,
-  category: string,
-  sessionId: string
+	targetPath: string,
+	platform: string,
+	category: string,
+	sessionId: string,
 ): Promise<void> {
-  const sourceDir = join(targetPath, `.${platform}`, category);
+	const sourceDir = join(targetPath, `.${platform}`, category);
 
-  try {
-    await stat(sourceDir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return;
-    }
-    throw err;
-  }
+	try {
+		await stat(sourceDir);
+	} catch (err) {
+		if (isErrnoException(err) && err.code === "ENOENT") {
+			return;
+		}
+		throw err;
+	}
 
-  const destDir = join(
-    targetPath,
-    ".sync-backup",
-    sessionId,
-    platform,
-    category
-  );
+	const destDir = join(targetPath, ".sync-backup", sessionId, platform, category);
 
-  await mkdir(destDir, { recursive: true });
-  await cp(sourceDir, destDir, { recursive: true });
+	await mkdir(destDir, { recursive: true });
+	await cp(sourceDir, destDir, { recursive: true });
 }
 
 /**
  * Backs up a single config file to the given backup directory.
  * Skips silently if the file does not exist.
  */
-export async function backupConfigFile(
-  filePath: string,
-  backupDir: string
-): Promise<void> {
-  try {
-    await stat(filePath);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return;
-    }
-    throw err;
-  }
+export async function backupConfigFile(filePath: string, backupDir: string): Promise<void> {
+	try {
+		await stat(filePath);
+	} catch (err) {
+		if (isErrnoException(err) && err.code === "ENOENT") {
+			return;
+		}
+		throw err;
+	}
 
-  await mkdir(backupDir, { recursive: true });
+	await mkdir(backupDir, { recursive: true });
 
-  const fileName = filePath.split("/").at(-1) ?? filePath;
-  const destFile = join(backupDir, fileName);
+	const fileName = filePath.split("/").at(-1) ?? filePath;
+	const destFile = join(backupDir, fileName);
 
-  await cp(filePath, destFile);
+	await cp(filePath, destFile);
 }
 
 /**
@@ -76,57 +74,58 @@ export async function backupConfigFile(
  * older than retentionDays based on directory modification time.
  * If retentionDays is 0, all session directories are removed.
  */
-export async function cleanupOldBackups(
-  targetPath: string,
-  retentionDays: number
-): Promise<void> {
-  const backupDir = join(targetPath, ".sync-backup");
+export async function cleanupOldBackups(targetPath: string, retentionDays: number): Promise<void> {
+	const backupDir = join(targetPath, ".sync-backup");
 
-  try {
-    await stat(backupDir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return;
-    }
-    throw err;
-  }
+	try {
+		await stat(backupDir);
+	} catch (err) {
+		if (isErrnoException(err) && err.code === "ENOENT") {
+			return;
+		}
+		throw err;
+	}
 
-  const entries = await readdir(backupDir);
-  const now = Date.now();
-  const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
+	const entries = await readdir(backupDir);
+	const now = Date.now();
+	const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
 
-  for (const entry of entries) {
-    const entryPath = join(backupDir, entry);
+	for (const entry of entries) {
+		const entryPath = join(backupDir, entry);
 
-    let entryStats;
-    try {
-      entryStats = await stat(entryPath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        continue;
-      }
-      throw err;
-    }
+		let entryStats;
+		try {
+			entryStats = await stat(entryPath);
+		} catch (err) {
+			if (isErrnoException(err) && err.code === "ENOENT") {
+				continue;
+			}
+			throw err;
+		}
 
-    if (!entryStats.isDirectory()) {
-      continue;
-    }
+		if (!entryStats.isDirectory()) {
+			continue;
+		}
 
-    if (retentionDays === 0) {
-      try {
-        await rm(entryPath, { recursive: true, force: true });
-      } catch (err) {
-        logWarn(`백업 디렉토리 삭제 실패, 건너뜀: ${entryPath}: ${err instanceof Error ? err.message : err}`);
-      }
-    } else {
-      const ageMs = now - entryStats.mtimeMs;
-      if (ageMs > retentionMs) {
-        try {
-          await rm(entryPath, { recursive: true, force: true });
-        } catch (err) {
-          logWarn(`백업 디렉토리 삭제 실패, 건너뜀: ${entryPath}: ${err instanceof Error ? err.message : err}`);
-        }
-      }
-    }
-  }
+		if (retentionDays === 0) {
+			try {
+				await rm(entryPath, { recursive: true, force: true });
+			} catch (err) {
+				logWarn(
+					`백업 디렉토리 삭제 실패, 건너뜀: ${entryPath}: ${err instanceof Error ? err.message : err}`,
+				);
+			}
+		} else {
+			const ageMs = now - entryStats.mtimeMs;
+			if (ageMs > retentionMs) {
+				try {
+					await rm(entryPath, { recursive: true, force: true });
+				} catch (err) {
+					logWarn(
+						`백업 디렉토리 삭제 실패, 건너뜀: ${entryPath}: ${err instanceof Error ? err.message : err}`,
+					);
+				}
+			}
+		}
+	}
 }

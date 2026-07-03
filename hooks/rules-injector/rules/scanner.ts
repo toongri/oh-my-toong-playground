@@ -1,7 +1,11 @@
 import { type Dirent, existsSync, readdirSync, realpathSync, type Stats, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { DEFAULT_MAX_SCAN_FILES, RULE_FILE_EXTENSIONS, SCANNER_EXCLUDED_DIRS } from "./constants.js";
+import {
+	DEFAULT_MAX_SCAN_FILES,
+	RULE_FILE_EXTENSIONS,
+	SCANNER_EXCLUDED_DIRS,
+} from "./constants.js";
 
 export interface ScanOptions {
 	rootDir: string;
@@ -98,13 +102,30 @@ function scanDirectory(
 
 		if (entry.isDirectory()) {
 			if (!excludedDirs.has(entry.name) && depth < maxDepth) {
-				scanDirectory(entryPath, depth + 1, maxDepth, maxFiles, excludedDirs, visitedDirectories, results);
+				scanDirectory(
+					entryPath,
+					depth + 1,
+					maxDepth,
+					maxFiles,
+					excludedDirs,
+					visitedDirectories,
+					results,
+				);
 			}
 			continue;
 		}
 
 		if (entry.isSymbolicLink()) {
-			scanSymbolicLink(entryPath, entry.name, depth, maxDepth, maxFiles, excludedDirs, visitedDirectories, results);
+			scanSymbolicLink(
+				entryPath,
+				entry.name,
+				depth,
+				maxDepth,
+				maxFiles,
+				excludedDirs,
+				visitedDirectories,
+				results,
+			);
 			continue;
 		}
 
@@ -137,7 +158,15 @@ function scanSymbolicLink(
 
 	if (targetStats.isDirectory()) {
 		if (!excludedDirs.has(linkName) && depth < maxDepth) {
-			scanDirectory(linkPath, depth + 1, maxDepth, maxFiles, excludedDirs, visitedDirectories, results);
+			scanDirectory(
+				linkPath,
+				depth + 1,
+				maxDepth,
+				maxFiles,
+				excludedDirs,
+				visitedDirectories,
+				results,
+			);
 		}
 		return;
 	}

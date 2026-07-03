@@ -6,7 +6,9 @@ export function formatAdditionalContextOutput(
 	eventName: ContextInjectionHookEventName,
 	additionalContext: string,
 ): string {
-	const normalizedContext = limitAdditionalContextText(normalizeAdditionalContext(additionalContext));
+	const normalizedContext = limitAdditionalContextText(
+		normalizeAdditionalContext(additionalContext),
+	);
 	if (normalizedContext.length === 0) return "";
 	return `${JSON.stringify({
 		hookSpecificOutput: {
@@ -30,7 +32,7 @@ function sliceToUtf8Bytes(str: string, maxBytes: number): string {
 	if (buf.byteLength <= maxBytes) return str;
 	let end = maxBytes;
 	// Walk back past any continuation bytes (10xxxxxx = 0x80–0xBF).
-	while (end > 0 && (buf[end]! & 0xc0) === 0x80) end--;
+	while (end > 0 && (buf[end] & 0xc0) === 0x80) end--;
 	return buf.subarray(0, end).toString("utf8");
 }
 
@@ -42,15 +44,16 @@ function sliceToUtf8Bytes(str: string, maxBytes: number): string {
  * before deciding what to mark as injected (mark-after-clamp pattern).
  */
 export function limitAdditionalContextText(additionalContext: string): string {
-	if (Buffer.byteLength(additionalContext, "utf8") <= MAX_ADDITIONAL_CONTEXT_BYTES) return additionalContext;
+	if (Buffer.byteLength(additionalContext, "utf8") <= MAX_ADDITIONAL_CONTEXT_BYTES)
+		return additionalContext;
 	const marker = `\n\n[Truncated hook additional context to ${MAX_ADDITIONAL_CONTEXT_BYTES} bytes to avoid Codex context overflow.]`;
 	if (Buffer.byteLength(marker, "utf8") >= MAX_ADDITIONAL_CONTEXT_BYTES) {
 		return sliceToUtf8Bytes(marker, MAX_ADDITIONAL_CONTEXT_BYTES);
 	}
 	const markerBytes = Buffer.byteLength(marker, "utf8");
-	const head = sliceToUtf8Bytes(additionalContext, MAX_ADDITIONAL_CONTEXT_BYTES - markerBytes).replace(
-		/[ \t\r\n]+$/,
-		"",
-	);
+	const head = sliceToUtf8Bytes(
+		additionalContext,
+		MAX_ADDITIONAL_CONTEXT_BYTES - markerBytes,
+	).replace(/[ \t\r\n]+$/, "");
 	return `${head}${marker}`;
 }

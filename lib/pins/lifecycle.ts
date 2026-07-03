@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
-import { parse, serialize } from './entity.ts';
+import { readFileSync, writeFileSync, unlinkSync } from "fs";
+import { join } from "path";
+import { parse, serialize } from "./entity.ts";
 
 /**
  * Marks oldId as superseded by newId:
@@ -10,16 +10,16 @@ import { parse, serialize } from './entity.ts';
  * - Both files are preserved (old is not deleted)
  */
 export async function supersede(oldId: string, newId: string, dir: string): Promise<void> {
-  const oldPath = join(dir, `${oldId}.md`);
-  const entity = parse(readFileSync(oldPath, 'utf8'));
+	const oldPath = join(dir, `${oldId}.md`);
+	const entity = parse(readFileSync(oldPath, "utf8"));
 
-  entity.frontmatter.status = 'superseded';
-  entity.frontmatter.relations = [
-    ...entity.frontmatter.relations,
-    { target: newId, type: 'superseded_by' },
-  ];
+	entity.frontmatter.status = "superseded";
+	entity.frontmatter.relations = [
+		...entity.frontmatter.relations,
+		{ target: newId, type: "superseded_by" },
+	];
 
-  writeFileSync(oldPath, serialize(entity), 'utf8');
+	writeFileSync(oldPath, serialize(entity), "utf8");
 }
 
 /**
@@ -28,12 +28,12 @@ export async function supersede(oldId: string, newId: string, dir: string): Prom
  * Without force, this is a no-op — the file remains untouched.
  */
 export async function hardDelete(
-  id: string,
-  dir: string,
-  opts: { force?: boolean },
+	id: string,
+	dir: string,
+	opts: { force?: boolean },
 ): Promise<void> {
-  if (!opts.force) {
-    return;
-  }
-  unlinkSync(join(dir, `${id}.md`));
+	if (!opts.force) {
+		return;
+	}
+	unlinkSync(join(dir, `${id}.md`));
 }

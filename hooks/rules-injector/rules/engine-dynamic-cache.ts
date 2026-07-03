@@ -49,7 +49,11 @@ export function findSortedCandidatesCached(
 	return candidates;
 }
 
-function setDynamicMatchCacheEntry(cache: DynamicMatchCache, cacheKey: string, reason: MatchReason | null): void {
+function setDynamicMatchCacheEntry(
+	cache: DynamicMatchCache,
+	cacheKey: string,
+	reason: MatchReason | null,
+): void {
 	if (cache.size >= MAX_DYNAMIC_MATCH_CACHE_ENTRIES) {
 		const oldestCacheKey = cache.keys().next().value;
 		if (oldestCacheKey !== undefined) {

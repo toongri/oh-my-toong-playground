@@ -11,13 +11,13 @@
  */
 
 export const REQUIRED_HEADINGS: string[] = [
-  'TL;DR',
-  'Context',
-  'Work Objectives',
-  'TODOs',
-  'Execution Strategy',
-  'Verification Strategy',
-  'Success Criteria',
+	"TL;DR",
+	"Context",
+	"Work Objectives",
+	"TODOs",
+	"Execution Strategy",
+	"Verification Strategy",
+	"Success Criteria",
 ];
 
 /**
@@ -25,7 +25,7 @@ export const REQUIRED_HEADINGS: string[] = [
  * This prevents headings inside fences from being counted.
  */
 function stripFences(content: string): string {
-  return content.replace(/^```[\s\S]*?^```/gm, '');
+	return content.replace(/^```[\s\S]*?^```/gm, "");
 }
 
 /**
@@ -40,53 +40,51 @@ function stripFences(content: string): string {
  * @returns Array of heading literals that are missing or empty.
  */
 export function validatePlan(content: string): string[] {
-  const stripped = stripFences(content);
+	const stripped = stripFences(content);
 
-  // Parse the heading line regex: exactly ## <literal> (optional trailing whitespace)
-  const headingRegex = /^##[ \t]+(.+?)[ \t]*$/gm;
+	// Parse the heading line regex: exactly ## <literal> (optional trailing whitespace)
+	const headingRegex = /^##[ \t]+(.+?)[ \t]*$/gm;
 
-  // Collect first-occurrence positions of level-2 headings
-  const headingPositions: Array<{ literal: string; bodyStart: number }> = [];
-  const seen = new Set<string>();
+	// Collect first-occurrence positions of level-2 headings
+	const headingPositions: Array<{ literal: string; bodyStart: number }> = [];
+	const seen = new Set<string>();
 
-  let match: RegExpExecArray | null;
-  while ((match = headingRegex.exec(stripped)) !== null) {
-    const literal = match[1];
-    if (!seen.has(literal)) {
-      seen.add(literal);
-      headingPositions.push({
-        literal,
-        bodyStart: match.index + match[0].length,
-      });
-    }
-  }
+	let match: RegExpExecArray | null;
+	while ((match = headingRegex.exec(stripped)) !== null) {
+		const literal = match[1];
+		if (!seen.has(literal)) {
+			seen.add(literal);
+			headingPositions.push({
+				literal,
+				bodyStart: match.index + match[0].length,
+			});
+		}
+	}
 
-  const missing: string[] = [];
+	const missing: string[] = [];
 
-  for (const required of REQUIRED_HEADINGS) {
-    const entry = headingPositions.find((h) => h.literal === required);
+	for (const required of REQUIRED_HEADINGS) {
+		const entry = headingPositions.find((h) => h.literal === required);
 
-    if (entry === undefined) {
-      // Heading not found at all
-      missing.push(required);
-      continue;
-    }
+		if (entry === undefined) {
+			// Heading not found at all
+			missing.push(required);
+			continue;
+		}
 
-    // Find the start of the next ## heading after this one
-    const nextHeadingMatch = /^##[ \t]+/m.exec(stripped.slice(entry.bodyStart));
-    const bodyEnd =
-      nextHeadingMatch !== null
-        ? entry.bodyStart + nextHeadingMatch.index
-        : stripped.length;
+		// Find the start of the next ## heading after this one
+		const nextHeadingMatch = /^##[ \t]+/m.exec(stripped.slice(entry.bodyStart));
+		const bodyEnd =
+			nextHeadingMatch !== null ? entry.bodyStart + nextHeadingMatch.index : stripped.length;
 
-    const body = stripped.slice(entry.bodyStart, bodyEnd).trim();
+		const body = stripped.slice(entry.bodyStart, bodyEnd).trim();
 
-    if (body.length === 0) {
-      missing.push(required);
-    }
-  }
+		if (body.length === 0) {
+			missing.push(required);
+		}
+	}
 
-  return missing;
+	return missing;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,22 +92,23 @@ export function validatePlan(content: string): string[] {
 // ---------------------------------------------------------------------------
 
 if (import.meta.main) {
-  const planPath = process.argv[2];
-  if (!planPath) {
-    console.error('Usage: bun validate-plan.ts <plan_path>');
-    process.exit(2);
-  }
+	const planPath = process.argv[2];
+	if (!planPath) {
+		console.error("Usage: bun validate-plan.ts <plan_path>");
+		process.exit(2);
+	}
 
-  const { readFileSync } = await import('fs');
-  const content = readFileSync(planPath, 'utf8');
-  const missing = validatePlan(content);
+	const { readFileSync } = await import("fs");
+	const content = readFileSync(planPath, "utf8");
+	const missing = validatePlan(content);
 
-  if (missing.length > 0) {
-    for (const h of missing) {
-      console.log(h);
-    }
-    process.exit(1);
-  }
+	if (missing.length > 0) {
+		for (const h of missing) {
+			// eslint-disable-next-line no-console -- CLI contract (see file header): offending heading literals printed to stdout for the invoking skill to read
+			console.log(h);
+		}
+		process.exit(1);
+	}
 
-  process.exit(0);
+	process.exit(0);
 }

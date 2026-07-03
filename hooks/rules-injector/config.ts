@@ -6,9 +6,14 @@ import { defaultConfig } from "./rules/index.js";
 import type { PiRulesConfig, RuleSource } from "./rules/index.js";
 import { findProjectRoot } from "./rules/project-root.js";
 
-export function configFromEnvironment(env: NodeJS.ProcessEnv = process.env, cwd?: string): PiRulesConfig {
+export function configFromEnvironment(
+	env: NodeJS.ProcessEnv = process.env,
+	cwd?: string,
+): PiRulesConfig {
 	const config = defaultConfig();
-	const disableBundledRules = isTruthy(firstEnv(env, "CODEX_RULES_DISABLE_BUNDLED", "PI_RULES_DISABLE_BUNDLED"));
+	const disableBundledRules = isTruthy(
+		firstEnv(env, "CODEX_RULES_DISABLE_BUNDLED", "PI_RULES_DISABLE_BUNDLED"),
+	);
 	config.disabled = isTruthy(firstEnv(env, "CODEX_RULES_DISABLED", "PI_RULES_DISABLED"));
 	// D-22 file-based opt-out: OR in the sentinel-file check so all four handler
 	// gates honor it without per-handler duplication. Errors are silenced to
@@ -20,39 +25,53 @@ export function configFromEnvironment(env: NodeJS.ProcessEnv = process.env, cwd?
 		parsePositiveInteger(firstEnv(env, "CODEX_RULES_MAX_RULE_CHARS", "PI_RULES_MAX_RULE_CHARS")) ??
 		config.maxRuleChars;
 	config.maxResultChars =
-		parsePositiveInteger(firstEnv(env, "CODEX_RULES_MAX_RESULT_CHARS", "PI_RULES_MAX_RESULT_CHARS")) ??
-		config.maxResultChars;
+		parsePositiveInteger(
+			firstEnv(env, "CODEX_RULES_MAX_RESULT_CHARS", "PI_RULES_MAX_RESULT_CHARS"),
+		) ?? config.maxResultChars;
 	config.postCompactMaxRuleChars =
 		parsePositiveInteger(
-			firstEnv(env, "CODEX_RULES_POST_COMPACT_MAX_RULE_CHARS", "PI_RULES_POST_COMPACT_MAX_RULE_CHARS"),
+			firstEnv(
+				env,
+				"CODEX_RULES_POST_COMPACT_MAX_RULE_CHARS",
+				"PI_RULES_POST_COMPACT_MAX_RULE_CHARS",
+			),
 		) ?? config.postCompactMaxRuleChars;
 	config.postCompactMaxResultChars =
 		parsePositiveInteger(
-			firstEnv(env, "CODEX_RULES_POST_COMPACT_MAX_RESULT_CHARS", "PI_RULES_POST_COMPACT_MAX_RESULT_CHARS"),
+			firstEnv(
+				env,
+				"CODEX_RULES_POST_COMPACT_MAX_RESULT_CHARS",
+				"PI_RULES_POST_COMPACT_MAX_RESULT_CHARS",
+			),
 		) ?? config.postCompactMaxResultChars;
 	config.dynamicMaxRuleChars =
-		parsePositiveInteger(firstEnv(env, "CODEX_RULES_DYNAMIC_MAX_RULE_CHARS", "PI_RULES_DYNAMIC_MAX_RULE_CHARS")) ??
-		config.dynamicMaxRuleChars;
+		parsePositiveInteger(
+			firstEnv(env, "CODEX_RULES_DYNAMIC_MAX_RULE_CHARS", "PI_RULES_DYNAMIC_MAX_RULE_CHARS"),
+		) ?? config.dynamicMaxRuleChars;
 	config.dynamicMaxResultChars =
 		parsePositiveInteger(
 			firstEnv(env, "CODEX_RULES_DYNAMIC_MAX_RESULT_CHARS", "PI_RULES_DYNAMIC_MAX_RESULT_CHARS"),
 		) ?? config.dynamicMaxResultChars;
 	config.promptMaxRuleChars =
-		parsePositiveInteger(firstEnv(env, "CODEX_RULES_PROMPT_MAX_RULE_CHARS", "PI_RULES_PROMPT_MAX_RULE_CHARS")) ??
-		config.promptMaxRuleChars;
+		parsePositiveInteger(
+			firstEnv(env, "CODEX_RULES_PROMPT_MAX_RULE_CHARS", "PI_RULES_PROMPT_MAX_RULE_CHARS"),
+		) ?? config.promptMaxRuleChars;
 	config.promptMaxResultChars =
-		parsePositiveInteger(firstEnv(env, "CODEX_RULES_PROMPT_MAX_RESULT_CHARS", "PI_RULES_PROMPT_MAX_RESULT_CHARS")) ??
-		config.promptMaxResultChars;
+		parsePositiveInteger(
+			firstEnv(env, "CODEX_RULES_PROMPT_MAX_RESULT_CHARS", "PI_RULES_PROMPT_MAX_RESULT_CHARS"),
+		) ?? config.promptMaxResultChars;
 	config.enabledSources = parseEnabledSources(
 		firstEnv(env, "CODEX_RULES_ENABLED_SOURCES", "PI_RULES_ENABLED_SOURCES"),
 		disableBundledRules,
 	);
 	config.sessionStateTtlDays =
-		parsePositiveInteger(firstEnv(env, "CODEX_RULES_SESSION_STATE_TTL_DAYS", "PI_RULES_SESSION_STATE_TTL_DAYS")) ??
-		config.sessionStateTtlDays;
+		parsePositiveInteger(
+			firstEnv(env, "CODEX_RULES_SESSION_STATE_TTL_DAYS", "PI_RULES_SESSION_STATE_TTL_DAYS"),
+		) ?? config.sessionStateTtlDays;
 	config.errorLogMaxBytes =
-		parsePositiveInteger(firstEnv(env, "CODEX_RULES_ERROR_LOG_MAX_BYTES", "PI_RULES_ERROR_LOG_MAX_BYTES")) ??
-		config.errorLogMaxBytes;
+		parsePositiveInteger(
+			firstEnv(env, "CODEX_RULES_ERROR_LOG_MAX_BYTES", "PI_RULES_ERROR_LOG_MAX_BYTES"),
+		) ?? config.errorLogMaxBytes;
 	return config;
 }
 
@@ -79,7 +98,10 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
 	return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-function parseEnabledSources(value: string | undefined, disableBundledRules: boolean): RuleSource[] | "auto" {
+function parseEnabledSources(
+	value: string | undefined,
+	disableBundledRules: boolean,
+): RuleSource[] | "auto" {
 	if (value === undefined || value.trim().toLowerCase() === "auto") {
 		return disableBundledRules ? sourcesWithoutBundledRules() : "auto";
 	}
@@ -92,7 +114,9 @@ function parseEnabledSources(value: string | undefined, disableBundledRules: boo
 		}
 		sources.push(source);
 	}
-	const enabledSources = disableBundledRules ? sources.filter((source) => source !== "plugin-bundled") : sources;
+	const enabledSources = disableBundledRules
+		? sources.filter((source) => source !== "plugin-bundled")
+		: sources;
 	return enabledSources;
 }
 

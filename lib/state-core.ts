@@ -20,12 +20,22 @@
  * This module does NOT create state files; adoption may only rename existing ones.
  */
 
-import { readdirSync, readFileSync, renameSync, appendFileSync, existsSync, openSync, ftruncateSync, writeSync, closeSync } from 'fs';
-import { join } from 'path';
+import {
+	readdirSync,
+	readFileSync,
+	renameSync,
+	appendFileSync,
+	existsSync,
+	openSync,
+	ftruncateSync,
+	writeSync,
+	closeSync,
+} from "fs";
+import { join } from "path";
 // lib-internal imports must be relative — deployed copies under .claude/lib/ have no @lib alias
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
-import { getOmtDir } from './omt-dir';
+import { getOmtDir } from "./omt-dir";
 
 // ---------------------------------------------------------------------------
 // Timestamp
@@ -39,18 +49,18 @@ import { getOmtDir } from './omt-dir';
  * to `date -j -f "%Y-%m-%dT%H:%M:%S"` (BSD) or `date -d` (GNU).
  */
 export function nowStamp(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  // getTimezoneOffset returns minutes west of UTC; negative = east
-  const tzOffset = -d.getTimezoneOffset(); // minutes east of UTC
-  const tzSign = tzOffset >= 0 ? '+' : '-';
-  const tzH = pad(Math.floor(Math.abs(tzOffset) / 60));
-  const tzM = pad(Math.abs(tzOffset) % 60);
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
-    `${tzSign}${tzH}:${tzM}`
-  );
+	const d = new Date();
+	const pad = (n: number) => String(n).padStart(2, "0");
+	// getTimezoneOffset returns minutes west of UTC; negative = east
+	const tzOffset = -d.getTimezoneOffset(); // minutes east of UTC
+	const tzSign = tzOffset >= 0 ? "+" : "-";
+	const tzH = pad(Math.floor(Math.abs(tzOffset) / 60));
+	const tzM = pad(Math.abs(tzOffset) % 60);
+	return (
+		`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+		`T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+		`${tzSign}${tzH}:${tzM}`
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +75,7 @@ const SAFE_ID_MAX = 200;
  * and has length 1..200. No dots, slashes, spaces — prevents path traversal.
  */
 export function isSafeSessionId(id: string): boolean {
-  return id.length >= 1 && id.length <= SAFE_ID_MAX && SAFE_ID_RE.test(id);
+	return id.length >= 1 && id.length <= SAFE_ID_MAX && SAFE_ID_RE.test(id);
 }
 
 /**
@@ -73,18 +83,18 @@ export function isSafeSessionId(id: string): boolean {
  * Skill CLIs (TypeScript) call this at startup; they hard-fail on bad sid.
  */
 export function resolveSessionIdOrThrow(): string {
-  const sid = process.env['OMT_SESSION_ID'];
-  if (!sid) {
-    throw new Error(
-      'OMT_SESSION_ID is not set. The PreToolUse seed must have run before invoking this CLI.'
-    );
-  }
-  if (!isSafeSessionId(sid)) {
-    throw new Error(
-      `OMT_SESSION_ID "${sid}" is not a safe session id (must match ^[A-Za-z0-9_-]+$, length 1..200).`
-    );
-  }
-  return sid;
+	const sid = process.env["OMT_SESSION_ID"];
+	if (!sid) {
+		throw new Error(
+			"OMT_SESSION_ID is not set. The PreToolUse seed must have run before invoking this CLI.",
+		);
+	}
+	if (!isSafeSessionId(sid)) {
+		throw new Error(
+			`OMT_SESSION_ID "${sid}" is not a safe session id (must match ^[A-Za-z0-9_-]+$, length 1..200).`,
+		);
+	}
+	return sid;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,8 +105,11 @@ export function resolveSessionIdOrThrow(): string {
  * Merges `partial` over `prior` and sets `last_touched_at` to `nowStamp()`.
  * Every state writer calls this — heartbeat is always refreshed on any write.
  */
-export function mergeWithHeartbeat<T extends object>(prior: T, partial: Partial<T>): T & { last_touched_at: string } {
-  return { ...prior, ...partial, last_touched_at: nowStamp() };
+export function mergeWithHeartbeat<T extends object>(
+	prior: T,
+	partial: Partial<T>,
+): T & { last_touched_at: string } {
+	return { ...prior, ...partial, last_touched_at: nowStamp() };
 }
 
 // ---------------------------------------------------------------------------
@@ -131,38 +144,38 @@ export const TERMINAL_TTL_SECONDS = 1800;
  * @param nowEpoch  Current Unix epoch seconds.
  */
 export function isStateLive(
-  parsed: { active?: boolean; last_touched_at?: string; started_at?: string },
-  nowEpoch: number
+	parsed: { active?: boolean; last_touched_at?: string; started_at?: string },
+	nowEpoch: number,
 ): boolean {
-  // Fallback chain: last_touched_at → started_at → dead
-  let touched: number | null = null;
-  const lta = parsed.last_touched_at;
-  if (lta) touched = parseEpoch(lta);
-  if (touched === null) {
-    const sa = parsed.started_at;
-    if (sa) touched = parseEpoch(sa);
-  }
-  if (touched === null) return false;
-  // Clock-skew: if touched > now, treat as live (age clamped to 0)
-  const idle = Math.max(0, nowEpoch - touched);
-  if (parsed.active) {
-    return idle < ACTIVE_IDLE_TTL_SECONDS;
-  } else {
-    return idle < TERMINAL_TTL_SECONDS;
-  }
+	// Fallback chain: last_touched_at → started_at → dead
+	let touched: number | null = null;
+	const lta = parsed.last_touched_at;
+	if (lta) touched = parseEpoch(lta);
+	if (touched === null) {
+		const sa = parsed.started_at;
+		if (sa) touched = parseEpoch(sa);
+	}
+	if (touched === null) return false;
+	// Clock-skew: if touched > now, treat as live (age clamped to 0)
+	const idle = Math.max(0, nowEpoch - touched);
+	if (parsed.active) {
+		return idle < ACTIVE_IDLE_TTL_SECONDS;
+	} else {
+		return idle < TERMINAL_TTL_SECONDS;
+	}
 }
 
 // ---------------------------------------------------------------------------
 // State-type prefix map
 // ---------------------------------------------------------------------------
 
-export type StateType = 'goal' | 'prometheus' | 'deep-interview';
+export type StateType = "goal" | "prometheus" | "deep-interview";
 
 /** Maps each stateful skill type to its state-file filename prefix. */
 export const STATE_PREFIX: Record<StateType, string> = {
-  goal: 'goal-state-',
-  prometheus: 'prometheus-state-',
-  'deep-interview': 'deep-interview-active-state-',
+	goal: "goal-state-",
+	prometheus: "prometheus-state-",
+	"deep-interview": "deep-interview-active-state-",
 };
 
 // ---------------------------------------------------------------------------
@@ -171,56 +184,85 @@ export const STATE_PREFIX: Record<StateType, string> = {
 
 /** Parses an ISO-8601 string to a Unix epoch (seconds). Returns null on failure. */
 function parseEpoch(iso: string): number | null {
-  try {
-    const t = Date.parse(iso);
-    if (isNaN(t)) return null;
-    return Math.floor(t / 1000);
-  } catch {
-    return null;
-  }
+	try {
+		const t = Date.parse(iso);
+		if (isNaN(t)) return null;
+		return Math.floor(t / 1000);
+	} catch {
+		return null;
+	}
 }
 
 /** Extracts the sid from a state filename given the prefix. */
 function sidFromFilename(filename: string, prefix: string): string {
-  // filename: `<prefix><sid>.json`
-  return filename.slice(prefix.length, -'.json'.length);
+	// filename: `<prefix><sid>.json`
+	return filename.slice(prefix.length, -".json".length);
 }
 
 /** Returns the state-file path for a given type and sid. */
 function statePath(type: StateType, sid: string): string {
-  return join(getOmtDir(), `${STATE_PREFIX[type]}${sid}.json`);
+	return join(getOmtDir(), `${STATE_PREFIX[type]}${sid}.json`);
+}
+
+/** True iff `value` is a non-null, non-array object (i.e. a JSON "object"). */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** True iff `err` is an Error-shaped value carrying a Node.js `code` field. */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+	return typeof err === "object" && err !== null && "code" in err;
 }
 
 /** Reads and parses a state file. Returns null on missing or malformed. */
 function readParsed(path: string): Record<string, unknown> | null {
-  try {
-    const raw = readFileSync(path, 'utf8');
-    const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+	try {
+		const raw = readFileSync(path, "utf8");
+		const parsed: unknown = JSON.parse(raw);
+		if (!isPlainObject(parsed)) return null;
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Narrows a parsed state record down to the shape isStateLive expects, without
+ * an unsafe cast. Fields with the wrong runtime type are treated as absent —
+ * matches how isStateLive already only ever receives well-formed state files
+ * written by this module.
+ */
+function toLivenessShape(parsed: Record<string, unknown>): {
+	active?: boolean;
+	last_touched_at?: string;
+	started_at?: string;
+} {
+	return {
+		active: typeof parsed["active"] === "boolean" ? parsed["active"] : undefined,
+		last_touched_at:
+			typeof parsed["last_touched_at"] === "string" ? parsed["last_touched_at"] : undefined,
+		started_at: typeof parsed["started_at"] === "string" ? parsed["started_at"] : undefined,
+	};
 }
 
 /** Returns the purpose string for a candidate, per type. */
 function purposeFor(type: StateType, parsed: Record<string, unknown>): string {
-  if (type === 'goal') {
-    return String(parsed['outcome'] ?? '');
-  }
-  if (type === 'prometheus') {
-    const planPath = String(parsed['plan_path'] ?? '');
-    if (planPath !== '') return planPath;
-    return String(parsed['phase'] ?? '');
-  }
-  if (type === 'deep-interview') {
-    const state = parsed['state'];
-    if (typeof state === 'object' && state !== null && !Array.isArray(state)) {
-      return String((state as Record<string, unknown>)['initial_idea'] ?? '');
-    }
-    return '';
-  }
-  return '';
+	if (type === "goal") {
+		return String(parsed["outcome"] ?? "");
+	}
+	if (type === "prometheus") {
+		const planPath = String(parsed["plan_path"] ?? "");
+		if (planPath !== "") return planPath;
+		return String(parsed["phase"] ?? "");
+	}
+	if (type === "deep-interview") {
+		const state = parsed["state"];
+		if (isPlainObject(state)) {
+			return String(state["initial_idea"] ?? "");
+		}
+		return "";
+	}
+	return "";
 }
 
 // ---------------------------------------------------------------------------
@@ -234,17 +276,17 @@ function purposeFor(type: StateType, parsed: Record<string, unknown>): string {
  * an adopt-rename between the two calls could resurrect an orphan file.
  */
 export function writeFileNoCreate(path: string, content: string): void {
-  const buf = Buffer.from(content, 'utf8');
-  let fd: number | undefined;
-  try {
-    fd = openSync(path, 'r+');
-    ftruncateSync(fd, 0);
-    if (buf.length > 0) {
-      writeSync(fd, buf, 0, buf.length, 0);
-    }
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
+	const buf = Buffer.from(content, "utf8");
+	let fd: number | undefined;
+	try {
+		fd = openSync(path, "r+");
+		ftruncateSync(fd, 0);
+		if (buf.length > 0) {
+			writeSync(fd, buf, 0, buf.length, 0);
+		}
+	} finally {
+		if (fd !== undefined) closeSync(fd);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -261,25 +303,25 @@ export function writeFileNoCreate(path: string, content: string): void {
  *   deep-interview: seeded file lacking the rich `state` object
  */
 export function isPristine(type: StateType, parsed: Record<string, unknown>): boolean {
-  if (type === 'prometheus') {
-    return (
-      parsed['phase'] === 'S0' &&
-      parsed['plan_path'] === '' &&
-      (parsed['resume_summary'] === '' || parsed['resume_summary'] === undefined)
-    );
-  }
-  if (type === 'goal') {
-    return (
-      parsed['phase'] === 'planning' &&
-      (parsed['iteration'] === 0 || parsed['iteration'] === undefined) &&
-      (parsed['outcome'] === '' || parsed['outcome'] === undefined)
-    );
-  }
-  if (type === 'deep-interview') {
-    // Pristine = seed file without the rich `state` object
-    return parsed['state'] === undefined || parsed['state'] === null;
-  }
-  return false;
+	if (type === "prometheus") {
+		return (
+			parsed["phase"] === "S0" &&
+			parsed["plan_path"] === "" &&
+			(parsed["resume_summary"] === "" || parsed["resume_summary"] === undefined)
+		);
+	}
+	if (type === "goal") {
+		return (
+			parsed["phase"] === "planning" &&
+			(parsed["iteration"] === 0 || parsed["iteration"] === undefined) &&
+			(parsed["outcome"] === "" || parsed["outcome"] === undefined)
+		);
+	}
+	if (type === "deep-interview") {
+		// Pristine = seed file without the rich `state` object
+		return parsed["state"] === undefined || parsed["state"] === null;
+	}
+	return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -287,10 +329,10 @@ export function isPristine(type: StateType, parsed: Record<string, unknown>): bo
 // ---------------------------------------------------------------------------
 
 export interface AdoptionCandidate {
-  sid: string;
-  purpose: string;
-  startedAt: string;
-  idleSeconds: number;
+	sid: string;
+	purpose: string;
+	startedAt: string;
+	idleSeconds: number;
 }
 
 /**
@@ -305,45 +347,45 @@ export interface AdoptionCandidate {
  * Used in adoption UX: skill presents these candidates to the user before calling adopt().
  */
 export function listOthers(type: StateType): AdoptionCandidate[] {
-  const omtDir = getOmtDir();
-  const prefix = STATE_PREFIX[type];
-  const curSid = process.env['OMT_SESSION_ID'] ?? '';
-  const now = Math.floor(Date.now() / 1000);
+	const omtDir = getOmtDir();
+	const prefix = STATE_PREFIX[type];
+	const curSid = process.env["OMT_SESSION_ID"] ?? "";
+	const now = Math.floor(Date.now() / 1000);
 
-  let entries: string[];
-  try {
-    entries = readdirSync(omtDir);
-  } catch {
-    return [];
-  }
+	let entries: string[];
+	try {
+		entries = readdirSync(omtDir);
+	} catch {
+		return [];
+	}
 
-  const results: AdoptionCandidate[] = [];
+	const results: AdoptionCandidate[] = [];
 
-  for (const entry of entries) {
-    if (!entry.startsWith(prefix) || !entry.endsWith('.json')) continue;
-    const sid = sidFromFilename(entry, prefix);
-    // Exclude current session
-    if (sid === curSid) continue;
-    // Parse the file — skip malformed
-    const parsed = readParsed(join(omtDir, entry));
-    if (parsed === null) continue;
-    // Only ACTIVE-live candidates (r7 source filter)
-    if (parsed['active'] !== true) continue;
-    if (!isStateLive(parsed as { active?: boolean; last_touched_at?: string; started_at?: string }, now)) continue;
-    // Pristine seeds are INERT to consumers (f9f3242): skip empty-purpose seeds
-    if (isPristine(type, parsed)) continue;
-    const lta = String(parsed['last_touched_at'] ?? '');
-    const touched = parseEpoch(lta);
-    const idleSeconds = touched !== null ? Math.max(0, now - touched) : 0;
-    results.push({
-      sid,
-      purpose: purposeFor(type, parsed),
-      startedAt: String(parsed['started_at'] ?? ''),
-      idleSeconds,
-    });
-  }
+	for (const entry of entries) {
+		if (!entry.startsWith(prefix) || !entry.endsWith(".json")) continue;
+		const sid = sidFromFilename(entry, prefix);
+		// Exclude current session
+		if (sid === curSid) continue;
+		// Parse the file — skip malformed
+		const parsed = readParsed(join(omtDir, entry));
+		if (parsed === null) continue;
+		// Only ACTIVE-live candidates (r7 source filter)
+		if (parsed["active"] !== true) continue;
+		if (!isStateLive(toLivenessShape(parsed), now)) continue;
+		// Pristine seeds are INERT to consumers (f9f3242): skip empty-purpose seeds
+		if (isPristine(type, parsed)) continue;
+		const lta = String(parsed["last_touched_at"] ?? "");
+		const touched = parseEpoch(lta);
+		const idleSeconds = touched !== null ? Math.max(0, now - touched) : 0;
+		results.push({
+			sid,
+			purpose: purposeFor(type, parsed),
+			startedAt: String(parsed["started_at"] ?? ""),
+			idleSeconds,
+		});
+	}
 
-  return results;
+	return results;
 }
 
 // ---------------------------------------------------------------------------
@@ -359,10 +401,13 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
  * direct unit testing of the no-create invariant.
  */
 export function restampAfterAdopt(path: string): void {
-  const content = readFileSync(path, 'utf8');
-  const parsed = JSON.parse(content) as Record<string, unknown>;
-  const stamped = { ...parsed, last_touched_at: nowStamp() };
-  writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
+	const content = readFileSync(path, "utf8");
+	const parsed: unknown = JSON.parse(content);
+	if (!isPlainObject(parsed)) {
+		throw new Error(`restampAfterAdopt: "${path}" does not contain a JSON object`);
+	}
+	const stamped = { ...parsed, last_touched_at: nowStamp() };
+	writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
 }
 
 // ---------------------------------------------------------------------------
@@ -389,99 +434,104 @@ export function restampAfterAdopt(path: string): void {
  *   <ISO ts> <type> <srcSid> -> <curSid>
  */
 export function adopt(type: StateType, srcSid: string): void {
-  const curSid = process.env['OMT_SESSION_ID'];
-  if (!curSid) {
-    throw new Error('adopt: OMT_SESSION_ID is not set');
-  }
+	const curSid = process.env["OMT_SESSION_ID"];
+	if (!curSid) {
+		throw new Error("adopt: OMT_SESSION_ID is not set");
+	}
 
-  // r2: validate both sids
-  if (!isSafeSessionId(srcSid)) {
-    throw new Error(`adopt: srcSid "${srcSid}" fails safe-id validation`);
-  }
-  if (!isSafeSessionId(curSid)) {
-    throw new Error(`adopt: curSid "${curSid}" fails safe-id validation`);
-  }
+	// r2: validate both sids
+	if (!isSafeSessionId(srcSid)) {
+		throw new Error(`adopt: srcSid "${srcSid}" fails safe-id validation`);
+	}
+	if (!isSafeSessionId(curSid)) {
+		throw new Error(`adopt: curSid "${curSid}" fails safe-id validation`);
+	}
 
-  // r1: self-adopt refused
-  if (srcSid === curSid) {
-    throw new Error(`adopt: self-adopt refused (srcSid === curSid === "${curSid}")`);
-  }
+	// r1: self-adopt refused
+	if (srcSid === curSid) {
+		throw new Error(`adopt: self-adopt refused (srcSid === curSid === "${curSid}")`);
+	}
 
-  const omtDir = getOmtDir();
-  const srcPath = statePath(type, srcSid);
-  const dstPath = statePath(type, curSid);
-  const now = Math.floor(Date.now() / 1000);
+	const omtDir = getOmtDir();
+	const srcPath = statePath(type, srcSid);
+	const dstPath = statePath(type, curSid);
+	const now = Math.floor(Date.now() / 1000);
 
-  // r7: source must be ACTIVE-live
-  const srcParsed = readParsed(srcPath);
-  if (srcParsed === null) {
-    throw new Error(`adopt: source "${srcPath}" is missing or malformed (lost race or never existed)`);
-  }
-  if (srcParsed['active'] !== true) {
-    throw new Error(`adopt: source "${srcPath}" is not ACTIVE (r7: TERMINAL sources are refused)`);
-  }
-  if (!isStateLive(srcParsed as { active?: boolean; last_touched_at?: string; started_at?: string }, now)) {
-    throw new Error(`adopt: source "${srcPath}" failed the liveness check (r7: TTL-expired or no parseable timestamp — only live sources are adoptable)`);
-  }
+	// r7: source must be ACTIVE-live
+	const srcParsed = readParsed(srcPath);
+	if (srcParsed === null) {
+		throw new Error(
+			`adopt: source "${srcPath}" is missing or malformed (lost race or never existed)`,
+		);
+	}
+	if (srcParsed["active"] !== true) {
+		throw new Error(`adopt: source "${srcPath}" is not ACTIVE (r7: TERMINAL sources are refused)`);
+	}
+	if (!isStateLive(toLivenessShape(srcParsed), now)) {
+		throw new Error(
+			`adopt: source "${srcPath}" failed the liveness check (r7: TTL-expired or no parseable timestamp — only live sources are adoptable)`,
+		);
+	}
 
-  // r8: source must not be pristine (pristine seeds are INERT to consumers — f9f3242)
-  if (isPristine(type, srcParsed)) {
-    throw new Error(
-      `adopt: source "${srcPath}" is a pristine seed with no real work (r8: pristine sources are refused — nothing to adopt).`
-    );
-  }
+	// r8: source must not be pristine (pristine seeds are INERT to consumers — f9f3242)
+	if (isPristine(type, srcParsed)) {
+		throw new Error(
+			`adopt: source "${srcPath}" is a pristine seed with no real work (r8: pristine sources are refused — nothing to adopt).`,
+		);
+	}
 
-  // r3: check current session state
-  if (existsSync(dstPath)) {
-    const curParsed = readParsed(dstPath);
-    if (curParsed === null) {
-      // Malformed current — fail closed
-      throw new Error(
-        `adopt: current session state "${dstPath}" is malformed. ` +
-          `Please manually inspect and remove it, then re-invoke the skill.`
-      );
-    }
-    // ACTIVE non-pristine → refuse
-    if (curParsed['active'] === true && !isPristine(type, curParsed)) {
-      throw new Error(
-        `adopt: current session has ACTIVE non-pristine state at "${dstPath}". ` +
-          `Adoption refused to avoid overwriting in-progress work (r3).`
-      );
-    }
-    // ACTIVE pristine, TERMINAL, or absent → adoptable-over (fall through to rename)
-  }
+	// r3: check current session state
+	if (existsSync(dstPath)) {
+		const curParsed = readParsed(dstPath);
+		if (curParsed === null) {
+			// Malformed current — fail closed
+			throw new Error(
+				`adopt: current session state "${dstPath}" is malformed. ` +
+					`Please manually inspect and remove it, then re-invoke the skill.`,
+			);
+		}
+		// ACTIVE non-pristine → refuse
+		if (curParsed["active"] === true && !isPristine(type, curParsed)) {
+			throw new Error(
+				`adopt: current session has ACTIVE non-pristine state at "${dstPath}". ` +
+					`Adoption refused to avoid overwriting in-progress work (r3).`,
+			);
+		}
+		// ACTIVE pristine, TERMINAL, or absent → adoptable-over (fall through to rename)
+	}
 
-  // r4: atomic rename (ENOENT → throw, no mutation)
-  try {
-    renameSync(srcPath, dstPath);
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      throw new Error(
-        `adopt: source "${srcPath}" vanished before rename (lost race — another session adopted it first). ` +
-          `No mutation occurred.`
-      );
-    }
-    throw err;
-  }
+	// r4: atomic rename (ENOENT → throw, no mutation)
+	try {
+		renameSync(srcPath, dstPath);
+	} catch (err) {
+		const code = isErrnoException(err) ? err.code : undefined;
+		if (code === "ENOENT") {
+			throw new Error(
+				`adopt: source "${srcPath}" vanished before rename (lost race — another session adopted it first). ` +
+					`No mutation occurred.`,
+				{ cause: err },
+			);
+		}
+		throw err;
+	}
 
-  // r5: post-rename heartbeat re-stamp of the renamed-to file (best-effort)
-  try {
-    restampAfterAdopt(dstPath);
-  } catch (e) {
-    process.stderr.write(
-      `adopt: warning: post-rename heartbeat re-stamp failed for "${dstPath}": ${String(e)}\n`
-    );
-    // Still success — r5 is best-effort
-  }
+	// r5: post-rename heartbeat re-stamp of the renamed-to file (best-effort)
+	try {
+		restampAfterAdopt(dstPath);
+	} catch (e) {
+		process.stderr.write(
+			`adopt: warning: post-rename heartbeat re-stamp failed for "${dstPath}": ${String(e)}\n`,
+		);
+		// Still success — r5 is best-effort
+	}
 
-  // Append audit log line
-  try {
-    const logPath = join(omtDir, 'adoption.log');
-    appendFileSync(logPath, `${nowStamp()} ${type} ${srcSid} -> ${curSid}\n`, 'utf8');
-  } catch (e) {
-    process.stderr.write(`adopt: warning: failed to append adoption.log: ${String(e)}\n`);
-  }
+	// Append audit log line
+	try {
+		const logPath = join(omtDir, "adoption.log");
+		appendFileSync(logPath, `${nowStamp()} ${type} ${srcSid} -> ${curSid}\n`, "utf8");
+	} catch (e) {
+		process.stderr.write(`adopt: warning: failed to append adoption.log: ${String(e)}\n`);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -497,33 +547,40 @@ export function adopt(type: StateType, srcSid: string): void {
  * Skill-tool entry are indistinguishable downstream.
  */
 function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
-  if (type === 'prometheus') {
-    return { active: true, phase: 'S0', plan_path: '', resume_summary: '', started_at: ts, last_touched_at: ts };
-  }
-  if (type === 'goal') {
-    return {
-      active: true,
-      phase: 'planning',
-      iteration: 0,
-      outcome: '',
-      verification_surface: '',
-      constraints: '',
-      boundaries: '',
-      max_iterations: 10,
-      blocked_stop: '',
-      objective_verdict: 'absent',
-      plan_path: '',
-      resume_summary: '',
-      budget_limit_notified: false,
-      blocked_reason: '',
-      completion_evidence_paths: [],
-      schema_version: 1,
-      started_at: ts,
-      last_touched_at: ts,
-    };
-  }
-  // deep-interview
-  return { active: true, started_at: ts, last_touched_at: ts };
+	if (type === "prometheus") {
+		return {
+			active: true,
+			phase: "S0",
+			plan_path: "",
+			resume_summary: "",
+			started_at: ts,
+			last_touched_at: ts,
+		};
+	}
+	if (type === "goal") {
+		return {
+			active: true,
+			phase: "planning",
+			iteration: 0,
+			outcome: "",
+			verification_surface: "",
+			constraints: "",
+			boundaries: "",
+			max_iterations: 10,
+			blocked_stop: "",
+			objective_verdict: "absent",
+			plan_path: "",
+			resume_summary: "",
+			budget_limit_notified: false,
+			blocked_reason: "",
+			completion_evidence_paths: [],
+			schema_version: 1,
+			started_at: ts,
+			last_touched_at: ts,
+		};
+	}
+	// deep-interview
+	return { active: true, started_at: ts, last_touched_at: ts };
 }
 
 /**
@@ -543,21 +600,21 @@ function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
  * writes) is fully covered.
  */
 function wasAdoptedAway(type: StateType, srcSid: string): boolean {
-  const logPath = join(getOmtDir(), 'adoption.log');
-  let content: string;
-  try {
-    content = readFileSync(logPath, 'utf8');
-  } catch {
-    return false; // no log → no adoption ever happened
-  }
-  for (const line of content.split('\n')) {
-    const parts = line.trim().split(/\s+/);
-    // parts: [<iso-ts>, <type>, <srcSid>, '->', <curSid>]
-    if (parts.length >= 5 && parts[1] === type && parts[2] === srcSid && parts[3] === '->') {
-      return true;
-    }
-  }
-  return false;
+	const logPath = join(getOmtDir(), "adoption.log");
+	let content: string;
+	try {
+		content = readFileSync(logPath, "utf8");
+	} catch {
+		return false; // no log → no adoption ever happened
+	}
+	for (const line of content.split("\n")) {
+		const parts = line.trim().split(/\s+/);
+		// parts: [<iso-ts>, <type>, <srcSid>, '->', <curSid>]
+		if (parts.length >= 5 && parts[1] === type && parts[2] === srcSid && parts[3] === "->") {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -575,21 +632,21 @@ function wasAdoptedAway(type: StateType, srcSid: string): boolean {
  * orphan-resurrection guarantee is preserved.
  */
 export function ensureSeed(type: StateType, sessionId: string): void {
-  // Defensive: callers validate sid, but never derive a path from an unsafe id.
-  if (!isSafeSessionId(sessionId)) return;
-  const path = statePath(type, sessionId);
-  if (existsSync(path)) return; // already seeded — never clobber real work
-  if (wasAdoptedAway(type, sessionId)) return; // taken over by a live session — do not resurrect
-  const content = JSON.stringify(seedSkeleton(type, nowStamp()), null, 2);
-  let fd: number | undefined;
-  try {
-    fd = openSync(path, 'wx'); // O_CREAT|O_EXCL — atomic; EEXIST if seeded concurrently
-    const buf = Buffer.from(content, 'utf8');
-    writeSync(fd, buf, 0, buf.length, 0);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return; // lost the create race — fine
-    throw err;
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
+	// Defensive: callers validate sid, but never derive a path from an unsafe id.
+	if (!isSafeSessionId(sessionId)) return;
+	const path = statePath(type, sessionId);
+	if (existsSync(path)) return; // already seeded — never clobber real work
+	if (wasAdoptedAway(type, sessionId)) return; // taken over by a live session — do not resurrect
+	const content = JSON.stringify(seedSkeleton(type, nowStamp()), null, 2);
+	let fd: number | undefined;
+	try {
+		fd = openSync(path, "wx"); // O_CREAT|O_EXCL — atomic; EEXIST if seeded concurrently
+		const buf = Buffer.from(content, "utf8");
+		writeSync(fd, buf, 0, buf.length, 0);
+	} catch (err) {
+		if (isErrnoException(err) && err.code === "EEXIST") return; // lost the create race — fine
+		throw err;
+	} finally {
+		if (fd !== undefined) closeSync(fd);
+	}
 }

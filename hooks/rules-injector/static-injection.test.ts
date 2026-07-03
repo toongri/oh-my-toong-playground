@@ -114,8 +114,14 @@ test("C1: dropped listed rule is NOT marked injected and re-appears in next reco
 	mkdirSync(rulesDir, { recursive: true });
 
 	writeFileSync(join(projectDir, "package.json"), JSON.stringify({ name: "test-project" }));
-	writeFileSync(join(rulesDir, "rule1.md"), "---\nalwaysApply: true\n---\nRule 1 content: always-apply instructions.\n");
-	writeFileSync(join(rulesDir, "rule2.md"), "---\nalwaysApply: true\n---\nRule 2 content: always-apply instructions.\n");
+	writeFileSync(
+		join(rulesDir, "rule1.md"),
+		"---\nalwaysApply: true\n---\nRule 1 content: always-apply instructions.\n",
+	);
+	writeFileSync(
+		join(rulesDir, "rule2.md"),
+		"---\nalwaysApply: true\n---\nRule 2 content: always-apply instructions.\n",
+	);
 
 	const cachePath = join(scratchDir, "session.json");
 	// Empty cache — recovery will treat all rules as missing (no transcript).
@@ -153,7 +159,7 @@ test("C1: dropped listed rule is NOT marked injected and re-appears in next reco
 
 	// Read staticDedup from cache.
 	const state = readCacheState(cachePath);
-	const staticDedup = state["staticDedup"] as string[] | undefined ?? [];
+	const staticDedup = (state["staticDedup"] as string[] | undefined) ?? [];
 
 	// Only one rule should be marked. Count how many of rule1 vs rule2 appear.
 	const deduped1 = staticDedup.some((k: string) => k.includes("rule1.md"));
@@ -232,13 +238,7 @@ test("P2: tail rule past 32K byte clamp is NOT marked injected (can be re-inject
 		CODEX_RULES_ENABLED_SOURCES: ".claude/rules",
 	};
 
-	const output = runStaticInjection(
-		projectDir,
-		null,
-		"SessionStart",
-		cachePath,
-		{ env },
-	);
+	const output = runStaticInjection(projectDir, null, "SessionStart", cachePath, { env });
 
 	// Output is non-empty.
 	expect(output.length).toBeGreaterThan(0);
@@ -247,7 +247,7 @@ test("P2: tail rule past 32K byte clamp is NOT marked injected (can be re-inject
 	expect(Buffer.byteLength(output, "utf8")).toBeLessThanOrEqual(50_000);
 
 	const state = readCacheState(cachePath);
-	const staticDedup = state["staticDedup"] as string[] | undefined ?? [];
+	const staticDedup = (state["staticDedup"] as string[] | undefined) ?? [];
 
 	// Rule1 should be marked (its marker is in the head, before the 32K cut).
 	const markedRule1 = staticDedup.some((k: string) => k.includes("a-rule1.md"));

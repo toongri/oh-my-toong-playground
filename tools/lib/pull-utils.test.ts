@@ -6,10 +6,10 @@ import { tmpdir } from "os";
 import { parseFrontmatter } from "./frontmatter.ts";
 import type { SyncItem } from "./types.ts";
 import {
-  resolveDeployedPath,
-  resolveSourcePath,
-  reversePlatformPaths,
-  stripInjectedFrontmatter,
+	resolveDeployedPath,
+	resolveSourcePath,
+	reversePlatformPaths,
+	stripInjectedFrontmatter,
 } from "./pull-utils.ts";
 
 // ---------------------------------------------------------------------------
@@ -17,35 +17,35 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("resolveDeployedPath", () => {
-  it("returns file path with `.md` suffix for agents", () => {
-    const result = resolveDeployedPath("/proj", "claude", "agents", "oracle");
-    expect(result).toBe("/proj/.claude/agents/oracle.md");
-  });
+	it("returns file path with `.md` suffix for agents", () => {
+		const result = resolveDeployedPath("/proj", "claude", "agents", "oracle");
+		expect(result).toBe("/proj/.claude/agents/oracle.md");
+	});
 
-  it("returns file path with `.md` suffix for commands", () => {
-    const result = resolveDeployedPath("/proj", "claude", "commands", "commit");
-    expect(result).toBe("/proj/.claude/commands/commit.md");
-  });
+	it("returns file path with `.md` suffix for commands", () => {
+		const result = resolveDeployedPath("/proj", "claude", "commands", "commit");
+		expect(result).toBe("/proj/.claude/commands/commit.md");
+	});
 
-  it("returns file path with `.md` suffix for rules", () => {
-    const result = resolveDeployedPath("/proj", "claude", "rules", "coding");
-    expect(result).toBe("/proj/.claude/rules/coding.md");
-  });
+	it("returns file path with `.md` suffix for rules", () => {
+		const result = resolveDeployedPath("/proj", "claude", "rules", "coding");
+		expect(result).toBe("/proj/.claude/rules/coding.md");
+	});
 
-  it("returns directory path without suffix for skills", () => {
-    const result = resolveDeployedPath("/proj", "claude", "skills", "diagnose");
-    expect(result).toBe("/proj/.claude/skills/diagnose");
-  });
+	it("returns directory path without suffix for skills", () => {
+		const result = resolveDeployedPath("/proj", "claude", "skills", "diagnose");
+		expect(result).toBe("/proj/.claude/skills/diagnose");
+	});
 
-  it("returns directory path without suffix for scripts", () => {
-    const result = resolveDeployedPath("/proj", "claude", "scripts", "hud");
-    expect(result).toBe("/proj/.claude/scripts/hud");
-  });
+	it("returns directory path without suffix for scripts", () => {
+		const result = resolveDeployedPath("/proj", "claude", "scripts", "hud");
+		expect(result).toBe("/proj/.claude/scripts/hud");
+	});
 
-  it("uses `.gemini/` directory for gemini platform", () => {
-    const result = resolveDeployedPath("/proj", "gemini", "skills", "diagnose");
-    expect(result).toBe("/proj/.gemini/skills/diagnose");
-  });
+	it("uses `.gemini/` directory for gemini platform", () => {
+		const result = resolveDeployedPath("/proj", "gemini", "skills", "diagnose");
+		expect(result).toBe("/proj/.gemini/skills/diagnose");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -53,72 +53,75 @@ describe("resolveDeployedPath", () => {
 // ---------------------------------------------------------------------------
 
 describe("resolveSourcePath", () => {
-  const ROOT = "/root/oh-my-toong";
+	const ROOT = "/root/oh-my-toong";
 
-  it("resolves global ref for skills to `{rootDir}/skills/{name}`", () => {
-    const result = resolveSourcePath("diagnose", "skills", ROOT);
-    expect(result).toBe(`${ROOT}/skills/diagnose`);
-  });
+	it("resolves global ref for skills to `{rootDir}/skills/{name}`", () => {
+		const result = resolveSourcePath("diagnose", "skills", ROOT);
+		expect(result).toBe(`${ROOT}/skills/diagnose`);
+	});
 
-  it("resolves global ref for commands to `{rootDir}/commands/{name}.md`", () => {
-    const result = resolveSourcePath("commit", "commands", ROOT);
-    expect(result).toBe(`${ROOT}/commands/commit.md`);
-  });
+	it("resolves global ref for commands to `{rootDir}/commands/{name}.md`", () => {
+		const result = resolveSourcePath("commit", "commands", ROOT);
+		expect(result).toBe(`${ROOT}/commands/commit.md`);
+	});
 
-  it("resolves scoped ref to `{rootDir}/projects/{project}/{category}/{name}`", () => {
-    const result = resolveSourcePath("my-project:testing", "skills", ROOT);
-    expect(result).toBe(`${ROOT}/projects/my-project/skills/testing`);
-  });
+	it("resolves scoped ref to `{rootDir}/projects/{project}/{category}/{name}`", () => {
+		const result = resolveSourcePath("my-project:testing", "skills", ROOT);
+		expect(result).toBe(`${ROOT}/projects/my-project/skills/testing`);
+	});
 
-  it("falls back to global path for unscoped ref when `projectDirName` is provided and project-local doesn't exist", () => {
-    const result = resolveSourcePath("diagnose", "skills", ROOT, "my-project");
-    expect(result).toBe(`${ROOT}/skills/diagnose`);
-  });
+	it("falls back to global path for unscoped ref when `projectDirName` is provided and project-local doesn't exist", () => {
+		const result = resolveSourcePath("diagnose", "skills", ROOT, "my-project");
+		expect(result).toBe(`${ROOT}/skills/diagnose`);
+	});
 
-  it("returns error object on cross-project scoped ref when `projectDirName` differs", () => {
-    const result = resolveSourcePath("other-project:testing", "skills", ROOT, "my-project");
-    expect(typeof result).toBe("object");
-    expect(result).toHaveProperty("error");
-    expect((result as { error: string }).error).toContain("Cross-project reference not allowed");
-  });
+	it("returns error object on cross-project scoped ref when `projectDirName` differs", () => {
+		const result = resolveSourcePath("other-project:testing", "skills", ROOT, "my-project");
+		expect(typeof result).toBe("object");
+		expect(result).toHaveProperty("error");
+		expect((result as { error: string }).error).toContain("Cross-project reference not allowed");
+	});
 
-  it("prefers project-local path when exists for unscoped ref with projectDirName", () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), "pull-utils-test-"));
-    try {
-      mkdirSync(join(tmpDir, "projects", "my-proj", "skills", "diagnose"), { recursive: true });
-      writeFileSync(join(tmpDir, "projects", "my-proj", "skills", "diagnose", "SKILL.md"), "# test");
-      mkdirSync(join(tmpDir, "skills", "diagnose"), { recursive: true });
-      writeFileSync(join(tmpDir, "skills", "diagnose", "SKILL.md"), "# global");
+	it("prefers project-local path when exists for unscoped ref with projectDirName", () => {
+		const tmpDir = mkdtempSync(join(tmpdir(), "pull-utils-test-"));
+		try {
+			mkdirSync(join(tmpDir, "projects", "my-proj", "skills", "diagnose"), { recursive: true });
+			writeFileSync(
+				join(tmpDir, "projects", "my-proj", "skills", "diagnose", "SKILL.md"),
+				"# test",
+			);
+			mkdirSync(join(tmpDir, "skills", "diagnose"), { recursive: true });
+			writeFileSync(join(tmpDir, "skills", "diagnose", "SKILL.md"), "# global");
 
-      const result = resolveSourcePath("diagnose", "skills", tmpDir, "my-proj");
-      expect(result).toBe(join(tmpDir, "projects", "my-proj", "skills", "diagnose"));
-    } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
+			const result = resolveSourcePath("diagnose", "skills", tmpDir, "my-proj");
+			expect(result).toBe(join(tmpDir, "projects", "my-proj", "skills", "diagnose"));
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
 
-  it("falls back to global when project-local doesn't exist on filesystem", () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), "pull-utils-test-"));
-    try {
-      mkdirSync(join(tmpDir, "skills", "diagnose"), { recursive: true });
-      writeFileSync(join(tmpDir, "skills", "diagnose", "SKILL.md"), "# global");
+	it("falls back to global when project-local doesn't exist on filesystem", () => {
+		const tmpDir = mkdtempSync(join(tmpdir(), "pull-utils-test-"));
+		try {
+			mkdirSync(join(tmpDir, "skills", "diagnose"), { recursive: true });
+			writeFileSync(join(tmpDir, "skills", "diagnose", "SKILL.md"), "# global");
 
-      const result = resolveSourcePath("diagnose", "skills", tmpDir, "my-proj");
-      expect(result).toBe(join(tmpDir, "skills", "diagnose"));
-    } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
+			const result = resolveSourcePath("diagnose", "skills", tmpDir, "my-proj");
+			expect(result).toBe(join(tmpDir, "skills", "diagnose"));
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
 
-  it("allows same-project scoped ref when `projectDirName` matches", () => {
-    const result = resolveSourcePath("my-project:testing", "skills", ROOT, "my-project");
-    expect(result).toBe(`${ROOT}/projects/my-project/skills/testing`);
-  });
+	it("allows same-project scoped ref when `projectDirName` matches", () => {
+		const result = resolveSourcePath("my-project:testing", "skills", ROOT, "my-project");
+		expect(result).toBe(`${ROOT}/projects/my-project/skills/testing`);
+	});
 
-  it("returns `.md` suffix for file-based categories (agents) on new component", () => {
-    const result = resolveSourcePath("new-agent", "agents", ROOT);
-    expect(result).toBe(`${ROOT}/agents/new-agent.md`);
-  });
+	it("returns `.md` suffix for file-based categories (agents) on new component", () => {
+		const result = resolveSourcePath("new-agent", "agents", ROOT);
+		expect(result).toBe(`${ROOT}/agents/new-agent.md`);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -126,29 +129,29 @@ describe("resolveSourcePath", () => {
 // ---------------------------------------------------------------------------
 
 describe("reversePlatformPaths", () => {
-  it("replaces `.gemini/` with `.claude/`", () => {
-    const content = "See .gemini/skills/diagnose/ for details";
-    const result = reversePlatformPaths(content, "gemini");
-    expect(result).toBe("See .claude/skills/diagnose/ for details");
-  });
+	it("replaces `.gemini/` with `.claude/`", () => {
+		const content = "See .gemini/skills/diagnose/ for details";
+		const result = reversePlatformPaths(content, "gemini");
+		expect(result).toBe("See .claude/skills/diagnose/ for details");
+	});
 
-  it("replaces `.codex/` with `.claude/`", () => {
-    const content = "See .codex/skills/diagnose/ for details";
-    const result = reversePlatformPaths(content, "codex");
-    expect(result).toBe("See .claude/skills/diagnose/ for details");
-  });
+	it("replaces `.codex/` with `.claude/`", () => {
+		const content = "See .codex/skills/diagnose/ for details";
+		const result = reversePlatformPaths(content, "codex");
+		expect(result).toBe("See .claude/skills/diagnose/ for details");
+	});
 
-  it("returns content unchanged for claude platform", () => {
-    const content = "See .claude/skills/diagnose/ for details";
-    const result = reversePlatformPaths(content, "claude");
-    expect(result).toBe(content);
-  });
+	it("returns content unchanged for claude platform", () => {
+		const content = "See .claude/skills/diagnose/ for details";
+		const result = reversePlatformPaths(content, "claude");
+		expect(result).toBe(content);
+	});
 
-  it("replaces all occurrences in content", () => {
-    const content = ".gemini/agents/oracle.md and .gemini/skills/prometheus/";
-    const result = reversePlatformPaths(content, "gemini");
-    expect(result).toBe(".claude/agents/oracle.md and .claude/skills/prometheus/");
-  });
+	it("replaces all occurrences in content", () => {
+		const content = ".gemini/agents/oracle.md and .gemini/skills/prometheus/";
+		const result = reversePlatformPaths(content, "gemini");
+		expect(result).toBe(".claude/agents/oracle.md and .claude/skills/prometheus/");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -156,7 +159,7 @@ describe("reversePlatformPaths", () => {
 // ---------------------------------------------------------------------------
 
 describe("stripInjectedFrontmatter", () => {
-  const makeDeployedWithSkills = (skills: string[]) => `---
+	const makeDeployedWithSkills = (skills: string[]) => `---
 name: oracle
 model: sonnet
 skills:
@@ -165,37 +168,37 @@ ${skills.map((s) => `  - ${s}`).join("\n")}
 
 # Oracle body`;
 
-  const makeSource = (extra: string = "") => `---
+	const makeSource = (extra: string = "") => `---
 name: oracle
 model: sonnet
 ${extra}---
 
 # Oracle body`;
 
-  it("removes `skills` key when `add-skills` present and source has no skills", () => {
-    const deployed = makeDeployedWithSkills(["testing"]);
-    const source = makeSource();
-    const syncItem = { component: "oracle", "add-skills": ["testing"] };
+	it("removes `skills` key when `add-skills` present and source has no skills", () => {
+		const deployed = makeDeployedWithSkills(["testing"]);
+		const source = makeSource();
+		const syncItem = { component: "oracle", "add-skills": ["testing"] };
 
-    const result = stripInjectedFrontmatter(deployed, source, syncItem);
+		const result = stripInjectedFrontmatter(deployed, source, syncItem);
 
-    const { frontmatter } = parseFrontmatter(result);
-    expect("skills" in frontmatter).toBe(false);
-  });
+		const { frontmatter } = parseFrontmatter(result);
+		expect("skills" in frontmatter).toBe(false);
+	});
 
-  it("restores source `skills` value when `add-skills` present and source has skills", () => {
-    const deployed = makeDeployedWithSkills(["testing", "pre-existing"]);
-    const source = makeSource("skills:\n  - pre-existing\n");
-    const syncItem = { component: "oracle", "add-skills": ["testing"] };
+	it("restores source `skills` value when `add-skills` present and source has skills", () => {
+		const deployed = makeDeployedWithSkills(["testing", "pre-existing"]);
+		const source = makeSource("skills:\n  - pre-existing\n");
+		const syncItem = { component: "oracle", "add-skills": ["testing"] };
 
-    const result = stripInjectedFrontmatter(deployed, source, syncItem);
+		const result = stripInjectedFrontmatter(deployed, source, syncItem);
 
-    const { frontmatter: fm } = parseFrontmatter(result);
-    expect(fm["skills"]).toEqual(["pre-existing"]);
-  });
+		const { frontmatter: fm } = parseFrontmatter(result);
+		expect(fm["skills"]).toEqual(["pre-existing"]);
+	});
 
-  it("removes `hooks` key when `add-hooks` present and source has no hooks", () => {
-    const deployed = `---
+	it("removes `hooks` key when `add-hooks` present and source has no hooks", () => {
+		const deployed = `---
 name: oracle
 model: sonnet
 hooks:
@@ -208,52 +211,52 @@ hooks:
 ---
 
 # Oracle body`;
-    const source = makeSource();
-    const syncItem = {
-      component: "oracle",
-      "add-hooks": [{ component: "stop-hook", event: "SubagentStop" }],
-    };
+		const source = makeSource();
+		const syncItem = {
+			component: "oracle",
+			"add-hooks": [{ component: "stop-hook", event: "SubagentStop" }],
+		};
 
-    const result = stripInjectedFrontmatter(deployed, source, syncItem);
+		const result = stripInjectedFrontmatter(deployed, source, syncItem);
 
-    const { frontmatter: fm } = parseFrontmatter(result);
-    expect("hooks" in fm).toBe(false);
-  });
+		const { frontmatter: fm } = parseFrontmatter(result);
+		expect("hooks" in fm).toBe(false);
+	});
 
-  it("returns content unchanged for string sync items", () => {
-    const deployed = makeDeployedWithSkills(["testing"]);
-    const source = makeSource();
-    const syncItem = "oracle";
+	it("returns content unchanged for string sync items", () => {
+		const deployed = makeDeployedWithSkills(["testing"]);
+		const source = makeSource();
+		const syncItem = "oracle";
 
-    const result = stripInjectedFrontmatter(deployed, source, syncItem);
+		const result = stripInjectedFrontmatter(deployed, source, syncItem);
 
-    expect(result).toBe(deployed);
-  });
+		expect(result).toBe(deployed);
+	});
 
-  it("returns content unchanged for object items without `add-skills`/`add-hooks`", () => {
-    const deployed = makeDeployedWithSkills(["testing"]);
-    const source = makeSource();
-    const syncItem: SyncItem = { component: "oracle", platforms: ["claude"] };
+	it("returns content unchanged for object items without `add-skills`/`add-hooks`", () => {
+		const deployed = makeDeployedWithSkills(["testing"]);
+		const source = makeSource();
+		const syncItem: SyncItem = { component: "oracle", platforms: ["claude"] };
 
-    const result = stripInjectedFrontmatter(deployed, source, syncItem);
+		const result = stripInjectedFrontmatter(deployed, source, syncItem);
 
-    expect(result).toBe(deployed);
-  });
+		expect(result).toBe(deployed);
+	});
 
-  it("preserves deployed body in result", () => {
-    const deployedBody = "\n# Oracle body with DEPLOYED changes";
-    const deployed = `---
+	it("preserves deployed body in result", () => {
+		const deployedBody = "\n# Oracle body with DEPLOYED changes";
+		const deployed = `---
 name: oracle
 model: sonnet
 skills:
   - testing
 ---
 ${deployedBody}`;
-    const source = makeSource();
-    const syncItem = { component: "oracle", "add-skills": ["testing"] };
+		const source = makeSource();
+		const syncItem = { component: "oracle", "add-skills": ["testing"] };
 
-    const result = stripInjectedFrontmatter(deployed, source, syncItem);
+		const result = stripInjectedFrontmatter(deployed, source, syncItem);
 
-    expect(result).toContain("DEPLOYED changes");
-  });
+		expect(result).toContain("DEPLOYED changes");
+	});
 });

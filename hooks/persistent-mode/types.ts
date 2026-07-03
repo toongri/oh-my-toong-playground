@@ -1,20 +1,20 @@
 // Hook input from Claude Code
 export interface HookInput {
-  sessionId?: string;
-  session_id?: string;
-  cwd?: string;
-  transcript_path?: string;
-  last_assistant_message?: string;
-  /** Claude Code v2.1.152+: running background tasks at stop time. */
-  background_tasks?: Array<{ id: string; type?: string; status?: string; [k: string]: unknown }>;
+	sessionId?: string;
+	session_id?: string;
+	cwd?: string;
+	transcript_path?: string;
+	last_assistant_message?: string;
+	/** Claude Code v2.1.152+: running background tasks at stop time. */
+	background_tasks?: Array<{ id: string; type?: string; status?: string; [k: string]: unknown }>;
 }
 
 // Parsed hook input
 export interface ParsedInput {
-  sessionId: string;
-  directory: string;
-  lastAssistantMessage: string | null;
-  activeSubagentCount: number;
+	sessionId: string;
+	directory: string;
+	lastAssistantMessage: string | null;
+	activeSubagentCount: number;
 }
 
 /**
@@ -26,7 +26,7 @@ export interface ParsedInput {
  * the file with this minimal shape discards in-flight interview data.
  */
 export interface DeepInterviewState {
-  active: boolean;
+	active: boolean;
 }
 
 /**
@@ -38,7 +38,7 @@ export interface DeepInterviewState {
  * discards in-flight prometheus data.
  */
 export interface PrometheusState {
-  active: boolean;
+	active: boolean;
 }
 
 /**
@@ -57,33 +57,32 @@ export interface PrometheusState {
  * discarded entirely.
  */
 export interface GoalState {
-  active: boolean;
-  phase: 'planning' | 'pursuing' | 'budget_limited' | 'blocked' | 'complete';
-  objective_verdict: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' | 'absent';
-  iteration: number;
-  max_iterations: number;
-  /** Continuation-objective text (hook-consumed): the desired end state. */
-  outcome?: string;
-  /** Continuation-objective text (hook-consumed): how completion is verified. */
-  verification_surface?: string;
-  /** Evidence paths the hook's complete-gate reads. */
-  completion_evidence_paths?: string[];
-  /** Set by the hook when it emits the budget-limit notice (write-once guard). */
-  budget_limit_notified?: boolean;
-  /** Refreshed on every write (heartbeat). Used by the GC liveness check. */
-  last_touched_at?: string;
+	active: boolean;
+	phase: "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
+	objective_verdict: "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | "absent";
+	iteration: number;
+	max_iterations: number;
+	/** Continuation-objective text (hook-consumed): the desired end state. */
+	outcome?: string;
+	/** Continuation-objective text (hook-consumed): how completion is verified. */
+	verification_surface?: string;
+	/** Evidence paths the hook's complete-gate reads. */
+	completion_evidence_paths?: string[];
+	/** Set by the hook when it emits the budget-limit notice (write-once guard). */
+	budget_limit_notified?: boolean;
+	/** Refreshed on every write (heartbeat). Used by the GC liveness check. */
+	last_touched_at?: string;
 }
 
 // Hook output format
 export interface HookOutput {
-  decision?: 'block' | 'continue';
-  continue?: boolean;
-  reason?: string;
+	decision?: "block" | "continue";
+	continue?: boolean;
+	reason?: string;
 }
 
 // Todo item from transcript parsing
 export interface TodoItem {
-  id: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+	id: string;
+	status: "pending" | "in_progress" | "completed" | "cancelled";
 }
-

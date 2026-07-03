@@ -9,47 +9,78 @@
  * Shared primitives (atomicWriteJson, sleepMs, etc.) are imported from lib/job-utils.ts.
  */
 
-import fs from 'fs';
-import path from 'path';
-import { spawn } from 'child_process';
+import fs from "fs";
+import path from "path";
+import { spawn } from "child_process";
 
 import {
-  exitWithError,
-  ensureDir,
-  safeFileName as _safeFileName,
-  atomicWriteJson,
-  readJsonIfExists,
-  sleepMs,
-  computeTerminalDoneCount,
-  asCodexStepStatus,
-  parseWaitCursor,
-  formatWaitCursor,
-  resolveBucketSize,
-  stripAnsi,
-} from './job-utils';
+	exitWithError,
+	ensureDir,
+	safeFileName as _safeFileName,
+	atomicWriteJson,
+	readJsonIfExists,
+	sleepMs,
+	computeTerminalDoneCount,
+	asCodexStepStatus,
+	parseWaitCursor,
+	formatWaitCursor,
+	resolveBucketSize,
+	stripAnsi,
+} from "./job-utils";
 
-import { pickDriver, type CliType } from './agent-drivers/types';
-import { resumeOneTurn, runOnce, splitCommand, type RunOneTurnOpts, type OneTurnResult } from './worker-utils';
+import { pickDriver, type CliType } from "./agent-drivers/types";
+import {
+	resumeOneTurn,
+	runOnce,
+	splitCommand,
+	type RunOneTurnOpts,
+	type OneTurnResult,
+} from "./worker-utils";
+
+// ---------------------------------------------------------------------------
+// Internal narrowing helpers (not exported — safe to type precisely)
+// ---------------------------------------------------------------------------
+
+/** Narrow an unknown JSON-decoded value to a plain object for safe property access. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+/** Parse a status/job-meta timestamp field to epoch ms; NaN for anything not string|number. */
+function toEpochMs(value: unknown): number {
+	return typeof value === "string" || typeof value === "number" ? new Date(value).getTime() : NaN;
+}
+
+/** Narrow detectCliType's loose `string` result to the CliType union pickDriver expects. */
+function isCliType(value: string): value is CliType {
+	return (
+		value === "opencode" ||
+		value === "claude" ||
+		value === "codex" ||
+		value === "gemini" ||
+		value === "unknown"
+	);
+}
 
 // ---------------------------------------------------------------------------
 // JobConfig type
 // ---------------------------------------------------------------------------
 
 export interface JobConfig {
-  /** e.g. 'reviewer' or 'member' */
-  entitySingular: string;
-  /** e.g. 'reviewers' or 'members' */
-  entityPlural: string;
-  /** directory name under jobDir, e.g. 'reviewers' or 'members' */
-  entityDirName: string;
-  /** prefix for job directory names, e.g. 'chunk-review-' or 'council-' */
-  jobPrefix: string;
-  /** UI label prefix, e.g. '[Chunk Review]' or '[Council]' */
-  uiLabel: string;
-  /** top-level YAML key in config files, e.g. 'chunk-review' or 'council' */
-  configTopLevelKey: string;
-  /** optional feature flags for consumers */
-  [key: string]: unknown;
+	/** e.g. 'reviewer' or 'member' */
+	entitySingular: string;
+	/** e.g. 'reviewers' or 'members' */
+	entityPlural: string;
+	/** directory name under jobDir, e.g. 'reviewers' or 'members' */
+	entityDirName: string;
+	/** prefix for job directory names, e.g. 'chunk-review-' or 'council-' */
+	jobPrefix: string;
+	/** UI label prefix, e.g. '[Chunk Review]' or '[Council]' */
+	uiLabel: string;
+	/** top-level YAML key in config files, e.g. 'chunk-review' or 'council' */
+	configTopLevelKey: string;
+	/** optional feature flags for consumers */
+	[key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,117 +88,124 @@ export interface JobConfig {
 // ---------------------------------------------------------------------------
 
 export interface CmdResultsHooks {
-  /** Extra top-level fields to add to JSON output (e.g., specName, prompt) */
-  extraTopLevel?: (jobDir: string, jobMeta: any) => Record<string, unknown>;
-  /** Extra per-member fields. Receives the raw member object (includes stderr, output, safeName, all status.json fields). */
-  extraMemberFields?: (rawMember: any) => Record<string, unknown>;
+	/** Extra top-level fields to add to JSON output (e.g., specName, prompt) */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public hook signature (consumer-facing); narrowing would break existing hook implementations across consumers
+	extraTopLevel?: (jobDir: string, jobMeta: any) => Record<string, unknown>;
+	/** Extra per-member fields. Receives the raw member object (includes stderr, output, safeName, all status.json fields). */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public hook signature (consumer-facing); narrowing would break existing hook implementations across consumers
+	extraMemberFields?: (rawMember: any) => Record<string, unknown>;
 }
 
 export interface CmdWaitHooks {
-  /** Transform the wait payload before output (e.g., add specName) */
-  transformPayload?: (payload: any) => any;
-  /** Override default timeout-ms (framework default: 600000). Set 0 for infinite. */
-  defaultTimeoutMs?: number;
+	/** Transform the wait payload before output (e.g., add specName) */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public hook signature (consumer-facing); narrowing would break existing hook implementations across consumers
+	transformPayload?: (payload: any) => any;
+	/** Override default timeout-ms (framework default: 600000). Set 0 for infinite. */
+	defaultTimeoutMs?: number;
 }
 
 // ---------------------------------------------------------------------------
 // safeFileName wrapper (defaults to entitySingular fallback)
 // ---------------------------------------------------------------------------
 
-export function safeFileName(name: string, fallback: string = 'member'): string {
-  return _safeFileName(name, fallback);
+export function safeFileName(name: string, fallback: string = "member"): string {
+	return _safeFileName(name, fallback);
 }
 
 // ---------------------------------------------------------------------------
 // assertMembersOrExit — shared guard for "no members at job start"
 // ---------------------------------------------------------------------------
 
-export function assertMembersOrExit(members: unknown[], config: JobConfig, configPath: string): void {
-  if (members.length === 0) {
-    exitWithError(
-      `start: no ${config.entityPlural} to dispatch — config has zero valid ${config.entityPlural}. config=${configPath}`,
-    );
-  }
+export function assertMembersOrExit(
+	members: unknown[],
+	config: JobConfig,
+	configPath: string,
+): void {
+	if (members.length === 0) {
+		exitWithError(
+			`start: no ${config.entityPlural} to dispatch — config has zero valid ${config.entityPlural}. config=${configPath}`,
+		);
+	}
 }
 
 // ---------------------------------------------------------------------------
 // CLI detection & augmented command construction
 // ---------------------------------------------------------------------------
 
-const PACKAGE_RUNNERS = ['npx', 'bunx', 'pnpm', 'yarn', 'deno'];
-const CLI_NAMES = ['claude', 'gemini', 'codex', 'opencode'];
+const PACKAGE_RUNNERS = ["npx", "bunx", "pnpm", "yarn", "deno"];
+const CLI_NAMES = ["claude", "gemini", "codex", "opencode"];
 
 export function detectCliType(command: unknown): string {
-  if (!command) return 'unknown';
-  const tokens = String(command).trim().split(/\s+/);
-  if (CLI_NAMES.includes(tokens[0])) return tokens[0];
-  if (PACKAGE_RUNNERS.includes(tokens[0])) {
-    for (const token of tokens.slice(1, 3)) {
-      if (CLI_NAMES.includes(token)) return token;
-    }
-  }
-  return 'unknown';
+	if (!command) return "unknown";
+	const tokens = String(command).trim().split(/\s+/);
+	if (CLI_NAMES.includes(tokens[0])) return tokens[0];
+	if (PACKAGE_RUNNERS.includes(tokens[0])) {
+		for (const token of tokens.slice(1, 3)) {
+			if (CLI_NAMES.includes(token)) return token;
+		}
+	}
+	return "unknown";
 }
 
 export function buildAugmentedCommand(
-  entity: {
-    command: unknown;
-    model?: unknown;
-    effort_level?: unknown;
-    output_format?: unknown;
-    env?: Record<string, string>;
-  },
-  cliType: string,
+	entity: {
+		command: unknown;
+		model?: unknown;
+		effort_level?: unknown;
+		output_format?: unknown;
+		env?: Record<string, string>;
+	},
+	cliType: string,
 ): { command: string; env: Record<string, string> } {
-  const parts = [String(entity.command)];
+	const parts = [String(entity.command)];
 
-  // Seed with member's env (YAML scalars may be non-string, so String()-cast each value).
-  const env: Record<string, string> = {};
-  if (entity.env) {
-    for (const [k, v] of Object.entries(entity.env)) {
-      env[k] = String(v);
-    }
-  }
+	// Seed with member's env (YAML scalars may be non-string, so String()-cast each value).
+	const env: Record<string, string> = {};
+	if (entity.env) {
+		for (const [k, v] of Object.entries(entity.env)) {
+			env[k] = String(v);
+		}
+	}
 
-  // model
-  if (entity.model) {
-    if (cliType === 'codex') {
-      parts.push('-m', String(entity.model));
-    } else {
-      parts.push('--model', String(entity.model));
-    }
-  }
+	// model
+	if (entity.model) {
+		if (cliType === "codex") {
+			parts.push("-m", String(entity.model));
+		} else {
+			parts.push("--model", String(entity.model));
+		}
+	}
 
-  // nested session guard
-  if (cliType === 'claude') {
-    env.CLAUDECODE = '';
-  }
+	// nested session guard
+	if (cliType === "claude") {
+		env.CLAUDECODE = "";
+	}
 
-  // effort_level
-  if (entity.effort_level) {
-    if (cliType === 'claude') {
-      env.CLAUDE_CODE_EFFORT_LEVEL = String(entity.effort_level);
-    } else if (cliType === 'codex') {
-      parts.push('-c', `model_reasoning_effort=${entity.effort_level}`);
-    } else if (cliType === 'opencode') {
-      parts.push('--variant', String(entity.effort_level));
-    }
-    // gemini/unknown: ignored
-  }
+	// effort_level
+	if (entity.effort_level) {
+		if (cliType === "claude") {
+			env.CLAUDE_CODE_EFFORT_LEVEL = String(entity.effort_level);
+		} else if (cliType === "codex") {
+			parts.push("-c", `model_reasoning_effort=${entity.effort_level}`);
+		} else if (cliType === "opencode") {
+			parts.push("--variant", String(entity.effort_level));
+		}
+		// gemini/unknown: ignored
+	}
 
-  // output_format
-  if (entity.output_format && entity.output_format !== 'text') {
-    if (cliType === 'claude' || cliType === 'gemini') {
-      parts.push('--output-format', String(entity.output_format));
-    } else if (cliType === 'codex') {
-      parts.push('--json');
-    } else if (cliType === 'opencode') {
-      parts.push('--format', String(entity.output_format));
-    }
-    // unknown: ignored
-  }
+	// output_format
+	if (entity.output_format && entity.output_format !== "text") {
+		if (cliType === "claude" || cliType === "gemini") {
+			parts.push("--output-format", String(entity.output_format));
+		} else if (cliType === "codex") {
+			parts.push("--json");
+		} else if (cliType === "opencode") {
+			parts.push("--format", String(entity.output_format));
+		}
+		// unknown: ignored
+	}
 
-  return { command: parts.join(' '), env };
+	return { command: parts.join(" "), env };
 }
 
 // ---------------------------------------------------------------------------
@@ -177,45 +215,45 @@ export function buildAugmentedCommand(
 const GC_MAX_AGE_MS = 3_600_000; // 1 hour
 
 export function gcStaleJobs(jobsDir: string, config: JobConfig): void {
-  try {
-    const resolvedJobsDir = fs.realpathSync(jobsDir);
-    const prefix = config.jobPrefix;
-    const entries = fs.readdirSync(jobsDir);
-    for (const entry of entries) {
-      if (!entry.startsWith(prefix)) continue;
+	try {
+		const resolvedJobsDir = fs.realpathSync(jobsDir);
+		const prefix = config.jobPrefix;
+		const entries = fs.readdirSync(jobsDir);
+		for (const entry of entries) {
+			if (!entry.startsWith(prefix)) continue;
 
-      const candidatePath = path.join(jobsDir, entry);
+			const candidatePath = path.join(jobsDir, entry);
 
-      // Path traversal guard — resolve symlinks before comparing
-      let realCandidatePath: string;
-      try {
-        realCandidatePath = fs.realpathSync(candidatePath);
-      } catch {
-        continue;
-      }
-      const relative = path.relative(resolvedJobsDir, realCandidatePath);
-      const isUnder = !relative.startsWith('..') && !path.isAbsolute(relative);
-      if (!isUnder) continue;
+			// Path traversal guard — resolve symlinks before comparing
+			let realCandidatePath: string;
+			try {
+				realCandidatePath = fs.realpathSync(candidatePath);
+			} catch {
+				continue;
+			}
+			const relative = path.relative(resolvedJobsDir, realCandidatePath);
+			const isUnder = !relative.startsWith("..") && !path.isAbsolute(relative);
+			if (!isUnder) continue;
 
-      let jobMeta: any;
-      try {
-        jobMeta = readJsonIfExists(path.join(candidatePath, 'job.json'));
-      } catch {
-        continue;
-      }
-      if (!jobMeta || !(jobMeta as any).createdAt) continue;
+			let jobMeta: unknown;
+			try {
+				jobMeta = readJsonIfExists(path.join(candidatePath, "job.json"));
+			} catch {
+				continue;
+			}
+			if (!isRecord(jobMeta) || !jobMeta.createdAt) continue;
 
-      const createdAtMs = new Date((jobMeta as any).createdAt).getTime();
-      if (Number.isNaN(createdAtMs)) continue;
+			const createdAtMs = toEpochMs(jobMeta.createdAt);
+			if (Number.isNaN(createdAtMs)) continue;
 
-      const age = Date.now() - createdAtMs;
-      if (age > GC_MAX_AGE_MS) {
-        fs.rmSync(candidatePath, { recursive: true, force: true });
-      }
-    }
-  } catch {
-    // GC is best-effort — never block cmdStart
-  }
+			const age = Date.now() - createdAtMs;
+			if (age > GC_MAX_AGE_MS) {
+				fs.rmSync(candidatePath, { recursive: true, force: true });
+			}
+		}
+	} catch {
+		// GC is best-effort — never block cmdStart
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -223,73 +261,77 @@ export function gcStaleJobs(jobsDir: string, config: JobConfig): void {
 // ---------------------------------------------------------------------------
 
 export function spawnWorkers({
-  entities,
-  workerPath,
-  jobDir,
-  entitiesDir,
-  timeoutSec,
-  config,
+	entities,
+	workerPath,
+	jobDir,
+	entitiesDir,
+	timeoutSec,
+	config,
 }: {
-  entities: any[];
-  workerPath: string;
-  jobDir: string;
-  entitiesDir: string;
-  timeoutSec: number;
-  config: JobConfig;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported signature; entity shape is consumer-defined YAML-derived data
+	entities: any[];
+	workerPath: string;
+	jobDir: string;
+	entitiesDir: string;
+	timeoutSec: number;
+	config: JobConfig;
 }): void {
-  // Validate names and detect case-insensitive collisions before spawning
-  const seenLower = new Map<string, string>();
-  for (const entity of entities) {
-    const name = String(entity.name);
-    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-      exitWithError(
-        `start: ${config.entitySingular} name must contain only alphanumeric, underscore, or hyphen characters: "${name}"`,
-      );
-    }
-    const lower = name.toLowerCase();
-    if (seenLower.has(lower)) {
-      exitWithError(
-        `start: ${config.entitySingular} name collision (case-insensitive) — "${name}" and "${seenLower.get(lower)}"`,
-      );
-    }
-    seenLower.set(lower, name);
-  }
+	// Validate names and detect case-insensitive collisions before spawning
+	const seenLower = new Map<string, string>();
+	for (const entity of entities) {
+		const name = String(entity.name);
+		if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+			exitWithError(
+				`start: ${config.entitySingular} name must contain only alphanumeric, underscore, or hyphen characters: "${name}"`,
+			);
+		}
+		const lower = name.toLowerCase();
+		if (seenLower.has(lower)) {
+			exitWithError(
+				`start: ${config.entitySingular} name collision (case-insensitive) — "${name}" and "${seenLower.get(lower)}"`,
+			);
+		}
+		seenLower.set(lower, name);
+	}
 
-  for (const entity of entities) {
-    const name = String(entity.name);
-    const entityDir = path.join(entitiesDir, name);
-    ensureDir(entityDir);
+	for (const entity of entities) {
+		const name = String(entity.name);
+		const entityDir = path.join(entitiesDir, name);
+		ensureDir(entityDir);
 
-    atomicWriteJson(path.join(entityDir, 'status.json'), {
-      member: name,
-      state: 'queued',
-      queuedAt: new Date().toISOString(),
-      command: String(entity.command),
-    });
+		atomicWriteJson(path.join(entityDir, "status.json"), {
+			member: name,
+			state: "queued",
+			queuedAt: new Date().toISOString(),
+			command: String(entity.command),
+		});
 
-    const cliType = detectCliType(entity.command);
-    const augmented = buildAugmentedCommand(entity, cliType);
+		const cliType = detectCliType(entity.command);
+		const augmented = buildAugmentedCommand(entity, cliType);
 
-    const workerArgs = [
-      workerPath,
-      '--job-dir', jobDir,
-      '--member', name,
-      '--command', augmented.command,
-    ];
-    for (const [key, value] of Object.entries(augmented.env)) {
-      workerArgs.push('--env', `${key}=${value}`);
-    }
-    if (timeoutSec && Number.isFinite(timeoutSec) && timeoutSec > 0) {
-      workerArgs.push('--timeout', String(timeoutSec));
-    }
+		const workerArgs = [
+			workerPath,
+			"--job-dir",
+			jobDir,
+			"--member",
+			name,
+			"--command",
+			augmented.command,
+		];
+		for (const [key, value] of Object.entries(augmented.env)) {
+			workerArgs.push("--env", `${key}=${value}`);
+		}
+		if (timeoutSec && Number.isFinite(timeoutSec) && timeoutSec > 0) {
+			workerArgs.push("--timeout", String(timeoutSec));
+		}
 
-    const child = spawn(process.execPath, workerArgs, {
-      detached: true,
-      stdio: 'ignore',
-      env: process.env,
-    });
-    child.unref();
-  }
+		const child = spawn(process.execPath, workerArgs, {
+			detached: true,
+			stdio: "ignore",
+			env: process.env,
+		});
+		child.unref();
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -307,152 +349,188 @@ export const HEARTBEAT_STALE_THRESHOLD_MS = 60_000;
 export const HEARTBEAT_GRACE_PERIOD_MS = 120_000;
 
 export async function computeStatus(
-  jobDir: string,
-  config: JobConfig,
+	jobDir: string,
+	config: JobConfig,
 ): Promise<{
-  jobDir: string;
-  id: string | null;
-  chairmanRole: string | null;
-  overallState: string;
-  counts: Record<string, number>;
-  members: any[];
+	jobDir: string;
+	id: string | null;
+	chairmanRole: string | null;
+	overallState: string;
+	counts: Record<string, number>;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported return type; members shape is intentionally loose for downstream JSON serialization
+	members: any[];
 }> {
-  const resolvedJobDir = path.resolve(jobDir);
-  if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
+	const resolvedJobDir = path.resolve(jobDir);
+	if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
 
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
-  if (!jobMeta) exitWithError(`job.json not found: ${path.join(resolvedJobDir, 'job.json')}`);
+	const jobMetaRaw = readJsonIfExists(path.join(resolvedJobDir, "job.json"));
+	if (!isRecord(jobMetaRaw))
+		exitWithError(`job.json not found: ${path.join(resolvedJobDir, "job.json")}`);
+	const jobMeta = jobMetaRaw;
 
-  const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
-  if (!fs.existsSync(entitiesRoot)) exitWithError(`${config.entityDirName} folder not found: ${entitiesRoot}`);
+	const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
+	if (!fs.existsSync(entitiesRoot))
+		exitWithError(`${config.entityDirName} folder not found: ${entitiesRoot}`);
 
-  // Staleness threshold: Math.max(2 * timeoutSec, 120) seconds
-  const timeoutSec = (jobMeta.settings && Number.isFinite(Number(jobMeta.settings.timeoutSec)))
-    ? Number(jobMeta.settings.timeoutSec)
-    : 0;
-  const stalenessThresholdMs = Math.max(2 * timeoutSec, 120) * 1000;
+	// Staleness threshold: Math.max(2 * timeoutSec, 120) seconds
+	const jobSettings = isRecord(jobMeta.settings) ? jobMeta.settings : undefined;
+	const timeoutSec =
+		jobSettings && Number.isFinite(Number(jobSettings.timeoutSec))
+			? Number(jobSettings.timeoutSec)
+			: 0;
+	const stalenessThresholdMs = Math.max(2 * timeoutSec, 120) * 1000;
 
-  const members: any[] = [];
-  for (const entry of fs.readdirSync(entitiesRoot)) {
-    const statusPath = path.join(entitiesRoot, entry, 'status.json');
-    let status = readJsonIfExists(statusPath) as any;
-    if (!status) continue;
+	const members: Record<string, unknown>[] = [];
+	for (const entry of fs.readdirSync(entitiesRoot)) {
+		const statusPath = path.join(entitiesRoot, entry, "status.json");
+		const statusRaw = readJsonIfExists(statusPath);
+		if (!isRecord(statusRaw)) continue;
+		let status: Record<string, unknown> = statusRaw;
 
-    // Staleness check for queued entities
-    if (status.state === 'queued') {
-      let queuedTs: number;
-      if (status.queuedAt) {
-        queuedTs = new Date(status.queuedAt).getTime();
-      } else {
-        // Fallback to file mtime
-        try { queuedTs = fs.statSync(statusPath).mtimeMs; } catch { queuedTs = Date.now(); }
-      }
-      const elapsed = Date.now() - queuedTs;
-      if (elapsed > stalenessThresholdMs) {
-        // CAS pattern: sleep then re-read to avoid race with worker startup
-        await sleepMs(250);
-        const recheck = readJsonIfExists(statusPath) as any;
-        if (recheck && recheck.state === 'queued') {
-          const errorPayload = {
-            ...recheck,
-            state: 'error',
-            error: `Worker stale: no progress for ${Math.round(elapsed / 1000)} seconds`,
-          };
-          atomicWriteJson(statusPath, errorPayload);
-          status = errorPayload;
-        } else if (recheck) {
-          status = recheck;
-        }
-      }
-    }
+		// Staleness check for queued entities
+		if (status.state === "queued") {
+			let queuedTs: number;
+			if (status.queuedAt) {
+				queuedTs = toEpochMs(status.queuedAt);
+			} else {
+				// Fallback to file mtime
+				try {
+					queuedTs = fs.statSync(statusPath).mtimeMs;
+				} catch {
+					queuedTs = Date.now();
+				}
+			}
+			const elapsed = Date.now() - queuedTs;
+			if (elapsed > stalenessThresholdMs) {
+				// CAS pattern: sleep then re-read to avoid race with worker startup
+				await sleepMs(250);
+				const recheck = readJsonIfExists(statusPath);
+				if (isRecord(recheck) && recheck.state === "queued") {
+					const errorPayload = {
+						...recheck,
+						state: "error",
+						error: `Worker stale: no progress for ${Math.round(elapsed / 1000)} seconds`,
+					};
+					atomicWriteJson(statusPath, errorPayload);
+					status = errorPayload;
+				} else if (isRecord(recheck)) {
+					status = recheck;
+				}
+			}
+		}
 
-    // Staleness check for running entities (heartbeat-based)
-    if (status.state === 'running') {
-      let isStale = false;
-      let startTs: number;
-      if (status.lastHeartbeat) {
-        // heartbeat present: stale if older than HEARTBEAT_STALE_THRESHOLD_MS
-        const heartbeatAge = Date.now() - new Date(status.lastHeartbeat).getTime();
-        isStale = heartbeatAge > HEARTBEAT_STALE_THRESHOLD_MS;
-        startTs = new Date(status.lastHeartbeat).getTime();
-      } else {
-        // no heartbeat yet: grace period based on startedAt or file mtime
-        if (status.startedAt) {
-          startTs = new Date(status.startedAt).getTime();
-        } else {
-          try { startTs = fs.statSync(statusPath).mtimeMs; } catch { startTs = Date.now(); }
-        }
-        isStale = (Date.now() - startTs) > HEARTBEAT_GRACE_PERIOD_MS;
-      }
+		// Staleness check for running entities (heartbeat-based)
+		if (status.state === "running") {
+			let isStale: boolean;
+			let startTs: number;
+			if (status.lastHeartbeat) {
+				// heartbeat present: stale if older than HEARTBEAT_STALE_THRESHOLD_MS
+				const heartbeatAge = Date.now() - toEpochMs(status.lastHeartbeat);
+				isStale = heartbeatAge > HEARTBEAT_STALE_THRESHOLD_MS;
+				startTs = toEpochMs(status.lastHeartbeat);
+			} else {
+				// no heartbeat yet: grace period based on startedAt or file mtime
+				if (status.startedAt) {
+					startTs = toEpochMs(status.startedAt);
+				} else {
+					try {
+						startTs = fs.statSync(statusPath).mtimeMs;
+					} catch {
+						startTs = Date.now();
+					}
+				}
+				isStale = Date.now() - startTs > HEARTBEAT_GRACE_PERIOD_MS;
+			}
 
-      if (isStale) {
-        // CAS pattern: sleep then re-read to avoid race with legitimate completion
-        await sleepMs(250);
-        const recheck = readJsonIfExists(statusPath) as any;
-        if (recheck && recheck.state === 'running') {
-          // Recompute elapsed using recheck fields (post-CAS)
-          let recheckStartTs: number;
-          if (recheck.lastHeartbeat) {
-            recheckStartTs = new Date(recheck.lastHeartbeat).getTime();
-          } else if (recheck.startedAt) {
-            recheckStartTs = new Date(recheck.startedAt).getTime();
-          } else {
-            try { recheckStartTs = fs.statSync(statusPath).mtimeMs; } catch { recheckStartTs = startTs; }
-          }
-          const elapsed = Math.round((Date.now() - recheckStartTs) / 1000);
-          const errorPayload = {
-            ...recheck,
-            state: 'error',
-            error: recheck.lastHeartbeat
-              ? `Worker stale: no heartbeat for ${elapsed} seconds`
-              : `Worker stale: running for ${elapsed} seconds without heartbeat`,
-          };
-          atomicWriteJson(statusPath, errorPayload);
-          status = errorPayload;
-        } else if (recheck) {
-          status = recheck;
-        }
-      }
-    }
+			if (isStale) {
+				// CAS pattern: sleep then re-read to avoid race with legitimate completion
+				await sleepMs(250);
+				const recheck = readJsonIfExists(statusPath);
+				if (isRecord(recheck) && recheck.state === "running") {
+					// Recompute elapsed using recheck fields (post-CAS)
+					let recheckStartTs: number;
+					if (recheck.lastHeartbeat) {
+						recheckStartTs = toEpochMs(recheck.lastHeartbeat);
+					} else if (recheck.startedAt) {
+						recheckStartTs = toEpochMs(recheck.startedAt);
+					} else {
+						try {
+							recheckStartTs = fs.statSync(statusPath).mtimeMs;
+						} catch {
+							recheckStartTs = startTs;
+						}
+					}
+					const elapsed = Math.round((Date.now() - recheckStartTs) / 1000);
+					const errorPayload = {
+						...recheck,
+						state: "error",
+						error: recheck.lastHeartbeat
+							? `Worker stale: no heartbeat for ${elapsed} seconds`
+							: `Worker stale: running for ${elapsed} seconds without heartbeat`,
+					};
+					atomicWriteJson(statusPath, errorPayload);
+					status = errorPayload;
+				} else if (isRecord(recheck)) {
+					status = recheck;
+				}
+			}
+		}
 
-    members.push({ safeName: entry, ...status });
-  }
+		members.push({ safeName: entry, ...status });
+	}
 
-  const totals: Record<string, number> = {
-    queued: 0, running: 0, retrying: 0, done: 0, error: 0,
-    missing_cli: 0, timed_out: 0, canceled: 0, non_retryable: 0,
-    empty_output: 0, transient_error: 0, permanent_error: 0,
-    awaiting_resume: 0,
-  };
-  for (const r of members) {
-    const state = String(r.state || 'unknown');
-    if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
-  }
+	const totals: Record<string, number> = {
+		queued: 0,
+		running: 0,
+		retrying: 0,
+		done: 0,
+		error: 0,
+		missing_cli: 0,
+		timed_out: 0,
+		canceled: 0,
+		non_retryable: 0,
+		empty_output: 0,
+		transient_error: 0,
+		permanent_error: 0,
+		awaiting_resume: 0,
+	};
+	for (const r of members) {
+		const state = String(r.state || "unknown");
+		if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
+	}
 
-  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0 && totals.awaiting_resume === 0;
-  const overallState = allDone ? 'done'
-    : (totals.running > 0 || totals.retrying > 0) ? 'running'
-    : totals.queued > 0 ? 'queued'
-    : totals.awaiting_resume > 0 ? 'awaiting_resume'
-    : 'queued';
+	const allDone =
+		totals.running === 0 &&
+		totals.queued === 0 &&
+		totals.retrying === 0 &&
+		totals.awaiting_resume === 0;
+	const overallState = allDone
+		? "done"
+		: totals.running > 0 || totals.retrying > 0
+			? "running"
+			: totals.queued > 0
+				? "queued"
+				: totals.awaiting_resume > 0
+					? "awaiting_resume"
+					: "queued";
 
-  return {
-    jobDir: resolvedJobDir,
-    id: jobMeta.id || null,
-    chairmanRole: jobMeta.chairmanRole || null,
-    overallState,
-    counts: { total: members.length, ...totals },
-    members: members
-      .map((r) => ({
-        member: r.member,
-        state: r.state,
-        startedAt: r.startedAt || null,
-        finishedAt: r.finishedAt || null,
-        exitCode: r.exitCode != null ? r.exitCode : null,
-        message: r.message || null,
-      }))
-      .sort((a, b) => String(a.member).localeCompare(String(b.member))),
-  };
+	return {
+		jobDir: resolvedJobDir,
+		id: typeof jobMeta.id === "string" ? jobMeta.id : null,
+		chairmanRole: typeof jobMeta.chairmanRole === "string" ? jobMeta.chairmanRole : null,
+		overallState,
+		counts: { total: members.length, ...totals },
+		members: members
+			.map((r) => ({
+				member: r.member,
+				state: r.state,
+				startedAt: r.startedAt || null,
+				finishedAt: r.finishedAt || null,
+				exitCode: r.exitCode !== undefined && r.exitCode !== null ? r.exitCode : null,
+				message: r.message || null,
+			}))
+			.sort((a, b) => String(a.member).localeCompare(String(b.member))),
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -460,130 +538,151 @@ export async function computeStatus(
 // ---------------------------------------------------------------------------
 
 const UI_STRINGS = {
-  dispatch: {
-    completed: 'Dispatched review prompts',
-    inProgress: 'Dispatching review prompts',
-  },
-  synthesize: {
-    completed: 'Results ready',
-    inProgress: 'Ready to synthesize',
-    pending: 'Waiting to synthesize',
-  },
+	dispatch: {
+		completed: "Dispatched review prompts",
+		inProgress: "Dispatching review prompts",
+	},
+	synthesize: {
+		completed: "Results ready",
+		inProgress: "Ready to synthesize",
+		pending: "Waiting to synthesize",
+	},
 };
 
 export function buildUiPayload(
-  statusPayload: {
-    overallState?: string;
-    counts?: Record<string, number>;
-    members?: any[];
-  },
-  config: JobConfig,
+	statusPayload: {
+		overallState?: string;
+		counts?: Record<string, number>;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported signature; members come straight from computeStatus's loose members: any[]
+		members?: any[];
+	},
+	config: JobConfig,
 ): {
-  progress: { done: number; total: number; overallState: string };
-  codex: { update_plan: { plan: any[] } };
-  claude: { todo_write: { todos: any[] } };
+	progress: { done: number; total: number; overallState: string };
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported return type (codex update_plan / claude todo_write consumer contract)
+	codex: { update_plan: { plan: any[] } };
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported return type (codex update_plan / claude todo_write consumer contract)
+	claude: { todo_write: { todos: any[] } };
 } {
-  const counts = statusPayload.counts || {};
-  const done = computeTerminalDoneCount(counts);
-  const total = Number(counts.total || 0);
-  const isDone = String(statusPayload.overallState || '') === 'done';
+	const counts = statusPayload.counts || {};
+	const done = computeTerminalDoneCount(counts);
+	const total = Number(counts.total || 0);
+	const isDone = String(statusPayload.overallState || "") === "done";
 
-  const queued = Number(counts.queued || 0);
-  const running = Number(counts.running || 0);
+	const queued = Number(counts.queued || 0);
+	const running = Number(counts.running || 0);
 
-  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
-  const sortedMembers = membersArray
-    .map((r) => ({
-      entity: r && r.member != null ? String(r.member) : '',
-      state: r && r.state != null ? String(r.state) : 'unknown',
-      exitCode: r && r.exitCode != null ? r.exitCode : null,
-    }))
-    .filter((r) => r.entity)
-    .sort((a, b) => a.entity.localeCompare(b.entity));
+	const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
+	const sortedMembers = membersArray
+		.map((r) => ({
+			entity: r && r.member !== undefined && r.member !== null ? String(r.member) : "",
+			state: r && r.state !== undefined && r.state !== null ? String(r.state) : "unknown",
+			exitCode: r && r.exitCode !== undefined && r.exitCode !== null ? r.exitCode : null,
+		}))
+		.filter((r) => r.entity)
+		.sort((a, b) => a.entity.localeCompare(b.entity));
 
-  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled', 'non_retryable', 'empty_output', 'transient_error', 'permanent_error']);
-  const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
-  let hasInProgress = dispatchStatus === 'in_progress';
+	const terminalStates = new Set([
+		"done",
+		"missing_cli",
+		"error",
+		"timed_out",
+		"canceled",
+		"non_retryable",
+		"empty_output",
+		"transient_error",
+		"permanent_error",
+	]);
+	const dispatchStatus = asCodexStepStatus(
+		isDone ? "completed" : queued > 0 ? "in_progress" : "completed",
+	);
+	let hasInProgress = dispatchStatus === "in_progress";
 
-  const memberSteps = sortedMembers.map((r) => {
-    const state = r.state || 'unknown';
-    const isTerminal = terminalStates.has(state);
+	const memberSteps = sortedMembers.map((r) => {
+		const state = r.state || "unknown";
+		const isTerminal = terminalStates.has(state);
 
-    let status: string;
-    if (isTerminal) {
-      status = 'completed';
-    } else if (!hasInProgress && running > 0 && state === 'running') {
-      status = 'in_progress';
-      hasInProgress = true;
-    } else {
-      status = 'pending';
-    }
+		let status: string;
+		if (isTerminal) {
+			status = "completed";
+		} else if (!hasInProgress && running > 0 && state === "running") {
+			status = "in_progress";
+			hasInProgress = true;
+		} else {
+			status = "pending";
+		}
 
-    const label = `${config.uiLabel} Ask ${r.entity}`;
-    return { label, status: asCodexStepStatus(status) };
-  });
+		const label = `${config.uiLabel} Ask ${r.entity}`;
+		return { label, status: asCodexStepStatus(status) };
+	});
 
-  const synthStatus = asCodexStepStatus(isDone ? (hasInProgress ? 'pending' : 'in_progress') : 'pending');
+	const synthStatus = asCodexStepStatus(
+		isDone ? (hasInProgress ? "pending" : "in_progress") : "pending",
+	);
 
-  const codexPlan = [
-    { step: `${config.uiLabel} Prompt dispatch`, status: dispatchStatus },
-    ...memberSteps.map((s) => ({ step: s.label, status: s.status })),
-    { step: `${config.uiLabel} Synthesize`, status: synthStatus },
-  ];
+	const codexPlan = [
+		{ step: `${config.uiLabel} Prompt dispatch`, status: dispatchStatus },
+		...memberSteps.map((s) => ({ step: s.label, status: s.status })),
+		{ step: `${config.uiLabel} Synthesize`, status: synthStatus },
+	];
 
-  const claudeTodos = [
-    {
-      content: `${config.uiLabel} Prompt dispatch`,
-      status: dispatchStatus,
-      activeForm: dispatchStatus === 'completed'
-        ? UI_STRINGS.dispatch.completed
-        : UI_STRINGS.dispatch.inProgress,
-    },
-    ...memberSteps.map((s) => ({
-      content: s.label,
-      status: s.status,
-      activeForm: s.status === 'completed' ? 'Finished' : 'Awaiting response',
-    })),
-    {
-      content: `${config.uiLabel} Synthesize`,
-      status: synthStatus,
-      activeForm:
-        synthStatus === 'completed'
-          ? UI_STRINGS.synthesize.completed
-          : synthStatus === 'in_progress'
-            ? UI_STRINGS.synthesize.inProgress
-            : UI_STRINGS.synthesize.pending,
-    },
-  ];
+	const claudeTodos = [
+		{
+			content: `${config.uiLabel} Prompt dispatch`,
+			status: dispatchStatus,
+			activeForm:
+				dispatchStatus === "completed"
+					? UI_STRINGS.dispatch.completed
+					: UI_STRINGS.dispatch.inProgress,
+		},
+		...memberSteps.map((s) => ({
+			content: s.label,
+			status: s.status,
+			activeForm: s.status === "completed" ? "Finished" : "Awaiting response",
+		})),
+		{
+			content: `${config.uiLabel} Synthesize`,
+			status: synthStatus,
+			activeForm:
+				synthStatus === "completed"
+					? UI_STRINGS.synthesize.completed
+					: synthStatus === "in_progress"
+						? UI_STRINGS.synthesize.inProgress
+						: UI_STRINGS.synthesize.pending,
+		},
+	];
 
-  return {
-    progress: { done, total, overallState: String(statusPayload.overallState || '') },
-    codex: { update_plan: { plan: codexPlan } },
-    claude: { todo_write: { todos: claudeTodos } },
-  };
+	return {
+		progress: { done, total, overallState: String(statusPayload.overallState || "") },
+		codex: { update_plan: { plan: codexPlan } },
+		claude: { todo_write: { todos: claudeTodos } },
+	};
 }
 
 // ---------------------------------------------------------------------------
 // Wait payload (internal helper)
 // ---------------------------------------------------------------------------
 
-function asWaitPayload(statusPayload: any, config: JobConfig): any {
-  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
+function asWaitPayload(
+	statusPayload: Awaited<ReturnType<typeof computeStatus>>,
+	config: JobConfig,
+): Record<string, unknown> {
+	const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
 
-  return {
-    jobDir: statusPayload.jobDir,
-    id: statusPayload.id,
-    chairmanRole: statusPayload.chairmanRole,
-    overallState: statusPayload.overallState,
-    counts: statusPayload.counts,
-    [config.entityPlural]: membersArray.map((r: any) => ({
-      member: r.member,
-      state: r.state,
-      exitCode: r.exitCode != null ? r.exitCode : null,
-      message: r.message || null,
-    })),
-    ui: buildUiPayload(statusPayload, config),
-  };
+	return {
+		jobDir: statusPayload.jobDir,
+		id: statusPayload.id,
+		chairmanRole: statusPayload.chairmanRole,
+		overallState: statusPayload.overallState,
+		counts: statusPayload.counts,
+		[config.entityPlural]: membersArray.map((r) => ({
+			member: r.member,
+			state: r.state,
+			exitCode: r.exitCode !== undefined && r.exitCode !== null ? r.exitCode : null,
+			message: r.message || null,
+		})),
+		ui: buildUiPayload(statusPayload, config),
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -591,41 +690,48 @@ function asWaitPayload(statusPayload: any, config: JobConfig): any {
 // ---------------------------------------------------------------------------
 
 export function buildManifest(
-  jobDir: string,
-  config: JobConfig,
+	jobDir: string,
+	config: JobConfig,
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- public exported return type; manifest entity shape is intentionally loose for downstream JSON serialization
 ): { id: string; [key: string]: any } {
-  const resolvedJobDir = path.resolve(jobDir);
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
-  const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
+	const resolvedJobDir = path.resolve(jobDir);
+	const jobMetaRaw = readJsonIfExists(path.join(resolvedJobDir, "job.json"));
+	const jobMeta = isRecord(jobMetaRaw) ? jobMetaRaw : undefined;
+	const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
 
-  const jobId = jobMeta ? jobMeta.id : 'unknown';
-  const entities: any[] = [];
-  if (fs.existsSync(entitiesRoot)) {
-    for (const entry of fs.readdirSync(entitiesRoot)) {
-      const statusPath = path.join(entitiesRoot, entry, 'status.json');
-      const status = readJsonIfExists(statusPath) as any;
-      if (!status) continue;
-      const outputPath = path.join(entitiesRoot, entry, 'output.txt');
-      const outputExists = fs.existsSync(outputPath);
-      const isReadable = status.state === 'done' && (status.size_bytes ?? Infinity) > 0;
-      entities.push({
-        member: status.member,
-        outputFilePath: outputExists && isReadable ? outputPath : null,
-        errorMessage: outputExists && isReadable ? null : (status.message || status.error?.type || status.error?.message || status.state),
-        size_bytes: status.size_bytes ?? null,
-        attempts: status.attempts ?? null,
-        error: status.error ?? null,
-        _safeName: entry,
-      });
-    }
-  }
+	const jobId = jobMeta && typeof jobMeta.id === "string" ? jobMeta.id : "unknown";
+	const entities: Record<string, unknown>[] = [];
+	if (fs.existsSync(entitiesRoot)) {
+		for (const entry of fs.readdirSync(entitiesRoot)) {
+			const statusPath = path.join(entitiesRoot, entry, "status.json");
+			const status = readJsonIfExists(statusPath);
+			if (!isRecord(status)) continue;
+			const outputPath = path.join(entitiesRoot, entry, "output.txt");
+			const outputExists = fs.existsSync(outputPath);
+			const sizeBytes = typeof status.size_bytes === "number" ? status.size_bytes : undefined;
+			const isReadable = status.state === "done" && (sizeBytes ?? Infinity) > 0;
+			const statusError = isRecord(status.error) ? status.error : undefined;
+			entities.push({
+				member: status.member,
+				outputFilePath: outputExists && isReadable ? outputPath : null,
+				errorMessage:
+					outputExists && isReadable
+						? null
+						: status.message || statusError?.type || statusError?.message || status.state,
+				size_bytes: status.size_bytes ?? null,
+				attempts: status.attempts ?? null,
+				error: status.error ?? null,
+				_safeName: entry,
+			});
+		}
+	}
 
-  return {
-    id: jobId,
-    [config.entityPlural]: entities
-      .map(({ _safeName, ...rest }: any) => rest)
-      .sort((a: any, b: any) => String(a.member).localeCompare(String(b.member))),
-  };
+	return {
+		id: jobId,
+		[config.entityPlural]: entities
+			.map(({ _safeName, ...rest }) => rest)
+			.sort((a, b) => String(a.member).localeCompare(String(b.member))),
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -633,78 +739,98 @@ export function buildManifest(
 // ---------------------------------------------------------------------------
 
 export async function cmdWait(
-  options: Record<string, unknown>,
-  jobDir: string,
-  config: JobConfig,
-  hooks?: CmdWaitHooks,
+	options: Record<string, unknown>,
+	jobDir: string,
+	config: JobConfig,
+	hooks?: CmdWaitHooks,
 ): Promise<void> {
-  const resolvedJobDir = path.resolve(jobDir);
-  const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
-  const prevCursorRaw =
-    options.cursor != null
-      ? String(options.cursor)
-      : fs.existsSync(cursorFilePath)
-        ? String(fs.readFileSync(cursorFilePath, 'utf8')).trim()
-        : '';
-  const prevCursor = parseWaitCursor(prevCursorRaw);
+	const resolvedJobDir = path.resolve(jobDir);
+	const cursorFilePath = path.join(resolvedJobDir, ".wait_cursor");
+	const prevCursorRaw =
+		options.cursor !== undefined && options.cursor !== null
+			? String(options.cursor)
+			: fs.existsSync(cursorFilePath)
+				? String(fs.readFileSync(cursorFilePath, "utf8")).trim()
+				: "";
+	const prevCursor = parseWaitCursor(prevCursorRaw);
 
-  const intervalMsRaw = options['interval-ms'] != null ? options['interval-ms'] : 250;
-  const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0) exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
+	const intervalMsRaw =
+		options["interval-ms"] !== undefined && options["interval-ms"] !== null
+			? options["interval-ms"]
+			: 250;
+	const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
+	if (!Number.isFinite(intervalMs) || intervalMs <= 0)
+		exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
 
-  const defaultTimeout = hooks?.defaultTimeoutMs ?? 600000;
-  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : defaultTimeout;
-  const timeoutMs = Math.trunc(Number(timeoutMsRaw));
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
+	const defaultTimeout = hooks?.defaultTimeoutMs ?? 600000;
+	const timeoutMsRaw =
+		options["timeout-ms"] !== undefined && options["timeout-ms"] !== null
+			? options["timeout-ms"]
+			: defaultTimeout;
+	const timeoutMs = Math.trunc(Number(timeoutMsRaw));
+	if (!Number.isFinite(timeoutMs) || timeoutMs < 0)
+		exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
 
-  const applyHook = (p: any) => hooks?.transformPayload ? hooks.transformPayload(p) : p;
+	const applyHook = (p: Record<string, unknown>): Record<string, unknown> =>
+		hooks?.transformPayload ? hooks.transformPayload(p) : p;
 
-  let payload = await computeStatus(jobDir, config);
-  const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
+	let payload = await computeStatus(jobDir, config);
+	const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
 
-  const doneCount = computeTerminalDoneCount(payload.counts);
-  const isDone = payload.overallState === 'done';
-  const total = Number(payload.counts.total || 0);
-  const queued = Number(payload.counts.queued || 0);
-  const dispatchBucket = queued === 0 && total > 0 ? 1 : 0;
-  const doneBucket = Math.floor(doneCount / bucketSize);
-  const cursor = formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone);
+	const doneCount = computeTerminalDoneCount(payload.counts);
+	const isDone = payload.overallState === "done";
+	const total = Number(payload.counts.total || 0);
+	const queued = Number(payload.counts.queued || 0);
+	const dispatchBucket = queued === 0 && total > 0 ? 1 : 0;
+	const doneBucket = Math.floor(doneCount / bucketSize);
+	const cursor = formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone);
 
-  if (!prevCursor) {
-    fs.writeFileSync(cursorFilePath, cursor, 'utf8');
-    process.stdout.write(`${JSON.stringify({ ...applyHook(asWaitPayload(payload, config)), cursor }, null, 2)}\n`);
-    return;
-  }
+	if (!prevCursor) {
+		fs.writeFileSync(cursorFilePath, cursor, "utf8");
+		process.stdout.write(
+			`${JSON.stringify({ ...applyHook(asWaitPayload(payload, config)), cursor }, null, 2)}\n`,
+		);
+		return;
+	}
 
-  const start = Date.now();
-  while (cursor === prevCursorRaw) {
-    if (timeoutMs > 0 && Date.now() - start >= timeoutMs) break;
-    await sleepMs(intervalMs);
-    payload = await computeStatus(jobDir, config);
-    const d = computeTerminalDoneCount(payload.counts);
-    const doneFlag = payload.overallState === 'done';
-    const totalCount = Number(payload.counts.total || 0);
-    const queuedCount = Number(payload.counts.queued || 0);
-    const dispatchB = queuedCount === 0 && totalCount > 0 ? 1 : 0;
-    const doneB = Math.floor(d / bucketSize);
-    const nextCursor = formatWaitCursor(bucketSize, dispatchB, doneB, doneFlag);
-    if (nextCursor !== prevCursorRaw) {
-      fs.writeFileSync(cursorFilePath, nextCursor, 'utf8');
-      process.stdout.write(`${JSON.stringify({ ...applyHook(asWaitPayload(payload, config)), cursor: nextCursor }, null, 2)}\n`);
-      return;
-    }
-  }
+	const start = Date.now();
+	while (cursor === prevCursorRaw) {
+		if (timeoutMs > 0 && Date.now() - start >= timeoutMs) break;
+		await sleepMs(intervalMs);
+		payload = await computeStatus(jobDir, config);
+		const d = computeTerminalDoneCount(payload.counts);
+		const doneFlag = payload.overallState === "done";
+		const totalCount = Number(payload.counts.total || 0);
+		const queuedCount = Number(payload.counts.queued || 0);
+		const dispatchB = queuedCount === 0 && totalCount > 0 ? 1 : 0;
+		const doneB = Math.floor(d / bucketSize);
+		const nextCursor = formatWaitCursor(bucketSize, dispatchB, doneB, doneFlag);
+		if (nextCursor !== prevCursorRaw) {
+			fs.writeFileSync(cursorFilePath, nextCursor, "utf8");
+			process.stdout.write(
+				`${JSON.stringify({ ...applyHook(asWaitPayload(payload, config)), cursor: nextCursor }, null, 2)}\n`,
+			);
+			return;
+		}
+	}
 
-  const finalPayload = await computeStatus(jobDir, config);
-  const finalDone = computeTerminalDoneCount(finalPayload.counts);
-  const finalDoneFlag = finalPayload.overallState === 'done';
-  const finalTotal = Number(finalPayload.counts.total || 0);
-  const finalQueued = Number(finalPayload.counts.queued || 0);
-  const finalDispatchBucket = finalQueued === 0 && finalTotal > 0 ? 1 : 0;
-  const finalDoneBucket = Math.floor(finalDone / bucketSize);
-  const finalCursor = formatWaitCursor(bucketSize, finalDispatchBucket, finalDoneBucket, finalDoneFlag);
-  fs.writeFileSync(cursorFilePath, finalCursor, 'utf8');
-  process.stdout.write(`${JSON.stringify({ ...applyHook(asWaitPayload(finalPayload, config)), cursor: finalCursor }, null, 2)}\n`);
+	const finalPayload = await computeStatus(jobDir, config);
+	const finalDone = computeTerminalDoneCount(finalPayload.counts);
+	const finalDoneFlag = finalPayload.overallState === "done";
+	const finalTotal = Number(finalPayload.counts.total || 0);
+	const finalQueued = Number(finalPayload.counts.queued || 0);
+	const finalDispatchBucket = finalQueued === 0 && finalTotal > 0 ? 1 : 0;
+	const finalDoneBucket = Math.floor(finalDone / bucketSize);
+	const finalCursor = formatWaitCursor(
+		bucketSize,
+		finalDispatchBucket,
+		finalDoneBucket,
+		finalDoneFlag,
+	);
+	fs.writeFileSync(cursorFilePath, finalCursor, "utf8");
+	process.stdout.write(
+		`${JSON.stringify({ ...applyHook(asWaitPayload(finalPayload, config)), cursor: finalCursor }, null, 2)}\n`,
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -712,71 +838,74 @@ export async function cmdWait(
 // ---------------------------------------------------------------------------
 
 export function cmdResults(
-  options: Record<string, unknown>,
-  jobDir: string,
-  config: JobConfig,
-  hooks?: CmdResultsHooks,
+	options: Record<string, unknown>,
+	jobDir: string,
+	config: JobConfig,
+	hooks?: CmdResultsHooks,
 ): void {
-  const resolvedJobDir = path.resolve(jobDir);
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
-  const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
+	const resolvedJobDir = path.resolve(jobDir);
+	const jobMetaRaw = readJsonIfExists(path.join(resolvedJobDir, "job.json"));
+	const jobMeta = isRecord(jobMetaRaw) ? jobMetaRaw : undefined;
+	const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
 
-  const reviewers: any[] = [];
-  if (fs.existsSync(entitiesRoot)) {
-    for (const entry of fs.readdirSync(entitiesRoot)) {
-      const statusPath = path.join(entitiesRoot, entry, 'status.json');
-      const outputPath = path.join(entitiesRoot, entry, 'output.txt');
-      const errorPath = path.join(entitiesRoot, entry, 'error.txt');
-      const status = readJsonIfExists(statusPath) as any;
-      if (!status) continue;
-      const output = fs.existsSync(outputPath) ? stripAnsi(fs.readFileSync(outputPath, 'utf8')) : '';
-      const stderr = fs.existsSync(errorPath) ? stripAnsi(fs.readFileSync(errorPath, 'utf8')) : '';
-      reviewers.push({ safeName: entry, ...status, output, stderr });
-    }
-  }
+	const reviewers: Record<string, unknown>[] = [];
+	if (fs.existsSync(entitiesRoot)) {
+		for (const entry of fs.readdirSync(entitiesRoot)) {
+			const statusPath = path.join(entitiesRoot, entry, "status.json");
+			const outputPath = path.join(entitiesRoot, entry, "output.txt");
+			const errorPath = path.join(entitiesRoot, entry, "error.txt");
+			const status = readJsonIfExists(statusPath);
+			if (!isRecord(status)) continue;
+			const output = fs.existsSync(outputPath)
+				? stripAnsi(fs.readFileSync(outputPath, "utf8"))
+				: "";
+			const stderr = fs.existsSync(errorPath) ? stripAnsi(fs.readFileSync(errorPath, "utf8")) : "";
+			reviewers.push({ safeName: entry, ...status, output, stderr });
+		}
+	}
 
-  if (options.manifest) {
-    const manifest = buildManifest(jobDir, config);
-    process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
-    return;
-  }
+	if (options.manifest) {
+		const manifest = buildManifest(jobDir, config);
+		process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
+		return;
+	}
 
-  if (options.json) {
-    const extraTop = hooks?.extraTopLevel ? hooks.extraTopLevel(resolvedJobDir, jobMeta) : {};
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          jobDir: resolvedJobDir,
-          id: jobMeta ? jobMeta.id : null,
-          ...extraTop,
-          [config.entityPlural]: reviewers
-            .map((r) => ({
-              member: r.member,
-              state: r.state,
-              exitCode: r.exitCode != null ? r.exitCode : null,
-              message: r.message || null,
-              output: r.output,
-              ...(hooks?.extraMemberFields ? hooks.extraMemberFields(r) : {}),
-            }))
-            .sort((a, b) => String(a.member).localeCompare(String(b.member))),
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    return;
-  }
+	if (options.json) {
+		const extraTop = hooks?.extraTopLevel ? hooks.extraTopLevel(resolvedJobDir, jobMeta) : {};
+		process.stdout.write(
+			`${JSON.stringify(
+				{
+					jobDir: resolvedJobDir,
+					id: jobMeta ? jobMeta.id : null,
+					...extraTop,
+					[config.entityPlural]: reviewers
+						.map((r) => ({
+							member: r.member,
+							state: r.state,
+							exitCode: r.exitCode !== undefined && r.exitCode !== null ? r.exitCode : null,
+							message: r.message || null,
+							output: r.output,
+							...(hooks?.extraMemberFields ? hooks.extraMemberFields(r) : {}),
+						}))
+						.sort((a, b) => String(a.member).localeCompare(String(b.member))),
+				},
+				null,
+				2,
+			)}\n`,
+		);
+		return;
+	}
 
-  for (const r of reviewers.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
-    process.stdout.write(`\n=== ${r.member} (${r.state}) ===\n`);
-    if (r.message) process.stdout.write(`${r.message}\n`);
-    process.stdout.write(r.output || '');
-    if (!r.output && r.stderr) {
-      process.stdout.write('\n');
-      process.stdout.write(r.stderr);
-    }
-    process.stdout.write('\n');
-  }
+	for (const r of reviewers.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
+		process.stdout.write(`\n=== ${r.member} (${r.state}) ===\n`);
+		if (r.message) process.stdout.write(`${r.message}\n`);
+		process.stdout.write(String(r.output || ""));
+		if (!r.output && r.stderr) {
+			process.stdout.write("\n");
+			process.stdout.write(String(r.stderr));
+		}
+		process.stdout.write("\n");
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -784,31 +913,36 @@ export function cmdResults(
 // ---------------------------------------------------------------------------
 
 export function cmdStop(
-  _options: Record<string, unknown>,
-  jobDir: string,
-  config: JobConfig,
+	_options: Record<string, unknown>,
+	jobDir: string,
+	config: JobConfig,
 ): void {
-  const resolvedJobDir = path.resolve(jobDir);
-  const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
-  if (!fs.existsSync(entitiesRoot)) exitWithError(`No ${config.entityDirName} folder found: ${entitiesRoot}`);
+	const resolvedJobDir = path.resolve(jobDir);
+	const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
+	if (!fs.existsSync(entitiesRoot))
+		exitWithError(`No ${config.entityDirName} folder found: ${entitiesRoot}`);
 
-  let stoppedAny = false;
-  for (const entry of fs.readdirSync(entitiesRoot)) {
-    const statusPath = path.join(entitiesRoot, entry, 'status.json');
-    const status = readJsonIfExists(statusPath) as any;
-    if (!status) continue;
-    if (status.state !== 'running') continue;
-    if (!status.pid) continue;
+	let stoppedAny = false;
+	for (const entry of fs.readdirSync(entitiesRoot)) {
+		const statusPath = path.join(entitiesRoot, entry, "status.json");
+		const status = readJsonIfExists(statusPath);
+		if (!isRecord(status)) continue;
+		if (status.state !== "running") continue;
+		if (!status.pid) continue;
 
-    try {
-      process.kill(Number(status.pid), 'SIGTERM');
-      stoppedAny = true;
-    } catch {
-      // ignore
-    }
-  }
+		try {
+			process.kill(Number(status.pid), "SIGTERM");
+			stoppedAny = true;
+		} catch {
+			// ignore
+		}
+	}
 
-  process.stdout.write(stoppedAny ? `stop: sent SIGTERM to running ${config.entityPlural}\n` : `stop: no running ${config.entityPlural}\n`);
+	process.stdout.write(
+		stoppedAny
+			? `stop: sent SIGTERM to running ${config.entityPlural}\n`
+			: `stop: no running ${config.entityPlural}\n`,
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -816,56 +950,59 @@ export function cmdStop(
 // ---------------------------------------------------------------------------
 
 export function cmdClean(
-  options: Record<string, unknown>,
-  jobDir: string,
-  config: JobConfig,
-  defaultJobsDir: string,
+	options: Record<string, unknown>,
+	jobDir: string,
+	config: JobConfig,
+	defaultJobsDir: string,
 ): void {
-  const resolvedJobDir = path.resolve(jobDir);
+	const resolvedJobDir = path.resolve(jobDir);
 
-  // Primary: use explicit jobs-dir from options/env/default
-  const configuredJobsDir = path.resolve(
-    (options['jobs-dir'] as string | undefined) || defaultJobsDir,
-  );
+	// Primary: use explicit jobs-dir from options/env/default
+	const jobsDirOption = typeof options["jobs-dir"] === "string" ? options["jobs-dir"] : undefined;
+	const configuredJobsDir = path.resolve(jobsDirOption || defaultJobsDir);
 
-  // Path traversal guard: check if target is under the configured jobs directory
-  const relative = path.relative(configuredJobsDir, resolvedJobDir);
-  const isUnderConfigured = !relative.startsWith('..') && !path.isAbsolute(relative);
+	// Path traversal guard: check if target is under the configured jobs directory
+	const relative = path.relative(configuredJobsDir, resolvedJobDir);
+	const isUnderConfigured = !relative.startsWith("..") && !path.isAbsolute(relative);
 
-  if (!isUnderConfigured) {
-    // Fallback: accept if jobDir contains job.json (proves it's a real job directory)
-    const jobJsonPath = path.join(resolvedJobDir, 'job.json');
-    if (!fs.existsSync(jobJsonPath)) {
-      exitWithError(`clean: refusing to delete path outside jobs directory: ${resolvedJobDir} (jobsDir: ${configuredJobsDir})`);
-    }
-  }
+	if (!isUnderConfigured) {
+		// Fallback: accept if jobDir contains job.json (proves it's a real job directory)
+		const jobJsonPath = path.join(resolvedJobDir, "job.json");
+		if (!fs.existsSync(jobJsonPath)) {
+			exitWithError(
+				`clean: refusing to delete path outside jobs directory: ${resolvedJobDir} (jobsDir: ${configuredJobsDir})`,
+			);
+		}
+	}
 
-  // Active-member guard: refuse to delete if any member is in a non-terminal/resumable state.
-  // Override with force: true (e.g. options.force = true) to skip this check.
-  if (!options['force']) {
-    const activeMemberStates = new Set(['awaiting_resume', 'running', 'queued', 'retrying']);
-    const entitiesDir = path.join(resolvedJobDir, config.entityDirName);
-    if (fs.existsSync(entitiesDir)) {
-      let activeEntries: string[] = [];
-      try {
-        activeEntries = fs.readdirSync(entitiesDir).filter((e) => {
-          const statusPath = path.join(entitiesDir, e, 'status.json');
-          const status = readJsonIfExists(statusPath) as { state?: string } | null;
-          return status != null && activeMemberStates.has(status.state ?? '');
-        });
-      } catch {
-        // If we can't read the entities dir, proceed; the path-traversal guard already validated.
-      }
-      if (activeEntries.length > 0) {
-        exitWithError(
-          `clean: refusing to delete job dir with active ${config.entityPlural}: ${activeEntries.join(', ')} — use force option to override`,
-        );
-      }
-    }
-  }
+	// Active-member guard: refuse to delete if any member is in a non-terminal/resumable state.
+	// Override with force: true (e.g. options.force = true) to skip this check.
+	if (!options["force"]) {
+		const activeMemberStates = new Set(["awaiting_resume", "running", "queued", "retrying"]);
+		const entitiesDir = path.join(resolvedJobDir, config.entityDirName);
+		if (fs.existsSync(entitiesDir)) {
+			let activeEntries: string[] = [];
+			try {
+				activeEntries = fs.readdirSync(entitiesDir).filter((e) => {
+					const statusPath = path.join(entitiesDir, e, "status.json");
+					const status = readJsonIfExists(statusPath);
+					if (!isRecord(status)) return false;
+					const state = typeof status.state === "string" ? status.state : "";
+					return activeMemberStates.has(state);
+				});
+			} catch {
+				// If we can't read the entities dir, proceed; the path-traversal guard already validated.
+			}
+			if (activeEntries.length > 0) {
+				exitWithError(
+					`clean: refusing to delete job dir with active ${config.entityPlural}: ${activeEntries.join(", ")} — use force option to override`,
+				);
+			}
+		}
+	}
 
-  fs.rmSync(resolvedJobDir, { recursive: true, force: true });
-  process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
+	fs.rmSync(resolvedJobDir, { recursive: true, force: true });
+	process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -876,34 +1013,35 @@ const COLLECT_POLL_INTERVAL_MS = 5000;
 const COLLECT_TIMEOUT_HARDCAP_MS = 300000;
 
 export async function cmdCollect(
-  options: Record<string, unknown>,
-  jobDir: string,
-  config: JobConfig,
+	options: Record<string, unknown>,
+	jobDir: string,
+	config: JobConfig,
 ): Promise<void> {
-  const timeoutMsRaw = options['timeout-ms'] != null ? Number(options['timeout-ms']) : 150000;
-  const timeoutMs = Math.min(
-    Math.max(0, Number.isFinite(timeoutMsRaw) ? Math.trunc(timeoutMsRaw) : 150000),
-    COLLECT_TIMEOUT_HARDCAP_MS,
-  );
+	const timeoutMsRaw =
+		options["timeout-ms"] !== undefined && options["timeout-ms"] !== null
+			? Number(options["timeout-ms"])
+			: 150000;
+	const timeoutMs = Math.min(
+		Math.max(0, Number.isFinite(timeoutMsRaw) ? Math.trunc(timeoutMsRaw) : 150000),
+		COLLECT_TIMEOUT_HARDCAP_MS,
+	);
 
-  const start = Date.now();
-  while (true) {
-    const status = await computeStatus(jobDir, config);
-    if (status.overallState === 'done') {
-      const manifest = buildManifest(jobDir, config);
-      process.stdout.write(
-        `${JSON.stringify({ overallState: 'done', ...manifest }, null, 2)}\n`,
-      );
-      return;
-    }
-    if (timeoutMs > 0 && Date.now() - start >= timeoutMs) {
-      process.stdout.write(
-        `${JSON.stringify({ overallState: status.overallState, id: status.id, counts: status.counts }, null, 2)}\n`,
-      );
-      return;
-    }
-    await sleepMs(COLLECT_POLL_INTERVAL_MS);
-  }
+	const start = Date.now();
+	while (true) {
+		const status = await computeStatus(jobDir, config);
+		if (status.overallState === "done") {
+			const manifest = buildManifest(jobDir, config);
+			process.stdout.write(`${JSON.stringify({ overallState: "done", ...manifest }, null, 2)}\n`);
+			return;
+		}
+		if (timeoutMs > 0 && Date.now() - start >= timeoutMs) {
+			process.stdout.write(
+				`${JSON.stringify({ overallState: status.overallState, id: status.id, counts: status.counts }, null, 2)}\n`,
+			);
+			return;
+		}
+		await sleepMs(COLLECT_POLL_INTERVAL_MS);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -911,99 +1049,105 @@ export async function cmdCollect(
 // ---------------------------------------------------------------------------
 
 export type ResumeMemberOpts = {
-  driverFactory?: (cliType: string) => ReturnType<typeof pickDriver>;
-  resumeOneTurnFn?: (sessionID: string, opts: RunOneTurnOpts) => Promise<OneTurnResult>;
-  /** Test-only: forwarded to resumeOneTurn for spawn-less e2e wire validation. */
-  runOnceFn?: typeof runOnce;
+	driverFactory?: (cliType: string) => ReturnType<typeof pickDriver>;
+	resumeOneTurnFn?: (sessionID: string, opts: RunOneTurnOpts) => Promise<OneTurnResult>;
+	/** Test-only: forwarded to resumeOneTurn for spawn-less e2e wire validation. */
+	runOnceFn?: typeof runOnce;
 };
 
 export async function cmdResumeMember(
-  jobDir: string,
-  name: string,
-  prompt: string,
-  config: JobConfig,
-  opts: ResumeMemberOpts = {},
+	jobDir: string,
+	name: string,
+	prompt: string,
+	config: JobConfig,
+	opts: ResumeMemberOpts = {},
 ): Promise<void> {
-  const memberDir = path.join(jobDir, config.entityDirName, name);
-  const statusPath = path.join(memberDir, 'status.json');
+	const memberDir = path.join(jobDir, config.entityDirName, name);
+	const statusPath = path.join(memberDir, "status.json");
 
-  // Read status.json
-  let status: Record<string, unknown>;
-  try {
-    status = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
-  } catch {
-    throw new Error('no resumable session');
-  }
+	// Read status.json
+	let status: Record<string, unknown>;
+	try {
+		status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
+	} catch {
+		throw new Error("no resumable session");
+	}
 
-  // Check sessionID
-  const sessionID = status.sessionID;
-  if (!sessionID) throw new Error('no resumable session');
+	// Check sessionID
+	const sessionID = status.sessionID;
+	if (!sessionID) throw new Error("no resumable session");
 
-  // State check
-  const state = String(status.state ?? '');
-  if (state === 'error' || state === 'non_retryable') {
-    throw new Error(`member in non-resumable state: ${state}`);
-  }
+	// State check
+	const state = String(status.state ?? "");
+	if (state === "error" || state === "non_retryable") {
+		throw new Error(`member in non-resumable state: ${state}`);
+	}
 
-  // Restore workerEnv saved by executeOneTurn (P1-4: preserve cross-CLI env contract across resume).
-  const storedWorkerEnv =
-    status.workerEnv && typeof status.workerEnv === 'object' && status.workerEnv !== null
-      ? (status.workerEnv as Record<string, string>)
-      : {};
+	// Restore workerEnv saved by executeOneTurn (P1-4: preserve cross-CLI env contract across resume).
+	const storedWorkerEnv: Record<string, string> = {};
+	if (isRecord(status.workerEnv)) {
+		for (const [envKey, envValue] of Object.entries(status.workerEnv)) {
+			if (typeof envValue === "string") storedWorkerEnv[envKey] = envValue;
+		}
+	}
 
-  // Preflight: validate CLI type, driver, and command BEFORE reserving the cap slot so that
-  // misconfigured commands do not burn a resume_count increment (item 4).
-  const command = status.command;
-  const cliType = detectCliType(command);
-  if (cliType === 'unknown') throw new Error('unknown cli type');
+	// Preflight: validate CLI type, driver, and command BEFORE reserving the cap slot so that
+	// misconfigured commands do not burn a resume_count increment (item 4).
+	const command = status.command;
+	const cliType = detectCliType(command);
+	if (cliType === "unknown") throw new Error("unknown cli type");
+	if (!isCliType(cliType)) throw new Error("unknown cli type");
 
-  // Driver lookup
-  const driverFactory = opts.driverFactory ?? pickDriver;
-  const driver = driverFactory(cliType as CliType);
-  if (!driver) throw new Error(`no driver for ${cliType}`);
+	// Driver lookup
+	const driverFactory = opts.driverFactory ?? pickDriver;
+	const driver = driverFactory(cliType);
+	if (!driver) throw new Error(`no driver for ${cliType}`);
 
-  // P1-3: parse status.command to restore original program+args (preserve --agent/--model/-p/run/etc.)
-  const cmdStr = String(command ?? '');
-  const tokens = splitCommand(cmdStr);
-  if (!tokens || tokens.length === 0) throw new Error('invalid stored command');
+	// P1-3: parse status.command to restore original program+args (preserve --agent/--model/-p/run/etc.)
+	const cmdStr = String(command ?? "");
+	const tokens = splitCommand(cmdStr);
+	if (!tokens || tokens.length === 0) throw new Error("invalid stored command");
 
-  // Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn so a subsequent
-  // sequential call observes the incremented count. NOTE: atomicWriteJson guarantees
-  // single-write atomicity, NOT read-check-write atomicity — true concurrent invocations
-  // can still race past the cap. The single-developer / chairman-driven flow is
-  // effectively sequential, so the cap holds in practice. executeOneTurn preserves
-  // resume_count via read-then-write (line 449 of worker-utils.ts).
-  const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
-  if (resumeCount >= 3) throw new Error('resume cap exceeded (3/3)');
-  atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
-  const [origProgram, ...origArgs] = tokens;
+	// Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn so a subsequent
+	// sequential call observes the incremented count. NOTE: atomicWriteJson guarantees
+	// single-write atomicity, NOT read-check-write atomicity — true concurrent invocations
+	// can still race past the cap. The single-developer / chairman-driven flow is
+	// effectively sequential, so the cap holds in practice. executeOneTurn preserves
+	// resume_count via read-then-write (line 449 of worker-utils.ts).
+	const resumeCount = typeof status.resume_count === "number" ? status.resume_count : 0;
+	if (resumeCount >= 3) throw new Error("resume cap exceeded (3/3)");
+	atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
+	const [origProgram, ...origArgs] = tokens;
 
-  // P2-1: read timeoutSec from job.json instead of hardcoding
-  let timeoutSec = 300;
-  try {
-    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8')) as Record<string, unknown>;
-    const settings = jobMeta.settings as Record<string, unknown> | undefined;
-    if (settings && typeof settings.timeoutSec === 'number' && settings.timeoutSec >= 0) {
-      timeoutSec = settings.timeoutSec;
-    }
-  } catch { /* keep default 300 */ }
+	// P2-1: read timeoutSec from job.json instead of hardcoding
+	let timeoutSec = 300;
+	try {
+		const jobMeta: Record<string, unknown> = JSON.parse(
+			fs.readFileSync(path.join(jobDir, "job.json"), "utf8"),
+		);
+		const settings = isRecord(jobMeta.settings) ? jobMeta.settings : undefined;
+		if (settings && typeof settings.timeoutSec === "number" && settings.timeoutSec >= 0) {
+			timeoutSec = settings.timeoutSec;
+		}
+	} catch {
+		/* keep default 300 */
+	}
 
-  // Note: promptsDir and fallbackFile are intentionally not forwarded here.
-  // session-preserving CLIs (claude --resume, opencode session resume, codex exec resume)
-  // retain persona + reviewContent server-side, making assemblePrompt re-injection redundant on resume.
-  const resumeFn = opts.resumeOneTurnFn ?? resumeOneTurn;
-  await resumeFn(String(sessionID), {
-    program: origProgram,
-    args: origArgs,
-    prompt,
-    member: name,
-    memberDir,
-    command: cmdStr,
-    timeoutSec,
-    cliType: cliType as RunOneTurnOpts['cliType'],
-    workerEnv: storedWorkerEnv,
-    driverFactory: opts.driverFactory as RunOneTurnOpts['driverFactory'],
-    runOnceFn: opts.runOnceFn,
-  });
+	// Note: promptsDir and fallbackFile are intentionally not forwarded here.
+	// session-preserving CLIs (claude --resume, opencode session resume, codex exec resume)
+	// retain persona + reviewContent server-side, making assemblePrompt re-injection redundant on resume.
+	const resumeFn = opts.resumeOneTurnFn ?? resumeOneTurn;
+	await resumeFn(String(sessionID), {
+		program: origProgram,
+		args: origArgs,
+		prompt,
+		member: name,
+		memberDir,
+		command: cmdStr,
+		timeoutSec,
+		cliType,
+		workerEnv: storedWorkerEnv,
+		driverFactory: opts.driverFactory,
+		runOnceFn: opts.runOnceFn,
+	});
 }
-

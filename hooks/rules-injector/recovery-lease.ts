@@ -20,7 +20,8 @@ export interface RecoveryLease {
 // and re-run recovery (double recovery), which is exactly what the lease prevents.
 const WORST_CASE_CONTEXT_WINDOW_TOKENS = 272_000;
 const ESTIMATED_TRANSCRIPT_CHARS_PER_TOKEN = 3;
-const WORST_CASE_TRANSCRIPT_BYTES = WORST_CASE_CONTEXT_WINDOW_TOKENS * ESTIMATED_TRANSCRIPT_CHARS_PER_TOKEN;
+const WORST_CASE_TRANSCRIPT_BYTES =
+	WORST_CASE_CONTEXT_WINDOW_TOKENS * ESTIMATED_TRANSCRIPT_CHARS_PER_TOKEN;
 // Conservative effective throughput for read + JSON-line scan + string allocation on
 // a cold/contended disk. Deliberately pessimistic (~0.25 MB/s) so the derived TTL is
 // an upper bound, not a typical-case estimate.
@@ -33,7 +34,10 @@ export function recoveryLeaseTtlMs(): number {
 	return Math.max(MIN_RECOVERY_LEASE_TTL_MS, derived);
 }
 
-export function newRecoveryLease(now: number = Date.now(), ownerPid: number = process.pid): RecoveryLease {
+export function newRecoveryLease(
+	now: number = Date.now(),
+	ownerPid: number = process.pid,
+): RecoveryLease {
 	return { ownerPid, startedAt: now, leaseTTL: recoveryLeaseTtlMs() };
 }
 

@@ -8,6 +8,9 @@ export function claimedPostCompactKind<T extends PostCompactPendingKind>(
 	return result === "claimed" ? kind : undefined;
 }
 
-export function shouldSkipPostCompactClaim(result: PostCompactClaimResult, recoveryInProgress: boolean): boolean {
+export function shouldSkipPostCompactClaim(
+	result: PostCompactClaimResult,
+	recoveryInProgress: boolean,
+): boolean {
 	return result === "contended" || (result === "not-pending" && recoveryInProgress);
 }

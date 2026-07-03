@@ -11,7 +11,9 @@ export interface PostCompactStateFields {
 	readonly compacted?: boolean;
 }
 
-export function postCompactKindState(kinds: ReadonlySet<PostCompactPendingKind>): PostCompactPendingState | undefined {
+export function postCompactKindState(
+	kinds: ReadonlySet<PostCompactPendingKind>,
+): PostCompactPendingState | undefined {
 	if (kinds.size === 0) {
 		return undefined;
 	}
@@ -22,7 +24,9 @@ export function postCompactKindState(kinds: ReadonlySet<PostCompactPendingKind>)
 	};
 }
 
-export function postCompactPendingKinds(state: PostCompactStateFields): Set<PostCompactPendingKind> {
+export function postCompactPendingKinds(
+	state: PostCompactStateFields,
+): Set<PostCompactPendingKind> {
 	const pendingKinds = new Set<PostCompactPendingKind>();
 	if (state.compacted === true || state.postCompactPending?.static === true) {
 		pendingKinds.add("static");
@@ -33,7 +37,9 @@ export function postCompactPendingKinds(state: PostCompactStateFields): Set<Post
 	return pendingKinds;
 }
 
-export function postCompactRecoveringKinds(state: PostCompactStateFields): Set<PostCompactPendingKind> {
+export function postCompactRecoveringKinds(
+	state: PostCompactStateFields,
+): Set<PostCompactPendingKind> {
 	const recoveringKinds = new Set<PostCompactPendingKind>();
 	if (state.postCompactRecovering?.static === true) {
 		recoveringKinds.add("static");

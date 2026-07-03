@@ -91,7 +91,8 @@ export type RuleSource =
  * Why a candidate matched the target file. Surfaced in the injection block so
  * the model can attribute its behavior to a specific rule.
  */
-export type MatchReason = "alwaysApply" | "single-file" | { kind: "glob"; pattern: string } | { kind: "no-match" };
+export type MatchReason =
+	"alwaysApply" | "single-file" | { kind: "glob"; pattern: string } | { kind: "no-match" };
 
 /**
  * Truncation result.

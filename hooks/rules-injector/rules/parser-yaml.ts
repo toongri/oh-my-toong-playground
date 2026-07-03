@@ -74,7 +74,11 @@ function parseBooleanValue(value: string, lineNumber: number): boolean {
 	throw new RuleFrontmatterParseError(`Expected boolean on line ${lineNumber}`);
 }
 
-function parseGlobValue(rawValue: string, lines: readonly string[], lineIndex: number): ParsedGlobValue {
+function parseGlobValue(
+	rawValue: string,
+	lines: readonly string[],
+	lineIndex: number,
+): ParsedGlobValue {
 	if (rawValue.startsWith("[")) {
 		return { values: parseInlineArray(rawValue), consumed: 1 };
 	}
@@ -148,10 +152,9 @@ function findClosingBracket(value: string): number {
 	let escaped = false;
 	// depth starts at 1 for the opening [ that the caller has already consumed.
 	// We return when depth drops back to 0 (i.e. the matching outer ]).
-	// Inner [] (POSIX char-classes) and {} (brace globs) are tracked so their
-	// closing delimiters are never mistaken for the outer array's closing bracket.
+	// Inner [] (POSIX char-classes) are tracked so their closing delimiters
+	// are never mistaken for the outer array's closing bracket.
 	let bracketDepth = 1;
-	let braceDepth = 0;
 
 	for (let index = 1; index < value.length; index += 1) {
 		const character = value[index];
@@ -169,7 +172,8 @@ function findClosingBracket(value: string): number {
 
 		if (character === '"' || character === "'") {
 			const prev = value[index - 1];
-			const atBoundary = index === 0 || prev === "[" || prev === "," || prev === " " || prev === "\t";
+			const atBoundary =
+				index === 0 || prev === "[" || prev === "," || prev === " " || prev === "\t";
 			if (quote === null && atBoundary) quote = character;
 			else if (quote !== null && quote === character) quote = null;
 			continue;
@@ -181,10 +185,6 @@ function findClosingBracket(value: string): number {
 			} else if (character === "]") {
 				bracketDepth -= 1;
 				if (bracketDepth === 0) return index;
-			} else if (character === "{") {
-				braceDepth += 1;
-			} else if (character === "}") {
-				braceDepth -= 1;
 			}
 		}
 	}
@@ -262,7 +262,8 @@ function splitCommaSeparated(value: string): string[] {
 function parseStringValue(value: string): string {
 	if (value.length === 0) return "";
 	if (value.startsWith('"')) return parseJsonString(value);
-	if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) return value.slice(1, -1).replace(/''/g, "'");
+	if (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
+		return value.slice(1, -1).replace(/''/g, "'");
 	if (value.startsWith("'")) throw new RuleFrontmatterParseError("Unclosed quoted value");
 	return value;
 }
@@ -300,7 +301,13 @@ function stripComment(line: string): string {
 
 		if (character === '"' || character === "'") {
 			const prev = line[index - 1];
-			const atBoundary = index === 0 || prev === " " || prev === "\t" || prev === ":" || prev === "[" || prev === ",";
+			const atBoundary =
+				index === 0 ||
+				prev === " " ||
+				prev === "\t" ||
+				prev === ":" ||
+				prev === "[" ||
+				prev === ",";
 			if (quote === null && atBoundary) quote = character;
 			else if (quote !== null && quote === character) quote = null;
 			continue;

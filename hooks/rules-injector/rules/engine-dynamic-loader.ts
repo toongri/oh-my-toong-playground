@@ -1,7 +1,12 @@
 import { findSortedCandidatesCached, matchDynamicRuleCached } from "./engine-dynamic-cache.js";
 import { loadCandidate, ruleDedupKey } from "./engine-loader.js";
 import { isSameOrChildPath } from "./engine-paths.js";
-import type { CandidateDiscoveryCache, DynamicMatchCache, EngineDeps, LoadedRuleContent } from "./engine-types.js";
+import type {
+	CandidateDiscoveryCache,
+	DynamicMatchCache,
+	EngineDeps,
+	LoadedRuleContent,
+} from "./engine-types.js";
 import { createRuleDiscoveryCache } from "./finder.js";
 import { matchRule } from "./matcher.js";
 import { sortCandidates } from "./ordering.js";
@@ -47,7 +52,11 @@ export function loadDynamicCandidates(
 		if (disabledSources !== undefined) {
 			findOptions.disabledSources = disabledSources;
 		}
-		const candidates = findSortedCandidatesCached(candidateDiscoveryCache, deps.findCandidates, findOptions);
+		const candidates = findSortedCandidatesCached(
+			candidateDiscoveryCache,
+			deps.findCandidates,
+			findOptions,
+		);
 
 		for (const candidate of candidates) {
 			const loadedRule = loadCandidate(

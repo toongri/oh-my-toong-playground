@@ -26,21 +26,21 @@ const SUBCOMMAND = "(?:start|collect|results|stop|clean|status|resume-member)";
 type ArgForm = "flag" | "positional";
 
 interface JobSkill {
-  name: string;
-  jobTs: string;
-  skillMd: string;
+	name: string;
+	jobTs: string;
+	skillMd: string;
 }
 
 /** Every skills/<name> that ships both a scripts/job.ts CLI and a SKILL.md. */
 function jobSkills(): JobSkill[] {
-  return readdirSync(SKILLS_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => ({
-      name: d.name,
-      jobTs: join(SKILLS_DIR, d.name, "scripts", "job.ts"),
-      skillMd: join(SKILLS_DIR, d.name, "SKILL.md"),
-    }))
-    .filter((s) => existsSync(s.jobTs) && existsSync(s.skillMd));
+	return readdirSync(SKILLS_DIR, { withFileTypes: true })
+		.filter((d) => d.isDirectory())
+		.map((d) => ({
+			name: d.name,
+			jobTs: join(SKILLS_DIR, d.name, "scripts", "job.ts"),
+			skillMd: join(SKILLS_DIR, d.name, "SKILL.md"),
+		}))
+		.filter((s) => existsSync(s.jobTs) && existsSync(s.skillMd));
 }
 
 /**
@@ -52,19 +52,19 @@ function jobSkills(): JobSkill[] {
  * mis-read. Returns null when the error matches neither (no resume-member CLI).
  */
 function implResumeForm(jobTs: string): ArgForm | null {
-  let stderr = "";
-  try {
-    execFileSync(process.execPath, [jobTs, "resume-member"], {
-      stdio: ["ignore", "ignore", "pipe"],
-      encoding: "utf-8",
-    });
-    return null; // resume-member with no args must never exit 0
-  } catch (e) {
-    stderr = String((e as { stderr?: unknown })?.stderr ?? "");
-  }
-  if (/--job\b/.test(stderr)) return "flag";
-  if (/missing jobDir|missing member/.test(stderr)) return "positional";
-  return null;
+	let stderr: string;
+	try {
+		execFileSync(process.execPath, [jobTs, "resume-member"], {
+			stdio: ["ignore", "ignore", "pipe"],
+			encoding: "utf-8",
+		});
+		return null; // resume-member with no args must never exit 0
+	} catch (e) {
+		stderr = String((e as { stderr?: unknown })?.stderr ?? "");
+	}
+	if (/--job\b/.test(stderr)) return "flag";
+	if (/missing jobDir|missing member/.test(stderr)) return "positional";
+	return null;
 }
 
 /**
@@ -74,18 +74,18 @@ function implResumeForm(jobTs: string): ArgForm | null {
  * the command without showing a full invocation.
  */
 function docResumeForms(skillMd: string): ArgForm[] {
-  return readFileSync(skillMd, "utf-8")
-    .split("\n")
-    .filter((l) => /job\.ts"? resume-member\s/.test(l))
-    .map((l) => (/--(?:job|member|prompt)\b/.test(l) ? "flag" : "positional"));
+	return readFileSync(skillMd, "utf-8")
+		.split("\n")
+		.filter((l) => /job\.ts"? resume-member\s/.test(l))
+		.map((l) => (/--(?:job|member|prompt)\b/.test(l) ? "flag" : "positional"));
 }
 
 /** Subcommands referenced anywhere in the SKILL.md body. */
 function bodySubcommands(skillMd: string): Set<string> {
-  const subs = new Set<string>();
-  const re = new RegExp(`job\\.ts"? (${SUBCOMMAND})\\b`, "g");
-  for (const m of readFileSync(skillMd, "utf-8").matchAll(re)) subs.add(m[1]);
-  return subs;
+	const subs = new Set<string>();
+	const re = new RegExp(`job\\.ts"? (${SUBCOMMAND})\\b`, "g");
+	for (const m of readFileSync(skillMd, "utf-8").matchAll(re)) subs.add(m[1]);
+	return subs;
 }
 
 /**
@@ -93,56 +93,58 @@ function bodySubcommands(skillMd: string): Set<string> {
  * skill has no such whitelist (only the Chairman orchestration skills do).
  */
 function whitelistSubcommands(skillMd: string): Set<string> | null {
-  const lines = readFileSync(skillMd, "utf-8").split("\n");
-  const start = lines.findIndex((l) => /^#{1,6}\s+Allowed Bash Usage/.test(l));
-  if (start === -1) return null;
-  const subs = new Set<string>();
-  const re = new RegExp(`job\\.ts"? (${SUBCOMMAND})\\b`, "g");
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^#{1,6}\s/.test(lines[i])) break; // next heading ends the section
-    for (const m of lines[i].matchAll(re)) subs.add(m[1]);
-  }
-  return subs;
+	const lines = readFileSync(skillMd, "utf-8").split("\n");
+	const start = lines.findIndex((l) => /^#{1,6}\s+Allowed Bash Usage/.test(l));
+	if (start === -1) return null;
+	const subs = new Set<string>();
+	const re = new RegExp(`job\\.ts"? (${SUBCOMMAND})\\b`, "g");
+	for (let i = start + 1; i < lines.length; i++) {
+		if (/^#{1,6}\s/.test(lines[i])) break; // next heading ends the section
+		for (const m of lines[i].matchAll(re)) subs.add(m[1]);
+	}
+	return subs;
 }
 
 const SKILLS = jobSkills();
 
 describe("review skill family — resume-member arg form (doc ↔ impl)", () => {
-  const documented = SKILLS.map((s) => ({
-    name: s.name,
-    impl: implResumeForm(s.jobTs),
-    docForms: docResumeForms(s.skillMd),
-  })).filter((s) => s.docForms.length > 0);
+	const documented = SKILLS.map((s) => ({
+		name: s.name,
+		impl: implResumeForm(s.jobTs),
+		docForms: docResumeForms(s.skillMd),
+	})).filter((s) => s.docForms.length > 0);
 
-  it("at least one skill documents a full resume-member invocation (parser guard)", () => {
-    expect(documented.length).toBeGreaterThanOrEqual(1);
-  });
+	it("at least one skill documents a full resume-member invocation (parser guard)", () => {
+		expect(documented.length).toBeGreaterThanOrEqual(1);
+	});
 
-  for (const s of documented) {
-    it(`${s.name}: every documented arg form matches the job.ts handler`, () => {
-      expect(s.impl).not.toBeNull();
-      const mismatched = s.docForms.filter((f) => f !== s.impl);
-      expect(mismatched).toEqual([]);
-    });
-  }
+	for (const s of documented) {
+		it(`${s.name}: every documented arg form matches the job.ts handler`, () => {
+			expect(s.impl).not.toBeNull();
+			const mismatched = s.docForms.filter((f) => f !== s.impl);
+			expect(mismatched).toEqual([]);
+		});
+	}
 });
 
 describe("review skill family — Allowed Bash whitelist completeness", () => {
-  const chairman = SKILLS.map((s) => ({
-    name: s.name,
-    whitelist: whitelistSubcommands(s.skillMd),
-    body: bodySubcommands(s.skillMd),
-  })).filter((s): s is { name: string; whitelist: Set<string>; body: Set<string> } => s.whitelist !== null);
+	const chairman = SKILLS.map((s) => ({
+		name: s.name,
+		whitelist: whitelistSubcommands(s.skillMd),
+		body: bodySubcommands(s.skillMd),
+	})).filter(
+		(s): s is { name: string; whitelist: Set<string>; body: Set<string> } => s.whitelist !== null,
+	);
 
-  it("at least one Chairman skill exposes an Allowed Bash Usage section (parser guard)", () => {
-    expect(chairman.length).toBeGreaterThanOrEqual(1);
-  });
+	it("at least one Chairman skill exposes an Allowed Bash Usage section (parser guard)", () => {
+		expect(chairman.length).toBeGreaterThanOrEqual(1);
+	});
 
-  for (const s of chairman) {
-    it(`${s.name}: every job.ts subcommand used in the body is whitelisted`, () => {
-      expect(s.whitelist.size).toBeGreaterThan(0);
-      const missing = [...s.body].filter((c) => !s.whitelist.has(c)).sort();
-      expect(missing).toEqual([]);
-    });
-  }
+	for (const s of chairman) {
+		it(`${s.name}: every job.ts subcommand used in the body is whitelisted`, () => {
+			expect(s.whitelist.size).toBeGreaterThan(0);
+			const missing = [...s.body].filter((c) => !s.whitelist.has(c)).sort();
+			expect(missing).toEqual([]);
+		});
+	}
 });
