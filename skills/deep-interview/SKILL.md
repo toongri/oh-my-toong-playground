@@ -396,11 +396,14 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 Once Phase 2 exits (via the residual-ambiguity seam, above) toward design work, interrogate the design **relentlessly** — probe **every aspect** of the design until reaching **shared understanding** with the user, going beyond requirements clarity.
 
-**Pacing:** ask design questions **one at a time**, exactly as in the requirements loop — never batch. For each question, offer a recommended answer so the user can accept or override it quickly. Before asking, check whether the codebase can already answer it — if so, run `explore` first and fold the finding into the question instead of asking the user to rediscover it.
+**Interrogate every open design decision, one at a time, in dependency order.** Walk the design tree from its root — settle a decision that gates others before the branches that depend on it (an upstream answer can reshape or delete a downstream one's alternatives); never batch. Put each genuinely-open decision to the user (via `AskUserQuestion`) with **2-3 alternatives** and your reasoned recommendation among them — every real decision, including low-stakes, cheap-to-reverse ones, not just the hardest. Before asking, check whether the codebase already settles it; if so, run `explore` and fold the finding in rather than making the user rediscover it.
 
-**Per-decision alternatives:** for **every design decision** — every point where the implementation genuinely could go more than one way — present **2-3 alternatives** with a recommendation, via `AskUserQuestion`. This isn't limited to costly-to-change choices: every real decision earns alternatives, not just the hardest ones.
+**Red flags — you're about to swallow a decision:**
+- *"User's in a hurry — batch the rest into one question"*
+- *"This one's low-risk / reversible — apply a default, let them veto"*
+- *"The sketch already covers it — close enough to settled"*
 
-**Fact vs. strawman boundary:** a point the codebase or an external constraint already forces onto a single path is a **fact** — ground it with `explore`/`librarian` and state it as settled, do not manufacture a **strawman** alternative around it. Only present alternatives where a real choice exists; naming options nobody would pick is not a decision.
+All mean STOP. Under pressure you still put **every** open decision to the user with its real alternatives and a reasoned recommendation — pressure never thins the alternatives or skips the decision. The only thing settled without a question is a path the codebase or an external constraint **forces** onto a single path — a **fact** (ground it with `explore`/`librarian`; don't manufacture a **strawman** alternative around a forced path), not one you deem low-risk. An explicit early-exit (Step 2f) still exits.
 
 **Persist each decision to state:** after the user answers a design question (or a forced point is fact-grounded), append the decision to interview state *before* moving to the next question — the same mechanism Step 2e and Step 2-fact use, so the resume path (`get`/`adopt`) and Phase 4 crystallization recover the chosen alternatives even across a session interruption. Without this, the decision lives only in the in-context transcript and is lost on cross-session resume. The existing `--append-round-stdin` accepts this shape with no schema change (exactly as the `fact-ground` round does), marked as a design round so it is distinguishable from requirements Q&A:
 
