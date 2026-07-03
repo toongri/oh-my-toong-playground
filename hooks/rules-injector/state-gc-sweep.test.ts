@@ -198,7 +198,7 @@ test("sweep error is swallowed", () => {
 const CLI_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "cli.ts");
 
 test("SessionStart hook runs sweep and rotate", () => {
-	const pluginDataDir = join(tempHome, ".omt");
+	const pluginDataDir = join(tempHome, ".omt", "rules-injector");
 	mkdirSync(pluginDataDir, { recursive: true });
 
 	// Aged sibling session-state file: must be swept given the 1-day TTL override below.
@@ -206,8 +206,9 @@ test("SessionStart hook runs sweep and rotate", () => {
 	writeFileSync(staleSiblingPath, SESSION_STATE_JSON);
 	age(staleSiblingPath, 2 * 24 * 60 * 60 * 1000);
 
-	// Oversized error.log: rotateErrorLog derives its sink from homedir() directly
-	// (ignores PLUGIN_DATA), so it always lives at HOME/.omt/rules-injector/error.log.
+	// Oversized error.log: rotateErrorLog now shares its sink resolution with
+	// writeErrorBreadcrumb (resolveErrorLogSink), so it lives under PLUGIN_DATA
+	// when set — the same directory as the session-state sibling above.
 	const errorLogPath = join(tempHome, ".omt", "rules-injector", "error.log");
 	mkdirSync(dirname(errorLogPath), { recursive: true });
 	writeFileSync(errorLogPath, "x".repeat(50));
@@ -265,7 +266,7 @@ test("SessionStart hook runs sweep and rotate", () => {
 // additionalContext must be observed from the same hook run.
 
 test("SessionStart compact-source recovery is unchanged by GC pre-step", () => {
-	const pluginDataDir = join(tempHome, ".omt");
+	const pluginDataDir = join(tempHome, ".omt", "rules-injector");
 	mkdirSync(pluginDataDir, { recursive: true });
 
 	const projectDir = mkdtempSync(join(tmpdir(), "rules-injector-gc-recovery-proj-"));
@@ -309,8 +310,8 @@ test("SessionStart compact-source recovery is unchanged by GC pre-step", () => {
 
 		// 2. Seed GC-triggering conditions: an aged sibling session-state file (must
 		//    be swept given the 1-day TTL override below) and an oversized error.log
-		//    (rotateErrorLog derives its sink from homedir() directly, ignoring
-		//    PLUGIN_DATA, so it always lives at HOME/.omt/rules-injector/error.log).
+		//    (rotateErrorLog shares its sink resolution with writeErrorBreadcrumb, so
+		//    it lives under PLUGIN_DATA — same directory as the session-state sibling).
 		// The GC pre-step in step 1 already touched pluginDataDir's own 24h sweep
 		// throttle marker (it runs unconditionally on every SessionStart, even with
 		// nothing to sweep), so age that marker back out of the throttle window —

@@ -68,13 +68,22 @@ function formatFields(fields: DebugFields): string {
 }
 
 /**
+ * Resolves the error.log sink path, honoring `PLUGIN_DATA` when set so
+ * `writeErrorBreadcrumb` and `rotateErrorLog` always agree on the same file.
+ */
+function resolveErrorLogSink(): string {
+	const root = process.env["PLUGIN_DATA"] ?? join(homedir(), ".omt", "rules-injector");
+	return join(root, "error.log");
+}
+
+/**
  * Always-on operator breadcrumb sink (advisory L2). Appends a timestamped line
  * to `~/.omt/rules-injector/error.log` so a swallowed hook-execution error stays
  * visible to the operator. Best-effort: never throws and never blocks the turn.
  */
 export function writeErrorBreadcrumb(context: string, error: unknown): void {
 	try {
-		const sink = join(homedir(), ".omt", "rules-injector", "error.log");
+		const sink = resolveErrorLogSink();
 		mkdirSync(dirname(sink), { recursive: true });
 		const detail =
 			error instanceof Error
@@ -94,7 +103,7 @@ export function writeErrorBreadcrumb(context: string, error: unknown): void {
  */
 export function rotateErrorLog(maxBytes: number): void {
 	try {
-		const sink = join(homedir(), ".omt", "rules-injector", "error.log");
+		const sink = resolveErrorLogSink();
 		if (statSync(sink).size > maxBytes) {
 			writeFileSync(sink, "");
 		}
