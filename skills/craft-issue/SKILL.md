@@ -171,6 +171,17 @@ Before writing, check for existing issues covering the same issue:
 
 Write to the PM tool autonomously once all refuse-to-file conditions pass. No pre-write human approval gate.
 
+### Plain-Language Gate (before any write)
+
+Before executing the write steps below, check the **body about to be emitted to the issue** — not gather-stage summaries or authoring notes — against these four checks. Failing any check blocks the write: fix the issue, then re-check.
+
+1. **Header contract**: every emitted section header/subheading is the localized Render-Label from `references/issue-craft.md`'s Render Contract — no authoring-instruction leakage (Required/Conditional markers, trigger conditions, hedge language, the `— expected` separator) survives into a header or bracketed subtitle.
+2. **Symbol gloss**: every code symbol (function, module, file, service, constant) named in the body carries a first-occurrence what/where/does gloss, per `references/issue-craft.md`'s symbol-gloss contract.
+3. **Shorthand/abbreviation**: no undefined engineer shorthand or internal abbreviation (domain-internal shorthand in the style of `known-moved`, `recon`, `tx-body`, `markFailed-first`, `pre-capture`) appears without being spelled out at first use. Found one? Expand it at first use.
+4. **Reader-facing humanizer pass**: when the body's language is Korean (the team's working language), invoke `Skill(humanizer)` on the reader-facing prose immediately before the write — this is the point where engineer-shorthand register becomes PM-reader register.
+
+Gate failure means: do not write. Correct the header, symbol, shorthand, or prose issue, then re-run the four checks.
+
 Abstract write steps (in order):
 
 1. **Link related items**: attach previously gathered related issues/issues as related items in the PM tool.
@@ -191,4 +202,4 @@ Review is post-hoc: the issue is written first; the caller can review and reques
 
 - `references/gather-crosslink.md`: complete gather bound, curation rules, cross-link procedure, source-unreachable handling, impact & premises investigation delegation (§7), and cross-link annotation format. Read at Stage 2.
 - `references/diagnose-rootcause.md`: the symptom-report diagnosis sub-pipeline — independent-diagnosis mandate (prior issues are hypotheses), delegation orchestration (explore/oracle/librarian + your own runtime-evidence track), competing-hypothesis disproof ledger, runtime-evidence gate, multi-path coverage, and the confidence gate. Read at Stage 3 when the cause is unknown.
-- `references/issue-craft.md`: best-practice body shape, observable-AC rubric (weasel-word prohibition, Action/Expected/Verification), RCA Bug-Report shape, anti-fluff rules, Model A INVEST slice rubric with per-child stage-check and settled-child handoff. Read at Stages 4 and 5.
+- `references/issue-craft.md`: best-practice body shape, observable-AC rubric (weasel-word prohibition, Action/Expected/Verification), RCA Bug-Report shape, anti-fluff rules, Model A INVEST slice rubric with per-child stage-check and settled-child handoff, Render Contract, and symbol-gloss contract. Read at Stages 4 and 5, and consulted again at Stage 6's Plain-Language Gate.

@@ -88,7 +88,7 @@ rather than locking onto the first plausible story.
 The ledger must contain **at least two candidate causes**, and for each a verdict backed by evidence:
 
 ```
-## Hypothesis ledger
+Hypothesis ledger:
 - H1 (candidate): {mechanism}
     verdict: CONFIRMED — {the runtime + code evidence that establishes it}
 - H2 (competing): {a different mechanism that would produce the same symptom}
@@ -96,6 +96,10 @@ The ledger must contain **at least two candidate causes**, and for each a verdic
 - H3 (competing): {another plausible cause — including any prior-issue assertion per §1}
     verdict: REFUTED — {evidence} | or NOT-DISTINGUISHED — {what evidence would separate it from H1}
 ```
+
+This is a **working artifact**, not an issue-body section — the example above uses a plain label, not
+a `##` heading, on purpose. Never render `## Hypothesis ledger` (or a translated equivalent) as its own
+top-level section in the issue; per §7, fold it compactly into Evidence or Notes instead.
 
 Rules:
 
@@ -199,10 +203,19 @@ The sub-pipeline feeds the issue body (issue-craft.md) as follows:
 - **Reproduction** ← the trigger sequence established during diagnosis.
 - **Evidence** ← the runtime trace (§4) quoted directly (log lines, timeline, the decisive asymmetry),
   plus the FILE:LINE code citations from the `explore` tracks.
-- **Pre-Context / per-path status** ← §5 coverage: which implementations carry the defect.
+- **Pre-Context / per-path status** ← §5 coverage: which implementations carry the defect. Rendered as
+  a sub-bullet within Pre-Context (사전 확인), localized as 경로별 상태 — never a standalone top-level
+  section.
 - **Hypothesis ledger** ← record the refuted alternatives, compactly, under Evidence or Notes. They tell
   the next reader which plausible causes were already ruled out, so the investigation is not re-run.
-- **Confidence** ← the §6 grade and residual uncertainty.
+  Never rendered as its own top-level section (see §3).
+- **Confidence** ← the §6 grade and residual uncertainty. Folds into the Root Cause / Evidence
+  confidence statement, localized as 확신도 — never rendered as its own top-level section.
+
+The labels named above (`Root Cause`, `Symptom`, `Fix direction`, `Reproduction`, `Evidence`,
+`Pre-Context`) are canonical English pointers into the issue-craft.md contract — they render in the
+issue body via that file's Render Contract and Working-Language Localization table (§1) and its RCA
+Bug-Report shape (§3), never as raw English.
 
 Then apply the Duplicate Policy (§1: after the cause is established) and proceed to the write tail.
 
