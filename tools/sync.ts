@@ -101,7 +101,9 @@ export function deploysToClaudeDotDir(
 		return Array.isArray(items) && items.length > 0;
 	});
 	const hasClaudeDotFileDeploy =
-		parsedClaudeYaml !== null && Object.keys(parsedClaudeYaml).some((k) => k !== "mcps");
+		parsedClaudeYaml !== null &&
+		parsedClaudeYaml !== undefined &&
+		Object.keys(parsedClaudeYaml).some((k) => k !== "mcps");
 	return hasComponentSections || hasClaudeDotFileDeploy;
 }
 
