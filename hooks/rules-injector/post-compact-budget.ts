@@ -20,6 +20,10 @@ const POST_COMPACT_RESERVED_CONTEXT_PERCENT = 5;
 const POST_COMPACT_MIN_RESERVED_TOKENS = 8_000;
 const POST_COMPACT_MIN_GUIDE_CHARS = 500;
 const FALLBACK_CONTEXT_WINDOW_TOKENS = 200_000;
+// Models not listed here fall back to fallbackModelContextBudget()'s 200k
+// tokens, which covers most real-world traffic. To scale post-compact
+// injection sizing to a specific model's context window, register its slug
+// below. Do not empty this array — registered models get precise sizing.
 const MODEL_CONTEXT_BUDGETS: readonly ModelContextBudget[] = [
 	{
 		slug: "gpt-5.5",
