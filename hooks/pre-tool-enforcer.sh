@@ -36,7 +36,7 @@ fi
 if [[ "$toolName" == "Skill" ]]; then
     skillName=$(extract_json_field "skill" "")
     case "$skillName" in
-        prometheus|goal|deep-interview)
+        prometheus|goal|deep-interview|qa)
             # BASH_SOURCE-relative sourcing for resolve_omt_dir (mirrors session-start.sh:49-53)
             _PTE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -127,6 +127,24 @@ if [[ "$toolName" == "Skill" ]]; then
                             "deep-interview" \
                             '{
   "active": true,
+  "started_at": "'"${ts}"'",
+  "last_touched_at": "'"${ts}"'"
+}'
+                        ;;
+                    qa)
+                        write_seed_if_absent \
+                            "$omt_dir/qa-state-${sid}.json" \
+                            "qa" \
+                            '{
+  "active": true,
+  "phase": "PRE-FLIGHT",
+  "cycle": 0,
+  "max_cycles": 5,
+  "same_failure_key": "",
+  "same_failure_count": 0,
+  "fix_head_before": "",
+  "user_dirty_set": [],
+  "target": "",
   "started_at": "'"${ts}"'",
   "last_touched_at": "'"${ts}"'"
 }'

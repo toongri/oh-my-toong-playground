@@ -1023,10 +1023,11 @@ describe("ensureSeed ↔ bash seed parity (ES-parity)", () => {
 		return { ...o, started_at: "PLACEHOLDER_TS", last_touched_at: "PLACEHOLDER_TS" };
 	}
 
-	const cases: Array<"goal" | "prometheus" | "deep-interview"> = [
+	const cases: Array<"goal" | "prometheus" | "deep-interview" | "qa"> = [
 		"goal",
 		"prometheus",
 		"deep-interview",
+		"qa",
 	];
 
 	for (const type of cases) {

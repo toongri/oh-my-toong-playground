@@ -81,7 +81,8 @@ GC_NOW=$(date +%s)
 for state_file in \
     "$OMT_DIR"/goal-state-*.json \
     "$OMT_DIR"/prometheus-state-*.json \
-    "$OMT_DIR"/deep-interview-active-state-*.json; do
+    "$OMT_DIR"/deep-interview-active-state-*.json \
+    "$OMT_DIR"/qa-state-*.json; do
   [ -f "$state_file" ] || continue
   if is_current_session "$state_file" "$SESSION_ID"; then
     continue
@@ -190,6 +191,32 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
         fi
 
         MESSAGES="$MESSAGES<session-restore>\n\n[GOAL RESTORED]\n\nYou have an active goal session (phase: $GOAL_PHASE).\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/goal-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\n$GOAL_INSTRUCTION\nIMPORTANT: Invoking the goal skill again while a goal is already active is refused. Continue the existing goal, do not start a new one.\n\n</session-restore>\n\n---\n\n"
+      fi
+    fi
+  fi
+fi
+
+# Check for active qa state (session-specific)
+if [ -f "$OMT_DIR/qa-state-${SESSION_ID}.json" ]; then
+  QA_STATE=$(cat "$OMT_DIR/qa-state-${SESSION_ID}.json" 2>/dev/null)
+
+  if command -v jq &> /dev/null; then
+    QA_ACTIVE=$(echo "$QA_STATE" | jq -r '.active // false' 2>/dev/null)
+    if [ "$QA_ACTIVE" = "true" ]; then
+      QA_PHASE=$(echo "$QA_STATE" | jq -r '.phase // ""' 2>/dev/null)
+
+      # Pristine-seed guard: a freshly seeded state (phase=PRE-FLIGHT, cycle=0,
+      # target="" or absent) is inert — it may be an orphan from a refused qa
+      # invocation. Skip the restore block; GC reaps the orphan by TTL.
+      QA_CYCLE_RAW=$(echo "$QA_STATE" | jq -r '.cycle // 0' 2>/dev/null)
+      QA_TARGET_RAW=$(echo "$QA_STATE" | jq -r '.target // ""' 2>/dev/null)
+      QA_IS_PRISTINE=false
+      if [ "$QA_PHASE" = "PRE-FLIGHT" ] && [ "$QA_CYCLE_RAW" = "0" ] && [ "$QA_TARGET_RAW" = "" ]; then
+        QA_IS_PRISTINE=true
+      fi
+
+      if [ "$QA_IS_PRISTINE" = "false" ]; then
+        MESSAGES="$MESSAGES<session-restore>\n\n[QA RESTORED]\n\nYou have an active qa session (phase: $QA_PHASE).\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/qa-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\n\nContinue the qa cycle from the state you just read above.\n\n</session-restore>\n\n---\n\n"
       fi
     fi
   fi

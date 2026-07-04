@@ -1,4 +1,4 @@
-# Stage 3: Hands-On QA
+# ADVERSARIAL E2E: Hands-On QA
 
 > **Hands-on execution applicability**: This is the detail target for SKILL.md's `Hands-on execution` trigger, which activates on a disjunction: **user-facing change OR caller-provided executable scenarios**. Either arm alone activates it. Caller-provided scenarios run verbatim on either arm. The adversarial matrix is added only when the **user-facing** arm is active — activation by caller-provided scenarios alone (non-user-facing change) runs those scenarios verbatim without the matrix.
 
@@ -18,8 +18,8 @@ Verify user-facing behavior by actually running the changed code. This is not op
 | UI, page, component, frontend, render | Frontend | Verify with `agent-browser` (fallback: `playwright`) |
 | Mobile, app, iOS, Android, simulator, emulator | Mobile | Verify with `maestro` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
-| Refactoring, internal logic, utility, helper, config | Internal only | **Skip Stage 3** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — non-user-facing surface) |
-| Documentation, markdown, comments only | Non-code | **Skip Stage 3** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — non-user-facing surface) |
+| Refactoring, internal logic, utility, helper, config | Internal only | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — non-user-facing surface) |
+| Documentation, markdown, comments only | Non-code | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — non-user-facing surface) |
 
 ### When Multiple Types Apply
 
@@ -27,10 +27,10 @@ If changes span multiple types (e.g., API + Frontend), verify each applicable ty
 
 ### Skip Documentation
 
-When skipping Stage 3, document in output:
+When skipping ADVERSARIAL E2E, document in output:
 
 ```
-Stage 3 Result: SKIPPED (internal logic only / non-code change)
+ADVERSARIAL E2E Result: SKIPPED (internal logic only / non-code change)
 ```
 
 ---
@@ -41,10 +41,10 @@ Stage 3 Result: SKIPPED (internal logic only / non-code change)
 
 ### Start
 
-1. Discover the start command (same discovery logic as Stage 1 command discovery)
+1. Discover the start command (same discovery logic as BASELINE command discovery)
 2. Run the server/application in background using `run_in_background`
 3. Wait for readiness (health check endpoint, port listening, or startup log message)
-4. If startup fails after reasonable timeout, report as Stage 3 FAIL
+4. If startup fails after reasonable timeout, report as ADVERSARIAL E2E FAIL
 5. After successful readiness, export `$API_BASE_URL` (e.g., `export API_BASE_URL=http://localhost:${PORT:?PORT must be set after server start}`) so AC verification commands referencing the [Executor-Provided Variables](../prometheus/acceptance-criteria.md#executor-provided-variables) contract resolve correctly.
 
 ### Stop
@@ -271,10 +271,10 @@ Skip teardown only when boot was idempotent and the device was reused, not creat
 
 ---
 
-## Stage 3 Output Format
+## ADVERSARIAL E2E Output Format
 
 ```markdown
-## Stage 3: Hands-On QA
+## ADVERSARIAL E2E: Hands-On QA
 
 **Applicability:** [API / Frontend / Mobile / CLI / SKIPPED (reason)]
 
@@ -284,23 +284,23 @@ Skip teardown only when boot was idempotent and the device was reused, not creat
 | [Endpoint/Page/Command] | PASS / FAIL | [response/behavior summary] |
 | Server stop | PASS / FAIL | [cleanup details] |
 
-**Stage 3 Result:** PASS -> Proceed to Stage 4 / FAIL -> REQUEST_CHANGES / SKIPPED -> Proceed to Stage 4
+**ADVERSARIAL E2E Result:** PASS -> Proceed to CHECK / FAIL -> REQUEST_CHANGES / SKIPPED -> Proceed to CHECK
 ```
 
 ---
 
-## Stage 3 Failure = Immediate Stop
+## ADVERSARIAL E2E Failure = Immediate Stop
 
 If ANY verification fails:
-1. **Do NOT proceed to Stage 4**
+1. **Do NOT proceed to CHECK**
 2. Report the failure with specific output (response body, error message, screenshot reference)
 3. **Stop** the server/application
 4. Issue `REQUEST_CHANGES` immediately
-5. Wait for fix and re-run from Stage 1
+5. Wait for fix and re-run from BASELINE
 
 ---
 
-## Red Flags for Stage 3
+## Red Flags for ADVERSARIAL E2E
 
 | Excuse | Reality |
 |--------|---------|
