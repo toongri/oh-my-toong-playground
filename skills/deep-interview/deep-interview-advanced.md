@@ -56,10 +56,12 @@ If the user chooses interview, prometheus invokes `/deep-interview`. When the in
 
 | Dimension | Greenfield | Brownfield |
 |-----------|-----------|------------|
-| Goal Clarity | 40% | 35% |
-| Constraint Clarity | 30% | 25% |
-| Success Criteria | 30% | 25% |
-| Context Clarity | N/A | 15% |
+| Intent Clarity | 30% | 27% |
+| Outcome Clarity | 25% | 22% |
+| Scope Clarity | 20% | 18% |
+| Constraint Clarity | 15% | 14% |
+| Success Criteria | 10% | 9% |
+| Context Clarity | N/A | 10% |
 
 Brownfield adds Context Clarity because modifying existing code safely requires understanding the system being changed.
 
