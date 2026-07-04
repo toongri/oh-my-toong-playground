@@ -386,6 +386,15 @@ describe("posture prune", () => {
 		expect(skill).toContain("pre-work CLEAR");
 		expect(skill).not.toContain("pre-work UNCLEAR");
 	});
+
+	// code-review PR #156 finding F2: the single-fact exemption lightens only the
+	// min-2-wave floor (depth). Phase 0 still mandates "3+ orthogonal axes" and
+	// Phase 1 "every axis at once" (breadth), so a one-fact grounding still fans
+	// out across fabricated axes — the promised lightened footprint is unreachable
+	// unless the decomposition is also scoped for this path. Assert the carve-out.
+	test("CLEAR single-fact path scopes axis breadth to a single axis (no forced 3+ fan-out)", () => {
+		expect(skill).toContain("single axis");
+	});
 });
 
 // ---------------------------------------------------------------------------

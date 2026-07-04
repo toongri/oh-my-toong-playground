@@ -183,7 +183,7 @@ T1 risk modifiers raise the floor for high-risk dimensions; a caller-supplied ov
 
 ## CLEAR posture — lightened footprint
 
-A Scoped in-interview single-fact call (deep-interview asking this engine to ground exactly one fact while the human is mid-interview) is EXEMPT from the minimum-2-waves floor: a single wave that answers the fact converges immediately, rather than padding out to the floor. The journal footprint for CLEAR is minimized to what backs the returned facts — EXPAND-until-convergence and claim verification are still applied, just scaled to the single-fact ask instead of a full multi-faceted run.
+A Scoped in-interview single-fact call (deep-interview asking this engine to ground exactly one fact while the human is mid-interview) is EXEMPT from the minimum-2-waves floor: a single wave that answers the fact converges immediately, rather than padding out to the floor. The journal footprint for CLEAR is minimized to what backs the returned facts — EXPAND-until-convergence and claim verification are still applied, just scaled to the single-fact ask instead of a full multi-faceted run. This path is also scoped in breadth, not only depth: Phase 0 decomposes it to a **single axis** (the one fact), not the 3+ orthogonal axes a multi-faceted query requires, so Phase 1 launches one worker rather than fanning out across fabricated axes.
 
 ## Pre-work handoff conformance
 
