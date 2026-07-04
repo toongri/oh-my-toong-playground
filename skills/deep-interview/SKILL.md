@@ -188,7 +188,7 @@ Taken ONLY when the selector chose Fact-ground. This round dispatches a research
    ```bash
    bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
      --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
-   {"n":<round_number>,"kind":"fact-ground","dimension":"<weakest_dimension>","fact":"<grounded fact>","provenance":"<one-of-the-four-labels>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>},"ambiguity":<ambiguity>}
+   {"n":<round_number>,"kind":"fact-ground","dimension":"<weakest_dimension>","fact":"<grounded fact>","provenance":"<one-of-the-four-labels>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>},"ambiguity":<ambiguity>}
    OMT_DI_PAYLOAD_EOF
 
    bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
@@ -220,7 +220,9 @@ If any prompt input is too large, summarize it first and then continue from the 
 **Question styles by dimension:**
 | Dimension | Question Style | Example |
 |-----------|---------------|---------|
-| Goal Clarity | "What exactly happens when...?" | "When you say 'manage tasks', what specific action does a user take first?" |
+| Intent Clarity | "What exactly happens when...?" | "When you say 'manage tasks', what specific action does a user take first?" |
+| Outcome Clarity | "What does done look like?" | "If this shipped tomorrow, what would exist that doesn't exist today?" |
+| Scope Clarity | "What's in vs out?" | "Is user authentication part of this feature, or a separate concern to build later?" |
 | Constraint Clarity | "What are the boundaries?" | "Should this work offline, or is internet connectivity assumed?" |
 | Success Criteria | "How do we know it works?" | "If I showed you the finished product, what would make you say 'yes, that's it'?" |
 | Context Clarity (brownfield) | "How does this fit?" | "I found JWT auth middleware in `src/auth/` (pattern: passport + JWT). Should this feature extend that path or intentionally diverge from it?" |
@@ -253,10 +255,12 @@ Transcript or prompt-safe transcript summary:
 {all rounds Q&A or summarized transcript}
 
 Score each dimension:
-1. Goal Clarity (0.0-1.0): Is the primary objective unambiguous? Can you state it in one sentence without qualifiers? Can you name the key entities (nouns) and their relationships (verbs) without ambiguity?
-2. Constraint Clarity (0.0-1.0): Are the boundaries, limitations, and non-goals clear?
-3. Success Criteria Clarity (0.0-1.0): Could you write a test that verifies success? Are acceptance criteria concrete?
-{4. Context Clarity (0.0-1.0): [brownfield only] Do we understand the existing system well enough to modify it safely? Do the identified entities map cleanly to existing codebase structures?}
+1. Intent Clarity (0.0-1.0): Is the primary objective unambiguous? Can you state it in one sentence without qualifiers? Can you name the key entities (nouns) and their relationships (verbs) without ambiguity?
+2. Outcome Clarity (0.0-1.0): Is the concrete deliverable or end-state clear enough to recognize when it exists?
+3. Scope Clarity (0.0-1.0): Are the boundaries of what's included versus excluded from this piece of work clear?
+4. Constraint Clarity (0.0-1.0): Are the boundaries, limitations, and non-goals clear?
+5. Success Criteria Clarity (0.0-1.0): Could you write a test that verifies success? Are acceptance criteria concrete?
+{6. Context Clarity (0.0-1.0): [brownfield only] Do we understand the existing system well enough to modify it safely? Do the identified entities map cleanly to existing codebase structures?}
 
 For each dimension provide:
 - score: float (0.0-1.0)
@@ -267,7 +271,7 @@ Also identify:
 - weakest_dimension: the single lowest-confidence dimension this round
 - weakest_dimension_rationale: one sentence explaining why it is the highest-leverage target for the next question
 
-5. Ontology Extraction: Identify all key entities (nouns) discussed in the transcript.
+7. Ontology Extraction: Identify all key entities (nouns) discussed in the transcript.
 
 {If round > 1, inject: "Previous round's entities: {prior_entities_json from state.ontology_snapshots[-1]}. REUSE these entity names where the concept is the same. Only introduce new names for genuinely new concepts."}
 
@@ -282,8 +286,8 @@ Respond as JSON. Include an additional "ontology" key containing the entities ar
 
 **Calculate ambiguity:**
 
-Greenfield: `ambiguity = 1 - (goal × 0.40 + constraints × 0.30 + criteria × 0.30)`
-Brownfield: `ambiguity = 1 - (goal × 0.35 + constraints × 0.25 + criteria × 0.25 + context × 0.15)`
+Greenfield: `ambiguity = 1 - (intent × 0.30 + outcome × 0.25 + scope × 0.20 + constraints × 0.15 + success × 0.10)`
+Brownfield: `ambiguity = 1 - (intent × 0.27 + outcome × 0.22 + scope × 0.18 + constraints × 0.14 + success × 0.09 + context × 0.10)`
 
 **Calculate ontology stability:**
 
@@ -320,7 +324,9 @@ Round {n} complete.
 
 | Dimension | Score | Weight | Weighted | Gap |
 |-----------|-------|--------|----------|-----|
-| Goal | {s} | {w} | {s*w} | {gap or "Clear"} |
+| Intent | {s} | {w} | {s*w} | {gap or "Clear"} |
+| Outcome | {s} | {w} | {s*w} | {gap or "Clear"} |
+| Scope | {s} | {w} | {s*w} | {gap or "Clear"} |
 | Constraints | {s} | {w} | {s*w} | {gap or "Clear"} |
 | Success Criteria | {s} | {w} | {s*w} | {gap or "Clear"} |
 | Context (brownfield) | {s} | {w} | {s*w} | {gap or "Clear"} |
@@ -340,7 +346,7 @@ Update interview state with the new round and scores by invoking the CLI twice �
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
-{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>},"ambiguity":<ambiguity>}
+{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>},"ambiguity":<ambiguity>}
 OMT_DI_PAYLOAD_EOF
 
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
@@ -355,11 +361,18 @@ For brownfield interviews, include the `context` score in the `scores` object:
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
-{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"goal":<g>,"constraints":<c>,"criteria":<cr>,"context":<ctx>},"ambiguity":<ambiguity>}
+{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>,"context":<context>},"ambiguity":<ambiguity>}
 OMT_DI_PAYLOAD_EOF
 ```
 
-`context` carries 15% of the ambiguity formula for brownfield (`context × 0.15`) and is required for accurate resume after `adopt`.
+`context` carries 10% of the ambiguity formula for brownfield (`context × 0.10`) and is required for accurate resume after `adopt`.
+
+**Record the answer's provenance** via the same CLI used in Step 2-fact, labeled `[from-user]` since this round's fact came from the user's own answer rather than a research or codebase read:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
+  --append-provenance-item '{"evidence_id":"<id>","label":"[from-user]"}'
+```
 
 ### Step 2f: Check Soft Limits
 

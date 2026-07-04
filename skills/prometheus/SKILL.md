@@ -220,8 +220,8 @@ After loading context, classify the user's request. Classification determines in
 
 | Variant | Dimensions | Weights |
 |---------|-----------|---------|
-| **Greenfield** | Goal, Constraint, Success Criteria | 0.4, 0.3, 0.3 |
-| **Brownfield** | Goal, Constraint, Success Criteria, Context | 0.35, 0.25, 0.25, 0.15 |
+| **Greenfield** | Intent, Outcome, Scope, Constraints, Success | 0.30, 0.25, 0.20, 0.15, 0.10 |
+| **Brownfield** | Intent, Outcome, Scope, Constraints, Success, Context | 0.27, 0.22, 0.18, 0.14, 0.09, 0.10 |
 
 Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below.
 **All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below.
@@ -599,9 +599,11 @@ Round {n} | Ambiguity: {score}%
 
 | Dimension             | Score | Gap                 |
 |-----------------------|-------|---------------------|
-| Goal                  | {s}   | {gap or "Clear"}    |
+| Intent                | {s}   | {gap or "Clear"}    |
+| Outcome               | {s}   | {gap or "Clear"}    |
+| Scope                 | {s}   | {gap or "Clear"}    |
 | Constraints           | {s}   | {gap or "Clear"}    |
-| Success Criteria      | {s}   | {gap or "Clear"}    |
+| Success               | {s}   | {gap or "Clear"}    |
 | Context (brownfield)  | {s}   | {gap or "Clear"}    |
 
 → Next question targets: {weakest dimension}
