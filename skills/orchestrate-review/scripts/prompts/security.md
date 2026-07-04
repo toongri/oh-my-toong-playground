@@ -26,6 +26,9 @@ Examine the diff and the surrounding context for OWASP-aligned vulnerabilities. 
 - **Broken authz/authn**: missing or bypassable authentication gate on a new route or handler; authorization check skipped for a subset of inputs; privilege escalation path introduced by a role or scope change; insecure direct object reference exposing another user's data.
 - **Secret/credential exposure**: API keys, passwords, tokens, or PII logged, returned in a response, hardcoded in source, or written to a file with broad permissions; secrets passed through environment variables that are echoed or exposed.
 - **Crypto misuse**: weak or deprecated algorithm (MD5, SHA-1, DES, ECB mode); hardcoded IV or salt; predictable random number used for a security-sensitive purpose; incorrect use of encrypt-then-MAC vs MAC-then-encrypt.
+- **Path Traversal**: user-controlled path segment (`../`, absolute path override) reaches a filesystem read/write/delete call, letting an attacker escape the intended directory.
+- **SSRF**: a user-supplied URL or hostname is passed to an outbound HTTP/network client without an allowlist or scheme/host check, letting an attacker make the server request internal-only endpoints or metadata services.
+- **Insecure Deserialization**: untrusted data is deserialized (pickle, `yaml.load`, Java native serialization, PHP `unserialize`) without a safe-loader restriction, letting an attacker craft a payload that executes code or forges an object graph.
 
 ## Scope
 

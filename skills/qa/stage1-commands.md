@@ -1,4 +1,4 @@
-# Stage 1: Automated Verification
+# BASELINE: Automated Verification
 
 Run automated checks BEFORE any code analysis. This is not optional.
 
@@ -89,20 +89,20 @@ When project lacks build tools, tests, or linter:
    - JavaScript: `node --check file.js`
    - Shell: `bash -n script.sh`
 
-2. **Document gaps as findings** for Stage 4
+2. **Document gaps as findings** for the Output Format's Issues section
    - "No test coverage" -> recommend adding tests
    - "No linter configured" -> recommend setup
 
-3. **Proceed to Stage 2** after documenting
+3. **Proceed to ADVERSARIAL E2E** after documenting
 
 **"No tools configured" is a finding, not a blocker.** The absence of tooling itself becomes a code quality concern.
 
 ---
 
-## Stage 1 Output Format
+## BASELINE Output Format
 
 ```markdown
-## Stage 1: Automated Verification
+## BASELINE: Automated Verification
 
 | Check | Status | Details |
 |-------|--------|---------|
@@ -110,22 +110,22 @@ When project lacks build tools, tests, or linter:
 | Tests | PASS (N/N) / FAIL (N/M) | [failed test names if any] |
 | Lint | PASS / FAIL | [error count if any] |
 
-**Stage 1 Result:** PASS -> Proceed to Stage 2 / FAIL -> REQUEST_CHANGES
+**BASELINE Result:** PASS -> Proceed to ADVERSARIAL E2E / FAIL -> REQUEST_CHANGES
 ```
 
 ---
 
-## Stage 1 Failure = Immediate Stop
+## BASELINE Failure = Immediate Stop
 
 If ANY check fails:
-1. **Do NOT proceed to Stage 2, Stage 3, or Stage 4**
+1. **Do NOT proceed to ADVERSARIAL E2E**
 2. Report the failure with specific output
 3. Issue `REQUEST_CHANGES` immediately
-4. Wait for fix and re-run Stage 1
+4. Wait for fix and re-run BASELINE
 
 ---
 
-## Red Flags for Stage 1
+## Red Flags for BASELINE
 
 | Excuse | Reality |
 |--------|---------|
