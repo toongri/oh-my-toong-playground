@@ -91,10 +91,10 @@ describe("convergence stop rules", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Claim-ledger lock with OMT-native evidence
+// Claim-graph gate with OMT-native evidence
 // ---------------------------------------------------------------------------
 
-describe("claim-ledger lock", () => {
+describe("claim-graph gate", () => {
 	test("≥2 independent source domains gate is present", () => {
 		expect(skill).toContain("≥ 2 independent source domains");
 	});
@@ -221,8 +221,8 @@ describe("three journal files", () => {
 		expect(skill).toContain("expansion-log.md");
 	});
 
-	test("claim-ledger.md journal file is present", () => {
-		expect(skill).toContain("claim-ledger.md");
+	test("claim-graph.md journal file is present", () => {
+		expect(skill).toContain("claim-graph.md");
 	});
 });
 
@@ -241,20 +241,16 @@ describe("single-snapshot write-ordering", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Three-posture routing
+// Posture routing (two postures: explicit research, pre-work CLEAR)
 // ---------------------------------------------------------------------------
 
-describe("three-posture routing", () => {
+describe("posture routing", () => {
 	test("explicit research posture is present", () => {
 		expect(skill).toContain("explicit research");
 	});
 
 	test("pre-work CLEAR posture is present", () => {
 		expect(skill).toContain("pre-work CLEAR");
-	});
-
-	test("pre-work UNCLEAR posture is present", () => {
-		expect(skill).toContain("pre-work UNCLEAR");
 	});
 
 	test("posture selection criteria are present", () => {
@@ -279,8 +275,7 @@ describe("tier scaling", () => {
 		expect(skill).toContain("caller-supplied override");
 	});
 
-	test("worker-floor table rows — Trivial / Scoped / Complex / Architecture / explicit — are present", () => {
-		expect(skill).toContain("Trivial");
+	test("worker-floor table rows — Scoped / Complex / Architecture — are present", () => {
 		expect(skill).toContain("Scoped");
 		expect(skill).toContain("Complex");
 		expect(skill).toContain("Architecture");
@@ -306,53 +301,12 @@ describe("pre-work handoff conformance", () => {
 });
 
 // ---------------------------------------------------------------------------
-// UNCLEAR branches
-// ---------------------------------------------------------------------------
-
-describe("UNCLEAR autonomous branch", () => {
-	test("oracle-substitute is present", () => {
-		expect(skill).toContain("oracle-substitute");
-	});
-
-	test("oracle REQUEST_CHANGES → deep-interview escalation is present", () => {
-		expect(skill).toContain("oracle-REQUEST_CHANGES");
-		expect(skill).toContain("deep-interview escalation");
-	});
-});
-
-// ---------------------------------------------------------------------------
 // Human end-gate
 // ---------------------------------------------------------------------------
 
 describe("human end-gate", () => {
 	test("human end-gate is present", () => {
 		expect(skill).toContain("human end-gate");
-	});
-
-	test("single synchronization point is present", () => {
-		expect(skill).toContain("single synchronization point");
-	});
-
-	test("UNCLEAR path pauses and surfaces for human approval is present", () => {
-		expect(skill).toContain("pauses and surfaces");
-	});
-});
-
-// ---------------------------------------------------------------------------
-// Trivial short-circuit
-// ---------------------------------------------------------------------------
-
-describe("Trivial short-circuit", () => {
-	test("Trivial tier short-circuits the engine — present", () => {
-		expect(skill).toContain("Trivial tier short-circuits");
-	});
-
-	test("no SYNTHESIS.md on Trivial is present", () => {
-		expect(skill).toContain("no SYNTHESIS");
-	});
-
-	test("no worker fan-out on Trivial is present", () => {
-		expect(skill).toContain("no fan-out");
 	});
 });
 
@@ -397,5 +351,221 @@ describe("non-goal absence", () => {
 
 	test("second research skill is ABSENT", () => {
 		expect(count("second research skill")).toBe(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Phase 1 — posture prune (RED test, TDD: authored before the SKILL.md edit)
+// Asserts the POST-prune end state: UNCLEAR + Trivial fully removed, CLEAR
+// reachability (tier-capped Scoped coupling + floor-exemption) retained.
+// FAILS on the current unmodified SKILL.md; PASSES after the Phase-1 prune.
+// Word-boundary is load-bearing: bare /unclear/i would match "uncleared" at
+// the Phase-2-owned ledger Failure_Modes row, which Phase 1 must not touch.
+// ---------------------------------------------------------------------------
+
+describe("posture prune", () => {
+	test("\\bunclear\\b (case-insensitive) is absent — Phase 1 prune target", () => {
+		const matches = skill.match(/\bunclear\b/gi) || [];
+		expect(matches.length).toBe(0);
+	});
+
+	test("\\btrivial\\b (case-insensitive) is absent — Phase 1 prune target", () => {
+		const matches = skill.match(/\btrivial\b/gi) || [];
+		expect(matches.length).toBe(0);
+	});
+
+	test("CLEAR reachability retained: tier-capped Scoped coupling language is present", () => {
+		expect(skill).toContain("Scoped");
+	});
+
+	test("CLEAR reachability retained: min-2-wave floor-exemption for a Scoped in-interview single-fact call is present", () => {
+		expect(/floor.*exempt|exempt.*floor|single-fact/i.test(skill)).toBe(true);
+	});
+
+	test("postures reduced to two: pre-work CLEAR present, pre-work UNCLEAR absent", () => {
+		expect(skill).toContain("pre-work CLEAR");
+		expect(skill).not.toContain("pre-work UNCLEAR");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Phase 2 — epistemic-instrumentation suite (RED test, TDD: authored before
+// the SKILL.md edit). Asserts the POST-edit-Phase-2 end state: claim-ledger
+// renamed to claim-graph with the 15-field schema and 5-criteria gate; the
+// 4 sibling artifacts (intent-diff, observation-manifest,
+// verification-economics, cause-disappearance) adopted; worker-ownership
+// invariant stated; tier-axis rigor rule recorded as OMT-original while the
+// posture-orthogonality invariant is retained verbatim.
+// FAILS on the current unmodified SKILL.md (still says "claim-ledger" and has
+// none of the 5 artifacts); PASSES after tasks #11/#12/#13.
+// ---------------------------------------------------------------------------
+
+describe("epistemic suite / claim-graph gate", () => {
+	describe("claim-ledger renamed to claim-graph", () => {
+		test('"claim-ledger" / "claim ledger" token is absent', () => {
+			expect(skill).not.toMatch(/claim[- ]ledger/i);
+		});
+
+		test("every bare \\bledger\\b occurrence is part of the \"Claims Ledger\" attribution only", () => {
+			const ledgerMatches = skill.match(/\bledger\b/gi) || [];
+			const claimsLedgerMatches = skill.match(/Claims\s+Ledger/gi) || [];
+			// Non-vacuous: the attribution itself must still be present.
+			expect(ledgerMatches.length).toBeGreaterThan(0);
+			expect(ledgerMatches.length).toBe(claimsLedgerMatches.length);
+		});
+	});
+
+	describe("intent-diff.md artifact (9-field schema)", () => {
+		test("intent-diff.md filename is present", () => {
+			expect(skill).toContain("intent-diff.md");
+		});
+
+		test("a representative subset of intent-diff.md's required fields is present in its context", () => {
+			const idx = skill.indexOf("intent-diff.md");
+			expect(idx).toBeGreaterThan(-1);
+			const context = skill.slice(idx, idx + 1500);
+			for (const field of [
+				"intent_id",
+				"expected truth",
+				"observed reality",
+				"violated invariant",
+				"linked claim ids",
+			]) {
+				expect(context).toContain(field);
+			}
+		});
+	});
+
+	describe("claim-graph.md artifact (15-field schema)", () => {
+		test("claim-graph.md filename is present", () => {
+			expect(skill).toContain("claim-graph.md");
+		});
+
+		test("a representative subset of claim-graph.md's required fields is present in its context", () => {
+			const idx = skill.indexOf("claim-graph.md");
+			expect(idx).toBeGreaterThan(-1);
+			const context = skill.slice(idx, idx + 2500);
+			for (const field of [
+				"claim_id",
+				"risk tier",
+				"independent observation groups",
+				"counter-search result",
+				"primary source backing",
+				"final synthesis location",
+			]) {
+				expect(context).toContain(field);
+			}
+		});
+	});
+
+	describe("observation-manifest.md artifact (11-field schema)", () => {
+		test("observation-manifest.md filename is present", () => {
+			expect(skill).toContain("observation-manifest.md");
+		});
+
+		test("a representative subset of observation-manifest.md's required fields is present in its context", () => {
+			const idx = skill.indexOf("observation-manifest.md");
+			expect(idx).toBeGreaterThan(-1);
+			const context = skill.slice(idx, idx + 1500);
+			for (const field of [
+				"observation_id",
+				"evidence layer",
+				"independence basis",
+				"observed_at",
+				"contamination notes",
+			]) {
+				expect(context).toContain(field);
+			}
+		});
+	});
+
+	describe("verification-economics.md artifact (8-field schema)", () => {
+		test("verification-economics.md filename is present", () => {
+			expect(skill).toContain("verification-economics.md");
+		});
+
+		test("a representative subset of verification-economics.md's required fields is present in its context", () => {
+			const idx = skill.indexOf("verification-economics.md");
+			expect(idx).toBeGreaterThan(-1);
+			const context = skill.slice(idx, idx + 1500);
+			for (const field of ["error cost", "defer/verify", "outcome", "residual risk"]) {
+				expect(context).toContain(field);
+			}
+		});
+	});
+
+	describe("cause-disappearance.md artifact (8-field schema)", () => {
+		test("cause-disappearance.md filename is present", () => {
+			expect(skill).toContain("cause-disappearance.md");
+		});
+
+		test("a representative subset of cause-disappearance.md's required fields is present in its context", () => {
+			const idx = skill.indexOf("cause-disappearance.md");
+			expect(idx).toBeGreaterThan(-1);
+			const context = skill.slice(idx, idx + 1500);
+			for (const field of [
+				"last_seen",
+				"disconfirming observation",
+				"replacement cause",
+				"current status",
+			]) {
+				expect(context).toContain(field);
+			}
+		});
+	});
+
+	describe("verified-claims digest is the sole allowlist", () => {
+		test('"verified-claims digest" is present', () => {
+			expect(skill).toContain("verified-claims digest");
+		});
+
+		test('a "sole allowlist" / "sole synthesis" clause is present', () => {
+			expect(/sole (allowlist|synthesis)/i.test(skill)).toBe(true);
+		});
+	});
+
+	describe("5-criteria gate (2 criteria added to the former 3-criteria lock)", () => {
+		test("independent observation groups criterion is present", () => {
+			expect(/independent (observation|obs) groups?/i.test(skill)).toBe(true);
+		});
+
+		test("a temporal observed_at / valid_at criterion is present", () => {
+			expect(/observed_at/i.test(skill) || /valid_at/i.test(skill)).toBe(true);
+		});
+	});
+
+	describe("worker-ownership invariant", () => {
+		test("artifacts are stated as orchestrator-owned", () => {
+			expect(/orchestrator-owned/i.test(skill)).toBe(true);
+		});
+
+		test("workers are stated to never write the artifacts", () => {
+			expect(/workers? never write/i.test(skill)).toBe(true);
+		});
+	});
+
+	describe("tier-axis rigor rule (D-2 design note)", () => {
+		test("Scoped tier scopes to the 3 base artifacts: claim-graph + intent-diff + observation-manifest", () => {
+			expect(skill).toContain("claim-graph.md");
+			expect(skill).toContain("intent-diff.md");
+			expect(skill).toContain("observation-manifest.md");
+		});
+
+		test("higher tiers add verification-economics + cause-disappearance", () => {
+			expect(skill).toContain("verification-economics.md");
+			expect(skill).toContain("cause-disappearance.md");
+		});
+
+		test("tier-scaling rule vocabulary is present (rigor scales with complexity tier)", () => {
+			expect(/tier[- ]scal/i.test(skill)).toBe(true);
+		});
+
+		test("posture-orthogonality invariant is retained verbatim: \"identical across both postures\"", () => {
+			expect(skill).toContain("identical across both postures");
+		});
+
+		test("tier-scaling is recorded as OMT-original (not OMO)", () => {
+			expect(/OMT-original/i.test(skill)).toBe(true);
+		});
 	});
 });
