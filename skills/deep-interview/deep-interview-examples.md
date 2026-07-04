@@ -85,7 +85,7 @@ Why good: Shows entity tracking across rounds with visible convergence. Stabilit
 
 Ontology-style question for scope-fuzzy tasks:
 ```
-Round 6 | Targeting: Goal Clarity | Why now: the core entity is still unstable across rounds, so feature questions would compound ambiguity | Ambiguity: 38%
+Round 6 | Targeting: Intent Clarity | Why now: the core entity is still unstable across rounds, so feature questions would compound ambiguity | Ambiguity: 38%
 
 "Across the last rounds you've described this as a workflow, an inbox, and a planner. Which one is the core thing this product IS, and which ones are supporting metaphors or views?"
 ```
