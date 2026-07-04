@@ -556,3 +556,35 @@ describe("phase-3 collision guard: prometheus's own copies of the same fixtures 
 		expect(existsSync(join(prometheusTestsDir, "baseline-pressure-scenario.md"))).toBe(true);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// phase-3 template propagation (code-review PR #156 finding F1, CONFIRMED):
+// the Phase-4 output is composed from deep-interview-spec-template.md, so that
+// template is a downstream consumer of the widened scoring dims. Its Clarity
+// Breakdown table and the per-round transcript placeholder must carry the new
+// Intent/Outcome/Scope split and must NOT reference the retired goal/criteria
+// score keys — the persisted `scores` object no longer has them, so the old
+// `(Goal: {g}, ..., Criteria: {cr})` placeholder would misreport the run.
+// FAILS on the pre-fix template (still 4-dim Goal/Constraint/Success/Context).
+// ---------------------------------------------------------------------------
+describe("phase-3 template propagation: Phase-4 spec-template reflects the widened D-5 dimensions", () => {
+	test("Clarity Breakdown table lists the split Intent/Outcome/Scope dimensions", () => {
+		expect(template).toContain("Intent Clarity");
+		expect(template).toContain("Outcome Clarity");
+		expect(template).toContain("Scope Clarity");
+	});
+
+	test("Clarity Breakdown no longer has a bare 'Goal Clarity' dimension row", () => {
+		expect(template).not.toContain("| Goal Clarity |");
+	});
+
+	test("transcript placeholder does not reference the retired goal/criteria score keys", () => {
+		expect(template).not.toMatch(/Goal:\s*\{g\}/);
+		expect(template).not.toMatch(/Criteria:\s*\{cr\}/);
+	});
+
+	test("examples do not target the retired 'Goal Clarity' dimension label", () => {
+		const examplesMd = readFileSync(join(import.meta.dir, "deep-interview-examples.md"), "utf8");
+		expect(examplesMd).not.toContain("Goal Clarity");
+	});
+});
