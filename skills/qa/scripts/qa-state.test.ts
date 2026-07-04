@@ -11,6 +11,7 @@ import {
 	noteFailure,
 	recordFixHead,
 	captureDirtySet,
+	completeQa,
 	resolveStatePath,
 	type QaState,
 } from "./qa-state.ts";
@@ -175,6 +176,19 @@ describe("qa state: Same-Failure key semantics", () => {
 		expect(readQaState(S)!.same_failure_count).toBe(3);
 	});
 
+	// (P2 finding 2) noteFailure's terminate must be a latch (>=3), not an
+	// equality check (===3): a resumed run can call note-failure again after
+	// count already hit 3, landing on 4 — the 3x-exit must still fire.
+	test("same key 4x (resumed run past the 3x boundary) still signals terminate", () => {
+		setQaState(S, { phase: "CHECK" });
+		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
+		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
+		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
+		const r = noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
+		expect(r.same_failure_count).toBe(4);
+		expect(r.terminate).toBe(true);
+	});
+
 	test("a different key resets count to 1 and updates same_failure_key", () => {
 		setQaState(S, { phase: "CHECK" });
 		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
@@ -203,6 +217,19 @@ describe("qa state: fix_head_before + user_dirty_set", () => {
 		captureDirtySet(S, ["a.ts"]);
 		captureDirtySet(S, []);
 		expect(readQaState(S)!.user_dirty_set).toEqual([]);
+	});
+});
+
+describe("qa state: terminal completion (P2 finding 1 — no active:false resurrection)", () => {
+	test("completeQa marks active:false so readQaState no longer restores the session", () => {
+		setQaState(S, { phase: "PRE-FLIGHT" });
+		advancePhase(S, "STATE");
+		expect(readQaState(S)).not.toBeNull();
+		completeQa(S);
+		expect(readQaState(S)).toBeNull();
+		// but the underlying file still exists (inactive, not deleted)
+		expect(existsSync(resolveStatePath(S))).toBe(true);
+		expect(rawState().active).toBe(false);
 	});
 });
 
@@ -241,6 +268,14 @@ describe("qa-state CLI wiring", () => {
 		const parsed = JSON.parse(out);
 		expect(parsed.same_failure_count).toBe(2);
 		expect(parsed.terminate).toBe(false);
+	});
+
+	test("CLI complete deactivates the session; get then reports absent", () => {
+		run("set --phase PRE-FLIGHT");
+		run("complete");
+		expect(rawState().active).toBe(false);
+		const out = run("get").trim();
+		expect(out).toBe("null");
 	});
 
 	test("(B2) CLI exits non-zero when OMT_SESSION_ID is empty", () => {

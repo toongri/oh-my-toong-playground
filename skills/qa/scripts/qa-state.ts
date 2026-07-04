@@ -24,6 +24,7 @@
  *   record-fix-head <sha>
  *   capture-dirty-set <json-array>
  *   note-failure <key>
+ *   complete
  *   get
  *   status
  */
@@ -279,7 +280,9 @@ export function captureDirtySet(sessionId: string, files: string[]): void {
 /**
  * Same-Failure bookkeeping: if `key` matches the stored `same_failure_key`,
  * increments `same_failure_count`; otherwise resets it to 1 and updates the
- * stored key. Terminate signaled at count === 3.
+ * stored key. Terminate signaled at count >= 3 (a latch, not an equality
+ * check — a resumed/repeated call after count already reached 3 must still
+ * report terminate, not silently pass through).
  */
 export function noteFailure(
 	sessionId: string,
@@ -290,7 +293,17 @@ export function noteFailure(
 	const priorCount = prior.same_failure_count ?? 0;
 	const count = key === priorKey ? priorCount + 1 : 1;
 	mergeWrite(sessionId, { same_failure_key: key, same_failure_count: count });
-	return { same_failure_count: count, terminate: count === 3 };
+	return { same_failure_count: count, terminate: count >= 3 };
+}
+
+/**
+ * Marks the qa cycle inactive at the terminal STATE phase (Goal Met / max_cycles /
+ * Same-Failure-3x / Safety). Without this, `active` stays `true` forever (mergeWrite
+ * has no other path to `false`), and a completed cycle gets resurrected by the
+ * session-start restore banner on the next session.
+ */
+export function completeQa(sessionId: string): void {
+	mergeWrite(sessionId, { active: false });
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +391,8 @@ function main(): void {
 			}
 			const result = noteFailure(sessionId, key);
 			process.stdout.write(JSON.stringify(result) + "\n");
+		} else if (subcommand === "complete") {
+			completeQa(sessionId);
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readQaState(sessionId)) + "\n");
 		} else if (subcommand === "status") {
@@ -385,7 +400,7 @@ function main(): void {
 			process.stdout.write((state ? state.phase : "absent") + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: qa-state.ts <set|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|get|status> [options]\n",
+				"Usage: qa-state.ts <set|advance-phase|inc-cycle|record-fix-head|capture-dirty-set|note-failure|complete|get|status> [options]\n",
 			);
 			process.exit(1);
 		}

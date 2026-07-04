@@ -169,6 +169,8 @@ bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>
 
 A `continue` invocation reads this state and resumes at the last recorded phase/cycle rather than restarting the cycle from PRE-FLIGHT. (The CLI itself is authored elsewhere — this section only pins the invocation contract qa's cycle relies on.)
 
+Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, Same-Failure-3x, or Safety), run `bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts complete` before reporting the verdict. This marks the state inactive so the finished cycle is not resurrected as "in progress" in a later session.
+
 ---
 
 ## Fix-Loop Nesting Contract
