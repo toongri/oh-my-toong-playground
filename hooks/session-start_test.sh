@@ -805,9 +805,9 @@ test_gc_glob_only_managed_prefixes() {
     glob_lines=$(echo "$gc_section" | grep -oE '"?\$\{?OMT_DIR\}?"?/[a-z-]+-\*\.json')
     glob_count=$(echo "$glob_lines" | grep -c '.' 2>/dev/null || true)
 
-    # Exact-set assertion: must be exactly 3 globs
-    if [ "$glob_count" -ne 3 ]; then
-        echo "ASSERTION FAILED: GC glob must have exactly 3 entries, found $glob_count"
+    # Exact-set assertion: must be exactly 4 globs
+    if [ "$glob_count" -ne 4 ]; then
+        echo "ASSERTION FAILED: GC glob must have exactly 4 entries, found $glob_count"
         echo "  Glob lines:"
         echo "$glob_lines"
         echo "  Full GC section:"
@@ -817,7 +817,7 @@ test_gc_glob_only_managed_prefixes() {
 
     # Each expected prefix must appear exactly once
     local prefix
-    for prefix in goal-state prometheus-state deep-interview-active-state; do
+    for prefix in goal-state prometheus-state deep-interview-active-state qa-state; do
         local count
         count=$(echo "$glob_lines" | grep -c "$prefix" 2>/dev/null || true)
         if [ "$count" -ne 1 ]; then
