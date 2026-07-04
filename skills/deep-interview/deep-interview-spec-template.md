@@ -16,10 +16,12 @@
 ## Clarity Breakdown
 | Dimension | Score | Weight | Weighted |
 |-----------|-------|--------|----------|
-| Goal Clarity | {s} | {w} | {s*w} |
+| Intent Clarity | {s} | {w} | {s*w} |
+| Outcome Clarity | {s} | {w} | {s*w} |
+| Scope Clarity | {s} | {w} | {s*w} |
 | Constraint Clarity | {s} | {w} | {s*w} |
 | Success Criteria | {s} | {w} | {s*w} |
-| Context Clarity | {s} | {w} | {s*w} |
+| Context Clarity (brownfield) | {s} | {w} | {s*w} |
 | **Total Clarity** | | | **{total}** |
 | **Ambiguity** | | | **{1-total}** |
 
@@ -94,7 +96,7 @@ erDiagram
 ### Round 1
 **Q:** {question}
 **A:** {answer}
-**Ambiguity:** {score}% (Goal: {g}, Constraints: {c}, Criteria: {cr})
+**Ambiguity:** {score}% (Intent: {i}, Outcome: {o}, Scope: {sc}, Constraints: {con}, Success: {su}{brownfield: , Context: {cx}})
 
 ...
 </details>

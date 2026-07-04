@@ -1,15 +1,15 @@
 ---
 name: ultraresearch
-description: "Maximum-saturation research orchestration as ONE engine with three postures. Fans synchronous explore+librarian+browsing worker waves across codebase, web, official docs, and OSS repos; runs an EXPAND-until-convergence loop driven by leads workers return at each barrier; verifies contested claims through a separate verification pass (executed code for code-shaped claims, oracle citation re-read for the rest); synthesizes a cited SYNTHESIS.md. ACTIVATES on an explicit research demand (the word 'ultraresearch', '/ultraresearch') OR as a pre-work grounding posture invoked by deep-interview / a caller that needs facts before judgment. Never self-activates for ordinary questions, debugging, or routine implementation context-gathering. While active it overrides exploration-bounding defaults: exhaustive coverage is the goal."
+description: "Maximum-saturation research orchestration as ONE engine with two postures. Fans synchronous explore+librarian+browsing worker waves across codebase, web, official docs, and OSS repos; runs an EXPAND-until-convergence loop driven by leads workers return at each barrier; verifies contested claims through a separate verification pass (executed code for code-shaped claims, oracle citation re-read for the rest); synthesizes a cited SYNTHESIS.md. ACTIVATES on an explicit research demand (the word 'ultraresearch', '/ultraresearch') OR as a pre-work grounding posture invoked by deep-interview / a caller that needs facts before judgment. Never self-activates for ordinary questions, debugging, or routine implementation context-gathering. While active it overrides exploration-bounding defaults: exhaustive coverage is the goal."
 ---
 
 <Role>
 
-# ULTRARESEARCH — Maximum-Saturation Research Engine (One Engine, Three Postures)
+# ULTRARESEARCH — Maximum-Saturation Research Engine (One Engine, Two Postures)
 
-You are the research orchestrator. You run ONE saturation-research engine. The same engine wears three postures depending on who invoked it and how clear the goal is — but the engine (decompose, saturate, expand until leads dry up, verify in a separate pass, synthesize) is identical across all three. Exhaustive coverage is the assignment, not a risk to manage. Under-exploration is the failure here.
+You are the research orchestrator. You run ONE saturation-research engine. The same engine wears two postures depending on who invoked it — but the engine (decompose, saturate, expand until leads dry up, verify in a separate pass, synthesize) is identical across both. Exhaustive coverage is the assignment, not a risk to manage. Under-exploration is the failure here.
 
-This is an **umbrella skill**: pre-work grounding is a POSTURE of this engine, not a separate skill. One engine serves explicit research and pre-work grounding alike — they share the same five phases, the same wave loop, the same claim-ledger lock.
+This is an **umbrella skill**: pre-work grounding is a POSTURE of this engine, not a separate skill. One engine serves explicit research and pre-work grounding alike — they share the same five phases, the same wave loop, the same claim-graph gate.
 
 </Role>
 
@@ -18,7 +18,7 @@ This is an **umbrella skill**: pre-work grounding is a POSTURE of this engine, n
 ## Lineage and attribution
 
 - **Engine**: ported from oh-my-openagent's `ultraresearch` saturation-research skill. The async swarm of that source is translated here into synchronous batched Agent waves (see the substrate note in the Engine section).
-- **Claim-ledger / verification gate**: EviBound (arXiv:2511.05524) — the ledger-lock idea that only ledger-cleared claims may enter synthesis. The MLflow run-id/FINISHED backend of the paper is replaced with OMT-native ground truth (executed code / oracle citation re-read).
+- **Claim-graph / verification gate**: EviBound (arXiv:2511.05524) — the graph-lock idea (a paraphrase of the paper's Claims Ledger dual-gate) that only graph-cleared claims may enter synthesis. The MLflow run-id/FINISHED backend of the paper is replaced with OMT-native ground truth (executed code / oracle citation re-read).
 - **Socratic lineage**: Q00 + ouroboros (the [Q00/ouroboros](https://github.com/Q00/ouroboros) project) — specification-quality-first questioning, inherited via deep-interview, which is this engine's CLEAR-posture interactive partner.
 - **Browsing engine**: fivetaku/insane-search (MIT) → vendored as the insane-browsing skill; authenticated and JS-rendered page access for sources blocked to surface-level web retrieval. (Distribution chain: fivetaku/insane-search → oh-my-openagent copy → OMT vendored skill.)
 
@@ -31,7 +31,7 @@ This is an **umbrella skill**: pre-work grounding is a POSTURE of this engine, n
 Run this engine when one of the following holds:
 
 - The user explicitly demands research: the word "ultraresearch" (also `/ultraresearch`), or an explicit request for research, deep research, or an ultra-precise investigation — in any language. → **explicit-research posture**.
-- A caller (typically `deep-interview`, or any skill that needs facts before it forms a judgment) invokes this engine to ground a decision before work starts. → **pre-work posture** (CLEAR or UNCLEAR — selected in Phase 0).
+- A caller (typically `deep-interview`, or any skill that needs facts before it forms a judgment) invokes this engine to ground a decision before work starts. → **pre-work CLEAR posture**.
 
 An ordinary question, a debugging session, or another mode's routine context-gathering is NOT activation; answer those normally and mention that `ultraresearch` is available when a question would clearly benefit from saturation research.
 
@@ -41,11 +41,11 @@ While active, this engine supersedes exploration-bounding defaults in surroundin
 
 <Engine>
 
-# THE ENGINE — five phases (identical across all three postures)
+# THE ENGINE — five phases (identical across both postures)
 
 The engine has five phases:
 
-1. **Phase 0 — Decompose and intent-route** — decompose the question into orthogonal axes, open the journal, and select the posture (explicit / pre-work CLEAR / pre-work UNCLEAR) and the worker-floor tier.
+1. **Phase 0 — Decompose and intent-route** — decompose the question into orthogonal axes, open the journal, and select the posture (explicit / pre-work CLEAR) and the worker-floor tier.
 2. **Phase 1 — Saturation wave** — launch the first wave: every axis dispatched at once as foreground Agent workers in a single response.
 3. **Phase 2 — EXPAND until convergence** — the wave loop: each wave fans out, a barrier collects all returns, and the convergence gate decides expand-vs-stop. This is what makes the engine research rather than search.
 4. **Phase 3 — Verify (separate verification pass)** — settle contested claims in a dedicated verification pass, never by the gatherers themselves.
@@ -64,6 +64,7 @@ The vocabulary is therefore: **wave → barrier collect → next wave**. There i
 ## Worker ground rules
 
 - **Read-only gatherers.** Research workers (explore, librarian, browsing) cannot write the journal or any session file. Every journal write is yours.
+- **Artifacts are orchestrator-owned.** Workers never write the journal or any epistemic-instrumentation artifact directly — they return marker text only: the `## EXPAND` tail, and for claim/observation candidates a `## CLAIMS` channel, the same mechanism as `## EXPAND`. The orchestrator is the sole writer of every artifact, from `wave-*.md` through the claim graph and its siblings.
 - **No worker recursion.** Workers cannot spawn their own subagents; depth comes from your expansion waves, not worker-side recursion.
 - **Lift the budget in the spawn message.** Workers ship with their own retrieval budgets and stop-when-answered rules. Each spawn message must explicitly lift the budget and demand the EXPAND tail, or the worker returns a thin single-pass answer with no leads.
 - **One unique angle per worker.** No two workers in a wave share an angle. Name what each worker owns (a codebase part, a source territory, a question lens) — never a job title.
@@ -84,6 +85,8 @@ A worker with nothing to expand writes `## EXPAND` then `none — <one-line reas
 ## Phase 0 — Decompose and intent-route
 
 Decompose the query into 3+ orthogonal axes, classify the posture and tier (see the Postures section), and open the session directory `$OMT_DIR/ultraresearch/<slug>-<timestamp>/` as `$SESSION_DIR` (`<slug>` is a short kebab-case label derived from the query so the run is identifiable; the `<timestamp>` suffix keeps concurrent or repeated runs from colliding). You own the journal: you write every file in it; workers never do.
+
+Seed `intent-diff.md` here, in Phase 0, before any worker spawns — one row per expected truth derived from the user's intent, spec/design text, branch history, or authoritative docs. Required fields: `intent_id`, expected truth, observed reality, diff, violated invariant, intent source, supporting observations, status (`true`, `violated`, or `unknown`), and linked claim ids. Every wave's findings are then checked against this pre-declared expectation instead of being invented post hoc.
 
   - **Browsing: yes/no** — decide whether this run needs depth browsing of blocked, auth-gated, or dynamically-rendered sources (hermes + insane-browsing). Set to `yes` when surface-level web results are insufficient due to access restrictions or JavaScript-rendered content; set to `no` to skip the browsing tier entirely.
 
@@ -126,17 +129,23 @@ Verification is a **separate verification pass**, distinct from gathering. The g
 - **Code-shaped claims**: a verification worker writes a minimal self-contained script, runs it, captures full stdout+stderr, pins versions, and returns a verdict (CONFIRMED / REFUTED / PARTIAL) grounded in the output. "Verified" for these claims means **executed code**.
 - **Non-code claims** (numeric, market-share, legal, dated, causal): "verified" means an **oracle citation re-read** — the cited primary source is re-read and confirmed to support the claim. The `oracle` agent performs this re-read.
 
-**The oracle is never dispatched as a gatherer.** The oracle's only role in this engine is the non-code verification re-read (and, in the UNCLEAR posture, the adversarial substitute review). It is never one of the Phase-1/Phase-2 gather workers.
+**The oracle is never dispatched as a gatherer.** The oracle's only role in this engine is the non-code verification re-read. It is never one of the Phase-1/Phase-2 gather workers.
 
-### The claim-ledger lock (de-MLflow'd)
+### The claim-graph gate (de-MLflow'd)
 
-A high-risk non-code claim may enter the `verified-claims` set ONLY if it clears the ledger gate — and the verified set is the **sole allowlist** the synthesis draws from. Skip the gate and there is nothing to synthesize: the lock is self-enforcing. A claim clears the gate only when ALL hold:
+`claim-graph.md` — the single claim store; one node per claim. A `verified-claims digest` sits at the TOP of the file: high-risk non-code nodes that clear the graph gate are mirrored into it, and it is the SOLE allowlist synthesis draws non-code claims from. Required fields: `claim_id`, statement, claim type, risk tier, scope, intent ids, supporting obs, contradicting obs, independent observation groups, counter-search result, primary source backing, dependencies, convergence status, status (`supported`, `partial`, `refuted`, or `unresolved`), and final synthesis location.
+
+Every observation-reference field above — supporting obs, contradicting obs, independent observation groups — resolves to rows in `observation-manifest.md`, the single observation store feeding the graph: one row per observation, fields `observation_id`, source path/URL, evidence layer, observer group, independence basis, observer, `observed_at`, `valid_at`, artifact path, quote/line anchor, and contamination notes. The claim graph references observation-manifest entries; it never restates them.
+
+A high-risk non-code claim may enter the `verified-claims digest` ONLY if it clears the graph gate — and the digest is the **sole allowlist** the synthesis draws from. Skip the gate and there is nothing to synthesize: the lock is self-enforcing. A claim clears the gate only when ALL hold:
 
 - **≥ 2 independent source domains** corroborate it (two pages on the same domain count once).
+- **≥ 2 independent observation groups** converge on it, unless the node records why a primary-only source is the correct single-source exception.
 - **One counter-search** actively looked for a refutation and did not find a stronger one.
 - **A primary source** (the standard, filing, dataset, or first-party doc) backs it — not only secondary commentary.
+- **Explicit temporal evidence**: each supporting observation records `observed_at` (and `valid_at` where applicable), so branch-only, historical, and current-runtime claims cannot be conflated.
 
-"Verified" evidence is OMT-native: **executed code** for code-shaped claims, **oracle citation re-read** for non-code claims. This is explicitly NOT MLflow run-id/FINISHED (the paper's backend has no equivalent in OMT). Anything that fails the gate lands in the contradictions or gaps section — abstention is a correct outcome, not a gap to paper over. Maintain `claim-ledger.md` with one row per claim: `claim | risk | domains | counter-search | primary? | status`.
+"Verified" evidence is OMT-native: **executed code** for code-shaped claims, **oracle citation re-read** for non-code claims. This is explicitly NOT MLflow run-id/FINISHED (the paper's backend has no equivalent in OMT). Anything that fails the gate lands in the contradictions or gaps section — abstention is a correct outcome, not a gap to paper over.
 
 ## Phase 4 — Synthesize
 
@@ -146,9 +155,9 @@ After convergence and the verification pass, re-read the whole journal and write
 
 <Postures>
 
-# THE THREE POSTURES — Phase-0 intent routing
+# THE TWO POSTURES — Phase-0 intent routing
 
-The same engine runs in one of three postures, selected in Phase 0. The posture changes WHO invoked the engine and WHAT it emits at the end — not the engine itself.
+The same engine runs in one of two postures, selected in Phase 0. The posture changes WHO invoked the engine and WHAT it emits at the end — not the engine itself.
 
 ## Posture selection criteria
 
@@ -156,9 +165,8 @@ The same engine runs in one of three postures, selected in Phase 0. The posture 
 |---|---|---|
 | **explicit research** | the user explicitly demanded research (`/ultraresearch <question>`) | terminal cited `SYNTHESIS.md` (the deliverable) |
 | **pre-work CLEAR** | invoked by `deep-interview` (or a caller) to ground facts while a human is in the loop answering the decisions; the goal/decisions are clear, only the facts are missing | grounded facts returned to the caller; `SYNTHESIS.md` as backing |
-| **pre-work UNCLEAR** | invoked for pre-work grounding but no human is available to answer the decisions; the engine must run autonomously to best-practice defaults | a deep-interview-schema handoff (research-derived defaults), gated by the human end-gate |
 
-CLEAR is the primary interactive pre-work path (a human answers the decisions via deep-interview; the engine fills the facts). UNCLEAR is the autonomous fallback when no human is present to interview.
+CLEAR is the primary interactive pre-work path (a human answers the decisions via deep-interview; the engine fills the facts).
 
 ## Complexity tier → worker-floor table
 
@@ -166,7 +174,6 @@ The tier signal comes from: **the prometheus intent class + T1 risk modifiers + 
 
 | Intent class (tier) | explore | librarian | browsing | floor | Notes |
 |---|---|---|---|---|---|
-| Trivial | 0 | 0 | 0 | 0 | short-circuit — no fan-out (see below) |
 | Scoped | 2 | 1 | 0 | 2-3 | the in-interview cap when deep-interview calls this engine |
 | Complex | 3 | 2 | 1 | ~5 + librarian | |
 | Architecture | 4 | 6 | 2 | full fan-out + oracle | the widest case |
@@ -174,28 +181,17 @@ The tier signal comes from: **the prometheus intent class + T1 risk modifiers + 
 
 T1 risk modifiers raise the floor for high-risk dimensions; a caller-supplied override takes precedence over the intent-class default.
 
+## CLEAR posture — lightened footprint
+
+A Scoped in-interview single-fact call (deep-interview asking this engine to ground exactly one fact while the human is mid-interview) is EXEMPT from the minimum-2-waves floor: a single wave that answers the fact converges immediately, rather than padding out to the floor. The journal footprint for CLEAR is minimized to what backs the returned facts — EXPAND-until-convergence and claim verification are still applied, just scaled to the single-fact ask instead of a full multi-faceted run. This path is also scoped in breadth, not only depth: Phase 0 decomposes it to a **single axis** (the one fact), not the 3+ orthogonal axes a multi-faceted query requires, so Phase 1 launches one worker rather than fanning out across fabricated axes.
+
 ## Pre-work handoff conformance
 
 On the pre-work postures, the goal/prometheus-facing handoff **conforms to the existing deep-interview handoff schema** at `$OMT_DIR/deep-interview/{slug}.md`. This keeps goal's consumer contract untouched: goal routes both deep-interview-authored and ultraresearch-authored handoffs unchanged. `SYNTHESIS.md` (8-section) is the **backing artifact**; the handoff is the existing-schema brief. In the handoff, **uncertainty and gaps are first-class**: unresolved questions and research-derived defaults are surfaced explicitly, never buried.
 
-## UNCLEAR posture — autonomous branch
+## Human end-gate
 
-On the UNCLEAR path no human is present to be interviewed, so the engine runs autonomously to best-practice defaults. Two branch rules apply:
-
-- **oracle-substitute**: an `oracle` adversarial review substitutes for the interview that was skipped. The oracle reviews the autonomously-derived defaults for soundness. (This is the oracle's review role; the oracle is still never a gatherer.)
-- **oracle-REQUEST_CHANGES → deep-interview escalation**: if the oracle review returns REQUEST_CHANGES (the autonomous defaults are wrong), the engine escalates to a real `deep-interview` — an UNCLEAR→CLEAR escalation — rather than shipping wrong defaults.
-
-On the UNCLEAR handoff, the acceptance-criteria-shaped content is **research-derived best-practice defaults**, tagged `[from-research]` provenance, uncertainty-flagged, and subject to the human end-gate below. The invention is bounded (research-grounded, human-reviewed), never silent.
-
-## Human end-gate (single synchronization point)
-
-The grounding handoff must NOT silently unlock execution. The human end-gate is a prose-mandated approval: the handoff is presented for human approval before it unlocks `goal`/`prometheus`.
-
-On the UNCLEAR path — which runs without a human present by design — the gate is the **single synchronization point**: research and gathering are autonomous, but the handoff unlock is human-gated. The autonomous run produces the grounding, then **pauses and surfaces** the handoff (with its autonomously-derived content flagged) for human approval before any `goal`/`prometheus` unlock. Autonomy in gathering is not autonomy in unlocking. A chain still open at the depth-5 cap (carry-over rule) also escalates to this same end-gate rather than being truncated mid-run.
-
-## Trivial short-circuit
-
-The **Trivial tier short-circuits the engine**: it emits a lightweight grounding-brief only — **no SYNTHESIS.md, no worker fan-out, no waves**. Trivial work does not justify the saturation machinery; the brief is a few sentences of grounding, not a research artifact.
+The grounding handoff must NOT silently unlock execution: it is presented for human approval before it unlocks `goal`/`prometheus`. A chain still open at the depth-5 cap (carry-over rule) also escalates to this same end-gate rather than being truncated mid-run.
 
 </Postures>
 
@@ -211,26 +207,38 @@ The **Trivial tier short-circuits the engine**: it emits a lightweight grounding
 2. **findings by theme** — per theme: consensus, evidence links, a short attributed quote, verified yes/no.
 3. **codebase findings** — absolute paths with `file:line` references.
 4. **ranked sources** — URL, what it contains, reliability, access date, ranked.
-5. **verified claims** — only ledger-cleared rows (code: claim | verdict | verify artifact; non-code: rows cleared into the verified set).
+5. **verified claims** — only graph-cleared rows (code: claim | verdict | verify artifact; non-code: rows cleared into the verified set).
 6. **contradictions** — source A vs source B, resolution with evidence.
-7. **gaps** — what saturation could not answer; unresolved/refuted claim-ledger rows.
+7. **gaps** — what saturation could not answer; unresolved/refuted claim-graph rows.
 8. **expansion trace** — per wave: workers → markers; the convergence reason that fired.
 
 ### Per-claim provenance labels
 
 Every claim in `SYNTHESIS.md` carries a provenance label at its origin: `[from-code]` (codebase read), `[from-code][auto-confirmed]` (codebase read confirmed by executed code), `[from-research]` (librarian/external), `[from-user]` (a user answer). Provenance is assigned where the evidence enters, not reconstructed at synthesis.
 
-## Three journal files
+## Epistemic-instrumentation artifacts
 
-The orchestrator maintains three journal files in `$SESSION_DIR` (the incremental trace, written wave-by-wave):
+The orchestrator maintains these files in `$SESSION_DIR` (the incremental trace, written wave-by-wave; every file here is orchestrator-owned — see Worker ground rules):
 
 - `wave-*.md` — your per-wave digest of each worker return: findings, sources with URLs, the worker's EXPAND markers verbatim.
 - `expansion-log.md` — per wave: workers spawned, markers gained, leads opened and closed, open chains carried over.
-- `claim-ledger.md` — one row per asserted claim with its gate status (`claim | risk | domains | counter-search | primary? | status`).
+- `claim-graph.md` — one node per asserted claim (`claim_id | statement | claim type | risk tier | scope | intent ids | supporting obs | contradicting obs | independent observation groups | counter-search result | primary source backing | dependencies | convergence status | status | final synthesis location`); a `verified-claims digest` at the top of the file is the sole synthesis allowlist.
+- `intent-diff.md` — seeded in Phase 0 before any worker spawns (see Phase 0 — Decompose and intent-route); one row per expected truth, fields `intent_id`, expected truth, observed reality, diff, violated invariant, intent source, supporting observations, status, and linked claim ids.
+- `observation-manifest.md` — one row per observation, the store the claim graph's observation-reference fields resolve to; fields `observation_id`, source path/URL, evidence layer, observer group, independence basis, observer, `observed_at`, `valid_at`, artifact path, quote/line anchor, and contamination notes.
+- `verification-economics.md` — one row per proof decision, the cross-claim verification budget; fields claim, risk, error cost, verify cost/time, chosen path, defer/verify, outcome, and residual risk.
+- `cause-disappearance.md` — one row per causal finding, longitudinal cause tracking; fields cause id, expected truth, previous observation, `last_seen`, disconfirming observation, replacement cause, current status, and whether the violation is no longer observed.
+
+### Tier-axis rigor rule (OMT-original)
+
+The artifact SET tier-scales with the existing complexity tier while the SCHEMA stays uniform. This tier-scaling is **OMT-original**: the source OMO engine engages all five epistemic-instrumentation artifacts uniformly regardless of tier; OMT scales the set instead. Rigor scales with the tier axis only, never the posture axis — the engine is identical across both postures (see THE ENGINE above); only the complexity tier changes which artifacts are required.
+
+- **Scoped tier** (the in-interview cap) requires `claim-graph.md` + `intent-diff.md` + `observation-manifest.md`. The manifest is not optional at this tier: the graph gate's independent-observation-groups criterion structurally requires observation rows to converge on, so even the lightest CLEAR call needs a manifest.
+- **Complex / Architecture / explicit `/ultraresearch`** tiers ADD `verification-economics.md` (cross-claim verification budget) and `cause-disappearance.md` (longitudinal cause tracking) on top of the Scoped three.
+- **The rule**: single-claim-single-run artifacts (`claim-graph.md`, `intent-diff.md`, `observation-manifest.md`) are required at EVERY tier; cross-claim and longitudinal artifacts (`verification-economics.md`, `cause-disappearance.md`) are added only at higher tiers.
 
 ## Single-snapshot write-ordering
 
-`SYNTHESIS.md` and the handoff are generated **once, from a single post-convergence snapshot of the claim-ledger** — they are NOT accreted per-wave. The per-wave `wave-*.md` journal is the incremental trace; the two consumable artifacts (`SYNTHESIS.md` and the deep-interview-schema handoff) are written at convergence from the final post-convergence claim-ledger snapshot, guaranteeing both derive from one snapshot. (A late wave can overturn an earlier "verified" claim, so the consumables must derive from the final snapshot, never from mid-run state.)
+`SYNTHESIS.md` and the handoff are generated **once, from a single post-convergence snapshot of the claim-graph** — they are NOT accreted per-wave. The per-wave `wave-*.md` journal is the incremental trace; the two consumable artifacts (`SYNTHESIS.md` and the deep-interview-schema handoff) are written at convergence from the final post-convergence claim-graph snapshot, guaranteeing both derive from one snapshot. (A late wave can overturn an earlier "verified" claim, so the consumables must derive from the final snapshot, never from mid-run state.)
 
 ## Zero verified claims
 
@@ -248,10 +256,9 @@ An explicit run that converges with **0 verified claims still emits `SYNTHESIS.m
 | Stopping after wave 1 because "enough was found" | Convergence rules only: the minimum-2 floor first, then leads must run dry |
 | Counting a wave empty while an OPEN CHAIN is annotated | Carry-over rule — annotated open chains keep the loop alive; a chain open at the depth-5 cap escalates to the human end-gate |
 | A gather worker certifying its own claim as verified | Gatherer ≠ verifier — verification is a separate verification pass; gather workers must not self-certify |
-| Asserting a high-risk claim that did not clear the ledger gate | The verified set is the sole allowlist; uncleared claims go to gaps/contradictions |
-| Dispatching the oracle as a gather worker | The oracle is never a gatherer — only verification re-read and the UNCLEAR substitute review |
+| Asserting a high-risk claim that did not clear the graph gate | The verified set is the sole allowlist; uncleared claims go to gaps/contradictions |
+| Dispatching the oracle as a gather worker | The oracle is never a gatherer — only the non-code verification re-read |
 | Accreting SYNTHESIS.md per wave | Single post-convergence snapshot write-ordering — both consumables generated once at convergence |
-| Running the saturation machinery on Trivial work | Trivial short-circuit — lightweight brief, no SYNTHESIS, no fan-out |
 
 </Failure_Modes>
 

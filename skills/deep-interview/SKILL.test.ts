@@ -19,6 +19,128 @@ import { join } from "path";
 
 const skillMd = readFileSync(join(import.meta.dir, "SKILL.md"), "utf8");
 const template = readFileSync(join(import.meta.dir, "deep-interview-spec-template.md"), "utf8");
+const prometheusMd = readFileSync(join(import.meta.dir, "..", "prometheus", "SKILL.md"), "utf8");
+const advancedMd = readFileSync(join(import.meta.dir, "deep-interview-advanced.md"), "utf8");
+
+// ---------------------------------------------------------------------------
+// Phase-3 (ambiguity dimension widening) parsing helpers.
+//
+// Three sources express the same {dim: weight} data in three different
+// shapes (bare inline formula, comma-separated decimal table, percentage
+// table). `normalizeDim` collapses any of their spellings ("Goal Clarity",
+// "Constraint", "criteria", "Success Criteria", "constraints", ...) down to
+// one canonical short key so cross-representation comparisons are MAP
+// equality, never raw string identity.
+// ---------------------------------------------------------------------------
+
+function normalizeDim(raw: string): string {
+	let s = raw.trim().toLowerCase();
+	s = s.replace(/\s*clarity\s*$/, "");
+	s = s.replace(/\s*criteria\s*$/, "");
+	s = s.trim();
+	if (s.endsWith("s") && !s.endsWith("ss")) s = s.slice(0, -1);
+	return s;
+}
+
+function normalizeWeightMap(m: Record<string, number>): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const [k, v] of Object.entries(m)) out[normalizeDim(k)] = v;
+	return out;
+}
+
+/** Parses deep-interview's canonical inline formula, e.g.
+ *  `Greenfield: \`ambiguity = 1 - (intent × 0.30 + outcome × 0.25 + ...)\`` */
+function parseInlineFormula(md: string, variant: "Greenfield" | "Brownfield"): Record<string, number> {
+	const re = new RegExp(variant + ":\\s*`ambiguity = 1 - \\(([^)]*)\\)`");
+	const m = md.match(re);
+	if (!m) return {};
+	const map: Record<string, number> = {};
+	const pairRe = /([A-Za-z]+)\s*×\s*(\d+\.\d+)/g;
+	let pm: RegExpExecArray | null;
+	while ((pm = pairRe.exec(m[1])) !== null) {
+		map[normalizeDim(pm[1])] = parseFloat(pm[2]);
+	}
+	return map;
+}
+
+/** Parses prometheus's decimal weight table rows, e.g.
+ *  `| **Greenfield** | Intent, Outcome, ... | 0.30, 0.25, ... |` */
+function parsePrometheusTable(md: string): { greenfield: Record<string, number>; brownfield: Record<string, number> } {
+	const start = md.indexOf("**Ambiguity Score**:");
+	const end = md.indexOf("## Failure Modes to Avoid");
+	const region = md.slice(start === -1 ? 0 : start, end === -1 ? undefined : end);
+	const rowRe = /\|\s*\*\*(Greenfield|Brownfield)\*\*\s*\|([^|]+)\|([^|]+)\|/g;
+	const result: { greenfield: Record<string, number>; brownfield: Record<string, number> } = {
+		greenfield: {},
+		brownfield: {},
+	};
+	let m: RegExpExecArray | null;
+	while ((m = rowRe.exec(region)) !== null) {
+		const variant = m[1].toLowerCase() as "greenfield" | "brownfield";
+		const dims = m[2].split(",").map((s) => normalizeDim(s));
+		const weights = m[3].split(",").map((s) => parseFloat(s.trim()));
+		const map: Record<string, number> = {};
+		dims.forEach((d, i) => {
+			map[d] = weights[i];
+		});
+		result[variant] = map;
+	}
+	return result;
+}
+
+/** Parses deep-interview-advanced.md's percentage weight table, e.g.
+ *  `| Intent Clarity | 30% | 27% |` under the `Greenfield | Brownfield` header. */
+function parseAdvancedPercentTable(md: string): { greenfield: Record<string, number>; brownfield: Record<string, number> } {
+	const start = md.indexOf("## Brownfield vs Greenfield Weights");
+	const end = md.indexOf("## Challenge Agent Modes");
+	const region = md.slice(start === -1 ? 0 : start, end === -1 ? undefined : end);
+	const rowRe = /\|\s*([A-Za-z][A-Za-z ]*?)\s*\|\s*(N\/A|\d+%)\s*\|\s*(N\/A|\d+%)\s*\|/g;
+	const greenfield: Record<string, number> = {};
+	const brownfield: Record<string, number> = {};
+	let m: RegExpExecArray | null;
+	while ((m = rowRe.exec(region)) !== null) {
+		const dim = normalizeDim(m[1]);
+		if (m[2] !== "N/A") greenfield[dim] = parseInt(m[2], 10) / 100;
+		if (m[3] !== "N/A") brownfield[dim] = parseInt(m[3], 10) / 100;
+	}
+	return { greenfield, brownfield };
+}
+
+/** Parses the inner keys of the FIRST `"scores":{...}` object found after `anchorText`. */
+function extractScoresKeys(md: string, anchorText: string): string[] {
+	const anchorIdx = md.indexOf(anchorText);
+	if (anchorIdx === -1) return [];
+	const openMarker = '"scores":{';
+	const openIdx = md.indexOf(openMarker, anchorIdx);
+	if (openIdx === -1) return [];
+	const innerStart = openIdx + openMarker.length;
+	const closeIdx = md.indexOf("}", innerStart);
+	const inner = md.slice(innerStart, closeIdx);
+	const keys: string[] = [];
+	const keyRe = /"(\w+)":/g;
+	let m: RegExpExecArray | null;
+	while ((m = keyRe.exec(inner)) !== null) keys.push(m[1]);
+	return keys;
+}
+
+// D-5 canonical decided weights (both sum to 1.00) -- the single source of
+// dims that the formula, the payload key-sets, and the two mirror tables
+// (prometheus, deep-interview-advanced.md) must all agree with.
+const EXPECTED_GREENFIELD_WEIGHTS = normalizeWeightMap({
+	intent: 0.3,
+	outcome: 0.25,
+	scope: 0.2,
+	constraints: 0.15,
+	success: 0.1,
+});
+const EXPECTED_BROWNFIELD_WEIGHTS = normalizeWeightMap({
+	intent: 0.27,
+	outcome: 0.22,
+	scope: 0.18,
+	constraints: 0.14,
+	success: 0.09,
+	context: 0.1,
+});
 
 // ---------------------------------------------------------------------------
 // STRIP: design-machinery phrases removed by the Design Interview reshape
@@ -236,8 +358,16 @@ describe("new-prose: Design Interview persists decisions to state", () => {
 // ---------------------------------------------------------------------------
 
 describe("regression-guard", () => {
-	test("ambiguity formula is present", () => {
-		expect(skillMd).toContain("goal × 0.40 + constraints × 0.30 + criteria × 0.30");
+	test("ambiguity formula (greenfield, 5-dim canonical weights) is present", () => {
+		expect(skillMd).toContain(
+			"intent × 0.30 + outcome × 0.25 + scope × 0.20 + constraints × 0.15 + success × 0.10",
+		);
+	});
+
+	test("ambiguity formula (brownfield, 6-dim canonical weights) is present", () => {
+		expect(skillMd).toContain(
+			"intent × 0.27 + outcome × 0.22 + scope × 0.18 + constraints × 0.14 + success × 0.09 + context × 0.10",
+		);
 	});
 
 	test("metis is absent from SKILL.md", () => {
@@ -306,5 +436,155 @@ describe("file-existence: mermaid visualization assets", () => {
 
 	test("references/render-assembly.md exists", () => {
 		expect(existsSync(join(import.meta.dir, "references/render-assembly.md"))).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// PHASE-3: ambiguity dimension widening (deep-interview + prometheus lockstep)
+// (must FAIL before tasks #15/#16/#17 -- RED)
+// ---------------------------------------------------------------------------
+
+describe("phase-3 new-dims: scoring probe (deep-interview formula widened to D-5 canonical weights)", () => {
+	test("greenfield formula parses to the canonical 5-dim weight map", () => {
+		expect(normalizeWeightMap(parseInlineFormula(skillMd, "Greenfield"))).toEqual(EXPECTED_GREENFIELD_WEIGHTS);
+	});
+
+	test("brownfield formula parses to the canonical 6-dim weight map", () => {
+		expect(normalizeWeightMap(parseInlineFormula(skillMd, "Brownfield"))).toEqual(EXPECTED_BROWNFIELD_WEIGHTS);
+	});
+});
+
+describe("phase-3 parity: greenfield + brownfield weight maps agree across all 3 sources (normalized maps, not raw strings)", () => {
+	const diGreenfield = normalizeWeightMap(parseInlineFormula(skillMd, "Greenfield"));
+	const diBrownfield = normalizeWeightMap(parseInlineFormula(skillMd, "Brownfield"));
+	const promTables = parsePrometheusTable(prometheusMd);
+	const advancedTables = parseAdvancedPercentTable(advancedMd);
+	const promGreenfield = normalizeWeightMap(promTables.greenfield);
+	const promBrownfield = normalizeWeightMap(promTables.brownfield);
+	const advancedGreenfield = normalizeWeightMap(advancedTables.greenfield);
+	const advancedBrownfield = normalizeWeightMap(advancedTables.brownfield);
+
+	test("greenfield: deep-interview formula == prometheus decimal table", () => {
+		expect(diGreenfield).toEqual(promGreenfield);
+	});
+
+	test("greenfield: deep-interview formula == deep-interview-advanced.md percentage table", () => {
+		expect(diGreenfield).toEqual(advancedGreenfield);
+	});
+
+	test("brownfield: deep-interview formula == prometheus decimal table", () => {
+		expect(diBrownfield).toEqual(promBrownfield);
+	});
+
+	test("brownfield: deep-interview formula == deep-interview-advanced.md percentage table", () => {
+		expect(diBrownfield).toEqual(advancedBrownfield);
+	});
+
+	test("greenfield map matches the D-5 canonical weights (sanity anchor)", () => {
+		expect(diGreenfield).toEqual(EXPECTED_GREENFIELD_WEIGHTS);
+	});
+
+	test("brownfield map matches the D-5 canonical weights (sanity anchor)", () => {
+		expect(diBrownfield).toEqual(EXPECTED_BROWNFIELD_WEIGHTS);
+	});
+});
+
+describe("phase-3 payload key-set guard: scores{} key-sets match the D-5 canonical dimension set", () => {
+	const EXPECTED_GREENFIELD_KEYS = new Set(Object.keys(EXPECTED_GREENFIELD_WEIGHTS));
+	const EXPECTED_BROWNFIELD_KEYS = new Set(Object.keys(EXPECTED_BROWNFIELD_WEIGHTS));
+
+	test("fact-ground payload (~:191) scores key-set is the 5-key greenfield set", () => {
+		const keys = extractScoresKeys(skillMd, '"kind":"fact-ground"');
+		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_GREENFIELD_KEYS);
+	});
+
+	test("Step 2e greenfield payload (~:343) scores key-set is the 5-key greenfield set", () => {
+		const keys = extractScoresKeys(skillMd, "### Step 2e: Update State");
+		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_GREENFIELD_KEYS);
+	});
+
+	test("Step 2e brownfield payload (~:358) scores key-set is the 6-key brownfield set", () => {
+		const keys = extractScoresKeys(skillMd, "For brownfield interviews, include the");
+		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_BROWNFIELD_KEYS);
+	});
+
+	test("no {goal,constraints,criteria} survivor at any payload site", () => {
+		const allKeys = [
+			...extractScoresKeys(skillMd, '"kind":"fact-ground"'),
+			...extractScoresKeys(skillMd, "### Step 2e: Update State"),
+			...extractScoresKeys(skillMd, "For brownfield interviews, include the"),
+		];
+		expect(allKeys).not.toContain("goal");
+		expect(allKeys).not.toContain("criteria");
+	});
+});
+
+describe("phase-3 [from-user] Step 2e content probe (SKILL.md content, not CLI behavior)", () => {
+	const step2eStart = skillMd.indexOf("### Step 2e: Update State");
+	const step2fStart = skillMd.indexOf("### Step 2f");
+	const step2eRegion = step2fStart === -1 ? skillMd.slice(step2eStart) : skillMd.slice(step2eStart, step2fStart);
+
+	test("Step 2e region is non-empty (sanity)", () => {
+		expect(step2eStart).toBeGreaterThan(-1);
+		expect(step2eRegion.length).toBeGreaterThan(0);
+	});
+
+	test("Step 2e region contains a [from-user] --append-provenance-item worked example", () => {
+		expect(step2eRegion).toContain("[from-user]");
+		expect(step2eRegion).toContain("--append-provenance-item");
+	});
+});
+
+describe("phase-3 fixture absence: stale deep-interview test fixtures removed", () => {
+	test("deep-interview/tests/application-scenarios.md does not exist", () => {
+		expect(existsSync(join(import.meta.dir, "tests/application-scenarios.md"))).toBe(false);
+	});
+
+	test("deep-interview/tests/baseline-pressure-scenario.md does not exist", () => {
+		expect(existsSync(join(import.meta.dir, "tests/baseline-pressure-scenario.md"))).toBe(false);
+	});
+});
+
+describe("phase-3 collision guard: prometheus's own copies of the same fixtures survive", () => {
+	const prometheusTestsDir = join(import.meta.dir, "..", "prometheus", "tests");
+
+	test("prometheus/tests/application-scenarios.md exists", () => {
+		expect(existsSync(join(prometheusTestsDir, "application-scenarios.md"))).toBe(true);
+	});
+
+	test("prometheus/tests/baseline-pressure-scenario.md exists", () => {
+		expect(existsSync(join(prometheusTestsDir, "baseline-pressure-scenario.md"))).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// phase-3 template propagation (code-review PR #156 finding F1, CONFIRMED):
+// the Phase-4 output is composed from deep-interview-spec-template.md, so that
+// template is a downstream consumer of the widened scoring dims. Its Clarity
+// Breakdown table and the per-round transcript placeholder must carry the new
+// Intent/Outcome/Scope split and must NOT reference the retired goal/criteria
+// score keys — the persisted `scores` object no longer has them, so the old
+// `(Goal: {g}, ..., Criteria: {cr})` placeholder would misreport the run.
+// FAILS on the pre-fix template (still 4-dim Goal/Constraint/Success/Context).
+// ---------------------------------------------------------------------------
+describe("phase-3 template propagation: Phase-4 spec-template reflects the widened D-5 dimensions", () => {
+	test("Clarity Breakdown table lists the split Intent/Outcome/Scope dimensions", () => {
+		expect(template).toContain("Intent Clarity");
+		expect(template).toContain("Outcome Clarity");
+		expect(template).toContain("Scope Clarity");
+	});
+
+	test("Clarity Breakdown no longer has a bare 'Goal Clarity' dimension row", () => {
+		expect(template).not.toContain("| Goal Clarity |");
+	});
+
+	test("transcript placeholder does not reference the retired goal/criteria score keys", () => {
+		expect(template).not.toMatch(/Goal:\s*\{g\}/);
+		expect(template).not.toMatch(/Criteria:\s*\{cr\}/);
+	});
+
+	test("examples do not target the retired 'Goal Clarity' dimension label", () => {
+		const examplesMd = readFileSync(join(import.meta.dir, "deep-interview-examples.md"), "utf8");
+		expect(examplesMd).not.toContain("Goal Clarity");
 	});
 });
