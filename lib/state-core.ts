@@ -169,13 +169,14 @@ export function isStateLive(
 // State-type prefix map
 // ---------------------------------------------------------------------------
 
-export type StateType = "goal" | "prometheus" | "deep-interview";
+export type StateType = "goal" | "prometheus" | "deep-interview" | "qa";
 
 /** Maps each stateful skill type to its state-file filename prefix. */
 export const STATE_PREFIX: Record<StateType, string> = {
 	goal: "goal-state-",
 	prometheus: "prometheus-state-",
 	"deep-interview": "deep-interview-active-state-",
+	qa: "qa-state-",
 };
 
 // ---------------------------------------------------------------------------
@@ -262,6 +263,9 @@ function purposeFor(type: StateType, parsed: Record<string, unknown>): string {
 		}
 		return "";
 	}
+	if (type === "qa") {
+		return String(parsed["target"] ?? "");
+	}
 	return "";
 }
 
@@ -301,6 +305,7 @@ export function writeFileNoCreate(path: string, content: string): void {
  *   prometheus:     phase=="S0" && plan_path==""
  *   goal:           phase=="planning" && iteration==0 && outcome==""
  *   deep-interview: seeded file lacking the rich `state` object
+ *   qa:             phase=="PRE-FLIGHT" && cycle==0 && target==""
  */
 export function isPristine(type: StateType, parsed: Record<string, unknown>): boolean {
 	if (type === "prometheus") {
@@ -320,6 +325,9 @@ export function isPristine(type: StateType, parsed: Record<string, unknown>): bo
 	if (type === "deep-interview") {
 		// Pristine = seed file without the rich `state` object
 		return parsed["state"] === undefined || parsed["state"] === null;
+	}
+	if (type === "qa") {
+		return parsed["phase"] === "PRE-FLIGHT" && parsed["cycle"] === 0 && parsed["target"] === "";
 	}
 	return false;
 }
@@ -575,6 +583,21 @@ function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
 			blocked_reason: "",
 			completion_evidence_paths: [],
 			schema_version: 1,
+			started_at: ts,
+			last_touched_at: ts,
+		};
+	}
+	if (type === "qa") {
+		return {
+			active: true,
+			phase: "PRE-FLIGHT",
+			cycle: 0,
+			max_cycles: 5,
+			same_failure_key: "",
+			same_failure_count: 0,
+			fix_head_before: "",
+			user_dirty_set: [],
+			target: "",
 			started_at: ts,
 			last_touched_at: ts,
 		};

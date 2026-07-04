@@ -53,6 +53,7 @@ toong
 #   P4 — directory contains a goal-state-*.json file with "active":true
 #   P5 — directory contains a deep-interview-active-state-*.json file
 #   P6 — directory contains a prometheus-state-*.json file
+#   P7 — directory contains a qa-state-*.json file
 # ---------------------------------------------------------------------------
 
 is_residue() {
@@ -72,7 +73,8 @@ list_state_files() {
     for f in \
         "$dir"/goal-state-*.json \
         "$dir"/prometheus-state-*.json \
-        "$dir"/deep-interview-active-state-*.json; do
+        "$dir"/deep-interview-active-state-*.json \
+        "$dir"/qa-state-*.json; do
         [[ -f "$f" ]] && echo "$f"
     done
     return 0
@@ -117,7 +119,7 @@ is_preserved() {
         [[ "$name" == "algocare-home-stage" ]] || return 0
     fi
 
-    # P4/P5/P6: contains at least one LIVE state file (goal, prometheus, or deep-interview)
+    # P4/P5/P6/P7: contains at least one LIVE state file (goal, prometheus, deep-interview, or qa)
     has_live_state "$dir" && return 0
 
     return 1
