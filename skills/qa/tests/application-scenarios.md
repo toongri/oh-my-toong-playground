@@ -260,7 +260,7 @@ QA 스킬의 핵심 기법(Composable Verification Layers, Spec Compliance, Scop
 - Changed files: utils/formatter.ts
 - Junior's summary: "Simplified date formatting logic while keeping signatures"
 
-**Expected Behavior:** Hands-on execution 트리거 적용 조건에서 "refactoring, internal logic, utility" 신호 감지 → Hands-on execution SKIP. 출력에 "Stage 3 Result: SKIPPED (internal logic only)" 기록. code quality check로 직접 진행.
+**Expected Behavior:** Hands-on execution 트리거 적용 조건에서 "refactoring, internal logic, utility" 신호 감지 → Hands-on execution SKIP. 출력에 "ADVERSARIAL E2E Result: SKIPPED (internal logic only)" 기록. code quality check로 직접 진행.
 
 **Verification Points:**
 1. "Refactor" + "utility" 신호에서 internal 유형으로 분류한다

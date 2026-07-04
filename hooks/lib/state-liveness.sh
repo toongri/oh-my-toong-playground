@@ -129,6 +129,7 @@ is_state_live() {
 #   goal-state-<sid>.json
 #   prometheus-state-<sid>.json
 #   deep-interview-active-state-<sid>.json
+#   qa-state-<sid>.json
 # We extract it as the portion after the last '-' separator group before '.json'.
 is_current_session() {
   local file="$1"
@@ -142,6 +143,7 @@ is_current_session() {
   #   goal-state-<sid>                         prefix = "goal-state-"
   #   prometheus-state-<sid>                   prefix = "prometheus-state-"
   #   deep-interview-active-state-<sid>        prefix = "deep-interview-active-state-"
+  #   qa-state-<sid>                           prefix = "qa-state-"
   # Session IDs may themselves contain '-' (e.g. UUIDs), so we MUST strip only
   # the fixed prefix, not everything up to the last '-'.
   local file_sid
@@ -152,6 +154,8 @@ is_current_session() {
       file_sid="${basename_val#prometheus-state-}" ;;
     deep-interview-active-state-*)
       file_sid="${basename_val#deep-interview-active-state-}" ;;
+    qa-state-*)
+      file_sid="${basename_val#qa-state-}" ;;
     *)
       # Unknown prefix — cannot determine sid; treat as different session
       file_sid="" ;;
