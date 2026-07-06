@@ -28,6 +28,131 @@ EOF
     exit 0
 fi
 
+# Handoff-gate arm (ADR D-1/D-2/D-5..D-9): while armed, forces a single clean
+# `cat` of the compaction handoff before any other tool call. Uses
+# permissionDecision:"deny" (denies only THIS call, the turn continues) --
+# NOT the TaskOutput arm's continue:false (halts the whole turn). Do not
+# copy continue:false here; a denied tool call must not also halt the turn.
+_hg_sid="${OMT_SESSION_ID:-}"
+if [[ -n "$_hg_sid" ]] && ! echo "$_hg_sid" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
+    _hg_sid=""
+fi
+if [[ -z "$_hg_sid" ]]; then
+    _hg_stdin_sid=$(extract_json_field "session_id" "")
+    if [[ -n "$_hg_stdin_sid" ]] && echo "$_hg_stdin_sid" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
+        _hg_sid="$_hg_stdin_sid"
+    fi
+fi
+
+_hg_omt_dir="${OMT_DIR:-}"
+if [[ -z "$_hg_omt_dir" ]]; then
+    _hg_stdin_cwd=$(extract_json_field "cwd" "")
+    if [[ -n "$_hg_stdin_cwd" ]]; then
+        # BASH_SOURCE-relative sourcing for resolve_omt_dir (mirrors :40-41,:58 below)
+        _hg_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        _hg_omt_dir=$(source "$_hg_script_dir/lib/omt-dir.sh" && unset OMT_DIR && resolve_omt_dir "$_hg_stdin_cwd")
+    fi
+fi
+
+# Arming predicate: ALL must hold, else fail-open (fall through silently).
+# Writability + jq availability are part of arming, not deferred, so a
+# non-cat call under an unwritable dir / jq-less box fails OPEN, not denied
+# (no-livelock).
+_hg_armed=0
+if [[ -n "$_hg_sid" && -n "$_hg_omt_dir" ]]; then
+    _hg_H="$_hg_omt_dir/handoff-${_hg_sid}.md"
+    _hg_M="$_hg_omt_dir/handoff-consumed-${_hg_sid}"
+    if [[ -f "$_hg_H" && ! -f "$_hg_M" && -w "$_hg_omt_dir" ]] && command -v jq > /dev/null 2>&1; then
+        _hg_armed=1
+    fi
+fi
+
+if [[ "$_hg_armed" -eq 1 ]]; then
+    # Quote-aware tokenizer (no eval/bash -c/$(...) on decoded bytes): splits
+    # $1 into _hg_tokens[], stripping quote delimiters. _hg_sqdollar[k]=1
+    # marks a token whose content came from inside single quotes AND held a
+    # literal '$' -- the shell would not expand that, so substituting it here
+    # would be a false-allow silent-skip; treated as a deny signal below.
+    _hg_tokenize() {
+        local s="$1" i=0 len c cur="" in_token=0 quote="" cur_sqdollar=0
+        len=${#s}
+        _hg_tokens=()
+        _hg_sqdollar=()
+        while [[ "$i" -lt "$len" ]]; do
+            c="${s:$i:1}"
+            if [[ -n "$quote" ]]; then
+                if [[ "$c" == "$quote" ]]; then
+                    quote=""
+                else
+                    [[ "$quote" == "'" && "$c" == '$' ]] && cur_sqdollar=1
+                    cur+="$c"
+                fi
+            else
+                case "$c" in
+                    ' '|$'\t')
+                        if [[ "$in_token" -eq 1 ]]; then
+                            _hg_tokens+=("$cur")
+                            _hg_sqdollar+=("$cur_sqdollar")
+                            cur=""
+                            in_token=0
+                            cur_sqdollar=0
+                        fi
+                        ;;
+                    '"'|"'")
+                        quote="$c"
+                        in_token=1
+                        ;;
+                    *)
+                        cur+="$c"
+                        in_token=1
+                        ;;
+                esac
+            fi
+            i=$((i + 1))
+        done
+        if [[ -n "$quote" ]]; then
+            return 1
+        fi
+        if [[ "$in_token" -eq 1 ]]; then
+            _hg_tokens+=("$cur")
+            _hg_sqdollar+=("$cur_sqdollar")
+        fi
+        return 0
+    }
+
+    _hg_allow=0
+    if [[ "$toolName" == "Bash" ]]; then
+        _hg_cmd=$(echo "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || _hg_cmd=""
+        # Deny BEFORE any expansion -- the subshell/redirect/chain below is
+        # never executed, only string-matched.
+        if ! echo "$_hg_cmd" | grep -qE '[|;<>&`]|\$\(|tail|head|sed'; then
+            if _hg_tokenize "$_hg_cmd"; then
+                if [[ "${#_hg_tokens[@]}" -eq 2 && "${_hg_tokens[0]}" == "cat" \
+                    && "${_hg_sqdollar[1]:-0}" != "1" ]]; then
+                    _hg_arg="${_hg_tokens[1]}"
+                    _hg_candidate="${_hg_arg//\$OMT_DIR/$_hg_omt_dir}"
+                    _hg_candidate="${_hg_candidate//\$OMT_SESSION_ID/$_hg_sid}"
+                    _hg_expected="$_hg_omt_dir/handoff-${_hg_sid}.md"
+                    if [[ "$_hg_candidate" == "$_hg_expected" ]]; then
+                        _hg_allow=1
+                    fi
+                fi
+            fi
+        fi
+    fi
+
+    if [[ "$_hg_allow" -eq 1 ]]; then
+        # Marker write is EXCLUSIVE to this branch -- never a shared prologue.
+        : > "$_hg_M" 2>/dev/null || true
+        # Fall through to the existing allow path below.
+    else
+        # permissionDecision:"deny" (deny-this-one-call) -- NOT continue:false
+        # (halt-turn); see the header comment above.
+        printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Read the full compaction handoff FIRST — run: cat \"$OMT_DIR/handoff-$OMT_SESSION_ID.md\" (no truncation, no other tool until then)"}}'
+        exit 0
+    fi
+fi
+
 # Single-creation-point seeds for skill state files (ADR-7).
 # Resolution precedence: (1) env OMT_SESSION_ID / OMT_DIR when present and valid;
 # (2) stdin payload session_id (same safety regex) + cwd via resolve_omt_dir;

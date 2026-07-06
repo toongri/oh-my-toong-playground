@@ -1203,6 +1203,51 @@ EOF
 }
 
 # =============================================================================
+# Tests: re-arm deletion (ADR D-10) — a re-compaction on the same sid must
+# delete a stale handoff-consumed-<sid> marker BEFORE emitting a new
+# large-handoff pointer, so the gate re-arms for the fresh handoff.
+# =============================================================================
+
+# AC19: re-arm positive — stale marker present + a new >7000-char handoff on
+# the SAME sid, source=compact → the stale marker is deleted.
+test_session_start_rearm_deletes_stale_marker_on_new_large_handoff() {
+    local sid="rearm-positive"
+    local marker="$TEST_OMT_DIR/handoff-consumed-${sid}"
+    local handoff_file="$TEST_OMT_DIR/handoff-${sid}.md"
+
+    touch "$marker"
+    python3 -c "print('X' * 7200)" > "$handoff_file" 2>/dev/null \
+        || yes 'LARGE_HANDOFF_FILLER_LINE_1234567890_ABCDEFGHIJ' 2>/dev/null | head -c 7200 > "$handoff_file"
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' \
+        | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$marker" ]; then
+        echo "ASSERTION FAILED (AC19): stale handoff-consumed marker should be deleted on re-arm but still exists"
+        return 1
+    fi
+    return 0
+}
+
+# AC20: re-arm negative — stale marker present, source=startup and no new
+# handoff → the marker is untouched (survives).
+test_session_start_rearm_marker_survives_without_new_handoff() {
+    local sid="rearm-negative"
+    local marker="$TEST_OMT_DIR/handoff-consumed-${sid}"
+
+    touch "$marker"
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "startup"}' \
+        | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$marker" ]; then
+        echo "ASSERTION FAILED (AC20): handoff-consumed marker should survive when no new large handoff is emitted"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # Tests: T3 — self-contained orphan-handoff GC arm (ADR D-8)
 # Globs $OMT_DIR/handoff-*.md, dash-safe sid extraction, own current-sid guard,
 # mtime age > HANDOFF_ORPHAN_TTL_SECS → rm -f. Does NOT call/modify
@@ -1337,6 +1382,40 @@ EOF
     # And the orphan handoff reaped by the new arm.
     if [ -f "$orphan" ]; then
         echo "ASSERTION FAILED: orphan handoff should be reaped alongside the *.json GC"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: marker-GC arm (ADR D-11a) — reaps orphaned handoff-consumed-* markers
+# by TTL, self-contained (own current-sid skip), and must NEVER touch a .md
+# handoff even if a marker's sid literally starts "consumed-" style basenames.
+# =============================================================================
+
+# AC22: marker-GC isolation — a past-TTL handoff-consumed-<OLD-SID> marker is
+# reaped, WHILE a co-present YOUNG non-current handoff-<OTHER-SID>.md (under
+# TTL) survives untouched by the marker-GC arm.
+test_gc_marker_consumed_orphan_reaped_young_handoff_survives() {
+    local current_sid="marker-gc-current"
+    local old_marker="$TEST_OMT_DIR/handoff-consumed-old-marker-sid"
+    local young_handoff="$TEST_OMT_DIR/handoff-other-young-sid.md"
+
+    touch "$old_marker"
+    _backdate_mtime_secs "$old_marker" 2000
+
+    printf 'young non-current handoff body' > "$young_handoff"
+    _backdate_mtime_secs "$young_handoff" 60
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$current_sid"'"}' \
+        | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$old_marker" ]; then
+        echo "ASSERTION FAILED (AC22): past-TTL handoff-consumed marker should be reaped but still exists"
+        return 1
+    fi
+    if [ ! -f "$young_handoff" ]; then
+        echo "ASSERTION FAILED (AC22): young non-current .md handoff must SURVIVE the marker-GC arm"
         return 1
     fi
     return 0
@@ -1748,6 +1827,29 @@ test_cache_safe_handoff_large_pointer() {
         return 1
     fi
 
+    # (AC21) Red-flags hardening: CRITICAL marker + the 3 named rationalizations
+    if ! echo "$ctx" | grep -qF 'CRITICAL'; then
+        echo "ASSERTION FAILED (AC21): pointer must contain a CRITICAL marker"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qiF 'native compaction summary'; then
+        echo "ASSERTION FAILED (AC21): pointer must name the 'native compaction summary' rationalization"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qiF 'only the new part'; then
+        echo "ASSERTION FAILED (AC21): pointer must name the 'only the new part' rationalization"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qiF 'save tokens'; then
+        echo "ASSERTION FAILED (AC21): pointer must name the 'save tokens' rationalization"
+        return 1
+    fi
+    # (AC21) raw sid must never appear (session-invariant static bytes)
+    if echo "$ctx" | grep -qF "$sid"; then
+        echo "ASSERTION FAILED (AC21): pointer must NOT contain the raw session id"
+        return 1
+    fi
+
     # (iii) large-handoff file PRESERVED (not deleted)
     if [ ! -f "$handoff_file" ]; then
         echo "ASSERTION FAILED (AC5-iii): large handoff file must be preserved (delete fires only on <=7000 path)"
@@ -1900,6 +2002,10 @@ main() {
     run_test test_session_start_encoder_invariants_in_source
     run_test test_session_start_compact_no_handoff_equals_restore_only
 
+    # Re-arm deletion (ADR D-10)
+    run_test test_session_start_rearm_deletes_stale_marker_on_new_large_handoff
+    run_test test_session_start_rearm_marker_survives_without_new_handoff
+
     # T3: self-contained orphan-handoff GC arm (ADR D-8)
     run_test test_gc_handoff_orphan_old_reaped
     run_test test_gc_handoff_current_session_survives_when_old
@@ -1907,6 +2013,9 @@ main() {
     run_test test_gc_handoff_dash_sid_matched_exactly
     run_test test_gc_handoff_arm_does_not_call_is_current_session
     run_test test_gc_handoff_arm_does_not_disturb_json_state_gc
+
+    # Marker-GC arm (ADR D-11a)
+    run_test test_gc_marker_consumed_orphan_reaped_young_handoff_survives
 
     # Cache-safe restore — TODO 3 (AC2a–AC6)
     run_test test_cache_safe_prom_sentinel_not_in_stdout

@@ -234,6 +234,26 @@ EOF
         return 1
     fi
 
+    # AC21: the large-handoff pointer must carry the CRITICAL marker + the 3
+    # named rationalizations (Red-flags hardening, ADR D-11b) as static bytes,
+    # and this whole combined blob is already checked for raw-sid absence below.
+    if ! printf '%s' "$ss_out" | grep -qF 'CRITICAL'; then
+        echo "ASSERTION FAILED (AC21): session-start.sh large-handoff pointer must contain CRITICAL"
+        return 1
+    fi
+    if ! printf '%s' "$ss_out" | grep -qiF 'native compaction summary'; then
+        echo "ASSERTION FAILED (AC21): large-handoff pointer must name 'native compaction summary'"
+        return 1
+    fi
+    if ! printf '%s' "$ss_out" | grep -qiF 'only the new part'; then
+        echo "ASSERTION FAILED (AC21): large-handoff pointer must name 'only the new part'"
+        return 1
+    fi
+    if ! printf '%s' "$ss_out" | grep -qiF 'save tokens'; then
+        echo "ASSERTION FAILED (AC21): large-handoff pointer must name 'save tokens'"
+        return 1
+    fi
+
     # --- resume-forge-start.sh fixture: active resume-forge state ---
     # The restore block emits qualitative phrase ("in progress"), not filename or digit/digit.
     cat > "$TEST_OMT_DIR/state/resume-forge-guard-test.json" << 'EOF'
