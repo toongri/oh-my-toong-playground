@@ -21,24 +21,31 @@ export interface ParsedInput {
  * Minimal contract the persistent-mode hook reads from the deep-interview
  * state file. The on-disk file may carry additional fields at runtime
  * (e.g. current phase, interview rounds, ambiguity scores, ontology
- * snapshots) written by the interview skill itself; only `active` is
- * consulted here. Writers must merge rather than overwrite — replacing
- * the file with this minimal shape discards in-flight interview data.
+ * snapshots) written by the interview skill itself; the hook consults
+ * `active` plus the heartbeat timestamps (for TTL liveness — see isStateLive).
+ * Writers must merge rather than overwrite — replacing the file with this
+ * minimal shape discards in-flight interview data.
  */
 export interface DeepInterviewState {
 	active: boolean;
+	/** Heartbeat timestamps (managed StateType) — read by the isStateLive TTL check. */
+	last_touched_at?: string;
+	started_at?: string;
 }
 
 /**
  * Minimal contract the persistent-mode hook reads from the prometheus
  * state file. The on-disk file may carry additional fields at runtime
- * (e.g. phase, plan_path, resume_summary, started_at) written by the
- * prometheus skill itself; only `active` is consulted here. Writers must
- * merge rather than overwrite — replacing the file with this minimal shape
- * discards in-flight prometheus data.
+ * (e.g. phase, plan_path, resume_summary) written by the prometheus skill
+ * itself; the hook consults `active` plus the heartbeat timestamps (for
+ * TTL liveness — see isStateLive). Writers must merge rather than overwrite —
+ * replacing the file with this minimal shape discards in-flight prometheus data.
  */
 export interface PrometheusState {
 	active: boolean;
+	/** Heartbeat timestamps (managed StateType) — read by the isStateLive TTL check. */
+	last_touched_at?: string;
+	started_at?: string;
 }
 
 /**
