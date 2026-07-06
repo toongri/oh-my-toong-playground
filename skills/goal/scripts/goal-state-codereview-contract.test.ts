@@ -81,6 +81,7 @@ describe("V8: code-review 아티팩트 열거형 계약 보존 (redesign 경로)
 	// -------------------------------------------------------------------------
 	test("유효한 스키마: `readCodeReviewArtifact`가 redesign 경로 아티팩트에 대해 null이 아닌 값 반환 (R1 fail-closed)", () => {
 		writeArtifact(SID, {
+			status: "COMPLETE",
 			findings: REDESIGN_FINDINGS,
 			reviewer: "code-reviewer",
 			at: "2026-06-26T10:00:00",
@@ -95,6 +96,7 @@ describe("V8: code-review 아티팩트 열거형 계약 보존 (redesign 경로)
 	// -------------------------------------------------------------------------
 	test("모든 finding verdict가 {CONFIRMED, PLAUSIBLE}에 속함 — redesign 경로에서 열거형 계약 보존", () => {
 		writeArtifact(SID, {
+			status: "COMPLETE",
 			findings: REDESIGN_FINDINGS,
 			reviewer: "code-reviewer",
 			at: "2026-06-26T10:00:00",
@@ -112,6 +114,7 @@ describe("V8: code-review 아티팩트 열거형 계약 보존 (redesign 경로)
 	// -------------------------------------------------------------------------
 	test("모든 finding class가 {correctness, cleanup}에 속함 — redesign 경로에서 열거형 계약 보존", () => {
 		writeArtifact(SID, {
+			status: "COMPLETE",
 			findings: REDESIGN_FINDINGS,
 			reviewer: "code-reviewer",
 			at: "2026-06-26T10:00:00",
@@ -140,6 +143,7 @@ describe("V8: code-review 아티팩트 열거형 계약 보존 (redesign 경로)
 	// -------------------------------------------------------------------------
 	test("CRITICAL: 직렬화된 finding 문자열에 confidence 없음 (`readCodeReviewArtifact`는 추가 키 무시 — raw 스캔이 유일한 보호, T5/ADR-D3/R1)", () => {
 		writeArtifact(SID, {
+			status: "COMPLETE",
 			findings: REDESIGN_FINDINGS,
 			reviewer: "code-reviewer",
 			at: "2026-06-26T10:00:00",
