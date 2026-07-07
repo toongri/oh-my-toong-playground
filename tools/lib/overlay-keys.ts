@@ -7,6 +7,7 @@ const EXACT_REGISTRY = new Map<string, KeyExtractor>([
 	["skills.items", syncItemsKey],
 	["scripts.items", syncItemsKey],
 	["rules.items", syncItemsKey],
+	["docs.items", syncItemsKey],
 	["permissions.allow", selfKey],
 	["permissions.deny", selfKey],
 	["permissions.ask", selfKey],
