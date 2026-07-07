@@ -12,14 +12,17 @@ Verify user-facing behavior by actually running the changed code. This is not op
 
 ### Decision Logic
 
+The applicability gate is not "is the surface user-facing?" — it is **does the change touch a risk surface?** A change with no UI/API entry point can still touch a risk surface (a feature-flag-gated branch, a payment/notification resolver internal, a permission/state-transition path) and must not be waved through on "internal-only" grounds alone. Only a change that touches no risk surface at all — a genuinely inert pure refactor — is safe to skip.
+
 | Signal in Prompt | Change Type | Action |
 |------------------|-------------|--------|
 | API endpoint, route, handler, REST, HTTP | API | Verify with `curl` |
 | UI, page, component, frontend, render | Frontend | Verify with `agent-browser` (fallback: `playwright`) |
 | Mobile, app, iOS, Android, simulator, emulator | Mobile | Verify with `maestro` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
-| Refactoring, internal logic, utility, helper, config | Internal only | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — non-user-facing surface) |
-| Documentation, markdown, comments only | Non-code | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — non-user-facing surface) |
+| Feature-flag-gated logic, payment/notification resolver internals, permission/state-transition branch — no direct UI/API entry point but touches a **risk surface** | Internal / risk surface | Do NOT skip — derive scenarios via [scenario-authoring.md] Layer A→B→C, then verify hands-on |
+| Refactoring, internal logic, utility, helper, config that touches **no risk surface** (pure refactor, no behavior/branch change) | Internal only | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — no risk surface touched) |
+| Documentation, markdown, comments only | Non-code | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — no risk surface touched) |
 
 ### When Multiple Types Apply
 
@@ -278,11 +281,11 @@ Skip teardown only when boot was idempotent and the device was reused, not creat
 
 **Applicability:** [API / Frontend / Mobile / CLI / SKIPPED (reason)]
 
-| Verification | Status | Details |
-|--------------|--------|---------|
-| Server start | PASS / FAIL | [startup details] |
-| [Endpoint/Page/Command] | PASS / FAIL | [response/behavior summary] |
-| Server stop | PASS / FAIL | [cleanup details] |
+| Verification | Why-Needed | Status | Details |
+|--------------|-----------|--------|---------|
+| Server start | - | PASS / FAIL | [startup details] |
+| [Endpoint/Page/Command] | [why this scenario exists — the coverage gap it fills, from the derived scenario's `why-needed` field] | PASS / FAIL | [response/behavior summary] |
+| Server stop | - | PASS / FAIL | [cleanup details] |
 
 **ADVERSARIAL E2E Result:** PASS -> Proceed to CHECK / FAIL -> REQUEST_CHANGES / SKIPPED -> Proceed to CHECK
 ```
@@ -318,6 +321,8 @@ If ANY verification fails:
 
 ## Adversarial Scenario Matrix
 
+This matrix is the **hostile-depth** dimension of scenario verification — it is not where scenario derivation starts. Scenarios are first derived by **breadth** in [scenario-authoring.md]: walk that framework's Layer A → B → C for the change under review to produce the full six-field scenario set (`actor · preconditions · steps · expected · why-needed · priority`) covering the risk surface. Only after breadth derivation is done does **depth** apply — subject each derived scenario to the rows below as the hostile attack layer. Breadth first, depth second: do not skip straight to this matrix on an undifferentiated changed-file list.
+
 Hands-on verification is not "run the happy path once." A change is only verified when it survives hostile probing. When running these checks, adopt the mindset of a malicious or careless user: someone who ignores documentation, pastes garbage data, skips required fields, and actively tries to confuse or break the system. After the modality procedures above confirm the happy path, run the adversarial checks below. Each category names what a hostile check looks like so a verifier running hands-on knows what to probe — pick the rows that apply to the change under review and actually execute them, do not reason about them on paper.
 
 | # | Category | What the adversarial check probes |
@@ -328,3 +333,6 @@ Hands-on verification is not "run the happy path once." A change is only verifie
 | 4 | **Interruption–cancel–resume + dirty initial state** | Kill or cancel the operation mid-flight, then re-run it; trigger concurrent executions, rapid repeated calls, and out-of-order sequencing; also start it from a dirty/partial prior state (leftover lock file, half-written record, stale session). Assert it recovers to a consistent state rather than compounding corruption. |
 | 5 | **Misleading success** (OWASP LLM09) | Distrust a green check / `200` / `"done"` that does not reflect real success. Verify the *actual effect* — the row was written, the file changed on disk, the message was delivered — not the success signal the system reports. An overconfident success claim is itself the bug. |
 | 6 | **Idempotency / re-run** | Run the operation twice with identical inputs and assert no duplicate records, double charges, or corruption. **By-design exception**: some operations are intentionally non-idempotent (append-only logs, "send another reminder", incrementing counters). When the spec marks an operation as intended to differ on re-run, repeated effects are an acceptable exception, not a defect — confirm against the intended behavior rather than flagging it. |
+| 7 | **stale-state** (source vs. packaged / build-artifact staleness) | Verify against the actually deployed/packaged artifact — build cache, bundled dist, compiled binary, container image — not just the source tree; a source-correct change can still ship stale bytes. This is distinct from row 4: row 4 is a dirty *runtime* state (a corrupted mid-operation record inside the running system); row 7 is stale *build artifacts* (the wrong bytes were packaged/deployed in the first place). |
+| 8 | **dirty-worktree** (git / harness debris) | Check the repo/worktree the verification run itself leaves behind — a stray test file, an uncommitted debug print, a leftover git stash, a temporary branch the harness created. Temporary-harness debris is not a product defect, but it must be noticed and cleaned up, not silently committed. This is distinct from row 4: row 4 is dirty *application* state; row 8 is debris the *harness/verifier* leaves in the repo. |
+| 9 | **flaky-rerun** (non-deterministic pass/fail) | Run the identical check 2-3 times with identical inputs and assert the pass/fail verdict is stable across runs. A verdict that flips between runs (race condition, order-dependent test, timing-sensitive assertion) is itself a defect. This is distinct from row 6: row 6 asks whether re-running produces duplicate/corrupted *effects*; row 9 asks whether re-running produces a consistent *verdict* on the same effects. |
