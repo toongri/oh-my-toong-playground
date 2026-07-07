@@ -12,7 +12,7 @@
 #   5. \b\d+ incomplete tasks\b — task count
 #
 # Emitters under guard:
-#   - hooks/session-start.sh         (prometheus restore + pending + large-handoff pointer)
+#   - hooks/session-start.sh         (prometheus restore + pending + ledger recording instruction)
 #   - hooks/resume-forge-start.sh    (restore block)
 #   - skills/sisyphus/hooks/skill-catalog/index.ts  (static macro)
 # =============================================================================
@@ -121,19 +121,6 @@ assert_no_volatile_patterns() {
 }
 
 # =============================================================================
-# Helper: create a >7000-char handoff file to trigger the large-handoff POINTER
-# (session-start.sh branches: <=7000 = inline+delete; >7000 = pointer+keep)
-# =============================================================================
-_write_large_handoff() {
-    local path="$1"
-    yes 'LARGE_HANDOFF_FILLER_LINE_1234567890_ABCDEFGHIJ' 2>/dev/null \
-        | head -c 7200 > "$path" 2>/dev/null || true
-    if [ ! -s "$path" ] || [ "$(wc -c < "$path" 2>/dev/null || echo 0)" -lt 7001 ]; then
-        python3 -c "print('X' * 7200)" > "$path" 2>/dev/null || true
-    fi
-}
-
-# =============================================================================
 # RED demonstration: guard catches a session-ID leak in a throwaway emitter
 #
 # Creates a scratch shell script (never touches the real emitters) that
@@ -175,7 +162,7 @@ SCRATCH_EOF
 # Emitter setup:
 #   session-start.sh  — active prometheus state (restore block)
 #                     + pending todos (pending-tasks block)
-#                     + >7000-char handoff + source=compact (large-handoff POINTER)
+#                     + static ledger recording instruction (TODO 3, every session)
 #   resume-forge-start.sh — active resume-forge state file (restore block)
 #   skill-catalog/index.ts — static macro (no fixture needed)
 # =============================================================================
@@ -203,16 +190,8 @@ EOF
     printf '[{"id":"1","status":"pending"},{"id":"2","status":"pending"}]' \
         > "$TEST_HOME/.claude/todos/guard-todos.json"
 
-    # --- session-start.sh fixture 3: large handoff file (>7000 chars) ---
-    # With source=compact, the >7000-char branch emits an UNEXPANDED pointer
-    # (cat "$OMT_DIR/handoff-$OMT_SESSION_ID.md") instead of inlining the content.
-    _write_large_handoff "$TEST_OMT_DIR/handoff-${sid}.md"
-    if [ ! -s "$TEST_OMT_DIR/handoff-${sid}.md" ]; then
-        echo "ASSERTION FAILED: large handoff file could not be created"
-        return 1
-    fi
-
-    # Capture session-start.sh stdout (all three blocks: prometheus + pending + large-handoff pointer)
+    # Capture session-start.sh stdout (all three blocks: prometheus + pending +
+    # static ledger recording instruction, which fires unconditionally every session)
     local ss_out
     ss_out=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' \
         | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
@@ -228,29 +207,13 @@ EOF
         echo "  ss_out: ${ss_out:0:400}"
         return 1
     fi
-    if ! printf '%s' "$ss_out" | grep -qF 'COMPACTION HANDOFF'; then
-        echo "ASSERTION FAILED: session-start.sh must emit COMPACTION HANDOFF block"
+    # Positive-assertion (plan TODO 3, TODO 9): the static ledger recording
+    # instruction fires on every session and must be part of the combined
+    # blob checked for cache-safety below -- proves the new emitter, not just
+    # the removed handoff pointer, is what this guard actually verifies.
+    if ! printf '%s' "$ss_out" | grep -qF 'LEDGER RECORDING'; then
+        echo "ASSERTION FAILED: session-start.sh must emit the LEDGER RECORDING instruction (TODO 3)"
         echo "  ss_out: ${ss_out:0:400}"
-        return 1
-    fi
-
-    # AC21: the large-handoff pointer must carry the CRITICAL marker + the 3
-    # named rationalizations (Red-flags hardening, ADR D-11b) as static bytes,
-    # and this whole combined blob is already checked for raw-sid absence below.
-    if ! printf '%s' "$ss_out" | grep -qF 'CRITICAL'; then
-        echo "ASSERTION FAILED (AC21): session-start.sh large-handoff pointer must contain CRITICAL"
-        return 1
-    fi
-    if ! printf '%s' "$ss_out" | grep -qiF 'native compaction summary'; then
-        echo "ASSERTION FAILED (AC21): large-handoff pointer must name 'native compaction summary'"
-        return 1
-    fi
-    if ! printf '%s' "$ss_out" | grep -qiF 'only the new part'; then
-        echo "ASSERTION FAILED (AC21): large-handoff pointer must name 'only the new part'"
-        return 1
-    fi
-    if ! printf '%s' "$ss_out" | grep -qiF 'save tokens'; then
-        echo "ASSERTION FAILED (AC21): large-handoff pointer must name 'save tokens'"
         return 1
     fi
 
