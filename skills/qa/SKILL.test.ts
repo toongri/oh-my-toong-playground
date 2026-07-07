@@ -20,6 +20,11 @@ import { join } from "path";
 // ---------------------------------------------------------------------------
 
 const skillMd = readFileSync(join(import.meta.dir, "SKILL.md"), "utf8");
+const scenarioAuthoringMd = readFileSync(
+	join(import.meta.dir, "scenario-authoring.md"),
+	"utf8",
+);
+const stage3Md = readFileSync(join(import.meta.dir, "stage3-handson.md"), "utf8");
 
 // ---------------------------------------------------------------------------
 // NEW-PROSE: cycle phase vocabulary (must FAIL before rewrite — RED)
@@ -231,6 +236,52 @@ describe("new-prose: fix-loop nesting contract", () => {
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: scenario-authoring.md risk/coverage-gap derivation framework
+// ---------------------------------------------------------------------------
+
+describe("new-prose: scenario-authoring.md derivation framework", () => {
+	test("impact mapping is present", () => {
+		expect(scenarioAuthoringMd).toContain("impact mapping");
+	});
+
+	test("coverage-gap judgment is present", () => {
+		expect(scenarioAuthoringMd).toContain("coverage-gap");
+	});
+
+	test("actor is present", () => {
+		expect(scenarioAuthoringMd).toContain("actor");
+	});
+
+	test("why-needed is present", () => {
+		expect(scenarioAuthoringMd).toContain("why-needed");
+	});
+});
+
+describe("new-prose: stage3-handson.md risk-surface + hardening rows", () => {
+	test("stale-state row is present", () => {
+		expect(stage3Md).toContain("stale-state");
+	});
+
+	test("dirty-worktree row is present", () => {
+		expect(stage3Md).toContain("dirty-worktree");
+	});
+
+	test("flaky-rerun row is present", () => {
+		expect(stage3Md).toContain("flaky-rerun");
+	});
+
+	test("new hardening rows are called out as distinct from the pre-existing row 4", () => {
+		expect(stage3Md).toContain("distinct from row");
+	});
+});
+
+describe("new-prose: SKILL.md points at scenario-authoring.md", () => {
+	test("scenario-authoring.md pointer is present", () => {
+		expect(skillMd).toContain("scenario-authoring.md");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // STRIP: static-audit sections removed (must FAIL before rewrite — RED)
 // ---------------------------------------------------------------------------
 
@@ -275,6 +326,20 @@ describe("strip: Code-Quality static review step removed", () => {
 
 	test('"checklists.md" reference is absent', () => {
 		expect(skillMd).not.toContain("checklists.md");
+	});
+});
+
+describe("strip: qa's PLAN/Overview no longer disclaim reading the change", () => {
+	test('"not to read about it" is absent', () => {
+		expect(skillMd).not.toContain("not to read about it");
+	});
+
+	test('"static prose-audit machinery" is absent', () => {
+		expect(skillMd).not.toContain("static prose-audit machinery");
+	});
+
+	test('"static responsibility" no longer appears anywhere in SKILL.md', () => {
+		expect(skillMd.match(/static responsibility/g)).toBeNull();
 	});
 });
 
@@ -328,6 +393,41 @@ describe("preserved: binary APPROVE/REQUEST_CHANGES output contract", () => {
 describe("preserved: non-blocking command execution policy", () => {
 	test("run_in_background is present", () => {
 		expect(skillMd).toContain("run_in_background");
+	});
+});
+
+describe("preserved: stage3-handson.md 6-category adversarial matrix anchor", () => {
+	test('"## Adversarial Scenario Matrix" heading is present', () => {
+		expect(stage3Md).toContain("## Adversarial Scenario Matrix");
+	});
+
+	test("all 6 pre-existing category names are present", () => {
+		expect(stage3Md).toContain("Error / failure paths");
+		expect(stage3Md).toContain("Boundary / malformed input");
+		expect(stage3Md).toContain("Injection");
+		expect(stage3Md).toContain("Interruption");
+		expect(stage3Md).toContain("Misleading success");
+		expect(stage3Md).toContain("Idempotency");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// STRUCTURAL-INTEGRITY / ANCHOR-RESOLUTION: SKILL.md's scenario-authoring.md
+// pointer must resolve to real content, not a dangling filename reference.
+// ---------------------------------------------------------------------------
+
+describe("structural-integrity: scenario-authoring.md pointer resolves to a real heading (anchor resolution)", () => {
+	test("SKILL.md points at scenario-authoring.md AND that heading actually exists in the file", () => {
+		expect(skillMd).toContain("scenario-authoring.md");
+		expect(scenarioAuthoringMd).toContain(
+			"## Layer A — Risk / Coverage-Gap Derivation",
+		);
+	});
+
+	test("the six-field scenario shape is enumerated in order in scenario-authoring.md", () => {
+		expect(scenarioAuthoringMd).toContain(
+			"`actor · preconditions · steps · expected · why-needed · priority`",
+		);
 	});
 });
 
