@@ -25,21 +25,6 @@ mcps:
       - "--prefer-offline"
       - "-y"
       - "@upstash/context7-mcp@3.2.1"
-  # Requires shell env: OPENSEARCH_URL, OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD
-  # (AWS: AWS_REGION, AWS_IAM_ARN or AWS_PROFILE). See opensearch-project/opensearch-mcp-server-py.
-  opensearch:
-    command: uvx
-    args:
-      - "opensearch-mcp-server-py"
-  # Notion stdio MCP. Requires shell env: NOTION_TOKEN (ntn_*** integration secret).
-  notion:
-    command: npx
-    args:
-      - "-y"
-      - "@notionhq/notion-mcp-server"
-  # Linear hosted MCP. Codex supports remote streamable-HTTP servers natively, so no mcp-remote stdio proxy is needed. First use triggers Codex's browser OAuth.
-  linear:
-    url: "https://mcp.linear.app/mcp"
   # Figma hosted MCP. Codex handles this as a streamable HTTP server with OAuth login.
   figma:
     url: "https://mcp.figma.com/mcp"
