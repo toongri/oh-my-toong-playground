@@ -3774,6 +3774,23 @@ describe("syncDocs", () => {
 		expect(await readFile(path.join(deployRoot, "docs", "bundle", "sub", "two.md"))).toBe("# Two\n");
 	});
 
+	// A docs directory that happens to contain index.md must still deploy as a
+	// WHOLE directory (additive per-file), not collapse to a single docs/<name>.md
+	// via the generic resolver's skills-style index.md single-entry rule — that
+	// collapse would silently drop sibling files/assets under the docs directory.
+	it("docs hybrid form: a dir-form source containing index.md copies the whole directory, not just index.md", async () => {
+		await writeFile(path.join(rootDir, "docs", "guide", "index.md"), "# Guide\n");
+		await writeFile(path.join(rootDir, "docs", "guide", "advanced.md"), "# Advanced\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["guide"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "guide", "index.md"))).toBe("# Guide\n");
+		expect(await readFile(path.join(deployRoot, "docs", "guide", "advanced.md"))).toBe("# Advanced\n");
+		expect(await exists(path.join(deployRoot, "docs", "guide.md"))).toBe(false);
+	});
+
 	// --- AC3.1: overwrite ---
 
 	it("docs overwrite: a declared item overwrites the existing target unconditionally", async () => {
