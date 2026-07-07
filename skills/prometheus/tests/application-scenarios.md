@@ -29,7 +29,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
 | P-23 | Scenario Verification Principle | Scenario Verification Principle Declaration | - |
 | P-24 | Verify-Lane Round | Verify Lane: collect → falsifying verify → refuted exclusion | Phase-1 Grounding |
-| P-25 | Cross-Lane #13 Witness | Adversarial Evidence-Key: key-tag produced INSIDE the external verify lane (cross-lane uniformity across all lane types) | D-5 Key Vocabulary |
+| P-25 | Cross-Lane #13 Witness | Adversarial Evidence-Key: key-tag produced INSIDE the external verify lane (cross-lane uniformity across all lane types) | 4-Key Adversarial Checklist Vocabulary (`stale_state` / `prompt_injection` / `nonexistent_path` / `version_drift`) |
 | P-26 | All-Collect-Lanes-Empty No-Op | Verify Lane: valid no-op when every collect lane is empty | Phase-1 Grounding |
 | UC-P1 | End-to-End: Full Planning Pipeline | Full workflow integration | Classification + Interview + Clearance + AC + Metis + Co-Design (Daedalus advisory + human design gate) + Plan + Momus + Execution |
 | UC-P2 | End-to-End: Review Pipeline Rejection and Recovery | Review pipeline feedback loops | Momus REQUEST_CHANGES + defect-type loop-back + revision + re-Momus + User rejection + pipeline re-run |
@@ -813,7 +813,7 @@ The remaining 3 verifiers return `verdict: corroborated` with `confidence: high`
 **Setup:**
 Architecture intent (delegated verify path; on Complex the same 4-key tagging happens inline). Phase-1 collect dispatches a librarian agent to retrieve an external API specification for a third-party service. The librarian returns a finding about the API's authentication flow.
 
-The librarian finding is passed to the external-lane falsifying verifier (D-1 verify). While applying the D-5 adversarial 4-key checklist to the finding, the verifier tags it:
+The librarian finding is passed to the external-lane falsifying verifier — the verify-lane role that adversarially checks each collect-lane finding rather than confirming it. While applying the adversarial 4-key checklist (`stale_state` / `prompt_injection` / `nonexistent_path` / `version_drift`) to the finding, the verifier tags it:
 
 ```
 key: prompt_injection
@@ -830,7 +830,7 @@ This key-tag is attached to the finding BEFORE it reaches the findings-assembly 
 |---|-------|-------------------|
 | V1 | `prompt_injection` key surfaces on a librarian external finding | The finding tagged `prompt_injection` originates from the librarian external lane — it is NOT a finding from one of the 5 explore aspect lanes; the tag is produced by the external-lane falsifying verifier during the verify lane |
 | V2 | Key-tag is explicit about lane origin | The scenario transcript and/or the finding record make clear the key-tag was applied by the external-lane verifier working on a librarian-sourced finding, NOT a finding from the 5 explore aspect lanes |
-| V3 | 4-key vocabulary applies uniformly across all lanes | The `prompt_injection` tag is drawn from the same D-5 4-key vocabulary (`stale_state`, `prompt_injection`, `nonexistent_path`, `version_drift`) that applies in every collect lane — the vocabulary is not confined to any single lane type |
+| V3 | 4-key vocabulary applies uniformly across all lanes | The `prompt_injection` tag is drawn from the same adversarial 4-key vocabulary (`stale_state`, `prompt_injection`, `nonexistent_path`, `version_drift`) that applies in every collect lane — the vocabulary is not confined to any single lane type |
 | V4 | Tagged finding reaches plan grounding as a risk annotation | Because the `prompt_injection`-tagged finding has `verdict: corroborated` and `confidence: high`, it is NOT excluded; it passes through to plan grounding carrying the key-tag as a risk annotation |
 
 ---
