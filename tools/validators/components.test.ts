@@ -441,6 +441,55 @@ agents:
 			expect(result.errors.some((e) => e.includes("missing-agent"))).toBe(true);
 		});
 	});
+
+	describe("docs existence 검증", () => {
+		it("returns error for missing docs component with no source", async () => {
+			const syncPath = writeYaml(
+				root,
+				"sync.yaml",
+				`
+path: ${root}
+docs:
+  items:
+    - component: gone
+`,
+			);
+			const result = await validateSyncYamlComponents(syncPath, root);
+			expect(result.errors.some((e) => e.includes("gone"))).toBe(true);
+		});
+
+		it("skips existence check for docs item with delete:true and no source", async () => {
+			const syncPath = writeYaml(
+				root,
+				"sync.yaml",
+				`
+path: ${root}
+docs:
+  items:
+    - component: gone
+      delete: true
+`,
+			);
+			const result = await validateSyncYamlComponents(syncPath, root);
+			expect(result.errors.filter((e) => e.includes("gone"))).toHaveLength(0);
+		});
+
+		it("produces no errors for existing docs component", async () => {
+			touch(join(root, "docs", "adr-001.md"));
+			const syncPath = writeYaml(
+				root,
+				"sync.yaml",
+				`
+path: ${root}
+docs:
+  items:
+    - component: adr-001
+`,
+			);
+			const result = await validateSyncYamlComponents(syncPath, root);
+			expect(result.errors.filter((e) => e.includes("adr-001"))).toHaveLength(0);
+		});
+	});
 });
 
 // ---------------------------------------------------------------------------

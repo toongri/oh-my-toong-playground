@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { cp, mkdir, rm, readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { logWarn } from "./logger.ts";
 
 /**
@@ -67,6 +67,26 @@ export async function backupConfigFile(filePath: string, backupDir: string): Pro
 	const destFile = join(backupDir, fileName);
 
 	await cp(filePath, destFile);
+}
+
+/**
+ * Backs up a single docs target file before it is overwritten or deleted.
+ * Source: targetFilePath
+ * Destination: {deployRoot}/.sync-backup/{sessionId}/docs/<relpath>
+ *   where <relpath> is targetFilePath's path relative to deployRoot
+ *   (subdirectory structure preserved).
+ * Per-file only (never a directory copy), reusing backupConfigFile.
+ * Skips silently if the target file does not exist yet.
+ */
+export async function backupDocs(
+	targetFilePath: string,
+	deployRoot: string,
+	sessionId: string,
+): Promise<void> {
+	const relPath = relative(deployRoot, targetFilePath);
+	const backupDir = join(deployRoot, ".sync-backup", sessionId, "docs", dirname(relPath));
+
+	await backupConfigFile(targetFilePath, backupDir);
 }
 
 /**

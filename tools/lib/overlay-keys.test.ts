@@ -14,6 +14,10 @@ describe("hasRegistry", () => {
 		expect(hasRegistry("rules.items")).toBe(true);
 	});
 
+	it("docs.items 경로는 등록됨", () => {
+		expect(hasRegistry("docs.items")).toBe(true);
+	});
+
 	it("permissions 경로들은 등록됨", () => {
 		expect(hasRegistry("permissions.allow")).toBe(true);
 		expect(hasRegistry("permissions.deny")).toBe(true);
@@ -71,6 +75,29 @@ describe("getIdentityKey", () => {
 		it("문자열 항목은 자기 자신이 키", () => {
 			expect(getIdentityKey("agents.items", "oracle")).toBe("oracle");
 			expect(getIdentityKey("skills.items", "prometheus")).toBe("prometheus");
+		});
+	});
+
+	describe("docs.items 경로", () => {
+		it("객체 항목은 component 필드를 키로 반환", () => {
+			expect(getIdentityKey("docs.items", { component: "x" })).toBe("x");
+		});
+
+		it("문자열 항목은 자기 자신이 키", () => {
+			expect(getIdentityKey("docs.items", "architecture")).toBe("architecture");
+		});
+
+		it("동일 component를 가진 두 docs 항목은 같은 키로 dedup되어 overlay가 우선함", () => {
+			const global = { component: "architecture", path: "global/architecture.md" };
+			const overlay = { component: "architecture", path: "project/architecture.md" };
+			expect(getIdentityKey("docs.items", global)).toBe(getIdentityKey("docs.items", overlay));
+
+			const merged = new Map<string, unknown>();
+			for (const entry of [global, overlay]) {
+				merged.set(getIdentityKey("docs.items", entry), entry);
+			}
+			expect(merged.size).toBe(1);
+			expect(merged.get("architecture")).toEqual(overlay);
 		});
 	});
 
