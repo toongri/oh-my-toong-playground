@@ -11,7 +11,7 @@ description: Use when verifying a code change through a standalone adversarial e
 
 ## Overview
 
-Pure dynamic adversarial-e2e verification skill. qa's job is to run the change, not to read about it: static document-vs-code auditing (Security/Data-Integrity checklists, MUST-DO compliance tables, Completeness prose audits) belongs to `code-review`; qa's only static responsibility is the behavior-invisible PRE-FLIGHT contract gate below.
+Pure dynamic adversarial-e2e verification skill. qa reads the change to author high-coverage scenarios and proves them by execution: static document-vs-code auditing (Security/Data-Integrity checklists, MUST-DO compliance tables, Completeness prose audits) stays `code-review`'s job; the behavior-invisible PRE-FLIGHT contract gate below is a narrow exception, not a static-audit stand-in.
 
 qa is **standalone and stateful**. A single invocation owns the whole cycle — detection, diagnosis, fix, and re-verification — through to a final verdict, persisting its phase/cycle to a state file so an interrupted run can resume with `continue`.
 
@@ -59,7 +59,7 @@ Every phase below runs once per pass, except the bracketed loop, which repeats o
 
 ### PRE-FLIGHT
 
-A **behavior-invisible contract check** — the one static responsibility qa keeps, because no amount of running the app surfaces a scope violation. Gates on exactly two things:
+A **behavior-invisible contract check** — a narrow exception to qa's dynamic-only posture, because no amount of running the app surfaces a scope violation. Gates on exactly two things:
 
 1. **MUST-NOT-DO scope membership.** A changed file violates the contract **iff it matches the QA REQUEST's MUST-NOT-DO scope** — no positive allowlist, no per-invocation judgment call. Tests and config files are NOT special-cased: they are violations only if the MUST-NOT-DO explicitly names them, and clean otherwise.
 2. **B ⊆ A scope boundary.** Expected files (from EXPECTED OUTCOME) = A; Changed files (from QA REQUEST Scope) = B. PASS if B ⊆ A.
@@ -70,7 +70,9 @@ A **behavior-invisible contract check** — the one static responsibility qa kee
 
 ### PLAN
 
-Parse the QA REQUEST's Spec/AC into concrete verification targets and adversarial scenarios: what BASELINE must run green, what ADVERSARIAL E2E must attack, and what CHECK will judge against. Spec/AC understanding is retained here in full — only the static prose-audit machinery (MUST-DO tables, Completeness sub-checks) that used to sit downstream of it is gone.
+Parse the QA REQUEST's Spec/AC into concrete verification targets and adversarial scenarios: what BASELINE must run green, what ADVERSARIAL E2E must attack, and what CHECK will judge against. Spec/AC understanding is retained here in full; MUST-DO tables and Completeness sub-checks are `code-review`'s static-audit territory, not PLAN's.
+
+See [scenario-authoring.md] for the risk/coverage-gap derivation framework.
 
 ### BASELINE
 
@@ -85,10 +87,14 @@ Build/test/lint green baseline.
 
 ### ADVERSARIAL E2E
 
-Drive the changed surface for real and attack it. Two parts, both required when the change is user-facing:
+Drive the changed surface for real and attack it. Two parts, both required when the change touches a risk surface — user-facing OR an internal risk surface (feature-flag-gated logic, payment/notification resolver internals, permission/state transitions), per [stage3-handson.md] `### Decision Logic`; only a genuinely inert refactor that touches no risk surface skips:
 
-1. **Execute caller-provided scenarios verbatim**, with per-scenario evidence. ANY provided-scenario failure = immediate REQUEST_CHANGES.
-2. **Self-author and run the 6-category adversarial matrix** for the changed surface: failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency. See [stage3-handson.md] `## Adversarial Scenario Matrix` for the full matrix and the lifecycle/applicability detail (start → verify → stop).
+1. **Execute caller-provided scenarios verbatim**, with per-scenario evidence. ANY provided-scenario failure = immediate REQUEST_CHANGES. Caller-provided scenarios always run verbatim, unchanged — the derivation framework below governs only scenarios qa self-authors; it never rewrites what the caller handed in.
+2. **Self-author the 6-category adversarial matrix** for the changed surface, in this order — breadth before depth:
+   1. **Derive candidate scenarios by breadth** via [scenario-authoring.md]: Layer A impact-map → coverage-gap → H/M/L priority.
+   2. **Attack each derived scenario with the applicable depth rows, working highest-priority (H) first**, from the 6-category matrix: failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency. See [stage3-handson.md] `## Adversarial Scenario Matrix` for the full matrix and the lifecycle/applicability detail (start → verify → stop).
+
+   Breadth (step 1) MUST precede depth (step 2) — do not skip straight to the matrix on an undifferentiated changed-file list.
 
 **Inline modality drivers, no tmux.** qa itself drives the modality-appropriate tool inline — it is not delegated to a separate driver subagent:
 
@@ -98,6 +104,8 @@ Drive the changed surface for real and attack it. Two parts, both required when 
 | Frontend / UI | `agent-browser` (fallback: `playwright`) |
 | Mobile / App | `maestro` |
 | CLI / TUI | interactive `bash` |
+
+An internal risk surface with no direct UI/API is driven via its nearest entry point — an API/`curl` call if reachable, or a `bash` harness that invokes the code path directly.
 
 Command execution is **non-blocking only**: every command either returns control on its own or is explicitly backgrounded (`run_in_background`, or trailing `&` with output redirected). A bare blocking command that hangs the shell is forbidden. See [stage3-handson.md] Step 3.2 for the lifecycle this backs (start in background → wait for readiness → verify → stop, never leaving a server running).
 
@@ -249,6 +257,8 @@ qa is non-interactive and headless. Every command it runs MUST return control to
 | ADVERSARIAL E2E | PASS / FAIL | [matrix + scenario summary] |
 | Cycles run | N / max_cycles | [Same-Failure key if terminated early] |
 
+Self-authored scenarios reported under ADVERSARIAL E2E carry the six-field shape from [scenario-authoring.md] — actor · preconditions · steps · expected · why-needed · priority.
+
 ## Verdict: [APPROVE / REQUEST_CHANGES / COMMENT]
 
 ## Issues (if any)
@@ -287,7 +297,7 @@ Every issue surfaced MUST include a confidence score. See [feedback-protocol.md]
 CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop ≤5] → EXIT → CLEANUP → ROLLBACK → STATE
 PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed
 BASELINE:   build/test/lint green. See stage1-commands.md
-MATRIX:     6 categories — failure paths, boundary/malformed input, injection, interruption, misleading success, idempotency. See stage3-handson.md
+MATRIX:     6 categories — failure paths, boundary/malformed input, injection, interruption, misleading success, idempotency. Breadth via scenario-authoring.md, depth via stage3-handson.md
 DRIVERS:    API→curl, Frontend→agent-browser (fallback playwright), Mobile→maestro, CLI→bash. No tmux.
 LOOP:       DIAGNOSIS→oracle (fresh, read-only) | FIX→sisyphus-junior (commits own scoped fix, never git commit -a) | RE-VERIFY→qa, full re-run, distrust fixer
 EXIT:       Goal Met / max_cycles=5 / Same-Failure-3x (scenario-id+root-cause-file+root-cause-symbol) / Safety
