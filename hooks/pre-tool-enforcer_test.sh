@@ -753,6 +753,466 @@ test_fail_loud_write_failure_warns_not_silent() {
 }
 
 # =============================================================================
+# Handoff-gate arm (TODO 1 of handoff-full-read-teeth plan)
+# Shared harness: arm_handoff() creates $HG_H (handoff file) and clears $HG_M
+# (consumed marker) under the already-exported $OMT_DIR/$OMT_SESSION_ID from
+# setup_test_env. hg_is_deny/hg_is_allow classify hook stdout.
+# =============================================================================
+
+arm_handoff() {
+    HG_H="$OMT_DIR/handoff-$OMT_SESSION_ID.md"
+    : > "$HG_H"
+    HG_M="$OMT_DIR/handoff-consumed-$OMT_SESSION_ID"
+    rm -f "$HG_M"
+}
+
+hg_is_deny() {
+    echo "$1" | jq -e '.hookSpecificOutput.hookEventName=="PreToolUse" and .hookSpecificOutput.permissionDecision=="deny"' > /dev/null 2>&1
+}
+
+hg_is_allow() {
+    ! hg_is_deny "$1"
+}
+
+hg_bash_json() {
+    # $1 = raw command string, already fully resolved by the caller (no shell
+    # expansion happens inside this helper -- jq --arg treats it as a literal)
+    jq -n --arg cmd "$1" '{tool_name: "Bash", tool_input: {command: $cmd}}'
+}
+
+hg_reason() {
+    echo "$1" | jq -r '.hookSpecificOutput.permissionDecisionReason // empty'
+}
+
+test_hg_ac1_pipe_tail_denied() {
+    arm_handoff
+    local cmd="cat \"$HG_H\" | tail -40"
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC1: expected deny for piped tail. Got: $out"; return 1; }
+}
+
+test_hg_ac2_read_offset_denied_reason_mentions_cat() {
+    arm_handoff
+    local out
+    out=$(jq -n --arg fp "$HG_H" '{tool_name: "Read", tool_input: {file_path: $fp, offset: 1, limit: 40}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC2: expected deny for Read. Got: $out"; return 1; }
+    hg_reason "$out" | grep -qi "cat" \
+        || { echo "ASSERTION FAILED AC2: reason should mention cat. Got: $(hg_reason "$out")"; return 1; }
+}
+
+test_hg_ac3_read_no_offset_denied() {
+    arm_handoff
+    local out
+    out=$(jq -n --arg fp "$HG_H" '{tool_name: "Read", tool_input: {file_path: $fp}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC3: expected deny for Read w/o offset. Got: $out"; return 1; }
+}
+
+test_hg_ac4a_write_denied_reason_mentions_handoff_or_cat() {
+    arm_handoff
+    local out
+    out=$(jq -n --arg fp "$HG_H" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC4a: expected deny for Write. Got: $out"; return 1; }
+    hg_reason "$out" | grep -qiE "handoff|cat" \
+        || { echo "ASSERTION FAILED AC4a: reason should mention handoff/cat. Got: $(hg_reason "$out")"; return 1; }
+}
+
+test_hg_ac4b_bash_ls_denied() {
+    arm_handoff
+    local out
+    out=$(printf '%s' "$(hg_bash_json "ls")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC4b: expected deny for bash ls. Got: $out"; return 1; }
+}
+
+test_hg_ac5_recognition_edge_cases_denied() {
+    arm_handoff
+    local out
+
+    out=$(printf '%s' "$(hg_bash_json "cat \"$HG_H\" > /tmp/x")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC5a: redirect should deny. Got: $out"; return 1; }
+
+    out=$(printf '%s' "$(hg_bash_json "cat \"$HG_H\"; ls")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC5b: chained ; should deny. Got: $out"; return 1; }
+
+    out=$(printf '%s' "$(hg_bash_json "cat \"$HG_H\" && echo hi")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC5c: chained && should deny. Got: $out"; return 1; }
+
+    out=$(printf '%s' "$(hg_bash_json "echo cat")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC5d: echo cat should deny. Got: $out"; return 1; }
+
+    out=$(printf '%s' "$(hg_bash_json "cat -n \"$HG_H\"")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC5e: cat -n (two args) should deny. Got: $out"; return 1; }
+}
+
+test_hg_ac6_wrong_path_denied_reason_redirects_to_handoff() {
+    arm_handoff
+    local out
+    out=$(printf '%s' "$(hg_bash_json 'cat "/etc/hostname"')" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC6: wrong path should deny. Got: $out"; return 1; }
+    hg_reason "$out" | grep -qi "handoff" \
+        || { echo "ASSERTION FAILED AC6: reason should redirect to handoff. Got: $(hg_reason "$out")"; return 1; }
+}
+
+test_hg_ac7_other_state_file_denied_generic_reason() {
+    arm_handoff
+    local cmd='cat "$OMT_DIR/prometheus-state-$OMT_SESSION_ID.json"'
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC7: other state-file path should deny. Got: $out"; return 1; }
+    hg_reason "$out" | grep -qi "handoff" \
+        || { echo "ASSERTION FAILED AC7: reason should be generic handoff-first. Got: $(hg_reason "$out")"; return 1; }
+}
+
+test_hg_ac8a_command_substitution_denied() {
+    arm_handoff
+    local cmd='cat "$(echo /etc/hostname)"'
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC8a: command substitution should deny. Got: $out"; return 1; }
+}
+
+test_hg_ac8b_command_substitution_never_executed() {
+    arm_handoff
+    local pwned="$OMT_DIR/PWNED"
+    rm -f "$pwned"
+    local cmd='cat "$(touch "$OMT_DIR/PWNED"; echo "$OMT_DIR")/handoff-$OMT_SESSION_ID.md"'
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC8b: should deny. Got: $out"; return 1; }
+    [[ ! -e "$pwned" ]] \
+        || { echo "ASSERTION FAILED AC8b: SECURITY -- subshell was executed, PWNED file exists"; return 1; }
+}
+
+test_hg_ac_squote_literal_dollar_denied() {
+    arm_handoff
+    local cmd="cat '\$OMT_DIR/handoff-\$OMT_SESSION_ID.md'"
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC-SQUOTE: single-quoted literal \$ should deny. Got: $out"; return 1; }
+}
+
+test_hg_ac_env_full_honored_envelope() {
+    arm_handoff
+    local out
+    out=$(jq -n --arg fp "$HG_H" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    echo "$out" | jq -e . > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC-ENV: stdout should be valid JSON. Got: $out"; return 1; }
+    echo "$out" | grep -q '"hookEventName".*"PreToolUse"' \
+        || { echo "ASSERTION FAILED AC-ENV: missing hookEventName:PreToolUse. Got: $out"; return 1; }
+    echo "$out" | grep -q '"permissionDecision".*"deny"' \
+        || { echo "ASSERTION FAILED AC-ENV: missing permissionDecision:deny. Got: $out"; return 1; }
+}
+
+test_hg_ac_deny_nomark_marker_absent_on_deny() {
+    arm_handoff
+    local out
+
+    out=$(printf '%s' "$(hg_bash_json "cat \"$HG_H\" | tail -40")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC-DENY-NOMARK: piped tail should deny. Got: $out"; return 1; }
+    assert_file_not_exists "$HG_M" "AC-DENY-NOMARK: marker must not exist after denied pipe" || return 1
+
+    out=$(jq -n --arg fp "$HG_H" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC-DENY-NOMARK: Write should deny. Got: $out"; return 1; }
+    assert_file_not_exists "$HG_M" "AC-DENY-NOMARK: marker must not exist after denied Write" || return 1
+}
+
+test_hg_ac9_fully_expanded_path_allowed_and_marked() {
+    arm_handoff
+    local cmd="cat \"$HG_H\""
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED AC9: fully-expanded cat should allow. Got: $out"; return 1; }
+    assert_file_exists "$HG_M" "AC9: marker should be created on allowed cat" || return 1
+}
+
+test_hg_ac10_unexpanded_pointer_form_allowed_and_marked() {
+    arm_handoff
+    local cmd='cat "$OMT_DIR/handoff-$OMT_SESSION_ID.md"'
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED AC10: unexpanded pointer form should allow. Got: $out"; return 1; }
+    assert_file_exists "$HG_M" "AC10: marker should be created on allowed cat" || return 1
+}
+
+test_hg_ac11_leading_indent_allowed_and_marked() {
+    arm_handoff
+    local cmd='  cat "$OMT_DIR/handoff-$OMT_SESSION_ID.md"'
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED AC11: leading indent should allow. Got: $out"; return 1; }
+    assert_file_exists "$HG_M" "AC11: marker should be created on allowed cat" || return 1
+}
+
+test_hg_ac_partial_omtdir_expanded_sid_literal_allowed() {
+    arm_handoff
+    local cmd="cat \"$OMT_DIR/handoff-\$OMT_SESSION_ID.md\""
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED AC-PARTIAL: partially-substituted form should allow. Got: $out"; return 1; }
+    assert_file_exists "$HG_M" "AC-PARTIAL: marker should be created on allowed cat" || return 1
+}
+
+test_hg_ac_space_embedded_space_never_word_split() {
+    local base
+    base=$(mktemp -d)
+    export OMT_DIR="$base/dir with space"
+    mkdir -p "$OMT_DIR"
+    arm_handoff
+    local cmd="cat \"$OMT_DIR/handoff-$OMT_SESSION_ID.md\""
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    if ! hg_is_allow "$out"; then
+        echo "ASSERTION FAILED AC-SPACE: quoted path with embedded space should allow. Got: $out"
+        rm -rf "$base"
+        return 1
+    fi
+    if [[ ! -f "$HG_M" ]]; then
+        echo "ASSERTION FAILED AC-SPACE: marker should be created on allowed cat"
+        rm -rf "$base"
+        return 1
+    fi
+    rm -rf "$base"
+}
+
+test_hg_ac_unquoted_omtdir_space_denied_no_mark() {
+    # UNQUOTED pointer form under a space-bearing OMT_DIR. The hook's textual
+    # substitution matches the expected path (allow), but real bash word-splits
+    # the unquoted $OMT_DIR so `cat` never reads the handoff -- a false-allow
+    # that disarms the gate. The gate must DENY this form and leave no marker.
+    local base
+    base=$(mktemp -d)
+    export OMT_DIR="$base/dir with space"
+    mkdir -p "$OMT_DIR"
+    arm_handoff
+    local cmd='cat $OMT_DIR/handoff-$OMT_SESSION_ID.md'
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    if ! hg_is_deny "$out"; then
+        echo "ASSERTION FAILED AC-UNQUOTED: unquoted \$OMT_DIR w/ space must deny (word-split false-allow). Got: $out"
+        rm -rf "$base"
+        return 1
+    fi
+    if [[ -f "$HG_M" ]]; then
+        echo "ASSERTION FAILED AC-UNQUOTED: marker must not exist after denied unquoted form"
+        rm -rf "$base"
+        return 1
+    fi
+    rm -rf "$base"
+}
+
+test_hg_ac13_symlink_omt_dir_byte_exact_allowed() {
+    local real link
+    real=$(mktemp -d)
+    link="${real}-link"
+    ln -s "$real" "$link"
+    export OMT_DIR="$link"
+    arm_handoff
+    local cmd="cat \"$OMT_DIR/handoff-$OMT_SESSION_ID.md\""
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    if ! hg_is_allow "$out"; then
+        echo "ASSERTION FAILED AC13: symlinked OMT_DIR (byte-exact) should allow. Got: $out"
+        rm -f "$link"; rm -rf "$real"
+        return 1
+    fi
+    if [[ ! -f "$HG_M" ]]; then
+        echo "ASSERTION FAILED AC13: marker should be created on allowed cat"
+        rm -f "$link"; rm -rf "$real"
+        return 1
+    fi
+    rm -f "$link"; rm -rf "$real"
+}
+
+test_hg_ac14_marker_present_releases_gate() {
+    arm_handoff
+    : > "$HG_M"
+    local out
+    out=$(printf '%s' "$(hg_bash_json "ls")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED AC14: gate should be released once marker present. Got: $out"; return 1; }
+}
+
+test_hg_ac15_handoff_absent_fail_open() {
+    rm -f "$OMT_DIR/handoff-$OMT_SESSION_ID.md" 2>/dev/null || true
+    local out
+    out=$(jq -n --arg fp "$OMT_DIR/x" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED AC15: handoff absent should fail-open (allow). Got: $out"; return 1; }
+}
+
+test_hg_ac16_arms_via_stdin_derivation() {
+    local project_cwd="$SCRIPT_DIR"
+    local stdin_sid="hg-stdin-sid"
+    local fake_home="$TEST_TMP_DIR/home_hg16"
+    mkdir -p "$fake_home"
+
+    local derived_omt_dir
+    derived_omt_dir=$(
+        unset OMT_DIR
+        export HOME="$fake_home"
+        source "$SCRIPT_DIR/lib/omt-dir.sh" && resolve_omt_dir "$project_cwd"
+    )
+    mkdir -p "$derived_omt_dir"
+    : > "$derived_omt_dir/handoff-${stdin_sid}.md"
+    rm -f "$derived_omt_dir/handoff-consumed-${stdin_sid}"
+
+    local out
+    out=$(
+        unset OMT_DIR OMT_SESSION_ID
+        export HOME="$fake_home"
+        printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"x\",\"content\":\"x\"},\"session_id\":\"$stdin_sid\",\"cwd\":\"$project_cwd\"}" \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    )
+    hg_is_deny "$out" || { echo "ASSERTION FAILED AC16: should arm via stdin-derived sid/cwd and deny. Got: $out"; return 1; }
+}
+
+test_hg_ac17_neither_env_nor_cwd_fail_open() {
+    local out
+    out=$(
+        unset OMT_DIR OMT_SESSION_ID
+        printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"x","content":"x"}}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    )
+    hg_is_allow "$out" || { echo "ASSERTION FAILED AC17: unresolvable sid+dir should fail-open (allow). Got: $out"; return 1; }
+}
+
+test_hg_ac18_unwritable_dir_no_livelock() {
+    arm_handoff
+    chmod -w "$OMT_DIR"
+
+    local cmd="cat \"$HG_H\""
+    local out exit_code=0
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh") || exit_code=$?
+    chmod +w "$OMT_DIR"
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED AC18a: hook should exit 0 under unwritable dir (exit=$exit_code)"; return 1; }
+    hg_is_allow "$out" \
+        || { echo "ASSERTION FAILED AC18a: allowed-cat under unwritable dir should allow. Got: $out"; return 1; }
+
+    chmod -w "$OMT_DIR"
+    local out2
+    out2=$(jq -n --arg fp "$OMT_DIR/x" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    chmod +w "$OMT_DIR"
+
+    hg_is_allow "$out2" \
+        || { echo "ASSERTION FAILED AC18b: Write under unwritable dir should allow (no-livelock). Got: $out2"; return 1; }
+}
+
+test_hg_ac_jq_missing_fail_open() {
+    arm_handoff
+    local payload
+    payload=$(jq -n --arg fp "$OMT_DIR/x" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}')
+
+    # Build a shim PATH: symlink every executable found on the real PATH
+    # EXCEPT jq (by filename, not by directory -- jq shares /usr/bin with
+    # grep/sed/dirname/basename, which the hook still needs).
+    local shim_dir p bin name
+    shim_dir=$(mktemp -d)
+    local oldifs="$IFS"
+    IFS=':'
+    for p in $PATH; do
+        IFS="$oldifs"
+        [[ -d "$p" ]] || continue
+        for bin in "$p"/*; do
+            [[ -x "$bin" && -f "$bin" ]] || continue
+            name=$(basename "$bin")
+            [[ "$name" == "jq" ]] && continue
+            [[ -e "$shim_dir/$name" ]] && continue
+            ln -s "$bin" "$shim_dir/$name" 2>/dev/null || true
+        done
+        IFS=':'
+    done
+    IFS="$oldifs"
+
+    local out exit_code=0
+    out=$(
+        export PATH="$shim_dir"
+        printf '%s' "$payload" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    ) || exit_code=$?
+    rm -rf "$shim_dir"
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED AC-JQ: hook should exit 0 when jq missing (exit=$exit_code)"; return 1; }
+    hg_is_allow "$out" \
+        || { echo "ASSERTION FAILED AC-JQ: jq missing should fail-open (allow). Got: $out"; return 1; }
+}
+
+test_hg_ac23_armed_prometheus_skill_denied_no_seed() {
+    arm_handoff
+    local state_file="$OMT_DIR/prometheus-state-$OMT_SESSION_ID.json"
+    rm -f "$state_file"
+    local out
+    out=$(printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"prometheus"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" \
+        || { echo "ASSERTION FAILED AC23: armed Skill(prometheus) should deny. Got: $out"; return 1; }
+    assert_file_not_exists "$state_file" "AC23: prometheus-state must NOT be written while armed" || return 1
+}
+
+# =============================================================================
+# AC12 — drift-couple integration (TODO 3): the REAL session-start.sh emitter
+# and the REAL pre-tool-enforcer.sh gate must agree byte-for-byte. Runs
+# session-start.sh with source:compact + a >7000-char handoff under a clean
+# OMT_DIR (no prometheus/goal/qa/deep-interview restore-state present, HOME
+# sandboxed so real ~/.claude/todos can't inject a PENDING-TASKS message),
+# jq-decodes the emitted additionalContext, extracts the actual "cat ...
+# handoff-..." pointer line the emitter produced (no hand-fabricated string),
+# and feeds THAT literal env-unexpanded command to the gate.
+# =============================================================================
+
+test_ac12_drift_couple_session_start_emits_gate_accepts() {
+    local fake_home="$TEST_TMP_DIR/home_ac12"
+    mkdir -p "$fake_home/.claude"
+
+    local handoff_file="$OMT_DIR/handoff-$OMT_SESSION_ID.md"
+    rm -f "$OMT_DIR/handoff-consumed-$OMT_SESSION_ID"
+
+    # >7000-char handoff so session-start takes the pointer path (not the <=7000 inline path).
+    yes 'AC12_DRIFT_COUPLE_FILLER_LINE_1234567890_ABCDEFGHIJ' 2>/dev/null \
+        | head -c 7200 > "$handoff_file" 2>/dev/null || true
+    if [ ! -s "$handoff_file" ] || [ "$(wc -c < "$handoff_file" 2>/dev/null || echo 0)" -lt 7001 ]; then
+        python3 -c "print('X' * 7200)" > "$handoff_file" 2>/dev/null || true
+    fi
+
+    local output
+    output=$(
+        export HOME="$fake_home"
+        printf '%s' "{\"sessionId\":\"$OMT_SESSION_ID\",\"cwd\":\"$TEST_TMP_DIR\",\"source\":\"compact\"}" \
+            | bash "$SCRIPT_DIR/session-start.sh"
+    )
+
+    echo "$output" | jq -e . > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED AC12: session-start stdout must be valid JSON. Got: $output"; return 1; }
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext // empty')
+    [[ -n "$ctx" ]] \
+        || { echo "ASSERTION FAILED AC12: additionalContext should be non-empty for a >7000-char compact handoff"; return 1; }
+
+    # Extract the emitter's actual pointer line -- derived, not fabricated.
+    local cat_cmd
+    cat_cmd=$(echo "$ctx" | grep -oE 'cat "[^"]*handoff-[^"]*"' | head -1)
+    [[ -n "$cat_cmd" ]] \
+        || { echo "ASSERTION FAILED AC12: could not find a handoff cat pointer in emitted additionalContext. ctx: ${ctx:0:400}"; return 1; }
+
+    # Feed the extracted command, env-UNexpanded, to the gate under the SAME OMT_DIR/OMT_SESSION_ID.
+    local gate_out
+    gate_out=$(printf '%s' "$(hg_bash_json "$cat_cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+
+    hg_is_allow "$gate_out" \
+        || { echo "ASSERTION FAILED AC12: gate should allow the emitter's own pointer command. cmd='$cat_cmd' out=$gate_out"; return 1; }
+
+    assert_file_exists "$OMT_DIR/handoff-consumed-$OMT_SESSION_ID" \
+        "AC12: consumed marker should be written when the gate allows the emitter's pointer" || return 1
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -791,6 +1251,38 @@ main() {
     run_test test_ac8b_ii_missing_cwd_loud_failure
     run_test test_ac8b_iii_nonproject_cwd_falls_back_with_warning
     run_test test_ac8c_prometheus_and_di_seed_field_preservation
+
+    # Handoff-gate arm (TODO 1)
+    run_test test_hg_ac1_pipe_tail_denied
+    run_test test_hg_ac2_read_offset_denied_reason_mentions_cat
+    run_test test_hg_ac3_read_no_offset_denied
+    run_test test_hg_ac4a_write_denied_reason_mentions_handoff_or_cat
+    run_test test_hg_ac4b_bash_ls_denied
+    run_test test_hg_ac5_recognition_edge_cases_denied
+    run_test test_hg_ac6_wrong_path_denied_reason_redirects_to_handoff
+    run_test test_hg_ac7_other_state_file_denied_generic_reason
+    run_test test_hg_ac8a_command_substitution_denied
+    run_test test_hg_ac8b_command_substitution_never_executed
+    run_test test_hg_ac_squote_literal_dollar_denied
+    run_test test_hg_ac_env_full_honored_envelope
+    run_test test_hg_ac_deny_nomark_marker_absent_on_deny
+    run_test test_hg_ac9_fully_expanded_path_allowed_and_marked
+    run_test test_hg_ac10_unexpanded_pointer_form_allowed_and_marked
+    run_test test_hg_ac11_leading_indent_allowed_and_marked
+    run_test test_hg_ac_partial_omtdir_expanded_sid_literal_allowed
+    run_test test_hg_ac_space_embedded_space_never_word_split
+    run_test test_hg_ac_unquoted_omtdir_space_denied_no_mark
+    run_test test_hg_ac13_symlink_omt_dir_byte_exact_allowed
+    run_test test_hg_ac14_marker_present_releases_gate
+    run_test test_hg_ac15_handoff_absent_fail_open
+    run_test test_hg_ac16_arms_via_stdin_derivation
+    run_test test_hg_ac17_neither_env_nor_cwd_fail_open
+    run_test test_hg_ac18_unwritable_dir_no_livelock
+    run_test test_hg_ac_jq_missing_fail_open
+    run_test test_hg_ac23_armed_prometheus_skill_denied_no_seed
+
+    # Drift-couple integration (TODO 3)
+    run_test test_ac12_drift_couple_session_start_emits_gate_accepts
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

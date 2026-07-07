@@ -119,6 +119,29 @@ for handoff_file in "$OMT_DIR"/handoff-*.md; do
   fi
 done
 
+# GC arm: reap orphaned handoff-consumed-<sid> markers (D-9 marker contract).
+# Mirrors the handoff-*.md arm above: own current-sid skip, mtime TTL reuse of
+# TERMINAL_TTL. Separate arm (not folded into the .md arm above) because the
+# .md arm's sid-extraction (#handoff-/%.md) mis-parses a .md-less marker.
+# Explicit post-glob filter, NOT a glob property: handoff-consumed-* would
+# also match a handoff-consumed-*.md file if a sid literally started
+# "consumed-"; the filter guarantees this arm never reaps a .md handoff.
+for marker_file in "$OMT_DIR"/handoff-consumed-*; do
+  [ -e "$marker_file" ] || continue
+  case "$marker_file" in
+    *.md) continue ;;
+  esac
+  marker_base="${marker_file##*/}"
+  marker_sid="${marker_base#handoff-consumed-}"
+  [ "$marker_sid" = "$SESSION_ID" ] && continue
+  marker_mtime=$(stat -c %Y "$marker_file" 2>/dev/null || stat -f %m "$marker_file" 2>/dev/null || true)
+  [ -n "$marker_mtime" ] || continue
+  marker_age=$(( GC_NOW - marker_mtime ))
+  if [ "$marker_age" -gt "$HANDOFF_ORPHAN_TTL_SECS" ]; then
+    rm -f "$marker_file"
+  fi
+done
+
 # Check for active prometheus state (session-specific)
 if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
   PROMETHEUS_STATE=$(cat "$OMT_DIR/prometheus-state-${SESSION_ID}.json" 2>/dev/null)
@@ -240,12 +263,24 @@ if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
       HANDOFF="$HANDOFF_RAW"
       rm -f "$HANDOFF_FILE"
     else
-      HANDOFF="[COMPACTION HANDOFF -- full continuation record on disk]
+      # Re-arm (D-10): a re-compaction on this same sid overwrites the handoff
+      # file above; a stale consumed-marker from a PRIOR read would leave the
+      # gate disarmed for the new content. Delete it before emitting the
+      # pointer so the gate re-arms.
+      rm -f "$OMT_DIR/handoff-consumed-${SESSION_ID}"
+      HANDOFF="CRITICAL [COMPACTION HANDOFF -- full continuation record on disk]
 
 Your context was just compacted. The COMPLETE session handoff (original request verbatim, the full arc of decisions/rejections/Q&A, exact stopping point, and all user messages) is on disk. Run this command NOW, BEFORE ANY OTHER ACTION:
   cat \"\$OMT_DIR/handoff-\$OMT_SESSION_ID.md\"
 (\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)
-It is your only memory of this session -- do not trust your recollection of prior turns. Reconstructing it from memory is NOT reading it."
+It is your only memory of this session -- do not trust your recollection of prior turns. Reconstructing it from memory is NOT reading it.
+
+CRITICAL -- three exact rationalizations precede skipping this read. None of them holds:
+| Thought | Reality |
+|---|---|
+| \"The native compaction summary already covers this\" | The summary is compacted, lossy prose -- it does not substitute for the full on-disk record |
+| \"Only the new part since the last compaction is needed\" | The full handoff is needed, not a partial slice -- prior arc and decisions are required context |
+| \"Reading the whole file wastes tokens\" | Skipping it to save tokens costs far more later, recovering context lost through repeated back-and-forth |"
     fi
   fi
 fi
