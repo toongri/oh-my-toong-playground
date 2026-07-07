@@ -17,3 +17,7 @@ skills:
     - component: goal
       platforms: [claude]
     - agent-browser
+
+rules:
+  items:
+    - communication-style

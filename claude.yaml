@@ -2,6 +2,14 @@ hooks:
   PreCompact:
     - component: pre-compact.sh
       timeout: 1200
+  PreToolUse:
+    - component: label-commit-gate.sh
+      matcher: "Bash"
+      timeout: 5
+  PostToolUse:
+    - component: label-edit-warn.sh
+      matcher: "Write|Edit|MultiEdit"
+      timeout: 5
 
 config:
   language: "한국어"
