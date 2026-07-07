@@ -13,7 +13,12 @@ export type PluginObjectItem = {
 	"pre-commands"?: string[];
 };
 
-export type Category = "agents" | "commands" | "skills" | "scripts" | "rules";
+export type DeployCategory = "agents" | "commands" | "skills" | "scripts" | "rules";
+
+/** Backward-compat alias — existing consumers bind `Category`; keep resolving to the same union. */
+export type Category = DeployCategory;
+
+export type SourceCategory = DeployCategory | "docs";
 
 export type SyncItem =
 	| string
@@ -30,6 +35,13 @@ export type SyncSection = {
 	items?: SyncItem[];
 };
 
+export type DocsItem = string | { component: string; path?: string; as?: string; delete?: true };
+
+export type DocsSection = {
+	path?: string;
+	items?: DocsItem[];
+};
+
 export type ProvisionItem = {
 	check?: string;
 	commands: string[];
@@ -44,6 +56,7 @@ export type SyncYaml = {
 	skills?: SyncSection;
 	scripts?: SyncSection;
 	rules?: SyncSection;
+	docs?: DocsSection;
 	provision?: ProvisionItem[];
 };
 
