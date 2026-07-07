@@ -39,6 +39,7 @@
 
 import { readFileSync, unlinkSync } from "fs";
 import { execSync } from "child_process";
+import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
@@ -48,6 +49,8 @@ import {
 	writeFileNoCreate,
 	isPristine,
 	ensureSeed,
+	isStateLive,
+	STATE_PREFIX,
 } from "@lib/state-core";
 
 export type GoalPhase = "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
@@ -725,6 +728,7 @@ interface CodeReviewFinding {
 }
 
 interface CodeReviewArtifact {
+	status: "COMPLETE" | "INCONCLUSIVE";
 	findings: CodeReviewFinding[];
 	reviewer: string;
 	at: string;
@@ -807,6 +811,8 @@ function resolveCodeReviewArtifactPath(sessionId: string): string {
 function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 	if (!isRecord(value)) return false;
 	// Required top-level fields
+	const VALID_STATUS = ["COMPLETE", "INCONCLUSIVE"];
+	if (!isOneOf(value["status"], VALID_STATUS)) return false;
 	if (!Array.isArray(value["findings"])) return false;
 	const reviewer = value["reviewer"];
 	if (typeof reviewer !== "string" || reviewer.length === 0) return false;
@@ -825,7 +831,7 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
 /**
  * Reads and validates the code-review artifact. Returns the parsed artifact on
  * success, or null when the file is absent or the schema is invalid (never throws).
- * Schema: { findings: [{class, verdict, ref?}], reviewer, at } — NO `lane` field
+ * Schema: { status, findings: [{class, verdict, ref?}], reviewer, at } — NO `lane` field
  * (the path already identifies the lane).
  * `reviewer` must be a NON-EMPTY string — one notch stricter than the verdict
  * artifact's verifier string-check, because self-review bias is maximal at the
@@ -943,6 +949,12 @@ export function requestComplete(sessionId: string): boolean {
 	if (codeReview === null) {
 		return false;
 	}
+	// INCONCLUSIVE (D1): the review itself did not finish (timeout/ack-only/BLOCKED/
+	// genuinely uncertain) — distinct from a finished review that found CONFIRMED work.
+	// Blocks completion without implying a sisyphus re-dispatch is warranted.
+	if (codeReview.status === "INCONCLUSIVE") {
+		return false;
+	}
 	if (codeReview.findings.some((f) => f.verdict === "CONFIRMED")) {
 		return false;
 	}
@@ -967,6 +979,35 @@ export function serializeRequirements(sessionId: string): string {
 			`[${s.id}] ${s.story} — AC: ${s.acceptance_criteria.join("; ")} — verify: ${s.verification_surface}`,
 	);
 	return lines.join("\n") + "\n";
+}
+
+// ---------------------------------------------------------------------------
+// Cross-skill half-open detector (lever 1: finalize-before-advance guard)
+// ---------------------------------------------------------------------------
+
+export type CrossReadSkill = "deep-interview" | "prometheus";
+
+/**
+ * True iff `skill`'s OWN state file for `sessionId` is half-open: it ran, is
+ * still ACTIVE and TTL-live, and holds real (non-pristine) work — meaning it
+ * exited without emitting its done-token. Cross-reads the peer skill's state
+ * file directly via STATE_PREFIX; never reads or writes goal's own state.
+ *
+ * Absent file, parse failure, terminal (`active:false`), pristine seed, or
+ * TTL-stale all read as false (not half-open) — reused verbatim from
+ * @lib/state-core's isStateLive/isPristine, never reimplemented here.
+ */
+export function isSubskillHalfOpen(sessionId: string, skill: CrossReadSkill): boolean {
+	const path = join(getOmtDir(), `${STATE_PREFIX[skill]}${sessionId}.json`);
+	let parsed;
+	try {
+		parsed = JSON.parse(readFileSync(path, "utf8"));
+	} catch {
+		return false;
+	}
+	if (!isRecord(parsed)) return false;
+	const nowEpoch = Math.floor(Date.now() / 1000);
+	return parsed.active === true && isStateLive(parsed, nowEpoch) && !isPristine(skill, parsed);
 }
 
 // ---------------------------------------------------------------------------
@@ -1179,9 +1220,26 @@ function main(): void {
 			retireStory(sessionId, rawId);
 		} else if (subcommand === "serialize-requirements") {
 			process.stdout.write(serializeRequirements(sessionId));
+		} else if (subcommand === "check-subskill") {
+			const skillArg = str(args["skill"]);
+			const ALLOWED_SKILLS: CrossReadSkill[] = ["deep-interview", "prometheus"];
+			if (!isOneOf(skillArg, ALLOWED_SKILLS)) {
+				process.stderr.write(
+					`check-subskill: --skill must be one of ${ALLOWED_SKILLS.join("|")} (got "${String(skillArg)}")\n`,
+				);
+				process.exit(1);
+			}
+			if (isSubskillHalfOpen(sessionId, skillArg)) {
+				process.stderr.write(
+					`check-subskill: ${skillArg} state for session "${sessionId}" is half-open ` +
+						`(active, live, non-pristine — likely exited without its done-token). ` +
+						`Finalize it before advancing.\n`,
+				);
+				process.exit(1);
+			}
 		} else {
 			process.stderr.write(
-				"Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story|serialize-requirements> [options]\n",
+				"Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story|serialize-requirements|check-subskill> [options]\n",
 			);
 			process.exit(1);
 		}

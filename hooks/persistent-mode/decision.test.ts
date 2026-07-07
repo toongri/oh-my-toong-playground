@@ -133,6 +133,8 @@ describe("makeDecision", () => {
 			const deepInterviewState = {
 				active: true,
 				sessionId: "test-session",
+				started_at: new Date().toISOString(),
+				last_touched_at: new Date().toISOString(),
 				state: { phase: "in_progress" },
 			};
 			await writeFile(
@@ -152,6 +154,8 @@ describe("makeDecision", () => {
 			const deepInterviewState = {
 				active: true,
 				sessionId: "test-session",
+				started_at: new Date().toISOString(),
+				last_touched_at: new Date().toISOString(),
 				state: { phase: "in_progress" },
 			};
 			await writeFile(
@@ -192,6 +196,8 @@ describe("makeDecision", () => {
 			const deepInterviewState = {
 				active: true,
 				sessionId: "test-session",
+				started_at: new Date().toISOString(),
+				last_touched_at: new Date().toISOString(),
 				state: { phase: "in_progress" },
 			};
 			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
@@ -236,15 +242,17 @@ describe("makeDecision", () => {
 		});
 
 		it("non-pristine active DI state (has state key) still blocks session stop", async () => {
-			// A DI state with a rich `state` object is non-pristine — the interview is genuinely
-			// in progress and must continue blocking until the done-token or active:false.
+			// A DI state with a rich `state` object is non-pristine AND live (recent heartbeat) —
+			// the interview is genuinely in progress and must continue blocking until the
+			// done-token or active:false.
+			const fresh = new Date().toISOString();
 			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
 			await writeFile(
 				markerPath,
 				JSON.stringify({
 					active: true,
-					started_at: "2025-01-01T00:00:00+00:00",
-					last_touched_at: "2025-01-01T00:00:00+00:00",
+					started_at: fresh,
+					last_touched_at: fresh,
 					state: { phase: "in_progress", answers: {} },
 				}),
 			);
@@ -256,11 +264,40 @@ describe("makeDecision", () => {
 			expect(result.decision).toBe("block");
 			expect(result.reason).toContain("<deep-interview-continuation>");
 		});
+
+		it("stale (TTL-expired) non-pristine active DI does NOT block — GC reaps it", async () => {
+			// active:true + non-pristine but idle past ACTIVE_IDLE_TTL (6h): the interview
+			// process is effectively dead. session-start GC (is_state_live) and goal's
+			// check-subskill (isSubskillHalfOpen) both treat it as reapable; the Stop hook
+			// must agree and NOT wedge the session on a corpse the GC will sweep.
+			const stale = "2020-01-01T00:00:00+00:00";
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: stale,
+					last_touched_at: stale,
+					state: { phase: "in_progress", answers: {} },
+				}),
+			);
+
+			const context = createContext({ lastAssistantMessage: "some message without done token" });
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+		});
 	});
 
 	describe("Priority 1.5: Prometheus State Protection", () => {
 		it("makeDecision blocks with prometheus-continuation when state active and no token", async () => {
-			const prometheusState = { active: true, sessionId: "test-session" };
+			const prometheusState = {
+			active: true,
+			sessionId: "test-session",
+			started_at: new Date().toISOString(),
+			last_touched_at: new Date().toISOString(),
+		};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -275,7 +312,12 @@ describe("makeDecision", () => {
 		});
 
 		it("makeDecision cleans up prometheus state when token present in lastAssistantMessage", async () => {
-			const prometheusState = { active: true, sessionId: "test-session" };
+			const prometheusState = {
+			active: true,
+			sessionId: "test-session",
+			started_at: new Date().toISOString(),
+			last_touched_at: new Date().toISOString(),
+		};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -291,7 +333,12 @@ describe("makeDecision", () => {
 		});
 
 		it("makeDecision allows stop after MAX_BLOCK_COUNT token-less blocks (bounded escape)", async () => {
-			const prometheusState = { active: true, sessionId: "test-session" };
+			const prometheusState = {
+			active: true,
+			sessionId: "test-session",
+			started_at: new Date().toISOString(),
+			last_touched_at: new Date().toISOString(),
+		};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -317,7 +364,12 @@ describe("makeDecision", () => {
 			// so that if prometheus wrongly shares it, it would escape immediately.
 			await writeFile(join(stateDir, "block-count-test-session"), "5");
 
-			const prometheusState = { active: true, sessionId: "test-session" };
+			const prometheusState = {
+			active: true,
+			sessionId: "test-session",
+			started_at: new Date().toISOString(),
+			last_touched_at: new Date().toISOString(),
+		};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -336,7 +388,12 @@ describe("makeDecision", () => {
 			// Pre-load prometheus-specific counter to MAX_BLOCK_COUNT
 			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "5");
 
-			const prometheusState = { active: true, sessionId: "test-session" };
+			const prometheusState = {
+			active: true,
+			sessionId: "test-session",
+			started_at: new Date().toISOString(),
+			last_touched_at: new Date().toISOString(),
+		};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -355,7 +412,12 @@ describe("makeDecision", () => {
 			// Pre-load prometheus-specific counter to simulate in-progress session
 			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "3");
 
-			const prometheusState = { active: true, sessionId: "test-session" };
+			const prometheusState = {
+			active: true,
+			sessionId: "test-session",
+			started_at: new Date().toISOString(),
+			last_touched_at: new Date().toISOString(),
+		};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -370,6 +432,28 @@ describe("makeDecision", () => {
 			expect(existsSync(join(omtDir, "prometheus-state-test-session.json"))).toBe(false);
 			// Prometheus-specific counter file also deleted
 			expect(existsSync(join(stateDir, "block-count-prometheus-test-session"))).toBe(false);
+		});
+
+		it("stale (TTL-expired) active prometheus does NOT block — GC reaps it", async () => {
+			// active:true but idle past ACTIVE_IDLE_TTL (6h): the planning process is
+			// effectively dead. Consistent with session-start GC and goal's check-subskill,
+			// the Stop hook must NOT wedge the session on a corpse the GC will sweep.
+			const stale = "2020-01-01T00:00:00+00:00";
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: stale,
+					last_touched_at: stale,
+				}),
+			);
+
+			const context = createContext({ lastAssistantMessage: "some message without done token" });
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
 		});
 	});
 
@@ -773,6 +857,8 @@ describe("makeDecision", () => {
 				JSON.stringify({
 					active: true,
 					sessionId: "test-session",
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
 					state: { phase: "in_progress" },
 				}),
 			);
@@ -797,6 +883,8 @@ describe("makeDecision", () => {
 				JSON.stringify({
 					active: true,
 					sessionId: "test-session",
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
 					state: { phase: "in_progress" },
 				}),
 			);

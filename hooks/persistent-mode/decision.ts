@@ -15,7 +15,7 @@ import { detectDeepInterviewDone, detectPrometheusDone } from "./transcript-dete
 import { generateAttemptId, ensureDir } from "./utils.ts";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { isPristine } from "@lib/state-core";
+import { isPristine, isStateLive } from "@lib/state-core";
 
 export interface DecisionContext {
 	projectRoot: string;
@@ -272,6 +272,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	// readDeepInterviewState returns as null, causing delete to never fire and leaving
 	// orphaned files on disk). active:false → delete without requiring the done-token.
 	// active:true path is unchanged: done-token → delete, no token → block + continuation.
+	const nowEpoch = Math.floor(Date.now() / 1000);
 	const deepInterviewStateRaw = readDeepInterviewStateRaw(sessionId);
 	if (deepInterviewStateRaw) {
 		if (!deepInterviewStateRaw.active) {
@@ -279,12 +280,18 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			cleanupDeepInterviewState(sessionId);
 		} else if (detectDeepInterviewDone(lastAssistantMessage)) {
 			cleanupDeepInterviewState(sessionId);
-		} else if (!isPristine("deep-interview", toRecord(deepInterviewStateRaw))) {
-			// Pristine exception: a seed-only file (no rich `state` object) was written by the
-			// PreToolUse hook before the skill prose ran. If the skill died before `init`
-			// (permission denial, ESC, crash), the seed lingers. A pristine state is INERT to
-			// all consumers — it must not block session stop. The orphan ages toward TTL and is
-			// GC'd naturally.
+		} else if (
+			!isPristine("deep-interview", toRecord(deepInterviewStateRaw)) &&
+			isStateLive(deepInterviewStateRaw, nowEpoch)
+		) {
+			// Block only a LIVE non-pristine interview. Two fall-through exceptions:
+			//   - Pristine seed (no rich `state`): a seed-only file written by the PreToolUse
+			//     hook before the skill prose ran; INERT to all consumers.
+			//   - TTL-stale (idle past ACTIVE_IDLE_TTL): the interview process is effectively
+			//     dead. Blocking here would wedge the session on a corpse that session-start GC
+			//     (is_state_live) and goal's check-subskill (isSubskillHalfOpen) already treat
+			//     as reapable — the three consumers must agree.
+			// Either orphan ages toward TTL and is GC'd naturally; neither blocks session stop.
 			return formatBlockOutput(buildDeepInterviewContinuationMessage());
 		}
 	}
@@ -296,7 +303,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		if (detectPrometheusDone(lastAssistantMessage)) {
 			cleanupPrometheusState(sessionId);
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
-		} else {
+		} else if (isStateLive(prometheusState, nowEpoch)) {
+			// TTL-stale (idle past ACTIVE_IDLE_TTL) → fall through, no block: the planning
+			// process is dead and session-start GC will reap it, consistent with goal's
+			// check-subskill. done-token cleanup above stays unconditional (an emitted token
+			// finalizes regardless of liveness).
 			const blockCount = getBlockCount(stateDir, prometheusAttemptId);
 			if (blockCount >= MAX_BLOCK_COUNT) {
 				cleanupBlockCountFiles(stateDir, prometheusAttemptId);

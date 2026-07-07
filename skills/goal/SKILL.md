@@ -60,71 +60,9 @@ If no candidates exist, say so and proceed fresh. The branch never renames on it
 
 ---
 
-## Six Slots
+## Planning: Six Slots & Story Definition
 
-The Entry Gate's falsifiable objective is captured as six slots. **Four are captured from the request (or the crystallized spec); two are minted by this orchestrator.** All six are written through `set --phase planning` at seed time.
-
-Four content slots (from capture):
-
-1. **outcome** (`--outcome`) — what is true when the objective is reached (the desired end state).
-2. **verification-surface** (`--verification-surface`) — the concrete evidence that proves success (test, benchmark, artifact, observable behavior). This is the load-bearing slot: it is the only one that makes the objective machine-decidable.
-3. **constraints** (`--constraints`) — what must NOT regress while pursuing (correctness suites stay green, contracts preserved).
-4. **boundaries** (`--boundaries`) — the allowed files, tools, and resources the pursuit may touch.
-
-Two minted slots (not in the request — this orchestrator supplies them):
-
-5. **iteration-policy** → `max_iterations` (`--max-iterations <n>`) — the finite cap on pursuit blocks. Default **10** when not overridden at invocation; invocation-overridable. This is the SOLE soft-stop bound: when pursuit hits `max_iterations` the loop soft-stops (state preserved), it does NOT hard-kill.
-6. **blocked-stop** (`--blocked-stop <text>`) — the objective-specific predicate that means "no valid path forward". A decidable, point-in-time condition (no cross-iteration memory); when met, pursuit stops and reports the blocker, non-complete.
-
-Seed example (run at the first `planning` transition):
-
-```
-bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set --phase planning \
-  --outcome "<desired end state>" \
-  --verification-surface "<concrete evidence that proves success>" \
-  --constraints "<what must not regress>" \
-  --boundaries "<allowed files/tools/resources>" \
-  --max-iterations 10 \
-  --blocked-stop "<objective-specific no-path-forward predicate>"
-```
-
-<!-- story-layer:start -->
-
-## Story Definition (Planning Phase)
-
-After capturing the six slots and before dispatching to prometheus or sisyphus, define the WHAT-slices of the objective with the user, story by story. Each story is an independently verifiable chunk of the objective — not a task (HOW) but a stated outcome (WHAT).
-
-**When to slice vs. use single-derivation.** If the objective is a single WHAT — one deliverable, one verification surface, no meaningful sub-goals — run:
-
-```
-bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set-stories --single
-```
-
-This derives one story directly from the current `outcome` and marks it `confirmed` immediately (no separate `confirm-story` call needed). Use `--single` for objectives where slicing into multiple stories would introduce ceremony without value.
-
-For objectives with multiple distinct WHAT-slices, define them one at a time with the user. For each story, establish:
-
-1. A **WHAT statement** — the desired outcome for this slice, stated concretely.
-2. At least one **acceptance criterion** — a falsifiable check that, when met, confirms the slice is done.
-3. A **verification surface** — the concrete evidence that proves the AC is met (a test, an artifact, a command output, an observable behavior).
-
-Once you have agreed on the full story set with the user, ingest it:
-
-```
-bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set-stories --json '<array-of-stories>'
-```
-
-`set-stories --json` refuses an empty array, any story missing acceptance criteria or a verification surface, duplicate ids, an empty `outcome`, or a `phase` other than `planning`. Every ingested story starts `unconfirmed`.
-
-**Per-story confirmation.** After the user approves each story in the planning dialogue, confirm it:
-
-```
-bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts confirm-story <id>
-```
-
-`confirm-story` is the sole path from `unconfirmed` to `confirmed`. No other subcommand (`set`, `set-verdict`, `set-stories --json` re-ingestion) can produce `confirmed`. The pursuing phase is refused while any story remains `unconfirmed` — `set --phase pursuing` names the offending ids on stderr. Once all stories are `confirmed` (or `retired`), the pursuing transition is allowed.
-
-<!-- story-layer:end -->
+**You MUST read `references/planning.md` first** before seeding the six slots (`set --phase planning`), defining or confirming stories (`set-stories`/`confirm-story`), or applying any mid-flight story mutation (`add-story`/`revise-story`/`retire-story`) — it is the single owner of the slot definitions and the full story lifecycle.
 
 ---
 
@@ -135,6 +73,39 @@ Goal does not reimplement decomposition or execution. It invokes the existing sk
 - **Vague** (the verification surface cannot be derived without questioning the user) → `Skill(skill: "deep-interview")` passing the marker `caller=goal`. The interview crystallizes a spec at `$OMT_DIR/deep-interview/{slug}.md`; because the `caller=goal` marker is present, deep-interview's re-entrancy guard returns that crystallized spec to goal and emits NO `goal` handoff (preventing a goal→deep-interview→goal loop). Goal receives the returned spec and routes downstream itself; the spec's acceptance criteria feed the verification-surface slot.
 - **Complex** (the objective needs decomposition into a TODO plan with waves and acceptance criteria — multi-component, 3+ files, or any non-trivial build) → `Skill(skill: "prometheus")`. Prometheus runs its full planning pipeline (its human gates UN-wrapped) and ends by dispatching to sisyphus with a plan path at `$OMT_DIR/plans/{name}.md`.
 - **Execution** (a plan or crystallized spec already exists and the objective is ready to be built) → dispatch to sisyphus for execution: `Skill(skill: "sisyphus")` with the plan path.
+
+### Clarity gate
+
+When the Vague branch above returns a crystallized spec, goal trusts deep-interview's crystallized clarity (ambiguity ≤ the resolved threshold, default 0.15) as the requirements-clarity signal and does not re-interrogate the user before routing downstream — the spec's own clearance is already satisfied, not re-litigated by goal.
+
+### Fast-path gate
+
+Not every Complex-shaped objective needs prometheus's full planning pipeline. When a Complex objective clears all three fast-path signals — (1) the objective is Complex on file-count alone, with each individual change mechanical and localized, (2) no competing design fork exists — a single obvious approach, not a choice among architectures, and (3) no T1-tier risk is present (no security or data-integrity surface) — goal skips prometheus, captures the objective's acceptance criteria directly into the Story Definition layer, and dispatches straight to sisyphus. This fast-path judgment is goal's own inline prose gate, not a CLI subcommand — goal reads the three signals itself and decides. It presupposes the Clarity gate above: the fast-path evaluation only runs once deep-interview's crystallized clarity has already cleared, so the three signals are judged against a spec whose ambiguity is already resolved, not a foggy one.
+
+A live design fork disqualifies the fast-path outright: competing design alternatives are exactly what prometheus's planning pipeline exists to adjudicate, so an objective with a design fork always routes through prometheus regardless of file count or risk tier.
+
+When the three-signal verdict is on the fence — not clearly cleared, not clearly failed — the asymmetric default resolves it toward prometheus, never toward the fast path: a user wrongly silenced by a skipped planning gate is worse than one extra round of design review, so an ambiguous fast-path judgment falls back to the full prometheus pipeline.
+
+### Finalize-before-advance guard
+
+Before invoking a subskill at ANY dispatch site below, cross-read the OTHER stateful subskill's own state file to confirm it is not left half-open from an earlier call in this session:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts check-subskill --skill deep-interview
+bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts check-subskill --skill prometheus
+```
+
+A non-zero exit means that subskill's own state file is `active:true`, TTL-live, and non-pristine — it ran and never finalized (no done-token emitted). Before advancing with the dispatch you were about to make, emit that subskill's own done-token (`<deep-interview-done/>` or `<prometheus-done/>`) to finalize it first, THEN proceed. `check-subskill` exits 0 (pass) when the peer state is absent, terminal (`active:false`), pristine (freshly seeded, no real work), or TTL-stale — none of those block advancing.
+
+This guard runs at every dispatch site in the pipeline:
+
+- **Initial planning** — before the first `deep-interview` or `prometheus` call (the Vague/Complex branch above), check the OTHER of the two.
+- **Initial sisyphus execution** — before the first `sisyphus` dispatch (the Execution branch, and the fast-path direct-to-sisyphus that skips prometheus), check both `deep-interview` and `prometheus`.
+- **Re-plan loop-back** — before re-invoking `prometheus` (Strategic plan inadequacy, below), check `deep-interview`.
+- **REQUEST_CHANGES sisyphus re-dispatch** — before re-invoking `sisyphus` on named incomplete work items, check both `deep-interview` and `prometheus`.
+- **CONFIRMED-finding sisyphus re-dispatch** — before re-invoking `sisyphus` on code-review findings, check both `deep-interview` and `prometheus`.
+
+**Un-wedge recovery.** If a subskill exits without emitting its done-token (crash, interruption, forgotten emit), its state file sticks at `active:true` — half-open — and blocks the next dispatch site indefinitely. Recovery: emit that subskill's done-token to finalize the stuck state (or let the TTL-based GC reap it once its idle window elapses). Because this is a cross-read of the PEER skill's own state file, goal never gets wedged on its own state — only the peer's leaked half-open state, which self-heals via TTL even if no one ever emits the done-token.
 
 ### Phase transitions
 
@@ -152,109 +123,11 @@ The autonomous loop blocks ONLY when `phase=pursuing`. Set the phase around the 
 
 Initial path: `set --phase planning` (seed slots) → invoke prometheus / deep-interview → on sisyphus dispatch `set --phase pursuing`. Re-plan loop-back: `set --phase planning` (clears the verdict) → invoke prometheus again → `set --phase pursuing` after the fresh sisyphus dispatch.
 
-<!-- story-layer:start -->
-
-### Mid-flight Story Mutations
-
-Stories can be discovered, corrected, or retired during pursuit. Use the per-story mutation subcommands when the situation changes mid-flight:
-
-- **`add-story --json '<story>'`** — appends one new story with status `unconfirmed`. Allowed in both `planning` and `pursuing`. A newly added story must be confirmed via `confirm-story <id>` before completion is allowed (an `unconfirmed` story blocks `request-complete`).
-- **`revise-story <id> --json '<patch>'`** — patches an existing story's text, acceptance criteria, or verification surface. Revision ALWAYS resets the story's status to `unconfirmed` — a story whose definition changed requires fresh user approval. Refused on retired stories and unknown ids.
-- **`retire-story <id>`** — marks a story `retired`. An `unconfirmed` story is retirable in any phase. A `confirmed` story is retirable ONLY while `phase=planning` — retiring a confirmed story mid-pursuit is refused (run `set --phase planning` first to re-enter planning, then retire). This fence prevents retiring a confirmed WHAT mid-pursuit as a way to remove it from the completion gate.
-
-Re-plan (`set --phase planning`) preserves `stories[]` including per-story statuses, while resetting `objective_verdict` and `completion_evidence_paths` exactly as today. Stories survive re-planning; only verdict state is cleared.
-
-<!-- story-layer:end -->
-
 ---
 
 ## Completion Gate
 
-After a sisyphus pass, completion is NOT self-declared by stopping. Run the objective-level completion check yourself (the orchestrator), inline: take the **verification surface as PROSE requirements** — a completeness Spec — and confirm that every prose-stated requirement is reflected in the deliverable, rendering an APPROVE / REQUEST_CHANGES / COMMENT verdict.
-
-Run the **automated checks (build / test / lint)** inline and map the verification surface to concrete evidence per the rubric below. The expensive **hands-on adversarial matrix is NOT run in the autonomous loop** — that final, costly QA is the human's, performed once after the loop reports complete (the objective self-check covers automated correctness + completeness; the human covers hands-on confidence). The rubric forces an evidence-based verdict and asserts each element independently:
-
-- **prompt-to-artifact mapping** — map every explicit requirement, numbered item, named file, command, test, gate, and deliverable in the verification surface to concrete evidence; an unmapped requirement is incomplete.
-- **proxy-signal refusal** — refuse proxy signals as completion by themselves: passing tests, a green build, a complete manifest, or substantial effort count only insofar as they cover every requirement in the verification surface.
-- **verify-the-verifier** — confirm that any test suite, manifest, or green status actually COVERS the objective's requirements before relying on it (the FALSE-GREEN guard: not "are tests green?" but "do the green tests cover every objective requirement?").
-- **uncertainty = not-achieved** — treat any uncertain, weakly-verified, or uncovered requirement as not achieved; doubt drives REQUEST_CHANGES, never APPROVE.
-
-Because the orchestrator now runs this check on its own pursuit, the rubric is the discipline against self-deception — the objective lane is self-attested, and the genuinely independent structural teeth are the **code-review lane** (a fresh reviewer, below) and the human's final hands-on QA. Apply the rubric strictly: a self-attested APPROVE that skips proxy-refusal or verify-the-verifier is exactly the false-complete the gate exists to prevent.
-
-<!-- story-layer:start -->
-
-**Per-story re-derivation (same inline check).** The same self-check also re-derives a verdict for every non-retired story and authors the structured verdict artifact at `$OMT_DIR/goal-verdict-{sid}.json`. The orchestrator writes this file directly. (`request-complete` validates the artifact's schema and per-story verdicts, not its author — so the structural gate is unchanged.) The artifact schema is:
-
-```json
-{
-  "objective_verdict": "APPROVE | REQUEST_CHANGES | COMMENT",
-  "stories": [
-    { "id": "<story-id>", "verdict": "APPROVE | REQUEST_CHANGES", "evidence_refs": ["<path>"] }
-  ],
-  "verifier": "<orchestrator objective self-check>",
-  "at": "<ISO timestamp>"
-}
-```
-
-For each non-retired story, map the story's acceptance criteria and verification surface to concrete evidence and render an `APPROVE` or `REQUEST_CHANGES` per-story verdict. A single non-APPROVE per-story entry blocks completion regardless of the `objective_verdict` field — `objective_verdict === 'APPROVE'` alone is never sufficient.
-
-`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). As a second structural refusal lane, `request-complete` also reads the code-review artifact (`goal-codereview-{sid}.json`) from its conventional path internally (no path argument) and refuses if that artifact is absent, schema-invalid, or contains any `CONFIRMED` finding (see code-review lane below); this refusal is structural — it runs inside `request-complete` itself independent of the orchestrator loop, so completion is blocked even if the loop misbehaves. When all checks pass, `request-complete` writes `phase=complete` and `active=false`.
-
-<!-- story-layer:end -->
-
-**Code-review lane (runs alongside the objective self-check).** After each sisyphus pass, an independent code-review lane runs alongside the objective lane. Dispatch a fresh **code-reviewer** agent independently of the builder (sisyphus); self-review by the builder is forbidden. This lane is the autonomous loop's one genuinely independent gate — a fresh instance, not the orchestrator — so it carries the structural anti-anchoring teeth the objective self-check no longer provides. Before dispatching the code-reviewer, the orchestrator runs `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts serialize-requirements` and feeds its stdout block into the reviewer's `{REQUIREMENTS}` input so the reviewer can detect requirement-gap findings (stories the diff does not satisfy). The code-reviewer writes `$OMT_DIR/goal-codereview-{sid}.json` directly (it has file tools); the orchestrator passes only the session-derived path and never transcribes finding content. The artifact schema the code-reviewer must emit:
-
-```json
-{
-  "findings": [
-    { "class": "correctness|cleanup|requirement-gap", "verdict": "CONFIRMED|PLAUSIBLE", "ref": "<file:line>" }
-  ],
-  "reviewer": "<reviewer id>",
-  "at": "<ISO timestamp>"
-}
-```
-
-**Pass signal:** any finding where `verdict === "CONFIRMED"` blocks completion — whether `class` is `correctness`, `cleanup`, or `requirement-gap`. `PLAUSIBLE` findings are non-blocking; they are reported but do not prevent completion. `class` is an informational label the gate does not key on (the gate keys solely on `verdict === "CONFIRMED"`).
-
-A blocking code-review finding (any CONFIRMED) routes back to sisyphus re-dispatch targeted at those specific findings — the same concrete-progress shape as an objective-lane REQUEST_CHANGES verdict.
-
-**Completion fires ONLY on an objective-lane APPROVE AND an objective-scope Evidence Audit pass.** A **COMMENT verdict is NOT sufficient** for completion — not because COMMENT is a distinct severity tier, but because the never-false-complete invariant in `request-complete` structurally requires `objective_verdict=APPROVE`. COMMENT is a soft pass: no blocking issue but non-blocking notes remain — on COMMENT, address those notes and re-verify until APPROVE. **On an APPROVE,** the Evidence Audit applies the verify-the-verifier shape to your own check: confirm the verdict HOLDS UP by reading the evidence you collected (does it demonstrate the verification surface was met?). If the evidence is missing or does not demonstrate the verification surface, it is an Evidence Gap → continue pursuit, do not complete.
-
-On pass (APPROVE + Evidence Audit holds), run the completion sequence in this exact order — **record the Evidence Audit artifact paths FIRST, then flip the verdict, then request completion:**
-
-```
-bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set --phase pursuing --completion-evidence <audit-artifact-paths>
-bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set-verdict --verdict APPROVE
-bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts request-complete
-```
-
-`<audit-artifact-paths>` is a comma-separated list of the artifacts the Evidence Audit read (the evidence that demonstrates the verification surface was met). `set --phase pursuing --completion-evidence` keeps the phase `pursuing` and only records the evidence — it can never write `complete`.
-
-**Why evidence is recorded BEFORE the verdict flips:** so that whenever `objective_verdict=APPROVE` is observed, the completion evidence is already present. `request-complete` is the ONLY path to `phase=complete` — the hook layer never writes `complete` under any condition (cap reached → `budget_limited` block, not complete). Recording evidence first ensures the full `request-complete` gate (verdict + evidence + per-story artifact checks) is satisfiable the moment the verdict flips. When the cap is reached before the gate is met, the hook writes `budget_limited` and blocks for that turn; calling `request-complete` in the same turn is still possible and succeeds if the gate is met — ADR-7 complete-wins means `request-complete` prevails over a prior `budget_limited` state. If `request-complete` is refused, report the blocker honestly and stop.
-
-APPROVE alone does NOT leave the goal pursuing/active — the `request-complete` handoff is what transitions to terminal `complete` (and it is structurally gated on completion-evidence, so a write that never reached the gate cannot false-complete).
-
-**Once `request-complete` reaches terminal `complete`, hand off to the human for the final hands-on QA.** The autonomous loop proved the verification surface through automated checks and the code-review lane; the hands-on adversarial matrix was deliberately left out of the loop (see the Completion Gate opening). So when you report completion, also prompt the user to run their own final hands-on pass before shipping — the heavy `Skill(skill: "qa")` battery is available if they want it.
-
-**Two lanes gate completion: the objective self-check and code-review.** The completion path runs both the objective-level self-check (correctness, completeness, and evidence audit) and the independent code-review lane (static quality and conventions) — both must be clean for `request-complete` to pass. No design or architecture lane gates completion: daedalus and design-review are plan-time advisory only, not completion gates. Code-review is a completion-time quality lane and is distinct from design-review — the two must not be conflated.
-
-### Concrete progress action per non-APPROVE verdict
-
-Every non-APPROVE verdict drives a concrete progress action — never action-less spin. Each action is **scoped re-review**: it re-dispatches only the rejected unit (the named incomplete TODOs, or the specific CONFIRMED findings), never a full re-walk of already-passed work. A full re-plan via prometheus is the exception, reserved for a strategic plan inadequacy where the decomposition itself is wrong:
-
-- **REQUEST_CHANGES naming incomplete work items** (tactical — the work is unfinished, the plan is sound) → re-dispatch `Skill(skill: "sisyphus")` on the named incomplete TODOs. This stays inside sisyphus's junior loop; phase remains `pursuing`.
-- **Strategic plan inadequacy** (the plan itself cannot reach the objective — the decomposition is wrong, not merely unfinished) → re-plan via `Skill(skill: "prometheus")`: run `set --phase planning` first (which clears the verdict), let prometheus's human design gates run un-wrapped, then `set --phase pursuing` after the fresh sisyphus dispatch.
-- **COMMENT (soft pass — non-blocking notes)** → re-dispatch `Skill(skill: "sisyphus")` to address the self-check notes, then re-verify toward APPROVE; do NOT `request-complete` on a COMMENT (the code gate requires `objective_verdict=APPROVE`).
-- **Code-review lane: any CONFIRMED finding** → re-dispatch `Skill(skill: "sisyphus")` on the specific findings in `goal-codereview-{sid}.json`. Phase remains `pursuing`; run a fresh code-review dispatch after sisyphus resolves the findings.
-
-### Blocked-stop
-
-Pursuit stops as blocked (non-complete) ONLY on a decidable, point-in-time predicate — there is no cross-iteration stall detector; `max_iterations` absorbs genuine stalls. Exactly two conditions trip blocked:
-
-- **B1** — the objective self-check names NO actionable incomplete work item while the objective is still unmet (no valid progress path: nothing to re-dispatch and the verification surface is not satisfied).
-- **B2** — the captured **blocked-stop** slot's objective-specific condition is met.
-
-On either condition: run `set-blocked --reason "<blocker>"`, report the blocker to the user, and stop. A blocked pursuit is non-complete — `set-blocked` can never write `complete`.
+**You MUST read `references/completion-gate.md` first** before rendering the objective-lane verdict, evaluating the code-review lane, or running the completion sequence (`set-verdict`/`request-complete`) — it is the single owner of the evidence rubric, the per-story and code-review artifact schemas, the pass signal, the concrete-progress routing per verdict, and the blocked-stop conditions.
 
 ---
 
