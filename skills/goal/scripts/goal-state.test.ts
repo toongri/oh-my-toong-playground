@@ -29,9 +29,12 @@ import {
 	addStory,
 	retireStory,
 	serializeRequirements,
+	isSubskillHalfOpen,
+	readCodeReviewArtifact,
 	type GoalPhase,
 	type Story,
 } from "./goal-state.ts";
+import { STATE_PREFIX, ACTIVE_IDLE_TTL_SECONDS } from "@lib/state-core";
 
 let tmpDir: string;
 const originalOmtDir = process.env.OMT_DIR;
@@ -216,6 +219,7 @@ describe("goal state", () => {
 			"utf8",
 		);
 		writeCodeReviewArtifact(S2, {
+			status: "COMPLETE",
 			findings: [],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -266,6 +270,7 @@ describe("goal state", () => {
 
 		// APPROVE-backed request-complete must win over the prior budget_limited
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -331,6 +336,7 @@ describe("goal state", () => {
 			"utf8",
 		);
 		writeCodeReviewArtifact(Sc, {
+			status: "COMPLETE",
 			findings: [],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -424,6 +430,7 @@ describe("goal state", () => {
 			"utf8",
 		);
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -499,6 +506,7 @@ describe("goal state", () => {
 			"utf8",
 		);
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -1631,6 +1639,7 @@ function buildSatisfiedFixture(sid: string): object {
 	// Code-review lane: a clean (no-findings) artifact so the second completion lane passes
 	// by default. Callers asserting a BLOCK overwrite this with a CONFIRMED/invalid one.
 	writeCodeReviewArtifact(sid, {
+		status: "COMPLETE",
 		findings: [],
 		reviewer: "code-reviewer",
 		at: "2026-06-12T00:00:00",
@@ -1828,6 +1837,7 @@ describe("story layer: request-complete verdict gate (T4)", () => {
 			at: "2026-06-12T00:00:00",
 		});
 		writeCodeReviewArtifact(S2, {
+			status: "COMPLETE",
 			findings: [],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -1952,6 +1962,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact); // objective lane fully green
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [{ class: "cleanup", verdict: "CONFIRMED", ref: "foo.ts:1" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -1964,6 +1975,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [{ class: "correctness", verdict: "CONFIRMED", ref: "foo.ts:2" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -1977,6 +1989,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -1989,6 +2002,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [{ class: "cleanup", verdict: "PLAUSIBLE", ref: "foo.ts:3" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -2019,6 +2033,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [{ class: "correctness", verdict: "BOGUS", ref: "foo.ts:4" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -2030,7 +2045,12 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 	test("code-review invalid artifact refuses (empty reviewer)", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
-		writeCodeReviewArtifact(S, { findings: [], reviewer: "", at: "2026-06-12T00:00:00" });
+		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
+			findings: [],
+			reviewer: "",
+			at: "2026-06-12T00:00:00",
+		});
 		expect(requestComplete(S)).toBe(false);
 		expect(rawState().phase).toBe("pursuing");
 	});
@@ -2041,6 +2061,7 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -2072,6 +2093,66 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// TODO 2: inconclusive-state (D1 = Option B, status required)
+// ---------------------------------------------------------------------------
+
+describe("story layer: code-review INCONCLUSIVE status (TODO 2)", () => {
+	// RED: an artifact whose review itself did not finish (status=INCONCLUSIVE)
+	// must block completion even when findings are empty and every other gate
+	// (objective verdict, evidence, confirmed stories) is green. Distinct from
+	// the CONFIRMED-finding block: here the review never rendered a verdict at all.
+	test("code-review status INCONCLUSIVE blocks completion even with empty findings", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		writeCodeReviewArtifact(S, {
+			status: "INCONCLUSIVE",
+			findings: [],
+			reviewer: "code-reviewer",
+			at: "2026-06-12T00:00:00",
+		});
+		expect(requestComplete(S)).toBe(false);
+		expect(rawState().phase).toBe("pursuing");
+	});
+
+	// required-status fail-safe: a legacy/malformed artifact with no `status` key
+	// at all must be schema-invalid (never default-coerced to COMPLETE) — the
+	// reader must refuse it outright, degrading toward block (never-false-complete).
+	test("code-review artifact missing status is schema-invalid (readCodeReviewArtifact null)", () => {
+		writeCodeReviewArtifact(S, { findings: [], reviewer: "code-reviewer", at: "2026-06-12T00:00:00" });
+		expect(readCodeReviewArtifact(S)).toBeNull();
+	});
+
+	// control (GREEN): status COMPLETE + empty findings + every other gate green -> true.
+	test("code-review status COMPLETE with empty findings permits completion (control)", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
+			findings: [],
+			reviewer: "code-reviewer",
+			at: "2026-06-12T00:00:00",
+		});
+		expect(requestComplete(S)).toBe(true);
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// control (GREEN, existing behavior preserved): status COMPLETE + a CONFIRMED
+	// finding still blocks completion — INCONCLUSIVE handling must not loosen this.
+	test("code-review status COMPLETE with a CONFIRMED finding still blocks completion (control)", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
+			findings: [{ class: "correctness", verdict: "CONFIRMED", ref: "foo.ts:9" }],
+			reviewer: "code-reviewer",
+			at: "2026-06-12T00:00:00",
+		});
+		expect(requestComplete(S)).toBe(false);
+		expect(rawState().phase).toBe("pursuing");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // TODO 6: requirement-gap class (Hop E) + serialize-requirements (Hop B)
 // ---------------------------------------------------------------------------
 
@@ -2084,6 +2165,7 @@ describe("requirement-gap class: validator accepts and gate keys on verdict", ()
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [{ class: "requirement-gap", verdict: "PLAUSIBLE", ref: "foo.ts:1" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -2099,6 +2181,7 @@ describe("requirement-gap class: validator accepts and gate keys on verdict", ()
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact);
 		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
 			findings: [{ class: "requirement-gap", verdict: "CONFIRMED", ref: "foo.ts:2" }],
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
@@ -2214,5 +2297,112 @@ describe("re-plan 시 verdict 아티팩트 무효화", () => {
 		setGoalState(S, { phase: "planning", outcome: "초기 목표" });
 		// 에러 없이 진행됐는지 확인
 		expect(rawState().phase).toBe("planning");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Lever 1: finalize-before-advance cross-read guard
+// ---------------------------------------------------------------------------
+
+describe("isSubskillHalfOpen: cross-read half-open detector", () => {
+	/** Path derived from STATE_PREFIX — same constant the detector uses, so fixture and detector cannot drift. */
+	function diStatePath(sid: string): string {
+		return join(tmpDir, `${STATE_PREFIX["deep-interview"]}${sid}.json`);
+	}
+
+	function writeDiState(sid: string, fields: Record<string, unknown>): void {
+		writeFileSync(diStatePath(sid), JSON.stringify(fields), "utf8");
+	}
+
+	function isoSecondsAgo(secondsAgo: number): string {
+		const d = new Date(Date.now() - secondsAgo * 1000);
+		const pad = (n: number) => String(n).padStart(2, "0");
+		const tzOffset = -d.getTimezoneOffset();
+		const tzSign = tzOffset >= 0 ? "+" : "-";
+		const tzH = pad(Math.floor(Math.abs(tzOffset) / 60));
+		const tzM = pad(Math.abs(tzOffset) % 60);
+		return (
+			`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+			`T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+			`${tzSign}${tzH}:${tzM}`
+		);
+	}
+
+	test("half-open: active:true, live, non-pristine (rich state object) -> true", () => {
+		const now = nowIso();
+		writeDiState(S, {
+			active: true,
+			started_at: now,
+			last_touched_at: now,
+			state: { initial_idea: "some idea" },
+		});
+		expect(isSubskillHalfOpen(S, "deep-interview")).toBe(true);
+	});
+
+	test("terminal: active:false -> false regardless of freshness/content", () => {
+		const now = nowIso();
+		writeDiState(S, {
+			active: false,
+			started_at: now,
+			last_touched_at: now,
+			state: { initial_idea: "some idea" },
+		});
+		expect(isSubskillHalfOpen(S, "deep-interview")).toBe(false);
+	});
+
+	test("pristine: active:true but no rich `state` object (freshly seeded) -> false", () => {
+		const now = nowIso();
+		writeDiState(S, { active: true, started_at: now, last_touched_at: now });
+		expect(isSubskillHalfOpen(S, "deep-interview")).toBe(false);
+	});
+
+	test("TTL-stale: active:true, non-pristine, but idle beyond ACTIVE_IDLE_TTL_SECONDS -> false", () => {
+		const old = isoSecondsAgo(ACTIVE_IDLE_TTL_SECONDS + 60);
+		writeDiState(S, {
+			active: true,
+			started_at: old,
+			last_touched_at: old,
+			state: { initial_idea: "some idea" },
+		});
+		expect(isSubskillHalfOpen(S, "deep-interview")).toBe(false);
+	});
+
+	test("absent: no state file for the session -> false", () => {
+		expect(isSubskillHalfOpen("no-such-session", "deep-interview")).toBe(false);
+	});
+});
+
+describe("check-subskill CLI subcommand", () => {
+	function diStatePath(sid: string): string {
+		return join(tmpDir, `${STATE_PREFIX["deep-interview"]}${sid}.json`);
+	}
+
+	function writeDiState(sid: string, fields: Record<string, unknown>): void {
+		writeFileSync(diStatePath(sid), JSON.stringify(fields), "utf8");
+	}
+
+	test("half-open DI state -> non-zero exit", () => {
+		const now = nowIso();
+		writeDiState(S, {
+			active: true,
+			started_at: now,
+			last_touched_at: now,
+			state: { initial_idea: "some idea" },
+		});
+		expect(() => runCli("check-subskill --skill deep-interview")).toThrow();
+	});
+
+	test("pristine DI state -> exit 0", () => {
+		const now = nowIso();
+		writeDiState(S, { active: true, started_at: now, last_touched_at: now });
+		expect(() => runCli("check-subskill --skill deep-interview")).not.toThrow();
+	});
+
+	test("absent DI state -> exit 0", () => {
+		expect(() => runCli("check-subskill --skill deep-interview")).not.toThrow();
+	});
+
+	test("invalid --skill value -> non-zero exit", () => {
+		expect(() => runCli("check-subskill --skill sisyphus")).toThrow();
 	});
 });
