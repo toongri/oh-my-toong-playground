@@ -979,6 +979,32 @@ test_hg_ac_space_embedded_space_never_word_split() {
     rm -rf "$base"
 }
 
+test_hg_ac_unquoted_omtdir_space_denied_no_mark() {
+    # UNQUOTED pointer form under a space-bearing OMT_DIR. The hook's textual
+    # substitution matches the expected path (allow), but real bash word-splits
+    # the unquoted $OMT_DIR so `cat` never reads the handoff -- a false-allow
+    # that disarms the gate. The gate must DENY this form and leave no marker.
+    local base
+    base=$(mktemp -d)
+    export OMT_DIR="$base/dir with space"
+    mkdir -p "$OMT_DIR"
+    arm_handoff
+    local cmd='cat $OMT_DIR/handoff-$OMT_SESSION_ID.md'
+    local out
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    if ! hg_is_deny "$out"; then
+        echo "ASSERTION FAILED AC-UNQUOTED: unquoted \$OMT_DIR w/ space must deny (word-split false-allow). Got: $out"
+        rm -rf "$base"
+        return 1
+    fi
+    if [[ -f "$HG_M" ]]; then
+        echo "ASSERTION FAILED AC-UNQUOTED: marker must not exist after denied unquoted form"
+        rm -rf "$base"
+        return 1
+    fi
+    rm -rf "$base"
+}
+
 test_hg_ac13_symlink_omt_dir_byte_exact_allowed() {
     local real link
     real=$(mktemp -d)
@@ -1245,6 +1271,7 @@ main() {
     run_test test_hg_ac11_leading_indent_allowed_and_marked
     run_test test_hg_ac_partial_omtdir_expanded_sid_literal_allowed
     run_test test_hg_ac_space_embedded_space_never_word_split
+    run_test test_hg_ac_unquoted_omtdir_space_denied_no_mark
     run_test test_hg_ac13_symlink_omt_dir_byte_exact_allowed
     run_test test_hg_ac14_marker_present_releases_gate
     run_test test_hg_ac15_handoff_absent_fail_open

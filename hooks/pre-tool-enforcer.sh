@@ -73,11 +73,19 @@ if [[ "$_hg_armed" -eq 1 ]]; then
     # marks a token whose content came from inside single quotes AND held a
     # literal '$' -- the shell would not expand that, so substituting it here
     # would be a false-allow silent-skip; treated as a deny signal below.
+    # _hg_unqdollar[k]=1 is the symmetric case: a token holding a '$' that was
+    # OUTSIDE any quotes. Unquoted expansion is subject to word-splitting and
+    # globbing, so an unquoted $OMT_DIR carrying a space (or glob char) would
+    # make our pure textual substitution diverge from what bash actually runs
+    # (cat receives split args, never reads the handoff) -- also a deny signal.
+    # Only a double-quoted '$' is safe (expands without split/glob), which is
+    # exactly the canonical form the deny message instructs.
     _hg_tokenize() {
-        local s="$1" i=0 len c cur="" in_token=0 quote="" cur_sqdollar=0
+        local s="$1" i=0 len c cur="" in_token=0 quote="" cur_sqdollar=0 cur_unqdollar=0
         len=${#s}
         _hg_tokens=()
         _hg_sqdollar=()
+        _hg_unqdollar=()
         while [[ "$i" -lt "$len" ]]; do
             c="${s:$i:1}"
             if [[ -n "$quote" ]]; then
@@ -93,9 +101,11 @@ if [[ "$_hg_armed" -eq 1 ]]; then
                         if [[ "$in_token" -eq 1 ]]; then
                             _hg_tokens+=("$cur")
                             _hg_sqdollar+=("$cur_sqdollar")
+                            _hg_unqdollar+=("$cur_unqdollar")
                             cur=""
                             in_token=0
                             cur_sqdollar=0
+                            cur_unqdollar=0
                         fi
                         ;;
                     '"'|"'")
@@ -103,6 +113,7 @@ if [[ "$_hg_armed" -eq 1 ]]; then
                         in_token=1
                         ;;
                     *)
+                        [[ "$c" == '$' ]] && cur_unqdollar=1
                         cur+="$c"
                         in_token=1
                         ;;
@@ -116,6 +127,7 @@ if [[ "$_hg_armed" -eq 1 ]]; then
         if [[ "$in_token" -eq 1 ]]; then
             _hg_tokens+=("$cur")
             _hg_sqdollar+=("$cur_sqdollar")
+            _hg_unqdollar+=("$cur_unqdollar")
         fi
         return 0
     }
@@ -128,7 +140,8 @@ if [[ "$_hg_armed" -eq 1 ]]; then
         if ! echo "$_hg_cmd" | grep -qE '[|;<>&`]|\$\(|tail|head|sed'; then
             if _hg_tokenize "$_hg_cmd"; then
                 if [[ "${#_hg_tokens[@]}" -eq 2 && "${_hg_tokens[0]}" == "cat" \
-                    && "${_hg_sqdollar[1]:-0}" != "1" ]]; then
+                    && "${_hg_sqdollar[1]:-0}" != "1" \
+                    && "${_hg_unqdollar[1]:-0}" != "1" ]]; then
                     _hg_arg="${_hg_tokens[1]}"
                     _hg_candidate="${_hg_arg//\$OMT_DIR/$_hg_omt_dir}"
                     _hg_candidate="${_hg_candidate//\$OMT_SESSION_ID/$_hg_sid}"
