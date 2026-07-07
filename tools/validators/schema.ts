@@ -369,16 +369,25 @@ function validateDocsPathField(
 	value: unknown,
 	fieldCtx: string,
 	result: ValidationResult,
+	assertContainment = false,
 ): string | undefined {
 	if (value === undefined) return undefined;
 	if (typeof value !== "string") {
 		result.errors.push(`${fieldCtx}: string이어야 합니다 (got ${typeof value})`);
 		return undefined;
 	}
-	try {
-		assertDocsTargetContained(value);
-	} catch (e) {
-		result.errors.push(`${fieldCtx}: ${e instanceof Error ? e.message : String(e)}`);
+	// `item.path`/`item.as` are FRAGMENTS joined onto the base — a leading `..`
+	// that stays under deployRoot once combined is legitimate (matches the
+	// runtime resolveDocsTarget + AC4.1: "leaving the docs base but under
+	// deployRoot is allowed"). Containment is asserted on the COMBINED target
+	// below, so per-field containment only applies to the section base `path`,
+	// whose own `..` genuinely escapes deployRoot.
+	if (assertContainment) {
+		try {
+			assertDocsTargetContained(value);
+		} catch (e) {
+			result.errors.push(`${fieldCtx}: ${e instanceof Error ? e.message : String(e)}`);
+		}
 	}
 	return value;
 }
@@ -400,7 +409,7 @@ function validateDocsSection(sectionData: unknown, result: ValidationResult): vo
 		}
 	}
 
-	const sectionPath = validateDocsPathField(sectionData.path, "docs.path", result);
+	const sectionPath = validateDocsPathField(sectionData.path, "docs.path", result, true);
 
 	const items = sectionData.items;
 	if (items !== undefined && !isArray(items)) {
