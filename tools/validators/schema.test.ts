@@ -1698,7 +1698,9 @@ docs:
 	});
 
 	describe("docs rejects unsafe path", () => {
-		it("item.path가 상위 디렉토리를 벗어나면 오류를 반환한다", () => {
+		it("item.path가 deployRoot를 벗어나면 오류를 반환한다", () => {
+			// "../../x" from the default "docs" base normalizes to "../x" — it
+			// escapes deployRoot itself (not merely the docs base), so it is rejected.
 			const path = writeYaml(
 				dir,
 				"sync.yaml",
@@ -1707,11 +1709,31 @@ path: /target
 docs:
   items:
     - component: intro
-      path: "../x"
+      path: "../../x"
 `,
 			);
 			const result = validateSyncYaml(path);
 			expect(result.errors.some((e) => e.includes("deployRoot"))).toBe(true);
+		});
+
+		it("item.path가 docs base만 벗어나고 deployRoot 안이면 통과한다", () => {
+			// "../shared/x" from the "docs" base resolves to "shared/x" — under
+			// deployRoot. The runtime (resolveDocsTarget/syncDocs) allows this per
+			// AC4.1, so the validator must NOT reject it: containment is asserted on
+			// the COMBINED target, never on the raw item.path fragment in isolation.
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  items:
+    - component: intro
+      path: "../shared/x"
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors).toHaveLength(0);
 		});
 	});
 
