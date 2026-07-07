@@ -296,17 +296,9 @@ COMMIT 2: type: 제목
 
 #### MANDATORY Self-Check (제목 초안 작성 직후)
 
-제목을 쓴 직후, 커밋 실행 전 반드시 다음 정규식 패턴을 자가 검사한다. **하나라도 매칭되면 rewrite 후 재검사.**
+제목을 쓴 직후, 커밋 실행 전 반드시 invented/opaque label 여부를 자가 검사한다. **하나라도 매칭되면 rewrite 후 재검사.** 이 검사가 지키는 표준은 `communication-style` 룰(`rules/communication-style.md`)의 anti-pattern 1(Invented/opaque label ban)이며, 판정 정규식의 canonical source는 `hooks/lib/label-patterns.sh`다 — git-master는 자체 사본을 두지 않는다.
 
-```
-1. /\(?Step \d+(\.\d+)?\)?/        # Plan 단계 번호 — (Step 7), Step 7.6
-2. /AC [A-Z]\d+\b/                  # Acceptance criteria ID — AC M1, AC H4
-3. /\b[HMLBCDJ]\d+\b(?! \w)/        # 단독 AC 코드 — H4, M1, D5
-4. /Phase \d+|Round \d+|Iteration \d+/  # 기타 단계 라벨
-5. /\bP[0-3]\b(?! \w)/              # 단독 priority 라벨 — P0, P1
-```
-
-**왜 강제인가**: 작업자 본인은 plan 문서를 보고 있으니 `Step 7.6`이 명확하지만, git log 독자는 그 plan에 접근 불가. 이번 절차의 reference implementation은 24h 내 실제 발생한 8건 위반(`(Step 3)` ~ `(Step 12)`, `(AC M1)`, `(AC M3)`)을 history rewrite로 교정해야 했던 사례.
+**왜 강제인가**: 작업자 본인은 plan 문서를 보고 있으니 plan 단계 번호나 AC ID가 명확하지만, git log 독자는 그 plan에 접근 불가 — 과거 실제 위반을 history rewrite로 교정해야 했던 사례가 있다.
 
 **위반 패턴 발견 시 변환:**
 - 토큰 단순 제거: `(Step 12)` → 삭제 (제목이 도메인 용어로 이미 자족적인 경우)
@@ -358,8 +350,6 @@ COMMIT 2: type: 제목
 | `fix: collect-jd P1 스펙 드리프트 3건 정합` | `fix: ledger filename + canonical path + Gate 5 classification 정합` |
 | `refactor: SKILL.md HIGH 잔여 3섹션 cross-ref 전환` | `refactor: SKILL.md Session Lock + Atomic Write + L1/L2 cross-ref 전환` |
 | `fix: 코드 리뷰 P1/P2 이슈 수정` | `fix: persistence 저장 시점을 Step 완료 단위로 변경` |
-| `feat(dispenser): metro 모노레포 설정 + RN 패키지 고정 (Step 7)` | `feat(dispenser): metro 모노레포 설정 + RN 패키지 고정` |
-| `chore(monorepo): dispenser 워크스페이스 lockfile 재생성 (Step 7.6)` | `chore(monorepo): dispenser 워크스페이스 lockfile 재생성` |
 | `chore(dispenser): remove per-app husky (AC M1)` | `chore(dispenser): per-app husky 제거` |
 
 GOOD 제목들은 외부 문서 없이도 변경 영역(파일/모듈/도메인 개념)이 직접 보인다.
@@ -468,7 +458,7 @@ See `examples.md` for commit message examples.
 | Meta-commit: "리뷰 이슈 수정" | 변경 내용이 불투명, git log 무의미 | 실제 변경 기술: "저장 시점을 Step 완료 단위로 변경" |
 | Opaque reference: "P1-1, P2-3 반영" | 외부 문서 없이 해독 불가 | 참조는 body/trailer, 제목은 변경 자체 |
 | 외부 맥락에 의존하는 제목 (`P1 X`, `HIGH 잔여 Y`, `리뷰 N건`) | git log 독자는 분류 체계/세션 맥락에 접근 불가 — 의미 전달 실패 | 도메인 용어로 변경 자체를 기술; 분류/맥락은 body·trailer로 |
-| Plan-step / AC ID 박기: `(Step N)` `(AC M1)` `(Phase 2)` | plan 문서 없으면 git log 독자 해독 불가 — 작업자 본인 외에 의미 없는 토큰 | Step 5 MANDATORY Self-Check의 정규식 5종으로 자동 검사; 추적은 PR description 또는 trailer (`Refs: plan.md#step-N`) |
+| Plan-step / AC ID 박기 | plan 문서 없으면 git log 독자 해독 불가 — 작업자 본인 외에 의미 없는 토큰 | Step 5 MANDATORY Self-Check로 자동 검사(canonical 패턴: `hooks/lib/label-patterns.sh`); 추적은 PR description 또는 trailer로 |
 
 ---
 
