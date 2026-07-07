@@ -270,6 +270,79 @@ test_multiline_real_git_commit_on_second_line_denies() {
 }
 
 # =============================================================================
+# Documented-message-form coverage (Codex PR #161 P2): the hard block must
+# scan the actual commit text across ALL documented `git commit` message
+# forms, not just the first short quoted `-m`. Each of these creates a
+# message carrying a forbidden label and must → exit 2.
+# =============================================================================
+test_dash_dash_message_space_denies() {
+    local exit_code=0 stderr_out
+    local cmd="git commit --message 'fix D-36'"
+    stderr_out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+
+    [[ "$exit_code" -eq 2 ]] \
+        || { echo "ASSERTION FAILED: --message <space> form should deny (exit=$exit_code)"; return 1; }
+    echo "$stderr_out" | grep -q "D-36" \
+        || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
+}
+
+test_dash_dash_message_equals_denies() {
+    local exit_code=0 stderr_out
+    local cmd="git commit --message='fix D-36'"
+    stderr_out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+
+    [[ "$exit_code" -eq 2 ]] \
+        || { echo "ASSERTION FAILED: --message= form should deny (exit=$exit_code)"; return 1; }
+    echo "$stderr_out" | grep -q "D-36" \
+        || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
+}
+
+# Repeated -m (subject + body): git accepts multiple -m as paragraphs; the
+# label lives in the SECOND value, which the first-match-only extractor missed.
+test_repeated_dash_m_label_in_body_denies() {
+    local exit_code=0 stderr_out
+    local cmd="git commit -m 'clean subject' -m 'fix D-36'"
+    stderr_out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+
+    [[ "$exit_code" -eq 2 ]] \
+        || { echo "ASSERTION FAILED: repeated -m (label in 2nd) should deny (exit=$exit_code)"; return 1; }
+    echo "$stderr_out" | grep -q "D-36" \
+        || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
+}
+
+# --file <space> path (long-flag space form of -F): only --file=<path> was
+# handled; the space-separated documented form left the message unscanned.
+test_dash_dash_file_space_denies() {
+    local exit_code=0 stderr_out
+    local msg_file="$TEST_TMP_DIR/msg3.txt"
+    printf 'fix D-36\n' > "$msg_file"
+
+    local cmd="git commit --file $msg_file"
+    stderr_out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+
+    [[ "$exit_code" -eq 2 ]] \
+        || { echo "ASSERTION FAILED: --file <space> form should deny (exit=$exit_code)"; return 1; }
+    echo "$stderr_out" | grep -q "D-36" \
+        || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
+}
+
+# Guard: repeated -m where NO value carries a label must still passthrough
+# (subject + body both clean) → exit 0.
+test_repeated_dash_m_all_clean_passthrough() {
+    local exit_code=0
+    local cmd="git commit -m 'add enrich flag' -m 'covers retries and timeouts'"
+    jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" >/dev/null 2>&1 || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED: repeated -m all-clean should passthrough (exit=$exit_code)"; return 1; }
+}
+
+# =============================================================================
 # Fail-open source guard: missing lib must never wedge a commit (exit 0)
 # =============================================================================
 test_fail_open_when_lib_missing() {
@@ -308,6 +381,11 @@ main() {
     run_test test_editor_driven_commit_passthrough
     run_test test_bare_amend_no_message_passthrough
     run_test test_dash_dash_file_equals_shape_denies
+    run_test test_dash_dash_message_space_denies
+    run_test test_dash_dash_message_equals_denies
+    run_test test_repeated_dash_m_label_in_body_denies
+    run_test test_dash_dash_file_space_denies
+    run_test test_repeated_dash_m_all_clean_passthrough
     run_test test_combined_short_flag_am_denies
     run_test test_git_global_option_before_commit_denies
     run_test test_commit_graph_still_passthrough
