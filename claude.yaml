@@ -35,6 +35,15 @@ mcps:
     command: uvx
     args:
       - "opensearch-mcp-server-py"
+  # Postgres MCP Pro (crystaldba/postgres-mcp). Read-only via --access-mode=restricted
+  # (enforces read-only transactions + a query-time cap). Requires shell env: DATABASE_URI
+  # (postgresql://user:pass@host:5432/dbname). uvx installs PyPI v0.3.0; for Jan-2026
+  # fixes install from git main. https://github.com/crystaldba/postgres-mcp
+  postgres:
+    command: uvx
+    args:
+      - "postgres-mcp"
+      - "--access-mode=restricted"
   # Notion hosted MCP. Streamable HTTP; the server allows DCR, so a bare url triggers
   # OAuth automatically (authenticate via /mcp). Replaces the claude.ai web connector.
   notion:
