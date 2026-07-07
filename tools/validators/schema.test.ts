@@ -1646,6 +1646,175 @@ provision:
 });
 
 // ---------------------------------------------------------------------------
+// Suite: validateSyncYaml — docs 섹션 검증
+// ---------------------------------------------------------------------------
+
+describe("validateSyncYaml — docs 섹션 검증", () => {
+	let dir: string;
+
+	beforeEach(() => {
+		dir = makeTempDir();
+	});
+
+	afterEach(() => {
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	describe("docs section validated", () => {
+		it("유효한 docs 섹션은 오류 없이 통과한다", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  path: guides
+  items:
+    - component: intro
+      as: index
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors).toHaveLength(0);
+		});
+	});
+
+	describe("docs rejects platforms", () => {
+		it("item에 platforms 필드가 있으면 오류를 반환한다", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  items:
+    - component: intro
+      platforms: [claude]
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.some((e) => e.includes("platforms"))).toBe(true);
+		});
+	});
+
+	describe("docs rejects unsafe path", () => {
+		it("item.path가 상위 디렉토리를 벗어나면 오류를 반환한다", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  items:
+    - component: intro
+      path: "../x"
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.some((e) => e.includes("deployRoot"))).toBe(true);
+		});
+	});
+
+	describe("docs item shape", () => {
+		it("component 필드가 없으면 오류를 반환한다", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  items:
+    - path: guides/x
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.some((e) => e.includes("component 필드가 필요합니다"))).toBe(true);
+		});
+
+		it("delete가 false이면 오류를 반환한다", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  items:
+    - component: intro
+      delete: false
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.some((e) => e.includes("delete"))).toBe(true);
+		});
+
+		it("알 수 없는 item 필드가 있으면 오류를 반환한다", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  items:
+    - component: intro
+      unknown-field: value
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.some((e) => e.includes("unknown-field"))).toBe(true);
+		});
+	});
+
+	describe("docs rejects section platforms", () => {
+		it("섹션에 platforms 필드가 있으면 오류를 반환한다", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  platforms: [claude]
+  items:
+    - component: intro
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.some((e) => e.includes("platforms"))).toBe(true);
+		});
+
+		it("섹션에 알 수 없는 필드가 있으면 오류를 반환한다", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  unknown-section-field: value
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.some((e) => e.includes("unknown-section-field"))).toBe(true);
+		});
+	});
+
+	describe("docs component name traversal", () => {
+		it("component 이름이 상위 디렉토리를 벗어나면 오류를 반환한다", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+docs:
+  items:
+    - component: "../../etc/x"
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.some((e) => e.includes("deployRoot"))).toBe(true);
+		});
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Suite: validateAll — local yaml 파일 탐색
 // ---------------------------------------------------------------------------
 
