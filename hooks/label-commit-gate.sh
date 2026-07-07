@@ -35,24 +35,38 @@ if [[ ! "$cmd" =~ $_commit_gate_re ]]; then
     exit 0
 fi
 
-# Extract the commit MESSAGE. Human paths (editor-driven commit, bare
-# --amend, -F -) leave message empty → passthrough.
+# Extract the commit MESSAGE across ALL documented forms, then scan their
+# union. Human paths (editor-driven commit, bare --amend, -F -) leave the
+# message empty → passthrough. First-match-only extraction previously let
+# documented forms (--message, repeated -m as subject/body, --file <path>)
+# bypass the hard block (Codex PR #161 P2).
 message=""
 
-if [[ "$cmd" =~ -[a-zA-Z]*m[[:space:]]*\'([^\']*)\' ]]; then
-    message="${BASH_REMATCH[1]}"
-elif [[ "$cmd" =~ -[a-zA-Z]*m[[:space:]]*\"([^\"]*)\" ]]; then
-    message="${BASH_REMATCH[1]}"
-elif [[ "$cmd" =~ -F[[:space:]]+([^[:space:]]+) ]]; then
-    file_path="${BASH_REMATCH[1]}"
-    if [[ "$file_path" != "-" && -f "$file_path" ]]; then
-        message=$(cat "$file_path")
-    fi
-elif [[ "$cmd" =~ --file=([^[:space:]]+) ]]; then
-    file_path="${BASH_REMATCH[1]}"
-    if [[ -f "$file_path" ]]; then
-        message=$(cat "$file_path")
-    fi
+# Every -m / -am / --message value (space or = form, single or double
+# quoted). git treats repeated -m as subject/body paragraphs, so all values
+# are collected. Iterated because bash =~ captures only the leftmost match
+# per call; each pass strips through the matched value and re-scans the rest.
+# The leading (^|[[:space:]]) pins the flag to a token boundary so
+# -[a-zA-Z]*m never mis-binds to the "-m" substring inside "--message".
+_msg_re='(^|[[:space:]])(-[a-zA-Z]*m|--message)[[:space:]]*=?[[:space:]]*('\''[^'\'']*'\''|"[^"]*")'
+_rest="$cmd"
+while [[ "$_rest" =~ $_msg_re ]]; do
+    _val="${BASH_REMATCH[3]}"
+    _val="${_val#[\'\"]}"; _val="${_val%[\'\"]}"   # strip the surrounding quotes
+    message="$message$_val"$'\n'
+    _rest="${_rest#*"${BASH_REMATCH[0]}"}"          # advance past this match
+done
+
+# -F/--file message file: space form (-F <path>, --file <path>) or
+# --file=<path>. -F - (stdin) is a human path → left unread.
+file_path=""
+if [[ "$cmd" =~ (^|[[:space:]])(-F|--file)[[:space:]]+([^[:space:]]+) ]]; then
+    file_path="${BASH_REMATCH[3]}"
+elif [[ "$cmd" =~ (^|[[:space:]])--file=([^[:space:]]+) ]]; then
+    file_path="${BASH_REMATCH[2]}"
+fi
+if [[ -n "$file_path" && "$file_path" != "-" && -f "$file_path" ]]; then
+    message="$message$(cat "$file_path")"$'\n'
 fi
 
 if [[ -z "$message" ]]; then
