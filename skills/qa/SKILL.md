@@ -87,7 +87,7 @@ Build/test/lint green baseline.
 
 ### ADVERSARIAL E2E
 
-Drive the changed surface for real and attack it. Two parts, both required when the change is user-facing:
+Drive the changed surface for real and attack it. Two parts, both required when the change touches a risk surface — user-facing OR an internal risk surface (feature-flag-gated logic, payment/notification resolver internals, permission/state transitions), per [stage3-handson.md] `### Decision Logic`; only a genuinely inert refactor that touches no risk surface skips:
 
 1. **Execute caller-provided scenarios verbatim**, with per-scenario evidence. ANY provided-scenario failure = immediate REQUEST_CHANGES. Caller-provided scenarios always run verbatim, unchanged — the derivation framework below governs only scenarios qa self-authors; it never rewrites what the caller handed in.
 2. **Self-author the 6-category adversarial matrix** for the changed surface, in this order — breadth before depth:
@@ -104,6 +104,8 @@ Drive the changed surface for real and attack it. Two parts, both required when 
 | Frontend / UI | `agent-browser` (fallback: `playwright`) |
 | Mobile / App | `maestro` |
 | CLI / TUI | interactive `bash` |
+
+An internal risk surface with no direct UI/API is driven via its nearest entry point — an API/`curl` call if reachable, or a `bash` harness that invokes the code path directly.
 
 Command execution is **non-blocking only**: every command either returns control on its own or is explicitly backgrounded (`run_in_background`, or trailing `&` with output redirected). A bare blocking command that hangs the shell is forbidden. See [stage3-handson.md] Step 3.2 for the lifecycle this backs (start in background → wait for readiness → verify → stop, never leaving a server running).
 
