@@ -22,6 +22,8 @@ skills:
       platforms: [claude]
     - mock-interview
     - scan-pdf-to-notes
+    - component: meeting-notes
+      platforms: [claude]
     - component: goal
       platforms: [claude]
     - agent-browser
