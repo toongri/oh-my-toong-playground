@@ -1358,6 +1358,30 @@ export async function processYaml(
 		"lib",
 	);
 
+	// Platforms eligible for the non-claude path-rewrite loop below: the union,
+	// over every deployable category and every item in it, of that item's
+	// resolved platform cascade — mirroring syncCategory's own per-item
+	// resolvePlatforms(item, sectionPlatforms, syncYaml.platforms, category)
+	// call exactly, so eligibility equals actual deployment by construction.
+	// A project-level-only computation (fake item, no sectionPlatforms) would
+	// miss an item- or section-level override that ADDS a non-claude platform.
+	// This must key on CATEGORIES (feature-platforms.skills etc.), NOT
+	// libPlatforms — feature-platforms has no `lib` entry, so libPlatforms
+	// collapses to ["claude"] for any un-narrowed project and would wrongly
+	// skip codex/gemini/opencode for the root self-deploy.
+	const rewriteEligiblePlatforms = new Set<Platform>();
+	for (const category of CATEGORIES) {
+		const section = syncYaml[category];
+		if (!section || !Array.isArray(section.items) || section.items.length === 0) continue;
+		const sectionPlatforms = section.platforms;
+		for (const item of section.items) {
+			const platforms = await resolvePlatforms(item, sectionPlatforms, syncYaml.platforms, category);
+			for (const platform of platforms) {
+				rewriteEligiblePlatforms.add(platform);
+			}
+		}
+	}
+
 	// Parse claude.yaml once (it is colocated with sync.yaml in yamlDir, shared by
 	// every worktree) so the per-worktree mkdir gate need not re-read it.
 	const claudeYaml = await parseAndMergePlatformYaml(yamlDir, "claude");
@@ -1433,7 +1457,15 @@ export async function processYaml(
 			const nonClaudePlatforms: Platform[] = ["gemini", "codex", "opencode"];
 			for (const platform of nonClaudePlatforms) {
 				const platformDir = path.join(deployRoot, `.${platform}`);
-				if (existsSync(platformDir)) {
+				// Eligible = this sync deployed to the platform via a component category
+				// (rewriteEligiblePlatforms) OR via a hook/lib deploy recorded in
+				// libSourceRoots (a codex/gemini-hook-only project — same signal the
+				// syncLib gate above keys on). Without the libSourceRoots arm, a copied
+				// hook README's .claude/ references stay un-rewritten under .{platform}/.
+				if (
+					existsSync(platformDir) &&
+					(rewriteEligiblePlatforms.has(platform) || libSourceRoots.has(platform))
+				) {
 					if (context.dryRun) {
 						logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
 					} else {
