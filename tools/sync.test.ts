@@ -1519,6 +1519,47 @@ describe("processYaml", () => {
 			".claude/",
 		);
 	});
+
+	it("rewrites deployed md for a hook-only codex platform (no component categories)", async () => {
+		// hook-only codex project: sync.yaml has NO component-category items, so the
+		// CATEGORIES-derived rewriteEligiblePlatforms never gains codex. The platform
+		// is reached ONLY via codex.yaml's hook deploy, which syncPlatformConfigs
+		// records in libSourceRoots under codex. The rewrite gate must treat a
+		// hook/lib-only deploy as eligible too (mirroring the syncLib gate at
+		// sync.ts:1441) — otherwise a copied hook README keeps its .claude/ references
+		// under .codex/ un-rewritten.
+		const hookDir = path.join(rootDir, "hooks", "my-hook");
+		await writeFile(path.join(hookDir, "index.ts"), "export const run = () => {};\n");
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(
+			path.join(rootDir, "codex.yaml"),
+			"hooks:\n  PreToolUse:\n    - component: my-hook\n",
+		);
+
+		// Plant the hook README on disk (the mock adapter never copies it for real).
+		// The gate keys on codex being in libSourceRoots plus the file's presence,
+		// not on a real syncHooksDirect write.
+		const codexHookReadme = path.join(targetPath, ".codex", "hooks", "my-hook", "README.md");
+		const before = "See .claude/rules/ for conventions.\n";
+		await writeFile(codexHookReadme, before);
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const after = await readFile(codexHookReadme);
+		expect(
+			after,
+			".codex/hooks/my-hook/README.md must be rewritten to .codex/rules/ for a hook-only codex deploy",
+		).toContain(".codex/rules/");
+		expect(
+			after,
+			".codex/hooks/my-hook/README.md must no longer contain .claude/",
+		).not.toContain(".claude/");
+	});
 });
 
 // ---------------------------------------------------------------------------

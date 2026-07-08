@@ -1457,7 +1457,15 @@ export async function processYaml(
 			const nonClaudePlatforms: Platform[] = ["gemini", "codex", "opencode"];
 			for (const platform of nonClaudePlatforms) {
 				const platformDir = path.join(deployRoot, `.${platform}`);
-				if (existsSync(platformDir) && rewriteEligiblePlatforms.has(platform)) {
+				// Eligible = this sync deployed to the platform via a component category
+				// (rewriteEligiblePlatforms) OR via a hook/lib deploy recorded in
+				// libSourceRoots (a codex/gemini-hook-only project — same signal the
+				// syncLib gate above keys on). Without the libSourceRoots arm, a copied
+				// hook README's .claude/ references stay un-rewritten under .{platform}/.
+				if (
+					existsSync(platformDir) &&
+					(rewriteEligiblePlatforms.has(platform) || libSourceRoots.has(platform))
+				) {
 					if (context.dryRun) {
 						logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
 					} else {
