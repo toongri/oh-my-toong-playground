@@ -21,12 +21,14 @@ import type {
 	SyncYaml,
 	SyncContext,
 	PluginScope,
+	DocsItem,
 } from "./lib/types.ts";
 import { getRootDir, getBackupRetentionDays, getEnabledProjects } from "./lib/config.ts";
 import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import { resolvePlatforms, resolveComponentPath, setProjectContext } from "./lib/resolver.ts";
-import { generateBackupSessionId, backupCategory, cleanupOldBackups } from "./lib/backup.ts";
+import { generateBackupSessionId, backupCategory, backupDocs, cleanupOldBackups } from "./lib/backup.ts";
+import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
@@ -410,6 +412,474 @@ export async function syncPlatformConfigs(
 
 		if (result.modelMap) {
 			context.modelMaps.set(platform, result.modelMap);
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// syncDocs
+// ---------------------------------------------------------------------------
+
+/** Read a docs item's declared fields uniformly for both the string shorthand and the object form. */
+function docsItemFields(item: DocsItem): {
+	componentName: string;
+	itemPath: string | undefined;
+	as: string | undefined;
+	isDelete: boolean;
+} {
+	if (typeof item === "string") {
+		return { componentName: item, itemPath: undefined, as: undefined, isDelete: false };
+	}
+	return {
+		componentName: item.component,
+		itemPath: item.path,
+		as: item.as,
+		isDelete: item.delete === true,
+	};
+}
+
+/** Recursively list every FILE (not directory) under `dir`, as absolute paths. [] if `dir` is absent. */
+async function listFilesRecursive(dir: string): Promise<string[]> {
+	const results: string[] = [];
+	let entries: import("fs").Dirent[];
+	try {
+		entries = await fs.readdir(dir, { withFileTypes: true });
+	} catch {
+		return results;
+	}
+	for (const entry of entries) {
+		const fullPath = path.join(dir, entry.name);
+		if (entry.isDirectory()) {
+			results.push(...(await listFilesRecursive(fullPath)));
+		} else if (entry.isFile()) {
+			results.push(fullPath);
+		}
+	}
+	return results;
+}
+
+/**
+ * Recursively search `dir` for the first symlinked entry (file or directory),
+ * without following it. Returns its absolute path, or null if the tree is
+ * symlink-free. Used to reject a dir-form docs source that contains a
+ * human-planted symlink pointing outside the docs tree.
+ */
+async function findSymlinkInTree(dir: string): Promise<string | null> {
+	let entries: import("fs").Dirent[];
+	try {
+		entries = await fs.readdir(dir, { withFileTypes: true });
+	} catch {
+		return null;
+	}
+	for (const entry of entries) {
+		const fullPath = path.join(dir, entry.name);
+		if (entry.isSymbolicLink()) return fullPath;
+		if (entry.isDirectory()) {
+			const found = await findSymlinkInTree(fullPath);
+			if (found) return found;
+		}
+	}
+	return null;
+}
+
+/**
+ * Back up every file currently under `targetDir` (recursively), preserving
+ * substructure. `backupDocs` only ever copies a single file, so a whole-tree
+ * backup is this per-file loop over it. No-op if targetDir is absent/empty.
+ */
+async function backupDocsTree(targetDir: string, deployRoot: string, sessionId: string): Promise<void> {
+	for (const file of await listFilesRecursive(targetDir)) {
+		await backupDocs(file, deployRoot, sessionId);
+	}
+}
+
+/**
+ * Reject a docs deploy/delete target whose path — walked segment by segment
+ * from just under deployRoot down to and including absTarget itself — passes
+ * through a symlink anywhere along the way.
+ *
+ * Lexical containment (assertDocsTargetContained) is a string check and
+ * cannot see what's actually on disk: a human-planted symlink at an
+ * intermediate directory, or at the leaf target itself, would otherwise be
+ * silently followed by mkdir/copyFile/rm — escaping the docs tree entirely.
+ * This is the runtime-only counterpart that closes that gap.
+ *
+ * Only EXISTING segments are checked; a segment that doesn't exist yet means
+ * nothing below it can exist either, so the walk stops there.
+ */
+async function assertNoSymlinkInTargetPath(absTarget: string, deployRoot: string): Promise<void> {
+	const rel = path.relative(deployRoot, absTarget);
+	const segments = rel.split(path.sep).filter((segment) => segment.length > 0);
+
+	let current = deployRoot;
+	for (const segment of segments) {
+		current = path.join(current, segment);
+		let st: import("fs").Stats;
+		try {
+			st = await fs.lstat(current);
+		} catch {
+			return; // Doesn't exist yet — nothing below it can exist either.
+		}
+		if (st.isSymbolicLink()) {
+			throw new Error(`docs: refusing to write through symlink at ${current}`);
+		}
+	}
+}
+
+/**
+ * Compute a file-form docs item's real write path: `absTarget`, with the
+ * source's extension appended unless `absTarget` already ends with that same
+ * extension — avoids `x.md.md`. Checking `absTarget`'s OWN extname (the old
+ * approach) misfires on a dotted stem like `api.v2`: `path.extname` reports
+ * `.v2` as an extension already present and wrongly suppresses the append,
+ * losing `.md` entirely. Comparing against the SOURCE's extension specifically
+ * (via endsWith) is what correctly distinguishes "already has this extension"
+ * from "has an unrelated dot in the name".
+ */
+function docsFileFinalTarget(absTarget: string, sourceFile: string): string {
+	const sourceExt = path.extname(sourceFile);
+	return absTarget.endsWith(sourceExt) ? absTarget : absTarget + sourceExt;
+}
+
+/**
+ * Remove a single stale FILE squatting at a dir-form docs item's own
+ * (pre-extension) target path, backing it up first — otherwise the
+ * mkdir/copyFile in deployDocsDir would ENOTDIR trying to write files under a
+ * path that's currently a file. Only ever inspects `absTarget` itself; a
+ * sibling item's target is never touched.
+ *
+ * File-form has NO equivalent call: its real write leaf carries an appended
+ * extension (docsFileFinalTarget), so a directory sitting at the bare,
+ * pre-extension stem never collides with it on disk — anti-wipe wins, that
+ * directory is simply left alone (AC3.4 vs anti-wipe reconciliation).
+ *
+ * NEVER removes a directory — that would be an undeclared-human-dir wipe. If
+ * a directory sits at the exact leaf being deployed (e.g. a directory
+ * literally named `foo.md` squatting a file-form leaf), this function is not
+ * called for that path at all; copyFile is left to fail loudly instead.
+ */
+async function cleanStaleDocsForm(absTarget: string, deployRoot: string, sessionId: string): Promise<void> {
+	let existing: import("fs").Stats;
+	try {
+		existing = await fs.stat(absTarget);
+	} catch {
+		return; // Nothing there — no stale form to clean.
+	}
+	if (existing.isDirectory()) return; // Already the right form — additive merge handles it.
+
+	await backupDocs(absTarget, deployRoot, sessionId);
+	await fs.rm(absTarget, { force: true }); // Non-recursive: a single file, never a directory.
+}
+
+/**
+ * Write one docs FILE target at its real, already-resolved leaf
+ * (`finalTarget` — post-extension, computed once by the caller via
+ * docsFileFinalTarget): back up whatever currently sits there, then copy the
+ * source over it unconditionally (declared items always overwrite). No
+ * opposite-form cleaning here — see cleanStaleDocsForm's doc comment for why
+ * file-form never needs it.
+ */
+async function deployDocsFile(
+	sourceFile: string,
+	finalTarget: string,
+	deployRoot: string,
+	sessionId: string,
+): Promise<void> {
+	await backupDocs(finalTarget, deployRoot, sessionId);
+	await fs.mkdir(path.dirname(finalTarget), { recursive: true });
+	await fs.copyFile(sourceFile, finalTarget);
+}
+
+/**
+ * Write one docs DIRECTORY target: clean a stale squatting file at the
+ * target (see cleanStaleDocsForm), then additively copy every precomputed
+ * source→dest pair — the caller's own read-only Pass 1 enumeration, shared
+ * with the dry-run preview and the collision check, never re-derived here —
+ * backing up each destination file before overwrite. NEVER wipes/mirrors the
+ * target dir — an undeclared file already inside it is never enumerated
+ * here, so it survives untouched.
+ *
+ * Guards EACH destination file individually right before its own mkdir/
+ * copyFile: the coarse guard the caller already ran against `absTarget` only
+ * reaches the item's own bare stem, not a symlink planted deeper at some
+ * nested intermediate segment (e.g. `absTarget/sub` when the real write is
+ * `absTarget/sub/x.md`) — only a per-file, full deployRoot→destFile walk
+ * catches that write-escape.
+ */
+async function deployDocsDir(
+	absTarget: string,
+	files: { source: string; dest: string }[],
+	deployRoot: string,
+	sessionId: string,
+): Promise<void> {
+	await cleanStaleDocsForm(absTarget, deployRoot, sessionId);
+
+	for (const { source, dest } of files) {
+		await assertNoSymlinkInTargetPath(dest, deployRoot);
+		await backupDocs(dest, deployRoot, sessionId);
+		await fs.mkdir(path.dirname(dest), { recursive: true });
+		await fs.copyFile(source, dest);
+	}
+}
+
+/** Delete one docs target (file or directory), backing it up first. Idempotent: no-op if already absent. */
+async function deleteDocsTarget(absTarget: string, deployRoot: string, sessionId: string): Promise<void> {
+	let st: import("fs").Stats;
+	try {
+		st = await fs.stat(absTarget);
+	} catch {
+		return;
+	}
+	if (st.isDirectory()) {
+		await backupDocsTree(absTarget, deployRoot, sessionId);
+	} else {
+		await backupDocs(absTarget, deployRoot, sessionId);
+	}
+	await fs.rm(absTarget, { recursive: true, force: true });
+}
+
+/**
+ * Discover on-disk delete candidates for a delete:true item's bare stem. A
+ * delete item has no source file, so — unlike a write item — its real leaf
+ * isn't computable ahead of time; it must be discovered by basename directly
+ * under the stem's parent directory.
+ *
+ * An entry matches when its name is EXACTLY the stem's basename (a dir-form
+ * or extensionless-file candidate) or the stem's basename plus a literal `.`
+ * AND the entry is a regular file (a file-form candidate carrying an
+ * extension — stem `intro` matches `intro.md` but never `introduction.md`: a
+ * bare `startsWith(base)` without the trailing dot would wrongly treat an
+ * unrelated longer name as the same tombstone; the file-type check keeps a
+ * human directory like `intro.assets/` from matching too).
+ */
+async function findDocsDeleteCandidates(absStem: string): Promise<string[]> {
+	const dir = path.dirname(absStem);
+	const base = path.basename(absStem);
+	let entries: import("fs").Dirent[];
+	try {
+		entries = await fs.readdir(dir, { withFileTypes: true });
+	} catch {
+		return [];
+	}
+	return entries
+		.filter((entry) => entry.name === base || (entry.name.startsWith(`${base}.`) && entry.isFile()))
+		.map((entry) => path.join(dir, entry.name));
+}
+
+/**
+ * Deploy the `docs` component type: a NO-WIPE merge-patch onto a
+ * human-co-authored folder. Unlike the OMT-owned CATEGORIES (which
+ * backup+wipe+redeploy their whole target dir — see syncCategory above),
+ * docs is additive per-file only: an undeclared file already present at or
+ * under a docs target must always survive a sync. There is no per-platform
+ * dispatch either — docs lands directly under deployRoot.
+ *
+ * Resolve-then-mutate, in passes, because `resolveDocsTarget` only returns a
+ * BARE STEM (e.g. `docs/intro`, no extension) — the real materialized leaf
+ * differs per form (file-form appends the source's extension via
+ * docsFileFinalTarget; dir-form nests the source's files under the stem).
+ * Collision detection, the symlink guard, and delete all have to key off that
+ * REAL leaf, or they silently miss the path actually being written:
+ *
+ *   PASS 0 (lexical, no I/O): resolve each item's bare stem, and reject one
+ *     that resolves to the docs base directory itself (finding6 — otherwise a
+ *     single item could treat the whole shared folder as one target).
+ *   PASS 1 (resolve, READ-ONLY): compute each item's REAL leaf(s) — stat/
+ *     lstat/readdir only, no writes — so the collision check below still
+ *     throws before any mutation, including dry-run. This is why collision
+ *     detection can no longer be "purely lexical, no I/O" as it once was: the
+ *     real leaf depends on the source's extension, which requires resolving
+ *     and stat-ing the source. The property that survives is "before
+ *     mutation", not "I/O-free".
+ *   COLLISION: detectDocsTargetCollisions runs on the union of every real
+ *     leaf (file leaves + dir-form destination files + delete candidates).
+ *   PASS 2 (guard + mutate): for each real leaf, the runtime symlink guard
+ *     fires — in dry-run too — immediately before that leaf would be written
+ *     or removed.
+ *
+ * Under context.dryRun, every guard below still runs unconditionally — an
+ * unsafe item is rejected, never previewed as a would-succeed write — but no
+ * mutation happens: write/delete actions are logged via logDry instead of
+ * executed, followed by an advisory pass listing every file already sitting
+ * under the docs base that no item's write/delete plan would touch (the
+ * operator's only stateless drift signal, since docs never wipes on its own).
+ */
+export async function syncDocs(
+	context: SyncContext,
+	syncYaml: SyncYaml,
+	rootDir: string,
+	deployRoot: string,
+): Promise<void> {
+	const section = syncYaml.docs;
+	if (!section || !Array.isArray(section.items) || section.items.length === 0) {
+		return;
+	}
+
+	const items = section.items;
+	const docsBase = path.posix.normalize(section.path ?? "docs");
+
+	// PASS 0 (lexical, no I/O).
+	const relStems = items.map((item) => {
+		const { componentName, itemPath, as } = docsItemFields(item);
+		const relStem = resolveDocsTarget(componentName, section.path, itemPath, as);
+		// finding6 (defensive): an item resolving to the base directory itself
+		// would let one item (e.g. `{component: '.', delete: true}`) treat the
+		// ENTIRE shared docs folder as a single write/delete target — every
+		// human file under it would be wiped. (Resolving to deployRoot itself
+		// is already unreachable here: assertDocsTargetContained, called
+		// inside resolveDocsTarget above, rejects a normalized "." before
+		// returning.) Trailing slash(es) stripped before comparing: normalize
+		// alone preserves a trailing slash on docsBase (e.g. "docs/" stays
+		// "docs/") while relStem never carries one, so a raw string compare
+		// would miss that case and let `{path: "docs/"}` bypass this guard.
+		if (relStem.replace(/\/+$/, "") === docsBase.replace(/\/+$/, "")) {
+			throw new Error(`docs: target resolves to the docs base directory itself — refusing: ${relStem}`);
+		}
+		return relStem;
+	});
+
+	// PASS 1 (resolve, READ-ONLY): each item's REAL materialized leaf(s).
+	type DocsItemPlan =
+		| { kind: "delete"; absTarget: string; candidates: string[] }
+		| { kind: "file"; sourceFile: string; absTarget: string; finalTarget: string }
+		| { kind: "dir"; absTarget: string; files: { source: string; dest: string }[] };
+
+	const plans: (DocsItemPlan | null)[] = [];
+
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i];
+		const { componentName, isDelete } = docsItemFields(item);
+		const absTarget = path.join(deployRoot, relStems[i]);
+
+		if (isDelete) {
+			const candidates = await findDocsDeleteCandidates(absTarget);
+			if (candidates.length > 1) {
+				throw new Error(
+					`docs: ambiguous tombstone — multiple candidates match ${relStems[i]}: [${candidates.join(", ")}]`,
+				);
+			}
+			plans.push({ kind: "delete", absTarget, candidates });
+			continue;
+		}
+
+		const resolved = resolveComponentPath(componentName, "docs", rootDir, context.projectDir || undefined);
+		if ("error" in resolved) {
+			logWarn(`docs/${componentName}: ${resolved.error}`);
+			plans.push(null);
+			continue;
+		}
+
+		// Runtime FS guard: refuse a source that is itself a symlink — never
+		// materialize external content into the docs tree.
+		const sourceLstat = await fs.lstat(resolved.path);
+		if (sourceLstat.isSymbolicLink()) {
+			throw new Error(`docs/${componentName}: source is a symlink — refusing to materialize external content`);
+		}
+
+		const sourceStat = await fs.stat(resolved.path);
+		if (sourceStat.isDirectory()) {
+			// Runtime FS guard: refuse a dir-form source containing a symlinked file.
+			const symlinkPath = await findSymlinkInTree(resolved.path);
+			if (symlinkPath) {
+				throw new Error(
+					`docs/${componentName}: source contains a symlink (${symlinkPath}) — refusing to materialize external content`,
+				);
+			}
+			const files = (await listFilesRecursive(resolved.path)).map((source) => ({
+				source,
+				dest: path.join(absTarget, path.relative(resolved.path, source)),
+			}));
+			plans.push({ kind: "dir", absTarget, files });
+		} else {
+			const finalTarget = docsFileFinalTarget(absTarget, resolved.path);
+			plans.push({ kind: "file", sourceFile: resolved.path, absTarget, finalTarget });
+		}
+	}
+
+	// COLLISION: real leaves only (file leaves + dir-form destination files +
+	// delete candidates) — a bare-stem check would miss a collision that only
+	// appears post-extension (e.g. `intro` and `guide` renamed to `intro.md`
+	// both landing on `docs/intro.md`).
+	const leafSet: string[] = [];
+	for (const plan of plans) {
+		if (!plan) continue;
+		if (plan.kind === "file") leafSet.push(plan.finalTarget);
+		else if (plan.kind === "dir") leafSet.push(...plan.files.map((f) => f.dest));
+		else leafSet.push(...plan.candidates);
+	}
+	const collisions = detectDocsTargetCollisions(leafSet);
+	if (collisions.length > 0) {
+		const detail = collisions.map((c) => `${c.kind}: [${c.targets.join(", ")}]`).join("; ");
+		throw new Error(`docs: target collision detected — ${detail}`);
+	}
+
+	// PASS 2 (guard + mutate). Every target file any item resolves to touch
+	// (write or delete) — dry-run only, feeds the advisory unmanaged-file pass
+	// below. A delete:true item's own target counts as managed too: its
+	// removal is already reported via its own dry-run line, so it must not
+	// also surface as advisory drift.
+	const managedTargets = new Set<string>();
+
+	for (const plan of plans) {
+		if (!plan) continue;
+
+		if (plan.kind === "delete") {
+			// Coarse guard on the bare stem, mirroring the file/dir branches below
+			// — usually a no-op (the bare stem rarely exists on disk verbatim),
+			// but defends the case where it happens to coincide with the real
+			// on-disk candidate (e.g. an explicit `as` already carrying the
+			// extension).
+			await assertNoSymlinkInTargetPath(plan.absTarget, deployRoot);
+
+			const [candidate] = plan.candidates;
+			if (candidate === undefined) continue; // No on-disk match — idempotent no-op.
+
+			await assertNoSymlinkInTargetPath(candidate, deployRoot);
+			if (context.dryRun) {
+				managedTargets.add(candidate);
+				logDry(`docs: would remove ${candidate}`);
+			} else {
+				await deleteDocsTarget(candidate, deployRoot, context.backupSession);
+			}
+			continue;
+		}
+
+		if (plan.kind === "file") {
+			await assertNoSymlinkInTargetPath(plan.absTarget, deployRoot); // coarse: bare stem
+			await assertNoSymlinkInTargetPath(plan.finalTarget, deployRoot); // real leaf
+			if (context.dryRun) {
+				managedTargets.add(plan.finalTarget);
+				logDry(`docs: would write ${plan.finalTarget}`);
+			} else {
+				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupSession);
+			}
+			continue;
+		}
+
+		// plan.kind === "dir"
+		await assertNoSymlinkInTargetPath(plan.absTarget, deployRoot); // coarse: the item's own bare stem
+		if (context.dryRun) {
+			for (const { dest } of plan.files) {
+				await assertNoSymlinkInTargetPath(dest, deployRoot); // fine-grained: fires in dry-run too
+				managedTargets.add(dest);
+				logDry(`docs: would write ${dest}`);
+			}
+		} else {
+			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupSession);
+		}
+	}
+
+	if (!context.dryRun) return;
+
+	// Advisory unmanaged-file list (AC5.2c): every file already sitting under
+	// the docs base that no item above would write or delete. NOT an error and
+	// NOT swept — docs is no-wipe, so this is the only stateless signal that a
+	// target has drifted from what sync.yaml declares (human-added, or the
+	// operator deleted the source out from under a stale target).
+	const docsBaseAbs = path.join(deployRoot, docsBase);
+	for (const existingFile of (await listFilesRecursive(docsBaseAbs)).sort()) {
+		if (!managedTargets.has(existingFile)) {
+			logDry(`docs: advisory (unmanaged): ${existingFile}`);
 		}
 	}
 }
@@ -947,6 +1417,11 @@ export async function processYaml(
 			if (shouldMkdirClaude || libSourceRoots.size > 0) {
 				await syncLib(context, deployRoot, rootDir, libPlatforms, libSourceRoots);
 			}
+
+			// Sync docs — unconditional (not gated on shouldMkdirClaude): docs is
+			// platform-agnostic and lands directly under deployRoot, so a docs-only
+			// project (no CATEGORIES items, no .claude) must still deploy its docs.
+			await syncDocs(context, syncYaml, rootDir, deployRoot);
 
 			// Record this worktree as a backup root ONLY after all sync steps succeeded.
 			// Registering before the steps (or on failure) would let retention cleanup

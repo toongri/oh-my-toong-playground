@@ -7,22 +7,6 @@ mcps:
       - "--prefer-offline"
       - "-y"
       - "@upstash/context7-mcp@3.2.1"
-  # Requires shell env: OPENSEARCH_URL, OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD
-  # (AWS: AWS_REGION, AWS_IAM_ARN or AWS_PROFILE). See opensearch-project/opensearch-mcp-server-py.
-  opensearch:
-    command: uvx
-    args:
-      - "opensearch-mcp-server-py"
-  # Notion stdio MCP. Requires shell env: NOTION_TOKEN (ntn_*** integration secret).
-  notion:
-    command: npx
-    args:
-      - "-y"
-      - "@notionhq/notion-mcp-server"
-  # Linear hosted MCP. OpenCode runs this as a remote MCP with OAuth on first use (Linear allows dynamic client registration, so no mcp-remote stdio proxy is needed).
-  linear:
-    type: remote
-    url: "https://mcp.linear.app/mcp"
   # Figma hosted MCP. OpenCode must see this as a remote MCP to run OAuth.
   # Note: Figma currently allowlists remote MCP clients; OpenCode may receive HTTP 403 until approved.
   figma:
