@@ -1,6 +1,6 @@
-# Examiner Output Schema (v4.0)
+# Examiner Output Schema (v4.1)
 
-<!-- schema_version: "v4.0" -->
+<!-- schema_version: "v4.1" -->
 <!-- v4.0 changes:
   - structural_verdict (PUBLIC) 필드 추가: A5 scanability 축의 PASS/P1/FAIL을 PUBLIC으로 노출.
     review-resume readability-fix routing trigger 및 resume-forge Loop 2 gate에서 사용.
@@ -8,6 +8,11 @@
     (v3까지는 A1-A5 모두 PASS 조건; v4는 P1 최대 2개까지 허용하는 permissive 기준)
   - ownership-scope critical_rule_flag 제거: A4 ownership-scope axis의 P1 verdict로 대체됨.
     (see a4-ownership-scope.md integrity_suspected)
+-->
+<!-- v4.1 changes:
+  - interview_hints content가 4-요소 앵커드 스캐폴드(인용/문제/이유/제안, newline-delimited)로 격상.
+    type은 여전히 string[]; final_verdict/structural_verdict 필드 및 도출 로직 불변.
+    Vocabulary rule 확장: 문제/이유/제안 줄에 A[1-5] 코드·영문 axis name(Scanability 포함) 금지. 인용: 줄은 면제.
 -->
 
 ## Purpose
@@ -23,7 +28,7 @@
 모든 필드에 PUBLIC / INTERNAL 태그 부여. INTERNAL 필드는 orchestrator(resume-forge)만 접근 가능.
 
 ```yaml
-schema_version: string              # PUBLIC. ex: "v4.0"
+schema_version: string              # PUBLIC. ex: "v4.1"
 bullet_text: string                 # INTERNAL (debugging context)
 candidate_context:                  # INTERNAL
   years: int
@@ -149,11 +154,21 @@ downstream skill들이 v1 examiner output 참조를 v4로 갱신할 때 사용:
 
 ## interview_hints Constraints
 
-1. **Vocabulary rule**: hint 본문에 axis identifier (A1-A5) 또는 axis name (Technical Credibility, Causal Honesty, Outcome Presence & Clarity, Ownership & Scope, Scanability) 포함 금지. 자연스러운 서술로만.
+1. **Scaffold format rule**: 각 `interview_hints` 원소는 하나의 문자열이며, 4개 라벨이 각각 별도 줄(newline-delimited, `/`-delimited 아님)에 온다:
+   ```
+   인용: «원본 bullet의 verbatim substring»
+   문제: <그 인용 구간의 구체적 결함>
+   이유: <왜 문제인지 — 평이한 소스언어, 축 이름 없음>
+   제안: <구체적·실행가능한 수정안>
+   ```
+   - `인용:` 라인의 `«»` 내부는 원본 bullet의 글자 그대로 substring(paraphrase 금지). noleak 검증 시 이 줄만 라인 단위로 제외.
+   - 이 스캐폴드는 surface되는 모든 hint에 적용된다 — REQUEST_CHANGES hint, APPROVE 시 P1 개선 hint, 그리고 구조(A5) P1 readability hint(`resume-forge/SKILL.md:210` — structural_verdict가 A1-A4와 동일하게 uniform하게 surface)도 포함.
+   - 예외: 완전 clean APPROVE는 여전히 `interview_hints: []` (스캐폴드를 억지로 채우지 않음).
+2. **Vocabulary rule**: `문제:`/`이유:`/`제안:` 세 줄에는 axis identifier(`A[1-5]`, 즉 A1-A5) 또는 영문 axis name (Technical Credibility, Causal Honesty, Outcome Presence & Clarity, Ownership & Scope, Scanability) 포함 금지 — 자연스러운 서술로만. "이유:"는 평이한 소스언어로 설명한다. `인용:` 라인은 원본 bullet의 verbatim substring이므로 이 규칙에서 면제(후보 기술명에 A1 등이 우연히 들어갈 수 있음).
    - OK: "사용한 시스템과 선택 이유를 추가하면 기술 깊이가 더 잘 드러납니다"
    - 금지: "A1 Technical Credibility FAIL — 시스템 명시 필요"
-2. **Actionability rule**: 각 hint는 구체적이고 실행 가능해야 함. "add more technical detail"처럼 generic한 hint 금지.
-3. **P1 coverage**: P1 verdict는 final_verdict가 APPROVE여도 interview_hints에 improvement suggestion으로 포함.
+3. **Actionability rule**: 각 hint는 구체적이고 실행 가능해야 함. "add more technical detail"처럼 generic한 hint 금지.
+4. **P1 coverage**: P1 verdict는 final_verdict가 APPROVE여도 interview_hints에 improvement suggestion으로 포함.
 
 이 규칙들은 `agents/tech-claim-examiner.md` prompt에서 본문 복제 없이 참조된다.
 
@@ -183,7 +198,7 @@ review-resume가 생성하는 HTML report의 user-facing surface에 examiner int
 | Axis name | `Technical Credibility\|Causal Honesty\|Outcome Presence & Clarity\|Ownership & Scope\|Scanability` | 5축 정식 이름 누출. `Ownership & Scope`는 일반 `Ownership`과 구분하기 위해 정확 매치 |
 | Internal struct | `verdicts\.\|critical_rule_flags\.\|evidence_quote\|reasoning:` | examiner output schema의 field key 누출 |
 
-**Verification usage**: `grep -E '<pattern>' <rendered-html>`을 3개 pattern 각각에 대해 실행. 모두 0 matches이면 noleak 통과.
+**Verification usage**: rendered 내용이 §interview_hints Constraints의 4-요소 스캐폴드 hint(`인용:`/`문제:`/`이유:`/`제안:`)를 포함하는 경우, 먼저 각 hint의 `인용:` 라인(원본 bullet의 verbatim substring — 후보 기술명 "AWS A1 instances"처럼 `A[1-5]`-모양 토큰이 정당하게 들어갈 수 있음)을 라인 단위로 제외한다. 그 뒤 남은 라인에 대해 `grep -E '<pattern>' <rendered-html>`을 3개 pattern 각각 실행하여 모두 0 matches이면 noleak 통과. `인용:` 줄 제외 전처리 없이 whole-HTML에 naive하게 돌리면 `인용:` 라인의 후보 토큰에서 false-positive가 난다(`tests/phase9-loop-scenarios.md` SCN-13 `FX-TECH-ECHO` 참조). `인용:` 라인을 포함하지 않는 terse 출력(스캐폴드 이전 형태)에는 이 전처리가 불필요하며, 그 경우 기존 whole-content grep이 그대로 유효하다.
 
 **Canonical regex** (shell에서 직접 사용, escape 없이):
 ```
