@@ -93,6 +93,7 @@ BEGIN {
   idx = 1
   in_target = 0
   inserted = 0
+  found_target = 0
 }
 {
   if (idx <= n && $0 == H[idx]) {
@@ -107,6 +108,7 @@ BEGIN {
     if ($0 == target) {
       print $0
       in_target = 1
+      found_target = 1
       if (mode == "replace") {
         if (content != "") print content
         inserted = 1
@@ -126,7 +128,22 @@ END {
   if (in_target && inserted == 0) {
     if (content != "") print content
   }
+  # Target header never seen -> the ledger is missing this section (corrupted
+  # or foreign-created). Signal a hard error instead of letting mv overwrite
+  # the file with content silently dropped -- a durable record fails loud.
+  if (!found_target) exit 3
 }
-' "$LEDGER_FILE" > "$TMP_FILE"
+' "$LEDGER_FILE" > "$TMP_FILE" || _awk_rc=$?
+_awk_rc="${_awk_rc:-0}"
+
+if [ "$_awk_rc" -eq 3 ]; then
+  rm -f "$TMP_FILE"
+  echo "omt-ledger: section '$TARGET_HEADER' not found in ledger -- refusing to $MODE (would silently drop content). Ledger left unchanged." >&2
+  exit 1
+elif [ "$_awk_rc" -ne 0 ]; then
+  rm -f "$TMP_FILE"
+  echo "omt-ledger: awk failed (exit $_awk_rc) -- ledger left unchanged" >&2
+  exit 1
+fi
 
 mv "$TMP_FILE" "$LEDGER_FILE"
