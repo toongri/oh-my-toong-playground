@@ -596,6 +596,34 @@ HTML_FILE="${OMT_DIR:-$HOME/.omt/global}/reports/review-YYYYMMDD-HHmmss.html"
 
 **Strength Comment:** Per career bullet or problem-solving entry, only items that PASS all 6 section evaluation criteria get `.comment-strength`.
 
+### 제출 전 셀프 점검 (Pre-Submission Self-Check)
+
+At report generation, run a 6-item self-check sweep over the resume text and emit its result into the template's `<!-- SELF-CHECK CONTENT -->` slot (references/html-template.html). This is an advisory submission-readiness checklist the human reads last — NOT a blocking gate, NOT per-item scores/verdicts. Frame it as "제출 전 사람이 마지막으로 읽는 준비 체크리스트".
+
+Render the six checklist items with these EXACT labels:
+1. 모든 프로젝트에 문제 해결 성과가 있는가
+2. 숫자가 0개인 프로젝트가 있는가
+3. 기간·역할·기술 스택이 모든 프로젝트에 붙어 있는가
+4. 자기 판정 형용사가 남아 있는가
+5. 볼드·소제목·숫자만으로 구조가 보이는가
+6. 모든 문장을 소리 내어 3분 설명할 수 있는가
+
+Items 1–3 (completeness naming): for each project entry, check presence of (1) a problem-solving achievement, (2) at least one quantitative number, (3) all of {period, role-signal, tech-stack} where role-signal = title / contribution% / one-line description. Name every entry lacking one, each with a one-line guidance that names ONLY the missing component to add (e.g. "성과 한 줄 추가", "정량 수치 추가", "기간 추가") — never a quality critique. Item 1 marks ALL achievement-less entries as 최우선 수리 대상.
+
+Item 4 (advisory adjective scan): scan for the pinned v1 list 대폭 / 크게 / 뛰어난 / 획기적 / 압도적 / 탁월; list each occurrence with its surrounding text under the heading 재검토 후보 표현 (참고); attach NO PASS/FAIL/수리 token. A benign usage (e.g. "크게 3가지로 나눴다") is listed as advisory but never flagged as a violation.
+
+Item 5 (independent whole-resume structural sweep): read the whole resume text for presence of bold / subheadings / numbers. Emit exactly ONE of these markers:
+- 구조 가독성: 양호 — 볼드·소제목·숫자로 구조가 드러남
+- 구조 가독성: 미흡 — 볼드·소제목·숫자 보강 필요
+This is an independent sweep over the resume text with no examiner dependency; framed as human confirmation.
+
+Item 6 (human read-aloud to-do): render verbatim, with no machine verdict / completion claim:
+각 문장을 소리 내어 3분 내로 직접 설명해보세요 — AI 초안이면 필수
+
+Authority separation: Phase 9's tech-claim-examiner APPROVE is the claim-quality enforcement gate; this self-check is a submission-readiness reminder the human reads last. A self-check flag — including item 5 reporting 미흡 while every unit passed Phase 9 — does NOT invalidate the examiner APPROVE. The two ask different questions (per-claim quality vs whole-resume completeness/layout), so a divergence is expected, not a contradiction.
+
+Fallback: when the resume has no evaluable project entries, emit 평가 대상 프로젝트 항목 없음 for items 1–3 / 5 instead of naming a fabricated entry.
+
 ### Approval Gate
 
 <critical>
