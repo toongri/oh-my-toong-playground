@@ -1690,6 +1690,88 @@ EOF
     return 0
 }
 
+# AC (F1 regression): acute section content that itself contains a `## `
+# markdown line must survive recovery inline in full. The extractor must treat
+# ONLY the 6 known skeleton headers as section boundaries, not any `## ` line,
+# otherwise a subheader inside a Now/Corrections summary silently truncates the
+# inline at that line -- defeating the whole point of option D (acute inlined so
+# it survives compaction).
+test_session_start_ledger_recovery_preserves_hash_line_in_acute() {
+    local sid="ledger-recovery-hashline"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+Working on the recovery bug.
+## Investigation notes
+POST_SUBHEADER_SENTINEL_must_survive
+## Decisions
+DECISIONS_SENTINEL_should_not_appear
+## User Corrections (verbatim)
+## Pending
+## Pointers
+## Learnings
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if ! echo "$ctx" | grep -qF 'POST_SUBHEADER_SENTINEL_must_survive'; then
+        echo "ASSERTION FAILED: Now content after an inner '## ' line must survive recovery inline (not be truncated)"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    # The real Decisions content is a bulk section and must still be excluded.
+    if echo "$ctx" | grep -qF 'DECISIONS_SENTINEL_should_not_appear'; then
+        echo "ASSERTION FAILED: bulk Decisions content must not leak into the acute inline"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# AC (S5 regression): a bulk section (Decisions) whose content contains a line
+# equal to a real acute header (`## Now`) must NOT have that injected content
+# extracted into the acute inline. Structural section identity, not substring.
+test_session_start_ledger_recovery_no_header_injection_from_bulk() {
+    local sid="ledger-recovery-inject"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+REAL_NOW_SENTINEL
+## Decisions
+real decision
+## Now
+INJECTED_FROM_BULK_should_not_appear
+## User Corrections (verbatim)
+## Pending
+## Pointers
+## Learnings
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if ! echo "$ctx" | grep -qF 'REAL_NOW_SENTINEL'; then
+        echo "ASSERTION FAILED: the real Now content must be inlined"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    if echo "$ctx" | grep -qF 'INJECTED_FROM_BULK_should_not_appear'; then
+        echo "ASSERTION FAILED: a '## Now' line injected inside a bulk section must NOT leak into the acute inline"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
 # =============================================================================
 # Tests: Ledger GC — mtime-based (TODO 5)
 # session-ledger-*.md files are durable-append .md, so liveness cannot use
@@ -1945,6 +2027,8 @@ main() {
     run_test test_session_start_ledger_recovery_no_ledger_harmless
     run_test test_session_start_ledger_recovery_acute_over_cap_pointer_fallback
     run_test test_session_start_ledger_recovery_only_on_compact_source
+    run_test test_session_start_ledger_recovery_preserves_hash_line_in_acute
+    run_test test_session_start_ledger_recovery_no_header_injection_from_bulk
 
     # Ledger GC — mtime-based (TODO 5)
     run_test test_gc_ledger_other_session_stale_reaped

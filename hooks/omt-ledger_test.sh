@@ -212,6 +212,52 @@ test_metachar_multibyte_payload_stored_losslessly() {
 }
 
 # =============================================================================
+# Test (F2/S9 regression): content containing a `## <SectionName>` line must
+# not corrupt a later append to that section. Section boundaries are the 6
+# known skeleton headers in fixed order, not any `## ` line in content.
+# =============================================================================
+
+test_hashline_in_content_does_not_misroute_later_append() {
+    # Inject a line equal to a real header ("## Pending") into Decisions content.
+    printf 'decision one\n## Pending\nfake pending body' | "$LEDGER_SCRIPT" append Decisions
+    # Now append to the REAL Pending section.
+    printf 'REAL_PENDING_ITEM' | "$LEDGER_SCRIPT" append Pending
+
+    local ledger
+    ledger="$(ledger_path)"
+
+    # The real append must land under the real (last) Pending header, i.e. after
+    # "## Pointers"'s predecessor -- concretely, REAL_PENDING_ITEM must appear
+    # AFTER the "## User Corrections (verbatim)" header, inside the real Pending
+    # section, not inside the Decisions block.
+    local real_pending_block
+    real_pending_block=$(awk '
+      $0=="## Now"||$0=="## Decisions"||$0=="## User Corrections (verbatim)"||$0=="## Pending"||$0=="## Pointers"||$0=="## Learnings" {
+        cur=$0; next
+      }
+      cur=="## Pending" && seen_corr { print }
+      $0=="## User Corrections (verbatim)"{seen_corr=1}
+    ' "$ledger")
+
+    # Simpler structural check: the Decisions section must NOT contain the real
+    # pending item, and the item must exist somewhere after the Corrections header.
+    local decisions_block
+    decisions_block=$(awk 'BEGIN{n=split("## Now|## Decisions|## User Corrections (verbatim)|## Pending|## Pointers|## Learnings",H,"|");idx=1}
+      { if(idx<=n && $0==H[idx]){cur=$0;idx++;next} if(cur=="## Decisions")print }' "$ledger")
+
+    if echo "$decisions_block" | grep -qF 'REAL_PENDING_ITEM'; then
+        echo "ASSERTION FAILED: real Pending append misrouted into the Decisions section (header-line injection)"
+        echo "--- ledger ---"; cat "$ledger"
+        return 1
+    fi
+
+    # Decisions must still hold its own content and the injected literal line.
+    assert_output_contains_local "$decisions_block" 'decision one' \
+        "Decisions content must be preserved" || return 1
+    return 0
+}
+
+# =============================================================================
 # Tests: default/empty OMT_SESSION_ID refusal
 # =============================================================================
 
@@ -321,6 +367,7 @@ main() {
     run_test test_now_called_twice_keeps_only_latest_content
     run_test test_now_replace_does_not_disturb_other_sections
     run_test test_metachar_multibyte_payload_stored_losslessly
+    run_test test_hashline_in_content_does_not_misroute_later_append
     run_test test_default_session_id_refuses_and_creates_no_file
     run_test test_empty_session_id_refuses_and_creates_no_file
     run_test test_ledger_absent_when_never_invoked

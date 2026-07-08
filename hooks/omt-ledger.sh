@@ -81,29 +81,42 @@ TMP_FILE="$(mktemp "${LEDGER_FILE}.XXXXXX")"
 # same backslash-escape processing as string literals, which would corrupt a
 # payload containing literal backslash sequences. ENVIRON values are raw
 # process-environment bytes, never re-parsed.
+# Section identity is structural: the 6 known headers appear in a fixed order
+# (idx walks the sequence), so a line is a real section header ONLY when it
+# equals the next-expected header H[idx]. A header-shaped line sitting in a
+# section's content (e.g. "## Pending" written into Decisions prose) is NOT a
+# boundary and is NOT mistaken for the target section on a later append (F2/S9).
 awk -v target="$TARGET_HEADER" -v mode="$MODE" '
 BEGIN {
   content = ENVIRON["OMT_LEDGER_CONTENT"]
+  n = split("## Now|## Decisions|## User Corrections (verbatim)|## Pending|## Pointers|## Learnings", H, "|")
+  idx = 1
   in_target = 0
   inserted = 0
 }
 {
-  if ($0 == target) {
-    print $0
-    in_target = 1
-    if (mode == "replace") {
-      if (content != "") print content
-      inserted = 1
-    }
-    next
-  }
-  if (in_target && substr($0, 1, 3) == "## ") {
-    if (mode == "append" && inserted == 0) {
+  if (idx <= n && $0 == H[idx]) {
+    # A real structural header: we are leaving the previous section. Flush a
+    # pending append at the section end (before this header) if not yet done.
+    if (in_target && mode == "append" && inserted == 0) {
       if (content != "") print content
       inserted = 1
     }
     in_target = 0
+    idx++
+    if ($0 == target) {
+      print $0
+      in_target = 1
+      if (mode == "replace") {
+        if (content != "") print content
+        inserted = 1
+      }
+      next
+    }
+    print $0
+    next
   }
+  # Ordinary content line (including lines that merely look like a header).
   if (in_target && mode == "replace") {
     next
   }
