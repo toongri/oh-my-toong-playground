@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtemp, mkdir, writeFile, readdir, stat, chmod } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, readdir, stat, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,6 +7,7 @@ import {
 	generateBackupSessionId,
 	backupCategory,
 	backupConfigFile,
+	backupDocs,
 	cleanupOldBackups,
 } from "./backup.ts";
 
@@ -191,6 +192,59 @@ describe("backup 모듈", () => {
 			} finally {
 				await chmod(targetPath, 0o755);
 			}
+		});
+	});
+
+	describe("backupDocs", () => {
+		it("docs backup before mutate: copies the target file into .sync-backup/{sessionId}/docs/<relpath> preserving subdirectories", async () => {
+			const deployRoot = join(tmpDir, "docs-backup-basic");
+			const sessionId = "docs-sess-01";
+			const relPath = join("skills", "prometheus", "SKILL.md");
+			const targetFilePath = join(deployRoot, relPath);
+
+			await mkdir(join(deployRoot, "skills", "prometheus"), { recursive: true });
+			await writeFile(targetFilePath, "# Original content");
+
+			await backupDocs(targetFilePath, deployRoot, sessionId);
+
+			const backedUpFile = join(deployRoot, ".sync-backup", sessionId, "docs", relPath);
+			const content = await readFile(backedUpFile, "utf-8");
+			expect(content).toBe("# Original content");
+		});
+
+		it("does nothing when the target file does not exist yet", async () => {
+			const deployRoot = join(tmpDir, "docs-backup-missing");
+			await mkdir(deployRoot, { recursive: true });
+			const targetFilePath = join(deployRoot, "docs", "new-file.md");
+
+			// Should not throw
+			await backupDocs(targetFilePath, deployRoot, "docs-sess-missing");
+
+			// No .sync-backup directory should be created
+			let exists = true;
+			try {
+				await stat(join(deployRoot, ".sync-backup"));
+			} catch {
+				exists = false;
+			}
+			expect(exists).toBe(false);
+		});
+
+		it("docs backup retention: cleanupOldBackups(deployRoot, 0) removes the docs session dir", async () => {
+			const deployRoot = join(tmpDir, "docs-backup-retention");
+			const sessionId = "docs-sess-retention";
+			const relPath = "readme.md";
+			const targetFilePath = join(deployRoot, relPath);
+
+			await mkdir(deployRoot, { recursive: true });
+			await writeFile(targetFilePath, "content");
+
+			await backupDocs(targetFilePath, deployRoot, sessionId);
+
+			await cleanupOldBackups(deployRoot, 0);
+
+			const remaining = await readdir(join(deployRoot, ".sync-backup"));
+			expect(remaining).toHaveLength(0);
 		});
 	});
 

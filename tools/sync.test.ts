@@ -8,6 +8,7 @@ const parseYaml = Bun.YAML.parse;
 import {
 	syncCategory,
 	syncPlatformConfigs,
+	syncDocs,
 	processYaml,
 	syncLib,
 	rewritePlatformPaths,
@@ -3519,5 +3520,750 @@ describe("component fan-out", () => {
 		await expect(
 			runProjectsLoop(rootDir, adapters, context, effectiveFilter, false),
 		).rejects.toBeInstanceOf(DeployTargetsError);
+	});
+
+	// ---------------------------------------------------------------------
+	// TODO 11 — syncDocs wired into processYaml's per-deployRoot fan-out
+	// ---------------------------------------------------------------------
+
+	// AC2.6 (part 1) — docs fans out to every resolved worktree, same as any
+	// other component type.
+	it("docs fan-out: deploys the doc into every worktree", async () => {
+		const { container, worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${container}\ndocs:\n  items:\n    - intro\n`);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ dryRun: false });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(await readFile(path.join(worktrees[0]!, "docs", "intro.md"))).toBe("# Intro\n");
+		expect(await readFile(path.join(worktrees[1]!, "docs", "intro.md"))).toBe("# Intro\n");
+	});
+
+	// AC2.6 (part 2) — a project sync.yaml and the root sync.yaml resolving to
+	// the same worktree must deploy the doc exactly once. syncDocs adds no
+	// dedup of its own; it inherits the existing processedPaths mechanism for
+	// free because it runs inside processYaml's per-deployRoot loop, same as
+	// every other component type (mirrors the "Bug3" dedup test above).
+	it("docs fan-out: a project sync.yaml and root sync.yaml resolving to the same worktree deploy the doc once", async () => {
+		const { container, worktrees } = makeBareTopology("repo", ["wt1"]);
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+
+		const projDir = path.join(rootDir, "projects", "proj-a");
+		await fs.mkdir(projDir, { recursive: true });
+		await writeFile(
+			path.join(projDir, "sync.yaml"),
+			`path: ${container}\nname: proj-a\ndocs:\n  items:\n    - intro\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ dryRun: false });
+		const effectiveFilter = resolveProjectFilter(new Set(), undefined);
+
+		// Projects phase: deploys the doc into the container's worktree.
+		await runProjectsLoop(rootDir, adapters, context, effectiveFilter, false);
+
+		expect(await readFile(path.join(worktrees[0]!, "docs", "intro.md"))).toBe("# Intro\n");
+
+		// Root phase dedup: a sync.yaml whose path resolves to the same worktree
+		// is already processed, so the CLI skips calling processYaml (and thus
+		// syncDocs) again for it — single deploy.
+		expect(allTargetsProcessed(worktrees[0]!, context.processedPaths)).toBe(true);
+	});
+
+	// AC2.2 — a docs-only sync.yaml (no agents/skills/etc.) still deploys its
+	// docs: proves the call site is NOT gated behind shouldMkdirClaude.
+	it("docs-only deploys: a sync.yaml with only a docs section still deploys, with no .claude gate", async () => {
+		const plainTarget = path.join(tmpDir, "docs-only-target");
+		await fs.mkdir(plainTarget, { recursive: true });
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${plainTarget}\ndocs:\n  items:\n    - intro\n`);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ dryRun: false });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(await readFile(path.join(plainTarget, "docs", "intro.md"))).toBe("# Intro\n");
+		// No component sections and no claude.yaml → shouldMkdirClaude is false;
+		// docs must still deploy without a .claude/ directory ever appearing.
+		expect(await exists(path.join(plainTarget, ".claude"))).toBe(false);
+	});
+
+	// AC2.1 — a syncDocs throw routes the whole worktree to failedTargets, same
+	// as any other deploy-step failure in the per-deployRoot try/catch.
+	it("docs failure routes failedTargets: a syncDocs throw records the worktree as failed", async () => {
+		const { worktrees } = makeBareTopology("repo", ["wt1"]);
+
+		// Two items resolving to the identical real leaf trip syncDocs's
+		// pre-flight collision guard — a clean, deterministic way to force a
+		// docs failure without touching fs modes. The collision check now keys
+		// off the REAL leaf (post-extension), so the source must actually exist
+		// for both items to resolve and collide.
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		const container = path.dirname(worktrees[0]!);
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${container}\ndocs:\n  items:\n    - intro\n    - intro\n`);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ dryRun: false });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(context.failedTargets).toContain(worktrees[0]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: syncDocs
+// ---------------------------------------------------------------------------
+
+describe("syncDocs", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let deployRoot: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-docs-test-"));
+		rootDir = path.join(tmpDir, "root");
+		deployRoot = path.join(tmpDir, "deploy");
+		await fs.mkdir(rootDir, { recursive: true });
+		await fs.mkdir(deployRoot, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("is a no-op when the docs section is absent", async () => {
+		const syncYaml: SyncYaml = { path: deployRoot };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await exists(path.join(deployRoot, "docs"))).toBe(false);
+	});
+
+	it("is a no-op when docs.items is empty", async () => {
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: [] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await exists(path.join(deployRoot, "docs"))).toBe(false);
+	});
+
+	// --- AC2.3: docs path/as resolution ---
+
+	it("docs path/as resolution: deploys under the default 'docs' base for a plain string item", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "intro.md"))).toBe("# Intro\n");
+	});
+
+	it("docs path/as resolution: item `path` can walk back out of the section base while staying under deployRoot", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "intro", path: "../top-level.md" }] },
+		};
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "top-level.md"))).toBe("# Intro\n");
+		expect(await exists(path.join(deployRoot, "docs", "intro.md"))).toBe(false);
+	});
+
+	it("docs path/as resolution: `as` renames the final file segment", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "intro", as: "README" }] },
+		};
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "README.md"))).toBe("# Intro\n");
+	});
+
+	it("docs path/as resolution: `as` renames a dir-form target directory", async () => {
+		await writeFile(path.join(rootDir, "docs", "guide", "a.md"), "# A\n");
+		await writeFile(path.join(rootDir, "docs", "guide", "b.md"), "# B\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "guide", as: "renamed-guide" }] },
+		};
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "renamed-guide", "a.md"))).toBe("# A\n");
+		expect(await readFile(path.join(deployRoot, "docs", "renamed-guide", "b.md"))).toBe("# B\n");
+		expect(await exists(path.join(deployRoot, "docs", "guide"))).toBe(false);
+	});
+
+	// --- AC2.4: nested component name ---
+
+	it("docs nested name: component 'skills/authoring' deploys to docs/skills/authoring.md", async () => {
+		await writeFile(path.join(rootDir, "docs", "skills", "authoring.md"), "# Authoring\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["skills/authoring"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "skills", "authoring.md"))).toBe(
+			"# Authoring\n",
+		);
+	});
+
+	// F5: `path.extname` on a DOTTED stem like "api.v2" reports ".v2" as an
+	// extension already present, wrongly suppressing the real source extension
+	// append — the fix compares against the SOURCE's own extension instead.
+	it("docs dotted stem: a dotted component name still gets the source's extension appended", async () => {
+		await writeFile(path.join(rootDir, "docs", "api.v2.md"), "# API v2\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["api.v2"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "api.v2.md"))).toBe("# API v2\n");
+		expect(await exists(path.join(deployRoot, "docs", "api.v2"))).toBe(false);
+	});
+
+	// --- AC2.5: hybrid form ---
+
+	it("docs hybrid form: a file-form source deploys as a single file", async () => {
+		await writeFile(path.join(rootDir, "docs", "single.md"), "# Single\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["single"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "single.md"))).toBe("# Single\n");
+	});
+
+	it("docs hybrid form: a dir-form source deploys additively", async () => {
+		await writeFile(path.join(rootDir, "docs", "bundle", "one.md"), "# One\n");
+		await writeFile(path.join(rootDir, "docs", "bundle", "sub", "two.md"), "# Two\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["bundle"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "bundle", "one.md"))).toBe("# One\n");
+		expect(await readFile(path.join(deployRoot, "docs", "bundle", "sub", "two.md"))).toBe("# Two\n");
+	});
+
+	// A docs directory that happens to contain index.md must still deploy as a
+	// WHOLE directory (additive per-file), not collapse to a single docs/<name>.md
+	// via the generic resolver's skills-style index.md single-entry rule — that
+	// collapse would silently drop sibling files/assets under the docs directory.
+	it("docs hybrid form: a dir-form source containing index.md copies the whole directory, not just index.md", async () => {
+		await writeFile(path.join(rootDir, "docs", "guide", "index.md"), "# Guide\n");
+		await writeFile(path.join(rootDir, "docs", "guide", "advanced.md"), "# Advanced\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["guide"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "guide", "index.md"))).toBe("# Guide\n");
+		expect(await readFile(path.join(deployRoot, "docs", "guide", "advanced.md"))).toBe("# Advanced\n");
+		expect(await exists(path.join(deployRoot, "docs", "guide.md"))).toBe(false);
+	});
+
+	// --- AC3.1: overwrite ---
+
+	it("docs overwrite: a declared item overwrites the existing target unconditionally", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# New\n");
+		await writeFile(path.join(deployRoot, "docs", "intro.md"), "# Old\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "intro.md"))).toBe("# New\n");
+	});
+
+	// --- AC3.2: delete idempotent ---
+
+	it("docs delete idempotent: delete:true removes an existing target", async () => {
+		await writeFile(path.join(deployRoot, "docs", "old.md"), "# Old\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "old", as: "old.md", delete: true }] },
+		};
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await exists(path.join(deployRoot, "docs", "old.md"))).toBe(false);
+	});
+
+	it("docs delete idempotent: delete:true is a no-op when the target is already absent", async () => {
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "missing", delete: true }] },
+		};
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toBeUndefined();
+	});
+
+	// F2: a delete item has no source, so resolveDocsTarget only gives its bare,
+	// pre-extension stem ("docs/intro") — the real on-disk leaf ("docs/intro.md")
+	// must be discovered by basename, not assumed to equal the bare stem.
+	it("docs delete real leaf: delete:true with a bare component name removes the real extensioned leaf on disk", async () => {
+		await writeFile(path.join(deployRoot, "docs", "intro.md"), "# Old\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "intro", delete: true }] },
+		};
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await exists(path.join(deployRoot, "docs", "intro.md"))).toBe(false);
+
+		// Idempotent: a second run against the now-absent leaf is a no-op.
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toBeUndefined();
+	});
+
+	it("docs delete real leaf: a similarly-named file is never treated as a tombstone candidate", async () => {
+		await writeFile(path.join(deployRoot, "docs", "introduction.md"), "keep me\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "intro", delete: true }] },
+		};
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "introduction.md"))).toBe("keep me\n");
+	});
+
+	// The extension-branch match (`${base}.` prefix) must require a FILE: a
+	// human DIRECTORY sharing that dot-prefix (e.g. "intro.assets/" for stem
+	// "intro") is not a file-form candidate for the "intro" tombstone and must
+	// never be resolved — let alone recursively removed — by delete:true.
+	it("docs delete candidate: a human directory sharing the stem's dot-prefix is never a delete candidate", async () => {
+		await writeFile(path.join(deployRoot, "docs", "intro.assets", "diagram.png"), "binary\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "intro", delete: true }] },
+		};
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await exists(path.join(deployRoot, "docs", "intro.assets", "diagram.png"))).toBe(true);
+	});
+
+	it("docs delete candidate control: a real intro.md file-form leaf is still removed by delete:true", async () => {
+		await writeFile(path.join(deployRoot, "docs", "intro.md"), "# Old\n");
+		await writeFile(path.join(deployRoot, "docs", "intro.assets", "diagram.png"), "binary\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "intro", delete: true }] },
+		};
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await exists(path.join(deployRoot, "docs", "intro.md"))).toBe(false);
+		expect(await exists(path.join(deployRoot, "docs", "intro.assets", "diagram.png"))).toBe(true);
+	});
+
+	it("docs delete ambiguous tombstone: a file-form AND a dir-form candidate matching the same stem throws and touches neither", async () => {
+		await writeFile(path.join(deployRoot, "docs", "intro.md"), "# Old\n");
+		await writeFile(path.join(deployRoot, "docs", "intro", "nested.md"), "stale\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "intro", delete: true }] },
+		};
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow(/ambiguous tombstone/);
+		expect(await readFile(path.join(deployRoot, "docs", "intro.md"))).toBe("# Old\n");
+		expect(await readFile(path.join(deployRoot, "docs", "intro", "nested.md"))).toBe("stale\n");
+	});
+
+	// --- AC3.3: anti-wipe ---
+
+	it("docs anti-wipe: an undeclared sibling file survives a sync", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		await writeFile(path.join(deployRoot, "docs", "human-note.md"), "human content\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "human-note.md"))).toBe("human content\n");
+	});
+
+	it("docs anti-wipe: an undeclared file inside a dir-form target survives", async () => {
+		await writeFile(path.join(rootDir, "docs", "foo", "a.md"), "# A\n");
+		await writeFile(path.join(deployRoot, "docs", "foo", "human.md"), "human content\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["foo"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "foo", "human.md"))).toBe(
+			"human content\n",
+		);
+		expect(await readFile(path.join(deployRoot, "docs", "foo", "a.md"))).toBe("# A\n");
+	});
+
+	// --- AC3.4 vs anti-wipe: form-morph never recursively wipes a directory ---
+	//
+	// F4 reconciliation: a file-form item's real write leaf carries an appended
+	// extension (docs/foo.md), so a pre-existing DIRECTORY sitting at the bare,
+	// pre-extension stem (docs/foo/) never actually collides with it on disk —
+	// anti-wipe wins, and that directory (however "stale"-looking) survives.
+
+	it("docs form-morph: a file-form deploy coexists with a stale dir-form entry at the bare stem (anti-wipe wins)", async () => {
+		await writeFile(path.join(rootDir, "docs", "foo.md"), "# Foo\n");
+		await writeFile(path.join(deployRoot, "docs", "foo", "old.md"), "stale\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["foo"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "foo", "old.md"))).toBe("stale\n");
+		expect(await readFile(path.join(deployRoot, "docs", "foo.md"))).toBe("# Foo\n");
+	});
+
+	it("docs form-morph: a dir-form deploy removes a single stale squatting FILE at its exact target, never a directory", async () => {
+		await writeFile(path.join(rootDir, "docs", "bundle", "one.md"), "# One\n");
+		await writeFile(path.join(deployRoot, "docs", "bundle"), "stale file\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["bundle"] } };
+		const context = makeContext({ backupSession: "form-morph-sess" });
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "bundle", "one.md"))).toBe("# One\n");
+		const backupFile = path.join(
+			deployRoot,
+			".sync-backup",
+			"form-morph-sess",
+			"docs",
+			"docs",
+			"bundle",
+		);
+		expect(await readFile(backupFile)).toBe("stale file\n");
+	});
+
+	it("docs form-morph: a different sibling target is untouched by a flip", async () => {
+		await writeFile(path.join(rootDir, "docs", "foo.md"), "# Foo\n");
+		await writeFile(path.join(deployRoot, "docs", "foo", "old.md"), "stale\n");
+		await writeFile(path.join(deployRoot, "docs", "bar", "keep.md"), "keep me\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["foo"] } };
+		const context = makeContext();
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(await readFile(path.join(deployRoot, "docs", "bar", "keep.md"))).toBe("keep me\n");
+	});
+
+	// --- AC4.3/4.4: pre-flight collision rejection ---
+
+	it("docs duplicate target: two items resolving to the same target throws before mutating anything", async () => {
+		await writeFile(path.join(rootDir, "docs", "a.md"), "# A\n");
+		await writeFile(path.join(rootDir, "docs", "b.md"), "# B\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: {
+				items: [
+					{ component: "a", as: "same" },
+					{ component: "b", as: "same" },
+				],
+			},
+		};
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await exists(path.join(deployRoot, "docs"))).toBe(false);
+	});
+
+	it("docs case collision: two items differing only by case throws before mutating anything", async () => {
+		await writeFile(path.join(rootDir, "docs", "a.md"), "# A\n");
+		await writeFile(path.join(rootDir, "docs", "b.md"), "# B\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: {
+				items: [
+					{ component: "a", as: "Same" },
+					{ component: "b", as: "same" },
+				],
+			},
+		};
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await exists(path.join(deployRoot, "docs"))).toBe(false);
+	});
+
+	// F3: a collision that only appears AFTER extension resolution — the bare
+	// stems ("docs/intro" vs "docs/intro.md") differ lexically, so a
+	// pre-extension check would miss this, but both resolve to the identical
+	// real write leaf "docs/intro.md" once each source's extension is applied.
+	it("docs post-extension collision: two items whose bare stems differ but whose real leaves match throws before mutating anything", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		await writeFile(path.join(rootDir, "docs", "guide.md"), "# Guide\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: ["intro", { component: "guide", as: "intro.md" }] },
+		};
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await exists(path.join(deployRoot, "docs"))).toBe(false);
+	});
+
+	// finding6 (defensive): an item resolving to the docs base directory itself
+	// would let a single item treat the ENTIRE shared docs folder as one
+	// write/delete target — e.g. {component: '.', delete: true} would otherwise
+	// resolve to the bare stem "docs" and, discovered as a lone on-disk
+	// candidate, recursively wipe every human file already under it.
+	it("docs base-wipe guard: an item resolving to the docs base directory throws instead of wiping the folder", async () => {
+		await writeFile(path.join(deployRoot, "docs", "human-note.md"), "human content\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: ".", delete: true }] },
+		};
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await readFile(path.join(deployRoot, "docs", "human-note.md"))).toBe("human content\n");
+	});
+
+	// A trailing slash on section.path must not bypass the base-wipe guard: the
+	// guard compares a normalized base against the item's bare stem, and
+	// path.posix.normalize preserves a trailing slash while resolveDocsTarget's
+	// bare stem never carries one — a naive string `===` would then miss this
+	// and let a schema-valid `{path: "docs/"}` config recursively wipe docs/.
+	it("docs base-wipe guard: a trailing slash on section.path still triggers the guard instead of wiping the folder", async () => {
+		await writeFile(path.join(deployRoot, "docs", "human-note.md"), "human content\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { path: "docs/", items: [{ component: ".", delete: true }] },
+		};
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await readFile(path.join(deployRoot, "docs", "human-note.md"))).toBe("human content\n");
+	});
+
+	// --- AC4.1/4.2: FS-level symlink-escape guards (runtime, beyond lexical containment) ---
+	//
+	// `docs` is NO-WIPE and human-co-authored, so it can preserve a human-planted
+	// symlink that a plain cp/rm would follow straight out of the docs tree.
+	// Lexical containment (resolveDocsTarget) cannot see a symlinked directory —
+	// these guards are the actual escape-prevention layer at runtime.
+
+	it("docs traversal runtime: an item path escaping deployRoot is rejected before mutating anything", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: [{ component: "intro", path: "../../outside.md" }] },
+		};
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await exists(path.join(deployRoot, "docs"))).toBe(false);
+	});
+
+	it("docs source symlink: a symlinked source file is rejected and nothing is deployed", async () => {
+		const externalFile = path.join(tmpDir, "external.md");
+		await writeFile(externalFile, "external content\n");
+		await fs.mkdir(path.join(rootDir, "docs"), { recursive: true });
+		await fs.symlink(externalFile, path.join(rootDir, "docs", "linked.md"));
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["linked"] } };
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await exists(path.join(deployRoot, "docs", "linked.md"))).toBe(false);
+	});
+
+	it("docs source symlink: a symlinked file inside a dir-form source is rejected and nothing is deployed", async () => {
+		await writeFile(path.join(rootDir, "docs", "bundle", "one.md"), "# One\n");
+		const externalFile = path.join(tmpDir, "external-two.md");
+		await writeFile(externalFile, "external content\n");
+		await fs.symlink(externalFile, path.join(rootDir, "docs", "bundle", "two.md"));
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["bundle"] } };
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await exists(path.join(deployRoot, "docs", "bundle"))).toBe(false);
+	});
+
+	it("docs target symlink: a pre-existing leaf symlink to an external file is not followed on overwrite", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# New\n");
+		const externalFile = path.join(tmpDir, "external-leaf.md");
+		await writeFile(externalFile, "external content\n");
+		await fs.mkdir(path.join(deployRoot, "docs"), { recursive: true });
+		await fs.symlink(externalFile, path.join(deployRoot, "docs", "intro.md"));
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await readFile(externalFile)).toBe("external content\n");
+	});
+
+	it("docs intermediate symlink: a symlinked intermediate target directory refuses the write", async () => {
+		await writeFile(path.join(rootDir, "docs", "api", "x.md"), "# X\n");
+		const externalDir = path.join(tmpDir, "external-dir");
+		await fs.mkdir(externalDir, { recursive: true });
+		await fs.mkdir(path.join(deployRoot, "docs"), { recursive: true });
+		await fs.symlink(externalDir, path.join(deployRoot, "docs", "api"));
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["api"] } };
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await fs.readdir(externalDir)).toEqual([]);
+	});
+
+	// F1: the coarse guard above only reaches the item's own bare stem
+	// (deployRoot/docs/foo); a dir-form deploy also writes NESTED files below
+	// that stem (deployRoot/docs/foo/sub/x.md), and a symlink planted at that
+	// deeper intermediate segment is a write-escape the coarse guard cannot see.
+	it("docs nested intermediate symlink: a symlink under a dir-form target's own subdirectory refuses the write", async () => {
+		await writeFile(path.join(rootDir, "docs", "foo", "sub", "x.md"), "# X\n");
+		const externalDir = path.join(tmpDir, "external-sub-dir");
+		await fs.mkdir(externalDir, { recursive: true });
+		await fs.mkdir(path.join(deployRoot, "docs", "foo"), { recursive: true });
+		await fs.symlink(externalDir, path.join(deployRoot, "docs", "foo", "sub"));
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["foo"] } };
+		const context = makeContext();
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await fs.readdir(externalDir)).toEqual([]);
+	});
+
+	// --- Backup evidence: every mutation is recoverable ---
+
+	it("backs up the pre-existing file before an overwrite", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# New\n");
+		await writeFile(path.join(deployRoot, "docs", "intro.md"), "# Old\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext({ backupSession: "sess1" });
+
+		await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		// backupDocs preserves the FULL deployRoot-relative path (including the
+		// docs section's own "docs/" segment) under the fixed .sync-backup/<session>/docs/
+		// namespace — so a target already living at deployRoot/docs/intro.md backs
+		// up to .sync-backup/sess1/docs/docs/intro.md (see lib/backup.ts:backupDocs).
+		const backupFile = path.join(deployRoot, ".sync-backup", "sess1", "docs", "docs", "intro.md");
+		expect(await readFile(backupFile)).toBe("# Old\n");
+	});
+
+	// --- AC5.2: dry-run preview branch ---
+
+	it("docs dry run: previews write/delete plans and an advisory list, and writes nothing to disk", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		await writeFile(path.join(deployRoot, "docs", "old.md"), "# Old\n");
+		await writeFile(path.join(deployRoot, "docs", "human-note.md"), "human content\n");
+		const syncYaml: SyncYaml = {
+			path: deployRoot,
+			docs: { items: ["intro", { component: "old", as: "old.md", delete: true }] },
+		};
+		const context = makeContext({ dryRun: true });
+
+		const lines: string[] = [];
+		const origStderr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = (chunk: string | Uint8Array) => {
+			if (typeof chunk === "string") lines.push(chunk);
+			return true;
+		};
+		try {
+			await syncDocs(context, syncYaml, rootDir, deployRoot);
+		} finally {
+			process.stderr.write = origStderr;
+		}
+
+		// AC5.2a: write plan for the declared (non-delete) item.
+		const writeLines = lines.filter((l) => l.includes("write"));
+		expect(writeLines.some((l) => l.includes(path.join(deployRoot, "docs", "intro.md")))).toBe(
+			true,
+		);
+
+		// AC5.2b: delete plan for the delete:true item.
+		const removeLines = lines.filter((l) => l.includes("remove"));
+		expect(removeLines.some((l) => l.includes(path.join(deployRoot, "docs", "old.md")))).toBe(true);
+
+		// AC5.2c: advisory line for the undeclared file — but NOT for the
+		// delete:true item's own target (its removal is already reported above;
+		// it must not also read as unmanaged drift).
+		const advisoryLines = lines.filter((l) => l.includes("advisory"));
+		expect(
+			advisoryLines.some((l) => l.includes(path.join(deployRoot, "docs", "human-note.md"))),
+		).toBe(true);
+		expect(advisoryLines.some((l) => l.includes("old.md"))).toBe(false);
+
+		// AC5.2d: write nothing — filesystem is byte-identical to before.
+		expect(await exists(path.join(deployRoot, "docs", "intro.md"))).toBe(false);
+		expect(await readFile(path.join(deployRoot, "docs", "old.md"))).toBe("# Old\n");
+		expect(await readFile(path.join(deployRoot, "docs", "human-note.md"))).toBe(
+			"human content\n",
+		);
+		expect(await exists(path.join(deployRoot, ".sync-backup"))).toBe(false);
+	});
+
+	it("docs dry run: dir-form item previews each source file's destination", async () => {
+		await writeFile(path.join(rootDir, "docs", "bundle", "one.md"), "# One\n");
+		await writeFile(path.join(rootDir, "docs", "bundle", "sub", "two.md"), "# Two\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["bundle"] } };
+		const context = makeContext({ dryRun: true });
+
+		const lines: string[] = [];
+		const origStderr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = (chunk: string | Uint8Array) => {
+			if (typeof chunk === "string") lines.push(chunk);
+			return true;
+		};
+		try {
+			await syncDocs(context, syncYaml, rootDir, deployRoot);
+		} finally {
+			process.stderr.write = origStderr;
+		}
+
+		const output = lines.join("");
+		expect(output).toContain(path.join(deployRoot, "docs", "bundle", "one.md"));
+		expect(output).toContain(path.join(deployRoot, "docs", "bundle", "sub", "two.md"));
+		expect(await exists(path.join(deployRoot, "docs", "bundle"))).toBe(false);
+	});
+
+	it("docs dry guards: a pre-existing leaf symlink target is rejected in preview, never previewed as a successful write", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# New\n");
+		const externalFile = path.join(tmpDir, "external-leaf.md");
+		await writeFile(externalFile, "external content\n");
+		await fs.mkdir(path.join(deployRoot, "docs"), { recursive: true });
+		await fs.symlink(externalFile, path.join(deployRoot, "docs", "intro.md"));
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext({ dryRun: true });
+
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
+		expect(await readFile(externalFile)).toBe("external content\n");
 	});
 });

@@ -5,25 +5,6 @@ mcps:
     args:
       - -y
       - "@upstash/context7-mcp@latest"
-  # Requires shell env: OPENSEARCH_URL, OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD
-  # (AWS: AWS_REGION, AWS_IAM_ARN or AWS_PROFILE). See opensearch-project/opensearch-mcp-server-py.
-  opensearch:
-    command: uvx
-    args:
-      - "opensearch-mcp-server-py"
-  # Notion stdio MCP. Requires shell env: NOTION_TOKEN (ntn_*** integration secret).
-  notion:
-    command: npx
-    args:
-      - "-y"
-      - "@notionhq/notion-mcp-server"
-  # Linear hosted MCP via mcp-remote stdio proxy. First run opens browser OAuth; token cached at ~/.mcp-auth.
-  linear:
-    command: npx
-    args:
-      - "-y"
-      - "mcp-remote"
-      - "https://mcp.linear.app/mcp"
   # Figma hosted MCP via mcp-remote stdio proxy. OAuth on first run.
   figma:
     command: npx

@@ -25,7 +25,7 @@ import {
 	isArray,
 } from "../lib/validation.ts";
 import { resolveComponentPath, setProjectContext } from "../lib/resolver.ts";
-import type { SyncYaml } from "../lib/types.ts";
+import type { SyncItem, SyncYaml } from "../lib/types.ts";
 import { readAndExpandSyncYaml } from "../lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "../lib/parse-platform-yaml.ts";
 import { deploysToClaudeDotDir } from "../sync.ts";
@@ -277,7 +277,7 @@ export async function validateSyncYamlComponents(
 
 	// Category definitions: [category, extension]
 	type CategoryDef = {
-		category: "agents" | "commands" | "skills" | "scripts" | "rules";
+		category: "agents" | "commands" | "skills" | "scripts" | "rules" | "docs";
 		ext: string;
 	};
 	const categories: CategoryDef[] = [
@@ -286,6 +286,7 @@ export async function validateSyncYamlComponents(
 		{ category: "skills", ext: "" },
 		{ category: "scripts", ext: "" },
 		{ category: "rules", ext: ".md" },
+		{ category: "docs", ext: "" },
 	];
 
 	for (const { category } of categories) {
@@ -299,6 +300,10 @@ export async function validateSyncYamlComponents(
 			const item = items[i];
 			const component = getItemComponent(item);
 			if (!component) continue;
+
+			// docs: a delete:true item is a tombstone naming a target to REMOVE, so
+			// its source may legitimately no longer exist — skip the existence check.
+			if (category === "docs" && isObject(item) && item.delete === true) continue;
 
 			// Agents: try flat path first for non-scoped refs
 			if (category === "agents" && !component.includes(":")) {
@@ -315,8 +320,10 @@ export async function validateSyncYamlComponents(
 
 		// hooks: also validate add-hooks in agent items
 		if (category === "agents") {
-			for (let i = 0; i < items.length; i++) {
-				const item = items[i];
+			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- category === "agents" guarantees sectionData was SyncSection, so items is SyncItem[]; the shared `items` variable's static type widens across the CategoryDef union now that "docs" (→ DocsItem[]) is a member
+			const agentItems = items as SyncItem[];
+			for (let i = 0; i < agentItems.length; i++) {
+				const item = agentItems[i];
 				if (!isObject(item)) continue;
 
 				// add-skills

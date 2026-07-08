@@ -178,9 +178,14 @@ export function tryResolveInDir(dir: string, name: string, category: string): st
 	const filePath = join(dir, `${name}.md`);
 	if (existsSync(filePath)) return filePath;
 
-	// 2. Folder with index.md
-	const indexPath = join(dir, name, "index.md");
-	if (existsSync(indexPath)) return indexPath;
+	// 2. Folder with index.md → the single entry file (skills-style single-entry
+	//    convention). Excluded for `docs`: a docs directory deploys as a WHOLE
+	//    tree (additive per-file), so collapsing it to index.md would silently
+	//    drop sibling files/assets. docs falls through to (4) → the directory.
+	if (category !== "docs") {
+		const indexPath = join(dir, name, "index.md");
+		if (existsSync(indexPath)) return indexPath;
+	}
 
 	// 3. Skills-specific SKILL.md → return the containing directory
 	if (category === "skills") {

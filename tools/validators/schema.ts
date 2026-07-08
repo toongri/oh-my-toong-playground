@@ -18,6 +18,7 @@
 import { existsSync, readdirSync } from "fs";
 import { join, dirname, basename } from "path";
 import { getRootDir } from "../lib/config.ts";
+import { resolveDocsTarget, assertDocsTargetContained } from "../lib/path-utils.ts";
 import {
 	type ValidationResult,
 	makeResult,
@@ -51,6 +52,7 @@ const VALID_SYNC_TOP_LEVEL = new Set([
 	"skills",
 	"scripts",
 	"rules",
+	"docs",
 	"provision",
 ]);
 
@@ -82,6 +84,12 @@ const VALID_ADD_HOOK_ITEM_FIELDS = new Set([
 const VALID_GENERIC_ITEM_FIELDS = new Set(["component", "platforms"]);
 
 const VALID_PROVISION_ITEM_FIELDS = new Set(["check", "commands"]);
+
+// docs is platform-agnostic (no per-section/per-item `platforms`) and has a
+// shape distinct from the generic sections (`path` instead of `platforms`,
+// item-level `path`/`as`/`delete` instead of `add-skills`/`add-hooks`).
+const VALID_DOCS_SECTION_FIELDS = new Set(["path", "items"]);
+const VALID_DOCS_ITEM_FIELDS = new Set(["component", "path", "as", "delete"]);
 
 const VALID_EVENTS = new Set([
 	"SessionStart",
@@ -348,6 +356,132 @@ function validateProvision(provision: unknown, result: ValidationResult): void {
 	}
 }
 
+/**
+ * Validate a `docs` item's `path`/`as`/section's `path` field: must be a
+ * string when present, and must itself be a relative, contained path
+ * (rejects absolute paths, empty, `.`, and any leading `..` escape) via the
+ * shared `assertDocsTargetContained` — no re-implementation of containment.
+ * Returns the string value (even if it failed containment) so the caller can
+ * still feed it into `resolveDocsTarget` for the combined-target check, or
+ * `undefined` when the field is absent or of the wrong type.
+ */
+function validateDocsPathField(
+	value: unknown,
+	fieldCtx: string,
+	result: ValidationResult,
+	assertContainment = false,
+): string | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "string") {
+		result.errors.push(`${fieldCtx}: string이어야 합니다 (got ${typeof value})`);
+		return undefined;
+	}
+	// `item.path`/`item.as` are FRAGMENTS joined onto the base — a leading `..`
+	// that stays under deployRoot once combined is legitimate (matches the
+	// runtime resolveDocsTarget + AC4.1: "leaving the docs base but under
+	// deployRoot is allowed"). Containment is asserted on the COMBINED target
+	// below, so per-field containment only applies to the section base `path`,
+	// whose own `..` genuinely escapes deployRoot.
+	if (assertContainment) {
+		try {
+			assertDocsTargetContained(value);
+		} catch (e) {
+			result.errors.push(`${fieldCtx}: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	}
+	return value;
+}
+
+function validateDocsSection(sectionData: unknown, result: ValidationResult): void {
+	if (sectionData === null || sectionData === undefined) return;
+
+	if (!isObject(sectionData)) {
+		result.errors.push(`docs: object 형식이어야 합니다`);
+		return;
+	}
+
+	// Section-level fields: docs is platform-agnostic — no `platforms` key.
+	for (const key of Object.keys(sectionData)) {
+		if (!VALID_DOCS_SECTION_FIELDS.has(key)) {
+			result.errors.push(
+				`docs: 알 수 없는 필드 '${key}' (지원: ${[...VALID_DOCS_SECTION_FIELDS].join(", ")})`,
+			);
+		}
+	}
+
+	const sectionPath = validateDocsPathField(sectionData.path, "docs.path", result, true);
+
+	const items = sectionData.items;
+	if (items !== undefined && !isArray(items)) {
+		result.errors.push(`docs.items: 배열 형식이어야 합니다`);
+		return;
+	}
+	if (!isArray(items)) return;
+
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i];
+		const itemCtx = `docs.items[${i}]`;
+
+		if (typeof item === "string") {
+			validateComponentRef(item, itemCtx, result);
+			if (item.trim()) {
+				try {
+					resolveDocsTarget(item, sectionPath, undefined, undefined);
+				} catch (e) {
+					result.errors.push(`${itemCtx}: ${e instanceof Error ? e.message : String(e)}`);
+				}
+			}
+			continue;
+		}
+
+		if (!isObject(item)) {
+			result.errors.push(`${itemCtx}: string 또는 object 이어야 합니다`);
+			continue;
+		}
+
+		// Item-level fields: no `platforms`, no `add-skills`/`add-hooks` — docs
+		// items only ever carry component/path/as/delete.
+		for (const key of Object.keys(item)) {
+			if (!VALID_DOCS_ITEM_FIELDS.has(key)) {
+				result.errors.push(
+					`${itemCtx}: 알 수 없는 필드 '${key}' (지원: ${[...VALID_DOCS_ITEM_FIELDS].join(", ")})`,
+				);
+			}
+		}
+
+		const component = item.component;
+		let validComponent: string | undefined;
+		if (!("component" in item)) {
+			result.errors.push(`${itemCtx}: component 필드가 필요합니다`);
+		} else if (typeof component !== "string") {
+			result.errors.push(`${itemCtx}.component: string이어야 합니다 (got ${typeof component})`);
+		} else if (!component.trim()) {
+			result.errors.push(`${itemCtx}.component: 빈 문자열은 허용되지 않습니다`);
+		} else {
+			validateComponentRef(component, `${itemCtx}.component`, result);
+			validComponent = component;
+		}
+
+		const itemPath = validateDocsPathField(item.path, `${itemCtx}.path`, result);
+		const itemAs = validateDocsPathField(item.as, `${itemCtx}.as`, result);
+
+		if ("delete" in item && item.delete !== true) {
+			result.errors.push(`${itemCtx}.delete: true만 허용됩니다 (got ${JSON.stringify(item.delete)})`);
+		}
+
+		// Combined containment: catches escapes that only manifest once
+		// component/section.path/item.path/as are joined together (e.g. a
+		// traversal hidden in the component name itself).
+		if (validComponent !== undefined) {
+			try {
+				resolveDocsTarget(validComponent, sectionPath, itemPath, itemAs);
+			} catch (e) {
+				result.errors.push(`${itemCtx}: ${e instanceof Error ? e.message : String(e)}`);
+			}
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // sync.yaml validator
 // ---------------------------------------------------------------------------
@@ -378,6 +512,7 @@ function validateSyncYamlData(
 	validateSection(data.skills, "skills", result, VALID_GENERIC_ITEM_FIELDS);
 	validateSection(data.scripts, "scripts", result, VALID_GENERIC_ITEM_FIELDS);
 	validateSection(data.rules, "rules", result, VALID_GENERIC_ITEM_FIELDS);
+	validateDocsSection(data.docs, result);
 	validateProvision(data.provision, result);
 }
 
