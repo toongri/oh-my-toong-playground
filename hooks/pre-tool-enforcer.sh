@@ -80,12 +80,35 @@ _wg_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDe
 
 if [[ "$toolName" == "Bash" ]] && command -v jq > /dev/null 2>&1; then
     _wg_cmd=$(echo "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || _wg_cmd=""
-    # Single-quoted spans are inert shell literals -- a `>` or a ledger path
-    # inside `'...'` is prose, never a live redirect operator or write target.
-    # Strip them before scanning so quoted prose containing "> session-ledger-"
-    # does not false-arm the guard (F3), while DOUBLE-quoted paths (`> "$f"`,
-    # a real target) are preserved and still caught.
-    _wg_scan=$(printf '%s' "$_wg_cmd" | sed "s/'[^']*'//g")
+    # Single-quoted spans are inert shell literals -- but deleting them
+    # wholesale (old approach) also erased REAL quoted write targets like
+    # `rm '/tmp/session-ledger-x.md'`. Quote-aware normalization instead:
+    # drop the quote CHARACTERS but keep the quoted CONTENT visible, while
+    # masking shell-active metachars (`> < | ; &`) that appear INSIDE quotes
+    # -- so an in-quote `>` never reads as a live redirect (grep below) and
+    # an in-quote `|`/`;`/`&` never spuriously splits a segment. Metachars
+    # OUTSIDE quotes (real redirects/splitters) and DOUBLE-quoted paths
+    # (`> "$f"`) pass through unchanged, exactly as before.
+    _wg_scan=$(printf '%s' "$_wg_cmd" | awk '
+        BEGIN { sq = sprintf("%c", 39) }
+        {
+            n = length($0)
+            inq = 0
+            out = ""
+            for (i = 1; i <= n; i++) {
+                c = substr($0, i, 1)
+                if (c == sq) {
+                    inq = 1 - inq
+                    continue
+                }
+                if (inq && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
+                    out = out " "
+                    continue
+                }
+                out = out c
+            }
+            print out
+        }')
     if [[ -n "$_wg_scan" ]] && echo "$_wg_scan" | grep -q 'session-ledger-'; then
         _wg_denied=0
         while IFS= read -r _wg_seg; do
