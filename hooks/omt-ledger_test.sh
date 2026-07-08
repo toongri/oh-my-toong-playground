@@ -394,6 +394,51 @@ test_empty_session_id_refuses_and_creates_no_file() {
 }
 
 # =============================================================================
+# Test (PR #162 finding A, P2): two concurrent append/now invocations must be
+# serialized via a lock so one cannot clobber the other's write (last-writer-
+# wins durability race). Deterministic reproduction: pre-seize the lock
+# directory ourselves, launch a background append, and assert it stays
+# blocked (content absent, process still alive) until we release the lock.
+# =============================================================================
+
+test_concurrent_append_serializes_via_lock() {
+    printf 'seed' | "$LEDGER_SCRIPT" append Decisions >/dev/null
+
+    local ledger lockdir pid
+    ledger="$(ledger_path)"
+    lockdir="${ledger}.lock"
+
+    mkdir "$lockdir"
+
+    printf 'LOCKED_APPEND' | "$LEDGER_SCRIPT" append Decisions &
+    pid=$!
+
+    sleep 0.3
+
+    if grep -qF 'LOCKED_APPEND' "$ledger"; then
+        echo "ASSERTION FAILED: append should be blocked while lock is held, but content already appeared"
+        kill "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        rmdir "$lockdir" 2>/dev/null || true
+        return 1
+    fi
+
+    if ! kill -0 "$pid" 2>/dev/null; then
+        echo "ASSERTION FAILED: background append process should still be waiting for the lock, but it already exited"
+        rmdir "$lockdir" 2>/dev/null || true
+        return 1
+    fi
+
+    rmdir "$lockdir"
+    wait "$pid"
+
+    assert_file_contains "$ledger" 'LOCKED_APPEND' \
+        "background append should complete once the lock is released" || return 1
+    assert_file_contains "$ledger" '## Decisions' \
+        "skeleton headers should survive the serialized append" || return 1
+}
+
+# =============================================================================
 # Test: uninvoked session -> ledger file absent
 # =============================================================================
 
@@ -473,6 +518,7 @@ main() {
     run_test test_content_line_matching_header_does_not_create_false_boundary
     run_test test_already_escaped_looking_content_gets_double_escaped_on_write
     run_test test_missing_target_header_refuses_instead_of_silent_loss
+    run_test test_concurrent_append_serializes_via_lock
     run_test test_default_session_id_refuses_and_creates_no_file
     run_test test_empty_session_id_refuses_and_creates_no_file
     run_test test_ledger_absent_when_never_invoked
