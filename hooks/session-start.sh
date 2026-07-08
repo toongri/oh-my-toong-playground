@@ -266,8 +266,32 @@ if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
     # (F1), and a header-shaped line injected into a bulk section is never
     # mistaken for the real acute header (S5). A line is a structural header only
     # when it equals the next-expected header H[idx].
+    # Escape/unescape is a shared contract with hooks/omt-ledger.sh (PR #162 P2):
+    # its writer prefixes any NEW content line that collides with a skeleton
+    # header with SENTINEL before writing, so a Now/Corrections content line
+    # that is literally "## Decisions" etc. never re-matches H[idx] as a false
+    # boundary here. unescape_line() strips exactly one SENTINEL back off KEPT
+    # acute content lines only -- never touches structural header lines. Keep
+    # SENTINEL identical to omt-ledger.sh's ("OMT_ESC::") or recovery will
+    # surface escaped text verbatim.
     LEDGER_ACUTE=$(awk '
+      function is_skeleton_header(line,    h) {
+        for (h = 1; h <= n; h++) if (line == H[h]) return 1
+        return 0
+      }
+      function unescape_line(line,    stripped, count) {
+        if (index(line, SENTINEL) != 1) return line
+        stripped = line
+        count = 0
+        while (index(stripped, SENTINEL) == 1) {
+          stripped = substr(stripped, length(SENTINEL) + 1)
+          count++
+        }
+        if (count >= 1 && is_skeleton_header(stripped)) return substr(line, length(SENTINEL) + 1)
+        return line
+      }
       BEGIN {
+        SENTINEL = "OMT_ESC::"
         n = split("## Now|## Decisions|## User Corrections (verbatim)|## Pending|## Pointers|## Learnings", H, "|")
         idx = 1
       }
@@ -277,7 +301,7 @@ if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
         if (keep) print
         next
       }
-      keep { print }
+      keep { print unescape_line($0) }
     ' "$LEDGER_FILE_D")
 
     MESSAGES="$MESSAGES<session-restore>\n\n[LEDGER RECOVERY -- compaction]\n\nYour context was just compacted. The durable session ledger on disk is the source of truth for this session.\n\nBulk sections (Decisions/Pending/Pointers/Learnings): run this command NOW, before any other action:\n  cat \"\$OMT_DIR/session-ledger-\$OMT_SESSION_ID.md\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\nResume from the \`## Now\` section.\n\n"

@@ -1773,6 +1773,118 @@ EOF
 }
 
 # =============================================================================
+# Test (PR #162 P2 regression): a Now-section content line that collides with
+# a skeleton header string is written to disk ESCAPED by omt-ledger.sh (one
+# "OMT_ESC::" sentinel prefix -- see hooks/omt-ledger.sh). The recovery reader
+# here must unescape exactly that sentinel back off KEPT acute content lines,
+# so the literal "## Decisions" line survives, in order, between its
+# neighbors -- Now is fully inlined, not truncated -- while a real bulk
+# section is still excluded and no raw sentinel leaks into the output.
+# =============================================================================
+
+test_session_start_ledger_recovery_unescapes_header_collision_content() {
+    local sid="ledger-recovery-escaped-collision"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+NOW_A
+OMT_ESC::## Decisions
+NOW_B
+## Decisions
+REAL_BULK_DECISION_SHOULD_NOT_APPEAR
+## User Corrections (verbatim)
+## Pending
+## Pointers
+## Learnings
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    # Now must be fully inlined, unescaped, and in order: NOW_A, then the bare
+    # (unescaped) "## Decisions" line, then NOW_B -- no truncation.
+    local now_lines
+    now_lines=$(echo "$ctx" | awk '/^NOW_A$/{f=1} f{print} /^NOW_B$/{f=0}')
+    local expected
+    expected=$'NOW_A\n## Decisions\nNOW_B'
+    if [ "$now_lines" != "$expected" ]; then
+        echo "ASSERTION FAILED: Now section must inline NOW_A, an unescaped '## Decisions' content line, then NOW_B, in order"
+        echo "  expected: ${expected}"
+        echo "  got: ${now_lines}"
+        return 1
+    fi
+
+    # The raw sentinel must never leak into additionalContext.
+    if echo "$ctx" | grep -qF 'OMT_ESC::'; then
+        echo "ASSERTION FAILED: the raw escape sentinel must never leak into additionalContext"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+
+    # The real bulk Decisions section must still be excluded from the inline.
+    if echo "$ctx" | grep -qF 'REAL_BULK_DECISION_SHOULD_NOT_APPEAR'; then
+        echo "ASSERTION FAILED: bulk Decisions content must not leak into the acute inline"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Test (double-escape round-trip, reader half): a content line double-escaped
+# by the writer (two sentinels, because the user's literal text already
+# looked like one sentinel + header) must have exactly ONE sentinel stripped
+# on recovery -- restoring the user's original one-sentinel text exactly, not
+# fully unescaped and not left with both sentinels.
+# =============================================================================
+
+test_session_start_ledger_recovery_double_escape_round_trip() {
+    local sid="ledger-recovery-double-escape"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+OMT_ESC::OMT_ESC::## Decisions
+## Decisions
+## User Corrections (verbatim)
+## Pending
+## Pointers
+## Learnings
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    # Exactly one sentinel must remain -- this is the round-trip of the
+    # user's original (already sentinel-shaped) literal content.
+    local match_count
+    match_count=$(echo "$ctx" | grep -cxF 'OMT_ESC::## Decisions')
+    if [ "$match_count" -ne 1 ]; then
+        echo "ASSERTION FAILED: double-escaped content must recover to exactly one remaining sentinel + header line, found $match_count"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    if echo "$ctx" | grep -qxF 'OMT_ESC::OMT_ESC::## Decisions'; then
+        echo "ASSERTION FAILED: both sentinels must not survive recovery (only one must be stripped)"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    if echo "$ctx" | grep -qxF '## Decisions'; then
+        echo "ASSERTION FAILED: the line must not be fully unescaped to bare '## Decisions' -- it was double-escaped, so exactly one sentinel must remain"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # Tests: Ledger GC — mtime-based (TODO 5)
 # session-ledger-*.md files are durable-append .md, so liveness cannot use
 # is_state_live (JSON .active parsing). GC is mtime-only, TTL=ACTIVE_IDLE_TTL
@@ -2029,6 +2141,8 @@ main() {
     run_test test_session_start_ledger_recovery_only_on_compact_source
     run_test test_session_start_ledger_recovery_preserves_hash_line_in_acute
     run_test test_session_start_ledger_recovery_no_header_injection_from_bulk
+    run_test test_session_start_ledger_recovery_unescapes_header_collision_content
+    run_test test_session_start_ledger_recovery_double_escape_round_trip
 
     # Ledger GC — mtime-based (TODO 5)
     run_test test_gc_ledger_other_session_stale_reaped
