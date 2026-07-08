@@ -20,6 +20,7 @@ Technical Evaluation Request:
 - `bullet_text`: resume bullet to evaluate
 - `candidate_context`: `{ years, position, target_company }`
 - (Optional) Cross-entry context for R-Cross check
+- (Optional) `## Proposed Alternatives`: re-dispatch 시 review-resume이 전달하는 후보 수정안 블록. first dispatch에는 `None — initial evaluation`.
 
 ---
 
@@ -219,7 +220,7 @@ THEN final_verdict := "REQUEST_CHANGES"
 ```
 
 이 rule은 R-Phys, R-Cross 후 다음 순서로 체크. P1 누적이 3개 이상이면 개별 FAIL 없이도 REQUEST_CHANGES.
-**Note**: R-Phys 또는 R-Cross가 triggered되어 early return하더라도, P1 cumulative count는 `interview_hints` 생성을 위해 계산하고 기록한다.
+**Note**: R-Phys 또는 R-Cross가 triggered되어 early return하더라도, 그 시점까지 평가된 A1-A4 축의 pending P1 verdict는 count 기록에 그치지 않고 `interview_hints`에 4-라벨 스캐폴드(§Output Format 참조)로 실제 emit한다.
 
 #### final_verdict Decision Sequence
 
@@ -227,8 +228,8 @@ THEN final_verdict := "REQUEST_CHANGES"
 1. Evaluate all 5 axes (A1-A5)
 2. Assign structural_verdict = verdicts.a5_scanability.verdict
 3. Check critical_rule_flags:
-   a. If r_phys triggered → final_verdict = REQUEST_CHANGES (early return)
-   b. If r_cross triggered → final_verdict = REQUEST_CHANGES (early return)
+   a. If r_phys triggered → final_verdict = REQUEST_CHANGES (early return); 그 시점까지 평가된 A1-A4 pending P1 verdict(및 r_phys 자체가 구동한 hint 포함)를 interview_hints에 4-라벨 스캐폴드로 emit
+   b. If r_cross triggered → final_verdict = REQUEST_CHANGES (early return); 그 시점까지 평가된 A1-A4 pending P1 verdict(및 r_cross 자체가 구동한 hint 포함)를 interview_hints에 4-라벨 스캐폴드로 emit
 4. Check P1 cumulative: if count(P1 across A1-A4) >= 3 → final_verdict = REQUEST_CHANGES (early return)
 5. If any A1-A4 FAIL → final_verdict = REQUEST_CHANGES
 6. If structural_verdict == FAIL AND all A1-A4 PASS/P1 AND count(P1 across A1-A4) < 3 → final_verdict = REQUEST_CHANGES (readability-fix lane)
@@ -241,10 +242,10 @@ THEN final_verdict := "REQUEST_CHANGES"
 
 ## Output Format
 
-다음 YAML template로 응답 (output-schema.md v4.0 contract와 정확히 일치):
+다음 YAML template로 응답 (output-schema.md v4.1 contract와 정확히 일치):
 
 ```yaml
-schema_version: "v4.0"
+schema_version: "v4.1"
 bullet_text: <원본 bullet>
 candidate_context:
   years: <int>
@@ -286,16 +287,32 @@ critical_rule_flags:
 final_verdict: APPROVE | REQUEST_CHANGES
 structural_verdict: PASS | P1 | FAIL   # A5 scanability axis verdict — FAIL triggers final_verdict = REQUEST_CHANGES (readability-fix lane)
 interview_hints:
-  - <hint 1>
-  - <hint 2>
-  - ...
+  - |
+    인용: «bullet 본문에서 직접 발췌한 verbatim substring»
+    문제: <그 인용 구간의 구체적 결함>
+    이유: <왜 문제인지 — 평이한 서술, axis 이름 없이>
+    제안: <구체적·실행가능한 수정안>
+  - |
+    인용: «...»
+    문제: ...
+    이유: ...
+    제안: ...
 ```
+<!-- English bullet example: labels switch to the English set, «» rule unchanged —
+  Quote: «...»
+  Problem: ...
+  Why: ...
+  Suggestion: ... -->
 
-**Language hint rule (bidirectional)**: `interview_hints` 언어는 source bullet의 언어를 따른다 — 한국어 bullet → 한국어 hint; English bullet → English hint.
+**Scaffold rule**: interview_hints에 surface되는 모든 hint는 4-라벨 스캐폴드로 emit한다 — content axis(A1-A4)의 P1/FAIL 구동 hint, structural axis(A5)의 P1 구동 hint, critical-rule(r_phys/r_cross) 구동 hint 등을 포함하되, 이 열거는 예시일 뿐이다: surface되는 어떤 hint든 이 스캐폴드를 입는다. 라벨 자체가 source bullet 언어를 따른다 — 한국어 bullet이면 `인용:` / `문제:` / `이유:` / `제안:`, English bullet이면 `Quote:` / `Problem:` / `Why:` / `Suggestion:` (콜론 뒤 한 칸 공백). `인용:`/`Quote:`의 내용은 언어와 무관하게 항상 «»로 감싼다. A5 P1 hint의 `인용:`/`Quote:`은 파묻힌·뒤바뀐 구절을, `제안:`/`Suggestion:`은 재배치·압축 fix를 담는다. 완전 clean(P1 없음, structural PASS)이면 `interview_hints: []`.
+
+**Dispatch-state branch (`제안:`/`Suggestion:` 줄)**: `## Input`의 `Proposed Alternatives`에 실제 후보 대안이 있으면 `제안:`/`Suggestion:` 줄은 그 대안을 근거로 작성(near-verbatim 인용, 새로 지어내지 않음). `None — initial evaluation`이면 examiner가 자체 생성.
+
+**Language hint rule (bidirectional)**: `interview_hints`는 라벨과 본문 모두 source bullet의 언어를 따른다 — 한국어 bullet → 한국어 라벨(인용/문제/이유/제안) + 한국어 hint 본문; English bullet → English 라벨(Quote/Problem/Why/Suggestion) + English hint 본문. 라벨 매핑: 인용=Quote, 문제=Problem, 이유=Why, 제안=Suggestion. `인용:`/`Quote:` 줄은 원문 verbatim이므로 본문 언어 일치가 자동 충족.
 
 ### interview_hints Constraints
 
-Follow `skills/tech-claim-rubric/output-schema.md` §interview_hints Constraints (Vocabulary / Actionability / P1 coverage rules). Do not duplicate rule bodies here.
+Follow `skills/tech-claim-rubric/output-schema.md` §interview_hints Constraints (Vocabulary / Actionability / P1 coverage / scaffold rules). `문제:` / `이유:` / `제안:` 세 줄(English bullet에서는 `Problem:` / `Why:` / `Suggestion:` — 동일 규칙 적용)에는 `A[1-5]` 코드도 axis name도 등장하지 않는다 — `인용:`/`Quote:` 줄은 verbatim 인용이라 면제. Do not duplicate rule bodies here.
 
 ---
 
@@ -316,8 +333,9 @@ Follow `skills/tech-claim-rubric/output-schema.md` §interview_hints Constraints
 - [ ] P1 cumulative meta-rule 적용: count(P1 across A1-A4) ≥ 3이면 final_verdict = REQUEST_CHANGES
 - [ ] final_verdict 도출 시 A1-A4 FAIL/P1-cumulative 외에 structural_verdict == FAIL 게이트도 적용됨
 - [ ] structural_verdict 작성됨 (A5 scanability 결과 직접 반영)
-- [ ] interview_hints 언어가 source bullet 언어와 일치 (한국어 bullet → 한국어 hint, English bullet → English hint)
+- [ ] interview_hints 언어가 source bullet 언어와 일치 — 4-라벨과 hint 본문 모두 (한국어 bullet → 한국어 라벨+hint, English bullet → English 라벨+hint)
 - [ ] interview_hints에 axis identifier (A1-A5) 또는 axis name 포함되지 않음 (Vocabulary rule)
 - [ ] 각 hint가 구체적이고 실행 가능함 — generic 표현 없음 (Actionability rule)
-- [ ] P1 verdict가 어느 axis(A1-A4)에라도 존재할 경우 final_verdict가 APPROVE여도 interview_hints에 개선 제안 포함됨 (P1 coverage rule)
+- [ ] P1 verdict가 content axis(A1-A4) 또는 structural axis(A5)에라도 존재할 경우, final_verdict나 조기 종료 여부와 무관하게 interview_hints에 개선 제안 포함됨 (P1 coverage rule)
+- [ ] 모든 hint가 4-라벨 스캐폴드(한국어 bullet: `인용:`/`문제:`/`이유:`/`제안:`, English bullet: `Quote:`/`Problem:`/`Why:`/`Suggestion:`)를 따르며, `인용:`/`Quote:`은 bullet 본문에서 직접 발췌한 verbatim substring임 (paraphrase 금지)
 - [ ] final_verdict 결정됨 (APPROVE | REQUEST_CHANGES)
