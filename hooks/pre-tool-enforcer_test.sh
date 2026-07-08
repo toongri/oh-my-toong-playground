@@ -938,6 +938,71 @@ test_wg_i_write_edit_multiedit_filepath_nonledger_passes() {
 }
 
 # =============================================================================
+# (j) single-quoted REAL write targets must still be caught -- quote-aware
+# normalization strips the quote CHARACTERS but keeps the quoted CONTENT
+# visible, so the existing path-visible checks below (redirect grep, dd
+# of=, cp/mv last-word, first-word command match) still fire on a quoted
+# path exactly as they do on an unquoted one.
+# =============================================================================
+
+test_wg_j1_rm_singlequoted_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "rm '$ledger'" "WG-J1(rm quoted)"
+}
+
+test_wg_j2_truncate_redirect_singlequoted_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny ": > '$ledger'" "WG-J2(: > quoted)"
+}
+
+test_wg_j3_append_redirect_singlequoted_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "echo x >> '$ledger'" "WG-J3(>> quoted)"
+}
+
+test_wg_j4_tee_singlequoted_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "tee '$ledger'" "WG-J4(tee quoted)"
+}
+
+test_wg_j5_dd_singlequoted_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "dd of='$ledger'" "WG-J5(dd quoted)"
+}
+
+test_wg_j6_cp_singlequoted_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "cp z '$ledger'" "WG-J6(cp quoted)"
+}
+
+test_wg_j7_mv_singlequoted_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "mv z '$ledger'" "WG-J7(mv quoted)"
+}
+
+test_wg_j8_truncate_cmd_singlequoted_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "truncate -s0 '$ledger'" "WG-J8(truncate quoted)"
+}
+
+test_wg_j9_sed_i_singlequoted_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "sed -i s/a/b/ '$ledger'" "WG-J9(sed -i quoted)"
+}
+
+# (k) in-quote '|' AND '>' together must both be masked -- an in-quote pipe
+# must not spuriously split the segment (which would expose the in-quote
+# '>' + ledger path to the redirect grep as if it were a real write target).
+# Regression guard for the quote-aware normalizer masking the full
+# metachar class, not just '>'.
+test_wg_k_pipe_and_gt_inside_quotes_passes() {
+    local out
+    local cmd="printf 'a | b > session-ledger-x.md' | omt-ledger.sh append Decisions"
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-K(in-quote pipe+gt): should pass. Got: $out"; return 1; }
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -997,6 +1062,16 @@ main() {
     run_test test_wg_g3_quoted_gt_in_nonledger_echo_passes
     run_test test_wg_h_write_edit_multiedit_filepath_ledger_denied
     run_test test_wg_i_write_edit_multiedit_filepath_nonledger_passes
+    run_test test_wg_j1_rm_singlequoted_denied
+    run_test test_wg_j2_truncate_redirect_singlequoted_denied
+    run_test test_wg_j3_append_redirect_singlequoted_denied
+    run_test test_wg_j4_tee_singlequoted_denied
+    run_test test_wg_j5_dd_singlequoted_denied
+    run_test test_wg_j6_cp_singlequoted_denied
+    run_test test_wg_j7_mv_singlequoted_denied
+    run_test test_wg_j8_truncate_cmd_singlequoted_denied
+    run_test test_wg_j9_sed_i_singlequoted_denied
+    run_test test_wg_k_pipe_and_gt_inside_quotes_passes
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
