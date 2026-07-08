@@ -258,6 +258,32 @@ test_hashline_in_content_does_not_misroute_later_append() {
 }
 
 # =============================================================================
+# Test (silent-loss guard): a ledger missing the target section header must
+# make append/now REFUSE (non-zero) rather than exit 0 while dropping content.
+# A well-formed ledger always carries all 6 headers, so this only triggers on
+# an externally-corrupted ledger -- but a durable record must fail loud, never
+# silently lose data.
+# =============================================================================
+
+test_missing_target_header_refuses_instead_of_silent_loss() {
+    local ledger
+    ledger="$(ledger_path)"
+    # Corrupted ledger: only 2 of the 6 skeleton headers (missing ## Learnings).
+    printf '## Now\n## Decisions\n' > "$ledger"
+
+    if printf 'MUST_NOT_VANISH' | "$LEDGER_SCRIPT" append Learnings; then
+        echo "ASSERTION FAILED: append to a ledger missing '## Learnings' must exit non-zero, not succeed while silently dropping content"
+        return 1
+    fi
+
+    # Refusal must be non-destructive: the pre-existing ledger stays intact.
+    assert_file_contains "$ledger" "## Decisions" \
+        "existing ledger content must be preserved when append refuses" || return 1
+    assert_file_not_contains "$ledger" "MUST_NOT_VANISH" \
+        "refused content must not be partially written" || return 1
+}
+
+# =============================================================================
 # Tests: default/empty OMT_SESSION_ID refusal
 # =============================================================================
 
@@ -368,6 +394,7 @@ main() {
     run_test test_now_replace_does_not_disturb_other_sections
     run_test test_metachar_multibyte_payload_stored_losslessly
     run_test test_hashline_in_content_does_not_misroute_later_append
+    run_test test_missing_target_header_refuses_instead_of_silent_loss
     run_test test_default_session_id_refuses_and_creates_no_file
     run_test test_empty_session_id_refuses_and_creates_no_file
     run_test test_ledger_absent_when_never_invoked
