@@ -1,6 +1,6 @@
-# Examiner Output Schema (v4.0)
+# Examiner Output Schema (v4.1)
 
-<!-- schema_version: "v4.0" -->
+<!-- schema_version: "v4.1" -->
 <!-- v4.0 changes:
   - structural_verdict (PUBLIC) 필드 추가: A5 scanability 축의 PASS/P1/FAIL을 PUBLIC으로 노출.
     review-resume readability-fix routing trigger 및 resume-forge Loop 2 gate에서 사용.
@@ -8,6 +8,11 @@
     (v3까지는 A1-A5 모두 PASS 조건; v4는 P1 최대 2개까지 허용하는 permissive 기준)
   - ownership-scope critical_rule_flag 제거: A4 ownership-scope axis의 P1 verdict로 대체됨.
     (see a4-ownership-scope.md integrity_suspected)
+-->
+<!-- v4.1 changes:
+  - interview_hints content가 4-요소 앵커드 스캐폴드(인용/문제/이유/제안, newline-delimited)로 격상.
+    type은 여전히 string[]; final_verdict/structural_verdict 필드 및 도출 로직 불변.
+    Vocabulary rule 확장: 문제/이유/제안 줄에 A[1-5] 코드·영문 axis name(Scanability 포함) 금지. 인용: 줄은 면제.
 -->
 
 ## Purpose
@@ -23,7 +28,7 @@
 모든 필드에 PUBLIC / INTERNAL 태그 부여. INTERNAL 필드는 orchestrator(resume-forge)만 접근 가능.
 
 ```yaml
-schema_version: string              # PUBLIC. ex: "v4.0"
+schema_version: string              # PUBLIC. ex: "v4.1"
 bullet_text: string                 # INTERNAL (debugging context)
 candidate_context:                  # INTERNAL
   years: int
@@ -71,8 +76,8 @@ structural_verdict: PASS | P1 | FAIL       # PUBLIC. A5 scanability axis의 verd
                                            #   - resume-forge: Loop 2 gate readability-fix path
                                            #     (A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE)
 interview_hints: string[]                  # PUBLIC (APPROVE/REQUEST_CHANGES 모두 user-facing — P1 hints는 항상 surface)
-                                           # language constraint: source bullet의 언어 = hint 언어.
-                                           # 한국어 bullet → 한국어 hint; English bullet → English hint. (bidirectional)
+                                           # language constraint: source bullet의 언어 = hint 언어 — 4-라벨 + hint 본문 모두.
+                                           # 한국어 bullet → 한국어 라벨(인용/문제/이유/제안)+hint; English bullet → English 라벨(Quote/Problem/Why/Suggestion)+hint. (bidirectional)
 ```
 
 ---
@@ -149,11 +154,22 @@ downstream skill들이 v1 examiner output 참조를 v4로 갱신할 때 사용:
 
 ## interview_hints Constraints
 
-1. **Vocabulary rule**: hint 본문에 axis identifier (A1-A5) 또는 axis name (Technical Credibility, Causal Honesty, Outcome Presence & Clarity, Ownership & Scope, Scanability) 포함 금지. 자연스러운 서술로만.
+1. **Scaffold format rule**: 각 `interview_hints` 원소는 하나의 문자열이며, 4개 라벨이 각각 별도 줄(newline-delimited, `/`-delimited 아님)에 온다. 라벨 자체가 source bullet 언어를 따른다 — 한국어 bullet:
+   ```
+   인용: «원본 bullet의 verbatim substring»
+   문제: <그 인용 구간의 구체적 결함>
+   이유: <왜 문제인지 — 평이한 소스언어, 축 이름 없음>
+   제안: <구체적·실행가능한 수정안>
+   ```
+   English bullet은 동일 구조에 영어 라벨셋을 쓴다: `Quote:` / `Problem:` / `Why:` / `Suggestion:` (콜론 뒤 한 칸 공백). 라벨 매핑: 인용=Quote, 문제=Problem, 이유=Why, 제안=Suggestion.
+   - `인용:`/`Quote:` 라인의 `«»` 내부는 원본 bullet의 글자 그대로 substring(paraphrase 금지), 언어와 무관하게 항상 «»로 감싼다. noleak 검증 시 «»로 감싼 이 verbatim 줄만 라인 단위로 제외한다.
+   - 이 스캐폴드는 surface되는 모든 hint에 적용된다 — REQUEST_CHANGES hint, APPROVE 시 P1 개선 hint, 그리고 구조(A5) P1 readability hint(`resume-forge/SKILL.md:210` — structural_verdict가 A1-A4와 동일하게 uniform하게 surface)도 포함.
+   - 예외: 완전 clean APPROVE는 여전히 `interview_hints: []` (스캐폴드를 억지로 채우지 않음).
+2. **Vocabulary rule**: `문제:`/`이유:`/`제안:` 세 줄(English bullet에서는 `Problem:`/`Why:`/`Suggestion:` — 동일 규칙)에는 axis identifier(`A[1-5]`, 즉 A1-A5) 또는 영문 axis name (Technical Credibility, Causal Honesty, Outcome Presence & Clarity, Ownership & Scope, Scanability) 포함 금지 — 자연스러운 서술로만. "이유:"/"Why:"는 평이한 소스언어로 설명한다. `인용:`/`Quote:` 라인은 원본 bullet의 verbatim substring이므로 이 규칙에서 면제(후보 기술명에 A1 등이 우연히 들어갈 수 있음).
    - OK: "사용한 시스템과 선택 이유를 추가하면 기술 깊이가 더 잘 드러납니다"
    - 금지: "A1 Technical Credibility FAIL — 시스템 명시 필요"
-2. **Actionability rule**: 각 hint는 구체적이고 실행 가능해야 함. "add more technical detail"처럼 generic한 hint 금지.
-3. **P1 coverage**: P1 verdict는 final_verdict가 APPROVE여도 interview_hints에 improvement suggestion으로 포함.
+3. **Actionability rule**: 각 hint는 구체적이고 실행 가능해야 함. "add more technical detail"처럼 generic한 hint 금지.
+4. **P1 coverage**: P1 verdict는 final_verdict가 APPROVE여도 interview_hints에 improvement suggestion으로 포함.
 
 이 규칙들은 `agents/tech-claim-examiner.md` prompt에서 본문 복제 없이 참조된다.
 
@@ -183,7 +199,7 @@ review-resume가 생성하는 HTML report의 user-facing surface에 examiner int
 | Axis name | `Technical Credibility\|Causal Honesty\|Outcome Presence & Clarity\|Ownership & Scope\|Scanability` | 5축 정식 이름 누출. `Ownership & Scope`는 일반 `Ownership`과 구분하기 위해 정확 매치 |
 | Internal struct | `verdicts\.\|critical_rule_flags\.\|evidence_quote\|reasoning:` | examiner output schema의 field key 누출 |
 
-**Verification usage**: `grep -E '<pattern>' <rendered-html>`을 3개 pattern 각각에 대해 실행. 모두 0 matches이면 noleak 통과.
+**Verification usage**: rendered 내용이 §interview_hints Constraints의 4-요소 스캐폴드 hint(한국어: `인용:`/`문제:`/`이유:`/`제안:`, English: `Quote:`/`Problem:`/`Why:`/`Suggestion:`)를 포함하는 경우, 먼저 «»로 감싼 verbatim 줄(즉 `인용:`/`Quote:` 라벨 줄 — 원본 bullet의 verbatim substring이며, 후보 기술명 "AWS A1 instances"처럼 `A[1-5]`-모양 토큰이 정당하게 들어갈 수 있음)을 라인 단위로 제외한다. «»는 인용 줄에만 존재하므로 라벨 언어(한국어/영어)와 무관하게 이 줄을 식별할 수 있다. 그 뒤 남은 라인에 대해 `grep -E '<pattern>' <rendered-html>`을 3개 pattern 각각 실행하여 모두 0 matches이면 noleak 통과. «» 줄 제외 전처리 없이 whole-HTML에 naive하게 돌리면 인용 줄의 후보 토큰에서 false-positive가 난다(`tests/phase9-loop-scenarios.md` SCN-13 `FX-TECH-ECHO` 참조). «»로 감싼 인용 줄을 포함하지 않는 terse 출력(스캐폴드 이전 형태)에는 이 전처리가 불필요하며, 그 경우 기존 whole-content grep이 그대로 유효하다.
 
 **Canonical regex** (shell에서 직접 사용, escape 없이):
 ```
