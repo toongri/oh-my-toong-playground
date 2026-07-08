@@ -259,9 +259,22 @@ fi
 if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
   LEDGER_FILE_D="$OMT_DIR/session-ledger-${SESSION_ID}.md"
   if [ -f "$LEDGER_FILE_D" ]; then
+    # Section boundaries are the 6 known skeleton headers consumed in their fixed
+    # order (idx walks the sequence), NOT any `## ` line -- so a `## ` markdown
+    # subheader INSIDE an acute section's content does not truncate the extract
+    # (F1), and a header-shaped line injected into a bulk section is never
+    # mistaken for the real acute header (S5). A line is a structural header only
+    # when it equals the next-expected header H[idx].
     LEDGER_ACUTE=$(awk '
-      /^## / {
-        if ($0 == "## Now" || $0 == "## User Corrections (verbatim)") { keep = 1 } else { keep = 0 }
+      BEGIN {
+        n = split("## Now|## Decisions|## User Corrections (verbatim)|## Pending|## Pointers|## Learnings", H, "|")
+        idx = 1
+      }
+      (idx <= n && $0 == H[idx]) {
+        idx++
+        keep = ($0 == "## Now" || $0 == "## User Corrections (verbatim)")
+        if (keep) print
+        next
       }
       keep { print }
     ' "$LEDGER_FILE_D")
