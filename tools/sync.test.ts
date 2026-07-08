@@ -1371,6 +1371,154 @@ describe("processYaml", () => {
 		// .claude/ must be created when component items are present
 		expect(await exists(path.join(compTargetPath, ".claude"))).toBe(true);
 	});
+
+	// Regression coverage for the platform-eligibility gate on the post-deploy
+	// rewrite loop (tools/sync.ts:1432-1443). That loop currently runs
+	// `rewritePlatformPaths` for any non-claude platform whose `.{platform}/`
+	// dir happens to exist on disk, WITHOUT checking whether this project
+	// actually deploys to that platform — so a claude-only project's
+	// hand-authored `.codex/`/`.gemini/` files get their `.claude/` references
+	// clobbered even though OMT never deployed anything there.
+
+	it("preserves hand-authored non-claude md in claude-only target", async () => {
+		// claude-only project: sync.yaml top-level `platforms` narrows every
+		// category to claude. The project never deploys to codex/gemini, so
+		// hand-authored non-claude .md files sitting under the target must be
+		// left byte-identical.
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nplatforms: [claude]\n`);
+
+		const codexFile = path.join(targetPath, ".codex", "hooks", "README.md");
+		const geminiFile = path.join(targetPath, ".gemini", "custom.md");
+		const codexBefore = "Hand-authored codex notes. See .claude/rules/ for conventions.\n";
+		const geminiBefore = "Hand-authored gemini notes. See .claude/rules/ for conventions.\n";
+		await writeFile(codexFile, codexBefore);
+		await writeFile(geminiFile, geminiBefore);
+
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const codexAfter = await readFile(codexFile);
+		const geminiAfter = await readFile(geminiFile);
+
+		expect(codexAfter, ".codex/hooks/README.md must be untouched in a claude-only target").toBe(
+			codexBefore,
+		);
+		expect(geminiAfter, ".gemini/custom.md must be untouched in a claude-only target").toBe(
+			geminiBefore,
+		);
+	});
+
+	it("still rewrites deployed codex skill md via feature-platforms default", async () => {
+		// Un-narrowed project — no top-level `platforms` override and the skills
+		// item carries none either, so resolvePlatforms falls through to
+		// config.yaml's feature-platforms.skills default. This test depends on
+		// the REAL repo config.yaml declaring codex in feature-platforms.skills
+		// (pinned by "feature-platforms contains only skills" below): getRootDir()
+		// (tools/lib/config.ts) walks up from tools/lib/config.ts's OWN module
+		// location to find config.yaml, not from the `rootDir` fixture argument
+		// passed to processYaml — so resolvePlatforms always reads the real repo
+		// config.yaml regardless of any config.yaml written under this tmpDir.
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nskills:\n  items:\n    - oracle\n`);
+
+		// Plant a codex skill md directly on disk instead of deploying it for
+		// real: the mock adapter never writes files, and "oracle" has no source
+		// under rootDir/skills/ so resolveComponentPath fails and syncCategory's
+		// per-item dispatch loop `continue`s before ever reaching the
+		// backup+wipe step for codex:skills — so the planted file survives
+		// untouched to the rewrite pass. The gate keys on the file's presence on
+		// disk plus the un-narrowed config, not on a real syncSkillsDirect write.
+		const codexSkillFile = path.join(targetPath, ".codex", "skills", "oracle", "SKILL.md");
+		const before = "See .claude/rules/ for conventions.\n";
+		await writeFile(codexSkillFile, before);
+
+		const adapters = makeAdapterMap(["claude", "codex"]);
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const after = await readFile(codexSkillFile);
+		expect(after, ".codex/skills/oracle/SKILL.md must be rewritten to .codex/rules/").toContain(
+			".codex/rules/",
+		);
+		expect(after, ".codex/skills/oracle/SKILL.md must no longer contain .claude/").not.toContain(
+			".claude/",
+		);
+	});
+
+	it("dry-run does not report codex rewrite for claude-only target", async () => {
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\nplatforms: [claude]\n`);
+
+		// A stray .codex/ dir already exists at the deploy root (e.g. left over
+		// from an earlier, differently-configured sync of the same target).
+		await fs.mkdir(path.join(targetPath, ".codex", "hooks"), { recursive: true });
+
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ dryRun: true });
+
+		const lines: string[] = [];
+		const origStderr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = (chunk: string | Uint8Array) => {
+			if (typeof chunk === "string") lines.push(chunk);
+			return true;
+		};
+		try {
+			await processYaml(context, syncYamlPath, adapters, rootDir);
+		} finally {
+			process.stderr.write = origStderr;
+		}
+
+		expect(
+			lines.some((l) => l.includes("Rewrite .claude/ paths -> .codex/")),
+			"dry-run must not report a codex rewrite for a claude-only target",
+		).toBe(false);
+	});
+
+	it("rewrites deployed md for a section-level non-claude platform override", async () => {
+		// Top-level `platforms: [claude]` narrows every category's project-level
+		// default to claude-only (Level 3 in the resolvePlatforms cascade) — this
+		// pins down the OLD gate's per-category loop to {claude}, since it always
+		// passes the fake item + undefined sectionPlatforms and so never sees the
+		// section-level override below. Section-level `platforms: [claude,
+		// opencode]` on `agents` (Level 2) OUTRANKS the top-level Level-3 default
+		// for the real per-item resolution, ADDING opencode. The gate must mirror
+		// this per-item resolvePlatforms cascade (item > section > syncYaml >
+		// feature-platforms > use-platforms) exactly as syncCategory does, or
+		// opencode's deployed md is silently left un-rewritten.
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nplatforms: [claude]\nagents:\n  platforms: [claude, opencode]\n  items:\n    - oracle\n`,
+		);
+
+		// Plant an opencode agent md directly on disk instead of deploying it for
+		// real: the mock adapter never writes files, and "oracle" has no source
+		// under rootDir/agents/ so resolveComponentPath fails and syncCategory's
+		// per-item dispatch loop `continue`s before reaching backup+wipe for
+		// opencode:agents — so the planted file survives untouched to the
+		// rewrite pass. The gate keys on the file's presence on disk plus the
+		// resolved eligible-platform set, not on a real syncAgentsDirect write.
+		const opencodeAgentFile = path.join(targetPath, ".opencode", "agents", "oracle.md");
+		const before = "See .claude/rules/ for conventions.\n";
+		await writeFile(opencodeAgentFile, before);
+
+		const adapters = makeAdapterMap(["claude", "opencode"]);
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const after = await readFile(opencodeAgentFile);
+		expect(after, ".opencode/agents/oracle.md must be rewritten to .opencode/rules/").toContain(
+			".opencode/rules/",
+		);
+		expect(after, ".opencode/agents/oracle.md must no longer contain .claude/").not.toContain(
+			".claude/",
+		);
+	});
 });
 
 // ---------------------------------------------------------------------------
