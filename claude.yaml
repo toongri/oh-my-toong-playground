@@ -1,7 +1,4 @@
 hooks:
-  PreCompact:
-    - component: pre-compact.sh
-      timeout: 1200
   PreToolUse:
     - component: label-commit-gate.sh
       matcher: "Bash"

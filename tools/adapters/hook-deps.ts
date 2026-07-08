@@ -8,8 +8,12 @@ import { logInfo, logWarn, logDry } from "../lib/logger.ts";
  * Scans the file for lines matching:
  *   source "$SOME_VAR/relative/path.sh"
  *   . "$SOME_VAR/relative/path.sh"
- * Captures the relative path after the variable reference, resolves it
- * under hooksSourceDir, and recurses (with cycle detection).
+ *   # omt-hook-dep: relative/path.sh
+ * Captures the relative path (after the variable reference, or from the
+ * explicit directive), resolves it under hooksSourceDir, and recurses (with
+ * cycle detection). The directive covers companion files referenced only
+ * inside a string (e.g. an injected instruction), which the `source`/`.`
+ * pattern can't see.
  *
  * Returns absolute paths of all discovered dependencies that exist on disk.
  * Test files (*_test.sh) are excluded.
@@ -33,9 +37,37 @@ export async function resolveShellDependencies(
 	// Handles both ${VAR} and $VAR, single or double quotes, optional quotes
 	const SOURCE_RE = /^\s*(?:source|\.)\s+["']?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?[/]([\w./-]+\.sh)["']?/;
 
+	// Explicit companion-dependency directive: `# omt-hook-dep: <relpath>.sh`.
+	// Declares a file the scanner otherwise can't see (e.g. a path only
+	// referenced inside an injected instruction string, not a `source` line).
+	// Must be checked before the comment-skip below, since the directive is
+	// itself a `#` comment.
+	const HOOK_DEP_DIRECTIVE_RE = /^\s*#\s*omt-hook-dep:\s*([\w./-]+\.sh)\s*$/;
+
 	const deps: string[] = [];
 
 	for (const line of content.split("\n")) {
+		const directiveMatch = HOOK_DEP_DIRECTIVE_RE.exec(line);
+		if (directiveMatch) {
+			const relPath = directiveMatch[1];
+			if (relPath.endsWith("_test.sh")) continue;
+
+			const absPath = path.join(hooksSourceDir, relPath);
+			try {
+				await fs.stat(absPath);
+			} catch {
+				logWarn(`Shell dependency not found, skipping: ${absPath}`);
+				continue;
+			}
+
+			if (!visited.has(absPath)) {
+				deps.push(absPath);
+				const transitive = await resolveShellDependencies(absPath, hooksSourceDir, visited);
+				deps.push(...transitive);
+			}
+			continue;
+		}
+
 		// Skip commented lines
 		const trimmed = line.trimStart();
 		if (trimmed.startsWith("#")) continue;
