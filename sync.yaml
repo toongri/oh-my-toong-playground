@@ -1,4 +1,12 @@
 path: "~"
+
+# codegraph 바이너리 전역 설치 (PATH 체크라 디렉토리 무관 → 루트에서 1회).
+# 인덱스 빌드(codegraph init)는 repo별이라 각 projects/*/sync.yaml에 남겨둠.
+provision:
+  - check: "command -v codegraph"
+    commands:
+      - "npm i -g @colbymchenry/codegraph"
+
 skills:
   items:
     - hud
