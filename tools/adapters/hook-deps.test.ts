@@ -186,6 +186,28 @@ describe("resolveShellDependencies", () => {
 		const deps = await resolveShellDependencies(entryFile, hooksDir);
 		expect(deps).toEqual([libFile]);
 	});
+
+	it("`# omt-hook-dep: <relpath>` 디렉티브 매칭 — 문자열 내부 참조라 source 정규식이 못 잡는 companion 파일도 의존성으로 반환", async () => {
+		const ledgerFile = path.join(hooksDir, "omt-ledger.sh");
+		await writeFile(ledgerFile, "#!/bin/bash\necho ledger\n");
+
+		const entryFile = path.join(hooksDir, "session-start.sh");
+		await writeFile(
+			entryFile,
+			'#!/bin/bash\n# omt-hook-dep: omt-ledger.sh\necho ".claude/hooks/omt-ledger.sh append Foo"\n',
+		);
+
+		const deps = await resolveShellDependencies(entryFile, hooksDir);
+		expect(deps).toEqual([ledgerFile]);
+	});
+
+	it("omt-hook-dep 디렉티브가 가리키는 파일이 없으면 skip (throw 없음)", async () => {
+		const entryFile = path.join(hooksDir, "session-start.sh");
+		await writeFile(entryFile, "#!/bin/bash\n# omt-hook-dep: missing-ledger.sh\n");
+
+		const deps = await resolveShellDependencies(entryFile, hooksDir);
+		expect(deps).toEqual([]);
+	});
 });
 
 // ---------------------------------------------------------------------------

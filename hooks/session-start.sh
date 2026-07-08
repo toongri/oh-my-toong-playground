@@ -78,6 +78,7 @@ LEDGER_ACUTE_INLINE=""
 # steps to the session ledger AS IT WORKS, instead of relying on a stale
 # end-of-session summary. Static text only -- no session-varying values, so
 # this stays cache-safe (prefix-invariant) across every session.
+# omt-hook-dep: omt-ledger.sh
 RECORDING_INSTRUCTION="<session-recording>\n\n[LEDGER RECORDING]\n\nRecord decisions, user corrections, and next-steps to the durable session ledger AS YOU WORK -- do not wait until the end of the session. Ledger sections are append-only, except Now, which the now subcommand replaces with the latest current-state summary.\n\nAppend content (piped via stdin) to a section:\n  <content> | .claude/hooks/omt-ledger.sh append Decisions\n  <content> | .claude/hooks/omt-ledger.sh append Pending\n\nReplace the current-state summary:\n  <content> | .claude/hooks/omt-ledger.sh now\n\nCRITICAL: record a user correction VERBATIM -- the user's exact original words, never a paraphrase or summary. Paraphrasing a correction silently loses the precise wording that made it a correction. Append verbatim corrections to the User Corrections (verbatim) section.\n\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook; omt-ledger.sh computes the ledger path internally.)\n\n</session-recording>\n\n---\n\n"
 MESSAGES="$MESSAGES$RECORDING_INSTRUCTION"
 
