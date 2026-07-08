@@ -880,6 +880,26 @@ test_wg_g_nonledger_write_with_ledger_substring_passes() {
     hg_is_allow "$out" || { echo "ASSERTION FAILED WG-G: non-ledger write with ledger substring in content should pass. Got: $out"; return 1; }
 }
 
+# (g2/F3 regression) quoted '>' INSIDE prose must not be mistaken for a redirect
+# operator. A '>' char sitting inside a single-quoted string is not a write
+# target; the guard must not arm on it. Two witnesses: an omt-ledger append whose
+# stdin payload prose contains "> session-ledger-", and a non-ledger write whose
+# echoed prose contains it. Both MUST PASS (TODO7 MUST-NOT: omt-ledger prose /
+# non-ledger compound brick 금지; AC-g write-target-vs-substring).
+test_wg_g2_quoted_gt_in_omtledger_prose_passes() {
+    local out
+    local cmd="printf 'to dump use: foo > session-ledger-x.md' | omt-ledger.sh append Decisions"
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-G2(omt-ledger prose '>'): should pass. Got: $out"; return 1; }
+}
+
+test_wg_g3_quoted_gt_in_nonledger_echo_passes() {
+    local out
+    local cmd="echo 'tip: cmd > session-ledger-x.md saves it' > /tmp/note"
+    out=$(printf '%s' "$(hg_bash_json "$cmd")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-G3(non-ledger echo prose '>'): should pass. Got: $out"; return 1; }
+}
+
 # (h) Write/Edit/MultiEdit file_path == ledger -> DENY (separate code path
 # from the Bash-command guard above; enforcer had no file_path handling before).
 test_wg_h_write_edit_multiedit_filepath_ledger_denied() {
@@ -973,6 +993,8 @@ main() {
     run_test test_wg_e9_rm_denied
     run_test test_wg_f_chain_write_denied
     run_test test_wg_g_nonledger_write_with_ledger_substring_passes
+    run_test test_wg_g2_quoted_gt_in_omtledger_prose_passes
+    run_test test_wg_g3_quoted_gt_in_nonledger_echo_passes
     run_test test_wg_h_write_edit_multiedit_filepath_ledger_denied
     run_test test_wg_i_write_edit_multiedit_filepath_nonledger_passes
 

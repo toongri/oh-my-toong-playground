@@ -80,14 +80,20 @@ _wg_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDe
 
 if [[ "$toolName" == "Bash" ]] && command -v jq > /dev/null 2>&1; then
     _wg_cmd=$(echo "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || _wg_cmd=""
-    if [[ -n "$_wg_cmd" ]] && echo "$_wg_cmd" | grep -q 'session-ledger-'; then
+    # Single-quoted spans are inert shell literals -- a `>` or a ledger path
+    # inside `'...'` is prose, never a live redirect operator or write target.
+    # Strip them before scanning so quoted prose containing "> session-ledger-"
+    # does not false-arm the guard (F3), while DOUBLE-quoted paths (`> "$f"`,
+    # a real target) are preserved and still caught.
+    _wg_scan=$(printf '%s' "$_wg_cmd" | sed "s/'[^']*'//g")
+    if [[ -n "$_wg_scan" ]] && echo "$_wg_scan" | grep -q 'session-ledger-'; then
         _wg_denied=0
         while IFS= read -r _wg_seg; do
             if _wg_ledger_target_in_segment "$_wg_seg"; then
                 _wg_denied=1
                 break
             fi
-        done < <(echo "$_wg_cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+        done < <(echo "$_wg_scan" | sed -E 's/(&&|\|\||;|\|)/\n/g')
         if [[ "$_wg_denied" -eq 1 ]]; then
             printf '%s\n' "$_wg_deny_json"
             exit 0
