@@ -57,6 +57,35 @@ fi
 
 LEDGER_FILE="$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"
 
+# Serialize the read-modify-write critical section below (skeleton bootstrap
+# through the final mv) across concurrent append/now invocations racing on
+# the same ledger file (PR #162 finding A, P2: without this, two concurrent
+# writers can last-writer-wins clobber each other's content). mkdir is
+# atomic on POSIX and portable to macOS Bash 3.2 -- flock is unavailable
+# there, unlike hooks/rules-injector/session-state-lock.ts's mkdir-based lock.
+LOCK_DIR="$LEDGER_FILE.lock"
+_lock_acquired=0
+_lock_attempt=0
+while [ "$_lock_attempt" -lt 50 ]; do
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    _lock_acquired=1
+    break
+  fi
+  _lock_attempt=$((_lock_attempt + 1))
+  sleep 0.1
+done
+
+if [ "$_lock_acquired" -ne 1 ]; then
+  echo "omt-ledger: could not acquire lock $LOCK_DIR (timeout) -- ledger left unchanged" >&2
+  exit 1
+fi
+
+# Release the lock (and clean up any tmp file) on every exit path from here
+# on -- normal success, the exit-3 fail-loud branch, and the awk-failure
+# branch all pass through this trap. TMP_FILE is unset until mktemp runs
+# below; ${TMP_FILE:-} tolerates that under `set -u`.
+trap 'rm -f "${TMP_FILE:-}" 2>/dev/null; rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+
 LEDGER_SKELETON='## Now
 ## Decisions
 ## User Corrections (verbatim)
