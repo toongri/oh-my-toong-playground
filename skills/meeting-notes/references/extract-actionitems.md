@@ -75,7 +75,7 @@ Alice: "그럼 다음 스프린트까지요"           ← due (following turn)
 Every emitted action item is one line in this exact shape:
 
 ```
-- [ ] [A{n}] {verb-first concrete task} — 담당: @{single owner | [미배정]} — 기한: {date | [기한 미정]} — 근거: "{verbatim transcript quote}"
+- [ ] [A{n}] {verb-first concrete task} — 담당: {@single owner | [미배정]} — 기한: {date | [기한 미정]} — 근거: "{verbatim transcript quote}"
 ```
 
 Append ` — confidence: low → 휴먼리뷰` when the item is hedged, implicit-owner, or otherwise uncertain. This ALWAYS includes a `담당: [미배정]` item and an unresolved generic-label owner — an ownerless or ambiguously-owned action is by definition the "unclear-owner" case that validation layer 3 (§6) routes to human review.
