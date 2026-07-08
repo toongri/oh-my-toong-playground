@@ -71,7 +71,16 @@ if [ -n "$CLAUDE_ENV_FILE" ]; then
 fi
 
 MESSAGES=""
-HANDOFF=""
+LEDGER_ACUTE_INLINE=""
+
+# Ledger recording instruction (plan TODO 3, D2/D3): every session, regardless
+# of source, reminds the agent to durable-record decisions/corrections/next-
+# steps to the session ledger AS IT WORKS, instead of relying on a stale
+# end-of-session summary. Static text only -- no session-varying values, so
+# this stays cache-safe (prefix-invariant) across every session.
+# omt-hook-dep: omt-ledger.sh
+RECORDING_INSTRUCTION="<session-recording>\n\n[LEDGER RECORDING]\n\nRecord decisions, user corrections, and next-steps to the durable session ledger AS YOU WORK -- do not wait until the end of the session. Ledger sections are append-only, except Now, which the now subcommand replaces with the latest current-state summary.\n\nAppend content (piped via stdin) to a section:\n  <content> | \"\${CLAUDE_PROJECT_DIR:-\$HOME}/.claude/hooks/omt-ledger.sh\" append Decisions\n  <content> | \"\${CLAUDE_PROJECT_DIR:-\$HOME}/.claude/hooks/omt-ledger.sh\" append Pending\n\nReplace the current-state summary:\n  <content> | \"\${CLAUDE_PROJECT_DIR:-\$HOME}/.claude/hooks/omt-ledger.sh\" now\n\nCRITICAL: record a user correction VERBATIM -- the user's exact original words, never a paraphrase or summary. Paraphrasing a correction silently loses the precise wording that made it a correction. Append verbatim corrections to the User Corrections (verbatim) section.\n\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook; omt-ledger.sh computes the ledger path internally.)\n\n</session-recording>\n\n---\n\n"
+MESSAGES="$MESSAGES$RECORDING_INSTRUCTION"
 
 # GC: reap dead state files for the 3 managed prefixes.
 # Liveness defined by hooks/lib/state-liveness.sh (ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m).
@@ -92,53 +101,24 @@ for state_file in \
   fi
 done
 
-# GC arm: reap orphaned compaction handoffs by mtime (self-contained).
-# A .md handoff has no JSON liveness fields, so it cannot be classified by
-# is_state_live / is_current_session (which strip .json + match *-state- prefixes).
-# This arm extracts the sid from the basename (dash-safe: prefix + suffix strip,
-# NOT a last-dash split), skips the current session via its OWN guard, and reaps
-# any handoff older than HANDOFF_ORPHAN_TTL_SECS. is_current_session is NOT called.
-# The TTL mirrors the terminal grace period; sourced from the state-liveness SSOT
-# (TERMINAL_TTL) rather than re-stating the literal, to avoid value drift.
-HANDOFF_ORPHAN_TTL_SECS="$TERMINAL_TTL"
-for handoff_file in "$OMT_DIR"/handoff-*.md; do
-  [ -e "$handoff_file" ] || continue
-  handoff_base="${handoff_file##*/}"
-  handoff_sid="${handoff_base#handoff-}"
-  handoff_sid="${handoff_sid%.md}"
-  [ "$handoff_sid" = "$SESSION_ID" ] && continue
-  # GNU form (-c %Y) first: GNU `stat -f` means --file-system and prints a
-  # non-numeric block to stdout for the file operand, which would poison the
-  # arithmetic below; BSD `stat -c` instead fails cleanly with no stdout. So the
-  # GNU-first order is portable, while BSD-first would capture garbage on Linux.
-  handoff_mtime=$(stat -c %Y "$handoff_file" 2>/dev/null || stat -f %m "$handoff_file" 2>/dev/null || true)
-  [ -n "$handoff_mtime" ] || continue
-  handoff_age=$(( GC_NOW - handoff_mtime ))
-  if [ "$handoff_age" -gt "$HANDOFF_ORPHAN_TTL_SECS" ]; then
-    rm -f "$handoff_file"
+# Ledger GC (plan TODO 5): session-ledger-*.md is durable-append prose, not
+# JSON, so is_state_live's .active parsing does not apply -- liveness here is
+# mtime-only, using the same ACTIVE_IDLE_TTL SSOT sourced above. The current
+# session's ledger is kept unconditionally regardless of mtime age (mirrors
+# the sid-skip pattern in the state-GC loop above), since it may be idle
+# between appends without being dead.
+for ledger_file in "$OMT_DIR"/session-ledger-*.md; do
+  [ -f "$ledger_file" ] || continue
+  ledger_sid=$(basename "$ledger_file" .md)
+  ledger_sid="${ledger_sid#session-ledger-}"
+  if [ "$ledger_sid" = "$SESSION_ID" ]; then
+    continue
   fi
-done
-
-# GC arm: reap orphaned handoff-consumed-<sid> markers (D-9 marker contract).
-# Mirrors the handoff-*.md arm above: own current-sid skip, mtime TTL reuse of
-# TERMINAL_TTL. Separate arm (not folded into the .md arm above) because the
-# .md arm's sid-extraction (#handoff-/%.md) mis-parses a .md-less marker.
-# Explicit post-glob filter, NOT a glob property: handoff-consumed-* would
-# also match a handoff-consumed-*.md file if a sid literally started
-# "consumed-"; the filter guarantees this arm never reaps a .md handoff.
-for marker_file in "$OMT_DIR"/handoff-consumed-*; do
-  [ -e "$marker_file" ] || continue
-  case "$marker_file" in
-    *.md) continue ;;
-  esac
-  marker_base="${marker_file##*/}"
-  marker_sid="${marker_base#handoff-consumed-}"
-  [ "$marker_sid" = "$SESSION_ID" ] && continue
-  marker_mtime=$(stat -c %Y "$marker_file" 2>/dev/null || stat -f %m "$marker_file" 2>/dev/null || true)
-  [ -n "$marker_mtime" ] || continue
-  marker_age=$(( GC_NOW - marker_mtime ))
-  if [ "$marker_age" -gt "$HANDOFF_ORPHAN_TTL_SECS" ]; then
-    rm -f "$marker_file"
+  ledger_mtime=$(stat -c %Y "$ledger_file" 2>/dev/null || stat -f %m "$ledger_file" 2>/dev/null || true)
+  [ -n "$ledger_mtime" ] || continue
+  ledger_age=$(( GC_NOW - ledger_mtime ))
+  if [ "$ledger_age" -ge "$ACTIVE_IDLE_TTL" ]; then
+    rm -f "$ledger_file"
   fi
 done
 
@@ -245,43 +225,98 @@ if [ -f "$OMT_DIR/qa-state-${SESSION_ID}.json" ]; then
   fi
 fi
 
-# Compaction handoff (source==compact): read the current-sid handoff into a
-# SEPARATE variable (NOT MESSAGES) so the surgical jq -Rs encoder can handle the
-# untrusted summarizer prose on its own, leaving the restore sed path untouched.
-# Delete-on-consume for inlined (small) handoffs; large handoffs are KEPT as a pointer
-# target and reaped later by the orphan-GC TTL arm.
-if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
-  HANDOFF_FILE="$OMT_DIR/handoff-${SESSION_ID}.md"
-  if [ -f "$HANDOFF_FILE" ]; then
-    HANDOFF_RAW=$(cat "$HANDOFF_FILE" 2>/dev/null)
-    # additionalContext is capped ~10k chars; the rich handoff routinely exceeds it.
-    # Small handoff: inline it and consume the baton (delete). Large handoff: inject a
-    # forced-reread POINTER and KEEP the file so the agent reads the full record on
-    # disk (the orphan-GC arm reaps it later by TTL). No inline preview -- a byte-cut
-    # of multibyte (e.g. Korean) prose could emit invalid UTF-8 into the jq -Rs encoder.
-    if [ "${#HANDOFF_RAW}" -le 7000 ]; then
-      HANDOFF="$HANDOFF_RAW"
-      rm -f "$HANDOFF_FILE"
-    else
-      # Re-arm (D-10): a re-compaction on this same sid overwrites the handoff
-      # file above; a stale consumed-marker from a PRIOR read would leave the
-      # gate disarmed for the new content. Delete it before emitting the
-      # pointer so the gate re-arms.
-      rm -f "$OMT_DIR/handoff-consumed-${SESSION_ID}"
-      HANDOFF="CRITICAL [COMPACTION HANDOFF -- full continuation record on disk]
+# Check for active deep-interview state (session-specific, plan TODO 6). The
+# di seed schema (hooks/pre-tool-enforcer.sh) is minimal -- {active,
+# started_at, last_touched_at} only, unlike prometheus/goal/qa above which
+# also carry .phase (and prometheus/goal carry .plan_path). This block
+# therefore mirrors the per-skill restore pattern in a restrained form: an
+# active-session re-read instruction only, with no "Phase:" line, since di
+# has no phase field to source one from.
+if [ -f "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" ]; then
+  DI_STATE=$(cat "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" 2>/dev/null)
 
-Your context was just compacted. The COMPLETE session handoff (original request verbatim, the full arc of decisions/rejections/Q&A, exact stopping point, and all user messages) is on disk. Run this command NOW, BEFORE ANY OTHER ACTION:
-  cat \"\$OMT_DIR/handoff-\$OMT_SESSION_ID.md\"
-(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)
-It is your only memory of this session -- do not trust your recollection of prior turns. Reconstructing it from memory is NOT reading it.
-
-CRITICAL -- three exact rationalizations precede skipping this read. None of them holds:
-| Thought | Reality |
-|---|---|
-| \"The native compaction summary already covers this\" | The summary is compacted, lossy prose -- it does not substitute for the full on-disk record |
-| \"Only the new part since the last compaction is needed\" | The full handoff is needed, not a partial slice -- prior arc and decisions are required context |
-| \"Reading the whole file wastes tokens\" | Skipping it to save tokens costs far more later, recovering context lost through repeated back-and-forth |"
+  if command -v jq &> /dev/null; then
+    DI_ACTIVE=$(echo "$DI_STATE" | jq -r '.active // false' 2>/dev/null)
+    if [ "$DI_ACTIVE" = "true" ]; then
+      MESSAGES="$MESSAGES<session-restore>\n\n[DEEP-INTERVIEW RESTORED]\n\nYou have an active deep-interview session.\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/deep-interview-active-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\nRe-read the state to determine where you left off, then continue the deep-interview session.\n\n</session-restore>\n\n---\n\n"
     fi
+  fi
+fi
+
+# Compaction recovery, option D (plan TODO 4, D1): when source==compact AND the
+# durable session ledger exists on disk, extract ONLY the two acute sections --
+# `## Now` (current state) and `## User Corrections (verbatim)` -- and inline
+# them directly into additionalContext. The bulk sections (Decisions/Pending/
+# Pointers/Learnings) are never inlined; a static pointer+instruction directs
+# the agent to `cat` the full ledger on demand. This replaces the prior
+# forced-reread compaction pointer: the PR#158 postmortem showed hiding the
+# important part behind a read is what got skipped, so the acute part is
+# inlined instead.
+#
+# The extracted acute text is untrusted ledger prose (may contain quotes,
+# backslashes, verbatim user corrections) and is kept in a SEPARATE variable
+# (NOT MESSAGES), encoded later via the surgical jq -Rs path -- mirroring how
+# the prior compaction fragment was kept out of the sed-escaped restore body.
+if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
+  LEDGER_FILE_D="$OMT_DIR/session-ledger-${SESSION_ID}.md"
+  if [ -f "$LEDGER_FILE_D" ]; then
+    # Section boundaries are the 6 known skeleton headers consumed in their fixed
+    # order (idx walks the sequence), NOT any `## ` line -- so a `## ` markdown
+    # subheader INSIDE an acute section's content does not truncate the extract
+    # (F1), and a header-shaped line injected into a bulk section is never
+    # mistaken for the real acute header (S5). A line is a structural header only
+    # when it equals the next-expected header H[idx].
+    # Escape/unescape is a shared contract with hooks/omt-ledger.sh (PR #162 P2):
+    # its writer prefixes any NEW content line that collides with a skeleton
+    # header with SENTINEL before writing, so a Now/Corrections content line
+    # that is literally "## Decisions" etc. never re-matches H[idx] as a false
+    # boundary here. unescape_line() strips exactly one SENTINEL back off KEPT
+    # acute content lines only -- never touches structural header lines. Keep
+    # SENTINEL identical to omt-ledger.sh's ("OMT_ESC::") or recovery will
+    # surface escaped text verbatim.
+    LEDGER_ACUTE=$(awk '
+      function is_skeleton_header(line,    h) {
+        for (h = 1; h <= n; h++) if (line == H[h]) return 1
+        return 0
+      }
+      function unescape_line(line,    stripped, count) {
+        if (index(line, SENTINEL) != 1) return line
+        stripped = line
+        count = 0
+        while (index(stripped, SENTINEL) == 1) {
+          stripped = substr(stripped, length(SENTINEL) + 1)
+          count++
+        }
+        if (count >= 1 && is_skeleton_header(stripped)) return substr(line, length(SENTINEL) + 1)
+        return line
+      }
+      BEGIN {
+        SENTINEL = "OMT_ESC::"
+        n = split("## Now|## Decisions|## User Corrections (verbatim)|## Pending|## Pointers|## Learnings", H, "|")
+        idx = 1
+      }
+      (idx <= n && $0 == H[idx]) {
+        idx++
+        keep = ($0 == "## Now" || $0 == "## User Corrections (verbatim)")
+        if (keep) print
+        next
+      }
+      keep { print unescape_line($0) }
+    ' "$LEDGER_FILE_D")
+
+    MESSAGES="$MESSAGES<session-restore>\n\n[LEDGER RECOVERY -- compaction]\n\nYour context was just compacted. The durable session ledger on disk is the source of truth for this session.\n\nBulk sections (Decisions/Pending/Pointers/Learnings): run this command NOW, before any other action:\n  cat \"\$OMT_DIR/session-ledger-\$OMT_SESSION_ID.md\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\nResume from the \`## Now\` section.\n\n"
+
+    # additionalContext is capped ~10k chars; reuse the existing 7000-char inline
+    # cap (see the incomplete-todos/prometheus/goal pointer sections above) as the
+    # acute-vs-pointer threshold. Over cap: skip the inline, rely on the cat pointer above.
+    if [ -n "$LEDGER_ACUTE" ] && [ "${#LEDGER_ACUTE}" -le 7000 ]; then
+      MESSAGES="${MESSAGES}[Now + User Corrections, inlined below]\n\n"
+      LEDGER_ACUTE_INLINE="$LEDGER_ACUTE"
+    else
+      MESSAGES="${MESSAGES}[Now + User Corrections exceed the inline cap -- read them via the cat command above.]\n\n"
+    fi
+
+    MESSAGES="${MESSAGES}</session-restore>\n\n---\n\n"
   fi
 fi
 
@@ -313,15 +348,15 @@ if [ "$INCOMPLETE_COUNT" -gt 0 ]; then
   MESSAGES="$MESSAGES<session-restore>\n\n[PENDING TASKS DETECTED]\n\nYou have incomplete tasks from a previous session.\nPlease continue working on these tasks.\n\n</session-restore>\n\n---\n\n"
 fi
 
-# Output message if we have any restore content OR a consumed handoff.
-if [ -n "$MESSAGES" ] || [ -n "$HANDOFF" ]; then
+# Output message if we have any restore content OR an inlined ledger acute fragment.
+if [ -n "$MESSAGES" ] || [ -n "$LEDGER_ACUTE_INLINE" ]; then
   # Escape for JSON
   MESSAGES_ESCAPED=$(echo "$MESSAGES" | sed 's/"/\\"/g')
-  # Surgically encode the untrusted handoff fragment to a JSON-safe string body:
+  # Surgically encode the untrusted ledger acute fragment to a JSON-safe string body:
   # jq -Rs emits a quoted JSON string; strip the outer quotes so it concatenates
   # onto the sed-escaped restore body inside the single additionalContext value.
-  HANDOFF_ESCAPED=$(printf '%s' "$HANDOFF" | jq -Rs . | sed '1s/^"//; $s/"$//')
-  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$MESSAGES_ESCAPED$HANDOFF_ESCAPED\"}}"
+  LEDGER_ACUTE_INLINE_ESCAPED=$(printf '%s' "$LEDGER_ACUTE_INLINE" | jq -Rs . | sed '1s/^"//; $s/"$//')
+  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$MESSAGES_ESCAPED$LEDGER_ACUTE_INLINE_ESCAPED\"}}"
 else
   echo '{"continue": true}'
 fi

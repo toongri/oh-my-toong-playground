@@ -28,140 +28,104 @@ EOF
     exit 0
 fi
 
-# Handoff-gate arm (ADR D-1/D-2/D-5..D-9): while armed, forces a single clean
-# `cat` of the compaction handoff before any other tool call. Uses
-# permissionDecision:"deny" (denies only THIS call, the turn continues) --
-# NOT the TaskOutput arm's continue:false (halts the whole turn). Do not
-# copy continue:false here; a denied tool call must not also halt the turn.
-_hg_sid="${OMT_SESSION_ID:-}"
-if [[ -n "$_hg_sid" ]] && ! echo "$_hg_sid" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
-    _hg_sid=""
-fi
-if [[ -z "$_hg_sid" ]]; then
-    _hg_stdin_sid=$(extract_json_field "session_id" "")
-    if [[ -n "$_hg_stdin_sid" ]] && echo "$_hg_stdin_sid" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
-        _hg_sid="$_hg_stdin_sid"
-    fi
-fi
-
-_hg_omt_dir="${OMT_DIR:-}"
-if [[ -z "$_hg_omt_dir" ]]; then
-    _hg_stdin_cwd=$(extract_json_field "cwd" "")
-    if [[ -n "$_hg_stdin_cwd" ]]; then
-        # BASH_SOURCE-relative sourcing for resolve_omt_dir (mirrors :40-41,:58 below)
-        _hg_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        _hg_omt_dir=$(source "$_hg_script_dir/lib/omt-dir.sh" && unset OMT_DIR && resolve_omt_dir "$_hg_stdin_cwd")
-    fi
-fi
-
-# Arming predicate: ALL must hold, else fail-open (fall through silently).
-# Writability + jq availability are part of arming, not deferred, so a
-# non-cat call under an unwritable dir / jq-less box fails OPEN, not denied
-# (no-livelock).
-_hg_armed=0
-if [[ -n "$_hg_sid" && -n "$_hg_omt_dir" ]]; then
-    _hg_H="$_hg_omt_dir/handoff-${_hg_sid}.md"
-    _hg_M="$_hg_omt_dir/handoff-consumed-${_hg_sid}"
-    if [[ -f "$_hg_H" && ! -f "$_hg_M" && -w "$_hg_omt_dir" ]] && command -v jq > /dev/null 2>&1; then
-        _hg_armed=1
-    fi
-fi
-
-if [[ "$_hg_armed" -eq 1 ]]; then
-    # Quote-aware tokenizer (no eval/bash -c/$(...) on decoded bytes): splits
-    # $1 into _hg_tokens[], stripping quote delimiters. _hg_sqdollar[k]=1
-    # marks a token whose content came from inside single quotes AND held a
-    # literal '$' -- the shell would not expand that, so substituting it here
-    # would be a false-allow silent-skip; treated as a deny signal below.
-    # _hg_unqdollar[k]=1 is the symmetric case: a token holding a '$' that was
-    # OUTSIDE any quotes. Unquoted expansion is subject to word-splitting and
-    # globbing, so an unquoted $OMT_DIR carrying a space (or glob char) would
-    # make our pure textual substitution diverge from what bash actually runs
-    # (cat receives split args, never reads the handoff) -- also a deny signal.
-    # Only a double-quoted '$' is safe (expands without split/glob), which is
-    # exactly the canonical form the deny message instructs.
-    _hg_tokenize() {
-        local s="$1" i=0 len c cur="" in_token=0 quote="" cur_sqdollar=0 cur_unqdollar=0
-        len=${#s}
-        _hg_tokens=()
-        _hg_sqdollar=()
-        _hg_unqdollar=()
-        while [[ "$i" -lt "$len" ]]; do
-            c="${s:$i:1}"
-            if [[ -n "$quote" ]]; then
-                if [[ "$c" == "$quote" ]]; then
-                    quote=""
-                else
-                    [[ "$quote" == "'" && "$c" == '$' ]] && cur_sqdollar=1
-                    cur+="$c"
-                fi
-            else
-                case "$c" in
-                    ' '|$'\t')
-                        if [[ "$in_token" -eq 1 ]]; then
-                            _hg_tokens+=("$cur")
-                            _hg_sqdollar+=("$cur_sqdollar")
-                            _hg_unqdollar+=("$cur_unqdollar")
-                            cur=""
-                            in_token=0
-                            cur_sqdollar=0
-                            cur_unqdollar=0
-                        fi
-                        ;;
-                    '"'|"'")
-                        quote="$c"
-                        in_token=1
-                        ;;
-                    *)
-                        [[ "$c" == '$' ]] && cur_unqdollar=1
-                        cur+="$c"
-                        in_token=1
-                        ;;
-                esac
-            fi
-            i=$((i + 1))
-        done
-        if [[ -n "$quote" ]]; then
-            return 1
-        fi
-        if [[ "$in_token" -eq 1 ]]; then
-            _hg_tokens+=("$cur")
-            _hg_sqdollar+=("$cur_sqdollar")
-            _hg_unqdollar+=("$cur_unqdollar")
-        fi
+# =============================================================================
+# Ledger write-guard (compaction-continuous-record plan, TODO 7, D5): a
+# best-effort append-only guard for the durable session ledger
+# ($OMT_DIR/session-ledger-<sid>.md, hooks/omt-ledger.sh). Blacklist, not
+# whitelist -- a false-arm here blocks one write (bypassable), whereas a
+# false-arm in a whitelist gate bricks every unrelated call. Arms ONLY when
+# the command's WRITE-TARGET (not any substring anywhere in the command)
+# references "session-ledger-": redirect target, tee/dd/cp/mv/sed -i/
+# truncate/rm argument. `cat`/read passes; omt-ledger.sh itself never
+# exposes the path in argv (D6) so it never arms.
+# =============================================================================
+_wg_ledger_target_in_segment() {
+    # $1 = one chain segment (already split on && || ; |). 0 = this segment's
+    # write-target references the ledger; 1 = no match.
+    local seg="$1"
+    if echo "$seg" | grep -Eq '>[[:space:]]*[^[:space:]]*session-ledger-'; then
         return 0
-    }
-
-    _hg_allow=0
-    if [[ "$toolName" == "Bash" ]]; then
-        _hg_cmd=$(echo "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || _hg_cmd=""
-        # Deny BEFORE any expansion -- the subshell/redirect/chain below is
-        # never executed, only string-matched.
-        if ! echo "$_hg_cmd" | grep -qE '[|;<>&`]|\$\(|tail|head|sed'; then
-            if _hg_tokenize "$_hg_cmd"; then
-                if [[ "${#_hg_tokens[@]}" -eq 2 && "${_hg_tokens[0]}" == "cat" \
-                    && "${_hg_sqdollar[1]:-0}" != "1" \
-                    && "${_hg_unqdollar[1]:-0}" != "1" ]]; then
-                    _hg_arg="${_hg_tokens[1]}"
-                    _hg_candidate="${_hg_arg//\$OMT_DIR/$_hg_omt_dir}"
-                    _hg_candidate="${_hg_candidate//\$OMT_SESSION_ID/$_hg_sid}"
-                    _hg_expected="$_hg_omt_dir/handoff-${_hg_sid}.md"
-                    if [[ "$_hg_candidate" == "$_hg_expected" ]]; then
-                        _hg_allow=1
-                    fi
-                fi
+    fi
+    if ! echo "$seg" | grep -q 'session-ledger-'; then
+        return 1
+    fi
+    local first_word
+    first_word=$(echo "$seg" | awk '{print $1}')
+    case "$first_word" in
+        tee|rm|truncate)
+            return 0
+            ;;
+        dd)
+            if echo "$seg" | grep -Eq 'of=[^[:space:]]*session-ledger-'; then
+                return 0
             fi
+            ;;
+        sed)
+            if echo "$seg" | grep -q -- '-i'; then
+                return 0
+            fi
+            ;;
+        cp|mv)
+            local last_word
+            last_word=$(echo "$seg" | awk '{print $NF}')
+            if echo "$last_word" | grep -q 'session-ledger-'; then
+                return 0
+            fi
+            ;;
+    esac
+    return 1
+}
+
+_wg_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the durable session ledger (session-ledger-*.md). Use hooks/omt-ledger.sh append/now instead."}}'
+
+if [[ "$toolName" == "Bash" ]] && command -v jq > /dev/null 2>&1; then
+    _wg_cmd=$(echo "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || _wg_cmd=""
+    # Single-quoted spans are inert shell literals -- but deleting them
+    # wholesale (old approach) also erased REAL quoted write targets like
+    # `rm '/tmp/session-ledger-x.md'`. Quote-aware normalization instead:
+    # drop the quote CHARACTERS but keep the quoted CONTENT visible, while
+    # masking shell-active metachars (`> < | ; &`) that appear INSIDE quotes
+    # -- so an in-quote `>` never reads as a live redirect (grep below) and
+    # an in-quote `|`/`;`/`&` never spuriously splits a segment. Metachars
+    # OUTSIDE quotes (real redirects/splitters) and DOUBLE-quoted paths
+    # (`> "$f"`) pass through unchanged, exactly as before.
+    _wg_scan=$(printf '%s' "$_wg_cmd" | awk '
+        BEGIN { sq = sprintf("%c", 39) }
+        {
+            n = length($0)
+            inq = 0
+            out = ""
+            for (i = 1; i <= n; i++) {
+                c = substr($0, i, 1)
+                if (c == sq) {
+                    inq = 1 - inq
+                    continue
+                }
+                if (inq && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
+                    out = out " "
+                    continue
+                }
+                out = out c
+            }
+            print out
+        }')
+    if [[ -n "$_wg_scan" ]] && echo "$_wg_scan" | grep -q 'session-ledger-'; then
+        _wg_denied=0
+        while IFS= read -r _wg_seg; do
+            if _wg_ledger_target_in_segment "$_wg_seg"; then
+                _wg_denied=1
+                break
+            fi
+        done < <(echo "$_wg_scan" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+        if [[ "$_wg_denied" -eq 1 ]]; then
+            printf '%s\n' "$_wg_deny_json"
+            exit 0
         fi
     fi
-
-    if [[ "$_hg_allow" -eq 1 ]]; then
-        # Marker write is EXCLUSIVE to this branch -- never a shared prologue.
-        : > "$_hg_M" 2>/dev/null || true
-        # Fall through to the existing allow path below.
-    else
-        # permissionDecision:"deny" (deny-this-one-call) -- NOT continue:false
-        # (halt-turn); see the header comment above.
-        printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Read the full compaction handoff FIRST — run: cat \"$OMT_DIR/handoff-$OMT_SESSION_ID.md\" (no truncation, no other tool until then)"}}'
+elif [[ "$toolName" == "Write" || "$toolName" == "Edit" || "$toolName" == "MultiEdit" ]] && command -v jq > /dev/null 2>&1; then
+    _wg_fp=$(echo "$input" | jq -r '.tool_input.file_path // empty' 2>/dev/null) || _wg_fp=""
+    if [[ -n "$_wg_fp" ]] && echo "$_wg_fp" | grep -q 'session-ledger-'; then
+        printf '%s\n' "$_wg_deny_json"
         exit 0
     fi
 fi

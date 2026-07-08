@@ -976,164 +976,8 @@ EOF
 }
 
 # =============================================================================
-# Tests: T2 — source==compact handoff injection branch + surgical jq -Rs encoder
+# Tests: encoding invariants (retained across the TODO 8 handoff removal)
 # =============================================================================
-
-# AC-T2.1: source==compact + adversarial handoff (quote, backslash, real newline,
-# tab, \x01 control char) → stdout is valid JSON and additionalContext round-trips
-# the handoff text.
-test_session_start_compact_handoff_adversarial_valid_json() {
-    local sid="test-compact-adversarial"
-
-    # Build a handoff with every hazardous byte: " \ <real newline> <tab> <\x01>
-    printf 'HANDOFF_START quote=" back=\\ tab=\tnext-line\nctrl=\001 HANDOFF_END' \
-        > "$TEST_OMT_DIR/handoff-${sid}.md"
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    # (a) stdout must be valid JSON
-    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
-        echo "ASSERTION FAILED: hook stdout is not valid JSON for adversarial handoff"
-        echo "  Output: ${output:0:500}"
-        return 1
-    fi
-
-    # (b) the parsed additionalContext must contain the handoff text round-tripped
-    local ctx
-    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-    if ! echo "$ctx" | grep -qF 'HANDOFF_START'; then
-        echo "ASSERTION FAILED: additionalContext should contain handoff head HANDOFF_START"
-        echo "  additionalContext: ${ctx:0:500}"
-        return 1
-    fi
-    if ! echo "$ctx" | grep -qF 'HANDOFF_END'; then
-        echo "ASSERTION FAILED: additionalContext should contain handoff tail HANDOFF_END"
-        echo "  additionalContext: ${ctx:0:500}"
-        return 1
-    fi
-    # The literal quote/backslash must survive the round-trip
-    if ! echo "$ctx" | grep -qF 'quote="'; then
-        echo "ASSERTION FAILED: additionalContext should preserve the literal quote"
-        return 1
-    fi
-    if ! echo "$ctx" | grep -qF 'back=\'; then
-        echo "ASSERTION FAILED: additionalContext should preserve the literal backslash"
-        return 1
-    fi
-    return 0
-}
-
-# AC-T2.2 (regression): handoff present AND a prometheus restore present →
-# BOTH appear in additionalContext; stdout valid JSON; [PROMETHEUS RESTORED]
-# marker is byte-present.
-test_session_start_compact_handoff_and_prometheus_restore_coexist() {
-    local sid="test-compact-coexist"
-
-    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
-{
-  "active": true,
-  "phase": "STAGE_B",
-  "plan_path": "",
-  "resume_summary": "Restore body present alongside handoff."
-}
-EOF
-
-    printf 'HANDOFF_COEXIST_BODY' > "$TEST_OMT_DIR/handoff-${sid}.md"
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    # stdout must be valid JSON
-    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
-        echo "ASSERTION FAILED: combined restore+handoff stdout is not valid JSON"
-        echo "  Output: ${output:0:500}"
-        return 1
-    fi
-
-    # The restore marker must be byte-present in the raw stdout
-    assert_output_contains "$output" "\[PROMETHEUS RESTORED\]" "combined output should keep the restore marker" || return 1
-
-    # Both restore content and handoff content must be in the parsed additionalContext
-    local ctx
-    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-    if ! echo "$ctx" | grep -qF 'PROMETHEUS RESTORED'; then
-        echo "ASSERTION FAILED: additionalContext should contain the prometheus restore"
-        return 1
-    fi
-    if ! echo "$ctx" | grep -qF 'HANDOFF_COEXIST_BODY'; then
-        echo "ASSERTION FAILED: additionalContext should contain the handoff body"
-        return 1
-    fi
-    return 0
-}
-
-# AC-T2.3: after a compact start, the handoff file is deleted (delete-on-consume).
-test_session_start_compact_handoff_deleted_on_consume() {
-    local sid="test-compact-consume"
-    local handoff_file="$TEST_OMT_DIR/handoff-${sid}.md"
-
-    printf 'CONSUME_ME' > "$handoff_file"
-
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    if [ -f "$handoff_file" ]; then
-        echo "ASSERTION FAILED: handoff file should be deleted on consume but still exists"
-        return 1
-    fi
-    return 0
-}
-
-# AC-T2.4: source ∈ {startup,resume,clear} → handoff is NOT read; stdout is
-# byte-identical to the no-handoff baseline run for the same state fixtures.
-test_session_start_non_compact_source_ignores_handoff() {
-    local sid="test-noncompact-source"
-
-    # A prometheus restore fixture so there is non-empty MESSAGES output to compare.
-    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
-{
-  "active": true,
-  "phase": "STAGE_B",
-  "plan_path": "",
-  "resume_summary": "Baseline restore body."
-}
-EOF
-
-    # Baseline: no handoff file present, source=startup.
-    local baseline
-    baseline=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "startup"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    # Now plant a handoff file that MUST be ignored by non-compact sources.
-    printf 'SHOULD_NOT_APPEAR_NONCOMPACT' > "$TEST_OMT_DIR/handoff-${sid}.md"
-
-    local src
-    for src in startup resume clear; do
-        local out
-        out=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "'"$src"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-        # Handoff content must never appear
-        if echo "$out" | grep -qF 'SHOULD_NOT_APPEAR_NONCOMPACT'; then
-            echo "ASSERTION FAILED: source=$src must NOT read the handoff file"
-            echo "  Output: ${out:0:500}"
-            return 1
-        fi
-
-        # Byte-identical to the no-handoff baseline
-        if [ "$out" != "$baseline" ]; then
-            echo "ASSERTION FAILED: source=$src output should be byte-identical to no-handoff baseline"
-            echo "  baseline: ${baseline:0:500}"
-            echo "  got:      ${out:0:500}"
-            return 1
-        fi
-    done
-
-    # The handoff file must remain untouched (non-compact sources never consume it)
-    if [ ! -f "$TEST_OMT_DIR/handoff-${sid}.md" ]; then
-        echo "ASSERTION FAILED: non-compact source must NOT delete the handoff file"
-        return 1
-    fi
-    return 0
-}
 
 # AC-T2.5: source grep — the restore sed encoder line is present and unmodified,
 # the per-field escapers at the historical lines are unchanged, and the handoff
@@ -1159,263 +1003,6 @@ test_session_start_encoder_invariants_in_source() {
     # Handoff is encoded via jq -Rs
     if ! grep -qE 'jq -Rs' "$SCRIPT_DIR/session-start.sh"; then
         echo "ASSERTION FAILED: handoff must be encoded via 'jq -Rs'"
-        return 1
-    fi
-    return 0
-}
-
-# AC-T2.6: source==compact but NO handoff file → stdout equals the restore-only
-# JSON (no error, valid JSON, identical to the same-state run without compact).
-test_session_start_compact_no_handoff_equals_restore_only() {
-    local sid="test-compact-nofile"
-
-    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
-{
-  "active": true,
-  "phase": "STAGE_B",
-  "plan_path": "",
-  "resume_summary": "Restore-only body, no handoff."
-}
-EOF
-
-    # compact source with NO handoff file present
-    local out_compact
-    out_compact=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    # must be valid JSON
-    if ! echo "$out_compact" | jq -e . > /dev/null 2>&1; then
-        echo "ASSERTION FAILED: compact-with-no-handoff stdout is not valid JSON"
-        echo "  Output: ${out_compact:0:500}"
-        return 1
-    fi
-
-    # restore-only baseline (startup source, same state, no handoff)
-    local out_restore_only
-    out_restore_only=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "startup"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    if [ "$out_compact" != "$out_restore_only" ]; then
-        echo "ASSERTION FAILED: compact-with-no-handoff must equal restore-only output"
-        echo "  restore-only: ${out_restore_only:0:500}"
-        echo "  compact:      ${out_compact:0:500}"
-        return 1
-    fi
-    return 0
-}
-
-# =============================================================================
-# Tests: re-arm deletion (ADR D-10) — a re-compaction on the same sid must
-# delete a stale handoff-consumed-<sid> marker BEFORE emitting a new
-# large-handoff pointer, so the gate re-arms for the fresh handoff.
-# =============================================================================
-
-# AC19: re-arm positive — stale marker present + a new >7000-char handoff on
-# the SAME sid, source=compact → the stale marker is deleted.
-test_session_start_rearm_deletes_stale_marker_on_new_large_handoff() {
-    local sid="rearm-positive"
-    local marker="$TEST_OMT_DIR/handoff-consumed-${sid}"
-    local handoff_file="$TEST_OMT_DIR/handoff-${sid}.md"
-
-    touch "$marker"
-    python3 -c "print('X' * 7200)" > "$handoff_file" 2>/dev/null \
-        || yes 'LARGE_HANDOFF_FILLER_LINE_1234567890_ABCDEFGHIJ' 2>/dev/null | head -c 7200 > "$handoff_file"
-
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' \
-        | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    if [ -f "$marker" ]; then
-        echo "ASSERTION FAILED (AC19): stale handoff-consumed marker should be deleted on re-arm but still exists"
-        return 1
-    fi
-    return 0
-}
-
-# AC20: re-arm negative — stale marker present, source=startup and no new
-# handoff → the marker is untouched (survives).
-test_session_start_rearm_marker_survives_without_new_handoff() {
-    local sid="rearm-negative"
-    local marker="$TEST_OMT_DIR/handoff-consumed-${sid}"
-
-    touch "$marker"
-
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "startup"}' \
-        | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    if [ ! -f "$marker" ]; then
-        echo "ASSERTION FAILED (AC20): handoff-consumed marker should survive when no new large handoff is emitted"
-        return 1
-    fi
-    return 0
-}
-
-# =============================================================================
-# Tests: T3 — self-contained orphan-handoff GC arm (ADR D-8)
-# Globs $OMT_DIR/handoff-*.md, dash-safe sid extraction, own current-sid guard,
-# mtime age > HANDOFF_ORPHAN_TTL_SECS → rm -f. Does NOT call/modify
-# is_current_session; leaves the *.json state GC unchanged.
-# =============================================================================
-
-# Helper: back-date a file's mtime by N seconds (BSD touch -t; GNU touch -d).
-# Minute granularity is acceptable for the 60s-vs-2000s distances tested here.
-_backdate_mtime_secs() {
-    local file="$1"
-    local secs="$2"
-    local mins=$(( (secs + 59) / 60 ))
-    local stamp
-    stamp=$(date -j -v-"${mins}"M "+%Y%m%d%H%M" 2>/dev/null \
-        || date -d "${secs} seconds ago" "+%Y%m%d%H%M" 2>/dev/null \
-        || echo "200001010000")
-    touch -t "$stamp" "$file" 2>/dev/null \
-        || touch -d "${secs} seconds ago" "$file" 2>/dev/null \
-        || true
-}
-
-# AC-T3.1: handoff-<otherUUID>.md with mtime 2000s old → reaped.
-test_gc_handoff_orphan_old_reaped() {
-    local orphan="$TEST_OMT_DIR/handoff-11111111-2222-3333-4444-555555555555.md"
-    printf 'stale handoff body' > "$orphan"
-    _backdate_mtime_secs "$orphan" 2000
-
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "current-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    if [ -f "$orphan" ]; then
-        echo "ASSERTION FAILED: orphan handoff (2000s old, other session) should be reaped but still exists"
-        return 1
-    fi
-    return 0
-}
-
-# AC-T3.2: handoff-<currentSID>.md (current session) → NOT reaped even if old.
-test_gc_handoff_current_session_survives_when_old() {
-    local sid="current-session"
-    local current="$TEST_OMT_DIR/handoff-${sid}.md"
-    printf 'current session handoff' > "$current"
-    _backdate_mtime_secs "$current" 3000
-
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    if [ ! -f "$current" ]; then
-        echo "ASSERTION FAILED: current-session handoff should survive GC even when old (own current-sid guard)"
-        return 1
-    fi
-    return 0
-}
-
-# AC-T3.3: handoff-<otherUUID>.md with mtime 60s old → NOT reaped (under TTL).
-test_gc_handoff_orphan_young_survives() {
-    local young="$TEST_OMT_DIR/handoff-99999999-8888-7777-6666-555555555555.md"
-    printf 'young handoff body' > "$young"
-    _backdate_mtime_secs "$young" 60
-
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "current-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    if [ ! -f "$young" ]; then
-        echo "ASSERTION FAILED: young orphan handoff (60s old) should survive GC (under 1800s TTL)"
-        return 1
-    fi
-    return 0
-}
-
-# AC-T3.4: sid extraction strips 'handoff-' prefix + '.md' suffix exactly; a sid
-# containing dashes is matched as the current session (no last-'-' split bug).
-test_gc_handoff_dash_sid_matched_exactly() {
-    local sid="89bf1e27-a19c-48a1-9950-aaaaaaaaaaaa"
-    local current="$TEST_OMT_DIR/handoff-${sid}.md"
-    printf 'dash-sid current handoff' > "$current"
-    _backdate_mtime_secs "$current" 3000
-
-    # Run AS this dash-containing session — the file is the current session's,
-    # so a correct prefix+suffix strip recognizes it and skips the reap.
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    if [ ! -f "$current" ]; then
-        echo "ASSERTION FAILED: dash-containing current sid should be matched exactly and skipped (no last-'-' split)"
-        return 1
-    fi
-    return 0
-}
-
-# AC-T3.5: the handoff GC arm is self-contained — it does NOT call is_current_session
-# (it uses its own dash-safe prefix/suffix sid extraction instead). Inspecting the
-# arm's source region directly asserts that invariant without depending on an
-# origin/main ref, so it neither false-fails in checkouts lacking the ref nor breaks
-# when state-liveness.sh is legitimately edited for an unrelated reason.
-test_gc_handoff_arm_does_not_call_is_current_session() {
-    local arm
-    arm=$(awk '/^for handoff_file in /{f=1} f{print} f&&/^done/{exit}' "$SCRIPT_DIR/session-start.sh")
-    if [ -z "$arm" ]; then
-        echo "ASSERTION FAILED: could not locate the handoff GC arm loop in session-start.sh"
-        return 1
-    fi
-    if printf '%s\n' "$arm" | grep -q 'is_current_session'; then
-        echo "ASSERTION FAILED: handoff GC arm must not call is_current_session (must use its own sid guard)"
-        return 1
-    fi
-    return 0
-}
-
-# AC-T3.6: the existing *.json state GC behavior is unchanged — a stale other-session
-# *.json state is still reaped while an old handoff is also reaped in the same run.
-test_gc_handoff_arm_does_not_disturb_json_state_gc() {
-    local stale_ts
-    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
-    local json_file="$TEST_OMT_DIR/goal-state-other-stale.json"
-    cat > "$json_file" << EOF
-{
-  "active": true,
-  "phase": "pursuing",
-  "last_touched_at": "${stale_ts}",
-  "outcome": "stale goal",
-  "iteration": 1
-}
-EOF
-    local orphan="$TEST_OMT_DIR/handoff-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.md"
-    printf 'stale handoff' > "$orphan"
-    _backdate_mtime_secs "$orphan" 2000
-
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "current-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    # The stale *.json state must still be reaped (existing GC unchanged).
-    if [ -f "$json_file" ]; then
-        echo "ASSERTION FAILED: stale other-session *.json state should still be reaped (existing GC must be unchanged)"
-        return 1
-    fi
-    # And the orphan handoff reaped by the new arm.
-    if [ -f "$orphan" ]; then
-        echo "ASSERTION FAILED: orphan handoff should be reaped alongside the *.json GC"
-        return 1
-    fi
-    return 0
-}
-
-# =============================================================================
-# Tests: marker-GC arm (ADR D-11a) — reaps orphaned handoff-consumed-* markers
-# by TTL, self-contained (own current-sid skip), and must NEVER touch a .md
-# handoff even if a marker's sid literally starts "consumed-" style basenames.
-# =============================================================================
-
-# AC22: marker-GC isolation — a past-TTL handoff-consumed-<OLD-SID> marker is
-# reaped, WHILE a co-present YOUNG non-current handoff-<OTHER-SID>.md (under
-# TTL) survives untouched by the marker-GC arm.
-test_gc_marker_consumed_orphan_reaped_young_handoff_survives() {
-    local current_sid="marker-gc-current"
-    local old_marker="$TEST_OMT_DIR/handoff-consumed-old-marker-sid"
-    local young_handoff="$TEST_OMT_DIR/handoff-other-young-sid.md"
-
-    touch "$old_marker"
-    _backdate_mtime_secs "$old_marker" 2000
-
-    printf 'young non-current handoff body' > "$young_handoff"
-    _backdate_mtime_secs "$young_handoff" 60
-
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$current_sid"'"}' \
-        | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    if [ -f "$old_marker" ]; then
-        echo "ASSERTION FAILED (AC22): past-TTL handoff-consumed marker should be reaped but still exists"
-        return 1
-    fi
-    if [ ! -f "$young_handoff" ]; then
-        echo "ASSERTION FAILED (AC22): young non-current .md handoff must SURVIVE the marker-GC arm"
         return 1
     fi
     return 0
@@ -1781,99 +1368,6 @@ test_cache_safe_incomplete_count_existence_only() {
     fi
 }
 
-# AC5: large handoff (>7000 chars) emits UNEXPANDED cat pointer; no expanded abs path;
-#      run-now retained; large-handoff file PRESERVED; round-trip cat returns non-empty.
-test_cache_safe_handoff_large_pointer() {
-    local sid="handoff-large-ptr"
-    local handoff_file="$TEST_OMT_DIR/handoff-${sid}.md"
-
-    # Create >7000-char handoff file
-    yes 'LARGE_HANDOFF_FILLER_LINE_1234567890_ABCDEFGHIJ' 2>/dev/null | head -c 7200 > "$handoff_file" 2>/dev/null || true
-    # Fallback if yes/head -c not available
-    if [ ! -s "$handoff_file" ] || [ "$(wc -c < "$handoff_file" 2>/dev/null || echo 0)" -lt 7001 ]; then
-        python3 -c "print('X' * 7200)" > "$handoff_file" 2>/dev/null || true
-    fi
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    # (i) stdout valid JSON
-    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
-        echo "ASSERTION FAILED (AC5): hook stdout must be valid JSON"
-        echo "  output: ${output:0:500}"
-        return 1
-    fi
-
-    local ctx
-    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-
-    # (i) UNEXPANDED cat pointer for handoff
-    if ! echo "$ctx" | grep -qF 'cat "$OMT_DIR/handoff-$OMT_SESSION_ID.md"'; then
-        echo "ASSERTION FAILED (AC5-i): additionalContext must contain UNEXPANDED handoff cat pointer"
-        echo "  ctx: ${ctx:0:600}"
-        return 1
-    fi
-
-    # (i) NO expanded absolute path — check for the actual handoff_file path
-    if echo "$ctx" | grep -qF "${handoff_file}"; then
-        echo "ASSERTION FAILED (AC5-i): large-handoff must NOT emit expanded absolute path"
-        echo "  ctx: ${ctx:0:600}"
-        return 1
-    fi
-
-    # (ii) run-now imperative retained
-    if ! echo "$ctx" | grep -qiE 'now, before any other action'; then
-        echo "ASSERTION FAILED (AC5-ii): run-now imperative must be retained beside pointer"
-        return 1
-    fi
-
-    # (AC21) Red-flags hardening: CRITICAL marker + the 3 named rationalizations
-    if ! echo "$ctx" | grep -qF 'CRITICAL'; then
-        echo "ASSERTION FAILED (AC21): pointer must contain a CRITICAL marker"
-        return 1
-    fi
-    if ! echo "$ctx" | grep -qiF 'native compaction summary'; then
-        echo "ASSERTION FAILED (AC21): pointer must name the 'native compaction summary' rationalization"
-        return 1
-    fi
-    if ! echo "$ctx" | grep -qiF 'only the new part'; then
-        echo "ASSERTION FAILED (AC21): pointer must name the 'only the new part' rationalization"
-        return 1
-    fi
-    if ! echo "$ctx" | grep -qiF 'save tokens'; then
-        echo "ASSERTION FAILED (AC21): pointer must name the 'save tokens' rationalization"
-        return 1
-    fi
-    # (AC21) raw sid must never appear (session-invariant static bytes)
-    if echo "$ctx" | grep -qF "$sid"; then
-        echo "ASSERTION FAILED (AC21): pointer must NOT contain the raw session id"
-        return 1
-    fi
-
-    # (iii) large-handoff file PRESERVED (not deleted)
-    if [ ! -f "$handoff_file" ]; then
-        echo "ASSERTION FAILED (AC5-iii): large handoff file must be preserved (delete fires only on <=7000 path)"
-        return 1
-    fi
-
-    # (iii) round-trip: source env file and execute cat
-    local tmp_env
-    tmp_env=$(mktemp)
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' \
-        | CLAUDE_ENV_FILE="$tmp_env" "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    # shellcheck source=/dev/null
-    source "$tmp_env"
-    rm -f "$tmp_env"
-
-    local cat_result
-    cat_result=$(cat "$OMT_DIR/handoff-$OMT_SESSION_ID.md" 2>/dev/null) || true
-    if [ -z "$cat_result" ]; then
-        echo "ASSERTION FAILED (AC5-iii): round-trip cat of large handoff must return non-empty"
-        return 1
-    fi
-}
-
 # AC6: prometheus restore output is byte-identical across two different session IDs,
 # even when resume_summary differs — proving resume_summary is not embedded in output.
 test_cache_safe_prom_session_invariant() {
@@ -1926,6 +1420,679 @@ test_cache_safe_goal_session_invariant() {
         echo "  out_b: ${out_b:0:500}"
         return 1
     fi
+}
+
+# =============================================================================
+# Tests: Ledger recording instruction — plan TODO 3 (D2/D3)
+# Every session, regardless of source, session-start.sh must inject a static
+# reminder that decisions/corrections/next-steps get appended to the durable
+# session ledger via omt-ledger.sh AS THEY HAPPEN, with a verbatim mandate for
+# user corrections. No fixtures needed -- this must fire on a bare session.
+# =============================================================================
+
+# AC-T3.1: fresh session (no state fixtures at all), for every source value,
+# emits the ledger recording instruction + both omt-ledger call examples.
+test_session_start_ledger_recording_every_source() {
+    local src
+    for src in startup resume compact clear; do
+        local output
+        output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "ledger-src-test", "source": "'"$src"'"}' \
+            | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+        if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+            echo "ASSERTION FAILED: source=$src stdout must be valid JSON"
+            echo "  Output: ${output:0:500}"
+            return 1
+        fi
+
+        local ctx
+        ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+        if ! echo "$ctx" | grep -qF 'LEDGER RECORDING'; then
+            echo "ASSERTION FAILED: source=$src must emit the LEDGER RECORDING instruction"
+            echo "  ctx: ${ctx:0:600}"
+            return 1
+        fi
+        if ! echo "$ctx" | grep -qF 'omt-ledger.sh" append'; then
+            echo "ASSERTION FAILED: source=$src must include an omt-ledger.sh append call example"
+            echo "  ctx: ${ctx:0:600}"
+            return 1
+        fi
+        if ! echo "$ctx" | grep -qF 'omt-ledger.sh" now'; then
+            echo "ASSERTION FAILED: source=$src must include an omt-ledger.sh now call example"
+            echo "  ctx: ${ctx:0:600}"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# AC-T3.2: the instruction names the verbatim mandate for user corrections (D3) --
+# grep for the substance, not exact wording.
+test_session_start_ledger_recording_verbatim_mandate() {
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "ledger-verbatim-test"}' \
+        | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if ! echo "$ctx" | grep -qiF 'verbatim'; then
+        echo "ASSERTION FAILED: ledger recording instruction must mandate verbatim correction capture"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qiF 'paraphrase'; then
+        echo "ASSERTION FAILED: ledger recording instruction must forbid paraphrasing corrections"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.3: session-varying values must never leak into the recording instruction --
+# raw session ID absent, and the pointer vars stay UNEXPANDED literal text.
+test_session_start_ledger_recording_is_static() {
+    local sid="ledger-static-zzqqxx"
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' \
+        | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if echo "$ctx" | grep -qF "$sid"; then
+        echo "ASSERTION FAILED: ledger recording instruction must not leak the raw session id"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF '$OMT_SESSION_ID'; then
+        echo "ASSERTION FAILED: ledger recording instruction must reference the UNEXPANDED \$OMT_SESSION_ID pointer"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.4 (PR #162 Codex finding B, P2): the omt-ledger.sh call examples must be
+# rooted via the CLAUDE_PROJECT_DIR/HOME literal, not a bare cwd-relative path --
+# a bare `.claude/hooks/omt-ledger.sh` breaks when Claude is launched from a
+# project subdirectory. The rooted literal must stay UNEXPANDED (cache-safe:
+# no machine-specific /Users or /home path leaks into the injected prefix).
+test_session_start_ledger_recording_rooted_path() {
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "ledger-rooted-test"}' \
+        | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if echo "$ctx" | grep -qF ' | .claude/hooks/omt-ledger.sh'; then
+        echo "ASSERTION FAILED: omt-ledger.sh call examples must not use the bare cwd-relative path"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh'; then
+        echo "ASSERTION FAILED: omt-ledger.sh call examples must be rooted via the unexpanded CLAUDE_PROJECT_DIR/HOME literal"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" append Decisions'; then
+        echo "ASSERTION FAILED: rooted append-Decisions example missing"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" append Pending'; then
+        echo "ASSERTION FAILED: rooted append-Pending example missing"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" now'; then
+        echo "ASSERTION FAILED: rooted now example missing"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if echo "$ctx" | grep -qE '/Users/|/home/'; then
+        echo "ASSERTION FAILED: rooted path must stay unexpanded -- no machine-specific /Users or /home path may leak into the injected prefix"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: Ledger recovery option D — plan TODO 4 (D1)
+# source==compact AND a session ledger exists on disk -> inline ONLY the acute
+# sections (## Now, ## User Corrections (verbatim)) into additionalContext;
+# bulk sections (Decisions/Pending/Pointers/Learnings) get a pointer+instruction,
+# never inline content. Supersedes the removed handoff-inline mechanism (TODO 8).
+# =============================================================================
+
+# AC: source=compact + ledger with content in every section -> Now and
+# Corrections are inlined, the 4 bulk sections are NOT, and the bulk cat
+# pointer is present.
+test_session_start_ledger_recovery_inlines_now_and_corrections() {
+    local sid="ledger-recovery-positive"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+NOW_SENTINEL_q1w2e3
+
+## Decisions
+DECISIONS_SENTINEL_should_not_appear
+
+## User Corrections (verbatim)
+CORR_SENTINEL_a1b2c3
+
+## Pending
+PENDING_SENTINEL_should_not_appear
+
+## Pointers
+POINTERS_SENTINEL_should_not_appear
+
+## Learnings
+LEARNINGS_SENTINEL_should_not_appear
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: ledger-recovery stdout must be valid JSON"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if ! echo "$ctx" | grep -qF 'NOW_SENTINEL_q1w2e3'; then
+        echo "ASSERTION FAILED: additionalContext must inline the ## Now section content"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF 'CORR_SENTINEL_a1b2c3'; then
+        echo "ASSERTION FAILED: additionalContext must inline the ## User Corrections (verbatim) section content"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+
+    local bulk_sentinel
+    for bulk_sentinel in DECISIONS_SENTINEL_should_not_appear PENDING_SENTINEL_should_not_appear POINTERS_SENTINEL_should_not_appear LEARNINGS_SENTINEL_should_not_appear; do
+        if echo "$ctx" | grep -qF "$bulk_sentinel"; then
+            echo "ASSERTION FAILED: bulk section content ($bulk_sentinel) must NOT be inlined"
+            echo "  ctx: ${ctx:0:600}"
+            return 1
+        fi
+    done
+
+    if ! echo "$ctx" | grep -qF 'cat "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"'; then
+        echo "ASSERTION FAILED: additionalContext must contain the ledger cat pointer for the bulk sections"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# AC: source=compact, no ledger file on disk -> harmless, no inline block, valid JSON.
+test_session_start_ledger_recovery_no_ledger_harmless() {
+    local sid="ledger-recovery-noledger"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: source=compact with no ledger must still produce valid JSON"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null || echo "")
+
+    if echo "$ctx" | grep -qF 'LEDGER RECOVERY'; then
+        echo "ASSERTION FAILED: no ledger file present, the LEDGER RECOVERY block must not appear"
+        return 1
+    fi
+    return 0
+}
+
+# AC: acute (## Now + ## User Corrections) content over the 7000-char inline
+# cap -> NOT inlined; the bulk cat pointer is emitted as the fallback instead.
+test_session_start_ledger_recovery_acute_over_cap_pointer_fallback() {
+    local sid="ledger-acute-overcap"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    local big_now
+    big_now=$(python3 -c "print('x' * 7200)" 2>/dev/null) || true
+    if [ -z "$big_now" ]; then
+        big_now=$(yes x 2>/dev/null | tr -d '\n' | head -c 7200)
+    fi
+
+    {
+        echo "## Now"
+        echo "BIGNOW_SENTINEL_${big_now}"
+        echo ""
+        echo "## Decisions"
+        echo "## User Corrections (verbatim)"
+        echo "## Pending"
+        echo "## Pointers"
+        echo "## Learnings"
+    } > "$ledger_file"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: acute-over-cap stdout must be valid JSON"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if echo "$ctx" | grep -qF 'BIGNOW_SENTINEL'; then
+        echo "ASSERTION FAILED: acute content over the 7000-char cap must NOT be inlined"
+        return 1
+    fi
+
+    if ! echo "$ctx" | grep -qF 'cat "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"'; then
+        echo "ASSERTION FAILED: acute-over-cap must fall back to the ledger cat pointer"
+        echo "  ctx: ${ctx:0:500}"
+        return 1
+    fi
+    return 0
+}
+
+# AC: recovery D only fires when source==compact; other sources with the SAME
+# ledger fixture present must never inline its content.
+test_session_start_ledger_recovery_only_on_compact_source() {
+    local sid="ledger-recovery-noncompact"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+NOW_ONLY_COMPACT_SENTINEL
+
+## Decisions
+## User Corrections (verbatim)
+## Pending
+## Pointers
+## Learnings
+EOF
+
+    local src
+    for src in startup resume clear; do
+        local output
+        output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "'"$src"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+        if echo "$output" | grep -qF 'NOW_ONLY_COMPACT_SENTINEL'; then
+            echo "ASSERTION FAILED: source=$src must NOT trigger ledger recovery inline"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# AC (F1 regression): acute section content that itself contains a `## `
+# markdown line must survive recovery inline in full. The extractor must treat
+# ONLY the 6 known skeleton headers as section boundaries, not any `## ` line,
+# otherwise a subheader inside a Now/Corrections summary silently truncates the
+# inline at that line -- defeating the whole point of option D (acute inlined so
+# it survives compaction).
+test_session_start_ledger_recovery_preserves_hash_line_in_acute() {
+    local sid="ledger-recovery-hashline"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+Working on the recovery bug.
+## Investigation notes
+POST_SUBHEADER_SENTINEL_must_survive
+## Decisions
+DECISIONS_SENTINEL_should_not_appear
+## User Corrections (verbatim)
+## Pending
+## Pointers
+## Learnings
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if ! echo "$ctx" | grep -qF 'POST_SUBHEADER_SENTINEL_must_survive'; then
+        echo "ASSERTION FAILED: Now content after an inner '## ' line must survive recovery inline (not be truncated)"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    # The real Decisions content is a bulk section and must still be excluded.
+    if echo "$ctx" | grep -qF 'DECISIONS_SENTINEL_should_not_appear'; then
+        echo "ASSERTION FAILED: bulk Decisions content must not leak into the acute inline"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# AC (S5 regression): a bulk section (Decisions) whose content contains a line
+# equal to a real acute header (`## Now`) must NOT have that injected content
+# extracted into the acute inline. Structural section identity, not substring.
+test_session_start_ledger_recovery_no_header_injection_from_bulk() {
+    local sid="ledger-recovery-inject"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+REAL_NOW_SENTINEL
+## Decisions
+real decision
+## Now
+INJECTED_FROM_BULK_should_not_appear
+## User Corrections (verbatim)
+## Pending
+## Pointers
+## Learnings
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if ! echo "$ctx" | grep -qF 'REAL_NOW_SENTINEL'; then
+        echo "ASSERTION FAILED: the real Now content must be inlined"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    if echo "$ctx" | grep -qF 'INJECTED_FROM_BULK_should_not_appear'; then
+        echo "ASSERTION FAILED: a '## Now' line injected inside a bulk section must NOT leak into the acute inline"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Test (PR #162 P2 regression): a Now-section content line that collides with
+# a skeleton header string is written to disk ESCAPED by omt-ledger.sh (one
+# "OMT_ESC::" sentinel prefix -- see hooks/omt-ledger.sh). The recovery reader
+# here must unescape exactly that sentinel back off KEPT acute content lines,
+# so the literal "## Decisions" line survives, in order, between its
+# neighbors -- Now is fully inlined, not truncated -- while a real bulk
+# section is still excluded and no raw sentinel leaks into the output.
+# =============================================================================
+
+test_session_start_ledger_recovery_unescapes_header_collision_content() {
+    local sid="ledger-recovery-escaped-collision"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+NOW_A
+OMT_ESC::## Decisions
+NOW_B
+## Decisions
+REAL_BULK_DECISION_SHOULD_NOT_APPEAR
+## User Corrections (verbatim)
+## Pending
+## Pointers
+## Learnings
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    # Now must be fully inlined, unescaped, and in order: NOW_A, then the bare
+    # (unescaped) "## Decisions" line, then NOW_B -- no truncation.
+    local now_lines
+    now_lines=$(echo "$ctx" | awk '/^NOW_A$/{f=1} f{print} /^NOW_B$/{f=0}')
+    local expected
+    expected=$'NOW_A\n## Decisions\nNOW_B'
+    if [ "$now_lines" != "$expected" ]; then
+        echo "ASSERTION FAILED: Now section must inline NOW_A, an unescaped '## Decisions' content line, then NOW_B, in order"
+        echo "  expected: ${expected}"
+        echo "  got: ${now_lines}"
+        return 1
+    fi
+
+    # The raw sentinel must never leak into additionalContext.
+    if echo "$ctx" | grep -qF 'OMT_ESC::'; then
+        echo "ASSERTION FAILED: the raw escape sentinel must never leak into additionalContext"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+
+    # The real bulk Decisions section must still be excluded from the inline.
+    if echo "$ctx" | grep -qF 'REAL_BULK_DECISION_SHOULD_NOT_APPEAR'; then
+        echo "ASSERTION FAILED: bulk Decisions content must not leak into the acute inline"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Test (double-escape round-trip, reader half): a content line double-escaped
+# by the writer (two sentinels, because the user's literal text already
+# looked like one sentinel + header) must have exactly ONE sentinel stripped
+# on recovery -- restoring the user's original one-sentinel text exactly, not
+# fully unescaped and not left with both sentinels.
+# =============================================================================
+
+test_session_start_ledger_recovery_double_escape_round_trip() {
+    local sid="ledger-recovery-double-escape"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+
+    cat > "$ledger_file" << 'EOF'
+## Now
+OMT_ESC::OMT_ESC::## Decisions
+## Decisions
+## User Corrections (verbatim)
+## Pending
+## Pointers
+## Learnings
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'", "source": "compact"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    # Exactly one sentinel must remain -- this is the round-trip of the
+    # user's original (already sentinel-shaped) literal content.
+    local match_count
+    match_count=$(echo "$ctx" | grep -cxF 'OMT_ESC::## Decisions')
+    if [ "$match_count" -ne 1 ]; then
+        echo "ASSERTION FAILED: double-escaped content must recover to exactly one remaining sentinel + header line, found $match_count"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    if echo "$ctx" | grep -qxF 'OMT_ESC::OMT_ESC::## Decisions'; then
+        echo "ASSERTION FAILED: both sentinels must not survive recovery (only one must be stripped)"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    if echo "$ctx" | grep -qxF '## Decisions'; then
+        echo "ASSERTION FAILED: the line must not be fully unescaped to bare '## Decisions' -- it was double-escaped, so exactly one sentinel must remain"
+        echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: Ledger GC — mtime-based (TODO 5)
+# session-ledger-*.md files are durable-append .md, so liveness cannot use
+# is_state_live (JSON .active parsing). GC is mtime-only, TTL=ACTIVE_IDLE_TTL
+# (6h, state-liveness.sh SSOT). The current session's ledger is always kept
+# regardless of mtime (mirrors the sid-skip pattern from state-GC).
+# =============================================================================
+
+# AC: non-current-sid ledger with mtime >6h old is reaped.
+test_gc_ledger_other_session_stale_reaped() {
+    local sid="ledger-gc-other-stale"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+    printf '## Now\nstale\n' > "$ledger_file"
+
+    local old_mtime
+    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" "$ledger_file" 2>/dev/null || touch -d "7 hours ago" "$ledger_file" 2>/dev/null || true
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "ledger-gc-fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ -f "$ledger_file" ]; then
+        echo "ASSERTION FAILED: other-session ledger with 7h-old mtime should have been reaped"
+        return 1
+    fi
+    return 0
+}
+
+# AC: current-sid ledger is preserved unconditionally, even with a 7h-old mtime.
+test_gc_ledger_current_session_stale_survives() {
+    local sid="ledger-gc-current"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+    printf '## Now\ncurrent\n' > "$ledger_file"
+
+    local old_mtime
+    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" "$ledger_file" 2>/dev/null || touch -d "7 hours ago" "$ledger_file" 2>/dev/null || true
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$ledger_file" ]; then
+        echo "ASSERTION FAILED: current-session ledger should survive GC regardless of mtime age"
+        return 1
+    fi
+    return 0
+}
+
+# AC: non-current-sid ledger with a fresh mtime (mid-append) is NOT reaped.
+test_gc_ledger_other_session_fresh_survives() {
+    local sid="ledger-gc-other-fresh"
+    local ledger_file="$TEST_OMT_DIR/session-ledger-${sid}.md"
+    printf '## Now\nfresh\n' > "$ledger_file"
+    # mtime is already "now" -- no touch needed
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "ledger-gc-fresh-session2"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$ledger_file" ]; then
+        echo "ASSERTION FAILED: other-session ledger with a fresh mtime (mid-append) should survive GC"
+        return 1
+    fi
+    return 0
+}
+
+# AC: ledger GC glob is namespace-scoped to session-ledger-*.md only; an
+# unrelated stale .md file (non-ledger) must NOT be touched by it.
+test_gc_ledger_namespace_separation_untouched() {
+    local other_file="$TEST_OMT_DIR/handoff-old-orphan.md"
+    printf 'unrelated stale content\n' > "$other_file"
+
+    local old_mtime
+    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" "$other_file" 2>/dev/null || touch -d "7 hours ago" "$other_file" 2>/dev/null || true
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "ledger-gc-namespace-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$other_file" ]; then
+        echo "ASSERTION FAILED: ledger GC must not touch a non-session-ledger .md file"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: deep-interview restore block (plan TODO 6)
+# di's seed schema (hooks/pre-tool-enforcer.sh) is minimal -- {active,
+# started_at, last_touched_at} only, unlike prometheus/goal/qa which also
+# carry .phase (and prometheus/goal carry .plan_path). The restore block must
+# emit only an active-session re-read instruction and must never emit a blank
+# "Phase:" line, since di has no phase field to source one from.
+# =============================================================================
+
+# AC: di active-state fixture -> stdout injects a di state re-read instruction
+# (restore marker + run-now cat pointer to the di state file).
+test_session_start_deep_interview_active_emits_reread_instruction() {
+    local sid="di-restore-active"
+    cat > "$TEST_OMT_DIR/deep-interview-active-state-${sid}.json" << EOF
+{
+  "active": true,
+  "started_at": "$(date "+%Y-%m-%dT%H:%M:%S")",
+  "last_touched_at": "$(date "+%Y-%m-%dT%H:%M:%S")"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: di-active stdout must be valid JSON"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    assert_output_contains "$ctx" "DEEP-INTERVIEW RESTORED" "active di state must inject a DI restore block" || return 1
+
+    if ! echo "$ctx" | grep -qF 'cat "$OMT_DIR/deep-interview-active-state-$OMT_SESSION_ID.json"'; then
+        echo "ASSERTION FAILED: additionalContext must contain the UNEXPANDED di state cat pointer"
+        echo "  ctx: ${ctx:0:500}"
+        return 1
+    fi
+
+    if ! echo "$ctx" | grep -qiE 'now, before any other action|run .*now'; then
+        echo "ASSERTION FAILED: additionalContext should contain a run-now imperative for the di re-read"
+        return 1
+    fi
+    return 0
+}
+
+# AC: di has no .phase field in its seed schema -- the restore block must
+# never emit a "Phase:" line (blank or otherwise). Only di is active here
+# (no prometheus/goal/qa state), so any "Phase:" occurrence would prove the
+# prometheus block was copied verbatim instead of mirrored to di's schema.
+test_session_start_deep_interview_no_blank_phase_line() {
+    local sid="di-restore-no-phase"
+    cat > "$TEST_OMT_DIR/deep-interview-active-state-${sid}.json" << EOF
+{
+  "active": true,
+  "started_at": "$(date "+%Y-%m-%dT%H:%M:%S")",
+  "last_touched_at": "$(date "+%Y-%m-%dT%H:%M:%S")"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    assert_output_not_contains "$ctx" "Phase:" "di restore block must never emit a Phase: line (di seed has no .phase)" || return 1
+    return 0
+}
+
+# grep-0 (TODO 8): session-start.sh must contain zero handoff references — the
+# handoff reader block, the two orphan-GC arms, and the HANDOFF variable are
+# all removed; ledger recovery option D (above) supersedes them.
+test_session_start_no_handoff_remnants() {
+    if grep -qiE 'handoff' "$SCRIPT_DIR/session-start.sh" 2>/dev/null; then
+        echo "ASSERTION FAILED: session-start.sh must have 0 handoff references (TODO 8 removal; superseded by ledger recovery option D)"
+        grep -niE 'handoff' "$SCRIPT_DIR/session-start.sh" | head -10
+        return 1
+    fi
+    return 0
 }
 
 # =============================================================================
@@ -1994,28 +2161,8 @@ main() {
     run_test test_session_start_orphan_accept_unmanaged_state
     run_test test_session_start_no_retired_loop_restore
 
-    # T2: source==compact handoff injection branch + surgical jq -Rs encoder
-    run_test test_session_start_compact_handoff_adversarial_valid_json
-    run_test test_session_start_compact_handoff_and_prometheus_restore_coexist
-    run_test test_session_start_compact_handoff_deleted_on_consume
-    run_test test_session_start_non_compact_source_ignores_handoff
+    # Encoding invariants (retained across the TODO 8 handoff removal)
     run_test test_session_start_encoder_invariants_in_source
-    run_test test_session_start_compact_no_handoff_equals_restore_only
-
-    # Re-arm deletion (ADR D-10)
-    run_test test_session_start_rearm_deletes_stale_marker_on_new_large_handoff
-    run_test test_session_start_rearm_marker_survives_without_new_handoff
-
-    # T3: self-contained orphan-handoff GC arm (ADR D-8)
-    run_test test_gc_handoff_orphan_old_reaped
-    run_test test_gc_handoff_current_session_survives_when_old
-    run_test test_gc_handoff_orphan_young_survives
-    run_test test_gc_handoff_dash_sid_matched_exactly
-    run_test test_gc_handoff_arm_does_not_call_is_current_session
-    run_test test_gc_handoff_arm_does_not_disturb_json_state_gc
-
-    # Marker-GC arm (ADR D-11a)
-    run_test test_gc_marker_consumed_orphan_reaped_young_handoff_survives
 
     # Cache-safe restore — TODO 3 (AC2a–AC6)
     run_test test_cache_safe_prom_sentinel_not_in_stdout
@@ -2025,9 +2172,37 @@ main() {
     run_test test_cache_safe_goal_pointer_and_imperative
     run_test test_cache_safe_goal_round_trip
     run_test test_cache_safe_incomplete_count_existence_only
-    run_test test_cache_safe_handoff_large_pointer
     run_test test_cache_safe_prom_session_invariant
     run_test test_cache_safe_goal_session_invariant
+
+    # Ledger recording instruction (TODO 3)
+    run_test test_session_start_ledger_recording_every_source
+    run_test test_session_start_ledger_recording_verbatim_mandate
+    run_test test_session_start_ledger_recording_is_static
+    run_test test_session_start_ledger_recording_rooted_path
+
+    # Ledger recovery option D (TODO 4, D1)
+    run_test test_session_start_ledger_recovery_inlines_now_and_corrections
+    run_test test_session_start_ledger_recovery_no_ledger_harmless
+    run_test test_session_start_ledger_recovery_acute_over_cap_pointer_fallback
+    run_test test_session_start_ledger_recovery_only_on_compact_source
+    run_test test_session_start_ledger_recovery_preserves_hash_line_in_acute
+    run_test test_session_start_ledger_recovery_no_header_injection_from_bulk
+    run_test test_session_start_ledger_recovery_unescapes_header_collision_content
+    run_test test_session_start_ledger_recovery_double_escape_round_trip
+
+    # Ledger GC — mtime-based (TODO 5)
+    run_test test_gc_ledger_other_session_stale_reaped
+    run_test test_gc_ledger_current_session_stale_survives
+    run_test test_gc_ledger_other_session_fresh_survives
+    run_test test_gc_ledger_namespace_separation_untouched
+
+    # deep-interview restore block (TODO 6)
+    run_test test_session_start_deep_interview_active_emits_reread_instruction
+    run_test test_session_start_deep_interview_no_blank_phase_line
+
+    # Dead handoff plumbing removed (TODO 8)
+    run_test test_session_start_no_handoff_remnants
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
