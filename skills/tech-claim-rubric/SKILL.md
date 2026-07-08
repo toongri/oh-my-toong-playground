@@ -204,7 +204,7 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 
 | Field | Description |
 |-------|-------------|
-| `schema_version` | `string` — output schema contract version (e.g., `v4.0`) |
+| `schema_version` | `string` — output schema contract version (e.g., `v4.1`) |
 | `final_verdict` | `APPROVE` or `REQUEST_CHANGES` |
 | `structural_verdict` | `PASS`/`P1`/`FAIL` — A5 axis verdict, readability routing key |
 | `interview_hints` | `string[]` — actionable improvement suggestions |
