@@ -1453,12 +1453,12 @@ test_session_start_ledger_recording_every_source() {
             echo "  ctx: ${ctx:0:600}"
             return 1
         fi
-        if ! echo "$ctx" | grep -qF 'omt-ledger.sh append'; then
+        if ! echo "$ctx" | grep -qF 'omt-ledger.sh" append'; then
             echo "ASSERTION FAILED: source=$src must include an omt-ledger.sh append call example"
             echo "  ctx: ${ctx:0:600}"
             return 1
         fi
-        if ! echo "$ctx" | grep -qF 'omt-ledger.sh now'; then
+        if ! echo "$ctx" | grep -qF 'omt-ledger.sh" now'; then
             echo "ASSERTION FAILED: source=$src must include an omt-ledger.sh now call example"
             echo "  ctx: ${ctx:0:600}"
             return 1
@@ -1509,6 +1509,52 @@ test_session_start_ledger_recording_is_static() {
     if ! echo "$ctx" | grep -qF '$OMT_SESSION_ID'; then
         echo "ASSERTION FAILED: ledger recording instruction must reference the UNEXPANDED \$OMT_SESSION_ID pointer"
         echo "  ctx: ${ctx:0:600}"
+        return 1
+    fi
+    return 0
+}
+
+# AC-T3.4 (PR #162 Codex finding B, P2): the omt-ledger.sh call examples must be
+# rooted via the CLAUDE_PROJECT_DIR/HOME literal, not a bare cwd-relative path --
+# a bare `.claude/hooks/omt-ledger.sh` breaks when Claude is launched from a
+# project subdirectory. The rooted literal must stay UNEXPANDED (cache-safe:
+# no machine-specific /Users or /home path leaks into the injected prefix).
+test_session_start_ledger_recording_rooted_path() {
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "ledger-rooted-test"}' \
+        | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if echo "$ctx" | grep -qF ' | .claude/hooks/omt-ledger.sh'; then
+        echo "ASSERTION FAILED: omt-ledger.sh call examples must not use the bare cwd-relative path"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh'; then
+        echo "ASSERTION FAILED: omt-ledger.sh call examples must be rooted via the unexpanded CLAUDE_PROJECT_DIR/HOME literal"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" append Decisions'; then
+        echo "ASSERTION FAILED: rooted append-Decisions example missing"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" append Pending'; then
+        echo "ASSERTION FAILED: rooted append-Pending example missing"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if ! echo "$ctx" | grep -qF '${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh" now'; then
+        echo "ASSERTION FAILED: rooted now example missing"
+        echo "  ctx: ${ctx:0:800}"
+        return 1
+    fi
+    if echo "$ctx" | grep -qE '/Users/|/home/'; then
+        echo "ASSERTION FAILED: rooted path must stay unexpanded -- no machine-specific /Users or /home path may leak into the injected prefix"
+        echo "  ctx: ${ctx:0:800}"
         return 1
     fi
     return 0
@@ -2133,6 +2179,7 @@ main() {
     run_test test_session_start_ledger_recording_every_source
     run_test test_session_start_ledger_recording_verbatim_mandate
     run_test test_session_start_ledger_recording_is_static
+    run_test test_session_start_ledger_recording_rooted_path
 
     # Ledger recovery option D (TODO 4, D1)
     run_test test_session_start_ledger_recovery_inlines_now_and_corrections
