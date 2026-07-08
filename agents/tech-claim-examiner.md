@@ -298,16 +298,21 @@ interview_hints:
     이유: ...
     제안: ...
 ```
+<!-- English bullet example: labels switch to the English set, «» rule unchanged —
+  Quote: «...»
+  Problem: ...
+  Why: ...
+  Suggestion: ... -->
 
-**Scaffold rule**: interview_hints에 surface되는 모든 hint는 위 4-라벨(`인용:` / `문제:` / `이유:` / `제안:`) 스캐폴드로 emit한다 — content axis(A1-A4)의 P1/FAIL 구동 hint, structural axis(A5)의 P1 구동 hint, critical-rule(r_phys/r_cross) 구동 hint 등을 포함하되, 이 열거는 예시일 뿐이다: surface되는 어떤 hint든 이 스캐폴드를 입는다. `인용:`의 내용은 항상 «»로 감싼다. A5 P1 hint의 `인용:`은 파묻힌·뒤바뀐 구절을, `제안:`은 재배치·압축 fix를 담는다. 완전 clean(P1 없음, structural PASS)이면 `interview_hints: []`.
+**Scaffold rule**: interview_hints에 surface되는 모든 hint는 4-라벨 스캐폴드로 emit한다 — content axis(A1-A4)의 P1/FAIL 구동 hint, structural axis(A5)의 P1 구동 hint, critical-rule(r_phys/r_cross) 구동 hint 등을 포함하되, 이 열거는 예시일 뿐이다: surface되는 어떤 hint든 이 스캐폴드를 입는다. 라벨 자체가 source bullet 언어를 따른다 — 한국어 bullet이면 `인용:` / `문제:` / `이유:` / `제안:`, English bullet이면 `Quote:` / `Problem:` / `Why:` / `Suggestion:` (콜론 뒤 한 칸 공백). `인용:`/`Quote:`의 내용은 언어와 무관하게 항상 «»로 감싼다. A5 P1 hint의 `인용:`/`Quote:`은 파묻힌·뒤바뀐 구절을, `제안:`/`Suggestion:`은 재배치·압축 fix를 담는다. 완전 clean(P1 없음, structural PASS)이면 `interview_hints: []`.
 
-**Dispatch-state branch (`제안:` 줄)**: `## Input`의 `Proposed Alternatives`에 실제 후보 대안이 있으면 `제안:` 줄은 그 대안을 근거로 작성(near-verbatim 인용, 새로 지어내지 않음). `None — initial evaluation`이면 examiner가 자체 생성.
+**Dispatch-state branch (`제안:`/`Suggestion:` 줄)**: `## Input`의 `Proposed Alternatives`에 실제 후보 대안이 있으면 `제안:`/`Suggestion:` 줄은 그 대안을 근거로 작성(near-verbatim 인용, 새로 지어내지 않음). `None — initial evaluation`이면 examiner가 자체 생성.
 
-**Language hint rule (bidirectional)**: `interview_hints` 언어는 source bullet의 언어를 따른다 — 한국어 bullet → 한국어 hint; English bullet → English hint. `인용:` 줄은 원문 verbatim이므로 자동 충족.
+**Language hint rule (bidirectional)**: `interview_hints`는 라벨과 본문 모두 source bullet의 언어를 따른다 — 한국어 bullet → 한국어 라벨(인용/문제/이유/제안) + 한국어 hint 본문; English bullet → English 라벨(Quote/Problem/Why/Suggestion) + English hint 본문. 라벨 매핑: 인용=Quote, 문제=Problem, 이유=Why, 제안=Suggestion. `인용:`/`Quote:` 줄은 원문 verbatim이므로 본문 언어 일치가 자동 충족.
 
 ### interview_hints Constraints
 
-Follow `skills/tech-claim-rubric/output-schema.md` §interview_hints Constraints (Vocabulary / Actionability / P1 coverage / scaffold rules). `문제:` / `이유:` / `제안:` 세 줄에는 `A[1-5]` 코드도 axis name도 등장하지 않는다 — `인용:` 줄은 verbatim 인용이라 면제. Do not duplicate rule bodies here.
+Follow `skills/tech-claim-rubric/output-schema.md` §interview_hints Constraints (Vocabulary / Actionability / P1 coverage / scaffold rules). `문제:` / `이유:` / `제안:` 세 줄(English bullet에서는 `Problem:` / `Why:` / `Suggestion:` — 동일 규칙 적용)에는 `A[1-5]` 코드도 axis name도 등장하지 않는다 — `인용:`/`Quote:` 줄은 verbatim 인용이라 면제. Do not duplicate rule bodies here.
 
 ---
 
@@ -328,9 +333,9 @@ Follow `skills/tech-claim-rubric/output-schema.md` §interview_hints Constraints
 - [ ] P1 cumulative meta-rule 적용: count(P1 across A1-A4) ≥ 3이면 final_verdict = REQUEST_CHANGES
 - [ ] final_verdict 도출 시 A1-A4 FAIL/P1-cumulative 외에 structural_verdict == FAIL 게이트도 적용됨
 - [ ] structural_verdict 작성됨 (A5 scanability 결과 직접 반영)
-- [ ] interview_hints 언어가 source bullet 언어와 일치 (한국어 bullet → 한국어 hint, English bullet → English hint)
+- [ ] interview_hints 언어가 source bullet 언어와 일치 — 4-라벨과 hint 본문 모두 (한국어 bullet → 한국어 라벨+hint, English bullet → English 라벨+hint)
 - [ ] interview_hints에 axis identifier (A1-A5) 또는 axis name 포함되지 않음 (Vocabulary rule)
 - [ ] 각 hint가 구체적이고 실행 가능함 — generic 표현 없음 (Actionability rule)
 - [ ] P1 verdict가 content axis(A1-A4) 또는 structural axis(A5)에라도 존재할 경우, final_verdict나 조기 종료 여부와 무관하게 interview_hints에 개선 제안 포함됨 (P1 coverage rule)
-- [ ] 모든 hint가 4-라벨 스캐폴드(`인용:`/`문제:`/`이유:`/`제안:`)를 따르며, `인용:`은 bullet 본문에서 직접 발췌한 verbatim substring임 (paraphrase 금지)
+- [ ] 모든 hint가 4-라벨 스캐폴드(한국어 bullet: `인용:`/`문제:`/`이유:`/`제안:`, English bullet: `Quote:`/`Problem:`/`Why:`/`Suggestion:`)를 따르며, `인용:`/`Quote:`은 bullet 본문에서 직접 발췌한 verbatim substring임 (paraphrase 금지)
 - [ ] final_verdict 결정됨 (APPROVE | REQUEST_CHANGES)

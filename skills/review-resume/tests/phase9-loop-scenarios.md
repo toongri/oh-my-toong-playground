@@ -148,7 +148,7 @@ Pattern 본문은 `skills/tech-claim-rubric/output-schema.md §Prohibited Token 
 
 ## Rich-Hint Scaffold Format (A′) — pinned physical format
 
-각 `interview_hints` 원소는 **하나의 문자열**이며, 4개 라벨이 각각 **별도 줄**(newline-delimited, `/`-delimited 아님)에 온다:
+각 `interview_hints` 원소는 **하나의 문자열**이며, 4개 라벨이 각각 **별도 줄**(newline-delimited, `/`-delimited 아님)에 온다. 라벨 자체가 source bullet 언어를 따른다 — 한국어 bullet:
 
 ```
 인용: «원본 bullet의 verbatim substring»
@@ -157,8 +157,10 @@ Pattern 본문은 `skills/tech-claim-rubric/output-schema.md §Prohibited Token 
 제안: <구체적·실행가능한 수정안>
 ```
 
-- `인용:` 라인의 `«»` 내부는 원본 bullet에서 **글자 그대로** 뽑은 substring (paraphrase 금지). noleak 검증 시 이 줄만 라인 단위로 제외하고 나머지 3줄을 검사한다.
-- `문제:` / `이유:` / `제안:` 라인에는 axis identifier(`A[1-5]`)도 axis name(Technical Credibility / Causal Honesty / Outcome Presence & Clarity / Ownership & Scope / Scanability)도 등장하지 않는다. "이유"는 평이한 한국어 서술.
+English bullet은 동일 구조에 영어 라벨셋을 쓴다: `Quote:` / `Problem:` / `Why:` / `Suggestion:` (콜론 뒤 한 칸 공백). 라벨 매핑: 인용=Quote, 문제=Problem, 이유=Why, 제안=Suggestion.
+
+- `인용:`/`Quote:` 라인의 `«»` 내부는 원본 bullet에서 **글자 그대로** 뽑은 substring (paraphrase 금지), 언어와 무관하게 항상 «»로 감싼다. noleak 검증 시 «»로 감싼 이 verbatim 줄만 라인 단위로 제외하고 나머지 3줄을 검사한다 — «»는 인용 줄에만 존재하므로 라벨 언어와 무관하게 식별 가능하다.
+- `문제:` / `이유:` / `제안:` 라인(English bullet에서는 `Problem:` / `Why:` / `Suggestion:` — 동일 규칙)에는 axis identifier(`A[1-5]`)도 axis name(Technical Credibility / Causal Honesty / Outcome Presence & Clarity / Ownership & Scope / Scanability)도 등장하지 않는다. "이유"/"Why"는 평이한 소스언어 서술.
 - 이 포맷은 `output-schema.md §interview_hints Constraints`(Vocabulary/Actionability/P1 coverage)의 상위 호환이다 — 기존 제약을 완화하지 않고 물리적 구조만 4-라인으로 pin한다.
 
 ### Fixture Index
@@ -172,6 +174,7 @@ Pattern 본문은 `skills/tech-claim-rubric/output-schema.md §Prohibited Token 
 | `FX-CLEAN` | 완전 clean APPROVE | `interview_hints == []` 회귀 방지 (SCN-1과 정합) |
 | `FX-RPHYS` | r_phys early-return + pending content P1 | early-return에도 실제 emit (count만 아님) |
 | `FX-TECH-ECHO` | bullet 본문에 `A[1-5]`-모양 토큰 | noleak false-positive 방지 (`인용:` 줄 제외 후 검사) |
+| `FX-EN` | English bullet, unquantified outcome | 영어 라벨(Quote/Problem/Why/Suggestion) emit + noleak |
 
 ---
 
@@ -389,7 +392,7 @@ interview_hints:
 
 ## SCN-13: bullet 본문에 axis-모양 토큰 — 인용 라인만 매치, remainder는 clean (FX-TECH-ECHO)
 
-**Target Rule:** noleak 검증은 `인용:` 라인을 제외한 remainder에 대해서만 수행된다 — 원본 bullet 자체가 우연히 `A[1-5]` 모양 토큰(예: 기술/인스턴스명)을 포함하면 `인용:` 라인에는 그 토큰이 그대로(verbatim) 등장할 수 있지만, 이것은 noleak 위반이 아니다.
+**Target Rule:** noleak 검증은 «»로 감싼 verbatim 줄(즉 `인용:`/`Quote:` 라벨 줄)을 제외한 remainder에 대해서만 수행된다 — 원본 bullet 자체가 우연히 `A[1-5]` 모양 토큰(예: 기술/인스턴스명)을 포함하면 그 인용 줄에는 그 토큰이 그대로(verbatim) 등장할 수 있지만, 이것은 noleak 위반이 아니다.
 
 **Setup:**
 
@@ -416,3 +419,46 @@ interview_hints:
 - `인용:` 라인을 제거한 나머지 3줄(`문제:`/`이유:`/`제안:`)에만 `grep -E '\bA[1-5]\b'`를 적용하면 0 matches — 이것이 실제 noleak 판정 기준.
 - 나머지 두 canonical 정규식(axis name alternation, internal struct)도 `인용:` 줄 제외 remainder에서 0 matches.
 - 이 fixture는 SCN-6(HTML report noleak)의 실행 방식과 구분된다: SCN-6은 렌더된 HTML 전체를 검사하는 반면, 이 fixture는 raw hint 문자열 레벨에서 "`인용:` 줄 제외" 전처리가 선행되어야 함을 규정한다 — review-resume의 HTML 렌더러는 `인용:` 라인을 별도 마크업(예: blockquote)으로 렌더링하고 noleak 검사기는 그 라인을 알고 제외해야 한다.
+
+---
+
+## SCN-14: English bullet — English-label scaffold, «» language-agnostic noleak (FX-EN)
+
+**Target Rule:** source bullet이 영어면 4개 라벨이 영어(`Quote:`/`Problem:`/`Why:`/`Suggestion:`)로 emit되고, noleak 검증은 «» verbatim 줄 제외 후 나머지에 정준 3정규식 0 matches.
+
+**Setup:**
+
+Fixture `FX-EN` bullet:
+```
+Built a Scanability monitoring dashboard on AWS A1 instances and greatly improved service response time.
+```
+
+Dispatch payload (first dispatch):
+```
+## Bullet
+Built a Scanability monitoring dashboard on AWS A1 instances and greatly improved service response time.
+
+## Proposed Alternatives
+None — initial evaluation
+```
+
+examiner 기대 output (GREEN mock, PUBLIC fields만):
+```yaml
+final_verdict: REQUEST_CHANGES
+interview_hints:
+  - |
+    Quote: «greatly improved service response time»
+    Problem: The result is stated only qualitatively with "greatly" and carries no before/after figures.
+    Why: "Greatly" cannot be verified or compared — a reader has no sense of how large the improvement was.
+    Suggestion: Replace "greatly" with a concrete before→after metric, e.g., "reduced p95 response time from 800ms to 200ms (75% faster)."
+```
+
+**Expected:** review-resume이 이 hint를 그대로 user에게 표시. 라벨이 English(`Quote:`/`Problem:`/`Why:`/`Suggestion:`)로 emit되며 한국어 라벨(인용/문제/이유/제안)은 등장하지 않는다. `Quote:` 줄은 원본 bullet의 verbatim substring이며 «»로 감싼다.
+
+**Verification:**
+- `Quote:` / `Problem:` / `Why:` / `Suggestion:` 4개 라벨이 hint 문자열 내 각각 별도 줄로 1회씩 등장.
+- `Quote:` 줄(«» 줄)에는 "AWS A1"/"Scanability" 같은 토큰이 원본 bullet에서 온 것이라면 정당하게 등장할 수 있다.
+- «» 줄 제외 remainder(`Problem:`/`Why:`/`Suggestion:` 3줄)에 canonical noleak 정규식 3종(`\bA[1-5]\b` / axis name alternation / `verdicts\.|critical_rule_flags\.|evidence_quote|reasoning:`) 각각 0 matches.
+- 한국어 라벨(인용/문제/이유/제안)이 hint 문자열 어디에도 등장하지 않는다.
+
+---
