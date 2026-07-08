@@ -199,6 +199,82 @@ test_now_replace_does_not_disturb_other_sections() {
 }
 
 # =============================================================================
+# Test (PR #162 P2 regression): a NEW content line that is literally equal to
+# a skeleton header (e.g. "## Decisions" written as prose inside the Now
+# section) must not be re-mistaken for a real structural boundary on a LATER
+# invocation (this script re-parses the whole file from scratch each run).
+# Escape-on-write prefixes such a line with SENTINEL before it ever reaches
+# disk, so the file must end up with EXACTLY ONE bare "## Decisions" header,
+# the fake line must stay inert content of the Now section, and a subsequent
+# append to the REAL Decisions section must land there (not misrouted).
+# =============================================================================
+
+test_content_line_matching_header_does_not_create_false_boundary() {
+    printf 'NOW_A\n## Decisions\nNOW_B' | "$LEDGER_SCRIPT" now
+    printf 'DECISION_REAL' | "$LEDGER_SCRIPT" append Decisions
+
+    local ledger
+    ledger="$(ledger_path)"
+
+    local header_count
+    header_count=$(grep -cxF '## Decisions' "$ledger")
+    if [ "$header_count" -ne 1 ]; then
+        echo "ASSERTION FAILED: expected exactly one structural '## Decisions' header, found $header_count"
+        echo "--- ledger ---"; cat "$ledger"
+        return 1
+    fi
+
+    local now_block decisions_block
+    now_block=$(awk 'BEGIN{n=split("## Now|## Decisions|## User Corrections (verbatim)|## Pending|## Pointers|## Learnings",H,"|");idx=1}
+      { if(idx<=n && $0==H[idx]){cur=$0;idx++;next} if(cur=="## Now")print }' "$ledger")
+    decisions_block=$(awk 'BEGIN{n=split("## Now|## Decisions|## User Corrections (verbatim)|## Pending|## Pointers|## Learnings",H,"|");idx=1}
+      { if(idx<=n && $0==H[idx]){cur=$0;idx++;next} if(cur=="## Decisions")print }' "$ledger")
+
+    assert_output_contains_local "$now_block" 'NOW_B' \
+        "NOW_B must remain inside the Now section body, not misrouted by the collision line" || return 1
+    assert_output_contains_local "$decisions_block" 'DECISION_REAL' \
+        "DECISION_REAL must land under the real Decisions section" || return 1
+    if echo "$now_block" | grep -qF 'DECISION_REAL'; then
+        echo "ASSERTION FAILED: DECISION_REAL must not leak into the Now section"
+        echo "--- ledger ---"; cat "$ledger"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Test (double-escape round-trip): content that ITSELF already looks escaped
+# (one SENTINEL followed by a skeleton header, as literal user text) must get
+# an ADDITIONAL sentinel prepended on write -- never conflated with the
+# single-escape case. This is the writer half of the round-trip; the reader
+# half (exactly one sentinel stripped back off) is covered in session-start_test.sh.
+# =============================================================================
+
+test_already_escaped_looking_content_gets_double_escaped_on_write() {
+    printf 'OMT_ESC::## Decisions' | "$LEDGER_SCRIPT" now
+
+    local ledger
+    ledger="$(ledger_path)"
+
+    local double_count single_count
+    double_count=$(grep -cxF 'OMT_ESC::OMT_ESC::## Decisions' "$ledger")
+    single_count=$(grep -cxF 'OMT_ESC::## Decisions' "$ledger")
+
+    if [ "$double_count" -ne 1 ]; then
+        echo "ASSERTION FAILED: content already shaped like one sentinel + header must be escaped to two sentinels, not left as-is"
+        echo "--- ledger ---"; cat "$ledger"
+        return 1
+    fi
+    # Whole-line exact match (-x): the on-disk line is the double-escaped
+    # form, never the bare single-escaped form -- these must not both exist.
+    if [ "$single_count" -ne 0 ]; then
+        echo "ASSERTION FAILED: the single-sentinel form must not appear as a bare line on disk (it must be double-escaped), found $single_count"
+        echo "--- ledger ---"; cat "$ledger"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Test: metacharacter + multibyte + self-referential-string payload, lossless
 # =============================================================================
 
@@ -394,6 +470,8 @@ main() {
     run_test test_now_replace_does_not_disturb_other_sections
     run_test test_metachar_multibyte_payload_stored_losslessly
     run_test test_hashline_in_content_does_not_misroute_later_append
+    run_test test_content_line_matching_header_does_not_create_false_boundary
+    run_test test_already_escaped_looking_content_gets_double_escaped_on_write
     run_test test_missing_target_header_refuses_instead_of_silent_loss
     run_test test_default_session_id_refuses_and_creates_no_file
     run_test test_empty_session_id_refuses_and_creates_no_file

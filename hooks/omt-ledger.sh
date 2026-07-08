@@ -86,8 +86,37 @@ TMP_FILE="$(mktemp "${LEDGER_FILE}.XXXXXX")"
 # equals the next-expected header H[idx]. A header-shaped line sitting in a
 # section's content (e.g. "## Pending" written into Decisions prose) is NOT a
 # boundary and is NOT mistaken for the target section on a later append (F2/S9).
+#
+# Residual gap (PR #162 P2): the above holds for lines ALREADY on disk, but a
+# NEW content line from stdin that happens to equal one of the 6 skeleton
+# headers verbatim (e.g. a "## Decisions" line inside Now's body) would become
+# indistinguishable from a real header on the NEXT invocation's fresh idx-walk
+# (this script re-parses the whole file from scratch every run). Fixed via
+# escape-on-write: emit_content() prefixes any NEW content line that collides
+# with a skeleton header with SENTINEL before it ever reaches disk, so it can
+# never re-match H[idx] on a later run. SENTINEL is a fixed literal string
+# ("OMT_ESC::") with no ERE metacharacters and no plausible collision with
+# ledger prose; hooks/session-start.sh's recovery reader strips exactly one
+# SENTINEL back off on read (unescape-on-read) -- the two must stay in sync.
+# Pre-existing on-disk lines are never touched by this (verbatim passthrough).
 awk -v target="$TARGET_HEADER" -v mode="$MODE" '
+function is_skeleton_header(line,    h) {
+  for (h = 1; h <= n; h++) if (line == H[h]) return 1
+  return 0
+}
+function escape_line(line,    stripped) {
+  stripped = line
+  while (index(stripped, SENTINEL) == 1) stripped = substr(stripped, length(SENTINEL) + 1)
+  if (is_skeleton_header(stripped)) return SENTINEL line
+  return line
+}
+function emit_content(   nlines, larr, i) {
+  if (content == "") return
+  nlines = split(content, larr, "\n")
+  for (i = 1; i <= nlines; i++) print escape_line(larr[i])
+}
 BEGIN {
+  SENTINEL = "OMT_ESC::"
   content = ENVIRON["OMT_LEDGER_CONTENT"]
   n = split("## Now|## Decisions|## User Corrections (verbatim)|## Pending|## Pointers|## Learnings", H, "|")
   idx = 1
@@ -100,7 +129,7 @@ BEGIN {
     # A real structural header: we are leaving the previous section. Flush a
     # pending append at the section end (before this header) if not yet done.
     if (in_target && mode == "append" && inserted == 0) {
-      if (content != "") print content
+      emit_content()
       inserted = 1
     }
     in_target = 0
@@ -110,7 +139,7 @@ BEGIN {
       in_target = 1
       found_target = 1
       if (mode == "replace") {
-        if (content != "") print content
+        emit_content()
         inserted = 1
       }
       next
@@ -126,7 +155,7 @@ BEGIN {
 }
 END {
   if (in_target && inserted == 0) {
-    if (content != "") print content
+    emit_content()
   }
   # Target header never seen -> the ledger is missing this section (corrupted
   # or foreign-created). Signal a hard error instead of letting mv overwrite
