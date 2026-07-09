@@ -473,13 +473,18 @@ describe("new-prose: Scenarios Executed roster (roster axis)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// NEW-PROSE: issuance precondition names the inert-refactor carve-out
+// NEW-PROSE: issuance precondition names both carve-outs
 // (Finding 1 fix — a zero-row roster from a genuinely inert refactor is a
 // complete cycle and still issues a verdict; must FAIL before the SKILL.md
 // edit — RED)
+//
+// Both carve-outs are load-bearing and each one's absence deadlocks a distinct
+// path: without the inert-refactor carve-out a pure refactor can never be
+// approved; without the PRE-FLIGHT one a contract-violating change can never be
+// rejected. Guard them symmetrically.
 // ---------------------------------------------------------------------------
 
-describe("new-prose: issuance precondition names the inert-refactor carve-out", () => {
+describe("new-prose: issuance precondition names both carve-outs", () => {
 	test("the Approval Decision guard prose names the inert-refactor carve-out", () => {
 		const guardStart = skillMd.indexOf("## Approval Decision");
 		expect(guardStart).not.toBe(-1);
@@ -490,6 +495,18 @@ describe("new-prose: issuance precondition names the inert-refactor carve-out", 
 		expect(tableStart).not.toBe(-1);
 		const guardSection = skillMd.slice(guardStart, tableStart);
 		expect(guardSection).toContain("inert refactor");
+	});
+
+	test("the Approval Decision guard prose names the PRE-FLIGHT fail-fast carve-out", () => {
+		const guardStart = skillMd.indexOf("## Approval Decision");
+		expect(guardStart).not.toBe(-1);
+		const tableStart = skillMd.indexOf(
+			"| Condition | Verdict |",
+			guardStart + 1,
+		);
+		expect(tableStart).not.toBe(-1);
+		const guardSection = skillMd.slice(guardStart, tableStart);
+		expect(guardSection).toContain("PRE-FLIGHT fail-fast");
 	});
 });
 
