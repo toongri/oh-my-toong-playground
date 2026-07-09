@@ -257,7 +257,14 @@ qa is non-interactive and headless. Every command it runs MUST return control to
 | ADVERSARIAL E2E | PASS / FAIL | [matrix + scenario summary] |
 | Cycles run | N / max_cycles | [Same-Failure key if terminated early] |
 
-Self-authored scenarios reported under ADVERSARIAL E2E carry the six-field shape from [scenario-authoring.md] — actor · preconditions · steps · expected · why-needed · priority.
+## Scenarios Executed
+
+| # | source | actor | preconditions | steps | expected | result | why-needed | priority |
+|---|---|---|---|---|---|---|---|---|
+
+Every row's `source` is either `self-authored` or `caller-provided`. A `self-authored` row carries the six-field shape from [scenario-authoring.md] — actor · preconditions · steps · expected · why-needed · priority — filled in full; a `caller-provided` row carries whatever shape the caller supplied. This table is the canonical scenario record for the cycle: `result` maps to `Status` and `why-needed` maps to `Why-Needed` in the four-column working table [stage3-handson.md] mandates for hands-on execution — the column-count divergence is declared here, not fixed there.
+
+Close the table with exactly one coverage-delta line naming the impact-map domains from [scenario-authoring.md], which of those domains the rows above cover, and which are left uncovered.
 
 ## Verdict: [APPROVE / REQUEST_CHANGES / COMMENT]
 
@@ -278,6 +285,8 @@ Self-authored scenarios reported under ADVERSARIAL E2E carry the six-field shape
 ---
 
 ## Approval Decision
+
+1. **Issuance precondition.** A `## Scenarios Executed` section is a precondition for issuing a verdict — when it is absent, the `## Verdict` heading is omitted rather than a verdict being issued. This reads as an unfinished cycle, never as a third value alongside the `{APPROVE, REQUEST_CHANGES, COMMENT}` domain below. The single exception is the PRE-FLIGHT fail-fast, which legitimately issues **REQUEST_CHANGES** with no cycle run and therefore no `## Scenarios Executed` section.
 
 | Condition | Verdict |
 |-----------|---------|
@@ -304,5 +313,6 @@ EXIT:       Goal Met / max_cycles=5 / Same-Failure-3x (scenario-id+root-cause-fi
 ROLLBACK:   git revert fix_head_before..HEAD only, NEVER git reset --hard; 3 guards: linear-descendant, non-empty-range=ERROR, post-revert disjointness on user_dirty_set; REFUSE the cycle on user_dirty_set overlap; rm -rf/force auto-deny honored
 STATE:      bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>; continue resumes at last phase/cycle
 NESTING:    qa's fix-loop must NOT be called inside another fix-loop (e.g. goal) — doc contract, YAGNI; upgrade trigger: add a code guard when qa gains its first fix-loop-owning caller
+ROSTER:     ## Scenarios Executed is a precondition for verdict issuance; absent → verdict not issued, cycle incomplete
 FEEDBACK:   feedback-protocol.md for Confidence Scoring; CONFIDENCE 0-49 discard, 50-79 nitpick, 80+ report
 ```

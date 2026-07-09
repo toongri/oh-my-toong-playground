@@ -432,6 +432,42 @@ describe("structural-integrity: scenario-authoring.md pointer resolves to a real
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: Scenarios Executed roster (roster axis) (must FAIL before rewrite — RED)
+// ---------------------------------------------------------------------------
+
+describe("new-prose: Scenarios Executed roster (roster axis)", () => {
+	test('"## Scenarios Executed" heading is present', () => {
+		expect(skillMd).toContain("## Scenarios Executed");
+	});
+
+	test("the nine-column header appears in the pinned order", () => {
+		expect(skillMd).toContain(
+			"| # | source | actor | preconditions | steps | expected | result | why-needed | priority |",
+		);
+	});
+
+	test("both source tokens are enumerated", () => {
+		expect(skillMd).toContain("self-authored");
+		expect(skillMd).toContain("caller-provided");
+	});
+
+	test("stage3-handson.md is referenced from inside the roster section", () => {
+		const rosterStart = skillMd.indexOf("## Scenarios Executed");
+		expect(rosterStart).not.toBe(-1);
+		const rosterEnd = skillMd.indexOf("\n## ", rosterStart + 1);
+		expect(rosterEnd).not.toBe(-1);
+		const rosterSection = skillMd.slice(rosterStart, rosterEnd);
+		expect(rosterSection).toContain("stage3-handson.md");
+	});
+
+	test("the old prose line naming the six-field shape directly is absent", () => {
+		expect(skillMd).not.toContain(
+			"Self-authored scenarios reported under ADVERSARIAL E2E carry the six-field shape",
+		);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // REGRESSION GUARD: frontmatter identity (must PASS before AND after)
 // ---------------------------------------------------------------------------
 
