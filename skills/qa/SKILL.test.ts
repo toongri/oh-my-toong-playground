@@ -432,6 +432,109 @@ describe("structural-integrity: scenario-authoring.md pointer resolves to a real
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: Scenarios Executed roster (roster axis) (must FAIL before rewrite — RED)
+// ---------------------------------------------------------------------------
+
+describe("new-prose: Scenarios Executed roster (roster axis)", () => {
+	test('"## Scenarios Executed" heading is present', () => {
+		expect(skillMd).toContain("## Scenarios Executed");
+	});
+
+	test("the nine-column header appears in the pinned order", () => {
+		expect(skillMd).toContain(
+			"| # | source | actor | preconditions | steps | expected | result | why-needed | priority |",
+		);
+	});
+
+	test("both source tokens are enumerated in the roster section", () => {
+		const rosterStart = skillMd.indexOf("## Scenarios Executed");
+		expect(rosterStart).not.toBe(-1);
+		const rosterEnd = skillMd.indexOf("\n## ", rosterStart + 1);
+		expect(rosterEnd).not.toBe(-1);
+		const rosterSection = skillMd.slice(rosterStart, rosterEnd);
+		expect(rosterSection).toContain("self-authored");
+		expect(rosterSection).toContain("caller-provided");
+	});
+
+	test("stage3-handson.md is referenced from inside the roster section", () => {
+		const rosterStart = skillMd.indexOf("## Scenarios Executed");
+		expect(rosterStart).not.toBe(-1);
+		const rosterEnd = skillMd.indexOf("\n## ", rosterStart + 1);
+		expect(rosterEnd).not.toBe(-1);
+		const rosterSection = skillMd.slice(rosterStart, rosterEnd);
+		expect(rosterSection).toContain("stage3-handson.md");
+	});
+
+	test("the old prose line naming the six-field shape directly is absent", () => {
+		expect(skillMd).not.toContain(
+			"Self-authored scenarios reported under ADVERSARIAL E2E carry the six-field shape",
+		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: issuance precondition names both carve-outs
+// (Finding 1 fix — a zero-row roster from a genuinely inert refactor is a
+// complete cycle and still issues a verdict; must FAIL before the SKILL.md
+// edit — RED)
+//
+// Both carve-outs are load-bearing and each one's absence deadlocks a distinct
+// path: without the inert-refactor carve-out a pure refactor can never be
+// approved; without the PRE-FLIGHT one a contract-violating change can never be
+// rejected. Guard them symmetrically.
+// ---------------------------------------------------------------------------
+
+describe("new-prose: issuance precondition names both carve-outs", () => {
+	test("the Approval Decision guard prose names the inert-refactor carve-out", () => {
+		const guardStart = skillMd.indexOf("## Approval Decision");
+		expect(guardStart).not.toBe(-1);
+		const tableStart = skillMd.indexOf(
+			"| Condition | Verdict |",
+			guardStart + 1,
+		);
+		expect(tableStart).not.toBe(-1);
+		const guardSection = skillMd.slice(guardStart, tableStart);
+		expect(guardSection).toContain("inert refactor");
+	});
+
+	test("the Approval Decision guard prose names the PRE-FLIGHT fail-fast carve-out", () => {
+		const guardStart = skillMd.indexOf("## Approval Decision");
+		expect(guardStart).not.toBe(-1);
+		const tableStart = skillMd.indexOf(
+			"| Condition | Verdict |",
+			guardStart + 1,
+		);
+		expect(tableStart).not.toBe(-1);
+		const guardSection = skillMd.slice(guardStart, tableStart);
+		expect(guardSection).toContain("PRE-FLIGHT fail-fast");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: the Quick Reference ROSTER line carries the PRE-FLIGHT carve-out
+//
+// The Quick Reference is a compression of the body, and an agent that leans on
+// it alone must not read the roster precondition as unconditional: the
+// PRE-FLIGHT fail-fast issues a verdict with no roster. Stated unconditionally,
+// the line pushes an agent to synthesize an empty roster on that path, which
+// collides with the inert-refactor state (roster present, zero rows) and makes
+// "cycle never ran" indistinguishable from "cycle ran, no risk surface".
+// ---------------------------------------------------------------------------
+
+describe("new-prose: Quick Reference ROSTER line names the PRE-FLIGHT carve-out", () => {
+	test("the ROSTER line inside Quick Reference names the PRE-FLIGHT fail-fast exception", () => {
+		const quickRefStart = skillMd.indexOf("## Quick Reference");
+		expect(quickRefStart).not.toBe(-1);
+		const quickRef = skillMd.slice(quickRefStart);
+		const rosterLine = quickRef
+			.split("\n")
+			.find((line) => line.startsWith("ROSTER:"));
+		expect(rosterLine).toBeDefined();
+		expect(rosterLine).toContain("PRE-FLIGHT fail-fast");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // REGRESSION GUARD: frontmatter identity (must PASS before AND after)
 // ---------------------------------------------------------------------------
 
