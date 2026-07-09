@@ -511,6 +511,30 @@ describe("new-prose: issuance precondition names both carve-outs", () => {
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: the Quick Reference ROSTER line carries the PRE-FLIGHT carve-out
+//
+// The Quick Reference is a compression of the body, and an agent that leans on
+// it alone must not read the roster precondition as unconditional: the
+// PRE-FLIGHT fail-fast issues a verdict with no roster. Stated unconditionally,
+// the line pushes an agent to synthesize an empty roster on that path, which
+// collides with the inert-refactor state (roster present, zero rows) and makes
+// "cycle never ran" indistinguishable from "cycle ran, no risk surface".
+// ---------------------------------------------------------------------------
+
+describe("new-prose: Quick Reference ROSTER line names the PRE-FLIGHT carve-out", () => {
+	test("the ROSTER line inside Quick Reference names the PRE-FLIGHT fail-fast exception", () => {
+		const quickRefStart = skillMd.indexOf("## Quick Reference");
+		expect(quickRefStart).not.toBe(-1);
+		const quickRef = skillMd.slice(quickRefStart);
+		const rosterLine = quickRef
+			.split("\n")
+			.find((line) => line.startsWith("ROSTER:"));
+		expect(rosterLine).toBeDefined();
+		expect(rosterLine).toContain("PRE-FLIGHT fail-fast");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // REGRESSION GUARD: frontmatter identity (must PASS before AND after)
 // ---------------------------------------------------------------------------
 
