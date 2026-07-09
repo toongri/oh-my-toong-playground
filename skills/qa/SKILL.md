@@ -286,7 +286,7 @@ Close the table with exactly one coverage-delta line naming the impact-map domai
 
 ## Approval Decision
 
-1. **Issuance precondition.** A `## Scenarios Executed` section is a precondition for issuing a verdict — when it is absent, the `## Verdict` heading is omitted rather than a verdict being issued. This reads as an unfinished cycle, never as a third value alongside the `{APPROVE, REQUEST_CHANGES, COMMENT}` domain below. The single exception is the PRE-FLIGHT fail-fast, which legitimately issues **REQUEST_CHANGES** with no cycle run and therefore no `## Scenarios Executed` section.
+1. **Issuance precondition.** A `## Scenarios Executed` section is a precondition for issuing a verdict. When it is absent, the `## Verdict` heading is omitted rather than a verdict being issued — this reads as an unfinished cycle, never as a fourth value alongside the `{APPROVE, REQUEST_CHANGES, COMMENT}` domain below. The single exception to this absence rule is the PRE-FLIGHT fail-fast, which legitimately issues **REQUEST_CHANGES** with no cycle run and therefore no `## Scenarios Executed` section. A section that is *present* with zero rows is a separate case, not an omission: when ADVERSARIAL E2E was skipped because the change is a genuinely inert refactor touching no risk surface (`### ADVERSARIAL E2E` above), the cycle is complete, its coverage-delta line states the change touched no risk surface, and a verdict **is** issued per the table below.
 
 | Condition | Verdict |
 |-----------|---------|
