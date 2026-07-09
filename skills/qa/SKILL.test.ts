@@ -446,9 +446,14 @@ describe("new-prose: Scenarios Executed roster (roster axis)", () => {
 		);
 	});
 
-	test("both source tokens are enumerated", () => {
-		expect(skillMd).toContain("self-authored");
-		expect(skillMd).toContain("caller-provided");
+	test("both source tokens are enumerated in the roster section", () => {
+		const rosterStart = skillMd.indexOf("## Scenarios Executed");
+		expect(rosterStart).not.toBe(-1);
+		const rosterEnd = skillMd.indexOf("\n## ", rosterStart + 1);
+		expect(rosterEnd).not.toBe(-1);
+		const rosterSection = skillMd.slice(rosterStart, rosterEnd);
+		expect(rosterSection).toContain("self-authored");
+		expect(rosterSection).toContain("caller-provided");
 	});
 
 	test("stage3-handson.md is referenced from inside the roster section", () => {
@@ -464,6 +469,27 @@ describe("new-prose: Scenarios Executed roster (roster axis)", () => {
 		expect(skillMd).not.toContain(
 			"Self-authored scenarios reported under ADVERSARIAL E2E carry the six-field shape",
 		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: issuance precondition names the inert-refactor carve-out
+// (Finding 1 fix — a zero-row roster from a genuinely inert refactor is a
+// complete cycle and still issues a verdict; must FAIL before the SKILL.md
+// edit — RED)
+// ---------------------------------------------------------------------------
+
+describe("new-prose: issuance precondition names the inert-refactor carve-out", () => {
+	test("the Approval Decision guard prose names the inert-refactor carve-out", () => {
+		const guardStart = skillMd.indexOf("## Approval Decision");
+		expect(guardStart).not.toBe(-1);
+		const tableStart = skillMd.indexOf(
+			"| Condition | Verdict |",
+			guardStart + 1,
+		);
+		expect(tableStart).not.toBe(-1);
+		const guardSection = skillMd.slice(guardStart, tableStart);
+		expect(guardSection).toContain("inert refactor");
 	});
 });
 
