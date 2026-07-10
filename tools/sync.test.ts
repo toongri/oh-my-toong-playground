@@ -795,13 +795,16 @@ describe("syncPlatformConfigs", () => {
 	});
 
 	it("stores model-map in context.modelMaps (P2-1)", async () => {
-		await writeFile(path.join(yamlDir, "codex.yaml"), "model-map:\n  claude-3: o3\n");
+		await writeFile(
+			path.join(yamlDir, "codex.yaml"),
+			"model-map:\n  tiers:\n    sonnet:\n      model: o3\n",
+		);
 
 		const codexAdapter = makeMockAdapter("codex");
 		// Override syncPlatformYaml to return a model map
 		codexAdapter.syncPlatformYaml = async (_t, _y, _d) => ({
 			processedSections: ["model-map"],
-			modelMap: { "claude-3": "o3" },
+			modelMap: { tiers: { sonnet: { model: "o3" } } },
 		});
 
 		const adapters = new Map<Platform, PlatformAdapter>([["codex", codexAdapter]]) as AdapterMap & {
@@ -813,7 +816,7 @@ describe("syncPlatformConfigs", () => {
 
 		await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
 
-		expect(context.modelMaps.get("codex")).toEqual({ "claude-3": "o3" });
+		expect(context.modelMaps.get("codex")).toEqual({ tiers: { sonnet: { model: "o3" } } });
 	});
 
 	it("stores processedSections in context.platformYamlSections", async () => {
@@ -1453,7 +1456,7 @@ describe("processYaml", () => {
 		// item carries none either, so resolvePlatforms falls through to
 		// config.yaml's feature-platforms.skills default. This test depends on
 		// the REAL repo config.yaml declaring codex in feature-platforms.skills
-		// (pinned by "feature-platforms contains only skills" below): getRootDir()
+		// (pinned by "feature-platforms contains skills and agents" below): getRootDir()
 		// (tools/lib/config.ts) walks up from tools/lib/config.ts's OWN module
 		// location to find config.yaml, not from the `rootDir` fixture argument
 		// passed to processYaml — so resolvePlatforms always reads the real repo
@@ -1749,13 +1752,16 @@ describe("modelMaps 크로스 프로젝트 누수 방지", () => {
 		claudeAdapter.syncPlatformYaml = async (_t, _y, _d) => {
 			callCount++;
 			if (callCount === 1) {
-				return { processedSections: ["model-map"], modelMap: { "claude-3": "o3" } };
+				return { processedSections: ["model-map"], modelMap: { tiers: { sonnet: { model: "o3" } } } };
 			}
 			return { processedSections: [], modelMap: undefined };
 		};
 
 		// Place a claude.yaml only in yaml1Dir
-		await writeFile(path.join(syncYaml1Dir, "claude.yaml"), "model-map:\n  claude-3: o3\n");
+		await writeFile(
+			path.join(syncYaml1Dir, "claude.yaml"),
+			"model-map:\n  tiers:\n    sonnet:\n      model: o3\n",
+		);
 
 		const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap;
 
@@ -1763,7 +1769,7 @@ describe("modelMaps 크로스 프로젝트 누수 방지", () => {
 
 		// First processYaml: populates modelMaps
 		await processYaml(context, syncYaml1Path, adapters, rootDir);
-		expect(context.modelMaps.get("claude")).toEqual({ "claude-3": "o3" });
+		expect(context.modelMaps.get("claude")).toEqual({ tiers: { sonnet: { model: "o3" } } });
 
 		// Second processYaml: no claude.yaml → should clear modelMaps
 		await processYaml(context, syncYaml2Path, adapters, rootDir);
@@ -2780,7 +2786,7 @@ describe("dry-run", () => {
 // ---------------------------------------------------------------------------
 
 describe("config.yaml feature-platforms 정리", () => {
-	it("feature-platforms contains only skills", async () => {
+	it("feature-platforms contains skills and agents", async () => {
 		// Read the actual config.yaml from the repo
 		const configPath = path.join(import.meta.dir, "..", "config.yaml");
 
@@ -2789,7 +2795,7 @@ describe("config.yaml feature-platforms 정리", () => {
 		const featurePlatforms = config["feature-platforms"] as Record<string, unknown> | undefined;
 
 		expect(featurePlatforms).toBeDefined();
-		expect(Object.keys(featurePlatforms!)).toEqual(["skills"]);
+		expect(Object.keys(featurePlatforms!)).toEqual(["skills", "agents"]);
 		// config, mcps, plugins should be absent
 		expect(featurePlatforms!["config"]).toBeUndefined();
 		expect(featurePlatforms!["mcps"]).toBeUndefined();

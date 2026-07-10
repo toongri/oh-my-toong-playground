@@ -20,13 +20,39 @@ import { readTextFile, readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isPlainObject } from "../lib/deep-merge.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
+import { assertMappedTier } from "../lib/model-map.ts";
 import type {
+	ModelMap,
 	PlatformConfigResult,
 	PlatformYaml,
 	PlatformYamlHookItem,
 	PluginScope,
 } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
+
+// =============================================================================
+// Model Map Applier
+// =============================================================================
+
+export type CodexResolvedModel = { model: string; model_reasoning_effort?: string };
+
+/**
+ * Resolve an agent's tier to its Codex model + reasoning effort.
+ * A per-agent override in `modelMap.agents` beats the `modelMap.tiers` default.
+ * The tier must be present in `modelMap.tiers` — see `assertMappedTier`.
+ */
+export function resolveCodexAgentModel(
+	modelMap: ModelMap,
+	tier: string,
+	agentFile: string,
+	agentName?: string,
+): CodexResolvedModel {
+	assertMappedTier(modelMap, tier, { platform: "codex", agentFile, agentName });
+	const entry = (agentName ? modelMap.agents?.[agentName] : undefined) ?? modelMap.tiers[tier];
+	return entry.effort === undefined
+		? { model: entry.model }
+		: { model: entry.model, model_reasoning_effort: entry.effort };
+}
 
 // =============================================================================
 // TOML Managed Block Helpers
@@ -135,7 +161,7 @@ export class CodexAdapter implements PlatformAdapter {
 		_addSkills?: string[],
 		_addHooks?: unknown[],
 		_dryRun = false,
-		_modelMap?: Record<string, string>,
+		_modelMap?: ModelMap,
 	): Promise<void> {
 		logWarn(`Codex: agents는 지원되지 않습니다. Skip: ${displayName}`);
 	}
@@ -388,7 +414,7 @@ export class CodexAdapter implements PlatformAdapter {
 		_scope?: PluginScope,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
-		let modelMap: Record<string, string> | undefined;
+		let modelMap: ModelMap | undefined;
 
 		// Reset MCP accumulator for this run
 		this.resetMcpAccumulator();

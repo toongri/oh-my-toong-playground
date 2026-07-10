@@ -540,7 +540,9 @@ mcps:
 config:
   model: o3
 model-map:
-  claude: o3
+  tiers:
+    sonnet:
+      model: o3
 `,
 			);
 			const result = validatePlatformYaml(path, "codex");
@@ -596,7 +598,9 @@ hooks: null
 config:
   model: anthropic/claude-opus-4-5
 model-map:
-  claude: anthropic/claude-opus-4-5
+  tiers:
+    sonnet:
+      model: anthropic/claude-opus-4-5
 `,
 			);
 			const result = validatePlatformYaml(path, "opencode");
