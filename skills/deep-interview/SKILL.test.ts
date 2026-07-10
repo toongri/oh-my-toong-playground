@@ -218,44 +218,45 @@ describe("preserved: brainstorm-delegation phrase removal", () => {
 });
 
 // ---------------------------------------------------------------------------
-// PRESERVED: mermaid visualization render-orchestration (must PASS — invariant)
+// REMOVED: mermaid visualization render-orchestration (must FAIL before T6
+// deletes the render machinery from SKILL.md — RED)
 // ---------------------------------------------------------------------------
 
-describe("preserved: spec-presentation render target", () => {
-	test("spec-presentation.html render target is present", () => {
-		expect(skillMd).toContain("spec-presentation.html");
+describe("removed: spec-presentation render target", () => {
+	test("spec-presentation.html render target is absent", () => {
+		expect(skillMd).not.toContain("spec-presentation.html");
 	});
 
-	test("{slug}.html output naming is present", () => {
-		expect(skillMd).toContain("{slug}.html");
+	test("{slug}.html output naming is absent", () => {
+		expect(skillMd).not.toContain("{slug}.html");
 	});
 
-	test('"open it in a browser" instruction is present', () => {
-		expect(skillMd).toContain("open it in a browser");
-	});
-});
-
-describe("preserved: ontology-preview on-demand render", () => {
-	test("ontology-preview.html render target is present", () => {
-		expect(skillMd).toContain("ontology-preview.html");
-	});
-
-	test("on-demand ontology render mention is present", () => {
-		expect(skillMd).toContain("on-demand ontology render");
-	});
-
-	test('"see, preview, or visualize the model" trigger phrase is present', () => {
-		expect(skillMd).toContain("see, preview, or visualize the model");
-	});
-
-	test('"no entities yet" guard is present', () => {
-		expect(skillMd).toContain("no entities yet");
+	test('"open it in a browser" instruction is absent', () => {
+		expect(skillMd).not.toContain("open it in a browser");
 	});
 });
 
-describe("preserved: render-assembly reference", () => {
-	test("render-assembly.md reference is present", () => {
-		expect(skillMd).toContain("render-assembly.md");
+describe("removed: ontology-preview on-demand render", () => {
+	test("ontology-preview.html render target is absent", () => {
+		expect(skillMd).not.toContain("ontology-preview.html");
+	});
+
+	test("on-demand ontology render mention is absent", () => {
+		expect(skillMd).not.toContain("on-demand ontology render");
+	});
+
+	test('"see, preview, or visualize the model" trigger phrase is absent', () => {
+		expect(skillMd).not.toContain("see, preview, or visualize the model");
+	});
+
+	test('"no entities yet" guard is absent', () => {
+		expect(skillMd).not.toContain("no entities yet");
+	});
+});
+
+describe("removed: render-assembly reference", () => {
+	test("render-assembly.md reference is absent", () => {
+		expect(skillMd).not.toContain("render-assembly.md");
 	});
 });
 
@@ -386,12 +387,60 @@ describe("template: approach and design decisions section", () => {
 });
 
 // ---------------------------------------------------------------------------
-// TEMPLATE: mermaid ontology erDiagram slot (must PASS — invariant)
+// TEMPLATE: mermaid ontology erDiagram slot relocated to a "## Diagrams"
+// section, out of "## Ontology (Key Entities)" (must FAIL before T9
+// rewrites the template — RED)
 // ---------------------------------------------------------------------------
 
 describe("template: mermaid ontology erDiagram slot", () => {
-	test("erDiagram is present in template", () => {
-		expect(template).toContain("erDiagram");
+	test("erDiagram is absent from the Ontology (Key Entities) section", () => {
+		const start = template.indexOf("## Ontology (Key Entities)");
+		expect(start).not.toBe(-1);
+		const end = template.indexOf("\n## ", start + 1);
+		const section = end === -1 ? template.slice(start) : template.slice(start, end);
+		expect(section).not.toContain("erDiagram");
+	});
+
+	test("erDiagram is present in the Diagrams section", () => {
+		const start = template.indexOf("## Diagrams");
+		expect(start).not.toBe(-1);
+		const end = template.indexOf("\n## ", start + 1);
+		const section = end === -1 ? template.slice(start) : template.slice(start, end);
+		expect(section).toContain("erDiagram");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: diagram-guide.md wiring + canonical 6-lens coverage-table
+// literals (must FAIL before T4 creates diagram-guide.md and T9 rewrites
+// the template — RED)
+// ---------------------------------------------------------------------------
+
+describe("added: diagram-guide.md exists and is wired from SKILL.md", () => {
+	test("skills/deep-interview/diagram-guide.md exists", () => {
+		expect(existsSync(join(import.meta.dir, "diagram-guide.md"))).toBe(true);
+	});
+
+	test("SKILL.md references diagram-guide.md", () => {
+		expect(skillMd).toContain("diagram-guide.md");
+	});
+});
+
+describe("added: template carries the canonical 6-lens coverage table", () => {
+	test('canonical coverage-table header "| Lens | Trigger FACT | Status |" is present', () => {
+		expect(template).toContain("| Lens | Trigger FACT | Status |");
+	});
+
+	test('"drawn" status literal is present', () => {
+		expect(template).toContain("drawn");
+	});
+
+	test('"trigger FALSE:" status literal is present', () => {
+		expect(template).toContain("trigger FALSE:");
+	});
+
+	test('"## Diagrams" heading is present', () => {
+		expect(template).toContain("## Diagrams");
 	});
 });
 
@@ -426,16 +475,17 @@ describe("template: design-coverage sections removed", () => {
 });
 
 // ---------------------------------------------------------------------------
-// FILE-EXISTENCE: mermaid visualization assets (must PASS — invariant)
+// REMOVED: mermaid visualization assets (must FAIL before T6 deletes these
+// files — RED)
 // ---------------------------------------------------------------------------
 
-describe("file-existence: mermaid visualization assets", () => {
-	test("templates/spec-presentation.html exists", () => {
-		expect(existsSync(join(import.meta.dir, "templates/spec-presentation.html"))).toBe(true);
+describe("removed: mermaid visualization assets", () => {
+	test("templates/spec-presentation.html does not exist", () => {
+		expect(existsSync(join(import.meta.dir, "templates/spec-presentation.html"))).toBe(false);
 	});
 
-	test("references/render-assembly.md exists", () => {
-		expect(existsSync(join(import.meta.dir, "references/render-assembly.md"))).toBe(true);
+	test("references/render-assembly.md does not exist", () => {
+		expect(existsSync(join(import.meta.dir, "references/render-assembly.md"))).toBe(false);
 	});
 });
 
