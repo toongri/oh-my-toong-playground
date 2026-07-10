@@ -515,7 +515,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - [ ] Spec includes Ontology (Key Entities) table and Ontology Convergence section
 </Final_Checklist>
 
-**Advanced topics (resume, configuration, ambiguityThreshold, cross-session continuation, prometheus integration, weights / challenge-modes / score-interpretation tables): read `deep-interview-advanced.md` now** — do not guess at resume logic or configuration values from memory.
+**Advanced topics (resume, configuration, ambiguityThreshold, cross-session continuation, weights / challenge-modes / score-interpretation tables): read `deep-interview-advanced.md` now** — do not guess at resume logic or configuration values from memory.
 
 ## Reference Files (on-demand)
 
@@ -525,7 +525,7 @@ Read these files at the moment indicated — not speculatively upfront.
 |---|---|---|
 | `deep-interview-spec-template.md` | The Phase 4 output spec markdown template | When composing the output spec (Phase 4 crystallize) |
 | `deep-interview-examples.md` | Question-quality calibration examples (Good/Bad) | When calibrating or debugging question quality |
-| `deep-interview-advanced.md` | Resume, configuration (ambiguityThreshold), cross-session continuation, prometheus integration, and the weights / challenge-modes / score-interpretation tables | When resuming, configuring, continuing across sessions, integrating with prometheus, or needing the interpretation tables |
+| `deep-interview-advanced.md` | Resume, configuration (ambiguityThreshold), cross-session continuation, and the weights / challenge-modes / score-interpretation tables | When resuming, configuring, continuing across sessions, or needing the interpretation tables |
 | `diagram-guide.md` | The 6-lens table with trigger FACTs, the coverage-table rule and its canonical status literals, the node cap, the post-draw self-audit, and mermaid-validity rules | Before authoring the spec's `## Diagrams` section (Phase 4 crystallize) |
 
 Task: {{ARGUMENTS}}
