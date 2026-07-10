@@ -439,26 +439,13 @@ When the Design Interview phase has exited with all design branches resolved, or
 
 1. **Generate the specification** with the prompt-safe transcript, using the design decisions recorded during the Design Interview phase for the Approach section; on a user-forced escape hatch, include any unresolved requirements gap or design branch as a risk-note instead. **Spec template: you MUST read `deep-interview-spec-template.md` now, before composing the spec.** Do not write the spec from memory.
 
-**Diagram-authoring guidance**: the Ontology (Key Entities) `erDiagram` is REQUIRED. Self-audit every mermaid block before writing it (see `render-assembly.md`'s mermaid-validity note: no raw `;` in diagram text).
+**Diagram-authoring guidance**: **you MUST read `diagram-guide.md` in full before authoring the spec's `## Diagrams` section.** Author the 6-row coverage table using the canonical literals verbatim — header `| Lens | Trigger FACT | Status |`, and per-row status of either `drawn` or `trigger FALSE: <reason>` (these are control-plane tokens; never translate or paraphrase them). Draw every lens whose trigger FACT holds. Each diagram follows the Why → Diagram → Interpretation format. All mermaid fences live inside the `## Diagrams` section (fence-locality) — no mermaid block appears outside it.
 
 2. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
 
 **Inline self-review** (after writing), 4 checks: placeholder / consistency / scope / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, no ambiguous text remains.
 
-3. **Render to HTML**: **You MUST read `references/render-assembly.md` first** — it is the single owner of the close-tag escape, the active-placeholder HTML-escape, and the prose-fragment guard; apply its full guard set before substituting. Fill `templates/spec-presentation.html` with the assembled spec markdown and the placeholder values, then write the render to `$OMT_DIR/deep-interview/{slug}.html` — reuse the SAME `{slug}` from the just-written `{slug}.md`; do NOT re-derive the slug. Tell the user to open it in a browser. If the final ontology has zero entities, the Ontology (Key Entities) `erDiagram` slot must render a `no entities yet` state rather than an empty/invalid erDiagram. **Lifecycle**: this render HTML is never auto-deleted, same as the `.md` spec.
-
-4. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
-
-### On-demand ontology render
-
-At any point during the interview — not gated to Phase 4 — recognize a natural-language request (Korean or English) to see, preview, or visualize the model, the ontology, the entities, or a diagram, and treat it as a request for an on-demand ontology render:
-
-1. Read current state via `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get` and take the latest `ontology_snapshots` entry.
-2. Compose an ontology-only markdown `erDiagram` from that snapshot's entities and relationships. If the latest snapshot's entities are absent or empty, emit a `no entities yet` state instead of an empty/invalid erDiagram.
-3. **You MUST read `references/render-assembly.md` first** and apply its full guard set — the same close-tag escape, active-placeholder HTML-escape, and prose-fragment guard it defines.
-4. Fill the SAME `templates/spec-presentation.html` template used by the Phase 4 render: the ontology-only markdown becomes `{{SPEC_MARKDOWN_JSON}}`. For the mid-interview meta placeholders, source values from current state rather than final-spec values — `{{AMBIGUITY_SCORE}}` and `{{ROUND_COUNT}}` from the latest state, `{{SPEC_TITLE}}` and `{{HTML_TITLE}}` = "Ontology Preview", `{{SPEC_FILE_PATH}}` = the preview path. Write the render to `$OMT_DIR/deep-interview/ontology-preview.html`.
-
-This on-demand ontology render is a lightweight, ontology-only preview, distinct from the Phase 4 final render (which embeds the full spec).
+3. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
 
 ## Phase 5: Execution Bridge
 
@@ -545,6 +532,6 @@ Read these files at the moment indicated — not speculatively upfront.
 | `deep-interview-spec-template.md` | The Phase 4 output spec markdown template | When composing the output spec (Phase 4 crystallize) |
 | `deep-interview-examples.md` | Question-quality calibration examples (Good/Bad) | When calibrating or debugging question quality |
 | `deep-interview-advanced.md` | Resume, configuration (ambiguityThreshold), cross-session continuation, prometheus integration, and the weights / challenge-modes / score-interpretation tables | When resuming, configuring, continuing across sessions, integrating with prometheus, or needing the interpretation tables |
-| `render-assembly.md` | The substitution-time injection guards (close-tag escape, active-placeholder HTML-escape, prose-fragment guard), and mermaid self-audit for HTML renders | Before both render call sites: the Phase 4 final render and the on-demand ontology render |
+| `diagram-guide.md` | The 6-lens table with trigger FACTs, the coverage-table rule and its canonical status literals, the node cap, the post-draw self-audit, and mermaid-validity rules | Before authoring the spec's `## Diagrams` section (Phase 4 crystallize) |
 
 Task: {{ARGUMENTS}}

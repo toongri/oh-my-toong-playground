@@ -672,9 +672,9 @@ Prometheus output MUST contain evidence of all three pass indicators when a Verd
 
 ---
 
-## Scenario P-22: HTML Presentation
+## Scenario P-22: Markdown Presentation
 
-**Primary Technique:** HTML Presentation — Stage B Decision Matrix 신호에 따른 실행 권고 계산
+**Primary Technique:** Markdown Presentation — Stage B Decision Matrix 신호에 따른 실행 권고 계산
 
 **Primary Technique secondary:** Stage B Execution Recommendation — Plan more wins conflict resolution
 
@@ -747,13 +747,13 @@ Prometheus MUST apply "Plan more wins" tie-breaking:
 | V2 | Variant B → Focused Execution recommended | Prometheus computes "Focused execution" recommendation when Scoped flag and TODO < 4 are both present |
 | V3 | Variant C tie-breaking: Plan more wins | When Decision Matrix signals split evenly (Variant C: 1 Strong Complex + 1 Strong Trivial), Prometheus applies "Plan more wins" — recommends Full Orchestration, does NOT arbitrarily pick Focused Execution |
 | V4 | Recommendation is computed, not hardcoded | The `(Recommended)` label attaches dynamically to the option matching Stage B output — Prometheus does NOT hardcode "Option 1 is recommended" |
-| V5 | Stage A template artifact produced | Prometheus renders an HTML artifact at render-time based on `skills/prometheus/templates/plan-presentation.html`; the artifact is not committed to disk as `plan.{lang}.md` |
+| V5 | Stage A presentation artifact produced | Prometheus authors `$OMT_DIR/plans/presentation/{name}.md` directly at render-time, following the Presentation Section Order in `review-pipeline.md` — no template, no format converter, no placeholder-substitution engine; the artifact is not committed to disk as `plan.{lang}.md` |
 | V6 | SESSION-DERIVED-BOXES-HERE injection order | The `<!-- SESSION-DERIVED-BOXES-HERE ... -->` block is replaced by exactly 2 `.section-box` elements in order: (a) Stage B · Execution Recommendation, (b) Pipeline State |
-| V7 | Plan markdown container is parser-resilient | The rendered HTML embeds plan markdown in a `script type="application/json" id="plan-md"` element; content is JSON-encoded with literal close-tag sequence escaped as backslash-escaped form |
+| V7 | Coverage table resolves every lens row | The Bird's-Eye View section opens with a 6-row coverage table (canonical header `| Lens | Trigger FACT | Status |`); every row resolves to either `drawn` or `trigger FALSE: <reason>` — no lens is silently omitted |
 | V8 | Language detection fallback | When session language detection fails or yields an ambiguous result, rendering falls back to the original language in `plan.md` (does NOT attempt partial translation) |
-| V9 | Per-plan output path, no overwrite | The Stage A HTML artifact is written to `$OMT_DIR/plans/presentation/{name}.html` where `{name}` matches the plan markdown stem (`{name}.md`) — NOT a fixed `plan.html`. Two plans rendered in succession each produce their own file and neither overwrites the other; the `presentation/` directory is created if absent |
+| V9 | Per-plan output path, no overwrite | The Stage A presentation artifact is written to `$OMT_DIR/plans/presentation/{name}.md` where `{name}` matches the plan markdown stem — NOT a shared fixed filename. Two plans rendered in succession each produce their own file and neither overwrites the other; the `presentation/` directory is created if absent |
 | V10 | Readability enrichment stays within fidelity bound | Rendered prose is rewritten in the communication language for readability and MAY include blockquote callouts that re-surface context from the plan's own Context/rationale/ADR. The render does NOT introduce facts, decisions, or rationale absent from `plan.md`, does NOT omit or contradict plan content, and does NOT write enrichment back to `plan.md` (which stays unchanged on disk) |
-| V11 | Stage A always produces the HTML | A missing tool (e.g. `pandoc: command not found`) or time pressure is never a reason to present raw markdown instead — Prometheus uses any substitution tool (awk/sed/bun/Write; no converter needed) and produces the artifact |
+| V11 | Stage A always produces the presentation artifact | A missing tool or time pressure is never a reason to skip the derived presentation file — Prometheus authors `$OMT_DIR/plans/presentation/{name}.md` directly (plain file write, no converter dependency) and produces the artifact every time Stage A runs |
 | V12 | Trigger-based REQUIRED diagram for runtime flow | When `plan.md` defines a multi-participant runtime control flow across components (Module/API lens trigger FACT holds), Stage A MUST render the corresponding Mermaid diagram (a `sequenceDiagram` per `diagram-guide.md`) injected into the render-time markdown — the diagram is REQUIRED, not optional; the ` ```mermaid ` fence renders via the template's Mermaid runtime. When no lens trigger FACT holds (the plan has no API interaction, no stateful entity, no user-facing scenario, no complex branching, and no multi-component topology), Stage A renders no enrichment diagram — the absence is forced by false trigger FACTs, not by any discretionary gate |
 | V13 | Diagram fidelity bound — no invented edges | A Stage A diagram re-visualizes only flow/structure already decided in `plan.md`. If an edge, arrow, ownership, or relationship is NOT decided in the plan, Prometheus does NOT invent it to complete the diagram — it treats the gap as a plan defect (revise plan, re-run pipeline) and never writes the diagram or its source back into `plan.md` |
 
@@ -1112,7 +1112,7 @@ artifact, but the AC strings are not re-derived from scratch.
 
 ## Scenario P-28: Trigger-Based Diagram Lenses (Stage A)
 
-**Primary Technique:** Diagram Lens Taxonomy (trigger-based REQUIRED) — when a lens's trigger FACT holds in `plan.md`, that lens's diagram is REQUIRED; diagrams are grouped macro → micro in the Bird's-Eye section; fidelity preserved (ephemeral HTML only, no invented edges).
+**Primary Technique:** Diagram Lens Taxonomy (trigger-based REQUIRED) — when a lens's trigger FACT holds in `plan.md`, that lens's diagram is REQUIRED; diagrams are grouped macro → micro in the Bird's-Eye section; fidelity preserved (derived presentation file only, no invented edges).
 
 **Setup:**
 The full review pipeline has completed (S1 Metis APPROVE, S2 Co-Design human design gate approved, S4 Momus APPROVE). Stage A render is about to be executed. `plan.md` contains all three trigger facts simultaneously:
@@ -1128,7 +1128,7 @@ Stage A render. plan.md is ready. The plan introduces:
     guard conditions governing each transition;
 (c) a new RateLimitConfig struct defining the rule's fields (limit, window_seconds,
     burst_allowance, target_pattern).
-Render the Stage A HTML presentation.
+Render the Stage A markdown presentation.
 ```
 
 **Verification Points:**
@@ -1138,8 +1138,8 @@ Render the Stage A HTML presentation.
 | V1 | Module/API lens renders a `sequenceDiagram` and is not skipped | Because the plan adds a new API endpoint, the Module/API lens trigger FACT holds; Stage A MUST include a `sequenceDiagram` visualizing the new POST /rate-limits interaction (caller → gateway → handler → return); this lens is REQUIRED and may not be omitted via an opt-out or necessity judgment |
 | V2 | Domain state lens renders a `stateDiagram-v2` and is not skipped | Because `RateLimitRule` has a non-trivial lifecycle (ACTIVE / SUSPENDED / EXPIRED with guard conditions), the Domain state lens trigger FACT holds; Stage A MUST include a `stateDiagram-v2` for `RateLimitRule`; this lens is REQUIRED and may not be omitted |
 | V3 | Domain/Service object lens renders a `classDiagram` and is not skipped | Because `RateLimitConfig` is a new data shape introduced in the plan, the Domain/Service object lens trigger FACT holds; Stage A MUST include a `classDiagram` showing `RateLimitConfig`'s fields and relationships; this lens is REQUIRED and may not be omitted |
-| V4 | All diagrams grouped in the Bird's-Eye section, ordered macro → micro | The three required diagrams appear together inside the Bird's-Eye section of the HTML; ordering is macro → micro: system topology / component flow first, then sequence (Module/API), then single-component zoom-ins (state, class); no diagram is scattered through the plan body |
-| V5 | Diagrams are ephemeral (HTML only, not written into `plan.md`) | None of the rendered Mermaid blocks are injected into `plan.md` on disk; the source file is unchanged after Stage A render; diagrams exist only in the generated HTML presentation |
+| V4 | All diagrams grouped in the Bird's-Eye section, ordered macro → micro | The three required diagrams appear together inside the Bird's-Eye section of the derived presentation file; ordering is macro → micro: system topology / component flow first, then sequence (Module/API), then single-component zoom-ins (state, class); no diagram is scattered through the plan body |
+| V5 | Diagrams are ephemeral (derived presentation file only, not written into `plan.md`) | None of the rendered Mermaid blocks are injected into `plan.md` on disk; the source file is unchanged after Stage A render; diagrams exist only in the generated presentation markdown |
 | V6 | Triggered lens with no plan source surfaces as a plan gap, not an invented edge | If any of the three trigger FACTS held but `plan.md` provided no source material for the corresponding lens (e.g., the API endpoint is named but its participants are undefined), Prometheus MUST identify this as a plan gap and NOT invent participants, edges, or field names to complete the diagram |
 | V7 | No numeric diagram cap or consolidation-force applied | Prometheus does not merge or suppress the three diagrams to minimize diagram count; each triggered lens produces its own diagram; "too many diagrams" is not treated as a scope defect |
 
@@ -1196,7 +1196,7 @@ Hand the following spec to a fresh prometheus subagent (paste it inline as the u
 Add an async notification delivery gateway that dispatches transactional
 emails on behalf of internal application services. Scope is backend only —
 no mobile push, no in-app notifications, no templating engine (plain-text
-first, no HTML rendering layer).
+first, no rich-formatting rendering layer).
 
 ## Resolved Forks
 
@@ -1351,7 +1351,7 @@ If any RF row lacks an explicit Decision column value, that fork is not actually
 | P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
 | P-20 | AC Granularity | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Compound AC 판정(Universal quantifier + Explicit enumeration 동시 매칭), per-concern 분해(rule×file), per-file PASS/FAIL bash 제공. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-20.md |
 | P-21 | Verdict Bypass | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Red Flag 2개 phrase 식별, Operational Definition of Revise 3단계 분석, State Machine S1→S0→S1(fresh) 복귀 경로. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-21.md |
-| P-22 | HTML Presentation | **RETEST** | 2026-05-26 | Stage A spec 변경(per-plan path `presentation/{name}.html`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. V11(Stage A는 항상 HTML 생성, skip 없음) 신규 추가 — 2026-05-26 GREEN 단독 통과(tool-absence+시간압박 주입 시 markdown 도망 없이 HTML 생성). V12/V13(trigger-based REQUIRED diagram + no invented edges) 신규 추가 — 재검증 필요. 기존 V1-V8(Stage B Decision Matrix)은 무영향 |
+| P-22 | Markdown Presentation | **RETEST** | 2026-05-26 | Stage A spec 변경(per-plan path `presentation/{name}.md`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. V11(Stage A는 항상 presentation 산출물 생성, skip 없음) 신규 추가 — 2026-05-26 GREEN 단독 통과(tool-absence+시간압박 주입 시 산출물 생성 도망 없음). V12/V13(trigger-based REQUIRED diagram + no invented edges) 신규 추가 — 재검증 필요. 기존 V1-V8(Stage B Decision Matrix)은 무영향 |
 | UC-P1 | End-to-End — Full Planning Pipeline | | | Rebaselined to actual pipeline (Metis → Co-Design [Daedalus advisory + human design gate] → Plan → Momus). Needs re-testing |
 | UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | Rebaselined to Momus-gated + defect-type loop-back. Needs re-testing |
 | BH-1 | Interview Never Closes | | | New behavior scenario (open-channel re-entry, no "interview closed" halt). Needs testing |

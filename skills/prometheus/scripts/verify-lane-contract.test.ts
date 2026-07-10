@@ -155,7 +155,7 @@ describe("SKILL.md survival — untouched-section tokens", () => {
 describe("review-pipeline.md survival — file content", () => {
 	it("C15: review-pipeline.md carries the Stage A / Stage B / Stage C lookup structure", () => {
 		expect(reviewPipelineContent).toContain(
-			"Stage A HTML render, Stage B Decision Matrix computation",
+			"Stage A markdown render, Stage B Decision Matrix computation",
 		);
 	});
 });
