@@ -1,6 +1,6 @@
 BUN_MIN := 1.2.21
 
-.PHONY: sync sync-dry install-frozen validate validate-schema validate-components validate-lib-imports validate-ac-rules-ssot validate-tests typecheck test pull pull-dry help
+.PHONY: sync sync-dry install-frozen validate validate-schema validate-components validate-lib-imports validate-ac-rules-ssot validate-tests typecheck test help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -13,8 +13,6 @@ help:
 	@echo "  make validate-ac-rules-ssot - AC 규칙 SSOT byte-identity 검증"
 	@echo "  make typecheck          - TypeScript strict 타입 검사 (tsc --noEmit)"
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
-	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
-	@echo "  make pull-dry PROJ=<name> - 풀백 미리보기 (실제 변경 없음)"
 
 sync: validate validate-tests
 	@bun run tools/sync.ts
@@ -48,11 +46,3 @@ typecheck:
 	@bunx tsc --noEmit
 
 test: validate-tests
-
-pull:
-	@test -n "$(PROJ)" || (echo "PROJ is required. Usage: make pull PROJ=<name>" && exit 1)
-	@bun run tools/pull.ts $(PROJ)
-
-pull-dry:
-	@test -n "$(PROJ)" || (echo "PROJ is required. Usage: make pull-dry PROJ=<name>" && exit 1)
-	@bun run tools/pull.ts $(PROJ) --dry-run
