@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import { parse } from "smol-toml";
 import {
 	CodexAdapter,
 	insertManagedBlock,
@@ -97,7 +98,7 @@ describe("CodexAdapter", () => {
 	});
 
 	// ---------------------------------------------------------------------------
-	// syncAgentsDirect — skip with warning
+	// syncAgentsDirect — md → toml translator
 	// ---------------------------------------------------------------------------
 
 	describe("syncAgentsDirect", () => {
@@ -119,6 +120,159 @@ describe("CodexAdapter", () => {
 				.then(() => true)
 				.catch(() => false);
 			expect(exists).toBe(false);
+		});
+
+		it("emits exactly the allowlist keys and parses with smol-toml via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "oracle.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: oracle",
+					"description: Use when delegating architecture analysis or debugging diagnosis",
+					"model: opus",
+					"---",
+					"",
+					"You are the Oracle agent. Follow the diagnose skill exactly.",
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(targetBase, "oracle", sourceFile, [], [], false, modelMap);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "oracle.toml");
+			const content = await fs.readFile(targetFile, "utf-8");
+			const parsed = parse(content) as Record<string, unknown>;
+
+			expect(Object.keys(parsed).sort()).toEqual(
+				["description", "developer_instructions", "model", "model_reasoning_effort", "name"].sort(),
+			);
+			expect(parsed.name).toBe("oracle");
+			expect(parsed.description).toBe(
+				"Use when delegating architecture analysis or debugging diagnosis",
+			);
+			expect(parsed.developer_instructions).toBe(
+				"You are the Oracle agent. Follow the diagnose skill exactly.",
+			);
+			expect(parsed.model).toBe("gpt-5.6-sol");
+			expect(parsed.model_reasoning_effort).toBe("high");
+		});
+
+		it("drops Claude-only frontmatter keys (add-skills/subagent_type/tools/skills) via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "sisyphus-junior.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: sisyphus-junior",
+					"description: Focused executor for multi-step implementation tasks",
+					"model: sonnet",
+					"add-skills:",
+					"  - testing",
+					"subagent_type: general-purpose",
+					"tools: Bash, Read",
+					"skills: diagnose",
+					"---",
+					"",
+					"Execute tasks directly.",
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(
+				targetBase,
+				"sisyphus-junior",
+				sourceFile,
+				[],
+				[],
+				false,
+				modelMap,
+			);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "sisyphus-junior.toml");
+			const content = await fs.readFile(targetFile, "utf-8");
+			const parsed = parse(content) as Record<string, unknown>;
+
+			expect(Object.keys(parsed).sort()).toEqual(
+				["description", "developer_instructions", "model", "model_reasoning_effort", "name"].sort(),
+			);
+			expect(parsed).not.toHaveProperty("add-skills");
+			expect(parsed).not.toHaveProperty("subagent_type");
+			expect(parsed).not.toHaveProperty("tools");
+			expect(parsed).not.toHaveProperty("skills");
+		});
+
+		it("resolves an opus-tier agent to gpt-5.6-sol + high effort via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "oracle.md");
+			await fs.writeFile(
+				sourceFile,
+				"---\nname: oracle\ndescription: Diagnose things\nmodel: opus\n---\n\nBody text.\n",
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(targetBase, "oracle", sourceFile, [], [], false, modelMap);
+
+			const content = await fs.readFile(
+				path.join(targetBase, ".codex", "agents", "oracle.toml"),
+				"utf-8",
+			);
+			const parsed = parse(content) as Record<string, unknown>;
+			expect(parsed.model).toBe("gpt-5.6-sol");
+			expect(parsed.model_reasoning_effort).toBe("high");
+		});
+
+		it("throws naming sourcePath when frontmatter description is blank via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "blank-description.md");
+			await fs.writeFile(
+				sourceFile,
+				'---\nname: blank-description\ndescription: ""\nmodel: opus\n---\n\nBody text.\n',
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await expect(
+				adapter.syncAgentsDirect(
+					targetBase,
+					"blank-description",
+					sourceFile,
+					[],
+					[],
+					false,
+					modelMap,
+				),
+			).rejects.toThrow(sourceFile);
+		});
+
+		it("throws naming sourcePath when the body is blank via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "blank-body.md");
+			await fs.writeFile(
+				sourceFile,
+				"---\nname: blank-body\ndescription: Has a description\nmodel: opus\n---\n\n   \n",
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await expect(
+				adapter.syncAgentsDirect(targetBase, "blank-body", sourceFile, [], [], false, modelMap),
+			).rejects.toThrow(sourceFile);
+		});
+
+		it("throws naming sourcePath and tier when a tier is declared but no model-map is reachable via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "no-map.md");
+			await fs.writeFile(
+				sourceFile,
+				"---\nname: no-map\ndescription: Has a description\nmodel: opus\n---\n\nBody text.\n",
+			);
+			const targetBase = path.join(tmpDir, "target");
+
+			await expect(
+				adapter.syncAgentsDirect(targetBase, "no-map", sourceFile, [], [], false, undefined),
+			).rejects.toThrow(/opus/);
 		});
 	});
 

@@ -3,7 +3,7 @@
  * Implements PlatformAdapter for the Codex platform.
  *
  * Key behaviors:
- * - agents: not supported, skip with warning
+ * - agents: md -> toml translator (name/description/developer_instructions + model-map)
  * - commands: not supported (global ~/.codex/prompts/ only), skip with warning
  * - hooks: supported; command is a literal relative `bun run .codex/hooks/<name>/index.ts`
  * - skills, scripts: syncDirectory
@@ -21,6 +21,7 @@ import { isPlainObject } from "../lib/deep-merge.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { assertMappedTier } from "../lib/model-map.ts";
+import { parseFrontmatter } from "../lib/frontmatter.ts";
 import type {
 	ModelMap,
 	PlatformConfigResult,
@@ -151,19 +152,73 @@ export class CodexAdapter implements PlatformAdapter {
 	private mcpAccumulator: Record<string, Record<string, unknown>> = {};
 
 	// ---------------------------------------------------------------------------
-	// syncAgentsDirect — not supported
+	// syncAgentsDirect — md -> toml translator
 	// ---------------------------------------------------------------------------
 
+	/**
+	 * Translates an agent `.md` (Claude-vocabulary frontmatter + body) into a
+	 * Codex agent TOML. Emits ONLY the allowlisted keys `name` / `description` /
+	 * `developer_instructions` [+ `model` / `model_reasoning_effort`] — Claude-only
+	 * frontmatter keys (`add-skills`, `subagent_type`, `tools`, `skills`, ...) are
+	 * never spread into the output. Codex does NOT reject unknown TOML keys — its
+	 * `deny_unknown_fields` is silently disabled by the flattened `ConfigToml`
+	 * (serde limitation, verified at 0.144.1) — so it will not catch a leak for us:
+	 * this emit-allowlist is the only guarantee, and must never become a denylist.
+	 */
 	async syncAgentsDirect(
-		_targetPath: string,
+		targetPath: string,
 		displayName: string,
-		_sourcePath: string,
+		sourcePath: string,
 		_addSkills?: string[],
 		_addHooks?: unknown[],
-		_dryRun = false,
-		_modelMap?: ModelMap,
+		dryRun = false,
+		modelMap?: ModelMap,
 	): Promise<void> {
-		logWarn(`Codex: agents는 지원되지 않습니다. Skip: ${displayName}`);
+		const targetFile = path.join(targetPath, this.configDir, "agents", `${displayName}.toml`);
+
+		const stat = await fs.stat(sourcePath).catch(() => undefined);
+		if (!stat?.isFile()) {
+			logWarn(`Codex agent 원본 없음: ${sourcePath}`);
+			return;
+		}
+
+		if (dryRun) {
+			logDry(`Translate agent: ${sourcePath} -> ${targetFile}`);
+			return;
+		}
+
+		const { frontmatter, body } = parseFrontmatter(await fs.readFile(sourcePath, "utf-8"));
+
+		const name =
+			typeof frontmatter.name === "string" && frontmatter.name.trim()
+				? frontmatter.name.trim()
+				: displayName;
+		const description =
+			typeof frontmatter.description === "string" ? frontmatter.description.trim() : "";
+		const developer_instructions = body.trim();
+
+		if (!description || !developer_instructions) {
+			throw new Error(
+				`codex agent '${sourcePath}': description/developer_instructions must be non-blank`,
+			);
+		}
+
+		const tier = typeof frontmatter.model === "string" ? frontmatter.model : undefined;
+		let modelFields: Partial<CodexResolvedModel> = {};
+		if (tier) {
+			if (!modelMap) {
+				throw new Error(
+					`codex agent '${sourcePath}': model tier '${tier}' but no model-map reachable`,
+				);
+			}
+			modelFields = resolveCodexAgentModel(modelMap, tier, sourcePath, name);
+		}
+
+		const tomlObj = { name, description, developer_instructions, ...modelFields };
+
+		await fs.mkdir(path.dirname(targetFile), { recursive: true });
+		await fs.writeFile(targetFile, stringify(tomlObj), "utf-8");
+		logInfo(`Codex agent 생성: ${displayName}.toml`);
 	}
 
 	// ---------------------------------------------------------------------------
