@@ -399,7 +399,12 @@ export async function syncCategory(
 	// pruned after a successful (non-dry) cleanup, so a thrown cleanup leaves the
 	// ownership record intact for the next run to retry against.
 	if (category === "skills" && deployedNames.has("agents")) {
-		await cleanupCodexSkillsFossil(deployRoot, context.backupSession, context.dryRun);
+		await cleanupCodexSkillsFossil(
+			deployRoot,
+			context.backupSession,
+			context.dryRun,
+			deployedNames.get("agents") ?? new Set(),
+		);
 		if (!context.dryRun) {
 			await removeManifestPair(deployRoot, "codex", "skills");
 		}
