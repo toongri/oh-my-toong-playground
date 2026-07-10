@@ -617,6 +617,36 @@ describe("goal state", () => {
 		expect(rawState().completion_evidence_paths).toEqual([]);
 	});
 
+	// Regression: a value-bearing flag that unconditionally swallows the next token
+	// (added to fix free-text --evidence/--rationale values beginning with "--")
+	// must NOT apply to --completion-evidence — that flag's value is a path list,
+	// never itself a flag. A valueless --completion-evidence immediately followed
+	// by another flag must still coerce to boolean `true` so the pre-existing
+	// `=== true` guard rejects it, instead of swallowing the next flag's NAME as
+	// a bogus path and silently dropping that flag's real value.
+	test("completion-evidence rejects a swallowed flag name", () => {
+		setGoalState(S, { phase: "pursuing" });
+		const script = join(import.meta.dir, "goal-state.ts");
+		const run = (cmd: string) =>
+			execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: process.env });
+
+		expect(() =>
+			run("set --phase pursuing --completion-evidence --plan-path /x/y"),
+		).toThrow();
+		expect(rawState().completion_evidence_paths).not.toEqual(["--plan-path"]);
+		expect(rawState().completion_evidence_paths).toEqual([]);
+		expect(rawState().plan_path).not.toBe("/x/y");
+
+		// Regression guard: a real valueless-looking-but-real single path still works.
+		const realPath = `${tmpDir}/real-path.txt`;
+		run(`set --phase pursuing --completion-evidence ${realPath}`);
+		expect(rawState().completion_evidence_paths).toEqual([realPath]);
+
+		// Regression guard: a comma-separated path list still works.
+		run("set --phase pursuing --completion-evidence p1,p2");
+		expect(rawState().completion_evidence_paths).toEqual(["p1", "p2"]);
+	});
+
 	// C6: a corrupt on-disk max_iterations (non-number string) must be coerced to the
 	// DEFAULT on the next merge-write rather than surviving uncoerced (it would defeat
 	// the hook's iteration >= max_iterations comparison).
