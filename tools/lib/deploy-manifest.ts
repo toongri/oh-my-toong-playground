@@ -71,14 +71,17 @@ export function computeOrphans(previousNames: string[], declaredNames: string[])
  * Remove each orphaned entry under `{deployRoot}/.{platform}/{category}/`.
  *
  * For an orphan named `X`, removes the on-disk entry `X` itself (directory or
- * extensionless file) AND any sibling `X.*` (a file carrying an extension,
- * e.g. a `.toml`/`.md` component) — the two on-disk forms a deployed component
- * can take. Matching is anchored on the full name plus a literal following
- * dot, so `intro` matches `intro.md` but never `introduction.md`: a bare
- * `startsWith` without the trailing-dot check would treat an unrelated longer
- * name as the same entry. Because `X` only ever names something OMT itself
- * previously recorded deploying, a foreign resident (a different name
- * entirely) can never match here, regardless of what orphanNames contains.
+ * extensionless file) AND its single-file forms `X.md` / `X.toml` — the exact
+ * on-disk forms OMT's adapters ever deploy a component as (extensionless
+ * directory for skills/scripts, `.md` for claude/opencode agents-commands-
+ * rules, `.toml` for gemini commands and codex agents). Matching is exact
+ * equality against those known suffixes, not a prefix/stem check, so `intro`
+ * matches `intro.md` but never `introduction.md`, and never a same-stem
+ * foreign file like `intro.personal.md`. Because `X` only ever names
+ * something OMT itself previously recorded deploying, and the match is exact
+ * rather than a `startsWith`, a foreign resident (any name, including one
+ * that merely starts with `X.`) can never match here, regardless of what
+ * orphanNames contains.
  */
 export async function removeOrphans(
 	deployRoot: string,
@@ -97,7 +100,9 @@ export async function removeOrphans(
 	}
 
 	for (const entry of entries) {
-		const isOrphan = orphanNames.some((name) => entry === name || entry.startsWith(`${name}.`));
+		const isOrphan = orphanNames.some(
+			(name) => entry === name || entry === `${name}.md` || entry === `${name}.toml`,
+		);
 		if (isOrphan) {
 			await fs.rm(path.join(categoryDir, entry), { recursive: true, force: true });
 		}
