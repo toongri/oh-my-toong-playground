@@ -97,7 +97,7 @@ The presentation markdown is authored in exactly this order, top to bottom:
 1. **H1 + meta table** — the plan title as an H1, followed by the meta table (plan file path, TODO count, AC count, wave label).
 2. **Stage B · Execution Recommendation box** — a blockquote surfacing the reviewer verdicts and recommendation output from session state.
 3. **Pipeline State box** — a blockquote surfacing the S0 → S_current pipeline-state journal from session state, immediately after the Execution Recommendation box.
-4. **Bird's-Eye View** — the `## Bird's-Eye View` section (coverage table + triggered lens diagrams), when the plan has >= 2 components.
+4. **Bird's-Eye View** — the `## Bird's-Eye View` section (coverage table + triggered lens diagrams), generated when ANY lens trigger holds (see `diagram-guide.md` Lens Taxonomy) — NOT only the System topology `>= 2 components` trigger. A single-component plan that triggers Domain state or Business logic still generates the section to host that diagram and its coverage-table row; `>= 2 components` gates only the System topology row inside the table, never the section's existence.
 5. **Review Digest** — the `## Review Digest` section (AC paired with verification method), immediately after Bird's-Eye View when generated, otherwise first.
 6. **plan body** — the full plan markdown, rewritten for readability, with the TODO breakdown wrapped in collapsed `<details><summary>` blocks so execution detail is opt-in reading.
 
