@@ -83,7 +83,7 @@ digraph prometheus_flow {
     "Write plan to $OMT_DIR/plans/*.md" [shape=box];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
-    "Stage A: HTML Render" [shape=box];
+    "Stage A: Markdown Render" [shape=box];
     "Stage B: Execution Recommendation" [shape=box];
     "Stage C: Execution Bridge" [shape=ellipse];
     "User's choice?" [shape=diamond];
@@ -110,8 +110,8 @@ digraph prometheus_flow {
     "Momus verdict?" -> "Momus review" [label="REQUEST_CHANGES (default: scoped re-review)\nrevise plan → re-run only Momus (fresh instance), upstream preserved"];
     "Momus verdict?" -> "Requirements Interview" [label="REQUEST_CHANGES (exception)\nrequirements root cause → re-Metis → … → re-Momus"];
     "Momus verdict?" -> "Co-Design Interview\n(in-phase Daedalus advisory folded in)" [label="REQUEST_CHANGES (exception)\ndesign root cause → human gate → re-plan → re-Momus"];
-    "Momus verdict?" -> "Stage A: HTML Render" [label="APPROVE/COMMENT"];
-    "Stage A: HTML Render" -> "Stage B: Execution Recommendation";
+    "Momus verdict?" -> "Stage A: Markdown Render" [label="APPROVE/COMMENT"];
+    "Stage A: Markdown Render" -> "Stage B: Execution Recommendation";
     "Stage B: Execution Recommendation" -> "Stage C: Execution Bridge";
     "Stage C: Execution Bridge" -> "User's choice?";
     "User's choice?" -> "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [label="(1) Full orchestration\n(fresh S4 APPROVE/COMMENT)"];
@@ -774,7 +774,7 @@ This contract applies to EVERY plan. The contract lives here — not in a refere
 - **Location**: `$OMT_DIR/plans/{name}.md`
 - **Language**: English
 - **Exclude**: Vague criteria ("verify it works")
-- **Agent anonymity**: The plan file records established facts, not the agents or passes that produced them. The ban is on agent-as-source attribution, not token presence: do not write "oracle confirmed", "explore found", "per the reviewer", "3 oracle passes established", or any phrasing that credits explore / librarian / oracle / Metis / Momus as the source of a fact. Bare domain use of those words is fine (e.g. "migrate to Oracle DB", "explore the cache policy"). State the conclusion as fact and let the WHY stand on its own evidence; the agents' results are fully applied to the planning and the plan, but the agents do not appear as the plan's source. (Scope: the durable plan file only. The ephemeral Stage A HTML presentation MAY surface pipeline/reviewer state as an intentional process-transparency overlay — see `## Review Pipeline`.)
+- **Agent anonymity**: The plan file records established facts, not the agents or passes that produced them. The ban is on agent-as-source attribution, not token presence: do not write "oracle confirmed", "explore found", "per the reviewer", "3 oracle passes established", or any phrasing that credits explore / librarian / oracle / Metis / Momus as the source of a fact. Bare domain use of those words is fine (e.g. "migrate to Oracle DB", "explore the cache policy"). State the conclusion as fact and let the WHY stand on its own evidence; the agents' results are fully applied to the planning and the plan, but the agents do not appear as the plan's source. (Scope: the durable plan file only. The derived presentation view MAY surface pipeline/reviewer state as an intentional process-transparency overlay — see `## Review Pipeline`.)
 
 ### Plan Sections (all required)
 
@@ -1167,11 +1167,11 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 
 | Stage | Mandate | Detail location |
 |---|---|---|
-| **Stage A** | Render plan to a single-file, browser-openable HTML — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts + Mermaid diagram(s) — a bird's-eye System topology diagram REQUIRED when the plan has >= 2 components (governed by `review-pipeline.md`), plus each of the six lens diagrams (System topology / Module-API / User-Actor / Domain state / Domain-Service object / Business logic, defined in `diagram-guide.md`) REQUIRED when its trigger FACT holds in `plan.md` (trigger-based, not optional; the only reason to omit a lens is that its trigger FACT is false). Every diagram shows the runtime behavior the implemented plan would produce — flows, sequences, state transitions, object structures. Diagram count scales with plan size: a larger plan warrants more diagrams because diagrams are the plan's review surface; there is no cap. Re-visualize decided content only, never inventing edges. ALL diagrams grouped in the Bird's-Eye section (macro → micro) + a Review Digest (AC + per-AC verification, re-surfaced verbatim) before the plan body, TODO execution detail collapsed in `<details>` (never omitted) + session-derived boxes (Stage B recommendation, Pipeline State). Always produced via template substitution (no converter needed); when the plan is approved, the HTML gets made. | Exact output path, rendering invariants (6), translation invariants (3), readability enrichment, template reference in `review-pipeline.md`; diagram type-selection + authoring rules + guardrails + presentation protocol + post-draw self-audit in `diagram-guide.md` |
+| **Stage A** | Render the plan to a single-file markdown presentation at `$OMT_DIR/plans/presentation/{name}.md` — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts. The Bird's-Eye section opens with the six-lens coverage table, then every triggered diagram: a bird's-eye System topology diagram REQUIRED when the plan has >= 2 components (governed by `review-pipeline.md`), plus each of the six lens diagrams (System topology / Module-API / User-Actor / Domain state / Domain-Service object / Business logic, defined in `diagram-guide.md`) REQUIRED when its trigger FACT holds in `plan.md` (trigger-based, not optional; the only reason to omit a lens is that its trigger FACT is false). Every diagram shows the runtime behavior the implemented plan would produce — flows, sequences, state transitions, object structures. Diagram count scales with plan size: a larger plan warrants more diagrams because diagrams are the plan's review surface; there is no cap. Re-visualize decided content only, never inventing edges. Diagrams run macro → micro within the Bird's-Eye section, which precedes a Review Digest (AC + per-AC verification, re-surfaced verbatim), which precedes the plan body; TODO execution detail collapsed in `<details>` (never omitted) + session-derived boxes (Stage B recommendation, Pipeline State) rendered as blockquote callouts. Directly authored per the Presentation Section Order (no template, no substitution); when the plan is approved, the presentation gets made. | Presentation Section Order, translation invariants, readability enrichment in `review-pipeline.md`; diagram type-selection + authoring rules + guardrails + presentation protocol + post-draw self-audit in `diagram-guide.md` |
 | **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Momus feasibility signal). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
 | **Stage C** | Execution Bridge (S7) via platform's user-prompt primitive — mode choice ONLY: 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. Execution selection is valid only against the fresh S4 verdict on the current artifact (see the S8 reachability invariant in the Pipeline State Machine). | Option formatting in `review-pipeline.md` |
 
-**Stage A language gate — execute BEFORE rendering any prose:** First state the session's conversation language out loud, then render every prose string in the HTML in that language — hero text, headings, body, callouts alike. Detection is render-time, never hard-coded. Only the preservation list stays verbatim (code blocks, file paths, CLI, `WI-N`, `AC#M`, `S0-S8`); `plan.md` on disk is never rewritten. This is Stage A's silent-failure point — skip the active naming and the prose defaults to `plan.md`'s authoring language even when the session ran in another language. This gate is binding on its own; the full Translation Rule (3 invariants) in `review-pipeline.md` adds detail but is not a precondition for honoring it.
+**Stage A language gate — execute BEFORE rendering any prose:** First state the session's conversation language out loud, then render every prose string in the presentation markdown in that language — hero text, headings, body, callouts alike. Detection is render-time, never hard-coded. Only the preservation list stays verbatim (code blocks, file paths, CLI, `WI-N`, `AC#M`, `S0-S8`, `drawn`, `trigger FALSE:`); `plan.md` on disk is never rewritten. This is Stage A's silent-failure point — skip the active naming and the prose defaults to `plan.md`'s authoring language even when the session ran in another language. This gate is binding on its own; the full Translation Rule (3 invariants) in `review-pipeline.md` adds detail but is not a precondition for honoring it.
 
 On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 → delegate to sisyphus-junior. Option 3 → return to the S0 Requirements interview (user-initiated revise).
 
@@ -1191,7 +1191,7 @@ On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 �
 | Momus | Separate metis results in prompt | Already in Plan Context + anchoring risk |
 | Momus | Adding review instructions | Momus has own criteria |
 
-> Detailed invocation templates (3-Section Metis, Daedalus Verification Focus, Momus path-only) + Stage A HTML rendering procedure (6 rendering invariants, 3 translation invariants, readability enrichment, template reference, substitution semantics) + Stage B Decision Matrix details + Stage C option formatting → [review-pipeline.md](review-pipeline.md). Lookup-only — read the relevant section when executing that specific stage.
+> Detailed invocation templates (3-Section Metis, Daedalus Verification Focus, Momus path-only) + Stage A markdown rendering procedure (section order, translation invariants, readability enrichment) + Stage B Decision Matrix details + Stage C option formatting → [review-pipeline.md](review-pipeline.md). Lookup-only — read the relevant section when executing that specific stage.
 
 ---
 
@@ -1209,7 +1209,7 @@ This resolves the apparent paradox in the prior wording — "optional" referred 
 | Entering Acceptance Criteria drafting (Clearance all-YES, about to propose AC) | [acceptance-criteria.md](acceptance-criteria.md) | Full file, single Read call |
 | About to invoke `Write` on the plan file (`$OMT_DIR/plans/*.md`) | [plan-template.md](plan-template.md) | Full file, single Read call |
 | About to invoke a reviewer (Metis/Daedalus/Momus) OR execute Stage A/B/C | [review-pipeline.md](review-pipeline.md) | Full file, single Read call |
-| About to insert any diagram into the Stage A HTML (whether the required bird's-eye topology diagram or any triggered lens diagram) | [diagram-guide.md](diagram-guide.md) | Full file, single Read call |
+| About to insert any diagram into the Stage A presentation (whether the required bird's-eye topology diagram or any triggered lens diagram) | [diagram-guide.md](diagram-guide.md) | Full file, single Read call |
 
 **Per-reference cache**: One full-read per session per reference is sufficient. If you have already full-read `interview.md` earlier in this session, you do not need to re-read on every subsequent interview turn — but if you did partial-read or have not read it at all, the trigger still demands full-read NOW.
 

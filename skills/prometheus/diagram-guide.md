@@ -1,12 +1,12 @@
 # Diagram Guide (Stage A)
 
-Selection criteria and authoring rules for diagrams rendered in the Stage A HTML presentation. A diagram is **Readability Enrichment** — it makes flow or structure already decided in `plan.md` *visible*. It never authors plan content and never touches `plan.md` on disk.
+Selection criteria and authoring rules for diagrams rendered in the Stage A markdown presentation. A diagram is **Readability Enrichment** — it makes flow or structure already decided in `plan.md` *visible*. It never authors plan content and never touches `plan.md` on disk.
 
 ## Stage A Fidelity Bounds (read first)
 
 A diagram is the highest-density enrichment, so the fidelity bound is strictest:
 
-- **Ephemeral only.** Diagrams render into the HTML presentation only. NEVER write a diagram or its source into `plan.md` — Invariant 3 keeps `plan.md` the unmodified single source of truth; every re-render redraws from it. Inject the ` ```mermaid ` fence into the render-time markdown string, not into the file on disk.
+- **Derived view only.** Diagrams render into the derived presentation file only. NEVER write a diagram or its source into `plan.md` — Invariant 3 keeps `plan.md` the unmodified single source of truth; every re-render redraws from it. Inject the ` ```mermaid ` fence into the render-time markdown string, not into the file on disk.
 - **Re-visualize decided flow only.** Drawing an edge forces a commitment: who calls whom, in what order, which component owns what. If you cannot draw an arrow or relationship without making a decision `plan.md` did not already make, **STOP** — that is a plan defect, not a diagram opportunity. Return to revise the plan and re-run the pipeline; do not invent the missing edge at render time. A diagram can never be vaguer than the plan it visualizes.
 - **Diagrams are the plan's review surface.** A reviewer should be able to verify the design by reading the diagram set without reading all the prose. Diagram count therefore SHOULD scale with plan size — a large plan with many components, APIs, and stateful entities warrants many diagrams. There is no numeric cap, no consolidation-to-minimize pressure, and no "too many diagrams = scope defect" tripwire. Suppressing diagrams makes large plans unverifiable; that is the problem this rule exists to prevent.
 - **Trigger-based REQUIRED.** Each lens in the **Lens Taxonomy** section has a trigger FACT. When that FACT holds in `plan.md`, the lens's diagram is REQUIRED — not optional, not a judgment call. The only reason not to draw a lens is that its trigger FACT is false (the plan genuinely has no API, no stateful entity, etc.). A triggered lens with no source in `plan.md` is a plan gap to fix, not an excuse to skip the diagram.
@@ -30,7 +30,25 @@ Diagrams are organized by lens (the altitude or concern each diagram addresses).
 
 System topology applies that general rule, with two specifics preserved: its existence trigger is ">= 2 components" (and `review-pipeline.md` gates its existence on that same fact — never change this trigger); and its richest form, the decision-log-derived ownership TABLE plus its flow mermaid, is still gated on structural enumeration (Complex/Architecture). So when the plan has >= 2 components but carries NO structural enumeration (e.g. a Scoped plan), the System topology diagram still EXISTS, drawn from the plan-decided component interactions / topology, while the decision-log ownership table is omitted; when there IS structural enumeration, the richer ownership-table + flow mermaid is drawn. This is a content-source distinction, not an existence escape: the diagram is never skipped once >= 2 components holds.
 
-**Decision-log mermaid.** Each D-item in the unified decision log records one decided commitment. An in-band mermaid (rendered inline within the decision log, distinct from the grouped Bird's-Eye lens set) re-visualizes the DECIDED D-items only — it MUST NOT invent ownership or edges beyond what the decided items already record. The diagram is never a source of truth; the decided decision log in `plan.md` remains the single authority. The same trigger rule applies: draw it when the trigger holds, skip it only when the trigger FACT is false.
+**Decision-log fidelity.** Each D-item in the unified decision log records one decided commitment. Any mermaid that re-visualizes decided D-items renders inside the Bird's-Eye View section alongside every other lens — fence-locality is absolute (see the Coverage Table section below): never inline in the decision-log prose, never scattered through the plan body. It re-visualizes the DECIDED D-items only — it MUST NOT invent ownership or edges beyond what the decided items already record. The diagram is never a source of truth; the decided decision log in `plan.md` remains the single authority. The same trigger rule applies: draw it when the trigger holds, skip it only when the trigger FACT is false.
+
+## Coverage Table (audit ledger)
+
+The rendered presentation's Bird's-Eye View section starts with a 6-row
+coverage table, header
+exactly `| Lens | Trigger FACT | Status |`. Every Status cell is exactly
+`drawn` or `trigger FALSE: <reason>` — never blank. The count of `drawn`
+rows MUST match the number of mermaid fences in the presentation, and every
+mermaid fence lives inside the Bird's-Eye View section (fence-locality).
+
+This table is an audit ledger for lens coverage: a mechanical check catches
+a lying `drawn` row (fence count mismatch), while a wrong `trigger FALSE`
+reason is caught by human review. A blank Status cell is a defect, not an
+acceptable omission.
+
+Note: this coverage table is prometheus-specific and deliberately differs
+in lens composition from deep-interview's (prometheus includes
+`classDiagram` and excludes `erDiagram`; deep-interview does the reverse).
 
 ## 1. Diagram Types
 

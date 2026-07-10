@@ -2,7 +2,7 @@
 
 **This file is lookup-only.** The mandatory review-pipeline rules are defined inline in `SKILL.md > ## Review Pipeline (Mandatory Contract)`. The contract is authoritative.
 
-Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A HTML render, Stage B Decision Matrix computation, or Stage C option presentation. Read the corresponding section in full at that moment.
+Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A markdown render, Stage B Decision Matrix computation, or Stage C option presentation. Read the corresponding section in full at that moment.
 
 ---
 
@@ -64,58 +64,63 @@ Momus verifies both document quality and codebase feasibility: it reads the refe
 
 ---
 
-## Stage A: HTML Render — Procedure
+## Stage A: Markdown Render — Procedure
 
-Convert `$OMT_DIR/plans/{name}.md` to a single-file HTML document and open it in the browser so the user can read the plan rendered.
+Render `$OMT_DIR/plans/{name}.md` into a single presentation markdown file so the user can read the plan in a readable, navigable form.
 
 **Requirements:**
-- **Output artifact**: `$OMT_DIR/plans/presentation/{name}.html` — `{name}` is the same stem as the plan markdown (`{name}.md`), so each plan owns its own HTML file and concurrent or successive plans never overwrite a shared file. Create the `presentation/` directory if it does not yet exist. Single-file, self-contained, browser-openable.
-- **Content fidelity (faithful, not verbatim)**: Render the plan faithfully — no plan content may be omitted, weakened, or contradicted. Within that bound, prose MAY be rewritten for readability (see Translation Rule) and MAY carry readability callouts (see Readability Enrichment). The rendered HTML is a presentation for the human reader, not a second source of truth.
-- **Production**: render the plan into the canonical template — string substitution, no markdown-to-HTML converter needed (marked.js renders client-side at browser-open), so any tool works (awk, sed, bun, the Write tool). When the plan is approved, the HTML always gets made; output must meet the single-file + browser requirement.
+- **Output artifact**: `$OMT_DIR/plans/presentation/{name}.md` — `{name}` is the same stem as the plan markdown (`{name}.md`), so each plan owns its own presentation file and concurrent or successive plans never overwrite a shared file. Create the `presentation/` directory if it does not yet exist.
+- **Content fidelity (faithful, not verbatim)**: Render the plan faithfully — no plan content may be omitted, weakened, or contradicted. Within that bound, prose MAY be rewritten for readability (see Translation Rule) and MAY carry readability callouts (see Readability Enrichment). The rendered markdown is a presentation for the human reader, not a second source of truth.
+- **Production**: author the presentation markdown directly, following the Presentation Section Order below. No template, no format converter, no placeholder-substitution engine — the agent reads the section order and writes the file.
 
-### HTML Components
+### Presentation Components
 
-The Stage A HTML output is composed of 5 distinct components:
+The Stage A markdown presentation is composed of 5 distinct components:
 
-- **hero header** — plan title, meta pills (TODO count, AC count, wave label, plan file path), and stage kicker
-- **Stage B** — execution recommendation box injected from session state (reviewer verdicts, recommendation output)
-- **Pipeline State** — pipeline state journal box injected from session state (S0 → S_current transitions)
-- **bird's-eye view** — the System topology section, governed by these sub-rules (each independently editable):
+- **H1 + meta table** — plan title as an H1 heading, followed by a meta table (plan file path, TODO count, AC count, wave label)
+- **Stage B + Pipeline State** — two blockquote boxes authored from session state, in this order: (a) Stage B · Execution Recommendation (reviewer verdicts, recommendation output), (b) Pipeline State (S0 → S_current transitions)
+- **Bird's-Eye View** — the `## Bird's-Eye View` section, governed by these sub-rules (each independently editable):
   - **Source authority**: the ownership table + flow mermaid are generated FROM the decided D-items in the plan's decision log. The decision log is the single render authority — no node, edge, or ownership absent from the decided log.
   - **Existence / trigger**: the System topology diagram is REQUIRED when the plan has >= 2 components — a single existence trigger, not a discretionary diagram test. This is the same fact `diagram-guide.md` states for the System topology lens.
   - **Content source**: existence and content source are distinct (the general Tier-2 rule — see the Render-source invariant under Readability Enrichment). A triggered lens diagram sources from content decided in plan.md, whether that content is a structural D-item OR decided plan prose. For System topology specifically: the Tier-1 richest form — the decision-log-derived ownership table plus its flow mermaid — is sourced from structural enumeration (Complex/Architecture flag). When the plan has >= 2 components but carries NO structural enumeration (e.g. a Scoped plan), the System topology diagram still exists, drawn from the plan-decided component interactions, while the decision-log ownership table is omitted.
-  - **Edges: none**: when every structural (solo) D-item in the log declares `Edges: none` — contested items carry no Edges field and are excluded from this check — the component renders the ownership table only (the flow mermaid is omitted).
+  - **Edges: none**: when every structural (solo) D-item in the log declares `Edges: none` — contested items carry no Edges field and are excluded from this check — the section renders the ownership table only (the flow mermaid is omitted).
   - **Gating exemption**: `diagram-guide.md` governs type selection, guardrails, and presentation for all diagrams including this one, but does not gate its existence — existence is the ">= 2 components" trigger above.
-  - **In-band render mechanism**: rendered in-band — the renderer prepends a generated `## Bird's-Eye View` section (ownership table + ` ```mermaid ` fence if edges exist) to the render-time markdown before JSON-encoding into `article#plan-content`. Classified as plan-derived.
-  - **Single gathering point + ordering**: the Bird's-Eye section is the single gathering point for ALL diagrams. Every triggered lens diagram (REQUIRED when its trigger FACT holds — see diagram-guide.md) renders here immediately after the ownership table + flow mermaid, ordered macro → micro (System topology / Module-API → User-Actor / Domain state → Domain-Service object / Business logic), each with its own Why → Diagram → Interpretation — never scattered through the plan body.
-  - **Empty-section edge case**: when the plan generates no decision-log ownership table (no structural enumeration) but other lens triggers hold, the renderer still creates the section to host them — the decision-log-derived ownership table and flow mermaid are simply omitted.
-- **review digest** — a generated `## Review Digest` section prepended before the plan body: immediately after the Bird's-Eye View when that section is generated, otherwise first in the render-time markdown. Contains the plan's acceptance criteria, each paired with its verification method (command / check) re-surfaced verbatim from the plan's AC and Verification sections. This is the collaborator's primary review surface — what will be true and how it is proven. Re-surfacing only; no new facts. Classified as plan-derived.
-- **plan-content** — the full plan markdown rendered into `article#plan-content`; sourced faithfully from plan.md (readability rewrite + enrichment callouts allowed per Readability Enrichment — no omission, no contradiction, no invented facts). **Reading order serves the design reviewer**: execution-detail sections (the TODO breakdown) are wrapped in collapsed `<details><summary>` blocks in the render-time markdown (marked passes raw HTML through) so design-review content leads and execution detail is opt-in reading — collapse, never omit: content fidelity still requires the full plan present.
+  - **Coverage table + rendering order**: the section opens with a 6-row coverage table, one row per lens, canonical header `| Lens | Trigger FACT | Status |`, each row's Status either `drawn` or `trigger FALSE: <reason>` — silence is not allowed, every lens row must resolve to one of the two. Below the table, every lens whose trigger FACT holds is rendered in full, ordered macro → micro (System topology / Module-API → User-Actor / Domain state → Domain-Service object / Business logic), each with its own Why → Diagram → Interpretation — never scattered through the plan body. Every mermaid fence in the presentation file lives inside this section.
+  - **Empty-section edge case**: when the plan carries no structural enumeration, the decision-log-derived ownership table is omitted — but this does NOT flip the System topology row to `trigger FALSE`. Once `>= 2 components` holds, that lens's diagram still exists, drawn from the plan-decided component interactions (the Content source rule above), so its coverage-table row reads `drawn`. `trigger FALSE: <reason>` is reserved for a lens whose own trigger FACT is genuinely false — never for a triggered lens that merely lost its structural (decision-log) source. The section is still authored to host whatever other lens triggers hold.
+- **Review Digest** — a `## Review Digest` section, immediately after the Bird's-Eye View when that section is generated, otherwise first in the presentation markdown. Contains the plan's acceptance criteria, each paired with its verification method (command / check) re-surfaced verbatim from the plan's AC and Verification sections. This is the collaborator's primary review surface — what will be true and how it is proven. Re-surfacing only; no new facts.
+- **plan body** — the full plan markdown rewritten for readability into the presentation file; sourced faithfully from plan.md (readability rewrite + enrichment callouts allowed per Readability Enrichment — no omission, no contradiction, no invented facts). **Reading order serves the design reviewer**: execution-detail sections (the TODO breakdown) are wrapped in collapsed `<details><summary>` blocks so design-review content leads and execution detail is opt-in reading — collapse, never omit: content fidelity still requires the full plan present.
+
+### Presentation Section Order
+
+The presentation markdown is authored in exactly this order, top to bottom:
+
+1. **H1 + meta table** — the plan title as an H1, followed by the meta table (plan file path, TODO count, AC count, wave label).
+2. **Stage B · Execution Recommendation box** — a blockquote surfacing the reviewer verdicts and recommendation output from session state.
+3. **Pipeline State box** — a blockquote surfacing the S0 → S_current pipeline-state journal from session state, immediately after the Execution Recommendation box.
+4. **Bird's-Eye View** — the `## Bird's-Eye View` section (coverage table + triggered lens diagrams), generated when ANY lens trigger holds (see `diagram-guide.md` Lens Taxonomy) — NOT only the System topology `>= 2 components` trigger. A single-component plan that triggers Domain state or Business logic still generates the section to host that diagram and its coverage-table row; `>= 2 components` gates only the System topology row inside the table, never the section's existence.
+5. **Review Digest** — the `## Review Digest` section (AC paired with verification method), immediately after Bird's-Eye View when generated, otherwise first.
+6. **plan body** — the full plan markdown, rewritten for readability, with the TODO breakdown wrapped in collapsed `<details><summary>` blocks so execution detail is opt-in reading.
+
+Every mermaid fence in the presentation file lives inside the Bird's-Eye View section — fence-locality is absolute, no diagram is drawn anywhere else in the document.
 
 ### Source Classification
 
 | Component | Source |
 |---|---|
-| hero header | plan-derived |
-| Stage B | session-derived |
-| Pipeline State | session-derived |
-| bird's-eye view | plan-derived |
-| review digest | plan-derived |
-| article#plan-content | plan-derived |
+| H1 + meta table | plan-derived |
+| Stage B · Execution Recommendation box | session-derived |
+| Pipeline State box | session-derived |
+| Bird's-Eye View | plan-derived |
+| Review Digest | plan-derived |
+| plan body | plan-derived |
 
-`plan-derived` components populated from `$OMT_DIR/plans/{name}.md`. `session-derived` composed from session state (reviewer verdicts, pipeline state transitions) and injected via `<!-- SESSION-DERIVED-BOXES-HERE -->` marker.
-
-### Template Reference
-
-Canonical HTML shell at: `skills/prometheus/templates/plan-presentation.html`
-
-Contains the static HTML structure with `{{placeholder}}` substitution variables, the `<!-- SESSION-DERIVED-BOXES-HERE -->` injection marker, and an embedded top-comment documenting all placeholders.
+`plan-derived` components are authored from `$OMT_DIR/plans/{name}.md`. `session-derived` components are authored directly from session state (reviewer verdicts, pipeline state transitions) at render time — no injection marker, no template.
 
 ### Translation Rule
 
 Three invariants govern language translation applied during Stage A rendering.
 
-**Invariant 1 — Session auto-detect of conversational language**: The session detects the conversational language in use (the language the user is writing in during the current session). All prose content in HTML output is **rewritten in that detected communication language** so the reader can follow it naturally — a readability-oriented rewrite, not a word-for-word translation of the plan's source prose. No language is hard-coded; detection is render-time.
+**Invariant 1 — Session auto-detect of conversational language**: The session detects the conversational language in use (the language the user is writing in during the current session). All prose content in the presentation markdown is **rewritten in that detected communication language** so the reader can follow it naturally — a readability-oriented rewrite, not a word-for-word translation of the plan's source prose. No language is hard-coded; detection is render-time.
 
 **Invariant 2 — Prose-only scope with preservation list**: Translation applies to prose-only content. The following are **never** translated:
 
@@ -126,25 +131,26 @@ Three invariants govern language translation applied during Stage A rendering.
 - `AC#M` — acceptance criteria labels (e.g. `AC#1`)
 - `S0-S8` — pipeline state identifiers
 - `grep` — tool names used as identifiers in verification commands
+- `drawn` / `trigger FALSE:` — coverage-table status literals
 
 Translating any item is a rule violation.
 
-**Invariant 3 — plan.md as single source-of-truth, render-time-only translation**: `plan.md` is the single SoT for plan content. No translated copy (`plan.{lang}.md`) is written to disk; translation is render-time only. HTML is ephemeral — re-rendering always draws from unmodified `plan.md`.
+**Invariant 3 — plan.md as single source-of-truth, render-time-only translation**: `plan.md` is the single SoT for plan content. No translated copy is written to disk; translation is render-time only. The presentation file is derived, non-authoritative — re-rendering always draws from unmodified `plan.md`.
 
 **Fallback**: If language detection fails or yields an ambiguous result, render in original language. Do not block Stage A on detection failure.
 
 ### Readability Enrichment
 
-`plan.md` is written in terse, executor-facing spec language. The HTML presentation MAY add readability aids so the human reader can follow it — but only within the content-fidelity bound declared in Requirements.
+`plan.md` is written in terse, executor-facing spec language. The presentation MAY add readability aids so the human reader can follow it — but only within the content-fidelity bound declared in Requirements.
 
 **Allowed:**
 - Rephrasing plan prose for natural reading flow in the communication language (per Translation Rule).
 - Markdown blockquote callouts (`>`) that surface context the reader needs — drawn from the plan's own Context / interview-rationale / ADR sections. Use them to make an already-stated WHY easy to find, not to assert anything new.
-- Mermaid diagrams that re-visualize flow or structure **already decided in `plan.md`** (e.g. a runtime control flow the plan describes only in prose across several TODOs). Governed by the lens taxonomy (each lens REQUIRED when its trigger FACT holds) and bound by the Stage A Fidelity Bounds. The lens taxonomy (6 lenses, trigger FACTs), type selection, guardrails, and the Why -> Diagram -> Interpretation presentation protocol live in `diagram-guide.md`. The template loads the Mermaid runtime, so a ` ```mermaid ` fence injected into the render-time markdown renders as a diagram. Before drawing, full-read `diagram-guide.md` first — the Reference Full-Read Mandate triggers on diagram insertion (any lens trigger FACT holds).
+- Mermaid diagrams that re-visualize flow or structure **already decided in `plan.md`** (e.g. a runtime control flow the plan describes only in prose across several TODOs). Governed by the lens taxonomy (each lens REQUIRED when its trigger FACT holds) and bound by the Stage A Fidelity Bounds. The lens taxonomy (6 lenses, trigger FACTs), type selection, guardrails, and the Why -> Diagram -> Interpretation presentation protocol live in `diagram-guide.md`. A ` ```mermaid ` fence written directly into the presentation markdown renders as a diagram in a Mermaid-aware markdown viewer. Before drawing, full-read `diagram-guide.md` first — the Reference Full-Read Mandate triggers on diagram insertion (any lens trigger FACT holds).
 
   **Render-source invariant (two tiers of render authority)**: Render authority is explicitly TWO tiers, and the two tiers source content differently.
 
-  - **Tier 1 — decision-log-bound (the two log-rooted artifacts).** The derived bird's-eye view (the decision-log-derived ownership table + flow mermaid) AND the in-band decision-log mermaid are rooted IN the decision log; the decision log in plan.md is their single render authority. They re-visualize the decided D-items as recorded in plan.md — no diagram may introduce ownership or edges absent from the decided log. The bound is bidirectional: such a diagram also may not say LESS than the decided log within its scope — no erasing decided ownership by aggregation, no renaming decided components, no omitting the return edge of a drawn synchronous call. This strict log-binding is what guarantees these two artifacts invent nothing; do not weaken it.
+  - **Tier 1 — decision-log-bound (the two log-rooted artifacts).** The derived Bird's-Eye View (the decision-log-derived ownership table + flow mermaid) AND the in-band decision-log mermaid are rooted IN the decision log; the decision log in plan.md is their single render authority. They re-visualize the decided D-items as recorded in plan.md — no diagram may introduce ownership or edges absent from the decided log. The bound is bidirectional: such a diagram also may not say LESS than the decided log within its scope — no erasing decided ownership by aggregation, no renaming decided components, no omitting the return edge of a drawn synchronous call. This strict log-binding is what guarantees these two artifacts invent nothing; do not weaken it.
   - **Tier 2 — the grouped Bird's-Eye lens diagrams (the 6-lens set).** Each may re-visualize content already decided in plan.md — whether that content is recorded as a structural D-item OR as decided plan prose. The no-invention bound still holds in full: the diagram still cannot draw an edge, ownership, or relationship the plan never decided, and still cannot be vaguer than the plan it visualizes. The only difference from Tier 1 is the source of a decided edge: a lens diagram may source a decided edge from plan prose, not only from a structural D-item. A triggered lens (REQUIRED when its trigger FACT holds — see `diagram-guide.md`) is therefore never forced to skip just because the plan carries no structural D-item; it sources from the decided prose instead.
 
   Authoring rules and the post-draw self-audit live in `diagram-guide.md`.
@@ -152,42 +158,10 @@ Translating any item is a rule violation.
 **Forbidden:**
 - Introducing any fact, decision, scope, or rationale not already present in `plan.md`. Enrichment re-surfaces existing context; it does not author new context. If the plan genuinely lacks context the reader needs, that is a plan defect — fix the plan and re-run the pipeline, do not paper over it at render time.
 - Omitting, weakening, or contradicting any plan content.
-- Writing enrichment back to disk. Per Invariant 3 the callouts live only in the ephemeral HTML; `plan.md` stays the single source of truth and every re-render redraws from it.
+- Writing enrichment back to disk. Per Invariant 3 the callouts live only in the derived presentation file; `plan.md` stays the single source of truth and every re-render redraws from it.
 - Drawing a diagram edge, arrow, or relationship that `plan.md` did not already decide. A diagram cannot be vaguer than the plan it visualizes — if you cannot draw it without inventing a who-calls-whom or ownership decision the plan never made, that is a plan defect: fix the plan and re-run the pipeline, do not invent the edge at render time.
 
-Rationale: `plan.md` is the artifact the pipeline reviewed — Momus reviewed the finished plan at S4, and Daedalus reviewed its design-brief / ADR sections at S2 — and it is the artifact the executor runs from. Net-new content in the HTML would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
-
-### Rendering Methodology
-
-Seven invariants govern substitution and injection during Stage A rendering.
-
-**Rule 1 — Active-element-only substitution**: `{{…}}` placeholders are substituted only at their active template elements. For `{{PLAN_MARKDOWN_JSON}}`, the active container is the `script type="application/json" id="plan-md"` element; substitution occurs only at that active element line. Literal occurrences inside the top-comment documentation block are NOT substituted. Replacement patterns must be anchored to the specific enclosing element by its opening-tag signature, not to the raw placeholder token alone.
-
-**Rule 2 — Multi-occurrence guard**: When a placeholder token appears in both documentation and an active element, the substitution engine MUST skip the documentation occurrence. Preferred: element-line regex anchored on active element. **Alternatives**: first-match-only with active-element anchor; pre-pass element extraction.
-
-**Multi-active-occurrence semantics**: If a placeholder legitimately appears across multiple active elements (e.g., `{{TOC_TITLE}}` in both navigation header and footer), substitution applies to ALL active occurrences — only documentation/top-comment literals are excluded. This prevents a future-analogous bug where first-match-only logic silently drops a second occurrence of a legitimate active placeholder.
-
-**Rule 3 — Session-derived box injection sequence**: The `<!-- SESSION-DERIVED-BOXES-HERE … -->` comment block is replaced with exactly two `.section-box` elements in this exact order: (a) Stage B · Execution Recommendation, (b) Pipeline State. The entire comment block (from `<!-- SESSION-DERIVED-BOXES-HERE` to terminating `-->`) is removed; the 2 boxes replace it verbatim in order.
-
-**Rule 4 — Error recovery / fallback**: If any placeholder is not found in the template, the rendering engine retains the original element untouched — no silent HTML destruction. If translation detection fails per the Translation Rule, fallback to original language.
-
-**Rule 5 — Tool-agnostic**: Substitution engine is the implementer's choice (awk, sed, Node, Python, Bun script, etc.). Rendering Methodology declares invariants, not implementation. Any tool satisfying the seven rules is acceptable.
-
-**Rule 6 — Parser-resilient container embedding**: The HTML element holding plan markdown content (`{{PLAN_MARKDOWN_JSON}}` container) MUST satisfy:
-
-- **(6a) Inert container**: Element whose content the HTML parser treats as text — non-executable, inert. Canonical: `script type="application/json"` (HTML5 non-executable-type). Alternative inert container: `textarea hidden`.
-
-- **(6b) Content-side close-tag escape**: The injection pipeline MUST escape the container's close-tag sequence so plan prose cannot terminate the container prematurely. Canonical pattern:
-  ```js
-  const payload = JSON.stringify(planMarkdown).replace(/<\/(script)([\s/>])/gi, '<\\/$1$2');
-  // consumer: JSON.parse(container.textContent)
-  ```
-
-`script type="text/markdown"` MUST NOT be used — unencoded markdown without close-tag escape fails (6b).
-
-Both (6a) and (6b) MUST be present regardless of container choice; alternative inert containers MUST supply their own paired close-tag escape.
-
-**Rule 7 — Active-placeholder HTML escape**: Every `{{…}}` placeholder substituted into an active HTML position — `{{HTML_TITLE}}`, `{{STAGE_KICKER}}`, `{{PLAN_TITLE}}`, `{{TODO_COUNT}}`, `{{AC_COUNT}}`, `{{WAVE_COUNT_LABEL}}`, `{{PLAN_FILE_LABEL}}`, `{{PLAN_FILE_PATH}}`, `{{TOC_TITLE}}`, `{{FOOTER_NOTE}}` — MUST be HTML-escaped (`&`, `<`, `>`, `"`, `'`) before substitution. A plan title, label, or path carrying an HTML-significant character would otherwise inject live markup into `<title>`, `<h1>`, etc. `{{PLAN_MARKDOWN_JSON}}` is exempt — it lives in the inert JSON container and is governed by Rule 6 (the 6b close-tag escape) instead. `{{LANG_CODE}}` must be a plain BCP-47 tag (e.g. `ko`, `en`), not free text.
+Rationale: `plan.md` is the artifact the pipeline reviewed — Momus reviewed the finished plan at S4, and Daedalus reviewed its design-brief / ADR sections at S2 — and it is the artifact the executor runs from. Net-new content in the presentation file would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
 
 ---
 
