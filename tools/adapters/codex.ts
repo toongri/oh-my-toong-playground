@@ -23,6 +23,7 @@ import { backupCategory } from "../lib/backup.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { assertMappedTier } from "../lib/model-map.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
+import { PLATFORM_REWRITE_RULES, applyRewriteRules } from "../lib/rewrite-rules.ts";
 import type {
 	ModelMap,
 	PlatformConfigResult,
@@ -150,8 +151,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * project `<repo>/.agents/skills`). Skills are the ONLY Codex category that
  * writes outside `configDir` (`.codex/`) — agents, config.toml, hooks, and
  * scripts all still live under `.codex/`.
+ *
+ * Exported so `rewritePlatformPaths` (tools/sync.ts) resolves this same path
+ * rather than re-declaring the `.agents/skills` string — one owner for it.
  */
-function codexSkillsDir(targetPath: string): string {
+export function codexSkillsDir(targetPath: string): string {
 	return path.join(targetPath, ".agents", "skills");
 }
 
@@ -333,7 +337,26 @@ export class CodexAdapter implements PlatformAdapter {
 			modelFields = resolveCodexAgentModel(modelMap, tier, sourcePath, name);
 		}
 
-		const tomlObj = { name, description, developer_instructions, ...modelFields };
+		// Agent bodies are instruction text the model reads (they carry `Skill(`,
+		// `subagent_type`, etc. — e.g. agents/sisyphus-junior.md), and the emitted
+		// TOML lives inside the codex deploy root the plan's absence checks scope
+		// to. Apply the same rule table rewritePlatformPaths applies to deployed
+		// .md here, at generation time, since these TOML files are generated (not
+		// walked as .md). name/model/model_reasoning_effort are never rewritten —
+		// the emit-allowlist stays exactly as it is. No ${CLAUDE_SKILL_DIR} bake:
+		// it does not occur in agents/*.md, and an agent has no owning skill dir.
+		const rewrittenDescription = applyRewriteRules(description, PLATFORM_REWRITE_RULES.codex);
+		const rewrittenInstructions = applyRewriteRules(
+			developer_instructions,
+			PLATFORM_REWRITE_RULES.codex,
+		);
+
+		const tomlObj = {
+			name,
+			description: rewrittenDescription,
+			developer_instructions: rewrittenInstructions,
+			...modelFields,
+		};
 
 		await fs.mkdir(path.dirname(targetFile), { recursive: true });
 		await fs.writeFile(targetFile, stringify(tomlObj), "utf-8");

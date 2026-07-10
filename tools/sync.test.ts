@@ -32,6 +32,7 @@ import { _resetConfigCache } from "./lib/config.ts";
 import { ProjectKeyError, deriveClaudeProjectKey } from "./lib/git-key.ts";
 import { DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
+import { CodexAdapter } from "./adapters/codex.ts";
 import { cleanupOldBackups } from "./lib/backup.ts";
 import { execFileSync } from "child_process";
 
@@ -1808,7 +1809,7 @@ describe("processYaml", () => {
 		);
 	});
 
-	it("still rewrites deployed codex skill md via feature-platforms default", async () => {
+	it("still rewrites deployed codex md via feature-platforms default", async () => {
 		// Un-narrowed project — no top-level `platforms` override and the skills
 		// item carries none either, so resolvePlatforms falls through to
 		// config.yaml's feature-platforms.skills default. This test depends on
@@ -1821,27 +1822,34 @@ describe("processYaml", () => {
 		const syncYamlPath = path.join(rootDir, "sync.yaml");
 		await writeFile(syncYamlPath, `path: ${targetPath}\nskills:\n  items:\n    - oracle\n`);
 
-		// Plant a codex skill md directly on disk instead of deploying it for
-		// real: the mock adapter never writes files, and "oracle" has no source
-		// under rootDir/skills/ so resolveComponentPath fails and syncCategory's
+		// Plant a file directly on disk instead of deploying it for real: the
+		// mock adapter never writes files, and "oracle" has no source under
+		// rootDir/skills/ so resolveComponentPath fails and syncCategory's
 		// per-item dispatch loop `continue`s before ever reaching the
 		// backup+wipe step for codex:skills — so the planted file survives
 		// untouched to the rewrite pass. The gate keys on the file's presence on
 		// disk plus the un-narrowed config, not on a real syncSkillsDirect write.
-		const codexSkillFile = path.join(targetPath, ".codex", "skills", "oracle", "SKILL.md");
+		//
+		// Deliberately planted under .codex/hooks/, NOT .codex/skills/: the
+		// latter is the deprecated pre-b9908fbc fossil root, which the .codex/
+		// walk now excludes entirely (TODO 4 / D3) — skills live in
+		// .agents/skills. This test's actual subject is the eligibility-gating
+		// fallthrough to feature-platforms.skills, not the skills category
+		// itself, so any non-fossil .codex/ path exercises it equally.
+		const codexFile = path.join(targetPath, ".codex", "hooks", "oracle", "README.md");
 		const before = "See .claude/rules/ for conventions.\n";
-		await writeFile(codexSkillFile, before);
+		await writeFile(codexFile, before);
 
 		const adapters = makeAdapterMap(["claude", "codex"]);
 		const context = makeContext();
 
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
-		const after = await readFile(codexSkillFile);
-		expect(after, ".codex/skills/oracle/SKILL.md must be rewritten to .codex/rules/").toContain(
+		const after = await readFile(codexFile);
+		expect(after, ".codex/hooks/oracle/README.md must be rewritten to .codex/rules/").toContain(
 			".codex/rules/",
 		);
-		expect(after, ".codex/skills/oracle/SKILL.md must no longer contain .claude/").not.toContain(
+		expect(after, ".codex/hooks/oracle/README.md must no longer contain .claude/").not.toContain(
 			".claude/",
 		);
 	});
@@ -3085,6 +3093,272 @@ describe("rewritePlatformPaths", () => {
 
 		const content = await readFile(path.join(geminiDir, "doc.md"));
 		expect(content).toBe(original);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: rewritePlatformPaths — codex two-root rule-table rewrite (TODO 4)
+//
+// D1: content.replace(/\.claude\//g, ...) hard-coded single rule -> applyRewriteRules
+//     driven by PLATFORM_REWRITE_RULES[platform].
+// D2: the .claude/-only fast path skipped every other Codex rule family.
+// D3: the walk only ever saw `.{platform}` — Codex skills deploy to
+//     `.agents/skills`, a second, disjoint root (since b9908fbc).
+// D4: covered separately below (processYaml call-site gate).
+// ---------------------------------------------------------------------------
+
+describe("rewritePlatformPaths — codex two-root rule-table rewrite (TODO 4)", () => {
+	let tmpDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "rewrite-codex-tworoot-test-"));
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(targetPath, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("G4-10: never opens a file for claude — a deployed skill carrying every codex token survives byte-identical (structural invariance)", async () => {
+		const rootDir = path.join(tmpDir, "root");
+		await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+		const sourceSkillDir = path.join(rootDir, "skills", "everything");
+		await fs.mkdir(sourceSkillDir, { recursive: true });
+		const source =
+			"Uses .claude/skills/x, ${CLAUDE_SKILL_DIR}/scripts/j.ts, Skill(humanizer), WebFetch, " +
+			"WebSearch, TaskOutput, TaskCreate, Agent(x), subagent_type, MultiEdit, AskUserQuestion, " +
+			"$CLAUDE_ENV_FILE, $CLAUDE_PROJECT_DIR, CLAUDE.md\n";
+		await writeFile(path.join(sourceSkillDir, "SKILL.md"), source);
+
+		const context = makeContext();
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["claude"], items: ["everything"] },
+		};
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		const deployedPath = path.join(targetPath, ".claude", "skills", "everything", "SKILL.md");
+		expect(await readFile(deployedPath)).toBe(source);
+
+		// PLATFORM_REWRITE_RULES.claude is empty by design — rewritePlatformPaths
+		// must return before it ever calls fs.readdir (which any directory walk
+		// requires), so no file under .claude/ is ever opened.
+		const readdirSpy = spyOn(fs, "readdir");
+		await rewritePlatformPaths(targetPath, "claude");
+		expect(readdirSpy).not.toHaveBeenCalled();
+		readdirSpy.mockRestore();
+
+		expect(await readFile(deployedPath)).toBe(source);
+	});
+
+	it("walks BOTH codex roots — .codex/ and .agents/skills/<owned> — applying the rule table and the contextual ${CLAUDE_SKILL_DIR} bake", async () => {
+		const skillDir = path.join(targetPath, ".agents", "skills", "mine");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(
+			path.join(skillDir, "SKILL.md"),
+			"See .claude/skills/x, invoke Skill(humanizer), run ${CLAUDE_SKILL_DIR}/scripts/j.ts\n",
+		);
+
+		const hookDir = path.join(targetPath, ".codex", "hooks", "sample");
+		await fs.mkdir(hookDir, { recursive: true });
+		await writeFile(path.join(hookDir, "README.md"), "Configured under .claude/hooks/sample\n");
+
+		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]));
+
+		const skillContent = await readFile(path.join(skillDir, "SKILL.md"));
+		expect(skillContent).toContain(".agents/skills/x");
+		expect(skillContent).toContain("the humanizer skill");
+		expect(skillContent).toContain(path.join(skillDir, "scripts", "j.ts"));
+		expect(skillContent).not.toContain("${CLAUDE_SKILL_DIR}");
+		expect(skillContent).not.toContain("Skill(");
+
+		const hookContent = await readFile(path.join(hookDir, "README.md"));
+		expect(hookContent).toContain(".codex/hooks/sample");
+		expect(hookContent).not.toContain(".claude/");
+	});
+
+	it("never touches a foreign .agents/skills resident absent from codexSkillNames (highest blast-radius guard — fails against a whole-dir walk)", async () => {
+		const ownedDir = path.join(targetPath, ".agents", "skills", "mine");
+		await fs.mkdir(ownedDir, { recursive: true });
+		await writeFile(path.join(ownedDir, "SKILL.md"), "Uses .claude/ and Skill(x)\n");
+
+		const foreignDir = path.join(targetPath, ".agents", "skills", "plannotator-compound");
+		await fs.mkdir(foreignDir, { recursive: true });
+		const foreignContent = "Uses .claude/ and Skill(x) — not OMT's to touch\n";
+		await writeFile(path.join(foreignDir, "SKILL.md"), foreignContent);
+
+		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]));
+
+		// The mechanism actually ran (this assertion is what makes the test fail
+		// under a "do nothing" no-op, rather than passing vacuously).
+		const ownedContent = await readFile(path.join(ownedDir, "SKILL.md"));
+		expect(ownedContent).not.toContain(".claude/");
+		expect(ownedContent).not.toContain("Skill(");
+
+		// The foreign resident — not in codexSkillNames — is untouched, byte-identical.
+		expect(await readFile(path.join(foreignDir, "SKILL.md"))).toBe(foreignContent);
+	});
+
+	it("never rewrites the deprecated .codex/skills fossil root (e.g. a foreign .system entry)", async () => {
+		const fossilFile = path.join(targetPath, ".codex", "skills", ".system", "note.md");
+		const fossilContent = ".claude/ residue left behind by a prior OMT version\n";
+		await writeFile(fossilFile, fossilContent);
+
+		// A real .codex/ file outside the fossil root, so the .codex/ walk has
+		// something legitimate to rewrite in the same run.
+		await writeFile(path.join(targetPath, ".codex", "agents", "oracle.md"), "See .claude/agents/\n");
+
+		await rewritePlatformPaths(targetPath, "codex");
+
+		expect(await readFile(fossilFile)).toBe(fossilContent);
+		expect(await readFile(path.join(targetPath, ".codex", "agents", "oracle.md"))).toContain(
+			".codex/agents/",
+		);
+	});
+
+	it("never rewrites generated lib/vendor/*.js bundles", async () => {
+		const vendorFile = path.join(targetPath, ".codex", "lib", "vendor", "picomatch.js");
+		const vendorContent = "// bundled third-party code\nmodule.exports = () => '.claude/';\n";
+		await writeFile(vendorFile, vendorContent);
+
+		await rewritePlatformPaths(targetPath, "codex");
+
+		expect(await readFile(vendorFile)).toBe(vendorContent);
+	});
+
+	it("rules-injector regression guard: program files under .codex/ survive byte-identical (content-type policy, not root)", async () => {
+		// hooks/rules-injector/rules/constants.ts: `.claude/rules` here is one
+		// entry in a MULTI-ECOSYSTEM rule-source enum (sibling to `.omo/rules`,
+		// `.cursor/rules`) — it names Claude Code's convention, not an OMT
+		// platform path. Rewriting it to `.codex/rules` breaks the injector,
+		// the ONLY hook wired to Codex (codex.yaml).
+		const constantsFile = path.join(targetPath, ".codex", "hooks", "rules-injector", "constants.ts");
+		const constantsContent = 'export const CLAUDE_RULES_DIR = ".claude/rules";\n';
+		await writeFile(constantsFile, constantsContent);
+
+		// lib/job-utils.ts: a runtime path-classifier check, not a deploy-path
+		// reference.
+		const jobUtilsFile = path.join(targetPath, ".codex", "lib", "job-utils.ts");
+		const jobUtilsContent = 'if (p.includes("/.claude/skills/")) return "claude";\n';
+		await writeFile(jobUtilsFile, jobUtilsContent);
+
+		await rewritePlatformPaths(targetPath, "codex");
+
+		expect(await readFile(constantsFile)).toBe(constantsContent);
+		expect(await readFile(jobUtilsFile)).toBe(jobUtilsContent);
+	});
+
+	it("skill-bundled programs under .agents/skills survive byte-identical, while the sibling .md is still rewritten (proves the walk isn't skipped wholesale)", async () => {
+		const skillDir = path.join(targetPath, ".agents", "skills", "mine");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "See .claude/skills and Skill(x)\n");
+
+		// scripts/t.ts: subagent_type here is a transcript struct field, not
+		// the Claude Agent(...) tool parameter — rewriting it to agent_type
+		// breaks parsing.
+		const scriptFile = path.join(skillDir, "scripts", "t.ts");
+		const scriptContent = 'type Entry = { subagent_type: string; source: ".claude/skills" };\n';
+		await writeFile(scriptFile, scriptContent);
+
+		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]));
+
+		const mdContent = await readFile(path.join(skillDir, "SKILL.md"));
+		expect(mdContent).toContain(".agents/skills");
+		expect(mdContent).toContain("the x skill");
+		expect(mdContent).not.toContain("Skill(");
+
+		expect(await readFile(scriptFile)).toBe(scriptContent);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: processYaml — codex skills rewrite gate (D4) + scoped skill name
+// derivation (empirical proof, not just the unscoped happy path).
+// ---------------------------------------------------------------------------
+
+describe("processYaml — codex skills rewrite gate (D4) and scoped name derivation", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "process-yaml-codex-rewrite-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("D4: rewrites codex skills even when the target has no .codex/ directory at all", async () => {
+		const skillDir = path.join(rootDir, "skills", "myskill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "Use Skill(x) and see .claude/rules\n");
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [codex]\n  items:\n    - myskill\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		// Premise of the D4 gap: a codex-skills-only project never creates .codex/.
+		expect(await exists(path.join(targetPath, ".codex"))).toBe(false);
+
+		const deployed = await readFile(path.join(targetPath, ".agents", "skills", "myskill", "SKILL.md"));
+		expect(deployed).toContain("the x skill");
+		expect(deployed).toContain(".codex/rules");
+		expect(deployed).not.toContain("Skill(");
+		expect(deployed).not.toContain(".claude/");
+	});
+
+	it("derives the deployed skill directory name from resolveComponentPath's displayName for a scoped component, and that exact name drives the rewrite", async () => {
+		const skillDir = path.join(rootDir, "projects", "myproj", "skills", "testing");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "Uses .claude/ and Skill(x)\n");
+
+		const syncYamlPath = path.join(rootDir, "projects", "myproj", "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [codex]\n  items:\n    - myproj:testing\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		// Empirical: the deployed directory is named "testing" (resolveComponentPath's
+		// displayName), never the raw scoped ref "myproj:testing".
+		const agentsSkillsDir = path.join(targetPath, ".agents", "skills");
+		expect(await fs.readdir(agentsSkillsDir)).toEqual(["testing"]);
+
+		// codexSkillNames must have carried "testing" through to the rewrite — if the
+		// derivation were wrong (raw ref, or left empty), this file would still
+		// contain .claude/ / Skill(.
+		const deployed = await readFile(path.join(agentsSkillsDir, "testing", "SKILL.md"));
+		expect(deployed).toContain(".codex/");
+		expect(deployed).not.toContain(".claude/");
+		expect(deployed).toContain("the x skill");
 	});
 });
 

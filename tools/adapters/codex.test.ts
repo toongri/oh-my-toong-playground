@@ -207,6 +207,58 @@ describe("CodexAdapter", () => {
 			expect(parsed).not.toHaveProperty("skills");
 		});
 
+		it("rewrites Claude vocabulary in description/developer_instructions via PLATFORM_REWRITE_RULES.codex before TOML serialization (TODO 4) — name/model/model_reasoning_effort untouched", async () => {
+			// Real carrier shape: agent bodies invoke skills and reference
+			// subagent_type in prose (e.g. agents/sisyphus-junior.md:102-103).
+			// These TOML files are generated (not walked as .md by
+			// rewritePlatformPaths), so the rewrite happens here, at generation
+			// time, instead.
+			const sourceFile = path.join(tmpDir, "sisyphus-junior.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: sisyphus-junior",
+					"description: Focused executor for multi-step implementation tasks",
+					"model: sonnet",
+					"---",
+					"",
+					'Invoke Skill(skill: "prometheus") first. Never spawn via subagent_type directly.',
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(
+				targetBase,
+				"sisyphus-junior",
+				sourceFile,
+				[],
+				[],
+				false,
+				modelMap,
+			);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "sisyphus-junior.toml");
+			const content = await fs.readFile(targetFile, "utf-8");
+
+			// Rewritten to Codex vocabulary.
+			expect(content).toContain("the prometheus skill");
+			expect(content).toContain("agent_type");
+
+			// grep -c 'Skill(' on the emitted file is 0.
+			expect((content.match(/Skill\(/g) ?? []).length).toBe(0);
+
+			// Still valid TOML, and the untouched fields are exactly untouched.
+			const parsed = parse(content) as Record<string, unknown>;
+			expect(parsed.name).toBe("sisyphus-junior");
+			expect(parsed.model).toBe("gpt-5.6-sol");
+			expect(parsed.model_reasoning_effort).toBe("medium");
+			expect(parsed.developer_instructions).toContain("the prometheus skill");
+			expect(parsed.developer_instructions).toContain("agent_type");
+		});
+
 		it("resolves an opus-tier agent to gpt-5.6-sol + high effort via `syncAgentsDirect`", async () => {
 			const sourceFile = path.join(tmpDir, "oracle.md");
 			await fs.writeFile(
