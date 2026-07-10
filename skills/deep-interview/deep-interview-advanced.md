@@ -50,7 +50,7 @@ Prometheus: "Your request is quite open-ended. Would you like to run a deep inte
   [Yes, interview first] [No, expand directly]
 ```
 
-If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes, the crystallized spec routes planning/execution through `goal` at the Phase 5 execution bridge (the bridge offers no direct prometheus/sisyphus option); `goal` then orchestrates downstream and selects prometheus for decomposition when the work warrants it. Prometheus treats the delivered spec as ground-truth input it does not re-derive: it reviews the spec once via its Clearance and fills or fixes only genuine gaps.
+If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes, the crystallized spec routes planning/execution through `goal` at the Phase 5 execution bridge (the bridge offers no direct prometheus/sisyphus option); `goal` then pursues the objective and may involve prometheus for decomposition when the work warrants it. Prometheus treats the delivered spec as ground-truth input it does not re-derive: it reviews the spec once via its Clearance and fills or fixes only genuine gaps.
 
 ## Brownfield vs Greenfield Weights
 

@@ -30,7 +30,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set --phase planning \
 
 ## Story Definition (Planning Phase)
 
-After capturing the six slots and before dispatching to prometheus or sisyphus, define the WHAT-slices of the objective with the user, story by story. Each story is an independently verifiable chunk of the objective — not a task (HOW) but a stated outcome (WHAT).
+After capturing the six slots and before dispatching to sisyphus, define the WHAT-slices of the objective with the user, story by story. Each story is an independently verifiable chunk of the objective — not a task (HOW) but a stated outcome (WHAT).
 
 **When to slice vs. use single-derivation.** If the objective is a single WHAT — one deliverable, one verification surface, no meaningful sub-goals — run:
 
@@ -72,9 +72,9 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts confirm-story <id>
 
 Stories can be discovered, corrected, or retired during pursuit. Use the per-story mutation subcommands when the situation changes mid-flight:
 
-- **`add-story --json '<story>'`** — appends one new story with status `unconfirmed`. Allowed in both `planning` and `pursuing`. A newly added story must be confirmed via `confirm-story <id>` before completion is allowed (an `unconfirmed` story blocks `request-complete`).
-- **`revise-story <id> --json '<patch>'`** — patches an existing story's text, acceptance criteria, or verification surface. Revision ALWAYS resets the story's status to `unconfirmed` — a story whose definition changed requires fresh user approval. Refused on retired stories and unknown ids.
-- **`retire-story <id>`** — marks a story `retired`. An `unconfirmed` story is retirable in any phase. A `confirmed` story is retirable ONLY while `phase=planning` — retiring a confirmed story mid-pursuit is refused (run `set --phase planning` first to re-enter planning, then retire). This fence prevents retiring a confirmed WHAT mid-pursuit as a way to remove it from the completion gate.
+- **`add-story --json '<story>'`** — appends one new story with status `unconfirmed`. Requires `--evidence '<what was observed>'` and `--rationale '<why this is the right response>'` in addition to `--json`; both are mandatory with no default — an omitted or whitespace-only value is refused. Allowed in both `planning` and `pursuing`. A newly added story must be confirmed via `confirm-story <id>` before completion is allowed (an `unconfirmed` story blocks `request-complete`).
+- **`revise-story <id> --json '<patch>' --evidence '<what was observed>' --rationale '<why this is the right response>'`** — patches an existing story's text, acceptance criteria, or verification surface. `--evidence` and `--rationale` are both mandatory with no default — an omitted or whitespace-only value is refused. Revision ALWAYS resets the story's status to `unconfirmed` — a story whose definition changed requires fresh user approval. Refused on retired stories and unknown ids.
+- **`retire-story <id> --evidence '<what was observed>' --rationale '<why this is the right response>'`** — marks a story `retired`. `--evidence` and `--rationale` are both mandatory with no default — an omitted or whitespace-only value is refused. An `unconfirmed` story is retirable in any phase. A `confirmed` story is retirable ONLY while `phase=planning` — retiring a confirmed story mid-pursuit is refused (run `set --phase planning` first to re-enter planning, then retire). This fence prevents retiring a confirmed WHAT mid-pursuit as a way to remove it from the completion gate.
 
 Re-plan (`set --phase planning`) preserves `stories[]` including per-story statuses, while resetting `objective_verdict` and `completion_evidence_paths` exactly as today. Stories survive re-planning; only verdict state is cleared.
 
