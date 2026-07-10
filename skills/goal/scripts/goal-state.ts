@@ -1065,6 +1065,33 @@ export function serializeRequirements(sessionId: string): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * Every flag in this CLI that always takes a value (as opposed to a boolean
+ * switch like `--single`). Free-text values — most notably `--evidence` and
+ * `--rationale`, but also `--outcome`/`--constraints`/etc. — may legitimately
+ * begin with "--" (e.g. quoting a CLI flag inside an observation). Listing
+ * them here lets parseArgs consume the next token unconditionally instead of
+ * guessing from its shape.
+ */
+const VALUE_BEARING_FLAGS = new Set([
+	"phase",
+	"outcome",
+	"verification-surface",
+	"constraints",
+	"boundaries",
+	"max-iterations",
+	"blocked-stop",
+	"plan-path",
+	"resume-summary",
+	"completion-evidence",
+	"verdict",
+	"reason",
+	"src",
+	"json",
+	"evidence",
+	"rationale",
+]);
+
+/**
  * Splits argv into flags (`--key value` / `--key` boolean) and positionals, in
  * encounter order. Positionals are collected into an array rather than a single
  * `_subcommand` slot — a raw argv scan for "the first token not starting with
@@ -1073,6 +1100,16 @@ export function serializeRequirements(sessionId: string): string {
  * (e.g. `retire-story --evidence "e" story-1` — the value "e" is not a
  * positional, but a naive scan can't tell). Consuming here, once, is the only
  * correct place to draw that line.
+ *
+ * A known value-bearing flag (VALUE_BEARING_FLAGS) always consumes the next
+ * token as its value, even if that token starts with "--" — otherwise a
+ * free-text value beginning with "--" is silently coerced to boolean `true`
+ * (see goal-state.test.ts's "steering reason value may begin with dashes").
+ * Only when the next token is undefined (flag is the last argv token) does it
+ * fall back to boolean `true`, so a genuinely missing value is still caught by
+ * callers checking for that. Any OTHER flag keeps the old shape-guessing
+ * behavior (`--single` and any future boolean switch) — misclassifying a
+ * boolean flag here would swallow the next positional argument.
  */
 function parseArgs(args: string[]): { flags: Record<string, string | boolean>; positionals: string[] } {
 	const flags: Record<string, string | boolean> = {};
@@ -1082,7 +1119,7 @@ function parseArgs(args: string[]): { flags: Record<string, string | boolean>; p
 		if (arg.startsWith("--")) {
 			const key = arg.slice(2);
 			const next = args[i + 1];
-			if (next !== undefined && !next.startsWith("--")) {
+			if (next !== undefined && (VALUE_BEARING_FLAGS.has(key) || !next.startsWith("--"))) {
 				flags[key] = next;
 				i++;
 			} else {

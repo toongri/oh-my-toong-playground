@@ -2567,4 +2567,40 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 		).toThrow();
 		expect(JSON.parse(runCli("get")).stories.length).toBe(1);
 	});
+
+	// A free-text --evidence/--rationale value that itself begins with "--" (e.g. quoting
+	// a CLI flag in an observation) must not be coerced to boolean by parseArgs and then
+	// misdiagnosed by requireSteeringReason as "missing".
+	test("steering reason value may begin with dashes", () => {
+		seedConfirmedPursuing(S);
+
+		const newStoryJson = JSON.stringify({
+			id: "story-4",
+			story: "s4",
+			acceptance_criteria: ["ac"],
+			verification_surface: "v",
+		});
+		runCli(
+			`add-story --json '${newStoryJson}' --evidence "--dry-run flag exposed a race" --rationale "fix needed"`,
+		);
+		const afterAdd = JSON.parse(runCli("get")).stories.find((s: any) => s.id === "story-4");
+		expect(afterAdd.steering_evidence).toBe("--dry-run flag exposed a race");
+		expect(afterAdd.status).toBe("unconfirmed");
+
+		runCli(
+			`revise-story story-4 --json '{"story":"s4 revised"}' --evidence "--weird" --rationale "--also weird"`,
+		);
+		const afterRevise = JSON.parse(runCli("get")).stories.find((s: any) => s.id === "story-4");
+		expect(afterRevise.story).toBe("s4 revised");
+		expect(afterRevise.steering_evidence).toBe("--weird");
+		expect(afterRevise.steering_rationale).toBe("--also weird");
+
+		// id must still resolve from the positional, not get swallowed as a flag value.
+		runCli('retire-story story-4 --evidence "--weird" --rationale "r"');
+		const afterRetire = JSON.parse(runCli("get")).stories.find((s: any) => s.id === "story-4");
+		expect(afterRetire.status).toBe("retired");
+
+		// A genuinely missing value (last token) must still be refused.
+		expect(() => runCli("retire-story story-1 --evidence")).toThrow();
+	});
 });
