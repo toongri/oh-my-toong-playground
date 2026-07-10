@@ -29,12 +29,10 @@ import {
 	addStory,
 	retireStory,
 	serializeRequirements,
-	isSubskillHalfOpen,
 	readCodeReviewArtifact,
 	type GoalPhase,
 	type Story,
 } from "./goal-state.ts";
-import { STATE_PREFIX, ACTIVE_IDLE_TTL_SECONDS } from "@lib/state-core";
 
 let tmpDir: string;
 const originalOmtDir = process.env.OMT_DIR;
@@ -1375,10 +1373,16 @@ describe("story layer: mutations", () => {
 
 		// revise-story: patches story fields and resets status to unconfirmed
 		// S1 was confirmed before entering pursuing; revise must reset it
-		reviseStory(S, "S1", {
-			story: "ship feature X v2",
-			acceptance_criteria: ["all tests green", "perf meets SLO"],
-		});
+		reviseStory(
+			S,
+			"S1",
+			{
+				story: "ship feature X v2",
+				acceptance_criteria: ["all tests green", "perf meets SLO"],
+			},
+			"e",
+			"r",
+		);
 		const afterRevise = readGoalGet(S)!.stories!;
 		const s1 = afterRevise.find((s) => s.id === "S1")!;
 		expect(s1.story).toBe("ship feature X v2");
@@ -1392,7 +1396,7 @@ describe("story layer: mutations", () => {
 			acceptance_criteria: ["search returns results"],
 			verification_surface: "E2E search test",
 		};
-		addStory(S, newStory as Story);
+		addStory(S, newStory as Story, "e", "r");
 		const afterAdd = readGoalGet(S)!.stories!;
 		expect(afterAdd.length).toBe(3);
 		const s3 = afterAdd.find((s) => s.id === "S3")!;
@@ -1402,7 +1406,7 @@ describe("story layer: mutations", () => {
 		// retire-story: sets retired (S2 was confirmed; we're in pursuing — but S2 is confirmed
 		// so this should be refused. Let's use the unconfirmed S1 instead, since revise reset it)
 		// S1 is now unconfirmed, S3 is unconfirmed — retire S3 (unconfirmed, pursuing => allowed)
-		retireStory(S, "S3");
+		retireStory(S, "S3", "e", "r");
 		const afterRetire = readGoalGet(S)!.stories!;
 		const s3After = afterRetire.find((s) => s.id === "S3")!;
 		expect(s3After.status).toBe("retired");
@@ -1415,11 +1419,11 @@ describe("story layer: mutations", () => {
 
 		// revise with an explicit confirmed status in the patch must be refused
 		// (no mutation may produce confirmed)
-		expect(() => reviseStory(S, "S1", { status: "confirmed" as any })).toThrow();
+		expect(() => reviseStory(S, "S1", { status: "confirmed" as any }, "e", "r")).toThrow();
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
 
 		// revise with an out-of-enum status must be refused
-		expect(() => reviseStory(S, "S1", { status: "achieved" as any })).toThrow();
+		expect(() => reviseStory(S, "S1", { status: "achieved" as any }, "e", "r")).toThrow();
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
 
 		// add-story with confirmed status must be refused
@@ -1430,7 +1434,7 @@ describe("story layer: mutations", () => {
 			verification_surface: "manual test",
 			status: "confirmed",
 		};
-		expect(() => addStory(S, confirmedStory)).toThrow();
+		expect(() => addStory(S, confirmedStory, "e", "r")).toThrow();
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
 
 		// add-story with out-of-enum status must be refused
@@ -1441,7 +1445,7 @@ describe("story layer: mutations", () => {
 			verification_surface: "manual test",
 			status: "open" as any,
 		};
-		expect(() => addStory(S, badStatusStory)).toThrow();
+		expect(() => addStory(S, badStatusStory, "e", "r")).toThrow();
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
 	});
 
@@ -1453,7 +1457,7 @@ describe("story layer: mutations", () => {
 		expect(readGoalGet(S)!.stories![0].status).toBe("confirmed");
 
 		// Revise S1 (confirmed) — must reset to unconfirmed
-		reviseStory(S, "S1", { story: "ship feature X revised" });
+		reviseStory(S, "S1", { story: "ship feature X revised" }, "e", "r");
 		const afterRevise = readGoalGet(S)!.stories![0];
 		expect(afterRevise.story).toBe("ship feature X revised");
 		expect(afterRevise.status).toBe("unconfirmed"); // reset from confirmed
@@ -1466,7 +1470,7 @@ describe("story layer: mutations", () => {
 
 		const stateBefore = readFileSync(resolveStatePath(S), "utf8");
 		// Revise S1 (retired) — must be refused
-		expect(() => reviseStory(S, "S1", { story: "attempt resurrect" })).toThrow();
+		expect(() => reviseStory(S, "S1", { story: "attempt resurrect" }, "e", "r")).toThrow();
 		// State unchanged
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
 	});
@@ -1482,7 +1486,7 @@ describe("story layer: mutations", () => {
 		expect(readGoalGet(Sp)!.stories![0].status).toBe("confirmed");
 		expect(readGoalGet(Sp)!.phase).toBe("pursuing");
 		const stateBeforeFence = readFileSync(resolveStatePath(Sp), "utf8");
-		expect(() => retireStory(Sp, "S1")).toThrow(); // D-9 anti-dodge fence
+		expect(() => retireStory(Sp, "S1", "e", "r")).toThrow(); // D-9 anti-dodge fence
 		expect(readFileSync(resolveStatePath(Sp), "utf8")).toBe(stateBeforeFence);
 
 		// Fixture 2: confirmed story + planning => allowed (retire is legal, not a dodge)
@@ -1493,7 +1497,7 @@ describe("story layer: mutations", () => {
 		confirmStory(Spl, "S1");
 		expect(readGoalGet(Spl)!.stories![0].status).toBe("confirmed");
 		expect(readGoalGet(Spl)!.phase).toBe("planning");
-		retireStory(Spl, "S1"); // must NOT throw
+		retireStory(Spl, "S1", "e", "r"); // must NOT throw
 		expect(readGoalGet(Spl)!.stories![0].status).toBe("retired");
 
 		// Fixture 3: unconfirmed story + pursuing => allowed (not a dodge — no confirmation to bypass)
@@ -1511,7 +1515,7 @@ describe("story layer: mutations", () => {
 		writeFileSync(resolveStatePath(Su), JSON.stringify(raw, null, 2), "utf8");
 		expect(readGoalGet(Su)!.stories![1].status).toBe("unconfirmed");
 		expect(readGoalGet(Su)!.phase).toBe("pursuing");
-		retireStory(Su, "S2"); // must NOT throw (unconfirmed is retirable in any phase)
+		retireStory(Su, "S2", "e", "r"); // must NOT throw (unconfirmed is retirable in any phase)
 		expect(readGoalGet(Su)!.stories![1].status).toBe("retired");
 	});
 
@@ -1526,17 +1530,22 @@ describe("story layer: mutations", () => {
 
 		// All three mutation subcommands must fail nonzero when the file is absent
 		// (the file was removed — writeFileNoCreate will throw ENOENT)
-		expect(() => reviseStory(S, "S1", { story: "should fail" })).toThrow();
+		expect(() => reviseStory(S, "S1", { story: "should fail" }, "e", "r")).toThrow();
 		expect(() =>
-			addStory(S, {
-				id: "S2",
-				story: "new",
-				acceptance_criteria: ["ac"],
-				verification_surface: "manual",
-				status: "unconfirmed",
-			}),
+			addStory(
+				S,
+				{
+					id: "S2",
+					story: "new",
+					acceptance_criteria: ["ac"],
+					verification_surface: "manual",
+					status: "unconfirmed",
+				},
+				"e",
+				"r",
+			),
 		).toThrow();
-		expect(() => retireStory(S, "S1")).toThrow();
+		expect(() => retireStory(S, "S1", "e", "r")).toThrow();
 
 		// Restore prior state to verify it was not mutated during failed writes
 		writeFileSync(resolveStatePath(S), priorContent, "utf8");
@@ -1559,7 +1568,7 @@ describe("story layer: mutations", () => {
 		const stateBefore = readFileSync(resolveStatePath(S), "utf8");
 
 		// S1을 patch해서 id를 S2(이미 존재)로 바꾸려는 시도 → 거부
-		expect(() => reviseStory(S, "S1", { id: "S2" })).toThrow(/revise-story: refused/);
+		expect(() => reviseStory(S, "S1", { id: "S2" }, "e", "r")).toThrow(/revise-story: refused/);
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
 	});
 
@@ -1576,7 +1585,7 @@ describe("story layer: mutations", () => {
 			verification_surface: "CI pipeline passes",
 			status: "unconfirmed",
 		};
-		expect(() => addStory(S, newStory)).toThrow(/add-story: refused/);
+		expect(() => addStory(S, newStory, "e", "r")).toThrow(/add-story: refused/);
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
 	});
 });
@@ -1760,13 +1769,18 @@ describe("story layer: request-complete verdict gate (T4)", () => {
 		});
 		setVerdict(S, "APPROVE");
 		// Add a new story mid-flight (born unconfirmed) — now an unconfirmed story exists
-		addStory(S, {
-			id: "S2",
-			story: "new mid-flight story",
-			acceptance_criteria: ["ac2"],
-			verification_surface: "v2",
-			status: "unconfirmed",
-		});
+		addStory(
+			S,
+			{
+				id: "S2",
+				story: "new mid-flight story",
+				acceptance_criteria: ["ac2"],
+				verification_surface: "v2",
+				status: "unconfirmed",
+			},
+			"e",
+			"r",
+		);
 		writeVerdictArtifact(S, {
 			objective_verdict: "APPROVE",
 			stories: [
@@ -1820,7 +1834,7 @@ describe("story layer: request-complete verdict gate (T4)", () => {
 		setStories(S2, [sa, sb]);
 		confirmStory(S2, "S1");
 		// Retire S2 while planning (allowed)
-		retireStory(S2, "S2");
+		retireStory(S2, "S2", "e", "r");
 		setGoalState(S2, {
 			phase: "pursuing",
 			completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`],
@@ -1868,7 +1882,7 @@ describe("story layer: request-complete verdict gate (T4)", () => {
 		setStories(S, [s1]);
 		confirmStory(S, "S1");
 		// Retire S1 while planning (allowed)
-		retireStory(S, "S1");
+		retireStory(S, "S1", "e", "r");
 		setGoalState(S, {
 			phase: "pursuing",
 			completion_evidence_paths: [`${process.env.OMT_DIR}/e.md`],
@@ -2222,7 +2236,7 @@ describe("serialize-requirements subcommand", () => {
 			status: "unconfirmed",
 		};
 		setStories(S, [s1]);
-		retireStory(S, "S1");
+		retireStory(S, "S1", "e", "r");
 		const out = serializeRequirements(S);
 		expect(out).toBe("");
 	});
@@ -2301,108 +2315,256 @@ describe("re-plan 시 verdict 아티팩트 무효화", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Lever 1: finalize-before-advance cross-read guard
+// TODO 8: WHAT-freeze — outcome/verification_surface become structurally
+// immutable once phase=pursuing (ADR D-6). set() must refuse to rewrite either
+// slot while pursuing; planning remains a legitimate re-plan path for both.
 // ---------------------------------------------------------------------------
 
-describe("isSubskillHalfOpen: cross-read half-open detector", () => {
-	/** Path derived from STATE_PREFIX — same constant the detector uses, so fixture and detector cannot drift. */
-	function diStatePath(sid: string): string {
-		return join(tmpDir, `${STATE_PREFIX["deep-interview"]}${sid}.json`);
-	}
-
-	function writeDiState(sid: string, fields: Record<string, unknown>): void {
-		writeFileSync(diStatePath(sid), JSON.stringify(fields), "utf8");
-	}
-
-	function isoSecondsAgo(secondsAgo: number): string {
-		const d = new Date(Date.now() - secondsAgo * 1000);
-		const pad = (n: number) => String(n).padStart(2, "0");
-		const tzOffset = -d.getTimezoneOffset();
-		const tzSign = tzOffset >= 0 ? "+" : "-";
-		const tzH = pad(Math.floor(Math.abs(tzOffset) / 60));
-		const tzM = pad(Math.abs(tzOffset) % 60);
-		return (
-			`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-			`T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
-			`${tzSign}${tzH}:${tzM}`
-		);
-	}
-
-	test("half-open: active:true, live, non-pristine (rich state object) -> true", () => {
-		const now = nowIso();
-		writeDiState(S, {
-			active: true,
-			started_at: now,
-			last_touched_at: now,
-			state: { initial_idea: "some idea" },
+describe("WHAT-freeze: outcome/verification_surface frozen during pursuing", () => {
+	test("pursuing refuses frozen slots", () => {
+		// Realistic sequence: outcome/verification_surface are decided during planning,
+		// then the orchestrator transitions to pursuing WITHOUT re-supplying them.
+		setGoalState(S, {
+			phase: "planning",
+			outcome: "A",
+			verification_surface: "surface A",
 		});
-		expect(isSubskillHalfOpen(S, "deep-interview")).toBe(true);
+		setGoalState(S, { phase: "pursuing" });
+		const stateBefore = readFileSync(resolveStatePath(S), "utf8");
+
+		// outcome is frozen: attempting to rewrite it while pursuing throws and
+		// leaves the state file byte-identical.
+		expect(() => setGoalState(S, { phase: "pursuing", outcome: "B" })).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
+		expect(rawState().outcome).toBe("A");
+
+		// verification_surface is frozen the same way.
+		expect(() =>
+			setGoalState(S, { phase: "pursuing", verification_surface: "surface B" }),
+		).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
+		expect(rawState().verification_surface).toBe("surface A");
 	});
 
-	test("terminal: active:false -> false regardless of freshness/content", () => {
-		const now = nowIso();
-		writeDiState(S, {
-			active: false,
-			started_at: now,
-			last_touched_at: now,
-			state: { initial_idea: "some idea" },
+	test("planning writes outcome", () => {
+		setGoalState(S, {
+			phase: "planning",
+			outcome: "A",
+			verification_surface: "surface A",
 		});
-		expect(isSubskillHalfOpen(S, "deep-interview")).toBe(false);
-	});
-
-	test("pristine: active:true but no rich `state` object (freshly seeded) -> false", () => {
-		const now = nowIso();
-		writeDiState(S, { active: true, started_at: now, last_touched_at: now });
-		expect(isSubskillHalfOpen(S, "deep-interview")).toBe(false);
-	});
-
-	test("TTL-stale: active:true, non-pristine, but idle beyond ACTIVE_IDLE_TTL_SECONDS -> false", () => {
-		const old = isoSecondsAgo(ACTIVE_IDLE_TTL_SECONDS + 60);
-		writeDiState(S, {
-			active: true,
-			started_at: old,
-			last_touched_at: old,
-			state: { initial_idea: "some idea" },
+		setGoalState(S, { phase: "pursuing" });
+		// planning is a legitimate re-plan path — both slots remain writable.
+		setGoalState(S, {
+			phase: "planning",
+			outcome: "B",
+			verification_surface: "surface B",
 		});
-		expect(isSubskillHalfOpen(S, "deep-interview")).toBe(false);
+		expect(rawState().outcome).toBe("B");
+		expect(rawState().verification_surface).toBe("surface B");
 	});
 
-	test("absent: no state file for the session -> false", () => {
-		expect(isSubskillHalfOpen("no-such-session", "deep-interview")).toBe(false);
+	// --completion-evidence must remain reachable while pursuing — the freeze guard
+	// must not catch it, or request-complete could never record evidence again.
+	test("CLI: pursuing --completion-evidence still succeeds with frozen outcome", () => {
+		runCli('set --phase planning --outcome "A" --verification-surface "surface A"');
+		runCli("set-stories --single");
+		runCli(`set --phase pursuing --completion-evidence ${tmpDir}/a.txt`);
+		expect(rawState().phase).toBe("pursuing");
+		expect(rawState().completion_evidence_paths).toEqual([`${tmpDir}/a.txt`]);
+	});
+
+	// CLI-level: rewriting outcome mid-pursuit exits non-zero and leaves outcome unchanged.
+	test("CLI: set --phase pursuing --outcome exits non-zero and outcome unchanged", () => {
+		runCli('set --phase planning --outcome "A" --verification-surface "surface A"');
+		runCli("set-stories --single");
+		runCli("set --phase pursuing");
+		expect(() => runCli('set --phase pursuing --outcome "B"')).toThrow();
+		expect(rawState().outcome).toBe("A");
 	});
 });
 
-describe("check-subskill CLI subcommand", () => {
-	function diStatePath(sid: string): string {
-		return join(tmpDir, `${STATE_PREFIX["deep-interview"]}${sid}.json`);
+// ---------------------------------------------------------------------------
+// TODO 10: mid-flight steering mutations (add-story/revise-story/retire-story)
+// require two separate reason fields — --evidence (what was observed) and
+// --rationale (why this is the right response). Neither has a default; an
+// omitted or whitespace-only value is a hard refusal (ADR D-4). Fixtures below
+// deliberately avoid the confirmed+pursuing anti-dodge fence (D-9) so the ONLY
+// source of refusal in the "requires" tests is the new steering guard.
+// ---------------------------------------------------------------------------
+
+describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () => {
+	/** phase=pursuing, outcome="A", one CONFIRMED story ("story-1"). The fence
+	 * (D-9) only bites a confirmed+pursuing RETIRE, so add-story/revise-story
+	 * against this fixture always have a clear (fence-free) path to success —
+	 * any rejection observed here can only come from the new steering guard. */
+	function seedConfirmedPursuing(sid: string): void {
+		setGoalState(sid, { phase: "planning", outcome: "A", verification_surface: "surface A" });
+		setStories(sid, [
+			{
+				id: "story-1",
+				story: "s1",
+				acceptance_criteria: ["ac"],
+				verification_surface: "v",
+				status: "unconfirmed",
+			},
+		]);
+		confirmStory(sid, "story-1");
+		setGoalState(sid, { phase: "pursuing" });
 	}
 
-	function writeDiState(sid: string, fields: Record<string, unknown>): void {
-		writeFileSync(diStatePath(sid), JSON.stringify(fields), "utf8");
-	}
+	test("steering requires evidence and rationale", () => {
+		seedConfirmedPursuing(S);
 
-	test("half-open DI state -> non-zero exit", () => {
-		const now = nowIso();
-		writeDiState(S, {
-			active: true,
-			started_at: now,
-			last_touched_at: now,
-			state: { initial_idea: "some idea" },
+		// add-story: no phase gate at all — outcome is set, so the fence cannot fire.
+		const newStoryJson = JSON.stringify({
+			id: "story-2",
+			story: "s2",
+			acceptance_criteria: ["ac"],
+			verification_surface: "v",
 		});
-		expect(() => runCli("check-subskill --skill deep-interview")).toThrow();
+		expect(() => runCli(`add-story --json '${newStoryJson}'`)).toThrow();
+		expect(
+			JSON.parse(runCli("get")).stories.some((s: any) => s.id === "story-2"),
+		).toBe(false);
+		expect(() =>
+			runCli(`add-story --json '${newStoryJson}' --evidence "   " --rationale "y"`),
+		).toThrow();
+		expect(
+			JSON.parse(runCli("get")).stories.some((s: any) => s.id === "story-2"),
+		).toBe(false);
+
+		// revise-story: no phase gate at all.
+		expect(() =>
+			runCli(`revise-story story-1 --json '{"story":"s1 revised"}'`),
+		).toThrow();
+		expect(() =>
+			runCli(
+				`revise-story story-1 --json '{"story":"s1 revised"}' --evidence "e" --rationale "   "`,
+			),
+		).toThrow();
+		expect(JSON.parse(runCli("get")).stories[0].story).toBe("s1");
+
+		// retire-story: target the fence-safe UNCONFIRMED story (per fixture discipline —
+		// a confirmed+pursuing target would let the pre-existing anti-dodge fence produce
+		// the non-zero exit, proving nothing about the new guard).
+		addStory(
+			S,
+			{
+				id: "story-3",
+				story: "s3",
+				acceptance_criteria: ["ac"],
+				verification_surface: "v",
+				status: "unconfirmed",
+			},
+			"seed evidence",
+			"seed rationale",
+		);
+		expect(() => runCli("retire-story story-3")).toThrow();
+		expect(
+			JSON.parse(runCli("get")).stories.find((s: any) => s.id === "story-3").status,
+		).toBe("unconfirmed");
+		expect(() =>
+			runCli('retire-story story-3 --evidence "   " --rationale "y"'),
+		).toThrow();
+		expect(
+			JSON.parse(runCli("get")).stories.find((s: any) => s.id === "story-3").status,
+		).toBe("unconfirmed");
 	});
 
-	test("pristine DI state -> exit 0", () => {
-		const now = nowIso();
-		writeDiState(S, { active: true, started_at: now, last_touched_at: now });
-		expect(() => runCli("check-subskill --skill deep-interview")).not.toThrow();
+	test("steering persists reason and freezes outcome", () => {
+		seedConfirmedPursuing(S);
+
+		addStory(
+			S,
+			{
+				id: "story-2",
+				story: "s2",
+				acceptance_criteria: ["ac"],
+				verification_surface: "v",
+				status: "unconfirmed",
+			},
+			"observed X",
+			"because Y",
+		);
+		const afterAdd = readGoalGet(S)!.stories!.find((s) => s.id === "story-2")!;
+		expect(afterAdd.steering_evidence).toBe("observed X");
+		expect(afterAdd.steering_rationale).toBe("because Y");
+		expect(rawState().outcome).toBe("A");
+
+		reviseStory(S, "story-2", { story: "s2 revised" }, "observed Z", "because W");
+		const afterRevise = readGoalGet(S)!.stories!.find((s) => s.id === "story-2")!;
+		expect(afterRevise.story).toBe("s2 revised");
+		expect(afterRevise.steering_evidence).toBe("observed Z");
+		expect(afterRevise.steering_rationale).toBe("because W");
+		expect(rawState().outcome).toBe("A");
+
+		retireStory(S, "story-2", "observed Q", "because R");
+		const afterRetire = readGoalGet(S)!.stories!.find((s) => s.id === "story-2")!;
+		expect(afterRetire.status).toBe("retired");
+		expect(afterRetire.steering_evidence).toBe("observed Q");
+		expect(afterRetire.steering_rationale).toBe("because R");
+		expect(rawState().outcome).toBe("A");
 	});
 
-	test("absent DI state -> exit 0", () => {
-		expect(() => runCli("check-subskill --skill deep-interview")).not.toThrow();
+	// The anti-dodge fence (D-9) must survive the new contract untouched: supplying
+	// BOTH required flags must not become a bypass route for a confirmed+pursuing retire.
+	test("confirmed story cannot be retired during pursuit", () => {
+		seedConfirmedPursuing(S);
+		const stateBefore = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => retireStory(S, "story-1", "e", "r")).toThrow(/retire-story: refused/);
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
+		expect(readGoalGet(S)!.stories!.find((s) => s.id === "story-1")!.status).toBe(
+			"confirmed",
+		);
 	});
 
-	test("invalid --skill value -> non-zero exit", () => {
-		expect(() => runCli("check-subskill --skill sisyphus")).toThrow();
+	// D-13: the id must come from the parsed positional, not from a raw argv scan that
+	// misreads the FIRST non-"--"-prefixed token — which, once --evidence/--rationale take
+	// values, can be a flag's value rather than the id.
+	test("story id is not taken from a flag value", () => {
+		setGoalState(S, { phase: "planning", outcome: "A", verification_surface: "surface A" });
+		addStory(
+			S,
+			{
+				id: "story-9",
+				story: "s9",
+				acceptance_criteria: ["ac"],
+				verification_surface: "v",
+				status: "unconfirmed",
+			},
+			"seed evidence",
+			"seed rationale",
+		);
+		// Flags precede the positional id; "obs" is NOT a story id — if the scan misreads
+		// it as the id, retireStory would throw "unknown story id" and this would fail.
+		runCli('retire-story --evidence "obs" --rationale "r" story-9');
+		expect(
+			JSON.parse(runCli("get")).stories.find((s: any) => s.id === "story-9").status,
+		).toBe("retired");
+	});
+
+	// Regression guard: set-stories/set-single-story must NOT gain the new flags — bulk
+	// replacement is re-planning, not steering, and the two flags are steering-specific.
+	test("set-stories remains planning-only", () => {
+		setGoalState(S, { phase: "planning", outcome: "A", verification_surface: "surface A" });
+		setStories(S, [
+			{
+				id: "story-1",
+				story: "s1",
+				acceptance_criteria: ["ac"],
+				verification_surface: "v",
+				status: "unconfirmed",
+			},
+		]);
+		confirmStory(S, "story-1");
+		setGoalState(S, { phase: "pursuing" });
+		// set-stories still refuses outside planning on the PRE-EXISTING phase gate — no
+		// evidence/rationale flags are involved anywhere in this subcommand.
+		expect(() =>
+			runCli(
+				`set-stories --json '[{"id":"story-2","story":"s2","acceptance_criteria":["ac"],"verification_surface":"v","status":"unconfirmed"}]'`,
+			),
+		).toThrow();
+		expect(JSON.parse(runCli("get")).stories.length).toBe(1);
 	});
 });
