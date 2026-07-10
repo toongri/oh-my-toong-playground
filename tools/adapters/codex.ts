@@ -18,7 +18,8 @@ import { stringify } from "smol-toml";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { readTextFile, readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isPlainObject } from "../lib/deep-merge.ts";
-import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
+import { syncDirectory, copyFile, collectFiles } from "../lib/sync-directory.ts";
+import { backupCategory } from "../lib/backup.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { assertMappedTier } from "../lib/model-map.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
@@ -152,6 +153,135 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 function codexSkillsDir(targetPath: string): string {
 	return path.join(targetPath, ".agents", "skills");
+}
+
+/**
+ * Asserts that `fossilEntryDir` and `newEntryDir` (both directories, the
+ * on-disk form every deployed skill takes) hold the exact same relative file
+ * set with byte-identical contents. Throws naming `entryName` and the first
+ * differing relative path on any mismatch — a file present on only one side,
+ * or present on both with different bytes.
+ */
+async function assertRecursiveByteIdentity(
+	fossilEntryDir: string,
+	newEntryDir: string,
+	entryName: string,
+): Promise<void> {
+	const fossilFiles = await collectFiles(fossilEntryDir, "", []);
+	const newFiles = new Set(await collectFiles(newEntryDir, "", []));
+	const fossilFileSet = new Set(fossilFiles);
+
+	for (const rel of fossilFiles) {
+		if (!newFiles.has(rel)) {
+			throw new Error(
+				`cleanupCodexSkillsFossil: entry '${entryName}' differs from .agents/skills — '${rel}' exists only in .codex/skills`,
+			);
+		}
+	}
+	for (const rel of newFiles) {
+		if (!fossilFileSet.has(rel)) {
+			throw new Error(
+				`cleanupCodexSkillsFossil: entry '${entryName}' differs from .agents/skills — '${rel}' exists only in .agents/skills`,
+			);
+		}
+	}
+	for (const rel of fossilFiles) {
+		const [fossilBytes, newBytes] = await Promise.all([
+			fs.readFile(path.join(fossilEntryDir, rel)),
+			fs.readFile(path.join(newEntryDir, rel)),
+		]);
+		if (!fossilBytes.equals(newBytes)) {
+			throw new Error(
+				`cleanupCodexSkillsFossil: entry '${entryName}' differs from .agents/skills — bytes differ at '${rel}'`,
+			);
+		}
+	}
+}
+
+/**
+ * Removes the pre-b9908fbc `.codex/skills` fossil now that Codex skills deploy
+ * to `.agents/skills` (codexSkillsDir). Codex 0.144.1 reads BOTH roots, so a
+ * populated fossil makes every skill appear twice in the session prompt.
+ *
+ * Safety contract:
+ * - An entry is OMT-owned iff a same-named entry exists in `.agents/skills`;
+ *   anything else is a foreign resident (e.g. `.system`, which really lives
+ *   under `~/.codex/skills`) and is NEVER deleted, and never blocks cleanup.
+ * - Every OMT-owned entry must be a byte-identical duplicate of its
+ *   `.agents/skills` counterpart before anything is deleted — on any mismatch
+ *   this throws and deletes nothing (a silent skip would leave a duplicate
+ *   skill loaded; a silent delete risks unrecoverable loss).
+ * - The fossil is backed up (via `backupCategory`, using the plain-string
+ *   platform `"codex"`) BEFORE removal, giving a rollback surface.
+ * - `fossilDir` itself is removed only once it is fully empty; a surviving
+ *   foreign resident keeps it in place.
+ * - Idempotent: once the fossil is gone, a repeat call returns silently.
+ */
+export async function cleanupCodexSkillsFossil(
+	deployRoot: string,
+	backupSession: string,
+	dryRun: boolean,
+): Promise<void> {
+	const fossilDir = path.join(deployRoot, ".codex", "skills");
+	const newDir = codexSkillsDir(deployRoot);
+
+	const fossilStat = await fs.stat(fossilDir).catch(() => undefined);
+	if (!fossilStat?.isDirectory()) {
+		return; // nothing to do — idempotent
+	}
+
+	const newStat = await fs.stat(newDir).catch(() => undefined);
+	if (!newStat?.isDirectory()) {
+		if (dryRun) {
+			logDry(
+				`Codex skills fossil cleanup deferred: '${newDir}' does not exist yet (a real sync creates it first)`,
+			);
+			return;
+		}
+		throw new Error(
+			`cleanupCodexSkillsFossil: '${fossilDir}' exists but its replacement '${newDir}' does not — refusing to delete the fossil`,
+		);
+	}
+
+	const fossilEntries = await fs.readdir(fossilDir);
+	const newEntryNames = new Set(await fs.readdir(newDir));
+
+	const omtOwned: string[] = [];
+	for (const name of fossilEntries) {
+		if (newEntryNames.has(name)) {
+			omtOwned.push(name);
+		} else {
+			logInfo(`Codex skills fossil: foreign resident kept: ${name}`);
+		}
+	}
+
+	// Prove byte identity for every OMT-owned entry BEFORE anything is deleted.
+	for (const name of omtOwned) {
+		await assertRecursiveByteIdentity(path.join(fossilDir, name), path.join(newDir, name), name);
+	}
+
+	if (dryRun) {
+		for (const name of omtOwned) {
+			logDry(`Remove Codex skills fossil entry: ${path.join(fossilDir, name)}`);
+		}
+		return;
+	}
+
+	if (omtOwned.length === 0) {
+		return; // nothing OMT-owned to remove (fossil holds only foreign residents)
+	}
+
+	await backupCategory(deployRoot, "codex", "skills", backupSession);
+
+	for (const name of omtOwned) {
+		await fs.rm(path.join(fossilDir, name), { recursive: true, force: true });
+	}
+
+	const remaining = await fs.readdir(fossilDir);
+	if (remaining.length === 0) {
+		await fs.rm(fossilDir, { recursive: true, force: true });
+		logInfo(`Codex skills fossil removed: ${fossilDir}`);
+	}
 }
 
 // =============================================================================

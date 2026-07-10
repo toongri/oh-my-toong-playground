@@ -37,7 +37,7 @@ import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import { resolvePlatforms, resolveComponentPath, setProjectContext } from "./lib/resolver.ts";
 import { generateBackupSessionId, backupCategory, backupDocs, cleanupOldBackups } from "./lib/backup.ts";
-import { reconcilePairManifest } from "./lib/deploy-manifest.ts";
+import { reconcilePairManifest, removeManifestPair } from "./lib/deploy-manifest.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
@@ -52,7 +52,7 @@ import {
 import { runProvision } from "./lib/provision.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
-import { CodexAdapter } from "./adapters/codex.ts";
+import { CodexAdapter, cleanupCodexSkillsFossil } from "./adapters/codex.ts";
 import { opencodeAdapter } from "./adapters/opencode.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 
@@ -385,6 +385,23 @@ export async function syncCategory(
 	if (!context.dryRun) {
 		for (const [deployLocation, names] of deployedNames) {
 			await reconcilePairManifest(deployRoot, deployLocation, category, [...names]);
+		}
+	}
+
+	// One-time fossil cleanup: `.codex/skills` is the pre-b9908fbc deploy location,
+	// dead now that Codex skills route to `.agents/skills` (deployLocationForManifest).
+	// Codex 0.144.1 reads BOTH roots, so a populated fossil duplicates every skill in
+	// the session prompt. Runs once per deployRoot (syncCategory itself is called once
+	// per deployRoot per category), guarded on codex having actually been a target for
+	// skills THIS run — deployedNames is keyed by deploy LOCATION, so "agents" present
+	// here means codex+skills was declared (never fires for a claude/gemini-only run).
+	// Cleanup runs even under dryRun (it reports via logDry); the manifest key is only
+	// pruned after a successful (non-dry) cleanup, so a thrown cleanup leaves the
+	// ownership record intact for the next run to retry against.
+	if (category === "skills" && deployedNames.has("agents")) {
+		await cleanupCodexSkillsFossil(deployRoot, context.backupSession, context.dryRun);
+		if (!context.dryRun) {
+			await removeManifestPair(deployRoot, "codex", "skills");
 		}
 	}
 }

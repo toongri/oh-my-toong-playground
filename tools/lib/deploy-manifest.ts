@@ -135,3 +135,25 @@ export async function reconcilePairManifest(
 	next[key] = declaredNames;
 	await writeManifest(deployRoot, next);
 }
+
+/**
+ * Remove a single `${platformOrLocation}/${category}` pair key from the
+ * manifest, leaving every other pair untouched. Bootstrap-safe: when
+ * `readManifest` returns `null` (file absent, unreadable, or corrupt), this
+ * is a no-op — it never writes the manifest and never throws. Used to prune a
+ * stale pair key after its deploy location has moved (e.g. `codex/skills`
+ * once Codex skills routed to `.agents/skills`), so a future `codex/skills`
+ * deploy never diffs against that stale key's leftover entry names.
+ */
+export async function removeManifestPair(
+	deployRoot: string,
+	platformOrLocation: string,
+	category: string,
+): Promise<void> {
+	const current = await readManifest(deployRoot);
+	if (current === null) return;
+
+	const key = pairKey(platformOrLocation, category);
+	const { [key]: _removed, ...rest } = current;
+	await writeManifest(deployRoot, rest);
+}
