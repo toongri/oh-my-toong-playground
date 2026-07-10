@@ -35,7 +35,8 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 	opencode: [{ id: "4", detect: /\.claude\//g, replace: ".opencode/", lossy: false }],
 
 	codex: [
-		// Order: S -> 17 -> 4 -> 5 -> 6a -> 6b -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14 -> 2 -> 3.
+		// Order: S -> 17 -> 17b -> 4 -> 5 -> 6a -> 6b -> 7 -> 8 -> 9 -> 10 -> 11 -> 12
+		//        -> 13 -> 14p -> 14 -> 1 -> 2 -> 3.
 		// This array order IS the application order — ordering is semantic, not cosmetic.
 
 		// S MUST precede 17 and 4: Codex skills live in .agents/skills, NOT
@@ -49,6 +50,18 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		// 17-before-4 for auditability even though final output would agree
 		// either way for the home-config case.
 		{ id: "17", detect: /~\/\.claude\//g, replace: "~/.codex/", lossy: false },
+
+		// 17b MUST run after 17 (and after S, transitively, since S precedes 17):
+		// `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` (skills/deep-interview/SKILL.md:67,
+		// skills/code-review/SKILL.md:418,433) uses bracket notation, so `~/.claude` is
+		// followed by `]`, not `/` — rule 17 (which demands a trailing slash) never
+		// touches it, and it would otherwise survive verbatim into the Codex deploy.
+		// `\b` alone (run BEFORE 17) would wrongly steal `~/.claude/skills/hud` and
+		// `~/.claude/hooks/x` (`/` is a non-word char, so `\b` matches there too) —
+		// running after 17 guarantees every trailing-slash instance is already
+		// consumed, leaving only the bracket/non-slash case for this rule.
+		{ id: "17b", detect: /~\/\.claude\b/g, replace: "~/.codex", lossy: false },
+
 		{ id: "4", detect: /\.claude\//g, replace: ".codex/", lossy: false },
 		{ id: "5", detect: /\bCLAUDE\.md\b/g, replace: "AGENTS.md", lossy: false },
 
@@ -96,10 +109,34 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		// shape — call shape differs.
 		{ id: "13", detect: /\bMultiEdit\b/g, replace: "apply_patch", lossy: true },
 
+		// 14p MUST precede 14 (longest match first): `\bAskUserQuestion\b` cannot
+		// match the plural `AskUserQuestions` — the `\b` fails right before the
+		// trailing `s` — so without this row running first, the plural survives
+		// unmapped (skills/collect-jd/tests/pressure-scenarios.md:688: "asking too
+		// many AskUserQuestions will tire the user"). Running 14p first consumes
+		// every plural instance whole, so 14 never sees a partial/mangled remainder.
+		{
+			id: "14p",
+			detect: /\bAskUserQuestions\b/g,
+			replace: "plain-text user questions",
+			lossy: true,
+		},
 		{
 			id: "14",
 			detect: /\bAskUserQuestion\b/g,
 			replace: "a plain-text user question",
+			lossy: true,
+		},
+
+		// Real carrier: skills/deep-interview/SKILL.md:67, skills/code-review/SKILL.md:418,433
+		// (`Read [$CLAUDE_CONFIG_DIR|~/.claude]/settings.json`). Lossy: Codex's real
+		// counterpart is the CODEX_HOME env var (config-home override), but Codex
+		// stores config in config.toml, not settings.json — the substitution keeps
+		// the sentence directionally right but not literally executable.
+		{
+			id: "1",
+			detect: /\$CLAUDE_CONFIG_DIR\b/g,
+			replace: "$CODEX_HOME",
 			lossy: true,
 		},
 
@@ -122,6 +159,76 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		},
 	],
 };
+
+/**
+ * Hook event names Codex shares verbatim with Claude (codex-rs/hooks/src/lib.rs:86-94).
+ * These must NEVER be rewritten by any platform table — a rule that silently
+ * renamed a hook event would break hook dispatch. Asserted in rewrite-rules.test.ts.
+ */
+export const KEEP_IDENTICAL_TOKENS: readonly string[] = [
+	"PreToolUse",
+	"PostToolUse",
+	"SessionStart",
+	"UserPromptSubmit",
+	"PreCompact",
+];
+
+/**
+ * Tokens that satisfy a BROAD_DETECTORS pattern but are NOT Claude-isms —
+ * ordinary technical vocabulary that happens to share a shape (`Web[A-Z]\w+`,
+ * `CLAUDE_[A-Z_]+`) with a real Claude tool/env-var name. Each reason names the
+ * real, verified carrier location(s) — corpus-scanned, not asserted from memory.
+ *
+ * WebP and WebGL are documented here for completeness but are not live
+ * escapes today: WebP's 4 characters never satisfy the claude-tool detector's
+ * `Web[A-Z]\w+` (which needs ≥1 trailing word-char after the capital), and
+ * WebGL's sole carrier (skills/insane-browsing) is `platforms: [claude]`-only,
+ * so it never reaches the codex deploy surface to be scanned.
+ */
+export const OUT_OF_SCOPE_TOKENS: readonly { token: string; reason: string }[] = [
+	{
+		token: "WebP",
+		reason:
+			"image format; ordinary technical term in skills/tech-claim-rubric evaluation content, not a Claude tool.",
+	},
+	{
+		token: "WebSocket",
+		reason:
+			"network protocol; appears in skills/insane-browsing (extract_cookies.py) and skills/prometheus (test scenario prose), not skills/qa.",
+	},
+	{
+		token: "WebFlux",
+		reason: "Spring framework module; skills/tech-claim-rubric evaluation content.",
+	},
+	{
+		token: "WebView",
+		reason:
+			"mobile/embedded browser component; appears in skills/tech-claim-rubric, not skills/insane-browsing.",
+	},
+	{
+		token: "WebTestClient",
+		reason: "Spring test class; appears in skills/qa, not skills/tech-claim-rubric.",
+	},
+	{
+		token: "WebGL",
+		reason: "graphics API; appears in skills/insane-browsing, not skills/prometheus.",
+	},
+	{
+		token: "CLAUDE_CODE_EFFORT_LEVEL",
+		reason:
+			'appears inside a comment that explains the per-platform difference ("claude: env CLAUDE_CODE_EFFORT_LEVEL, codex: -c flag") in skills/agent-council/council.config.yaml:16; rewriting it destroys the distinction it documents. The other carrier, skills/orchestrate-review/scripts/job.test.ts:831, is a *.test.ts file excluded from deploy by DEFAULT_EXCLUDE.',
+	},
+	{
+		token: "CLAUDE_PID",
+		reason:
+			"skills/collect-jd/tests/concurrency-dogfood.md:136: Korean prose describing that collect-jd is a Claude Code skill — documentation about Claude, not an instruction to the agent.",
+	},
+	{
+		token: "WebEnvironment",
+		reason:
+			"Spring Boot Test API (`@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)`); appears in the project-local `testing` skill's e2e-test.md reference, duplicated in both projects/loopers-kotlin-spring-template and projects/toong-java-spring-template (Kotlin/Java variants of the same test-setup snippet). Not enumerated by the original corpus scan — found by running the G4-2 scanner itself against the full (unfiltered) project set.",
+	},
+];
 
 /**
  * Literal token the Claude Code harness expands to a skill's absolute

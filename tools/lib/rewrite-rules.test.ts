@@ -3,17 +3,20 @@ import {
 	applyRewriteRules,
 	bakeSkillDirToken,
 	BROAD_DETECTORS,
+	KEEP_IDENTICAL_TOKENS,
+	OUT_OF_SCOPE_TOKENS,
 	PLATFORM_REWRITE_RULES,
 	SKILL_DIR_TOKEN,
 } from "./rewrite-rules.ts";
 
 // Fixture containing (at least) one occurrence of every family in the codex
-// table: S, 17, 4, 5, 6a, 6b, 7, 8, 9, 10, 11, 12, 13, 14, 2, 3.
+// table: S, 17, 17b, 4, 5, 6a, 6b, 7, 8, 9, 10, 11, 12, 13, 14p, 14, 1, 2, 3.
 const CODEX_FIXTURE_LINES = [
 	"~/.claude/skills/hud/catalog.ts",
 	".claude/skills/goal/SKILL.md",
 	"~/.claude/hooks/session-start.sh",
 	".claude/agents/oracle.md",
+	"See ~/.claude] for config (bracket notation, no trailing slash)",
 	"See CLAUDE.md for repository overview.",
 	"Skill(humanizer)",
 	'Skill(skill: "sisyphus")',
@@ -28,6 +31,8 @@ const CODEX_FIXTURE_LINES = [
 	"subagent_type: explore",
 	"MultiEdit(file_path, edits)",
 	"AskUserQuestion to gather input",
+	"asking too many AskUserQuestions will tire the user",
+	"$CLAUDE_CONFIG_DIR",
 	"$CLAUDE_ENV_FILE",
 	"$CLAUDE_PROJECT_DIR",
 ];
@@ -216,6 +221,105 @@ describe("BROAD_DETECTORS — 완결성 넷은 공허하지 않다", () => {
 		});
 		expect(coveredByAnyRule).toBe(false);
 		expect(matches("claude-env", "CLAUDE_UNKNOWN_ENV")).toBe(true);
+	});
+});
+
+describe("codex 규칙 — Hole A: `$CLAUDE_CONFIG_DIR` -> `$CODEX_HOME`", () => {
+	it('"$CLAUDE_CONFIG_DIR" -> "$CODEX_HOME"', () => {
+		expect(applyRewriteRules("$CLAUDE_CONFIG_DIR", PLATFORM_REWRITE_RULES.codex)).toBe(
+			"$CODEX_HOME",
+		);
+	});
+
+	it("실제 캐리어 라인(deep-interview/SKILL.md:67)에서 CONFIG_DIR과 bracket 표기가 함께 정정된다", () => {
+		const line =
+			"Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user)";
+		const result = applyRewriteRules(line, PLATFORM_REWRITE_RULES.codex);
+		expect(result).toBe(
+			"Read `[$CODEX_HOME|~/.codex]/settings.json` and `./.codex/settings.json` (project overrides user)",
+		);
+	});
+});
+
+describe("codex 규칙 — Hole B: `~/.claude]`(트레일링 슬래시 없음) -> `~/.codex`, 순서 17 이후", () => {
+	it('"~/.claude]/settings.json" -> "~/.codex]/settings.json"', () => {
+		expect(
+			applyRewriteRules("~/.claude]/settings.json", PLATFORM_REWRITE_RULES.codex),
+		).toBe("~/.codex]/settings.json");
+	});
+
+	it('새 규칙이 "~/.claude/skills/hud" -> "~/.agents/skills/hud" 매치를 훔치지 않는다 (회귀)', () => {
+		const result = applyRewriteRules("~/.claude/skills/hud", PLATFORM_REWRITE_RULES.codex);
+		expect(result).toBe("~/.agents/skills/hud");
+		expect(result).not.toBe("~/.codex/skills/hud");
+	});
+
+	it('새 규칙이 "~/.claude/hooks/x" -> "~/.codex/hooks/x" 매치를 훔치지 않는다 (회귀)', () => {
+		expect(applyRewriteRules("~/.claude/hooks/x", PLATFORM_REWRITE_RULES.codex)).toBe(
+			"~/.codex/hooks/x",
+		);
+	});
+});
+
+describe("codex 규칙 — Hole C: `AskUserQuestions`(복수) -> `plain-text user questions`, rule 14보다 먼저", () => {
+	it('"AskUserQuestion" (단수) -> "a plain-text user question" (기존 규칙 14, 회귀)', () => {
+		expect(applyRewriteRules("AskUserQuestion", PLATFORM_REWRITE_RULES.codex)).toBe(
+			"a plain-text user question",
+		);
+	});
+
+	it('"AskUserQuestions" (복수) -> "plain-text user questions"', () => {
+		expect(applyRewriteRules("AskUserQuestions", PLATFORM_REWRITE_RULES.codex)).toBe(
+			"plain-text user questions",
+		);
+	});
+
+	it("단수와 복수가 한 줄에 함께 있어도 서로 오염시키지 않는다", () => {
+		const result = applyRewriteRules(
+			"AskUserQuestion and AskUserQuestions",
+			PLATFORM_REWRITE_RULES.codex,
+		);
+		expect(result).toBe("a plain-text user question and plain-text user questions");
+	});
+
+	it("실제 캐리어 라인(collect-jd/tests/pressure-scenarios.md:688)이 정정된다", () => {
+		const line = '"asking too many AskUserQuestions will tire the user" user-consideration rationalization';
+		const result = applyRewriteRules(line, PLATFORM_REWRITE_RULES.codex);
+		expect(result).toBe(
+			'"asking too many plain-text user questions will tire the user" user-consideration rationalization',
+		);
+	});
+});
+
+describe("G4-1 — KEEP_IDENTICAL_TOKENS / OUT_OF_SCOPE_TOKENS", () => {
+	it("KEEP_IDENTICAL_TOKENS는 codex가 공유하는 5개 hook 이벤트명이다", () => {
+		expect(KEEP_IDENTICAL_TOKENS).toEqual([
+			"PreToolUse",
+			"PostToolUse",
+			"SessionStart",
+			"UserPromptSubmit",
+			"PreCompact",
+		]);
+	});
+
+	it("어느 플랫폼 테이블의 어떤 규칙도 KEEP_IDENTICAL_TOKENS 토큰을 매치하지 않는다 — 매치되면 hook 이벤트명이 조용히 rename되어 dispatch가 깨진다", () => {
+		for (const rules of Object.values(PLATFORM_REWRITE_RULES)) {
+			for (const rule of rules) {
+				const re = new RegExp(rule.detect.source, rule.detect.flags);
+				for (const token of KEEP_IDENTICAL_TOKENS) {
+					re.lastIndex = 0;
+					expect(re.test(token)).toBe(false);
+				}
+			}
+		}
+	});
+
+	it("OUT_OF_SCOPE_TOKENS는 비어있지 않고, 모든 항목이 비어있지 않은 reason을 가진다", () => {
+		expect(OUT_OF_SCOPE_TOKENS.length).toBeGreaterThan(0);
+		for (const entry of OUT_OF_SCOPE_TOKENS) {
+			expect(entry.token.length).toBeGreaterThan(0);
+			expect(entry.reason.trim().length).toBeGreaterThan(0);
+		}
 	});
 });
 

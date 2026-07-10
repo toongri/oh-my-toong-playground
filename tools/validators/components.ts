@@ -13,7 +13,7 @@
  * CLI usage: bun run tools/validators/components.ts [path-to-sync.yaml]
  */
 
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join, dirname, basename } from "path";
 import { getRootDir, getEnabledProjects } from "../lib/config.ts";
 import { expandTilde } from "../lib/path-utils.ts";
@@ -29,8 +29,17 @@ import type { SyncItem, SyncYaml } from "../lib/types.ts";
 import { readAndExpandSyncYaml } from "../lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "../lib/parse-platform-yaml.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
-import { deploysToClaudeDotDir } from "../sync.ts";
+import { deploysToClaudeDotDir, SUPPORTED_CATEGORIES } from "../sync.ts";
 import { resolveDeployTargets } from "../lib/resolve-deploy-targets.ts";
+import { collectFiles, DEFAULT_EXCLUDE } from "../lib/sync-directory.ts";
+import {
+	applyRewriteRules,
+	BROAD_DETECTORS,
+	KEEP_IDENTICAL_TOKENS,
+	OUT_OF_SCOPE_TOKENS,
+	PLATFORM_REWRITE_RULES,
+	SKILL_DIR_TOKEN,
+} from "../lib/rewrite-rules.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -618,6 +627,191 @@ export async function validateModelMapCoverage(
 }
 
 // ---------------------------------------------------------------------------
+// G4-2: codex rewrite-table completeness scanner
+// ---------------------------------------------------------------------------
+
+/** The inner env-var name literally inside SKILL_DIR_TOKEN (`${CLAUDE_SKILL_DIR}` -> `CLAUDE_SKILL_DIR`). */
+const SKILL_DIR_TOKEN_INNER = SKILL_DIR_TOKEN.slice(2, -1);
+
+/**
+ * Resolve the absolute file paths a single codex-resolved sync.yaml item
+ * deploys, mirroring `resolveAgentSourcePath`'s flat-path-first precedence for
+ * `agents` and `resolveComponentPath`'s directory conventions (SKILL.md,
+ * plain directory) for every other category. A directory result (skills,
+ * scripts) is walked with `collectFiles`/`DEFAULT_EXCLUDE` — the SAME
+ * exclusion policy `syncDirectory` applies at deploy time
+ * (tools/lib/sync-directory.ts) — so a `*.test.ts` fixture that never reaches
+ * the deploy tree is never scanned here either.
+ */
+async function resolveCodexCandidateFiles(
+	category: string,
+	component: string,
+	rootDir: string,
+	projectDirName: string | undefined,
+): Promise<string[]> {
+	const sourcePath =
+		category === "agents"
+			? resolveAgentSourcePath(component, rootDir, projectDirName)
+			: (() => {
+					const resolved = resolveComponentPath(component, category, rootDir, projectDirName);
+					return "error" in resolved ? null : resolved.path;
+				})();
+	if (sourcePath === null || !existsSync(sourcePath)) return []; // missing-component already reported elsewhere
+
+	if (statSync(sourcePath).isDirectory()) {
+		const relFiles = await collectFiles(sourcePath, "", DEFAULT_EXCLUDE);
+		return relFiles.map((rel) => join(sourcePath, rel));
+	}
+	return [sourcePath];
+}
+
+/**
+ * True when a single BROAD_DETECTORS match is accounted for by one of the
+ * four coverage layers named in plan AC G4-2: a codex PLATFORM_REWRITE_RULES
+ * row, SKILL_DIR_TOKEN (baked per-file before deploy, never a static row),
+ * KEEP_IDENTICAL_TOKENS, or OUT_OF_SCOPE_TOKENS. Anything else is a genuine
+ * escape.
+ */
+function isCoveredMatch(
+	detectorName: string,
+	matchedText: string,
+	line: string,
+	isAgentsCategory: boolean,
+): boolean {
+	if (detectorName === "claude-model") {
+		// syncAgentsDirect (tools/adapters/codex.ts) transforms agent .md
+		// frontmatter into TOML via the model-map before any raw
+		// `model: opus|sonnet` line can reach the deploy surface, so a match
+		// under `agents/` is structurally safe. The identical literal inside a
+		// skill body (only copied, never transformed) is a real defect.
+		return isAgentsCategory;
+	}
+
+	if (matchedText === SKILL_DIR_TOKEN_INNER && line.includes(SKILL_DIR_TOKEN)) return true;
+	if (KEEP_IDENTICAL_TOKENS.includes(matchedText)) return true;
+	if (OUT_OF_SCOPE_TOKENS.some((t) => t.token === matchedText)) return true;
+
+	// Line-granularity, not point-match: a rule like `S` (`.claude/skills`)
+	// requires trailing context the isolated matched text lacks, so coverage
+	// is "does the codex table's rewrite of the WHOLE line still contain the
+	// matched text" rather than testing the match text in isolation.
+	const rewritten = applyRewriteRules(line, PLATFORM_REWRITE_RULES.codex);
+	return !rewritten.includes(matchedText);
+}
+
+function scanFileForUncoveredTokens(
+	filePath: string,
+	isAgentsCategory: boolean,
+	result: ValidationResult,
+): void {
+	const content = readFileSync(filePath, "utf-8");
+	const lines = content.split("\n");
+
+	for (const detector of BROAD_DETECTORS) {
+		const re = new RegExp(detector.detect.source, detector.detect.flags);
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(content)) !== null) {
+			const matchedText = m[0];
+			if (m.index === re.lastIndex) re.lastIndex++; // guard against zero-width matches
+
+			const lineNumber = content.slice(0, m.index).split("\n").length;
+			const line = lines[lineNumber - 1] ?? "";
+
+			if (isCoveredMatch(detector.name, matchedText, line, isAgentsCategory)) continue;
+
+			result.errors.push(
+				`codex-rewrite: uncovered ${detector.name} match '${matchedText}' at ${filePath}:${lineNumber}`,
+			);
+		}
+	}
+}
+
+/**
+ * G4-2: for every source file that would deploy to codex — resolved from
+ * sync.yaml + the enabled projects/*\/sync.yaml, mirroring how
+ * `validateModelMapCoverage` resolves its candidates — assert every
+ * BROAD_DETECTORS match is covered by the codex PLATFORM_REWRITE_RULES table,
+ * SKILL_DIR_TOKEN, KEEP_IDENTICAL_TOKENS, or OUT_OF_SCOPE_TOKENS.
+ *
+ * Scans the SOURCE-resolved deploy-candidate set, not the deployed tree —
+ * `make validate` must not require a prior `make sync`, and the deploy
+ * surface may not exist or may live under $HOME.
+ *
+ * Guarantee scope (plan AC G4-2 residual, stated explicitly): this catches
+ * tokens matching a DECLARED detection rule that are absent from the table.
+ * It does not claim to know every possible Claude-ism shape.
+ */
+export async function validateCodexRewriteCoverage(
+	rootDir: string,
+	enabledProjects?: string[],
+): Promise<ValidationResult> {
+	const result = makeResult();
+
+	const effective = enabledProjects ?? (await getEnabledProjects());
+	const enabledSet = effective && effective.length > 0 ? new Set(effective) : undefined;
+	const projectsDir = join(rootDir, "projects");
+
+	const codexCategories = SUPPORTED_CATEGORIES.codex;
+	const scanned = new Set<string>(); // dedupe: same absolute file resolved via multiple sync.yaml refs
+
+	for (const syncYamlPath of discoverSyncYamls(rootDir)) {
+		if (enabledSet) {
+			const parentDir = dirname(syncYamlPath);
+			if (dirname(parentDir) === projectsDir && !enabledSet.has(basename(parentDir))) {
+				continue;
+			}
+		}
+
+		let syncYaml: SyncYaml | null;
+		try {
+			syncYaml = await readAndExpandSyncYaml(syncYamlPath);
+		} catch {
+			continue; // parse error already reported by validateSyncYamlComponents
+		}
+		if (!isObject(syncYaml)) continue;
+
+		const ctx = setProjectContext(syncYaml, syncYamlPath, rootDir);
+		const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
+		const syncYamlPlatforms = isArray(syncYaml.platforms) ? syncYaml.platforms : undefined;
+
+		for (const category of codexCategories) {
+			const sectionData = syncYaml[category];
+			if (!isObject(sectionData) || !isArray(sectionData.items)) continue;
+
+			const sectionPlatforms = isArray(sectionData.platforms) ? sectionData.platforms : undefined;
+
+			for (const item of sectionData.items) {
+				const component = getItemComponent(item);
+				if (!component) continue;
+
+				// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- item came from a runtime-checked SyncSection.items array; shape matches SyncItem
+				const platforms = await resolvePlatforms(
+					item as SyncItem,
+					sectionPlatforms as Platform[] | undefined,
+					syncYamlPlatforms as Platform[] | undefined,
+					category,
+				);
+				if (!platforms.includes("codex")) continue;
+
+				const files = await resolveCodexCandidateFiles(
+					category,
+					component,
+					rootDir,
+					projectDirName,
+				);
+				for (const filePath of files) {
+					if (scanned.has(filePath)) continue;
+					scanned.add(filePath);
+					scanFileForUncoveredTokens(filePath, category === "agents", result);
+				}
+			}
+		}
+	}
+
+	return result;
+}
+
+// ---------------------------------------------------------------------------
 // Discovery and orchestration
 // ---------------------------------------------------------------------------
 
@@ -686,6 +880,7 @@ export async function validateAll(
 	}
 
 	mergeResult(result, await validateModelMapCoverage(rootDir, enabledProjects));
+	mergeResult(result, await validateCodexRewriteCoverage(rootDir, enabledProjects));
 
 	return result;
 }

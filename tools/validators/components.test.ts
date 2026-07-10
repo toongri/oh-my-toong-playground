@@ -10,6 +10,7 @@ import {
 	validateSyncYamlComponents,
 	validatePlatformYamlHookComponents,
 	validateModelMapCoverage,
+	validateCodexRewriteCoverage,
 	validateAll,
 } from "./components.ts";
 import { getRootDir } from "../lib/config.ts";
@@ -1674,5 +1675,229 @@ agents:
 		const result = await validateModelMapCoverage(root);
 		expect(result.errors.length).toBeGreaterThan(0);
 		expect(result.errors.some((e) => e.includes("codex"))).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validateCodexRewriteCoverage (G4-2)
+// ---------------------------------------------------------------------------
+
+describe("validateCodexRewriteCoverage — 실제 코퍼스", () => {
+	it("실제 레포의 codex 배포 표면은 rewrite 테이블에 완전히 커버된다 (zero findings)", async () => {
+		const rootDir = getRootDir();
+		expect(rootDir).not.toBeNull();
+		// enabledProjects: [] forces a full-corpus scan regardless of a machine-local
+		// (gitignored) config.local.yaml `enabled-projects` override — without this,
+		// a developer machine that scopes projects down for `make sync` would silently
+		// under-scan here too, and several of the real OUT_OF_SCOPE_TOKENS carriers
+		// (tech-claim-rubric, qa, agent-council, collect-jd) live in project-local
+		// sync.yaml files that such an override can exclude.
+		const result = await validateCodexRewriteCoverage(rootDir as string, []);
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
+describe("validateCodexRewriteCoverage — G4-2 positive control (양성/음성 대조)", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = makeRoot();
+	});
+
+	afterEach(() => {
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("커버된 토큰만 있는 codex 스킬은 에러 없음 (스캐너가 항상 통과하는 무효 스캐너가 아님을 증명하는 음성 대조)", async () => {
+		writeYaml(
+			join(root, "skills", "clean-skill"),
+			"SKILL.md",
+			"---\nname: clean-skill\ndescription: test\n---\n\nUse TaskCreate to add a todo, then read $CLAUDE_ENV_FILE.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: clean-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("codex 테이블에 없는 새 CLAUDE_ 환경변수 토큰을 심으면 에러를 반환한다 (positive control)", async () => {
+		writeYaml(
+			join(root, "skills", "rogue-skill"),
+			"SKILL.md",
+			"---\nname: rogue-skill\ndescription: test\n---\n\nRead $CLAUDE_UNKNOWN_ENV before continuing.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: rogue-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("CLAUDE_UNKNOWN_ENV"))).toBe(true);
+	});
+
+	it("codex 테이블에 없는 새 claude-tool 형태 토큰(TaskWatcher)을 심으면 에러를 반환한다 (positive control)", async () => {
+		writeYaml(
+			join(root, "skills", "rogue-tool-skill"),
+			"SKILL.md",
+			"---\nname: rogue-tool-skill\ndescription: test\n---\n\nPoll the TaskWatcher for status.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: rogue-tool-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("TaskWatcher"))).toBe(true);
+	});
+
+	it("platforms: [claude]인 스킬은 스캔되지 않는다 — 커버되지 않은 토큰이 있어도 에러 없음", async () => {
+		writeYaml(
+			join(root, "skills", "claude-only-skill"),
+			"SKILL.md",
+			"---\nname: claude-only-skill\ndescription: test\n---\n\nRead $CLAUDE_UNKNOWN_ENV before continuing.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: claude-only-skill
+      platforms: [claude]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("DEFAULT_EXCLUDE에 해당하는 *.test.ts 파일은 스캔 대상에서 제외된다 (배포되지 않으므로)", async () => {
+		touch(join(root, "skills", "excl-skill", "SKILL.md"));
+		writeYaml(
+			join(root, "skills", "excl-skill"),
+			"job.test.ts",
+			'const x = "$CLAUDE_UNKNOWN_ENV";\n',
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: excl-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("agents/*.md의 `model: opus|sonnet` frontmatter는 codex 배포 시 model-map 변환을 거치므로 커버된 것으로 취급한다", async () => {
+		writeYaml(
+			join(root, "agents"),
+			"my-agent.md",
+			"---\nname: my-agent\ndescription: test\nmodel: opus\n---\n\nDo the thing.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+agents:
+  items:
+    - component: my-agent
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("스킬 본문(agents/가 아님)에 `model: opus` 리터럴이 있으면 실제 결함으로 에러를 반환한다", async () => {
+		writeYaml(
+			join(root, "skills", "model-leak-skill"),
+			"SKILL.md",
+			"---\nname: model-leak-skill\ndescription: test\n---\n\nmodel: opus\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: model-leak-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("claude-model"))).toBe(true);
+	});
+
+	it("SKILL_DIR_TOKEN(`${CLAUDE_SKILL_DIR}`)은 배포 전 per-file baking 대상이므로 커버된 것으로 취급한다", async () => {
+		writeYaml(
+			join(root, "skills", "dir-token-skill"),
+			"SKILL.md",
+			"---\nname: dir-token-skill\ndescription: test\n---\n\nRun `bun ${CLAUDE_SKILL_DIR}/scripts/job.ts`.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: dir-token-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("OUT_OF_SCOPE_TOKENS에 등록된 토큰(WebSocket)이 있어도 에러 없음", async () => {
+		writeYaml(
+			join(root, "skills", "websocket-skill"),
+			"SKILL.md",
+			"---\nname: websocket-skill\ndescription: test\n---\n\nConnect via WebSocket for realtime updates.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: websocket-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
 	});
 });
