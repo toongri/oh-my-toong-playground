@@ -227,8 +227,17 @@ export async function cleanupCodexSkillsFossil(
 		}
 	}
 
+	if (dryRun) {
+		for (const name of omtOwned) {
+			logDry(`Remove Codex skills fossil entry: ${path.join(fossilDir, name)}`);
+		}
+		return;
+	}
+
 	// Every OMT-owned entry must have a live counterpart under .agents/skills
-	// BEFORE anything is deleted (deployed-but-missing anomaly guard).
+	// BEFORE anything is deleted (deployed-but-missing anomaly guard). This is
+	// a real-run-only guard: in dry-run nothing has been written yet, so a
+	// missing counterpart is expected, not an anomaly.
 	for (const name of omtOwned) {
 		const counterpartStat = await fs.stat(path.join(newDir, name)).catch(() => undefined);
 		if (!counterpartStat) {
@@ -236,13 +245,6 @@ export async function cleanupCodexSkillsFossil(
 				`cleanupCodexSkillsFossil: entry '${name}' is owned this run but has no counterpart at '${path.join(newDir, name)}' — refusing to delete`,
 			);
 		}
-	}
-
-	if (dryRun) {
-		for (const name of omtOwned) {
-			logDry(`Remove Codex skills fossil entry: ${path.join(fossilDir, name)}`);
-		}
-		return;
 	}
 
 	if (omtOwned.length === 0) {
