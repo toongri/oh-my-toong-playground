@@ -132,6 +132,16 @@ export const SUPPORTED_CATEGORIES: Record<string, Set<Category>> = {
 };
 
 /**
+ * Deploy-LOCATION key for backup + manifest reconciliation. NOT a Platform:
+ * Codex reads skills from `.agents/skills` (a cross-CLI root), not `.codex/skills`,
+ * so its backup source and manifest ownership key must name that physical pair.
+ * Must never leak into the Platform union, the adapter registry, or SUPPORTED_CATEGORIES.
+ */
+export function deployLocationForManifest(platform: Platform, category: string): string {
+	return platform === "codex" && category === "skills" ? "agents" : platform;
+}
+
+/**
  * Generic sync loop for a single category.
  * Replaces sync_agents, sync_commands, sync_skills, sync_scripts, sync_rules.
  *
@@ -176,7 +186,10 @@ export async function syncCategory(
 	// PREVIOUS run's recorded set instead of wiping the whole category dir.
 	// Never populated for "rules": rules are excluded from removal entirely (may
 	// hold user-managed files), exactly as the old wipe excluded them.
-	const deployedNames = new Map<Platform, Set<string>>();
+	// Keyed by deploy LOCATION (deployLocationForManifest), not Platform directly —
+	// Codex skills accumulate under "agents", matching the physical .agents/skills
+	// pair its backup and manifest reconciliation actually own.
+	const deployedNames = new Map<string, Set<string>>();
 
 	for (const item of items) {
 		const componentRef = typeof item === "string" ? item : (item.component ?? "");
@@ -290,10 +303,11 @@ export async function syncCategory(
 			// Declare this entry for this platform×category pair (see deployedNames
 			// above) — the set diffed against the manifest's previous run below.
 			if (category !== "rules") {
-				let names = deployedNames.get(platform);
+				const deployLocation = deployLocationForManifest(platform, category);
+				let names = deployedNames.get(deployLocation);
 				if (!names) {
 					names = new Set<string>();
-					deployedNames.set(platform, names);
+					deployedNames.set(deployLocation, names);
 				}
 				names.add(displayName);
 			}
@@ -325,7 +339,12 @@ export async function syncCategory(
 			// Codex `.system` dir, a user-authored skill, etc.) untouched.
 			const prepKey = `${platform}:${category}`;
 			if (!preparedKeys.has(prepKey) && !context.dryRun) {
-				await backupCategory(deployRoot, platform, category, context.backupSession);
+				await backupCategory(
+					deployRoot,
+					deployLocationForManifest(platform, category),
+					category,
+					context.backupSession,
+				);
 				preparedKeys.add(prepKey);
 			}
 
@@ -357,13 +376,15 @@ export async function syncCategory(
 		}
 	}
 
-	// Manifest-scoped orphan removal: for each platform this category deployed to,
-	// remove only entries OMT itself previously deployed for this pair that are no
-	// longer declared — never a foreign resident, and never anything under "rules"
-	// (deployedNames stays empty for rules, so this loop is a no-op there).
+	// Manifest-scoped orphan removal: for each deploy location this category
+	// deployed to, remove only entries OMT itself previously deployed for this
+	// pair that are no longer declared — never a foreign resident, and never
+	// anything under "rules" (deployedNames stays empty for rules, so this loop
+	// is a no-op there). deployedNames is already keyed by deploy LOCATION
+	// (deployLocationForManifest), so no further mapping is needed here.
 	if (!context.dryRun) {
-		for (const [platform, names] of deployedNames) {
-			await reconcilePairManifest(deployRoot, platform, category, [...names]);
+		for (const [deployLocation, names] of deployedNames) {
+			await reconcilePairManifest(deployRoot, deployLocation, category, [...names]);
 		}
 	}
 }

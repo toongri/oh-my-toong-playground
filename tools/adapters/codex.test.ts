@@ -564,7 +564,7 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncSkillsDirect", () => {
-		it("copies skill directory to target via `syncSkillsDirect`", async () => {
+		it("copies skill directory to <target>/.agents/skills via `syncSkillsDirect`", async () => {
 			// Create a source skill directory
 			const sourceSkill = path.join(tmpDir, "source-skills", "prometheus");
 			await fs.mkdir(sourceSkill, { recursive: true });
@@ -573,9 +573,27 @@ describe("CodexAdapter", () => {
 			const targetBase = path.join(tmpDir, "target");
 			await adapter.syncSkillsDirect(targetBase, "prometheus", sourceSkill, false);
 
-			const targetFile = path.join(targetBase, ".codex", "skills", "prometheus", "SKILL.md");
+			const targetFile = path.join(targetBase, ".agents", "skills", "prometheus", "SKILL.md");
 			const content = await fs.readFile(targetFile, "utf-8");
 			expect(content).toBe("# Prometheus\n");
+		});
+
+		it("creates no <target>/.codex/skills directory via `syncSkillsDirect`", async () => {
+			// Codex 0.144.1 deprecates .codex/skills in favor of .agents/skills — this
+			// write path must never create the old location.
+			const sourceSkill = path.join(tmpDir, "source-skills", "prometheus");
+			await fs.mkdir(sourceSkill, { recursive: true });
+			await fs.writeFile(path.join(sourceSkill, "SKILL.md"), "# Prometheus\n");
+
+			const targetBase = path.join(tmpDir, "target");
+			await adapter.syncSkillsDirect(targetBase, "prometheus", sourceSkill, false);
+
+			const oldSkillsDir = path.join(targetBase, ".codex", "skills");
+			const exists = await fs
+				.stat(oldSkillsDir)
+				.then(() => true)
+				.catch(() => false);
+			expect(exists).toBe(false);
 		});
 
 		it("logs warning and creates no files when source is missing via `syncSkillsDirect`", async () => {

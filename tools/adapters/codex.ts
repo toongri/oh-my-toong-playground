@@ -140,6 +140,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // =============================================================================
+// Skills directory resolution
+// =============================================================================
+
+/**
+ * Codex 0.144.1 deprecates `~/.codex/skills` / `<repo>/.codex/skills` in favor
+ * of the cross-CLI `.agents/skills` root (both home `~/.agents/skills` and
+ * project `<repo>/.agents/skills`). Skills are the ONLY Codex category that
+ * writes outside `configDir` (`.codex/`) — agents, config.toml, hooks, and
+ * scripts all still live under `.codex/`.
+ */
+function codexSkillsDir(targetPath: string): string {
+	return path.join(targetPath, ".agents", "skills");
+}
+
+// =============================================================================
 // CodexAdapter
 // =============================================================================
 
@@ -298,7 +313,7 @@ export class CodexAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, this.configDir, "skills");
+		const targetDir = codexSkillsDir(targetPath);
 		const targetSkillDir = path.join(targetDir, displayName);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
