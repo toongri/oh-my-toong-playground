@@ -1,4 +1,10 @@
-import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
+import type {
+	ModelMap,
+	Platform,
+	PlatformConfigResult,
+	PlatformYaml,
+	PluginScope,
+} from "../lib/types.ts";
 
 /**
  * Common interface for all platform adapters.
@@ -26,7 +32,7 @@ export interface PlatformAdapter {
 		addSkills?: string[],
 		addHooks?: unknown[],
 		dryRun?: boolean,
-		modelMap?: Record<string, string>,
+		modelMap?: ModelMap,
 	): Promise<void>;
 
 	/** Sync a command file to the target project. */

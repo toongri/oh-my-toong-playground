@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { CodexAdapter, insertManagedBlock, buildMcpTomlContent } from "./codex.ts";
+import {
+	CodexAdapter,
+	insertManagedBlock,
+	buildMcpTomlContent,
+	resolveCodexAgentModel,
+} from "./codex.ts";
+import type { ModelMap } from "../lib/types.ts";
 
 // =============================================================================
 // insertManagedBlock
@@ -261,15 +267,19 @@ describe("CodexAdapter", () => {
 		it("returns model-map in result via `syncPlatformYaml`", async () => {
 			const yaml = {
 				"model-map": {
-					"claude-3-5-sonnet": "o4-mini",
-					"claude-3-haiku": "o3-mini",
+					tiers: {
+						sonnet: { model: "o4-mini" },
+						haiku: { model: "o3-mini" },
+					},
 				},
 			};
 			const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);
 			expect(result.processedSections).toContain("model-map");
 			expect(result.modelMap).toEqual({
-				"claude-3-5-sonnet": "o4-mini",
-				"claude-3-haiku": "o3-mini",
+				tiers: {
+					sonnet: { model: "o4-mini" },
+					haiku: { model: "o3-mini" },
+				},
 			});
 		});
 
@@ -320,7 +330,7 @@ describe("CodexAdapter", () => {
 			const yaml = {
 				config: { model: "o4-mini" },
 				mcps: { srv: { command: "npx" } },
-				"model-map": { "claude-3-5-sonnet": "o4-mini" },
+				"model-map": { tiers: { sonnet: { model: "o4-mini" } } },
 			};
 			const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);
 			expect(result.processedSections).toContain("config");
@@ -812,5 +822,50 @@ describe("CodexAdapter", () => {
 				`bun run ${path.join(targetBase, ".codex/hooks/rules-injector/cli.ts")} hook session-start`,
 			);
 		});
+	});
+});
+
+// =============================================================================
+// resolveCodexAgentModel
+// =============================================================================
+
+describe("resolveCodexAgentModel", () => {
+	it("resolves a tier to {model, model_reasoning_effort} via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = {
+			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+		};
+		const result = resolveCodexAgentModel(modelMap, "opus", "oracle.md");
+		expect(result).toEqual({ model: "gpt-5.6-sol", model_reasoning_effort: "high" });
+	});
+
+	it("omits model_reasoning_effort when the tier entry has no effort via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol" } } };
+		const result = resolveCodexAgentModel(modelMap, "opus", "oracle.md");
+		expect(result).toEqual({ model: "gpt-5.6-sol" });
+	});
+
+	it("prefers a per-agent override over the tier default via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = {
+			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+			agents: { oracle: { model: "gpt-5.6-sol-special", effort: "low" } },
+		};
+		const result = resolveCodexAgentModel(modelMap, "opus", "oracle.md", "oracle");
+		expect(result).toEqual({ model: "gpt-5.6-sol-special", model_reasoning_effort: "low" });
+	});
+
+	it("leaves a sibling agent without an override on the tier default via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = {
+			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+			agents: { oracle: { model: "gpt-5.6-sol-special", effort: "low" } },
+		};
+		const result = resolveCodexAgentModel(modelMap, "opus", "sisyphus.md", "sisyphus");
+		expect(result).toEqual({ model: "gpt-5.6-sol", model_reasoning_effort: "high" });
+	});
+
+	it("throws naming the agent file and tier when the tier is unmapped via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol" } } };
+		expect(() => resolveCodexAgentModel(modelMap, "sonnet", "oracle.md")).toThrow(
+			/oracle\.md.*sonnet|sonnet.*oracle\.md/,
+		);
 	});
 });

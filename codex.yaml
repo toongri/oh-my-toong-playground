@@ -1,5 +1,14 @@
 # MCP definitions for Codex.
 # Note: Figma uses Codex remote MCP config; gemini still uses mcp-remote.
+model-map:
+  tiers:
+    opus:
+      model: gpt-5.6-sol
+      effort: high
+    sonnet:
+      model: gpt-5.6-sol
+      effort: medium
+  agents: {}
 hooks:
   SessionStart:
     - component: rules-injector
