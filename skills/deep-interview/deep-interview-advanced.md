@@ -40,18 +40,6 @@ If candidates exist, present them via AskUserQuestion with one option per candid
 
 If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.
 
-## Integration with Prometheus
-
-When prometheus receives a vague input (no file paths, function names, or concrete anchors), it can redirect to deep-interview:
-
-```
-User: "prometheus build me a thing"
-Prometheus: "Your request is quite open-ended. Would you like to run a deep interview first to clarify requirements?"
-  [Yes, interview first] [No, expand directly]
-```
-
-If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes, the crystallized spec routes planning/execution through `goal` at the Phase 5 execution bridge (the bridge offers no direct prometheus/sisyphus option); `goal` then pursues the objective and may involve prometheus for decomposition when the work warrants it. Prometheus treats the delivered spec as ground-truth input it does not re-derive: it reviews the spec once via its Clearance and fills or fixes only genuine gaps.
-
 ## Brownfield vs Greenfield Weights
 
 | Dimension | Greenfield | Brownfield |
