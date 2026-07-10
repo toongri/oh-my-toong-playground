@@ -212,12 +212,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				}
 				return formatBlockOutput(message); // NO iteration++
 			}
-			// Budget remains.
-			if (goal.objective_verdict === "APPROVE") {
-				// SKILL runs the Evidence Audit + request-complete (E2; invariant-safe).
-				return formatContinueOutput();
-			}
-			// verdict in {REQUEST_CHANGES, COMMENT, absent} → block + continuation + iteration++.
+			// Budget remains. verdict in {APPROVE, REQUEST_CHANGES, COMMENT, absent} → block +
+			// continuation + iteration++. APPROVE is NOT a stop-allow shortcut: the loop itself
+			// writes objective_verdict via set-verdict, so trusting it here would let the loop
+			// stop itself before request-complete's gate ever runs. The only legitimate allow-stop
+			// is the terminal active:false fold above, written exclusively by request-complete.
 			const newIteration = goal.iteration + 1;
 			const message = buildGoalContinuationMessage(goal, newIteration); // build FIRST (E1)
 			let writeOk = true;
@@ -289,8 +288,9 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			//     hook before the skill prose ran; INERT to all consumers.
 			//   - TTL-stale (idle past ACTIVE_IDLE_TTL): the interview process is effectively
 			//     dead. Blocking here would wedge the session on a corpse that session-start GC
-			//     (is_state_live) and goal's check-subskill (isSubskillHalfOpen) already treat
-			//     as reapable — the three consumers must agree.
+			//     (is_state_live) already treats as reapable — this branch's own isStateLive
+			//     check (in the condition above) agrees by falling through instead of
+			//     blocking; the two consumers must stay in agreement.
 			// Either orphan ages toward TTL and is GC'd naturally; neither blocks session stop.
 			return formatBlockOutput(buildDeepInterviewContinuationMessage());
 		}
@@ -305,9 +305,9 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
 		} else if (isStateLive(prometheusState, nowEpoch)) {
 			// TTL-stale (idle past ACTIVE_IDLE_TTL) → fall through, no block: the planning
-			// process is dead and session-start GC will reap it, consistent with goal's
-			// check-subskill. done-token cleanup above stays unconditional (an emitted token
-			// finalizes regardless of liveness).
+			// process is dead and session-start GC will reap it; this fallthrough is the
+			// second consumer that must agree — done-token cleanup above stays unconditional
+			// (an emitted token finalizes regardless of liveness).
 			const blockCount = getBlockCount(stateDir, prometheusAttemptId);
 			if (blockCount >= MAX_BLOCK_COUNT) {
 				cleanupBlockCountFiles(stateDir, prometheusAttemptId);

@@ -267,9 +267,9 @@ describe("makeDecision", () => {
 
 		it("stale (TTL-expired) non-pristine active DI does NOT block — GC reaps it", async () => {
 			// active:true + non-pristine but idle past ACTIVE_IDLE_TTL (6h): the interview
-			// process is effectively dead. session-start GC (is_state_live) and goal's
-			// check-subskill (isSubskillHalfOpen) both treat it as reapable; the Stop hook
-			// must agree and NOT wedge the session on a corpse the GC will sweep.
+			// process is effectively dead. session-start GC (is_state_live) already treats
+			// it as reapable; the Stop hook is the second consumer and must agree, NOT
+			// wedge the session on a corpse the GC will sweep.
 			const stale = "2020-01-01T00:00:00+00:00";
 			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
 			await writeFile(
@@ -436,8 +436,8 @@ describe("makeDecision", () => {
 
 		it("stale (TTL-expired) active prometheus does NOT block — GC reaps it", async () => {
 			// active:true but idle past ACTIVE_IDLE_TTL (6h): the planning process is
-			// effectively dead. Consistent with session-start GC and goal's check-subskill,
-			// the Stop hook must NOT wedge the session on a corpse the GC will sweep.
+			// effectively dead. Consistent with session-start GC, the Stop hook must NOT
+			// wedge the session on a corpse the GC will sweep.
 			const stale = "2020-01-01T00:00:00+00:00";
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
@@ -505,7 +505,7 @@ describe("makeDecision", () => {
 			expect(after.iteration).toBe(3);
 		});
 
-		it("goal does not block when objective verdict is APPROVE", async () => {
+		it("APPROVE alone does not allow the stop", async () => {
 			await writeGoal({
 				active: true,
 				phase: "pursuing",
@@ -517,10 +517,28 @@ describe("makeDecision", () => {
 
 			const result = makeDecision(createContext());
 
-			expect(result).toEqual({ continue: true });
-			// No iteration++ on APPROVE-yield
+			expect(result.decision).toBe("block");
+			// APPROVE falls through to the normal block-and-increment path — only
+			// request-complete's terminal state (active:false) allows the stop.
 			const after = await readGoalFile();
-			expect(after.iteration).toBe(2);
+			expect(after.iteration).toBe(3);
+		});
+
+		it("terminal complete still allows the stop", async () => {
+			// This is the state request-complete (skills/goal/scripts/goal-state.ts) writes —
+			// the only legitimate allow-stop path once APPROVE's shortcut is removed.
+			await writeGoal({
+				active: false,
+				phase: "complete",
+				objective_verdict: "APPROVE",
+				iteration: 3,
+				max_iterations: 10,
+				outcome: "goal objective text",
+			});
+
+			const result = makeDecision(createContext());
+
+			expect(result).toEqual({ continue: true });
 		});
 
 		it("budget exhaustion soft-stops without completing", async () => {
