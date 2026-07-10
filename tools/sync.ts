@@ -52,9 +52,15 @@ import {
 import { runProvision } from "./lib/provision.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
-import { CodexAdapter, cleanupCodexSkillsFossil } from "./adapters/codex.ts";
+import { CodexAdapter, cleanupCodexSkillsFossil, codexSkillsDir } from "./adapters/codex.ts";
 import { opencodeAdapter } from "./adapters/opencode.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
+import {
+	PLATFORM_REWRITE_RULES,
+	applyRewriteRules,
+	bakeSkillDirToken,
+	type RewriteRule,
+} from "./lib/rewrite-rules.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1285,34 +1291,115 @@ export async function syncLib(
 // ---------------------------------------------------------------------------
 
 /**
- * For non-claude platforms: find deployed .md files and replace .claude/ references
- * with .<platform>/. Mirrors rewrite_platform_paths in sync.sh:1407-1420.
+ * De-Claude-ify deployed bytes for a non-claude platform, driven entirely by
+ * the shared PLATFORM_REWRITE_RULES table (tools/lib/rewrite-rules.ts) — not
+ * a hard-coded `.claude/` replace. Mirrors rewrite_platform_paths in
+ * sync.sh:1407-1420, generalized to the full rule table (TODO 4).
+ *
+ * Cleaves by CONTENT TYPE, not by root: only `.md` — instruction text the
+ * model reads — is ever rewritten (see collectMdFiles below). Programs that
+ * RUN on Codex (`.ts`/`.sh`/`.js`/...) are never walked, because Claude
+ * vocabulary inside them is often not a Claude-ism at all — e.g.
+ * hooks/rules-injector's `.claude/rules` is one entry in a multi-ecosystem
+ * rule-source enum (sibling to `.omo/rules`, `.cursor/rules`), and
+ * skills/hud/scripts/transcript.ts's `subagent_type` is a struct field —
+ * rewriting either breaks working code for a token that isn't OMT's platform
+ * path or tool name at all. `.codex/agents/*.toml` (also program-adjacent,
+ * generated from `agents/*.md`) gets the same rule table applied at
+ * generation time in CodexAdapter.syncAgentsDirect instead of by this walk.
+ *
+ * Gemini/OpenCode have one deploy root (`.{platform}/`). Codex has TWO,
+ * disjoint since commit b9908fbc: `.codex/` (agents, hooks, scripts, config,
+ * lib) and `.agents/skills/<name>` (skills, manifest-owned). `codexSkillNames`
+ * names exactly the skills OMT deployed to `.agents/skills` THIS run — the
+ * only names this function is allowed to walk there; anything else under
+ * `.agents/skills` (e.g. a foreign `plannotator-compound`) is left untouched.
  */
-export async function rewritePlatformPaths(targetPath: string, platform: Platform): Promise<void> {
-	if (platform === "claude") return;
+export async function rewritePlatformPaths(
+	targetPath: string,
+	platform: Platform,
+	codexSkillNames: ReadonlySet<string> = new Set(),
+): Promise<void> {
+	const rules = PLATFORM_REWRITE_RULES[platform];
+	// Claude's rule table is empty by design (tools/lib/rewrite-rules.ts) — this
+	// return, BEFORE any directory is even computed, is what makes Claude's
+	// deployed bytes invariant by construction (plan AC G4-10): no file under
+	// .claude/ is ever opened by this function, so byte-identity is structural,
+	// not merely asserted by a test.
+	if (rules.length === 0) return;
 
-	const platformDir = path.join(targetPath, `.${platform}`);
-	const mdFiles = await collectMdFiles(platformDir);
+	if (platform !== "codex") {
+		await rewriteFilesUnder(path.join(targetPath, `.${platform}`), rules);
+		return;
+	}
 
-	for (const filePath of mdFiles) {
+	// Root 1: .codex/ (agents, hooks, scripts, config, lib), EXCLUDING
+	// .codex/skills/** — the deprecated pre-b9908fbc fossil root.
+	// cleanupCodexSkillsFossil removes only OMT-owned entries from it; whatever
+	// survives (e.g. `.system`) is a foreign resident this function must never
+	// touch.
+	const codexDir = path.join(targetPath, ".codex");
+	await rewriteFilesUnder(codexDir, rules, [path.join(codexDir, "skills")]);
+
+	// Root 2: .agents/skills/<name>, manifest-owned only. For each owned skill,
+	// also bake the contextual ${CLAUDE_SKILL_DIR} token to that skill's
+	// absolute deployed dir (Claude Code expands the token at skill-injection
+	// time; Codex has no expander, and a skill's shell command runs under the
+	// agent's session cwd, not the skill dir, so only an absolute path resolves).
+	for (const name of codexSkillNames) {
+		const skillDir = path.join(codexSkillsDir(targetPath), name);
+		await rewriteFilesUnder(skillDir, rules, [], (content) => bakeSkillDirToken(content, skillDir));
+	}
+}
+
+/**
+ * Apply `rules` (plus an optional per-file `extraTransform`, e.g. the
+ * ${CLAUDE_SKILL_DIR} bake) to every rewrite-candidate file under `dir`,
+ * writing back only files whose content actually changed. This IS the "does
+ * any rule match" check (D2): a file no rule (and no extraTransform) touches
+ * comes back identical and is never written.
+ */
+async function rewriteFilesUnder(
+	dir: string,
+	rules: readonly RewriteRule[],
+	excludeDirs: string[] = [],
+	extraTransform?: (content: string) => string,
+): Promise<void> {
+	const files = await collectMdFiles(dir, excludeDirs);
+	for (const filePath of files) {
 		let content: string;
 		try {
 			content = await fs.readFile(filePath, "utf8");
 		} catch {
 			continue;
 		}
-
-		if (!content.includes(".claude/")) continue;
-
-		const updated = content.replace(/\.claude\//g, `.${platform}/`);
-		await fs.writeFile(filePath, updated, "utf8");
+		let updated = applyRewriteRules(content, rules);
+		if (extraTransform) updated = extraTransform(updated);
+		if (updated !== content) {
+			await fs.writeFile(filePath, updated, "utf8");
+		}
 	}
 }
 
 /**
- * Recursively collect all .md files under a directory.
+ * Recursively collect `.md` files under `dir` — instruction text the model
+ * reads, the only content type this rewrite ever touches. Programs that run
+ * ON Codex (`.ts`/`.sh`/`.js`/...) are deliberately NEVER walked here: rows in
+ * PLATFORM_REWRITE_RULES.codex translate Claude vocabulary for a model
+ * reading prose, and applying them to source code corrupts it — e.g.
+ * `.claude/rules` in hooks/rules-injector's multi-ecosystem rule-source enum
+ * is a source-format name, not an OMT platform path, and `subagent_type` in
+ * skills/hud/scripts/transcript.ts is a struct field, not the Claude tool
+ * parameter. See the codex two-root policy on rewritePlatformPaths above.
+ *
+ * Exclusions:
+ *   - `excludeDirs` (caller-supplied absolute paths): the .codex/skills
+ *     fossil root, pruned so this walk never touches it.
+ *   - `lib.tmp-*` / `lib.old-*`: syncLib's atomic-swap temp dirs — transient,
+ *     never a stable deploy target. lib/ does carry .md, so this still
+ *     matters even restricted to that one extension.
  */
-async function collectMdFiles(dir: string): Promise<string[]> {
+async function collectMdFiles(dir: string, excludeDirs: string[] = []): Promise<string[]> {
 	const results: string[] = [];
 	let entries: import("fs").Dirent[];
 	try {
@@ -1323,7 +1410,9 @@ async function collectMdFiles(dir: string): Promise<string[]> {
 	for (const entry of entries) {
 		const fullPath = path.join(dir, entry.name);
 		if (entry.isDirectory()) {
-			results.push(...(await collectMdFiles(fullPath)));
+			if (excludeDirs.includes(fullPath)) continue;
+			if (/^lib\.(tmp|old)-/.test(entry.name)) continue;
+			results.push(...(await collectMdFiles(fullPath, excludeDirs)));
 		} else if (entry.isFile() && entry.name.endsWith(".md")) {
 			results.push(fullPath);
 		}
@@ -1460,6 +1549,13 @@ export async function processYaml(
 	// collapses to ["claude"] for any un-narrowed project and would wrongly
 	// skip codex/gemini/opencode for the root self-deploy.
 	const rewriteEligiblePlatforms = new Set<Platform>();
+	// Skills this sync.yaml declares for codex, keyed by DEPLOYED directory name
+	// (resolveComponentPath's displayName — a scoped ref like "proj:testing"
+	// deploys as "testing", matching exactly what syncCategory later writes
+	// under .agents/skills/). Collected in this same per-item cascade rather
+	// than threaded out of syncCategory's local deployedNames map — this loop
+	// already resolves every item, so a second plumbing path would only drift.
+	const codexSkillNames = new Set<string>();
 	for (const category of CATEGORIES) {
 		const section = syncYaml[category];
 		if (!section || !Array.isArray(section.items) || section.items.length === 0) continue;
@@ -1468,6 +1564,20 @@ export async function processYaml(
 			const platforms = await resolvePlatforms(item, sectionPlatforms, syncYaml.platforms, category);
 			for (const platform of platforms) {
 				rewriteEligiblePlatforms.add(platform);
+			}
+			if (category === "skills" && platforms.includes("codex")) {
+				const componentRef = typeof item === "string" ? item : (item.component ?? "");
+				if (componentRef) {
+					const resolved = resolveComponentPath(
+						componentRef,
+						category,
+						rootDir,
+						context.projectDir || undefined,
+					);
+					if (!("error" in resolved)) {
+						codexSkillNames.add(resolved.displayName);
+					}
+				}
 			}
 		}
 	}
@@ -1552,14 +1662,19 @@ export async function processYaml(
 				// libSourceRoots (a codex/gemini-hook-only project — same signal the
 				// syncLib gate above keys on). Without the libSourceRoots arm, a copied
 				// hook README's .claude/ references stay un-rewritten under .{platform}/.
+				//
+				// A codex-skills-only project never creates .codex/ at all (skills land
+				// under .agents/skills, not .codex/skills) — codexSkillNames.size > 0 is
+				// the second, independent trigger that covers exactly that case (D4).
+				const codexSkillsPresent = platform === "codex" && codexSkillNames.size > 0;
 				if (
-					existsSync(platformDir) &&
+					(existsSync(platformDir) || codexSkillsPresent) &&
 					(rewriteEligiblePlatforms.has(platform) || libSourceRoots.has(platform))
 				) {
 					if (context.dryRun) {
 						logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
 					} else {
-						await rewritePlatformPaths(deployRoot, platform);
+						await rewritePlatformPaths(deployRoot, platform, codexSkillNames);
 					}
 				}
 			}
