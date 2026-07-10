@@ -9,6 +9,7 @@ import {
 	computeOrphans,
 	removeOrphans,
 	reconcilePairManifest,
+	removeManifestPair,
 	type ManifestData,
 } from "./deploy-manifest.ts";
 
@@ -252,6 +253,54 @@ describe("deploy-manifest 모듈", () => {
 				"claude/skills": ["x"],
 				"codex/scripts": ["y"],
 			});
+		});
+	});
+
+	describe("removeManifestPair", () => {
+		it("removes only the named pair key, leaving sibling pairs intact", async () => {
+			const deployRoot = join(tmpDir, "remove-pair-basic");
+			await mkdir(deployRoot, { recursive: true });
+			await writeFile(
+				join(deployRoot, ".sync-manifest.json"),
+				JSON.stringify({
+					"codex/skills": ["a", "b"],
+					"claude/skills": ["c"],
+					"codex/scripts": ["d"],
+				}),
+			);
+
+			await removeManifestPair(deployRoot, "codex", "skills");
+
+			expect(await readManifest(deployRoot)).toEqual({
+				"claude/skills": ["c"],
+				"codex/scripts": ["d"],
+			});
+		});
+
+		it("is a no-op (no write, no throw) when the manifest file is absent", async () => {
+			const deployRoot = join(tmpDir, "remove-pair-absent");
+			await mkdir(deployRoot, { recursive: true });
+
+			await removeManifestPair(deployRoot, "codex", "skills");
+
+			expect(
+				stat(join(deployRoot, ".sync-manifest.json")).then(
+					() => true,
+					() => false,
+				),
+			).resolves.toBe(false);
+		});
+
+		it("is a no-op (no write, no throw) when the manifest file is corrupt (bootstrap contract)", async () => {
+			const deployRoot = join(tmpDir, "remove-pair-corrupt");
+			await mkdir(deployRoot, { recursive: true });
+			await writeFile(join(deployRoot, ".sync-manifest.json"), "{ not valid json");
+
+			await removeManifestPair(deployRoot, "codex", "skills");
+
+			// The corrupt bytes must survive untouched — never coerced/rewritten.
+			const raw = await readFile(join(deployRoot, ".sync-manifest.json"), "utf8");
+			expect(raw).toBe("{ not valid json");
 		});
 	});
 });

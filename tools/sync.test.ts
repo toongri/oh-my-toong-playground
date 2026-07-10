@@ -908,6 +908,83 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		expect(manifest["gemini/skills"]).toEqual(["some-skill"]);
 		expect(manifest["agents/skills"]).toBeUndefined();
 	});
+
+	it("removes a byte-identical .codex/skills fossil entry after a codex skills sync and prunes the stale codex/skills manifest key", async () => {
+		// Fossil (pre-b9908fbc location) and its byte-identical .agents/skills
+		// counterpart, as if a prior sync deployed under both names.
+		const fossilFile = path.join(targetPath, ".codex", "skills", "old-skill", "SKILL.md");
+		const newFile = path.join(targetPath, ".agents", "skills", "old-skill", "SKILL.md");
+		await writeFile(fossilFile, "# Old Skill\n");
+		await writeFile(newFile, "# Old Skill\n");
+
+		// A stale codex/skills manifest key left over from before the .agents/skills
+		// routing change — must be pruned once cleanup succeeds. No "agents/skills"
+		// key yet (that pair's own reconcile is bootstrap for "old-skill", so the
+		// pre-existing orphan-removal logic leaves it alone — it isn't declared this
+		// run, but it was never recorded as agents/skills-owned either).
+		await writeFile(
+			path.join(targetPath, ".sync-manifest.json"),
+			JSON.stringify({ "codex/skills": ["old-skill"] }),
+		);
+
+		const skillDir = path.join(rootDir, "skills", "new-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# New Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["codex"], items: ["new-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext({ dryRun: false, backupSession: "sid-fossil-cleanup" });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		// Fossil entry removed, and the now-empty fossilDir removed with it.
+		expect(await exists(path.join(targetPath, ".codex", "skills"))).toBe(false);
+
+		// Backed up before removal.
+		const backedUp = path.join(
+			targetPath,
+			".sync-backup",
+			"sid-fossil-cleanup",
+			"codex",
+			"skills",
+			"old-skill",
+			"SKILL.md",
+		);
+		expect(await exists(backedUp)).toBe(true);
+
+		// Stale codex/skills manifest key pruned; agents/skills reflects this run.
+		const manifest = JSON.parse(await readFile(path.join(targetPath, ".sync-manifest.json")));
+		expect(manifest["codex/skills"]).toBeUndefined();
+		expect(manifest["agents/skills"]).toEqual(["new-skill"]);
+	});
+
+	it("never touches a .codex/skills fossil when codex is not a target for this skills sync (guard)", async () => {
+		// A fossil entry with NO .agents/skills counterpart at all — if the fossil
+		// cleanup guard incorrectly fired for this claude-only run, cleanup would
+		// throw (newDir absent) instead of silently no-op'ing.
+		const strayFile = path.join(targetPath, ".codex", "skills", "stray", "SKILL.md");
+		await writeFile(strayFile, "# Stray\n");
+
+		const skillDir = path.join(rootDir, "skills", "claude-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# Claude Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["claude"], items: ["claude-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ dryRun: false });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		expect(await exists(strayFile)).toBe(true);
+	});
 });
 
 // ---------------------------------------------------------------------------
