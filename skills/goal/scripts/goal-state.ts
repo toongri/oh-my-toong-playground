@@ -1065,31 +1065,18 @@ export function serializeRequirements(sessionId: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Every flag in this CLI that always takes a value (as opposed to a boolean
- * switch like `--single`). Free-text values — most notably `--evidence` and
- * `--rationale`, but also `--outcome`/`--constraints`/etc. — may legitimately
- * begin with "--" (e.g. quoting a CLI flag inside an observation). Listing
- * them here lets parseArgs consume the next token unconditionally instead of
- * guessing from its shape.
+ * Free-text flags whose value may legitimately begin with "--" (e.g. quoting
+ * a CLI flag inside an observation): `--evidence` and `--rationale` only.
+ * Listing them here lets parseArgs consume the next token unconditionally
+ * instead of guessing from its shape. Every OTHER value-bearing flag in this
+ * CLI (phase, verdict, completion-evidence, max-iterations, paths, ids, ...)
+ * takes a structured value that never itself starts with "--", so it must
+ * keep the conservative shape-guessing consumption below — otherwise a
+ * valueless flag immediately followed by another flag would swallow that
+ * flag's NAME as a bogus value instead of coercing to boolean `true` (see
+ * goal-state.test.ts's "completion-evidence rejects a swallowed flag name").
  */
-const VALUE_BEARING_FLAGS = new Set([
-	"phase",
-	"outcome",
-	"verification-surface",
-	"constraints",
-	"boundaries",
-	"max-iterations",
-	"blocked-stop",
-	"plan-path",
-	"resume-summary",
-	"completion-evidence",
-	"verdict",
-	"reason",
-	"src",
-	"json",
-	"evidence",
-	"rationale",
-]);
+const FREE_TEXT_VALUE_FLAGS = new Set(["evidence", "rationale"]);
 
 /**
  * Splits argv into flags (`--key value` / `--key` boolean) and positionals, in
@@ -1101,15 +1088,17 @@ const VALUE_BEARING_FLAGS = new Set([
  * positional, but a naive scan can't tell). Consuming here, once, is the only
  * correct place to draw that line.
  *
- * A known value-bearing flag (VALUE_BEARING_FLAGS) always consumes the next
- * token as its value, even if that token starts with "--" — otherwise a
- * free-text value beginning with "--" is silently coerced to boolean `true`
- * (see goal-state.test.ts's "steering reason value may begin with dashes").
+ * A free-text flag (FREE_TEXT_VALUE_FLAGS) always consumes the next token as
+ * its value, even if that token starts with "--" — otherwise a free-text
+ * value beginning with "--" is silently coerced to boolean `true` (see
+ * goal-state.test.ts's "steering reason value may begin with dashes"). Every
+ * other flag — including structured value-bearing flags like
+ * `--completion-evidence`/`--phase`/`--max-iterations` as well as boolean
+ * switches like `--single` — keeps the shape-guessing behavior: the next
+ * token is consumed as a value only if it does NOT look like a flag itself.
  * Only when the next token is undefined (flag is the last argv token) does it
  * fall back to boolean `true`, so a genuinely missing value is still caught by
- * callers checking for that. Any OTHER flag keeps the old shape-guessing
- * behavior (`--single` and any future boolean switch) — misclassifying a
- * boolean flag here would swallow the next positional argument.
+ * callers checking for that.
  */
 function parseArgs(args: string[]): { flags: Record<string, string | boolean>; positionals: string[] } {
 	const flags: Record<string, string | boolean> = {};
@@ -1119,7 +1108,7 @@ function parseArgs(args: string[]): { flags: Record<string, string | boolean>; p
 		if (arg.startsWith("--")) {
 			const key = arg.slice(2);
 			const next = args[i + 1];
-			if (next !== undefined && (VALUE_BEARING_FLAGS.has(key) || !next.startsWith("--"))) {
+			if (next !== undefined && (FREE_TEXT_VALUE_FLAGS.has(key) || !next.startsWith("--"))) {
 				flags[key] = next;
 				i++;
 			} else {
