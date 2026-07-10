@@ -1261,6 +1261,39 @@ describe("cleanupCodexSkillsFossil", () => {
 		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
 	});
 
+	it("does NOT throw in dry-run when .agents/skills exists but only holds a foreign resident, leaving the owned fossil entry untouched", async () => {
+		// Reproduces the dry-run-only false failure: newDir exists (because a
+		// foreign resident lives there), so the first "newDir missing" guard
+		// is bypassed, but no .agents/skills/skill-x counterpart has ever been
+		// written (dry-run writes nothing) — the counterpart-existence check
+		// must not run in dry-run.
+		await fs.mkdir(fossilPath("skill-x"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-x", "SKILL.md"), "x\n");
+		await fs.mkdir(fossilPath("plannotator-compound"), { recursive: true });
+		await fs.writeFile(
+			fossilPath("plannotator-compound", "SKILL.md"),
+			"not OMT-managed\n",
+		);
+		await fs.mkdir(newPath("plannotator-compound"), { recursive: true });
+		await fs.writeFile(
+			newPath("plannotator-compound", "SKILL.md"),
+			"not OMT-managed\n",
+		);
+		// newPath("skill-x") intentionally never created.
+
+		await cleanupCodexSkillsFossil(
+			tmpDir,
+			"sid-dry-newdir-exists",
+			true,
+			new Set(["skill-x"]),
+		);
+
+		expect(await pathExists(fossilPath("skill-x"))).toBe(true);
+		expect(await fs.readFile(fossilPath("skill-x", "SKILL.md"), "utf-8")).toBe("x\n");
+		expect(await pathExists(fossilPath("plannotator-compound"))).toBe(true);
+		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+	});
+
 	it("throws naming the entry, deletes nothing, and writes no backup when an owned entry has no counterpart under .agents/skills", async () => {
 		await fs.mkdir(fossilPath("skill-h"), { recursive: true });
 		await fs.writeFile(fossilPath("skill-h", "SKILL.md"), "h\n");
@@ -1277,15 +1310,17 @@ describe("cleanupCodexSkillsFossil", () => {
 		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
 	});
 
-	it("still throws under dry-run when an owned entry has no counterpart under .agents/skills", async () => {
+	it("does NOT throw under dry-run when an owned entry has no counterpart under .agents/skills — the counterpart check is real-run-only", async () => {
+		// newDir exists (unlike sid-dry-no-newdir) but has no skill-i
+		// counterpart. In dry-run nothing has ever been written, so a missing
+		// counterpart is expected, not a deployed-but-missing anomaly — the
+		// counterpart-existence check must not run in dry-run.
 		await fs.mkdir(fossilPath("skill-i"), { recursive: true });
 		await fs.writeFile(fossilPath("skill-i", "SKILL.md"), "i\n");
 		await fs.mkdir(newPath(), { recursive: true });
 		// newPath("skill-i") intentionally never created.
 
-		await expect(
-			cleanupCodexSkillsFossil(tmpDir, "sid-dry-missing-counterpart", true, new Set(["skill-i"])),
-		).rejects.toThrow(/skill-i/);
+		await cleanupCodexSkillsFossil(tmpDir, "sid-dry-missing-counterpart", true, new Set(["skill-i"]));
 
 		expect(await pathExists(fossilPath("skill-i"))).toBe(true);
 		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
