@@ -28,6 +28,7 @@ import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import { resolvePlatforms, resolveComponentPath, setProjectContext } from "./lib/resolver.ts";
 import { generateBackupSessionId, backupCategory, backupDocs, cleanupOldBackups } from "./lib/backup.ts";
+import { reconcilePairManifest } from "./lib/deploy-manifest.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
@@ -156,6 +157,13 @@ export async function syncCategory(
 	// Key: `${platform}:${category}`
 	const preparedKeys = new Set<string>();
 
+	// Entry names (displayName) this run declares for each platform, within this
+	// category — the manifest-scoped orphan removal below diffs this against the
+	// PREVIOUS run's recorded set instead of wiping the whole category dir.
+	// Never populated for "rules": rules are excluded from removal entirely (may
+	// hold user-managed files), exactly as the old wipe excluded them.
+	const deployedNames = new Map<Platform, Set<string>>();
+
 	for (const item of items) {
 		const componentRef = typeof item === "string" ? item : (item.component ?? "");
 
@@ -258,6 +266,17 @@ export async function syncCategory(
 			// Skip unsupported platform×category combinations entirely (no backup/wipe/dispatch).
 			if (!SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
 
+			// Declare this entry for this platform×category pair (see deployedNames
+			// above) — the set diffed against the manifest's previous run below.
+			if (category !== "rules") {
+				let names = deployedNames.get(platform);
+				if (!names) {
+					names = new Set<string>();
+					deployedNames.set(platform, names);
+				}
+				names.add(displayName);
+			}
+
 			// Record SOURCE paths for lib-dependency collection (independent of dryRun:
 			// the lib scan reads source, never the deployed tree). The component itself
 			// plus any add-hooks bundles it deploys may carry @lib/ imports.
@@ -278,18 +297,15 @@ export async function syncCategory(
 				}
 			}
 
-			// Backup before first write for this platform×category
+			// Backup before first write for this platform×category. Orphan cleanup for
+			// components removed from sync.yaml no longer wipes the whole category dir —
+			// see the manifest-scoped reconcile after this loop, which removes only this
+			// pair's own previously-deployed orphans and leaves foreign residents (a
+			// Codex `.system` dir, a user-authored skill, etc.) untouched.
 			const prepKey = `${platform}:${category}`;
 			if (!preparedKeys.has(prepKey) && !context.dryRun) {
 				await backupCategory(deployRoot, platform, category, context.backupSession);
 				preparedKeys.add(prepKey);
-				// Wipe category dir so orphan files from removed components are cleaned up.
-				// Rules are excluded: they may contain user-managed files.
-				if (category !== "rules") {
-					const categoryDir = path.join(deployRoot, `.${platform}`, category);
-					await fs.rm(categoryDir, { recursive: true, force: true });
-					await fs.mkdir(categoryDir, { recursive: true });
-				}
 			}
 
 			if (context.dryRun) {
@@ -317,6 +333,16 @@ export async function syncCategory(
 			} else if (category === "rules") {
 				await adapter.syncRulesDirect(deployRoot, displayName, sourcePath, false);
 			}
+		}
+	}
+
+	// Manifest-scoped orphan removal: for each platform this category deployed to,
+	// remove only entries OMT itself previously deployed for this pair that are no
+	// longer declared — never a foreign resident, and never anything under "rules"
+	// (deployedNames stays empty for rules, so this loop is a no-op there).
+	if (!context.dryRun) {
+		for (const [platform, names] of deployedNames) {
+			await reconcilePairManifest(deployRoot, platform, category, [...names]);
 		}
 	}
 }
