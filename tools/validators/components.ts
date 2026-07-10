@@ -13,7 +13,7 @@
  * CLI usage: bun run tools/validators/components.ts [path-to-sync.yaml]
  */
 
-import { existsSync, readdirSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import { join, dirname, basename } from "path";
 import { getRootDir, getEnabledProjects } from "../lib/config.ts";
 import { expandTilde } from "../lib/path-utils.ts";
@@ -24,10 +24,11 @@ import {
 	isObject,
 	isArray,
 } from "../lib/validation.ts";
-import { resolveComponentPath, setProjectContext } from "../lib/resolver.ts";
+import { resolveComponentPath, resolvePlatforms, setProjectContext } from "../lib/resolver.ts";
 import type { SyncItem, SyncYaml } from "../lib/types.ts";
 import { readAndExpandSyncYaml } from "../lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "../lib/parse-platform-yaml.ts";
+import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { deploysToClaudeDotDir } from "../sync.ts";
 import { resolveDeployTargets } from "../lib/resolve-deploy-targets.ts";
 
@@ -463,6 +464,160 @@ export async function validatePlatformYamlHookComponents(
 }
 
 // ---------------------------------------------------------------------------
+// G3-5 / G3-6: model-map coverage for codex/opencode-resolved agents
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the tier key sets declared in the repo-root codex.yaml / opencode.yaml
+ * model-map. The model-map is GLOBAL — it lives only in the root per-platform
+ * YAML (colocated with the root sync.yaml, whose `path: "~"`), never in a
+ * per-project sync.yaml. Returns `undefined` for a platform whose root YAML
+ * or model-map.tiers is absent.
+ */
+async function loadRootModelMapTiers(
+	rootDir: string,
+): Promise<{ codex: Set<string> | undefined; opencode: Set<string> | undefined }> {
+	const codexYaml = await parseAndMergePlatformYaml(rootDir, "codex");
+	const opencodeYaml = await parseAndMergePlatformYaml(rootDir, "opencode");
+	return {
+		codex: codexYaml?.["model-map"]?.tiers ? new Set(Object.keys(codexYaml["model-map"].tiers)) : undefined,
+		opencode: opencodeYaml?.["model-map"]?.tiers
+			? new Set(Object.keys(opencodeYaml["model-map"].tiers))
+			: undefined,
+	};
+}
+
+/**
+ * Resolve an agent component ref to its source .md path, mirroring the
+ * flat-path-first precedence used by the agents category check in
+ * `validateSyncYamlComponents` above. Returns null when unresolvable — that
+ * case is already reported as a missing-component error elsewhere.
+ */
+function resolveAgentSourcePath(
+	component: string,
+	rootDir: string,
+	projectDirName: string | undefined,
+): string | null {
+	if (!component.includes(":")) {
+		const flatPath = join(rootDir, "agents", `${component}.md`);
+		if (existsSync(flatPath)) return flatPath;
+		const indexPath = join(rootDir, "agents", component, "index.md");
+		if (existsSync(indexPath)) return indexPath;
+	}
+	const resolved = resolveComponentPath(component, "agents", rootDir, projectDirName);
+	return "error" in resolved ? null : resolved.path;
+}
+
+/**
+ * G3-5/G3-6: for every `agents` item across the whole sync.yaml corpus (root +
+ * projects/*) that resolves to codex or opencode, the agent's declared
+ * `model:` tier must be present in that platform's model-map.tiers (G3-5).
+ *
+ * G3-6 adds a single aggregate assertion: the codex model-map's tier set must
+ * be a superset of every tier codex-resolved agents actually declare — with a
+ * non-empty-declared-tiers positive control, so a resolver bug that silently
+ * resolves zero codex agents (e.g. a broken feature-platforms cascade) cannot
+ * vacuously satisfy the superset check by having nothing to compare.
+ *
+ * opencode currently resolves zero agents (feature-platforms.agents =
+ * [claude, codex], no per-item override) — its per-agent loop body simply
+ * never runs, producing no errors. That is correct behavior, not a gap: only
+ * codex gets the non-empty positive control, matching what feature-platforms
+ * actually targets today.
+ */
+export async function validateModelMapCoverage(
+	rootDir: string,
+	enabledProjects?: string[],
+): Promise<ValidationResult> {
+	const result = makeResult();
+
+	const rootTiers = await loadRootModelMapTiers(rootDir);
+	const effective = enabledProjects ?? (await getEnabledProjects());
+	const enabledSet = effective && effective.length > 0 ? new Set(effective) : undefined;
+	const projectsDir = join(rootDir, "projects");
+
+	const codexDeclaredTiers = new Set<string>();
+
+	for (const syncYamlPath of discoverSyncYamls(rootDir)) {
+		if (enabledSet) {
+			const parentDir = dirname(syncYamlPath);
+			if (dirname(parentDir) === projectsDir && !enabledSet.has(basename(parentDir))) {
+				continue;
+			}
+		}
+
+		let syncYaml: SyncYaml | null;
+		try {
+			syncYaml = await readAndExpandSyncYaml(syncYamlPath);
+		} catch {
+			continue; // parse error already reported by validateSyncYamlComponents
+		}
+		if (!isObject(syncYaml)) continue;
+
+		const ctx = setProjectContext(syncYaml, syncYamlPath, rootDir);
+		const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
+
+		const agentsSection = syncYaml.agents;
+		if (!isObject(agentsSection) || !isArray(agentsSection.items)) continue;
+
+		const sectionPlatforms = isArray(agentsSection.platforms) ? agentsSection.platforms : undefined;
+		const syncYamlPlatforms = isArray(syncYaml.platforms) ? syncYaml.platforms : undefined;
+
+		for (const item of agentsSection.items) {
+			const component = getItemComponent(item);
+			if (!component) continue;
+
+			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- item came from a runtime-checked SyncSection.items array; shape matches SyncItem
+			const platforms = await resolvePlatforms(
+				item as SyncItem,
+				sectionPlatforms as Platform[] | undefined,
+				syncYamlPlatforms as Platform[] | undefined,
+				"agents",
+			);
+
+			for (const platform of platforms) {
+				if (platform !== "codex" && platform !== "opencode") continue;
+
+				const sourcePath = resolveAgentSourcePath(component, rootDir, projectDirName);
+				if (sourcePath === null) continue; // missing-component already reported elsewhere
+
+				const content = readFileSync(sourcePath, "utf-8");
+				const { frontmatter } = parseFrontmatter(content);
+				const tier = frontmatter.model;
+				if (typeof tier !== "string" || !tier) continue;
+
+				if (platform === "codex") codexDeclaredTiers.add(tier);
+
+				const tiers = rootTiers[platform];
+				if (!tiers || !tiers.has(tier)) {
+					result.errors.push(
+						`model-map: agent '${component}' declares tier '${tier}' not mapped in ${platform} model-map.tiers (${syncYamlPath})`,
+					);
+				}
+			}
+		}
+	}
+
+	// G3-6 positive control: the declared-tier set for codex must be non-empty,
+	// or the superset assertion below would vacuously pass.
+	if (codexDeclaredTiers.size === 0) {
+		result.errors.push(
+			"model-map: no codex-resolved agent declared a tier — contradicts feature-platforms.agents including codex",
+		);
+	} else {
+		const codexTiers = rootTiers.codex ?? new Set<string>();
+		const missing = [...codexDeclaredTiers].filter((t) => !codexTiers.has(t));
+		if (missing.length > 0) {
+			result.errors.push(
+				`model-map: codex model-map.tiers is missing tier(s) declared by agents: ${missing.join(", ")}`,
+			);
+		}
+	}
+
+	return result;
+}
+
+// ---------------------------------------------------------------------------
 // Discovery and orchestration
 // ---------------------------------------------------------------------------
 
@@ -529,6 +684,8 @@ export async function validateAll(
 			await validatePlatformYamlHookComponents(yamlDir, rootDir, claudeYamlPreParsed),
 		);
 	}
+
+	mergeResult(result, await validateModelMapCoverage(rootDir, enabledProjects));
 
 	return result;
 }

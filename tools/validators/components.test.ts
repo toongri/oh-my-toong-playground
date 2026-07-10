@@ -9,8 +9,10 @@ import os from "os";
 import {
 	validateSyncYamlComponents,
 	validatePlatformYamlHookComponents,
+	validateModelMapCoverage,
 	validateAll,
 } from "./components.ts";
+import { getRootDir } from "../lib/config.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1522,5 +1524,155 @@ platforms: [codex]
 
 		const result = await validateSyncYamlComponents(syncPath, root);
 		expect(result.errors.some((e) => e.includes("AGENTS.md"))).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validateModelMapCoverage (G3-5/G3-6)
+// ---------------------------------------------------------------------------
+
+describe("validateModelMapCoverage — 실제 코퍼스", () => {
+	it("실제 레포의 codex-대상 agents는 모두 codex model-map.tiers에 매핑되어 있다", async () => {
+		const rootDir = getRootDir();
+		expect(rootDir).not.toBeNull();
+		const result = await validateModelMapCoverage(rootDir as string);
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
+describe("validateModelMapCoverage — G3-5 unmapped tier positive control", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = makeRoot();
+	});
+
+	afterEach(() => {
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("returns error naming the agent and tier when a codex-resolved agent declares an unmapped tier", async () => {
+		writeYaml(
+			root,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    sonnet:
+      model: gpt-5.6-sol
+`,
+		);
+		writeYaml(
+			join(root, "agents"),
+			"rogue-agent.md",
+			`---
+name: rogue-agent
+model: haiku
+---
+body
+`,
+		);
+		const syncPath = writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+platforms: [codex]
+agents:
+  items:
+    - rogue-agent
+`,
+		);
+
+		const result = await validateModelMapCoverage(root);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("rogue-agent") && e.includes("haiku"))).toBe(true);
+	});
+
+	it("produces no errors when a codex-resolved agent's tier IS mapped", async () => {
+		writeYaml(
+			root,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    sonnet:
+      model: gpt-5.6-sol
+`,
+		);
+		writeYaml(
+			join(root, "agents"),
+			"good-agent.md",
+			`---
+name: good-agent
+model: sonnet
+---
+body
+`,
+		);
+		const syncPath = writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+platforms: [codex]
+agents:
+  items:
+    - good-agent
+`,
+		);
+
+		const result = await validateModelMapCoverage(root);
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
+describe("validateModelMapCoverage — G3-6 non-empty positive control", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = makeRoot();
+	});
+
+	afterEach(() => {
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("returns an error when zero codex-resolved agents are found, instead of vacuously passing", async () => {
+		writeYaml(
+			root,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    sonnet:
+      model: gpt-5.6-sol
+`,
+		);
+		writeYaml(
+			join(root, "agents"),
+			"claude-only-agent.md",
+			`---
+name: claude-only-agent
+model: sonnet
+---
+body
+`,
+		);
+		const syncPath = writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+platforms: [claude]
+agents:
+  items:
+    - claude-only-agent
+`,
+		);
+
+		const result = await validateModelMapCoverage(root);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("codex"))).toBe(true);
 	});
 });

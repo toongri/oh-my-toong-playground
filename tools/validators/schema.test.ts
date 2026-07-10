@@ -1075,6 +1075,88 @@ mcps:
 });
 
 // ---------------------------------------------------------------------------
+// Suite: validatePlatformYaml — model-map 섹션 검증
+// ---------------------------------------------------------------------------
+
+describe("validatePlatformYaml — model-map 섹션 검증", () => {
+	let dir: string;
+
+	beforeEach(() => {
+		dir = makeTempDir();
+	});
+
+	afterEach(() => {
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it("produces no errors for a valid codex model-map with effort", () => {
+		const path = writeYaml(
+			dir,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    opus:
+      model: gpt-5.6-sol
+      effort: high
+    sonnet:
+      model: gpt-5.6-sol
+      effort: medium
+`,
+		);
+		const result = validatePlatformYaml(path, "codex");
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("returns error when opencode model-map tier declares effort", () => {
+		const path = writeYaml(
+			dir,
+			"opencode.yaml",
+			`
+model-map:
+  tiers:
+    sonnet:
+      model: openai/gpt-5.5
+      effort: medium
+`,
+		);
+		const result = validatePlatformYaml(path, "opencode");
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("effort"))).toBe(true);
+	});
+
+	it("returns error when model-map is missing tiers", () => {
+		const path = writeYaml(
+			dir,
+			"codex.yaml",
+			`
+model-map:
+  agents: {}
+`,
+		);
+		const result = validatePlatformYaml(path, "codex");
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("tiers"))).toBe(true);
+	});
+
+	it("returns error when a tier entry is missing model", () => {
+		const path = writeYaml(
+			dir,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    sonnet:
+      effort: medium
+`,
+		);
+		const result = validatePlatformYaml(path, "codex");
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("model"))).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Suite: validateSyncYamlPartial
 // ---------------------------------------------------------------------------
 
