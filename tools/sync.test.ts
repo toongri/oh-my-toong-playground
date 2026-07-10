@@ -22,6 +22,7 @@ import {
 	isFatalSyncError,
 	deploysToClaudeDotDir,
 	loadRootModelMaps,
+	deployLocationForManifest,
 	type AdapterMap,
 	type LibSourceRoots,
 } from "./sync.ts";
@@ -753,6 +754,159 @@ describe("syncCategory", () => {
 
 		const matches = warnings.filter((w) => w.includes("gemini") && w.includes("agents"));
 		expect(matches).toHaveLength(1);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: deployLocationForManifest — Codex skills route to `.agents/skills`
+//
+// Codex 0.144.1 reads skills from the cross-CLI `.agents/skills` root, not
+// `.codex/skills`. backupCategory and reconcilePairManifest both key their
+// directory as `.${platform}/${category}` (a plain `string` param, not the
+// `Platform` union) — deployLocationForManifest supplies "agents" instead of
+// "codex" for exactly the (codex, skills) pair so those two untouched helpers
+// resolve to `.agents/skills` with zero edits to backup.ts/deploy-manifest.ts.
+// ---------------------------------------------------------------------------
+
+describe("deployLocationForManifest", () => {
+	it('returns "agents" for (codex, skills)', () => {
+		expect(deployLocationForManifest("codex", "skills")).toBe("agents");
+	});
+
+	it('returns "codex" for (codex, agents) — only skills is redirected', () => {
+		expect(deployLocationForManifest("codex", "agents")).toBe("codex");
+	});
+
+	it('returns "gemini" for (gemini, skills) — other platforms are untouched', () => {
+		expect(deployLocationForManifest("gemini", "skills")).toBe("gemini");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: syncCategory — codex skills manifest + backup routing to .agents/skills
+// ---------------------------------------------------------------------------
+
+describe("syncCategory — codex skills manifest+backup routing", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-category-codex-agents-dir-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(rootDir, { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("records the manifest key as agents/skills (not codex/skills) after a codex skills sync", async () => {
+		const skillDir = path.join(rootDir, "skills", "new-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# New Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["codex"], items: ["new-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext({ dryRun: false });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		const manifestPath = path.join(targetPath, ".sync-manifest.json");
+		const manifest = JSON.parse(await readFile(manifestPath));
+		expect(manifest["agents/skills"]).toEqual(["new-skill"]);
+		expect(manifest["codex/skills"]).toBeUndefined();
+	});
+
+	it("backs up a pre-existing .agents/skills entry under .sync-backup/{sid}/agents/skills/", async () => {
+		// Pre-existing skill under the NEW location, as if deployed by a prior sync.
+		const preExisting = path.join(targetPath, ".agents", "skills", "old-skill", "SKILL.md");
+		await writeFile(preExisting, "# Old Skill\n");
+
+		const skillDir = path.join(rootDir, "skills", "new-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# New Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["codex"], items: ["new-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext({ dryRun: false, backupSession: "sid-agents-skills" });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		const backedUp = path.join(
+			targetPath,
+			".sync-backup",
+			"sid-agents-skills",
+			"agents",
+			"skills",
+			"old-skill",
+			"SKILL.md",
+		);
+		expect(await exists(backedUp)).toBe(true);
+	});
+
+	it("preserves a foreign resident directory under .agents/skills/ on bootstrap (no prior manifest)", async () => {
+		// Positive control: a foreign resident sits under .agents/skills/ with no
+		// manifest yet on disk — reconcilePairManifest must treat this as bootstrap
+		// and delete nothing.
+		const foreignFile = path.join(
+			targetPath,
+			".agents",
+			"skills",
+			"plannotator-compound",
+			"SKILL.md",
+		);
+		await writeFile(foreignFile, "# Foreign resident\n");
+
+		const skillDir = path.join(rootDir, "skills", "new-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# New Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["codex"], items: ["new-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext({ dryRun: false });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		expect(await exists(foreignFile)).toBe(true);
+	});
+
+	it("regression: gemini skills still route the manifest key to gemini/skills", async () => {
+		const skillDir = path.join(rootDir, "skills", "some-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# Some Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["gemini"], items: ["some-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["gemini"]);
+		const context = makeContext({ dryRun: false });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		const manifestPath = path.join(targetPath, ".sync-manifest.json");
+		const manifest = JSON.parse(await readFile(manifestPath));
+		expect(manifest["gemini/skills"]).toEqual(["some-skill"]);
+		expect(manifest["agents/skills"]).toBeUndefined();
 	});
 });
 
