@@ -166,6 +166,25 @@ describe("deploy-manifest 모듈", () => {
 			// Should not throw
 			await removeOrphans(deployRoot, "claude", "skills", ["anything"]);
 		});
+
+		it("never removes a foreign same-stem file (review.personal.md) when orphan is review, but still removes the real form review.md", async () => {
+			const deployRoot = join(tmpDir, "remove-foreign-same-stem-dot");
+			const categoryDir = join(deployRoot, ".claude", "rules");
+			await mkdir(categoryDir, { recursive: true });
+			await writeFile(join(categoryDir, "review.md"), "orphan real form - must be removed");
+			await writeFile(join(categoryDir, "review.personal.md"), "foreign - must survive");
+			await writeFile(join(categoryDir, "reviewer.md"), "foreign sibling stem - must survive");
+			const foreignBytesBefore = await readFile(join(categoryDir, "review.personal.md"), "utf8");
+			const siblingBytesBefore = await readFile(join(categoryDir, "reviewer.md"), "utf8");
+
+			await removeOrphans(deployRoot, "claude", "rules", ["review"]);
+
+			expect(stat(join(categoryDir, "review.md"))).rejects.toThrow();
+			expect(await readFile(join(categoryDir, "review.personal.md"), "utf8")).toBe(
+				foreignBytesBefore,
+			);
+			expect(await readFile(join(categoryDir, "reviewer.md"), "utf8")).toBe(siblingBytesBefore);
+		});
 	});
 
 	describe("reconcilePairManifest - safety contract", () => {
