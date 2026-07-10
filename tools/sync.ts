@@ -23,6 +23,7 @@ import type {
 	SyncContext,
 	PluginScope,
 	DocsItem,
+	ModelMap,
 } from "./lib/types.ts";
 import {
 	getRootDir,
@@ -126,7 +127,7 @@ export function deploysToClaudeDotDir(
 export const SUPPORTED_CATEGORIES: Record<string, Set<Category>> = {
 	claude: new Set(["agents", "commands", "skills", "scripts", "rules"]),
 	gemini: new Set(["commands", "skills", "scripts"]),
-	codex: new Set(["skills", "scripts"]),
+	codex: new Set(["agents", "skills", "scripts"]),
 	opencode: new Set(["agents", "commands", "skills", "scripts", "rules"]),
 };
 
@@ -164,6 +165,11 @@ export async function syncCategory(
 	// Track which (platform, category) pairs have been prepared (backed up).
 	// Key: `${platform}:${category}`
 	const preparedKeys = new Set<string>();
+
+	// Dedup key set for the unsupported platform×category skip log below — a
+	// project deploying 12 agents to an unsupported platform must log the skip
+	// once, not 12 times.
+	const unsupportedLogged = new Set<string>();
 
 	// Entry names (displayName) this run declares for each platform, within this
 	// category — the manifest-scoped orphan removal below diffs this against the
@@ -272,7 +278,14 @@ export async function syncCategory(
 			}
 
 			// Skip unsupported platform×category combinations entirely (no backup/wipe/dispatch).
-			if (!SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
+			if (!SUPPORTED_CATEGORIES[platform]?.has(category)) {
+				const unsupportedKey = `${platform}:${category}`;
+				if (!unsupportedLogged.has(unsupportedKey)) {
+					unsupportedLogged.add(unsupportedKey);
+					logWarn(`Unsupported platform/category skipped: platform=${platform} category=${category}`);
+				}
+				continue;
+			}
 
 			// Declare this entry for this platform×category pair (see deployedNames
 			// above) — the set diffed against the manifest's previous run below.
@@ -330,7 +343,7 @@ export async function syncCategory(
 					addSkills,
 					addHooks,
 					false,
-					context.modelMaps.get(platform),
+					context.modelMaps.get(platform) ?? context.rootModelMaps.get(platform),
 				);
 			} else if (category === "commands") {
 				await adapter.syncCommandsDirect(deployRoot, displayName, sourcePath, false);
@@ -1529,6 +1542,32 @@ export async function processYaml(
 }
 
 // ---------------------------------------------------------------------------
+// loadRootModelMaps
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the root/global model-maps once, before any project or root sync.yaml
+ * is processed. Root-only categories like "agents" are declared exclusively
+ * in projects/*\/sync.yaml (no project ships its own codex.yaml/opencode.yaml),
+ * while the model-map itself lives only in the root {platform}.yaml — and
+ * projects/*\/sync.yaml runs BEFORE the root sync.yaml (runProjectsLoop, then
+ * the root pass), with context.modelMaps cleared at the start of every
+ * processYaml call. Without this, context.modelMaps.get("codex") is empty
+ * for every project agent dispatch. context.rootModelMaps is populated here
+ * exactly once and is never cleared, so it survives across every processYaml
+ * call in the run.
+ */
+export async function loadRootModelMaps(rootDir: string): Promise<Map<Platform, ModelMap>> {
+	const out = new Map<Platform, ModelMap>();
+	for (const platform of ["codex", "opencode"] as const) {
+		const merged = await parseAndMergePlatformYaml(rootDir, platform);
+		const mm = merged?.["model-map"];
+		if (mm) out.set(platform, mm);
+	}
+	return out;
+}
+
+// ---------------------------------------------------------------------------
 // createContext
 // ---------------------------------------------------------------------------
 
@@ -1543,6 +1582,7 @@ export function createContext(dryRun: boolean): SyncContext {
 		isRootYaml: true,
 		backupSession: generateBackupSessionId(),
 		modelMaps: new Map(),
+		rootModelMaps: new Map(),
 		processedPaths: new Set(),
 		platformYamlSections: new Map(),
 		backupRoots: new Set(),
@@ -1753,6 +1793,7 @@ if (import.meta.main) {
 	}
 
 	const context = createContext(dryRun);
+	context.rootModelMaps = await loadRootModelMaps(rootDir);
 
 	logInfo(`백업 세션: ${context.backupSession}`);
 	logInfo(`백업 위치: ${rootDir}/.sync-backup/${context.backupSession}/`);

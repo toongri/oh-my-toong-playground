@@ -87,6 +87,8 @@ export type SyncContext = {
 	isRootYaml: boolean;
 	backupSession: string;
 	modelMaps: Map<Platform, ModelMap>;
+	/** Root/global platform model-maps; loaded once, NEVER cleared by processYaml. */
+	rootModelMaps: Map<Platform, ModelMap>;
 	processedPaths: Set<string>;
 	platformYamlSections: Map<Platform, string[]>;
 	/**

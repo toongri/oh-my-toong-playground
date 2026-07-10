@@ -21,10 +21,11 @@ import {
 	allTargetsProcessed,
 	isFatalSyncError,
 	deploysToClaudeDotDir,
+	loadRootModelMaps,
 	type AdapterMap,
 	type LibSourceRoots,
 } from "./sync.ts";
-import type { SyncContext, Platform, Category, SyncYaml } from "./lib/types.ts";
+import type { SyncContext, Platform, Category, SyncYaml, ModelMap } from "./lib/types.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 import { _resetConfigCache } from "./lib/config.ts";
 import { ProjectKeyError, deriveClaudeProjectKey } from "./lib/git-key.ts";
@@ -113,6 +114,7 @@ function makeContext(overrides?: Partial<SyncContext>): SyncContext {
 		isRootYaml: true,
 		backupSession: "test-session",
 		modelMaps: new Map(),
+		rootModelMaps: new Map(),
 		processedPaths: new Set(),
 		platformYamlSections: new Map(),
 		backupRoots: new Set(),
@@ -550,11 +552,11 @@ describe("syncCategory", () => {
 		expect(await exists(path.join(claudeRulesDir, "manual-rule.md"))).toBe(true);
 	});
 
-	it("does not wipe target directory for unsupported platform×category combo (codex+agents)", async () => {
-		// Pre-populate target codex agents dir with a file
-		const codexAgentsDir = path.join(targetPath, ".codex", "agents");
-		await fs.mkdir(codexAgentsDir, { recursive: true });
-		await writeFile(path.join(codexAgentsDir, "existing-agent.md"), "# Existing\n");
+	it("does not wipe target directory for unsupported platform×category combo (gemini+agents)", async () => {
+		// Pre-populate target gemini agents dir with a file
+		const geminiAgentsDir = path.join(targetPath, ".gemini", "agents");
+		await fs.mkdir(geminiAgentsDir, { recursive: true });
+		await writeFile(path.join(geminiAgentsDir, "existing-agent.md"), "# Existing\n");
 
 		const agentFile = path.join(rootDir, "agents", "oracle.md");
 		await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
@@ -562,21 +564,21 @@ describe("syncCategory", () => {
 		const syncYaml: SyncYaml = {
 			path: targetPath,
 			agents: {
-				platforms: ["codex"],
+				platforms: ["gemini"],
 				items: ["oracle"],
 			},
 		};
 
-		const adapters = makeAdapterMap(["codex"]);
+		const adapters = makeAdapterMap(["gemini"]);
 		const context = makeContext({ dryRun: false });
 
 		await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
-		// File must survive — codex does not support agents, so no wipe occurred
-		expect(await exists(path.join(codexAgentsDir, "existing-agent.md"))).toBe(true);
+		// File must survive — gemini does not support agents, so no wipe occurred
+		expect(await exists(path.join(geminiAgentsDir, "existing-agent.md"))).toBe(true);
 		// Adapter must not have been called
 		expect(
-			adapters.getAdapter("codex")!.calls.filter((c) => c.method === "syncAgentsDirect"),
+			adapters.getAdapter("gemini")!.calls.filter((c) => c.method === "syncAgentsDirect"),
 		).toHaveLength(0);
 	});
 
@@ -614,17 +616,17 @@ describe("syncCategory", () => {
 
 	it("SUPPORTED_CATEGORIES covers all 4 platforms with correct categories", async () => {
 		// Import the map indirectly by verifying behavior for each platform×category.
-		// Supported: claude=all5, opencode=all5, gemini=commands/skills/scripts, codex=skills/scripts
+		// Supported: claude=all5, opencode=all5, gemini=commands/skills/scripts, codex=agents/skills/scripts
 		const expectedSupported: Record<string, Category[]> = {
 			claude: ["agents", "commands", "skills", "scripts", "rules"],
 			opencode: ["agents", "commands", "skills", "scripts", "rules"],
 			gemini: ["commands", "skills", "scripts"],
-			codex: ["skills", "scripts"],
+			codex: ["agents", "skills", "scripts"],
 		};
 
 		const expectedUnsupported: Record<string, Category[]> = {
 			gemini: ["agents", "rules"],
-			codex: ["agents", "commands", "rules"],
+			codex: ["commands", "rules"],
 		};
 
 		for (const [platform, supported] of Object.entries(expectedSupported)) {
@@ -700,6 +702,91 @@ describe("syncCategory", () => {
 				).toBe(0);
 			}
 		}
+	});
+
+	it("dispatches with rootModelMaps as fallback when context.modelMaps has no entry for the platform", async () => {
+		await writeFile(path.join(rootDir, "agents", "test-agent.md"), "# test-agent\n");
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			agents: { platforms: ["codex"], items: ["test-agent"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const rootMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+		// context.modelMaps stays empty (per-scope YAML never populated it); only
+		// rootModelMaps carries the codex map, mirroring the real gap: project
+		// agents deploy with no project codex.yaml, so only the root map is reachable.
+		const context = makeContext({ dryRun: false, rootModelMaps: new Map([["codex", rootMap]]) });
+
+		await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
+
+		const calls = adapters
+			.getAdapter("codex")!
+			.calls.filter((c) => c.method === "syncAgentsDirect");
+		expect(calls).toHaveLength(1);
+		// syncAgentsDirect(deployRoot, displayName, sourcePath, addSkills, addHooks, dryRun, modelMap)
+		expect(calls[0]!.args[6]).toEqual(rootMap);
+	});
+
+	it("logs the unsupported platform/category skip exactly once across multiple items", async () => {
+		await writeFile(path.join(rootDir, "agents", "agent-one.md"), "# agent-one\n");
+		await writeFile(path.join(rootDir, "agents", "agent-two.md"), "# agent-two\n");
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			agents: { platforms: ["gemini"], items: ["agent-one", "agent-two"] },
+		};
+
+		const adapters = makeAdapterMap(["gemini"]);
+		const context = makeContext({ dryRun: false });
+
+		const warnings: string[] = [];
+		const origStderr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = (chunk: string | Uint8Array) => {
+			if (typeof chunk === "string") warnings.push(chunk);
+			return true;
+		};
+		try {
+			await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
+		} finally {
+			process.stderr.write = origStderr;
+		}
+
+		const matches = warnings.filter((w) => w.includes("gemini") && w.includes("agents"));
+		expect(matches).toHaveLength(1);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: loadRootModelMaps
+// ---------------------------------------------------------------------------
+
+describe("loadRootModelMaps", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "load-root-model-maps-test-"));
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("returns the codex model-map parsed from the repo root's codex.yaml", async () => {
+		await writeFile(
+			path.join(tmpDir, "codex.yaml"),
+			"model-map:\n  tiers:\n    opus:\n      model: gpt-5.6-sol\n      effort: high\n",
+		);
+
+		const result = await loadRootModelMaps(tmpDir);
+
+		expect(result.get("codex")).toEqual({
+			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+		});
+	});
+
+	it("returns an empty map when no root platform YAML declares a model-map", async () => {
+		const result = await loadRootModelMaps(tmpDir);
+		expect(result.size).toBe(0);
 	});
 });
 
@@ -2813,6 +2900,7 @@ describe("createContext", () => {
 		expect(ctx.dryRun).toBe(false);
 		expect(ctx.processedPaths).toBeInstanceOf(Set);
 		expect(ctx.modelMaps).toBeInstanceOf(Map);
+		expect(ctx.rootModelMaps).toBeInstanceOf(Map);
 		expect(ctx.platformYamlSections).toBeInstanceOf(Map);
 		expect(typeof ctx.backupSession).toBe("string");
 		expect(ctx.backupSession.length).toBeGreaterThan(0);
