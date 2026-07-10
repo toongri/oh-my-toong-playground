@@ -13,6 +13,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { existsSync } from "fs";
+import { execFileSync } from "node:child_process";
 
 import type {
 	Platform,
@@ -23,7 +24,14 @@ import type {
 	PluginScope,
 	DocsItem,
 } from "./lib/types.ts";
-import { getRootDir, getBackupRetentionDays, getEnabledProjects } from "./lib/config.ts";
+import {
+	getRootDir,
+	getBackupRetentionDays,
+	getEnabledProjects,
+	getFeaturePlatforms,
+	getCodexVersions,
+} from "./lib/config.ts";
+import { parseCodexVersion, assertCodexVersionAllowed } from "./lib/codex-version.ts";
 import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import { resolvePlatforms, resolveComponentPath, setProjectContext } from "./lib/resolver.ts";
@@ -1674,6 +1682,59 @@ export async function runProjectsLoop(
 }
 
 // ---------------------------------------------------------------------------
+// Codex CLI version guard
+// ---------------------------------------------------------------------------
+
+/** DI hooks for {@link assertCodexVersionIfTargeted}; both default to the real check. */
+export type CodexVersionCheckOptions = {
+	isCodexTargetPlatform?: () => Promise<boolean>;
+	fetchVersion?: () => string;
+};
+
+/** True when "codex" is a configured target platform for any deployed category. */
+async function defaultIsCodexTargetPlatform(): Promise<boolean> {
+	for (const category of CATEGORIES) {
+		const platforms = await getFeaturePlatforms(category);
+		if (platforms.includes("codex")) return true;
+	}
+	return false;
+}
+
+function defaultFetchCodexVersion(): string {
+	// env explicitly passed (not left to spawn's default) so a runtime PATH
+	// override — e.g. a test stubbing `codex` on a temp dir PATH — is honored;
+	// Bun's spawn PATH resolution otherwise caches PATH from process start.
+	return execFileSync("codex", ["--version"], {
+		stdio: ["pipe", "pipe", "pipe"],
+		env: process.env,
+	}).toString();
+}
+
+/**
+ * Guards the installed Codex CLI version against the probe-verified allowlist
+ * (config.yaml `codex-versions`) before any deploy work runs. Skipped
+ * entirely when codex isn't a configured target platform, so a codex-free
+ * sync never requires codex to be installed.
+ */
+export async function assertCodexVersionIfTargeted(
+	options: CodexVersionCheckOptions = {},
+): Promise<void> {
+	const isTargeted = options.isCodexTargetPlatform ?? defaultIsCodexTargetPlatform;
+	const fetchVersion = options.fetchVersion ?? defaultFetchCodexVersion;
+
+	if (!(await isTargeted())) return;
+
+	const raw = fetchVersion();
+	const observed = parseCodexVersion(raw);
+	if (observed === null) {
+		throw new Error(`Codex CLI 버전 파싱 실패: "codex --version" 출력이 "${raw.trim()}"`);
+	}
+
+	const allowed = await getCodexVersions();
+	assertCodexVersionAllowed(observed, allowed);
+}
+
+// ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
 
@@ -1703,6 +1764,9 @@ if (import.meta.main) {
 	adapters.set("opencode", opencodeAdapter);
 
 	try {
+		// 배포 작업 이전에 Codex CLI 버전을 검증된 허용목록과 대조 (codex가 대상 플랫폼일 때만)
+		await assertCodexVersionIfTargeted();
+
 		// projects/*/sync.yaml 먼저 처리
 		const enabledProjects = await getEnabledProjects();
 		const effectiveFilter = resolveProjectFilter(projectFilter, enabledProjects);
