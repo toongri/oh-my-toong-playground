@@ -7,7 +7,7 @@ level: 3
 ---
 
 <Purpose>
-Deep Interview implements Ouroboros-inspired Socratic questioning with mathematical ambiguity scoring. It replaces vague ideas with crystal-clear specifications by asking targeted questions that expose hidden assumptions, measuring clarity across weighted dimensions, and refusing to proceed until ambiguity drops below the resolved threshold for this run. The output feeds into an execution route chosen from the spec itself: **deep-interview → planning/execution via `goal` (which orchestrates prometheus/sisyphus downstream), or a directly matching domain skill for terminal domain outputs**, ensuring maximum clarity at every stage.
+Deep Interview implements Ouroboros-inspired Socratic questioning with mathematical ambiguity scoring. It replaces vague ideas with crystal-clear specifications by asking targeted questions that expose hidden assumptions, measuring clarity across weighted dimensions, and refusing to proceed until ambiguity drops below the resolved threshold for this run. The output feeds into an execution route chosen from the spec itself: **deep-interview → planning/execution via `goal`, or a directly matching domain skill for terminal domain outputs**, ensuring maximum clarity at every stage.
 </Purpose>
 
 <Use_When>
@@ -449,25 +449,19 @@ When the Design Interview phase has exited with all design branches resolved, or
 
 ## Phase 5: Execution Bridge
 
-After the spec is written, FIRST apply the re-entrancy guard, then choose the recommended execution route from the spec's own characteristics, and present options via `AskUserQuestion`.
-
-**Re-entrancy guard (caller marker, NOT a goal-state read):** Check whether this interview was invoked with the caller marker `caller=goal`.
-- **Marker `caller=goal` present** → `goal` is the caller and is already orchestrating. Return the crystallized spec (the `$OMT_DIR/deep-interview/{slug}.md` path) to the caller and emit **NO** `goal` handoff. This prevents a goal→deep-interview→goal loop. Skip the planning/execution route below; the caller routes downstream itself.
-- **Marker absent** → emit the `goal` handoff as described below.
-
-The guard relies ONLY on the caller-supplied marker; it does NOT read any goal-state file.
+After the spec is written, choose the recommended execution route from the spec's own characteristics, and present options via `AskUserQuestion`.
 
 **Recommend the route by judging the spec you just wrote — its output shape and how much HOW-uncertainty the interview left open:**
 - If the spec's output maps cleanly to a single domain skill available in this session (e.g., documentation → `technical-writing`, slides → `create-slides`), recommend that skill **directly** — this terminal domain output bypasses `goal` (it needs no planning/execution orchestration). Read the live available-skills list to find the match — do NOT hardcode a skill catalog here, because the available skills change.
-- Else (the remaining work is planning and/or multi-step execution — code that benefits from AC-gated planning, or settled multi-step orchestration), recommend handing the spec to **`goal`**, which orchestrates planning/execution downstream (it wraps prometheus/sisyphus and re-pursues the objective). Do NOT recommend prometheus or sisyphus directly for planning/execution work; route that through `goal`.
+- Else (the remaining work is planning and/or multi-step execution — code that benefits from AC-gated planning, or settled multi-step orchestration), recommend handing the spec to **`goal`**, which pursues the objective through planning/execution downstream. Do NOT recommend prometheus or sisyphus directly for planning/execution work; hand it to `goal` instead.
 
-`goal` is the single orchestration entry for planning/execution work; it chooses between decomposition (prometheus) and execution (sisyphus) itself. Do not reflexively pre-pick prometheus vs sisyphus here — its core value, requirements clarification, is exactly what this phase already delivered, and `goal` selects the downstream skill from the spec it receives.
+`goal` is the recommended destination for planning/execution work rather than prometheus or sisyphus directly. Do not reflexively pre-pick prometheus vs sisyphus here — its core value, requirements clarification, is exactly what this phase already delivered, and `goal` determines the downstream path from the spec it receives.
 
 **Question:** "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
 
 **Build the options like this** (recommended route first, tagged "(Recommended)", with a one-sentence rationale tied to THIS spec):
 - The recommended route from the rule above (a domain skill directly, or `goal` for planning/execution work).
-- When the recommended route is `goal`, also offer a domain skill as the override only if the spec plausibly maps to one. When the recommended route is a domain skill, offer `goal` as the override (so planning/execution can still be chosen). Planning/execution work is always routed through `goal` — never offer prometheus or sisyphus as direct options here.
+- When the recommended route is `goal`, also offer a domain skill as the override only if the spec plausibly maps to one. When the recommended route is a domain skill, offer `goal` as the override (so planning/execution can still be chosen). Planning/execution work always goes to `goal` — never offer prometheus or sisyphus as direct options here.
 - **Continue interviewing** — "Continue interviewing to improve clarity (current: {score}%)" → return to the Phase 2 loop.
 
 Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the planning/execution option invokes `Skill(skill: "goal")`).

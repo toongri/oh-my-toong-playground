@@ -1,13 +1,13 @@
 ---
 name: goal
-description: Autonomous objective-pursuit orchestrator — wraps deep-interview/prometheus/sisyphus, then re-pursues the objective across plan/execute cycles until an objective-level completion gate confirms the verification surface is met.
+description: Autonomous objective-pursuit executor — decomposes an objective into Six Slots and a Story set, dispatches execution to sisyphus, then re-pursues the objective across plan/execute cycles until an objective-level completion gate confirms the verification surface is met.
 ---
 
 <Role>
 
-# Goal — Autonomous Objective-Pursuit Orchestrator
+# Goal — Autonomous Objective-Pursuit Executor
 
-Turn the one-shot pipeline deep-interview → prometheus → sisyphus into an autonomous loop that re-pursues a single OBJECTIVE across plan/execute cycles until completion is proven.
+Goal is a pure executor: it decomposes a single OBJECTIVE into the Six Slots and a Story set itself, dispatches execution to sisyphus, and re-pursues the objective across plan/execute cycles in an autonomous loop until completion is proven.
 
 **Design philosophy: autonomy is post-planning.** Planning carries human gates; those gates run UN-wrapped. The autonomy begins after planning, during pursuit. The single load-bearing invariant of the whole design: **the loop never false-completes.** Every state-write or verdict-write failure degrades toward continue-pursuit or block — never toward a claimed completion.
 
@@ -40,7 +40,7 @@ A goal is only worth pursuing autonomously if "done" is decidable. **Falsifiabil
 
 On a non-falsifiable request, take exactly ONE of these two remediation outcomes:
 
-- **deep-interview supplementation** — when the objective is rich but under-specified (the verification surface can be derived through questioning), invoke `Skill(skill: "deep-interview")` passing the marker `caller=goal` to crystallize a spec whose acceptance criteria become the verification surface. The `caller=goal` marker makes deep-interview's re-entrancy guard return the crystallized spec to goal and emit NO `goal` handoff (no goal→deep-interview→goal loop). Resume the Entry Gate against the crystallized spec.
+- **outside-goal clarification** — when the objective is rich but under-specified (the verification surface can be derived through questioning), stop here: tell the user to invoke a clarification skill (e.g. deep-interview) directly, outside goal, to crystallize a spec, then re-invoke goal with that crystallized spec as the objective. Goal itself does not call clarification skills — it only resumes the Entry Gate once the user re-enters with a crystallized spec.
 - **ask-user** — when a single missing fact would make the objective falsifiable (the user can state the success criterion in one sentence), ask the user directly for the verification surface before proceeding.
 
 **Re-invocation refusal.** Before seeding anything, read state via `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get`. If the result is `active: true` AND `pristine: false`, REFUSE to start a second pursuit — report the active objective and its phase, and stop. A second concurrent goal is never seeded over a non-pristine active one. A `pristine: true` result means the state was freshly seeded by this very invocation's PreToolUse hook — proceed normally. (Terminal states read as inactive and do not block a fresh goal.)
@@ -53,7 +53,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts list-others
 
 If candidates exist, present them via AskUserQuestion with one option per candidate (labeled with the candidate's purpose and age — e.g. "ship X — started 2026-06-10, 3 hours idle"), plus a "start fresh" option. Proceed to the next step ONLY on an explicit user selection:
 
-- On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts adopt --src <selected-sid>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get` to read what was adopted, and resume from the restored state — if `phase` is `planning`, resume planning from the stored `plan_path`/`resume_summary`; if `phase` is `pursuing`, continue pursuit at the adopted `iteration`. Do NOT re-seed via `set --phase planning` from the new invocation's text.
+- On candidate selection: run `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts adopt --src <selected-sid>`, then run `bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts get` to read what was adopted, and resume from the restored state — if `phase` is `planning`, resume planning from the adopted Story set and `resume_summary`; if `phase` is `pursuing`, continue pursuit at the adopted `iteration`. Do NOT re-seed via `set --phase planning` from the new invocation's text.
 - On "start fresh": proceed as a new goal.
 
 If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.
@@ -66,52 +66,15 @@ If no candidates exist, say so and proceed fresh. The branch never renames on it
 
 ---
 
-## Conditional Orchestration
+## Execution Dispatch
 
-Goal does not reimplement decomposition or execution. It invokes the existing skills conditionally by request shape, then takes over with the autonomous loop during pursuit.
-
-- **Vague** (the verification surface cannot be derived without questioning the user) → `Skill(skill: "deep-interview")` passing the marker `caller=goal`. The interview crystallizes a spec at `$OMT_DIR/deep-interview/{slug}.md`; because the `caller=goal` marker is present, deep-interview's re-entrancy guard returns that crystallized spec to goal and emits NO `goal` handoff (preventing a goal→deep-interview→goal loop). Goal receives the returned spec and routes downstream itself; the spec's acceptance criteria feed the verification-surface slot.
-- **Complex** (the objective needs decomposition into a TODO plan with waves and acceptance criteria — multi-component, 3+ files, or any non-trivial build) → `Skill(skill: "prometheus")`. Prometheus runs its full planning pipeline (its human gates UN-wrapped) and ends by dispatching to sisyphus with a plan path at `$OMT_DIR/plans/{name}.md`.
-- **Execution** (a plan or crystallized spec already exists and the objective is ready to be built) → dispatch to sisyphus for execution: `Skill(skill: "sisyphus")` with the plan path.
-
-### Clarity gate
-
-When the Vague branch above returns a crystallized spec, goal trusts deep-interview's crystallized clarity (ambiguity ≤ the resolved threshold, default 0.15) as the requirements-clarity signal and does not re-interrogate the user before routing downstream — the spec's own clearance is already satisfied, not re-litigated by goal.
-
-### Fast-path gate
-
-Not every Complex-shaped objective needs prometheus's full planning pipeline. When a Complex objective clears all three fast-path signals — (1) the objective is Complex on file-count alone, with each individual change mechanical and localized, (2) no competing design fork exists — a single obvious approach, not a choice among architectures, and (3) no T1-tier risk is present (no security or data-integrity surface) — goal skips prometheus, captures the objective's acceptance criteria directly into the Story Definition layer, and dispatches straight to sisyphus. This fast-path judgment is goal's own inline prose gate, not a CLI subcommand — goal reads the three signals itself and decides. It presupposes the Clarity gate above: the fast-path evaluation only runs once deep-interview's crystallized clarity has already cleared, so the three signals are judged against a spec whose ambiguity is already resolved, not a foggy one.
-
-A live design fork disqualifies the fast-path outright: competing design alternatives are exactly what prometheus's planning pipeline exists to adjudicate, so an objective with a design fork always routes through prometheus regardless of file count or risk tier.
-
-When the three-signal verdict is on the fence — not clearly cleared, not clearly failed — the asymmetric default resolves it toward prometheus, never toward the fast path: a user wrongly silenced by a skipped planning gate is worse than one extra round of design review, so an ambiguous fast-path judgment falls back to the full prometheus pipeline.
-
-### Finalize-before-advance guard
-
-Before invoking a subskill at ANY dispatch site below, cross-read the OTHER stateful subskill's own state file to confirm it is not left half-open from an earlier call in this session:
-
-```
-bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts check-subskill --skill deep-interview
-bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts check-subskill --skill prometheus
-```
-
-A non-zero exit means that subskill's own state file is `active:true`, TTL-live, and non-pristine — it ran and never finalized (no done-token emitted). Before advancing with the dispatch you were about to make, emit that subskill's own done-token (`<deep-interview-done/>` or `<prometheus-done/>`) to finalize it first, THEN proceed. `check-subskill` exits 0 (pass) when the peer state is absent, terminal (`active:false`), pristine (freshly seeded, no real work), or TTL-stale — none of those block advancing.
-
-This guard runs at every dispatch site in the pipeline:
-
-- **Initial planning** — before the first `deep-interview` or `prometheus` call (the Vague/Complex branch above), check the OTHER of the two.
-- **Initial sisyphus execution** — before the first `sisyphus` dispatch (the Execution branch, and the fast-path direct-to-sisyphus that skips prometheus), check both `deep-interview` and `prometheus`.
-- **Re-plan loop-back** — before re-invoking `prometheus` (Strategic plan inadequacy, below), check `deep-interview`.
-- **REQUEST_CHANGES sisyphus re-dispatch** — before re-invoking `sisyphus` on named incomplete work items, check both `deep-interview` and `prometheus`.
-- **CONFIRMED-finding sisyphus re-dispatch** — before re-invoking `sisyphus` on code-review findings, check both `deep-interview` and `prometheus`.
-
-**Un-wedge recovery.** If a subskill exits without emitting its done-token (crash, interruption, forgotten emit), its state file sticks at `active:true` — half-open — and blocks the next dispatch site indefinitely. Recovery: emit that subskill's done-token to finalize the stuck state (or let the TTL-based GC reap it once its idle window elapses). Because this is a cross-read of the PEER skill's own state file, goal never gets wedged on its own state — only the peer's leaked half-open state, which self-heals via TTL even if no one ever emits the done-token.
+Goal does not reimplement execution. It decomposes the objective into the Six Slots and a Story set itself — see `references/planning.md` — then dispatches execution to sisyphus: `Skill(skill: "sisyphus")` with the adopted Story set.
 
 ### Phase transitions
 
-The autonomous loop blocks ONLY when `phase=pursuing`. Set the phase around the planning/execution skills so the loop yields during planning (human gates run un-wrapped) and only activates during pursuit:
+The autonomous loop blocks ONLY when `phase=pursuing`. Set the phase around decomposition so the loop yields while decomposing (human gates run un-wrapped) and only activates during pursuit:
 
-- **Before EVERY prometheus or deep-interview call** — both the initial planning call AND the re-plan loop-back — run:
+- **While decomposing the Six Slots and the Story set** — run:
   ```
   bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set --phase planning
   ```
@@ -121,7 +84,7 @@ The autonomous loop blocks ONLY when `phase=pursuing`. Set the phase around the 
   bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set --phase pursuing
   ```
 
-Initial path: `set --phase planning` (seed slots) → invoke prometheus / deep-interview → on sisyphus dispatch `set --phase pursuing`. Re-plan loop-back: `set --phase planning` (clears the verdict) → invoke prometheus again → `set --phase pursuing` after the fresh sisyphus dispatch.
+Initial path: `set --phase planning` (seed slots) → decompose the Six Slots and the Story set → dispatch to sisyphus → `set --phase pursuing`. Re-plan loop-back: `set --phase planning` (clears the verdict) → re-decompose the Story set → `set --phase pursuing` after the fresh sisyphus dispatch.
 
 ---
 
