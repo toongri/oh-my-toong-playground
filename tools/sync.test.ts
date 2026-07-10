@@ -315,18 +315,48 @@ describe("syncCategory", () => {
 		expect(calls.filter((c) => c.method === "syncAgentsDirect")).toHaveLength(0);
 	});
 
-	it("removes orphan files after sync (P1-3)", async () => {
-		// Create a skill component in rootDir
-		const skillDir = path.join(rootDir, "skills", "oracle");
-		await fs.mkdir(skillDir, { recursive: true });
-		await writeFile(path.join(skillDir, "SKILL.md"), "# Oracle\n");
+	it("removes only OMT-deployed orphans across syncs, preserving foreign residents", async () => {
+		// Source files for both agents declared in the first sync.
+		await writeFile(path.join(rootDir, "agents", "oracle.md"), "# Oracle\n");
+		await writeFile(path.join(rootDir, "agents", "explore.md"), "# Explore\n");
 
-		// Pre-populate target with an orphan agent file
 		const claudeAgentsDir = path.join(targetPath, ".claude", "agents");
-		await fs.mkdir(claudeAgentsDir, { recursive: true });
-		await writeFile(path.join(claudeAgentsDir, "orphan-agent.md"), "# Orphan\n");
 
-		const syncYaml: SyncYaml = {
+		// --- First sync: declares oracle + explore. The mock adapter records the
+		// call but never writes to disk, so simulate what a real adapter would have
+		// deployed by placing the two files directly under the target agents dir.
+		await fs.mkdir(claudeAgentsDir, { recursive: true });
+		await writeFile(path.join(claudeAgentsDir, "oracle.md"), "# Oracle\n");
+		await writeFile(path.join(claudeAgentsDir, "explore.md"), "# Explore\n");
+
+		const firstSyncYaml: SyncYaml = {
+			path: targetPath,
+			agents: {
+				platforms: ["claude"],
+				items: ["oracle", "explore"],
+			},
+		};
+
+		const adapters = makeAdapterMap(["claude"]);
+		await syncCategory(
+			makeContext({ dryRun: false }),
+			"agents",
+			firstSyncYaml,
+			adapters,
+			rootDir,
+			targetPath,
+		);
+
+		// The manifest now records both entries under claude/agents.
+		const manifestPath = path.join(targetPath, ".sync-manifest.json");
+		const manifestAfterFirst = JSON.parse(await readFile(manifestPath));
+		expect(manifestAfterFirst["claude/agents"].sort()).toEqual(["explore", "oracle"]);
+
+		// A foreign file the manifest never recorded deploying.
+		await writeFile(path.join(claudeAgentsDir, "foreign.md"), "# Foreign\n");
+
+		// --- Second sync on the same target: declares only oracle.
+		const secondSyncYaml: SyncYaml = {
 			path: targetPath,
 			agents: {
 				platforms: ["claude"],
@@ -334,16 +364,21 @@ describe("syncCategory", () => {
 			},
 		};
 
-		// Ensure source file exists so resolveComponentPath succeeds
-		await writeFile(path.join(rootDir, "agents", "oracle.md"), "# Oracle\n");
+		await syncCategory(
+			makeContext({ dryRun: false }),
+			"agents",
+			secondSyncYaml,
+			adapters,
+			rootDir,
+			targetPath,
+		);
 
-		const adapters = makeAdapterMap(["claude"]);
-		const context = makeContext({ dryRun: false });
-
-		await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
-
-		// Orphan should be gone: wipe+recreate cleared the dir before writing
-		expect(await exists(path.join(claudeAgentsDir, "orphan-agent.md"))).toBe(false);
+		// explore.md dropped from the declared set -> removed as an OMT orphan.
+		expect(await exists(path.join(claudeAgentsDir, "explore.md"))).toBe(false);
+		// oracle.md is still declared -> survives.
+		expect(await exists(path.join(claudeAgentsDir, "oracle.md"))).toBe(true);
+		// foreign.md was never in the manifest -> survives.
+		expect(await exists(path.join(claudeAgentsDir, "foreign.md"))).toBe(true);
 	});
 
 	it("resolves add-hooks component and attaches source_path and display_name for agents category", async () => {
@@ -545,11 +580,13 @@ describe("syncCategory", () => {
 		).toHaveLength(0);
 	});
 
-	it("proceeds with backup+wipe+dispatch for supported platform×category combo (claude+agents)", async () => {
-		// Pre-populate target claude agents dir with an orphan file
+	it("processes a supported platform×category and preserves pre-existing files on bootstrap", async () => {
+		// Pre-populate target claude agents dir with a file that predates any sync —
+		// no manifest exists yet, so this is the BOOTSTRAP case: reconcile must
+		// delete nothing.
 		const claudeAgentsDir = path.join(targetPath, ".claude", "agents");
 		await fs.mkdir(claudeAgentsDir, { recursive: true });
-		await writeFile(path.join(claudeAgentsDir, "orphan.md"), "# Orphan\n");
+		await writeFile(path.join(claudeAgentsDir, "preexisting.md"), "# Preexisting\n");
 
 		const agentFile = path.join(rootDir, "agents", "oracle.md");
 		await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
@@ -567,9 +604,9 @@ describe("syncCategory", () => {
 
 		await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
-		// Orphan wiped — claude supports agents
-		expect(await exists(path.join(claudeAgentsDir, "orphan.md"))).toBe(false);
-		// Adapter called
+		// Bootstrap (no prior manifest) deletes nothing — the pre-existing file survives.
+		expect(await exists(path.join(claudeAgentsDir, "preexisting.md"))).toBe(true);
+		// Adapter still called — claude supports agents.
 		expect(adapters.getAdapter("claude")!.calls.some((c) => c.method === "syncAgentsDirect")).toBe(
 			true,
 		);
