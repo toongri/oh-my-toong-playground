@@ -261,7 +261,7 @@ interface ButtonProps extends React.ComponentPropsWithoutRef<"button"> {
 
 function Button({ variant = "primary", loading, children, ...rest }: ButtonProps) {
   return (
-    <button disabled={loading || rest.disabled} {...rest}>
+    <button {...rest} disabled={loading || rest.disabled}>
       {loading ? <Spinner /> : children}
     </button>
   );
