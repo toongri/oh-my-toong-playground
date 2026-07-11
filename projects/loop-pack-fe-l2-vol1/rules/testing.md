@@ -4,11 +4,8 @@ paths: ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
 
 # 테스트 판단 규칙
 
-> 테스트를 만지기 전에 **`docs/testing/conventions.md`를 읽고** 상황에 맞게 적용하라(전체 규칙·안티패턴 표).
+> 테스트를 만지기 전에, 아래 문서를 읽고 상황에 맞게 적용하라(전체 규칙·안티패턴 표).
 
-핵심:
-
-- **사용자가 쓰는 방식을 닮게**: 구현 세부(state 이름·내부 메서드·CSS 클래스) 말고, 보고 조작하는 동작을 검증.
-- **쿼리**: `getByRole` > `getByLabelText` > `getByText`. `getByTestId`·`container.querySelector` 금지.
-- **상호작용**: `userEvent.setup()` + `await`. 비동기 등장은 `findBy`. `waitFor` 콜백엔 assertion 하나만, side-effect 금지.
-- **모킹**: 네트워크만 MSW. 내 코드의 내부 모듈을 `vi.mock`하지 않는다(false green).
+| 언제 로딩하나 (WHEN) | 문서 | 담긴 내용 (WHAT) |
+| --- | --- | --- |
+| 테스트를 작성·리뷰할 때 (무엇을 검증할지 · 쿼리를 어떻게 고를지 · 상호작용·비동기를 어떻게 다룰지 · 무엇을 모킹할지) | `docs/testing/conventions.md` | 원칙(사용 방식을 닮을수록 신뢰) · 무엇을 테스트/안 하나 · 쿼리 우선순위(`getByRole` 등) · 상호작용·비동기(`userEvent`·`findBy`·`waitFor`) · 모킹(MSW·내부 모듈 금지) · 네이밍·구조(given-when-then) · AI 단골 안티패턴 |
