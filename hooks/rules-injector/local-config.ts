@@ -87,15 +87,20 @@ function readYamlObject(path: string): Record<string, unknown> {
 // Generic transform: array -> comma-join; EXCEPT `exclude` -> newline-join (so
 // brace-comma globs like `**/*.{spec,test}.md` survive). `exclude` also
 // accepts a bare scalar string (a single glob, not a `- <glob>` list),
-// applied as-is. Any other type (number, boolean, object, ...) is a
-// genuinely wrong-typed `exclude`: throw so the caller's try/catch
-// breadcrumbs it and drops the value, rather than silently coercing it.
+// applied as-is. Any other type (number, boolean, object, ...) — including a
+// non-string element inside the array (e.g. `- 42`) — is a genuinely
+// wrong-typed `exclude`: throw so the caller's try/catch breadcrumbs it and
+// drops the value, rather than silently coercing it into a bogus glob.
 function serializeValue(key: string, value: unknown): string {
 	if (key === "exclude") {
 		if (typeof value === "string") {
 			return value;
 		}
 		if (Array.isArray(value)) {
+			const badTypes = value.filter((v) => typeof v !== "string").map((v) => typeof v);
+			if (badTypes.length > 0) {
+				throw new TypeError(`exclude array must contain only strings, got ${badTypes.join(", ")}`);
+			}
 			return value.join("\n");
 		}
 		throw new TypeError(`exclude must be a string or string[], got ${typeof value}`);
