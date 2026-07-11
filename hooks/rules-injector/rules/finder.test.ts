@@ -4,7 +4,8 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { findRuleCandidates } from "./finder.js";
+import { filterExcludedCandidates, findRuleCandidates } from "./finder.js";
+import type { RuleCandidate } from "./types.js";
 
 describe("findRuleCandidates — static mode distance gradient (regression: #static-distance-flatten)", () => {
 	let tmp: string;
@@ -175,5 +176,49 @@ describe("findRuleCandidates — excludeGlobs filter", () => {
 			excludeGlobs: ["/**/.claude/rules/**"],
 		});
 		expect(droppedByPath.find((c) => c.source === ".claude/rules")).toBeUndefined();
+	});
+});
+
+describe("filterExcludedCandidates — win32 path normalization", () => {
+	function candidate(path: string, realPath: string): RuleCandidate {
+		return {
+			path,
+			realPath,
+			source: ".claude/rules",
+			distance: 0,
+			isGlobal: false,
+			isSingleFile: true,
+			relativePath: ".claude/rules/ai-collaboration.md",
+		};
+	}
+
+	test("slash-based glob drops a candidate whose path uses win32 backslashes", () => {
+		// On win32 candidate.path/realPath carry backslashes (node:path /
+		// realpathSync.native) while globs stay slash-based; the filter must
+		// normalize both sides before matching.
+		const backslashPath = "C:\\repo\\.claude\\rules\\ai-collaboration.md";
+		const filtered = filterExcludedCandidates(
+			[candidate(backslashPath, backslashPath)],
+			["**/ai-collaboration.md"],
+		);
+		expect(filtered).toHaveLength(0);
+	});
+
+	test("drops on realPath backslashes even when path already matches nothing", () => {
+		const backslashReal = "D:\\canonical\\rules\\ai-collaboration.md";
+		const filtered = filterExcludedCandidates(
+			[candidate("/symlink/rules/ai-collaboration.md", backslashReal)],
+			["**/canonical/**"],
+		);
+		expect(filtered).toHaveLength(0);
+	});
+
+	test("posix paths remain matchable (normalization is a no-op)", () => {
+		const posixPath = "/repo/.claude/rules/ai-collaboration.md";
+		const filtered = filterExcludedCandidates(
+			[candidate(posixPath, posixPath)],
+			["**/ai-collaboration.md"],
+		);
+		expect(filtered).toHaveLength(0);
 	});
 });
