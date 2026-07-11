@@ -4,7 +4,7 @@
  * Exports:
  *   nowStamp()                    — ISO-seconds timestamp, round-trips BSD/GNU date parser
  *   isSafeSessionId(id)           — validates ^[A-Za-z0-9_-]+$, length 1..200
- *   resolveSessionIdOrThrow()     — reads OMT_SESSION_ID env, throws if absent/unsafe
+ *   resolveSessionIdOrThrow()     — reads OMT_SESSION_ID env (fallback: CODEX_THREAD_ID), throws if absent/unsafe
  *   mergeWithHeartbeat(p, q)      — {...p, ...q, last_touched_at: nowStamp()}
  *   ACTIVE_IDLE_TTL_SECONDS       — 21600 (6 hours) — TS definition site (parity-tested vs bash)
  *   TERMINAL_TTL_SECONDS          — 1800 (30 minutes) — TS definition site
@@ -79,22 +79,32 @@ export function isSafeSessionId(id: string): boolean {
 }
 
 /**
- * Reads OMT_SESSION_ID from env. Throws if absent or unsafe.
+ * Reads OMT_SESSION_ID from env; falls back to CODEX_THREAD_ID when OMT_SESSION_ID
+ * is absent. OMT_SESSION_ID is authoritative: when present, it is validated and
+ * returned without ever falling through to CODEX_THREAD_ID, even if unsafe.
+ * Throws if neither is set, or if the value in use is unsafe.
  * Skill CLIs (TypeScript) call this at startup; they hard-fail on bad sid.
  */
 export function resolveSessionIdOrThrow(): string {
-	const sid = process.env["OMT_SESSION_ID"];
-	if (!sid) {
-		throw new Error(
-			"OMT_SESSION_ID is not set. The PreToolUse seed must have run before invoking this CLI.",
-		);
+	const omtSid = process.env["OMT_SESSION_ID"];
+	if (omtSid) {
+		if (!isSafeSessionId(omtSid)) {
+			throw new Error(
+				`OMT_SESSION_ID "${omtSid}" is not a safe session id (must match ^[A-Za-z0-9_-]+$, length 1..200).`,
+			);
+		}
+		return omtSid;
 	}
-	if (!isSafeSessionId(sid)) {
-		throw new Error(
-			`OMT_SESSION_ID "${sid}" is not a safe session id (must match ^[A-Za-z0-9_-]+$, length 1..200).`,
-		);
+	const codexSid = process.env["CODEX_THREAD_ID"];
+	if (codexSid) {
+		if (!isSafeSessionId(codexSid)) {
+			throw new Error(
+				`CODEX_THREAD_ID "${codexSid}" is not a safe session id (must match ^[A-Za-z0-9_-]+$, length 1..200).`,
+			);
+		}
+		return codexSid;
 	}
-	return sid;
+	throw new Error("No session id: neither OMT_SESSION_ID (Claude) nor CODEX_THREAD_ID (Codex) is set.");
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +367,7 @@ export interface AdoptionCandidate {
 export function listOthers(type: StateType): AdoptionCandidate[] {
 	const omtDir = getOmtDir();
 	const prefix = STATE_PREFIX[type];
-	const curSid = process.env["OMT_SESSION_ID"] ?? "";
+	const curSid = (process.env["OMT_SESSION_ID"] ?? process.env["CODEX_THREAD_ID"]) ?? "";
 	const now = Math.floor(Date.now() / 1000);
 
 	let entries: string[];
@@ -442,10 +452,7 @@ export function restampAfterAdopt(path: string): void {
  *   <ISO ts> <type> <srcSid> -> <curSid>
  */
 export function adopt(type: StateType, srcSid: string): void {
-	const curSid = process.env["OMT_SESSION_ID"];
-	if (!curSid) {
-		throw new Error("adopt: OMT_SESSION_ID is not set");
-	}
+	const curSid = resolveSessionIdOrThrow();
 
 	// r2: validate both sids
 	if (!isSafeSessionId(srcSid)) {

@@ -2,12 +2,15 @@
  * Deep-interview skill state CLI.
  *
  * State file path: ${OMT_DIR}/deep-interview-active-state-${sessionId}.json
- * Session ID: derived from OMT_SESSION_ID env via resolveSessionIdOrThrow().
+ * Session ID: resolved from OMT_SESSION_ID env, falling back to CODEX_THREAD_ID
+ * (Codex), via resolveSessionIdOrThrow(); hard-fails when neither is set or the
+ * value is unsafe.
  *
- * The PreToolUse seed (hooks/pre-tool-enforcer.sh) is the SOLE creator of this
- * file; it writes the skeleton {active, started_at, last_touched_at} on
- * Skill(deep-interview) invocation. Every writer here is STRICT NO-CREATE
- * (ADR-7): absent file → non-zero exit, no file created.
+ * The seed {active, started_at, last_touched_at} is created either by the
+ * Claude PreToolUse hook (hooks/pre-tool-enforcer.sh) on Skill(deep-interview)
+ * invocation, or self-healed by ensureSeed() (lib/state-core.ts) via an atomic
+ * O_EXCL create when a writer here runs without a seed already present.
+ * Adoption only renames an existing file — it never fabricates a seed.
  *
  * Subcommands:
  *   init   [--initial-idea <text>] [--interview-id <id>] [--type greenfield|brownfield]
