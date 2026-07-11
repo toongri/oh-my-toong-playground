@@ -6,9 +6,30 @@ model-map:
       model: gpt-5.6-sol
       effort: high
     sonnet:
-      model: gpt-5.6-sol
+      model: gpt-5.6-terra
       effort: medium
-  agents: {}
+  agents:
+    code-reviewer:
+      model: gpt-5.6-sol
+      effort: xhigh
+    daedalus:
+      model: gpt-5.6-sol
+      effort: xhigh
+    metis:
+      model: gpt-5.6-sol
+      effort: xhigh
+    momus:
+      model: gpt-5.6-sol
+      effort: xhigh
+    oracle:
+      model: gpt-5.6-sol
+      effort: xhigh
+    spec-reviewer:
+      model: gpt-5.6-sol
+      effort: xhigh
+    tech-claim-examiner:
+      model: gpt-5.6-sol
+      effort: xhigh
 hooks:
   SessionStart:
     - component: rules-injector
