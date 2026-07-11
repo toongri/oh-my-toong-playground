@@ -366,14 +366,16 @@ The orchestrator constructs this command string but does NOT execute it. The com
 
 1. Read dispatch template from `${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/chunk-reviewer-prompt.md`
 2. Interpolate placeholders with context from Steps 0-4:
-   - {WHAT_WAS_IMPLEMENTED} ← Step 0 description
-   - {DESCRIPTION} ← Step 0 or commit messages
-   - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
-   - {PROJECT_CONTEXT} ← Step 0 project context
+   - {WHAT_WAS_IMPLEMENTED} ← Step 0 description (interactive) / JSON field `what_was_implemented` (structured-output goal dispatch)
+   - {DESCRIPTION} ← Step 0 or commit messages (interactive) / JSON field `description` (goal dispatch)
+   - {REQUIREMENTS} ← Step 0 requirements or "N/A - code quality review only" (interactive) / JSON field `requirements` (goal dispatch)
+   - {PROJECT_CONTEXT} ← Step 0 project context (interactive) / JSON field `project_context` (goal dispatch); if it resolves to the literal `"(none provided)"` backfill marker, backfill from codebase signals gathered in Step 0 acquisition steps 1-3 (CLAUDE.md/README/ADR)
    - {FILE_LIST} ← Step 2 file list
    - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
    - {COMMIT_HISTORY} ← Step 2 commit history
    - {EVIDENCE_RESULTS} ← Step 3 evidence summary (Source: Step 3. Fallback: "Evidence verification unavailable — no build/test/lint commands discovered")
+
+   The four intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}) source differently depending on mode — the same `goal-codereview-{sid}.json` dispatch signal Step 0's Intent Block Gate uses to discriminate non-interactive dispatch. In structured-output mode (goal dispatch), the Step 0 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, follow the same INCONCLUSIVE artifact bridge Step 3 uses on build failure and stop before dispatching chunk-reviewer agents — do not guess field values from malformed input.
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
 
 **Dispatch rules:**
