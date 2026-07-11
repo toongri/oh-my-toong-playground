@@ -1052,14 +1052,26 @@ export function requestComplete(sessionId: string): boolean {
 /**
  * Formats all confirmed stories as a requirements block:
  * one line per story — `[id] story — AC: a1; a2 — verify: surface` — with a
- * trailing newline. Zero confirmed stories → empty string (empty block).
+ * trailing newline. Zero confirmed stories (all retired, or none defined yet)
+ * fall back to `[outcome] <outcome> — AC: <criterion> — verify: <criterion>`,
+ * where criterion is the top-level verification_surface slot when non-empty,
+ * else the outcome itself — so the block never goes structurally empty while
+ * an outcome exists (an empty block reads as "no AC" to the code-review
+ * coverage finder, which then skips requirement-gap detection entirely).
+ * An empty outcome has nothing to fall back to, so it still returns "".
  * Feeds the code-review lane's `{REQUIREMENTS}` input (Hop B).
  */
 export function serializeRequirements(sessionId: string): string {
 	const state = readGoalState(sessionId);
 	const stories: Story[] = state?.stories ?? [];
 	const confirmed = stories.filter((s) => s.status === "confirmed");
-	if (confirmed.length === 0) return "";
+	if (confirmed.length === 0) {
+		const outcome = state?.outcome ?? "";
+		if (outcome.trim() === "") return "";
+		const surface = state?.verification_surface ?? "";
+		const criterion = surface.trim() !== "" ? surface : outcome;
+		return `[outcome] ${outcome} — AC: ${criterion} — verify: ${criterion}\n`;
+	}
 	const lines = confirmed.map(
 		(s) =>
 			`[${s.id}] ${s.story} — AC: ${s.acceptance_criteria.join("; ")} — verify: ${s.verification_surface}`,

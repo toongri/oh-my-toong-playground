@@ -2278,8 +2278,10 @@ describe("serialize-requirements subcommand", () => {
 		);
 	});
 
-	// Zero-confirmed / all-retired → empty string (empty block).
-	test("empty output when all stories are retired", () => {
+	// Zero-confirmed / all-retired, but outcome is set → AC-shaped fallback, not a
+	// structurally empty block (an empty block reads as "no AC" to the code-review
+	// coverage finder, which then skips requirement-gap detection entirely).
+	test("AC-shaped fallback when all stories are retired", () => {
 		setGoalState(S, { phase: "planning", outcome: "ship it" });
 		const s1: Story = {
 			id: "S1",
@@ -2291,10 +2293,20 @@ describe("serialize-requirements subcommand", () => {
 		setStories(S, [s1]);
 		retireStory(S, "S1", "e", "r");
 		const out = serializeRequirements(S);
-		expect(out).toBe("");
+		expect(out).toBe("[outcome] ship it — AC: ship it — verify: ship it\n");
 	});
 
-	// Zero stories → empty string.
+	// Zero stories at all, outcome set → same AC-shaped fallback as the all-retired case.
+	test("AC-shaped fallback when no stories exist but outcome is set", () => {
+		setGoalState(S, { phase: "planning", outcome: "reduce dispense latency" });
+		const out = serializeRequirements(S);
+		expect(out).toBe(
+			"[outcome] reduce dispense latency — AC: reduce dispense latency — verify: reduce dispense latency\n",
+		);
+	});
+
+	// Zero stories AND empty outcome (pristine, nothing seeded yet) → empty string.
+	// An empty outcome has nothing to fall back to, so the fallback stays blank.
 	test("empty output when no stories exist", () => {
 		const out = serializeRequirements(S);
 		expect(out).toBe("");
