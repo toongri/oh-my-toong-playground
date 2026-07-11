@@ -29,7 +29,6 @@ import {
 	addStory,
 	retireStory,
 	serializeRequirements,
-	serializeReviewContext,
 	BACKFILL_MARKER,
 	readCodeReviewArtifact,
 	type GoalPhase,
