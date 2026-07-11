@@ -91,23 +91,42 @@ is exactly the failure this system exists to prevent.
 To make the trigger fire reliably, make the entry point rich:
 
 - State the doc's intent/scope in one clause.
-- Enumerate every section the doc actually contains — don't summarize down
-  to one sentence, list the topics.
-- Seed dense symptom, keyword, and trigger vocabulary: the raw way a
-  situation shows up in a request or an error, not just the clean topic
-  name. "8 props and messy," "infinite re-render," "3-level prop drilling"
-  recall better than "prop management" or "render optimization" alone.
-  Maximize recall so no relevant situation slips past the index.
+- Enumerate every concern the doc addresses — don't summarize down to one
+  sentence, list every concern.
 
-**No answer, no resolution — only the question and its symptoms.** State
-what decision or topic the doc covers and the symptoms that signal it's
-relevant, never how it should be resolved. "Covers when to colocate vs.
-lift state, triggered by prop drilling past 2 levels" is a WHAT;
-"always lift state above 2 levels of drilling" is an answer that leaked
-out of the doc and must not appear in the index. When two similarly-named
-docs need disambiguating, do it by scope or domain ("frontend state
-placement" vs. "backend cache state") — never by giving away the answer.
-The answer must be read in the doc, not inferred from the index line.
+**Recall comes from breadth of concern coverage, not from symptom
+vocabulary piled onto each concern.** Naming every concern the doc
+addresses is what makes the agent's task match against the index; loading
+one concern with multiple symptom phrases doesn't extend that coverage —
+it just bloats the entry.
+
+Each concern is written as a **name** plus, at most, one **minimal
+identifying hook** — a concrete symbol or API token that pins down which
+concern this is, used only when the name alone would be ambiguous. Never
+write a symptom sentence or a symptom cluster in its place. Concrete
+symbols and API tokens stay in — they're cheap, precise hooks. Prose
+descriptors ("overused," "missing," "collapses," "confused") don't: that's
+a diagnosis, and diagnosis is the doc's job, not the index's.
+
+- Bad (a decision sentence standing in for a concern):
+  `lookup method: get vs find, throw vs null on miss`
+- Good (concern name + minimal hook): `lookup naming (get/find)`
+- Bad (the answer leaking into the hook): `enforce withPermission()`
+- Good (concern name, no resolution): `permission-enforcement convention`
+
+This hook format invites a redundancy — avoid it: a header or
+parenthetical that pre-summarizes the very concerns the entry then lists
+below it. Drop the summary; the concern list is already the summary.
+
+**No answer, no resolution — only the concern and its minimal hook.**
+State what decision or topic the doc covers, never how it should be
+resolved. "Covers when to colocate vs. lift state, triggered by prop
+drilling past 2 levels" is a WHAT; "always lift state above 2 levels of
+drilling" is an answer that leaked out of the doc and must not appear in
+the index. When two similarly-named docs need disambiguating, do it by
+scope or domain ("frontend state placement" vs. "backend cache state") —
+never by giving away the answer. The answer must be read in the doc, not
+inferred from the index line.
 
 Keep the heavy substance — examples, rationale, before/after diffs, and
 the actual resolution — in the doc. The index's only job is to get the doc
@@ -115,27 +134,34 @@ opened when it's relevant.
 
 ## 4. Format
 
-A list entry per doc, at whichever density the doc's topic count demands —
-both forms below are still a list, never a table:
+A list entry per doc — never a table. Because each concern carries at most
+a minimal hook, not a sentence (Section 3), a single inline line per doc
+stays readable even when a doc covers many concerns, so **one line per doc
+is the default**:
 
-- **Few short topics** — one inline entry, `·`-separated:
-  ```
-  - `path/to/doc.md` — **domain**: symptom/topic(essence) · symptom/topic(essence) · ...
-  ```
-- **Many topics, each needing its own symptom vocabulary** — break into
-  nested sub-bullets, one topic per line, so each gets room for its raw
-  symptom/keyword phrasing:
-  ```
-  - `path/to/doc.md` — **domain**
-    - symptom/topic(essence): keyword, keyword, raw phrasing
-    - symptom/topic(essence): keyword, keyword, raw phrasing
-  ```
+```
+- `path/to/doc.md` — **domain**: concern(hook), concern(hook), concern(hook), ...
+```
 
-A list is the right shape here — inline or expanded vertically — because
-there is one real dimension (doc → its WHAT contents), not two. Reach for a
-table only when there are genuinely two aligned dimensions to compare across
-rows (e.g. doc × maturity level) — a table forced onto a single dimension
-just adds column noise without adding information.
+Nested sub-bullets are now the rare exception, not the go-to — reach for
+them only when a single doc's concern set is genuinely too large to scan
+on one line:
+
+```
+- `path/to/doc.md` — **domain**
+  - concern(hook)
+  - concern(hook)
+```
+
+Full sentences were what used to force nesting (each symptom needed its own
+line to breathe); minimal hooks remove that pressure, which is why one line
+is now the default and nesting the exception.
+
+A list is the right shape here — inline or nested — because there is one
+real dimension (doc → its WHAT contents), not two. Reach for a table only
+when there are genuinely two aligned dimensions to compare across rows
+(e.g. doc × maturity level) — a table forced onto a single dimension just
+adds column noise without adding information.
 
 ## 5. Discipline
 
