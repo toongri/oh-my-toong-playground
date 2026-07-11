@@ -29,6 +29,7 @@ export interface EngineDeps {
 		disabledSources?: ReadonlySet<string>;
 		skipUserHome?: boolean;
 		cache?: RuleDiscoveryCache;
+		excludeGlobs?: string[];
 	}) => RuleCandidate[];
 	readFile: (path: string) => string | null;
 	findProjectRoot: (startPath: string) => string | null;

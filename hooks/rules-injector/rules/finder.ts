@@ -1,6 +1,8 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
+import picomatch from "picomatch";
+
 import {
 	BUNDLED_RULE_SUBDIR,
 	GLOBAL_DISTANCE,
@@ -44,6 +46,8 @@ export interface FinderOptions {
 	pluginRoot?: string;
 	platform?: NodeJS.Platform;
 	cache?: RuleDiscoveryCache;
+	/** Glob patterns; a candidate whose `path` or `realPath` matches any is dropped. */
+	excludeGlobs?: string[];
 }
 
 interface PluginBundledFinderOptions {
@@ -85,7 +89,21 @@ export function findRuleCandidates(options: FinderOptions): RuleCandidate[] {
 		candidates.push(...findUserHomeCandidates(homeDirectory, disabledSources, options.cache));
 	}
 
-	return candidates;
+	return filterExcludedCandidates(candidates, options.excludeGlobs);
+}
+
+function filterExcludedCandidates(
+	candidates: RuleCandidate[],
+	excludeGlobs: string[] | undefined,
+): RuleCandidate[] {
+	if (excludeGlobs === undefined || excludeGlobs.length === 0) {
+		return candidates;
+	}
+
+	const matchers = excludeGlobs.map((glob) => picomatch(glob, { bash: true, dot: true }));
+	return candidates.filter(
+		(candidate) => !matchers.some((isMatch) => isMatch(candidate.path) || isMatch(candidate.realPath)),
+	);
 }
 
 export function findPluginBundledCandidates(

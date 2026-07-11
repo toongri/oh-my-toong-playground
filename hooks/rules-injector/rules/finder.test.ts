@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -101,5 +101,79 @@ describe("findRuleCandidates — static mode distance gradient (regression: #sta
 
 		// Critical: distances must differ so dedup logic can distinguish them
 		expect(nested.distance).not.toBe(root.distance);
+	});
+});
+
+describe("findRuleCandidates — excludeGlobs filter", () => {
+	let tmp: string;
+
+	beforeEach(() => {
+		tmp = mkdtempSync(join(tmpdir(), "rules-finder-exclude-test-"));
+	});
+
+	afterEach(() => {
+		rmSync(tmp, { recursive: true, force: true });
+	});
+
+	test("excludes on absolute path not relativePath", () => {
+		const projectRoot = join(tmp, "repo");
+		const rulesDir = join(projectRoot, ".claude", "rules");
+		mkdirSync(rulesDir, { recursive: true });
+		writeFileSync(join(rulesDir, "ai-collaboration.md"), "# rule");
+
+		// An absolute-anchored glob matches the absolute path and drops the candidate.
+		const excluded = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			skipUserHome: true,
+			pluginRoot: tmp,
+			excludeGlobs: ["/**/ai-collaboration.md"],
+		});
+		expect(excluded.find((c) => c.source === ".claude/rules")).toBeUndefined();
+
+		// A non-matching glob leaves the candidate present.
+		const present = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			skipUserHome: true,
+			pluginRoot: tmp,
+			excludeGlobs: ["nonexistent/**"],
+		});
+		expect(present.find((c) => c.source === ".claude/rules")).toBeDefined();
+	});
+
+	test("exclude matches path OR realPath", () => {
+		const projectRoot = join(tmp, "repo");
+		mkdirSync(join(projectRoot, ".claude"), { recursive: true });
+		const realRulesDir = join(tmp, "real-rules");
+		mkdirSync(realRulesDir, { recursive: true });
+		writeFileSync(join(realRulesDir, "symlinked.md"), "# rule");
+		// Symlink the rule dir so a candidate's `path` (via the symlink) differs
+		// from its `realPath` (the resolved canonical location).
+		symlinkSync(realRulesDir, join(projectRoot, ".claude", "rules"), "dir");
+
+		// Glob matches only realPath (the symlink target, outside the project tree).
+		const droppedByRealPath = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			skipUserHome: true,
+			pluginRoot: tmp,
+			excludeGlobs: ["/**/real-rules/**"],
+		});
+		expect(droppedByRealPath.find((c) => c.source === ".claude/rules")).toBeUndefined();
+
+		// Glob matches only path (the symlink itself, under the project tree).
+		const droppedByPath = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			skipUserHome: true,
+			pluginRoot: tmp,
+			excludeGlobs: ["/**/.claude/rules/**"],
+		});
+		expect(droppedByPath.find((c) => c.source === ".claude/rules")).toBeUndefined();
 	});
 });

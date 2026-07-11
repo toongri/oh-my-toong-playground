@@ -23,6 +23,7 @@ function autoConfig(): PiRulesConfig {
 		enabledSources: "auto",
 		sessionStateTtlDays: 7,
 		errorLogMaxBytes: 5_242_880,
+		excludeGlobs: [],
 	};
 }
 
