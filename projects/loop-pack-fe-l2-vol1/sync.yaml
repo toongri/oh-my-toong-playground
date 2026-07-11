@@ -9,3 +9,10 @@ rules:
     - typescript
     - hook-design
     - feature-boundary
+
+# rule들이 "docs/react/…를 읽어라"로 가리키는 근거 문서. 디렉토리 형태 →
+# docs/react/ 전체가 docs/react/로, testing/ 전체가 docs/testing/로 착지한다.
+docs:
+  items:
+    - react
+    - testing
