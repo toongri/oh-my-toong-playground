@@ -1079,6 +1079,58 @@ export function serializeRequirements(sessionId: string): string {
 	return lines.join("\n") + "\n";
 }
 
+/**
+ * Placeholder for a Shared Contract field whose sources are all blank. A single
+ * literal shared by both writer (this file) and reader (the code-review lane's
+ * finder step, T6) — an empty JSON string field would read to the finder as
+ * "nothing here to check", silently skipping that input entirely.
+ */
+export const BACKFILL_MARKER = "(none provided)";
+
+/**
+ * Builds the Shared Contract shape — the 4-field JSON the code-review lane's
+ * finder step consumes (T6) — from this goal's per-field sources. Mirrors
+ * serializeRequirements' never-structurally-empty invariant per field: each
+ * field falls back to BACKFILL_MARKER only when every one of its sources is
+ * blank; a mixed-empty composite (`description`, `project_context`) keeps
+ * whatever non-blank source it has instead of collapsing to the marker.
+ *
+ * Throws when no active goal state exists for `sessionId` — the CLI dispatch
+ * lets this propagate to a non-zero exit, the same failure protocol every
+ * other subcommand in `main()` follows.
+ */
+export function serializeReviewContext(sessionId: string): {
+	what_was_implemented: string;
+	description: string;
+	requirements: string;
+	project_context: string;
+} {
+	const state = readGoalState(sessionId);
+	if (state === null) {
+		throw new Error(`serialize-review-context: no active goal state for session "${sessionId}"`);
+	}
+
+	const what_was_implemented = state.outcome.trim() !== "" ? state.outcome : BACKFILL_MARKER;
+
+	const descriptionSources = [
+		state.resume_summary,
+		state.plan_path.trim() !== "" ? `plan: ${state.plan_path}` : "",
+	].filter((s) => s.trim() !== "");
+	const description =
+		descriptionSources.length > 0 ? descriptionSources.join("\n\n") : BACKFILL_MARKER;
+
+	const requirementsRaw = serializeRequirements(sessionId);
+	const requirements = requirementsRaw !== "" ? requirementsRaw : BACKFILL_MARKER;
+
+	const projectContextSources = [state.constraints, state.boundaries].filter(
+		(s) => s.trim() !== "",
+	);
+	const project_context =
+		projectContextSources.length > 0 ? projectContextSources.join("\n\n") : BACKFILL_MARKER;
+
+	return { what_was_implemented, description, requirements, project_context };
+}
+
 // ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
@@ -1354,9 +1406,11 @@ function main(): void {
 			);
 		} else if (subcommand === "serialize-requirements") {
 			process.stdout.write(serializeRequirements(sessionId));
+		} else if (subcommand === "serialize-review-context") {
+			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story|serialize-requirements> [options]\n",
+				"Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story|serialize-requirements|serialize-review-context> [options]\n",
 			);
 			process.exit(1);
 		}
