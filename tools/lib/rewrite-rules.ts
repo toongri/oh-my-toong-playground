@@ -109,6 +109,15 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		// shape — call shape differs.
 		{ id: "13", detect: /\bMultiEdit\b/g, replace: "apply_patch", lossy: true },
 
+		// Real target tool: Codex's `request_user_input` (rust-v0.144.1,
+		// codex-rs/core/src/tools/handlers/request_user_input_spec.rs) is the
+		// genuine AskUserQuestion analog — questions[] of 1-3, each
+		// {id, header, question, options[]} with 2-3 {label, description}
+		// options, recommended-first, auto "Other", optional autoResolutionMs.
+		// Lossy because it's mode-gated (full support in Plan/collaboration
+		// modes, feature-flagged in Default mode) and because the call shape
+		// itself isn't asserted identical to AskUserQuestion's.
+		//
 		// 14p MUST precede 14 (longest match first): `\bAskUserQuestion\b` cannot
 		// match the plural `AskUserQuestions` — the `\b` fails right before the
 		// trailing `s` — so without this row running first, the plural survives
@@ -118,13 +127,13 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		{
 			id: "14p",
 			detect: /\bAskUserQuestions\b/g,
-			replace: "plain-text user questions",
+			replace: "request_user_input calls",
 			lossy: true,
 		},
 		{
 			id: "14",
 			detect: /\bAskUserQuestion\b/g,
-			replace: "a plain-text user question",
+			replace: "request_user_input",
 			lossy: true,
 		},
 

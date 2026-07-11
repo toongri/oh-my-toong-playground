@@ -261,16 +261,16 @@ describe("codex 규칙 — Hole B: `~/.claude]`(트레일링 슬래시 없음) -
 	});
 });
 
-describe("codex 규칙 — Hole C: `AskUserQuestions`(복수) -> `plain-text user questions`, rule 14보다 먼저", () => {
-	it('"AskUserQuestion" (단수) -> "a plain-text user question" (기존 규칙 14, 회귀)', () => {
+describe("codex 규칙 — Hole C: `AskUserQuestions`(복수) -> `request_user_input calls`, rule 14보다 먼저", () => {
+	it('"AskUserQuestion" (단수) -> "request_user_input" (기존 규칙 14, 회귀)', () => {
 		expect(applyRewriteRules("AskUserQuestion", PLATFORM_REWRITE_RULES.codex)).toBe(
-			"a plain-text user question",
+			"request_user_input",
 		);
 	});
 
-	it('"AskUserQuestions" (복수) -> "plain-text user questions"', () => {
+	it('"AskUserQuestions" (복수) -> "request_user_input calls"', () => {
 		expect(applyRewriteRules("AskUserQuestions", PLATFORM_REWRITE_RULES.codex)).toBe(
-			"plain-text user questions",
+			"request_user_input calls",
 		);
 	});
 
@@ -279,15 +279,33 @@ describe("codex 규칙 — Hole C: `AskUserQuestions`(복수) -> `plain-text use
 			"AskUserQuestion and AskUserQuestions",
 			PLATFORM_REWRITE_RULES.codex,
 		);
-		expect(result).toBe("a plain-text user question and plain-text user questions");
+		expect(result).toBe("request_user_input and request_user_input calls");
 	});
 
 	it("실제 캐리어 라인(collect-jd/tests/pressure-scenarios.md:688)이 정정된다", () => {
 		const line = '"asking too many AskUserQuestions will tire the user" user-consideration rationalization';
 		const result = applyRewriteRules(line, PLATFORM_REWRITE_RULES.codex);
 		expect(result).toBe(
-			'"asking too many plain-text user questions will tire the user" user-consideration rationalization',
+			'"asking too many request_user_input calls will tire the user" user-consideration rationalization',
 		);
+	});
+
+	it('"asking a single AskUserQuestion" -> "asking a single request_user_input" (이중관사 없음)', () => {
+		expect(
+			applyRewriteRules("asking a single AskUserQuestion", PLATFORM_REWRITE_RULES.codex),
+		).toBe("asking a single request_user_input");
+	});
+
+	it('백틱 캐리어 "Use `AskUserQuestion`" -> "Use `request_user_input`"', () => {
+		expect(applyRewriteRules("Use `AskUserQuestion`", PLATFORM_REWRITE_RULES.codex)).toBe(
+			"Use `request_user_input`",
+		);
+	});
+
+	it('"via a single AskUserQuestion" -> "via a single request_user_input"', () => {
+		expect(
+			applyRewriteRules("via a single AskUserQuestion", PLATFORM_REWRITE_RULES.codex),
+		).toBe("via a single request_user_input");
 	});
 });
 
