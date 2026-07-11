@@ -9,9 +9,9 @@ const SKILL_MD = join(REPO_ROOT, "skills", "code-review", "SKILL.md");
 // Regression guard: main-session interactive paths preserved when the
 // goal-codereview-{sid}.json signal is absent.
 //
-// T4 (Step 0 non-interactive discriminator, commit 027fd492) and T5 (Step 3
-// INCONCLUSIVE bridge, commit c2f10630) added signal-gated branches alongside
-// the pre-existing main-session interactive paths in SKILL.md. This test pins
+// The Step 0 non-interactive discriminator and the Step 3 INCONCLUSIVE bridge
+// added signal-gated branches alongside the pre-existing main-session
+// interactive paths in SKILL.md. This test pins
 // that those additions stayed additive: the interactive rows/branches must
 // still exist, and the new branches must remain conditional on the goal
 // signal rather than replacing or unconditionally triggering over them.
