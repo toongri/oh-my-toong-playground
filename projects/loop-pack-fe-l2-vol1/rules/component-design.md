@@ -4,26 +4,12 @@ paths: ["**/*.tsx", "**/*.jsx"]
 
 # 컴포넌트 설계 판단 규칙
 
-> 설계 전에 **상황에 해당하는 근거 문서 하나만 읽고** 적용하라(판단 기준 표·Before/After 카탈로그). 셋을 다 읽지 않는다.
->
-> | 지금 하려는 판단 | 읽을 문서 |
-> | --- | --- |
-> | 이 컴포넌트를 쪼갤까 (경계·God Component·성급한 추상화) | `docs/react/component-boundary.md` |
-> | 공통 컴포넌트 인터페이스를 어떻게 (Props·값의 주인·합성) | `docs/react/props-contract.md` |
-> | Drilling을 유지할까 Context로 넘길까 | `docs/react/context-and-state.md` |
+> 컴포넌트 경계·Props 계약·Context 전환을 판단할 때, 아래 표에서 상황에 맞는 문서 하나를 읽고 적용하라(판단 기준·Before/After 카탈로그) — 셋을 다 읽지 않는다.
 
-핵심:
+| 언제 로딩하나 (WHEN) | 문서 | 담긴 내용 (WHAT) |
+| --- | --- | --- |
+| 이 컴포넌트를 쪼갤지 판단할 때 (경계·God Component·성급한 추상화) | `docs/react/component-boundary.md` | 변경 이유로 경계 긋기 · 구현 vs 조합 분리 · 무관한 상태는 추출 신호 · 중복 > 잘못된 추상화 |
+| 공통 컴포넌트의 인터페이스를 설계할 때 (Props 모양·값의 주인·합성 방식) | `docs/react/props-contract.md` | Props는 적을수록 좋다 · Props 네이밍(boolean 긍정형 + `is` 접두) · Controlled vs Uncontrolled · 공통 컴포넌트 설계(도입 시점 YAGNI · 3원칙 · className 위임 · children vs slot) · TypeScript 고급 Props(discriminated union · `ComponentPropsWithoutRef`) |
+| Props Drilling을 유지할지 Context로 넘길지 판단할 때 | `docs/react/context-and-state.md` | Props Drilling vs Context 전환 판단 |
 
-- **경계 = 변경 이유**: 변경 이유가 다르면 자른다. 성급한 공통화보단 중복이 낫다(rule of three) — 판단 기준·Before/After는 `component-boundary.md`.
-- **구현 vs 조합 분리**: 한 컴포넌트는 구현이거나 조합이거나 — 같은 추상화 고도. 조합하다 내부를 인라인 구현하지 마라(조합=목차, 구현=본문).
-- **무관한 상태 = 추출 신호**: 서로 무관한 state가 한 컴포넌트에 쌓이면 그 state를 쓰는 UI와 함께 떼어낸다. 상태를 '어디 둘지'의 판단은 react.md.
-- **Props 수**: 6개 이상이면 재설계 신호 — 표시 토글·boolean을 늘리지 말고 `children` 합성이나 컴포넌트 분리로. 4~5개는 관련 Props를 객체로 묶을지 검토. 진짜 문제는 개수 자체가 아니라 "서로 무관한 제어 손잡이가 흩어져 유효 조합을 못 읽는" 상태다.
-- **boolean Props**: 긍정형 + `is` 접두로 통일(`isOpen`·`disabled`). 부정형(`notDisabled` → 이중 부정)·모호한 이름(`show`) 금지.
-- **값의 주인 먼저**: 부모가 쥐면 Controlled(`value`+`onChange`), 자신이 쥐면 Uncontrolled(`defaultValue`+`ref`). 이 선택이 Props 모양을 결정한다. 공통 컴포넌트는 `value !== undefined`로 분기해 둘 다 지원.
-- **Drilling vs Context**: 2단계 전달은 유지(흐름 추적 가능). 3단계+인데 중간이 그 Props를 안 쓰거나, 여러 트리가 같은 상태를 공유하면 Context. Context는 서브트리 단위 한정 — 전역 스토어 대용이 아니다.
-- **Context 분리**: 자주 바뀌는 값과 드물게 바뀌는 값을 한 Context에 넣지 않는다(구독 하위 전체가 리렌더). 변경 빈도로 쪼갠다.
-- **공통 컴포넌트**: ①비즈니스 로직 미포함(판단은 사용처에서) ②도메인 용어 미사용(`Button`✅ `ProductButton`❌) ③`variant`/`size`로 외양 제어 + JSDoc 주석. 도입은 같은 UI가 3곳 이상 반복될 때 — "나중에 쓸 듯"은 만들 이유가 아니다(YAGNI). 스타일 미세조정 요청이 반복되면 prop 늘리지 말고 `className` 위임 — `props-contract.md` "스타일 확장은 prop 말고 className 위임".
-- **children vs slot**: 채울 구멍이 하나면 `children`, 이름 붙은 자리가 여럿+순서 고정이면 slot(`title`/`footer` element props) — `props-contract.md` "children vs slot".
-- **조건부 Props**: 조합에 규칙이 있으면 전부 optional 대신 discriminated union(`{ variant: 'text'; label } | { variant: 'icon'; icon }`). HTML 속성을 그대로 넘길 땐 손으로 나열 말고 `ComponentPropsWithoutRef<'button'>` 확장.
-
-네이밍(`onX`/`handleX`)·props→state 미러링 금지·추출 기준은 `react.md`, discriminated union 기본기는 `typescript.md`에 있다 — 여기서 중복하지 않는다.
+**관련 규칙**: 이벤트 prop 네이밍(`onX`/`handleX`)·props→state 미러링 금지·상태 추출 기준은 `react.md` rule에, discriminated union 기본기는 `typescript.md` rule에 있다.
