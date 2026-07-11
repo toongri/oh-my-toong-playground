@@ -1,6 +1,8 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
+import picomatch from "picomatch";
+
 import {
 	BUNDLED_RULE_SUBDIR,
 	GLOBAL_DISTANCE,
@@ -14,6 +16,7 @@ import {
 	scanRuleFilesCached,
 	singleFileInfoCached,
 } from "./finder-cache.js";
+import { toPosixPath } from "./engine-paths.js";
 import { getWalkDirectories, toRelativePath } from "./finder-paths.js";
 import {
 	toProjectRuleSource,
@@ -44,6 +47,8 @@ export interface FinderOptions {
 	pluginRoot?: string;
 	platform?: NodeJS.Platform;
 	cache?: RuleDiscoveryCache;
+	/** Glob patterns; a candidate whose `path` or `realPath` matches any is dropped. */
+	excludeGlobs?: string[];
 }
 
 interface PluginBundledFinderOptions {
@@ -85,7 +90,27 @@ export function findRuleCandidates(options: FinderOptions): RuleCandidate[] {
 		candidates.push(...findUserHomeCandidates(homeDirectory, disabledSources, options.cache));
 	}
 
-	return candidates;
+	return filterExcludedCandidates(candidates, options.excludeGlobs);
+}
+
+export function filterExcludedCandidates(
+	candidates: RuleCandidate[],
+	excludeGlobs: string[] | undefined,
+): RuleCandidate[] {
+	if (excludeGlobs === undefined || excludeGlobs.length === 0) {
+		return candidates;
+	}
+
+	// Normalize globs and candidate paths to POSIX before matching: on win32 the
+	// paths carry backslashes (node:path / realpathSync.native) but globs stay
+	// slash-based, so raw picomatch would never match. Mirrors matcher.ts.
+	const matchers = excludeGlobs.map((glob) => picomatch(toPosixPath(glob), { bash: true, dot: true }));
+	return candidates.filter(
+		(candidate) =>
+			!matchers.some(
+				(isMatch) => isMatch(toPosixPath(candidate.path)) || isMatch(toPosixPath(candidate.realPath)),
+			),
+	);
 }
 
 export function findPluginBundledCandidates(
