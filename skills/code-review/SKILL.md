@@ -142,9 +142,12 @@ Before exiting Step 0, the state must be one of:
 |-------|--------|
 | **Intent confirmed** — author's goal, approach, and constraints are understood from artifacts and/or interview | Proceed to Step 1 |
 | **User explicit deferral** — user says "skip", "그냥 리뷰해줘", "없어", "code quality only", or unambiguous equivalent | Set {REQUIREMENTS} = "N/A — code-quality-only review (user deferred)" and proceed |
+| **Non-interactive dispatch (goal)** — the dispatch prompt itself carries a `goal-codereview-{sid}.json` artifact path alongside a 4-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`) | Treat as **Intent confirmed (non-interactive, no user interview)** and proceed to Step 1. Acquisition steps 1-3 (PR/branch artifacts, linked references, codebase signals) still run — they backfill any slot whose value is the `(none provided)` marker. Only step 4 (user interview) is replaced by the payload. |
 | **Neither** — artifacts thin and user not yet asked, OR user gave vague answers without explicit deferral | **BLOCK**. Do not proceed. Continue interview until one of the two states above is reached. |
 
 There is no "I tried hard enough, just review" path. The block IS the safety mechanism.
+
+A fresh code-reviewer agent has no ambient session to check for an active artifact path — the non-interactive discriminator above is prompt-borne: whether the dispatch prompt includes the path, not whether a session-scoped artifact happens to exist. This is the same `goal-codereview-{sid}.json` signal Step 5 later reads as `runId` (Find Phase Sink, below); Step 0 is where it first enters the pipeline. When the signal is absent, the main-session interactive gate above (**Neither** → BLOCK) is unchanged.
 
 ### Vague answer refinement
 
