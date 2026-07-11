@@ -1,6 +1,6 @@
 # 테스트 컨벤션 (Vitest + React Testing Library)
 
-> Vitest + React Testing Library + (네트워크) MSW가 설치되어 있다. MSW 핸들러는 `src/mocks/handlers.ts`에 살고, 테스트 파일은 `no-cross-feature` 의존성 규칙 때문에 `src/mocks/server.ts`를 import할 수 없어 `server.use(...)`로 테스트별 핸들러를 덮어쓰지 못한다 — 대신 핸들러가 요청 쿼리를 읽어 분기한다.
+> 테스트를 작성할 때는 Vitest + React Testing Library + (네트워크) MSW를 기준으로 상황에 맞게 사용한다. MSW를 쓸 때 핸들러는 `src/mocks/handlers.ts`에 두고, 테스트 파일은 `no-cross-feature` 의존성 규칙상 `src/mocks/server.ts`를 import할 수 없으므로 `server.use(...)`로 테스트별 핸들러를 덮어쓰는 대신 핸들러가 요청 쿼리를 읽어 분기한다.
 
 ## 원칙
 
@@ -18,12 +18,16 @@
 - `getByTestId`는 최후수단: 사용자에게 안 보이는 속성이라 접근성과 무관하고 리팩터에 취약하다.
 - `container.querySelector('.class')` 금지: CSS 클래스는 구현 세부다.
 - 단언은 jest-dom matcher로: `expect(...).toBeDisabled()` (`button.disabled` 직접 비교 X).
+- role 쿼리와 짝을 이루는 jest-dom 접근성 matcher: `toHaveAccessibleName` / `toHaveAccessibleDescription` / `toHaveErrorMessage`(https://github.com/testing-library/jest-dom).
+- 위 우선순위 체인은 Testing Library 공식 가이드의 3단계 구조를 압축한 것이다: `getByDisplayValue`까지 포함하는 1단계(누구나 접근 가능한 쿼리) → `getByAltText`/`getByTitle`의 2단계(Semantic 쿼리) → `getByTestId`의 3단계(Test ID) 순으로 내려간다(https://testing-library.com/docs/queries/about/#priority).
 
 ## 상호작용 · 비동기
 
 - `userEvent.setup()` + `await user.click(...)`. `fireEvent`는 예외적 단일 이벤트에만.
 - 즉시 존재: `getBy*` / 부재 단언: `queryBy*` / 비동기 등장: `await findBy*` / 복잡 조건: `waitFor`.
 - `waitFor` 콜백엔 assertion 하나만. side-effect(이벤트 발생) 금지 — 콜백이 재실행된다.
+- user-event v14(2022-04)부터 API가 전부 비동기로 바뀌었다. `userEvent.setup()` + `await`가 필수이고(v13까지는 동기였다), await 없이 호출하는 예제를 보면 outdated 튜토리얼로 의심한다. fake timer를 쓸 때는 `userEvent.setup({ advanceTimers })` 옵션으로 내부 delay를 진행시킨다(https://testing-library.com/docs/user-event/intro/).
+- `waitFor(() => getBy...)`를 손수 쓰는 대신 `findBy*`를 쓴다 — `findBy*`는 내부적으로 `getBy` + `waitFor`이고 기본 타임아웃 1000ms, 폴링 간격 50ms다(https://testing-library.com/docs/dom-testing-library/api-async/#findby-queries).
 
 ## 모킹
 
