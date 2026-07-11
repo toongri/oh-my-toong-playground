@@ -550,8 +550,15 @@ export function setStories(sessionId: string, stories: Story[]): void {
 		}
 		seenIds.add(s.id);
 	}
-	// Normalize: force every status to unconfirmed (full-replace semantics, D-6)
-	const normalized: Story[] = stories.map((s): Story => ({ ...s, status: "unconfirmed" }));
+	// Normalize: force every status to unconfirmed (full-replace semantics, D-6).
+	// Strip steering provenance (ADR D-11): steering_evidence/steering_rationale are written
+	// ONLY by the three steering mutations. A re-plan that re-ingests a set copied from `get`
+	// carries these keys on the spread; drop them so a planning-created story can never
+	// present fabricated mid-flight evidence.
+	const normalized: Story[] = stories.map((s): Story => {
+		const { steering_evidence: _se, steering_rationale: _sr, ...rest } = s;
+		return { ...rest, status: "unconfirmed" };
+	});
 	mergeWrite(sessionId, { stories: normalized });
 }
 

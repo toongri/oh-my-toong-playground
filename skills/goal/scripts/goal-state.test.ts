@@ -1070,6 +1070,29 @@ describe("story layer: set-stories", () => {
 		expect(state.stories![1].status).toBe("unconfirmed");
 	});
 
+	// Provenance (ADR D-11): steering_evidence/steering_rationale are written ONLY by the
+	// three steering mutations (add/revise/retire-story). setStories spreads the caller JSON,
+	// so a story carrying these keys — copied from a `get` of a previously-steered set on a
+	// re-plan — must have them stripped, else a planning-ingested story presents fabricated
+	// mid-flight evidence it never earned.
+	test("set-stories strips steering provenance from planning-ingested stories", () => {
+		seedWithOutcome(S);
+		setStories(S, [
+			{
+				id: "S1",
+				story: "ship feature X",
+				acceptance_criteria: ["all tests green"],
+				verification_surface: "CI pipeline passes",
+				status: "unconfirmed",
+				steering_evidence: "fabricated observation",
+				steering_rationale: "fabricated justification",
+			},
+		]);
+		const ingested = readGoalGet(S)!.stories!.find((s) => s.id === "S1")!;
+		expect(ingested.steering_evidence).toBeUndefined();
+		expect(ingested.steering_rationale).toBeUndefined();
+	});
+
 	// AC-1b-i: refuses empty story set
 	test("ingestion rejects zero-stories", () => {
 		seedWithOutcome(S);
