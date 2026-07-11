@@ -29,6 +29,8 @@ import {
 	addStory,
 	retireStory,
 	serializeRequirements,
+	serializeReviewContext,
+	BACKFILL_MARKER,
 	readCodeReviewArtifact,
 	type GoalPhase,
 	type Story,
@@ -2328,6 +2330,88 @@ describe("serialize-requirements subcommand", () => {
 		expect(out).toContain("[S1] ship the feature");
 		expect(out).toContain("AC: green; deployed");
 		expect(out).toContain("verify: smoke test");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// serialize-review-context subcommand — Shared Contract 4-field JSON emitted
+// for the code-review lane's finder step. RED: serializeReviewContext does
+// not exist yet.
+// ---------------------------------------------------------------------------
+
+describe("serialize-review-context subcommand", () => {
+	// 5-sentinel wiring: outcome/resume_summary/plan_path/constraints/boundaries
+	// each land in their documented contract field; description and
+	// project_context are composites of two sources each.
+	test("wires all 5 goal-state sources into the correct 4 contract fields", () => {
+		setGoalState(S, {
+			phase: "planning",
+			outcome: "SENTINEL_OUTCOME",
+			resume_summary: "SENTINEL_RESUME",
+			plan_path: "SENTINEL_PLAN",
+			constraints: "SENTINEL_CONSTRAINTS",
+			boundaries: "SENTINEL_BOUNDARIES",
+		});
+		const story: Story = {
+			id: "S1",
+			story: "do the thing",
+			acceptance_criteria: ["ac1"],
+			verification_surface: "v",
+			status: "unconfirmed",
+		};
+		setStories(S, [story]);
+		confirmStory(S, "S1");
+
+		const out = runCli("serialize-review-context");
+		const parsed = JSON.parse(out);
+
+		expect(parsed.what_was_implemented).toContain("SENTINEL_OUTCOME");
+		expect(parsed.description).toContain("SENTINEL_RESUME");
+		expect(parsed.description).toContain("SENTINEL_PLAN");
+		expect(parsed.project_context).toContain("SENTINEL_CONSTRAINTS");
+		expect(parsed.project_context).toContain("SENTINEL_BOUNDARIES");
+		expect(parsed.requirements).toBe(serializeRequirements(S));
+	});
+
+	// EMPTY-SOURCE: a field whose sources are ALL blank reads as the exact
+	// BACKFILL_MARKER literal. A field with one non-blank source (mixed-empty)
+	// is NOT the marker — it holds only the non-blank source.
+	test("all-blank sources read as BACKFILL_MARKER; mixed-empty holds only the non-blank source", () => {
+		setGoalState(S, { phase: "planning", resume_summary: "kicked off, no plan yet" });
+
+		const out = runCli("serialize-review-context");
+		const parsed = JSON.parse(out);
+
+		// outcome/constraints/boundaries never set -> all sources blank -> marker
+		expect(parsed.what_was_implemented).toBe(BACKFILL_MARKER);
+		expect(parsed.project_context).toBe(BACKFILL_MARKER);
+		expect(parsed.requirements).toBe(BACKFILL_MARKER);
+
+		// description: resume_summary set, plan_path blank -> mixed-empty, not the marker
+		expect(parsed.description).not.toBe(BACKFILL_MARKER);
+		expect(parsed.description).toBe("kicked off, no plan yet");
+	});
+
+	// ROUND-TRIP: stdout parses to exactly the 4 contract keys, each holding
+	// its correctly-sourced value.
+	test("stdout round-trips through JSON.parse to exactly the 4 contract keys", () => {
+		setGoalState(S, {
+			phase: "planning",
+			outcome: "ship it",
+			resume_summary: "in progress",
+			constraints: "no new deps",
+			boundaries: "no billing changes",
+		});
+
+		const out = runCli("serialize-review-context");
+		const parsed = JSON.parse(out);
+
+		expect(Object.keys(parsed).sort()).toEqual(
+			["description", "project_context", "requirements", "what_was_implemented"].sort(),
+		);
+		expect(parsed.what_was_implemented).toBe("ship it");
+		expect(parsed.description).toBe("in progress");
+		expect(parsed.project_context).toBe("no new deps\n\nno billing changes");
 	});
 });
 
