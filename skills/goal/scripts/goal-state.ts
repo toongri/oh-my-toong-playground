@@ -1110,11 +1110,21 @@ export function serializeReviewContext(sessionId: string): {
 		throw new Error(`serialize-review-context: no active goal state for session "${sessionId}"`);
 	}
 
-	const what_was_implemented = state.outcome.trim() !== "" ? state.outcome : BACKFILL_MARKER;
+	// readGoalState runtime-checks only active/phase/iteration and returns the raw
+	// parsed object, so a malformed state file could carry a missing string field.
+	// Coerce each source with `?? ""` before deref — the same defensive posture
+	// serializeRequirements takes — rather than crash on `undefined.trim()`.
+	const outcome = state.outcome ?? "";
+	const resumeSummary = state.resume_summary ?? "";
+	const planPath = state.plan_path ?? "";
+	const constraints = state.constraints ?? "";
+	const boundaries = state.boundaries ?? "";
+
+	const what_was_implemented = outcome.trim() !== "" ? outcome : BACKFILL_MARKER;
 
 	const descriptionSources = [
-		state.resume_summary,
-		state.plan_path.trim() !== "" ? `plan: ${state.plan_path}` : "",
+		resumeSummary,
+		planPath.trim() !== "" ? `plan: ${planPath}` : "",
 	].filter((s) => s.trim() !== "");
 	const description =
 		descriptionSources.length > 0 ? descriptionSources.join("\n\n") : BACKFILL_MARKER;
@@ -1122,9 +1132,7 @@ export function serializeReviewContext(sessionId: string): {
 	const requirementsRaw = serializeRequirements(sessionId);
 	const requirements = requirementsRaw !== "" ? requirementsRaw : BACKFILL_MARKER;
 
-	const projectContextSources = [state.constraints, state.boundaries].filter(
-		(s) => s.trim() !== "",
-	);
+	const projectContextSources = [constraints, boundaries].filter((s) => s.trim() !== "");
 	const project_context =
 		projectContextSources.length > 0 ? projectContextSources.join("\n\n") : BACKFILL_MARKER;
 
