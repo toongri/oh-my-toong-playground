@@ -1,10 +1,10 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs";
 import path from "path";
 import os from "os";
 
 import { parseCodexVersion, assertCodexVersionAllowed } from "./codex-version.ts";
-import { assertCodexVersionIfTargeted } from "../sync.ts";
+import { assertCodexVersionIfTargeted, isCodexTargetedForRun } from "../sync.ts";
 
 // ---------------------------------------------------------------------------
 // parseCodexVersion
@@ -91,5 +91,99 @@ describe("assertCodexVersionIfTargeted (sync.ts entry-point wiring)", () => {
 			process.env.PATH = originalPath;
 			fs.rmSync(stubDir, { recursive: true, force: true });
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// isCodexTargetedForRun (run-aware codex-targeting predicate)
+// ---------------------------------------------------------------------------
+
+function makeCodexTargetTempDir(): string {
+	return fs.mkdtempSync(path.join(os.tmpdir(), "codex-targeted-run-test-"));
+}
+
+function writeSyncYamlFixture(filePath: string, content: string): void {
+	fs.mkdirSync(path.dirname(filePath), { recursive: true });
+	fs.writeFileSync(filePath, content, "utf-8");
+}
+
+describe("isCodexTargetedForRun (run-aware codex-targeting predicate)", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = makeCodexTargetTempDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(root, { recursive: true, force: true });
+	});
+
+	it("returns false for a run filtered to a claude-only project, even when an unfiltered project and the root sync.yaml target codex", async () => {
+		writeSyncYamlFixture(
+			path.join(root, "projects", "proj-a", "sync.yaml"),
+			`
+path: ${path.join(root, "deploy-a")}
+skills:
+  items:
+    - component: only-claude
+      platforms: [claude]
+`,
+		);
+		writeSyncYamlFixture(
+			path.join(root, "projects", "proj-b", "sync.yaml"),
+			`
+path: ${path.join(root, "deploy-b")}
+skills:
+  items:
+    - component: only-codex
+      platforms: [codex]
+`,
+		);
+		writeSyncYamlFixture(
+			path.join(root, "sync.yaml"),
+			`
+path: ${path.join(root, "deploy-root")}
+skills:
+  items:
+    - component: root-codex
+      platforms: [codex]
+`,
+		);
+
+		// Mirrors a `--projects proj-a` CLI run: only proj-a is in scope, root excluded.
+		const targeted = await isCodexTargetedForRun(root, new Set(["proj-a"]), false);
+		expect(targeted).toBe(false);
+	});
+
+	it("returns true when a project inside the run's filter has a codex-targeted component", async () => {
+		writeSyncYamlFixture(
+			path.join(root, "projects", "proj-b", "sync.yaml"),
+			`
+path: ${path.join(root, "deploy-b")}
+skills:
+  items:
+    - component: only-codex
+      platforms: [codex]
+`,
+		);
+
+		const targeted = await isCodexTargetedForRun(root, new Set(["proj-b"]), false);
+		expect(targeted).toBe(true);
+	});
+
+	it("only scans the root sync.yaml when includeRoot is true (mirrors main()'s projectFilter.size === 0 condition)", async () => {
+		writeSyncYamlFixture(
+			path.join(root, "sync.yaml"),
+			`
+path: ${path.join(root, "deploy-root")}
+skills:
+  items:
+    - component: root-codex
+      platforms: [codex]
+`,
+		);
+
+		expect(await isCodexTargetedForRun(root, undefined, false)).toBe(false);
+		expect(await isCodexTargetedForRun(root, undefined, true)).toBe(true);
 	});
 });

@@ -1898,6 +1898,65 @@ async function defaultIsCodexTargetPlatform(): Promise<boolean> {
 	return false;
 }
 
+/**
+ * Run-aware replacement for {@link defaultIsCodexTargetPlatform}: true only if
+ * some component in a sync.yaml that THIS run will actually process resolves
+ * to the "codex" platform. Mirrors the sync.yaml enumeration + filter
+ * semantics of {@link runProjectsLoop} and the root-run block in the CLI entry
+ * point, instead of scanning every category's GLOBAL feature-platforms
+ * (which ignores `--projects` filtering and per-item platform overrides).
+ */
+export async function isCodexTargetedForRun(
+	rootDir: string,
+	effectiveFilter: Set<string> | undefined,
+	includeRoot: boolean,
+): Promise<boolean> {
+	const syncYamlPaths: string[] = [];
+
+	const projectsDir = path.join(rootDir, "projects");
+	if (existsSync(projectsDir)) {
+		const entries = await fs.readdir(projectsDir, { withFileTypes: true });
+		for (const entry of entries) {
+			if (!entry.isDirectory()) continue;
+			if (effectiveFilter !== undefined && !effectiveFilter.has(entry.name)) continue;
+			const candidate = path.join(projectsDir, entry.name, "sync.yaml");
+			if (existsSync(candidate)) syncYamlPaths.push(candidate);
+		}
+	}
+
+	if (includeRoot) {
+		const rootSyncYaml = path.join(rootDir, "sync.yaml");
+		if (existsSync(rootSyncYaml)) syncYamlPaths.push(rootSyncYaml);
+	}
+
+	for (const syncYamlPath of syncYamlPaths) {
+		let syncYaml: SyncYaml | null;
+		try {
+			syncYaml = await readAndExpandSyncYaml(syncYamlPath);
+		} catch {
+			continue;
+		}
+		// No `path` means the sync.yaml is an unconfigured template — runProjectsLoop
+		// and the root-run block both skip it, so it deploys nothing either.
+		if (!syncYaml || !syncYaml.path) continue;
+
+		const syncYamlPlatforms = syncYaml.platforms;
+
+		for (const category of SUPPORTED_CATEGORIES.codex) {
+			const sectionData = syncYaml[category];
+			if (!sectionData || !Array.isArray(sectionData.items)) continue;
+
+			const sectionPlatforms = sectionData.platforms;
+			for (const item of sectionData.items) {
+				const platforms = await resolvePlatforms(item, sectionPlatforms, syncYamlPlatforms, category);
+				if (platforms.includes("codex")) return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 function defaultFetchCodexVersion(): string {
 	// env explicitly passed (not left to spawn's default) so a runtime PATH
 	// override — e.g. a test stubbing `codex` on a temp dir PATH — is honored;
@@ -1963,12 +2022,18 @@ if (import.meta.main) {
 	adapters.set("opencode", opencodeAdapter);
 
 	try {
-		// 배포 작업 이전에 Codex CLI 버전을 검증된 허용목록과 대조 (codex가 대상 플랫폼일 때만)
-		await assertCodexVersionIfTargeted();
-
 		// projects/*/sync.yaml 먼저 처리
 		const enabledProjects = await getEnabledProjects();
 		const effectiveFilter = resolveProjectFilter(projectFilter, enabledProjects);
+
+		// 배포 작업 이전에 Codex CLI 버전을 검증된 허용목록과 대조 (이번 실행이 실제로
+		// 처리할 sync.yaml 중 codex를 대상으로 하는 컴포넌트가 있을 때만). includeRoot는
+		// 아래 루트 sync.yaml 처리 조건(projectFilter.size === 0)과 동일해야 한다.
+		await assertCodexVersionIfTargeted({
+			isCodexTargetPlatform: () =>
+				isCodexTargetedForRun(rootDir, effectiveFilter, projectFilter.size === 0),
+		});
+
 		await runProjectsLoop(rootDir, adapters, context, effectiveFilter, verbose);
 
 		// 루트 sync.yaml 처리 (이미 처리된 path는 스킵, 프로젝트 필터 미적용)
