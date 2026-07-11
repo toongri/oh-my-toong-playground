@@ -108,6 +108,7 @@ describe("isSafeSessionId (B4)", () => {
 
 describe("resolveSessionIdOrThrow (B2)", () => {
 	const origEnv = process.env.OMT_SESSION_ID;
+	const origCodex = process.env.CODEX_THREAD_ID;
 
 	afterEach(() => {
 		if (origEnv === undefined) {
@@ -115,21 +116,71 @@ describe("resolveSessionIdOrThrow (B2)", () => {
 		} else {
 			process.env.OMT_SESSION_ID = origEnv;
 		}
+		if (origCodex === undefined) {
+			delete process.env.CODEX_THREAD_ID;
+		} else {
+			process.env.CODEX_THREAD_ID = origCodex;
+		}
 	});
 
 	test("throws when OMT_SESSION_ID is unset", () => {
 		delete process.env.OMT_SESSION_ID;
+		delete process.env.CODEX_THREAD_ID;
 		expect(() => resolveSessionIdOrThrow()).toThrow();
 	});
 
 	test("throws when OMT_SESSION_ID is unsafe (../escape)", () => {
 		process.env.OMT_SESSION_ID = "../escape";
+		delete process.env.CODEX_THREAD_ID;
 		expect(() => resolveSessionIdOrThrow()).toThrow();
 	});
 
 	test("returns the id when OMT_SESSION_ID is valid", () => {
 		process.env.OMT_SESSION_ID = "valid-session-123";
+		delete process.env.CODEX_THREAD_ID;
 		expect(resolveSessionIdOrThrow()).toBe("valid-session-123");
+	});
+
+	// (a) both set (both safe) → OMT_SESSION_ID wins, is authoritative
+	test("returns OMT_SESSION_ID when both OMT_SESSION_ID and CODEX_THREAD_ID are set", () => {
+		process.env.OMT_SESSION_ID = "claude-session-1";
+		process.env.CODEX_THREAD_ID = "codex-thread-1";
+		expect(resolveSessionIdOrThrow()).toBe("claude-session-1");
+	});
+
+	// (b) OMT_SESSION_ID absent, CODEX_THREAD_ID set safe → fallback used
+	test("falls back to CODEX_THREAD_ID when OMT_SESSION_ID is absent", () => {
+		delete process.env.OMT_SESSION_ID;
+		process.env.CODEX_THREAD_ID = "codex-thread-1";
+		expect(resolveSessionIdOrThrow()).toBe("codex-thread-1");
+	});
+
+	// (c) neither set → throws
+	test("throws when neither OMT_SESSION_ID nor CODEX_THREAD_ID is set", () => {
+		delete process.env.OMT_SESSION_ID;
+		delete process.env.CODEX_THREAD_ID;
+		expect(() => resolveSessionIdOrThrow()).toThrow();
+	});
+
+	// (d) OMT_SESSION_ID absent, CODEX_THREAD_ID present but unsafe → throws (not silently used)
+	test("throws when OMT_SESSION_ID is absent and CODEX_THREAD_ID is unsafe", () => {
+		delete process.env.OMT_SESSION_ID;
+		process.env.CODEX_THREAD_ID = "bad/id";
+		expect(() => resolveSessionIdOrThrow()).toThrow();
+	});
+
+	// (e) OMT_SESSION_ID set but unsafe, CODEX_THREAD_ID set safe → throws, no fallthrough
+	test("throws when OMT_SESSION_ID is unsafe even though CODEX_THREAD_ID is safe (no fallthrough)", () => {
+		process.env.OMT_SESSION_ID = "../escape";
+		process.env.CODEX_THREAD_ID = "codex-thread-1";
+		expect(() => resolveSessionIdOrThrow()).toThrow();
+	});
+
+	// (f) representative UUIDv7 as CODEX_THREAD_ID, OMT_SESSION_ID absent → returns it
+	test("accepts a UUIDv7 CODEX_THREAD_ID when OMT_SESSION_ID is absent", () => {
+		delete process.env.OMT_SESSION_ID;
+		process.env.CODEX_THREAD_ID = "01920a7b-1c3d-7e4f-8a2b-1234567890ab";
+		expect(resolveSessionIdOrThrow()).toBe("01920a7b-1c3d-7e4f-8a2b-1234567890ab");
 	});
 });
 

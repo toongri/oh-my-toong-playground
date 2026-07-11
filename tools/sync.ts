@@ -13,6 +13,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { existsSync } from "fs";
+import { execFileSync } from "node:child_process";
 
 import type {
 	Platform,
@@ -22,12 +23,21 @@ import type {
 	SyncContext,
 	PluginScope,
 	DocsItem,
+	ModelMap,
 } from "./lib/types.ts";
-import { getRootDir, getBackupRetentionDays, getEnabledProjects } from "./lib/config.ts";
+import {
+	getRootDir,
+	getBackupRetentionDays,
+	getEnabledProjects,
+	getFeaturePlatforms,
+	getCodexVersions,
+} from "./lib/config.ts";
+import { parseCodexVersion, assertCodexVersionAllowed } from "./lib/codex-version.ts";
 import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import { resolvePlatforms, resolveComponentPath, setProjectContext } from "./lib/resolver.ts";
 import { generateBackupSessionId, backupCategory, backupDocs, cleanupOldBackups } from "./lib/backup.ts";
+import { reconcilePairManifest, removeManifestPair } from "./lib/deploy-manifest.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
@@ -42,9 +52,15 @@ import {
 import { runProvision } from "./lib/provision.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
-import { CodexAdapter } from "./adapters/codex.ts";
+import { CodexAdapter, cleanupCodexSkillsFossil, codexSkillsDir } from "./adapters/codex.ts";
 import { opencodeAdapter } from "./adapters/opencode.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
+import {
+	PLATFORM_REWRITE_RULES,
+	applyRewriteRules,
+	bakeSkillDirToken,
+	type RewriteRule,
+} from "./lib/rewrite-rules.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,9 +133,19 @@ export function deploysToClaudeDotDir(
 export const SUPPORTED_CATEGORIES: Record<string, Set<Category>> = {
 	claude: new Set(["agents", "commands", "skills", "scripts", "rules"]),
 	gemini: new Set(["commands", "skills", "scripts"]),
-	codex: new Set(["skills", "scripts"]),
+	codex: new Set(["agents", "skills", "scripts"]),
 	opencode: new Set(["agents", "commands", "skills", "scripts", "rules"]),
 };
+
+/**
+ * Deploy-LOCATION key for backup + manifest reconciliation. NOT a Platform:
+ * Codex reads skills from `.agents/skills` (a cross-CLI root), not `.codex/skills`,
+ * so its backup source and manifest ownership key must name that physical pair.
+ * Must never leak into the Platform union, the adapter registry, or SUPPORTED_CATEGORIES.
+ */
+export function deployLocationForManifest(platform: Platform, category: string): string {
+	return platform === "codex" && category === "skills" ? "agents" : platform;
+}
 
 /**
  * Generic sync loop for a single category.
@@ -155,6 +181,21 @@ export async function syncCategory(
 	// Track which (platform, category) pairs have been prepared (backed up).
 	// Key: `${platform}:${category}`
 	const preparedKeys = new Set<string>();
+
+	// Dedup key set for the unsupported platform×category skip log below — a
+	// project deploying 12 agents to an unsupported platform must log the skip
+	// once, not 12 times.
+	const unsupportedLogged = new Set<string>();
+
+	// Entry names (displayName) this run declares for each platform, within this
+	// category — the manifest-scoped orphan removal below diffs this against the
+	// PREVIOUS run's recorded set instead of wiping the whole category dir.
+	// Never populated for "rules": rules are excluded from removal entirely (may
+	// hold user-managed files), exactly as the old wipe excluded them.
+	// Keyed by deploy LOCATION (deployLocationForManifest), not Platform directly —
+	// Codex skills accumulate under "agents", matching the physical .agents/skills
+	// pair its backup and manifest reconciliation actually own.
+	const deployedNames = new Map<string, Set<string>>();
 
 	for (const item of items) {
 		const componentRef = typeof item === "string" ? item : (item.component ?? "");
@@ -256,7 +297,26 @@ export async function syncCategory(
 			}
 
 			// Skip unsupported platform×category combinations entirely (no backup/wipe/dispatch).
-			if (!SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
+			if (!SUPPORTED_CATEGORIES[platform]?.has(category)) {
+				const unsupportedKey = `${platform}:${category}`;
+				if (!unsupportedLogged.has(unsupportedKey)) {
+					unsupportedLogged.add(unsupportedKey);
+					logWarn(`Unsupported platform/category skipped: platform=${platform} category=${category}`);
+				}
+				continue;
+			}
+
+			// Declare this entry for this platform×category pair (see deployedNames
+			// above) — the set diffed against the manifest's previous run below.
+			if (category !== "rules") {
+				const deployLocation = deployLocationForManifest(platform, category);
+				let names = deployedNames.get(deployLocation);
+				if (!names) {
+					names = new Set<string>();
+					deployedNames.set(deployLocation, names);
+				}
+				names.add(displayName);
+			}
 
 			// Record SOURCE paths for lib-dependency collection (independent of dryRun:
 			// the lib scan reads source, never the deployed tree). The component itself
@@ -278,18 +338,20 @@ export async function syncCategory(
 				}
 			}
 
-			// Backup before first write for this platform×category
+			// Backup before first write for this platform×category. Orphan cleanup for
+			// components removed from sync.yaml no longer wipes the whole category dir —
+			// see the manifest-scoped reconcile after this loop, which removes only this
+			// pair's own previously-deployed orphans and leaves foreign residents (a
+			// Codex `.system` dir, a user-authored skill, etc.) untouched.
 			const prepKey = `${platform}:${category}`;
 			if (!preparedKeys.has(prepKey) && !context.dryRun) {
-				await backupCategory(deployRoot, platform, category, context.backupSession);
+				await backupCategory(
+					deployRoot,
+					deployLocationForManifest(platform, category),
+					category,
+					context.backupSession,
+				);
 				preparedKeys.add(prepKey);
-				// Wipe category dir so orphan files from removed components are cleaned up.
-				// Rules are excluded: they may contain user-managed files.
-				if (category !== "rules") {
-					const categoryDir = path.join(deployRoot, `.${platform}`, category);
-					await fs.rm(categoryDir, { recursive: true, force: true });
-					await fs.mkdir(categoryDir, { recursive: true });
-				}
 			}
 
 			if (context.dryRun) {
@@ -306,7 +368,7 @@ export async function syncCategory(
 					addSkills,
 					addHooks,
 					false,
-					context.modelMaps.get(platform),
+					context.modelMaps.get(platform) ?? context.rootModelMaps.get(platform),
 				);
 			} else if (category === "commands") {
 				await adapter.syncCommandsDirect(deployRoot, displayName, sourcePath, false);
@@ -317,6 +379,40 @@ export async function syncCategory(
 			} else if (category === "rules") {
 				await adapter.syncRulesDirect(deployRoot, displayName, sourcePath, false);
 			}
+		}
+	}
+
+	// Manifest-scoped orphan removal: for each deploy location this category
+	// deployed to, remove only entries OMT itself previously deployed for this
+	// pair that are no longer declared — never a foreign resident, and never
+	// anything under "rules" (deployedNames stays empty for rules, so this loop
+	// is a no-op there). deployedNames is already keyed by deploy LOCATION
+	// (deployLocationForManifest), so no further mapping is needed here.
+	if (!context.dryRun) {
+		for (const [deployLocation, names] of deployedNames) {
+			await reconcilePairManifest(deployRoot, deployLocation, category, [...names]);
+		}
+	}
+
+	// One-time fossil cleanup: `.codex/skills` is the pre-b9908fbc deploy location,
+	// dead now that Codex skills route to `.agents/skills` (deployLocationForManifest).
+	// Codex 0.144.1 reads BOTH roots, so a populated fossil duplicates every skill in
+	// the session prompt. Runs once per deployRoot (syncCategory itself is called once
+	// per deployRoot per category), guarded on codex having actually been a target for
+	// skills THIS run — deployedNames is keyed by deploy LOCATION, so "agents" present
+	// here means codex+skills was declared (never fires for a claude/gemini-only run).
+	// Cleanup runs even under dryRun (it reports via logDry); the manifest key is only
+	// pruned after a successful (non-dry) cleanup, so a thrown cleanup leaves the
+	// ownership record intact for the next run to retry against.
+	if (category === "skills" && deployedNames.has("agents")) {
+		await cleanupCodexSkillsFossil(
+			deployRoot,
+			context.backupSession,
+			context.dryRun,
+			deployedNames.get("agents") ?? new Set(),
+		);
+		if (!context.dryRun) {
+			await removeManifestPair(deployRoot, "codex", "skills");
 		}
 	}
 }
@@ -1195,34 +1291,115 @@ export async function syncLib(
 // ---------------------------------------------------------------------------
 
 /**
- * For non-claude platforms: find deployed .md files and replace .claude/ references
- * with .<platform>/. Mirrors rewrite_platform_paths in sync.sh:1407-1420.
+ * De-Claude-ify deployed bytes for a non-claude platform, driven entirely by
+ * the shared PLATFORM_REWRITE_RULES table (tools/lib/rewrite-rules.ts) — not
+ * a hard-coded `.claude/` replace. Mirrors rewrite_platform_paths in
+ * sync.sh:1407-1420, generalized to the full rule table (TODO 4).
+ *
+ * Cleaves by CONTENT TYPE, not by root: only `.md` — instruction text the
+ * model reads — is ever rewritten (see collectMdFiles below). Programs that
+ * RUN on Codex (`.ts`/`.sh`/`.js`/...) are never walked, because Claude
+ * vocabulary inside them is often not a Claude-ism at all — e.g.
+ * hooks/rules-injector's `.claude/rules` is one entry in a multi-ecosystem
+ * rule-source enum (sibling to `.omo/rules`, `.cursor/rules`), and
+ * skills/hud/scripts/transcript.ts's `subagent_type` is a struct field —
+ * rewriting either breaks working code for a token that isn't OMT's platform
+ * path or tool name at all. `.codex/agents/*.toml` (also program-adjacent,
+ * generated from `agents/*.md`) gets the same rule table applied at
+ * generation time in CodexAdapter.syncAgentsDirect instead of by this walk.
+ *
+ * Gemini/OpenCode have one deploy root (`.{platform}/`). Codex has TWO,
+ * disjoint since commit b9908fbc: `.codex/` (agents, hooks, scripts, config,
+ * lib) and `.agents/skills/<name>` (skills, manifest-owned). `codexSkillNames`
+ * names exactly the skills OMT deployed to `.agents/skills` THIS run — the
+ * only names this function is allowed to walk there; anything else under
+ * `.agents/skills` (e.g. a foreign `plannotator-compound`) is left untouched.
  */
-export async function rewritePlatformPaths(targetPath: string, platform: Platform): Promise<void> {
-	if (platform === "claude") return;
+export async function rewritePlatformPaths(
+	targetPath: string,
+	platform: Platform,
+	codexSkillNames: ReadonlySet<string> = new Set(),
+): Promise<void> {
+	const rules = PLATFORM_REWRITE_RULES[platform];
+	// Claude's rule table is empty by design (tools/lib/rewrite-rules.ts) — this
+	// return, BEFORE any directory is even computed, is what makes Claude's
+	// deployed bytes invariant by construction (plan AC G4-10): no file under
+	// .claude/ is ever opened by this function, so byte-identity is structural,
+	// not merely asserted by a test.
+	if (rules.length === 0) return;
 
-	const platformDir = path.join(targetPath, `.${platform}`);
-	const mdFiles = await collectMdFiles(platformDir);
+	if (platform !== "codex") {
+		await rewriteFilesUnder(path.join(targetPath, `.${platform}`), rules);
+		return;
+	}
 
-	for (const filePath of mdFiles) {
+	// Root 1: .codex/ (agents, hooks, scripts, config, lib), EXCLUDING
+	// .codex/skills/** — the deprecated pre-b9908fbc fossil root.
+	// cleanupCodexSkillsFossil removes only OMT-owned entries from it; whatever
+	// survives (e.g. `.system`) is a foreign resident this function must never
+	// touch.
+	const codexDir = path.join(targetPath, ".codex");
+	await rewriteFilesUnder(codexDir, rules, [path.join(codexDir, "skills")]);
+
+	// Root 2: .agents/skills/<name>, manifest-owned only. For each owned skill,
+	// also bake the contextual ${CLAUDE_SKILL_DIR} token to that skill's
+	// absolute deployed dir (Claude Code expands the token at skill-injection
+	// time; Codex has no expander, and a skill's shell command runs under the
+	// agent's session cwd, not the skill dir, so only an absolute path resolves).
+	for (const name of codexSkillNames) {
+		const skillDir = path.join(codexSkillsDir(targetPath), name);
+		await rewriteFilesUnder(skillDir, rules, [], (content) => bakeSkillDirToken(content, skillDir));
+	}
+}
+
+/**
+ * Apply `rules` (plus an optional per-file `extraTransform`, e.g. the
+ * ${CLAUDE_SKILL_DIR} bake) to every rewrite-candidate file under `dir`,
+ * writing back only files whose content actually changed. This IS the "does
+ * any rule match" check (D2): a file no rule (and no extraTransform) touches
+ * comes back identical and is never written.
+ */
+async function rewriteFilesUnder(
+	dir: string,
+	rules: readonly RewriteRule[],
+	excludeDirs: string[] = [],
+	extraTransform?: (content: string) => string,
+): Promise<void> {
+	const files = await collectMdFiles(dir, excludeDirs);
+	for (const filePath of files) {
 		let content: string;
 		try {
 			content = await fs.readFile(filePath, "utf8");
 		} catch {
 			continue;
 		}
-
-		if (!content.includes(".claude/")) continue;
-
-		const updated = content.replace(/\.claude\//g, `.${platform}/`);
-		await fs.writeFile(filePath, updated, "utf8");
+		let updated = applyRewriteRules(content, rules);
+		if (extraTransform) updated = extraTransform(updated);
+		if (updated !== content) {
+			await fs.writeFile(filePath, updated, "utf8");
+		}
 	}
 }
 
 /**
- * Recursively collect all .md files under a directory.
+ * Recursively collect `.md` files under `dir` — instruction text the model
+ * reads, the only content type this rewrite ever touches. Programs that run
+ * ON Codex (`.ts`/`.sh`/`.js`/...) are deliberately NEVER walked here: rows in
+ * PLATFORM_REWRITE_RULES.codex translate Claude vocabulary for a model
+ * reading prose, and applying them to source code corrupts it — e.g.
+ * `.claude/rules` in hooks/rules-injector's multi-ecosystem rule-source enum
+ * is a source-format name, not an OMT platform path, and `subagent_type` in
+ * skills/hud/scripts/transcript.ts is a struct field, not the Claude tool
+ * parameter. See the codex two-root policy on rewritePlatformPaths above.
+ *
+ * Exclusions:
+ *   - `excludeDirs` (caller-supplied absolute paths): the .codex/skills
+ *     fossil root, pruned so this walk never touches it.
+ *   - `lib.tmp-*` / `lib.old-*`: syncLib's atomic-swap temp dirs — transient,
+ *     never a stable deploy target. lib/ does carry .md, so this still
+ *     matters even restricted to that one extension.
  */
-async function collectMdFiles(dir: string): Promise<string[]> {
+async function collectMdFiles(dir: string, excludeDirs: string[] = []): Promise<string[]> {
 	const results: string[] = [];
 	let entries: import("fs").Dirent[];
 	try {
@@ -1233,7 +1410,9 @@ async function collectMdFiles(dir: string): Promise<string[]> {
 	for (const entry of entries) {
 		const fullPath = path.join(dir, entry.name);
 		if (entry.isDirectory()) {
-			results.push(...(await collectMdFiles(fullPath)));
+			if (excludeDirs.includes(fullPath)) continue;
+			if (/^lib\.(tmp|old)-/.test(entry.name)) continue;
+			results.push(...(await collectMdFiles(fullPath, excludeDirs)));
 		} else if (entry.isFile() && entry.name.endsWith(".md")) {
 			results.push(fullPath);
 		}
@@ -1370,6 +1549,13 @@ export async function processYaml(
 	// collapses to ["claude"] for any un-narrowed project and would wrongly
 	// skip codex/gemini/opencode for the root self-deploy.
 	const rewriteEligiblePlatforms = new Set<Platform>();
+	// Skills this sync.yaml declares for codex, keyed by DEPLOYED directory name
+	// (resolveComponentPath's displayName — a scoped ref like "proj:testing"
+	// deploys as "testing", matching exactly what syncCategory later writes
+	// under .agents/skills/). Collected in this same per-item cascade rather
+	// than threaded out of syncCategory's local deployedNames map — this loop
+	// already resolves every item, so a second plumbing path would only drift.
+	const codexSkillNames = new Set<string>();
 	for (const category of CATEGORIES) {
 		const section = syncYaml[category];
 		if (!section || !Array.isArray(section.items) || section.items.length === 0) continue;
@@ -1378,6 +1564,20 @@ export async function processYaml(
 			const platforms = await resolvePlatforms(item, sectionPlatforms, syncYaml.platforms, category);
 			for (const platform of platforms) {
 				rewriteEligiblePlatforms.add(platform);
+			}
+			if (category === "skills" && platforms.includes("codex")) {
+				const componentRef = typeof item === "string" ? item : (item.component ?? "");
+				if (componentRef) {
+					const resolved = resolveComponentPath(
+						componentRef,
+						category,
+						rootDir,
+						context.projectDir || undefined,
+					);
+					if (!("error" in resolved)) {
+						codexSkillNames.add(resolved.displayName);
+					}
+				}
 			}
 		}
 	}
@@ -1462,14 +1662,19 @@ export async function processYaml(
 				// libSourceRoots (a codex/gemini-hook-only project — same signal the
 				// syncLib gate above keys on). Without the libSourceRoots arm, a copied
 				// hook README's .claude/ references stay un-rewritten under .{platform}/.
+				//
+				// A codex-skills-only project never creates .codex/ at all (skills land
+				// under .agents/skills, not .codex/skills) — codexSkillNames.size > 0 is
+				// the second, independent trigger that covers exactly that case (D4).
+				const codexSkillsPresent = platform === "codex" && codexSkillNames.size > 0;
 				if (
-					existsSync(platformDir) &&
+					(existsSync(platformDir) || codexSkillsPresent) &&
 					(rewriteEligiblePlatforms.has(platform) || libSourceRoots.has(platform))
 				) {
 					if (context.dryRun) {
 						logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
 					} else {
-						await rewritePlatformPaths(deployRoot, platform);
+						await rewritePlatformPaths(deployRoot, platform, codexSkillNames);
 					}
 				}
 			}
@@ -1495,6 +1700,32 @@ export async function processYaml(
 }
 
 // ---------------------------------------------------------------------------
+// loadRootModelMaps
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the root/global model-maps once, before any project or root sync.yaml
+ * is processed. Root-only categories like "agents" are declared exclusively
+ * in projects/*\/sync.yaml (no project ships its own codex.yaml/opencode.yaml),
+ * while the model-map itself lives only in the root {platform}.yaml — and
+ * projects/*\/sync.yaml runs BEFORE the root sync.yaml (runProjectsLoop, then
+ * the root pass), with context.modelMaps cleared at the start of every
+ * processYaml call. Without this, context.modelMaps.get("codex") is empty
+ * for every project agent dispatch. context.rootModelMaps is populated here
+ * exactly once and is never cleared, so it survives across every processYaml
+ * call in the run.
+ */
+export async function loadRootModelMaps(rootDir: string): Promise<Map<Platform, ModelMap>> {
+	const out = new Map<Platform, ModelMap>();
+	for (const platform of ["codex", "opencode"] as const) {
+		const merged = await parseAndMergePlatformYaml(rootDir, platform);
+		const mm = merged?.["model-map"];
+		if (mm) out.set(platform, mm);
+	}
+	return out;
+}
+
+// ---------------------------------------------------------------------------
 // createContext
 // ---------------------------------------------------------------------------
 
@@ -1509,6 +1740,7 @@ export function createContext(dryRun: boolean): SyncContext {
 		isRootYaml: true,
 		backupSession: generateBackupSessionId(),
 		modelMaps: new Map(),
+		rootModelMaps: new Map(),
 		processedPaths: new Set(),
 		platformYamlSections: new Map(),
 		backupRoots: new Set(),
@@ -1648,6 +1880,118 @@ export async function runProjectsLoop(
 }
 
 // ---------------------------------------------------------------------------
+// Codex CLI version guard
+// ---------------------------------------------------------------------------
+
+/** DI hooks for {@link assertCodexVersionIfTargeted}; both default to the real check. */
+export type CodexVersionCheckOptions = {
+	isCodexTargetPlatform?: () => Promise<boolean>;
+	fetchVersion?: () => string;
+};
+
+/** True when "codex" is a configured target platform for any deployed category. */
+async function defaultIsCodexTargetPlatform(): Promise<boolean> {
+	for (const category of CATEGORIES) {
+		const platforms = await getFeaturePlatforms(category);
+		if (platforms.includes("codex")) return true;
+	}
+	return false;
+}
+
+/**
+ * Run-aware replacement for {@link defaultIsCodexTargetPlatform}: true only if
+ * some component in a sync.yaml that THIS run will actually process resolves
+ * to the "codex" platform. Mirrors the sync.yaml enumeration + filter
+ * semantics of {@link runProjectsLoop} and the root-run block in the CLI entry
+ * point, instead of scanning every category's GLOBAL feature-platforms
+ * (which ignores `--projects` filtering and per-item platform overrides).
+ */
+export async function isCodexTargetedForRun(
+	rootDir: string,
+	effectiveFilter: Set<string> | undefined,
+	includeRoot: boolean,
+): Promise<boolean> {
+	const syncYamlPaths: string[] = [];
+
+	const projectsDir = path.join(rootDir, "projects");
+	if (existsSync(projectsDir)) {
+		const entries = await fs.readdir(projectsDir, { withFileTypes: true });
+		for (const entry of entries) {
+			if (!entry.isDirectory()) continue;
+			if (effectiveFilter !== undefined && !effectiveFilter.has(entry.name)) continue;
+			const candidate = path.join(projectsDir, entry.name, "sync.yaml");
+			if (existsSync(candidate)) syncYamlPaths.push(candidate);
+		}
+	}
+
+	if (includeRoot) {
+		const rootSyncYaml = path.join(rootDir, "sync.yaml");
+		if (existsSync(rootSyncYaml)) syncYamlPaths.push(rootSyncYaml);
+	}
+
+	for (const syncYamlPath of syncYamlPaths) {
+		let syncYaml: SyncYaml | null;
+		try {
+			syncYaml = await readAndExpandSyncYaml(syncYamlPath);
+		} catch {
+			continue;
+		}
+		// No `path` means the sync.yaml is an unconfigured template — runProjectsLoop
+		// and the root-run block both skip it, so it deploys nothing either.
+		if (!syncYaml || !syncYaml.path) continue;
+
+		const syncYamlPlatforms = syncYaml.platforms;
+
+		for (const category of SUPPORTED_CATEGORIES.codex) {
+			const sectionData = syncYaml[category];
+			if (!sectionData || !Array.isArray(sectionData.items)) continue;
+
+			const sectionPlatforms = sectionData.platforms;
+			for (const item of sectionData.items) {
+				const platforms = await resolvePlatforms(item, sectionPlatforms, syncYamlPlatforms, category);
+				if (platforms.includes("codex")) return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+function defaultFetchCodexVersion(): string {
+	// env explicitly passed (not left to spawn's default) so a runtime PATH
+	// override — e.g. a test stubbing `codex` on a temp dir PATH — is honored;
+	// Bun's spawn PATH resolution otherwise caches PATH from process start.
+	return execFileSync("codex", ["--version"], {
+		stdio: ["pipe", "pipe", "pipe"],
+		env: process.env,
+	}).toString();
+}
+
+/**
+ * Guards the installed Codex CLI version against the probe-verified allowlist
+ * (config.yaml `codex-versions`) before any deploy work runs. Skipped
+ * entirely when codex isn't a configured target platform, so a codex-free
+ * sync never requires codex to be installed.
+ */
+export async function assertCodexVersionIfTargeted(
+	options: CodexVersionCheckOptions = {},
+): Promise<void> {
+	const isTargeted = options.isCodexTargetPlatform ?? defaultIsCodexTargetPlatform;
+	const fetchVersion = options.fetchVersion ?? defaultFetchCodexVersion;
+
+	if (!(await isTargeted())) return;
+
+	const raw = fetchVersion();
+	const observed = parseCodexVersion(raw);
+	if (observed === null) {
+		throw new Error(`Codex CLI 버전 파싱 실패: "codex --version" 출력이 "${raw.trim()}"`);
+	}
+
+	const allowed = await getCodexVersions();
+	assertCodexVersionAllowed(observed, allowed);
+}
+
+// ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
 
@@ -1666,6 +2010,7 @@ if (import.meta.main) {
 	}
 
 	const context = createContext(dryRun);
+	context.rootModelMaps = await loadRootModelMaps(rootDir);
 
 	logInfo(`백업 세션: ${context.backupSession}`);
 	logInfo(`백업 위치: ${rootDir}/.sync-backup/${context.backupSession}/`);
@@ -1680,6 +2025,15 @@ if (import.meta.main) {
 		// projects/*/sync.yaml 먼저 처리
 		const enabledProjects = await getEnabledProjects();
 		const effectiveFilter = resolveProjectFilter(projectFilter, enabledProjects);
+
+		// 배포 작업 이전에 Codex CLI 버전을 검증된 허용목록과 대조 (이번 실행이 실제로
+		// 처리할 sync.yaml 중 codex를 대상으로 하는 컴포넌트가 있을 때만). includeRoot는
+		// 아래 루트 sync.yaml 처리 조건(projectFilter.size === 0)과 동일해야 한다.
+		await assertCodexVersionIfTargeted({
+			isCodexTargetPlatform: () =>
+				isCodexTargetedForRun(rootDir, effectiveFilter, projectFilter.size === 0),
+		});
+
 		await runProjectsLoop(rootDir, adapters, context, effectiveFilter, verbose);
 
 		// 루트 sync.yaml 처리 (이미 처리된 path는 스킵, 프로젝트 필터 미적용)

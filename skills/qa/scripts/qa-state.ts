@@ -2,7 +2,7 @@
  * QA skill state CLI.
  *
  * State file path: ${OMT_DIR}/qa-state-${sessionId}.json
- * Session ID: resolved from env OMT_SESSION_ID via resolveSessionIdOrThrow(); hard-fails when absent or unsafe.
+ * Session ID: resolved from env OMT_SESSION_ID, falling back to CODEX_THREAD_ID (Codex), via resolveSessionIdOrThrow(); hard-fails when neither is set or unsafe.
  *
  * Structural mirror of goal-state.ts (iteration/max_iterations ≙ cycle/max_cycles):
  * session-keyed JSON, merge-write preserving prior fields, `started_at` seeded once
@@ -230,11 +230,12 @@ export interface SetQaOpts {
 
 /** General setter: phase + target. Refuses an out-of-enum phase. */
 export function setQaState(sessionId: string, opts: SetQaOpts): void {
-	if (opts.phase !== undefined && !isOneOf(opts.phase, QA_PHASES)) {
-		throw new Error(`set: phase must be one of ${QA_PHASES.join("|")} (got "${opts.phase}")`);
+	const phase = opts.phase;
+	if (phase !== undefined && !isOneOf(phase, QA_PHASES)) {
+		throw new Error(`set: phase must be one of ${QA_PHASES.join("|")} (got "${phase}")`);
 	}
 	mergeWrite(sessionId, {
-		phase: opts.phase as QaPhase | undefined,
+		phase,
 		target: opts.target,
 	});
 }

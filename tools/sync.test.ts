@@ -21,15 +21,18 @@ import {
 	allTargetsProcessed,
 	isFatalSyncError,
 	deploysToClaudeDotDir,
+	loadRootModelMaps,
+	deployLocationForManifest,
 	type AdapterMap,
 	type LibSourceRoots,
 } from "./sync.ts";
-import type { SyncContext, Platform, Category, SyncYaml } from "./lib/types.ts";
+import type { SyncContext, Platform, Category, SyncYaml, ModelMap } from "./lib/types.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 import { _resetConfigCache } from "./lib/config.ts";
 import { ProjectKeyError, deriveClaudeProjectKey } from "./lib/git-key.ts";
 import { DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
+import { CodexAdapter } from "./adapters/codex.ts";
 import { cleanupOldBackups } from "./lib/backup.ts";
 import { execFileSync } from "child_process";
 
@@ -113,6 +116,7 @@ function makeContext(overrides?: Partial<SyncContext>): SyncContext {
 		isRootYaml: true,
 		backupSession: "test-session",
 		modelMaps: new Map(),
+		rootModelMaps: new Map(),
 		processedPaths: new Set(),
 		platformYamlSections: new Map(),
 		backupRoots: new Set(),
@@ -315,18 +319,48 @@ describe("syncCategory", () => {
 		expect(calls.filter((c) => c.method === "syncAgentsDirect")).toHaveLength(0);
 	});
 
-	it("removes orphan files after sync (P1-3)", async () => {
-		// Create a skill component in rootDir
-		const skillDir = path.join(rootDir, "skills", "oracle");
-		await fs.mkdir(skillDir, { recursive: true });
-		await writeFile(path.join(skillDir, "SKILL.md"), "# Oracle\n");
+	it("removes only OMT-deployed orphans across syncs, preserving foreign residents", async () => {
+		// Source files for both agents declared in the first sync.
+		await writeFile(path.join(rootDir, "agents", "oracle.md"), "# Oracle\n");
+		await writeFile(path.join(rootDir, "agents", "explore.md"), "# Explore\n");
 
-		// Pre-populate target with an orphan agent file
 		const claudeAgentsDir = path.join(targetPath, ".claude", "agents");
-		await fs.mkdir(claudeAgentsDir, { recursive: true });
-		await writeFile(path.join(claudeAgentsDir, "orphan-agent.md"), "# Orphan\n");
 
-		const syncYaml: SyncYaml = {
+		// --- First sync: declares oracle + explore. The mock adapter records the
+		// call but never writes to disk, so simulate what a real adapter would have
+		// deployed by placing the two files directly under the target agents dir.
+		await fs.mkdir(claudeAgentsDir, { recursive: true });
+		await writeFile(path.join(claudeAgentsDir, "oracle.md"), "# Oracle\n");
+		await writeFile(path.join(claudeAgentsDir, "explore.md"), "# Explore\n");
+
+		const firstSyncYaml: SyncYaml = {
+			path: targetPath,
+			agents: {
+				platforms: ["claude"],
+				items: ["oracle", "explore"],
+			},
+		};
+
+		const adapters = makeAdapterMap(["claude"]);
+		await syncCategory(
+			makeContext({ dryRun: false }),
+			"agents",
+			firstSyncYaml,
+			adapters,
+			rootDir,
+			targetPath,
+		);
+
+		// The manifest now records both entries under claude/agents.
+		const manifestPath = path.join(targetPath, ".sync-manifest.json");
+		const manifestAfterFirst = JSON.parse(await readFile(manifestPath));
+		expect(manifestAfterFirst["claude/agents"].sort()).toEqual(["explore", "oracle"]);
+
+		// A foreign file the manifest never recorded deploying.
+		await writeFile(path.join(claudeAgentsDir, "foreign.md"), "# Foreign\n");
+
+		// --- Second sync on the same target: declares only oracle.
+		const secondSyncYaml: SyncYaml = {
 			path: targetPath,
 			agents: {
 				platforms: ["claude"],
@@ -334,16 +368,21 @@ describe("syncCategory", () => {
 			},
 		};
 
-		// Ensure source file exists so resolveComponentPath succeeds
-		await writeFile(path.join(rootDir, "agents", "oracle.md"), "# Oracle\n");
+		await syncCategory(
+			makeContext({ dryRun: false }),
+			"agents",
+			secondSyncYaml,
+			adapters,
+			rootDir,
+			targetPath,
+		);
 
-		const adapters = makeAdapterMap(["claude"]);
-		const context = makeContext({ dryRun: false });
-
-		await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
-
-		// Orphan should be gone: wipe+recreate cleared the dir before writing
-		expect(await exists(path.join(claudeAgentsDir, "orphan-agent.md"))).toBe(false);
+		// explore.md dropped from the declared set -> removed as an OMT orphan.
+		expect(await exists(path.join(claudeAgentsDir, "explore.md"))).toBe(false);
+		// oracle.md is still declared -> survives.
+		expect(await exists(path.join(claudeAgentsDir, "oracle.md"))).toBe(true);
+		// foreign.md was never in the manifest -> survives.
+		expect(await exists(path.join(claudeAgentsDir, "foreign.md"))).toBe(true);
 	});
 
 	it("resolves add-hooks component and attaches source_path and display_name for agents category", async () => {
@@ -515,11 +554,11 @@ describe("syncCategory", () => {
 		expect(await exists(path.join(claudeRulesDir, "manual-rule.md"))).toBe(true);
 	});
 
-	it("does not wipe target directory for unsupported platform×category combo (codex+agents)", async () => {
-		// Pre-populate target codex agents dir with a file
-		const codexAgentsDir = path.join(targetPath, ".codex", "agents");
-		await fs.mkdir(codexAgentsDir, { recursive: true });
-		await writeFile(path.join(codexAgentsDir, "existing-agent.md"), "# Existing\n");
+	it("does not wipe target directory for unsupported platform×category combo (gemini+agents)", async () => {
+		// Pre-populate target gemini agents dir with a file
+		const geminiAgentsDir = path.join(targetPath, ".gemini", "agents");
+		await fs.mkdir(geminiAgentsDir, { recursive: true });
+		await writeFile(path.join(geminiAgentsDir, "existing-agent.md"), "# Existing\n");
 
 		const agentFile = path.join(rootDir, "agents", "oracle.md");
 		await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
@@ -527,29 +566,31 @@ describe("syncCategory", () => {
 		const syncYaml: SyncYaml = {
 			path: targetPath,
 			agents: {
-				platforms: ["codex"],
+				platforms: ["gemini"],
 				items: ["oracle"],
 			},
 		};
 
-		const adapters = makeAdapterMap(["codex"]);
+		const adapters = makeAdapterMap(["gemini"]);
 		const context = makeContext({ dryRun: false });
 
 		await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
-		// File must survive — codex does not support agents, so no wipe occurred
-		expect(await exists(path.join(codexAgentsDir, "existing-agent.md"))).toBe(true);
+		// File must survive — gemini does not support agents, so no wipe occurred
+		expect(await exists(path.join(geminiAgentsDir, "existing-agent.md"))).toBe(true);
 		// Adapter must not have been called
 		expect(
-			adapters.getAdapter("codex")!.calls.filter((c) => c.method === "syncAgentsDirect"),
+			adapters.getAdapter("gemini")!.calls.filter((c) => c.method === "syncAgentsDirect"),
 		).toHaveLength(0);
 	});
 
-	it("proceeds with backup+wipe+dispatch for supported platform×category combo (claude+agents)", async () => {
-		// Pre-populate target claude agents dir with an orphan file
+	it("processes a supported platform×category and preserves pre-existing files on bootstrap", async () => {
+		// Pre-populate target claude agents dir with a file that predates any sync —
+		// no manifest exists yet, so this is the BOOTSTRAP case: reconcile must
+		// delete nothing.
 		const claudeAgentsDir = path.join(targetPath, ".claude", "agents");
 		await fs.mkdir(claudeAgentsDir, { recursive: true });
-		await writeFile(path.join(claudeAgentsDir, "orphan.md"), "# Orphan\n");
+		await writeFile(path.join(claudeAgentsDir, "preexisting.md"), "# Preexisting\n");
 
 		const agentFile = path.join(rootDir, "agents", "oracle.md");
 		await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
@@ -567,9 +608,9 @@ describe("syncCategory", () => {
 
 		await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
 
-		// Orphan wiped — claude supports agents
-		expect(await exists(path.join(claudeAgentsDir, "orphan.md"))).toBe(false);
-		// Adapter called
+		// Bootstrap (no prior manifest) deletes nothing — the pre-existing file survives.
+		expect(await exists(path.join(claudeAgentsDir, "preexisting.md"))).toBe(true);
+		// Adapter still called — claude supports agents.
 		expect(adapters.getAdapter("claude")!.calls.some((c) => c.method === "syncAgentsDirect")).toBe(
 			true,
 		);
@@ -577,17 +618,17 @@ describe("syncCategory", () => {
 
 	it("SUPPORTED_CATEGORIES covers all 4 platforms with correct categories", async () => {
 		// Import the map indirectly by verifying behavior for each platform×category.
-		// Supported: claude=all5, opencode=all5, gemini=commands/skills/scripts, codex=skills/scripts
+		// Supported: claude=all5, opencode=all5, gemini=commands/skills/scripts, codex=agents/skills/scripts
 		const expectedSupported: Record<string, Category[]> = {
 			claude: ["agents", "commands", "skills", "scripts", "rules"],
 			opencode: ["agents", "commands", "skills", "scripts", "rules"],
 			gemini: ["commands", "skills", "scripts"],
-			codex: ["skills", "scripts"],
+			codex: ["agents", "skills", "scripts"],
 		};
 
 		const expectedUnsupported: Record<string, Category[]> = {
 			gemini: ["agents", "rules"],
-			codex: ["agents", "commands", "rules"],
+			codex: ["commands", "rules"],
 		};
 
 		for (const [platform, supported] of Object.entries(expectedSupported)) {
@@ -663,6 +704,360 @@ describe("syncCategory", () => {
 				).toBe(0);
 			}
 		}
+	});
+
+	it("dispatches with rootModelMaps as fallback when context.modelMaps has no entry for the platform", async () => {
+		await writeFile(path.join(rootDir, "agents", "test-agent.md"), "# test-agent\n");
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			agents: { platforms: ["codex"], items: ["test-agent"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const rootMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+		// context.modelMaps stays empty (per-scope YAML never populated it); only
+		// rootModelMaps carries the codex map, mirroring the real gap: project
+		// agents deploy with no project codex.yaml, so only the root map is reachable.
+		const context = makeContext({ dryRun: false, rootModelMaps: new Map([["codex", rootMap]]) });
+
+		await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
+
+		const calls = adapters
+			.getAdapter("codex")!
+			.calls.filter((c) => c.method === "syncAgentsDirect");
+		expect(calls).toHaveLength(1);
+		// syncAgentsDirect(deployRoot, displayName, sourcePath, addSkills, addHooks, dryRun, modelMap)
+		expect(calls[0]!.args[6]).toEqual(rootMap);
+	});
+
+	it("logs the unsupported platform/category skip exactly once across multiple items", async () => {
+		await writeFile(path.join(rootDir, "agents", "agent-one.md"), "# agent-one\n");
+		await writeFile(path.join(rootDir, "agents", "agent-two.md"), "# agent-two\n");
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			agents: { platforms: ["gemini"], items: ["agent-one", "agent-two"] },
+		};
+
+		const adapters = makeAdapterMap(["gemini"]);
+		const context = makeContext({ dryRun: false });
+
+		const warnings: string[] = [];
+		const origStderr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = (chunk: string | Uint8Array) => {
+			if (typeof chunk === "string") warnings.push(chunk);
+			return true;
+		};
+		try {
+			await syncCategory(context, "agents", syncYaml, adapters, rootDir, targetPath);
+		} finally {
+			process.stderr.write = origStderr;
+		}
+
+		const matches = warnings.filter((w) => w.includes("gemini") && w.includes("agents"));
+		expect(matches).toHaveLength(1);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: deployLocationForManifest — Codex skills route to `.agents/skills`
+//
+// Codex 0.144.1 reads skills from the cross-CLI `.agents/skills` root, not
+// `.codex/skills`. backupCategory and reconcilePairManifest both key their
+// directory as `.${platform}/${category}` (a plain `string` param, not the
+// `Platform` union) — deployLocationForManifest supplies "agents" instead of
+// "codex" for exactly the (codex, skills) pair so those two untouched helpers
+// resolve to `.agents/skills` with zero edits to backup.ts/deploy-manifest.ts.
+// ---------------------------------------------------------------------------
+
+describe("deployLocationForManifest", () => {
+	it('returns "agents" for (codex, skills)', () => {
+		expect(deployLocationForManifest("codex", "skills")).toBe("agents");
+	});
+
+	it('returns "codex" for (codex, agents) — only skills is redirected', () => {
+		expect(deployLocationForManifest("codex", "agents")).toBe("codex");
+	});
+
+	it('returns "gemini" for (gemini, skills) — other platforms are untouched', () => {
+		expect(deployLocationForManifest("gemini", "skills")).toBe("gemini");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: syncCategory — codex skills manifest + backup routing to .agents/skills
+// ---------------------------------------------------------------------------
+
+describe("syncCategory — codex skills manifest+backup routing", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-category-codex-agents-dir-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(rootDir, { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("records the manifest key as agents/skills (not codex/skills) after a codex skills sync", async () => {
+		const skillDir = path.join(rootDir, "skills", "new-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# New Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["codex"], items: ["new-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext({ dryRun: false });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		const manifestPath = path.join(targetPath, ".sync-manifest.json");
+		const manifest = JSON.parse(await readFile(manifestPath));
+		expect(manifest["agents/skills"]).toEqual(["new-skill"]);
+		expect(manifest["codex/skills"]).toBeUndefined();
+	});
+
+	it("backs up a pre-existing .agents/skills entry under .sync-backup/{sid}/agents/skills/", async () => {
+		// Pre-existing skill under the NEW location, as if deployed by a prior sync.
+		const preExisting = path.join(targetPath, ".agents", "skills", "old-skill", "SKILL.md");
+		await writeFile(preExisting, "# Old Skill\n");
+
+		const skillDir = path.join(rootDir, "skills", "new-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# New Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["codex"], items: ["new-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext({ dryRun: false, backupSession: "sid-agents-skills" });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		const backedUp = path.join(
+			targetPath,
+			".sync-backup",
+			"sid-agents-skills",
+			"agents",
+			"skills",
+			"old-skill",
+			"SKILL.md",
+		);
+		expect(await exists(backedUp)).toBe(true);
+	});
+
+	it("preserves a foreign resident directory under .agents/skills/ on bootstrap (no prior manifest)", async () => {
+		// Positive control: a foreign resident sits under .agents/skills/ with no
+		// manifest yet on disk — reconcilePairManifest must treat this as bootstrap
+		// and delete nothing.
+		const foreignFile = path.join(
+			targetPath,
+			".agents",
+			"skills",
+			"plannotator-compound",
+			"SKILL.md",
+		);
+		await writeFile(foreignFile, "# Foreign resident\n");
+
+		const skillDir = path.join(rootDir, "skills", "new-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# New Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["codex"], items: ["new-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext({ dryRun: false });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		expect(await exists(foreignFile)).toBe(true);
+	});
+
+	it("regression: gemini skills still route the manifest key to gemini/skills", async () => {
+		const skillDir = path.join(rootDir, "skills", "some-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# Some Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["gemini"], items: ["some-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["gemini"]);
+		const context = makeContext({ dryRun: false });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		const manifestPath = path.join(targetPath, ".sync-manifest.json");
+		const manifest = JSON.parse(await readFile(manifestPath));
+		expect(manifest["gemini/skills"]).toEqual(["some-skill"]);
+		expect(manifest["agents/skills"]).toBeUndefined();
+	});
+
+	it("removes a .codex/skills fossil entry for a skill re-declared this run, and prunes the stale codex/skills manifest key", async () => {
+		// Fossil (pre-b9908fbc location) and its .agents/skills counterpart, as
+		// if a prior sync deployed under both names. Bytes deliberately differ:
+		// ownership is decided by name-provenance (declared+deployed THIS run),
+		// never by byte comparison — the fossil holds a prior rewrite pass's
+		// bytes, which are never byte-identical to the live raw source.
+		const fossilFile = path.join(targetPath, ".codex", "skills", "old-skill", "SKILL.md");
+		const newFile = path.join(targetPath, ".agents", "skills", "old-skill", "SKILL.md");
+		await writeFile(fossilFile, "# Old Skill (fossil rewrite)\n");
+		await writeFile(newFile, "# Old Skill\n");
+
+		// A stale codex/skills manifest key left over from before the .agents/skills
+		// routing change — must be pruned once cleanup succeeds.
+		await writeFile(
+			path.join(targetPath, ".sync-manifest.json"),
+			JSON.stringify({ "codex/skills": ["old-skill"] }),
+		);
+
+		// "old-skill" must be re-declared (and thus re-deployed) THIS run for the
+		// fossil cleanup to own it — name-provenance ownership is scoped to the
+		// current run's deployed set, not "ever deployed".
+		const oldSkillDir = path.join(rootDir, "skills", "old-skill");
+		await fs.mkdir(oldSkillDir, { recursive: true });
+		await writeFile(path.join(oldSkillDir, "SKILL.md"), "# Old Skill\n");
+
+		const skillDir = path.join(rootDir, "skills", "new-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# New Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["codex"], items: ["new-skill", "old-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext({ dryRun: false, backupSession: "sid-fossil-cleanup" });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		// Fossil entry removed, and the now-empty fossilDir removed with it.
+		expect(await exists(path.join(targetPath, ".codex", "skills"))).toBe(false);
+
+		// Backed up before removal.
+		const backedUp = path.join(
+			targetPath,
+			".sync-backup",
+			"sid-fossil-cleanup",
+			"codex",
+			"skills",
+			"old-skill",
+			"SKILL.md",
+		);
+		expect(await exists(backedUp)).toBe(true);
+
+		// Stale codex/skills manifest key pruned; agents/skills reflects this run.
+		const manifest = JSON.parse(await readFile(path.join(targetPath, ".sync-manifest.json")));
+		expect(manifest["codex/skills"]).toBeUndefined();
+		expect(manifest["agents/skills"]).toEqual(["new-skill", "old-skill"]);
+	});
+
+	it("keeps a .codex/skills fossil entry untouched when its skill is not declared/deployed this run, even though a live .agents/skills counterpart exists", async () => {
+		// "old-skill" was deployed by a prior run (fossil + live counterpart both
+		// exist) but is NOT part of THIS run's sync.yaml items — under
+		// name-provenance ownership it is a foreign resident this run, not
+		// cleaned up, regardless of a live counterpart existing.
+		const fossilFile = path.join(targetPath, ".codex", "skills", "old-skill", "SKILL.md");
+		const newFile = path.join(targetPath, ".agents", "skills", "old-skill", "SKILL.md");
+		await writeFile(fossilFile, "# Old Skill\n");
+		await writeFile(newFile, "# Old Skill\n");
+
+		const skillDir = path.join(rootDir, "skills", "new-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# New Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["codex"], items: ["new-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext({ dryRun: false, backupSession: "sid-not-owned" });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		expect(await exists(fossilFile)).toBe(true);
+		expect(
+			await exists(
+				path.join(targetPath, ".sync-backup", "sid-not-owned", "codex", "skills", "old-skill"),
+			),
+		).toBe(false);
+	});
+
+	it("never touches a .codex/skills fossil when codex is not a target for this skills sync (guard)", async () => {
+		// A fossil entry with NO .agents/skills counterpart at all — if the fossil
+		// cleanup guard incorrectly fired for this claude-only run, cleanup would
+		// throw (newDir absent) instead of silently no-op'ing.
+		const strayFile = path.join(targetPath, ".codex", "skills", "stray", "SKILL.md");
+		await writeFile(strayFile, "# Stray\n");
+
+		const skillDir = path.join(rootDir, "skills", "claude-skill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "# Claude Skill\n");
+
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["claude"], items: ["claude-skill"] },
+		};
+
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ dryRun: false });
+
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		expect(await exists(strayFile)).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: loadRootModelMaps
+// ---------------------------------------------------------------------------
+
+describe("loadRootModelMaps", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "load-root-model-maps-test-"));
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("returns the codex model-map parsed from the repo root's codex.yaml", async () => {
+		await writeFile(
+			path.join(tmpDir, "codex.yaml"),
+			"model-map:\n  tiers:\n    opus:\n      model: gpt-5.6-sol\n      effort: high\n",
+		);
+
+		const result = await loadRootModelMaps(tmpDir);
+
+		expect(result.get("codex")).toEqual({
+			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+		});
+	});
+
+	it("returns an empty map when no root platform YAML declares a model-map", async () => {
+		const result = await loadRootModelMaps(tmpDir);
+		expect(result.size).toBe(0);
 	});
 });
 
@@ -758,13 +1153,16 @@ describe("syncPlatformConfigs", () => {
 	});
 
 	it("stores model-map in context.modelMaps (P2-1)", async () => {
-		await writeFile(path.join(yamlDir, "codex.yaml"), "model-map:\n  claude-3: o3\n");
+		await writeFile(
+			path.join(yamlDir, "codex.yaml"),
+			"model-map:\n  tiers:\n    sonnet:\n      model: o3\n",
+		);
 
 		const codexAdapter = makeMockAdapter("codex");
 		// Override syncPlatformYaml to return a model map
 		codexAdapter.syncPlatformYaml = async (_t, _y, _d) => ({
 			processedSections: ["model-map"],
-			modelMap: { "claude-3": "o3" },
+			modelMap: { tiers: { sonnet: { model: "o3" } } },
 		});
 
 		const adapters = new Map<Platform, PlatformAdapter>([["codex", codexAdapter]]) as AdapterMap & {
@@ -776,7 +1174,7 @@ describe("syncPlatformConfigs", () => {
 
 		await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
 
-		expect(context.modelMaps.get("codex")).toEqual({ "claude-3": "o3" });
+		expect(context.modelMaps.get("codex")).toEqual({ tiers: { sonnet: { model: "o3" } } });
 	});
 
 	it("stores processedSections in context.platformYamlSections", async () => {
@@ -1411,12 +1809,12 @@ describe("processYaml", () => {
 		);
 	});
 
-	it("still rewrites deployed codex skill md via feature-platforms default", async () => {
+	it("still rewrites deployed codex md via feature-platforms default", async () => {
 		// Un-narrowed project — no top-level `platforms` override and the skills
 		// item carries none either, so resolvePlatforms falls through to
 		// config.yaml's feature-platforms.skills default. This test depends on
 		// the REAL repo config.yaml declaring codex in feature-platforms.skills
-		// (pinned by "feature-platforms contains only skills" below): getRootDir()
+		// (pinned by "feature-platforms contains skills and agents" below): getRootDir()
 		// (tools/lib/config.ts) walks up from tools/lib/config.ts's OWN module
 		// location to find config.yaml, not from the `rootDir` fixture argument
 		// passed to processYaml — so resolvePlatforms always reads the real repo
@@ -1424,27 +1822,34 @@ describe("processYaml", () => {
 		const syncYamlPath = path.join(rootDir, "sync.yaml");
 		await writeFile(syncYamlPath, `path: ${targetPath}\nskills:\n  items:\n    - oracle\n`);
 
-		// Plant a codex skill md directly on disk instead of deploying it for
-		// real: the mock adapter never writes files, and "oracle" has no source
-		// under rootDir/skills/ so resolveComponentPath fails and syncCategory's
+		// Plant a file directly on disk instead of deploying it for real: the
+		// mock adapter never writes files, and "oracle" has no source under
+		// rootDir/skills/ so resolveComponentPath fails and syncCategory's
 		// per-item dispatch loop `continue`s before ever reaching the
 		// backup+wipe step for codex:skills — so the planted file survives
 		// untouched to the rewrite pass. The gate keys on the file's presence on
 		// disk plus the un-narrowed config, not on a real syncSkillsDirect write.
-		const codexSkillFile = path.join(targetPath, ".codex", "skills", "oracle", "SKILL.md");
+		//
+		// Deliberately planted under .codex/hooks/, NOT .codex/skills/: the
+		// latter is the deprecated pre-b9908fbc fossil root, which the .codex/
+		// walk now excludes entirely (TODO 4 / D3) — skills live in
+		// .agents/skills. This test's actual subject is the eligibility-gating
+		// fallthrough to feature-platforms.skills, not the skills category
+		// itself, so any non-fossil .codex/ path exercises it equally.
+		const codexFile = path.join(targetPath, ".codex", "hooks", "oracle", "README.md");
 		const before = "See .claude/rules/ for conventions.\n";
-		await writeFile(codexSkillFile, before);
+		await writeFile(codexFile, before);
 
 		const adapters = makeAdapterMap(["claude", "codex"]);
 		const context = makeContext();
 
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
-		const after = await readFile(codexSkillFile);
-		expect(after, ".codex/skills/oracle/SKILL.md must be rewritten to .codex/rules/").toContain(
+		const after = await readFile(codexFile);
+		expect(after, ".codex/hooks/oracle/README.md must be rewritten to .codex/rules/").toContain(
 			".codex/rules/",
 		);
-		expect(after, ".codex/skills/oracle/SKILL.md must no longer contain .claude/").not.toContain(
+		expect(after, ".codex/hooks/oracle/README.md must no longer contain .claude/").not.toContain(
 			".claude/",
 		);
 	});
@@ -1712,13 +2117,16 @@ describe("modelMaps 크로스 프로젝트 누수 방지", () => {
 		claudeAdapter.syncPlatformYaml = async (_t, _y, _d) => {
 			callCount++;
 			if (callCount === 1) {
-				return { processedSections: ["model-map"], modelMap: { "claude-3": "o3" } };
+				return { processedSections: ["model-map"], modelMap: { tiers: { sonnet: { model: "o3" } } } };
 			}
 			return { processedSections: [], modelMap: undefined };
 		};
 
 		// Place a claude.yaml only in yaml1Dir
-		await writeFile(path.join(syncYaml1Dir, "claude.yaml"), "model-map:\n  claude-3: o3\n");
+		await writeFile(
+			path.join(syncYaml1Dir, "claude.yaml"),
+			"model-map:\n  tiers:\n    sonnet:\n      model: o3\n",
+		);
 
 		const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap;
 
@@ -1726,7 +2134,7 @@ describe("modelMaps 크로스 프로젝트 누수 방지", () => {
 
 		// First processYaml: populates modelMaps
 		await processYaml(context, syncYaml1Path, adapters, rootDir);
-		expect(context.modelMaps.get("claude")).toEqual({ "claude-3": "o3" });
+		expect(context.modelMaps.get("claude")).toEqual({ tiers: { sonnet: { model: "o3" } } });
 
 		// Second processYaml: no claude.yaml → should clear modelMaps
 		await processYaml(context, syncYaml2Path, adapters, rootDir);
@@ -2689,6 +3097,272 @@ describe("rewritePlatformPaths", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Suite: rewritePlatformPaths — codex two-root rule-table rewrite (TODO 4)
+//
+// D1: content.replace(/\.claude\//g, ...) hard-coded single rule -> applyRewriteRules
+//     driven by PLATFORM_REWRITE_RULES[platform].
+// D2: the .claude/-only fast path skipped every other Codex rule family.
+// D3: the walk only ever saw `.{platform}` — Codex skills deploy to
+//     `.agents/skills`, a second, disjoint root (since b9908fbc).
+// D4: covered separately below (processYaml call-site gate).
+// ---------------------------------------------------------------------------
+
+describe("rewritePlatformPaths — codex two-root rule-table rewrite (TODO 4)", () => {
+	let tmpDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "rewrite-codex-tworoot-test-"));
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(targetPath, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("G4-10: never opens a file for claude — a deployed skill carrying every codex token survives byte-identical (structural invariance)", async () => {
+		const rootDir = path.join(tmpDir, "root");
+		await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+		const sourceSkillDir = path.join(rootDir, "skills", "everything");
+		await fs.mkdir(sourceSkillDir, { recursive: true });
+		const source =
+			"Uses .claude/skills/x, ${CLAUDE_SKILL_DIR}/scripts/j.ts, Skill(humanizer), WebFetch, " +
+			"WebSearch, TaskOutput, TaskCreate, Agent(x), subagent_type, MultiEdit, AskUserQuestion, " +
+			"$CLAUDE_ENV_FILE, $CLAUDE_PROJECT_DIR, CLAUDE.md\n";
+		await writeFile(path.join(sourceSkillDir, "SKILL.md"), source);
+
+		const context = makeContext();
+		const syncYaml: SyncYaml = {
+			path: targetPath,
+			skills: { platforms: ["claude"], items: ["everything"] },
+		};
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
+
+		const deployedPath = path.join(targetPath, ".claude", "skills", "everything", "SKILL.md");
+		expect(await readFile(deployedPath)).toBe(source);
+
+		// PLATFORM_REWRITE_RULES.claude is empty by design — rewritePlatformPaths
+		// must return before it ever calls fs.readdir (which any directory walk
+		// requires), so no file under .claude/ is ever opened.
+		const readdirSpy = spyOn(fs, "readdir");
+		await rewritePlatformPaths(targetPath, "claude");
+		expect(readdirSpy).not.toHaveBeenCalled();
+		readdirSpy.mockRestore();
+
+		expect(await readFile(deployedPath)).toBe(source);
+	});
+
+	it("walks BOTH codex roots — .codex/ and .agents/skills/<owned> — applying the rule table and the contextual ${CLAUDE_SKILL_DIR} bake", async () => {
+		const skillDir = path.join(targetPath, ".agents", "skills", "mine");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(
+			path.join(skillDir, "SKILL.md"),
+			"See .claude/skills/x, invoke Skill(humanizer), run ${CLAUDE_SKILL_DIR}/scripts/j.ts\n",
+		);
+
+		const hookDir = path.join(targetPath, ".codex", "hooks", "sample");
+		await fs.mkdir(hookDir, { recursive: true });
+		await writeFile(path.join(hookDir, "README.md"), "Configured under .claude/hooks/sample\n");
+
+		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]));
+
+		const skillContent = await readFile(path.join(skillDir, "SKILL.md"));
+		expect(skillContent).toContain(".agents/skills/x");
+		expect(skillContent).toContain("the humanizer skill");
+		expect(skillContent).toContain(path.join(skillDir, "scripts", "j.ts"));
+		expect(skillContent).not.toContain("${CLAUDE_SKILL_DIR}");
+		expect(skillContent).not.toContain("Skill(");
+
+		const hookContent = await readFile(path.join(hookDir, "README.md"));
+		expect(hookContent).toContain(".codex/hooks/sample");
+		expect(hookContent).not.toContain(".claude/");
+	});
+
+	it("never touches a foreign .agents/skills resident absent from codexSkillNames (highest blast-radius guard — fails against a whole-dir walk)", async () => {
+		const ownedDir = path.join(targetPath, ".agents", "skills", "mine");
+		await fs.mkdir(ownedDir, { recursive: true });
+		await writeFile(path.join(ownedDir, "SKILL.md"), "Uses .claude/ and Skill(x)\n");
+
+		const foreignDir = path.join(targetPath, ".agents", "skills", "plannotator-compound");
+		await fs.mkdir(foreignDir, { recursive: true });
+		const foreignContent = "Uses .claude/ and Skill(x) — not OMT's to touch\n";
+		await writeFile(path.join(foreignDir, "SKILL.md"), foreignContent);
+
+		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]));
+
+		// The mechanism actually ran (this assertion is what makes the test fail
+		// under a "do nothing" no-op, rather than passing vacuously).
+		const ownedContent = await readFile(path.join(ownedDir, "SKILL.md"));
+		expect(ownedContent).not.toContain(".claude/");
+		expect(ownedContent).not.toContain("Skill(");
+
+		// The foreign resident — not in codexSkillNames — is untouched, byte-identical.
+		expect(await readFile(path.join(foreignDir, "SKILL.md"))).toBe(foreignContent);
+	});
+
+	it("never rewrites the deprecated .codex/skills fossil root (e.g. a foreign .system entry)", async () => {
+		const fossilFile = path.join(targetPath, ".codex", "skills", ".system", "note.md");
+		const fossilContent = ".claude/ residue left behind by a prior OMT version\n";
+		await writeFile(fossilFile, fossilContent);
+
+		// A real .codex/ file outside the fossil root, so the .codex/ walk has
+		// something legitimate to rewrite in the same run.
+		await writeFile(path.join(targetPath, ".codex", "agents", "oracle.md"), "See .claude/agents/\n");
+
+		await rewritePlatformPaths(targetPath, "codex");
+
+		expect(await readFile(fossilFile)).toBe(fossilContent);
+		expect(await readFile(path.join(targetPath, ".codex", "agents", "oracle.md"))).toContain(
+			".codex/agents/",
+		);
+	});
+
+	it("never rewrites generated lib/vendor/*.js bundles", async () => {
+		const vendorFile = path.join(targetPath, ".codex", "lib", "vendor", "picomatch.js");
+		const vendorContent = "// bundled third-party code\nmodule.exports = () => '.claude/';\n";
+		await writeFile(vendorFile, vendorContent);
+
+		await rewritePlatformPaths(targetPath, "codex");
+
+		expect(await readFile(vendorFile)).toBe(vendorContent);
+	});
+
+	it("rules-injector regression guard: program files under .codex/ survive byte-identical (content-type policy, not root)", async () => {
+		// hooks/rules-injector/rules/constants.ts: `.claude/rules` here is one
+		// entry in a MULTI-ECOSYSTEM rule-source enum (sibling to `.omo/rules`,
+		// `.cursor/rules`) — it names Claude Code's convention, not an OMT
+		// platform path. Rewriting it to `.codex/rules` breaks the injector,
+		// the ONLY hook wired to Codex (codex.yaml).
+		const constantsFile = path.join(targetPath, ".codex", "hooks", "rules-injector", "constants.ts");
+		const constantsContent = 'export const CLAUDE_RULES_DIR = ".claude/rules";\n';
+		await writeFile(constantsFile, constantsContent);
+
+		// lib/job-utils.ts: a runtime path-classifier check, not a deploy-path
+		// reference.
+		const jobUtilsFile = path.join(targetPath, ".codex", "lib", "job-utils.ts");
+		const jobUtilsContent = 'if (p.includes("/.claude/skills/")) return "claude";\n';
+		await writeFile(jobUtilsFile, jobUtilsContent);
+
+		await rewritePlatformPaths(targetPath, "codex");
+
+		expect(await readFile(constantsFile)).toBe(constantsContent);
+		expect(await readFile(jobUtilsFile)).toBe(jobUtilsContent);
+	});
+
+	it("skill-bundled programs under .agents/skills survive byte-identical, while the sibling .md is still rewritten (proves the walk isn't skipped wholesale)", async () => {
+		const skillDir = path.join(targetPath, ".agents", "skills", "mine");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "See .claude/skills and Skill(x)\n");
+
+		// scripts/t.ts: subagent_type here is a transcript struct field, not
+		// the Claude Agent(...) tool parameter — rewriting it to agent_type
+		// breaks parsing.
+		const scriptFile = path.join(skillDir, "scripts", "t.ts");
+		const scriptContent = 'type Entry = { subagent_type: string; source: ".claude/skills" };\n';
+		await writeFile(scriptFile, scriptContent);
+
+		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]));
+
+		const mdContent = await readFile(path.join(skillDir, "SKILL.md"));
+		expect(mdContent).toContain(".agents/skills");
+		expect(mdContent).toContain("the x skill");
+		expect(mdContent).not.toContain("Skill(");
+
+		expect(await readFile(scriptFile)).toBe(scriptContent);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: processYaml — codex skills rewrite gate (D4) + scoped skill name
+// derivation (empirical proof, not just the unscoped happy path).
+// ---------------------------------------------------------------------------
+
+describe("processYaml — codex skills rewrite gate (D4) and scoped name derivation", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "process-yaml-codex-rewrite-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("D4: rewrites codex skills even when the target has no .codex/ directory at all", async () => {
+		const skillDir = path.join(rootDir, "skills", "myskill");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "Use Skill(x) and see .claude/rules\n");
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [codex]\n  items:\n    - myskill\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		// Premise of the D4 gap: a codex-skills-only project never creates .codex/.
+		expect(await exists(path.join(targetPath, ".codex"))).toBe(false);
+
+		const deployed = await readFile(path.join(targetPath, ".agents", "skills", "myskill", "SKILL.md"));
+		expect(deployed).toContain("the x skill");
+		expect(deployed).toContain(".codex/rules");
+		expect(deployed).not.toContain("Skill(");
+		expect(deployed).not.toContain(".claude/");
+	});
+
+	it("derives the deployed skill directory name from resolveComponentPath's displayName for a scoped component, and that exact name drives the rewrite", async () => {
+		const skillDir = path.join(rootDir, "projects", "myproj", "skills", "testing");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(path.join(skillDir, "SKILL.md"), "Uses .claude/ and Skill(x)\n");
+
+		const syncYamlPath = path.join(rootDir, "projects", "myproj", "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [codex]\n  items:\n    - myproj:testing\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		// Empirical: the deployed directory is named "testing" (resolveComponentPath's
+		// displayName), never the raw scoped ref "myproj:testing".
+		const agentsSkillsDir = path.join(targetPath, ".agents", "skills");
+		expect(await fs.readdir(agentsSkillsDir)).toEqual(["testing"]);
+
+		// codexSkillNames must have carried "testing" through to the rewrite — if the
+		// derivation were wrong (raw ref, or left empty), this file would still
+		// contain .claude/ / Skill(.
+		const deployed = await readFile(path.join(agentsSkillsDir, "testing", "SKILL.md"));
+		expect(deployed).toContain(".codex/");
+		expect(deployed).not.toContain(".claude/");
+		expect(deployed).toContain("the x skill");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Suite: dry-run
 // ---------------------------------------------------------------------------
 
@@ -2743,7 +3417,7 @@ describe("dry-run", () => {
 // ---------------------------------------------------------------------------
 
 describe("config.yaml feature-platforms 정리", () => {
-	it("feature-platforms contains only skills", async () => {
+	it("feature-platforms contains skills and agents", async () => {
 		// Read the actual config.yaml from the repo
 		const configPath = path.join(import.meta.dir, "..", "config.yaml");
 
@@ -2752,7 +3426,7 @@ describe("config.yaml feature-platforms 정리", () => {
 		const featurePlatforms = config["feature-platforms"] as Record<string, unknown> | undefined;
 
 		expect(featurePlatforms).toBeDefined();
-		expect(Object.keys(featurePlatforms!)).toEqual(["skills"]);
+		expect(Object.keys(featurePlatforms!)).toEqual(["skills", "agents"]);
 		// config, mcps, plugins should be absent
 		expect(featurePlatforms!["config"]).toBeUndefined();
 		expect(featurePlatforms!["mcps"]).toBeUndefined();
@@ -2770,6 +3444,7 @@ describe("createContext", () => {
 		expect(ctx.dryRun).toBe(false);
 		expect(ctx.processedPaths).toBeInstanceOf(Set);
 		expect(ctx.modelMaps).toBeInstanceOf(Map);
+		expect(ctx.rootModelMaps).toBeInstanceOf(Map);
 		expect(ctx.platformYamlSections).toBeInstanceOf(Map);
 		expect(typeof ctx.backupSession).toBe("string");
 		expect(ctx.backupSession.length).toBeGreaterThan(0);

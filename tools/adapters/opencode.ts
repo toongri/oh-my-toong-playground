@@ -1,24 +1,32 @@
 import fs from "fs/promises";
 import path from "path";
 
-import type { PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
+import type { ModelMap, PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
+import { assertMappedTier } from "../lib/model-map.ts";
 
 // =============================================================================
 // Model Map Helper
 // =============================================================================
 
 /**
- * Apply a model map to resolve a model string to its mapped value.
- * Returns the mapped value if found, or the original string if not.
+ * Resolve an agent's tier to its OpenCode model id.
+ * A per-agent override in `modelMap.agents` beats the `modelMap.tiers` default.
+ * The tier must be present in `modelMap.tiers` — see `assertMappedTier`.
  */
-export function applyModelMap(modelMap: Record<string, string>, model: string): string {
-	return modelMap[model] ?? model;
+export function applyModelMap(
+	modelMap: ModelMap,
+	tier: string,
+	agentFile: string,
+	agentName?: string,
+): string {
+	assertMappedTier(modelMap, tier, { platform: "opencode", agentFile, agentName });
+	return ((agentName ? modelMap.agents?.[agentName] : undefined) ?? modelMap.tiers[tier]).model;
 }
 
 // =============================================================================
@@ -35,7 +43,8 @@ export function applyModelMap(modelMap: Record<string, string>, model: string): 
  */
 export function translateAgentFrontmatter(
 	content: string,
-	modelMap?: Record<string, string>,
+	modelMap?: ModelMap,
+	agentFile?: string,
 ): string {
 	const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content);
 
@@ -54,7 +63,7 @@ export function translateAgentFrontmatter(
 
 	// P2-5: Apply model map to model field if provided
 	if (modelMap && typeof frontmatter["model"] === "string") {
-		frontmatter["model"] = applyModelMap(modelMap, frontmatter["model"]);
+		frontmatter["model"] = applyModelMap(modelMap, frontmatter["model"], agentFile ?? "");
 	}
 
 	return serializeFrontmatter(frontmatter, body);
@@ -76,7 +85,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		addSkills?: string[],
 		_addHooks?: unknown[],
 		dryRun?: boolean,
-		modelMap?: Record<string, string>,
+		modelMap?: ModelMap,
 	): Promise<void> {
 		const targetDir = path.join(targetPath, ".opencode", "agents");
 		const targetFile = path.join(targetDir, `${displayName}.md`);
@@ -105,7 +114,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		// Translate frontmatter for OpenCode compatibility (P2-5: pass modelMap)
 		try {
 			const content = await fs.readFile(targetFile, "utf-8");
-			const translated = translateAgentFrontmatter(content, modelMap);
+			const translated = translateAgentFrontmatter(content, modelMap, displayName);
 			await fs.writeFile(targetFile, translated, "utf-8");
 		} catch {
 			logWarn(`Failed to translate frontmatter for: ${sourcePath}. Copying as-is.`);
@@ -289,7 +298,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		_scope?: PluginScope,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
-		let modelMap: Record<string, string> | undefined;
+		let modelMap: ModelMap | undefined;
 
 		// 1. model-map (must be processed before config)
 		if (yaml["model-map"] !== undefined && yaml["model-map"] !== null) {
@@ -297,20 +306,10 @@ export const opencodeAdapter: PlatformAdapter = {
 			processedSections.push("model-map");
 		}
 
-		// 2. config — apply model-map to model and small_model fields, then merge
+		// 2. config — merged as-is. config.model/small_model are OpenCode's own
+		// default model ids, not agent tiers, so model-map does not apply here.
 		if (yaml.config !== undefined && yaml.config !== null) {
-			const configObj = { ...yaml.config };
-
-			if (modelMap) {
-				if (typeof configObj["model"] === "string") {
-					configObj["model"] = applyModelMap(modelMap, configObj["model"]);
-				}
-				if (typeof configObj["small_model"] === "string") {
-					configObj["small_model"] = applyModelMap(modelMap, configObj["small_model"]);
-				}
-			}
-
-			await syncConfig(targetPath, configObj, dryRun);
+			await syncConfig(targetPath, yaml.config, dryRun);
 			processedSections.push("config");
 		}
 

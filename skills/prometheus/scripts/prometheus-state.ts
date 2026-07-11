@@ -2,7 +2,7 @@
  * Prometheus skill state CLI.
  *
  * State file path: ${OMT_DIR}/prometheus-state-${sessionId}.json
- * Session ID: resolved via resolveSessionIdOrThrow() (hard-fail on absent/unsafe)
+ * Session ID: resolved from env OMT_SESSION_ID, falling back to CODEX_THREAD_ID (Codex), via resolveSessionIdOrThrow() (hard-fail when neither is set or unsafe)
  *
  * Subcommands:
  *   set --phase <S> [--plan-path <p>] [--resume-summary <s>]

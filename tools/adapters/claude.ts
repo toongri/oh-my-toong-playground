@@ -1,7 +1,13 @@
 import fs from "fs/promises";
 import path from "path";
 
-import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
+import type {
+	ModelMap,
+	Platform,
+	PlatformConfigResult,
+	PlatformYaml,
+	PluginScope,
+} from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
@@ -96,7 +102,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 		addSkills?: string[],
 		addHooks?: unknown[],
 		dryRun = false,
-		_modelMap?: Record<string, string>,
+		_modelMap?: ModelMap,
 	): Promise<void> {
 		const targetDir = path.join(targetPath, ".claude", "agents");
 		const targetFile = path.join(targetDir, `${displayName}.md`);

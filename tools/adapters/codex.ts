@@ -3,7 +3,7 @@
  * Implements PlatformAdapter for the Codex platform.
  *
  * Key behaviors:
- * - agents: not supported, skip with warning
+ * - agents: md -> toml translator (name/description/developer_instructions + model-map)
  * - commands: not supported (global ~/.codex/prompts/ only), skip with warning
  * - hooks: supported; command is a literal relative `bun run .codex/hooks/<name>/index.ts`
  * - skills, scripts: syncDirectory
@@ -19,14 +19,43 @@ import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { readTextFile, readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isPlainObject } from "../lib/deep-merge.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
+import { backupCategory } from "../lib/backup.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
+import { assertMappedTier } from "../lib/model-map.ts";
+import { parseFrontmatter } from "../lib/frontmatter.ts";
+import { PLATFORM_REWRITE_RULES, applyRewriteRules } from "../lib/rewrite-rules.ts";
 import type {
+	ModelMap,
 	PlatformConfigResult,
 	PlatformYaml,
 	PlatformYamlHookItem,
 	PluginScope,
 } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
+
+// =============================================================================
+// Model Map Applier
+// =============================================================================
+
+export type CodexResolvedModel = { model: string; model_reasoning_effort?: string };
+
+/**
+ * Resolve an agent's tier to its Codex model + reasoning effort.
+ * A per-agent override in `modelMap.agents` beats the `modelMap.tiers` default.
+ * The tier must be present in `modelMap.tiers` — see `assertMappedTier`.
+ */
+export function resolveCodexAgentModel(
+	modelMap: ModelMap,
+	tier: string,
+	agentFile: string,
+	agentName?: string,
+): CodexResolvedModel {
+	assertMappedTier(modelMap, tier, { platform: "codex", agentFile, agentName });
+	const entry = (agentName ? modelMap.agents?.[agentName] : undefined) ?? modelMap.tiers[tier];
+	return entry.effort === undefined
+		? { model: entry.model }
+		: { model: entry.model, model_reasoning_effort: entry.effort };
+}
 
 // =============================================================================
 // TOML Managed Block Helpers
@@ -113,6 +142,129 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // =============================================================================
+// Skills directory resolution
+// =============================================================================
+
+/**
+ * Codex 0.144.1 deprecates `~/.codex/skills` / `<repo>/.codex/skills` in favor
+ * of the cross-CLI `.agents/skills` root (both home `~/.agents/skills` and
+ * project `<repo>/.agents/skills`). Skills are the ONLY Codex category that
+ * writes outside `configDir` (`.codex/`) — agents, config.toml, hooks, and
+ * scripts all still live under `.codex/`.
+ *
+ * Exported so `rewritePlatformPaths` (tools/sync.ts) resolves this same path
+ * rather than re-declaring the `.agents/skills` string — one owner for it.
+ */
+export function codexSkillsDir(targetPath: string): string {
+	return path.join(targetPath, ".agents", "skills");
+}
+
+/**
+ * Removes the pre-b9908fbc `.codex/skills` fossil now that Codex skills deploy
+ * to `.agents/skills` (codexSkillsDir). Codex 0.144.1 reads BOTH roots, so a
+ * populated fossil makes every skill appear twice in the session prompt.
+ *
+ * Safety contract:
+ * - Ownership is decided by name-provenance, not on-disk state: an entry is
+ *   OMT-owned iff its name is in `ownedSkillNames` — the set of skills OMT
+ *   actually deployed to `.agents/skills` THIS run (the caller passes
+ *   `deployedNames.get("agents")`). Anything else is a foreign resident
+ *   (e.g. `.system`, or a same-named directory nobody here deployed) and is
+ *   NEVER deleted, and never blocks cleanup.
+ * - Byte identity between the fossil entry and its `.agents/skills`
+ *   counterpart is deliberately NOT asserted: the fossil holds
+ *   `rewrite_old(source)` — a prior OMT version's `rewritePlatformPaths`
+ *   rewrote `.claude/` references to `.codex/` before ever writing the
+ *   fossil — while the counterpart holds the raw, un-rewritten source, so
+ *   the bytes structurally can never match on a real deploy.
+ * - Deletion still requires a live counterpart: before removing an owned
+ *   entry, its `.agents/skills/<name>` directory must exist. A name that is
+ *   owned this run but has no on-disk counterpart is a deployed-but-missing
+ *   anomaly, not an expected byte-drift case — this throws, naming the
+ *   entry, and (checked for every owned entry before any deletion) leaves
+ *   the whole fossil untouched and writes no backup.
+ * - The fossil is backed up (via `backupCategory`, using the plain-string
+ *   platform `"codex"`) BEFORE removal, giving a rollback surface.
+ * - `fossilDir` itself is removed only once it is fully empty; a surviving
+ *   foreign resident keeps it in place.
+ * - Idempotent: once the fossil is gone, a repeat call returns silently.
+ */
+export async function cleanupCodexSkillsFossil(
+	deployRoot: string,
+	backupSession: string,
+	dryRun: boolean,
+	ownedSkillNames: ReadonlySet<string>,
+): Promise<void> {
+	const fossilDir = path.join(deployRoot, ".codex", "skills");
+	const newDir = codexSkillsDir(deployRoot);
+
+	const fossilStat = await fs.stat(fossilDir).catch(() => undefined);
+	if (!fossilStat?.isDirectory()) {
+		return; // nothing to do — idempotent
+	}
+
+	const newStat = await fs.stat(newDir).catch(() => undefined);
+	if (!newStat?.isDirectory()) {
+		if (dryRun) {
+			logDry(
+				`Codex skills fossil cleanup deferred: '${newDir}' does not exist yet (a real sync creates it first)`,
+			);
+			return;
+		}
+		throw new Error(
+			`cleanupCodexSkillsFossil: '${fossilDir}' exists but its replacement '${newDir}' does not — refusing to delete the fossil`,
+		);
+	}
+
+	const fossilEntries = await fs.readdir(fossilDir);
+
+	const omtOwned: string[] = [];
+	for (const name of fossilEntries) {
+		if (ownedSkillNames.has(name)) {
+			omtOwned.push(name);
+		} else {
+			logInfo(`Codex skills fossil: foreign resident kept: ${name}`);
+		}
+	}
+
+	if (dryRun) {
+		for (const name of omtOwned) {
+			logDry(`Remove Codex skills fossil entry: ${path.join(fossilDir, name)}`);
+		}
+		return;
+	}
+
+	// Every OMT-owned entry must have a live counterpart under .agents/skills
+	// BEFORE anything is deleted (deployed-but-missing anomaly guard). This is
+	// a real-run-only guard: in dry-run nothing has been written yet, so a
+	// missing counterpart is expected, not an anomaly.
+	for (const name of omtOwned) {
+		const counterpartStat = await fs.stat(path.join(newDir, name)).catch(() => undefined);
+		if (!counterpartStat) {
+			throw new Error(
+				`cleanupCodexSkillsFossil: entry '${name}' is owned this run but has no counterpart at '${path.join(newDir, name)}' — refusing to delete`,
+			);
+		}
+	}
+
+	if (omtOwned.length === 0) {
+		return; // nothing OMT-owned to remove (fossil holds only foreign residents)
+	}
+
+	await backupCategory(deployRoot, "codex", "skills", backupSession);
+
+	for (const name of omtOwned) {
+		await fs.rm(path.join(fossilDir, name), { recursive: true, force: true });
+	}
+
+	const remaining = await fs.readdir(fossilDir);
+	if (remaining.length === 0) {
+		await fs.rm(fossilDir, { recursive: true, force: true });
+		logInfo(`Codex skills fossil removed: ${fossilDir}`);
+	}
+}
+
+// =============================================================================
 // CodexAdapter
 // =============================================================================
 
@@ -125,19 +277,92 @@ export class CodexAdapter implements PlatformAdapter {
 	private mcpAccumulator: Record<string, Record<string, unknown>> = {};
 
 	// ---------------------------------------------------------------------------
-	// syncAgentsDirect — not supported
+	// syncAgentsDirect — md -> toml translator
 	// ---------------------------------------------------------------------------
 
+	/**
+	 * Translates an agent `.md` (Claude-vocabulary frontmatter + body) into a
+	 * Codex agent TOML. Emits ONLY the allowlisted keys `name` / `description` /
+	 * `developer_instructions` [+ `model` / `model_reasoning_effort`] — Claude-only
+	 * frontmatter keys (`add-skills`, `subagent_type`, `tools`, `skills`, ...) are
+	 * never spread into the output. Codex does NOT reject unknown TOML keys — its
+	 * `deny_unknown_fields` is silently disabled by the flattened `ConfigToml`
+	 * (serde limitation, verified at 0.144.1) — so it will not catch a leak for us:
+	 * this emit-allowlist is the only guarantee, and must never become a denylist.
+	 */
 	async syncAgentsDirect(
-		_targetPath: string,
+		targetPath: string,
 		displayName: string,
-		_sourcePath: string,
+		sourcePath: string,
 		_addSkills?: string[],
 		_addHooks?: unknown[],
-		_dryRun = false,
-		_modelMap?: Record<string, string>,
+		dryRun = false,
+		modelMap?: ModelMap,
 	): Promise<void> {
-		logWarn(`Codex: agents는 지원되지 않습니다. Skip: ${displayName}`);
+		const targetFile = path.join(targetPath, this.configDir, "agents", `${displayName}.toml`);
+
+		const stat = await fs.stat(sourcePath).catch(() => undefined);
+		if (!stat?.isFile()) {
+			logWarn(`Codex agent 원본 없음: ${sourcePath}`);
+			return;
+		}
+
+		if (dryRun) {
+			logDry(`Translate agent: ${sourcePath} -> ${targetFile}`);
+			return;
+		}
+
+		const { frontmatter, body } = parseFrontmatter(await fs.readFile(sourcePath, "utf-8"));
+
+		const name =
+			typeof frontmatter.name === "string" && frontmatter.name.trim()
+				? frontmatter.name.trim()
+				: displayName;
+		const description =
+			typeof frontmatter.description === "string" ? frontmatter.description.trim() : "";
+		const developer_instructions = body.trim();
+
+		if (!description || !developer_instructions) {
+			throw new Error(
+				`codex agent '${sourcePath}': description/developer_instructions must be non-blank`,
+			);
+		}
+
+		const tier = typeof frontmatter.model === "string" ? frontmatter.model : undefined;
+		let modelFields: Partial<CodexResolvedModel> = {};
+		if (tier) {
+			if (!modelMap) {
+				throw new Error(
+					`codex agent '${sourcePath}': model tier '${tier}' but no model-map reachable`,
+				);
+			}
+			modelFields = resolveCodexAgentModel(modelMap, tier, sourcePath, name);
+		}
+
+		// Agent bodies are instruction text the model reads (they carry `Skill(`,
+		// `subagent_type`, etc. — e.g. agents/sisyphus-junior.md), and the emitted
+		// TOML lives inside the codex deploy root the plan's absence checks scope
+		// to. Apply the same rule table rewritePlatformPaths applies to deployed
+		// .md here, at generation time, since these TOML files are generated (not
+		// walked as .md). name/model/model_reasoning_effort are never rewritten —
+		// the emit-allowlist stays exactly as it is. No ${CLAUDE_SKILL_DIR} bake:
+		// it does not occur in agents/*.md, and an agent has no owning skill dir.
+		const rewrittenDescription = applyRewriteRules(description, PLATFORM_REWRITE_RULES.codex);
+		const rewrittenInstructions = applyRewriteRules(
+			developer_instructions,
+			PLATFORM_REWRITE_RULES.codex,
+		);
+
+		const tomlObj = {
+			name,
+			description: rewrittenDescription,
+			developer_instructions: rewrittenInstructions,
+			...modelFields,
+		};
+
+		await fs.mkdir(path.dirname(targetFile), { recursive: true });
+		await fs.writeFile(targetFile, stringify(tomlObj), "utf-8");
+		logInfo(`Codex agent 생성: ${displayName}.toml`);
 	}
 
 	// ---------------------------------------------------------------------------
@@ -217,7 +442,7 @@ export class CodexAdapter implements PlatformAdapter {
 		sourcePath: string,
 		dryRun = false,
 	): Promise<void> {
-		const targetDir = path.join(targetPath, this.configDir, "skills");
+		const targetDir = codexSkillsDir(targetPath);
 		const targetSkillDir = path.join(targetDir, displayName);
 
 		let stat: Awaited<ReturnType<typeof fs.stat>>;
@@ -388,7 +613,7 @@ export class CodexAdapter implements PlatformAdapter {
 		_scope?: PluginScope,
 	): Promise<PlatformConfigResult> {
 		const processedSections: string[] = [];
-		let modelMap: Record<string, string> | undefined;
+		let modelMap: ModelMap | undefined;
 
 		// Reset MCP accumulator for this run
 		this.resetMcpAccumulator();

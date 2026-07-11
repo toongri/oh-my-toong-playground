@@ -13,7 +13,7 @@
  * CLI usage: bun run tools/validators/components.ts [path-to-sync.yaml]
  */
 
-import { existsSync, readdirSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join, dirname, basename } from "path";
 import { getRootDir, getEnabledProjects } from "../lib/config.ts";
 import { expandTilde } from "../lib/path-utils.ts";
@@ -24,12 +24,22 @@ import {
 	isObject,
 	isArray,
 } from "../lib/validation.ts";
-import { resolveComponentPath, setProjectContext } from "../lib/resolver.ts";
+import { resolveComponentPath, resolvePlatforms, setProjectContext } from "../lib/resolver.ts";
 import type { SyncItem, SyncYaml } from "../lib/types.ts";
 import { readAndExpandSyncYaml } from "../lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "../lib/parse-platform-yaml.ts";
-import { deploysToClaudeDotDir } from "../sync.ts";
+import { parseFrontmatter } from "../lib/frontmatter.ts";
+import { deploysToClaudeDotDir, SUPPORTED_CATEGORIES } from "../sync.ts";
 import { resolveDeployTargets } from "../lib/resolve-deploy-targets.ts";
+import { collectFiles, DEFAULT_EXCLUDE } from "../lib/sync-directory.ts";
+import {
+	applyRewriteRules,
+	BROAD_DETECTORS,
+	KEEP_IDENTICAL_TOKENS,
+	OUT_OF_SCOPE_TOKENS,
+	PLATFORM_REWRITE_RULES,
+	SKILL_DIR_TOKEN,
+} from "../lib/rewrite-rules.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -463,6 +473,333 @@ export async function validatePlatformYamlHookComponents(
 }
 
 // ---------------------------------------------------------------------------
+// G3-5 / G3-6: model-map coverage for codex/opencode-resolved agents
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the tier key sets declared in the repo-root codex.yaml / opencode.yaml
+ * model-map. The model-map is GLOBAL — it lives only in the root per-platform
+ * YAML (colocated with the root sync.yaml, whose `path: "~"`), never in a
+ * per-project sync.yaml. Returns `undefined` for a platform whose root YAML
+ * or model-map.tiers is absent.
+ */
+async function loadRootModelMapTiers(
+	rootDir: string,
+): Promise<{ codex: Set<string> | undefined; opencode: Set<string> | undefined }> {
+	const codexYaml = await parseAndMergePlatformYaml(rootDir, "codex");
+	const opencodeYaml = await parseAndMergePlatformYaml(rootDir, "opencode");
+	return {
+		codex: codexYaml?.["model-map"]?.tiers ? new Set(Object.keys(codexYaml["model-map"].tiers)) : undefined,
+		opencode: opencodeYaml?.["model-map"]?.tiers
+			? new Set(Object.keys(opencodeYaml["model-map"].tiers))
+			: undefined,
+	};
+}
+
+/**
+ * Resolve an agent component ref to its source .md path, mirroring the
+ * flat-path-first precedence used by the agents category check in
+ * `validateSyncYamlComponents` above. Returns null when unresolvable — that
+ * case is already reported as a missing-component error elsewhere.
+ */
+function resolveAgentSourcePath(
+	component: string,
+	rootDir: string,
+	projectDirName: string | undefined,
+): string | null {
+	if (!component.includes(":")) {
+		const flatPath = join(rootDir, "agents", `${component}.md`);
+		if (existsSync(flatPath)) return flatPath;
+		const indexPath = join(rootDir, "agents", component, "index.md");
+		if (existsSync(indexPath)) return indexPath;
+	}
+	const resolved = resolveComponentPath(component, "agents", rootDir, projectDirName);
+	return "error" in resolved ? null : resolved.path;
+}
+
+/**
+ * G3-5/G3-6: for every `agents` item across the whole sync.yaml corpus (root +
+ * projects/*) that resolves to codex or opencode, the agent's declared
+ * `model:` tier must be present in that platform's model-map.tiers (G3-5).
+ *
+ * G3-6 adds a single aggregate assertion: the codex model-map's tier set must
+ * be a superset of every tier codex-resolved agents actually declare — with a
+ * non-empty-declared-tiers positive control, so a resolver bug that silently
+ * resolves zero codex agents (e.g. a broken feature-platforms cascade) cannot
+ * vacuously satisfy the superset check by having nothing to compare.
+ *
+ * opencode currently resolves zero agents (feature-platforms.agents =
+ * [claude, codex], no per-item override) — its per-agent loop body simply
+ * never runs, producing no errors. That is correct behavior, not a gap: only
+ * codex gets the non-empty positive control, matching what feature-platforms
+ * actually targets today.
+ */
+export async function validateModelMapCoverage(
+	rootDir: string,
+	enabledProjects?: string[],
+): Promise<ValidationResult> {
+	const result = makeResult();
+
+	const rootTiers = await loadRootModelMapTiers(rootDir);
+	const effective = enabledProjects ?? (await getEnabledProjects());
+	const enabledSet = effective && effective.length > 0 ? new Set(effective) : undefined;
+	const projectsDir = join(rootDir, "projects");
+
+	const codexDeclaredTiers = new Set<string>();
+
+	for (const syncYamlPath of discoverSyncYamls(rootDir)) {
+		if (enabledSet) {
+			const parentDir = dirname(syncYamlPath);
+			if (dirname(parentDir) === projectsDir && !enabledSet.has(basename(parentDir))) {
+				continue;
+			}
+		}
+
+		let syncYaml: SyncYaml | null;
+		try {
+			syncYaml = await readAndExpandSyncYaml(syncYamlPath);
+		} catch {
+			continue; // parse error already reported by validateSyncYamlComponents
+		}
+		if (!syncYaml) continue;
+
+		const ctx = setProjectContext(syncYaml, syncYamlPath, rootDir);
+		const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
+
+		const agentsSection = syncYaml.agents;
+		if (!agentsSection || !Array.isArray(agentsSection.items)) continue;
+
+		const sectionPlatforms = agentsSection.platforms;
+		const syncYamlPlatforms = syncYaml.platforms;
+
+		for (const item of agentsSection.items) {
+			const component = getItemComponent(item);
+			if (!component) continue;
+
+			const platforms = await resolvePlatforms(item, sectionPlatforms, syncYamlPlatforms, "agents");
+
+			for (const platform of platforms) {
+				if (platform !== "codex" && platform !== "opencode") continue;
+
+				const sourcePath = resolveAgentSourcePath(component, rootDir, projectDirName);
+				if (sourcePath === null) continue; // missing-component already reported elsewhere
+
+				const content = readFileSync(sourcePath, "utf-8");
+				const { frontmatter } = parseFrontmatter(content);
+				const tier = frontmatter.model;
+				if (typeof tier !== "string" || !tier) continue;
+
+				if (platform === "codex") codexDeclaredTiers.add(tier);
+
+				const tiers = rootTiers[platform];
+				if (!tiers || !tiers.has(tier)) {
+					result.errors.push(
+						`model-map: agent '${component}' declares tier '${tier}' not mapped in ${platform} model-map.tiers (${syncYamlPath})`,
+					);
+				}
+			}
+		}
+	}
+
+	// G3-6 positive control: the declared-tier set for codex must be non-empty,
+	// or the superset assertion below would vacuously pass.
+	if (codexDeclaredTiers.size === 0) {
+		result.errors.push(
+			"model-map: no codex-resolved agent declared a tier — contradicts feature-platforms.agents including codex",
+		);
+	} else {
+		const codexTiers = rootTiers.codex ?? new Set<string>();
+		const missing = [...codexDeclaredTiers].filter((t) => !codexTiers.has(t));
+		if (missing.length > 0) {
+			result.errors.push(
+				`model-map: codex model-map.tiers is missing tier(s) declared by agents: ${missing.join(", ")}`,
+			);
+		}
+	}
+
+	return result;
+}
+
+// ---------------------------------------------------------------------------
+// G4-2: codex rewrite-table completeness scanner
+// ---------------------------------------------------------------------------
+
+/** The inner env-var name literally inside SKILL_DIR_TOKEN (`${CLAUDE_SKILL_DIR}` -> `CLAUDE_SKILL_DIR`). */
+const SKILL_DIR_TOKEN_INNER = SKILL_DIR_TOKEN.slice(2, -1);
+
+/**
+ * Resolve the absolute file paths a single codex-resolved sync.yaml item
+ * deploys, mirroring `resolveAgentSourcePath`'s flat-path-first precedence for
+ * `agents` and `resolveComponentPath`'s directory conventions (SKILL.md,
+ * plain directory) for every other category. A directory result (skills,
+ * scripts) is walked with `collectFiles`/`DEFAULT_EXCLUDE` — the SAME
+ * exclusion policy `syncDirectory` applies at deploy time
+ * (tools/lib/sync-directory.ts) — so a `*.test.ts` fixture that never reaches
+ * the deploy tree is never scanned here either.
+ */
+async function resolveCodexCandidateFiles(
+	category: string,
+	component: string,
+	rootDir: string,
+	projectDirName: string | undefined,
+): Promise<string[]> {
+	const sourcePath =
+		category === "agents"
+			? resolveAgentSourcePath(component, rootDir, projectDirName)
+			: (() => {
+					const resolved = resolveComponentPath(component, category, rootDir, projectDirName);
+					return "error" in resolved ? null : resolved.path;
+				})();
+	if (sourcePath === null || !existsSync(sourcePath)) return []; // missing-component already reported elsewhere
+
+	if (statSync(sourcePath).isDirectory()) {
+		const relFiles = await collectFiles(sourcePath, "", DEFAULT_EXCLUDE);
+		return relFiles.map((rel) => join(sourcePath, rel));
+	}
+	return [sourcePath];
+}
+
+/**
+ * True when a single BROAD_DETECTORS match is accounted for by one of the
+ * four coverage layers named in plan AC G4-2: a codex PLATFORM_REWRITE_RULES
+ * row, SKILL_DIR_TOKEN (baked per-file before deploy, never a static row),
+ * KEEP_IDENTICAL_TOKENS, or OUT_OF_SCOPE_TOKENS. Anything else is a genuine
+ * escape.
+ */
+function isCoveredMatch(
+	detectorName: string,
+	matchedText: string,
+	line: string,
+	isAgentsCategory: boolean,
+): boolean {
+	if (detectorName === "claude-model") {
+		// syncAgentsDirect (tools/adapters/codex.ts) transforms agent .md
+		// frontmatter into TOML via the model-map before any raw
+		// `model: opus|sonnet` line can reach the deploy surface, so a match
+		// under `agents/` is structurally safe. The identical literal inside a
+		// skill body (only copied, never transformed) is a real defect.
+		return isAgentsCategory;
+	}
+
+	if (matchedText === SKILL_DIR_TOKEN_INNER && line.includes(SKILL_DIR_TOKEN)) return true;
+	if (KEEP_IDENTICAL_TOKENS.includes(matchedText)) return true;
+	if (OUT_OF_SCOPE_TOKENS.some((t) => t.token === matchedText)) return true;
+
+	// Line-granularity, not point-match: a rule like `S` (`.claude/skills`)
+	// requires trailing context the isolated matched text lacks, so coverage
+	// is "does the codex table's rewrite of the WHOLE line still contain the
+	// matched text" rather than testing the match text in isolation.
+	const rewritten = applyRewriteRules(line, PLATFORM_REWRITE_RULES.codex);
+	return !rewritten.includes(matchedText);
+}
+
+function scanFileForUncoveredTokens(
+	filePath: string,
+	isAgentsCategory: boolean,
+	result: ValidationResult,
+): void {
+	const content = readFileSync(filePath, "utf-8");
+	const lines = content.split("\n");
+
+	for (const detector of BROAD_DETECTORS) {
+		const re = new RegExp(detector.detect.source, detector.detect.flags);
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(content)) !== null) {
+			const matchedText = m[0];
+			if (m.index === re.lastIndex) re.lastIndex++; // guard against zero-width matches
+
+			const lineNumber = content.slice(0, m.index).split("\n").length;
+			const line = lines[lineNumber - 1] ?? "";
+
+			if (isCoveredMatch(detector.name, matchedText, line, isAgentsCategory)) continue;
+
+			result.errors.push(
+				`codex-rewrite: uncovered ${detector.name} match '${matchedText}' at ${filePath}:${lineNumber}`,
+			);
+		}
+	}
+}
+
+/**
+ * G4-2: for every source file that would deploy to codex — resolved from
+ * sync.yaml + the enabled projects/*\/sync.yaml, mirroring how
+ * `validateModelMapCoverage` resolves its candidates — assert every
+ * BROAD_DETECTORS match is covered by the codex PLATFORM_REWRITE_RULES table,
+ * SKILL_DIR_TOKEN, KEEP_IDENTICAL_TOKENS, or OUT_OF_SCOPE_TOKENS.
+ *
+ * Scans the SOURCE-resolved deploy-candidate set, not the deployed tree —
+ * `make validate` must not require a prior `make sync`, and the deploy
+ * surface may not exist or may live under $HOME.
+ *
+ * Guarantee scope (plan AC G4-2 residual, stated explicitly): this catches
+ * tokens matching a DECLARED detection rule that are absent from the table.
+ * It does not claim to know every possible Claude-ism shape.
+ */
+export async function validateCodexRewriteCoverage(
+	rootDir: string,
+	enabledProjects?: string[],
+): Promise<ValidationResult> {
+	const result = makeResult();
+
+	const effective = enabledProjects ?? (await getEnabledProjects());
+	const enabledSet = effective && effective.length > 0 ? new Set(effective) : undefined;
+	const projectsDir = join(rootDir, "projects");
+
+	const codexCategories = SUPPORTED_CATEGORIES.codex;
+	const scanned = new Set<string>(); // dedupe: same absolute file resolved via multiple sync.yaml refs
+
+	for (const syncYamlPath of discoverSyncYamls(rootDir)) {
+		if (enabledSet) {
+			const parentDir = dirname(syncYamlPath);
+			if (dirname(parentDir) === projectsDir && !enabledSet.has(basename(parentDir))) {
+				continue;
+			}
+		}
+
+		let syncYaml: SyncYaml | null;
+		try {
+			syncYaml = await readAndExpandSyncYaml(syncYamlPath);
+		} catch {
+			continue; // parse error already reported by validateSyncYamlComponents
+		}
+		if (!syncYaml) continue;
+
+		const ctx = setProjectContext(syncYaml, syncYamlPath, rootDir);
+		const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
+		const syncYamlPlatforms = syncYaml.platforms;
+
+		for (const category of codexCategories) {
+			const sectionData = syncYaml[category];
+			if (!sectionData || !Array.isArray(sectionData.items)) continue;
+
+			const sectionPlatforms = sectionData.platforms;
+
+			for (const item of sectionData.items) {
+				const component = getItemComponent(item);
+				if (!component) continue;
+
+				const platforms = await resolvePlatforms(item, sectionPlatforms, syncYamlPlatforms, category);
+				if (!platforms.includes("codex")) continue;
+
+				const files = await resolveCodexCandidateFiles(
+					category,
+					component,
+					rootDir,
+					projectDirName,
+				);
+				for (const filePath of files) {
+					if (scanned.has(filePath)) continue;
+					scanned.add(filePath);
+					scanFileForUncoveredTokens(filePath, category === "agents", result);
+				}
+			}
+		}
+	}
+
+	return result;
+}
+
+// ---------------------------------------------------------------------------
 // Discovery and orchestration
 // ---------------------------------------------------------------------------
 
@@ -529,6 +866,9 @@ export async function validateAll(
 			await validatePlatformYamlHookComponents(yamlDir, rootDir, claudeYamlPreParsed),
 		);
 	}
+
+	mergeResult(result, await validateModelMapCoverage(rootDir, enabledProjects));
+	mergeResult(result, await validateCodexRewriteCoverage(rootDir, enabledProjects));
 
 	return result;
 }

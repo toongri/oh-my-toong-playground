@@ -15,6 +15,7 @@ type ConfigYaml = {
 	"feature-platforms"?: Record<string, Platform[]>;
 	"enabled-projects"?: string[];
 	backup_retention_days?: number;
+	"codex-versions"?: string[];
 	[key: string]: unknown;
 };
 
@@ -157,6 +158,21 @@ export async function getEnabledProjects(): Promise<string[] | undefined> {
 		return projects;
 	}
 	return undefined;
+}
+
+/**
+ * Return the validated Codex CLI version allowlist from config.yaml
+ * `codex-versions`. Returns an empty array if the field is missing or
+ * config.yaml is unavailable — an empty allowlist fails closed (every
+ * observed version is rejected) rather than silently admitting anything.
+ */
+export async function getCodexVersions(): Promise<string[]> {
+	const config = await loadConfig();
+	const versions = config?.["codex-versions"];
+	if (Array.isArray(versions) && versions.length > 0) {
+		return versions;
+	}
+	return [];
 }
 
 /**

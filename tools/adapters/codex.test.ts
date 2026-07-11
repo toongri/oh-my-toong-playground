@@ -2,7 +2,15 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { CodexAdapter, insertManagedBlock, buildMcpTomlContent } from "./codex.ts";
+import { parse } from "smol-toml";
+import {
+	CodexAdapter,
+	insertManagedBlock,
+	buildMcpTomlContent,
+	resolveCodexAgentModel,
+	cleanupCodexSkillsFossil,
+} from "./codex.ts";
+import type { ModelMap } from "../lib/types.ts";
 
 // =============================================================================
 // insertManagedBlock
@@ -91,7 +99,7 @@ describe("CodexAdapter", () => {
 	});
 
 	// ---------------------------------------------------------------------------
-	// syncAgentsDirect — skip with warning
+	// syncAgentsDirect — md → toml translator
 	// ---------------------------------------------------------------------------
 
 	describe("syncAgentsDirect", () => {
@@ -113,6 +121,211 @@ describe("CodexAdapter", () => {
 				.then(() => true)
 				.catch(() => false);
 			expect(exists).toBe(false);
+		});
+
+		it("emits exactly the allowlist keys and parses with smol-toml via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "oracle.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: oracle",
+					"description: Use when delegating architecture analysis or debugging diagnosis",
+					"model: opus",
+					"---",
+					"",
+					"You are the Oracle agent. Follow the diagnose skill exactly.",
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(targetBase, "oracle", sourceFile, [], [], false, modelMap);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "oracle.toml");
+			const content = await fs.readFile(targetFile, "utf-8");
+			const parsed = parse(content) as Record<string, unknown>;
+
+			expect(Object.keys(parsed).sort()).toEqual(
+				["description", "developer_instructions", "model", "model_reasoning_effort", "name"].sort(),
+			);
+			expect(parsed.name).toBe("oracle");
+			expect(parsed.description).toBe(
+				"Use when delegating architecture analysis or debugging diagnosis",
+			);
+			expect(parsed.developer_instructions).toBe(
+				"You are the Oracle agent. Follow the diagnose skill exactly.",
+			);
+			expect(parsed.model).toBe("gpt-5.6-sol");
+			expect(parsed.model_reasoning_effort).toBe("high");
+		});
+
+		it("drops Claude-only frontmatter keys (add-skills/subagent_type/tools/skills) via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "sisyphus-junior.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: sisyphus-junior",
+					"description: Focused executor for multi-step implementation tasks",
+					"model: sonnet",
+					"add-skills:",
+					"  - testing",
+					"subagent_type: general-purpose",
+					"tools: Bash, Read",
+					"skills: diagnose",
+					"---",
+					"",
+					"Execute tasks directly.",
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(
+				targetBase,
+				"sisyphus-junior",
+				sourceFile,
+				[],
+				[],
+				false,
+				modelMap,
+			);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "sisyphus-junior.toml");
+			const content = await fs.readFile(targetFile, "utf-8");
+			const parsed = parse(content) as Record<string, unknown>;
+
+			expect(Object.keys(parsed).sort()).toEqual(
+				["description", "developer_instructions", "model", "model_reasoning_effort", "name"].sort(),
+			);
+			expect(parsed).not.toHaveProperty("add-skills");
+			expect(parsed).not.toHaveProperty("subagent_type");
+			expect(parsed).not.toHaveProperty("tools");
+			expect(parsed).not.toHaveProperty("skills");
+		});
+
+		it("rewrites Claude vocabulary in description/developer_instructions via PLATFORM_REWRITE_RULES.codex before TOML serialization (TODO 4) — name/model/model_reasoning_effort untouched", async () => {
+			// Real carrier shape: agent bodies invoke skills and reference
+			// subagent_type in prose (e.g. agents/sisyphus-junior.md:102-103).
+			// These TOML files are generated (not walked as .md by
+			// rewritePlatformPaths), so the rewrite happens here, at generation
+			// time, instead.
+			const sourceFile = path.join(tmpDir, "sisyphus-junior.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: sisyphus-junior",
+					"description: Focused executor for multi-step implementation tasks",
+					"model: sonnet",
+					"---",
+					"",
+					'Invoke Skill(skill: "prometheus") first. Never spawn via subagent_type directly.',
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(
+				targetBase,
+				"sisyphus-junior",
+				sourceFile,
+				[],
+				[],
+				false,
+				modelMap,
+			);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "sisyphus-junior.toml");
+			const content = await fs.readFile(targetFile, "utf-8");
+
+			// Rewritten to Codex vocabulary.
+			expect(content).toContain("the prometheus skill");
+			expect(content).toContain("agent_type");
+
+			// grep -c 'Skill(' on the emitted file is 0.
+			expect((content.match(/Skill\(/g) ?? []).length).toBe(0);
+
+			// Still valid TOML, and the untouched fields are exactly untouched.
+			const parsed = parse(content) as Record<string, unknown>;
+			expect(parsed.name).toBe("sisyphus-junior");
+			expect(parsed.model).toBe("gpt-5.6-sol");
+			expect(parsed.model_reasoning_effort).toBe("medium");
+			expect(parsed.developer_instructions).toContain("the prometheus skill");
+			expect(parsed.developer_instructions).toContain("agent_type");
+		});
+
+		it("resolves an opus-tier agent to gpt-5.6-sol + high effort via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "oracle.md");
+			await fs.writeFile(
+				sourceFile,
+				"---\nname: oracle\ndescription: Diagnose things\nmodel: opus\n---\n\nBody text.\n",
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(targetBase, "oracle", sourceFile, [], [], false, modelMap);
+
+			const content = await fs.readFile(
+				path.join(targetBase, ".codex", "agents", "oracle.toml"),
+				"utf-8",
+			);
+			const parsed = parse(content) as Record<string, unknown>;
+			expect(parsed.model).toBe("gpt-5.6-sol");
+			expect(parsed.model_reasoning_effort).toBe("high");
+		});
+
+		it("throws naming sourcePath when frontmatter description is blank via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "blank-description.md");
+			await fs.writeFile(
+				sourceFile,
+				'---\nname: blank-description\ndescription: ""\nmodel: opus\n---\n\nBody text.\n',
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await expect(
+				adapter.syncAgentsDirect(
+					targetBase,
+					"blank-description",
+					sourceFile,
+					[],
+					[],
+					false,
+					modelMap,
+				),
+			).rejects.toThrow(sourceFile);
+		});
+
+		it("throws naming sourcePath when the body is blank via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "blank-body.md");
+			await fs.writeFile(
+				sourceFile,
+				"---\nname: blank-body\ndescription: Has a description\nmodel: opus\n---\n\n   \n",
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await expect(
+				adapter.syncAgentsDirect(targetBase, "blank-body", sourceFile, [], [], false, modelMap),
+			).rejects.toThrow(sourceFile);
+		});
+
+		it("throws naming sourcePath and tier when a tier is declared but no model-map is reachable via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "no-map.md");
+			await fs.writeFile(
+				sourceFile,
+				"---\nname: no-map\ndescription: Has a description\nmodel: opus\n---\n\nBody text.\n",
+			);
+			const targetBase = path.join(tmpDir, "target");
+
+			await expect(
+				adapter.syncAgentsDirect(targetBase, "no-map", sourceFile, [], [], false, undefined),
+			).rejects.toThrow(/opus/);
 		});
 	});
 
@@ -261,15 +474,19 @@ describe("CodexAdapter", () => {
 		it("returns model-map in result via `syncPlatformYaml`", async () => {
 			const yaml = {
 				"model-map": {
-					"claude-3-5-sonnet": "o4-mini",
-					"claude-3-haiku": "o3-mini",
+					tiers: {
+						sonnet: { model: "o4-mini" },
+						haiku: { model: "o3-mini" },
+					},
 				},
 			};
 			const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);
 			expect(result.processedSections).toContain("model-map");
 			expect(result.modelMap).toEqual({
-				"claude-3-5-sonnet": "o4-mini",
-				"claude-3-haiku": "o3-mini",
+				tiers: {
+					sonnet: { model: "o4-mini" },
+					haiku: { model: "o3-mini" },
+				},
 			});
 		});
 
@@ -320,7 +537,7 @@ describe("CodexAdapter", () => {
 			const yaml = {
 				config: { model: "o4-mini" },
 				mcps: { srv: { command: "npx" } },
-				"model-map": { "claude-3-5-sonnet": "o4-mini" },
+				"model-map": { tiers: { sonnet: { model: "o4-mini" } } },
 			};
 			const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);
 			expect(result.processedSections).toContain("config");
@@ -400,7 +617,7 @@ describe("CodexAdapter", () => {
 	// ---------------------------------------------------------------------------
 
 	describe("syncSkillsDirect", () => {
-		it("copies skill directory to target via `syncSkillsDirect`", async () => {
+		it("copies skill directory to <target>/.agents/skills via `syncSkillsDirect`", async () => {
 			// Create a source skill directory
 			const sourceSkill = path.join(tmpDir, "source-skills", "prometheus");
 			await fs.mkdir(sourceSkill, { recursive: true });
@@ -409,9 +626,27 @@ describe("CodexAdapter", () => {
 			const targetBase = path.join(tmpDir, "target");
 			await adapter.syncSkillsDirect(targetBase, "prometheus", sourceSkill, false);
 
-			const targetFile = path.join(targetBase, ".codex", "skills", "prometheus", "SKILL.md");
+			const targetFile = path.join(targetBase, ".agents", "skills", "prometheus", "SKILL.md");
 			const content = await fs.readFile(targetFile, "utf-8");
 			expect(content).toBe("# Prometheus\n");
+		});
+
+		it("creates no <target>/.codex/skills directory via `syncSkillsDirect`", async () => {
+			// Codex 0.144.1 deprecates .codex/skills in favor of .agents/skills — this
+			// write path must never create the old location.
+			const sourceSkill = path.join(tmpDir, "source-skills", "prometheus");
+			await fs.mkdir(sourceSkill, { recursive: true });
+			await fs.writeFile(path.join(sourceSkill, "SKILL.md"), "# Prometheus\n");
+
+			const targetBase = path.join(tmpDir, "target");
+			await adapter.syncSkillsDirect(targetBase, "prometheus", sourceSkill, false);
+
+			const oldSkillsDir = path.join(targetBase, ".codex", "skills");
+			const exists = await fs
+				.stat(oldSkillsDir)
+				.then(() => true)
+				.catch(() => false);
+			expect(exists).toBe(false);
 		});
 
 		it("logs warning and creates no files when source is missing via `syncSkillsDirect`", async () => {
@@ -812,5 +1047,317 @@ describe("CodexAdapter", () => {
 				`bun run ${path.join(targetBase, ".codex/hooks/rules-injector/cli.ts")} hook session-start`,
 			);
 		});
+	});
+});
+
+// =============================================================================
+// resolveCodexAgentModel
+// =============================================================================
+
+describe("resolveCodexAgentModel", () => {
+	it("resolves a tier to {model, model_reasoning_effort} via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = {
+			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+		};
+		const result = resolveCodexAgentModel(modelMap, "opus", "oracle.md");
+		expect(result).toEqual({ model: "gpt-5.6-sol", model_reasoning_effort: "high" });
+	});
+
+	it("omits model_reasoning_effort when the tier entry has no effort via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol" } } };
+		const result = resolveCodexAgentModel(modelMap, "opus", "oracle.md");
+		expect(result).toEqual({ model: "gpt-5.6-sol" });
+	});
+
+	it("prefers a per-agent override over the tier default via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = {
+			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+			agents: { oracle: { model: "gpt-5.6-sol-special", effort: "low" } },
+		};
+		const result = resolveCodexAgentModel(modelMap, "opus", "oracle.md", "oracle");
+		expect(result).toEqual({ model: "gpt-5.6-sol-special", model_reasoning_effort: "low" });
+	});
+
+	it("leaves a sibling agent without an override on the tier default via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = {
+			tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } },
+			agents: { oracle: { model: "gpt-5.6-sol-special", effort: "low" } },
+		};
+		const result = resolveCodexAgentModel(modelMap, "opus", "sisyphus.md", "sisyphus");
+		expect(result).toEqual({ model: "gpt-5.6-sol", model_reasoning_effort: "high" });
+	});
+
+	it("throws naming the agent file and tier when the tier is unmapped via `resolveCodexAgentModel`", () => {
+		const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol" } } };
+		expect(() => resolveCodexAgentModel(modelMap, "sonnet", "oracle.md")).toThrow(
+			/oracle\.md.*sonnet|sonnet.*oracle\.md/,
+		);
+	});
+});
+
+// =============================================================================
+// cleanupCodexSkillsFossil
+//
+// `.codex/skills` is the pre-b9908fbc deploy location; skills now deploy to
+// `.agents/skills` (codexSkillsDir). Codex 0.144.1 reads BOTH roots, so an
+// unremoved fossil duplicates every skill in the session prompt. These tests
+// exercise the removal exclusively against tmp dirs — never $HOME.
+// =============================================================================
+
+describe("cleanupCodexSkillsFossil", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-fossil-cleanup-test-"));
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	function fossilPath(...segments: string[]): string {
+		return path.join(tmpDir, ".codex", "skills", ...segments);
+	}
+
+	function newPath(...segments: string[]): string {
+		return path.join(tmpDir, ".agents", "skills", ...segments);
+	}
+
+	async function pathExists(p: string): Promise<boolean> {
+		return fs
+			.stat(p)
+			.then(() => true)
+			.catch(() => false);
+	}
+
+	it("backs up then removes an owned fossil entry, removes the now-empty fossilDir, and leaves .codex/config.toml untouched", async () => {
+		await fs.mkdir(fossilPath("skill-a"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-a", "SKILL.md"), "# skill-a\n");
+		await fs.mkdir(newPath("skill-a"), { recursive: true });
+		await fs.writeFile(newPath("skill-a", "SKILL.md"), "# skill-a\n");
+		await fs.writeFile(path.join(tmpDir, ".codex", "config.toml"), "model = \"o3\"\n");
+
+		await cleanupCodexSkillsFossil(tmpDir, "sid-happy", false, new Set(["skill-a"]));
+
+		expect(await pathExists(fossilPath("skill-a"))).toBe(false);
+		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(false);
+		expect(await fs.readFile(path.join(tmpDir, ".codex", "config.toml"), "utf-8")).toBe(
+			'model = "o3"\n',
+		);
+		const backedUp = path.join(
+			tmpDir,
+			".sync-backup",
+			"sid-happy",
+			"codex",
+			"skills",
+			"skill-a",
+			"SKILL.md",
+		);
+		expect(await fs.readFile(backedUp, "utf-8")).toBe("# skill-a\n");
+	});
+
+	it("removes a fossil entry that is a prior '.codex/'-rewrite of the current raw source, given name-provenance ownership", async () => {
+		// Realistic fossil drift: the fossil holds rewrite_old(source) — the
+		// source with ".claude/" rewritten to ".codex/" by a since-removed
+		// rewritePlatformPaths pass — while .agents/skills holds the raw,
+		// un-rewritten source. Byte-identity between them is structurally
+		// impossible; ownership must be decided by name-provenance
+		// (ownedSkillNames), not byte comparison.
+		await fs.mkdir(fossilPath("foo"), { recursive: true });
+		await fs.writeFile(fossilPath("foo", "SKILL.md"), "See .codex/scripts/run.sh for details.\n");
+		await fs.mkdir(newPath("foo"), { recursive: true });
+		await fs.writeFile(newPath("foo", "SKILL.md"), "See .claude/scripts/run.sh for details.\n");
+
+		await cleanupCodexSkillsFossil(tmpDir, "sid-drift", false, new Set(["foo"]));
+
+		expect(await pathExists(fossilPath("foo"))).toBe(false);
+	});
+
+	it("keeps a dotfile foreign resident (.system) untouched and leaves fossilDir in place", async () => {
+		await fs.mkdir(fossilPath(".system"), { recursive: true });
+		await fs.writeFile(fossilPath(".system", "note.txt"), "not OMT-managed\n");
+		await fs.mkdir(newPath(), { recursive: true });
+
+		// Positive control: prove the fixture actually exists before the call.
+		expect(await pathExists(fossilPath(".system"))).toBe(true);
+
+		await cleanupCodexSkillsFossil(tmpDir, "sid-foreign", false, new Set());
+
+		expect(await pathExists(fossilPath(".system"))).toBe(true);
+		expect(await fs.readFile(fossilPath(".system", "note.txt"), "utf-8")).toBe(
+			"not OMT-managed\n",
+		);
+		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(true);
+	});
+
+	it("keeps a foreign resident by name even when it also exists on disk under .agents/skills — ownership is name-provenance, not on-disk listing", async () => {
+		// plannotator-compound stands in for a real, never-deployed-by-OMT
+		// directory that happens to also exist on disk under .agents/skills
+		// (a foreign resident there too, with identical bytes on both sides).
+		// The old implementation derived ownership from `fs.readdir(newDir)`
+		// — an on-disk listing that includes foreign residents — so it would
+		// have treated this name collision as OMT-owned, found the bytes
+		// identical, and deleted it. ownedSkillNames excludes it, so under
+		// name-provenance ownership it must survive untouched.
+		await fs.mkdir(fossilPath(".system"), { recursive: true });
+		await fs.writeFile(fossilPath(".system", "note.txt"), "not OMT-managed\n");
+		await fs.mkdir(fossilPath("plannotator-compound"), { recursive: true });
+		await fs.writeFile(
+			fossilPath("plannotator-compound", "SKILL.md"),
+			"not OMT-managed either\n",
+		);
+		await fs.mkdir(newPath("plannotator-compound"), { recursive: true });
+		await fs.writeFile(
+			newPath("plannotator-compound", "SKILL.md"),
+			"not OMT-managed either\n",
+		);
+
+		await cleanupCodexSkillsFossil(tmpDir, "sid-foreign-by-name", false, new Set());
+
+		expect(await pathExists(fossilPath(".system"))).toBe(true);
+		expect(await pathExists(fossilPath("plannotator-compound"))).toBe(true);
+		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+	});
+
+	it("ownedSkillNames empty: nothing removed, no backup written, no throw", async () => {
+		// skill-j exists identically on both sides — under the old on-disk-
+		// listing ownership rule this name collision alone would make it
+		// OMT-owned and byte-identical, hence deleted. With an empty
+		// ownedSkillNames it must be treated as a foreign resident instead.
+		await fs.mkdir(fossilPath("skill-j"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-j", "SKILL.md"), "j\n");
+		await fs.mkdir(newPath("skill-j"), { recursive: true });
+		await fs.writeFile(newPath("skill-j", "SKILL.md"), "j\n");
+
+		await cleanupCodexSkillsFossil(tmpDir, "sid-empty-owned", false, new Set());
+
+		expect(await pathExists(fossilPath("skill-j"))).toBe(true);
+		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(true);
+	});
+
+	it("throws naming both paths and leaves the fossil untouched when .agents/skills is absent (dryRun: false)", async () => {
+		await fs.mkdir(fossilPath("skill-d"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-d", "SKILL.md"), "d\n");
+		// .agents/skills intentionally never created.
+
+		await expect(
+			cleanupCodexSkillsFossil(tmpDir, "sid-no-newdir", false, new Set(["skill-d"])),
+		).rejects.toThrow(/\.agents.*skills.*\.codex.*skills|\.codex.*skills.*\.agents.*skills/s);
+
+		expect(await pathExists(fossilPath("skill-d"))).toBe(true);
+	});
+
+	it("does NOT throw on a dry-run first preview when .agents/skills does not exist yet, and deletes nothing", async () => {
+		await fs.mkdir(fossilPath("skill-g"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-g", "SKILL.md"), "g\n");
+		// .agents/skills intentionally never created — this is the fresh-target
+		// first-dry-run scenario: dry-run writes nothing, so it can never exist yet.
+
+		await cleanupCodexSkillsFossil(tmpDir, "sid-dry-no-newdir", true, new Set(["skill-g"]));
+
+		expect(await pathExists(fossilPath("skill-g"))).toBe(true);
+		expect(await fs.readFile(fossilPath("skill-g", "SKILL.md"), "utf-8")).toBe("g\n");
+		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+	});
+
+	it("does NOT throw in dry-run when .agents/skills exists but only holds a foreign resident, leaving the owned fossil entry untouched", async () => {
+		// Reproduces the dry-run-only false failure: newDir exists (because a
+		// foreign resident lives there), so the first "newDir missing" guard
+		// is bypassed, but no .agents/skills/skill-x counterpart has ever been
+		// written (dry-run writes nothing) — the counterpart-existence check
+		// must not run in dry-run.
+		await fs.mkdir(fossilPath("skill-x"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-x", "SKILL.md"), "x\n");
+		await fs.mkdir(fossilPath("plannotator-compound"), { recursive: true });
+		await fs.writeFile(
+			fossilPath("plannotator-compound", "SKILL.md"),
+			"not OMT-managed\n",
+		);
+		await fs.mkdir(newPath("plannotator-compound"), { recursive: true });
+		await fs.writeFile(
+			newPath("plannotator-compound", "SKILL.md"),
+			"not OMT-managed\n",
+		);
+		// newPath("skill-x") intentionally never created.
+
+		await cleanupCodexSkillsFossil(
+			tmpDir,
+			"sid-dry-newdir-exists",
+			true,
+			new Set(["skill-x"]),
+		);
+
+		expect(await pathExists(fossilPath("skill-x"))).toBe(true);
+		expect(await fs.readFile(fossilPath("skill-x", "SKILL.md"), "utf-8")).toBe("x\n");
+		expect(await pathExists(fossilPath("plannotator-compound"))).toBe(true);
+		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+	});
+
+	it("throws naming the entry, deletes nothing, and writes no backup when an owned entry has no counterpart under .agents/skills", async () => {
+		await fs.mkdir(fossilPath("skill-h"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-h", "SKILL.md"), "h\n");
+		await fs.mkdir(newPath(), { recursive: true });
+		// newPath("skill-h") intentionally never created — "skill-h" is
+		// declared owned this run (deployed-but-missing anomaly) even though
+		// no such directory actually exists under .agents/skills.
+
+		await expect(
+			cleanupCodexSkillsFossil(tmpDir, "sid-missing-counterpart", false, new Set(["skill-h"])),
+		).rejects.toThrow(/skill-h/);
+
+		expect(await pathExists(fossilPath("skill-h"))).toBe(true);
+		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+	});
+
+	it("does NOT throw under dry-run when an owned entry has no counterpart under .agents/skills — the counterpart check is real-run-only", async () => {
+		// newDir exists (unlike sid-dry-no-newdir) but has no skill-i
+		// counterpart. In dry-run nothing has ever been written, so a missing
+		// counterpart is expected, not a deployed-but-missing anomaly — the
+		// counterpart-existence check must not run in dry-run.
+		await fs.mkdir(fossilPath("skill-i"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-i", "SKILL.md"), "i\n");
+		await fs.mkdir(newPath(), { recursive: true });
+		// newPath("skill-i") intentionally never created.
+
+		await cleanupCodexSkillsFossil(tmpDir, "sid-dry-missing-counterpart", true, new Set(["skill-i"]));
+
+		expect(await pathExists(fossilPath("skill-i"))).toBe(true);
+		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+	});
+
+	it("dry-run deletes nothing and writes no backup", async () => {
+		await fs.mkdir(fossilPath("skill-e"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-e", "SKILL.md"), "e\n");
+		await fs.mkdir(newPath("skill-e"), { recursive: true });
+		await fs.writeFile(newPath("skill-e", "SKILL.md"), "e\n");
+
+		await cleanupCodexSkillsFossil(tmpDir, "sid-dry", true, new Set(["skill-e"]));
+
+		expect(await pathExists(fossilPath("skill-e"))).toBe(true);
+		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+	});
+
+	it("returns silently (no throw) when the fossil directory is absent, and is idempotent on a repeat call", async () => {
+		// No .codex/skills at all, and no .agents/skills either — must still
+		// short-circuit BEFORE the newDir-must-exist check.
+		await cleanupCodexSkillsFossil(tmpDir, "sid-absent-1", false, new Set());
+		await cleanupCodexSkillsFossil(tmpDir, "sid-absent-2", false, new Set());
+
+		expect(await pathExists(path.join(tmpDir, ".codex"))).toBe(false);
+	});
+
+	it("is idempotent: a second call after a successful cleanup is a no-op", async () => {
+		await fs.mkdir(fossilPath("skill-f"), { recursive: true });
+		await fs.writeFile(fossilPath("skill-f", "SKILL.md"), "f\n");
+		await fs.mkdir(newPath("skill-f"), { recursive: true });
+		await fs.writeFile(newPath("skill-f", "SKILL.md"), "f\n");
+
+		await cleanupCodexSkillsFossil(tmpDir, "sid-idem-1", false, new Set(["skill-f"]));
+		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(false);
+
+		// Second call: fossilDir is gone, so this must return silently.
+		await cleanupCodexSkillsFossil(tmpDir, "sid-idem-2", false, new Set(["skill-f"]));
+		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(false);
 	});
 });
