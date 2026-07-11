@@ -124,15 +124,29 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		// unmapped (skills/collect-jd/tests/pressure-scenarios.md:688: "asking too
 		// many AskUserQuestions will tire the user"). Running 14p first consumes
 		// every plural instance whole, so 14 never sees a partial/mangled remainder.
+		//
+		// Both alternatives carry a leading `(?<=\\n)|\b` boundary: a plain
+		// leading `\b` fails when the token sits right after a DOT-label literal
+		// `\n` escape (backslash + n, not a real newline) — `n` is a word char,
+		// so there's no word/non-word transition there. Witnessed carrier:
+		// skills/collect-jd/reference/dedup-and-discovery.md:64 —
+		// `vambig [label="ambiguous → Phase 3:\nAskUserQuestion\n(auto-verdict
+		// forbidden)", ...]` — left this exact occurrence unmatched while
+		// sibling occurrences with a non-word char before the token matched
+		// fine. `(?<=\\n)` is a zero-width lookbehind for literal backslash+n
+		// in the regex source, so it consumes nothing and the `\n` escape is
+		// preserved in the output; the `\b` alternative still guards ordinary
+		// non-word boundaries, so a compound identifier suffix like
+		// `XAskUserQuestion` still fails both branches and stays unmatched.
 		{
 			id: "14p",
-			detect: /\bAskUserQuestions\b/g,
+			detect: /(?<=\\n)AskUserQuestions\b|\bAskUserQuestions\b/g,
 			replace: "request_user_input calls",
 			lossy: true,
 		},
 		{
 			id: "14",
-			detect: /\bAskUserQuestion\b/g,
+			detect: /(?<=\\n)AskUserQuestion\b|\bAskUserQuestion\b/g,
 			replace: "request_user_input",
 			lossy: true,
 		},
