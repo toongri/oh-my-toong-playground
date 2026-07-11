@@ -2,7 +2,7 @@
  * QA skill state CLI.
  *
  * State file path: ${OMT_DIR}/qa-state-${sessionId}.json
- * Session ID: resolved from env OMT_SESSION_ID via resolveSessionIdOrThrow(); hard-fails when absent or unsafe.
+ * Session ID: resolved from env OMT_SESSION_ID, falling back to CODEX_THREAD_ID (Codex), via resolveSessionIdOrThrow(); hard-fails when neither is set or unsafe.
  *
  * Structural mirror of goal-state.ts (iteration/max_iterations ≙ cycle/max_cycles):
  * session-keyed JSON, merge-write preserving prior fields, `started_at` seeded once
