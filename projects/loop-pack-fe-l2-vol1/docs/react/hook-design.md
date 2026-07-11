@@ -15,6 +15,7 @@
 7. useEffect를 줄이는 설계
 8. 직접 fetch할 때 — race와 의존성
 9. DIP — 구현체에 직접 묶이지 않기
+10. 비순수 입력은 렌더 밖에서 캡처한다
 
 ---
 
@@ -147,7 +148,31 @@ useEffect(() => {
 const filtered = orders.filter((o) => o.status === status);
 ```
 
-> 계산이 정말 무겁다고 **측정으로 확인되면** `useMemo`로 감싼다 — `useEffect`+state로 되돌리지 않는다. (react.dev "You Might Not Need an Effect")
+`useMemo`가 **정당한 용도는 둘뿐**이다.
+
+1. **측정으로 확인된 무거운 계산 캐시** — "느릴 것 같다"가 아니라 실제로 측정했을 때만 감싼다. `useEffect`+state로 되돌리지 않는다. (react.dev "You Might Not Need an Effect")
+2. **하위 `useEffect`/`memo`가 의존하는 객체 참조 안정화** — deps가 전부 원시값이어도 매 렌더 새 객체를 만들면 참조가 매번 바뀐다. 그 객체를 dep으로 받는 하위 `useEffect`는 매 렌더 재실행되고, `memo`는 무력화된다. `ProductListPage.tsx:44-57`의 `params`가 그 예다:
+
+```tsx
+// deps가 전부 원시값이라 참조가 안정적이다
+const params = useMemo<ProductListParams>(
+  () => ({ category, sortBy, searchQuery: debouncedSearch, page, ... }),
+  [category, debouncedSearch, sortBy, page, ...],
+);
+```
+
+이렇게 안정시킨 `params` 참조 위에서 `useProductList`(`useProductList.ts:50`)는 `[params, reloadKey]`를 그대로 deps로 쓴다 — 매 렌더 새 요청이 나가지 않는 건 이 `params`가 실제로 바뀔 때만 참조가 바뀌기 때문이다.
+
+두 번째 사례는 `useProductFilters`(`useProductFilters.ts:110-111`)의 `snapshot`이다. `query`와 `origin`을 객체 리터럴로 그대로 `useDebouncedValue`에 넘기면, 그 내부 `useEffect`(deps `[value, delayMs]`)가 매 렌더 새 참조를 받아 debounce 타이머가 계속 리셋된다 — `useMemo`로 참조를 고정해야 debounce가 실제로 동작한다.
+
+```tsx
+const snapshot = useMemo(() => ({ query, origin }), [query, origin]);
+const debounced = useDebouncedValue(snapshot, URL_WRITE_DEBOUNCE_MS);
+```
+
+이 사례는 아래 Caveat와도 정합한다: 여기서 정확성(query·origin desync 제거)은 `useMemo`의 캐시가 아니라 **query와 origin을 한 객체에 담은 구조**에서 나온다. React가 이 캐시를 버리고 매번 새 객체를 만들어도 desync는 재발하지 않고, 최악의 경우 debounce가 조금 더 지연될 뿐이다(URL 동기화 맥락은 [`url-state.md`](./url-state.md) §3 참고).
+
+> **Caveat**: `useMemo`는 성능 최적화 도구이지 정확성 보장 도구가 아니다. React는 이 캐시를 언제든 버리고 재계산할 수 있으므로, **"값이 반드시 고정되어야 한다"는 정확성을 `useMemo`에 의존하면 안 된다.** 값을 반드시 고정해야 한다면 `useRef`나 명시적 상태로 관리한다(비순수 계산을 `useMemo`로 감싸면 안 되는 이유는 아래 10절 참고).
 
 ## 8. 직접 fetch할 때 — race와 의존성
 
@@ -176,7 +201,10 @@ useEffect(() => {
 }, [status, page]); // ← 객체 아닌 원시 필드
 ```
 
-- **race condition**: `ignore` 플래그나 `AbortController`로 이전 요청이 최신 결과를 덮어쓰지 않게.
+- **race condition — `ignore` vs `AbortController` 선택 기준**:
+  - `ignore` 플래그는 **항상 필요한 기준선**이다 — 요청은 이미 네트워크로 나갔으니 되돌릴 수 없고, `ignore`는 그 응답이 돌아왔을 때 이미 stale해진 결과를 `setState`에 반영하지 않도록 막을 뿐이다.
+  - `AbortController`는 `ignore` 위에 얹는 선택이다. **요청 자체를 실제로 취소해야 할 때**(응답이 느려 서버·네트워크 자원을 계속 낭비하거나, 서버가 취소 신호를 실제로 활용할 때)만 추가한다 — `ignore`의 대체가 아니다.
+  - 이 레포의 `useProductList`(`useProductList.ts:23,48`)는 `ignore`만 쓴다. 목록 조회는 짧고 저비용이라 진행 중인 요청을 서버에서 실제로 끊어야 할 이유가 없고, stale 응답을 걸러내는 데는 `ignore`만으로 충분하기 때문이다.
 - **의존성은 원시 필드로**: `[params]`처럼 객체를 그대로 두면 매 렌더 새 참조 → 무한 요청. `[params.status, params.page]`로 푼다.
 - **반환 형태 일관**: `data`/`isPending`/`error`를 Hook 안에서 묶어 노출하면 나중에 도구 도입 시 호출부 수정이 준다.
 
@@ -211,3 +239,28 @@ function useOrders(params: OrderListParams) {
 ```
 
 도메인 규칙(취소 가능 여부·상태 라벨)은 UI 사이에 숨기지 말고 순수 함수로 뽑는다 — 별도의 변경 이유를 갖기 때문이다.
+
+## 10. 비순수 입력은 렌더 밖에서 캡처한다
+
+렌더링 함수는 **순수해야 한다** — 같은 props/state면 같은 결과를 내야 한다. `new Date()`, `Math.random()`처럼 호출마다 다른 값을 내는 코드를 렌더 중에 직접 부르면 이 규칙을 깬다(react.dev "Rules of React" 금지 항목).
+
+```tsx
+// ❌ 렌더 중 비순수 호출 — 리렌더마다 값이 바뀌고, StrictMode 이중 렌더에서 두 번 다른 값이 나올 수 있다
+function ProductCard({ product }: { product: Product }) {
+  const badges = computeBadges(product, new Date());
+  // ...
+}
+
+// ✅ 마운트 시 한 번만 캡처 — lazy initializer
+function ProductListPage() {
+  const [now] = useState(() => new Date());
+  // ...
+  return <ProductCard product={product} now={now} />;
+}
+```
+
+캡처한 값은 순수 함수나 자식 컴포넌트에 **인자로 주입**한다. 이 레포의 `computeBadges(product, now)`(`productBadges.ts:19`)가 그 형태다 — 함수 내부에서 현재 시각을 읽지 않고 호출부가 넘긴 `now`로만 계산해 결정론적이다.
+
+`useMemo(() => new Date(), [deps])`는 **틀린 해법**이다. `useMemo`는 §7의 caveat대로 성능 힌트일 뿐 정확성 보장 도구가 아니라서, React가 캐시를 버리고 재계산하면 다른 시각이 나올 수 있다. 렌더 밖 값을 고정하려면 `useState`의 lazy initializer(또는 `useRef`)를 쓴다.
+
+**StrictMode 이중 호출**: 개발 모드에서 컴포넌트 함수와 초기화 함수가 두 번 불려도, React는 `useState`의 **첫 결과만 유지**하고 두 번째 호출 결과는 버린다 — 그래서 `now`는 마운트당 하나의 값으로 안정적이다.
