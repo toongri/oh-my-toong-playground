@@ -55,13 +55,13 @@ async function getProduct(id: string) {
 
 ## 이미지 — next/image
 
-srcset·lazy·webp·크기 지정을 손으로 챙기던 걸 컴포넌트 하나로 표준화한다. 크기·webp 변환·lazy·blur placeholder까지 기본값이다.
+srcset·lazy·webp·크기 지정을 손으로 챙기던 걸 컴포넌트 하나로 표준화한다. 크기·webp 변환·lazy는 기본값이고, blur placeholder는 `placeholder="blur"`로 켠다 — 정적 import한 이미지는 이때 blurDataURL을 자동 생성한다.
 
 ```tsx
 // ❌ 최적화를 직접 챙긴다
 <img src="/hero.png" srcSet="/hero@1x.webp 1x, /hero@2x.webp 2x" loading="lazy" width={1200} height={600} />
 
-// ✅ next/image — 크기·webp 변환·lazy·blur가 자동
+// ✅ next/image — 크기·webp 변환·lazy는 자동, blur는 placeholder="blur"로 opt-in
 import Image from "next/image";
 import hero from "./hero.png";
 <Image src={hero} alt="히어로" placeholder="blur" />;
