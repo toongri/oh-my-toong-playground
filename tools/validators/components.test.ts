@@ -1573,7 +1573,7 @@ model: haiku
 body
 `,
 		);
-		const syncPath = writeYaml(
+		writeYaml(
 			root,
 			"sync.yaml",
 			`
@@ -1611,7 +1611,7 @@ model: sonnet
 body
 `,
 		);
-		const syncPath = writeYaml(
+		writeYaml(
 			root,
 			"sync.yaml",
 			`
@@ -1660,7 +1660,7 @@ model: sonnet
 body
 `,
 		);
-		const syncPath = writeYaml(
+		writeYaml(
 			root,
 			"sync.yaml",
 			`
