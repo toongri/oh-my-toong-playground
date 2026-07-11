@@ -119,6 +119,7 @@ export interface PiRulesConfig {
 	enabledSources: RuleSource[] | "auto";
 	sessionStateTtlDays: number;
 	errorLogMaxBytes: number;
+	excludeGlobs: string[];
 }
 
 /**

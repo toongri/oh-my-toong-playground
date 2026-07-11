@@ -72,6 +72,7 @@ export function configFromEnvironment(
 		parsePositiveInteger(
 			firstEnv(env, "CODEX_RULES_ERROR_LOG_MAX_BYTES", "PI_RULES_ERROR_LOG_MAX_BYTES"),
 		) ?? config.errorLogMaxBytes;
+	config.excludeGlobs = parseExcludeGlobs(firstEnv(env, "CODEX_RULES_EXCLUDE", "PI_RULES_EXCLUDE"));
 	return config;
 }
 
@@ -118,6 +119,14 @@ function parseEnabledSources(
 		? sources.filter((source) => source !== "plugin-bundled")
 		: sources;
 	return enabledSources;
+}
+
+function parseExcludeGlobs(value: string | undefined): string[] {
+	if (value === undefined) return [];
+	return value
+		.split("\n")
+		.map((glob) => glob.trim())
+		.filter((glob) => glob.length > 0);
 }
 
 function sourcesWithoutBundledRules(): RuleSource[] {

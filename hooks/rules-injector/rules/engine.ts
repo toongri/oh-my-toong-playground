@@ -41,6 +41,7 @@ export function defaultConfig(): PiRulesConfig {
 		enabledSources: "auto",
 		sessionStateTtlDays: DEFAULT_SESSION_STATE_TTL_DAYS,
 		errorLogMaxBytes: DEFAULT_ERROR_LOG_MAX_BYTES,
+		excludeGlobs: [],
 	};
 }
 
@@ -64,6 +65,7 @@ export function createEngine(config: PiRulesConfig, deps: EngineDeps): Engine {
 		if (disabledSources !== undefined) {
 			findOptions.disabledSources = disabledSources;
 		}
+		findOptions.excludeGlobs = config.excludeGlobs;
 		const candidates = deps.findCandidates(findOptions);
 		const result = loadStaticCandidates(candidates, deps, projectRoot);
 		storeLastLoad(state, result.rules, result.diagnostics);

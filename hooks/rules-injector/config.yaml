@@ -1,0 +1,9 @@
+# rules-injector shared base config (committed). Read from this module's own
+# directory by local-config.ts and hydrated into CODEX_RULES_* env knobs.
+# Machine-local overrides go in config.local.yaml (gitignored); those win over
+# the values here. A present real CODEX_RULES_/PI_RULES_ env var wins over both.
+#
+# exclude: glob(s) matched against each rule candidate's path/realPath; matching
+# rule files are dropped from Codex rule injection across all four hook lanes.
+exclude:
+  - "**/ai-collaboration.md"
