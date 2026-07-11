@@ -149,6 +149,17 @@ test("non-string scalar exclude writes a breadcrumb and leaves env unchanged", (
 	expect(breadcrumbWritten()).toBe(true);
 });
 
+test("non-string element in exclude array writes a breadcrumb and leaves env unchanged", () => {
+	useBreadcrumbSink();
+	const inputEnv = { FOO: "bar" };
+	const configDir = makeConfigDir();
+	writeLocalOverride(configDir, "exclude:\n  - '**/a.md'\n  - 42\n");
+
+	const hydrated = hydrateEnvFromLocalConfig(inputEnv, configDir);
+	expect(hydrated).toEqual(inputEnv);
+	expect(breadcrumbWritten()).toBe(true);
+});
+
 test("never throws on bad input", () => {
 	useBreadcrumbSink();
 	const inputEnv = { FOO: "bar" };
