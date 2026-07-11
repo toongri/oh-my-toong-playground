@@ -35,6 +35,10 @@ export type SyncSection = {
 	items?: SyncItem[];
 };
 
+export type ModelMapEntry = { model: string; effort?: string };
+
+export type ModelMap = { tiers: Record<string, ModelMapEntry>; agents?: Record<string, ModelMapEntry> };
+
 export type DocsItem = string | { component: string; path?: string; as?: string; delete?: true };
 
 export type DocsSection = {
@@ -73,7 +77,7 @@ export type PlatformYaml = {
 	mcps?: Record<string, Record<string, unknown>>;
 	plugins?: { items?: Array<string | PluginObjectItem> };
 	statusLine?: string;
-	"model-map"?: Record<string, string>;
+	"model-map"?: ModelMap;
 };
 
 export type SyncContext = {
@@ -82,7 +86,9 @@ export type SyncContext = {
 	projectDir: string;
 	isRootYaml: boolean;
 	backupSession: string;
-	modelMaps: Map<Platform, Record<string, string>>;
+	modelMaps: Map<Platform, ModelMap>;
+	/** Root/global platform model-maps; loaded once, NEVER cleared by processYaml. */
+	rootModelMaps: Map<Platform, ModelMap>;
 	processedPaths: Set<string>;
 	platformYamlSections: Map<Platform, string[]>;
 	/**
@@ -102,5 +108,5 @@ export type SyncContext = {
 
 export type PlatformConfigResult = {
 	processedSections: string[];
-	modelMap?: Record<string, string>;
+	modelMap?: ModelMap;
 };

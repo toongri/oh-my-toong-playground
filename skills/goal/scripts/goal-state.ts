@@ -2,7 +2,7 @@
  * Goal skill state CLI.
  *
  * State file path: ${OMT_DIR}/goal-state-${sessionId}.json
- * Session ID: resolved from env OMT_SESSION_ID via resolveSessionIdOrThrow(); hard-fails when absent or unsafe.
+ * Session ID: resolved from env OMT_SESSION_ID, falling back to CODEX_THREAD_ID (Codex), via resolveSessionIdOrThrow(); hard-fails when neither is set or unsafe.
  *
  * Structural mirror of prometheus-state.ts: session-keyed JSON, merge-write
  * preserving prior fields, `started_at` seeded once and never re-seeded,

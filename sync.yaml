@@ -9,7 +9,10 @@ provision:
 
 skills:
   items:
-    - hud
+    # hud는 Claude Code 전용 statusline 기능 — settings.local.json·claudeAiOauth를 읽고
+    # ${CLAUDE_SKILL_DIR}/../../ 경로로 리졸브하므로 Codex/Gemini/OpenCode엔 존재하지 않음.
+    - component: hud
+      platforms: [claude]
     - component: pin-record
       platforms: [claude]
     - component: pin-query

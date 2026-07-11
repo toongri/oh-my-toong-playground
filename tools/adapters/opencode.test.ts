@@ -11,6 +11,8 @@ import {
 	syncMcpsMerge,
 	opencodeAdapter,
 } from "./opencode.ts";
+import { assertMappedTier } from "../lib/model-map.ts";
+import type { ModelMap } from "../lib/types.ts";
 
 // =============================================================================
 // Test helpers
@@ -35,19 +37,51 @@ async function writeJson(file: string, obj: Record<string, unknown>): Promise<vo
 // =============================================================================
 
 describe("applyModelMap", () => {
-	it("returns the mapped model name via `applyModelMap`", () => {
-		const map = { "claude-opus-4": "openai/o3", "claude-sonnet-4": "openai/gpt-4o" };
-		expect(applyModelMap(map, "claude-opus-4")).toBe("openai/o3");
-		expect(applyModelMap(map, "claude-sonnet-4")).toBe("openai/gpt-4o");
+	it("returns the tier's mapped model id via `applyModelMap`", () => {
+		const map: ModelMap = {
+			tiers: { opus: { model: "openai/o3" }, sonnet: { model: "openai/gpt-4o" } },
+		};
+		expect(applyModelMap(map, "opus", "oracle.md")).toBe("openai/o3");
+		expect(applyModelMap(map, "sonnet", "oracle.md")).toBe("openai/gpt-4o");
 	});
 
-	it("returns the original model name when mapping is absent via `applyModelMap`", () => {
-		const map = { "claude-opus-4": "openai/o3" };
-		expect(applyModelMap(map, "unknown-model")).toBe("unknown-model");
+	it("prefers a per-agent override over the tier default via `applyModelMap`", () => {
+		const map: ModelMap = {
+			tiers: { opus: { model: "openai/o3" } },
+			agents: { oracle: { model: "openai/o3-special" } },
+		};
+		expect(applyModelMap(map, "opus", "oracle.md", "oracle")).toBe("openai/o3-special");
 	});
 
-	it("returns the original model name for an empty map via `applyModelMap`", () => {
-		expect(applyModelMap({}, "some-model")).toBe("some-model");
+	it("throws naming the agent file and tier when the tier is unmapped via `applyModelMap`", () => {
+		const map: ModelMap = { tiers: { opus: { model: "openai/o3" } } };
+		expect(() => applyModelMap(map, "unknown-tier", "oracle.md")).toThrow(
+			/oracle\.md.*unknown-tier|unknown-tier.*oracle\.md/,
+		);
+	});
+
+	it("throws for an empty tiers map via `applyModelMap`", () => {
+		expect(() => applyModelMap({ tiers: {} }, "opus", "oracle.md")).toThrow();
+	});
+});
+
+// =============================================================================
+// assertMappedTier
+// =============================================================================
+
+describe("assertMappedTier", () => {
+	it("passes without throwing when the tier is present via `assertMappedTier`", () => {
+		const map: ModelMap = { tiers: { opus: { model: "openai/o3" } } };
+		expect(() =>
+			assertMappedTier(map, "opus", { platform: "opencode", agentFile: "oracle.md" }),
+		).not.toThrow();
+	});
+
+	it("throws naming the agent file and tier when the tier is absent via `assertMappedTier`", () => {
+		const map: ModelMap = { tiers: { opus: { model: "openai/o3" } } };
+		expect(() =>
+			assertMappedTier(map, "sonnet", { platform: "opencode", agentFile: "oracle.md" }),
+		).toThrow(/oracle\.md.*sonnet|sonnet.*oracle\.md/);
 	});
 });
 
@@ -142,19 +176,19 @@ Content C.`;
 	it("applies model map to model field when provided (P2-5) via `translateAgentFrontmatter`", () => {
 		const content = `---
 name: oracle
-model: claude-opus-4
+model: opus
 ---
 
 Body.`;
 
-		const modelMap = { "claude-opus-4": "openai/o3" };
-		const result = translateAgentFrontmatter(content, modelMap);
+		const modelMap: ModelMap = { tiers: { opus: { model: "openai/o3" } } };
+		const result = translateAgentFrontmatter(content, modelMap, "oracle.md");
 
 		expect(result).toContain("model: openai/o3");
-		expect(result).not.toContain("claude-opus-4");
+		expect(result).not.toContain("model: opus\n");
 	});
 
-	it("preserves model value that is not in model map (P2-5) via `translateAgentFrontmatter`", () => {
+	it("throws when the frontmatter model tier is not in model map (P2-5) via `translateAgentFrontmatter`", () => {
 		const content = `---
 name: oracle
 model: gpt-5-turbo
@@ -162,10 +196,11 @@ model: gpt-5-turbo
 
 Body.`;
 
-		const modelMap = { "claude-opus-4": "openai/o3" };
-		const result = translateAgentFrontmatter(content, modelMap);
+		const modelMap: ModelMap = { tiers: { opus: { model: "openai/o3" } } };
 
-		expect(result).toContain("model: gpt-5-turbo");
+		expect(() => translateAgentFrontmatter(content, modelMap, "oracle.md")).toThrow(
+			/oracle\.md.*gpt-5-turbo|gpt-5-turbo.*oracle\.md/,
+		);
 	});
 
 	it("preserves model field unchanged when model map is absent via `translateAgentFrontmatter`", () => {
@@ -518,7 +553,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
 		const result = await opencodeAdapter.syncPlatformYaml(
 			tmpDir,
 			{
-				"model-map": { "claude-opus-4": "openai/o3" },
+				"model-map": { tiers: { opus: { model: "openai/o3" } } },
 				config: { model: "claude-opus-4" },
 				hooks: { UserPromptSubmit: [] },
 				mcps: {
@@ -534,14 +569,17 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
 		expect(result.processedSections).toContain("mcps");
 	});
 
-	it("applies model mapping to config model fields when model-map is present via `syncPlatformYaml`", async () => {
+	it("merges config model fields unchanged even when model-map is present via `syncPlatformYaml`", async () => {
+		const modelMap: ModelMap = {
+			tiers: {
+				opus: { model: "openai/o3" },
+				haiku: { model: "openai/gpt-4o-mini" },
+			},
+		};
 		const result = await opencodeAdapter.syncPlatformYaml(
 			tmpDir,
 			{
-				"model-map": {
-					"claude-opus-4": "openai/o3",
-					"claude-haiku-3": "openai/gpt-4o-mini",
-				},
+				"model-map": modelMap,
 				config: {
 					model: "claude-opus-4",
 					small_model: "claude-haiku-3",
@@ -552,14 +590,13 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
 		);
 
 		expect(result.processedSections).toEqual(["model-map", "config"]);
-		expect(result.modelMap).toEqual({
-			"claude-opus-4": "openai/o3",
-			"claude-haiku-3": "openai/gpt-4o-mini",
-		});
+		expect(result.modelMap).toEqual(modelMap);
 
+		// config.model/small_model are opencode's own default model ids — not agent
+		// tiers — so they merge unchanged even with a model-map present.
 		const config = await readJson(path.join(tmpDir, ".opencode", "opencode.json"));
-		expect(config["model"]).toBe("openai/o3");
-		expect(config["small_model"]).toBe("openai/gpt-4o-mini");
+		expect(config["model"]).toBe("claude-opus-4");
+		expect(config["small_model"]).toBe("claude-haiku-3");
 		expect(config["theme"]).toBe("dark");
 	});
 
@@ -611,10 +648,11 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
 	});
 
 	it("skips file write in dry-run mode via `syncPlatformYaml`", async () => {
+		const modelMap: ModelMap = { tiers: { opus: { model: "openai/o3" } } };
 		const result = await opencodeAdapter.syncPlatformYaml(
 			tmpDir,
 			{
-				"model-map": { "claude-opus-4": "openai/o3" },
+				"model-map": modelMap,
 				config: { model: "claude-opus-4" },
 				mcps: { context7: { type: "http" } },
 			},
@@ -622,7 +660,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
 		);
 
 		expect(result.processedSections).toEqual(["model-map", "config", "mcps"]);
-		expect(result.modelMap).toEqual({ "claude-opus-4": "openai/o3" });
+		expect(result.modelMap).toEqual(modelMap);
 
 		const exists = await fs
 			.access(path.join(tmpDir, ".opencode", "opencode.json"))
@@ -656,7 +694,7 @@ name: oracle
 subagent_type: general
 add-skills:
   - testing
-model: claude-opus-4
+model: opus
 ---
 
 Body content.`,
@@ -704,7 +742,7 @@ Body content.`,
 	it("applies modelMap to agent frontmatter model field at runtime (P2-5) via `syncAgentsDirect`", async () => {
 		const targetDir = await mkTempDir();
 		try {
-			const modelMap = { "claude-opus-4": "openai/o3" };
+			const modelMap: ModelMap = { tiers: { opus: { model: "openai/o3" } } };
 			await opencodeAdapter.syncAgentsDirect(
 				targetDir,
 				"oracle",
@@ -718,9 +756,9 @@ Body content.`,
 			const target = path.join(targetDir, ".opencode", "agents", "oracle.md");
 			const content = await fs.readFile(target, "utf-8");
 
-			// model field must be translated
+			// model field must be translated (agentFile threaded through as "oracle")
 			expect(content).toContain("model: openai/o3");
-			expect(content).not.toContain("claude-opus-4");
+			expect(content).not.toContain("model: opus\n");
 			// frontmatter translation still applied
 			expect(content).not.toContain("subagent_type");
 			expect(content).toContain("mode: subagent");

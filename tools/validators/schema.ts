@@ -662,6 +662,91 @@ function validatePlatformYamlData(
 			}
 		}
 	}
+
+	if (data["model-map"] !== undefined) {
+		validateModelMapSection(data["model-map"], label, platform, result);
+	}
+}
+
+const VALID_MODEL_MAP_TOP_FIELDS = new Set(["tiers", "agents"]);
+const VALID_MODEL_MAP_ENTRY_FIELDS = new Set(["model", "effort"]);
+
+/**
+ * Validates a model-map.tiers or model-map.agents entry map: each entry needs
+ * a string `model`, and `effort` (if present) must be a string — except for
+ * opencode, where `effort` is forbidden outright (opencode's ModelMapEntry has
+ * no reasoning-effort concept).
+ */
+function validateModelMapEntries(
+	entries: unknown,
+	label: string,
+	platform: string,
+	fieldLabel: "tiers" | "agents",
+	result: ValidationResult,
+): void {
+	if (!isObject(entries)) {
+		result.errors.push(`${label}: model-map.${fieldLabel}는 object 형식이어야 합니다`);
+		return;
+	}
+
+	for (const [name, entry] of Object.entries(entries)) {
+		const entryCtx = `${label}: model-map.${fieldLabel}.${name}`;
+
+		if (!isObject(entry)) {
+			result.errors.push(`${entryCtx}: object 형식이어야 합니다`);
+			continue;
+		}
+
+		for (const key of Object.keys(entry)) {
+			if (!VALID_MODEL_MAP_ENTRY_FIELDS.has(key)) {
+				result.errors.push(
+					`${entryCtx}: 알 수 없는 필드 '${key}' (지원: ${[...VALID_MODEL_MAP_ENTRY_FIELDS].join(", ")})`,
+				);
+			}
+		}
+
+		if (typeof entry.model !== "string" || !entry.model.trim()) {
+			result.errors.push(`${entryCtx}.model: string이어야 합니다 (got ${typeof entry.model})`);
+		}
+
+		if (platform === "opencode") {
+			if (entry.effort !== undefined) {
+				result.errors.push(`${entryCtx}.effort: opencode model-map은 effort를 지원하지 않습니다`);
+			}
+		} else if (entry.effort !== undefined && typeof entry.effort !== "string") {
+			result.errors.push(`${entryCtx}.effort: string이어야 합니다 (got ${typeof entry.effort})`);
+		}
+	}
+}
+
+function validateModelMapSection(
+	modelMap: unknown,
+	label: string,
+	platform: string,
+	result: ValidationResult,
+): void {
+	if (!isObject(modelMap)) {
+		result.errors.push(`${label}: model-map는 object 형식이어야 합니다`);
+		return;
+	}
+
+	for (const key of Object.keys(modelMap)) {
+		if (!VALID_MODEL_MAP_TOP_FIELDS.has(key)) {
+			result.errors.push(
+				`${label}: model-map에 알 수 없는 필드 '${key}' (지원: ${[...VALID_MODEL_MAP_TOP_FIELDS].join(", ")})`,
+			);
+		}
+	}
+
+	if (!("tiers" in modelMap)) {
+		result.errors.push(`${label}: model-map.tiers 필드가 필요합니다`);
+	} else {
+		validateModelMapEntries(modelMap.tiers, label, platform, "tiers", result);
+	}
+
+	if (modelMap.agents !== undefined) {
+		validateModelMapEntries(modelMap.agents, label, platform, "agents", result);
+	}
 }
 
 export function validatePlatformYaml(platformYamlPath: string, platform: string): ValidationResult {
