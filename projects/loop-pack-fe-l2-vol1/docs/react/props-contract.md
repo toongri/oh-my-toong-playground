@@ -1,10 +1,8 @@
 # Props·합성 계약 — 무엇을 어떻게 넘길까
 
-> `.claude/rules/component-design.md`가 가리키는 근거 문서. **공통 컴포넌트의 인터페이스를 설계할 때**(Props 모양·값의 주인·합성 방식) 읽는다. 각 판단의 "왜"를 Before/After로 보여준다.
->
-> 전제: 좋은 공통 컴포넌트는 기능을 많이 넣는 게 아니라 **결정을 사용처에 넘긴다**(Inversion of Control).
->
-> 컴포넌트를 어디서 자를지는 [`component-boundary.md`](./component-boundary.md), Context 전환 판단은 [`context-and-state.md`](./context-and-state.md)에 있다.
+좋은 공통 컴포넌트는 기능을 많이 넣는 게 아니라 **결정을 사용처에 넘긴다**(Inversion of Control).
+
+컴포넌트를 어디서 자를지는 [`component-boundary.md`](./component-boundary.md), Context 전환 판단은 [`context-and-state.md`](./context-and-state.md)에 있다.
 
 ## Props는 적을수록 좋다
 

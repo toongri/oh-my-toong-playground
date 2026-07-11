@@ -1,7 +1,5 @@
 # 테스트 도구 선택
 
-> 이 문서는 `rules/testing.md`가 가리키는 테스트 규칙의 일부다.
-
 카테고리별로 어떤 도구를 기본값으로 쓰고 언제 벗어나는지 정리한다. 도구를 고른 다음 "테스트를 어떻게 쓰는가"는 [conventions.md](./conventions.md), "어느 레이어에서 무엇을 테스트하는가"는 [test-layers.md](./test-layers.md)에 있다.
 
 ## 러너: Vitest 기본
