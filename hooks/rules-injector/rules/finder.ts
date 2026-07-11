@@ -16,6 +16,7 @@ import {
 	scanRuleFilesCached,
 	singleFileInfoCached,
 } from "./finder-cache.js";
+import { toPosixPath } from "./engine-paths.js";
 import { getWalkDirectories, toRelativePath } from "./finder-paths.js";
 import {
 	toProjectRuleSource,
@@ -92,7 +93,7 @@ export function findRuleCandidates(options: FinderOptions): RuleCandidate[] {
 	return filterExcludedCandidates(candidates, options.excludeGlobs);
 }
 
-function filterExcludedCandidates(
+export function filterExcludedCandidates(
 	candidates: RuleCandidate[],
 	excludeGlobs: string[] | undefined,
 ): RuleCandidate[] {
@@ -100,9 +101,15 @@ function filterExcludedCandidates(
 		return candidates;
 	}
 
-	const matchers = excludeGlobs.map((glob) => picomatch(glob, { bash: true, dot: true }));
+	// Normalize globs and candidate paths to POSIX before matching: on win32 the
+	// paths carry backslashes (node:path / realpathSync.native) but globs stay
+	// slash-based, so raw picomatch would never match. Mirrors matcher.ts.
+	const matchers = excludeGlobs.map((glob) => picomatch(toPosixPath(glob), { bash: true, dot: true }));
 	return candidates.filter(
-		(candidate) => !matchers.some((isMatch) => isMatch(candidate.path) || isMatch(candidate.realPath)),
+		(candidate) =>
+			!matchers.some(
+				(isMatch) => isMatch(toPosixPath(candidate.path)) || isMatch(toPosixPath(candidate.realPath)),
+			),
 	);
 }
 
