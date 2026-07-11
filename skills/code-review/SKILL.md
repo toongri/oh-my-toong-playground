@@ -292,7 +292,7 @@ Run in sequence — stop immediately on first failure:
 2. Full test suite
 3. Linter / static analysis
 
-**Any failure → do NOT dispatch chunk-reviewer agents. Report failure and exit.**
+**Any failure → do NOT dispatch chunk-reviewer agents.** See Fail-Fast Gate below for the exact exit sequence (it branches on whether this run carries the goal dispatch signal from Step 0).
 
 ### Output Format: {EVIDENCE_RESULTS}
 
@@ -331,7 +331,9 @@ If any check fails:
 1. Populate {EVIDENCE_RESULTS} Part 1 with the failure details (last 30 lines of failing command output)
 2. Omit Part 2 (Test Coverage Mapping) — it is not needed on failure
 3. Do NOT proceed to Step 4 or dispatch chunk-reviewer agents
-4. Report {EVIDENCE_RESULTS} and exit immediately
+4. **Goal dispatch signal present** (the dispatch prompt carried a `goal-codereview-{sid}.json` artifact path — the same non-interactive discriminator Step 0 uses): before reporting, write that artifact directly — `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}`. This is the exact code-review artifact schema `skills/goal/references/completion-gate.md` defines. A build/test/lint fail-fast is neither a finished review (`status: "COMPLETE"`) nor a confirmed defect (`findings` stays empty — the failing command and its last 30 lines of output belong in this reviewer's own failure report surfaced to goal, not folded into a per-finding `ref`) — it is the review itself failing to complete, which is exactly what `INCONCLUSIVE` means. Writing `status: "INCONCLUSIVE"` is sufficient by itself: it structurally blocks `request-complete` (the never-false-complete gate in `goal-state.ts`) without promoting to `status: "COMPLETE"` or introducing any new status value. If the artifact write itself fails, do not retry or invent a status — leave the artifact absent, which `request-complete`'s existing absent-artifact refusal already blocks on.
+5. **Goal dispatch signal absent** (interactive main-session review — no goal artifact path in play): no artifact write; this path is unchanged from before.
+6. Report {EVIDENCE_RESULTS} and exit immediately
 
 ## Step 4: Chunking Decision
 
