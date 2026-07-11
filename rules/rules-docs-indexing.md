@@ -30,10 +30,16 @@ writing before you write it.
   `paths:`, active whenever those paths are touched (e.g. a state-management
   rule, a naming rule, a type-safety rule). The rule body IS the guidance —
   no further lookup needed.
-- **Always-process**: a short global MUST rule (`paths: **/*`) that activates
-  the whole indexing system itself — e.g. "before any code action, load
-  relevant rules/docs and scan similar patterns for the area you're touching."
-  There is exactly one job here: turn the system on. Keep it short.
+- **Always-process**: a short MUST rule that activates the whole indexing
+  system itself — e.g. "before any code action, load relevant rules/docs
+  and scan similar patterns for the area you're touching." There is exactly
+  one job here: turn the system on. Keep it short. How it's made "always"
+  splits by scope:
+  - Universal (applies to every project) → deploy it to the global home
+    rules dir; presence there is the activator, no `paths:` glob needed.
+  - Project-specific → a project rule with `paths: **/*`.
+  Once a universal process rule exists globally, an individual project
+  need not add its own activator — it inherits the global one.
 - **Situational-index**: a thin pointer file. No substance of its own —
   it enumerates what exists in `docs/` and tells the agent when it's
   relevant to open one.
@@ -44,7 +50,19 @@ global "load rules before touching code" rule is always-process, and the
 component-design rule pointing into `docs/` for prop-contract patterns,
 state-colocation patterns, and composition patterns is situational-index.
 
-## 3. Index Entries: Recall-First, WHAT-Only
+Loading is not limited to `rules/` files — the same always/scoped/subtree
+spectrum has three vehicles:
+
+- Global (all projects): a file in the home `~/.claude/rules/` dir, no
+  `paths:` needed.
+- Project or path scope: a `rules/` file with a `paths:` glob — `**/*` for
+  the whole project, `apps/backend/**` for a subtree.
+- Subtree scope: a nested `CLAUDE.md` inside a subdirectory (e.g.
+  `apps/backend/CLAUDE.md`) that lazy-loads only when files under that
+  subtree are touched. An index can live in a nested `CLAUDE.md`, not only
+  in a `rules/` file.
+
+## 3. Index Entries: The WHAT Is a Trigger, Not an Answer
 
 **Do not write a per-doc WHEN trigger.** Write what the doc contains, not
 when to open it.
@@ -63,34 +81,61 @@ more than opening one that turns out not to be needed. Precision belongs to
 the moment the agent actually opens the doc and reads it in full, not to the
 index line that decides whether to open it.
 
-Instead, write a rich WHAT for each doc:
+**The WHAT's only job is to get the doc opened — it must never substitute
+for the doc.** Treat every entry as an aggressive trigger: it exists to
+fire when the doc's information is needed, not to pre-answer the question.
+Never approximate the doc's guidance in the index — a half-answer sitting
+right there tempts the agent to act on it and skip opening the doc, which
+is exactly the failure this system exists to prevent.
 
+To make the trigger fire reliably, make the entry point rich:
+
+- State the doc's intent/scope in one clause.
 - Enumerate every section the doc actually contains — don't summarize down
   to one sentence, list the topics.
-- Seed symptom and keyword vocabulary: the raw way an agent (or a human)
-  phrases the situation in the moment, not just the clean topic name.
-  "8 props and messy," "infinite re-render," "3-level prop drilling" recall
-  better than "prop management" or "render optimization" alone — the raw
-  phrasing is closer to what actually shows up in a request or an error.
-- Add a one-clause essence per topic: enough to disambiguate between two
-  similarly-named docs, not enough to explain the topic itself.
+- Seed dense symptom, keyword, and trigger vocabulary: the raw way a
+  situation shows up in a request or an error, not just the clean topic
+  name. "8 props and messy," "infinite re-render," "3-level prop drilling"
+  recall better than "prop management" or "render optimization" alone.
+  Maximize recall so no relevant situation slips past the index.
 
-Keep the heavy substance — examples, rationale, before/after diffs — in the
-doc. The index's only job is to get the doc opened when it's relevant.
+**No answer, no resolution — only the question and its symptoms.** State
+what decision or topic the doc covers and the symptoms that signal it's
+relevant, never how it should be resolved. "Covers when to colocate vs.
+lift state, triggered by prop drilling past 2 levels" is a WHAT;
+"always lift state above 2 levels of drilling" is an answer that leaked
+out of the doc and must not appear in the index. When two similarly-named
+docs need disambiguating, do it by scope or domain ("frontend state
+placement" vs. "backend cache state") — never by giving away the answer.
+The answer must be read in the doc, not inferred from the index line.
+
+Keep the heavy substance — examples, rationale, before/after diffs, and
+the actual resolution — in the doc. The index's only job is to get the doc
+opened when it's relevant.
 
 ## 4. Format
 
-One scannable list entry per doc:
+A list entry per doc, at whichever density the doc's topic count demands —
+both forms below are still a list, never a table:
 
-```
-- `path/to/doc.md` — **domain**: symptom/topic(essence) · symptom/topic(essence) · ...
-```
+- **Few short topics** — one inline entry, `·`-separated:
+  ```
+  - `path/to/doc.md` — **domain**: symptom/topic(essence) · symptom/topic(essence) · ...
+  ```
+- **Many topics, each needing its own symptom vocabulary** — break into
+  nested sub-bullets, one topic per line, so each gets room for its raw
+  symptom/keyword phrasing:
+  ```
+  - `path/to/doc.md` — **domain**
+    - symptom/topic(essence): keyword, keyword, raw phrasing
+    - symptom/topic(essence): keyword, keyword, raw phrasing
+  ```
 
-A list is the right shape here because there is one real dimension (doc →
-its WHAT contents), not two. Reach for a table only when there are
-genuinely two aligned dimensions to compare across rows (e.g. doc × maturity
-level) — a table forced onto a single dimension just adds column noise
-without adding information.
+A list is the right shape here — inline or expanded vertically — because
+there is one real dimension (doc → its WHAT contents), not two. Reach for a
+table only when there are genuinely two aligned dimensions to compare across
+rows (e.g. doc × maturity level) — a table forced onto a single dimension
+just adds column noise without adding information.
 
 ## 5. Discipline
 
