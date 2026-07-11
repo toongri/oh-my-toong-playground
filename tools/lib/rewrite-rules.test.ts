@@ -224,6 +224,41 @@ describe("BROAD_DETECTORS — 완결성 넷은 공허하지 않다", () => {
 	});
 });
 
+describe("BROAD_DETECTORS — 리터럴 `\\n` DOT 라벨 이스케이프 직후에도 매치한다 (규칙 14/14p와 동일한 `\\b` 사각지대를 net도 공유했으므로 fail-loud화)", () => {
+	function matches(name: string, input: string): boolean {
+		const detector = BROAD_DETECTORS.find((d) => d.name === name);
+		expect(detector).toBeDefined();
+		const re = new RegExp(detector!.detect.source, detector!.detect.flags);
+		return re.test(input);
+	}
+
+	it('claude-tool — 리터럴 \\n 직후의 "MultiEdit"에 매치한다: label="x:\\nMultiEdit"', () => {
+		expect(matches("claude-tool", 'label="x:\\nMultiEdit"')).toBe(true);
+	});
+
+	it('claude-tool — 리터럴 \\n 직후의 "TaskWatcher"에 매치한다: x:\\nTaskWatcher', () => {
+		expect(matches("claude-tool", "x:\\nTaskWatcher")).toBe(true);
+	});
+
+	it('claude-tool — 리터럴 \\n 직후의 "Agent("에 매치한다: phase:\\nAgent("', () => {
+		expect(matches("claude-tool", 'phase:\\nAgent("')).toBe(true);
+	});
+
+	it('claude-env — 리터럴 \\n 직후의 "CLAUDE_ENV_FILE"에 매치한다: x:\\nCLAUDE_ENV_FILE', () => {
+		expect(matches("claude-env", "x:\\nCLAUDE_ENV_FILE")).toBe(true);
+	});
+
+	it('claude-path — 리터럴 \\n 직후의 "CLAUDE.md"에 매치한다: x:\\nCLAUDE.md', () => {
+		expect(matches("claude-path", "x:\\nCLAUDE.md")).toBe(true);
+	});
+
+	it("공백 구분 형태는 수정 전후 모두 매치한다 (회귀 없음)", () => {
+		expect(matches("claude-tool", "x: MultiEdit")).toBe(true);
+		expect(matches("claude-env", "x: CLAUDE_ENV_FILE")).toBe(true);
+		expect(matches("claude-path", "x: CLAUDE.md")).toBe(true);
+	});
+});
+
 describe("codex 규칙 — Hole A: `$CLAUDE_CONFIG_DIR` -> `$CODEX_HOME`", () => {
 	it('"$CLAUDE_CONFIG_DIR" -> "$CODEX_HOME"', () => {
 		expect(applyRewriteRules("$CLAUDE_CONFIG_DIR", PLATFORM_REWRITE_RULES.codex)).toBe(
@@ -325,9 +360,24 @@ describe("codex 규칙 — Hole D: DOT 라벨의 리터럴 `\\n` 이스케이프
 		).toBe("foo\\nrequest_user_input calls bar");
 	});
 
+	it("실개행(real newline) 캐리어에서도 word-boundary 분기로 동일하게 치환된다: 'Phase 3:' + real-newline + 'AskUserQuestion' + real-newline + '(x)' -> 토큰만 request_user_input으로 (boundary 계약의 두 반쪽을 함께 고정)", () => {
+		expect(
+			applyRewriteRules("Phase 3:\nAskUserQuestion\n(x)", PLATFORM_REWRITE_RULES.codex),
+		).toBe("Phase 3:\nrequest_user_input\n(x)");
+	});
+
 	it('과매치 없음: "XAskUserQuestion"(복합 식별자 접미)은 미치환 유지', () => {
 		expect(applyRewriteRules("XAskUserQuestion", PLATFORM_REWRITE_RULES.codex)).toBe(
 			"XAskUserQuestion",
+		);
+	});
+
+	it('과매치 없음 (복수): "XAskUserQuestions"·"fooAskUserQuestions"(복합 식별자 접미)는 미치환 유지', () => {
+		expect(applyRewriteRules("XAskUserQuestions", PLATFORM_REWRITE_RULES.codex)).toBe(
+			"XAskUserQuestions",
+		);
+		expect(applyRewriteRules("fooAskUserQuestions", PLATFORM_REWRITE_RULES.codex)).toBe(
+			"fooAskUserQuestions",
 		);
 	});
 });

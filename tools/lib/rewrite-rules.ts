@@ -140,13 +140,13 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		// `XAskUserQuestion` still fails both branches and stays unmatched.
 		{
 			id: "14p",
-			detect: /(?<=\\n)AskUserQuestions\b|\bAskUserQuestions\b/g,
+			detect: /(?:(?<=\\n)|\b)AskUserQuestions\b/g,
 			replace: "request_user_input calls",
 			lossy: true,
 		},
 		{
 			id: "14",
-			detect: /(?<=\\n)AskUserQuestion\b|\bAskUserQuestion\b/g,
+			detect: /(?:(?<=\\n)|\b)AskUserQuestion\b/g,
 			replace: "request_user_input",
 			lossy: true,
 		},
@@ -286,12 +286,20 @@ export function bakeSkillDirToken(content: string, skillDirAbsPath: string): str
  * (which is only copied, never transformed) still fails validate. The
  * follow-up scanner decides the exact policy for a hit.
  */
+// claude-env/claude-path/claude-tool share rule 14/14p's `\b` blind spot: a
+// plain `\b` fails right before a literal `\n` DOT-label escape (backslash +
+// n, not a real newline) — `n` is a word char, so there's no word/non-word
+// transition there. Each gets the same `(?:(?<=\\n)|\b)` boundary fix as rule
+// 14/14p above, so the completeness net doesn't share the exact escape it
+// exists to catch. claude-model is untouched: it's line-anchored (`^`/`$`),
+// unrelated to `\n`-escapes.
 export const BROAD_DETECTORS: readonly { name: string; detect: RegExp }[] = [
-	{ name: "claude-env", detect: /\bCLAUDE_[A-Z_]+\b/g },
-	{ name: "claude-path", detect: /(~\/\.claude\/|\.claude\/|\bCLAUDE\.md\b)/g },
+	{ name: "claude-env", detect: /(?:(?<=\\n)|\b)CLAUDE_[A-Z_]+\b/g },
+	{ name: "claude-path", detect: /(~\/\.claude\/|\.claude\/|(?:(?<=\\n)|\b)CLAUDE\.md\b)/g },
 	{
 		name: "claude-tool",
-		detect: /\b(?:Skill|Agent)\s*\(|\b(?:Task|Ask|Web|Multi)[A-Z]\w+\b|\bsubagent_type\b/g,
+		detect:
+			/(?:(?<=\\n)|\b)(?:Skill|Agent)\s*\(|(?:(?<=\\n)|\b)(?:Task|Ask|Web|Multi)[A-Z]\w+\b|(?:(?<=\\n)|\b)subagent_type\b/g,
 	},
 	{ name: "claude-model", detect: /^model:\s*(?:opus|sonnet)\s*$/gm },
 ];
