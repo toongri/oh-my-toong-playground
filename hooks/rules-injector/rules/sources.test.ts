@@ -66,3 +66,14 @@ test("`disabledSourcesFromConfig`: auto mode disables .omo/rules and ~/.omo/rule
 	expect(disabled!.has(".omo/rules")).toBe(true);
 	expect(disabled!.has("~/.omo/rules")).toBe(true);
 });
+
+// ── cursor 제외: codex는 cursor 룰을 쓰지 않으므로 auto에서 제외 ────────────
+
+test("`DEFAULT_AUTO_DISABLED_SOURCES`: contains .cursor/rules", () => {
+	expect(DEFAULT_AUTO_DISABLED_SOURCES).toContain(".cursor/rules");
+});
+
+test("`disabledSourcesFromConfig`: auto mode disables .cursor/rules", () => {
+	const disabled = disabledSourcesFromConfig(autoConfig());
+	expect(disabled!.has(".cursor/rules")).toBe(true);
+});
