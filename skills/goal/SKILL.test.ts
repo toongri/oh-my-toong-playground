@@ -2,16 +2,6 @@ import { describe, test, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-// ---------------------------------------------------------------------------
-// Prose-contract test for skills/goal/SKILL.md — l4a-clarity-gate.
-//
-// goal must trust deep-interview's crystallized ambiguity score as the
-// requirements-clarity signal and skip re-interrogating the user before
-// routing downstream. This asserts the load-bearing sentence body-wide
-// (toContain over the whole file, not a heading-slice) so a later heading
-// reshape (lever 5) does not break this test.
-// ---------------------------------------------------------------------------
-
 const skillMd = readFileSync(join(import.meta.dir, "SKILL.md"), "utf8");
 const planningMd = readFileSync(
 	join(import.meta.dir, "references/planning.md"),
@@ -26,43 +16,37 @@ const completionGateMd = readFileSync(
 // union; which file it lives in is a routing detail, not a contract.
 const combined = skillMd + planningMd + completionGateMd;
 
-describe("clarity gate: goal trusts deep-interview's crystallized ambiguity", () => {
-	test("SKILL.md states goal trusts DI's crystallized clarity and does not re-interrogate", () => {
-		expect(skillMd).toContain(
-			"goal trusts deep-interview's crystallized clarity (ambiguity ≤ the resolved threshold, default 0.15) as the requirements-clarity signal and does not re-interrogate the user before routing downstream",
-		);
-	});
-});
-
 // ---------------------------------------------------------------------------
-// Prose-contract test for skills/goal/SKILL.md — l4-fastpath-gate.
+// Prose-contract test for skills/goal/SKILL.md — pure-executor reshape.
 //
-// goal must fold the Complex→prometheus branch: when a Complex objective
-// clears three fast-path signals (file-count-only Complex, no design fork,
-// no T1 risk) goal skips prometheus and dispatches straight to sisyphus via
-// the Story layer. A live design fork must be named explicitly as a
-// fast-path exclusion signal so design-fork work never leaks onto the fast
-// path. On-the-fence judgments default toward prometheus (asymmetric
-// default), never toward the fast path.
-//
-// Asserted body-wide (toContain over the whole file, not a heading-slice)
-// so a later heading reshape (lever 5) does not break this test. Per the
-// plan, the Conditional Orchestration section (where this prose lives)
-// stays in SKILL.md's body after lever 5 — it is not relocated to
-// references/ — so a plain whole-file toContain remains valid post-L1.
+// goal was reframed from an orchestrator that routed Vague/Complex objectives
+// through deep-interview/prometheus into a pure executor that decomposes the
+// Six Slots and Story set itself and dispatches straight to sisyphus. The
+// routing table, the Clarity gate, the Fast-path gate, and the
+// Finalize-before-advance guard (including its check-subskill dispatch and
+// Un-wedge recovery paragraph) are all gone from the prose.
 // ---------------------------------------------------------------------------
 
-describe("fast-path gate: goal conditionally folds prometheus for Complex objectives", () => {
-	test("SKILL.md states the three fast-path signals, naming a design fork as an exclusion signal", () => {
-		expect(skillMd).toContain(
-			"When a Complex objective clears all three fast-path signals — (1) the objective is Complex on file-count alone, with each individual change mechanical and localized, (2) no competing design fork exists — a single obvious approach, not a choice among architectures, and (3) no T1-tier risk is present (no security or data-integrity surface) — goal skips prometheus, captures the objective's acceptance criteria directly into the Story Definition layer, and dispatches straight to sisyphus.",
-		);
+describe("pure-executor reshape: routing/gating machinery is gone from SKILL.md", () => {
+	test("SKILL.md no longer contains the Conditional Orchestration routing table", () => {
+		expect(skillMd).not.toContain("Conditional Orchestration");
 	});
 
-	test("SKILL.md states the asymmetric default: on-the-fence falls back to prometheus", () => {
-		expect(skillMd).toContain(
-			"a user wrongly silenced by a skipped planning gate is worse than one extra round of design review, so an ambiguous fast-path judgment falls back to the full prometheus pipeline",
-		);
+	test("SKILL.md no longer contains the Clarity gate", () => {
+		expect(skillMd).not.toMatch(/### Clarity gate/);
+	});
+
+	test("SKILL.md no longer contains the Fast-path gate", () => {
+		expect(skillMd).not.toMatch(/### Fast-path gate/);
+	});
+
+	test("SKILL.md no longer contains the Finalize-before-advance guard or check-subskill dispatch", () => {
+		expect(skillMd).not.toContain("Finalize-before-advance");
+		expect(skillMd).not.toContain("check-subskill");
+	});
+
+	test("SKILL.md no longer contains the Un-wedge recovery paragraph", () => {
+		expect(skillMd).not.toContain("Un-wedge recovery");
 	});
 });
 
@@ -191,12 +175,6 @@ describe("preserved (regression): required phrases survive somewhere in body+ref
 		);
 		expect(combined).toContain(
 			"An `INCONCLUSIVE` status routes to a **reviewer-only re-run** instead — re-dispatch a fresh **code-reviewer** over the same diff, NOT sisyphus",
-		);
-	});
-
-	test("the fast-path three signals survive in the union (body-resident per plan)", () => {
-		expect(combined).toContain(
-			"When a Complex objective clears all three fast-path signals",
 		);
 	});
 });

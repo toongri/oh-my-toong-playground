@@ -32,14 +32,18 @@
  *   status
  *   set-stories --json '<array>' | --single
  *   confirm-story <id>                   (sole writer of confirmed — D-8)
- *   revise-story <id> --json '<patch>'   (resets status to unconfirmed — D-9)
- *   add-story --json '<story>'           (appends unconfirmed story — D-9)
- *   retire-story <id>                    (sets retired; confirmed-retire fence — D-9)
+ *   revise-story <id> --json '<patch>' --evidence <text> --rationale <text>
+ *                                         (resets status to unconfirmed — D-9)
+ *   add-story --json '<story>' --evidence <text> --rationale <text>
+ *                                         (appends unconfirmed story — D-9)
+ *   retire-story <id> --evidence <text> --rationale <text>
+ *                                         (sets retired; confirmed-retire fence — D-9)
+ *   --evidence/--rationale on the three steering mutations above are required — omitted
+ *   or whitespace-only values are refused (ADR D-4).
  */
 
 import { readFileSync, unlinkSync } from "fs";
 import { execSync } from "child_process";
-import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
@@ -49,8 +53,6 @@ import {
 	writeFileNoCreate,
 	isPristine,
 	ensureSeed,
-	isStateLive,
-	STATE_PREFIX,
 } from "@lib/state-core";
 
 export type GoalPhase = "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
@@ -76,6 +78,15 @@ export interface Story {
 	verification_surface: string;
 	/** Lifecycle status. `confirmed` writable ONLY by confirm-story (and --single carve-out). */
 	status: StoryStatus;
+	/**
+	 * What was observed that forces this mid-flight mutation. Written ONLY by the
+	 * steering mutations (add-story/revise-story/retire-story) — absent on stories
+	 * created during planning (set-stories/set-stories --single), which have no
+	 * steering event to record (ADR D-11).
+	 */
+	steering_evidence?: string;
+	/** Why this mutation is the right response to `steering_evidence`. Same writers as above. */
+	steering_rationale?: string;
 }
 const DEFAULT_MAX_ITERATIONS = 10;
 
@@ -377,6 +388,23 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 				`set: pursuing refused — ${unconfirmed.length} unconfirmed ${unconfirmed.length === 1 ? "story" : "stories"}: ${unconfirmed.join(", ")}`,
 			);
 		}
+		// WHAT-freeze (ADR D-6): outcome and verification_surface are the two named,
+		// typed CLI params that define the objective. Once pursuing has begun, a
+		// documented and reachable rewrite of either must not silently redefine the
+		// WHAT mid-pursuit — re-plan (phase=planning) is the only legitimate path to
+		// change them. This does not touch completion_evidence_paths or any other
+		// slot: request-complete depends on --completion-evidence staying writable
+		// while pursuing.
+		if (opts.outcome !== undefined) {
+			throw new Error(
+				"set: pursuing refused — outcome is frozen once pursuit has begun. Re-plan first (set --phase planning) to change it.",
+			);
+		}
+		if (opts.verification_surface !== undefined) {
+			throw new Error(
+				"set: pursuing refused — verification_surface is frozen once pursuit has begun. Re-plan first (set --phase planning) to change it.",
+			);
+		}
 	}
 	const next: Partial<GoalState> = {
 		phase: opts.phase,
@@ -472,6 +500,27 @@ function validateStoryFields(s: Story, label: string): void {
 }
 
 /**
+ * Enforces the two-field steering justification required by every mid-flight
+ * story mutation (add-story/revise-story/retire-story). `evidence` is what was
+ * observed that forces the change; `rationale` is why this change is the right
+ * response. Both are forcing functions, not data collection — no default value
+ * is supplied anywhere, and an omitted or whitespace-only value is a hard
+ * refusal (same `.trim() === ""` idiom used elsewhere in this file).
+ */
+function requireSteeringReason(label: string, evidence: string, rationale: string): void {
+	if (evidence.trim() === "") {
+		throw new Error(
+			`${label}: refused — --evidence is required (what was observed that forces this change)`,
+		);
+	}
+	if (rationale.trim() === "") {
+		throw new Error(
+			`${label}: refused — --rationale is required (why this change is the right response)`,
+		);
+	}
+}
+
+/**
  * Validates and persists a story set. Full-replace semantics: every story starts
  * `unconfirmed`. Refuses when:
  *   - phase !== 'planning'
@@ -501,8 +550,15 @@ export function setStories(sessionId: string, stories: Story[]): void {
 		}
 		seenIds.add(s.id);
 	}
-	// Normalize: force every status to unconfirmed (full-replace semantics, D-6)
-	const normalized: Story[] = stories.map((s): Story => ({ ...s, status: "unconfirmed" }));
+	// Normalize: force every status to unconfirmed (full-replace semantics, D-6).
+	// Strip steering provenance (ADR D-11): steering_evidence/steering_rationale are written
+	// ONLY by the three steering mutations. A re-plan that re-ingests a set copied from `get`
+	// carries these keys on the spread; drop them so a planning-created story can never
+	// present fabricated mid-flight evidence.
+	const normalized: Story[] = stories.map((s): Story => {
+		const { steering_evidence: _se, steering_rationale: _sr, ...rest } = s;
+		return { ...rest, status: "unconfirmed" };
+	});
 	mergeWrite(sessionId, { stories: normalized });
 }
 
@@ -511,10 +567,13 @@ export function setStories(sessionId: string, stories: Story[]): void {
  * forced to `unconfirmed` regardless). No mutation may produce `confirmed` (D-9).
  * Validates same per-story schema as setStories (>=1 AC, verification_surface, unique id).
  * Allowed in both `planning` and `pursuing` phases.
- * Refuses on: out-of-enum status, `confirmed` status, duplicate id, schema violation.
- * All refusals: throws, state unchanged.
+ * `evidence`/`rationale` are the steering justification (ADR D-4) — required, no default;
+ * recorded onto the new story as `steering_evidence`/`steering_rationale`.
+ * Refuses on: missing/blank evidence or rationale, out-of-enum status, `confirmed` status,
+ * duplicate id, schema violation. All refusals: throws, state unchanged.
  */
-export function addStory(sessionId: string, story: Story): void {
+export function addStory(sessionId: string, story: Story, evidence: string, rationale: string): void {
+	requireSteeringReason("add-story", evidence, rationale);
 	const prior = readPrior(sessionId);
 	const existing: Story[] = prior.stories ?? [];
 
@@ -542,7 +601,12 @@ export function addStory(sessionId: string, story: Story): void {
 	}
 
 	// Force status to unconfirmed regardless of what was passed
-	const normalized: Story = { ...story, status: "unconfirmed" };
+	const normalized: Story = {
+		...story,
+		status: "unconfirmed",
+		steering_evidence: evidence,
+		steering_rationale: rationale,
+	};
 	mergeWrite(sessionId, { stories: [...existing, normalized] });
 }
 
@@ -550,11 +614,20 @@ export function addStory(sessionId: string, story: Story): void {
  * Patches the content fields of an existing story (text/AC/surface).
  * ALWAYS resets status to `unconfirmed` — a changed story must be re-confirmed.
  * No mutation may produce `confirmed` or any value outside the enum (D-9).
- * Refuses on: retired story (no resurrect-via-revise), unknown id, out-of-enum status
- * in the patch, `confirmed` in the patch.
+ * `evidence`/`rationale` are the steering justification (ADR D-4) — required, no default;
+ * recorded onto the patched story as `steering_evidence`/`steering_rationale`.
+ * Refuses on: missing/blank evidence or rationale, retired story (no resurrect-via-revise),
+ * unknown id, out-of-enum status in the patch, `confirmed` in the patch.
  * All refusals: throws, state unchanged.
  */
-export function reviseStory(sessionId: string, storyId: string, patch: Partial<Story>): void {
+export function reviseStory(
+	sessionId: string,
+	storyId: string,
+	patch: Partial<Story>,
+	evidence: string,
+	rationale: string,
+): void {
+	requireSteeringReason("revise-story", evidence, rationale);
 	const prior = readPrior(sessionId);
 	const stories: Story[] = prior.stories ?? [];
 	const idx = stories.findIndex((s) => s.id === storyId);
@@ -587,7 +660,13 @@ export function reviseStory(sessionId: string, storyId: string, patch: Partial<S
 	}
 
 	// Apply the patch but ALWAYS reset status to unconfirmed
-	const updated: Story = { ...stories[idx], ...patch, status: "unconfirmed" };
+	const updated: Story = {
+		...stories[idx],
+		...patch,
+		status: "unconfirmed",
+		steering_evidence: evidence,
+		steering_rationale: rationale,
+	};
 
 	// Validate structural fields after applying the patch
 	validateStoryFields(updated, "revise-story");
@@ -601,11 +680,16 @@ export function reviseStory(sessionId: string, storyId: string, patch: Partial<S
  *   - `unconfirmed` story → retirable in any phase
  *   - `confirmed` story → retirable ONLY while `phase=planning`
  *     (retiring confirmed mid-pursuit would bypass the T4 verdict gate)
- * Refuses on: unknown id, already retired (no-op would hide bugs — be explicit),
- *   confirmed+pursuing combination.
+ * `evidence`/`rationale` are the steering justification (ADR D-4) — required, no default;
+ * recorded onto the retired story as `steering_evidence`/`steering_rationale`. Checked
+ * BEFORE the anti-dodge fence below, but supplying both never bypasses that fence — it
+ * only gates whether the fence is even reached.
+ * Refuses on: missing/blank evidence or rationale, unknown id, already retired (no-op
+ *   would hide bugs — be explicit), confirmed+pursuing combination.
  * All refusals: throws, state unchanged.
  */
-export function retireStory(sessionId: string, storyId: string): void {
+export function retireStory(sessionId: string, storyId: string, evidence: string, rationale: string): void {
+	requireSteeringReason("retire-story", evidence, rationale);
 	const prior = readPrior(sessionId);
 	const stories: Story[] = prior.stories ?? [];
 	const idx = stories.findIndex((s) => s.id === storyId);
@@ -628,7 +712,9 @@ export function retireStory(sessionId: string, storyId: string): void {
 	}
 
 	const updatedStories = stories.map((s, i): Story =>
-		i === idx ? { ...s, status: "retired" } : s,
+		i === idx
+			? { ...s, status: "retired", steering_evidence: evidence, steering_rationale: rationale }
+			: s,
 	);
 	mergeWrite(sessionId, { stories: updatedStories });
 }
@@ -982,65 +1068,80 @@ export function serializeRequirements(sessionId: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Cross-skill half-open detector (lever 1: finalize-before-advance guard)
-// ---------------------------------------------------------------------------
-
-export type CrossReadSkill = "deep-interview" | "prometheus";
-
-/**
- * True iff `skill`'s OWN state file for `sessionId` is half-open: it ran, is
- * still ACTIVE and TTL-live, and holds real (non-pristine) work — meaning it
- * exited without emitting its done-token. Cross-reads the peer skill's state
- * file directly via STATE_PREFIX; never reads or writes goal's own state.
- *
- * Absent file, parse failure, terminal (`active:false`), pristine seed, or
- * TTL-stale all read as false (not half-open) — reused verbatim from
- * @lib/state-core's isStateLive/isPristine, never reimplemented here.
- */
-export function isSubskillHalfOpen(sessionId: string, skill: CrossReadSkill): boolean {
-	const path = join(getOmtDir(), `${STATE_PREFIX[skill]}${sessionId}.json`);
-	let parsed;
-	try {
-		parsed = JSON.parse(readFileSync(path, "utf8"));
-	} catch {
-		return false;
-	}
-	if (!isRecord(parsed)) return false;
-	const nowEpoch = Math.floor(Date.now() / 1000);
-	return parsed.active === true && isStateLive(parsed, nowEpoch) && !isPristine(skill, parsed);
-}
-
-// ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-function parseArgs(args: string[]): Record<string, string | boolean> {
-	const result: Record<string, string | boolean> = {};
+/**
+ * Free-text flags whose value may legitimately begin with "--" (e.g. quoting
+ * a CLI flag inside an observation): `--evidence` and `--rationale` only.
+ * Listing them here lets parseArgs consume the next token unconditionally
+ * instead of guessing from its shape. Every OTHER value-bearing flag in this
+ * CLI (phase, verdict, completion-evidence, max-iterations, paths, ids, ...)
+ * takes a structured value that never itself starts with "--", so it must
+ * keep the conservative shape-guessing consumption below — otherwise a
+ * valueless flag immediately followed by another flag would swallow that
+ * flag's NAME as a bogus value instead of coercing to boolean `true` (see
+ * goal-state.test.ts's "completion-evidence rejects a swallowed flag name").
+ */
+const FREE_TEXT_VALUE_FLAGS = new Set(["evidence", "rationale"]);
+
+/**
+ * Splits argv into flags (`--key value` / `--key` boolean) and positionals, in
+ * encounter order. Positionals are collected into an array rather than a single
+ * `_subcommand` slot — a raw argv scan for "the first token not starting with
+ * --" (the bug this replaces) misreads a later flag's VALUE as a positional
+ * once any flag other than the subcommand can carry an argument-like value
+ * (e.g. `retire-story --evidence "e" story-1` — the value "e" is not a
+ * positional, but a naive scan can't tell). Consuming here, once, is the only
+ * correct place to draw that line.
+ *
+ * A free-text flag (FREE_TEXT_VALUE_FLAGS) always consumes the next token as
+ * its value, even if that token starts with "--" — otherwise a free-text
+ * value beginning with "--" is silently coerced to boolean `true` (see
+ * goal-state.test.ts's "steering reason value may begin with dashes"). Every
+ * other flag — including structured value-bearing flags like
+ * `--completion-evidence`/`--phase`/`--max-iterations` as well as boolean
+ * switches like `--single` — keeps the shape-guessing behavior: the next
+ * token is consumed as a value only if it does NOT look like a flag itself.
+ * Only when the next token is undefined (flag is the last argv token) does it
+ * fall back to boolean `true`, so a genuinely missing value is still caught by
+ * callers checking for that.
+ */
+function parseArgs(args: string[]): { flags: Record<string, string | boolean>; positionals: string[] } {
+	const flags: Record<string, string | boolean> = {};
+	const positionals: string[] = [];
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
 		if (arg.startsWith("--")) {
 			const key = arg.slice(2);
 			const next = args[i + 1];
-			if (next !== undefined && !next.startsWith("--")) {
-				result[key] = next;
+			if (next !== undefined && (FREE_TEXT_VALUE_FLAGS.has(key) || !next.startsWith("--"))) {
+				flags[key] = next;
 				i++;
 			} else {
-				result[key] = true;
+				flags[key] = true;
 			}
-		} else if (!result["_subcommand"]) {
-			result["_subcommand"] = arg;
+		} else {
+			positionals.push(arg);
 		}
 	}
-	return result;
+	return { flags, positionals };
 }
 
 function str(v: string | boolean | undefined): string | undefined {
 	return v !== undefined ? String(v) : undefined;
 }
 
+/** Like `str`, but a missing flag or a valueless boolean flag both read as "" —
+ * the shape `requireSteeringReason`'s blank check expects, so CLI omission and
+ * CLI whitespace collapse to the same rejection path. */
+function strFlagOrBlank(v: string | boolean | undefined): string {
+	return typeof v === "string" ? v : "";
+}
+
 function main(): void {
-	const args = parseArgs(process.argv.slice(2));
-	const subcommand = args["_subcommand"];
+	const { flags: args, positionals } = parseArgs(process.argv.slice(2));
+	const subcommand = positionals[0];
 	let sessionId: string;
 	try {
 		sessionId = resolveSessionIdOrThrow();
@@ -1142,8 +1243,9 @@ function main(): void {
 			}
 			adopt("goal", srcSid);
 		} else if (subcommand === "confirm-story") {
-			// parseArgs only captures the FIRST non-flag token as _subcommand.
-			// The story id is the second positional: scan raw argv past the subcommand.
+			// confirm-story takes no other value-bearing flags, so a raw argv scan for the
+			// first non-"--" token past the subcommand is still safe here (unlike
+			// revise-story/retire-story below, which now carry --evidence/--rationale).
 			const rawId = process.argv.slice(3).find((a) => !a.startsWith("--"));
 			if (!rawId) {
 				process.stderr.write("confirm-story: <id> argument is required\n");
@@ -1170,8 +1272,10 @@ function main(): void {
 				setStories(sessionId, parsed);
 			}
 		} else if (subcommand === "revise-story") {
-			// revise-story <id> --json '<patch>'
-			const rawId = process.argv.slice(3).find((a) => !a.startsWith("--"));
+			// revise-story <id> --json '<patch>' --evidence <text> --rationale <text>
+			// id is positionals[1] — the parsed positional, NOT a raw argv scan (that scan
+			// would misread --evidence's VALUE as the id once --evidence takes an argument).
+			const rawId = positionals[1];
 			if (!rawId) {
 				process.stderr.write("revise-story: <id> argument is required\n");
 				process.exit(1);
@@ -1191,9 +1295,15 @@ function main(): void {
 				process.stderr.write(`revise-story: invalid JSON — ${String(e)}\n`);
 				process.exit(1);
 			}
-			reviseStory(sessionId, rawId, patch);
+			reviseStory(
+				sessionId,
+				rawId,
+				patch,
+				strFlagOrBlank(args["evidence"]),
+				strFlagOrBlank(args["rationale"]),
+			);
 		} else if (subcommand === "add-story") {
-			// add-story --json '<story>'
+			// add-story --json '<story>' --evidence <text> --rationale <text>
 			const jsonArg = str(args["json"]);
 			if (!jsonArg) {
 				process.stderr.write("add-story: --json <story> is required\n");
@@ -1209,37 +1319,32 @@ function main(): void {
 				process.stderr.write(`add-story: invalid JSON — ${String(e)}\n`);
 				process.exit(1);
 			}
-			addStory(sessionId, parsed);
+			addStory(
+				sessionId,
+				parsed,
+				strFlagOrBlank(args["evidence"]),
+				strFlagOrBlank(args["rationale"]),
+			);
 		} else if (subcommand === "retire-story") {
-			// retire-story <id>
-			const rawId = process.argv.slice(3).find((a) => !a.startsWith("--"));
+			// retire-story <id> --evidence <text> --rationale <text>
+			// id is positionals[1] — see revise-story's comment above for why this must not
+			// be a raw argv scan.
+			const rawId = positionals[1];
 			if (!rawId) {
 				process.stderr.write("retire-story: <id> argument is required\n");
 				process.exit(1);
 			}
-			retireStory(sessionId, rawId);
+			retireStory(
+				sessionId,
+				rawId,
+				strFlagOrBlank(args["evidence"]),
+				strFlagOrBlank(args["rationale"]),
+			);
 		} else if (subcommand === "serialize-requirements") {
 			process.stdout.write(serializeRequirements(sessionId));
-		} else if (subcommand === "check-subskill") {
-			const skillArg = str(args["skill"]);
-			const ALLOWED_SKILLS: CrossReadSkill[] = ["deep-interview", "prometheus"];
-			if (!isOneOf(skillArg, ALLOWED_SKILLS)) {
-				process.stderr.write(
-					`check-subskill: --skill must be one of ${ALLOWED_SKILLS.join("|")} (got "${String(skillArg)}")\n`,
-				);
-				process.exit(1);
-			}
-			if (isSubskillHalfOpen(sessionId, skillArg)) {
-				process.stderr.write(
-					`check-subskill: ${skillArg} state for session "${sessionId}" is half-open ` +
-						`(active, live, non-pristine — likely exited without its done-token). ` +
-						`Finalize it before advancing.\n`,
-				);
-				process.exit(1);
-			}
 		} else {
 			process.stderr.write(
-				"Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story|serialize-requirements|check-subskill> [options]\n",
+				"Usage: goal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|revise-story|add-story|retire-story|serialize-requirements> [options]\n",
 			);
 			process.exit(1);
 		}
