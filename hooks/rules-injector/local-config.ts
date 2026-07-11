@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 import { writeErrorBreadcrumb } from "./debug-log.js";
 
@@ -72,9 +73,9 @@ function readYamlObject(path: string): Record<string, unknown> {
 		return {};
 	}
 	try {
-		const parsed: unknown = Bun.YAML.parse(raw);
-		if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-			return parsed as Record<string, unknown>;
+		const parsed: unknown = parseYaml(raw);
+		if (isRecord(parsed)) {
+			return parsed;
 		}
 		return {};
 	} catch (error) {
@@ -113,4 +114,8 @@ function toScreamingSnakeCase(key: string): string {
 // skip-guard above and the consumer agree on what counts as "present".
 function isPresent(value: string | undefined): boolean {
 	return typeof value === "string" && value.trim().length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
