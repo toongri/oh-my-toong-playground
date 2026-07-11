@@ -1,6 +1,6 @@
 # 테스트 컨벤션 (Vitest + React Testing Library)
 
-> 이 레포는 아직 테스트 스택 미설치다. 테스트 도입 시 Vitest + React Testing Library + (네트워크) MSW 기준으로 이 문서를 적용한다.
+> Vitest + React Testing Library + (네트워크) MSW가 설치되어 있다. MSW 핸들러는 `src/mocks/handlers.ts`에 살고, 테스트 파일은 `no-cross-feature` 의존성 규칙 때문에 `src/mocks/server.ts`를 import할 수 없어 `server.use(...)`로 테스트별 핸들러를 덮어쓰지 못한다 — 대신 핸들러가 요청 쿼리를 읽어 분기한다.
 
 ## 원칙
 
