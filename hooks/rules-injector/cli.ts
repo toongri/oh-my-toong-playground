@@ -13,6 +13,7 @@ import {
 	runUserPromptSubmitHook,
 } from "./codex-hook.js";
 import { writeErrorBreadcrumb } from "./debug-log.js";
+import { hydrateEnvFromLocalConfig } from "./local-config.js";
 
 const command = process.argv[2];
 const subcommand = process.argv[3];
@@ -41,6 +42,7 @@ async function runHookCli(eventName: HookCliEventName): Promise<void> {
 		if (!parsed) return;
 		const pluginDataRoot = process.env["PLUGIN_DATA"];
 		const options: CodexRulesHookOptions = pluginDataRoot === undefined ? {} : { pluginDataRoot };
+		options.env = hydrateEnvFromLocalConfig(process.env);
 		const output = await runHook(eventName, parsed, options);
 		await writeStdout(output);
 	} catch (error) {

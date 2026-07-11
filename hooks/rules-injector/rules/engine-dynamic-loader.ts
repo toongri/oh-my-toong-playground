@@ -52,6 +52,7 @@ export function loadDynamicCandidates(
 		if (disabledSources !== undefined) {
 			findOptions.disabledSources = disabledSources;
 		}
+		findOptions.excludeGlobs = config.excludeGlobs;
 		const candidates = findSortedCandidatesCached(
 			candidateDiscoveryCache,
 			deps.findCandidates,

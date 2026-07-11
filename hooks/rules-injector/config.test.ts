@@ -110,3 +110,20 @@ test("error-log cap: CODEX_RULES_ takes precedence over PI_RULES_ when both set"
 	});
 	expect(config.errorLogMaxBytes).toBe(3000);
 });
+
+// ── excludeGlobs: newline-separated CODEX_RULES_EXCLUDE / PI_RULES_EXCLUDE parse ──
+
+test("parses excludeGlobs from newline env", () => {
+	const config = configFromEnvironment({ CODEX_RULES_EXCLUDE: "**/a.md\n**/b.md" });
+	expect(config.excludeGlobs).toEqual(["**/a.md", "**/b.md"]);
+});
+
+test("excludeGlobs defaults empty", () => {
+	const config = configFromEnvironment({});
+	expect(config.excludeGlobs).toEqual([]);
+});
+
+test("excludeGlobs honors PI_ alias", () => {
+	const config = configFromEnvironment({ PI_RULES_EXCLUDE: "**/c.md\n**/d.md" });
+	expect(config.excludeGlobs).toEqual(["**/c.md", "**/d.md"]);
+});

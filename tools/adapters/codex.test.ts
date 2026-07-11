@@ -840,6 +840,26 @@ describe("CodexAdapter", () => {
 			expect(content).not.toContain("@lib/");
 			expect(content).toContain("../../lib/");
 		});
+
+		it("machine-local config.local.yaml in target survives sync as an orphan-deletion exclude via `syncHooksDirect`", async () => {
+			// Source dir: hooks/rules-injector/config.yaml (the committed base config)
+			const hookSrcDir = path.join(tmpDir, "hooks", "rules-injector");
+			await fs.mkdir(hookSrcDir, { recursive: true });
+			await fs.writeFile(path.join(hookSrcDir, "config.yaml"), "exclude:\n  - foo\n");
+
+			// Pre-seed a machine-local override in the TARGET dir only (not in source) —
+			// simulates a user-created ~/.codex/hooks/rules-injector/config.local.yaml
+			const targetBase = path.join(tmpDir, "target");
+			const targetHookDir = path.join(targetBase, ".codex", "hooks", "rules-injector");
+			await fs.mkdir(targetHookDir, { recursive: true });
+			await fs.writeFile(path.join(targetHookDir, "config.local.yaml"), "exclude:\n  - bar\n");
+
+			await adapter.syncHooksDirect(targetBase, "rules-injector", hookSrcDir, false);
+
+			// config.local.yaml is target-only (not in source) — must NOT be orphan-deleted
+			const localConfig = await fs.readFile(path.join(targetHookDir, "config.local.yaml"), "utf-8");
+			expect(localConfig).toBe("exclude:\n  - bar\n");
+		});
 	});
 
 	// ---------------------------------------------------------------------------
