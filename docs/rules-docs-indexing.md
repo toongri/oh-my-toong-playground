@@ -132,7 +132,30 @@ Keep the heavy substance — examples, rationale, before/after diffs, and
 the actual resolution — in the doc. The index's only job is to get the doc
 opened when it's relevant.
 
-## 4. Format
+## 4. Scope the index rule wide — the trigger is cheap
+
+Set an index rule's `paths:` to match where the concern is reasoned about,
+not where its artifacts live. Testing is chosen during planning and feature
+work — not only inside `*.test.*` files — so `paths: **/*.test.*` silently
+misses every moment you pick a verification strategy while writing the
+feature. That is the same recall loss as a narrow per-entry WHEN clause
+(Section 3), one level up.
+
+Glob width tracks payload weight, inversely:
+
+- **Always-substance rule** (heavy inline body) → scope tight; loading it
+  where it doesn't apply injects substance into the wrong context.
+- **Situational-index rule** (thin pointer, substance in `docs/`) → scope
+  wide. Over-firing costs a few pointer lines; under-firing skips a doc —
+  the worse failure.
+
+When an index should be available everywhere, **omit `paths:` entirely** —
+a `.claude/rules/*.md` file with no `paths:`/`globs`/`applyTo` and no
+`alwaysApply` loads unconditionally (Claude Code native semantics). Prefer
+this over `paths: **/*`: same effect, less noise, and it reads as "always"
+instead of "matches every path."
+
+## 5. Format
 
 A list entry per doc — never a table. Because each concern carries at most
 a minimal hook, not a sentence (Section 3), a single inline line per doc
@@ -163,7 +186,7 @@ when there are genuinely two aligned dimensions to compare across rows
 (e.g. doc × maturity level) — a table forced onto a single dimension just
 adds column noise without adding information.
 
-## 5. Discipline
+## 6. Discipline
 
 - Every `rules/` and `docs/` file: under 300 lines AND single-responsibility.
   Line count alone doesn't certify focus — a 250-line file covering three
