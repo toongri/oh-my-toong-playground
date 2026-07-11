@@ -309,6 +309,29 @@ describe("codex 규칙 — Hole C: `AskUserQuestions`(복수) -> `request_user_i
 	});
 });
 
+describe("codex 규칙 — Hole D: DOT 라벨의 리터럴 `\\n` 이스케이프 직후 AskUserQuestion(s) (witnessed: skills/collect-jd/reference/dedup-and-discovery.md:64)", () => {
+	it('DOT 라벨 "Phase 3:\\nAskUserQuestion\\n(x)" -> "Phase 3:\\nrequest_user_input\\n(x)" (리터럴 \\n 보존, 토큰만 치환)', () => {
+		expect(
+			applyRewriteRules(
+				"Phase 3:\\nAskUserQuestion\\n(x)",
+				PLATFORM_REWRITE_RULES.codex,
+			),
+		).toBe("Phase 3:\\nrequest_user_input\\n(x)");
+	});
+
+	it('복수형도 리터럴 \\n 직후에서 치환된다: "foo\\nAskUserQuestions bar" -> "foo\\nrequest_user_input calls bar"', () => {
+		expect(
+			applyRewriteRules("foo\\nAskUserQuestions bar", PLATFORM_REWRITE_RULES.codex),
+		).toBe("foo\\nrequest_user_input calls bar");
+	});
+
+	it('과매치 없음: "XAskUserQuestion"(복합 식별자 접미)은 미치환 유지', () => {
+		expect(applyRewriteRules("XAskUserQuestion", PLATFORM_REWRITE_RULES.codex)).toBe(
+			"XAskUserQuestion",
+		);
+	});
+});
+
 describe("G4-1 — KEEP_IDENTICAL_TOKENS / OUT_OF_SCOPE_TOKENS", () => {
 	it("KEEP_IDENTICAL_TOKENS는 codex가 공유하는 5개 hook 이벤트명이다", () => {
 		expect(KEEP_IDENTICAL_TOKENS).toEqual([
