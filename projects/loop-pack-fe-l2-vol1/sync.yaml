@@ -3,7 +3,6 @@ path: ~/repos/loop-pack-fe-l2-vol1/main
 
 rules:
   items:
-    - workflow
     - react
     - component-design
     - testing
