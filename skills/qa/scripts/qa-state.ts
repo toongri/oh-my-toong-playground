@@ -230,11 +230,12 @@ export interface SetQaOpts {
 
 /** General setter: phase + target. Refuses an out-of-enum phase. */
 export function setQaState(sessionId: string, opts: SetQaOpts): void {
-	if (opts.phase !== undefined && !isOneOf(opts.phase, QA_PHASES)) {
-		throw new Error(`set: phase must be one of ${QA_PHASES.join("|")} (got "${opts.phase}")`);
+	const phase = opts.phase;
+	if (phase !== undefined && !isOneOf(phase, QA_PHASES)) {
+		throw new Error(`set: phase must be one of ${QA_PHASES.join("|")} (got "${phase}")`);
 	}
 	mergeWrite(sessionId, {
-		phase: opts.phase as QaPhase | undefined,
+		phase,
 		target: opts.target,
 	});
 }

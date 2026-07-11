@@ -561,28 +561,22 @@ export async function validateModelMapCoverage(
 		} catch {
 			continue; // parse error already reported by validateSyncYamlComponents
 		}
-		if (!isObject(syncYaml)) continue;
+		if (!syncYaml) continue;
 
 		const ctx = setProjectContext(syncYaml, syncYamlPath, rootDir);
 		const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
 
 		const agentsSection = syncYaml.agents;
-		if (!isObject(agentsSection) || !isArray(agentsSection.items)) continue;
+		if (!agentsSection || !Array.isArray(agentsSection.items)) continue;
 
-		const sectionPlatforms = isArray(agentsSection.platforms) ? agentsSection.platforms : undefined;
-		const syncYamlPlatforms = isArray(syncYaml.platforms) ? syncYaml.platforms : undefined;
+		const sectionPlatforms = agentsSection.platforms;
+		const syncYamlPlatforms = syncYaml.platforms;
 
 		for (const item of agentsSection.items) {
 			const component = getItemComponent(item);
 			if (!component) continue;
 
-			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- item came from a runtime-checked SyncSection.items array; shape matches SyncItem
-			const platforms = await resolvePlatforms(
-				item as SyncItem,
-				sectionPlatforms as Platform[] | undefined,
-				syncYamlPlatforms as Platform[] | undefined,
-				"agents",
-			);
+			const platforms = await resolvePlatforms(item, sectionPlatforms, syncYamlPlatforms, "agents");
 
 			for (const platform of platforms) {
 				if (platform !== "codex" && platform !== "opencode") continue;
@@ -768,29 +762,23 @@ export async function validateCodexRewriteCoverage(
 		} catch {
 			continue; // parse error already reported by validateSyncYamlComponents
 		}
-		if (!isObject(syncYaml)) continue;
+		if (!syncYaml) continue;
 
 		const ctx = setProjectContext(syncYaml, syncYamlPath, rootDir);
 		const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
-		const syncYamlPlatforms = isArray(syncYaml.platforms) ? syncYaml.platforms : undefined;
+		const syncYamlPlatforms = syncYaml.platforms;
 
 		for (const category of codexCategories) {
 			const sectionData = syncYaml[category];
-			if (!isObject(sectionData) || !isArray(sectionData.items)) continue;
+			if (!sectionData || !Array.isArray(sectionData.items)) continue;
 
-			const sectionPlatforms = isArray(sectionData.platforms) ? sectionData.platforms : undefined;
+			const sectionPlatforms = sectionData.platforms;
 
 			for (const item of sectionData.items) {
 				const component = getItemComponent(item);
 				if (!component) continue;
 
-				// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- item came from a runtime-checked SyncSection.items array; shape matches SyncItem
-				const platforms = await resolvePlatforms(
-					item as SyncItem,
-					sectionPlatforms as Platform[] | undefined,
-					syncYamlPlatforms as Platform[] | undefined,
-					category,
-				);
+				const platforms = await resolvePlatforms(item, sectionPlatforms, syncYamlPlatforms, category);
 				if (!platforms.includes("codex")) continue;
 
 				const files = await resolveCodexCandidateFiles(
