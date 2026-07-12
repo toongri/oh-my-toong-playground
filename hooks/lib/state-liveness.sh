@@ -127,6 +127,7 @@ is_state_live() {
 #
 # The session id is encoded in the filename, e.g.:
 #   goal-state-<sid>.json
+#   ultragoal-state-<sid>.json
 #   prometheus-state-<sid>.json
 #   deep-interview-active-state-<sid>.json
 #   qa-state-<sid>.json
@@ -141,6 +142,7 @@ is_current_session() {
   # Strip the known prefix to extract the session id.
   # Known prefixes (basename without .json):
   #   goal-state-<sid>                         prefix = "goal-state-"
+  #   ultragoal-state-<sid>                    prefix = "ultragoal-state-"
   #   prometheus-state-<sid>                   prefix = "prometheus-state-"
   #   deep-interview-active-state-<sid>        prefix = "deep-interview-active-state-"
   #   qa-state-<sid>                           prefix = "qa-state-"
@@ -150,6 +152,8 @@ is_current_session() {
   case "$basename_val" in
     goal-state-*)
       file_sid="${basename_val#goal-state-}" ;;
+    ultragoal-state-*)
+      file_sid="${basename_val#ultragoal-state-}" ;;
     prometheus-state-*)
       file_sid="${basename_val#prometheus-state-}" ;;
     deep-interview-active-state-*)
