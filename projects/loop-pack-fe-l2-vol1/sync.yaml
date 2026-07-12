@@ -1,5 +1,5 @@
 name: loop-pack-fe-l2-vol1
-path: ~/repos/loop-pack-fe-l2-vol1/main
+path: ~/repos/loop-pack-fe-l2-vol1
 
 rules:
   items:
@@ -10,6 +10,7 @@ rules:
     - hook-design
     - feature-boundary
     - url-state
+    - nextjs
 
 # rule들이 "docs/react/…를 읽어라"로 가리키는 근거 문서. 디렉토리 형태 →
 # docs/react/ 전체가 docs/react/로, testing/ 전체가 docs/testing/로 착지한다.
@@ -17,3 +18,4 @@ docs:
   items:
     - react
     - testing
+    - nextjs
