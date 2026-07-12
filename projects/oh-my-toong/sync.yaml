@@ -68,3 +68,4 @@ rules:
     - rules-docs-authoring
     - agent-browser-usage
     - codebase-grounding
+    - sync-operations
