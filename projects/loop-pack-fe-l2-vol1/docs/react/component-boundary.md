@@ -1,10 +1,8 @@
 # 컴포넌트 경계 — 어디서 자를까
 
-> `.claude/rules/component-design.md`가 가리키는 근거 문서. **"이 컴포넌트를 쪼갤까"**를 판단할 때 읽는다. 각 판단의 "왜"를 Before/After로 보여준다.
->
-> 전제: 컴포넌트는 **"재사용 가능하게" 만들기 전에 "읽기 쉽게"** 만드는 것이 먼저다.
->
-> Props·합성 계약(무엇을 어떻게 넘길까)은 [`props-contract.md`](./props-contract.md), Context 전환 판단은 [`context-and-state.md`](./context-and-state.md)에 있다.
+컴포넌트는 **"재사용 가능하게" 만들기 전에 "읽기 쉽게"** 만드는 것이 먼저다.
+
+Props·합성 계약(무엇을 어떻게 넘길까)은 [`props-contract.md`](./props-contract.md), Context 전환 판단은 [`context-and-state.md`](./context-and-state.md)에 있다.
 
 
 Props를 어떻게 설계할지(계약)는 그다음 문제다. 먼저 **무엇을 한 컴포넌트로 볼지**를 정한다. 나누는 기준은 "크기"가 아니라 **"무엇이 함께 바뀌는가"**다.

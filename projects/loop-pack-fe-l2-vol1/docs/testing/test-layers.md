@@ -1,8 +1,6 @@
 # 테스트 레이어 — 어디에 얼마나 투자할까
 
-> 이 문서는 `rules/testing.md`가 가리키는 테스트 규칙의 일부다. **"어느 레이어에 얼마나 투자할지 + 무엇을 테스트할지"**를 다룬다.
->
-> RTL 작성 관용구(쿼리·상호작용·모킹·네이밍)는 [`conventions.md`](./conventions.md), Next.js App Router의 레이어 배치는 [`nextjs.md`](./nextjs.md), 실행·커버리지 도구는 [`tooling.md`](./tooling.md), CI 검증 절차는 [`verification.md`](./verification.md)에 있다.
+RTL 작성 관용구(쿼리·상호작용·모킹·네이밍)는 [`conventions.md`](./conventions.md), Next.js App Router의 레이어 배치는 [`nextjs.md`](./nextjs.md), 실행·커버리지 도구는 [`tooling.md`](./tooling.md), CI 검증 절차는 [`verification.md`](./verification.md)에 있다.
 
 ## 원칙
 
