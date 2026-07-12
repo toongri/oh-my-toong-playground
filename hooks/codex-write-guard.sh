@@ -206,6 +206,35 @@ _cwg_add_candidate() {
     candidates_text="${candidates_text}$(_cwg_absolutize "$1")"$'\n'
 }
 
+# _cwg_process_shell_text <shell_command_text>
+# Runs the heredoc-body scan and the redirect/tee/rm/cp/mv/sed/dd classifier
+# over one shell-text payload. Factored out so the Bash|bash|exec_command|
+# shell_command route below can run it once per alternate payload key
+# (tool_input.command and tool_input.cmd) without duplicating the logic.
+_cwg_process_shell_text() {
+    local shell_cmd="$1"
+    [ -n "$shell_cmd" ] || return 0
+
+    # Bash-embedded apply_patch heredoc body -- its own surface, scanned
+    # with the same header parser as the apply_patch envelope route.
+    local heredoc_body
+    heredoc_body=$(_cwg_extract_heredoc_body "$shell_cmd")
+    if [ -n "$heredoc_body" ]; then
+        while IFS= read -r hdr; do
+            _cwg_add_candidate "$hdr"
+        done < <(_cwg_extract_patch_headers "$heredoc_body")
+    fi
+
+    # Redirect / tee / rm classifier, per chain segment (split on
+    # && || ; |, matching pre-tool-enforcer.sh's segmentation).
+    while IFS= read -r seg; do
+        [ -n "$seg" ] || continue
+        while IFS= read -r tgt; do
+            _cwg_add_candidate "$tgt"
+        done < <(_cwg_extract_shell_targets "$seg")
+    done < <(printf '%s\n' "$shell_cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+}
+
 # -----------------------------------------------------------------------------
 # Route: tool_name -> parse strategy -> candidate targets.
 # -----------------------------------------------------------------------------
@@ -215,31 +244,35 @@ case "$tool_name" in
         _cwg_add_candidate "$fp"
         ;;
     apply_patch)
-        patch_cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || patch_cmd=""
-        while IFS= read -r hdr; do
-            _cwg_add_candidate "$hdr"
-        done < <(_cwg_extract_patch_headers "$patch_cmd")
-        ;;
-    Bash | bash | exec_command | shell_command)
-        shell_cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || shell_cmd=""
-
-        # Bash-embedded apply_patch heredoc body -- its own surface, scanned
-        # with the same header parser as the apply_patch envelope route.
-        heredoc_body=$(_cwg_extract_heredoc_body "$shell_cmd")
-        if [ -n "$heredoc_body" ]; then
+        # Codex has been observed sending the apply_patch payload text under
+        # any of command/input/patch/cmd depending on client -- scan ALL
+        # FOUR keys (not a first-match fallback), mirroring the sibling
+        # extractor hooks/rules-injector/tool-paths.ts:addPatchPayloadPaths.
+        # Reading only .command let an input/patch/cmd-only payload bypass
+        # the guard entirely; reading more keys carries no over-block risk
+        # since write_guard_core_run only denies on a full-path EXACT match
+        # against the resolved current-session ledger.
+        for _cwg_key in command input patch cmd; do
+            patch_cmd=$(printf '%s' "$input" | jq -r --arg k "$_cwg_key" '.tool_input[$k] // empty' 2>/dev/null) || patch_cmd=""
+            [ -n "$patch_cmd" ] || continue
             while IFS= read -r hdr; do
                 _cwg_add_candidate "$hdr"
-            done < <(_cwg_extract_patch_headers "$heredoc_body")
-        fi
+            done < <(_cwg_extract_patch_headers "$patch_cmd")
+        done
+        ;;
+    Bash | bash | exec_command | shell_command)
+        # Codex has been observed sending the shell text under
+        # tool_input.command normally, but also under tool_input.cmd for
+        # exec_command/shell_command payloads -- process both keys (not a
+        # first-match fallback) so a cmd-only payload isn't silently
+        # unguarded, mirroring tool-paths.ts's command/cmd fallback.
+        shell_cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || shell_cmd=""
+        shell_cmd_alt=$(printf '%s' "$input" | jq -r '.tool_input.cmd // empty' 2>/dev/null) || shell_cmd_alt=""
 
-        # Redirect / tee / rm classifier, per chain segment (split on
-        # && || ; |, matching pre-tool-enforcer.sh's segmentation).
-        while IFS= read -r seg; do
-            [ -n "$seg" ] || continue
-            while IFS= read -r tgt; do
-                _cwg_add_candidate "$tgt"
-            done < <(_cwg_extract_shell_targets "$seg")
-        done < <(printf '%s\n' "$shell_cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+        _cwg_process_shell_text "$shell_cmd"
+        if [ "$shell_cmd_alt" != "$shell_cmd" ]; then
+            _cwg_process_shell_text "$shell_cmd_alt"
+        fi
         ;;
 esac
 
