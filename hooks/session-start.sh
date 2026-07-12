@@ -82,13 +82,14 @@ LEDGER_ACUTE_INLINE=""
 RECORDING_INSTRUCTION="<session-recording>\n\n[LEDGER RECORDING]\n\nRecord decisions, user corrections, and next-steps to the durable session ledger AS YOU WORK -- do not wait until the end of the session. Ledger sections are append-only, except Now, which the now subcommand replaces with the latest current-state summary.\n\nAppend content (piped via stdin) to a section:\n  <content> | \"\${CLAUDE_PROJECT_DIR:-\$HOME}/.claude/hooks/omt-ledger.sh\" append Decisions\n  <content> | \"\${CLAUDE_PROJECT_DIR:-\$HOME}/.claude/hooks/omt-ledger.sh\" append Pending\n\nReplace the current-state summary:\n  <content> | \"\${CLAUDE_PROJECT_DIR:-\$HOME}/.claude/hooks/omt-ledger.sh\" now\n\nCRITICAL: record a user correction VERBATIM -- the user's exact original words, never a paraphrase or summary. Paraphrasing a correction silently loses the precise wording that made it a correction. Append verbatim corrections to the User Corrections (verbatim) section.\n\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook; omt-ledger.sh computes the ledger path internally.)\n\n</session-recording>\n\n---\n\n"
 MESSAGES="$MESSAGES$RECORDING_INSTRUCTION"
 
-# GC: reap dead state files for the 3 managed prefixes.
+# GC: reap dead state files for the managed prefixes.
 # Liveness defined by hooks/lib/state-liveness.sh (ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m).
 # The current session's state is always kept regardless of age.
 source "$SCRIPT_DIR_SS/lib/state-liveness.sh"
 GC_NOW=$(date +%s)
 for state_file in \
     "$OMT_DIR"/goal-state-*.json \
+    "$OMT_DIR"/ultragoal-state-*.json \
     "$OMT_DIR"/prometheus-state-*.json \
     "$OMT_DIR"/deep-interview-active-state-*.json \
     "$OMT_DIR"/qa-state-*.json; do
@@ -194,6 +195,58 @@ if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
         fi
 
         MESSAGES="$MESSAGES<session-restore>\n\n[GOAL RESTORED]\n\nYou have an active goal session (phase: $GOAL_PHASE).\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/goal-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\n$GOAL_INSTRUCTION\nIMPORTANT: Invoking the goal skill again while a goal is already active is refused. Continue the existing goal, do not start a new one.\n\n</session-restore>\n\n---\n\n"
+      fi
+    fi
+  fi
+fi
+
+# Check for active ultragoal state (session-specific). ultragoal shares GoalState's
+# exact JSON shape (UltragoalState = GoalState in lib/state-core.ts), so this block
+# mirrors the goal-state restore block above verbatim, save for the prefix/label swap.
+if [ -f "$OMT_DIR/ultragoal-state-${SESSION_ID}.json" ]; then
+  ULTRAGOAL_STATE=$(cat "$OMT_DIR/ultragoal-state-${SESSION_ID}.json" 2>/dev/null)
+
+  if command -v jq &> /dev/null; then
+    ULTRAGOAL_ACTIVE=$(echo "$ULTRAGOAL_STATE" | jq -r '.active // false' 2>/dev/null)
+    if [ "$ULTRAGOAL_ACTIVE" = "true" ]; then
+      ULTRAGOAL_PHASE=$(echo "$ULTRAGOAL_STATE" | jq -r '.phase // ""' 2>/dev/null)
+
+      # Pristine-seed guard: a freshly seeded state (phase=planning, iteration=0,
+      # outcome="" or absent) is inert — it may be an orphan from a refused ultragoal
+      # invocation. Skip the restore block; GC reaps the orphan by TTL.
+      ULTRAGOAL_ITERATION_RAW=$(echo "$ULTRAGOAL_STATE" | jq -r '.iteration // 0' 2>/dev/null)
+      ULTRAGOAL_OUTCOME_RAW=$(echo "$ULTRAGOAL_STATE" | jq -r '.outcome // ""' 2>/dev/null)
+      ULTRAGOAL_IS_PRISTINE=false
+      if [ "$ULTRAGOAL_PHASE" = "planning" ] && [ "$ULTRAGOAL_ITERATION_RAW" = "0" ] && [ "$ULTRAGOAL_OUTCOME_RAW" = "" ]; then
+        ULTRAGOAL_IS_PRISTINE=true
+      fi
+
+      if [ "$ULTRAGOAL_IS_PRISTINE" = "false" ]; then
+        ULTRAGOAL_PLAN_PATH=$(echo "$ULTRAGOAL_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
+
+        # Determine whether the plan file is available on disk.
+        ULTRAGOAL_PLAN_AVAILABLE=false
+        if [ -n "$ULTRAGOAL_PLAN_PATH" ] && [ "$ULTRAGOAL_PLAN_PATH" != "null" ] && [ -f "$ULTRAGOAL_PLAN_PATH" ]; then
+          ULTRAGOAL_PLAN_AVAILABLE=true
+        fi
+
+        ULTRAGOAL_INSTRUCTION=""
+        if [ "$ULTRAGOAL_PHASE" = "planning" ]; then
+          # Planning-resume: guide the AI to continue co-designing the plan
+          if [ "$ULTRAGOAL_PLAN_AVAILABLE" = "true" ]; then
+            ULTRAGOAL_INSTRUCTION="\nRe-read the current plan from disk and continue the planning process where you left off.\n"
+          else
+            ULTRAGOAL_INSTRUCTION="\nNo plan file on disk yet. Continue planning from the state you just read above — resume from its resume_summary checkpoint if present, otherwise begin planning afresh.\n"
+          fi
+        else
+          # Pursuing-resume: guide the AI to continue autonomous pursuit
+          ULTRAGOAL_INSTRUCTION="\nContinue pursuing the objective autonomously.\n"
+          if [ "$ULTRAGOAL_PLAN_AVAILABLE" = "true" ]; then
+            ULTRAGOAL_INSTRUCTION="${ULTRAGOAL_INSTRUCTION}Re-read the current plan from disk before continuing.\n"
+          fi
+        fi
+
+        MESSAGES="$MESSAGES<session-restore>\n\n[ULTRAGOAL RESTORED]\n\nYou have an active ultragoal session (phase: $ULTRAGOAL_PHASE).\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/ultragoal-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\n$ULTRAGOAL_INSTRUCTION\nIMPORTANT: Invoking the ultragoal skill again while an ultragoal is already active is refused. Continue the existing ultragoal, do not start a new one.\n\n</session-restore>\n\n---\n\n"
       fi
     fi
   fi
