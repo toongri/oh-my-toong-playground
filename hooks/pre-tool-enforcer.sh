@@ -29,104 +29,142 @@ EOF
 fi
 
 # =============================================================================
-# Ledger write-guard (compaction-continuous-record plan, TODO 7, D5): a
-# best-effort append-only guard for the durable session ledger
-# ($OMT_DIR/session-ledger-<sid>.md, hooks/omt-ledger.sh). Blacklist, not
-# whitelist -- a false-arm here blocks one write (bypassable), whereas a
-# false-arm in a whitelist gate bricks every unrelated call. Arms ONLY when
-# the command's WRITE-TARGET (not any substring anywhere in the command)
-# references "session-ledger-": redirect target, tee/dd/cp/mv/sed -i/
-# truncate/rm argument. `cat`/read passes; omt-ledger.sh itself never
-# exposes the path in argv (D6) so it never arms.
+# Ledger write-guard (compaction-continuous-record plan, TODO 7, D5;
+# delegated to the shared core in codex-ledger-parity TODO 5): a best-effort
+# append-only guard for the durable session ledger ($OMT_DIR/session-ledger-
+# <sid>.md, hooks/omt-ledger.sh). This shim owns EXTRACTION of candidate
+# write-target paths from Claude's tool-input shape only (Write/Edit/
+# MultiEdit .tool_input.file_path; Bash .tool_input.command redirect/tee/dd/
+# cp/mv/sed -i/truncate/rm write-target). The full-path EXACT match against
+# the resolved current-session ledger, and the deny JSON, both live in
+# hooks/write-guard-core.sh (write_guard_core_run) so a candidate merely
+# containing "session-ledger-" as a substring is no longer enough to arm.
 # =============================================================================
-_wg_ledger_target_in_segment() {
-    # $1 = one chain segment (already split on && || ; |). 0 = this segment's
-    # write-target references the ledger; 1 = no match.
+_wg_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=hooks/write-guard-core.sh
+source "$_wg_script_dir/write-guard-core.sh"
+
+# _wg_strip_dquotes <token> -- removes one leading and one trailing double
+# quote if present. Double-quoted write targets (`> "$f"`) pass through the
+# quote-aware normalizer below unchanged (only single quotes are unwrapped
+# there), so an extracted token like `"/tmp/x.md"` still carries its quote
+# characters and must be unwrapped before an EXACT path comparison.
+_wg_strip_dquotes() {
+    local s="$1"
+    s="${s#\"}"
+    s="${s%\"}"
+    printf '%s\n' "$s"
+}
+
+# _wg_absolutize <path> -- strip surrounding double quotes, then prefix a
+# relative path with the hook's cwd; an already-absolute path passes through.
+_wg_absolutize() {
+    local p
+    p="$(_wg_strip_dquotes "$1")"
+    case "$p" in
+        /*) printf '%s\n' "$p" ;;
+        *) printf '%s\n' "$PWD/$p" ;;
+    esac
+}
+
+# _wg_extract_bash_targets <chain segment> -- emits 0+ candidate write-target
+# paths (not yet absolutized) for one already quote-normalized `&&`/`||`/`;`/
+# `|` chain segment. Mirrors the write-vectors of the retired
+# _wg_ledger_target_in_segment classifier (redirect, tee/rm/truncate, dd of=,
+# sed -i, cp/mv last-arg) but EXTRACTS the target instead of testing it for a
+# "session-ledger-" substring -- write_guard_core_run does an EXACT full-path
+# comparison, so a harmless non-ledger candidate simply never matches.
+_wg_extract_bash_targets() {
     local seg="$1"
-    if echo "$seg" | grep -Eq '>[[:space:]]*[^[:space:]]*session-ledger-'; then
-        return 0
-    fi
-    if ! echo "$seg" | grep -q 'session-ledger-'; then
-        return 1
-    fi
+    # `|| true`: grep -oE returns 1 when a segment has no redirect at all --
+    # under this script's `set -euo pipefail`, an unguarded nonzero pipeline
+    # here would abort the function before the case block below ever runs.
+    echo "$seg" | grep -oE '>{1,2}[[:space:]]*[^[:space:]]+' | sed -E 's/^>{1,2}[[:space:]]*//' || true
+
     local first_word
     first_word=$(echo "$seg" | awk '{print $1}')
     case "$first_word" in
         tee|rm|truncate)
-            return 0
+            echo "$seg" | awk '{print $NF}'
             ;;
         dd)
-            if echo "$seg" | grep -Eq 'of=[^[:space:]]*session-ledger-'; then
-                return 0
-            fi
+            echo "$seg" | grep -oE 'of=[^[:space:]]+' | sed -E 's/^of=//' || true
             ;;
         sed)
             if echo "$seg" | grep -q -- '-i'; then
-                return 0
+                echo "$seg" | awk '{print $NF}'
             fi
             ;;
         cp|mv)
-            local last_word
-            last_word=$(echo "$seg" | awk '{print $NF}')
-            if echo "$last_word" | grep -q 'session-ledger-'; then
-                return 0
-            fi
+            echo "$seg" | awk '{print $NF}'
             ;;
     esac
-    return 1
 }
 
-_wg_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the durable session ledger (session-ledger-*.md). Use hooks/omt-ledger.sh append/now instead."}}'
+_wg_sid="${OMT_SESSION_ID:-}"
+_wg_omt_dir="${OMT_DIR:-}"
 
-if [[ "$toolName" == "Bash" ]] && command -v jq > /dev/null 2>&1; then
-    _wg_cmd=$(echo "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || _wg_cmd=""
-    # Single-quoted spans are inert shell literals -- but deleting them
-    # wholesale (old approach) also erased REAL quoted write targets like
-    # `rm '/tmp/session-ledger-x.md'`. Quote-aware normalization instead:
-    # drop the quote CHARACTERS but keep the quoted CONTENT visible, while
-    # masking shell-active metachars (`> < | ; &`) that appear INSIDE quotes
-    # -- so an in-quote `>` never reads as a live redirect (grep below) and
-    # an in-quote `|`/`;`/`&` never spuriously splits a segment. Metachars
-    # OUTSIDE quotes (real redirects/splitters) and DOUBLE-quoted paths
-    # (`> "$f"`) pass through unchanged, exactly as before.
-    _wg_scan=$(printf '%s' "$_wg_cmd" | awk '
-        BEGIN { sq = sprintf("%c", 39) }
-        {
-            n = length($0)
-            inq = 0
-            out = ""
-            for (i = 1; i <= n; i++) {
-                c = substr($0, i, 1)
-                if (c == sq) {
-                    inq = 1 - inq
-                    continue
-                }
-                if (inq && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
-                    out = out " "
-                    continue
-                }
-                out = out c
-            }
-            print out
-        }')
-    if [[ -n "$_wg_scan" ]] && echo "$_wg_scan" | grep -q 'session-ledger-'; then
-        _wg_denied=0
-        while IFS= read -r _wg_seg; do
-            if _wg_ledger_target_in_segment "$_wg_seg"; then
-                _wg_denied=1
-                break
-            fi
-        done < <(echo "$_wg_scan" | sed -E 's/(&&|\|\||;|\|)/\n/g')
-        if [[ "$_wg_denied" -eq 1 ]]; then
-            printf '%s\n' "$_wg_deny_json"
-            exit 0
+if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
+    _wg_candidates=""
+
+    if [[ "$toolName" == "Bash" ]] && command -v jq > /dev/null 2>&1; then
+        _wg_cmd=$(echo "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || _wg_cmd=""
+        if [[ -n "$_wg_cmd" ]]; then
+            # Single-quoted spans are inert shell literals -- but deleting them
+            # wholesale (old approach) also erased REAL quoted write targets like
+            # `rm '/tmp/session-ledger-x.md'`. Quote-aware normalization instead:
+            # drop the quote CHARACTERS but keep the quoted CONTENT visible, while
+            # masking shell-active metachars (`> < | ; &`) that appear INSIDE quotes
+            # -- so an in-quote `>` never reads as a live redirect (grep below) and
+            # an in-quote `|`/`;`/`&` never spuriously splits a segment. Metachars
+            # OUTSIDE quotes (real redirects/splitters) and DOUBLE-quoted paths
+            # (`> "$f"`) pass through unchanged, exactly as before.
+            _wg_scan=$(printf '%s' "$_wg_cmd" | awk '
+                BEGIN { sq = sprintf("%c", 39) }
+                {
+                    n = length($0)
+                    inq = 0
+                    out = ""
+                    for (i = 1; i <= n; i++) {
+                        c = substr($0, i, 1)
+                        if (c == sq) {
+                            inq = 1 - inq
+                            continue
+                        }
+                        if (inq && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
+                            out = out " "
+                            continue
+                        }
+                        out = out c
+                    }
+                    print out
+                }')
+            while IFS= read -r _wg_seg; do
+                [[ -z "$_wg_seg" ]] && continue
+                while IFS= read -r _wg_target; do
+                    [[ -z "$_wg_target" ]] && continue
+                    _wg_candidates="${_wg_candidates}$(_wg_absolutize "$_wg_target")
+"
+                done < <(_wg_extract_bash_targets "$_wg_seg")
+            done < <(echo "$_wg_scan" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+        fi
+    elif [[ "$toolName" == "Write" || "$toolName" == "Edit" || "$toolName" == "MultiEdit" ]] && command -v jq > /dev/null 2>&1; then
+        _wg_fp=$(echo "$input" | jq -r '.tool_input.file_path // empty' 2>/dev/null) || _wg_fp=""
+        if [[ -n "$_wg_fp" ]]; then
+            # Trailing literal newline (not `$(...)`, which strips it) --
+            # write_guard_core_run's stdin while-loop silently drops a final
+            # line with no trailing newline (read returns nonzero at EOF).
+            _wg_candidates="$(_wg_absolutize "$_wg_fp")
+"
         fi
     fi
-elif [[ "$toolName" == "Write" || "$toolName" == "Edit" || "$toolName" == "MultiEdit" ]] && command -v jq > /dev/null 2>&1; then
-    _wg_fp=$(echo "$input" | jq -r '.tool_input.file_path // empty' 2>/dev/null) || _wg_fp=""
-    if [[ -n "$_wg_fp" ]] && echo "$_wg_fp" | grep -q 'session-ledger-'; then
-        printf '%s\n' "$_wg_deny_json"
-        exit 0
+
+    if [[ -n "$_wg_candidates" ]]; then
+        _wg_out=$(printf '%s' "$_wg_candidates" | write_guard_core_run "$_wg_omt_dir" "$_wg_sid")
+        if [[ -n "$_wg_out" ]]; then
+            printf '%s\n' "$_wg_out"
+            exit 0
+        fi
     fi
 fi
 
