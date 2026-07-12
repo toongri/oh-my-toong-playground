@@ -788,7 +788,9 @@ describe("goal-state hardening: heartbeat + no-create + hard-fail", () => {
 	// (B2) absent OMT_SESSION_ID via CLI → non-zero exit, no default file
 	test("(B2) CLI exits non-zero when OMT_SESSION_ID is empty", () => {
 		const script = join(import.meta.dir, "goal-state.ts");
-		const env = { ...process.env, OMT_SESSION_ID: "" };
+		// clear CODEX_THREAD_ID too: resolveSessionIdOrThrow falls back to it,
+		// so blanking only OMT_SESSION_ID leaves the test runner-dependent.
+		const env = { ...process.env, OMT_SESSION_ID: "", CODEX_THREAD_ID: "" };
 		expect(() =>
 			execSync(
 				`bun ${script} set --phase planning --outcome x --verification-surface y --constraints z --boundaries b --max-iterations 10 --blocked-stop s`,
