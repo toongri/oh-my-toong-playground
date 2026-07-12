@@ -172,14 +172,31 @@ _cwg_extract_shell_targets() {
     esac
 }
 
+# _cwg_strip_quotes <token> -- removes a single leading+trailing double-quote
+# pair, then a single leading+trailing single-quote pair, mirroring the
+# Claude twin's _wg_strip_dquotes (hooks/pre-tool-enforcer.sh:52-57) extended
+# to single quotes -- a quoted redirect/rm/tee target (`> "$f"` or `> '$f'`)
+# still carries its quote characters after extraction and must be unwrapped
+# before write_guard_core_run's full-path EXACT comparison.
+_cwg_strip_quotes() {
+    local s="$1"
+    s="${s#\"}"
+    s="${s%\"}"
+    s="${s#\'}"
+    s="${s%\'}"
+    printf '%s\n' "$s"
+}
+
 # _cwg_absolutize <path>
-# Joins a relative path against the resolved cwd; leaves an absolute path
-# unchanged. write_guard_core_run requires already-absolutized candidates
-# (full-path EXACT match).
+# Strips surrounding quotes, then joins a relative path against the resolved
+# cwd; leaves an absolute path unchanged. write_guard_core_run requires
+# already-absolutized candidates (full-path EXACT match).
 _cwg_absolutize() {
-    case "$1" in
-        /*) printf '%s\n' "$1" ;;
-        *) printf '%s\n' "$cwd/$1" ;;
+    local p
+    p="$(_cwg_strip_quotes "$1")"
+    case "$p" in
+        /*) printf '%s\n' "$p" ;;
+        *) printf '%s\n' "$cwd/$p" ;;
     esac
 }
 
