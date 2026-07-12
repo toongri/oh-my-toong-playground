@@ -38,6 +38,8 @@ Dodds는 이 중 **integration에 가장 많이 투자하라**고 권한다(http
 
 구현 세부를 assert하면 이 둘을 동시에 유발한다 — "무엇이 일어났는가"가 아니라 "어떻게 일어났는가"에 결합되기 때문이다. 사용자가 관찰할 수 있는 결과(동작)만 assert하면 리팩터에도 안 깨지고(false negative 회피), 배선이 끊기면 확실히 빨개진다(false positive 회피).
 
+> 아래 예제는 간결성을 위해 import를 생략한다 — `globals: false`라 실제 파일 맨 위엔 `import { test, expect, vi } from "vitest"`와 `@testing-library/react`·`user-event` import가 필요하다.
+
 ```tsx
 // ❌ 구현 세부에 결합 — 내부 호출 여부만 확인, 리팩터하면 빨갛게
 test("담기를 누르면 addItem이 호출된다", async () => {

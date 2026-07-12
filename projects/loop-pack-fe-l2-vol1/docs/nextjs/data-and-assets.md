@@ -51,7 +51,7 @@ async function getProduct(id: string) {
 
 `revalidate` 한 줄이면 캐시/무효화가 **인프라로 내려간다**. 요점은 "직접 배선하던 캐시 관리를 프레임워크에 맡긴다"는 방향이다.
 
-> 캐시 스코프·태그 무효화·요청별 캐시 격리 같은 **깊은 캐싱 전략은 이 문서 범위가 아니다** — 데이터 심화 주차에서 별도로 다룬다. 여기선 "캐싱이 fetch 옵션으로 내려갔다"는 그림만 잡는다.
+> 캐시 스코프·태그 무효화·요청별 캐시 격리 같은 **깊은 캐싱 전략은 이 문서가 다루지 않는다**. Next 16은 `use cache` 지시어 기반 **Cache Components**(컴포넌트 단위 캐싱, 기본은 uncached)도 제공하는데 — `next.config`의 `cacheComponents: true`로 켤 때만 활성화되고, 켜지 않은 이 예시에선 위의 `fetch`+`revalidate`가 그대로 현행 기본이다. 여기선 "캐싱이 fetch 옵션으로 내려갔다"는 기본기만 잡는다.
 
 ## 이미지 — next/image
 
