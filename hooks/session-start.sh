@@ -71,16 +71,69 @@ if [ -n "$CLAUDE_ENV_FILE" ]; then
 fi
 
 MESSAGES=""
-LEDGER_ACUTE_INLINE=""
 
-# Ledger recording instruction (plan TODO 3, D2/D3): every session, regardless
-# of source, reminds the agent to durable-record decisions/corrections/next-
-# steps to the session ledger AS IT WORKS, instead of relying on a stale
-# end-of-session summary. Static text only -- no session-varying values, so
-# this stays cache-safe (prefix-invariant) across every session.
-# omt-hook-dep: omt-ledger.sh
-RECORDING_INSTRUCTION="<session-recording>\n\n[LEDGER RECORDING]\n\nRecord decisions, user corrections, and next-steps to the durable session ledger AS YOU WORK -- do not wait until the end of the session. Ledger sections are append-only, except Now, which the now subcommand replaces with the latest current-state summary.\n\nAppend content (piped via stdin) to a section:\n  <content> | \"\${CLAUDE_PROJECT_DIR:-\$HOME}/.claude/hooks/omt-ledger.sh\" append Decisions\n  <content> | \"\${CLAUDE_PROJECT_DIR:-\$HOME}/.claude/hooks/omt-ledger.sh\" append Pending\n\nReplace the current-state summary:\n  <content> | \"\${CLAUDE_PROJECT_DIR:-\$HOME}/.claude/hooks/omt-ledger.sh\" now\n\nCRITICAL: record a user correction VERBATIM -- the user's exact original words, never a paraphrase or summary. Paraphrasing a correction silently loses the precise wording that made it a correction. Append verbatim corrections to the User Corrections (verbatim) section.\n\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook; omt-ledger.sh computes the ledger path internally.)\n\n</session-recording>\n\n---\n\n"
-MESSAGES="$MESSAGES$RECORDING_INSTRUCTION"
+# Ledger recording (every source) + compaction recovery (source==compact),
+# delegated to the shared cross-platform core (plan TODO 4: codex-ledger-
+# parity) so Claude and Codex emit identical ledger text from ONE
+# implementation. hooks/ledger-core.sh's Claude branch is byte-identical to
+# the pre-delegation inline text this call replaces. The result is
+# pre-escaped and spliced in ahead of MESSAGES at final-output time (below),
+# so it lands first in additionalContext -- matching where the recording
+# instruction always sat (it fires on every source, unlike the restore
+# blocks further down which are conditional on active state).
+# omt-hook-dep: ledger-core.sh
+source "$SCRIPT_DIR_SS/ledger-core.sh"
+
+# ledger-core.sh's stdin sid fallback (its 3rd precedence tier, used when
+# neither OMT_SESSION_ID nor CODEX_THREAD_ID is set in the environment --
+# the common case here, since CLAUDE_ENV_FILE is read by the harness AFTER
+# this hook exits, not during it) reads ONLY `.session_id` (snake_case).
+# Claude Code's actual SessionStart stdin uses `.sessionId` (camelCase) --
+# see the jq filter at the very top of this file, which already handles
+# both forms into $SESSION_ID. Feed ledger_core_run a copy of stdin with
+# `.session_id` normalized to that already-resolved value, so its fallback
+# tier works for Claude's real stdin shape instead of always falling
+# through to the empty-sid refusal.
+LEDGER_CORE_INPUT="$INPUT"
+if command -v jq &> /dev/null; then
+  LEDGER_CORE_INPUT=$(printf '%s' "$INPUT" | jq --arg sid "$SESSION_ID" '.session_id = $sid' 2>/dev/null) || LEDGER_CORE_INPUT="$INPUT"
+fi
+
+# Run in a subshell with OMT_SESSION_ID/CODEX_THREAD_ID cleared: this hook's
+# own stdin (normalized above into $SESSION_ID) is ALWAYS the authoritative
+# identity for its own SessionStart invocation -- ledger_core_run's env-first
+# precedence exists for later, separate omt-ledger.sh CLI calls the agent
+# makes via CLAUDE_ENV_FILE, not for this hook's own delegated call. Clearing
+# them here (subshell-local; nothing outside this command substitution is
+# affected) stops a stale/inherited OMT_SESSION_ID from shadowing the
+# resolved stdin sid.
+LEDGER_CORE_OUT=$(
+  unset OMT_SESSION_ID CODEX_THREAD_ID
+  printf '%s' "$LEDGER_CORE_INPUT" | ledger_core_run claude
+)
+LEDGER_DELEGATED_ESCAPED=""
+if [ -n "$LEDGER_CORE_OUT" ]; then
+  # Restore the "-- compaction" qualifier on the recovery header: ledger-
+  # core.sh's shared (Claude+Codex) recovery text says "[LEDGER RECOVERY]"
+  # (platform-neutral wording), but the pre-delegation Claude text this call
+  # replaces said "[LEDGER RECOVERY -- compaction]". No escaping is needed --
+  # neither string contains a quote or backslash. Restore before extraction
+  # since the label sits inside the escaped additionalContext value.
+  LEDGER_CORE_OUT="${LEDGER_CORE_OUT/\[LEDGER RECOVERY\]/[LEDGER RECOVERY -- compaction]}"
+  # Extract the already-escaped additionalContext value verbatim (no
+  # decode/re-encode) from ledger-core.sh's own JSON output template
+  # (`"additionalContext": "...."}}`, hooks/ledger-core.sh:175) via plain
+  # prefix/suffix stripping -- re-escaping it here would double-escape the
+  # quotes/backslashes ledger-core.sh's own sed/jq -Rs pipeline already
+  # produced.
+  LEDGER_DELEGATED_ESCAPED="${LEDGER_CORE_OUT#*\"additionalContext\": \"}"
+  # Suffix pattern held in a variable: a literal `}}` typed directly inside
+  # ${var%pattern} would close the expansion early (brace-matching reads the
+  # first unescaped `}` as the expansion's own terminator), silently leaving
+  # the trailing `"}}` un-stripped.
+  _lc_suffix='"}}'
+  LEDGER_DELEGATED_ESCAPED="${LEDGER_DELEGATED_ESCAPED%$_lc_suffix}"
+fi
 
 # GC: reap dead state files for the managed prefixes.
 # Liveness defined by hooks/lib/state-liveness.sh (ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m).
@@ -296,82 +349,9 @@ if [ -f "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" ]; then
   fi
 fi
 
-# Compaction recovery, option D (plan TODO 4, D1): when source==compact AND the
-# durable session ledger exists on disk, extract ONLY the two acute sections --
-# `## Now` (current state) and `## User Corrections (verbatim)` -- and inline
-# them directly into additionalContext. The bulk sections (Decisions/Pending/
-# Pointers/Learnings) are never inlined; a static pointer+instruction directs
-# the agent to `cat` the full ledger on demand. This replaces the prior
-# forced-reread compaction pointer: the PR#158 postmortem showed hiding the
-# important part behind a read is what got skipped, so the acute part is
-# inlined instead.
-#
-# The extracted acute text is untrusted ledger prose (may contain quotes,
-# backslashes, verbatim user corrections) and is kept in a SEPARATE variable
-# (NOT MESSAGES), encoded later via the surgical jq -Rs path -- mirroring how
-# the prior compaction fragment was kept out of the sed-escaped restore body.
-if command -v jq &> /dev/null && [ "$SOURCE" = "compact" ]; then
-  LEDGER_FILE_D="$OMT_DIR/session-ledger-${SESSION_ID}.md"
-  if [ -f "$LEDGER_FILE_D" ]; then
-    # Section boundaries are the 6 known skeleton headers consumed in their fixed
-    # order (idx walks the sequence), NOT any `## ` line -- so a `## ` markdown
-    # subheader INSIDE an acute section's content does not truncate the extract
-    # (F1), and a header-shaped line injected into a bulk section is never
-    # mistaken for the real acute header (S5). A line is a structural header only
-    # when it equals the next-expected header H[idx].
-    # Escape/unescape is a shared contract with hooks/omt-ledger.sh (PR #162 P2):
-    # its writer prefixes any NEW content line that collides with a skeleton
-    # header with SENTINEL before writing, so a Now/Corrections content line
-    # that is literally "## Decisions" etc. never re-matches H[idx] as a false
-    # boundary here. unescape_line() strips exactly one SENTINEL back off KEPT
-    # acute content lines only -- never touches structural header lines. Keep
-    # SENTINEL identical to omt-ledger.sh's ("OMT_ESC::") or recovery will
-    # surface escaped text verbatim.
-    LEDGER_ACUTE=$(awk '
-      function is_skeleton_header(line,    h) {
-        for (h = 1; h <= n; h++) if (line == H[h]) return 1
-        return 0
-      }
-      function unescape_line(line,    stripped, count) {
-        if (index(line, SENTINEL) != 1) return line
-        stripped = line
-        count = 0
-        while (index(stripped, SENTINEL) == 1) {
-          stripped = substr(stripped, length(SENTINEL) + 1)
-          count++
-        }
-        if (count >= 1 && is_skeleton_header(stripped)) return substr(line, length(SENTINEL) + 1)
-        return line
-      }
-      BEGIN {
-        SENTINEL = "OMT_ESC::"
-        n = split("## Now|## Decisions|## User Corrections (verbatim)|## Pending|## Pointers|## Learnings", H, "|")
-        idx = 1
-      }
-      (idx <= n && $0 == H[idx]) {
-        idx++
-        keep = ($0 == "## Now" || $0 == "## User Corrections (verbatim)")
-        if (keep) print
-        next
-      }
-      keep { print unescape_line($0) }
-    ' "$LEDGER_FILE_D")
-
-    MESSAGES="$MESSAGES<session-restore>\n\n[LEDGER RECOVERY -- compaction]\n\nYour context was just compacted. The durable session ledger on disk is the source of truth for this session.\n\nBulk sections (Decisions/Pending/Pointers/Learnings): run this command NOW, before any other action:\n  cat \"\$OMT_DIR/session-ledger-\$OMT_SESSION_ID.md\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\nResume from the \`## Now\` section.\n\n"
-
-    # additionalContext is capped ~10k chars; reuse the existing 7000-char inline
-    # cap (see the incomplete-todos/prometheus/goal pointer sections above) as the
-    # acute-vs-pointer threshold. Over cap: skip the inline, rely on the cat pointer above.
-    if [ -n "$LEDGER_ACUTE" ] && [ "${#LEDGER_ACUTE}" -le 7000 ]; then
-      MESSAGES="${MESSAGES}[Now + User Corrections, inlined below]\n\n"
-      LEDGER_ACUTE_INLINE="$LEDGER_ACUTE"
-    else
-      MESSAGES="${MESSAGES}[Now + User Corrections exceed the inline cap -- read them via the cat command above.]\n\n"
-    fi
-
-    MESSAGES="${MESSAGES}</session-restore>\n\n---\n\n"
-  fi
-fi
+# Compaction recovery (source==compact, ledger present) is now handled by the
+# ledger_core_run delegation above -- see the LEDGER_DELEGATED_ESCAPED block
+# near the top of this file.
 
 # Check for incomplete todos in global directory
 INCOMPLETE_COUNT=0
@@ -401,15 +381,13 @@ if [ "$INCOMPLETE_COUNT" -gt 0 ]; then
   MESSAGES="$MESSAGES<session-restore>\n\n[PENDING TASKS DETECTED]\n\nYou have incomplete tasks from a previous session.\nPlease continue working on these tasks.\n\n</session-restore>\n\n---\n\n"
 fi
 
-# Output message if we have any restore content OR an inlined ledger acute fragment.
-if [ -n "$MESSAGES" ] || [ -n "$LEDGER_ACUTE_INLINE" ]; then
+# Output message if we have any restore content OR delegated ledger content.
+if [ -n "$MESSAGES" ] || [ -n "$LEDGER_DELEGATED_ESCAPED" ]; then
   # Escape for JSON
   MESSAGES_ESCAPED=$(echo "$MESSAGES" | sed 's/"/\\"/g')
-  # Surgically encode the untrusted ledger acute fragment to a JSON-safe string body:
-  # jq -Rs emits a quoted JSON string; strip the outer quotes so it concatenates
-  # onto the sed-escaped restore body inside the single additionalContext value.
-  LEDGER_ACUTE_INLINE_ESCAPED=$(printf '%s' "$LEDGER_ACUTE_INLINE" | jq -Rs . | sed '1s/^"//; $s/"$//')
-  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$MESSAGES_ESCAPED$LEDGER_ACUTE_INLINE_ESCAPED\"}}"
+  # LEDGER_DELEGATED_ESCAPED is already JSON-string-escaped (see above) --
+  # prepend it as-is, ahead of MESSAGES_ESCAPED.
+  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$LEDGER_DELEGATED_ESCAPED$MESSAGES_ESCAPED\"}}"
 else
   echo '{"continue": true}'
 fi
