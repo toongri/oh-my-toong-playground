@@ -19,6 +19,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 HOOK="$SCRIPT_DIR/codex-write-guard.sh"
 
+# EVIDENCE_OMT_DIR: self-derived (not ambient $OMT_DIR) so this suite runs
+# clean under `env -u OMT_DIR`, mirroring hooks/ledger-core_test.sh's own
+# evidence_dir derivation via resolve_omt_dir.
+EVIDENCE_OMT_DIR=$(bash -c "source '$SCRIPT_DIR/lib/omt-dir.sh'; resolve_omt_dir '$SCRIPT_DIR'")
+
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -132,7 +137,7 @@ test_qa_redirect_to_ledger_denies() {
 
     out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x > %s"},"session_id":"cx","cwd":"%s"}' "$LED" "$GITDIR" | run_hook)
 
-    evidence_dir="$OMT_DIR/evidence/codex-ledger-parity/codex-write-guard-hook"
+    evidence_dir="$EVIDENCE_OMT_DIR/evidence/codex-ledger-parity/codex-write-guard-hook"
     mkdir -p "$evidence_dir"
     {
         echo "input: echo x > $LED (cwd=$GITDIR sid=cx)"
@@ -160,7 +165,7 @@ test_qa_prose_mention_allows() {
 
     out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo editing the session-ledger docs"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
 
-    evidence_dir="$OMT_DIR/evidence/codex-ledger-parity/codex-write-guard-hook"
+    evidence_dir="$EVIDENCE_OMT_DIR/evidence/codex-ledger-parity/codex-write-guard-hook"
     mkdir -p "$evidence_dir"
     {
         echo "input: echo editing the session-ledger docs (cwd=$GITDIR sid=cx)"
