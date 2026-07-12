@@ -107,6 +107,45 @@ test_qa_no_continue_contract() {
 }
 
 # =============================================================================
+# Regression: jq unresolvable via PATH must not drop the recording
+# instruction. ledger-core.sh emits [LEDGER RECORDING] unconditionally
+# (outside any jq/sid gate -- hooks/ledger-core.sh:41-65), but this hook's
+# own emit step re-pipes that core output through `jq -c 'del(.continue)'`
+# with no jq-presence check. If jq is absent that pipe fails and the WHOLE
+# core output is dropped, silently defeating the core's byte-preservation
+# guarantee for Codex. Exercise a PATH that lacks jq but keeps the externals
+# this jq-absent path legitimately needs (dirname/cat/sed), mirroring
+# hooks/ledger-core_test.sh:149-198's jq_less_bin pattern.
+# =============================================================================
+test_jq_absent_recording_survives_no_continue() {
+    local jq_less_bin out rc ok=0
+
+    jq_less_bin=$(mktemp -d)
+    ln -s /usr/bin/dirname "$jq_less_bin/dirname"
+    ln -s /bin/cat "$jq_less_bin/cat"
+    ln -s /usr/bin/sed "$jq_less_bin/sed"
+
+    set +e
+    # Absolute /bin/bash sidesteps a bare `bash` lookup failing against the
+    # restricted PATH being assigned (same rationale as
+    # hooks/ledger-core_test.sh:165-172).
+    out=$(printf '{"source":"startup","session_id":"cx","cwd":"/tmp"}' \
+        | PATH="$jq_less_bin" OMT_DIR=/tmp/x /bin/bash "$HOOK" 2>/dev/null)
+    rc=$?
+    set -e
+    rm -rf "$jq_less_bin"
+
+    if [ "$rc" = "0" ] \
+        && echo "$out" | grep -q '\[LEDGER RECORDING\]' \
+        && [ "$(printf '%s' "$out" | grep -c '^{"continue"')" = "0" ] \
+        && echo "$out" | grep -q 'hookSpecificOutput'; then
+        ok=1
+    fi
+
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 main() {
@@ -117,6 +156,7 @@ main() {
     run_test test_compact_emits_recovery_no_continue
     run_test test_qa_recording_startup_no_claude_env_leak
     run_test test_qa_no_continue_contract
+    run_test test_jq_absent_recording_survives_no_continue
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
