@@ -139,26 +139,46 @@ test_qa_recording_noncompact() {
 }
 
 # =============================================================================
-# QA Scenario: jq absent — graceful degrade (empty stdout, exit 0).
+# QA Scenario: jq absent -- [LEDGER RECORDING] still fires (static text,
+# needs neither jq nor the sid); [LEDGER RECOVERY] is correctly ABSENT since
+# recovery legitimately needs jq to parse stdin (.source/.session_id/.cwd)
+# and locate the ledger file. Byte-preservation regression fix: the recording
+# instruction used to be emitted unconditionally by the pre-delegation hook,
+# independent of jq presence -- ledger_core_run must preserve that.
 # Evidence: $OMT_DIR/evidence/codex-ledger-parity/ledger-core/jq-absent.txt
 # =============================================================================
 test_qa_jq_absent() {
     local out rc ok=0
+
+    # Build a PATH that lacks jq but keeps cat/sed available: on this host jq
+    # lives in /usr/bin alongside sed, so a blanket PATH=/nonexistent (or
+    # simply dropping /usr/bin) would ALSO break sed -- and sed now runs
+    # unconditionally in the Emit step (since recording emits regardless of
+    # jq), so that blunter approach would corrupt the JSON output and mask
+    # the very regression this test guards against. Symlink only sed in so
+    # jq itself stays genuinely unresolvable via PATH.
+    local jq_less_bin
+    jq_less_bin=$(mktemp -d)
+    ln -s /usr/bin/sed "$jq_less_bin/sed"
+
     set +e
     # /bin/bash (absolute path), not a bare `bash` lookup: on this host the
     # calling shell is zsh, which re-resolves an assignment-prefixed command
-    # name against the NEW PATH being assigned -- `PATH=/nonexistent bash`
-    # fails with "command not found" (exit 127) before ever reaching
-    # ledger-core.sh, since zsh can no longer locate `bash` itself under the
-    # now-empty PATH. The absolute path sidesteps that lookup entirely while
-    # still handing the child process PATH=/nonexistent, so `command -v jq`
-    # inside ledger_core_run correctly reports jq as absent.
+    # name against the NEW PATH being assigned -- `PATH=... bash` fails with
+    # "command not found" (exit 127) before ever reaching ledger-core.sh if
+    # `bash` itself isn't on the restricted PATH. The absolute path
+    # sidesteps that lookup entirely while still handing the child process
+    # the restricted PATH, so `command -v jq` inside ledger_core_run
+    # correctly reports jq as absent.
     out=$(printf '{"source":"compact","session_id":"s","cwd":"/tmp"}' \
-        | PATH=/nonexistent OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude" 2>/dev/null)
+        | PATH="$jq_less_bin:/bin" OMT_DIR=/tmp/x OMT_SESSION_ID=s /bin/bash -c "source '$LEDGER_CORE'; ledger_core_run claude" 2>/dev/null)
     rc=$?
     set -e
+    rm -rf "$jq_less_bin"
 
-    if [ "$rc" = "0" ] && [ -z "$out" ]; then
+    if [ "$rc" = "0" ] \
+        && echo "$out" | grep -q '\[LEDGER RECORDING\]' \
+        && [ "$(printf '%s' "$out" | grep -c '\[LEDGER RECOVERY\]')" = "0" ]; then
         ok=1
     fi
 
@@ -166,13 +186,50 @@ test_qa_jq_absent() {
     evidence_dir=$(bash -c "source '$SCRIPT_DIR/lib/omt-dir.sh'; resolve_omt_dir '$SCRIPT_DIR'")/evidence/codex-ledger-parity/ledger-core
     mkdir -p "$evidence_dir"
     {
-        echo "# QA Scenario: jq absent -- graceful degrade"
-        echo "# Command: printf '...' | PATH=/nonexistent OMT_DIR=/tmp/x OMT_SESSION_ID=s bash -c \"source hooks/ledger-core.sh; ledger_core_run claude\""
+        echo "# QA Scenario: jq absent -- recording survives, recovery correctly absent"
+        echo "# Command: printf '...' | PATH=<no-jq> OMT_DIR=/tmp/x OMT_SESSION_ID=s bash -c \"source hooks/ledger-core.sh; ledger_core_run claude\""
         echo "# exit code: $rc"
-        echo "# stdout empty: $([ -z "$out" ] && echo yes || echo no)"
         echo "# Result: ok=$ok (1=PASS, 0=FAIL)"
+        echo "---- stdout ----"
+        echo "$out"
     } > "$evidence_dir/jq-absent.txt"
 
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
+# Regression: session_id missing (empty stdin session_id, no OMT_SESSION_ID/
+# CODEX_THREAD_ID env fallback) -- [LEDGER RECORDING] still fires;
+# [LEDGER RECOVERY] correctly ABSENT (recovery needs a valid resolved sid to
+# locate the ledger file). source=compact on purpose: if the sid gate were
+# broken, recovery would incorrectly fire here.
+# =============================================================================
+test_missing_sid_recording_present_recovery_absent() {
+    local out ok=0
+    out=$(printf '{"source":"compact","session_id":"","cwd":"/tmp"}' \
+        | OMT_DIR=/tmp/x bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; source '$LEDGER_CORE'; ledger_core_run claude")
+
+    if echo "$out" | grep -q '\[LEDGER RECORDING\]' \
+        && [ "$(printf '%s' "$out" | grep -c '\[LEDGER RECOVERY\]')" = "0" ]; then
+        ok=1
+    fi
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
+# Regression: session_id="default" (refused the same as omt-ledger.sh's own
+# empty/default refusal) -- [LEDGER RECORDING] still fires; [LEDGER RECOVERY]
+# correctly ABSENT.
+# =============================================================================
+test_default_sid_recording_present_recovery_absent() {
+    local out ok=0
+    out=$(printf '{"source":"compact","session_id":"default","cwd":"/tmp"}' \
+        | OMT_DIR=/tmp/x bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; source '$LEDGER_CORE'; ledger_core_run claude")
+
+    if echo "$out" | grep -q '\[LEDGER RECORDING\]' \
+        && [ "$(printf '%s' "$out" | grep -c '\[LEDGER RECOVERY\]')" = "0" ]; then
+        ok=1
+    fi
     [ "$ok" = "1" ]
 }
 
@@ -206,6 +263,8 @@ main() {
     run_test test_ac3_codex_inline_no_leak
     run_test test_qa_recording_noncompact
     run_test test_qa_jq_absent
+    run_test test_missing_sid_recording_present_recovery_absent
+    run_test test_default_sid_recording_present_recovery_absent
     run_test test_codex_noncompact_recording_only
 
     echo "=========================================="
