@@ -81,6 +81,17 @@ export interface GoalState {
 	last_touched_at?: string;
 }
 
+/**
+ * Minimal contract the persistent-mode hook reads from the ultragoal-state file
+ * written by `skills/ultragoal/scripts/ultragoal-state.ts`. That CLI is a
+ * structural copy of `skills/goal/scripts/goal-state.ts` (identical on-disk
+ * shape, separate file prefix `ultragoal-state-${sessionId}.json`), so the
+ * hook's minimal contract is identical to GoalState's — including the
+ * active-fold semantics (readUltragoalState vs readUltragoalStateRaw) GoalState's
+ * doc comment above describes.
+ */
+export type UltragoalState = GoalState;
+
 // Hook output format
 export interface HookOutput {
 	decision?: "block" | "continue";

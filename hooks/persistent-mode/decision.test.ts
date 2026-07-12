@@ -1288,6 +1288,128 @@ describe("makeDecision", () => {
 	});
 
 	// -------------------------------------------------------------------------
+	// Priority 1.45: Ultragoal autonomous pursuit loop
+	// Mirrors the Priority 1.4 goal loop above (same message envelope shape,
+	// same cap/write-failure/suppression semantics) but reads/writes the
+	// separate ultragoal-state-<sid>.json prefix and is independent of goal —
+	// neither loop's logic branches on the other's state.
+	// -------------------------------------------------------------------------
+	describe("Priority 1.45: Ultragoal autonomous pursuit loop", () => {
+		const ultragoalPath = join(omtDir, "ultragoal-state-test-session.json");
+
+		const writeUltragoal = async (state: Record<string, unknown>) => {
+			await writeFile(ultragoalPath, JSON.stringify(state));
+		};
+
+		const readUltragoalFile = async (): Promise<Record<string, unknown>> => {
+			const { readFileSync } = await import("fs");
+			return JSON.parse(readFileSync(ultragoalPath, "utf8"));
+		};
+
+		it("ultragoal blocks with <ultragoal-continuation> and increments iteration when objective unmet during pursuit", async () => {
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				objective_verdict: "",
+				iteration: 2,
+				max_iterations: 10,
+				outcome: "ultragoal objective text",
+			});
+
+			const result = makeDecision(createContext());
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<ultragoal-continuation>");
+			expect(result.reason).toContain("[ULTRAGOAL - ITERATION 3/10]");
+			const after = await readUltragoalFile();
+			expect(after.iteration).toBe(3);
+		});
+
+		it("terminal complete ultragoal-state still allows the stop", async () => {
+			await writeUltragoal({
+				active: false,
+				phase: "complete",
+				objective_verdict: "APPROVE",
+				iteration: 3,
+				max_iterations: 10,
+				outcome: "ultragoal objective text",
+			});
+
+			const result = makeDecision(createContext());
+
+			expect(result).toEqual({ continue: true });
+		});
+
+		it("ultragoal budget exhaustion soft-stops without completing", async () => {
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				objective_verdict: "REQUEST_CHANGES",
+				iteration: 10,
+				max_iterations: 10,
+				outcome: "ultragoal objective text",
+			});
+
+			const result = makeDecision(createContext());
+
+			expect(result.decision).toBe("block");
+			const after = await readUltragoalFile();
+			expect(after.phase).toBe("budget_limited");
+			expect(after.active).toBe(false);
+			expect(after.budget_limit_notified).toBe(true);
+		});
+
+		it("ultragoal active non-pursuing (planning) suppresses baseline todo branch", async () => {
+			await writeUltragoal({
+				active: true,
+				phase: "planning",
+				objective_verdict: "",
+				iteration: 0,
+				max_iterations: 10,
+				outcome: "ultragoal objective text",
+			});
+
+			const result = makeDecision(createContext({ incompleteTodoCount: 5 }));
+
+			expect(result).toEqual({ continue: true });
+			expect(result.reason ?? "").not.toContain("<todo-continuation>");
+		});
+
+		it("ultragoal loop is independent of the goal loop — a live pursuing goal fires its own continuation, not ultragoal's", async () => {
+			await writeFile(
+				join(omtDir, "goal-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					objective_verdict: "",
+					iteration: 1,
+					max_iterations: 10,
+					outcome: "goal objective text",
+				}),
+			);
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				objective_verdict: "",
+				iteration: 1,
+				max_iterations: 10,
+				outcome: "ultragoal objective text",
+			});
+
+			const result = makeDecision(createContext());
+
+			// Goal is checked first (Priority 1.4) and returns immediately — this
+			// turn's block reason is goal's, not ultragoal's, and ultragoal's
+			// on-disk iteration is untouched (proves no merged/shared branching).
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<goal-continuation>");
+			expect(result.reason ?? "").not.toContain("<ultragoal-continuation>");
+			const after = await readUltragoalFile();
+			expect(after.iteration).toBe(1);
+		});
+	});
+
+	// -------------------------------------------------------------------------
 	// Background-aware Stop hook guards
 	// Guard 2: activeSubagentCount > 0 — must pass through immediately.
 	// Non-subagent background tasks (shell/monitor/etc.) must NOT bypass enforcement.

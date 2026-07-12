@@ -25,6 +25,8 @@ import {
 	setStories,
 	setSingleStory,
 	confirmStory,
+	confirmAllStories,
+	reorderStories,
 	reviseStory,
 	addStory,
 	retireStory,
@@ -32,7 +34,7 @@ import {
 	readCodeReviewArtifact,
 	type GoalPhase,
 	type Story,
-} from "./goal-state.ts";
+} from "./ultragoal-state.ts";
 
 let tmpDir: string;
 const originalOmtDir = process.env.OMT_DIR;
@@ -71,7 +73,7 @@ function seedGoalFile(sessionId: string): void {
 }
 
 beforeEach(() => {
-	tmpDir = mkdtempSync(join(tmpdir(), "goal-state-test-"));
+	tmpDir = mkdtempSync(join(tmpdir(), "ultragoal-state-test-"));
 	process.env.OMT_DIR = tmpDir;
 	process.env.OMT_SESSION_ID = S;
 	seedGoalFile(S);
@@ -207,7 +209,7 @@ describe("goal state", () => {
 		setGoalState(S2, { phase: "pursuing", completion_evidence_paths: [`${tmpDir}/proof.txt`] });
 		setVerdict(S2, "APPROVE");
 		writeFileSync(
-			`${tmpDir}/goal-verdict-${S2}.json`,
+			`${tmpDir}/ultragoal-verdict-${S2}.json`,
 			JSON.stringify({
 				objective_verdict: "APPROVE",
 				stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: ["proof.txt"] }],
@@ -254,7 +256,7 @@ describe("goal state", () => {
 		setGoalState(S, { phase: "pursuing", completion_evidence_paths: [`${tmpDir}/done.md`] });
 		setVerdict(S, "APPROVE");
 		writeFileSync(
-			`${tmpDir}/goal-verdict-${S}.json`,
+			`${tmpDir}/ultragoal-verdict-${S}.json`,
 			JSON.stringify({
 				objective_verdict: "APPROVE",
 				stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: ["done.md"] }],
@@ -324,7 +326,7 @@ describe("goal state", () => {
 		setGoalState(Sc, { phase: "pursuing", completion_evidence_paths: [`${tmpDir}/p`] });
 		setVerdict(Sc, "APPROVE");
 		writeFileSync(
-			`${tmpDir}/goal-verdict-${Sc}.json`,
+			`${tmpDir}/ultragoal-verdict-${Sc}.json`,
 			JSON.stringify({
 				objective_verdict: "APPROVE",
 				stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: ["p"] }],
@@ -418,7 +420,7 @@ describe("goal state", () => {
 		setGoalState(S, { phase: "pursuing", completion_evidence_paths: [`${tmpDir}/a.md`] });
 		setVerdict(S, "APPROVE");
 		writeFileSync(
-			`${tmpDir}/goal-verdict-${S}.json`,
+			`${tmpDir}/ultragoal-verdict-${S}.json`,
 			JSON.stringify({
 				objective_verdict: "APPROVE",
 				stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: ["a.md"] }],
@@ -442,7 +444,7 @@ describe("goal state", () => {
 	test("set --max-iterations rejects non-numeric input", () => {
 		setGoalState(S, { phase: "pursuing" });
 		const prior = rawState().max_iterations;
-		const script = join(import.meta.dir, "goal-state.ts");
+		const script = join(import.meta.dir, "ultragoal-state.ts");
 		const run = (cmd: string) =>
 			execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: process.env });
 		expect(() => run("set --phase pursuing --max-iterations ten")).toThrow();
@@ -453,7 +455,7 @@ describe("goal state", () => {
 	// A3: set --max-iterations rejects zero / negative
 	test("set --max-iterations rejects zero or negative", () => {
 		setGoalState(S, { phase: "pursuing", max_iterations: 5 });
-		const script = join(import.meta.dir, "goal-state.ts");
+		const script = join(import.meta.dir, "ultragoal-state.ts");
 		const run = (cmd: string) =>
 			execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: process.env });
 		expect(() => run("set --phase pursuing --max-iterations 0")).toThrow();
@@ -465,7 +467,7 @@ describe("goal state", () => {
 	// A4: set-verdict rejects an out-of-enum verdict
 	test("set-verdict rejects an out-of-enum verdict", () => {
 		setGoalState(S, { phase: "pursuing" });
-		const script = join(import.meta.dir, "goal-state.ts");
+		const script = join(import.meta.dir, "ultragoal-state.ts");
 		const run = (cmd: string) =>
 			execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: process.env });
 		expect(() => run("set-verdict --verdict APPROVED")).toThrow();
@@ -476,7 +478,7 @@ describe("goal state", () => {
 	// CLI completion path — exercises the actual script end-to-end, proving the
 	// `--completion-evidence` flag is wired so request-complete is reachable.
 	test("CLI set --completion-evidence populates evidence so request-complete succeeds", () => {
-		const script = join(import.meta.dir, "goal-state.ts");
+		const script = join(import.meta.dir, "ultragoal-state.ts");
 		const p1 = `${tmpDir}/a.txt`;
 		const p2 = `${tmpDir}/b.txt`;
 		const run = (cmd: string) =>
@@ -494,7 +496,7 @@ describe("goal state", () => {
 
 		// Write the verdict artifact so the story gate passes
 		writeFileSync(
-			`${tmpDir}/goal-verdict-${S}.json`,
+			`${tmpDir}/ultragoal-verdict-${S}.json`,
 			JSON.stringify({
 				objective_verdict: "APPROVE",
 				stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: [p1] }],
@@ -596,7 +598,7 @@ describe("goal state", () => {
 	test("V_flags: set --max-iterations with no value exits non-zero and leaves state unchanged", () => {
 		setGoalState(S, { phase: "pursuing", max_iterations: 8 });
 		const priorMax = rawState().max_iterations;
-		const script = join(import.meta.dir, "goal-state.ts");
+		const script = join(import.meta.dir, "ultragoal-state.ts");
 		const run = (cmd: string) =>
 			execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: process.env });
 		// --max-iterations is the last token, so parseArgs coerces it to boolean true.
@@ -609,7 +611,7 @@ describe("goal state", () => {
 	// must exit non-zero and NOT persist the bogus ["true"] evidence.
 	test("V_flags: set --completion-evidence with no value exits non-zero and persists no evidence", () => {
 		setGoalState(S, { phase: "pursuing" });
-		const script = join(import.meta.dir, "goal-state.ts");
+		const script = join(import.meta.dir, "ultragoal-state.ts");
 		const run = (cmd: string) =>
 			execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: process.env });
 		expect(() => run("set --phase pursuing --completion-evidence")).toThrow();
@@ -626,7 +628,7 @@ describe("goal state", () => {
 	// a bogus path and silently dropping that flag's real value.
 	test("completion-evidence rejects a swallowed flag name", () => {
 		setGoalState(S, { phase: "pursuing" });
-		const script = join(import.meta.dir, "goal-state.ts");
+		const script = join(import.meta.dir, "ultragoal-state.ts");
 		const run = (cmd: string) =>
 			execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: process.env });
 
@@ -760,8 +762,8 @@ function rawStateOf(sessionId: string): any {
 
 // --- New TODO-3 ACs ---
 
-describe("goal-state hardening: heartbeat + no-create + hard-fail", () => {
-	// (A5) goal-state refreshes last_touched_at on every write
+describe("ultragoal-state hardening: heartbeat + no-create + hard-fail", () => {
+	// (A5) ultragoal-state refreshes last_touched_at on every write
 	test("(A5) last_touched_at refreshed on every write, >= started_at", async () => {
 		// S is already seeded in beforeEach
 		setGoalState(S, { phase: "planning", outcome: "x" });
@@ -787,7 +789,7 @@ describe("goal-state hardening: heartbeat + no-create + hard-fail", () => {
 
 	// (B2) absent OMT_SESSION_ID via CLI → non-zero exit, no default file
 	test("(B2) CLI exits non-zero when OMT_SESSION_ID is empty", () => {
-		const script = join(import.meta.dir, "goal-state.ts");
+		const script = join(import.meta.dir, "ultragoal-state.ts");
 		// clear CODEX_THREAD_ID too: resolveSessionIdOrThrow falls back to it,
 		// so blanking only OMT_SESSION_ID leaves the test runner-dependent.
 		const env = { ...process.env, OMT_SESSION_ID: "", CODEX_THREAD_ID: "" };
@@ -797,8 +799,8 @@ describe("goal-state hardening: heartbeat + no-create + hard-fail", () => {
 				{ encoding: "utf8", env },
 			),
 		).toThrow();
-		// No goal-state-default.json should have been created
-		const defaultPath = `${tmpDir}/goal-state-default.json`;
+		// No ultragoal-state-default.json should have been created
+		const defaultPath = `${tmpDir}/ultragoal-state-default.json`;
 		expect(existsSync(defaultPath)).toBe(false);
 	});
 });
@@ -807,7 +809,7 @@ describe("goal-state hardening: heartbeat + no-create + hard-fail", () => {
 // Adoption surface tests (TODO 8)
 // ---------------------------------------------------------------------------
 
-const script = join(import.meta.dir, "goal-state.ts");
+const script = join(import.meta.dir, "ultragoal-state.ts");
 
 /** Returns a current-time ISO-8601 string with timezone offset (format used by state-core). */
 function nowIso(): string {
@@ -824,9 +826,9 @@ function nowIso(): string {
 	);
 }
 
-/** Build a live goal-state file for a given sid (active, recently touched, non-pristine). */
+/** Build a live ultragoal-state file for a given sid (active, recently touched, non-pristine). */
 function writeLiveGoalState(sid: string, outcome: string): void {
-	const path = `${tmpDir}/goal-state-${sid}.json`;
+	const path = `${tmpDir}/ultragoal-state-${sid}.json`;
 	const now = nowIso();
 	writeFileSync(
 		path,
@@ -854,9 +856,9 @@ function writeLiveGoalState(sid: string, outcome: string): void {
 	);
 }
 
-/** Write a pristine goal-state seed for a given sid. */
+/** Write a pristine ultragoal-state seed for a given sid. */
 function writePristineGoalState(sid: string): void {
-	const path = `${tmpDir}/goal-state-${sid}.json`;
+	const path = `${tmpDir}/ultragoal-state-${sid}.json`;
 	const now = nowIso();
 	writeFileSync(
 		path,
@@ -902,7 +904,7 @@ describe("adoption: list-others + adopt (goal CLI)", () => {
 		expect(out).toContain("ship X");
 		// Self (B) must not appear
 		const lines = out.trim().split("\n").filter(Boolean);
-		expect(lines.every((l) => !l.includes("goal-state-B"))).toBe(true);
+		expect(lines.every((l) => !l.includes("ultragoal-state-B"))).toBe(true);
 		// B sid must not appear as a candidate
 		expect(lines.some((l) => / B[ \t]|^B[ \t]|\tB\t/.test(l) || l.startsWith("B "))).toBe(false);
 	});
@@ -927,13 +929,13 @@ describe("adoption: list-others + adopt (goal CLI)", () => {
 		writePristineGoalState("B");
 		runCli("adopt --src A", { OMT_SESSION_ID: "B" });
 		// A must be gone
-		expect(existsSync(`${tmpDir}/goal-state-A.json`)).toBe(false);
+		expect(existsSync(`${tmpDir}/ultragoal-state-A.json`)).toBe(false);
 		// B must hold A's content (outcome = "purpose P")
-		const b = JSON.parse(readFileSync(`${tmpDir}/goal-state-B.json`, "utf8"));
+		const b = JSON.parse(readFileSync(`${tmpDir}/ultragoal-state-B.json`, "utf8"));
 		expect(b.outcome).toBe("purpose P");
 		// adoption.log must have one entry
 		const log = readFileSync(`${tmpDir}/adoption.log`, "utf8");
-		expect(log).toContain("goal");
+		expect(log).toContain("ultragoal");
 		expect(log).toContain("A -> B");
 	});
 
@@ -941,26 +943,26 @@ describe("adoption: list-others + adopt (goal CLI)", () => {
 	test("F6-cli: adopt refused when current B is ACTIVE non-pristine; both files unchanged", () => {
 		writeLiveGoalState("A", "purpose A");
 		writeLiveGoalState("B", "ongoing work"); // non-pristine active
-		const aContent = readFileSync(`${tmpDir}/goal-state-A.json`, "utf8");
-		const bContent = readFileSync(`${tmpDir}/goal-state-B.json`, "utf8");
+		const aContent = readFileSync(`${tmpDir}/ultragoal-state-A.json`, "utf8");
+		const bContent = readFileSync(`${tmpDir}/ultragoal-state-B.json`, "utf8");
 		// adopt must fail (non-zero exit)
 		expect(() => runCli("adopt --src A", { OMT_SESSION_ID: "B" })).toThrow();
 		// Both files must be unchanged
-		expect(readFileSync(`${tmpDir}/goal-state-A.json`, "utf8")).toBe(aContent);
-		expect(readFileSync(`${tmpDir}/goal-state-B.json`, "utf8")).toBe(bContent);
+		expect(readFileSync(`${tmpDir}/ultragoal-state-A.json`, "utf8")).toBe(aContent);
+		expect(readFileSync(`${tmpDir}/ultragoal-state-B.json`, "utf8")).toBe(bContent);
 	});
 
 	// (dormancy-goal) adopted-away live source's old-sid write → non-zero, file still absent
-	test("dormancy-goal: after adoption, session A write to goal-state-A.json is refused (no-create)", () => {
+	test("dormancy-goal: after adoption, session A write to ultragoal-state-A.json is refused (no-create)", () => {
 		writeLiveGoalState("A", "purpose dormancy");
 		writePristineGoalState("B");
 		// adopt A into B
 		runCli("adopt --src A", { OMT_SESSION_ID: "B" });
-		expect(existsSync(`${tmpDir}/goal-state-A.json`)).toBe(false);
+		expect(existsSync(`${tmpDir}/ultragoal-state-A.json`)).toBe(false);
 		// Now session A tries to write — must fail non-zero (no-create semantics)
 		expect(() => runCli("set --phase pursuing", { OMT_SESSION_ID: "A" })).toThrow();
 		// File must still be absent
-		expect(existsSync(`${tmpDir}/goal-state-A.json`)).toBe(false);
+		expect(existsSync(`${tmpDir}/ultragoal-state-A.json`)).toBe(false);
 	});
 });
 
@@ -1023,7 +1025,7 @@ describe("mergeWrite uses writeFileNoCreate (no TOCTOU race)", () => {
 		renameSync(src, src + ".adopted");
 		appendFileSync(
 			`${tmpDir}/adoption.log`,
-			`2026-06-16T12:00:00+09:00 goal ${S} -> OTHER\n`,
+			`2026-06-16T12:00:00+09:00 ultragoal ${S} -> OTHER\n`,
 			"utf8",
 		);
 		// Now session S tries to write — must be refused, not silently recreated
@@ -1387,6 +1389,178 @@ describe("story layer: confirmation and phase gates", () => {
 });
 
 // ---------------------------------------------------------------------------
+// ultragoal: confirm-all-stories — bulk approve of an auto-generated story set.
+// confirmAllStories is confirm-story applied to the whole unconfirmed set, not a new
+// bypass — it must preserve the "confirm-story is the sole writer of confirmed" invariant.
+// ---------------------------------------------------------------------------
+
+describe("story layer: confirm-all-stories (bulk approve)", () => {
+	const s1: Story = {
+		id: "S1",
+		story: "ship feature X",
+		acceptance_criteria: ["all tests green"],
+		verification_surface: "CI pipeline passes",
+		status: "unconfirmed",
+	};
+	const s2: Story = {
+		id: "S2",
+		story: "add observability",
+		acceptance_criteria: ["dashboards visible"],
+		verification_surface: "Grafana dashboard",
+		status: "unconfirmed",
+	};
+
+	function seedWithOutcome(sid: string, outcome = "ship feature X"): void {
+		setGoalState(sid, { phase: "planning", outcome });
+	}
+
+	test("confirms every unconfirmed story in one call", () => {
+		seedWithOutcome(S);
+		setStories(S, [s1, s2]);
+		confirmAllStories(S);
+		const stories = readGoalGet(S)!.stories!;
+		expect(stories.find((s) => s.id === "S1")!.status).toBe("confirmed");
+		expect(stories.find((s) => s.id === "S2")!.status).toBe("confirmed");
+	});
+
+	// Retired stories are not confirmable (mirrors confirmStory's refusal semantics) — a
+	// retired story is left untouched by the bulk call, not confirmed.
+	test("leaves a retired story untouched", () => {
+		seedWithOutcome(S);
+		setStories(S, [s1, s2]);
+		retireStory(S, "S2", "e", "r");
+		confirmAllStories(S);
+		const stories = readGoalGet(S)!.stories!;
+		expect(stories.find((s) => s.id === "S1")!.status).toBe("confirmed");
+		expect(stories.find((s) => s.id === "S2")!.status).toBe("retired");
+	});
+
+	// Already-confirmed stories are untouched (idempotent no-op), matching confirmStory.
+	test("is idempotent: re-running after all are confirmed changes nothing", () => {
+		seedWithOutcome(S);
+		setStories(S, [s1]);
+		confirmAllStories(S);
+		expect(() => confirmAllStories(S)).not.toThrow();
+		expect(readGoalGet(S)!.stories![0].status).toBe("confirmed");
+	});
+
+	// Zero stories is a harmless no-op — bulk-confirm on an empty set must not throw.
+	test("no-ops when there are no stories", () => {
+		seedWithOutcome(S);
+		expect(() => confirmAllStories(S)).not.toThrow();
+	});
+
+	// The bulk-approve path preserves the pursuing gate invariant: once every story is
+	// confirmed via confirm-all-stories, `set --phase pursuing` succeeds exactly as it
+	// would after individual confirm-story calls.
+	test("pursuing gate passes after bulk-confirm", () => {
+		seedWithOutcome(S);
+		setStories(S, [s1, s2]);
+		confirmAllStories(S);
+		setGoalState(S, { phase: "pursuing" });
+		expect(readGoalGet(S)!.phase).toBe("pursuing");
+	});
+
+	// CLI dispatch wiring.
+	test("CLI confirm-all-stories subcommand bulk-confirms", () => {
+		seedWithOutcome(S);
+		setStories(S, [s1, s2]);
+		runCli("confirm-all-stories");
+		const stories = readGoalGet(S)!.stories!;
+		expect(stories.every((s) => s.status === "confirmed")).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// ultragoal: reorder-stories — planning-only story-array reorder (spec-optional, the
+// one named gap vs. the oh-my-codex steering reference: add/revise/retire already port
+// steering, reorder does not exist in goal).
+// ---------------------------------------------------------------------------
+
+describe("story layer: reorder-stories", () => {
+	const s1: Story = {
+		id: "S1",
+		story: "ship feature X",
+		acceptance_criteria: ["all tests green"],
+		verification_surface: "CI pipeline passes",
+		status: "unconfirmed",
+	};
+	const s2: Story = {
+		id: "S2",
+		story: "add observability",
+		acceptance_criteria: ["dashboards visible"],
+		verification_surface: "Grafana dashboard",
+		status: "unconfirmed",
+	};
+	const s3: Story = {
+		id: "S3",
+		story: "add search",
+		acceptance_criteria: ["search returns results"],
+		verification_surface: "E2E search test",
+		status: "unconfirmed",
+	};
+
+	function seedThreeStories(sid: string): void {
+		setGoalState(sid, { phase: "planning", outcome: "ship feature X" });
+		setStories(sid, [s1, s2, s3]);
+	}
+
+	test("reorders the story array to the given exact permutation", () => {
+		seedThreeStories(S);
+		reorderStories(S, ["S3", "S1", "S2"]);
+		const ids = readGoalGet(S)!.stories!.map((s) => s.id);
+		expect(ids).toEqual(["S3", "S1", "S2"]);
+	});
+
+	test("reorder preserves each story's fields and status, only order changes", () => {
+		seedThreeStories(S);
+		confirmStory(S, "S1");
+		reorderStories(S, ["S2", "S1", "S3"]);
+		const stories = readGoalGet(S)!.stories!;
+		expect(stories.find((s) => s.id === "S1")!.status).toBe("confirmed");
+		expect(stories.find((s) => s.id === "S2")!.status).toBe("unconfirmed");
+	});
+
+	test("refuses when order is missing an id (not an exact permutation)", () => {
+		seedThreeStories(S);
+		const stateBefore = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => reorderStories(S, ["S1", "S2"])).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
+	});
+
+	test("refuses when order contains a duplicate id", () => {
+		seedThreeStories(S);
+		const stateBefore = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => reorderStories(S, ["S1", "S1", "S2"])).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
+	});
+
+	test("refuses when order contains an unknown id", () => {
+		seedThreeStories(S);
+		const stateBefore = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => reorderStories(S, ["S1", "S2", "UNKNOWN"])).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
+	});
+
+	test("refuses outside planning phase", () => {
+		seedThreeStories(S);
+		confirmStory(S, "S1");
+		confirmStory(S, "S2");
+		confirmStory(S, "S3");
+		setGoalState(S, { phase: "pursuing" });
+		expect(() => reorderStories(S, ["S3", "S2", "S1"])).toThrow();
+	});
+
+	// CLI dispatch wiring.
+	test("CLI reorder-stories subcommand reorders via --order flag", () => {
+		seedThreeStories(S);
+		runCli("reorder-stories --order S3,S1,S2");
+		const ids = readGoalGet(S)!.stories!.map((s) => s.id);
+		expect(ids).toEqual(["S3", "S1", "S2"]);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // TODO 3: Mutation subcommands with anti-dodge fences
 // ---------------------------------------------------------------------------
 
@@ -1651,19 +1825,19 @@ describe("story layer: mutations", () => {
 
 /**
  * Helpers for the T4 gate tests.
- * Artifact lives at $OMT_DIR/goal-verdict-{sid}.json (mirrors state path convention).
+ * Artifact lives at $OMT_DIR/ultragoal-verdict-{sid}.json (mirrors state path convention).
  */
 function verdictArtifactPath(sid: string): string {
-	return `${process.env.OMT_DIR}/goal-verdict-${sid}.json`;
+	return `${process.env.OMT_DIR}/ultragoal-verdict-${sid}.json`;
 }
 
 function writeVerdictArtifact(sid: string, obj: object): void {
 	writeFileSync(verdictArtifactPath(sid), JSON.stringify(obj), "utf8");
 }
 
-/** Code-review lane artifact path: $OMT_DIR/goal-codereview-{sid}.json (mirrors verdict path). */
+/** Code-review lane artifact path: $OMT_DIR/ultragoal-codereview-{sid}.json (mirrors verdict path). */
 function codeReviewArtifactPath(sid: string): string {
-	return `${process.env.OMT_DIR}/goal-codereview-${sid}.json`;
+	return `${process.env.OMT_DIR}/ultragoal-codereview-${sid}.json`;
 }
 
 function writeCodeReviewArtifact(sid: string, obj: object): void {

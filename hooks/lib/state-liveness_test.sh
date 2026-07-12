@@ -308,6 +308,18 @@ test_is_current_session_no_match_different_sid() {
   fi
 }
 
+test_is_current_session_matches_ultragoal_filename_sid() {
+  local file="$TEST_TMP_DIR/ultragoal-state-abc123.json"
+  write_state "$file" "{\"active\":true}"
+
+  if is_current_session "$file" "abc123"; then
+    return 0
+  else
+    echo "  ASSERTION FAILED: ultragoal-state filename sid 'abc123' should match current sid 'abc123'"
+    return 1
+  fi
+}
+
 # =============================================================================
 # TTL-parity: bash constants equal TS constants in lib/state-core.ts
 # =============================================================================
@@ -402,6 +414,7 @@ run_test test_fallback_to_mtime_when_no_timestamps_fresh
 run_test test_fallback_to_mtime_when_no_timestamps_stale
 run_test test_is_current_session_matches_filename_sid
 run_test test_is_current_session_no_match_different_sid
+run_test test_is_current_session_matches_ultragoal_filename_sid
 run_test test_ttl_parity_with_state_core_ts
 run_test test_ttl_allowlist_no_stray_literals
 

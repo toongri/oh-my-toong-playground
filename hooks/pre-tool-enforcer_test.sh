@@ -426,6 +426,71 @@ test_seed_goal_is_idempotent() {
 }
 
 # =============================================================================
+# seed-ultragoal — Skill(ultragoal) seeds the pristine ultragoal skeleton
+# (mirrors seed-goal; ultragoal-state.ts is a structural copy of goal-state.ts
+# with its own prefix, so the seed skeleton content is identical to goal's)
+# =============================================================================
+
+test_seed_ultragoal_creates_skeleton() {
+    local state_file="$OMT_DIR/ultragoal-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "ultragoal state file should be created" || return 1
+
+    jq -e '.phase == "planning" and .iteration == 0 and .outcome == "" and .active == true
+        and (.started_at | length > 0) and (.last_touched_at | length > 0)' \
+        "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: ultragoal seed does not match pristine skeleton"; return 1; }
+}
+
+# =============================================================================
+# seed-ultragoal-idem — second ultragoal seed run leaves the existing file unchanged
+# =============================================================================
+
+test_seed_ultragoal_is_idempotent() {
+    local state_file="$OMT_DIR/ultragoal-state-test-sid.json"
+
+    # First seed
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "ultragoal state file should exist after first seed" || return 1
+
+    # Mutate iteration to 3
+    local tmp
+    tmp=$(mktemp)
+    jq '.iteration = 3' "$state_file" > "$tmp" && mv "$tmp" "$state_file"
+
+    jq -e '.iteration == 3' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: mutation of iteration to 3 failed"; return 1; }
+
+    # Re-fire seed
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    jq -e '.iteration == 3' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: re-fire seed must not reset iteration (create-if-absent only)"; return 1; }
+}
+
+# =============================================================================
+# seed-ultragoal-separate-prefix — Skill(ultragoal) seeds ultragoal-state-*,
+# never goal-state-* (separate prefix; goal's own seeding is untouched)
+# =============================================================================
+
+test_seed_ultragoal_does_not_seed_goal_state() {
+    local ultragoal_file="$OMT_DIR/ultragoal-state-test-sid.json"
+    local goal_file="$OMT_DIR/goal-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$ultragoal_file" "ultragoal state file should be created" || return 1
+    assert_file_not_exists "$goal_file" "goal state file should NOT be created for ultragoal skill" || return 1
+}
+
+# =============================================================================
 # B1 — [CONTRACT-INVERTED] session_id absent from env: derive from stdin or fail loudly
 #
 # New contract (two sub-cases):
@@ -1031,6 +1096,9 @@ main() {
     run_test test_seed_di_no_session_id_field
     run_test test_seed_goal_creates_skeleton
     run_test test_seed_goal_is_idempotent
+    run_test test_seed_ultragoal_creates_skeleton
+    run_test test_seed_ultragoal_is_idempotent
+    run_test test_seed_ultragoal_does_not_seed_goal_state
     run_test test_b1_absent_session_id_skips_and_warns
     run_test test_b3_unsafe_session_id_skips_and_warns
     run_test test_fail_loud_write_failure_warns_not_silent
