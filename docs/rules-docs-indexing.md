@@ -26,10 +26,10 @@ topic comes up, it wasn't situational — inline it.
 Every file under `rules/` is one of three kinds. Know which one you're
 writing before you write it.
 
-- **Always-substance**: inline judgment the agent applies directly, scoped by
-  `paths:`, active whenever those paths are touched (e.g. a state-management
-  rule, a naming rule, a type-safety rule). The rule body IS the guidance —
-  no further lookup needed.
+- **Always-substance**: inline judgment the agent applies directly (e.g. a
+  state-management rule, a naming rule, a type-safety rule). The rule body
+  IS the guidance — no further lookup needed. This category defines what the
+  rule is, not how widely it's scoped; Section 4 determines the glob.
 - **Always-process**: a short MUST rule that activates the whole indexing
   system itself — e.g. "before any code action, load relevant rules/docs
   and scan similar patterns for the area you're touching." There is exactly
@@ -148,6 +148,42 @@ Glob width tracks payload weight, inversely:
 - **Situational-index rule** (thin pointer, substance in `docs/`) → scope
   wide. Over-firing costs a few pointer lines; under-firing skips a doc —
   the worse failure.
+
+The category from Section 2 sets a default, not a mandate — the axis that
+actually decides glob width is payload weight, not the category label. A
+rule can be categorized always-substance and still carry a light body: a
+handful of lines of design-time judgment, not a heavy inline block. A light
+body's over-fire cost is close to zero, same as a situational-index rule —
+so scope it the same way: wide, or with `paths:` omitted. The category tells
+you what the rule is (inline judgment vs. a pointer); it does not tell you
+how far its glob should reach.
+
+Concrete case: a loop-pack project's `react.md` (12 lines: state shape,
+placement, classification, naming) and `typescript.md` (13 lines) are
+always-substance by category, so they were scoped `paths: ["**/*.tsx"]` —
+tight, matching the category's usual default. But the judgment they carry —
+plain boolean flag vs. a `status` union, say — gets made at design time,
+before any `.tsx` file exists to open. Scoped by category instead of by
+weight, the rule never fired at the moment it mattered.
+
+**Hazard: a wrong `paths:` fails silently.** A glob that no longer matches
+where the concern actually surfaces produces no error and no warning — it
+just never fires. This is a different failure from the width question
+above: width is about designing the glob too narrowly; this is about the
+glob drifting out of sync with the repo's actual layout, which can also
+happen later, after a directory move.
+
+Concrete case: a loop-pack project's `feature-boundary.md` was scoped
+`paths: ["src/**/*.ts", "src/**/*.tsx"]`, but one of the doc's core
+concerns — app assembly, where multiple features get imported together —
+lives in the app's root `app/` directory, outside `src/`. The rule never
+fired for the exact situation the doc exists to cover, and nothing signaled
+the miss.
+
+Keeping a `paths:` glob means carrying the ongoing maintenance debt of
+checking it against the repo's real layout. Omitting `paths:` removes this
+failure class outright — one more reason to prefer omission over a narrow
+scope.
 
 When an index should be available everywhere, **omit `paths:` entirely** —
 a `.claude/rules/*.md` file with no `paths:`/`globs`/`applyTo` and no
