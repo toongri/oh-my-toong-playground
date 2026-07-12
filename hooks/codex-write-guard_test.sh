@@ -420,6 +420,93 @@ test_own_rm_non_ledger_allows() {
 }
 
 # =============================================================================
+# Regression -- quote-stripping parity (code-review fix): _cwg_absolutize
+# used to leave surrounding quote characters on an extracted candidate
+# target, unlike the Claude twin _wg_strip_dquotes (hooks/pre-tool-
+# enforcer.sh:52-57) -- so a quoted redirect/rm/tee target never equaled the
+# unquoted resolved ledger path and silently ALLOWED, bypassing the guard.
+# Each quoted-ledger case below must DENY like the Claude twin; a quoted
+# non-ledger target must still ALLOW.
+# =============================================================================
+test_own_double_quoted_redirect_ledger_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="echo x > \"$LED\""
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-double-quoted-redirect: expected deny for 'echo x > \"<ledger>\"', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_single_quoted_redirect_ledger_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="echo x > '$LED'"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-single-quoted-redirect: expected deny for \"echo x > '<ledger>'\", got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_quoted_rm_ledger_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="rm \"$LED\""
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-quoted-rm: expected deny for 'rm \"<ledger>\"', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_quoted_tee_ledger_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="echo x | tee \"$LED\""
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-quoted-tee: expected deny for 'echo x | tee \"<ledger>\"', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Non-ledger control -- a quoted redirect to a non-ledger target must still
+# ALLOW (proves the quote-stripping fix does not turn quoting into an
+# over-broad denier).
+test_own_quoted_non_ledger_allows() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="echo x > \"$GITDIR/README.md\""
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED own-quoted-non-ledger-allow: expected allow for quoted non-ledger target, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -447,6 +534,11 @@ main() {
     run_test test_own_truncate_ledger_denies
     run_test test_own_sed_i_ledger_denies
     run_test test_own_rm_non_ledger_allows
+    run_test test_own_double_quoted_redirect_ledger_denies
+    run_test test_own_single_quoted_redirect_ledger_denies
+    run_test test_own_quoted_rm_ledger_denies
+    run_test test_own_quoted_tee_ledger_denies
+    run_test test_own_quoted_non_ledger_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
