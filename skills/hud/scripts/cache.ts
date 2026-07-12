@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
-import { homedir, tmpdir } from "os";
+import { homedir } from "os";
+import { randomUUID } from "crypto";
 
 interface CacheEntry<T> {
 	data: T;
@@ -52,7 +53,12 @@ function writeStore(store: CacheStore): void {
 	if (!existsSync(dir)) {
 		mkdirSync(dir, { recursive: true });
 	}
-	const tempPath = join(tmpdir(), `hud-cache-${process.pid}-${Date.now()}.tmp`);
+	// Temp file lives beside the target (same filesystem → atomic rename) and is
+	// uniquely named per write. A shared-tmpdir + pid+Date.now() name collides when
+	// two writes resolve the same millisecond — and fake timers freeze Date.now(),
+	// widening that window until one rename removes the temp another still expects
+	// (ENOENT crash). randomUUID makes the name collision-proof regardless.
+	const tempPath = join(dir, `${CACHE_FILE}.${randomUUID()}.tmp`);
 	writeFileSync(tempPath, JSON.stringify(store, null, 2), "utf8");
 	renameSync(tempPath, path);
 }
