@@ -358,6 +358,10 @@ describe("STATE_PREFIX", () => {
 		expect(STATE_PREFIX["goal"]).toBe("goal-state-");
 	});
 
+	test("ultragoal prefix is ultragoal-state-", () => {
+		expect(STATE_PREFIX["ultragoal"]).toBe("ultragoal-state-");
+	});
+
 	test("prometheus prefix is prometheus-state-", () => {
 		expect(STATE_PREFIX["prometheus"]).toBe("prometheus-state-");
 	});

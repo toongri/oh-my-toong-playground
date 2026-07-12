@@ -794,7 +794,9 @@ EOF
     return 0
 }
 
-# glob: the GC for-loop glob must only include exactly the 3 managed prefixes
+# glob: the GC for-loop glob must include exactly the 5 managed prefixes
+# (goal/ultragoal/prometheus/deep-interview/qa — ultragoal added alongside goal
+# as part of the state-lifecycle parity fix; ultragoal shares GoalState's shape).
 test_gc_glob_only_managed_prefixes() {
     # Extract lines between "# GC:" marker and the first "# Check for active" block.
     # Then pull the glob prefix names from lines matching the OMT_DIR pattern.
@@ -805,9 +807,9 @@ test_gc_glob_only_managed_prefixes() {
     glob_lines=$(echo "$gc_section" | grep -oE '"?\$\{?OMT_DIR\}?"?/[a-z-]+-\*\.json')
     glob_count=$(echo "$glob_lines" | grep -c '.' 2>/dev/null || true)
 
-    # Exact-set assertion: must be exactly 4 globs
-    if [ "$glob_count" -ne 4 ]; then
-        echo "ASSERTION FAILED: GC glob must have exactly 4 entries, found $glob_count"
+    # Exact-set assertion: must be exactly 5 globs
+    if [ "$glob_count" -ne 5 ]; then
+        echo "ASSERTION FAILED: GC glob must have exactly 5 entries, found $glob_count"
         echo "  Glob lines:"
         echo "$glob_lines"
         echo "  Full GC section:"
@@ -815,11 +817,12 @@ test_gc_glob_only_managed_prefixes() {
         return 1
     fi
 
-    # Each expected prefix must appear exactly once
+    # Each expected prefix must appear exactly once. Anchor on the preceding '/' so
+    # "goal-state" does not also match as a substring of "ultragoal-state".
     local prefix
-    for prefix in goal-state prometheus-state deep-interview-active-state qa-state; do
+    for prefix in goal-state ultragoal-state prometheus-state deep-interview-active-state qa-state; do
         local count
-        count=$(echo "$glob_lines" | grep -c "$prefix" 2>/dev/null || true)
+        count=$(echo "$glob_lines" | grep -c "/$prefix" 2>/dev/null || true)
         if [ "$count" -ne 1 ]; then
             echo "ASSERTION FAILED: GC glob must contain '$prefix' exactly once, found $count"
             echo "  Glob lines: $glob_lines"
@@ -834,6 +837,53 @@ test_gc_glob_only_managed_prefixes() {
         return 1
     fi
 
+    return 0
+}
+
+# C3a-ultragoal: other-session ultragoal-state with 7h-old heartbeat is REAPED
+# (mirrors test_gc_other_session_active_7h_idle_reaped for the goal-state prefix)
+test_gc_other_session_ultragoal_7h_idle_reaped() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local state_file="$TEST_OMT_DIR/ultragoal-state-other-session-stale.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale ultragoal",
+  "iteration": 1
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "session-B"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ -f "$state_file" ]; then
+        echo "ASSERTION FAILED: other-session ultragoal-state with 7h heartbeat should be reaped"
+        return 1
+    fi
+    return 0
+}
+
+# C2-ultragoal: current session's active ultragoal-state with 7h-old heartbeat SURVIVES
+# (mirrors test_gc_current_session_active_7h_idle_survives for the goal-state prefix)
+test_gc_current_session_ultragoal_active_7h_idle_survives() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    local sid="current-gc-ultragoal-session"
+    local state_file="$TEST_OMT_DIR/ultragoal-state-${sid}.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "live ultragoal",
+  "iteration": 1
+}
+EOF
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    if [ ! -f "$state_file" ]; then
+        echo "ASSERTION FAILED: current session's active ultragoal-state should survive GC even with 7h-old heartbeat"
+        return 1
+    fi
     return 0
 }
 
@@ -973,6 +1023,63 @@ EOF
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
 
     assert_output_not_contains "$output" "GOAL RESTORED" "pristine goal-state (absent outcome) must NOT inject GOAL RESTORED" || return 1
+}
+
+# =============================================================================
+# Tests: Ultragoal state restore — parity fix (ultragoal-state-* was omitted
+# from the restore-block enumeration alongside goal/prometheus/deep-interview/qa).
+# ultragoal shares GoalState's exact JSON shape (UltragoalState = GoalState in
+# lib/state-core.ts), so the same non-pristine restore / pristine-seed-guard
+# logic mirrors the goal-state tests above verbatim.
+# =============================================================================
+
+test_session_start_ultragoal_state_restore_non_pristine() {
+    local sid="test-ultragoal-pursuing"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    cat > "$TEST_OMT_DIR/ultragoal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "plan_path": "",
+  "resume_summary": "Iterating toward the objective. Block 2 of 5.",
+  "outcome": "Build feature X",
+  "iteration": 2,
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    assert_output_contains "$output" "ULTRAGOAL RESTORED" "non-pristine ultragoal-state must inject ULTRAGOAL RESTORED" || return 1
+    assert_output_contains "$output" "pursuing" "ultragoal restore should include phase label" || return 1
+    assert_output_contains "$output" "refused" "ultragoal restore should assert re-invocation refused" || return 1
+}
+
+test_session_start_pristine_ultragoal_state_not_restored() {
+    local sid="test-ultragoal-pristine"
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # Pristine seed: phase=planning, iteration=0, outcome="" — mirrors the goal
+    # pristine-seed guard exactly (same JSON shape).
+    cat > "$TEST_OMT_DIR/ultragoal-state-${sid}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "iteration": 0,
+  "max_iterations": 10,
+  "outcome": "",
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    assert_output_not_contains "$output" "ULTRAGOAL RESTORED" "pristine ultragoal-state must NOT inject ULTRAGOAL RESTORED" || return 1
 }
 
 # =============================================================================
@@ -2142,6 +2249,10 @@ main() {
     run_test test_session_start_non_pristine_planning_goal_still_restored
     run_test test_session_start_pristine_goal_absent_outcome_not_restored
 
+    # Ultragoal state restore — parity fix (mirrors goal-state restore tests)
+    run_test test_session_start_ultragoal_state_restore_non_pristine
+    run_test test_session_start_pristine_ultragoal_state_not_restored
+
     # deep-interview stale-cleanup: glob + mtime fallback
     run_test test_session_start_stale_deep_interview_with_started_at_purged
     run_test test_session_start_stale_deep_interview_no_started_at_purged_via_mtime
@@ -2155,6 +2266,8 @@ main() {
     run_test test_gc_terminal_state_10m_old_kept
     run_test test_gc_terminal_goal_fresh_heartbeat_survives_no_carveout
     run_test test_gc_glob_only_managed_prefixes
+    run_test test_gc_other_session_ultragoal_7h_idle_reaped
+    run_test test_gc_current_session_ultragoal_active_7h_idle_survives
     run_test test_gc_old_threshold_constants_removed
 
     # Retired-loop removal (TODO 10)
