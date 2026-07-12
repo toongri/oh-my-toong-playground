@@ -507,6 +507,91 @@ test_own_quoted_non_ledger_allows() {
 }
 
 # =============================================================================
+# Regression -- alternate-key payload bypass (PR #176 AI-review findings):
+# Codex has been observed sending the apply_patch payload text under
+# tool_input.input / tool_input.patch (not just .command), and the
+# exec_command/shell_command shell text under tool_input.cmd (not just
+# .command). The guard used to read only .command in each route, so a
+# write/delete targeting the ledger via one of these alternate keys was
+# silently ALLOWED. Each DENY case below must deny; the final case is a
+# non-ledger control proving the fix does not over-block.
+# =============================================================================
+test_own_apply_patch_input_key_ledger_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd=$(printf '*** Begin Patch\n*** Update File: %s\n*** End Patch\n' "$LED")
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"apply_patch", tool_input:{input:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-apply-patch-input-key: expected deny for apply_patch tool_input.input targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_apply_patch_patch_key_ledger_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd=$(printf '*** Begin Patch\n*** Delete File: %s\n*** End Patch\n' "$LED")
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"apply_patch", tool_input:{patch:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-apply-patch-patch-key: expected deny for apply_patch tool_input.patch targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_exec_command_cmd_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd "echo x > $LED" --arg cwd "$GITDIR" '{tool_name:"exec_command", tool_input:{cmd:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-exec-command-cmd-key: expected deny for exec_command tool_input.cmd redirect to ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_shell_command_cmd_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd "rm $LED" --arg cwd "$GITDIR" '{tool_name:"shell_command", tool_input:{cmd:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-shell-command-cmd-key: expected deny for shell_command tool_input.cmd 'rm <ledger>', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Non-ledger control -- exec_command with tool_input.cmd targeting a
+# non-ledger path must still ALLOW (proves reading the .cmd key does not
+# turn it into an over-broad denier).
+test_own_exec_command_cmd_key_non_ledger_allows() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd "cat $GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"exec_command", tool_input:{cmd:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED own-exec-command-cmd-key-allow: expected allow for non-ledger tool_input.cmd, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -539,6 +624,11 @@ main() {
     run_test test_own_quoted_rm_ledger_denies
     run_test test_own_quoted_tee_ledger_denies
     run_test test_own_quoted_non_ledger_allows
+    run_test test_own_apply_patch_input_key_ledger_denies
+    run_test test_own_apply_patch_patch_key_ledger_denies
+    run_test test_own_exec_command_cmd_key_ledger_denies
+    run_test test_own_shell_command_cmd_key_ledger_denies
+    run_test test_own_exec_command_cmd_key_non_ledger_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
