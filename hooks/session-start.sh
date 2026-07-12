@@ -113,13 +113,6 @@ LEDGER_CORE_OUT=$(
 )
 LEDGER_DELEGATED_ESCAPED=""
 if [ -n "$LEDGER_CORE_OUT" ]; then
-  # Restore the "-- compaction" qualifier on the recovery header: ledger-
-  # core.sh's shared (Claude+Codex) recovery text says "[LEDGER RECOVERY]"
-  # (platform-neutral wording), but the pre-delegation Claude text this call
-  # replaces said "[LEDGER RECOVERY -- compaction]". No escaping is needed --
-  # neither string contains a quote or backslash. Restore before extraction
-  # since the label sits inside the escaped additionalContext value.
-  LEDGER_CORE_OUT="${LEDGER_CORE_OUT/\[LEDGER RECOVERY\]/[LEDGER RECOVERY -- compaction]}"
   # Extract the already-escaped additionalContext value verbatim (no
   # decode/re-encode) from ledger-core.sh's own JSON output template
   # (`"additionalContext": "...."}}`, hooks/ledger-core.sh:175) via plain

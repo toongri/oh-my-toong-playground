@@ -30,8 +30,9 @@ run_test() {
 
 # =============================================================================
 # AC1: source==compact, populated <=7000-char ledger, platform=claude ->
-# [LEDGER RECOVERY] + inline `## Now` body + env-var pointer form (contains
-# the literal token OMT_SESSION_ID).
+# a [LEDGER RECOVERY marker (core owns the platform-qualified form, see AC4)
+# + inline `## Now` body + env-var pointer form (contains the literal token
+# OMT_SESSION_ID).
 # =============================================================================
 test_ac1_claude_compact_inline_recovery_env_pointer() {
     local SBX OD out
@@ -44,7 +45,7 @@ test_ac1_claude_compact_inline_recovery_env_pointer() {
         | OMT_DIR="$OD" OMT_SESSION_ID=test-sid-1 bash -c "source '$LEDGER_CORE'; ledger_core_run claude")
 
     local ok=0
-    if echo "$out" | grep -q '\[LEDGER RECOVERY\]' \
+    if echo "$out" | grep -q '\[LEDGER RECOVERY' \
         && echo "$out" | grep -q 'CURRENT-STATE-XYZ' \
         && echo "$out" | grep -q 'OMT_SESSION_ID'; then
         ok=1
@@ -251,6 +252,57 @@ test_codex_noncompact_recording_only() {
 }
 
 # =============================================================================
+# AC4 (S2: recovery-marker ownership): platform=claude compact-recovery output
+# must carry the "-- compaction" qualifier on the [LEDGER RECOVERY] marker
+# ITSELF -- i.e. ledger-core.sh must own and emit "[LEDGER RECOVERY --
+# compaction]" directly, not the bare "[LEDGER RECOVERY]" that a downstream
+# consumer (hooks/session-start.sh) patches in via string substitution.
+# =============================================================================
+test_ac4_claude_recovery_marker_has_compaction_suffix() {
+    local SBX OD out
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+    printf '## Now\nCURRENT-STATE-XYZ\n## User Corrections (verbatim)\n' > "$OD/session-ledger-test-sid-1.md"
+
+    out=$(printf '{"source":"compact","session_id":"test-sid-1","cwd":"%s"}' "$SBX" \
+        | OMT_DIR="$OD" OMT_SESSION_ID=test-sid-1 bash -c "source '$LEDGER_CORE'; ledger_core_run claude")
+
+    local ok=0
+    if echo "$out" | grep -qF '[LEDGER RECOVERY -- compaction]'; then
+        ok=1
+    fi
+
+    rm -rf "$SBX"
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
+# AC5 (S2: recovery-marker ownership): platform=codex compact-recovery output
+# must carry the bare "[LEDGER RECOVERY]" marker -- no "-- compaction" suffix,
+# since Codex has no compaction-triggered restore concept to qualify.
+# =============================================================================
+test_ac5_codex_recovery_marker_is_bare() {
+    local SBX OD out
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+    printf '## Now\nCURRENT-STATE-XYZ\n## User Corrections (verbatim)\n' > "$OD/session-ledger-test-sid-1.md"
+
+    out=$(printf '{"source":"compact","session_id":"test-sid-1","cwd":"%s"}' "$SBX" \
+        | OMT_DIR="$OD" bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; source '$LEDGER_CORE'; ledger_core_run codex")
+
+    local ok=0
+    if echo "$out" | grep -qF '[LEDGER RECOVERY]' \
+        && [ "$(printf '%s' "$out" | grep -c -- '-- compaction')" = "0" ]; then
+        ok=1
+    fi
+
+    rm -rf "$SBX"
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 main() {
@@ -266,6 +318,8 @@ main() {
     run_test test_missing_sid_recording_present_recovery_absent
     run_test test_default_sid_recording_present_recovery_absent
     run_test test_codex_noncompact_recording_only
+    run_test test_ac4_claude_recovery_marker_has_compaction_suffix
+    run_test test_ac5_codex_recovery_marker_is_bare
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

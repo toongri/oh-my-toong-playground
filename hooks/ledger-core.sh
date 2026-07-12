@@ -157,7 +157,21 @@ ledger_core_run() {
           _lc_pointer_block='  cat "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"\n($OMT_DIR and $OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\n'
         fi
 
-        _lc_messages="${_lc_messages}<session-restore>\n\n[LEDGER RECOVERY]\n\nYour context was just compacted. The durable session ledger on disk is the source of truth for this session.\n\nBulk sections (Decisions/Pending/Pointers/Learnings): run this command NOW, before any other action:\n${_lc_pointer_block}Resume from the \`## Now\` section.\n\n"
+        # Recovery marker is owned here (the SSOT), platform-parameterized on
+        # the same explicit signal as the pointer above: Codex has no
+        # compaction-triggered restore concept to qualify, so it gets the bare
+        # marker; Claude's restore is always compaction-triggered, so the core
+        # states that directly instead of a downstream consumer (the former
+        # hooks/session-start.sh string-substitution shim) patching it in
+        # after the fact.
+        local _lc_recovery_marker
+        if [ "$_lc_platform" = "codex" ]; then
+          _lc_recovery_marker="[LEDGER RECOVERY]"
+        else
+          _lc_recovery_marker="[LEDGER RECOVERY -- compaction]"
+        fi
+
+        _lc_messages="${_lc_messages}<session-restore>\n\n${_lc_recovery_marker}\n\nYour context was just compacted. The durable session ledger on disk is the source of truth for this session.\n\nBulk sections (Decisions/Pending/Pointers/Learnings): run this command NOW, before any other action:\n${_lc_pointer_block}Resume from the \`## Now\` section.\n\n"
 
         # additionalContext is capped ~10k chars; reuse the 7000-char inline
         # cap from session-start.sh as the acute-vs-pointer threshold.
