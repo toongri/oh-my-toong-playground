@@ -31,7 +31,6 @@ import {
 	addStory,
 	retireStory,
 	serializeRequirements,
-	serializeReviewContext,
 	BACKFILL_MARKER,
 	readCodeReviewArtifact,
 	type GoalPhase,
@@ -2502,8 +2501,7 @@ describe("serialize-requirements subcommand", () => {
 
 // ---------------------------------------------------------------------------
 // serialize-review-context subcommand — Shared Contract 4-field JSON emitted
-// for the code-review lane's finder step. RED: serializeReviewContext does
-// not exist yet.
+// for the code-review lane's finder step.
 // ---------------------------------------------------------------------------
 
 describe("serialize-review-context subcommand", () => {
