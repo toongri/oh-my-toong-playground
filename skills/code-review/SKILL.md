@@ -142,12 +142,12 @@ Before exiting Step 0, the state must be one of:
 |-------|--------|
 | **Intent confirmed** — author's goal, approach, and constraints are understood from artifacts and/or interview | Proceed to Step 1 |
 | **User explicit deferral** — user says "skip", "그냥 리뷰해줘", "없어", "code quality only", or unambiguous equivalent | Set {REQUIREMENTS} = "N/A — code-quality-only review (user deferred)" and proceed |
-| **Non-interactive dispatch (goal)** — the dispatch prompt itself carries a `goal-codereview-{sid}.json` artifact path alongside a 4-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`) | Treat as **Intent confirmed (non-interactive, no user interview)** and proceed to Step 1. Acquisition steps 1-3 (PR/branch artifacts, linked references, codebase signals) still run — they backfill any slot whose value is the `(none provided)` marker. Only step 4 (user interview) is replaced by the payload. |
+| **Non-interactive dispatch (completion-gate)** — the dispatch prompt itself carries a `{gate}-codereview-{sid}.json` artifact path alongside a 4-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`) | Treat as **Intent confirmed (non-interactive, no user interview)** and proceed to Step 1. Acquisition steps 1-3 (PR/branch artifacts, linked references, codebase signals) still run — they backfill any slot whose value is the `(none provided)` marker. Only step 4 (user interview) is replaced by the payload. |
 | **Neither** — artifacts thin and user not yet asked, OR user gave vague answers without explicit deferral | **BLOCK**. Do not proceed. Continue interview until one of the two states above is reached. |
 
 There is no "I tried hard enough, just review" path. The block IS the safety mechanism.
 
-A fresh code-reviewer agent has no ambient session to check for an active artifact path — the non-interactive discriminator above is prompt-borne: whether the dispatch prompt includes the path, not whether a session-scoped artifact happens to exist. This is the same `goal-codereview-{sid}.json` signal Step 5 later reads as `runId` (Find Phase Sink, below); Step 0 is where it first enters the pipeline. When the signal is absent, the main-session interactive gate above (**Neither** → BLOCK) is unchanged.
+A fresh code-reviewer agent has no ambient session to check for an active artifact path — the non-interactive discriminator above is prompt-borne: whether the dispatch prompt includes the path, not whether a session-scoped artifact happens to exist. This is the same `{gate}-codereview-{sid}.json` signal Step 5 later reads as `runId` (Find Phase Sink, below); Step 0 is where it first enters the pipeline. When the signal is absent, the main-session interactive gate above (**Neither** → BLOCK) is unchanged.
 
 ### Vague answer refinement
 
@@ -292,7 +292,7 @@ Run in sequence — stop immediately on first failure:
 2. Full test suite
 3. Linter / static analysis
 
-**Any failure → do NOT dispatch chunk-reviewer agents.** See Fail-Fast Gate below for the exact exit sequence (it branches on whether this run carries the goal dispatch signal from Step 0).
+**Any failure → do NOT dispatch chunk-reviewer agents.** See Fail-Fast Gate below for the exact exit sequence (it branches on whether this run carries the completion-gate dispatch signal from Step 0).
 
 ### Output Format: {EVIDENCE_RESULTS}
 
@@ -331,8 +331,8 @@ If any check fails:
 1. Populate {EVIDENCE_RESULTS} Part 1 with the failure details (last 30 lines of failing command output)
 2. Omit Part 2 (Test Coverage Mapping) — it is not needed on failure
 3. Do NOT proceed to Step 4 or dispatch chunk-reviewer agents
-4. **Goal dispatch signal present** (the dispatch prompt carried a `goal-codereview-{sid}.json` artifact path — the same non-interactive discriminator Step 0 uses): before reporting, write that artifact directly — `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}`. This is the exact code-review artifact schema `skills/goal/references/completion-gate.md` defines. A build/test/lint fail-fast is neither a finished review (`status: "COMPLETE"`) nor a confirmed defect (`findings` stays empty — the failing command and its last 30 lines of output belong in this reviewer's own failure report surfaced to goal, not folded into a per-finding `ref`) — it is the review itself failing to complete, which is exactly what `INCONCLUSIVE` means. Writing `status: "INCONCLUSIVE"` is sufficient by itself: it structurally blocks `request-complete` (the never-false-complete gate in `goal-state.ts`) without promoting to `status: "COMPLETE"` or introducing any new status value. If the artifact write itself fails, do not retry or invent a status — leave the artifact absent, which `request-complete`'s existing absent-artifact refusal already blocks on.
-5. **Goal dispatch signal absent** (interactive main-session review — no goal artifact path in play): no artifact write; this path is unchanged from before.
+4. **Completion-gate dispatch signal present** (the dispatch prompt carried a `{gate}-codereview-{sid}.json` artifact path — the same non-interactive discriminator Step 0 uses): before reporting, write that artifact directly — `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}`. This is the exact code-review artifact schema `skills/{gate}/references/completion-gate.md` defines. A build/test/lint fail-fast is neither a finished review (`status: "COMPLETE"`) nor a confirmed defect (`findings` stays empty — the failing command and its last 30 lines of output belong in this reviewer's own failure report surfaced to the dispatching gate, not folded into a per-finding `ref`) — it is the review itself failing to complete, which is exactly what `INCONCLUSIVE` means. Writing `status: "INCONCLUSIVE"` is sufficient by itself: it structurally blocks `request-complete` (the never-false-complete gate in `{gate}-state.ts`) without promoting to `status: "COMPLETE"` or introducing any new status value. If the artifact write itself fails, do not retry or invent a status — leave the artifact absent, which `request-complete`'s existing absent-artifact refusal already blocks on.
+5. **Completion-gate dispatch signal absent** (interactive main-session review — no completion-gate artifact path in play): no artifact write; this path is unchanged from before.
 6. Report {EVIDENCE_RESULTS} and exit immediately
 
 ## Step 4: Chunking Decision
@@ -366,16 +366,16 @@ The orchestrator constructs this command string but does NOT execute it. The com
 
 1. Read dispatch template from `${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/chunk-reviewer-prompt.md`
 2. Interpolate placeholders with context from Steps 0-4:
-   - {WHAT_WAS_IMPLEMENTED} ← Step 0 description (interactive) / JSON field `what_was_implemented` (structured-output goal dispatch)
-   - {DESCRIPTION} ← Step 0 or commit messages (interactive) / JSON field `description` (goal dispatch)
-   - {REQUIREMENTS} ← Step 0 requirements or "N/A - code quality review only" (interactive) / JSON field `requirements` (goal dispatch)
-   - {PROJECT_CONTEXT} ← Step 0 project context (interactive) / JSON field `project_context` (goal dispatch); if it resolves to the literal `"(none provided)"` backfill marker, backfill from codebase signals gathered in Step 0 acquisition steps 1-3 (CLAUDE.md/README/ADR)
+   - {WHAT_WAS_IMPLEMENTED} ← Step 0 description (interactive) / JSON field `what_was_implemented` (structured-output completion-gate dispatch)
+   - {DESCRIPTION} ← Step 0 or commit messages (interactive) / JSON field `description` (completion-gate dispatch)
+   - {REQUIREMENTS} ← Step 0 requirements or "N/A - code quality review only" (interactive) / JSON field `requirements` (completion-gate dispatch)
+   - {PROJECT_CONTEXT} ← Step 0 project context (interactive) / JSON field `project_context` (completion-gate dispatch); if it resolves to the literal `"(none provided)"` backfill marker, backfill from codebase signals gathered in Step 0 acquisition steps 1-3 (CLAUDE.md/README/ADR)
    - {FILE_LIST} ← Step 2 file list
    - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
    - {COMMIT_HISTORY} ← Step 2 commit history
    - {EVIDENCE_RESULTS} ← Step 3 evidence summary (Source: Step 3. Fallback: "Evidence verification unavailable — no build/test/lint commands discovered")
 
-   The four intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}) source differently depending on mode — the same `goal-codereview-{sid}.json` dispatch signal Step 0's Intent Block Gate uses to discriminate non-interactive dispatch. In structured-output mode (goal dispatch), the Step 0 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, follow the same INCONCLUSIVE artifact bridge Step 3 uses on build failure and stop before dispatching chunk-reviewer agents — do not guess field values from malformed input.
+   The four intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}) source differently depending on mode — the same `{gate}-codereview-{sid}.json` dispatch signal Step 0's Intent Block Gate uses to discriminate non-interactive dispatch. In structured-output mode (completion-gate dispatch), the Step 0 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, follow the same INCONCLUSIVE artifact bridge Step 3 uses on build failure and stop before dispatching chunk-reviewer agents — do not guess field values from malformed input.
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
 
 **Dispatch rules:**
@@ -397,7 +397,7 @@ After all re-dispatches complete, merge all chunk results (original + re-dispatc
 
 **Establish `runId` before dispatching chunk-reviewers (Step 5):**
 
-- Running under `/goal` (a `goal-codereview-{sid}.json` artifact path is active for the current session): `runId = {sid}`
+- Dispatched from a completion gate (a `{gate}-codereview-{sid}.json` artifact path is active for the current session): `runId = {sid}`
 - Otherwise: `runId = crypto.randomUUID()` (Tier-0 builtin — no dependency required)
 
 **After all chunk-reviewers return and before Phase 2 begins, write the durable sink:**

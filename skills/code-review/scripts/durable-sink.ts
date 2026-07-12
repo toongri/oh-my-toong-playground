@@ -11,9 +11,15 @@
  * written with findTokenUsage: null in that case.
  *
  * runId is always injected by the caller:
- *   - Under /goal: pass the goal session id {sid} so the sink correlates with
- *     goal-codereview-{sid}.json (goal-state.ts resolveCodeReviewArtifactPath)
+ *   - When dispatched from a completion gate: pass the session id {sid} so the
+ *     sink correlates with {gate}-codereview-{sid}.json ({gate}-state.ts
+ *     resolveCodeReviewArtifactPath)
  *   - Otherwise: pass crypto.randomUUID() (Tier-0 builtin, no extra dep)
+ *
+ * runId = {sid} is shared across gates within one session: running a second
+ * completion gate sequentially in the same session overwrites the earlier
+ * gate's telemetry at the same sink path. Accepted — this sink is telemetry
+ * only, and no completion gate reads it back.
  *
  * getOmtDir() reads $OMT_DIR at call time, enabling hermetic test injection
  * via process.env.OMT_DIR = tmpDir.
