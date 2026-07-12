@@ -2,7 +2,13 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { readCodeReviewArtifact } from "./ultragoal-state";
+import {
+	readCodeReviewArtifact,
+	requestComplete,
+	setGoalState,
+	setSingleStory,
+	setVerdict,
+} from "./ultragoal-state";
 
 // ---------------------------------------------------------------------------
 // V8: code-review artifact enum-contract preservation (redesign path)
@@ -58,6 +64,40 @@ function codeReviewArtifactPath(sid: string): string {
 
 function writeArtifact(sid: string, obj: object): void {
 	writeFileSync(codeReviewArtifactPath(sid), JSON.stringify(obj), "utf8");
+}
+
+/**
+ * Verdict-artifact path — mirrors resolveVerdictArtifactPath (ultragoal-state.ts:895-897,
+ * unexported, so this test file constructs the same convention directly).
+ */
+function verdictArtifactPath(sid: string): string {
+	return `${process.env.OMT_DIR}/ultragoal-verdict-${sid}.json`;
+}
+
+/**
+ * Minimal "objective lane green" fixture for the T7 requirement-gap tests below —
+ * sets up state so ONLY the code-review lane in requestComplete (ultragoal-state.ts)
+ * determines the outcome. Uses the setSingleStory carve-out (one auto-derived
+ * confirmed story `S1`) so no manual Story object construction is needed.
+ */
+function buildObjectiveLaneGreenFixture(sid: string): void {
+	setGoalState(sid, { phase: "planning", outcome: "ship it", verification_surface: "v1" });
+	setSingleStory(sid); // derives confirmed story S1
+	setGoalState(sid, {
+		phase: "pursuing",
+		completion_evidence_paths: [`${process.env.OMT_DIR}/evidence.md`],
+	});
+	setVerdict(sid, "APPROVE");
+	writeFileSync(
+		verdictArtifactPath(sid),
+		JSON.stringify({
+			objective_verdict: "APPROVE",
+			stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: ["evidence.md"] }],
+			verifier: "orchestrator",
+			at: "2026-06-26T10:00:00",
+		}),
+		"utf8",
+	);
 }
 
 // Representative redesign-path finding set: inline + escalated, kept under the
@@ -157,5 +197,40 @@ describe("V8: code-review 아티팩트 열거형 계약 보존 (redesign 경로)
 			const serialized = JSON.stringify(finding);
 			expect(serialized).not.toContain("confidence");
 		}
+	});
+});
+
+describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)", () => {
+	// REGRESSION GUARD, not a fresh RED: `requirement-gap` is already listed in
+	// VALID_CLASSES, and requestComplete's CONFIRMED gate keys only on
+	// `verdict`, never on `class` — so this test passes today. Its job is to
+	// pin that pairing against a future regression that narrows either the
+	// class enum or the CONFIRMED gate.
+	test("REGRESSION GUARD: requirement-gap 클래스 CONFIRMED finding — 아티팩트 수락 + requestComplete refuse", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeArtifact(SID, {
+			status: "COMPLETE",
+			findings: [{ class: "requirement-gap", verdict: "CONFIRMED", ref: "foo.ts:1" }],
+			reviewer: "code-reviewer",
+			at: "2026-06-26T10:00:00",
+		});
+
+		// 수락: requirement-gap이 VALID_CLASSES에 속해 있어 isCodeReviewArtifact가 아티팩트를 거부하지 않음.
+		expect(readCodeReviewArtifact(SID)).not.toBeNull();
+		// refuse: requestComplete는 verdict==='CONFIRMED'만 보고 class는 무시 — 완료가 차단됨.
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	// 진짜 판별 케이스: PLAUSIBLE은 non-blocking이므로 위 CONFIRMED 케이스와 대조된다.
+	test("requirement-gap 클래스 PLAUSIBLE finding — requestComplete refuse 안 함 (non-blocking 판별)", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeArtifact(SID, {
+			status: "COMPLETE",
+			findings: [{ class: "requirement-gap", verdict: "PLAUSIBLE", ref: "foo.ts:2" }],
+			reviewer: "code-reviewer",
+			at: "2026-06-26T10:00:00",
+		});
+
+		expect(requestComplete(SID)).toBe(true);
 	});
 });
