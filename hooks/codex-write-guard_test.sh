@@ -592,6 +592,126 @@ test_own_exec_command_cmd_key_non_ledger_allows() {
 }
 
 # =============================================================================
+# Regression -- lowercase native tool-name bypass (my-review finding): Codex
+# has been observed sending native write tools under their lowercase form
+# (write/edit/multiedit/multi_edit), mirroring the tool names tracked by the
+# sibling extractor hooks/rules-injector/tool-paths.ts's TRACKED_TOOL_NAMES
+# (:11-26), which normalizes via toLowerCase() (:29). The guard's allow-list
+# used to only recognize the capitalized Bash/Edit/Write forms, so a
+# lowercase native tool name fell through the case statement's `*) exit 0 ;;`
+# before ever reaching the ledger-path check -- silently ALLOWING a write
+# that targets the ledger. Each case below must DENY.
+# =============================================================================
+test_own_lowercase_write_file_path_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"write", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-lowercase-write-file-path: expected deny for lowercase 'write' tool_name targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_lowercase_edit_file_path_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"edit", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-lowercase-edit-file-path: expected deny for lowercase 'edit' tool_name targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_lowercase_multiedit_file_path_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"multiedit", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-lowercase-multiedit-file-path: expected deny for lowercase 'multiedit' tool_name targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_lowercase_multi_edit_file_path_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"multi_edit", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-lowercase-multi-edit-file-path: expected deny for lowercase 'multi_edit' tool_name targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Non-ledger control -- lowercase 'write' targeting a non-ledger file must
+# still ALLOW (proves the tool-name-normalization fix does not over-block).
+test_own_lowercase_write_file_path_non_ledger_allows() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"write", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED own-lowercase-write-file-path-allow: expected allow for lowercase 'write' non-ledger target, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Regression -- Edit/Write under-read of the path key (my-review finding):
+# the Edit|Write route used to read ONLY tool_input.file_path, unlike the
+# sibling extractor hooks/rules-injector/tool-paths.ts's addCommonPathFields
+# (:52-63), which reads path/filePath/file_path/target/targetPath/target_path
+# -- so a payload carrying the target under tool_input.path (capitalized
+# 'Write' or lowercase 'write') fell through unread, silently ALLOWING a
+# write that targets the ledger. Each case below must DENY.
+# =============================================================================
+test_own_write_path_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg p "$LED" --arg cwd "$GITDIR" '{tool_name:"Write", tool_input:{path:$p}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-write-path-key: expected deny for 'Write' tool_input.path targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_lowercase_write_path_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg p "$LED" --arg cwd "$GITDIR" '{tool_name:"write", tool_input:{path:$p}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-lowercase-write-path-key: expected deny for lowercase 'write' tool_input.path targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -629,6 +749,13 @@ main() {
     run_test test_own_exec_command_cmd_key_ledger_denies
     run_test test_own_shell_command_cmd_key_ledger_denies
     run_test test_own_exec_command_cmd_key_non_ledger_allows
+    run_test test_own_lowercase_write_file_path_ledger_denies
+    run_test test_own_lowercase_edit_file_path_ledger_denies
+    run_test test_own_lowercase_multiedit_file_path_ledger_denies
+    run_test test_own_lowercase_multi_edit_file_path_ledger_denies
+    run_test test_own_lowercase_write_file_path_non_ledger_allows
+    run_test test_own_write_path_key_ledger_denies
+    run_test test_own_lowercase_write_path_key_ledger_denies
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

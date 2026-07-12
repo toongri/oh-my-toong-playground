@@ -2,16 +2,21 @@
 # =============================================================================
 # Codex PreToolUse Write-Guard (codex-ledger-parity plan, TODO 7): a thin
 # Codex-specific shim that parses Codex write routes (apply_patch envelope,
-# Bash-embedded apply_patch heredoc, shell redirect/tee/rm, native Edit/Write),
-# resolves OMT_DIR/session_id, absolutizes candidate targets against cwd, and
-# delegates the actual full-path anchor-match + deny JSON to
-# write_guard_core_run (hooks/write-guard-core.sh) -- this file never emits
-# the deny JSON itself, and never folds apply_patch parsing into the shared
-# core (that would drift Claude's byte-identical deny at
+# Bash-embedded apply_patch heredoc, shell redirect/tee/rm, native
+# Edit/Write/MultiEdit), resolves OMT_DIR/session_id, absolutizes candidate
+# targets against cwd, and delegates the actual full-path anchor-match + deny
+# JSON to write_guard_core_run (hooks/write-guard-core.sh) -- this file never
+# emits the deny JSON itself, and never folds apply_patch parsing into the
+# shared core (that would drift Claude's byte-identical deny at
 # hooks/pre-tool-enforcer.sh).
 #
+# tool_name is normalized to lowercase before routing (mirroring the sibling
+# extractor hooks/rules-injector/tool-paths.ts:29's toLowerCase()), so both
+# capitalized native names (Edit/Write) and Codex's lowercase native names
+# (write/edit/multiedit/multi_edit) are covered by one case arm each.
 # Write-route set mirrors the sibling PostToolUse matcher (codex.yaml:45):
-# apply_patch | Bash | bash | exec_command | shell_command | Edit | Write.
+# apply_patch | bash | exec_command | shell_command | edit | write |
+# multiedit | multi_edit.
 #
 # BEST-EFFORT, not security-complete: headers/targets are absolutized
 # against cwd to cover the common case, not a full shell parser.
@@ -29,10 +34,17 @@ fi
 
 input=$(cat)
 
-tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null) || tool_name=""
+# Normalize tool_name to lowercase before routing, mirroring the sibling
+# extractor hooks/rules-injector/tool-paths.ts:29 (toLowerCase()) -- Codex
+# has been observed sending native write tools under their lowercase form
+# (write/edit/multiedit/multi_edit), which the allow-list below used to miss
+# entirely, falling through to `exit 0` before ever reaching the ledger-path
+# check. macOS Bash 3.2 has no ${var,,}, so tr is used instead.
+tool_name_raw=$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null) || tool_name_raw=""
+tool_name=$(printf '%s' "$tool_name_raw" | tr '[:upper:]' '[:lower:]')
 
 case "$tool_name" in
-    apply_patch | Bash | bash | exec_command | shell_command | Edit | Write) ;;
+    apply_patch | bash | exec_command | shell_command | edit | write | multiedit | multi_edit) ;;
     *) exit 0 ;;
 esac
 
@@ -208,7 +220,7 @@ _cwg_add_candidate() {
 
 # _cwg_process_shell_text <shell_command_text>
 # Runs the heredoc-body scan and the redirect/tee/rm/cp/mv/sed/dd classifier
-# over one shell-text payload. Factored out so the Bash|bash|exec_command|
+# over one shell-text payload. Factored out so the bash|exec_command|
 # shell_command route below can run it once per alternate payload key
 # (tool_input.command and tool_input.cmd) without duplicating the logic.
 _cwg_process_shell_text() {
@@ -239,9 +251,25 @@ _cwg_process_shell_text() {
 # Route: tool_name -> parse strategy -> candidate targets.
 # -----------------------------------------------------------------------------
 case "$tool_name" in
-    Edit | Write)
-        fp=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty' 2>/dev/null) || fp=""
-        _cwg_add_candidate "$fp"
+    edit | write | multiedit | multi_edit)
+        # Scan ALL common single-path keys (not a first-match fallback),
+        # mirroring the sibling extractor hooks/rules-injector/tool-paths.ts's
+        # addCommonPathFields (:52-63). Reading only .file_path let a payload
+        # carrying the target under .path/.filePath/.target/.targetPath/
+        # .target_path bypass the guard entirely; reading more keys carries
+        # no over-block risk since write_guard_core_run only denies on a
+        # full-path EXACT match against the resolved current-session ledger.
+        for _cwg_key in file_path path filePath target targetPath target_path; do
+            fp=$(printf '%s' "$input" | jq -r --arg k "$_cwg_key" '.tool_input[$k] // empty' 2>/dev/null) || fp=""
+            _cwg_add_candidate "$fp"
+        done
+        # Array-form path keys (multi-file edit payloads), mirroring
+        # tool-paths.ts's addPathArray over paths/filePaths/file_paths.
+        for _cwg_key in paths filePaths file_paths; do
+            while IFS= read -r fp; do
+                _cwg_add_candidate "$fp"
+            done < <(printf '%s' "$input" | jq -r --arg k "$_cwg_key" '.tool_input[$k]? // [] | .[]?' 2>/dev/null)
+        done
         ;;
     apply_patch)
         # Codex has been observed sending the apply_patch payload text under
@@ -260,7 +288,7 @@ case "$tool_name" in
             done < <(_cwg_extract_patch_headers "$patch_cmd")
         done
         ;;
-    Bash | bash | exec_command | shell_command)
+    bash | exec_command | shell_command)
         # Codex has been observed sending the shell text under
         # tool_input.command normally, but also under tool_input.cmd for
         # exec_command/shell_command payloads -- process both keys (not a
