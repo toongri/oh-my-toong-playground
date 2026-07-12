@@ -44,7 +44,7 @@ hooks:
   PreToolUse:
     - component: codex-write-guard.sh
       type: command
-      matcher: "Bash|bash|apply_patch|exec_command|shell_command|Edit|Write"
+      matcher: "Bash|bash|apply_patch|exec_command|shell_command|Edit|Write|edit|write|multiedit|multi_edit"
   PostToolUse:
     - component: rules-injector
       type: command
