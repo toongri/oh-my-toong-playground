@@ -311,6 +311,115 @@ test_own_native_edit_non_ledger_allows() {
 }
 
 # =============================================================================
+# Regression -- set -e/pipefail redirect-extraction hazard (code-review fix):
+# _cwg_extract_shell_targets's redirect-extraction grep returns 1 for any
+# chain segment with no `>`/`>>` -- under this script's `set -euo pipefail`,
+# that used to abort the function before the tee/rm/dd/cp/truncate/sed -i
+# case block ever ran, silently ALLOWING those routes against the ledger.
+# Each case below targets the resolved current ledger and must DENY.
+# =============================================================================
+test_own_rm_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"rm %s"},"session_id":"cx","cwd":"%s"}' "$LED" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-rm-ledger: expected deny for 'rm <ledger>', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_tee_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x | tee %s"},"session_id":"cx","cwd":"%s"}' "$LED" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-tee-ledger: expected deny for 'echo x | tee <ledger>', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_dd_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"dd if=/dev/zero of=%s bs=1 count=1"},"session_id":"cx","cwd":"%s"}' "$LED" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-dd-ledger: expected deny for 'dd of=<ledger>', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_cp_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"cp %s/src.md %s"},"session_id":"cx","cwd":"%s"}' "$GITDIR" "$LED" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-cp-ledger: expected deny for 'cp src <ledger>', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_truncate_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"truncate -s0 %s"},"session_id":"cx","cwd":"%s"}' "$LED" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-truncate-ledger: expected deny for 'truncate -s0 <ledger>', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_sed_i_ledger_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="sed -i 's/a/b/' $LED"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-sed-i-ledger: expected deny for 'sed -i ... <ledger>', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Non-ledger control -- 'rm' on a non-ledger file must ALLOW (proves the
+# set -e fix does not turn rm into an over-broad denier).
+test_own_rm_non_ledger_allows() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"rm %s/README.md"},"session_id":"cx","cwd":"%s"}' "$GITDIR" "$GITDIR" | run_hook)
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED own-rm-non-ledger-allow: expected allow, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -331,6 +440,13 @@ main() {
     run_test test_own_nested_heredoc_denies
     run_test test_own_relative_path_denies
     run_test test_own_native_edit_non_ledger_allows
+    run_test test_own_rm_ledger_denies
+    run_test test_own_tee_ledger_denies
+    run_test test_own_dd_ledger_denies
+    run_test test_own_cp_ledger_denies
+    run_test test_own_truncate_ledger_denies
+    run_test test_own_sed_i_ledger_denies
+    run_test test_own_rm_non_ledger_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
