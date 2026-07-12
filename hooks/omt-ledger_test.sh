@@ -480,6 +480,103 @@ test_success_produces_no_stdout_path_leak() {
 }
 
 # =============================================================================
+# Tests: additive session-id self-resolution (plan TODO 3) -- OMT_SESSION_ID
+# ?? CODEX_THREAD_ID with STRICT EMPTY-ONLY coalescing, mirroring
+# lib/state-core.ts:88-107 resolveSessionIdOrThrow's authoritative-env-first
+# semantics so bash and TypeScript resolve the SAME identity for a given
+# session. Each test below manages its own sandboxed HOME/OMT_DIR directly
+# (bypassing setup_test_env/teardown_test_env, which force OMT_SESSION_ID to
+# be preset) since the fallback and git-derivation paths need env shapes
+# those helpers don't produce; every sandbox is a mktemp -d, never real
+# $HOME/.omt, and is torn down with rm -rf on every return path.
+# =============================================================================
+
+run_test_raw() {
+    local test_name="$1"
+    CURRENT_TEST="$test_name"
+
+    if "$test_name"; then
+        echo "[PASS] $test_name"
+        ((TESTS_PASSED++)) || true
+    else
+        echo "[FAIL] $test_name"
+        ((TESTS_FAILED++)) || true
+    fi
+}
+
+test_codex_thread_id_fallback_used_when_omt_session_id_unset() {
+    local sbx gitdir
+    sbx="$(mktemp -d)"
+    gitdir="$sbx/repo"
+    mkdir -p "$gitdir"
+    git -C "$gitdir" init -q -b main
+
+    if ! ( cd "$gitdir" && printf 'hello\n' | env -u OMT_DIR -u OMT_SESSION_ID HOME="$sbx" CODEX_THREAD_ID=codex-abc bash "$LEDGER_SCRIPT" append Decisions ); then
+        echo "ASSERTION FAILED: append should succeed via CODEX_THREAD_ID fallback + git-derived OMT_DIR"
+        rm -rf "$sbx"
+        return 1
+    fi
+
+    if ! ls "$sbx"/.omt/*/session-ledger-codex-abc.md >/dev/null 2>&1; then
+        echo "ASSERTION FAILED: expected session-ledger-codex-abc.md under a git-derived OMT_DIR in $sbx/.omt"
+        rm -rf "$sbx"
+        return 1
+    fi
+
+    rm -rf "$sbx"
+    return 0
+}
+
+test_present_unsafe_omt_session_id_refuses_without_fallback() {
+    local sbx
+    sbx="$(mktemp -d)"
+
+    # 'evil.sid' contains a '.', which is outside the ^[A-Za-z0-9_-]{1,200}$
+    # charset guard but is a perfectly valid flat filename character -- prior
+    # to the guard this value would be silently accepted and written.
+    if printf 'x' | OMT_DIR="$sbx" OMT_SESSION_ID='evil.sid' CODEX_THREAD_ID=safe-sid "$LEDGER_SCRIPT" append Decisions; then
+        echo "ASSERTION FAILED: a present-but-unsafe OMT_SESSION_ID must refuse (exit non-zero), not succeed"
+        rm -rf "$sbx"
+        return 1
+    fi
+
+    if [ -f "$sbx/session-ledger-safe-sid.md" ]; then
+        echo "ASSERTION FAILED: unsafe OMT_SESSION_ID must not silently fall through to CODEX_THREAD_ID's ledger path"
+        rm -rf "$sbx"
+        return 1
+    fi
+
+    if [ -f "$sbx/session-ledger-evil.sid.md" ]; then
+        echo "ASSERTION FAILED: unsafe OMT_SESSION_ID must not be written under its own (unsafe) ledger path either"
+        rm -rf "$sbx"
+        return 1
+    fi
+
+    rm -rf "$sbx"
+    return 0
+}
+
+test_claude_env_first_unchanged_with_sandboxed_omt_dir() {
+    local sbx
+    sbx="$(mktemp -d)"
+
+    if ! ( printf 'x\n' | OMT_DIR="$sbx" OMT_SESSION_ID=uuid-1 CODEX_THREAD_ID=should-be-ignored "$LEDGER_SCRIPT" append Decisions ); then
+        echo "ASSERTION FAILED: Claude env-first path (OMT_SESSION_ID present) should succeed unchanged"
+        rm -rf "$sbx"
+        return 1
+    fi
+
+    if [ ! -f "$sbx/session-ledger-uuid-1.md" ]; then
+        echo "ASSERTION FAILED: ledger should be written at the env-supplied sid path, not affected by a set CODEX_THREAD_ID"
+        rm -rf "$sbx"
+        return 1
+    fi
+
+    rm -rf "$sbx"
+    return 0
+}
+
+# =============================================================================
 # Static checks: bash conventions (3.2 compat, set -euo pipefail)
 # =============================================================================
 
@@ -526,6 +623,9 @@ main() {
     run_test test_success_produces_no_stdout_path_leak
     run_test test_script_declares_set_euo_pipefail
     run_test test_script_has_no_associative_arrays
+    run_test_raw test_codex_thread_id_fallback_used_when_omt_session_id_unset
+    run_test_raw test_present_unsafe_omt_session_id_refuses_without_fallback
+    run_test_raw test_claude_env_first_unchanged_with_sandboxed_omt_dir
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
