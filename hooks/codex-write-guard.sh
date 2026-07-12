@@ -142,9 +142,14 @@ _cwg_extract_shell_targets() {
 
     # Redirect target: the token after the last `>` / `>>`, excluding fd
     # duplications like `2>&1` / `>&2`.
+    # `|| true`: grep -oE returns 1 when a segment has no redirect at all --
+    # under this script's `set -euo pipefail`, an unguarded nonzero pipeline
+    # here would abort the function (via the process-substitution subshell
+    # that invokes it) before the case block below -- tee/rm/truncate/cp/mv/
+    # sed -i/dd -- ever runs, silently ALLOWING those write routes.
     printf '%s\n' "$seg" \
         | grep -oE '(^|[^0-9&])>{1,2}[[:space:]]*[^[:space:]&][^[:space:]]*' \
-        | sed -E 's/^.*>{1,2}[[:space:]]*//'
+        | sed -E 's/^.*>{1,2}[[:space:]]*//' || true
 
     case "$first_word" in
         tee | rm | truncate)
@@ -159,7 +164,10 @@ _cwg_extract_shell_targets() {
             fi
             ;;
         dd)
-            printf '%s\n' "$seg" | grep -oE 'of=[^[:space:]]+' | sed 's/^of=//'
+            # Same set -e/pipefail hazard as the redirect grep above:
+            # `of=` is absent for a plain `dd if=x` read, so this grep can
+            # legitimately return 1.
+            printf '%s\n' "$seg" | grep -oE 'of=[^[:space:]]+' | sed 's/^of=//' || true
             ;;
     esac
 }
