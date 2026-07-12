@@ -8,6 +8,9 @@ import {
 	readGoalState,
 	readGoalStateRaw,
 	updateGoalState,
+	readUltragoalState,
+	readUltragoalStateRaw,
+	updateUltragoalState,
 	getBlockCount,
 	incrementBlockCount,
 	cleanupBlockCountFiles,
@@ -812,6 +815,108 @@ describe("Goal state management", () => {
 			updateGoalState(sessionId, { iteration: 7 });
 			expect(existsSync(stateFile)).toBe(false);
 		});
+	});
+});
+
+describe("Ultragoal state management", () => {
+	const testDir = join(tmpdir(), "state-test-ultragoal-" + Date.now());
+	const omtDir = join(testDir, "omt");
+	const sessionId = "test-session-ultragoal";
+
+	const savedOmtDir = process.env.OMT_DIR;
+
+	beforeAll(async () => {
+		await mkdir(omtDir, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await rm(testDir, { recursive: true, force: true });
+	});
+
+	beforeEach(async () => {
+		process.env.OMT_DIR = omtDir;
+		const stateFile = join(omtDir, `ultragoal-state-${sessionId}.json`);
+		try {
+			await rm(stateFile, { force: true });
+		} catch {}
+	});
+
+	afterEach(() => {
+		if (savedOmtDir === undefined) {
+			delete process.env.OMT_DIR;
+		} else {
+			process.env.OMT_DIR = savedOmtDir;
+		}
+	});
+
+	it("ultragoal: readUltragoalState returns state when active=true, null when active=false (active-fold mirrors goal)", async () => {
+		const stateFile = join(omtDir, `ultragoal-state-${sessionId}.json`);
+		await writeFile(
+			stateFile,
+			JSON.stringify({
+				active: true,
+				phase: "pursuing",
+				objective_verdict: "absent",
+				iteration: 1,
+				max_iterations: 10,
+			}),
+		);
+
+		const result = readUltragoalState(sessionId);
+		expect(result).not.toBeNull();
+		expect(result?.phase).toBe("pursuing");
+		expect(result).toEqual(readUltragoalStateRaw(sessionId));
+
+		await writeFile(
+			stateFile,
+			JSON.stringify({
+				active: false,
+				phase: "complete",
+				objective_verdict: "APPROVE",
+				iteration: 3,
+				max_iterations: 10,
+			}),
+		);
+		expect(readUltragoalState(sessionId)).toBeNull();
+		expect(readUltragoalStateRaw(sessionId)).not.toBeNull();
+	});
+
+	it("ultragoal: readUltragoalStateRaw returns null on absent or malformed file", async () => {
+		expect(readUltragoalStateRaw("nonexistent-ultragoal")).toBeNull();
+
+		const stateFile = join(omtDir, `ultragoal-state-${sessionId}.json`);
+		await writeFile(stateFile, "not valid json {");
+		expect(readUltragoalStateRaw(sessionId)).toBeNull();
+	});
+
+	it("ultragoal: updateUltragoalState spread-overlay preserves SKILL-only fields; no-op on absent file", async () => {
+		const stateFile = join(omtDir, `ultragoal-state-${sessionId}.json`);
+		await writeFile(
+			stateFile,
+			JSON.stringify({
+				active: true,
+				phase: "pursuing",
+				objective_verdict: "absent",
+				iteration: 1,
+				max_iterations: 10,
+				outcome: "Ship the multi-story feature",
+				schema_version: 1,
+			}),
+		);
+
+		updateUltragoalState(sessionId, { iteration: 3 });
+
+		const content = await readFile(stateFile, "utf8");
+		const parsed = JSON.parse(content);
+		expect(parsed.iteration).toBe(3);
+		expect(parsed.outcome).toBe("Ship the multi-story feature");
+		expect(parsed.schema_version).toBe(1);
+
+		const absentSessionId = "nonexistent-ultragoal-update";
+		const absentFile = join(omtDir, `ultragoal-state-${absentSessionId}.json`);
+		expect(existsSync(absentFile)).toBe(false);
+		updateUltragoalState(absentSessionId, { iteration: 3 });
+		expect(existsSync(absentFile)).toBe(false);
 	});
 });
 

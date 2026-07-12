@@ -138,7 +138,7 @@ fi
 if [[ "$toolName" == "Skill" ]]; then
     skillName=$(extract_json_field "skill" "")
     case "$skillName" in
-        prometheus|goal|deep-interview|qa)
+        prometheus|goal|ultragoal|deep-interview|qa)
             # BASH_SOURCE-relative sourcing for resolve_omt_dir (mirrors session-start.sh:49-53)
             _PTE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -202,6 +202,34 @@ if [[ "$toolName" == "Skill" ]]; then
                         write_seed_if_absent \
                             "$omt_dir/goal-state-${sid}.json" \
                             "goal" \
+                            '{
+  "active": true,
+  "phase": "planning",
+  "iteration": 0,
+  "outcome": "",
+  "verification_surface": "",
+  "constraints": "",
+  "boundaries": "",
+  "max_iterations": 10,
+  "blocked_stop": "",
+  "objective_verdict": "absent",
+  "plan_path": "",
+  "resume_summary": "",
+  "budget_limit_notified": false,
+  "blocked_reason": "",
+  "completion_evidence_paths": [],
+  "schema_version": 1,
+  "started_at": "'"${ts}"'",
+  "last_touched_at": "'"${ts}"'"
+}'
+                        ;;
+                    ultragoal)
+                        # ultragoal-state.ts (skills/ultragoal/scripts/ultragoal-state.ts) is a
+                        # structural copy of goal-state.ts with its own file prefix — the pristine
+                        # seed skeleton is identical to goal's, just written to ultragoal-state-.
+                        write_seed_if_absent \
+                            "$omt_dir/ultragoal-state-${sid}.json" \
+                            "ultragoal" \
                             '{
   "active": true,
   "phase": "planning",

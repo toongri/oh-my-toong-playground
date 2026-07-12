@@ -29,6 +29,8 @@ skills:
       platforms: [claude]
     - component: goal
       platforms: [claude]
+    - component: ultragoal
+      platforms: [claude]
     - agent-browser
 
 rules:
