@@ -1,7 +1,3 @@
----
-paths: ["**/*.tsx", "**/*.jsx", "**/use*.ts"]
----
-
 # React 판단 규칙
 
 - **상태 구조**: 동시에 참이면 안 되는 boolean들 대신 `status` 유니온(`'idle' | 'loading' | 'error' | 'success'`). 파생값은 state가 아니라 렌더 중 계산. 컬렉션의 선택은 객체 복사 말고 **id 저장** 후 find. props를 state로 미러링 금지(첫 값만 쓰면 `initialX`로 명명).
