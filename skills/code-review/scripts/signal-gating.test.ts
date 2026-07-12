@@ -7,14 +7,15 @@ const SKILL_MD = join(REPO_ROOT, "skills", "code-review", "SKILL.md");
 
 // ---------------------------------------------------------------------------
 // Regression guard: main-session interactive paths preserved when the
-// goal-codereview-{sid}.json signal is absent.
+// {gate}-codereview-{sid}.json signal is absent.
 //
 // The Step 0 non-interactive discriminator and the Step 3 INCONCLUSIVE bridge
 // added signal-gated branches alongside the pre-existing main-session
 // interactive paths in SKILL.md. This test pins
 // that those additions stayed additive: the interactive rows/branches must
-// still exist, and the new branches must remain conditional on the goal
-// signal rather than replacing or unconditionally triggering over them.
+// still exist, and the new branches must remain conditional on the
+// completion-gate signal rather than replacing or unconditionally triggering
+// over them.
 //
 // These invariants are already satisfied by the current SKILL.md — this test
 // is GREEN-from-start by design, not a manufactured RED. It exists to fail
@@ -63,7 +64,7 @@ function extractIntentGateStates(section: string): string[] {
 	return states;
 }
 
-describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: main-session paths preserved when goal signal absent)", () => {
+describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: main-session paths preserved when completion-gate signal absent)", () => {
 	const skillContent = readFileSync(SKILL_MD, "utf-8");
 
 	describe("Step 0 Intent Block Gate: 메인세션 대화형 경로 보존", () => {
@@ -85,22 +86,22 @@ describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: ma
 			expect(neitherRow).toContain("BLOCK");
 		});
 
-		it("`Non-interactive dispatch (goal)` 행은 `goal-codereview-{sid}.json` discriminator에 조건부다 (무조건 대체가 아니다)", () => {
-			expect(states).toContain("Non-interactive dispatch (goal)");
+		it("`Non-interactive dispatch (completion-gate)` 행은 `{gate}-codereview-{sid}.json` discriminator에 조건부다 (무조건 대체가 아니다)", () => {
+			expect(states).toContain("Non-interactive dispatch (completion-gate)");
 
 			const nonInteractiveRow = gateSection
 				.split("\n")
 				.find(
 					(line) =>
 						line.trim().startsWith("|") &&
-						line.includes("**Non-interactive dispatch (goal)**"),
+						line.includes("**Non-interactive dispatch (completion-gate)**"),
 				);
 
 			expect(nonInteractiveRow).toBeDefined();
 			// Conditional: the row's own text ties the state to the dispatch
 			// prompt carrying the artifact path — not an unconditional check.
 			expect(nonInteractiveRow).toContain("the dispatch prompt itself carries a");
-			expect(nonInteractiveRow).toContain("goal-codereview-{sid}.json");
+			expect(nonInteractiveRow).toContain("{gate}-codereview-{sid}.json");
 		});
 
 		it("신호 부재시 메인세션 대화형 게이트가 unchanged로 명시된다", () => {
@@ -118,7 +119,7 @@ describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: ma
 
 		it("signal-present 브랜치가 존재하고 INCONCLUSIVE 아티팩트를 기록한다", () => {
 			const presentLine = numberedLines.find((line) =>
-				line.includes("Goal dispatch signal present"),
+				line.includes("Completion-gate dispatch signal present"),
 			);
 
 			expect(presentLine).toBeDefined();
@@ -127,7 +128,7 @@ describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: ma
 
 		it("signal-absent 브랜치가 존재하고 아티팩트를 기록하지 않는다 — 메인세션은 INCONCLUSIVE write 안 함", () => {
 			const absentLine = numberedLines.find((line) =>
-				line.includes("Goal dispatch signal absent"),
+				line.includes("Completion-gate dispatch signal absent"),
 			);
 
 			expect(absentLine).toBeDefined();
