@@ -58,13 +58,12 @@ skills:
     - hud
 
 rules:
+  # 전역 rule(tool-usage-policy·work-principles·coding-discipline·least-code·
+  # agent-browser-usage·codebase-grounding)은 루트 sync.yaml이 ~/.claude/rules/로
+  # 배포하므로 self-sync에서 재나열하지 않는다 — 중복 로드 방지. 여기엔 프로젝트
+  # 전용 rule만 둔다.
   items:
-    - tool-usage-policy
-    - work-principles
-    - coding-discipline
-    - least-code
     - private-component-management
     - documentation-currency
     - rules-docs-authoring
-    - agent-browser-usage
-    - codebase-grounding
+    - sync-operations
