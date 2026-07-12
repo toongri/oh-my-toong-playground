@@ -1,4 +1,4 @@
-import { DeepInterviewState, PrometheusState, GoalState } from "./types.ts";
+import { DeepInterviewState, PrometheusState, GoalState, UltragoalState } from "./types.ts";
 import { readFileOrNull, writeFileSafe, deleteFile, ensureDir } from "./utils.ts";
 import { writeFileNoCreate } from "@lib/state-core";
 import { join } from "path";
@@ -135,6 +135,68 @@ export function updateGoalState(sessionId: string, partial: Partial<GoalState>):
 	// was renamed away between our read and this write — i.e. the adopt TOCTOU window.
 	// Catching ENOENT preserves the existing "file absent → do nothing" semantics while
 	// closing the race: the write syscall itself refuses creation (ADR-7 / F10).
+	try {
+		writeFileNoCreate(
+			path,
+			JSON.stringify({ ...raw, ...partial, last_touched_at: nowStamp() }, null, 2),
+		);
+	} catch (err) {
+		if (err !== null && typeof err === "object" && "code" in err && err.code === "ENOENT") return;
+		throw err;
+	}
+}
+
+// active-only view: readUltragoalStateRaw folded by active (null on absent/malformed/inactive).
+// Mirrors readGoalState — ultragoal-state.ts is a structural copy of goal-state.ts with its
+// own file prefix, so the active-fold semantics are identical.
+export function readUltragoalState(sessionId: string): UltragoalState | null {
+	const state = readUltragoalStateRaw(sessionId);
+	return state && state.active ? state : null;
+}
+
+// Active-agnostic probe: returns the parsed ultragoal-state even when active=false
+// (terminal phases complete/blocked/budget_limited), so the hook can suppress
+// the baseline-todo branch for ANY ultragoal phase. Null on absent or malformed;
+// never throws. Distinct from readUltragoalState, which folds active:false -> null.
+// Mirrors readGoalStateRaw (see its comment for the schema-guard rationale).
+export function readUltragoalStateRaw(sessionId: string): UltragoalState | null {
+	const path = join(getOmtDir(), `ultragoal-state-${sessionId}.json`);
+	const content = readFileOrNull(path);
+	if (!content) return null;
+
+	try {
+		const s: UltragoalState = JSON.parse(content);
+		const phases = ["planning", "pursuing", "budget_limited", "blocked", "complete"];
+		if (
+			typeof s.active !== "boolean" ||
+			!phases.includes(s.phase) ||
+			!Number.isInteger(s.iteration) ||
+			s.iteration < 0 ||
+			!Number.isInteger(s.max_iterations) ||
+			s.max_iterations < 1
+		) {
+			return null;
+		}
+		return s;
+	} catch {
+		return null;
+	}
+}
+
+// Strict spread-overlay writer, mirroring updateGoalState (see its comment for the
+// no-create/no-seed rationale — a second writer for ultragoal must stay just as strict).
+export function updateUltragoalState(sessionId: string, partial: Partial<UltragoalState>): void {
+	const path = join(getOmtDir(), `ultragoal-state-${sessionId}.json`);
+	const content = readFileOrNull(path);
+	if (!content) return;
+
+	let raw: Record<string, unknown>;
+	try {
+		raw = JSON.parse(content);
+	} catch {
+		return;
+	}
+
 	try {
 		writeFileNoCreate(
 			path,
