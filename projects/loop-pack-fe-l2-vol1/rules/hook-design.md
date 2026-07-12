@@ -1,7 +1,3 @@
----
-paths: ["**/*.ts", "**/*.tsx"]
----
-
 # Hook · Effect · 레이어 설계 판단 규칙
 
 Custom Hook·Effect·레이어 경계를 다루는 규칙이다. 문서를 열어 판단 기준·Before/After·트레이드오프를 확인한다.
