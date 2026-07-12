@@ -65,5 +65,6 @@ rules:
     - least-code
     - private-component-management
     - documentation-currency
+    - rules-docs-authoring
     - agent-browser-usage
     - codebase-grounding

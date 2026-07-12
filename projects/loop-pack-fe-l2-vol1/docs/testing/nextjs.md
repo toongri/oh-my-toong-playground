@@ -1,8 +1,6 @@
 # Next.js App Router 테스트
 
-> 이 문서는 `rules/testing.md`가 가리키는 테스트 규칙의 일부다. Next.js App Router에서 **무엇을 어느 레이어로 테스트하는지**를 다룬다.
->
-> 레이어에 얼마나 투자할지의 배경은 [`test-layers.md`](./test-layers.md), RTL 작성 관용구는 [`conventions.md`](./conventions.md), 실행·커버리지 도구는 [`tooling.md`](./tooling.md), CI 검증 절차는 [`verification.md`](./verification.md)에 있다.
+레이어에 얼마나 투자할지의 배경은 [`test-layers.md`](./test-layers.md), RTL 작성 관용구는 [`conventions.md`](./conventions.md), 실행·커버리지 도구는 [`tooling.md`](./tooling.md), CI 검증 절차는 [`verification.md`](./verification.md)에 있다.
 
 ## 공식 도구 분리
 

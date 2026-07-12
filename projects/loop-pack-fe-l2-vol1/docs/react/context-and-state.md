@@ -1,10 +1,8 @@
 # Context 전환 — Drilling을 언제 끊나
 
-> `.claude/rules/component-design.md`가 가리키는 근거 문서. **Props Drilling을 유지할지 Context로 넘길지** 판단할 때 읽는다.
->
-> 전제: Props Drilling은 흐름을 추적할 수 있는 **가장 단순한 방법**이다 — 무조건 나쁘지 않다.
->
-> 컴포넌트 경계는 [`component-boundary.md`](./component-boundary.md), Props·합성 계약은 [`props-contract.md`](./props-contract.md)에 있다. 상태를 **어디에 둘지**(서버/UI/URL/전역)의 분류는 [`react.md`](../../.claude/rules/react.md).
+Props Drilling은 흐름을 추적할 수 있는 **가장 단순한 방법**이다 — 무조건 나쁘지 않다.
+
+컴포넌트 경계는 [`component-boundary.md`](./component-boundary.md), Props·합성 계약은 [`props-contract.md`](./props-contract.md)에 있다. 상태를 **어디에 둘지**(서버/UI/URL/전역)의 분류는 [`react.md`](../../.claude/rules/react.md).
 
 ## Props Drilling vs Context
 

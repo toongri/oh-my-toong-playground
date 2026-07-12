@@ -1,5 +1,5 @@
 /**
- * Shared state spine for goal, prometheus, and deep-interview skill CLIs.
+ * Shared state spine for goal, ultragoal, prometheus, and deep-interview skill CLIs.
  *
  * Exports:
  *   nowStamp()                    — ISO-seconds timestamp, round-trips BSD/GNU date parser
@@ -179,11 +179,12 @@ export function isStateLive(
 // State-type prefix map
 // ---------------------------------------------------------------------------
 
-export type StateType = "goal" | "prometheus" | "deep-interview" | "qa";
+export type StateType = "goal" | "ultragoal" | "prometheus" | "deep-interview" | "qa";
 
 /** Maps each stateful skill type to its state-file filename prefix. */
 export const STATE_PREFIX: Record<StateType, string> = {
 	goal: "goal-state-",
+	ultragoal: "ultragoal-state-",
 	prometheus: "prometheus-state-",
 	"deep-interview": "deep-interview-active-state-",
 	qa: "qa-state-",
@@ -258,7 +259,7 @@ function toLivenessShape(parsed: Record<string, unknown>): {
 
 /** Returns the purpose string for a candidate, per type. */
 function purposeFor(type: StateType, parsed: Record<string, unknown>): string {
-	if (type === "goal") {
+	if (type === "goal" || type === "ultragoal") {
 		return String(parsed["outcome"] ?? "");
 	}
 	if (type === "prometheus") {
@@ -313,7 +314,7 @@ export function writeFileNoCreate(path: string, content: string): void {
  *
  * Pristine definitions per type:
  *   prometheus:     phase=="S0" && plan_path==""
- *   goal:           phase=="planning" && iteration==0 && outcome==""
+ *   goal/ultragoal: phase=="planning" && iteration==0 && outcome==""
  *   deep-interview: seeded file lacking the rich `state` object
  *   qa:             phase=="PRE-FLIGHT" && cycle==0 && target==""
  */
@@ -325,7 +326,7 @@ export function isPristine(type: StateType, parsed: Record<string, unknown>): bo
 			(parsed["resume_summary"] === "" || parsed["resume_summary"] === undefined)
 		);
 	}
-	if (type === "goal") {
+	if (type === "goal" || type === "ultragoal") {
 		return (
 			parsed["phase"] === "planning" &&
 			(parsed["iteration"] === 0 || parsed["iteration"] === undefined) &&
@@ -572,7 +573,7 @@ function seedSkeleton(type: StateType, ts: string): Record<string, unknown> {
 			last_touched_at: ts,
 		};
 	}
-	if (type === "goal") {
+	if (type === "goal" || type === "ultragoal") {
 		return {
 			active: true,
 			phase: "planning",
