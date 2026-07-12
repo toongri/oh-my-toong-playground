@@ -552,6 +552,78 @@ EOF
     return $result
 }
 
+# Positive: a RESIDUE-NAMED dir (would normally be deleted by name match) that also
+# holds a LIVE ultragoal-state file IS preserved via liveness (P4-P7 preserve check
+# runs before the residue-name check) — this is the real bug consequence: without
+# ultragoal-state-*.json in list_state_files, has_live_state never sees it, so a
+# residue-named directory holding only an active ultragoal pursuit falls through to
+# is_residue() and gets deleted. "capricious-watcher" is already created (empty,
+# evidence/ subdir only) by setup_fixture as one of the 14 residue entries; this test
+# adds a live ultragoal-state file into it.
+test_liveness_ultragoal_only_live_dir_preserved() {
+    local fresh_ts
+    fresh_ts=$(date -j -v-5M "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "5 minutes ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S")
+
+    local live_dir="$FIXTURE_HOME/.omt/capricious-watcher"
+    cat > "$live_dir/ultragoal-state-live-ug-sess.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${fresh_ts}",
+  "outcome": "live ultragoal",
+  "iteration": 1
+}
+EOF
+
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
+    if ! echo "$out" | grep "PRESERVED" | grep -q "capricious-watcher"; then
+        echo "ASSERTION FAILED: residue-named dir with a live ultragoal-state must be PRESERVED, not residue-deleted"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    if echo "$out" | grep "DELETE" | grep -q "capricious-watcher"; then
+        echo "ASSERTION FAILED: residue-named dir with a live ultragoal-state must NOT appear in the DELETE section"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    return 0
+}
+
+# AC 6.execute — the same residue-named dir with ONLY a live ultragoal-state
+# is not deleted under --execute (the actual bug consequence described in the
+# task: omt-cleanup.sh --execute deleting a residue directory that holds only
+# an active ultragoal pursuit → state loss). Uses "dented-gold" (a distinct
+# residue entry from setup_fixture) so this test does not collide with the
+# dry-run test above.
+test_liveness_ultragoal_only_live_dir_survives_execute() {
+    local fresh_ts
+    fresh_ts=$(date -j -v-5M "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "5 minutes ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date "+%Y-%m-%dT%H:%M:%S")
+
+    local live_dir="$FIXTURE_HOME/.omt/dented-gold"
+    cat > "$live_dir/ultragoal-state-live-ug-exec-sess.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${fresh_ts}",
+  "outcome": "live ultragoal",
+  "iteration": 1
+}
+EOF
+
+    bash "$CLEANUP_SCRIPT" --execute > /dev/null
+
+    if [[ ! -d "$live_dir" ]]; then
+        echo "ASSERTION FAILED: residue-named directory holding only a live ultragoal-state must survive --execute"
+        return 1
+    fi
+    if [[ ! -f "$live_dir/ultragoal-state-live-ug-exec-sess.json" ]]; then
+        echo "ASSERTION FAILED: live ultragoal-state file itself must survive --execute"
+        return 1
+    fi
+    return 0
+}
+
 # Positive: a dir with a LIVE active goal-state (fresh heartbeat) IS preserved via liveness
 test_liveness_fresh_active_dir_preserved() {
     local fresh_ts
@@ -637,6 +709,8 @@ main() {
     run_test test_liveness_active_7h_idle_execute_keeps_plan
     run_test test_dead_state_dryrun_shows_state_file_path
     run_test test_liveness_fresh_active_dir_preserved
+    run_test test_liveness_ultragoal_only_live_dir_preserved
+    run_test test_liveness_ultragoal_only_live_dir_survives_execute
 
     # (A) word-split regression — HOME path with spaces
     run_test test_dead_state_space_in_home_dryrun_shows_full_path
