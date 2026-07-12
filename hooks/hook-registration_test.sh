@@ -17,10 +17,11 @@
 #   - No claude.yaml/codex.yaml/gemini.yaml/opencode.yaml anywhere in the
 #     repo registers a PreCompact hook (TODO 1 removed the LLM summarizer's
 #     sole registration site; nothing should re-register it).
-#   - codex.yaml has no PreToolUse hooks at all -- codex has no PreToolUse
-#     event (plan Scope OUT); the ledger write-guard is unenforceable there
-#     by design, and the recording instruction still reaches it via
-#     SessionStart (rules-injector).
+#   - codex.yaml registers a PreToolUse guard (codex-write-guard.sh) -- Codex
+#     >= 0.144.1 enforces a pre-execution PreToolUse permissionDecision:"deny",
+#     falsifying the earlier assumption that Codex lacked this event; the
+#     ledger write-guard is wired there just like Claude's, alongside the
+#     SessionStart recording instruction (rules-injector).
 # =============================================================================
 set -euo pipefail
 
@@ -142,13 +143,17 @@ test_precompact_removed_from_all_targets() {
 }
 
 # =============================================================================
-# codex.yaml has no PreToolUse hooks -- codex has no PreToolUse event; the
-# ledger write-guard is unenforceable there by design (plan Scope OUT).
+# codex.yaml registers a PreToolUse guard -- Codex >= 0.144.1 enforces a
+# pre-execution PreToolUse permissionDecision:"deny", so the ledger
+# write-guard (codex-write-guard.sh) belongs there.
 # =============================================================================
-test_codex_yaml_has_no_pretooluse() {
-    if grep -q '^  PreToolUse:' "$REPO_DIR/codex.yaml"; then
-        echo "ASSERTION FAILED: codex.yaml must NOT register a PreToolUse hook (codex has no PreToolUse event)"
-        grep -n 'PreToolUse' "$REPO_DIR/codex.yaml"
+test_codex_yaml_has_pretooluse_guard() {
+    if [ "$(grep -c '^  PreToolUse:' "$REPO_DIR/codex.yaml")" = "0" ]; then
+        echo "ASSERTION FAILED: codex.yaml must register a PreToolUse hook (codex-write-guard.sh)"
+        return 1
+    fi
+    if [ "$(grep -c 'component: codex-write-guard.sh' "$REPO_DIR/codex.yaml")" = "0" ]; then
+        echo "ASSERTION FAILED: codex.yaml PreToolUse must register codex-write-guard.sh"
         return 1
     fi
     return 0
@@ -162,7 +167,7 @@ main() {
     run_test test_session_start_and_write_guard_paired_across_targets
     run_test test_session_start_and_write_guard_pair_witnessed_at_least_once
     run_test test_precompact_removed_from_all_targets
-    run_test test_codex_yaml_has_no_pretooluse
+    run_test test_codex_yaml_has_pretooluse_guard
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
