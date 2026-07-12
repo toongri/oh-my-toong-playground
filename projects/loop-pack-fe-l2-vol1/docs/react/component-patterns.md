@@ -142,7 +142,7 @@ Dialog처럼 Compound와 상태 소유권을 함께 여는 컴포넌트는 `open
 
 ## Provider vs Singleton — 전역 컴포넌트의 상태 위치
 
-트리 어디서든 `toast('담았어요')` 한 줄로 부르는 전역 컴포넌트. 핵심 질문은 **이 상태를 어디에 두나** — React 트리 안(**Provider**)이냐, 밖(**Singleton**)이냐. 화면 구석에 띄우는 건 **Portal**이 맡는다.
+트리 어디서든 `toast('담았어요')` 한 줄로 부르는 전역 컴포넌트. 핵심 질문은 **이 상태를 어디에 두나** — React 트리 안(**Provider**)이냐, 밖(**Singleton**)이냐. 화면 구석에 고정하는 건 **Portal**이나 인라인 `position: fixed`가 맡는다.
 
 ```tsx
 // A · Context + Provider + Portal — 직접 만들 때
@@ -152,6 +152,8 @@ export const useToast = () => useContext(ToastContext)!;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []); // 서버엔 document가 없다 → portal은 mount 후에만
   const toast = useCallback((message: string) => {
     const id = crypto.randomUUID();
     setToasts((prev) => [...prev, { id, message }]);
@@ -160,10 +162,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      {createPortal(
-        <div className="toast-viewport">{toasts.map((t) => <div key={t.id}>{t.message}</div>)}</div>,
-        document.body,
-      )}
+      {mounted &&
+        createPortal(
+          <div className="toast-viewport">{toasts.map((t) => <div key={t.id}>{t.message}</div>)}</div>,
+          document.body,
+        )}
     </ToastContext.Provider>
   );
 }
@@ -173,7 +176,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 A방식은 `toast`가 훅이라 **컴포넌트 렌더링 중에만** 부를 수 있다. API 인터셉터 같은 비-React 코드에서도 부르려면 상태를 React 밖(모듈 싱글톤)에 둬야 한다. react-hot-toast가 `<Provider>` 없이 도는 비결이다.
 
 ```tsx
-// B · 외부 store 싱글톤 + useSyncExternalStore — 라이브러리(react-hot-toast·sonner)가 고르는 방식
+// B · 외부 store 싱글톤 — react-hot-toast·sonner가 고르는 상태 위치. store→React 연결은 useSyncExternalStore(React 18 정공법)로
 let toasts: Toast[] = []; // store: React '밖' 모듈 싱글톤
 const listeners = new Set<() => void>();
 
@@ -196,12 +199,14 @@ export function Toaster() {
       return () => listeners.delete(cb);
     },
     () => toasts,
+    () => [], // server snapshot: 서버엔 토스트가 없다. 빠뜨리면 SSR에서 "Missing getServerSnapshot" 크래시
   );
-  return createPortal(<div>{snapshot.map((t) => <div key={t.id}>{t.message}</div>)}</div>, document.body);
+  // 라이브러리처럼 portal 대신 인라인 position:fixed(.toast-viewport) — 서버에 document 접근이 없어 SSR-safe
+  return <div className="toast-viewport">{snapshot.map((t) => <div key={t.id}>{t.message}</div>)}</div>;
 }
 ```
 
-> 🪟 **Portal이 왜 필요한가** — 토스트를 그 자리에 렌더하면 부모의 `overflow: hidden`·`z-index`에 갇힌다. `createPortal(node, document.body)`은 DOM 트리에서 부모 제약을 벗어나 `body` 바로 아래에 렌더한다. Dialog·Dropdown·Tooltip도 같은 이유로 Portal을 쓴다.
+> 🪟 **Portal과 SSR** — 그 자리에 렌더하면 부모의 `overflow: hidden`·`z-index`에 갇히니 `createPortal(node, document.body)`으로 `body` 아래로 빼낸다(Sample A). 단 App Router의 `"use client"` 컴포넌트도 서버에서 먼저 렌더되고 서버엔 `document`가 없어, portal은 mount 이후로 미뤄야 한다(위 `mounted` 가드). react-hot-toast·sonner는 이 복잡도를 **portal 없이 인라인 `position: fixed`**로 통째로 피한다(Sample B). 진짜 부모 밖으로 나가야 하는 Dialog·Dropdown·Tooltip에서만 그 mount 가드(또는 Radix 등 라이브러리)가 필요하다.
 
 |             | A · Context + Provider   | B · 외부 store 싱글톤       |
 | ----------- | ------------------------ | --------------------------- |
@@ -210,7 +215,7 @@ export function Toaster() {
 | SSR         | 요청별 격리 안전         | 모듈 공유 (주의)            |
 | 대표        | 직접 만들 때             | react-hot-toast · sonner    |
 
-`Singleton`은 "상태를 어디 두나"라는 아키텍처, `useSyncExternalStore`는 그 외부 store를 React에 다시 붙이는 도구다.
+`Singleton`은 "상태를 어디 두나"라는 아키텍처, `useSyncExternalStore`는 그 외부 store를 React에 다시 붙이는 도구다. 두 라이브러리는 실제론 아직 `useState`+`useEffect`로 구독하지만, react-hot-toast 소스엔 `useSyncExternalStore`로 이전하겠다는 TODO가 있다 — 이 API가 그 자리를 채우는 정공법이다.
 
 ## 패턴 선택 가이드
 
