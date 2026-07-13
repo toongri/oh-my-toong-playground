@@ -133,6 +133,35 @@ afterEach(async () => {
 	}
 });
 
+// ---------------------------------------------------------------------------
+// File-level OMT_DIR isolation
+//
+// `createContext()` resolves the OMT backup base via `resolveOmtDir()`,
+// which falls back to the developer's real `~/.omt/<project>` whenever
+// `OMT_DIR` is unset. Every `createContext()` call in this file must resolve
+// to a per-test tmp dir instead of the real base. The "createContext exposes
+// the OMT backup base" and "resolveBackupBase throws on a degenerate base"
+// tests below set `process.env.OMT_DIR` themselves and save/restore around
+// whatever value is already there — so they save/restore around this
+// file-level value, and this hook still restores the pre-suite value once
+// those tests are done.
+// ---------------------------------------------------------------------------
+
+let savedOmtDir: string | undefined;
+let omtDirTmp: string;
+
+beforeEach(() => {
+	savedOmtDir = process.env.OMT_DIR;
+	omtDirTmp = fs2.mkdtempSync(path.join(os.tmpdir(), "sync-test-omtdir-"));
+	process.env.OMT_DIR = omtDirTmp;
+});
+
+afterEach(() => {
+	if (savedOmtDir === undefined) delete process.env.OMT_DIR;
+	else process.env.OMT_DIR = savedOmtDir;
+	fs2.rmSync(omtDirTmp, { recursive: true, force: true });
+});
+
 function makeContext(overrides?: Partial<SyncContext>): SyncContext {
 	let backupBase = overrides?.backupBase;
 	if (backupBase === undefined) {
