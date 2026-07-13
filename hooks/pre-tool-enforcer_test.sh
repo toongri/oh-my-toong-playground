@@ -1068,6 +1068,64 @@ test_wg_k_pipe_and_gt_inside_quotes_passes() {
 }
 
 # =============================================================================
+# (l) regression (defect A) -- an unexpanded env-var-literal ledger path
+# bypasses the EXACT match: _wg_absolutize used to recognize ONLY a leading
+# '/' as an absolute path, so a literal "$OMT_DIR/session-ledger-$OMT_
+# SESSION_ID.md" token (never itself expanded, since the guard inspects
+# tool_input.command text, not what the real shell would later expand it
+# to) was treated as RELATIVE and got $PWD prefixed instead -- silently
+# ALLOWING the exact form that hooks/omt-ledger.sh's SessionStart recovery
+# pointer (`cat "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"`) itself teaches
+# agents to reproduce. Each form below must DENY.
+# =============================================================================
+test_wg_l1_env_var_dquoted_denied() {
+    wg_assert_deny 'echo x > "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"' "WG-L1(dquoted env-var)"
+}
+
+test_wg_l2_env_var_unquoted_denied() {
+    wg_assert_deny 'echo x > $OMT_DIR/session-ledger-$OMT_SESSION_ID.md' "WG-L2(unquoted env-var)"
+}
+
+test_wg_l3_env_var_braced_denied() {
+    wg_assert_deny 'echo x > "${OMT_DIR}/session-ledger-${OMT_SESSION_ID}.md"' "WG-L3(braced env-var)"
+}
+
+# =============================================================================
+# (m) regression (defect B) -- tee/rm/truncate only inspected the LAST
+# operand (awk '{print $NF}'), so `rm <ledger> <other>` extracted only
+# "<other>" and the real ledger operand went unchecked. Mirrors the
+# already-correct Codex extractor (_cwg_extract_shell_targets, hooks/codex-
+# write-guard.sh:167-169), which emits every non-option operand. Each DENY
+# case below places the ledger as a NON-final operand; the control proves a
+# genuinely non-ledger multi-target command still passes.
+# =============================================================================
+test_wg_m1_rm_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "rm \"$ledger\" /tmp/other" "WG-M1(rm multi-target)"
+}
+
+test_wg_m2_rm_flag_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "rm -f \"$ledger\" /tmp/other" "WG-M2(rm -f multi-target)"
+}
+
+test_wg_m3_truncate_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "truncate -s0 \"$ledger\" /tmp/other" "WG-M3(truncate multi-target)"
+}
+
+test_wg_m4_tee_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "tee \"$ledger\" /tmp/other" "WG-M4(tee multi-target)"
+}
+
+test_wg_m5_rm_multitarget_nonledger_control_allows() {
+    local out
+    out=$(printf '%s' "$(hg_bash_json 'rm /tmp/a /tmp/b')" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-M5: non-ledger multi-target rm should pass. Got: $out"; return 1; }
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1140,6 +1198,14 @@ main() {
     run_test test_wg_j8_truncate_cmd_singlequoted_denied
     run_test test_wg_j9_sed_i_singlequoted_denied
     run_test test_wg_k_pipe_and_gt_inside_quotes_passes
+    run_test test_wg_l1_env_var_dquoted_denied
+    run_test test_wg_l2_env_var_unquoted_denied
+    run_test test_wg_l3_env_var_braced_denied
+    run_test test_wg_m1_rm_multitarget_denied
+    run_test test_wg_m2_rm_flag_multitarget_denied
+    run_test test_wg_m3_truncate_multitarget_denied
+    run_test test_wg_m4_tee_multitarget_denied
+    run_test test_wg_m5_rm_multitarget_nonledger_control_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
