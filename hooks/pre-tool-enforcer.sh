@@ -44,15 +44,22 @@ _wg_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hooks/write-guard-core.sh
 source "$_wg_script_dir/write-guard-core.sh"
 
-# _wg_strip_dquotes <token> -- removes one leading and one trailing double
-# quote if present. Double-quoted write targets (`> "$f"`) pass through the
-# quote-aware normalizer below unchanged (only single quotes are unwrapped
-# there), so an extracted token like `"/tmp/x.md"` still carries its quote
-# characters and must be unwrapped before an EXACT path comparison.
+# _wg_strip_dquotes <token> -- removes EVERY double-quote character in the
+# token, not just an outermost pair. Double-quoted write targets (`> "$f"`)
+# pass through the quote-aware normalizer below unchanged (only single quotes
+# are unwrapped there), so an extracted token still carries its quote
+# characters and must be unwrapped before an EXACT path comparison. A target
+# can also be assembled from multiple double-quoted SPANS glued together with
+# no separating whitespace (e.g. `"$OMT_DIR"/"session-ledger-$OMT_SESSION_ID
+# .md"`) -- the real shell concatenates adjacent quoted spans into one word
+# and drops every quote character, so stripping only the outer pair would
+# leave embedded quotes that break the byte-EXACT compare downstream.
+# Stripping all quote characters mirrors that real-shell behavior; a harmless
+# non-ledger candidate that happens to carry embedded quotes simply still
+# fails the EXACT match, so over-stripping here is not a bypass.
 _wg_strip_dquotes() {
     local s="$1"
-    s="${s#\"}"
-    s="${s%\"}"
+    s="${s//\"/}"
     printf '%s\n' "$s"
 }
 
@@ -141,6 +148,27 @@ _wg_extract_bash_targets() {
 
 _wg_sid="${OMT_SESSION_ID:-}"
 _wg_omt_dir="${OMT_DIR:-}"
+
+# Fallback to the stdin payload when env is absent -- mirrors the Skill-seed
+# block's resolution precedence below (env first, then stdin session_id/cwd).
+# Without this, the guard went dark (silent no-op) during the session
+# bootstrap window, before CLAUDE_ENV_FILE exports are sourced into the
+# environment, even though the stdin payload still carries session_id + cwd.
+# Same safety charset validation as the seed block: an unsafe stdin
+# session_id must not arm the guard.
+if [[ -z "$_wg_sid" ]]; then
+    _wg_stdin_sid=$(extract_json_field "session_id" "")
+    if [[ -n "$_wg_stdin_sid" ]] && echo "$_wg_stdin_sid" | grep -qE '^[A-Za-z0-9_-]{1,200}$'; then
+        _wg_sid="$_wg_stdin_sid"
+    fi
+fi
+
+if [[ -z "$_wg_omt_dir" ]]; then
+    _wg_stdin_cwd=$(extract_json_field "cwd" "")
+    if [[ -n "$_wg_stdin_cwd" ]]; then
+        _wg_omt_dir=$(source "$_wg_script_dir/lib/omt-dir.sh" && unset OMT_DIR && resolve_omt_dir "$_wg_stdin_cwd")
+    fi
+fi
 
 if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
     _wg_candidates=""
