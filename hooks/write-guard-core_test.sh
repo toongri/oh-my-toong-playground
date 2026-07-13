@@ -120,6 +120,60 @@ test_qa_exact_current_ledger_denies() {
 }
 
 # =============================================================================
+# Regression (claim N) -- non-canonical path spellings must not bypass the
+# pure-string EXACT match. write_guard_core_run compared candidate paths to
+# the ledger path with a pure string `==`, so a candidate with a
+# non-canonical segment ('./', '//', 'a/../') preserved still lexically
+# resolves to the real ledger path but does NOT string-match it, and was
+# silently ALLOWED. Each DENY case below targets the resolved current-session
+# ledger via a non-canonical spelling; the final case is a non-ledger control
+# proving the fix does not over-block.
+# =============================================================================
+test_regression_dot_segment_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/./session-ledger-$SID.md" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED regression-dot-segment: expected deny for '$OD/./session-ledger-$SID.md', got '$out'"
+        return 1
+    fi
+}
+
+test_regression_double_slash_denies() {
+    local out
+    out=$(printf '%s\n' "$OD//session-ledger-$SID.md" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED regression-double-slash: expected deny for '$OD//session-ledger-$SID.md', got '$out'"
+        return 1
+    fi
+}
+
+test_regression_dotdot_segment_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/sub/../session-ledger-$SID.md" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED regression-dotdot-segment: expected deny for '$OD/sub/../session-ledger-$SID.md', got '$out'"
+        return 1
+    fi
+}
+
+test_regression_dot_segment_non_ledger_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/./other-notes.md" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED regression-dot-segment-allow: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -132,6 +186,10 @@ main() {
     run_test test_ac2_different_dir_session_ledger_allows
     run_test test_qa_substring_but_not_anchor_allows
     run_test test_qa_exact_current_ledger_denies
+    run_test test_regression_dot_segment_denies
+    run_test test_regression_double_slash_denies
+    run_test test_regression_dotdot_segment_denies
+    run_test test_regression_dot_segment_non_ledger_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
