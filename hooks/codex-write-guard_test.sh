@@ -717,6 +717,53 @@ test_own_lowercase_write_path_key_ledger_denies() {
 }
 
 # =============================================================================
+# Regression (defect A, ported from the Claude twin _wg_absolutize fix) --
+# an unexpanded env-var-literal ledger path bypasses the EXACT match:
+# _cwg_absolutize used to recognize only a leading '/' as absolute, so a
+# literal "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md" (or, since Codex's
+# resolved session id is OMT_SESSION_ID ?? CODEX_THREAD_ID, the
+# $CODEX_THREAD_ID spelling) token was treated as RELATIVE and got cwd
+# prefixed instead -- silently ALLOWING the exact form that hooks/omt-
+# ledger.sh's SessionStart recovery pointer itself teaches agents to
+# reproduce. Both env-var spellings must DENY.
+# =============================================================================
+test_own_env_var_omt_session_id_form_denies() {
+    local sbx od out result=0
+    sbx=$(mktemp -d)
+    od="$sbx/omt-dir"
+    mkdir -p "$od"
+
+    out=$(jq -n --arg cmd 'echo x > "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"' --arg cwd "$od" \
+        '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
+        | env -u CODEX_THREAD_ID OMT_DIR="$od" OMT_SESSION_ID=cx HOME="$sbx" bash "$HOOK")
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-env-var-omt-session-id-form: expected deny for literal \$OMT_DIR/\$OMT_SESSION_ID target, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$sbx"
+    return "$result"
+}
+
+test_own_env_var_codex_thread_id_form_denies() {
+    local sbx od out result=0
+    sbx=$(mktemp -d)
+    od="$sbx/omt-dir"
+    mkdir -p "$od"
+
+    out=$(jq -n --arg cmd 'echo x > "$OMT_DIR/session-ledger-$CODEX_THREAD_ID.md"' --arg cwd "$od" \
+        '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-env-var-codex-thread-id-form: expected deny for literal \$OMT_DIR/\$CODEX_THREAD_ID target, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$sbx"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -761,6 +808,8 @@ main() {
     run_test test_own_lowercase_write_file_path_non_ledger_allows
     run_test test_own_write_path_key_ledger_denies
     run_test test_own_lowercase_write_path_key_ledger_denies
+    run_test test_own_env_var_omt_session_id_form_denies
+    run_test test_own_env_var_codex_thread_id_form_denies
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

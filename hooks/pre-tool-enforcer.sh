@@ -56,11 +56,44 @@ _wg_strip_dquotes() {
     printf '%s\n' "$s"
 }
 
-# _wg_absolutize <path> -- strip surrounding double quotes, then prefix a
-# relative path with the hook's cwd; an already-absolute path passes through.
+# _wg_absolutize <path> -- strip surrounding double quotes, expand the two
+# known ledger-path env-vars via pure bash literal substitution, then prefix
+# a relative path with the hook's cwd; an already-absolute path passes
+# through.
+#
+# Why: a candidate arrives as the LITERAL command text (e.g. "$OMT_DIR/
+# session-ledger-$OMT_SESSION_ID.md"), not what the real shell would expand
+# it to at execution time -- the old code recognized only a leading '/' as
+# absolute, so this literal was treated as RELATIVE and got $PWD prefixed
+# instead, never matching the resolved ledger path. hooks/omt-ledger.sh's
+# SessionStart recovery pointer teaches exactly this literal-env-var form,
+# so it is the PRIMARY reproduction shape, not an edge case.
+#
+# ${p//find/replace} is a pure bash string substitution -- never eval/
+# envsubst, which would let an arbitrary $(...) or other variable reference
+# inside an untrusted Bash tool_input.command execute. Only OMT_DIR and
+# OMT_SESSION_ID are expanded: they are the only two variables that compose
+# the ledger path (write-guard-core.sh:29); $_wg_omt_dir is already the
+# fully-resolved OMT_DIR value, so expanding HOME/PWD/CLAUDE_PROJECT_DIR/etc
+# would be pure surface with no guard benefit. The braced form (${VAR}) is
+# substituted before the bare $VAR form so substituting "$OMT_DIR" first
+# would not leave a stray "{}" around the resolved value inside "${OMT_DIR}".
+#
+# KNOWN LIMITATION: a single-quoted reference (`rm '$OMT_DIR/...'`) is an
+# inert shell literal that never actually expands at real execution time
+# either -- but the quote-aware normalizer upstream (_wg_scan) has already
+# stripped the quote characters by the time this function runs, so it is
+# indistinguishable here from a double-quoted reference and gets
+# substituted (and matched) the same way. That command is inert and
+# harmless to begin with, so denying it is a safe false-positive, not a
+# bypass.
 _wg_absolutize() {
     local p
     p="$(_wg_strip_dquotes "$1")"
+    p="${p//\$\{OMT_DIR\}/$_wg_omt_dir}"
+    p="${p//\$\{OMT_SESSION_ID\}/$_wg_sid}"
+    p="${p//\$OMT_DIR/$_wg_omt_dir}"
+    p="${p//\$OMT_SESSION_ID/$_wg_sid}"
     case "$p" in
         /*) printf '%s\n' "$p" ;;
         *) printf '%s\n' "$PWD/$p" ;;
@@ -85,7 +118,12 @@ _wg_extract_bash_targets() {
     first_word=$(echo "$seg" | awk '{print $1}')
     case "$first_word" in
         tee|rm|truncate)
-            echo "$seg" | awk '{print $NF}'
+            # Every non-option operand, not just the last -- `rm <ledger>
+            # <other>` used to extract only "<other>" ($NF), leaving the
+            # ledger operand unchecked whenever it wasn't the final argument.
+            # Mirrors the already-correct Codex extractor
+            # (_cwg_extract_shell_targets, hooks/codex-write-guard.sh:167-169).
+            echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             ;;
         dd)
             echo "$seg" | grep -oE 'of=[^[:space:]]+' | sed -E 's/^of=//' || true

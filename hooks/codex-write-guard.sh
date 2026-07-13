@@ -200,12 +200,40 @@ _cwg_strip_quotes() {
 }
 
 # _cwg_absolutize <path>
-# Strips surrounding quotes, then joins a relative path against the resolved
-# cwd; leaves an absolute path unchanged. write_guard_core_run requires
-# already-absolutized candidates (full-path EXACT match).
+# Strips surrounding quotes, expands the three known ledger-path env-vars
+# via pure bash literal substitution, then joins a relative path against the
+# resolved cwd; leaves an absolute path unchanged. write_guard_core_run
+# requires already-absolutized candidates (full-path EXACT match).
+#
+# Same rationale as the Claude twin _wg_absolutize (hooks/pre-tool-
+# enforcer.sh): a candidate arrives as LITERAL command text, and the old
+# code treated a "$OMT_DIR/..." token as relative (cwd-prefixed) instead of
+# resolving the env-var reference, silently allowing the exact form Codex's
+# SessionStart recovery pointer teaches agents to reproduce.
+#
+# ${p//find/replace} is a pure bash string substitution -- never eval/
+# envsubst. THREE variables are expanded (one more than the Claude twin):
+# $OMT_DIR -> $omt_dir, and BOTH $OMT_SESSION_ID and $CODEX_THREAD_ID ->
+# $sid, because Codex's resolved session id is OMT_SESSION_ID ?? CODEX_
+# THREAD_ID (resolved above at :74-89) -- either env-var spelling composes
+# the same real ledger path. The braced form (${VAR}) is substituted before
+# the bare $VAR form to avoid a partial-match artifact.
+#
+# KNOWN LIMITATION: a single-quoted env-var reference (`rm '$OMT_DIR/...'`)
+# is an inert shell literal that never expands at real execution time
+# either, but _cwg_strip_quotes has already removed the quote characters by
+# the time this function runs, so it is indistinguishable here from a
+# double-quoted reference and gets substituted (and matched) the same way --
+# a safe false-positive on an already-inert command, not a bypass.
 _cwg_absolutize() {
     local p
     p="$(_cwg_strip_quotes "$1")"
+    p="${p//\$\{OMT_DIR\}/$omt_dir}"
+    p="${p//\$\{OMT_SESSION_ID\}/$sid}"
+    p="${p//\$\{CODEX_THREAD_ID\}/$sid}"
+    p="${p//\$OMT_DIR/$omt_dir}"
+    p="${p//\$OMT_SESSION_ID/$sid}"
+    p="${p//\$CODEX_THREAD_ID/$sid}"
     case "$p" in
         /*) printf '%s\n' "$p" ;;
         *) printf '%s\n' "$cwd/$p" ;;
