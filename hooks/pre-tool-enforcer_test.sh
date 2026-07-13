@@ -1243,6 +1243,94 @@ test_wg_p3_sed_i_singletarget_denied() {
 }
 
 # =============================================================================
+# (q) regression (defect: $HOME/~ ledger-path bypass) -- _wg_absolutize
+# substituted only $OMT_DIR/$OMT_SESSION_ID, never $HOME or a leading '~',
+# even though the resolved OMT_DIR is ALWAYS $HOME/.omt/<proj> -- so a
+# home-relative spelling of the ledger composes the SAME file but never
+# EXACT-matched, silently ALLOWING it (bypass). wg_home_ledger_invoke
+# sandboxes HOME under a fresh mktemp -d and places OMT_DIR at
+# $HOME/.omt/proj so the $HOME-spelled and $OMT_DIR-spelled paths resolve to
+# one identical file; cleans up its own tmphome after each invocation.
+# =============================================================================
+
+wg_home_ledger_invoke() {
+    # $1 = raw Bash command string (containing literal $HOME / ~ tokens,
+    # single-quoted at the call site so this function receives them
+    # unexpanded, matching the literal-command-text shape the guard inspects)
+    local cmd="$1"
+    local tmphome od out
+    tmphome=$(mktemp -d)
+    od="$tmphome/.omt/proj"
+    mkdir -p "$od"
+
+    out=$(
+        export HOME="$tmphome"
+        export OMT_SESSION_ID="cx"
+        export OMT_DIR="$od"
+        jq -n --arg cmd "$cmd" --arg cwd "$od" \
+            '{tool_name: "Bash", tool_input: {command: $cmd}, session_id: "cx", cwd: $cwd}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    )
+    rm -rf "$tmphome"
+    printf '%s' "$out"
+}
+
+test_wg_q1_home_dquoted_var_ledger_denied() {
+    local out
+    out=$(wg_home_ledger_invoke 'rm "$HOME/.omt/proj/session-ledger-cx.md"')
+    hg_is_deny "$out" || { echo "ASSERTION FAILED WG-Q1(\$HOME dquoted ledger): expected deny. Got: $out"; return 1; }
+}
+
+test_wg_q2_home_tilde_ledger_denied() {
+    local out
+    out=$(wg_home_ledger_invoke 'rm ~/.omt/proj/session-ledger-cx.md')
+    hg_is_deny "$out" || { echo "ASSERTION FAILED WG-Q2(~ ledger): expected deny. Got: $out"; return 1; }
+}
+
+test_wg_q3_home_dquoted_var_nonledger_allows() {
+    local out
+    out=$(wg_home_ledger_invoke 'rm "$HOME/.omt/proj/other-file.md"')
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-Q3(\$HOME dquoted non-ledger): expected allow. Got: $out"; return 1; }
+}
+
+test_wg_q4_home_toplevel_nonledger_allows() {
+    local out
+    out=$(wg_home_ledger_invoke 'rm "$HOME/notes.md"')
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-Q4(\$HOME top-level non-ledger): expected allow. Got: $out"; return 1; }
+}
+
+# =============================================================================
+# (r) regression (fail-open under set -u when HOME is unset) -- _wg_absolutize
+# used BARE $HOME (four occurrences) to expand the $HOME/~ forms added in
+# section (q) above. Under this script's `set -euo pipefail` (nounset), a
+# bare reference to an unset HOME aborts the whole hook with "unbound
+# variable" BEFORE any deny JSON is emitted -- fail-OPEN, worse than a
+# silent allow. Must use ${HOME:-} (matching the Codex twin's
+# _cwg_absolutize) so an unset HOME degrades to empty: the $HOME token drops
+# out of that substitution, but the ORIGINAL $OMT_DIR-spelled candidate
+# (untouched by the HOME substitution) still EXACT-matches the ledger and
+# denies normally -- no abort, no fail-open.
+# =============================================================================
+
+test_wg_r1_unset_home_no_fail_open_denied() {
+    local exit_code=0
+    local out
+    local ledger; ledger=$(wg_ledger_path)
+
+    out=$(
+        unset HOME
+        jq -n --arg cmd "rm \"$ledger\"" '{tool_name: "Bash", tool_input: {command: $cmd}}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED WG-R1: hook must exit 0 even when HOME is unset (no fail-open abort). exit=$exit_code output=$out"; return 1; }
+
+    hg_is_deny "$out" \
+        || { echo "ASSERTION FAILED WG-R1: \$OMT_DIR-spelled ledger delete must still DENY when HOME is unset. Got: $out"; return 1; }
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1330,6 +1418,11 @@ main() {
     run_test test_wg_p1_sed_i_multitarget_denied
     run_test test_wg_p2_sed_i_multitarget_nonledger_control_allows
     run_test test_wg_p3_sed_i_singletarget_denied
+    run_test test_wg_q1_home_dquoted_var_ledger_denied
+    run_test test_wg_q2_home_tilde_ledger_denied
+    run_test test_wg_q3_home_dquoted_var_nonledger_allows
+    run_test test_wg_q4_home_toplevel_nonledger_allows
+    run_test test_wg_r1_unset_home_no_fail_open_denied
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
