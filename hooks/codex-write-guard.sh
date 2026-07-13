@@ -380,10 +380,31 @@ case "$tool_name" in
         shell_cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || shell_cmd=""
         shell_cmd_alt=$(printf '%s' "$input" | jq -r '.tool_input.cmd // empty' 2>/dev/null) || shell_cmd_alt=""
 
+        # Resolve relative write targets against the command's OWN working
+        # directory -- tool_input.workdir ?? tool_input.cwd -- mirroring the
+        # sibling extractor tool-paths.ts:44-46 (workdir ?? cwd) for command
+        # tools. Without this, a payload that sets workdir=<ledger dir> plus a
+        # relative target wrote the real ledger while _cwg_absolutize resolved
+        # it against the hook-level cwd and the guard allowed it. Scope: this
+        # shell route only; edit/write/apply_patch keep plain cwd, as
+        # tool-paths.ts does. A relative workdir is itself resolved against the
+        # hook cwd. Saved/restored so the reassignment cannot leak to any
+        # later route.
+        _cwg_route_workdir=$(printf '%s' "$input" | jq -r '.tool_input.workdir // .tool_input.cwd // empty' 2>/dev/null) || _cwg_route_workdir=""
+        _cwg_saved_cwd="$cwd"
+        if [ -n "$_cwg_route_workdir" ]; then
+            case "$_cwg_route_workdir" in
+                /*) cwd="$_cwg_route_workdir" ;;
+                *) cwd="$cwd/$_cwg_route_workdir" ;;
+            esac
+        fi
+
         _cwg_process_shell_text "$shell_cmd"
         if [ "$shell_cmd_alt" != "$shell_cmd" ]; then
             _cwg_process_shell_text "$shell_cmd_alt"
         fi
+
+        cwd="$_cwg_saved_cwd"
         ;;
 esac
 

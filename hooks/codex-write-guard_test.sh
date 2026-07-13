@@ -815,6 +815,67 @@ test_own_inquote_redirect_no_pipe_allows() {
 }
 
 # =============================================================================
+# Regression (claim W) -- the bash|exec_command|shell_command route ignored
+# per-command tool_input.workdir/.cwd and always absolutized a relative write
+# target against the module-global $cwd (the hook-level top-level .cwd), not
+# the command's own working directory -- unlike the sibling extractor
+# hooks/rules-injector/tool-paths.ts:44-46 (workdir ?? cwd) for command
+# tools. A payload whose top-level .cwd is an unrelated directory but whose
+# tool_input.workdir is the resolved ledger directory, paired with a relative
+# target of just the ledger filename, wrote the real ledger while the guard
+# resolved the relative path against the wrong (top-level) cwd and silently
+# ALLOWED it. The DENY case below reproduces exactly that shape; the ALLOW
+# control keeps workdir pointed at the unrelated directory with an absolute
+# non-ledger target, proving the fix does not over-block.
+# =============================================================================
+test_regression_exec_command_workdir_relative_ledger_denies() {
+    local sbx od other out result=0
+    sbx=$(mktemp -d)
+    od="$sbx/omt-dir"
+    other="$sbx/other"
+    mkdir -p "$od" "$other"
+
+    # OMT_DIR is set explicitly (like test_own_relative_path_denies) so the
+    # ledger path is pinned to $od regardless of cwd/workdir resolution --
+    # the top-level .cwd is the UNRELATED $other directory, while
+    # tool_input.workdir is $od. Pre-fix, the relative target absolutized
+    # against the module-global cwd ($other) instead of workdir ($od),
+    # producing $other/session-ledger-cx.md != the real ledger and silently
+    # ALLOWING. Post-fix, the shell route reassigns cwd to workdir before
+    # absolutizing, so the relative target resolves to $od/session-ledger-cx.md
+    # and DENIES.
+    out=$(jq -n --arg cmd "echo x > session-ledger-cx.md" --arg workdir "$od" --arg cwd "$other" \
+        '{tool_name:"exec_command", tool_input:{cmd:$cmd, workdir:$workdir}, session_id:"cx", cwd:$cwd}' \
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-exec-command-workdir: expected deny for relative ledger target resolved against tool_input.workdir, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$sbx"
+    return "$result"
+}
+
+test_regression_exec_command_workdir_relative_non_ledger_allows() {
+    local sbx od other out result=0
+    sbx=$(mktemp -d)
+    od="$sbx/omt-dir"
+    other="$sbx/other"
+    mkdir -p "$od" "$other"
+
+    out=$(jq -n --arg cmd "echo x > $other/README.md" --arg workdir "$other" --arg cwd "$other" \
+        '{tool_name:"exec_command", tool_input:{cmd:$cmd, workdir:$workdir}, session_id:"cx", cwd:$cwd}' \
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED regression-exec-command-workdir-allow: expected allow for absolute non-ledger target, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$sbx"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -863,6 +924,8 @@ main() {
     run_test test_own_env_var_codex_thread_id_form_denies
     run_test test_qa_quoted_prose_gt_in_pipe_allows
     run_test test_own_inquote_redirect_no_pipe_allows
+    run_test test_regression_exec_command_workdir_relative_ledger_denies
+    run_test test_regression_exec_command_workdir_relative_non_ledger_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
