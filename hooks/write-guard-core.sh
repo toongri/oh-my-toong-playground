@@ -14,8 +14,10 @@
 # does the exact-path comparison and emits the deny JSON.
 # =============================================================================
 
-# Byte-identical to the Claude deny at hooks/pre-tool-enforcer.sh:79
-# (_wg_deny_json) -- keep both platforms' deny output identical (AC5).
+# Single source of truth for the deny JSON: both platform shims
+# (hooks/pre-tool-enforcer.sh for Claude, hooks/codex-write-guard.sh for
+# Codex) source this core and call write_guard_core_run rather than building
+# their own deny text -- keep both platforms' deny output identical (AC5).
 _wg_core_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the durable session ledger (session-ledger-*.md). Use hooks/omt-ledger.sh append/now instead."}}'
 
 # _wg_core_normpath <path>
