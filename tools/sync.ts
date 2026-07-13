@@ -1617,6 +1617,11 @@ export async function processYaml(
 				"sync-backup",
 				`${deriveProjectName(targetPath)}-${path.basename(deployRoot)}-${generateBackupSessionId()}`,
 			);
+			// This deploy's actual backup directory — the only breadcrumb an
+			// operator has to recover from a clobber, since this backup design
+			// has no restore path (logBackupLocation only prints the shared
+			// parent, not this per-deploy destination).
+			logInfo(`백업 대상: ${context.backupDest}`);
 
 			// Each worktree's deploy is independent — fresh source-root accumulator so
 			// syncLib targets this deployRoot's .{platform}/lib only.
@@ -1758,13 +1763,19 @@ export class UnsafeBackupRootError extends Error {}
  * unconditional mkdirSync ever runs. Calling getOmtDir() first would create
  * the degenerate directory (e.g. <cwd>/rel/ for a relative OMT_DIR) and then
  * refuse to prune it — exactly the pollution this function exists to avoid.
+ * The guard runs regardless of dryRun, so a degenerate root still throws
+ * during a dry run.
+ *
+ * @param dryRun - When true, skip getOmtDir()'s mkdirSync and return the
+ *                 already-computed path instead — a dry run must not create
+ *                 the base directory as a side effect.
  */
-export function resolveBackupBase(): string {
+export function resolveBackupBase(dryRun = false): string {
 	const base = resolveOmtDir();
 	if (!isSafeBackupRoot(base)) {
 		throw new UnsafeBackupRootError(`안전하지 않은 백업 루트: ${base}`);
 	}
-	return getOmtDir();
+	return dryRun ? base : getOmtDir();
 }
 
 // ---------------------------------------------------------------------------
@@ -1775,7 +1786,7 @@ export function resolveBackupBase(): string {
  * Create an initial SyncContext for a sync run.
  */
 export function createContext(dryRun: boolean): SyncContext {
-	const backupBase = resolveBackupBase();
+	const backupBase = resolveBackupBase(dryRun);
 	return {
 		dryRun,
 		projectName: "",

@@ -3509,6 +3509,29 @@ describe("createContext", () => {
 			fs2.rmSync(tmp, { recursive: true, force: true });
 		}
 	});
+
+	it("createContext(true) (dry-run) does not create the OMT base directory (F4)", () => {
+		const parentTmp = fs2.mkdtempSync(path.join(os.tmpdir(), "omt-dir-f4-"));
+		// A NOT-YET-EXISTING nested path — mkdir-vs-no-mkdir is only observable
+		// when the target doesn't already exist (a pre-existing tmp dir would
+		// make "not created" vacuously true).
+		const nested = path.join(parentTmp, "newly", "nested");
+		const originalOmtDir = process.env.OMT_DIR;
+		process.env.OMT_DIR = nested;
+		try {
+			createContext(true);
+			expect(fs2.existsSync(nested)).toBe(false);
+
+			// Contrast: non-dry-run DOES create it. Without this, the dry-run
+			// assertion above could pass merely because nothing ever mkdirs.
+			createContext(false);
+			expect(fs2.existsSync(nested)).toBe(true);
+		} finally {
+			if (originalOmtDir === undefined) delete process.env.OMT_DIR;
+			else process.env.OMT_DIR = originalOmtDir;
+			fs2.rmSync(parentTmp, { recursive: true, force: true });
+		}
+	});
 });
 
 describe("resolveBackupBase", () => {
@@ -5284,6 +5307,30 @@ describe("backup relocation (writer repoint + per-deploy destination)", () => {
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
 		expect(await exists(path.join(targetPath, ".sync-backup"))).toBe(false);
+	});
+
+	it("logs the per-deploy backup destination (F5)", async () => {
+		const adapters = await seedOverwriteFixture(targetPath);
+		const context = makeContext({ backupBase });
+
+		const chunks: string[] = [];
+		const origStderr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = (chunk: string | Uint8Array) => {
+			if (typeof chunk === "string") chunks.push(chunk);
+			return true;
+		};
+		try {
+			await processYaml(context, syncYamlPath, adapters, rootDir);
+		} finally {
+			process.stderr.write = origStderr;
+		}
+
+		const output = chunks.join("");
+		// The actual per-deploy backup destination must appear verbatim — this is
+		// the only breadcrumb an operator has, since this backup design has no
+		// restore path.
+		expect(output).toContain("백업 대상:");
+		expect(output).toContain(context.backupDest);
 	});
 
 	it("backupCategory lands under the OMT base", async () => {
