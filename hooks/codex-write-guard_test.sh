@@ -408,6 +408,45 @@ test_own_sed_i_ledger_denies() {
     return "$result"
 }
 
+# =============================================================================
+# Regression (confirmed bypass, code review finding) -- sed -i multi-file
+# ledger-as-non-final-operand bypass: `sed -i SCRIPT file1 file2` edits EVERY
+# file operand in place, not just the last, but the extractor used to emit
+# only $NF -- so a ledger operand that was NOT the last operand on the
+# command line was never even offered to write_guard_core_run's EXACT match,
+# silently ALLOWING the in-place edit. The DENY case below places the ledger
+# as the non-final operand; the ALLOW control has no ledger reference at all.
+# =============================================================================
+test_bypass_sed_i_non_final_operand_ledger_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="sed -i 's/a/b/' $LED $GITDIR/other.md"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED bypass-sed-i-non-final-operand: expected deny for 'sed -i ... <ledger> <other>' (ledger as non-final operand), got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_bypass_sed_i_non_ledger_allows() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="sed -i 's/a/b/' $GITDIR/other.md"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED bypass-sed-i-non-ledger-allow: expected allow for 'sed -i ... <non-ledger>' with no ledger reference, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
 # Non-ledger control -- 'rm' on a non-ledger file must ALLOW (proves the
 # set -e fix does not turn rm into an over-broad denier).
 test_own_rm_non_ledger_allows() {
@@ -1019,6 +1058,8 @@ main() {
     run_test test_own_cp_ledger_denies
     run_test test_own_truncate_ledger_denies
     run_test test_own_sed_i_ledger_denies
+    run_test test_bypass_sed_i_non_final_operand_ledger_denies
+    run_test test_bypass_sed_i_non_ledger_allows
     run_test test_own_rm_non_ledger_allows
     run_test test_own_double_quoted_redirect_ledger_denies
     run_test test_own_single_quoted_redirect_ledger_denies

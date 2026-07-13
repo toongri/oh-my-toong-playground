@@ -212,7 +212,7 @@ _cwg_extract_shell_targets() {
             ;;
         sed)
             if printf '%s\n' "$seg" | grep -q -- '-i'; then
-                printf '%s\n' "$seg" | awk '{print $NF}'
+                printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
             fi
             ;;
         dd)
