@@ -1068,6 +1068,158 @@ test_wg_k_pipe_and_gt_inside_quotes_passes() {
 }
 
 # =============================================================================
+# (l) regression (defect A) -- an unexpanded env-var-literal ledger path
+# bypasses the EXACT match: _wg_absolutize used to recognize ONLY a leading
+# '/' as an absolute path, so a literal "$OMT_DIR/session-ledger-$OMT_
+# SESSION_ID.md" token (never itself expanded, since the guard inspects
+# tool_input.command text, not what the real shell would later expand it
+# to) was treated as RELATIVE and got $PWD prefixed instead -- silently
+# ALLOWING the exact form that hooks/omt-ledger.sh's SessionStart recovery
+# pointer (`cat "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"`) itself teaches
+# agents to reproduce. Each form below must DENY.
+# =============================================================================
+test_wg_l1_env_var_dquoted_denied() {
+    wg_assert_deny 'echo x > "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"' "WG-L1(dquoted env-var)"
+}
+
+test_wg_l2_env_var_unquoted_denied() {
+    wg_assert_deny 'echo x > $OMT_DIR/session-ledger-$OMT_SESSION_ID.md' "WG-L2(unquoted env-var)"
+}
+
+test_wg_l3_env_var_braced_denied() {
+    wg_assert_deny 'echo x > "${OMT_DIR}/session-ledger-${OMT_SESSION_ID}.md"' "WG-L3(braced env-var)"
+}
+
+# =============================================================================
+# (m) regression (defect B) -- tee/rm/truncate only inspected the LAST
+# operand (awk '{print $NF}'), so `rm <ledger> <other>` extracted only
+# "<other>" and the real ledger operand went unchecked. Mirrors the
+# already-correct Codex extractor (_cwg_extract_shell_targets, hooks/codex-
+# write-guard.sh:167-169), which emits every non-option operand. Each DENY
+# case below places the ledger as a NON-final operand; the control proves a
+# genuinely non-ledger multi-target command still passes.
+# =============================================================================
+test_wg_m1_rm_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "rm \"$ledger\" /tmp/other" "WG-M1(rm multi-target)"
+}
+
+test_wg_m2_rm_flag_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "rm -f \"$ledger\" /tmp/other" "WG-M2(rm -f multi-target)"
+}
+
+test_wg_m3_truncate_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "truncate -s0 \"$ledger\" /tmp/other" "WG-M3(truncate multi-target)"
+}
+
+test_wg_m4_tee_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "tee \"$ledger\" /tmp/other" "WG-M4(tee multi-target)"
+}
+
+test_wg_m5_rm_multitarget_nonledger_control_allows() {
+    local out
+    out=$(printf '%s' "$(hg_bash_json 'rm /tmp/a /tmp/b')" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-M5: non-ledger multi-target rm should pass. Got: $out"; return 1; }
+}
+
+# =============================================================================
+# (n) regression (Claude write-guard defect #4) -- _wg_strip_dquotes stripped
+# only the OUTERMOST double-quote pair, so a redirect target assembled from
+# PER-TOKEN double-quoted spans glued together with no separating whitespace
+# (e.g. "$OMT_DIR"/"session-ledger-$OMT_SESSION_ID.md") still carried
+# embedded quote characters after the outer-pair strip, breaking the
+# byte-EXACT compare in write-guard-core.sh even though the real shell
+# concatenates adjacent quoted spans into the exact ledger path (quote
+# characters vanish entirely on word expansion). Fix: strip EVERY double
+# quote character in the token, not just the outermost pair.
+# =============================================================================
+test_wg_n1_per_segment_dquoted_ledger_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    # Target assembled from two double-quoted spans glued by an unquoted '/'
+    # -- a single shell word, no whitespace inside, so the extractor captures
+    # the whole thing as one candidate token.
+    wg_assert_deny 'echo x > "$OMT_DIR"/"session-ledger-$OMT_SESSION_ID.md"' "WG-N1(per-segment dquoted)"
+}
+
+test_wg_n2_per_segment_dquoted_nonledger_control_allows() {
+    local out
+    out=$(printf '%s' "$(hg_bash_json 'echo x > "/tmp"/"notes.md"')" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-N2: non-ledger per-segment dquoted target should pass. Got: $out"; return 1; }
+}
+
+# =============================================================================
+# (o) regression (Claude write-guard defect #2) -- the write-guard block read
+# ONLY OMT_SESSION_ID/OMT_DIR from the environment and skipped the entire
+# guard (silent no-op) when either was absent, unlike the Skill-seed block a
+# few dozen lines below it, which falls back to stdin session_id/cwd via
+# resolve_omt_dir. During the session bootstrap window (before CLAUDE_ENV_
+# FILE exports are sourced), env is absent but the stdin payload still
+# carries session_id + cwd -- the guard must not go dark in that window.
+# WG-O1 proves the DENY now fires via stdin fallback; WG-O2 proves the
+# safety-charset validation on the stdin session_id is still enforced (an
+# unsafe id must not arm the guard).
+# =============================================================================
+test_wg_o1_env_absent_stdin_fallback_rm_denied() {
+    local exit_code=0
+    local out
+
+    local project_cwd="$SCRIPT_DIR"
+    local stdin_sid="wg-env-fallback-sid"
+    local fake_home="$TEST_TMP_DIR/home_wgo1"
+    mkdir -p "$fake_home"
+
+    local derived_omt_dir
+    derived_omt_dir=$(
+        unset OMT_DIR
+        export HOME="$fake_home"
+        source "$SCRIPT_DIR/lib/omt-dir.sh" && resolve_omt_dir "$project_cwd"
+    )
+
+    local ledger_path="$derived_omt_dir/session-ledger-${stdin_sid}.md"
+
+    out=$(
+        unset OMT_DIR OMT_SESSION_ID CODEX_THREAD_ID
+        export HOME="$fake_home"
+        jq -n --arg cmd "rm \"$ledger_path\"" --arg sid "$stdin_sid" --arg cwd "$project_cwd" \
+            '{tool_name: "Bash", tool_input: {command: $cmd}, session_id: $sid, cwd: $cwd}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED WG-O1: hook should exit 0 (exit=$exit_code)"; return 1; }
+
+    hg_is_deny "$out" \
+        || { echo "ASSERTION FAILED WG-O1: env-absent write-guard should DENY via stdin session_id/cwd fallback. Got: $out"; return 1; }
+}
+
+test_wg_o2_unsafe_stdin_sid_does_not_arm_guard() {
+    local exit_code=0
+    local out
+
+    local project_cwd="$SCRIPT_DIR"
+    local unsafe_sid="../escape"
+    local fake_home="$TEST_TMP_DIR/home_wgo2"
+    mkdir -p "$fake_home"
+
+    out=$(
+        unset OMT_DIR OMT_SESSION_ID CODEX_THREAD_ID
+        export HOME="$fake_home"
+        jq -n --arg cmd 'rm /tmp/whatever' --arg sid "$unsafe_sid" --arg cwd "$project_cwd" \
+            '{tool_name: "Bash", tool_input: {command: $cmd}, session_id: $sid, cwd: $cwd}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED WG-O2: hook should exit 0 (exit=$exit_code)"; return 1; }
+
+    hg_is_allow "$out" \
+        || { echo "ASSERTION FAILED WG-O2: unsafe stdin session_id must not arm the write-guard. Got: $out"; return 1; }
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1140,6 +1292,18 @@ main() {
     run_test test_wg_j8_truncate_cmd_singlequoted_denied
     run_test test_wg_j9_sed_i_singlequoted_denied
     run_test test_wg_k_pipe_and_gt_inside_quotes_passes
+    run_test test_wg_l1_env_var_dquoted_denied
+    run_test test_wg_l2_env_var_unquoted_denied
+    run_test test_wg_l3_env_var_braced_denied
+    run_test test_wg_m1_rm_multitarget_denied
+    run_test test_wg_m2_rm_flag_multitarget_denied
+    run_test test_wg_m3_truncate_multitarget_denied
+    run_test test_wg_m4_tee_multitarget_denied
+    run_test test_wg_m5_rm_multitarget_nonledger_control_allows
+    run_test test_wg_n1_per_segment_dquoted_ledger_denied
+    run_test test_wg_n2_per_segment_dquoted_nonledger_control_allows
+    run_test test_wg_o1_env_absent_stdin_fallback_rm_denied
+    run_test test_wg_o2_unsafe_stdin_sid_does_not_arm_guard
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
