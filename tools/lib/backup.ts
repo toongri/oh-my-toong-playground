@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cp, mkdir, rm, readdir, stat, lstat } from "node:fs/promises";
+import { cp, mkdir, rm, readdir, stat, lstat, realpath } from "node:fs/promises";
 // `os` is imported as a namespace (not `{ homedir }`) so tests can
 // `spyOn(os, "homedir")` and have the override observed here — a named
 // import binds the value at import time and a spy on the module's own
@@ -108,7 +108,14 @@ export function isSafeBackupRoot(base: string): boolean {
 		return false;
 	}
 	const resolved = resolve(base);
-	if (resolved === "/" || resolved === os.homedir()) {
+	const home = os.homedir();
+	// F1: case-fold the exact-homedir comparison only (not "under home") —
+	// macOS APFS is case-insensitive by default, so "/users/x" and "/Users/x"
+	// can be the same inode even though they differ as strings. On a
+	// case-sensitive filesystem this may false-reject a distinct path that
+	// happens to case-fold-match home; that's fail-closed (cleanup skipped),
+	// which is safe.
+	if (resolved === "/" || resolved.toLowerCase() === home.toLowerCase()) {
 		return false;
 	}
 	return true;
@@ -131,6 +138,24 @@ export async function cleanupOldBackups(base: string, retentionDays: number): Pr
 	// this asymmetry by switching to throw.
 	if (!isSafeBackupRoot(base)) {
 		logError(`안전하지 않은 백업 루트, 정리를 건너뜁니다: ${base}`);
+		return;
+	}
+
+	// F2: <base> itself may be a symlink (e.g. `~/.omt` pointed at another
+	// volume). The lstat guard below only inspects the final `sync-backup`
+	// path component, so a symlinked base transparently resolves through it
+	// and is never caught. Re-validate against base's real path first.
+	let realBase = base;
+	try {
+		realBase = await realpath(base);
+	} catch (err) {
+		if (!isErrnoException(err) || err.code !== "ENOENT") {
+			throw err;
+		}
+		// base doesn't exist yet — can't be a symlink, fall through.
+	}
+	if (!isSafeBackupRoot(realBase)) {
+		logError(`안전하지 않은 백업 루트(실제 경로), 정리를 건너뜁니다: ${realBase}`);
 		return;
 	}
 
