@@ -29,6 +29,8 @@
 # indirection (`f="$OMT_DIR/..."; > "$f"`), parameter expansion
 # (`> "${OMT_DIR%/}/..."`), and process substitution. This shim stays a
 # best-effort literal-text scan, not a shell interpreter.
+#
+# omt-hook-dep: lib/omt-dir.sh
 # =============================================================================
 set -euo pipefail
 
@@ -68,16 +70,38 @@ stdin_sid=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null) || 
 # Mismatch-halt: `stdin.session_id` is a cross-check against this resolved
 # sid -- a present-but-DIVERGENT stdin.session_id, or the total absence of a
 # resolvable sid (no OMT_SESSION_ID and no CODEX_THREAD_ID, so the CLI cannot
-# record to any ledger), HALTs loudly rather than guarding the wrong (or a
-# nonexistent) ledger.
+# record to any ledger), triggers a loud-but-fail-open diagnostic (see
+# _cwg_halt below), not a hard block -- and not actually a wrong-ledger
+# guard either: both the ledger writer (omt-ledger.sh) and this guard
+# resolve the ledger path env-first (OMT_SESSION_ID ?? CODEX_THREAD_ID) and
+# never from stdin.session_id, so a divergent stdin sid can never point at
+# the wrong (or a nonexistent) ledger in the first place.
 # -----------------------------------------------------------------------------
 _cwg_charset_ok() {
     printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_-]{1,200}$'
 }
 
+# _cwg_halt: fail-OPEN (exit 0), not fail-closed. This repo's block signal
+# is deny-JSON-on-stdout with exit 0 -- write_guard_core_run (hooks/write-
+# guard-core.sh) returns 0 on both the deny path and the allow path, and no
+# caller of this hook inspects the exit code. A HALT here means the guard
+# could not trust its inputs enough to resolve a session id -- the same
+# "can't do the job, so don't block" class as the jq-absent fail-open a few
+# lines up, and the same policy as the Claude twin (hooks/pre-tool-
+# enforcer.sh), which has no hard-halt at all. Failing CLOSED (nonzero
+# exit) would risk Codex treating it as fail-closed and blocking every
+# apply_patch/Bash/edit/write/exec_command/shell_command call for the rest
+# of the session -- a best-effort, not-security-complete guard must not be
+# able to brick the agent on an unverified runtime assumption. The stderr
+# line stays a loud diagnostic either way.
+#
+# AC3 coupling: hooks/codex-write-guard_test.sh's
+# test_ac3_divergent_session_id_halts greps this stderr line for the tokens
+# halt|mismatch|diverg -- keep at least one of those tokens in the message
+# if it is ever reworded.
 _cwg_halt() {
     echo "HALT: codex-write-guard session-id mismatch/diverged -- $1" >&2
-    exit 1
+    exit 0
 }
 
 cli_sid=""
