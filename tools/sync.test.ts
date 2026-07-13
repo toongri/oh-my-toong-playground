@@ -5455,17 +5455,34 @@ describe("backup relocation (writer repoint + per-deploy destination)", () => {
 		expect(await readFile(backedUpFile)).toBe("# OLD X\n");
 	});
 
-	it("pre-existing in-target .sync-backup left untouched", async () => {
+	it("pre-existing in-target .sync-backup left untouched while shared-base aged dirs are pruned", async () => {
+		// F3: the old form of this test planted the in-target marker under a
+		// backupBase that had no `sync-backup/` at all, so cleanupOldBackups
+		// hit its ENOENT no-op branch (backup.ts:151-158) and returned before
+		// ever reaching the pruning logic — vacuously green even if the pruner's
+		// body, isSafeBackupRoot, age math, or symlink guard were all broken.
+		// This version makes the pruner actually run and delete something
+		// (the shared-base aged dir) in the SAME call whose in-target marker
+		// we assert survives — proving both that pruning happened and that it
+		// stayed scoped to `<backupBase>/sync-backup`.
+		const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+		const agedSharedDir = path.join(backupBase, "sync-backup", "aged-shared-session");
+		await fs.mkdir(agedSharedDir, { recursive: true });
+		await writeFile(path.join(agedSharedDir, "old.txt"), "stale");
+		await fs.utimes(agedSharedDir, past, past);
+
 		const staleDir = path.join(targetPath, ".sync-backup", "old-session");
 		await fs.mkdir(staleDir, { recursive: true });
 		const marker = path.join(staleDir, "marker.txt");
 		await writeFile(marker, "precious");
-		const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 		await fs.utimes(staleDir, past, past);
 
-		// The pruner must never visit the target tree at all — call it for real.
 		await cleanupOldBackups(backupBase, 3);
 
+		// (a) the pruner actually ran and deleted the aged shared-base session.
+		expect(await exists(agedSharedDir)).toBe(false);
+		// (b) ...without its root ever extending into the in-target tree.
 		expect(await exists(marker)).toBe(true);
 	});
 

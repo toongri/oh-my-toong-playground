@@ -9,6 +9,7 @@ import {
 	chmod,
 	symlink,
 	utimes,
+	realpath,
 } from "node:fs/promises";
 import * as os from "node:os";
 import { tmpdir } from "node:os";
@@ -75,6 +76,15 @@ describe("backup 모듈", () => {
 			expect(isSafeBackupRoot("/")).toBe(false);
 			expect(isSafeBackupRoot(os.homedir())).toBe(false);
 			expect(isSafeBackupRoot("/tmp/omt-xyz")).toBe(true);
+		});
+
+		it("isSafeBackupRoot rejects a case-variant of homedir (F1: APFS is case-insensitive)", () => {
+			const homedirSpy = spyOn(os, "homedir").mockReturnValue("/Users/Test");
+			try {
+				expect(isSafeBackupRoot("/users/test")).toBe(false);
+			} finally {
+				homedirSpy.mockRestore();
+			}
 		});
 	});
 
@@ -476,6 +486,39 @@ describe("backup 모듈", () => {
 			const preciousStats = await stat(precious);
 			expect(preciousStats.isFile()).toBe(true);
 			expect(captured).toContain(join(base, "sync-backup"));
+		});
+
+		it("cleanupOldBackups refuses when <base> itself is a symlink to homedir (F2)", async () => {
+			// The existing symlink guard above only lstats <base>/sync-backup
+			// (the last path component). If <base> ITSELF is a symlink (e.g.
+			// `~/.omt` pointed at another volume), that lstat transparently
+			// follows the intermediate symlink and never notices — this test
+			// plants a base that symlinks straight at (a faked) homedir.
+			// Resolve once up front: os.homedir() is compared against a
+			// realpath()'d base in the fix under test, and on macOS tmpdir()
+			// sits under /var, itself a symlink to /private/var — mocking the
+			// raw (unresolved) path here would make the two never match for
+			// reasons unrelated to F2. A real $HOME is already canonical.
+			const fakeHome = await realpath(await mkdtemp(join(tmpdir(), "omt-backup-f2-home-")));
+			const homedirSpy = spyOn(os, "homedir").mockReturnValue(fakeHome);
+			try {
+				const agedDir = join(fakeHome, "sync-backup", "aged");
+				await mkdir(agedDir, { recursive: true });
+				const precious = join(agedDir, "PRECIOUS.txt");
+				await writeFile(precious, "do not delete");
+				await ageDir(agedDir);
+
+				const linkParent = await mkdtemp(join(tmpdir(), "omt-backup-f2-linkparent-"));
+				const base = join(linkParent, "base-symlink");
+				await symlink(fakeHome, base);
+
+				await cleanupOldBackups(base, 3);
+
+				const preciousStats = await stat(precious);
+				expect(preciousStats.isFile()).toBe(true);
+			} finally {
+				homedirSpy.mockRestore();
+			}
 		});
 	});
 });
