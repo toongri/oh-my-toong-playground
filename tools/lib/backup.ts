@@ -26,14 +26,14 @@ function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
 /**
  * Backs up a single category directory from a platform's dot-directory.
  * Source: {targetPath}/.{platform}/{category}/
- * Destination: {targetPath}/.sync-backup/{sessionId}/{platform}/{category}/
+ * Destination: {backupDest}/{platform}/{category}/
  * Skips silently if the source directory does not exist.
  */
 export async function backupCategory(
 	targetPath: string,
 	platform: string,
 	category: string,
-	sessionId: string,
+	backupDest: string,
 ): Promise<void> {
 	const sourceDir = join(targetPath, `.${platform}`, category);
 
@@ -46,7 +46,7 @@ export async function backupCategory(
 		throw err;
 	}
 
-	const destDir = join(targetPath, ".sync-backup", sessionId, platform, category);
+	const destDir = join(backupDest, platform, category);
 
 	await mkdir(destDir, { recursive: true });
 	await cp(sourceDir, destDir, { recursive: true });
@@ -77,7 +77,7 @@ export async function backupConfigFile(filePath: string, backupDir: string): Pro
 /**
  * Backs up a single docs target file before it is overwritten or deleted.
  * Source: targetFilePath
- * Destination: {deployRoot}/.sync-backup/{sessionId}/docs/<relpath>
+ * Destination: {backupDest}/docs/<relpath>
  *   where <relpath> is targetFilePath's path relative to deployRoot
  *   (subdirectory structure preserved).
  * Per-file only (never a directory copy), reusing backupConfigFile.
@@ -86,10 +86,10 @@ export async function backupConfigFile(filePath: string, backupDir: string): Pro
 export async function backupDocs(
 	targetFilePath: string,
 	deployRoot: string,
-	sessionId: string,
+	backupDest: string,
 ): Promise<void> {
 	const relPath = relative(deployRoot, targetFilePath);
-	const backupDir = join(deployRoot, ".sync-backup", sessionId, "docs", dirname(relPath));
+	const backupDir = join(backupDest, "docs", dirname(relPath));
 
 	await backupConfigFile(targetFilePath, backupDir);
 }
