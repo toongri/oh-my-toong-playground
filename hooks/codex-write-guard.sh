@@ -184,6 +184,47 @@ _cwg_extract_shell_targets() {
     esac
 }
 
+# _cwg_mask_quoted <shell_command_text>
+# Quote-aware normalizer, re-derived from the same algorithm as the Claude
+# twin's _wg_scan (hooks/pre-tool-enforcer.sh:160-179): masks shell-active
+# metacharacters (`> < | ; &`) that appear INSIDE a single-quoted span by
+# replacing them with a space, and drops the quote CHARACTERS themselves
+# while preserving the quoted CONTENT -- so prose like
+# `printf 'see foo > <ledger> here' | omt-ledger.sh append` is never
+# misread by the redirect/segment-splitter logic below as a live redirect
+# or a live `|`/`;`/`&` chain separator. Without this, ANY `>` in the raw
+# shell text -- quoted or not -- was read as a live redirect, so a
+# legitimate ledger-append command whose prose happened to contain
+# `> <ledger>` inside quotes was denied (a false-positive over-block).
+# Double-quoted spans (`> "$f"`) and metacharacters OUTSIDE any quote (real
+# redirects/splitters) pass through unchanged -- same single-quote-only
+# scope as the Claude twin. This is independently re-derived bash+awk, not
+# sourced from the sibling file (Claude/Codex parsing intentionally never
+# shares code, see the file header) -- so the two guards can still diverge
+# if one is edited without the other.
+_cwg_mask_quoted() {
+    printf '%s' "$1" | awk '
+        BEGIN { sq = sprintf("%c", 39) }
+        {
+            n = length($0)
+            inq = 0
+            out = ""
+            for (i = 1; i <= n; i++) {
+                c = substr($0, i, 1)
+                if (c == sq) {
+                    inq = 1 - inq
+                    continue
+                }
+                if (inq && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
+                    out = out " "
+                    continue
+                }
+                out = out c
+            }
+            print out
+        }'
+}
+
 # _cwg_strip_quotes <token> -- removes a single leading+trailing double-quote
 # pair, then a single leading+trailing single-quote pair, mirroring the
 # Claude twin's _wg_strip_dquotes (hooks/pre-tool-enforcer.sh:52-57) extended
@@ -255,8 +296,12 @@ _cwg_process_shell_text() {
     local shell_cmd="$1"
     [ -n "$shell_cmd" ] || return 0
 
-    # Bash-embedded apply_patch heredoc body -- its own surface, scanned
-    # with the same header parser as the apply_patch envelope route.
+    # Bash-embedded apply_patch heredoc body -- its own surface, scanned on
+    # the RAW (unmasked) shell_cmd with the same header parser as the
+    # apply_patch envelope route. Must run BEFORE masking: the heredoc
+    # delimiter grep in _cwg_extract_heredoc_body matches on the literal
+    # quote characters around the delimiter (e.g. `apply_patch <<'EOF'`),
+    # which _cwg_mask_quoted would have already stripped.
     local heredoc_body
     heredoc_body=$(_cwg_extract_heredoc_body "$shell_cmd")
     if [ -n "$heredoc_body" ]; then
@@ -265,6 +310,16 @@ _cwg_process_shell_text() {
         done < <(_cwg_extract_patch_headers "$heredoc_body")
     fi
 
+    # Quote-aware masking BEFORE chain-splitting and redirect/rm
+    # extraction: without this, a `>` (or `|`/`;`/`&`) inside a single-
+    # quoted string was read the same as a live shell metacharacter, so
+    # prose like `printf 'see foo > <ledger>' | omt-ledger.sh append`
+    # falsely matched the redirect classifier below and denied a
+    # legitimate ledger-append command. See _cwg_mask_quoted for the full
+    # rationale and its parity with the Claude twin's _wg_scan.
+    local masked
+    masked=$(_cwg_mask_quoted "$shell_cmd")
+
     # Redirect / tee / rm classifier, per chain segment (split on
     # && || ; |, matching pre-tool-enforcer.sh's segmentation).
     while IFS= read -r seg; do
@@ -272,7 +327,7 @@ _cwg_process_shell_text() {
         while IFS= read -r tgt; do
             _cwg_add_candidate "$tgt"
         done < <(_cwg_extract_shell_targets "$seg")
-    done < <(printf '%s\n' "$shell_cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g')
+    done < <(printf '%s\n' "$masked" | sed -E 's/(&&|\|\||;|\|)/\n/g')
 }
 
 # -----------------------------------------------------------------------------

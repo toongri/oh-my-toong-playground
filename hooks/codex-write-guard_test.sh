@@ -764,6 +764,57 @@ test_own_env_var_codex_thread_id_form_denies() {
 }
 
 # =============================================================================
+# Regression -- quoted-prose false-positive (PR #176 AI-review finding): a
+# legitimate `omt-ledger.sh append` command piped from `printf '...'` prose
+# that happens to mention `> <ledger>` INSIDE a single-quoted string used to
+# be denied -- the redirect-target grep in _cwg_extract_shell_targets read
+# ANY `>` in the raw shell text as a live redirect regardless of quoting,
+# unlike the Claude twin's _wg_scan (hooks/pre-tool-enforcer.sh:160-179),
+# which quote-masks before classifying. Each ALLOW case below must allow;
+# the final case is a non-quoted control proving the fix does not
+# under-block a real redirect/rm (see test_qa_redirect_to_ledger_denies and
+# test_own_rm_ledger_denies above, which already cover that regression).
+# Evidence: $OMT_DIR/evidence/codex-ledger-parity/codex-write-guard-hook/quoted-prose-gt-allow.txt
+# =============================================================================
+test_qa_quoted_prose_gt_in_pipe_allows() {
+    new_sandbox
+    local cmd out evidence_dir result=0
+
+    cmd="printf 'note: see foo > $LED for details' | omt-ledger.sh append Decisions"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+
+    evidence_dir="$EVIDENCE_OMT_DIR/evidence/codex-ledger-parity/codex-write-guard-hook"
+    mkdir -p "$evidence_dir"
+    {
+        echo "input: $cmd (cwd=$GITDIR sid=cx)"
+        echo "output: $out"
+    } > "$evidence_dir/quoted-prose-gt-allow.txt"
+
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED QA-quoted-prose-gt: expected allow (no deny) for '>' inside single-quoted prose, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_inquote_redirect_no_pipe_allows() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="echo 'text > $LED more'"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED own-inquote-redirect-no-pipe: expected allow for '>' inside single-quoted text with no pipe, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -810,6 +861,8 @@ main() {
     run_test test_own_lowercase_write_path_key_ledger_denies
     run_test test_own_env_var_omt_session_id_form_denies
     run_test test_own_env_var_codex_thread_id_form_denies
+    run_test test_qa_quoted_prose_gt_in_pipe_allows
+    run_test test_own_inquote_redirect_no_pipe_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
