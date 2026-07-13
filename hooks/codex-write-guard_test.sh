@@ -876,6 +876,123 @@ test_regression_exec_command_workdir_relative_non_ledger_allows() {
 }
 
 # =============================================================================
+# Regression (defect #3, code-review finding) -- fd-dup redirect exclusion
+# swallows real file redirects: the old redirect-target grep required
+# `(^|[^0-9&])` immediately before `>`/`>>` (meant to skip fd-dups like
+# `2>&1`/`>&2`), but that same exclusion also skipped the FILE-target forms
+# `2>` and `&>` -- a digit or `&` sits right before `>` in both cases -- so a
+# real ledger redirect through either form silently ALLOWED, breaking parity
+# with the Claude twin's over-extract regex (hooks/pre-tool-enforcer.sh:115),
+# which has no such leading-char exclusion and correctly extracts both. Each
+# DENY case below must deny; the fd-dup-only ALLOW controls (no ledger
+# reference at all) prove the fix does not turn `2>&1`/`>&2` into
+# over-broad deniers.
+# =============================================================================
+test_defect3_stderr_redirect_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x 2> %s"},"session_id":"cx","cwd":"%s"}' "$LED" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect3-stderr-redirect: expected deny for 'echo x 2> <ledger>', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_defect3_combined_redirect_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x &> %s"},"session_id":"cx","cwd":"%s"}' "$LED" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect3-combined-redirect: expected deny for 'echo x &> <ledger>', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_defect3_fd_dup_stderr_to_stdout_no_ledger_allows() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x 2>&1"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED defect3-fd-dup-stderr-to-stdout-allow: expected allow for 'echo x 2>&1' (no ledger reference), got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_defect3_fd_dup_stdout_to_stderr_no_ledger_allows() {
+    new_sandbox
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x >&2"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED defect3-fd-dup-stdout-to-stderr-allow: expected allow for 'echo x >&2' (no ledger reference), got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Regression (defect #4, code-review finding) -- per-segment inner quotes
+# survive strip and break EXACT match: _cwg_strip_quotes only unwraps ONE
+# outermost double-quote pair then ONE outermost single-quote pair, but a
+# real shell word can be built from several ADJACENT quoted spans with no
+# separating whitespace (e.g. "$OMT_DIR"/"session-ledger-$OMT_SESSION_ID.md"),
+# which the real shell concatenates into a single word with ALL quote
+# characters removed. The old strip only removed the very first and very
+# last quote character of the token, leaving the INNER quote characters
+# (around the literal `/`) embedded in the candidate -- so after env-var
+# substitution the candidate carried stray `"` characters and never
+# full-path EXACT matched the real ledger path, silently ALLOWING. The DENY
+# case below must deny; the non-ledger control proves the fix does not
+# over-block a legitimate per-token-quoted non-ledger target.
+# =============================================================================
+test_defect4_per_token_quoted_env_var_denies() {
+    local sbx od out result=0
+    sbx=$(mktemp -d)
+    od="$sbx/omt-dir"
+    mkdir -p "$od"
+
+    out=$(jq -n --arg cmd 'echo x > "$OMT_DIR"/"session-ledger-$OMT_SESSION_ID.md"' --arg cwd "$od" \
+        '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
+        | env -u CODEX_THREAD_ID OMT_DIR="$od" OMT_SESSION_ID=cx HOME="$sbx" bash "$HOOK")
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect4-per-token-quoted-env-var: expected deny for per-token quoted env-var ledger redirect, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$sbx"
+    return "$result"
+}
+
+test_defect4_per_token_quoted_non_ledger_allows() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="echo x > \"$GITDIR\"/\"other.md\""
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED defect4-per-token-quoted-non-ledger-allow: expected allow for per-token quoted non-ledger target, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -926,6 +1043,12 @@ main() {
     run_test test_own_inquote_redirect_no_pipe_allows
     run_test test_regression_exec_command_workdir_relative_ledger_denies
     run_test test_regression_exec_command_workdir_relative_non_ledger_allows
+    run_test test_defect3_stderr_redirect_ledger_denies
+    run_test test_defect3_combined_redirect_ledger_denies
+    run_test test_defect3_fd_dup_stderr_to_stdout_no_ledger_allows
+    run_test test_defect3_fd_dup_stdout_to_stderr_no_ledger_allows
+    run_test test_defect4_per_token_quoted_env_var_denies
+    run_test test_defect4_per_token_quoted_non_ledger_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
