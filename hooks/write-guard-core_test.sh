@@ -14,6 +14,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 CORE="$SCRIPT_DIR/write-guard-core.sh"
 
+# EVIDENCE_OMT_DIR: self-derived (not ambient $OMT_DIR) so this suite runs
+# clean under `env -u OMT_DIR`, mirroring hooks/codex-write-guard_test.sh's
+# own EVIDENCE_OMT_DIR derivation via resolve_omt_dir.
+EVIDENCE_OMT_DIR=$(bash -c "source '$SCRIPT_DIR/lib/omt-dir.sh'; resolve_omt_dir '$SCRIPT_DIR'")
+
 TESTS_PASSED=0
 TESTS_FAILED=0
 
@@ -80,7 +85,7 @@ test_ac2_different_dir_session_ledger_allows() {
 test_qa_substring_but_not_anchor_allows() {
     local out evidence_dir
     out=$(printf '%s\n' "/tmp/draft-session-ledger-notes.md" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
-    evidence_dir="$OMT_DIR/evidence/codex-ledger-parity/write-guard-core"
+    evidence_dir="$EVIDENCE_OMT_DIR/evidence/codex-ledger-parity/write-guard-core"
     mkdir -p "$evidence_dir"
     {
         echo "input: /tmp/draft-session-ledger-notes.md (OMT_DIR=$OD sid=$SID)"
@@ -100,7 +105,7 @@ test_qa_substring_but_not_anchor_allows() {
 test_qa_exact_current_ledger_denies() {
     local out evidence_dir
     out=$(printf '%s\n' "$OD/session-ledger-$SID.md" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
-    evidence_dir="$OMT_DIR/evidence/codex-ledger-parity/write-guard-core"
+    evidence_dir="$EVIDENCE_OMT_DIR/evidence/codex-ledger-parity/write-guard-core"
     mkdir -p "$evidence_dir"
     {
         echo "input: $OD/session-ledger-$SID.md (OMT_DIR=$OD sid=$SID)"
