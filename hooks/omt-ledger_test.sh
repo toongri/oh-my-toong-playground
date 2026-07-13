@@ -18,6 +18,12 @@ setup_test_env() {
     export OMT_DIR="$TEST_TMP_DIR/.omt"
     mkdir -p "$OMT_DIR"
     export OMT_SESSION_ID="test-sid-1"
+    # An ambient CODEX_THREAD_ID (e.g. a real Codex session running this suite)
+    # must never leak in: omt-ledger.sh resolves sid as
+    # OMT_SESSION_ID ?? CODEX_THREAD_ID, so a stray CODEX_THREAD_ID would mask
+    # an explicitly-emptied OMT_SESSION_ID and turn an expected refusal into a
+    # false success. Unset it unconditionally for every run_test-based test.
+    unset CODEX_THREAD_ID
 }
 
 teardown_test_env() {
