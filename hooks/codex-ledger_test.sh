@@ -146,6 +146,75 @@ test_jq_absent_recording_survives_no_continue() {
 }
 
 # =============================================================================
+# Regression: jq present but FAILING (broken binary, exit 1, no stdout) must
+# not drop the recording instruction. ledger_core_run's own internal jq calls
+# (source==compact detection, sid extraction) run inside the
+# `CORE_OUT=$(ledger_core_run codex)` command substitution at codex-ledger.sh,
+# so their failure never escapes -- CORE_OUT still ends up fully formed
+# (hooks/ledger-core.sh:205 always echoes). The actual failure point is this
+# hook's OWN emit step: `printf '%s' "$CORE_OUT" | jq -c 'del(.continue)'` is a
+# plain top-level pipe (not inside `$(...)`), so a present-but-failing jq
+# writes nothing to stdout there and the pipe's non-zero exit is NOT
+# swallowed. Exercise a PATH with a broken jq shim (exit 1, no output)
+# alongside the externals this jq-present path legitimately needs
+# (dirname/cat/sed).
+# =============================================================================
+test_jq_failing_recording_survives_no_continue() {
+    local broken_jq_bin out rc ok=0
+
+    broken_jq_bin=$(mktemp -d)
+    ln -s /usr/bin/dirname "$broken_jq_bin/dirname"
+    ln -s /bin/cat "$broken_jq_bin/cat"
+    ln -s /usr/bin/sed "$broken_jq_bin/sed"
+    printf '#!/bin/bash\nexit 1\n' > "$broken_jq_bin/jq"
+    chmod +x "$broken_jq_bin/jq"
+
+    set +e
+    # Absolute /bin/bash sidesteps a bare `bash` lookup failing against the
+    # restricted PATH being assigned (same rationale as
+    # hooks/ledger-core_test.sh:165-172).
+    out=$(printf '{"source":"startup","session_id":"cx","cwd":"/tmp"}' \
+        | PATH="$broken_jq_bin" OMT_DIR=/tmp/x /bin/bash "$HOOK" 2>/dev/null)
+    rc=$?
+    set -e
+    rm -rf "$broken_jq_bin"
+
+    if [ "$rc" = "0" ] \
+        && echo "$out" | grep -q '\[LEDGER RECORDING\]' \
+        && [ "$(printf '%s' "$out" | grep -c '^{"continue"')" = "0" ] \
+        && echo "$out" | grep -q 'hookSpecificOutput'; then
+        ok=1
+    fi
+
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
+# Regression: malformed stdin JSON must not abort the script. ledger_core_run's
+# compaction-recovery branch pipes stdin through jq, which fails (exit 5) on
+# unparseable JSON -- but that failure occurs inside the
+# `CORE_OUT=$(ledger_core_run codex)` command substitution subshell, and bash
+# does not propagate errexit into a command substitution unless
+# `inherit_errexit` is explicitly enabled (it is not here, and this hook no
+# longer sets -e at all -- see the comment at the top of hooks/codex-ledger.sh),
+# so [LEDGER RECORDING] must still emit unconditionally.
+# =============================================================================
+test_malformed_stdin_does_not_abort_recording() {
+    local out rc ok=0
+
+    set +e
+    out=$(printf '%s' 'not valid json {{{' | OMT_DIR=/tmp/x bash "$HOOK" 2>/dev/null)
+    rc=$?
+    set -e
+
+    if [ "$rc" = "0" ] && echo "$out" | grep -q '\[LEDGER RECORDING\]'; then
+        ok=1
+    fi
+
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 main() {
@@ -157,6 +226,8 @@ main() {
     run_test test_qa_recording_startup_no_claude_env_leak
     run_test test_qa_no_continue_contract
     run_test test_jq_absent_recording_survives_no_continue
+    run_test test_jq_failing_recording_survives_no_continue
+    run_test test_malformed_stdin_does_not_abort_recording
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
