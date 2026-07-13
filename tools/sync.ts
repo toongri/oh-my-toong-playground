@@ -36,7 +36,8 @@ import { parseCodexVersion, assertCodexVersionAllowed } from "./lib/codex-versio
 import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import { resolvePlatforms, resolveComponentPath, setProjectContext } from "./lib/resolver.ts";
-import { generateBackupSessionId, backupCategory, backupDocs, cleanupOldBackups } from "./lib/backup.ts";
+import { backupCategory, backupDocs, cleanupOldBackups, isSafeBackupRoot } from "./lib/backup.ts";
+import { resolveOmtDir, getOmtDir } from "../lib/omt-dir.ts";
 import { reconcilePairManifest, removeManifestPair } from "./lib/deploy-manifest.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
@@ -349,7 +350,7 @@ export async function syncCategory(
 					deployRoot,
 					deployLocationForManifest(platform, category),
 					category,
-					context.backupSession,
+					context.backupDest,
 				);
 				preparedKeys.add(prepKey);
 			}
@@ -407,7 +408,7 @@ export async function syncCategory(
 	if (category === "skills" && deployedNames.has("agents")) {
 		await cleanupCodexSkillsFossil(
 			deployRoot,
-			context.backupSession,
+			context.backupDest,
 			context.dryRun,
 			deployedNames.get("agents") ?? new Set(),
 		);
@@ -935,7 +936,7 @@ export async function syncDocs(
 				managedTargets.add(candidate);
 				logDry(`docs: would remove ${candidate}`);
 			} else {
-				await deleteDocsTarget(candidate, deployRoot, context.backupSession);
+				await deleteDocsTarget(candidate, deployRoot, context.backupDest);
 			}
 			continue;
 		}
@@ -947,7 +948,7 @@ export async function syncDocs(
 				managedTargets.add(plan.finalTarget);
 				logDry(`docs: would write ${plan.finalTarget}`);
 			} else {
-				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupSession);
+				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupDest);
 			}
 			continue;
 		}
@@ -961,7 +962,7 @@ export async function syncDocs(
 				logDry(`docs: would write ${dest}`);
 			}
 		} else {
-			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupSession);
+			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupDest);
 		}
 	}
 
@@ -1647,12 +1648,6 @@ export async function processYaml(
 			// project (no CATEGORIES items, no .claude) must still deploy its docs.
 			await syncDocs(context, syncYaml, rootDir, deployRoot);
 
-			// Record this worktree as a backup root ONLY after all sync steps succeeded.
-			// Registering before the steps (or on failure) would let retention cleanup
-			// prune the last good backup of a worktree whose deploy threw — it must hold
-			// a success-only invariant: failed worktrees go to failedTargets, not here.
-			context.backupRoots.add(deployRoot);
-
 			// Rewrite platform paths for non-claude platforms
 			const nonClaudePlatforms: Platform[] = ["gemini", "codex", "opencode"];
 			for (const platform of nonClaudePlatforms) {
@@ -1725,6 +1720,33 @@ export async function loadRootModelMaps(rootDir: string): Promise<Map<Platform, 
 	return out;
 }
 
+/**
+ * Thrown by resolveBackupBase() when the resolved OMT_DIR would make the
+ * backup-retention pruner's recursive rm far more destructive than intended
+ * (relative path, "/", or the user's home directory). Never process.exit —
+ * that would kill the in-process test runner. The CLI entry point is
+ * responsible for catching this and exiting non-zero.
+ */
+export class UnsafeBackupRootError extends Error {}
+
+/**
+ * Resolves the OMT-owned backup root for this run and guarantees the
+ * directory exists — WITHOUT ever creating a degenerate root first.
+ *
+ * Order is load-bearing: resolveOmtDir() only computes the path (no fs
+ * writes), so isSafeBackupRoot() can reject it BEFORE getOmtDir()'s
+ * unconditional mkdirSync ever runs. Calling getOmtDir() first would create
+ * the degenerate directory (e.g. <cwd>/rel/ for a relative OMT_DIR) and then
+ * refuse to prune it — exactly the pollution this function exists to avoid.
+ */
+export function resolveBackupBase(): string {
+	const base = resolveOmtDir();
+	if (!isSafeBackupRoot(base)) {
+		throw new UnsafeBackupRootError(`안전하지 않은 백업 루트: ${base}`);
+	}
+	return getOmtDir();
+}
+
 // ---------------------------------------------------------------------------
 // createContext
 // ---------------------------------------------------------------------------
@@ -1733,17 +1755,23 @@ export async function loadRootModelMaps(rootDir: string): Promise<Map<Platform, 
  * Create an initial SyncContext for a sync run.
  */
 export function createContext(dryRun: boolean): SyncContext {
+	const backupBase = resolveBackupBase();
 	return {
 		dryRun,
 		projectName: "",
 		projectDir: "",
 		isRootYaml: true,
-		backupSession: generateBackupSessionId(),
+		backupBase,
+		// Initialized to backupBase, never "" — an empty string would make
+		// join("", platform, category) relative, so any reader that ran before
+		// the fan-out assignment (sync.ts fan-out loop) would write into the
+		// process cwd. No such reader exists today (every writer runs inside
+		// the fan-out loop); this is a cheap seatbelt against that defect class.
+		backupDest: backupBase,
 		modelMaps: new Map(),
 		rootModelMaps: new Map(),
 		processedPaths: new Set(),
 		platformYamlSections: new Map(),
-		backupRoots: new Set(),
 		failedTargets: [],
 	};
 }
@@ -2012,8 +2040,7 @@ if (import.meta.main) {
 	const context = createContext(dryRun);
 	context.rootModelMaps = await loadRootModelMaps(rootDir);
 
-	logInfo(`백업 세션: ${context.backupSession}`);
-	logInfo(`백업 위치: ${rootDir}/.sync-backup/${context.backupSession}/`);
+	logInfo(`백업 위치: ${context.backupBase}/sync-backup`);
 
 	const adapters: AdapterMap = new Map<Platform, PlatformAdapter>();
 	adapters.set("claude", new ClaudeAdapter());
@@ -2075,13 +2102,13 @@ if (import.meta.main) {
 		const cleanupPromises: Promise<void>[] = [];
 		if (!dryRun) {
 			const retentionDays = await getBackupRetentionDays();
-			// Union of processedPaths (container, drives deploy dedup) and backupRoots (per-worktree
-			// deploy roots populated during fan-out). Set-union ensures a non-bare path present in
-			// both is cleaned exactly once.
-			const cleanupTargets = new Set<string>([...context.processedPaths, ...context.backupRoots]);
-			for (const target of cleanupTargets) {
-				cleanupPromises.push(cleanupOldBackups(target, retentionDays).catch(() => {}));
-			}
+			// Prune the single shared OMT-owned root only — no longer a union with
+			// the per-worktree deploy-root set. This deliberately gives up the
+			// prior success-only invariant (only worktrees that finished cleanly
+			// were pruned): the shared root is pruned unconditionally now, by age.
+			// See the plan's ACCEPTED CONSEQUENCES — backups are write-only and
+			// git-recoverable, so this trade is accepted.
+			cleanupPromises.push(cleanupOldBackups(context.backupBase, retentionDays).catch(() => {}));
 		}
 
 		if (dryRun) {

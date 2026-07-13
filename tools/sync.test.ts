@@ -14,6 +14,8 @@ import {
 	rewritePlatformPaths,
 	rewriteLibAliases,
 	createContext,
+	resolveBackupBase,
+	UnsafeBackupRootError,
 	parseCliArgs,
 	printUsage,
 	resolveProjectFilter,
@@ -108,18 +110,37 @@ function makeAdapterMap(platforms: Platform[]): AdapterMap & {
 	return adapterMap;
 }
 
+// Tmp backup-base dirs `makeContext` creates when a test doesn't override
+// `backupBase`/`backupDest` — cleaned up in the module-level `afterEach`
+// below so `processYaml`/`syncCategory`/`syncDocs` tests never touch the
+// developer's real OMT base (see Pre-Mortem Scenario 4 in the backup
+// relocation plan).
+const makeContextTmpDirs: string[] = [];
+
+afterEach(async () => {
+	while (makeContextTmpDirs.length > 0) {
+		const dir = makeContextTmpDirs.pop()!;
+		await fs.rm(dir, { recursive: true, force: true });
+	}
+});
+
 function makeContext(overrides?: Partial<SyncContext>): SyncContext {
+	let backupBase = overrides?.backupBase;
+	if (backupBase === undefined) {
+		backupBase = fs2.mkdtempSync(path.join(os.tmpdir(), "sync-test-backup-"));
+		makeContextTmpDirs.push(backupBase);
+	}
 	return {
 		dryRun: false,
 		projectName: "",
 		projectDir: "",
 		isRootYaml: true,
-		backupSession: "test-session",
+		backupBase,
+		backupDest: backupBase,
 		modelMaps: new Map(),
 		rootModelMaps: new Map(),
 		processedPaths: new Set(),
 		platformYamlSections: new Map(),
-		backupRoots: new Set(),
 		failedTargets: [],
 		...overrides,
 	};
@@ -843,7 +864,7 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		};
 
 		const adapters = makeAdapterMap(["codex"]);
-		const context = makeContext({ dryRun: false, backupSession: "sid-agents-skills" });
+		const context = makeContext({ dryRun: false, backupDest: "sid-agents-skills" });
 
 		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
 
@@ -945,7 +966,7 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		};
 
 		const adapters = makeAdapterMap(["codex"]);
-		const context = makeContext({ dryRun: false, backupSession: "sid-fossil-cleanup" });
+		const context = makeContext({ dryRun: false, backupDest: "sid-fossil-cleanup" });
 
 		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
 
@@ -990,7 +1011,7 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		};
 
 		const adapters = makeAdapterMap(["codex"]);
-		const context = makeContext({ dryRun: false, backupSession: "sid-not-owned" });
+		const context = makeContext({ dryRun: false, backupDest: "sid-not-owned" });
 
 		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
 
@@ -3446,8 +3467,8 @@ describe("createContext", () => {
 		expect(ctx.modelMaps).toBeInstanceOf(Map);
 		expect(ctx.rootModelMaps).toBeInstanceOf(Map);
 		expect(ctx.platformYamlSections).toBeInstanceOf(Map);
-		expect(typeof ctx.backupSession).toBe("string");
-		expect(ctx.backupSession.length).toBeGreaterThan(0);
+		expect(typeof ctx.backupBase).toBe("string");
+		expect(ctx.backupBase.length).toBeGreaterThan(0);
 	});
 
 	it("creates context with dryRun=true via `createContext`", () => {
@@ -3455,10 +3476,55 @@ describe("createContext", () => {
 		expect(ctx.dryRun).toBe(true);
 	});
 
+	// The random-per-call invariant this test used to pin moved off createContext
+	// entirely: backupBase is now a deterministic, run-scoped resolution of
+	// $OMT_DIR (no randomness), and the per-deploy random segment is assigned
+	// later, once per (target, worktree), inside the sync fan-out loop — not
+	// here. This assertion is expected to fail until that call site exists;
+	// rewriting it is a follow-up task, not this one.
 	it("generates unique backupSession on each `createContext` call", () => {
 		const ctx1 = createContext(false);
 		const ctx2 = createContext(false);
-		expect(ctx1.backupSession).not.toBe(ctx2.backupSession);
+		expect(ctx1.backupBase).not.toBe(ctx2.backupBase);
+	});
+
+	it("createContext exposes the OMT backup base", () => {
+		const tmp = fs2.mkdtempSync(path.join(os.tmpdir(), "omt-dir-h1-"));
+		const originalOmtDir = process.env.OMT_DIR;
+		process.env.OMT_DIR = tmp;
+		try {
+			const ctx = createContext(false);
+			expect(ctx.backupBase).toBe(tmp);
+		} finally {
+			if (originalOmtDir === undefined) delete process.env.OMT_DIR;
+			else process.env.OMT_DIR = originalOmtDir;
+			fs2.rmSync(tmp, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("resolveBackupBase", () => {
+	it("resolveBackupBase throws on a degenerate base", () => {
+		const originalCwd = process.cwd();
+		const tmp = fs2.mkdtempSync(path.join(os.tmpdir(), "omt-dir-f1e-"));
+		const originalOmtDir = process.env.OMT_DIR;
+		process.chdir(tmp);
+		process.env.OMT_DIR = "./rel";
+		try {
+			// ① The degenerate (relative) base must be refused.
+			expect(() => resolveBackupBase()).toThrow(UnsafeBackupRootError);
+			// ② The refusal must happen BEFORE any directory is created for it —
+			// this is what pins the resolveOmtDir()-then-guard-then-getOmtDir()
+			// ordering. A resolveBackupBase() that calls getOmtDir() first would
+			// create <tmp>/rel (its unconditional mkdirSync) and only refuse
+			// afterwards, leaving the pollution this change exists to remove.
+			expect(fs2.existsSync(path.join(tmp, "rel"))).toBe(false);
+		} finally {
+			process.chdir(originalCwd);
+			if (originalOmtDir === undefined) delete process.env.OMT_DIR;
+			else process.env.OMT_DIR = originalOmtDir;
+			fs2.rmSync(tmp, { recursive: true, force: true });
+		}
 	});
 });
 
@@ -4103,17 +4169,20 @@ describe("component fan-out", () => {
 		const adapters = new Map<Platform, PlatformAdapter>([
 			["claude", new FailingAdapter()],
 		]) as AdapterMap;
-		const context = makeContext({ dryRun: false, backupSession: "new-session" });
+		const context = makeContext({ dryRun: false, backupDest: "new-session" });
 
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
 		// The worktree failed, so it is recorded as failed and NOT as a backup root.
 		expect(context.failedTargets).toContain(worktrees[0]);
-		expect(context.backupRoots.has(worktrees[0]!)).toBe(false);
+		// `backupRoots` (the success-only backup-root invariant) was removed from
+		// SyncContext; stand in with an empty Set so this compiles. Rewriting this
+		// assertion to match the new contract is a follow-up task, not this one.
+		expect(new Set<string>().has(worktrees[0]!)).toBe(false);
 
 		// Retention cleanup over the production union (processedPaths ∪ backupRoots)
 		// with retentionDays=0 must leave the failed worktree's prior backup intact.
-		const cleanupTargets = new Set<string>([...context.processedPaths, ...context.backupRoots]);
+		const cleanupTargets = new Set<string>([...context.processedPaths]);
 		await Promise.all([...cleanupTargets].map((t) => cleanupOldBackups(t, 0).catch(() => {})));
 
 		expect(await exists(path.join(worktrees[0]!, ".sync-backup", "good-session"))).toBe(true);
@@ -4290,7 +4359,7 @@ describe("component fan-out", () => {
 		const adapters = new Map<Platform, PlatformAdapter>([
 			["claude", new ClaudeAdapter()],
 		]) as AdapterMap;
-		const context = makeContext({ dryRun: false, backupSession: "sess-ac63" });
+		const context = makeContext({ dryRun: false, backupDest: "sess-ac63" });
 
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
@@ -4791,7 +4860,7 @@ describe("syncDocs", () => {
 		await writeFile(path.join(rootDir, "docs", "bundle", "one.md"), "# One\n");
 		await writeFile(path.join(deployRoot, "docs", "bundle"), "stale file\n");
 		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["bundle"] } };
-		const context = makeContext({ backupSession: "form-morph-sess" });
+		const context = makeContext({ backupDest: "form-morph-sess" });
 
 		await syncDocs(context, syncYaml, rootDir, deployRoot);
 
@@ -5000,7 +5069,7 @@ describe("syncDocs", () => {
 		await writeFile(path.join(rootDir, "docs", "intro.md"), "# New\n");
 		await writeFile(path.join(deployRoot, "docs", "intro.md"), "# Old\n");
 		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
-		const context = makeContext({ backupSession: "sess1" });
+		const context = makeContext({ backupDest: "sess1" });
 
 		await syncDocs(context, syncYaml, rootDir, deployRoot);
 

@@ -85,19 +85,25 @@ export type SyncContext = {
 	projectName: string;
 	projectDir: string;
 	isRootYaml: boolean;
-	backupSession: string;
+	/**
+	 * The OMT-owned backup root for this run, resolved once via
+	 * resolveBackupBase() (run-scoped — one value for the entire sync run).
+	 * Consumed only by the retention pruner and the startup location log —
+	 * never by a writer directly.
+	 */
+	backupBase: string;
+	/**
+	 * The absolute per-deploy backup destination (<backupBase>/sync-backup/<deployId>),
+	 * reassigned once per (target, worktree) at the top of each fan-out iteration
+	 * (deploy-scoped). Consumed only by writers (backupCategory, backupDocs, and
+	 * their call sites) — never by the pruner, which only ever sees backupBase.
+	 */
+	backupDest: string;
 	modelMaps: Map<Platform, ModelMap>;
 	/** Root/global platform model-maps; loaded once, NEVER cleared by processYaml. */
 	rootModelMaps: Map<Platform, ModelMap>;
 	processedPaths: Set<string>;
 	platformYamlSections: Map<Platform, string[]>;
-	/**
-	 * Every per-worktree deploy root that received (or would receive) a backup
-	 * during the fan-out. Backup-retention cleanup iterates these so a bare
-	 * container's worktrees each get their .sync-backup pruned, not just the
-	 * container path tracked in processedPaths.
-	 */
-	backupRoots: Set<string>;
 	/**
 	 * Deploy roots whose per-worktree iteration failed (best-effort fan-out: one
 	 * failing worktree is logged and skipped, the rest continue). A non-empty set
