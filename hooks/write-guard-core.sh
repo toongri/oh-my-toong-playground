@@ -3,8 +3,9 @@
 # Write-Guard Core (codex-ledger-parity plan, TODO 2): the shared full-path
 # anchor-match + byte-identical deny core for the ledger write-guard, sourced
 # by both hooks/pre-tool-enforcer.sh (Claude) and the Codex PreToolUse hook.
-# Full-path EXACT match on the resolved current-session ledger only -- NEVER
-# a bare "session-ledger-" substring (that loose match is
+# Full-path EXACT match on the resolved current-session ledger, PLUS a glob
+# candidate (contains *, ?, or [) whose pattern matches that resolved ledger
+# path -- NEVER a bare "session-ledger-" substring (that loose match is
 # hooks/pre-tool-enforcer.sh's superseded _wg_ledger_target_in_segment
 # classifier, hooks/pre-tool-enforcer.sh:42-77).
 #
@@ -59,19 +60,40 @@ _wg_core_normpath() {
 # write_guard_core_run <OMT_DIR> <session_id>
 # Reads newline-separated already-absolutized candidate target paths on
 # stdin. Emits the deny JSON to stdout iff any candidate is FULL-PATH EXACT
-# equal to "$OMT_DIR/session-ledger-<session_id>.md"; else emits nothing
+# equal to "$OMT_DIR/session-ledger-<session_id>.md", OR is a glob pattern
+# (contains *, ?, or [) that, used as a shell pattern, matches that resolved
+# ledger path (e.g. `rm "$OMT_DIR"/session-ledger-*.md` never EXACT-matches
+# but would still destroy the current-session ledger); else emits nothing
 # (allow).
 write_guard_core_run() {
     local omt_dir="$1"
     local session_id="$2"
     local ledger_path
     ledger_path="$(_wg_core_normpath "$omt_dir/session-ledger-$session_id.md")"
-    local candidate
+    local candidate norm_candidate
     while IFS= read -r candidate; do
-        if [ "$(_wg_core_normpath "$candidate")" = "$ledger_path" ]; then
+        norm_candidate="$(_wg_core_normpath "$candidate")"
+        if [ "$norm_candidate" = "$ledger_path" ]; then
             printf '%s\n' "$_wg_core_deny_json"
             return 0
         fi
+        # Glob candidate (e.g. `rm session-ledger-*.md`): never EXACT-matches,
+        # but if the pattern matches the resolved ledger path, running the
+        # command destroys the current ledger -> deny. Only globs that
+        # ACTUALLY match the single known ledger path are denied; a
+        # non-matching glob stays allow, so no false block.
+        case "$norm_candidate" in
+            *[*?[]*)
+                # Intentionally unquoted: $norm_candidate is used AS the glob
+                # pattern to test against the ledger path.
+                case "$ledger_path" in
+                    $norm_candidate)
+                        printf '%s\n' "$_wg_core_deny_json"
+                        return 0
+                        ;;
+                esac
+                ;;
+        esac
     done
     return 0
 }
