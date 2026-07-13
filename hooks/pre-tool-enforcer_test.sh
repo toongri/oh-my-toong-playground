@@ -1220,6 +1220,29 @@ test_wg_o2_unsafe_stdin_sid_does_not_arm_guard() {
 }
 
 # =============================================================================
+# (p) regression (sed arm left behind (m)'s fix) -- the sed `-i` arm still
+# extracted only the LAST operand (awk '{print $NF}'), unlike the tee/rm/
+# truncate arm (m) which was already fixed to extract every non-option
+# operand. `sed -i SCRIPT file1 file2` edits EVERY file operand in place, so
+# placing the ledger as a NON-final operand bypassed detection entirely.
+# =============================================================================
+test_wg_p1_sed_i_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "sed -i 's/a/b/' \"$ledger\" /tmp/other" "WG-P1(sed -i multi-target)"
+}
+
+test_wg_p2_sed_i_multitarget_nonledger_control_allows() {
+    local out
+    out=$(printf '%s' "$(hg_bash_json "sed -i 's/a/b/' /tmp/other.txt")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-P2: non-ledger sed -i should pass. Got: $out"; return 1; }
+}
+
+test_wg_p3_sed_i_singletarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "sed -i 's/a/b/' \"$ledger\"" "WG-P3(sed -i single/last-target, pre-existing case)"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1304,6 +1327,9 @@ main() {
     run_test test_wg_n2_per_segment_dquoted_nonledger_control_allows
     run_test test_wg_o1_env_absent_stdin_fallback_rm_denied
     run_test test_wg_o2_unsafe_stdin_sid_does_not_arm_guard
+    run_test test_wg_p1_sed_i_multitarget_denied
+    run_test test_wg_p2_sed_i_multitarget_nonledger_control_allows
+    run_test test_wg_p3_sed_i_singletarget_denied
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

@@ -137,7 +137,12 @@ _wg_extract_bash_targets() {
             ;;
         sed)
             if echo "$seg" | grep -q -- '-i'; then
-                echo "$seg" | awk '{print $NF}'
+                # Every non-option operand, not just the last -- mirrors the
+                # tee/rm/truncate fix above (`sed -i SCRIPT file1 file2` edits
+                # EVERY file operand in place, not just the final one). This
+                # over-extracts the SCRIPT operand too, which is harmless: it
+                # never EXACT-matches the ledger path.
+                echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             fi
             ;;
         cp|mv)
