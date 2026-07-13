@@ -1,7 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { cp, mkdir, rm, readdir, stat } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
-import { logWarn } from "./logger.ts";
+import { cp, mkdir, rm, readdir, stat, lstat } from "node:fs/promises";
+// `os` is imported as a namespace (not `{ homedir }`) so tests can
+// `spyOn(os, "homedir")` and have the override observed here — a named
+// import binds the value at import time and a spy on the module's own
+// export would not be seen through this module's binding.
+import * as os from "node:os";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { logError, logWarn } from "./logger.ts";
 
 /**
  * Generates a random hex session ID for backup directories.
@@ -90,12 +95,58 @@ export async function backupDocs(
 }
 
 /**
- * Removes session directories under {targetPath}/.sync-backup/ that are
+ * Pure predicate for cleanupOldBackups: false iff `base` is a degenerate
+ * root that would make the recursive prune below far more destructive than
+ * intended (a relative path resolved against an unexpected cwd, "/", or the
+ * user's home directory). Bases merely *near* home (e.g. "/Users",
+ * "$HOME/Documents") are deliberately NOT rejected — this targets only the
+ * three degenerate cases, since OMT_DIR is a user-owned value.
+ * No fs access, no env reads, no logging — pure string/path logic only.
+ */
+export function isSafeBackupRoot(base: string): boolean {
+	if (!isAbsolute(base)) {
+		return false;
+	}
+	const resolved = resolve(base);
+	if (resolved === "/" || resolved === os.homedir()) {
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Removes session directories under {base}/sync-backup/ that are
  * older than retentionDays based on directory modification time.
  * If retentionDays is 0, all session directories are removed.
  */
-export async function cleanupOldBackups(targetPath: string, retentionDays: number): Promise<void> {
-	const backupDir = join(targetPath, ".sync-backup");
+export async function cleanupOldBackups(base: string, retentionDays: number): Promise<void> {
+	const backupDir = join(base, "sync-backup");
+
+	// Both guards below MUST log-and-return, never throw. The sole caller
+	// (tools/sync.ts:2083) wraps this call in `.catch(() => {})`, so a thrown
+	// error here would be silently swallowed in production — the guard would
+	// be disarmed at exactly the moment it matters, while a test asserting on
+	// a rejection would stay green and hide the regression. logError + return
+	// keeps the refusal visible on stderr in both environments. Do not "fix"
+	// this asymmetry by switching to throw.
+	if (!isSafeBackupRoot(base)) {
+		logError(`안전하지 않은 백업 루트, 정리를 건너뜁니다: ${base}`);
+		return;
+	}
+
+	try {
+		const backupDirLstat = await lstat(backupDir);
+		if (backupDirLstat.isSymbolicLink()) {
+			logError(`백업 루트가 심볼릭 링크입니다, 정리를 건너뜁니다: ${backupDir}`);
+			return;
+		}
+	} catch (err) {
+		if (!isErrnoException(err) || err.code !== "ENOENT") {
+			throw err;
+		}
+		// No sync-backup dir yet — not a symlink. Fall through; the stat()
+		// below hits the same ENOENT and no-ops as before.
+	}
 
 	try {
 		await stat(backupDir);
