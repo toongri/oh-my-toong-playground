@@ -59,14 +59,29 @@ test_ac1_claude_compact_inline_recovery_env_pointer() {
 # AC2: platform=codex, >7000-char ledger -> pointer branch. No CLAUDE_ENV_FILE,
 # no unexpanded $OMT_DIR/$OMT_SESSION_ID; DOES contain the resolved absolute
 # ledger path.
+#
+# The 8000-char payload MUST live under the "## Now" header (not before it):
+# ledger-core.sh's recovery extractor keeps only content following the
+# "## Now"/"## User Corrections (verbatim)" headers, so padding placed BEFORE
+# "## Now" is discarded by the extractor and never reaches the >7000-char
+# inline-cap check at all -- that would make the pointer branch fire for the
+# wrong reason (an empty extracted acute) instead of the over-cap reason this
+# test claims to cover. Assertions distinguish the over-cap/pointer branch
+# from the inline branch by their branch-unique literal text ("exceed the
+# inline cap" vs "inlined below"), and confirm the original "no leak" intent
+# by asserting the raw x-payload itself never appears in the output (only the
+# inline branch would ever embed it).
 # =============================================================================
 test_ac2_codex_over_cap_pointer_no_leak() {
     local SBX OD out
     SBX=$(mktemp -d)
     OD="$SBX/omt"
     mkdir -p "$OD"
-    head -c 8000 /dev/zero | tr '\0' 'x' > "$OD/session-ledger-test-sid-1.md"
-    printf '## Now\nN\n' >> "$OD/session-ledger-test-sid-1.md"
+    {
+        printf '## Now\n'
+        head -c 8000 /dev/zero | tr '\0' 'x'
+        printf '\n## User Corrections (verbatim)\n'
+    } > "$OD/session-ledger-test-sid-1.md"
 
     out=$(printf '{"source":"compact","session_id":"test-sid-1","cwd":"%s"}' "$SBX" \
         | OMT_DIR="$OD" bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; source '$LEDGER_CORE'; ledger_core_run codex")
@@ -75,7 +90,10 @@ test_ac2_codex_over_cap_pointer_no_leak() {
     if [ "$(printf '%s' "$out" | grep -c 'CLAUDE_ENV_FILE')" = "0" ] \
         && [ "$(printf '%s' "$out" | grep -c '\$OMT_DIR')" = "0" ] \
         && [ "$(printf '%s' "$out" | grep -c '\$OMT_SESSION_ID')" = "0" ] \
-        && echo "$out" | grep -q "$OD/session-ledger-test-sid-1.md"; then
+        && echo "$out" | grep -q "$OD/session-ledger-test-sid-1.md" \
+        && echo "$out" | grep -qF 'exceed the inline cap' \
+        && [ "$(printf '%s' "$out" | grep -c 'inlined below')" = "0" ] \
+        && [ "$(printf '%s' "$out" | grep -cE 'x{50,}')" = "0" ]; then
         ok=1
     fi
 
