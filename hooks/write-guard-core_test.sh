@@ -176,6 +176,47 @@ test_regression_dot_segment_non_ledger_allows() {
 }
 
 # =============================================================================
+# Glob bypass (CONFIRMED defect) -- an unquoted glob candidate never
+# EXACT-string-matches the ledger path, but if the glob pattern itself
+# matches the resolved ledger path, running that command (e.g. `rm
+# "$OMT_DIR"/session-ledger-*.md`) destroys the current session ledger. The
+# core must also deny when a candidate glob pattern matches the ledger path,
+# not just on EXACT string equality.
+# =============================================================================
+test_glob_ledger_star_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/session-ledger-*.md" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-ledger-star: expected deny for '$OD/session-ledger-*.md', got '$out'"
+        return 1
+    fi
+}
+
+test_glob_dir_star_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/*" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-dir-star: expected deny for '$OD/*', got '$out'"
+        return 1
+    fi
+}
+
+test_glob_non_matching_star_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/other-*.md" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-non-matching-star: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -192,6 +233,9 @@ main() {
     run_test test_regression_double_slash_denies
     run_test test_regression_dotdot_segment_denies
     run_test test_regression_dot_segment_non_ledger_allows
+    run_test test_glob_ledger_star_denies
+    run_test test_glob_dir_star_denies
+    run_test test_glob_non_matching_star_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
