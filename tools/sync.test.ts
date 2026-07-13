@@ -36,6 +36,7 @@ import { DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { CodexAdapter } from "./adapters/codex.ts";
 import { cleanupOldBackups } from "./lib/backup.ts";
+import { deriveProjectName } from "../lib/omt-dir.ts";
 import { execFileSync } from "child_process";
 
 // ---------------------------------------------------------------------------
@@ -849,7 +850,7 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		expect(manifest["codex/skills"]).toBeUndefined();
 	});
 
-	it("backs up a pre-existing .agents/skills entry under .sync-backup/{sid}/agents/skills/", async () => {
+	it("backs up a pre-existing .agents/skills entry under the per-deploy backup destination", async () => {
 		// Pre-existing skill under the NEW location, as if deployed by a prior sync.
 		const preExisting = path.join(targetPath, ".agents", "skills", "old-skill", "SKILL.md");
 		await writeFile(preExisting, "# Old Skill\n");
@@ -864,19 +865,11 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		};
 
 		const adapters = makeAdapterMap(["codex"]);
-		const context = makeContext({ dryRun: false, backupDest: "sid-agents-skills" });
+		const context = makeContext({ dryRun: false });
 
 		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
 
-		const backedUp = path.join(
-			targetPath,
-			".sync-backup",
-			"sid-agents-skills",
-			"agents",
-			"skills",
-			"old-skill",
-			"SKILL.md",
-		);
+		const backedUp = path.join(context.backupDest, "agents", "skills", "old-skill", "SKILL.md");
 		expect(await exists(backedUp)).toBe(true);
 	});
 
@@ -966,7 +959,7 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		};
 
 		const adapters = makeAdapterMap(["codex"]);
-		const context = makeContext({ dryRun: false, backupDest: "sid-fossil-cleanup" });
+		const context = makeContext({ dryRun: false });
 
 		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
 
@@ -974,15 +967,7 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		expect(await exists(path.join(targetPath, ".codex", "skills"))).toBe(false);
 
 		// Backed up before removal.
-		const backedUp = path.join(
-			targetPath,
-			".sync-backup",
-			"sid-fossil-cleanup",
-			"codex",
-			"skills",
-			"old-skill",
-			"SKILL.md",
-		);
+		const backedUp = path.join(context.backupDest, "codex", "skills", "old-skill", "SKILL.md");
 		expect(await exists(backedUp)).toBe(true);
 
 		// Stale codex/skills manifest key pruned; agents/skills reflects this run.
@@ -1011,16 +996,14 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		};
 
 		const adapters = makeAdapterMap(["codex"]);
-		const context = makeContext({ dryRun: false, backupDest: "sid-not-owned" });
+		const context = makeContext({ dryRun: false });
 
 		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
 
 		expect(await exists(fossilFile)).toBe(true);
-		expect(
-			await exists(
-				path.join(targetPath, ".sync-backup", "sid-not-owned", "codex", "skills", "old-skill"),
-			),
-		).toBe(false);
+		expect(await exists(path.join(context.backupDest, "codex", "skills", "old-skill"))).toBe(
+			false,
+		);
 	});
 
 	it("never touches a .codex/skills fossil when codex is not a target for this skills sync (guard)", async () => {
@@ -3476,18 +3459,6 @@ describe("createContext", () => {
 		expect(ctx.dryRun).toBe(true);
 	});
 
-	// The random-per-call invariant this test used to pin moved off createContext
-	// entirely: backupBase is now a deterministic, run-scoped resolution of
-	// $OMT_DIR (no randomness), and the per-deploy random segment is assigned
-	// later, once per (target, worktree), inside the sync fan-out loop — not
-	// here. This assertion is expected to fail until that call site exists;
-	// rewriting it is a follow-up task, not this one.
-	it("generates unique backupSession on each `createContext` call", () => {
-		const ctx1 = createContext(false);
-		const ctx2 = createContext(false);
-		expect(ctx1.backupBase).not.toBe(ctx2.backupBase);
-	});
-
 	it("createContext exposes the OMT backup base", () => {
 		const tmp = fs2.mkdtempSync(path.join(os.tmpdir(), "omt-dir-h1-"));
 		const originalOmtDir = process.env.OMT_DIR;
@@ -4141,10 +4112,12 @@ describe("component fan-out", () => {
 		await fs.chmod(claudeDir, 0o755);
 	});
 
-	// Bug (2): a worktree that fails mid-deploy must NOT be registered as a backup
-	// root, so retention cleanup does not prune its last good backup. backupRoots
-	// is the success-only invariant: only worktrees that completed all sync steps
-	// belong in it.
+	// Bug (2): a pre-existing in-target `.sync-backup/` (the legacy dotted
+	// layout) must survive a failed worktree deploy. cleanupOldBackups now only
+	// ever prunes the single shared OMT-owned root (`<base>/sync-backup/`,
+	// dotless), never a target tree, so there is no success-only registration
+	// left to bypass — the guarantee holds by construction regardless of
+	// whether this worktree's deploy succeeds or fails.
 	it("Bug2: a worktree failing mid-deploy keeps its prior backup and is not a backup root", async () => {
 		const { container, worktrees } = makeBareTopology("repo", ["wt1"]);
 		await seedSkill("oracle");
@@ -4169,19 +4142,18 @@ describe("component fan-out", () => {
 		const adapters = new Map<Platform, PlatformAdapter>([
 			["claude", new FailingAdapter()],
 		]) as AdapterMap;
-		const context = makeContext({ dryRun: false, backupDest: "new-session" });
+		const context = makeContext({ dryRun: false });
 
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
-		// The worktree failed, so it is recorded as failed and NOT as a backup root.
+		// The worktree failed, so it is recorded as a failed target.
 		expect(context.failedTargets).toContain(worktrees[0]);
-		// `backupRoots` (the success-only backup-root invariant) was removed from
-		// SyncContext; stand in with an empty Set so this compiles. Rewriting this
-		// assertion to match the new contract is a follow-up task, not this one.
-		expect(new Set<string>().has(worktrees[0]!)).toBe(false);
 
-		// Retention cleanup over the production union (processedPaths ∪ backupRoots)
-		// with retentionDays=0 must leave the failed worktree's prior backup intact.
+		// cleanupOldBackups now only ever prunes `<base>/sync-backup` (dotless)
+		// directly under the given base — it never touches a target's legacy
+		// `.sync-backup/` at all, so running it against every processed worktree
+		// with retentionDays=0 must still leave the failed worktree's prior
+		// backup intact.
 		const cleanupTargets = new Set<string>([...context.processedPaths]);
 		await Promise.all([...cleanupTargets].map((t) => cleanupOldBackups(t, 0).catch(() => {})));
 
@@ -4341,12 +4313,16 @@ describe("component fan-out", () => {
 		expect(await exists(rulePath)).toBe(true);
 	});
 
-	// AC6.3 — per-worktree backup of replaced category lands under each worktree
-	it("AC6.3: replacing the skills category backs the old skill up under wt1's .sync-backup", async () => {
+	// AC6.3 — per-worktree backup of replaced category lands under the shared
+	// OMT-owned backup root, in a deploy-scoped dir keyed by this worktree.
+	it("AC6.3: replacing the skills category backs the old skill up under the OMT-owned backup root", async () => {
 		const { container, worktrees } = makeBareTopology("repo", ["wt1", "wt2"]);
 		await seedSkill("oracle");
 
-		// Pre-place an old skill in wt1 that the wipe will replace.
+		// Pre-place an old skill in wt1 that the wipe will replace. wt2 has no
+		// pre-existing content, so its backupCategory call hits the
+		// source-absent early-return and writes nothing — only wt1 produces a
+		// deploy-scoped backup dir under the shared root.
 		const oldSkill = path.join(worktrees[0]!, ".claude", "skills", "old", "SKILL.md");
 		await writeFile(oldSkill, "# old\n");
 
@@ -4359,14 +4335,17 @@ describe("component fan-out", () => {
 		const adapters = new Map<Platform, PlatformAdapter>([
 			["claude", new ClaudeAdapter()],
 		]) as AdapterMap;
-		const context = makeContext({ dryRun: false, backupDest: "sess-ac63" });
+		const backupBase = path.join(tmpDir, "ac63-omt-base");
+		const context = makeContext({ dryRun: false, backupBase });
 
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
+		const syncBackupRoot = path.join(backupBase, "sync-backup");
+		const entries = await fs.readdir(syncBackupRoot);
+		expect(entries).toHaveLength(1);
 		const backupCopy = path.join(
-			worktrees[0]!,
-			".sync-backup",
-			"sess-ac63",
+			syncBackupRoot,
+			entries[0]!,
 			"claude",
 			"skills",
 			"old",
@@ -4860,19 +4839,12 @@ describe("syncDocs", () => {
 		await writeFile(path.join(rootDir, "docs", "bundle", "one.md"), "# One\n");
 		await writeFile(path.join(deployRoot, "docs", "bundle"), "stale file\n");
 		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["bundle"] } };
-		const context = makeContext({ backupDest: "form-morph-sess" });
+		const context = makeContext();
 
 		await syncDocs(context, syncYaml, rootDir, deployRoot);
 
 		expect(await readFile(path.join(deployRoot, "docs", "bundle", "one.md"))).toBe("# One\n");
-		const backupFile = path.join(
-			deployRoot,
-			".sync-backup",
-			"form-morph-sess",
-			"docs",
-			"docs",
-			"bundle",
-		);
+		const backupFile = path.join(context.backupDest, "docs", "docs", "bundle");
 		expect(await readFile(backupFile)).toBe("stale file\n");
 	});
 
@@ -5069,15 +5041,16 @@ describe("syncDocs", () => {
 		await writeFile(path.join(rootDir, "docs", "intro.md"), "# New\n");
 		await writeFile(path.join(deployRoot, "docs", "intro.md"), "# Old\n");
 		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
-		const context = makeContext({ backupDest: "sess1" });
+		const context = makeContext();
 
 		await syncDocs(context, syncYaml, rootDir, deployRoot);
 
 		// backupDocs preserves the FULL deployRoot-relative path (including the
-		// docs section's own "docs/" segment) under the fixed .sync-backup/<session>/docs/
-		// namespace — so a target already living at deployRoot/docs/intro.md backs
-		// up to .sync-backup/sess1/docs/docs/intro.md (see lib/backup.ts:backupDocs).
-		const backupFile = path.join(deployRoot, ".sync-backup", "sess1", "docs", "docs", "intro.md");
+		// docs section's own "docs/" segment) under the per-deploy backup
+		// destination's "docs/" namespace — so a target already living at
+		// deployRoot/docs/intro.md backs up to <backupDest>/docs/docs/intro.md
+		// (see lib/backup.ts:backupDocs).
+		const backupFile = path.join(context.backupDest, "docs", "docs", "intro.md");
 		expect(await readFile(backupFile)).toBe("# Old\n");
 	});
 
@@ -5168,5 +5141,340 @@ describe("syncDocs", () => {
 
 		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
 		expect(await readFile(externalFile)).toBe("external content\n");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: backup relocation (writer repoint + per-deploy destination)
+//
+// Base is injected via makeContext({ backupBase: <tmp> }) — hermetic,
+// in-process, never touches the developer's real OMT base. See
+// $OMT_DIR/plans/sync-backup-relocation.md for the full design.
+// ---------------------------------------------------------------------------
+
+describe("backup relocation (writer repoint + per-deploy destination)", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+	let backupBase: string;
+	let syncYamlPath: string;
+
+	const GIT_ENV = {
+		...process.env,
+		GIT_AUTHOR_NAME: "T",
+		GIT_AUTHOR_EMAIL: "t@t.com",
+		GIT_COMMITTER_NAME: "T",
+		GIT_COMMITTER_EMAIL: "t@t.com",
+	};
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "backup-reloc-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		backupBase = path.join(tmpDir, "omt-base");
+		syncYamlPath = path.join(rootDir, "sync.yaml");
+		await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	/**
+	 * Plants an "oracle" skill source plus a sync.yaml declaring it for the
+	 * given target, AND pre-existing deployed content under the target's
+	 * `.claude/skills/` that the sync must back up before it can overwrite —
+	 * without this, backupCategory's source-absent early-return means no
+	 * backup is ever written and every location assertion below would be
+	 * vacuously true (see backup.ts:36-42).
+	 */
+	async function seedOverwriteFixture(target: string): Promise<AdapterMap> {
+		await writeFile(path.join(rootDir, "skills", "oracle", "SKILL.md"), "# Oracle\n");
+		await writeFile(path.join(target, ".claude", "skills", "old-thing", "SKILL.md"), "# Old\n");
+		await writeFile(
+			syncYamlPath,
+			`path: ${target}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+		);
+		return makeAdapterMap(["claude"]);
+	}
+
+	/** git init -b main at dir — real git repo fixture for deriveProjectName. */
+	async function initGitRepo(dir: string): Promise<void> {
+		await fs.mkdir(dir, { recursive: true });
+		execFileSync("git", ["init", "-b", "main", dir], { stdio: "pipe", env: GIT_ENV });
+	}
+
+	/** Builds a real bare-structure container with worktrees (adapted from "component fan-out"). */
+	async function makeBareTopologyLocal(container: string, names: string[]): Promise<string[]> {
+		await fs.mkdir(container, { recursive: true });
+		const bareDir = path.join(container, ".bare");
+		execFileSync("git", ["init", "--bare", bareDir], { stdio: "pipe", env: GIT_ENV });
+
+		const seedWt = fs2.mkdtempSync(path.join(os.tmpdir(), "backup-reloc-seed-"));
+		execFileSync(
+			"git",
+			["--git-dir", bareDir, "worktree", "add", "--orphan", "-b", "main", seedWt],
+			{ stdio: "pipe", env: GIT_ENV },
+		);
+		execFileSync("git", ["-C", seedWt, "commit", "--allow-empty", "-m", "init"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		execFileSync("git", ["-C", seedWt, "push", bareDir, "main"], { stdio: "pipe", env: GIT_ENV });
+		fs2.rmSync(seedWt, { recursive: true, force: true });
+		execFileSync("git", ["--git-dir", bareDir, "worktree", "prune"], { stdio: "pipe" });
+
+		const worktrees: string[] = [];
+		for (const name of names) {
+			const wtDir = path.join(container, name);
+			execFileSync("git", ["--git-dir", bareDir, "worktree", "add", wtDir], {
+				stdio: "pipe",
+				env: GIT_ENV,
+			});
+			worktrees.push(fs2.realpathSync(wtDir));
+		}
+		return worktrees;
+	}
+
+	it("no new .sync-backup under target worktrees", async () => {
+		const adapters = await seedOverwriteFixture(targetPath);
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(await exists(path.join(targetPath, ".sync-backup"))).toBe(false);
+	});
+
+	it("backupCategory lands under the OMT base", async () => {
+		const adapters = await seedOverwriteFixture(targetPath);
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const syncBackupRoot = path.join(backupBase, "sync-backup");
+		const entries = await fs.readdir(syncBackupRoot);
+		expect(entries).toHaveLength(1);
+		const categoryBackup = path.join(
+			syncBackupRoot,
+			entries[0]!,
+			"claude",
+			"skills",
+			"old-thing",
+			"SKILL.md",
+		);
+		expect(await exists(categoryBackup)).toBe(true);
+	});
+
+	it("backupDocs shares the category deploy segment", async () => {
+		await writeFile(path.join(rootDir, "skills", "oracle", "SKILL.md"), "# Oracle\n");
+		await writeFile(
+			path.join(targetPath, ".claude", "skills", "old-thing", "SKILL.md"),
+			"# Old\n",
+		);
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# New\n");
+		await writeFile(path.join(targetPath, "docs", "intro.md"), "# Old Docs\n");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\ndocs:\n  items:\n    - intro\n`,
+		);
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const syncBackupRoot = path.join(backupBase, "sync-backup");
+		const entries = await fs.readdir(syncBackupRoot);
+		expect(entries).toHaveLength(1);
+		const deploySegment = entries[0]!;
+
+		// Both the category backup and the docs backup must sit under the SAME
+		// deploy-segment directory — proving the per-deploy id was computed once
+		// and shared, not re-derived at each assembly point.
+		expect(
+			await exists(
+				path.join(syncBackupRoot, deploySegment, "claude", "skills", "old-thing", "SKILL.md"),
+			),
+		).toBe(true);
+		expect(
+			await exists(path.join(syncBackupRoot, deploySegment, "docs", "docs", "intro.md")),
+		).toBe(true);
+	});
+
+	it("target label uses deriveProjectName container name", async () => {
+		const gitTarget = path.join(tmpDir, "git-project");
+		await initGitRepo(gitTarget);
+		await writeFile(syncYamlPath, `path: ${gitTarget}\n`);
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const expectedName = deriveProjectName(gitTarget);
+		const segment = path.basename(context.backupDest);
+		expect(segment.startsWith(`${expectedName}-`)).toBe(true);
+	});
+
+	it("target label falls back to basename on non-git path", async () => {
+		const plainTarget = path.join(tmpDir, "plain-target");
+		await fs.mkdir(plainTarget, { recursive: true });
+		await writeFile(syncYamlPath, `path: ${plainTarget}\n`);
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const segment = path.basename(context.backupDest);
+		expect(segment.startsWith(`${path.basename(plainTarget)}-`)).toBe(true);
+	});
+
+	it("plain target yields duplicated name segments", async () => {
+		const gitTarget = path.join(tmpDir, "dup-project");
+		await initGitRepo(gitTarget);
+		await writeFile(syncYamlPath, `path: ${gitTarget}\n`);
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const name = path.basename(gitTarget);
+		const segment = path.basename(context.backupDest);
+		// Non-bare target: deployRoot === targetPath, so deriveProjectName(targetPath)
+		// and basename(deployRoot) are the same value — first two segments duplicate.
+		expect(segment.startsWith(`${name}-${name}-`)).toBe(true);
+	});
+
+	it("same target-worktree deployed twice gets distinct backup dirs", async () => {
+		const adapters = await seedOverwriteFixture(targetPath);
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+		const dest1 = context.backupDest;
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+		const dest2 = context.backupDest;
+
+		expect(dest1).not.toBe(dest2);
+
+		const syncBackupRoot = path.join(backupBase, "sync-backup");
+		const entries = await fs.readdir(syncBackupRoot);
+		expect(entries).toHaveLength(2);
+	});
+
+	it("two worktrees in one sync get distinct backup dirs", async () => {
+		const container = path.join(tmpDir, "bare-container");
+		const worktrees = await makeBareTopologyLocal(container, ["wt1", "wt2"]);
+		await writeFile(path.join(rootDir, "skills", "oracle", "SKILL.md"), "# Oracle\n");
+		for (const wt of worktrees) {
+			await writeFile(path.join(wt, ".claude", "skills", "old-thing", "SKILL.md"), "# Old\n");
+		}
+		await writeFile(
+			syncYamlPath,
+			`path: ${container}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+		);
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const syncBackupRoot = path.join(backupBase, "sync-backup");
+		const entries = await fs.readdir(syncBackupRoot);
+		expect(entries).toHaveLength(2);
+	});
+
+	it("backup preserves pre-overwrite target bytes", async () => {
+		await writeFile(path.join(rootDir, "skills", "oracle", "SKILL.md"), "# NEW Y\n");
+		await writeFile(path.join(targetPath, ".claude", "skills", "oracle", "SKILL.md"), "# OLD X\n");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+		);
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		// The sync must have actually overwritten — otherwise this AC proves nothing.
+		expect(
+			await readFile(path.join(targetPath, ".claude", "skills", "oracle", "SKILL.md")),
+		).toBe("# NEW Y\n");
+
+		const syncBackupRoot = path.join(backupBase, "sync-backup");
+		const entries = await fs.readdir(syncBackupRoot);
+		expect(entries).toHaveLength(1);
+		const backedUpFile = path.join(
+			syncBackupRoot,
+			entries[0]!,
+			"claude",
+			"skills",
+			"oracle",
+			"SKILL.md",
+		);
+		expect(await readFile(backedUpFile)).toBe("# OLD X\n");
+	});
+
+	it("pre-existing in-target .sync-backup left untouched", async () => {
+		const staleDir = path.join(targetPath, ".sync-backup", "old-session");
+		await fs.mkdir(staleDir, { recursive: true });
+		const marker = path.join(staleDir, "marker.txt");
+		await writeFile(marker, "precious");
+		const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+		await fs.utimes(staleDir, past, past);
+
+		// The pruner must never visit the target tree at all — call it for real.
+		await cleanupOldBackups(backupBase, 3);
+
+		expect(await exists(marker)).toBe(true);
+	});
+
+	it("backup write failure aborts worktree without clobbering target", async () => {
+		const adapters = await seedOverwriteFixture(targetPath);
+		const originalBytes = await readFile(
+			path.join(targetPath, ".claude", "skills", "old-thing", "SKILL.md"),
+		);
+
+		const backupRoot = path.join(backupBase, "sync-backup");
+		await fs.mkdir(backupRoot, { recursive: true });
+		await fs.chmod(backupRoot, 0o555);
+
+		// Precondition: a write under a chmod-0o555 backupRoot must actually
+		// throw. Without this, the test would pass vacuously under euid==0,
+		// where chmod is a no-op — fail (not skip) if the precondition doesn't hold.
+		let precondFailed = false;
+		try {
+			await fs.mkdir(path.join(backupRoot, "precondition-check", "x"), { recursive: true });
+			precondFailed = true;
+			await fs.rm(path.join(backupRoot, "precondition-check"), {
+				recursive: true,
+				force: true,
+			});
+		} catch {
+			// expected — precondition holds
+		}
+
+		try {
+			if (precondFailed) {
+				throw new Error(
+					"precondition failed: a write under a chmod-0o555 backupRoot did not throw " +
+						"(running as root, where chmod is a no-op?) — F2 cannot be measured",
+				);
+			}
+
+			const context = makeContext({ backupBase });
+
+			await processYaml(context, syncYamlPath, adapters, rootDir);
+
+			expect(
+				await readFile(path.join(targetPath, ".claude", "skills", "old-thing", "SKILL.md")),
+			).toBe(originalBytes);
+			expect(context.failedTargets).toContain(targetPath);
+		} finally {
+			await fs.chmod(backupRoot, 0o755);
+		}
 	});
 });

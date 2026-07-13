@@ -36,8 +36,14 @@ import { parseCodexVersion, assertCodexVersionAllowed } from "./lib/codex-versio
 import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import { resolvePlatforms, resolveComponentPath, setProjectContext } from "./lib/resolver.ts";
-import { backupCategory, backupDocs, cleanupOldBackups, isSafeBackupRoot } from "./lib/backup.ts";
-import { resolveOmtDir, getOmtDir } from "../lib/omt-dir.ts";
+import {
+	backupCategory,
+	backupDocs,
+	cleanupOldBackups,
+	generateBackupSessionId,
+	isSafeBackupRoot,
+} from "./lib/backup.ts";
+import { resolveOmtDir, getOmtDir, deriveProjectName } from "../lib/omt-dir.ts";
 import { reconcilePairManifest, removeManifestPair } from "./lib/deploy-manifest.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
@@ -1598,6 +1604,20 @@ export async function processYaml(
 
 	for (const deployRoot of deployRoots) {
 		try {
+			// Per-deploy backup destination (D-5): computed once per (target,
+			// worktree), before any deploy step. This is the only site that holds
+			// targetPath (the container) and deployRoot (the worktree)
+			// simultaneously, so it is the only site where the id CAN be computed —
+			// generating it lower (e.g. inside backupDocs, called from 6+ places)
+			// would scatter one deploy's backups across 6+ random directories.
+			// Writers read this back off the context exactly as they read
+			// context.backupDest at HEAD, so their signatures never change.
+			context.backupDest = path.join(
+				context.backupBase,
+				"sync-backup",
+				`${deriveProjectName(targetPath)}-${path.basename(deployRoot)}-${generateBackupSessionId()}`,
+			);
+
 			// Each worktree's deploy is independent — fresh source-root accumulator so
 			// syncLib targets this deployRoot's .{platform}/lib only.
 			const libSourceRoots: LibSourceRoots = new Map();
