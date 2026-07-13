@@ -1032,6 +1032,91 @@ test_defect4_per_token_quoted_non_ledger_allows() {
 }
 
 # =============================================================================
+# Regression (CONFIRMED bypass, independent code review) -- $HOME/~ spelling
+# of the ledger path bypasses the EXACT match: _cwg_absolutize expands
+# $OMT_DIR/$OMT_SESSION_ID/$CODEX_THREAD_ID but NOT $HOME/${HOME} or a
+# leading `~`. Because the resolved omt_dir is ALWAYS $HOME/.omt/<proj>, a
+# home-relative spelling of the ledger reaches the SAME file but is not
+# matched: `rm "$HOME/.omt/<proj>/session-ledger-<sid>.md"` leaves $HOME
+# literal (never matches), and `rm ~/.omt/<proj>/session-ledger-<sid>.md`
+# leaves `~` literal and treated as a cwd-relative token (never matches) --
+# both silently ALLOW. main's old substring guard caught these; this is a
+# regression. Each DENY case below must deny; the two non-ledger controls
+# prove the fix does not over-block a legitimate $HOME-relative target.
+# =============================================================================
+test_own_home_env_var_form_denies() {
+    local sbx od out result=0
+    sbx=$(mktemp -d)
+    od="$sbx/.omt/proj"
+    mkdir -p "$od"
+
+    out=$(jq -n --arg cmd 'rm "$HOME/.omt/proj/session-ledger-cx.md"' --arg cwd "$od" \
+        '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-home-env-var-form: expected deny for literal \$HOME/.omt/proj/session-ledger-cx.md target, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$sbx"
+    return "$result"
+}
+
+test_own_home_tilde_form_denies() {
+    local sbx od out result=0
+    sbx=$(mktemp -d)
+    od="$sbx/.omt/proj"
+    mkdir -p "$od"
+
+    out=$(jq -n --arg cmd 'rm ~/.omt/proj/session-ledger-cx.md' --arg cwd "$od" \
+        '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-home-tilde-form: expected deny for literal ~/.omt/proj/session-ledger-cx.md target, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$sbx"
+    return "$result"
+}
+
+test_own_home_env_var_non_ledger_allows() {
+    local sbx od out result=0
+    sbx=$(mktemp -d)
+    od="$sbx/.omt/proj"
+    mkdir -p "$od"
+
+    out=$(jq -n --arg cmd 'rm "$HOME/.omt/proj/other-file.md"' --arg cwd "$od" \
+        '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED own-home-env-var-non-ledger-allow: expected allow for \$HOME/.omt/proj/other-file.md, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$sbx"
+    return "$result"
+}
+
+test_own_home_outside_omt_dir_allows() {
+    local sbx od out result=0
+    sbx=$(mktemp -d)
+    od="$sbx/.omt/proj"
+    mkdir -p "$od"
+
+    out=$(jq -n --arg cmd 'rm "$HOME/notes.md"' --arg cwd "$od" \
+        '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
+    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
+        echo "ASSERTION FAILED own-home-outside-omt-dir-allow: expected allow for \$HOME/notes.md, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$sbx"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1090,6 +1175,10 @@ main() {
     run_test test_defect3_fd_dup_stdout_to_stderr_no_ledger_allows
     run_test test_defect4_per_token_quoted_env_var_denies
     run_test test_defect4_per_token_quoted_non_ledger_allows
+    run_test test_own_home_env_var_form_denies
+    run_test test_own_home_tilde_form_denies
+    run_test test_own_home_env_var_non_ledger_allows
+    run_test test_own_home_outside_omt_dir_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
