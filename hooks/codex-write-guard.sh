@@ -20,6 +20,15 @@
 #
 # BEST-EFFORT, not security-complete: headers/targets are absolutized
 # against cwd to cover the common case, not a full shell parser.
+#
+# The substring-blacklist -> full-path-EXACT-match migration (write-guard-
+# core.sh) narrowed the contract on purpose: forms the old substring scan
+# used to catch are OUT OF SCOPE here and are not going to be chased with
+# more parsing -- `cd "$OMT_DIR" && rm session-ledger-$SID.md` (relative
+# target resolved against a pre-`cd` cwd this hook never sees), variable
+# indirection (`f="$OMT_DIR/..."; > "$f"`), parameter expansion
+# (`> "${OMT_DIR%/}/..."`), and process substitution. This shim stays a
+# best-effort literal-text scan, not a shell interpreter.
 # =============================================================================
 set -euo pipefail
 
@@ -152,15 +161,22 @@ _cwg_extract_shell_targets() {
     local first_word
     first_word=$(printf '%s' "$seg" | awk '{print $1}')
 
-    # Redirect target: the token after the last `>` / `>>`, excluding fd
-    # duplications like `2>&1` / `>&2`.
+    # Redirect target: the token after the last `>` / `>>`. Over-extract,
+    # like the Claude twin (hooks/pre-tool-enforcer.sh:115): no leading-char
+    # exclusion for fd-dups (`2>&1`, `>&2`) here -- an earlier version
+    # excluded a digit/`&` immediately before `>` to skip fd-dups, but that
+    # same exclusion also skipped the FILE-target forms `2>`/`&>` (a digit
+    # or `&` sits right before `>` there too), silently ALLOWING a real
+    # ledger redirect through either form. write_guard_core_run does the
+    # actual EXACT match, so an over-extracted fd-dup operand (e.g. `&1`
+    # from `2>&1`) simply never matches the ledger path -- harmless.
     # `|| true`: grep -oE returns 1 when a segment has no redirect at all --
     # under this script's `set -euo pipefail`, an unguarded nonzero pipeline
     # here would abort the function (via the process-substitution subshell
     # that invokes it) before the case block below -- tee/rm/truncate/cp/mv/
     # sed -i/dd -- ever runs, silently ALLOWING those write routes.
     printf '%s\n' "$seg" \
-        | grep -oE '(^|[^0-9&])>{1,2}[[:space:]]*[^[:space:]&][^[:space:]]*' \
+        | grep -oE '>{1,2}[[:space:]]*[^[:space:]]+' \
         | sed -E 's/^.*>{1,2}[[:space:]]*//' || true
 
     case "$first_word" in
@@ -225,18 +241,33 @@ _cwg_mask_quoted() {
         }'
 }
 
-# _cwg_strip_quotes <token> -- removes a single leading+trailing double-quote
-# pair, then a single leading+trailing single-quote pair, mirroring the
-# Claude twin's _wg_strip_dquotes (hooks/pre-tool-enforcer.sh:52-57) extended
-# to single quotes -- a quoted redirect/rm/tee target (`> "$f"` or `> '$f'`)
-# still carries its quote characters after extraction and must be unwrapped
-# before write_guard_core_run's full-path EXACT comparison.
+# _cwg_strip_quotes <token> -- removes EVERY double-quote and single-quote
+# character in the token (not just one outermost pair each way), mirroring
+# what a real shell does to a word during expansion: quote characters never
+# survive into the expanded value, however many separately-quoted spans are
+# concatenated to build the word. A single-outermost-pair strip (this
+# function's earlier form, and the Claude twin's _wg_strip_dquotes at
+# hooks/pre-tool-enforcer.sh:52-57) is correct only when the whole token is
+# ONE quoted span -- it under-strips a token built from several ADJACENT
+# quoted spans with no separating whitespace, e.g.
+# "$OMT_DIR"/"session-ledger-$OMT_SESSION_ID.md" (a single shell word, no
+# space between the closing and opening quotes): stripping only the very
+# first and last quote character left the INNER quote characters (around the
+# literal `/`) embedded in the candidate, so after env-var substitution in
+# _cwg_absolutize the candidate carried stray `"` characters and never
+# full-path EXACT matched the real ledger path -- a silent bypass. Removing
+# every quote character unconditionally fixes this: a legitimate non-ledger
+# target loses its (already load-bearing-only-for-shell-parsing) quote
+# characters the same way and still resolves to its real path, so this is
+# over-removal that is harmless for write_guard_core_run's EXACT compare (a
+# ledger path itself never contains a quote character).
+#
+# ${s//\"/} / ${s//\'/} are pure bash parameter-expansion substitutions
+# (global, not first-match), Bash 3.2 compatible -- no eval/sed needed.
 _cwg_strip_quotes() {
     local s="$1"
-    s="${s#\"}"
-    s="${s%\"}"
-    s="${s#\'}"
-    s="${s%\'}"
+    s="${s//\"/}"
+    s="${s//\'/}"
     printf '%s\n' "$s"
 }
 
