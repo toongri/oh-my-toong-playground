@@ -2039,6 +2039,27 @@ export async function assertCodexVersionIfTargeted(
 	assertCodexVersionAllowed(observed, allowed);
 }
 
+/**
+ * Logs the OMT-owned sync-backup root for this run.
+ */
+export function logBackupLocation(base: string): void {
+	logInfo(`백업 위치: ${base}/sync-backup`);
+}
+
+/**
+ * Prunes old backups under the OMT-owned shared root. Prune the single shared
+ * OMT-owned root only — no longer a union with the per-worktree deploy-root
+ * set. This deliberately gives up the prior success-only invariant (only
+ * worktrees that finished cleanly were pruned): the shared root is pruned
+ * unconditionally now, by age. See the plan's ACCEPTED CONSEQUENCES — backups
+ * are write-only and git-recoverable, so this trade is accepted.
+ */
+export async function cleanupRunBackups(base: string, dryRun: boolean): Promise<void> {
+	if (dryRun) return;
+	const retentionDays = await getBackupRetentionDays();
+	await cleanupOldBackups(base, retentionDays).catch(() => {});
+}
+
 // ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
@@ -2057,10 +2078,19 @@ if (import.meta.main) {
 		process.exit(1);
 	}
 
-	const context = createContext(dryRun);
+	let context: SyncContext;
+	try {
+		context = createContext(dryRun);
+	} catch (err) {
+		if (err instanceof UnsafeBackupRootError) {
+			logError(err.message);
+			process.exit(1);
+		}
+		throw err;
+	}
 	context.rootModelMaps = await loadRootModelMaps(rootDir);
 
-	logInfo(`백업 위치: ${context.backupBase}/sync-backup`);
+	logBackupLocation(context.backupBase);
 
 	const adapters: AdapterMap = new Map<Platform, PlatformAdapter>();
 	adapters.set("claude", new ClaudeAdapter());
@@ -2118,26 +2148,13 @@ if (import.meta.main) {
 			}
 		}
 
-		// 오래된 백업 정리
-		const cleanupPromises: Promise<void>[] = [];
-		if (!dryRun) {
-			const retentionDays = await getBackupRetentionDays();
-			// Prune the single shared OMT-owned root only — no longer a union with
-			// the per-worktree deploy-root set. This deliberately gives up the
-			// prior success-only invariant (only worktrees that finished cleanly
-			// were pruned): the shared root is pruned unconditionally now, by age.
-			// See the plan's ACCEPTED CONSEQUENCES — backups are write-only and
-			// git-recoverable, so this trade is accepted.
-			cleanupPromises.push(cleanupOldBackups(context.backupBase, retentionDays).catch(() => {}));
-		}
-
 		if (dryRun) {
 			logWarn("========== DRY-RUN 완료 ==========");
 		} else {
 			logSuccess("========== 동기화 완료 ==========");
 		}
 
-		await Promise.all(cleanupPromises);
+		await cleanupRunBackups(context.backupBase, dryRun);
 		// Any worktree that failed during the best-effort fan-out forces a non-zero
 		// exit: an unwritable worktree must never be reported as a clean sync.
 		if (context.failedTargets.length > 0) {

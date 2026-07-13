@@ -25,6 +25,8 @@ import {
 	deploysToClaudeDotDir,
 	loadRootModelMaps,
 	deployLocationForManifest,
+	logBackupLocation,
+	cleanupRunBackups,
 	type AdapterMap,
 	type LibSourceRoots,
 } from "./sync.ts";
@@ -59,6 +61,12 @@ async function exists(p: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+/** Sets a directory's mtime far enough in the past to clear any retention window used in these tests. */
+async function ageDir(dirPath: string): Promise<void> {
+	const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+	await fs.utimes(dirPath, past, past);
 }
 
 /**
@@ -5476,5 +5484,166 @@ describe("backup relocation (writer repoint + per-deploy destination)", () => {
 		} finally {
 			await fs.chmod(backupRoot, 0o755);
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: CLI wiring extraction (logBackupLocation, cleanupRunBackups)
+//
+// These cover the two pieces pulled out of the `import.meta.main` CLI block
+// so they're independently testable — see $OMT_DIR/plans (T-4 story) for the
+// full design. cleanupRunBackups is the ONLY caller of the destructive
+// rm -rf pruner (cleanupOldBackups) reachable from the CLI, so every guard
+// (dry-run gate, retention resolution, best-effort catch) must live inside it.
+// ---------------------------------------------------------------------------
+
+describe("CLI wiring extraction (logBackupLocation, cleanupRunBackups)", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "cli-wiring-test-"));
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("cleanup prunes the shared root and never the target tree", async () => {
+		const base = path.join(tmpDir, "omt-base");
+		const worktree = path.join(tmpDir, "target-worktree");
+
+		const sharedAged = path.join(base, "sync-backup", "aged-session");
+		await fs.mkdir(sharedAged, { recursive: true });
+		await ageDir(sharedAged);
+
+		const targetAged = path.join(worktree, ".sync-backup", "old-session");
+		await fs.mkdir(targetAged, { recursive: true });
+		await ageDir(targetAged);
+
+		await cleanupRunBackups(base, false);
+
+		expect(await exists(sharedAged)).toBe(false);
+		expect(await exists(targetAged)).toBe(true);
+	});
+
+	it("age prune removes backups of untouched targets", async () => {
+		const rootDir = path.join(tmpDir, "root");
+		const targetPath = path.join(tmpDir, "target");
+		const backupBase = path.join(tmpDir, "omt-base");
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+
+		await writeFile(path.join(rootDir, "skills", "oracle", "SKILL.md"), "# Oracle\n");
+		await writeFile(path.join(targetPath, ".claude", "skills", "old-thing", "SKILL.md"), "# Old\n");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+		);
+		const adapters = makeAdapterMap(["claude"]);
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const syncBackupRoot = path.join(backupBase, "sync-backup");
+		const untouchedDir = path.join(syncBackupRoot, "y-untouched-session");
+		await fs.mkdir(untouchedDir, { recursive: true });
+		await ageDir(untouchedDir);
+
+		await cleanupRunBackups(backupBase, false);
+
+		expect(await exists(untouchedDir)).toBe(false);
+		_resetConfigCache();
+	});
+
+	it("failed worktree keeps this run's backup after cleanup", async () => {
+		const rootDir = path.join(tmpDir, "root");
+		const targetPath = path.join(tmpDir, "target");
+		const backupBase = path.join(tmpDir, "omt-base");
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+
+		await writeFile(path.join(rootDir, "skills", "oracle", "SKILL.md"), "# Oracle\n");
+		await writeFile(path.join(targetPath, ".claude", "skills", "old-thing", "SKILL.md"), "# Old\n");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+		);
+		const adapters = makeAdapterMap(["claude"]);
+		adapters.getAdapter("claude")!.syncSkillsDirect = async () => {
+			throw new Error("simulated deploy failure");
+		};
+		const context = makeContext({ backupBase });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(context.failedTargets).toContain(targetPath);
+
+		const syncBackupRoot = path.join(backupBase, "sync-backup");
+		expect(await fs.readdir(syncBackupRoot)).toHaveLength(1);
+
+		await cleanupRunBackups(backupBase, false);
+
+		expect(await fs.readdir(syncBackupRoot)).toHaveLength(1);
+		_resetConfigCache();
+	});
+
+	it("prune runs even when no target was processed", async () => {
+		const base = path.join(tmpDir, "omt-base");
+		const agedDir = path.join(base, "sync-backup", "aged-session");
+		await fs.mkdir(agedDir, { recursive: true });
+		await ageDir(agedDir);
+
+		await cleanupRunBackups(base, false);
+
+		expect(await exists(agedDir)).toBe(false);
+	});
+
+	it("cleanupRunBackups resolves even when the prune throws", async () => {
+		const base = path.join(tmpDir, "omt-base");
+		await writeFile(path.join(base, "sync-backup"), "not a directory");
+
+		// Precondition: readdir on a non-directory sync-backup path must actually
+		// reject — otherwise this test would pass vacuously even with the
+		// `.catch(() => {})` inside cleanupRunBackups removed.
+		await expect(cleanupOldBackups(base, 3)).rejects.toThrow();
+
+		await expect(cleanupRunBackups(base, false)).resolves.toBeUndefined();
+	});
+
+	it("cleanupRunBackups prunes nothing when dryRun is true", async () => {
+		const base = path.join(tmpDir, "omt-base");
+		const agedDir = path.join(base, "sync-backup", "aged-session");
+		await fs.mkdir(agedDir, { recursive: true });
+		await ageDir(agedDir);
+
+		await cleanupRunBackups(base, true);
+
+		expect(await exists(agedDir)).toBe(true);
+	});
+
+	it("logBackupLocation reports the OMT sync-backup root", () => {
+		const base = path.join(tmpDir, "omt-base");
+
+		const chunks: string[] = [];
+		const origStderr = process.stderr.write.bind(process.stderr);
+		process.stderr.write = (chunk: string | Uint8Array) => {
+			if (typeof chunk === "string") chunks.push(chunk);
+			return true;
+		};
+		try {
+			logBackupLocation(base);
+		} finally {
+			process.stderr.write = origStderr;
+		}
+
+		const output = chunks.join("");
+		expect(output).toContain(`${base}/sync-backup`);
+		expect(output).not.toContain("/.sync-backup/");
 	});
 });
