@@ -177,6 +177,34 @@ function buildFixtures(): Record<string, PlatformFixture> {
 }
 
 // ---------------------------------------------------------------------------
+// File-level OMT_DIR isolation
+//
+// `createContext()` resolves the OMT backup base via `resolveOmtDir()`,
+// which falls back to the developer's real `~/.omt/<project>` whenever
+// `OMT_DIR` is unset. Every `createContext()` call in this file (dry and
+// non-dry) must resolve to a per-test tmp dir instead — otherwise a non-dry
+// `processYaml`/`syncLib` run whose target already has deployed content
+// (e.g. the pre-planted stale skill fixture below, which exists so the sync
+// overwrites something) makes `backupCategory` (tools/lib/backup.ts:32-53)
+// write a real backup into the real OMT base.
+// ---------------------------------------------------------------------------
+
+let savedOmtDir: string | undefined;
+let omtDirTmp: string;
+
+beforeEach(async () => {
+	savedOmtDir = process.env.OMT_DIR;
+	omtDirTmp = await fs.mkdtemp(path.join(os.tmpdir(), "omt-e2e-omtdir-"));
+	process.env.OMT_DIR = omtDirTmp;
+});
+
+afterEach(async () => {
+	if (savedOmtDir === undefined) delete process.env.OMT_DIR;
+	else process.env.OMT_DIR = savedOmtDir;
+	await fs.rm(omtDirTmp, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
 // Suite: 4-platform overlay E2E
 // ---------------------------------------------------------------------------
 
@@ -568,6 +596,15 @@ describe("lib deployment complete after copy-time @lib/ rewrite (regression)", (
 				async () => ({ exitCode: 0 }),
 			),
 		);
+		// Reachability fixture: plant already-deployed skills content so the
+		// sync below overwrites it, forcing backupCategory (backup.ts:32-53) to
+		// actually copy something instead of hitting its source-absent
+		// early-return (backup.ts:40-47) against a pristine tmp target.
+		await writeFile(
+			path.join(targetPath, ".claude", "skills", "stale-skill", "SKILL.md"),
+			"stale content\n",
+		);
+
 		const context = createContext(false);
 
 		await processYaml(context, syncYamlPath, adapters, rootDir);
