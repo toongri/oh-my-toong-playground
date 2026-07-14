@@ -1,7 +1,3 @@
----
-paths: ["**/*.tsx", "app/**"]
----
-
 # Next.js App Router 판단 규칙
 
 App Router에서 렌더링 경계·라우팅·데이터·자산을 다루는 규칙이다. 문서를 열어 판단 기준·Before/After를 확인한다.

@@ -11,6 +11,8 @@
 - 한다: 렌더 결과, 인터랙션 후 UI 변화, 에러·빈 상태 메시지
 - 안 한다: 내부 state 변수명, props 전달 여부, 훅 반환값 직접 assert, React 자체 동작(렌더 사이클·Context 내부)
 
+> ⚠️ 흔한 오해: 이 금지는 **컴포넌트 하나가 쓰는 훅**에 한정된다 — 반환값이 화면을 보는 사용자에게는 중간 산물이기 때문이다. 퍼블리시된 재사용 훅은 반환값이 곧 공개 계약이라 이 금지가 적용되지 않는다. 훅을 어디서 검증할지는 [hooks.md](./hooks.md) 참고.
+
 ## 쿼리 우선순위
 
 `getByRole`(`name` 옵션) → `getByLabelText`(폼) → `getByPlaceholderText` → `getByText`(비인터랙티브) → `getByAltText`.
@@ -35,6 +37,12 @@
 - **외부 경계만** 모킹한다. 내 코드의 내부 모듈을 `vi.mock`하면 실제 통합을 숨겨 false green을 만든다.
 - `afterEach(() => vi.clearAllMocks())`로 테스트 간 오염을 차단한다.
 
+## 테스트 유틸 · 픽스처
+
+- 공용 `render` — provider(Query client·테마·i18n 등)로 감싸는 커스텀 `render`를 만들고 `@testing-library/react`를 전부 re-export하면서 `render`만 덮어쓴다(https://testing-library.com/docs/react-testing-library/setup/). 모든 테스트에 동일한 앰비언트 컨텍스트를 공급할 뿐 특정 테스트의 원인은 인코딩하지 않는다 — General Fixture와는 다르다. 그 경계 판단은 [setup-and-coupling.md](./setup-and-coupling.md) 참고.
+- 핸들러 조직 — 커지면 도메인별 파일로 나누고 나중에 합성한다(https://mswjs.io/docs/best-practices/structuring-handlers). 공식 권장은 테스트별 오버라이드를 `server.use()`로 얹는 것이다(https://mswjs.io/docs/best-practices/network-behavior-overrides). 이 레포는 위 상단 안내대로 `no-cross-feature` 규칙상 `server.use()`를 못 써 핸들러가 요청 쿼리를 읽어 분기하는 방식으로 우회한다.
+- 테스트 데이터는 팩토리로 뽑는다. 테스트 대역 배선(`vi.mock` 연결)은 값이 아니라 구조라 팩토리로 못 뽑는다 — 상세는 [setup-and-coupling.md](./setup-and-coupling.md).
+
 ## 네이밍 · 구조
 
 - 이름은 사용자 행동 + 결과로: `it('로그인 실패 시 에러 메시지를 보여준다')` (`it('renders LoginForm')` X).
@@ -48,5 +56,7 @@
 | 내부 state·메서드 assert            | state 변화가 만든 UI를 검증   |
 | 전체 컴포넌트 snapshot 남용         | 작고 안정적인 조각에만        |
 | `waitFor` 빈/다중 콜백              | 콜백 안 assertion 하나        |
-| 내부 모듈 `vi.mock`                 | 외부 경계만, 내부는 실제 코드 |
+| 내 피처 코드 `vi.mock`              | 외부/프레임워크 경계·어댑터만 |
 | `getByTestId` 기본 사용             | `getByRole`/`getByLabelText`  |
+| 훅 함수를 직접 호출해 촉발          | 실제 상호작용(클릭)으로 촉발한다 |
+| 파일마다 mock 스캐폴드 복붙         | 경계를 밖으로 밀어 셋업을 없앤다 |
