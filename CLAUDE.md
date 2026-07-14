@@ -115,6 +115,7 @@ skills:
 - **keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context
 - **persistent-mode/**: Prevents stopping when work remains incomplete (Stop hook, TypeScript directory)
 - **pre-tool-enforcer.sh**: Tool execution gate (TaskOutput blocking)
+- **verify-caps-gate/**: PreToolUse Bash gate — denies unfiltered whole-monorepo test/lint commands and injects per-runner memory caps (env caps for vitest/turbo/pnpm, flag caps for jest/turbo) per declarative `verify-caps.yaml` policy
 
 ### Key Workflows
 
