@@ -1,22 +1,6 @@
-hooks:
-  PreToolUse:
-    - component: turbo-verify-gate.sh
-      matcher: "Bash"
-      timeout: 5
-
 config:
   env:
     TURBO_CACHE_DIR: "/Users/toong/Library/Caches/algocare-home/turbo"
-  permissions:
-    deny:
-      - "Bash(turbo test)"
-      - "Bash(turbo lint)"
-      - "Bash(turbo run test)"
-      - "Bash(turbo run lint)"
-      - "Bash(pnpm test)"
-      - "Bash(pnpm lint)"
-      - "Bash(pnpm run test)"
-      - "Bash(pnpm run lint)"
 
 mcps:
   notion-algocare:
