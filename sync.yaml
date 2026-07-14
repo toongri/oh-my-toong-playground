@@ -37,3 +37,4 @@ rules:
   items:
     - communication-style
     - convention-grounding
+    - verification-discipline
