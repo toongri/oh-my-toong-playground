@@ -10,10 +10,6 @@ While iterating, run only the verification that the changed files actually affec
 
 The final "is it done" check runs over the affected scope — the changed code plus what depends on it — not an unconditional full-project run. "Affected" is the correct completeness bound: it catches every dependent the change can break, without paying to re-verify untouched code.
 
-## Never trigger heavy verification concurrently
-
-Test, type-check, and build are memory- and CPU-heavy. Do NOT launch them across multiple agents at the same time — parallel heavy verification multiplies peak memory by the number of agents and thrashes the machine. Serialize heavy verification: one at a time.
-
 ## Projects declare the contract; the harness calls it by name
 
 Each project exposes its own verification commands — a fast changed-scope command for the inner loop, and an affected-scope command for the completion gate — under names the project owns. The harness invokes them by name and does not hardcode any language's tool. (For example, one project might name these `verify:quick` and `verify:full`; another might expose Gradle tasks or a Makefile target. The names belong to the project, not to this rule.)
