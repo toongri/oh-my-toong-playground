@@ -1,0 +1,52 @@
+# verify-caps-gate shared base policy (committed). Read from this module's own
+# directory by index.ts's loadConfig and merged with verify-caps.local.yaml
+# (gitignored per-project override) — local wins, per-runner (one level deep):
+#   merged.runners[X] = { ...base.runners[X], ...local.runners[X] }
+#
+# Each runner is matched by its first shell token. Three closed action kinds:
+#   env  — prepend `VAR=value` assignments in front of the command (skip a VAR
+#          already present). Applies whenever the runner is matched, regardless
+#          of compound/`--` shape — env-prefix assignment only ever binds to
+#          the first sub-command, so it is always safe to prepend.
+#   flag — append `--flag=value` to the end of the command (skip if that flag
+#          key is already present). Only applied to a single simple command
+#          (no && || | ; newline > < ` $( ) with no end-of-options `--` marker
+#          — tail-appending onto a compound command or after `--` can land the
+#          flag on the wrong program or as a literal positional argument.
+#   deny — reject an unfiltered root `<runner> [run] (test|lint)` invocation
+#          (script name matched exactly, not e.g. "test:changed") unless the
+#          command carries one of scope_flags anywhere.
+#
+# vitest/turbo/pnpm all get VITEST_MAX_FORKS + VITEST_MAX_THREADS: vitest
+# needs both across pool types (s1 spike: VITEST_MAX_FORKS bounds concurrent
+# forks-pool workers; VITEST_MAX_THREADS is the threads-pool analogue and is
+# ignored when inactive — zero side effect), and turbo/pnpm need them too
+# because they may spawn vitest as a child process that inherits env.
+runners:
+  vitest:
+    env:
+      VITEST_MAX_FORKS: "2"
+      VITEST_MAX_THREADS: "2"
+  jest:
+    flag: "--maxWorkers=2"
+  turbo:
+    env:
+      VITEST_MAX_FORKS: "2"
+      VITEST_MAX_THREADS: "2"
+    flag: "--concurrency=1"
+    # --concurrency only applies alongside a scope flag: an unfiltered `turbo
+    # run local/start/ios/android` invocation can target a persistent task,
+    # and forcing --concurrency=1 there hard-errors ("N persistent tasks but
+    # concurrency of 1"). Gate the flag to commands that already carry one of
+    # deny.scope_flags below (the old bash gate had this same restriction).
+    flag_requires_scope: true
+    deny:
+      scripts: ["test", "lint"]
+      scope_flags: ["--filter", "-F", "--affected"]
+  pnpm:
+    env:
+      VITEST_MAX_FORKS: "2"
+      VITEST_MAX_THREADS: "2"
+    deny:
+      scripts: ["test", "lint"]
+      scope_flags: ["--filter", "-F", "--affected"]
