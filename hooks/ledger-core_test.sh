@@ -29,6 +29,27 @@ run_test() {
 }
 
 # =============================================================================
+# SUB-FIX 3: codex recording string's CODEX_HOME writer path must not double
+# to ~/.codex/.codex/hooks/omt-ledger.sh when CODEX_HOME is exported (the
+# conventional case). The taught literal template must read
+# "${CODEX_HOME:-$HOME/.codex}/hooks/omt-ledger.sh" (default folds .codex into
+# the fallback), never the doubled "${CODEX_HOME:-$HOME}/.codex/hooks/" form.
+# =============================================================================
+test_codex_home_path_not_doubled() {
+    local out ok=0
+    out=$(printf '{"source":"startup","session_id":"s","cwd":"/tmp"}' \
+        | OMT_DIR=/tmp/x OMT_SESSION_ID=s bash -c "source '$LEDGER_CORE'; ledger_core_run codex")
+
+    if echo "$out" | grep -qF '${CODEX_HOME:-$HOME/.codex}/hooks/omt-ledger.sh' \
+        && [ "$(printf '%s' "$out" | grep -cF '${CODEX_HOME:-$HOME}/.codex/hooks/')" = "0" ] \
+        && [ "$(printf '%s' "$out" | grep -cF '.codex/.codex')" = "0" ]; then
+        ok=1
+    fi
+
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
 # AC1: source==compact, populated <=7000-char ledger, platform=claude ->
 # a [LEDGER RECOVERY marker (core owns the platform-qualified form, see AC4)
 # + inline `## Now` body + env-var pointer form (contains the literal token
@@ -328,6 +349,7 @@ main() {
     echo "ledger-core.sh Tests"
     echo "=========================================="
 
+    run_test test_codex_home_path_not_doubled
     run_test test_ac1_claude_compact_inline_recovery_env_pointer
     run_test test_ac2_codex_over_cap_pointer_no_leak
     run_test test_ac3_codex_inline_no_leak
