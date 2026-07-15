@@ -11,7 +11,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 CORE="$SCRIPT_DIR/write-guard-core.sh"
 
 # EVIDENCE_OMT_DIR: self-derived (not ambient $OMT_DIR) so this suite runs
@@ -46,17 +45,20 @@ run_test() {
 }
 
 # =============================================================================
-# AC1 -- byte-identical deny vs the branch-point _wg_deny_json SSOT.
-# Anchored at merge-base(HEAD, main), NOT HEAD -- a later task moves
-# _wg_deny_json out of pre-tool-enforcer.sh, which would make a HEAD read
-# return empty on re-run.
+# AC1 -- byte-identical deny: write_guard_core_run emits EXACTLY the golden
+# deny JSON. The golden is pinned here as a literal, deliberately duplicated
+# from write-guard-core.sh's _wg_core_deny_json so any drift in that SSOT
+# fails this test -- reading the string from the SUT would be a tautology.
+# It was originally read from merge-base's pre-tool-enforcer.sh:_wg_deny_json,
+# but that string has since moved into write-guard-core.sh and no longer
+# exists at that git path (the merge-base anchor advanced past the move once
+# it merged to main), so the golden is pinned directly instead.
 # =============================================================================
-test_ac1_byte_identical_deny_at_branch_point() {
-    local base expected out
-    base=$(git -C "$ROOT_DIR" merge-base HEAD main)
-    expected=$(git -C "$ROOT_DIR" show "$base:hooks/pre-tool-enforcer.sh" | grep '^_wg_deny_json=' | cut -d"'" -f2)
+test_ac1_byte_identical_deny() {
+    local expected out
+    expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the durable session ledger (session-ledger-*.md). Use hooks/omt-ledger.sh append/now instead."}}'
     out=$(printf '%s\n' "$OD/session-ledger-$SID.md" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
-    if [ -n "$expected" ] && [ "$out" = "$expected" ] && printf '%s' "$out" | grep -q '"hookEventName":"PreToolUse"'; then
+    if [ "$out" = "$expected" ] && printf '%s' "$out" | grep -q '"hookEventName":"PreToolUse"'; then
         return 0
     else
         echo "ASSERTION FAILED AC1: expected='$expected' out='$out'"
@@ -182,7 +184,7 @@ main() {
     echo "Write-Guard Core Tests"
     echo "=========================================="
 
-    run_test test_ac1_byte_identical_deny_at_branch_point
+    run_test test_ac1_byte_identical_deny
     run_test test_ac2_different_dir_session_ledger_allows
     run_test test_qa_substring_but_not_anchor_allows
     run_test test_qa_exact_current_ledger_denies
