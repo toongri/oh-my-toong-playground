@@ -61,3 +61,16 @@ runners:
     deny:
       scripts: ["test", "lint"]
       scope_flags: ["--filter", "-F", "--affected"]
+      # selector_required_scripts — a SECOND deny axis for a scoped-but-whole-package
+      # run. `pnpm --filter <pkg> test` (with a scope flag but NO test selector) runs
+      # that package's ENTIRE suite — the exact whole-suite habit verification-discipline
+      # exists to prevent (witnessed: 16 vitest forks from one such command). Deny it
+      # and steer to verify:quick (change-affected scope) or a named selector. A run
+      # that DOES carry a selector — a positional (`test payment.router`), a `-t`/
+      # `--testNamePattern` flag, or a sub-scripted name (`test:changed`, not exact
+      # `test`) — is intentionally narrowed and still allowed+capped. Redirections/pipes
+      # after the script (`test 2>&1 | tail`, `test > out.txt`) are NOT selectors, so a
+      # bare-with-redirection run still denies. This axis is updatedInput-independent:
+      # deny works whether or not the harness honors the cap-injection rewrite.
+      selector_required_scripts: ["test"]
+      selector_required_reason: "`pnpm --filter <pkg> test`는 해당 패키지 전체 테스트 스위트를 실행합니다(리소스 폭증). 변경 영향 범위만 검증하려면 `pnpm verify:quick`을, 특정 테스트만 실행하려면 테스트명/경로를 지정하세요(예: `pnpm --filter <pkg> test <파일명 또는 -t \"패턴\">`)."

@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -29,6 +30,10 @@ import { fileURLToPath } from "node:url";
 export type RunnerDenyConfig = {
 	scripts: string[];
 	scope_flags: string[];
+	// Second deny axis: scripts that, even WITH a scope flag, are denied when run
+	// without a test selector (a scoped-but-whole-package run). Absent → axis off.
+	selector_required_scripts?: string[];
+	selector_required_reason?: string;
 };
 
 export type RunnerRule = {
@@ -95,8 +100,91 @@ function findDenyReason(command: string, config: VerifyCapsConfig): string | nul
 		) {
 			return buildDenyReason(runnerName, rule.deny.scope_flags);
 		}
+
+		// Second axis: a scoped-but-whole-package run. Past the unfiltered check
+		// above, so if this fires the segment DID carry a scope flag — a
+		// `pnpm --filter <pkg> test` with no test selector runs the whole package
+		// suite. Deny and steer to verify:quick (message from policy).
+		if (
+			rule.deny.selector_required_scripts !== undefined &&
+			scopedScriptWithoutSelector(
+				segment,
+				runnerName,
+				rule.deny.selector_required_scripts,
+				rule.deny.scope_flags,
+			)
+		) {
+			return rule.deny.selector_required_reason ?? buildSelectorRequiredReason(runnerName);
+		}
 	}
 	return null;
+}
+
+// True when `segment` is `<runner> [run/-r/--filter <pkg>/…] <script>` for a
+// script in `scripts` (matched EXACTLY — `test:changed` does not match `test`),
+// a scope flag is present, AND no test selector follows the script. "Selector"
+// = a positional operand (`test payment.router`) or a `-t`/`--testNamePattern`
+// flag; redirections and pipes after the script (`test 2>&1`, `test > out`) are
+// NOT selectors, so a bare-with-redirection run still matches (whole-package).
+function scopedScriptWithoutSelector(
+	segment: string,
+	runnerName: string,
+	scripts: string[],
+	scopeFlags: string[],
+): boolean {
+	const s = stripLeadingEnvAssignments(segment);
+	// Must be scoped — an unscoped bare `test` is the first axis's job, not this one.
+	if (!hasAnyScopeFlag(stripAfterEndOfOptions(s), scopeFlags)) return false;
+
+	const leadingForms = ["run", "-r", "--recursive"];
+	for (const flag of scopeFlags) {
+		// value-taking scope flag consumed with its value as one leading token
+		leadingForms.push(`${escapeRegExp(flag)}(?:=\\S+|\\s+\\S+)`);
+	}
+	leadingForms.push("-\\S+"); // any other boolean flag before the script
+	const leading = leadingForms.join("|");
+	const scriptAlt = scripts.map(escapeRegExp).join("|");
+	// `(?:${scriptAlt})(?:\\s+|$)` — exact script terminated by whitespace/end, so
+	// `test:changed` (colon after `test`) does not match the `test` alternative.
+	const re = new RegExp(`^${escapeRegExp(runnerName)}(?:\\s+(?:${leading}))*\\s+(?:${scriptAlt})(?:\\s+|$)`);
+	const match = re.exec(s);
+	if (match === null) return false;
+
+	return !hasTestSelector(s.slice(match[0].length));
+}
+
+// Does the text after the script token carry a test selector? Cut everything
+// from the first redirection/pipe onward (a redirect target like `out.txt` in
+// `test > out.txt` is not a selector), then a remaining positional operand or a
+// `-t`/`--testNamePattern` flag counts as a selector.
+function hasTestSelector(afterScript: string): boolean {
+	const args = argsBeforeRedirect(afterScript).trim();
+	if (args.length === 0) return false;
+	for (const tok of args.split(/\s+/)) {
+		if (tok.length === 0) continue;
+		if (tok.startsWith("-")) {
+			if (
+				tok === "-t" ||
+				tok === "--testNamePattern" ||
+				tok.startsWith("-t=") ||
+				tok.startsWith("--testNamePattern=")
+			) {
+				return true;
+			}
+			continue; // a non-selector flag (--coverage, --reporter, …)
+		}
+		return true; // a positional operand — a test file/name selector
+	}
+	return false;
+}
+
+// The command text before the first redirection or pipe operator. A redirect
+// operator is an optional fd digit / `&` followed by `<`/`>` (`>`, `>>`, `2>`,
+// `2>&1`, `&>`), or a bare `|`. Cutting here keeps redirect targets from being
+// misread as test selectors.
+function argsBeforeRedirect(text: string): string {
+	const marker = /(?:^|\s)(?:(?:&|\d)?>>?|\d*<|\|)/.exec(text);
+	return marker === null ? text : text.slice(0, marker.index);
 }
 
 // Quote-aware: a delimiter (&& || | & ; newline) inside a single- or
@@ -216,6 +304,11 @@ function stripAfterEndOfOptions(segment: string): string {
 
 function buildDenyReason(runnerName: string, scopeFlags: string[]): string {
 	return `무필터 \`${runnerName}\` test/lint 실행은 모노레포 전체를 실행해 리소스 폭증을 유발합니다. ${scopeFlags.join(" 또는 ")} 중 하나를 사용하세요.`;
+}
+
+// Fallback for the selector-required deny when the policy omits its own reason.
+function buildSelectorRequiredReason(runnerName: string): string {
+	return `\`${runnerName} --filter <pkg> test\`는 패키지 전체 스위트를 실행합니다. 변경 영향 범위만 검증하거나(예: \`${runnerName} verify:quick\`) 테스트명/경로를 지정하세요.`;
 }
 
 // -----------------------------------------------------------------------------
@@ -395,6 +488,15 @@ function toRunnerRule(raw: Record<string, unknown>): RunnerRule {
 			scripts: toStringArray(raw.deny.scripts),
 			scope_flags: toStringArray(raw.deny.scope_flags),
 		};
+		// Only set the selector-required axis when the yaml declares the script list:
+		// absent stays undefined (axis off), never coerces to [] and silently changes
+		// behavior. The reason string is optional (a default is used when omitted).
+		if (Array.isArray(raw.deny.selector_required_scripts)) {
+			rule.deny.selector_required_scripts = toStringArray(raw.deny.selector_required_scripts);
+		}
+		if (typeof raw.deny.selector_required_reason === "string") {
+			rule.deny.selector_required_reason = raw.deny.selector_required_reason;
+		}
 	}
 	return rule;
 }
@@ -423,6 +525,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // -----------------------------------------------------------------------------
+// Decision log — a JSONL audit trail of what the gate DID, so an unexpected
+// outcome (e.g. a test suite still spawning 16 workers) is diagnosable after
+// the fact: did the gate fire and inject a cap, or never fire at all? Only deny
+// and allow (the gate's actual actions) are logged — passthrough is skipped, so
+// the log stays scoped to gate decisions rather than every Bash command. The
+// injected/rewritten command is recorded so "allow with cap injected" is
+// distinguishable from "harness ran the original uncapped". Fail-open: any log
+// I/O error (bad path, permission, full disk) is swallowed — logging must never
+// throw or block the tool call. NOT injected context, so a timestamp here is
+// fine (the cache-safety rule governs prefix-injected context, not side files).
+// -----------------------------------------------------------------------------
+function defaultLogPath(): string {
+	const override = process.env.VERIFY_CAPS_LOG;
+	if (typeof override === "string" && override.length > 0) return override;
+	return join(homedir(), ".claude", "logs", "verify-caps-gate.jsonl");
+}
+
+type LogEntry = {
+	ts: string;
+	decision: "deny" | "allow";
+	command: string;
+	// deny → the reason shown to the caller; allow → the rewritten (cap-injected) command.
+	result: string;
+};
+
+function logDecision(entry: LogEntry, logPath: string): void {
+	try {
+		mkdirSync(dirname(logPath), { recursive: true });
+		appendFileSync(logPath, JSON.stringify(entry) + "\n");
+	} catch {
+		// fail-open: a logging failure must never block or throw.
+	}
+}
+
+// -----------------------------------------------------------------------------
 // PreToolUse IO contract — parses the hook's stdin JSON, calls decide(), and
 // formats the hook output envelope. Kept separate from main() (which only
 // handles the stdin/stdout plumbing) so it's directly testable with JSON
@@ -437,6 +574,7 @@ type PreToolUseInput = {
 export function processHookInput(
 	raw: string,
 	configDir: string = fileURLToPath(new URL(".", import.meta.url)),
+	logPath: string = defaultLogPath(),
 ): string {
 	try {
 		const input: PreToolUseInput = JSON.parse(raw);
@@ -449,6 +587,7 @@ export function processHookInput(
 		const result = decide(command, config);
 
 		if (result.action === "deny") {
+			logDecision({ ts: new Date().toISOString(), decision: "deny", command, result: result.reason }, logPath);
 			return JSON.stringify({
 				hookSpecificOutput: {
 					hookEventName: "PreToolUse",
@@ -458,6 +597,7 @@ export function processHookInput(
 			});
 		}
 		if (result.action === "allow") {
+			logDecision({ ts: new Date().toISOString(), decision: "allow", command, result: result.command }, logPath);
 			return JSON.stringify({
 				hookSpecificOutput: {
 					hookEventName: "PreToolUse",
