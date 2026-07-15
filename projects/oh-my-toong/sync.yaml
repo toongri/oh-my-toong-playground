@@ -21,6 +21,7 @@ agents:
     - sisyphus-junior
     - hermes
     - spec-reviewer
+    - issue-reviewer
 
 skills:
   items:
