@@ -284,6 +284,88 @@ test_glob_dir_component_wrong_depth_allows() {
 }
 
 # =============================================================================
+# False-block regression (CONFIRMED P2 defect) -- dotglob-off semantics. The
+# ledger sits under a DOTFILE directory segment ($HOME/.omt/<proj>/session-
+# ledger-<sid>.md). Bash `case` patterns let '*'/'?'/'[...]' match a leading
+# '.', but real shell pathname expansion with `dotglob` OFF (the shell
+# default) does NOT -- a leading '.' is matched ONLY by an explicit literal
+# '.' in the pattern. At real runtime `rm "$HOME"/*/proj/session-ledger-
+# <sid>.md` cannot reach the ledger (the '*' skips the hidden .omt dir, so it
+# expands to zero files), so the guard must ALLOW, not deny.
+# =============================================================================
+DOT_HOME="$TEST_TMP_DIR/dot-home"
+DOT_OD="$DOT_HOME/.omt/proj"
+
+test_glob_dotfile_segment_star_allows() {
+    local out cand
+    cand="$DOT_HOME/*/proj/session-ledger-$SID.md"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$DOT_OD' '$SID'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-dotfile-segment-star: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Regression guard (must NOT change) -- a candidate that spells the dotfile
+# segment out LITERALLY (".omt") and globs only the non-dot project segment
+# must still DENY: at real runtime `rm "$HOME/.omt/"*"/session-ledger-
+# <sid>.md"` DOES reach the ledger (the literal ".omt" matches itself; the
+# '*' expands within the non-dot project segment). This is the earlier P1
+# case (test_glob_dir_component_denies) replayed against a dotfile-bearing
+# OMT_DIR, to prove the dotfile guard does not over-correct.
+# =============================================================================
+test_glob_dotfile_literal_project_star_denies() {
+    local out cand
+    cand="$DOT_HOME/.omt/*/session-ledger-$SID.md"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$DOT_OD' '$SID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-dotfile-literal-project-star: expected deny for '$cand', got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Regression guard (must NOT change) -- a glob confined to the NON-dotfile
+# basename segment, with every directory segment (incl. the literal ".omt")
+# spelled out, must still DENY: `rm $OMT_DIR/session-ledger-*.md` reaches the
+# real ledger at runtime regardless of dotglob.
+# =============================================================================
+test_glob_dotfile_basename_partial_star_denies() {
+    local out cand
+    cand="$DOT_OD/session-ledger-*.md"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$DOT_OD' '$SID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-dotfile-basename-partial-star: expected deny for '$cand', got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Regression guard (must NOT change) -- a bare '*' at the basename position
+# (ledger basename "session-ledger-<sid>.md" is NOT itself a dotfile) must
+# still DENY: `rm $OMT_DIR/*` reaches the real ledger at runtime regardless
+# of dotglob, since dotglob only gates whether '*' matches a DOT-led name.
+# =============================================================================
+test_glob_dotfile_basename_star_denies() {
+    local out cand
+    cand="$DOT_OD/*"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$DOT_OD' '$SID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-dotfile-basename-star: expected deny for '$cand', got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -306,6 +388,10 @@ main() {
     run_test test_glob_ancestor_star_allows
     run_test test_glob_dir_component_denies
     run_test test_glob_dir_component_wrong_depth_allows
+    run_test test_glob_dotfile_segment_star_allows
+    run_test test_glob_dotfile_literal_project_star_denies
+    run_test test_glob_dotfile_basename_partial_star_denies
+    run_test test_glob_dotfile_basename_star_denies
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

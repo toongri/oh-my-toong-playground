@@ -78,6 +78,21 @@ _wg_core_pathwise_glob_match() {
         case "$cand" in */*) cand="${cand#*/}" ;; *) cand="" ;; esac
         lseg="${led%%/*}"
         case "$led" in */*) led="${led#*/}" ;; *) led="" ;; esac
+        # Dotfile guard: with bash `dotglob` off (the shell default), a
+        # leading '.' in a filename is matched ONLY by an explicit literal
+        # '.' in the pattern -- never by a leading '*', '?', or '[...]'. So
+        # if the ledger segment is a dotfile (e.g. ".omt"), a candidate
+        # segment that doesn't itself start with a literal '.' cannot expand
+        # onto it at real runtime; refuse the match before the glob check
+        # below would otherwise wrongly allow it (bash `case` patterns DO
+        # let '*' match a leading '.', unlike real pathname expansion).
+        case "$lseg" in
+            .*)
+                case "$cseg" in
+                    .*) ;;
+                    *) return 1 ;;
+                esac ;;
+        esac
         # Intentionally unquoted: $cseg is used AS the glob pattern.
         case "$lseg" in $cseg) ;; *) return 1 ;; esac
     done
