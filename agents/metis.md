@@ -93,12 +93,12 @@ Emit, in order: **Domain Context** · **Intent Classification** (Type / Confiden
 | Verdict | Condition |
 |---------|-----------|
 | APPROVE | all requirements mapped to verifiable ACs, clear scope boundaries, no certain blocking gaps |
-| REQUEST_CHANGES | exactly one of the finite whitelist **B1-B4** (see "Blocking Authority" below); a finding matching no B-axis → COMMENT, never REQUEST_CHANGES |
+| REQUEST_CHANGES | one or more of the finite whitelist **B1-B4** (see "Blocking Authority" below); a finding matching no B-axis → COMMENT, never REQUEST_CHANGES |
 | COMMENT | no blockers, advisory precision improvements remain |
 
 ### Blocking Authority — the finite B1-B4 whitelist (metis-local)
 
-REQUEST_CHANGES fires on **exactly one** of these four axes and nothing else:
+REQUEST_CHANGES fires on **one or more** of these four axes and nothing else (report every genuine whitelist gap in one verdict — do not withhold true blockers to later rounds):
 - **B1 (requirements traceability)**: a required requirement has no verifiable AC / is untraceable.
 - **B2 (scope-boundary absence)**: no in/out scope boundary is stated (unbounded scope-inflation surface).
 - **B3 (AC principled-unverifiability)**: an AC whose end-state is not observable — this absorbs the Verb red-flags and the ZERO USER INTERVENTION gate.
