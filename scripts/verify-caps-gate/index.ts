@@ -150,7 +150,22 @@ function scopedScriptWithoutSelector(
 	const match = re.exec(s);
 	if (match === null) return false;
 
-	return !hasTestSelector(s.slice(match[0].length));
+	return !hasTestSelector(stripScopeFlagOperands(s.slice(match[0].length), scopeFlags));
+}
+
+// A scope flag written AFTER the script in space-separated form (`test --filter
+// web`, `test -F web`) leaves its VALUE (`web`) as a bareword in the post-script
+// text — where hasTestSelector would misread it as a test selector and wrongly
+// let the whole-package run through (the `--filter=web` equals form is already
+// skipped as a `-`-prefixed flag; only the space-separated value leaks). Strip
+// each scope flag and its value before the selector check, mirroring the
+// leading-forms value-consumption above (flag with `=value` or ` value`).
+function stripScopeFlagOperands(rest: string, scopeFlags: string[]): string {
+	let s = rest;
+	for (const flag of scopeFlags) {
+		s = s.replace(new RegExp(`(^|\\s)${escapeRegExp(flag)}(?:=\\S+|\\s+\\S+)`, "g"), " ");
+	}
+	return s;
 }
 
 // Does the text after the script token carry a test selector? Cut everything

@@ -169,6 +169,8 @@ describe("decide — deny (scoped-but-whole-package: `--filter <pkg> test` with 
 		["pnpm --filter web test > /tmp/out.txt"], // redirect target is not a selector
 		["pnpm --filter web test 2>&1 | tail -20"], // seg1 is whole-package; pipe target isn't a selector
 		["pnpm --filter web test --coverage"], // a non-selector flag doesn't rescue it
+		["pnpm test --filter web"], // space-separated filter AFTER script: `web` is the filter value, not a selector
+		["pnpm test -F web"], // same, short scope-flag form
 	])("%s denies (whole package suite)", (command) => {
 		const result = decide(command, FIXTURE);
 		expect(result.action).toBe("deny");
@@ -187,6 +189,7 @@ describe("decide — deny (scoped-but-whole-package: `--filter <pkg> test` with 
 		['pnpm --filter @algocare/backend test -t "some name"'], // -t selector flag
 		["pnpm --filter @algocare/backend test --testNamePattern=login"], // long-form selector
 		["pnpm --filter @algocare/backend test:changed"], // sub-scripted, not exact `test`
+		["pnpm test --filter web payment.router"], // space-separated filter + a real selector after it
 	])("%s is not denied (a narrowed run carries a selector)", (command) => {
 		const result = decide(command, FIXTURE);
 		expect(result.action).not.toBe("deny");
