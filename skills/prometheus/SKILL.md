@@ -785,7 +785,7 @@ This contract applies to EVERY plan. The contract lives here — not in a refere
 | **Work Objectives** | Core objective, Definition of Done, Must Have, Must NOT Have / Guardrails |
 | **TODOs** | Numbered checkboxed tasks per TODO 7-field format below |
 | **Execution Strategy** | Wave visualization, Dependency Matrix, Critical Path. Target 5-8 tasks/wave. Circular dependencies forbidden. **Final Verification Wave mandatory for Scoped+ intent.** |
-| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Zero Human Intervention — agent-executed with evidence to `$OMT_DIR/evidence/{plan-name}/` |
+| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands **scoped to the change (not a whole-suite run)**. Zero Human Intervention — agent-executed with evidence to `$OMT_DIR/evidence/{plan-name}/` |
 | **Success Criteria** | Binary pass/fail end state. Verification commands + final checklist |
 | **ADR** | Co-authored decision log of titled `D-N` items — contested tier full 7-field MADR, solo tier lightweight fields + ownership/edges (see `### ADR`). Scoped+ default; Trivial exempt. |
 
