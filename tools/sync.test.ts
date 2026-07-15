@@ -37,7 +37,7 @@ import { ProjectKeyError, deriveClaudeProjectKey } from "./lib/git-key.ts";
 import { DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { CodexAdapter } from "./adapters/codex.ts";
-import { cleanupOldBackups } from "./lib/backup.ts";
+import { cleanupOldBackups, isSafeBackupRoot } from "./lib/backup.ts";
 import { deriveProjectName } from "../lib/omt-dir.ts";
 import { execFileSync } from "child_process";
 
@@ -3552,6 +3552,35 @@ describe("resolveBackupBase", () => {
 			expect(fs2.existsSync(path.join(tmp, "rel"))).toBe(false);
 		} finally {
 			process.chdir(originalCwd);
+			if (originalOmtDir === undefined) delete process.env.OMT_DIR;
+			else process.env.OMT_DIR = originalOmtDir;
+			fs2.rmSync(tmp, { recursive: true, force: true });
+		}
+	});
+
+	it("resolveBackupBase throws when the base is a symlink whose real path is degenerate", () => {
+		// The string spelling of an absolute symlink is not degenerate, so the
+		// pure isSafeBackupRoot() check accepts it. But its real target here is
+		// "/", where the write path (context.backupDest → backup writers) would
+		// dump backups and the prune path already refuses to clean up. Startup
+		// must realpath-resolve and fail-fast — mirroring cleanupOldBackups's
+		// F2 guard — so neither `make sync` nor `make sync-dry` proceeds.
+		const tmp = fs2.mkdtempSync(path.join(os.tmpdir(), "omt-dir-symlink-"));
+		const link = path.join(tmp, "link_to_root");
+		fs2.symlinkSync("/", link);
+		const originalOmtDir = process.env.OMT_DIR;
+		process.env.OMT_DIR = link;
+		try {
+			// ① The symlink spelling itself is NOT string-degenerate — this is
+			// exactly why the pure predicate cannot catch it and a realpath
+			// re-validation is required.
+			expect(isSafeBackupRoot(link)).toBe(true);
+			// ② Real (write) run must fail-fast.
+			expect(() => resolveBackupBase()).toThrow(UnsafeBackupRootError);
+			// ③ Dry run (make sync-dry) must fail-fast too — the finding calls
+			// out both paths explicitly.
+			expect(() => resolveBackupBase(true)).toThrow(UnsafeBackupRootError);
+		} finally {
 			if (originalOmtDir === undefined) delete process.env.OMT_DIR;
 			else process.env.OMT_DIR = originalOmtDir;
 			fs2.rmSync(tmp, { recursive: true, force: true });

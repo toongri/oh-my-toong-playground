@@ -12,7 +12,7 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { existsSync } from "fs";
+import { existsSync, realpathSync } from "fs";
 import { execFileSync } from "node:child_process";
 
 import type {
@@ -1774,6 +1774,25 @@ export function resolveBackupBase(dryRun = false): string {
 	const base = resolveOmtDir();
 	if (!isSafeBackupRoot(base)) {
 		throw new UnsafeBackupRootError(`안전하지 않은 백업 루트: ${base}`);
+	}
+	// The string guard above accepts a non-degenerate *spelling*, but base may
+	// be an absolute symlink whose real target is "/" or $HOME. The write path
+	// (context.backupDest → backup writers) follows that symlink and dumps
+	// backups into the degenerate location, which cleanupOldBackups's F2 guard
+	// then refuses to prune — so backups pile up unreachable. Re-validate the
+	// real path here so both `make sync` and `make sync-dry` fail-fast, exactly
+	// as cleanupOldBackups does before pruning.
+	let realBase = base;
+	try {
+		realBase = realpathSync(base);
+	} catch (err) {
+		// base doesn't exist yet (first run) — can't be a symlink, fall through.
+		if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== "ENOENT") {
+			throw err;
+		}
+	}
+	if (!isSafeBackupRoot(realBase)) {
+		throw new UnsafeBackupRootError(`안전하지 않은 백업 루트(실제 경로): ${realBase}`);
 	}
 	return dryRun ? base : getOmtDir();
 }
