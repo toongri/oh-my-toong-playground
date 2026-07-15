@@ -403,29 +403,34 @@ Scope:
 
 ## Scenario M-13: Carried-Forward Deadlock (Option-B-Shaped)
 
-**Prompt:**
+**Prompt (metis에 전달되는 전문 — 라운드 정보 없음):**
 ```
-다음 요구사항 브리프를 검토해줘. (컨텍스트: 이 브리프는 prometheus 재검토 루프의 3번째
-라운드다. 직전 두 라운드 모두 동일 항목에서 REQUEST_CHANGES를 받았다.)
+다음 요구사항 브리프를 검토해줘.
 
-요구사항: 알림 발송 배치잡의 실행 주기를 매시간에서 1분마다로 변경한다.
-
-Round 이력:
-- Round 1: REQUEST_CHANGES — B4(기존 알림 발송 로직이 exactly-once를 보장한다는 가정이
-  미검증)
-- Round 2: REQUEST_CHANGES — 동일 B4 항목, 여전히 미해결(가정을 검증하거나 flag하지 않음)
-- Round 3 (현재): 브리프 변경 없음, 동일 B4 항목 여전히 미해결
+요구사항: 알림 발송 배치잡의 실행 주기를 매시간에서 1분마다로 변경한다. 기존 알림 발송
+로직이 exactly-once를 보장한다고 전제한다.
 
 Scope: In-scope 배치잡 스케줄 설정만. Out-of-scope: 알림 로직 자체.
 인수조건: cron이 `* * * * *`로 설정되고 CloudWatch에서 분당 1회 실행이 관측된다.
 ```
 
+**라운드 카운터 모델 (prometheus 상태 — metis 호출 밖에서 모델링, 프롬프트에 절대 미포함):**
+prometheus가 위 **동일 브리프**를 3회 연속 디스패치했고 매번 동일 B4 항목(exactly-once
+미검증 가정)에서 REQUEST_CHANGES를 받았다고 가정 — `(B4, 알림 발송 로직)` 키가 K=3 도달.
+이 카운터는 prometheus가 소유하며 metis 프롬프트에는 결코 실리지 않는다(종단 카운터를
+prometheus가 소유하고 metis는 라운드를 수신하지 않는 설계 결정).
+
 **Expected:**
 - (a) Residual 항목이 명명됨: "기존 알림 발송 로직의 exactly-once 미검증 가정"(B4)
-- (b) metis는 round-unaware이므로 이번 호출에서도 **동일 B4 항목에 REQUEST_CHANGES를
-  반환**함(round 이력을 읽고 verdict를 바꾸지 않음)
-- (c) 관측 대상은 metis의 verdict가 아니라 **prometheus의 행동**: K=3 도달 시 prometheus가
-  residual을 기록하고 terminal transition(S2 진행)함을 assert
+- (b) metis는 라운드 정보를 프롬프트에서 전혀 받지 않으므로 오직 브리프 내용만으로 **동일
+  B4 항목에 REQUEST_CHANGES를 반환**한다. round-unaware 불변식이 teeth를 갖는 이유는 바로
+  이것이다 — 프롬프트에 라운드 신호가 부재하므로 metis가 라운드를 조건화하는 것 자체가
+  원천 불가능하다(라운드를 프롬프트에 넣으면 round-aware 실패모드도 동일 RC를 내 구별
+  불가가 되어 테스트가 공허해진다). 이 픽스처는 실제 시스템(Option B: metis는 라운드를
+  절대 수신 안 함)에 충실하게 metis 프롬프트를 라운드-무지 상태로 유지한다
+- (c) 관측 대상은 metis의 verdict가 아니라 **prometheus의 행동**: 위 라운드 카운터 모델에서
+  K=3 도달 시 prometheus가 residual을 기록하고 terminal transition(S2 진행)함을 assert —
+  이 K=3은 metis 호출과 분리된 prometheus 상태에서 온다
 - "metis 자신은 REQUEST_CHANGES를 반환(round-unaware) — terminal은 D-1 Option B에 따라
   prometheus-owned이며, metis의 verdict 자체가 아님"임을 명시
 
