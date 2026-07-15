@@ -35,6 +35,11 @@ export type RunnerRule = {
 	env?: Record<string, string>;
 	flag?: string;
 	flag_requires_scope?: boolean;
+	// Verification-script prefix allowlist for a general-purpose runner
+	// (pnpm/turbo). When present, cap injection only fires if the command
+	// invokes one of these scripts — see applyInjections. Absent (vitest/jest,
+	// dedicated test runners) means inject unconditionally.
+	inject_scripts?: string[];
 	deny?: RunnerDenyConfig;
 };
 
@@ -143,12 +148,35 @@ function splitSegments(command: string): string[] {
 
 function matchesDenyShape(segment: string, runnerName: string, scripts: string[]): boolean {
 	const scriptAlternation = scripts.map(escapeRegExp).join("|");
-	const re = new RegExp(`^${escapeRegExp(runnerName)}(\\s+run)?\\s+(${scriptAlternation})(\\s|$)`);
+	// Allow pnpm's whole-workspace flags (`-r`/`--recursive`) and an optional
+	// `run` — in any order — between the runner and the script. `pnpm -r test`
+	// / `pnpm --recursive lint` run the script in EVERY workspace package, which
+	// is exactly the unfiltered whole-monorepo invocation this deny targets;
+	// without allowing the flag here they slip past by sitting a token before
+	// the script. `-r`/`--recursive` are not scope flags, so hasAnyScopeFlag
+	// does not rescue them — a real scope flag (--filter/-F/--affected) elsewhere
+	// in the segment still does.
+	const re = new RegExp(
+		`^${escapeRegExp(runnerName)}(\\s+(run|-r|--recursive))*\\s+(${scriptAlternation})(\\s|$)`,
+	);
 	return re.test(segment);
 }
 
 function hasAnyScopeFlag(command: string, scopeFlags: string[]): boolean {
 	return scopeFlags.some((flag) => new RegExp(`(^|\\s)${escapeRegExp(flag)}([\\s=]|$)`).test(command));
+}
+
+// True if any whitespace-delimited word in the command begins with one of the
+// given verification-script prefixes at a word boundary: "test" matches the
+// word `test` and the sub-scripted `test:changed`, "verify" matches
+// `verify:quick` — but a word merely containing the prefix mid-token
+// (`test-utils`, `latest`) does NOT match. Lets a general-purpose runner
+// recognize a verification invocation regardless of the script's position
+// (before or after flags) without enumerating every script name.
+function hasAnyScriptPrefix(command: string, prefixes: string[]): boolean {
+	return prefixes.some((prefix) =>
+		new RegExp(`(^|\\s)${escapeRegExp(prefix)}(:\\S+)?(\\s|$)`).test(command),
+	);
 }
 
 // A scope flag (--filter/-F/--affected) that appears after a segment's `--`
@@ -179,6 +207,18 @@ function applyInjections(command: string, config: VerifyCapsConfig): string | nu
 	const runnerName = firstToken(stripLeadingEnvAssignments(command));
 	const rule = config.runners[runnerName];
 	if (rule === undefined) return null;
+
+	// A general-purpose runner (pnpm/turbo) declares inject_scripts — inject
+	// only when the command actually invokes one of those verification scripts.
+	// Injecting env forces permissionDecision:allow (updatedInput has no
+	// prompt-preserving form), so injecting an unrelated command like
+	// `pnpm publish` / `turbo gen` would silently auto-approve it past the Bash
+	// permission prompt (permission broadening). A runner with no inject_scripts
+	// (vitest/jest — dedicated test runners with no dangerous subcommands)
+	// injects unconditionally.
+	if (rule.inject_scripts !== undefined && !hasAnyScriptPrefix(command, rule.inject_scripts)) {
+		return null;
+	}
 
 	let result = command;
 	let changed = false;
@@ -306,6 +346,12 @@ function toRunnerRule(raw: Record<string, unknown>): RunnerRule {
 	}
 	if (typeof raw.flag_requires_scope === "boolean") {
 		rule.flag_requires_scope = raw.flag_requires_scope;
+	}
+	// Only set inject_scripts when the yaml actually declares an array: an
+	// absent field must stay undefined (→ unconditional injection for
+	// vitest/jest), not coerce to [] (→ never inject).
+	if (Array.isArray(raw.inject_scripts)) {
+		rule.inject_scripts = toStringArray(raw.inject_scripts);
 	}
 	if (isRecord(raw.deny)) {
 		rule.deny = {
