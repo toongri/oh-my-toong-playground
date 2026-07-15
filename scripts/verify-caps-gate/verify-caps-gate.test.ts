@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -32,7 +32,13 @@ const FIXTURE: VerifyCapsConfig = {
 		pnpm: {
 			env: { VITEST_MAX_FORKS: "2", VITEST_MAX_THREADS: "2" },
 			inject_scripts: ["test", "lint", "verify"],
-			deny: { scripts: ["test", "lint"], scope_flags: ["--filter", "-F", "--affected"] },
+			deny: {
+				scripts: ["test", "lint"],
+				scope_flags: ["--filter", "-F", "--affected"],
+				selector_required_scripts: ["test"],
+				selector_required_reason:
+					"`pnpm --filter <pkg> test`는 패키지 전체 스위트를 실행합니다. `pnpm verify:quick`을 쓰거나 테스트명/경로를 지정하세요.",
+			},
 		},
 	},
 };
@@ -73,8 +79,10 @@ describe("decide — deny (unfiltered root test/lint)", () => {
 		expect(result.action).toBe("deny");
 	});
 
-	test("defect7: `pnpm dev & pnpm test --filter=web` is not denied (seg2 has a scope flag)", () => {
-		const result = decide("pnpm dev & pnpm test --filter=web", FIXTURE);
+	test("defect7: `pnpm dev & pnpm test:changed --filter=web` is not denied (seg2 has a scope flag; test:changed carries its own selector)", () => {
+		// test:changed (not exact `test`) is not subject to the selector-required
+		// axis, so this still exercises only the bare-`&` split + scope-flag rescue.
+		const result = decide("pnpm dev & pnpm test:changed --filter=web", FIXTURE);
 		expect(result.action).not.toBe("deny");
 	});
 
@@ -107,8 +115,10 @@ describe("decide — deny (unfiltered root test/lint)", () => {
 		expect(result.action).not.toBe("deny");
 	});
 
-	test("denyBypass regression: `pnpm test --filter=web` (no `--`) is still not denied", () => {
-		const result = decide("pnpm test --filter=web", FIXTURE);
+	test("denyBypass regression: `pnpm test:changed --filter=web` (no `--`) is still not denied", () => {
+		// Uses test:changed (selector-required axis doesn't apply) so this stays a
+		// pure regression of the end-of-options bypass, not a selector-axis deny.
+		const result = decide("pnpm test:changed --filter=web", FIXTURE);
 		expect(result.action).not.toBe("deny");
 	});
 
@@ -127,21 +137,73 @@ describe("decide — deny (unfiltered root test/lint)", () => {
 		expect(result.action).toBe("deny");
 	});
 
-	test("recursive regression: `pnpm -r test --filter=web` is not denied (a real scope flag still rescues even alongside -r)", () => {
-		const result = decide("pnpm -r test --filter=web", FIXTURE);
+	test("recursive regression: `pnpm -r test:changed --filter=web` is not denied (a real scope flag still rescues even alongside -r)", () => {
+		// test:changed keeps this a pure recursive-axis regression; bare `-r test
+		// --filter` now (correctly) hits the selector-required whole-package deny.
+		const result = decide("pnpm -r test:changed --filter=web", FIXTURE);
 		expect(result.action).not.toBe("deny");
 	});
 });
 
 describe("decide — allow (not a deny match)", () => {
 	test.each([
-		["pnpm test --filter=@algocare/backend"],
+		["pnpm --filter=@algocare/backend test:changed"],
+		["pnpm --filter=@algocare/backend test payment.router"],
 		["turbo run test --affected"],
 		["pnpm verify:quick"],
 		["pnpm test:changed"],
 		["pnpm build"],
 	])("%s is not denied", (command) => {
 		const result = decide(command, FIXTURE);
+		expect(result.action).not.toBe("deny");
+	});
+});
+
+describe("decide — deny (scoped-but-whole-package: `--filter <pkg> test` with no selector)", () => {
+	test.each([
+		["pnpm --filter @algocare/backend test"],
+		["pnpm --filter=web test"],
+		["pnpm test --filter=web"],
+		["pnpm -F web test"],
+		["pnpm --filter web test 2>&1"], // redirection after test is not a selector
+		["pnpm --filter web test > /tmp/out.txt"], // redirect target is not a selector
+		["pnpm --filter web test 2>&1 | tail -20"], // seg1 is whole-package; pipe target isn't a selector
+		["pnpm --filter web test --coverage"], // a non-selector flag doesn't rescue it
+	])("%s denies (whole package suite)", (command) => {
+		const result = decide(command, FIXTURE);
+		expect(result.action).toBe("deny");
+	});
+
+	test("the selector-required deny reason steers to verify:quick", () => {
+		const result = decide("pnpm --filter @algocare/backend test", FIXTURE);
+		expect(result.action).toBe("deny");
+		if (result.action === "deny") {
+			expect(result.reason).toContain("verify:quick");
+		}
+	});
+
+	test.each([
+		["pnpm --filter @algocare/backend test payment.router"], // positional selector
+		['pnpm --filter @algocare/backend test -t "some name"'], // -t selector flag
+		["pnpm --filter @algocare/backend test --testNamePattern=login"], // long-form selector
+		["pnpm --filter @algocare/backend test:changed"], // sub-scripted, not exact `test`
+	])("%s is not denied (a narrowed run carries a selector)", (command) => {
+		const result = decide(command, FIXTURE);
+		expect(result.action).not.toBe("deny");
+	});
+
+	test("a selector-carrying scoped test still injects caps (not denied → reaches injection)", () => {
+		const result = decide("pnpm --filter @algocare/backend test payment.router", FIXTURE);
+		expect(result.action).toBe("allow");
+		if (result.action === "allow") {
+			expect(result.command).toContain("VITEST_MAX_FORKS=2");
+		}
+	});
+
+	test("turbo has no selector-required axis: `turbo run test --filter=web` is not denied by it", () => {
+		// Only pnpm declares selector_required_scripts in FIXTURE; turbo's scoped
+		// test stays allow+cap (its whole-monorepo run is the --affected/-less deny).
+		const result = decide("turbo run test --filter=web", FIXTURE);
 		expect(result.action).not.toBe("deny");
 	});
 });
@@ -276,8 +338,11 @@ describe("decide — `--` and compound guards (`--` keeps env; compound skips in
 		expect(result.action).toBe("passthrough");
 	});
 
-	test("`pnpm test --filter=web && pnpm publish` is passthrough (a scope-flagged verification segment still can't smuggle an auto-approval)", () => {
-		const result = decide("pnpm test --filter=web && pnpm publish", FIXTURE);
+	test("`pnpm test:changed --filter=web && pnpm publish` is passthrough (a scope-flagged verification segment still can't smuggle an auto-approval)", () => {
+		// test:changed keeps seg1 allow-eligible (bare `test --filter` would now hit
+		// the selector-required deny, changing what this test exercises); the point
+		// is that the compound still falls through to passthrough, not auto-approve.
+		const result = decide("pnpm test:changed --filter=web && pnpm publish", FIXTURE);
 		expect(result.action).toBe("passthrough");
 	});
 
@@ -322,8 +387,10 @@ describe("decide — general-purpose runners inject only on verification scripts
 	// Verification invocations still inject — including the flags-before-script
 	// form (`pnpm --filter x test:changed`), where the `--filter x` value is
 	// skipped as a leading token so the script after it stays recognized.
-	test("`pnpm test --filter=web` still injects env (verification preserved)", () => {
-		const result = decide("pnpm test --filter=web", FIXTURE);
+	test("`pnpm test payment.router --filter=web` still injects env (selector-carrying scoped test)", () => {
+		// A scoped test WITH a selector (positional `payment.router`) is a narrowed
+		// run — not caught by the selector-required deny — so it still injects caps.
+		const result = decide("pnpm test payment.router --filter=web", FIXTURE);
 		expect(result.action).toBe("allow");
 		if (result.action === "allow") {
 			expect(result.command).toContain("VITEST_MAX_FORKS=2");
@@ -423,8 +490,16 @@ describe("decide — real verify-caps.yaml drift pin", () => {
 		expect(result.action).toBe("deny");
 	});
 
-	test("`pnpm test --filter=x` is not denied against the shipped yaml", () => {
-		const result = decide("pnpm test --filter=x", realConfig);
+	test("`pnpm --filter=x test` denies against the shipped yaml (selector-required whole-package run)", () => {
+		const result = decide("pnpm --filter=x test", realConfig);
+		expect(result.action).toBe("deny");
+		if (result.action === "deny") {
+			expect(result.reason).toContain("verify:quick");
+		}
+	});
+
+	test("`pnpm --filter=x test:changed` is not denied against the shipped yaml (sub-scripted, not exact `test`)", () => {
+		const result = decide("pnpm --filter=x test:changed", realConfig);
 		expect(result.action).not.toBe("deny");
 	});
 
@@ -449,8 +524,8 @@ describe("decide — real verify-caps.yaml drift pin", () => {
 		expect(result.action).toBe("passthrough");
 	});
 
-	test("`pnpm test --filter=x` still injects env against the shipped yaml", () => {
-		const result = decide("pnpm test --filter=x", realConfig);
+	test("`pnpm --filter=x test:changed` still injects env against the shipped yaml", () => {
+		const result = decide("pnpm --filter=x test:changed", realConfig);
 		expect(result.action).toBe("allow");
 		if (result.action === "allow") {
 			expect(result.command).toContain("VITEST_MAX_FORKS=2");
@@ -615,5 +690,108 @@ describe("processHookInput", () => {
 			moduleDir,
 		);
 		expect(output).toBe("");
+	});
+});
+
+// -----------------------------------------------------------------------------
+// Decision logging — a fail-open JSONL audit trail of deny/allow decisions
+// (passthrough is not logged). This is the diagnostic instrument for "the gate
+// fired but the cap didn't stick vs the gate never fired": an allow entry with
+// the injected command in `result` proves the gate rewrote the command.
+// -----------------------------------------------------------------------------
+describe("processHookInput — decision logging", () => {
+	const moduleDir = fileURLToPath(new URL(".", import.meta.url));
+	const logDirs: string[] = [];
+
+	afterEach(() => {
+		while (logDirs.length > 0) {
+			const dir = logDirs.pop();
+			if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	function makeLogPath(): string {
+		const dir = mkdtempSync(join(tmpdir(), "verify-caps-log-"));
+		logDirs.push(dir);
+		// a nested path so the mkdir-recursive branch is exercised too
+		return join(dir, "nested", "verify-caps-gate.jsonl");
+	}
+
+	function readLines(logPath: string): Record<string, unknown>[] {
+		if (!existsSync(logPath)) return [];
+		return readFileSync(logPath, "utf8")
+			.split("\n")
+			.filter((line) => line.length > 0)
+			.map((line) => JSON.parse(line) as Record<string, unknown>);
+	}
+
+	test("a deny logs one JSONL entry with the command and reason", () => {
+		const logPath = makeLogPath();
+		processHookInput(
+			JSON.stringify({ tool_name: "Bash", tool_input: { command: "pnpm test" } }),
+			moduleDir,
+			logPath,
+		);
+		const lines = readLines(logPath);
+		expect(lines.length).toBe(1);
+		expect(lines[0].decision).toBe("deny");
+		expect(lines[0].command).toBe("pnpm test");
+		expect(typeof lines[0].result).toBe("string");
+		expect(typeof lines[0].ts).toBe("string");
+	});
+
+	test("an allow logs the REWRITTEN command in `result` (proves cap injection)", () => {
+		const logPath = makeLogPath();
+		processHookInput(
+			JSON.stringify({ tool_name: "Bash", tool_input: { command: "vitest run" } }),
+			moduleDir,
+			logPath,
+		);
+		const lines = readLines(logPath);
+		expect(lines.length).toBe(1);
+		expect(lines[0].decision).toBe("allow");
+		expect(lines[0].command).toBe("vitest run");
+		expect(lines[0].result).toContain("VITEST_MAX_FORKS=2");
+	});
+
+	test("a passthrough logs nothing (log scoped to gate actions only)", () => {
+		const logPath = makeLogPath();
+		processHookInput(
+			JSON.stringify({ tool_name: "Bash", tool_input: { command: "ls -la" } }),
+			moduleDir,
+			logPath,
+		);
+		expect(readLines(logPath)).toEqual([]);
+	});
+
+	test("consecutive decisions append (JSONL grows, not overwrites)", () => {
+		const logPath = makeLogPath();
+		const raw = (command: string) =>
+			JSON.stringify({ tool_name: "Bash", tool_input: { command } });
+		processHookInput(raw("pnpm test"), moduleDir, logPath);
+		processHookInput(raw("vitest run"), moduleDir, logPath);
+		const lines = readLines(logPath);
+		expect(lines.length).toBe(2);
+		expect(lines[0].decision).toBe("deny");
+		expect(lines[1].decision).toBe("allow");
+	});
+
+	test("fail-open: an unwritable log path does not throw and the envelope is still returned", () => {
+		// A path whose parent is a FILE (not a dir) makes mkdir/append fail; the
+		// gate must swallow it and still emit the decision envelope.
+		const dir = mkdtempSync(join(tmpdir(), "verify-caps-log-"));
+		logDirs.push(dir);
+		const fileAsParent = join(dir, "afile");
+		writeFileSync(fileAsParent, "x");
+		const badLogPath = join(fileAsParent, "cannot", "log.jsonl");
+		let output = "";
+		expect(() => {
+			output = processHookInput(
+				JSON.stringify({ tool_name: "Bash", tool_input: { command: "pnpm test" } }),
+				moduleDir,
+				badLogPath,
+			);
+		}).not.toThrow();
+		expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
 	});
 });
