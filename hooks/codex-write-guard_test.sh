@@ -56,13 +56,34 @@ run_hook() {
     env -u OMT_DIR -u OMT_SESSION_ID HOME="$SBX" CODEX_THREAD_ID=cx bash "$HOOK"
 }
 
+# assert_allow: strengthened allow assertion (ultragoal test-hardening story).
+# A prior allow check only grepped stdout for deny-JSON, which a CRASHED hook
+# (non-zero exit, empty stdout) would also pass -- silently masking a
+# fail-open as an allow. This requires BOTH exit status 0 AND no deny-JSON in
+# stdout. Callers must capture the hook's exit code themselves (the pipeline
+# runs under `set -euo pipefail`, so it must be invoked as
+# `out=$(... | run_hook) || rc=$?` -- not a bare `out=$(...)` -- or the
+# non-zero exit aborts the test function before this assertion ever runs).
+assert_allow() {
+    local out="$1" rc="$2" label="$3"
+    if [ "$rc" -ne 0 ]; then
+        echo "ASSERTION FAILED $label: expected allow (exit 0), got exit $rc, output '$out'"
+        return 1
+    fi
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED $label: expected allow, got deny in output '$out'"
+        return 1
+    fi
+    return 0
+}
+
 # =============================================================================
 # AC1 -- apply_patch envelope targeting the resolved current ledger DENIES;
 # a non-ledger target ALLOWS. (Plan TODO 7 AC1 exact setup/verification.)
 # =============================================================================
 test_ac1_apply_patch_envelope_denies_ledger_allows_other() {
     new_sandbox
-    local deny allow result=0
+    local deny allow rc=0 result=0
 
     deny=$(printf '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\\n*** Update File: %s\\n"},"session_id":"cx","cwd":"%s"}' "$LED" "$GITDIR" | run_hook)
     if ! printf '%s' "$deny" | grep -q '"permissionDecision":"deny"'; then
@@ -70,9 +91,8 @@ test_ac1_apply_patch_envelope_denies_ledger_allows_other() {
         result=1
     fi
 
-    allow=$(printf '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\\n*** Update File: %s/README.md\\n"},"session_id":"cx","cwd":"%s"}' "$GITDIR" "$GITDIR" | run_hook)
-    if [ "$(printf '%s' "$allow" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED AC1: expected allow for README.md target, got '$allow'"
+    allow=$(printf '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\\n*** Update File: %s/README.md\\n"},"session_id":"cx","cwd":"%s"}' "$GITDIR" "$GITDIR" | run_hook) || rc=$?
+    if ! assert_allow "$allow" "$rc" "AC1"; then
         result=1
     fi
 
@@ -161,9 +181,9 @@ test_qa_redirect_to_ledger_denies() {
 # =============================================================================
 test_qa_prose_mention_allows() {
     new_sandbox
-    local out evidence_dir result=0
+    local out evidence_dir rc=0 result=0
 
-    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo editing the session-ledger docs"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo editing the session-ledger docs"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
 
     evidence_dir="$EVIDENCE_OMT_DIR/evidence/codex-ledger-parity/codex-write-guard-hook"
     mkdir -p "$evidence_dir"
@@ -172,8 +192,7 @@ test_qa_prose_mention_allows() {
         echo "output: $out"
     } > "$evidence_dir/prose-allow.txt"
 
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED QA-prose: expected allow (no deny) for prose mention, got '$out'"
+    if ! assert_allow "$out" "$rc" "QA-prose"; then
         result=1
     fi
 
@@ -303,11 +322,10 @@ test_own_relative_path_denies() {
 # =============================================================================
 test_own_native_edit_non_ledger_allows() {
     new_sandbox
-    local out result=0
+    local out rc=0 result=0
 
-    out=$(jq -n --arg fp "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED own-native-edit-allow: expected allow, got '$out'"
+    out=$(jq -n --arg fp "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-native-edit-allow"; then
         result=1
     fi
 
@@ -434,12 +452,11 @@ test_bypass_sed_i_non_final_operand_ledger_denies() {
 
 test_bypass_sed_i_non_ledger_allows() {
     new_sandbox
-    local cmd out result=0
+    local cmd out rc=0 result=0
 
     cmd="sed -i 's/a/b/' $GITDIR/other.md"
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED bypass-sed-i-non-ledger-allow: expected allow for 'sed -i ... <non-ledger>' with no ledger reference, got '$out'"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "bypass-sed-i-non-ledger-allow"; then
         result=1
     fi
 
@@ -451,11 +468,10 @@ test_bypass_sed_i_non_ledger_allows() {
 # set -e fix does not turn rm into an over-broad denier).
 test_own_rm_non_ledger_allows() {
     new_sandbox
-    local out result=0
+    local out rc=0 result=0
 
-    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"rm %s/README.md"},"session_id":"cx","cwd":"%s"}' "$GITDIR" "$GITDIR" | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED own-rm-non-ledger-allow: expected allow, got '$out'"
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"rm %s/README.md"},"session_id":"cx","cwd":"%s"}' "$GITDIR" "$GITDIR" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-rm-non-ledger-allow"; then
         result=1
     fi
 
@@ -537,12 +553,11 @@ test_own_quoted_tee_ledger_denies() {
 # over-broad denier).
 test_own_quoted_non_ledger_allows() {
     new_sandbox
-    local cmd out result=0
+    local cmd out rc=0 result=0
 
     cmd="echo x > \"$GITDIR/README.md\""
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED own-quoted-non-ledger-allow: expected allow for quoted non-ledger target, got '$out'"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-quoted-non-ledger-allow"; then
         result=1
     fi
 
@@ -623,11 +638,10 @@ test_own_shell_command_cmd_key_ledger_denies() {
 # turn it into an over-broad denier).
 test_own_exec_command_cmd_key_non_ledger_allows() {
     new_sandbox
-    local out result=0
+    local out rc=0 result=0
 
-    out=$(jq -n --arg cmd "cat $GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"exec_command", tool_input:{cmd:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED own-exec-command-cmd-key-allow: expected allow for non-ledger tool_input.cmd, got '$out'"
+    out=$(jq -n --arg cmd "cat $GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"exec_command", tool_input:{cmd:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-exec-command-cmd-key-allow"; then
         result=1
     fi
 
@@ -706,11 +720,10 @@ test_own_lowercase_multi_edit_file_path_ledger_denies() {
 # still ALLOW (proves the tool-name-normalization fix does not over-block).
 test_own_lowercase_write_file_path_non_ledger_allows() {
     new_sandbox
-    local out result=0
+    local out rc=0 result=0
 
-    out=$(jq -n --arg fp "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"write", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED own-lowercase-write-file-path-allow: expected allow for lowercase 'write' non-ledger target, got '$out'"
+    out=$(jq -n --arg fp "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"write", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-lowercase-write-file-path-allow"; then
         result=1
     fi
 
@@ -817,10 +830,10 @@ test_own_env_var_codex_thread_id_form_denies() {
 # =============================================================================
 test_qa_quoted_prose_gt_in_pipe_allows() {
     new_sandbox
-    local cmd out evidence_dir result=0
+    local cmd out evidence_dir rc=0 result=0
 
     cmd="printf 'note: see foo > $LED for details' | omt-ledger.sh append Decisions"
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
 
     evidence_dir="$EVIDENCE_OMT_DIR/evidence/codex-ledger-parity/codex-write-guard-hook"
     mkdir -p "$evidence_dir"
@@ -829,8 +842,7 @@ test_qa_quoted_prose_gt_in_pipe_allows() {
         echo "output: $out"
     } > "$evidence_dir/quoted-prose-gt-allow.txt"
 
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED QA-quoted-prose-gt: expected allow (no deny) for '>' inside single-quoted prose, got '$out'"
+    if ! assert_allow "$out" "$rc" "QA-quoted-prose-gt"; then
         result=1
     fi
 
@@ -840,12 +852,11 @@ test_qa_quoted_prose_gt_in_pipe_allows() {
 
 test_own_inquote_redirect_no_pipe_allows() {
     new_sandbox
-    local cmd out result=0
+    local cmd out rc=0 result=0
 
     cmd="echo 'text > $LED more'"
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED own-inquote-redirect-no-pipe: expected allow for '>' inside single-quoted text with no pipe, got '$out'"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-inquote-redirect-no-pipe"; then
         result=1
     fi
 
@@ -896,7 +907,7 @@ test_regression_exec_command_workdir_relative_ledger_denies() {
 }
 
 test_regression_exec_command_workdir_relative_non_ledger_allows() {
-    local sbx od other out result=0
+    local sbx od other out rc=0 result=0
     sbx=$(mktemp -d)
     od="$sbx/omt-dir"
     other="$sbx/other"
@@ -904,9 +915,8 @@ test_regression_exec_command_workdir_relative_non_ledger_allows() {
 
     out=$(jq -n --arg cmd "echo x > $other/README.md" --arg workdir "$other" --arg cwd "$other" \
         '{tool_name:"exec_command", tool_input:{cmd:$cmd, workdir:$workdir}, session_id:"cx", cwd:$cwd}' \
-        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED regression-exec-command-workdir-allow: expected allow for absolute non-ledger target, got '$out'"
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK") || rc=$?
+    if ! assert_allow "$out" "$rc" "regression-exec-command-workdir-allow"; then
         result=1
     fi
 
@@ -957,11 +967,10 @@ test_defect3_combined_redirect_ledger_denies() {
 
 test_defect3_fd_dup_stderr_to_stdout_no_ledger_allows() {
     new_sandbox
-    local out result=0
+    local out rc=0 result=0
 
-    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x 2>&1"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED defect3-fd-dup-stderr-to-stdout-allow: expected allow for 'echo x 2>&1' (no ledger reference), got '$out'"
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x 2>&1"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "defect3-fd-dup-stderr-to-stdout-allow"; then
         result=1
     fi
 
@@ -971,11 +980,10 @@ test_defect3_fd_dup_stderr_to_stdout_no_ledger_allows() {
 
 test_defect3_fd_dup_stdout_to_stderr_no_ledger_allows() {
     new_sandbox
-    local out result=0
+    local out rc=0 result=0
 
-    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x >&2"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED defect3-fd-dup-stdout-to-stderr-allow: expected allow for 'echo x >&2' (no ledger reference), got '$out'"
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x >&2"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "defect3-fd-dup-stdout-to-stderr-allow"; then
         result=1
     fi
 
@@ -1018,12 +1026,11 @@ test_defect4_per_token_quoted_env_var_denies() {
 
 test_defect4_per_token_quoted_non_ledger_allows() {
     new_sandbox
-    local cmd out result=0
+    local cmd out rc=0 result=0
 
     cmd="echo x > \"$GITDIR\"/\"other.md\""
-    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED defect4-per-token-quoted-non-ledger-allow: expected allow for per-token quoted non-ledger target, got '$out'"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "defect4-per-token-quoted-non-ledger-allow"; then
         result=1
     fi
 
@@ -1081,16 +1088,15 @@ test_own_home_tilde_form_denies() {
 }
 
 test_own_home_env_var_non_ledger_allows() {
-    local sbx od out result=0
+    local sbx od out rc=0 result=0
     sbx=$(mktemp -d)
     od="$sbx/.omt/proj"
     mkdir -p "$od"
 
     out=$(jq -n --arg cmd 'rm "$HOME/.omt/proj/other-file.md"' --arg cwd "$od" \
         '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
-        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED own-home-env-var-non-ledger-allow: expected allow for \$HOME/.omt/proj/other-file.md, got '$out'"
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK") || rc=$?
+    if ! assert_allow "$out" "$rc" "own-home-env-var-non-ledger-allow"; then
         result=1
     fi
 
@@ -1099,20 +1105,287 @@ test_own_home_env_var_non_ledger_allows() {
 }
 
 test_own_home_outside_omt_dir_allows() {
-    local sbx od out result=0
+    local sbx od out rc=0 result=0
     sbx=$(mktemp -d)
     od="$sbx/.omt/proj"
     mkdir -p "$od"
 
     out=$(jq -n --arg cmd 'rm "$HOME/notes.md"' --arg cwd "$od" \
         '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' \
-        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK")
-    if [ "$(printf '%s' "$out" | grep -c deny)" != "0" ]; then
-        echo "ASSERTION FAILED own-home-outside-omt-dir-allow: expected allow for \$HOME/notes.md, got '$out'"
+        | env -u OMT_SESSION_ID OMT_DIR="$od" HOME="$sbx" CODEX_THREAD_ID=cx bash "$HOOK") || rc=$?
+    if ! assert_allow "$out" "$rc" "own-home-outside-omt-dir-allow"; then
         result=1
     fi
 
     rm -rf "$sbx"
+    return "$result"
+}
+
+# =============================================================================
+# Alt-path-key coverage (ultragoal test-hardening story, Goal A): the
+# Edit|Write|MultiEdit|multi_edit route in hooks/codex-write-guard.sh reads
+# ALL SIX scalar path keys (file_path/path/filePath/target/targetPath/
+# target_path) and ALL THREE array path keys (paths/filePaths/file_paths) --
+# see codex-write-guard.sh:428-438. file_path already has deny+allow coverage
+# above (test_own_relative_path_denies / test_own_native_edit_non_ledger_allows)
+# and path already has deny coverage (test_own_write_path_key_ledger_denies).
+# This block fills in path's allow leg, and the filePath/target/targetPath/
+# target_path/paths/filePaths/file_paths keys' deny+allow legs end to end, so
+# every key the hook reads is actually exercised by the suite.
+# =============================================================================
+test_own_write_path_key_non_ledger_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg p "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"Write", tool_input:{path:$p}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-write-path-key-non-ledger-allow"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_filepath_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{filePath:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-filepath-key: expected deny for 'Edit' tool_input.filePath targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_filepath_key_non_ledger_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg fp "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{filePath:$fp}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-filepath-key-non-ledger-allow"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_target_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{target:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-target-key: expected deny for 'Edit' tool_input.target targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_target_key_non_ledger_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg fp "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{target:$fp}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-target-key-non-ledger-allow"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_targetpath_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{targetPath:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-targetpath-key: expected deny for 'Edit' tool_input.targetPath targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_targetpath_key_non_ledger_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg fp "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{targetPath:$fp}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-targetpath-key-non-ledger-allow"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_target_path_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{target_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-target-path-key: expected deny for 'Edit' tool_input.target_path targeting ledger, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_target_path_key_non_ledger_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg fp "$GITDIR/README.md" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{target_path:$fp}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-target-path-key-non-ledger-allow"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# -----------------------------------------------------------------------------
+# Array-form path keys (paths/filePaths/file_paths). Each key gets a
+# single-element ledger deny, a mid-array (non-first-element) ledger deny --
+# proving the extractor iterates the WHOLE array rather than reading only
+# element 0 -- and a non-ledger allow.
+# -----------------------------------------------------------------------------
+test_own_paths_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{paths:[$fp]}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-paths-key: expected deny for 'Edit' tool_input.paths=[<ledger>], got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_paths_key_mid_array_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg a "$GITDIR/a.md" --arg led "$LED" --arg b "$GITDIR/b.md" --arg cwd "$GITDIR" \
+        '{tool_name:"Edit", tool_input:{paths:[$a,$led,$b]}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-paths-key-mid-array: expected deny for ledger as non-first element of tool_input.paths, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_paths_key_non_ledger_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg a "$GITDIR/a.md" --arg b "$GITDIR/b.md" --arg cwd "$GITDIR" \
+        '{tool_name:"Edit", tool_input:{paths:[$a,$b]}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-paths-key-non-ledger-allow"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_filepaths_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{filePaths:[$fp]}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-filepaths-key: expected deny for 'Edit' tool_input.filePaths=[<ledger>], got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_filepaths_key_mid_array_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg a "$GITDIR/a.md" --arg led "$LED" --arg b "$GITDIR/b.md" --arg cwd "$GITDIR" \
+        '{tool_name:"Edit", tool_input:{filePaths:[$a,$led,$b]}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-filepaths-key-mid-array: expected deny for ledger as non-first element of tool_input.filePaths, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_filepaths_key_non_ledger_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg a "$GITDIR/a.md" --arg b "$GITDIR/b.md" --arg cwd "$GITDIR" \
+        '{tool_name:"Edit", tool_input:{filePaths:[$a,$b]}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-filepaths-key-non-ledger-allow"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_file_paths_key_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg fp "$LED" --arg cwd "$GITDIR" '{tool_name:"Edit", tool_input:{file_paths:[$fp]}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-file-paths-key: expected deny for 'Edit' tool_input.file_paths=[<ledger>], got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_file_paths_key_mid_array_ledger_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg a "$GITDIR/a.md" --arg led "$LED" --arg b "$GITDIR/b.md" --arg cwd "$GITDIR" \
+        '{tool_name:"Edit", tool_input:{file_paths:[$a,$led,$b]}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED own-file-paths-key-mid-array: expected deny for ledger as non-first element of tool_input.file_paths, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_own_file_paths_key_non_ledger_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg a "$GITDIR/a.md" --arg b "$GITDIR/b.md" --arg cwd "$GITDIR" \
+        '{tool_name:"Edit", tool_input:{file_paths:[$a,$b]}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "own-file-paths-key-non-ledger-allow"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
     return "$result"
 }
 
@@ -1179,6 +1452,24 @@ main() {
     run_test test_own_home_tilde_form_denies
     run_test test_own_home_env_var_non_ledger_allows
     run_test test_own_home_outside_omt_dir_allows
+    run_test test_own_write_path_key_non_ledger_allows
+    run_test test_own_filepath_key_ledger_denies
+    run_test test_own_filepath_key_non_ledger_allows
+    run_test test_own_target_key_ledger_denies
+    run_test test_own_target_key_non_ledger_allows
+    run_test test_own_targetpath_key_ledger_denies
+    run_test test_own_targetpath_key_non_ledger_allows
+    run_test test_own_target_path_key_ledger_denies
+    run_test test_own_target_path_key_non_ledger_allows
+    run_test test_own_paths_key_ledger_denies
+    run_test test_own_paths_key_mid_array_ledger_denies
+    run_test test_own_paths_key_non_ledger_allows
+    run_test test_own_filepaths_key_ledger_denies
+    run_test test_own_filepaths_key_mid_array_ledger_denies
+    run_test test_own_filepaths_key_non_ledger_allows
+    run_test test_own_file_paths_key_ledger_denies
+    run_test test_own_file_paths_key_mid_array_ledger_denies
+    run_test test_own_file_paths_key_non_ledger_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
