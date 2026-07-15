@@ -182,6 +182,30 @@ describe("syncDirectory", () => {
 			expect(await exists(path.join(tgt, ".pytest_cache/CACHEDIR.TAG"))).toBe(false);
 			expect(await exists(path.join(tgt, "pkg/__pycache__/sub.cpython-312.pyc"))).toBe(false);
 		});
+
+		it("prunes __fixtures__ with the default exclude (no options passed)", async () => {
+			await writeFile(path.join(src, "helper.ts"), "export const x = 1;");
+			await writeFile(path.join(src, "__fixtures__/sample.md"), "fixture content");
+
+			await syncDirectory(src, tgt);
+
+			expect(await exists(path.join(tgt, "helper.ts"))).toBe(true);
+			expect(await exists(path.join(tgt, "__fixtures__/sample.md"))).toBe(false);
+		});
+
+		it("prunes __fixtures__ even when a custom exclude is passed", async () => {
+			// Regression: callers like { exclude: ["*.test.ts"] } must not lose
+			// __fixtures__ pruning, mirroring the PY_CACHE_EXCLUDE union above.
+			await writeFile(path.join(src, "helper.ts"), "export const x = 1;");
+			await writeFile(path.join(src, "helper.test.ts"), "import './helper.ts'");
+			await writeFile(path.join(src, "__fixtures__/sample.md"), "fixture content");
+
+			await syncDirectory(src, tgt, { exclude: ["*.test.ts"] });
+
+			expect(await exists(path.join(tgt, "helper.ts"))).toBe(true);
+			expect(await exists(path.join(tgt, "helper.test.ts"))).toBe(false);
+			expect(await exists(path.join(tgt, "__fixtures__/sample.md"))).toBe(false);
+		});
 	});
 
 	describe("실행 권한 보존", () => {
