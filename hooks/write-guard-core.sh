@@ -71,6 +71,7 @@ write_guard_core_run() {
     local ledger_path
     ledger_path="$(_wg_core_normpath "$omt_dir/session-ledger-$session_id.md")"
     local candidate norm_candidate
+    local cand_dir cand_base ledger_dir ledger_base
     while IFS= read -r candidate; do
         norm_candidate="$(_wg_core_normpath "$candidate")"
         if [ "$norm_candidate" = "$ledger_path" ]; then
@@ -82,16 +83,33 @@ write_guard_core_run() {
         # command destroys the current ledger -> deny. Only globs that
         # ACTUALLY match the single known ledger path are denied; a
         # non-matching glob stays allow, so no false block.
+        #
+        # Match is constrained to SINGLE-LEVEL glob semantics: the
+        # candidate's directory part must be EXACT-equal to the ledger's
+        # directory, and only the candidate's basename is used as the glob
+        # pattern (tested against the ledger's basename). A bash `case`
+        # pattern lets `*` span the `/` separator -- unlike real shell
+        # pathname expansion, where `*` matches within one path segment only
+        # -- so testing the whole candidate against the whole ledger path
+        # would wrongly deny an ANCESTOR-level glob (e.g. "$HOME/*") whose
+        # `*` never actually reaches a nested ledger at real runtime.
         case "$norm_candidate" in
             *[*?[]*)
-                # Intentionally unquoted: $norm_candidate is used AS the glob
-                # pattern to test against the ledger path.
-                case "$ledger_path" in
-                    $norm_candidate)
-                        printf '%s\n' "$_wg_core_deny_json"
-                        return 0
-                        ;;
-                esac
+                cand_dir="${norm_candidate%/*}"
+                cand_base="${norm_candidate##*/}"
+                ledger_dir="${ledger_path%/*}"
+                ledger_base="${ledger_path##*/}"
+                if [ "$cand_dir" = "$ledger_dir" ]; then
+                    # Intentionally unquoted: $cand_base is used AS the glob
+                    # pattern; it has no '/', so '*' cannot span a path
+                    # separator here -- this is a real single-level glob.
+                    case "$ledger_base" in
+                        $cand_base)
+                            printf '%s\n' "$_wg_core_deny_json"
+                            return 0
+                            ;;
+                    esac
+                fi
                 ;;
         esac
     done

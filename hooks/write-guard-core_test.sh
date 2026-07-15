@@ -217,6 +217,29 @@ test_glob_non_matching_star_allows() {
 }
 
 # =============================================================================
+# False-block regression (precision defect) -- an ANCESTOR-level glob (e.g.
+# "$HOME/*") must ALLOW, not deny. Bash `case` lets `*` span the `/`
+# separator, unlike real shell pathname expansion where `*` matches within
+# ONE path segment only. The ledger sits nested below the glob's directory
+# ($ANCESTOR_PARENT/.omt/proj/session-ledger-<sid>.md); at real runtime
+# "$ANCESTOR_PARENT"/* expands only to $ANCESTOR_PARENT's direct children
+# (skipping the dot-prefixed .omt dir) and never touches the ledger, so the
+# guard must not deny it.
+# =============================================================================
+test_glob_ancestor_star_allows() {
+    local ancestor_parent ancestor_od out
+    ancestor_parent="$TEST_TMP_DIR/ancestor-home"
+    ancestor_od="$ancestor_parent/.omt/proj"
+    out=$(printf '%s\n' "$ancestor_parent/*" | bash -c "source '$CORE'; write_guard_core_run '$ancestor_od' '$SID'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-ancestor-star: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -236,6 +259,7 @@ main() {
     run_test test_glob_ledger_star_denies
     run_test test_glob_dir_star_denies
     run_test test_glob_non_matching_star_allows
+    run_test test_glob_ancestor_star_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
