@@ -120,7 +120,7 @@ digraph prometheus_flow {
 }
 ```
 
-**Flowchart Enforcement Rule**: The verdict review loops on REQUEST_CHANGES are MANDATORY loops, not advisory paths — a Metis REQUEST_CHANGES always re-walks from the requirements phase; a Momus REQUEST_CHANGES is scoped re-review by default (re-run only Momus on the revised plan), with an earliest-affected re-walk only on an upstream root cause.
+**Flowchart Enforcement Rule**: The verdict review loops on REQUEST_CHANGES are MANDATORY loops, not advisory paths — a Metis REQUEST_CHANGES re-walks from the requirements phase until the K=3 orchestrator-owned carried-forward cap on the same `(B-axis, requirement locus)` item is reached, at which point prometheus records the residual as a carried-forward gap and proceeds to S2 (see `### State Lifecycle Directives`); a Momus REQUEST_CHANGES is scoped re-review by default (re-run only Momus on the revised plan), with an earliest-affected re-walk only on an upstream root cause.
 Proceeding past a Metis/Momus REQUEST_CHANGES without resolution violates the planning contract.
 Skipping any stage — including the in-phase Co-Design Daedalus advisory pass and the human design gate — is likewise a violation.
 
@@ -483,7 +483,7 @@ A phase task is complete only when its reviewer signal is received:
 | Daedalus | Advisory design input received and folded into the design phase per `## Design Consensus` (advisory only — proceed to the human design gate, then plan write) |
 | Momus | Verdict = APPROVE or COMMENT (proceed to user presentation) |
 
-REQUEST_CHANGES from a verdict-emitting reviewer (Metis or Momus) means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received. A Momus REQUEST_CHANGES is, by default, **scoped re-review**: revise the rejected plan and re-run only the Momus gate (fresh instance), preserving the upstream interview/AC/design artifacts. Only when the defect's root cause requires re-deciding an upstream artifact does it route to the **earliest affected phase** (requirements root cause → requirements phase → re-Metis; design root cause → design phase → human gate → re-plan), re-walking the full downstream including a fresh Momus re-review.
+REQUEST_CHANGES from a verdict-emitting reviewer (Metis or Momus) means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received — with one bounded exception for **Metis**: a Metis REQUEST_CHANGES blocks the downstream only until the K=3 orchestrator-owned carried-forward cap on the same `(B-axis, requirement locus)` item, after which prometheus records the residual as a carried-forward gap and proceeds to S2 (a Momus REQUEST_CHANGES has no such cap). A Momus REQUEST_CHANGES is, by default, **scoped re-review**: revise the rejected plan and re-run only the Momus gate (fresh instance), preserving the upstream interview/AC/design artifacts. Only when the defect's root cause requires re-deciding an upstream artifact does it route to the **earliest affected phase** (requirements root cause → requirements phase → re-Metis; design root cause → design phase → human gate → re-plan), re-walking the full downstream including a fresh Momus re-review.
 
 Starting a downstream phase task while a prior verdict phase remains in REQUEST_CHANGES state is a planning contract violation.
 
@@ -1009,11 +1009,11 @@ MANDATORY: Reviewer MUST pass (APPROVE or COMMENT) before proceeding.
 - Do NOT proceed until APPROVE or COMMENT
 - On REQUEST_CHANGES: revise and re-invoke
 - On missing or ambiguous verdict: treat as REQUEST_CHANGES
-- Loop repeats indefinitely until pass
+- Loop repeats until pass (a Metis REQUEST_CHANGES is bounded by the K=3 carried-forward cap — see below; a Momus REQUEST_CHANGES is unbounded)
 - Skipping is NEVER permitted
 ```
 
-A REQUEST_CHANGES verdict blocks ALL downstream progression — no stage advances until the blocking reviewer re-issues APPROVE or COMMENT after a proper Revise cycle.
+A REQUEST_CHANGES verdict blocks downstream progression until the blocking reviewer re-issues APPROVE or COMMENT after a proper Revise cycle — with one bounded exception: a **Metis** REQUEST_CHANGES blocks only until the K=3 orchestrator-owned carried-forward cap on the same `(B-axis, requirement locus)` item, at which point prometheus records the residual as a carried-forward gap and proceeds to S2 (see `### State Lifecycle Directives`). A **Momus** REQUEST_CHANGES has no cap — it blocks until the reviewer re-issues APPROVE or COMMENT.
 
 ### Common Verdict Handling (Metis + Momus only)
 
@@ -1023,10 +1023,10 @@ Daedalus does NOT appear in this table — it is advisory and emits no gating si
 |---------|--------|
 | **APPROVE** | Proceed to next stage |
 | **COMMENT** | Incorporate findings silently, proceed |
-| **REQUEST_CHANGES** | Revise, re-invoke. Loop until APPROVE or COMMENT |
+| **REQUEST_CHANGES** | Revise, re-invoke. Loop until APPROVE or COMMENT (a Metis loop also terminates at the K=3 carried-forward cap; a Momus loop does not) |
 | **Missing / ambiguous** (no explicit verdict label, punch-list only, "verdict inferable") | Treat as REQUEST_CHANGES |
 
-> "Incorporate findings silently": absorb reviewer findings into your understanding. Reviewer names, verdict labels, advisory enumeration do NOT appear in plan body. Reviewers shape the plan; they do not annotate it.
+> "Incorporate findings": absorb reviewer findings into the plan. Reviewer names, verdict labels, and advisory enumeration do NOT appear in the plan body — reviewers shape the plan, they do not annotate it. But **absorbing is not dropping**: a Metis COMMENT or demoted-to-advisory finding is recorded into the plan's Context / interview-summary as a carried-forward concern (its substance, not its reviewer attribution), so S3 plan-writing addresses it proactively — e.g. decomposing a flagged batch AC per-TODO — and Momus at S4 reviews an already-resolved AC instead of re-blocking. A demoted finding that silently evaporates is coverage loss; a recorded one pre-empts the S4 arms-race (COMMENT-carry).
 
 ### Operational Definition of "Revise"
 
@@ -1042,7 +1042,7 @@ A sequence missing any step is not Revise. Self-assessment, paraphrasing the dir
 
 A verdict is valid only when issued by a reviewer agent on the **current version** of the artifact. Prior verdicts on earlier versions are expired.
 
-Self-assessment cannot substitute for a reviewer verdict. Even if prometheus believes the revision is correct, that belief is irrelevant — only the reviewer's re-issuance advances the pipeline.
+Self-assessment cannot substitute for a reviewer verdict. Even if prometheus believes the revision is correct, that belief is irrelevant — only the reviewer's re-issuance advances the pipeline. The sole non-verdict advance is the K=3 orchestrator-owned carried-forward cap (a Metis-only backstop, per `### State Lifecycle Directives`): at the 3rd identical Metis REQUEST_CHANGES on the same `(B-axis, requirement locus)` item, prometheus advances by **recording the residual as an unresolved carried-forward gap** — not by asserting the item is fixed. Self-assessment of correctness still never advances the pipeline; only an explicit, logged carried-forward residual does.
 
 ### Reviewer Freshness Rule
 
@@ -1057,7 +1057,7 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | State | Description | Transitions |
 |-------|-------------|-------------|
 | **S0: Requirements** | Open requirements interview + AC co-decide | → S1 on Metis-ready clearance |
-| **S1: Metis Invocation** | 3-Section prompt to Metis (requirements gate) | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
+| **S1: Metis Invocation** | 3-Section prompt to Metis (requirements gate) | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES until the K=3 carried-forward cap on the same `(B-axis, requirement locus)` item, then → S2 with the residual recorded as a carried-forward gap (prometheus-owned; metis round-unaware) |
 | **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / co-authored decision log, including the structural enumeration of D-items per `## Plan Structure > ADR` | → S3 on human design-gate approval; advisory Daedalus input folded in per `## Design Consensus` (no gating signal — the human gate gates this state) |
 | **S3: Plan Generation** | Writing the TODO plan to `$OMT_DIR/plans/{name}.md` from the approved design | → S4 on self-review pass |
 | **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; on REQUEST_CHANGES → **scoped re-review by default**: revise the plan and re-run only S4 (fresh Momus), upstream preserved. Earliest-affected re-walk is the exception, taken only on an upstream root cause: → S0 on a requirements root cause (re-Metis → … → re-Momus), → S2 on a design root cause (human gate → re-plan → re-Momus) |
@@ -1116,12 +1116,13 @@ These directives govern how prometheus records its own pipeline state via the st
   1. Run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" get` and read `steps.acceptance_criteria.content` from its output to recover the prior confirmed AC (do not re-derive AC that was already confirmed — use the stored content directly).
   2. Re-read the current plan file (use `plan_path` from state; if absent, restart from `resume_summary`).
   3. Distrust any stored verdict and re-run gates on the current artifact — a stored verdict is not a pass, re-verification is mandatory; only the AC content (step 1) is reused without re-derivation.
+- **Metis carried-forward counter (K, cap 3)**: prometheus owns a per-item round counter keyed on `(B-axis, requirement locus)` — the Metis B-axis (B1-B4) plus the specific unresolved requirement locus. It increments only on a *repeat* Metis REQUEST_CHANGES for the **same** key; a different B-axis, or the same axis on a different requirement locus, starts a fresh count. metis is stateless and round-unaware — it never sees or emits this counter (Option B). At the 3rd identical REQUEST_CHANGES on one key (K=3), prometheus terminates that item's Metis loop: it extracts the residual from metis's own RC output, records it as a **carried-forward gap** in the plan Context / interview-summary, and proceeds to S2 — without signaling metis and without metis emitting any carried-forward verdict variant. The counter is session state (persistence is a design note; a compaction reset at worst re-counts and stays bounded by the finite B1-B4 whitelist). The K=3 cap is the deadlock backstop, not the primary convergence device — the finite B1-B4 whitelist is the primary convergence guarantee. This cap applies to Metis only; Momus has no carried-forward cap.
 
 ### Loop Termination Rule
 
-Reviewer loop terminates **iff** the reviewer issues APPROVE or COMMENT on the current artifact version. REQUEST_CHANGES → Revise. Missing/ambiguous → treat as REQUEST_CHANGES.
+A reviewer loop terminates on the reviewer issuing APPROVE or COMMENT on the current artifact version. REQUEST_CHANGES → Revise. Missing/ambiguous → treat as REQUEST_CHANGES. One additional, Metis-only terminal exists: the K=3 orchestrator-owned carried-forward cap (`### State Lifecycle Directives`) — at the 3rd identical Metis REQUEST_CHANGES on the same `(B-axis, requirement locus)` item, prometheus records the residual as a carried-forward gap and the Metis loop terminates into S2. A Momus loop has no such cap.
 
-Time pressure, user override ("just proceed"), self-assessment of fix correctness, parallel dispatch on a blocked artifact — none terminate the loop.
+Time pressure, user override ("just proceed"), self-assessment of fix correctness, parallel dispatch on a blocked artifact — none terminate the loop. The K=3 carried-forward cap is **not** an exception to this: it is not a user override or a time-pressure bypass but an orchestrator-owned convergence terminal that fires only after three genuine Revise cycles on the same `(B-axis, requirement locus)` item and records the residual as unresolved — user-driven shortcuts still never terminate the loop.
 
 ### Self-Review Checklist (after plan generation at S3, before Momus)
 
