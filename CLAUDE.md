@@ -82,7 +82,7 @@ skills:
 - Root `sync.yaml`: global paths only (`skills/`, `agents/`, etc.)
 - Project `sync.yaml`: own project first (`projects/<name>/skills/`), then global fallback. Cross-project references are blocked.
 
-**Per-platform YAML** (`{platform}.yaml`): Colocated with `sync.yaml`, inheriting its `path`. Manages config/hooks/mcps/plugins per platform — separate from `sync.yaml` which handles component deployment only (agents, commands, skills, scripts, rules).
+**Per-platform YAML** (`{platform}.yaml`): Colocated with `sync.yaml`, inheriting its `path`. Manages config/hooks/mcps/plugins per platform — separate from `sync.yaml` which handles component deployment only (agents, commands, skills, scripts, rules). Config/hooks/mcps deep-merge into the target's gitignored `.claude/settings.local.json` (global sync uses `settings.json`); see `docs/platform-yaml-config-deployment.md` for the deployment target and the two-layer gitignore mechanism (why a personal absolute path is safe in `claude.yaml`, not just `claude.local.yaml`).
 
 > **Note**: `mcps/` directory is deprecated. MCPs are now defined inline in per-platform YAML files.
 
