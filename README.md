@@ -46,11 +46,11 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 ## 문서
 
-라이브러리에 담긴 스킬(33종)·에이전트(11종)·명령어(2종)의 상세는 `docs/`에 정리되어 있습니다.
+라이브러리에 담긴 스킬(33종)·에이전트(14종)·명령어(2종)의 상세는 `docs/`에 정리되어 있습니다.
 
 | 문서 | 내용 |
 |------|------|
-| [코어 파이프라인](docs/skills/core-pipeline.md) | 정의→기획→실행→검증 파이프라인 (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 위임 에이전트 11종 |
+| [코어 파이프라인](docs/skills/core-pipeline.md) | 정의→기획→실행→검증 파이프라인 (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 위임 에이전트 14종 |
 | [리뷰/품질](docs/skills/review-quality.md) | code-review · orchestrate-review · design-review · slides-review · qa · performance-optimizer |
 | [문서/콘텐츠·유틸](docs/skills/authoring.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [지식 그래프(pins)](docs/skills/knowledge-graph-pins.md) | pins 지식 그래프 — pin-setup · record · query · audit · wrap-up |

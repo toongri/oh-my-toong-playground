@@ -321,11 +321,21 @@ owns a distinct sub-outcome.
 
 A **Decisions Needed** section is a list of open product or policy decisions that block or shape work. Each entry names the decision and the issue or owner it is delegated to for resolution.
 
-**Entries must not pre-solve.** The Model-A intent ban applies: naming the open question and its owner is allowed; embedding the answer is not. "Whether method B cards should be retired for existing users — delegated to `[design-issue-id]`" is a valid entry. "Method B cards will be retired; see `[design-issue-id]` for details" is a violation.
+- **No pre-solving** — name the decision and the issue or owner it is delegated to; do not state any option as chosen. "Whether method B cards should be retired for existing users — delegated to `[design-issue-id]`" is a valid entry. "Method B cards will be retired; see `[design-issue-id]` for details" is a violation. The Model-A intent ban applies: naming the open question and its owner is allowed; embedding the answer is not.
+- **Research-backed alternatives** — an alternatives table (option / pros / cons / source URL) and a recommendation are permitted; a decision is not. Record the recommendation as a `proposal — not decided in this issue`, never as the entry's chosen answer.
+- **Distinguish from `TBD`** — `TBD — needs validation via {method}` marks a missing **fact** in a body field (a premise that can be confirmed by investigation). Decisions Needed lists open **decisions** that require a product or policy call, not just investigation. The two mechanisms are complementary — a Decisions Needed entry may reference a TBD that will be resolved once the decision is made.
+- **Placement** — at the parent level, Decisions Needed lists decisions that affect multiple children. At the child level, a Decisions Needed entry is permitted when a decision affects only that child and has not yet been resolved.
 
-**Distinguish from `TBD`:** `TBD — needs validation via {method}` marks a missing **fact** in a body field (a premise that can be confirmed by investigation). Decisions Needed lists open **decisions** that require a product or policy call, not just investigation. The two mechanisms are complementary — a Decisions Needed entry may reference a TBD that will be resolved once the decision is made.
+### Request-Coverage Rule
 
-At the parent level, Decisions Needed lists decisions that affect multiple children. At the child level, a Decisions Needed entry is permitted when a decision affects only that child and has not yet been resolved.
+Before filing, compare the **issue set actually being written** (the single issue, or the parent plus every child) against the **original raw request** captured at Stage 1 — not against gathered documents, and not against a parent issue's own restated scope. This catches fake convergence: a writer summary that claims full coverage while the request itself has an element with no home in the written set.
+
+- **Coverage** — every distinct requirement or ask named in the original raw request maps to at least one AC, Non-Goal, or child issue in the set being written; a request element with no home anywhere in the set is a coverage gap.
+- **Non-Goals justification** — a request element deliberately left out of the issue set is named in Non-Goals with a reason, not silently dropped.
+- **Standalone scoring** — score coverage against the request text alone; the writer's own "all requirements handled" summary is not itself evidence of coverage.
+- **Delta from Coverage gap** — the slice-seam row compares the child set against the parent's own requirements; this rule compares the original request against the issue set.
+
+Cite only one.
 
 ### Anti-Fluff Rule
 
