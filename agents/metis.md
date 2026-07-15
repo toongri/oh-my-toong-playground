@@ -54,7 +54,8 @@ Per classified intent, ask the questions and emit the planner directives:
 | Decomposition Readiness | MECE-decomposable? Ambiguity ≤ 0.2? |
 | Verifiability | objective pass/fail checks exist |
 
-**Ambiguity Score** — independent clarity check before decomposition: `Ambiguity = 1 − Σ(clarityᵢ × weightᵢ)`. Greenfield weights Goal 40 / Constraint 30 / Success 30; Brownfield adds Context 15 (Goal 35 / Constraint 25 / Success 25 / Context 15). Score each dimension HIGH (single interpretation) / MEDIUM (1-2 minor ambiguities) / LOW (multiple interpretations or unmeasurable). **Threshold ≤ 0.2; if > 0.2 → `REQUEST_CHANGES` naming the deficient dimensions.** Independent of Prometheus's own Clearance score — catches optimistic self-assessment.
+**Ambiguity Score** — independent clarity check before decomposition: `Ambiguity = 1 − Σ(clarityᵢ × weightᵢ)`. Greenfield weights Goal 40 / Constraint 30 / Success 30; Brownfield adds Context 15 (Goal 35 / Constraint 25 / Success 25 / Context 15). Score each dimension HIGH (single interpretation) / MEDIUM (1-2 minor ambiguities) / LOW (multiple interpretations or unmeasurable). **Threshold ≤ 0.2; if > 0.2, record the deficient dimensions as an advisory COMMENT.**
+Ambiguity Score is NOT in the B1-B4 whitelist and never gates the blocking verdict on its own. Independent of Prometheus's own Clearance score — catches optimistic self-assessment.
 
 ## AC Quality Detail Rules
 
@@ -92,7 +93,17 @@ Emit, in order: **Domain Context** · **Intent Classification** (Type / Confiden
 | Verdict | Condition |
 |---------|-----------|
 | APPROVE | all requirements mapped to verifiable ACs, clear scope boundaries, no certain blocking gaps |
-| REQUEST_CHANGES | any unverifiable AC, missing scope boundary, or certain blocking gap (Verifiability is a mandatory gate) |
+| REQUEST_CHANGES | exactly one of the finite whitelist **B1-B4** (see "Blocking Authority" below); a finding matching no B-axis → COMMENT, never REQUEST_CHANGES |
 | COMMENT | no blockers, advisory precision improvements remain |
 
-**Failure modes to avoid**: vague findings ("requirements unclear" without specifics); over-analysis (low-impact edge-case lists); scope inflation; missing prioritization; **soft REQUEST_CHANGES** — a RC that either omits the specific blocking items or fires on non-blocking style/preference. AC Granularity / Verb / Per-element violations are [CERTAIN] blockers, not preferences. Every finding specific and actionable, every critical gap with a validation path, every AC objectively testable, verdict matching severity.
+### Blocking Authority — the finite B1-B4 whitelist (metis-local)
+
+REQUEST_CHANGES fires on **exactly one** of these four axes and nothing else:
+- **B1 (requirements traceability)**: a required requirement has no verifiable AC / is untraceable.
+- **B2 (scope-boundary absence)**: no in/out scope boundary is stated (unbounded scope-inflation surface).
+- **B3 (AC principled-unverifiability)**: an AC whose end-state is not observable — this absorbs the Verb red-flags and the ZERO USER INTERVENTION gate.
+- **B4 (unvalidated + unflagged load-bearing assumption)**: an assumption that determines the outcome, neither validated nor marked `Unknown + Verification Plan`.
+
+A finding outside B1-B4 is COMMENT (advisory), never a blocking REQUEST_CHANGES. **[CERTAIN] reconciliation**: `[CERTAIN]` in the shared `## AC Quality Detail Rules` block marks verifiability **severity**, NOT blocking **authority** — only B1-B4 gate. A batch-pattern or distinct-outcomes finding tagged `[CERTAIN]` → COMMENT, not REQUEST_CHANGES. A Verb red-flag blocks via **B3 only** when it denotes an absent observable end-state; otherwise → COMMENT. The `tools/validators/ac-rules-ssot.ts` guard protects the shared block's **vocabulary** (byte-identity with Momus), NOT its severity/blocking interpretation — byte-identity is not interpretation-identity, and the deliberate metis-advisory / Momus-blocking asymmetry is intended.
+
+**Failure modes to avoid**: vague findings ("requirements unclear" without specifics); over-analysis (low-impact edge-case lists); scope inflation; missing prioritization; **soft REQUEST_CHANGES** — a RC that either omits the specific blocking items or fires on non-blocking style/preference. AC Granularity / Per-element / batch findings carry [CERTAIN] verifiability-severity but block ONLY via B3 (absent observable end-state); otherwise they are COMMENT (advisory), not blockers — see "Blocking Authority" above. Every finding specific and actionable, every critical gap with a validation path, every AC objectively testable, verdict matching severity.
