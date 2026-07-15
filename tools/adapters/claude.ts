@@ -241,7 +241,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 				await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
 			} else {
 				await syncDirectory(sourcePath, targetHookDir, {
-					exclude: ["*.test.ts"],
+					exclude: ["*.test.ts", "*.local.yaml"],
 					platformRoot: path.join(targetPath, ".claude"),
 				});
 				logInfo(`Copied: ${displayName}/`);

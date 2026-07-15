@@ -289,7 +289,7 @@ Default timeout per command: **120 seconds**.
 Run in sequence — stop immediately on first failure:
 
 1. Build / compile
-2. Full test suite
+2. Project's declared test command (its verification contract's scopeable form — not necessarily the entire suite)
 3. Linter / static analysis
 
 **Any failure → do NOT dispatch chunk-reviewer agents.** See Fail-Fast Gate below for the exact exit sequence (it branches on whether this run carries the completion-gate dispatch signal from Step 0).

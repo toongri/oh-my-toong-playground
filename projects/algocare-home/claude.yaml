@@ -1,3 +1,22 @@
+# config·hooks·mcps는 대상 프로젝트의 .claude/settings.local.json으로 배포된다
+# (전역 sync만 settings.json). settings.local.json은 대상 레포에서 gitignore되므로
+# (algocare-home .gitignore) 여기 둔 개인 절대경로도 팀 레포엔 커밋되지 않는다.
+# OMT의 claude.yaml(git 추적)과 claude.local.yaml(gitignore)은 "OMT 레포에
+# 버전관리하느냐"의 축일 뿐 — 배포 착지점은 둘 다 gitignore된 settings.local.json.
+# 메커니즘 전문: docs/platform-yaml-config-deployment.md
+config:
+  env:
+    # 워크트리 공유 turbo 캐시(해시키드 경로 지정, 캐시 무효화 아님).
+    TURBO_CACHE_DIR: "/Users/toong/Library/Caches/algocare-home/turbo"
+
+hooks:
+  PreToolUse:
+    # verify-caps-gate: 무필터 test/lint deny + 러너별 메모리 캡.
+    # 정책 파일 hooks/verify-caps-gate/verify-caps.yaml.
+    - component: verify-caps-gate
+      matcher: "Bash"
+      timeout: 10
+
 mcps:
   notion-algocare:
     type: http
