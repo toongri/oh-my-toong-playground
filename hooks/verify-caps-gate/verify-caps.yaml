@@ -17,6 +17,15 @@
 #          (script name matched exactly, not e.g. "test:changed") unless the
 #          command carries one of scope_flags anywhere.
 #
+# inject_scripts (general-purpose runners pnpm/turbo only) — env/flag caps are
+# injected ONLY when the command invokes a verification script: a word starting
+# with one of these prefixes (test → test/test:changed, verify → verify:quick).
+# Injecting env forces permissionDecision:allow (auto-approve), so without this
+# gate a non-verification command (pnpm publish, pnpm dlx, turbo gen) would be
+# injected and silently approved past the Bash permission prompt. vitest/jest
+# omit inject_scripts (dedicated test runners, no dangerous subcommands) and
+# inject unconditionally.
+#
 # vitest/turbo/pnpm all get VITEST_MAX_FORKS + VITEST_MAX_THREADS: vitest
 # needs both across pool types (s1 spike: VITEST_MAX_FORKS bounds concurrent
 # forks-pool workers; VITEST_MAX_THREADS is the threads-pool analogue and is
@@ -40,6 +49,7 @@ runners:
     # concurrency of 1"). Gate the flag to commands that already carry one of
     # deny.scope_flags below (the old bash gate had this same restriction).
     flag_requires_scope: true
+    inject_scripts: ["test", "lint", "build", "typecheck"]
     deny:
       scripts: ["test", "lint"]
       scope_flags: ["--filter", "-F", "--affected"]
@@ -47,6 +57,7 @@ runners:
     env:
       VITEST_MAX_FORKS: "2"
       VITEST_MAX_THREADS: "2"
+    inject_scripts: ["test", "lint", "verify"]
     deny:
       scripts: ["test", "lint"]
       scope_flags: ["--filter", "-F", "--affected"]

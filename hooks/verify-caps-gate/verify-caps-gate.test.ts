@@ -8,8 +8,11 @@ import { decide, loadConfig, processHookInput, type VerifyCapsConfig } from "./i
 
 // -----------------------------------------------------------------------------
 // Fixture config mirroring verify-caps.yaml's shipped schema (vitest=env,
-// jest=flag, turbo=env+flag+deny, pnpm=env+deny). decide() is pure and takes
-// this fixture directly — no file I/O needed for the core truth table.
+// jest=flag, turbo=env+flag+inject_scripts+deny, pnpm=env+inject_scripts+deny).
+// pnpm/turbo carry an inject_scripts allowlist (general-purpose runners inject
+// only on verification scripts); vitest/jest omit it (dedicated runners inject
+// unconditionally). decide() is pure and takes this fixture directly — no file
+// I/O needed for the core truth table.
 // -----------------------------------------------------------------------------
 const FIXTURE: VerifyCapsConfig = {
 	runners: {
@@ -23,10 +26,12 @@ const FIXTURE: VerifyCapsConfig = {
 			env: { VITEST_MAX_FORKS: "2", VITEST_MAX_THREADS: "2" },
 			flag: "--concurrency=1",
 			flag_requires_scope: true,
+			inject_scripts: ["test", "lint", "build", "typecheck"],
 			deny: { scripts: ["test", "lint"], scope_flags: ["--filter", "-F", "--affected"] },
 		},
 		pnpm: {
 			env: { VITEST_MAX_FORKS: "2", VITEST_MAX_THREADS: "2" },
+			inject_scripts: ["test", "lint", "verify"],
 			deny: { scripts: ["test", "lint"], scope_flags: ["--filter", "-F", "--affected"] },
 		},
 	},
@@ -104,6 +109,26 @@ describe("decide — deny (unfiltered root test/lint)", () => {
 
 	test("denyBypass regression: `pnpm test --filter=web` (no `--`) is still not denied", () => {
 		const result = decide("pnpm test --filter=web", FIXTURE);
+		expect(result.action).not.toBe("deny");
+	});
+
+	test("recursive: `pnpm -r test` denies (`-r` runs the script in every workspace package — a whole-monorepo run, and `-r` is not a scope flag)", () => {
+		const result = decide("pnpm -r test", FIXTURE);
+		expect(result.action).toBe("deny");
+	});
+
+	test("recursive: `pnpm --recursive lint` denies (long-form whole-workspace run)", () => {
+		const result = decide("pnpm --recursive lint", FIXTURE);
+		expect(result.action).toBe("deny");
+	});
+
+	test("recursive: `pnpm -r run test` denies (`-r` sits before the `run` keyword)", () => {
+		const result = decide("pnpm -r run test", FIXTURE);
+		expect(result.action).toBe("deny");
+	});
+
+	test("recursive regression: `pnpm -r test --filter=web` is not denied (a real scope flag still rescues even alongside -r)", () => {
+		const result = decide("pnpm -r test --filter=web", FIXTURE);
 		expect(result.action).not.toBe("deny");
 	});
 });
@@ -200,12 +225,13 @@ describe("decide — defect1: turbo --concurrency requires a scope flag", () => 
 		}
 	});
 
-	test("`turbo run local` (persistent task) does not get --concurrency appended", () => {
+	test("`turbo run local` (persistent task, not a verification script) is passthrough — untouched, so no --concurrency can land on it", () => {
+		// `local` is not in turbo's inject_scripts, so it never reaches flag
+		// injection at all — a stronger guarantee than the old env-inject+scope
+		// gate. The flag_requires_scope gate for a real verification task with no
+		// scope flag is still covered by the `turbo run build` test above.
 		const result = decide("turbo run local", FIXTURE);
-		expect(result.action).toBe("allow");
-		if (result.action === "allow") {
-			expect(result.command).not.toContain("--concurrency");
-		}
+		expect(result.action).toBe("passthrough");
 	});
 
 	test("`turbo run test --affected` (has scope flag) still gets --concurrency appended", () => {
@@ -250,6 +276,74 @@ describe("decide — `--` and compound guards (flag append skipped, env prepend 
 	test("defect5: `jest &` (bare background `&`) does not get --maxWorkers appended", () => {
 		const result = decide("jest &", FIXTURE);
 		expect(result.action).toBe("passthrough");
+	});
+});
+
+describe("decide — general-purpose runners inject only on verification scripts", () => {
+	// pnpm/turbo are general-purpose: injecting env forces permissionDecision
+	// "allow" (auto-approve), so a non-verification command must NOT be injected
+	// — otherwise the hook silently bypasses the Bash permission prompt for
+	// pnpm publish / pnpm dlx / turbo gen etc. (permission broadening).
+	test.each([
+		["pnpm publish"],
+		["pnpm dlx cowsay hi"],
+		["pnpm add lodash"],
+		["pnpm install"],
+		["turbo gen component"],
+		["turbo login"],
+	])("%s is passthrough (no env-inject, permission prompt preserved)", (command) => {
+		const result = decide(command, FIXTURE);
+		expect(result.action).toBe("passthrough");
+	});
+
+	// Verification invocations still inject — including the flags-before-script
+	// form (`pnpm --filter x test:changed`) that position-based matching misses.
+	test("`pnpm test --filter=web` still injects env (verification preserved)", () => {
+		const result = decide("pnpm test --filter=web", FIXTURE);
+		expect(result.action).toBe("allow");
+		if (result.action === "allow") {
+			expect(result.command).toContain("VITEST_MAX_FORKS=2");
+		}
+	});
+
+	test("`pnpm --filter @algocare/backend test:changed` injects env (script after flags)", () => {
+		const result = decide("pnpm --filter @algocare/backend test:changed", FIXTURE);
+		expect(result.action).toBe("allow");
+		if (result.action === "allow") {
+			expect(result.command).toContain("VITEST_MAX_FORKS=2");
+		}
+	});
+
+	test("`pnpm verify:full` injects env (verify: prefix matches a sub-scripted name)", () => {
+		const result = decide("pnpm verify:full", FIXTURE);
+		expect(result.action).toBe("allow");
+	});
+
+	test("`turbo run build --affected` still injects (build is a turbo verification task)", () => {
+		const result = decide("turbo run build --affected", FIXTURE);
+		expect(result.action).toBe("allow");
+		if (result.action === "allow") {
+			expect(result.command).toContain("VITEST_MAX_FORKS=2");
+		}
+	});
+
+	// A word merely CONTAINING a prefix mid-token must not match: `test-utils`
+	// as a package name in `pnpm add test-utils` is not a verification script.
+	test("`pnpm add test-utils` is passthrough (prefix must sit at a word boundary)", () => {
+		const result = decide("pnpm add test-utils", FIXTURE);
+		expect(result.action).toBe("passthrough");
+	});
+
+	// Dedicated test runners (vitest/jest) declare no inject_scripts allowlist:
+	// they have no dangerous non-test subcommands, so they inject unconditionally.
+	test("`vitest --version` still injects (vitest is a dedicated runner, no allowlist)", () => {
+		const result = decide("vitest --version", FIXTURE);
+		expect(result.action).toBe("allow");
+	});
+
+	test("`jest --clearCache` still injects (jest is a dedicated runner, no allowlist)", () => {
+		const result = decide("jest --clearCache", FIXTURE);
+		expect(result.action).toBe("allow");
 	});
 });
 
@@ -324,6 +418,24 @@ describe("decide — real verify-caps.yaml drift pin", () => {
 		if (result.action === "allow") {
 			expect(result.command).not.toContain("--concurrency");
 		}
+	});
+
+	test("`pnpm publish` is passthrough against the shipped yaml (inject_scripts keeps non-verification commands off the auto-approve path)", () => {
+		const result = decide("pnpm publish", realConfig);
+		expect(result.action).toBe("passthrough");
+	});
+
+	test("`pnpm test --filter=x` still injects env against the shipped yaml", () => {
+		const result = decide("pnpm test --filter=x", realConfig);
+		expect(result.action).toBe("allow");
+		if (result.action === "allow") {
+			expect(result.command).toContain("VITEST_MAX_FORKS=2");
+		}
+	});
+
+	test("`pnpm -r test` denies against the shipped yaml (recursive whole-workspace run)", () => {
+		const result = decide("pnpm -r test", realConfig);
+		expect(result.action).toBe("deny");
 	});
 });
 
