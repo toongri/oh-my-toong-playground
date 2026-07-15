@@ -51,6 +51,58 @@ test_compact_emits_recovery_no_continue() {
 }
 
 # =============================================================================
+# SUB-FIX 4: a stale/ambient OMT_SESSION_ID (leaked from a parent Claude
+# process) must not shadow this Codex session's own CODEX_THREAD_ID identity.
+# ledger_core_run's precedence is OMT_SESSION_ID ?? CODEX_THREAD_ID ??
+# stdin.session_id -- if codex-ledger.sh forwards the ambient env unfiltered,
+# the foreign OMT_SESSION_ID sid wins and compact-recovery splices in ANOTHER
+# session's ledger. Two ledger files (SELF via CODEX_THREAD_ID, FOREIGN via
+# ambient OMT_SESSION_ID) let this test tell which sid actually resolved.
+# =============================================================================
+test_codex_ambient_omt_session_id_does_not_shadow_self() {
+    local SBX OD out ok=0
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+    printf '## Now\nSELF-MARKER-XYZ\n## User Corrections (verbatim)\n' > "$OD/session-ledger-self-sid-1.md"
+    printf '## Now\nFOREIGN-MARKER-XYZ\n## User Corrections (verbatim)\n' > "$OD/session-ledger-foreign-sid-1.md"
+
+    out=$(printf '{"source":"compact","session_id":"self-sid-1","cwd":"%s"}' "$SBX" \
+        | OMT_DIR="$OD" bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; export OMT_SESSION_ID=foreign-sid-1; export CODEX_THREAD_ID=self-sid-1; exec bash '$HOOK'" 2>/dev/null)
+
+    if echo "$out" | grep -q 'SELF-MARKER-XYZ' \
+        && [ "$(printf '%s' "$out" | grep -c 'FOREIGN-MARKER-XYZ')" = "0" ]; then
+        ok=1
+    fi
+
+    rm -rf "$SBX"
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
+# No-regression companion to the above: CODEX_THREAD_ID set, OMT_SESSION_ID
+# absent -- self-recovery via CODEX_THREAD_ID must still work (the fix must
+# NOT unset CODEX_THREAD_ID, only OMT_SESSION_ID).
+# =============================================================================
+test_codex_thread_id_alone_recovers_self() {
+    local SBX OD out ok=0
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+    printf '## Now\nSELF-ONLY-MARKER\n## User Corrections (verbatim)\n' > "$OD/session-ledger-self-sid-2.md"
+
+    out=$(printf '{"source":"compact","session_id":"self-sid-2","cwd":"%s"}' "$SBX" \
+        | OMT_DIR="$OD" bash -c "unset OMT_SESSION_ID CODEX_THREAD_ID; export CODEX_THREAD_ID=self-sid-2; exec bash '$HOOK'" 2>/dev/null)
+
+    if echo "$out" | grep -q 'SELF-ONLY-MARKER'; then
+        ok=1
+    fi
+
+    rm -rf "$SBX"
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
 # QA Scenario: Recording on Codex startup -- part-2 on Codex.
 # Evidence: $OMT_DIR/evidence/codex-ledger-parity/codex-ledger-hook/recording-startup.txt
 # =============================================================================
@@ -223,6 +275,8 @@ main() {
     echo "=========================================="
 
     run_test test_compact_emits_recovery_no_continue
+    run_test test_codex_ambient_omt_session_id_does_not_shadow_self
+    run_test test_codex_thread_id_alone_recovers_self
     run_test test_qa_recording_startup_no_claude_env_leak
     run_test test_qa_no_continue_contract
     run_test test_jq_absent_recording_survives_no_continue
