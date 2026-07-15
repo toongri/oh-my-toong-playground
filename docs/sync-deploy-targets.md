@@ -33,6 +33,32 @@
   해석되거나 `git worktree list` 자체가 실패하면 `DeployTargetsError`로 **시끄럽게**
   실패한다. 조용히 빈 타겟을 반환하면 아무것도 안 쓰고도 성공처럼 보이기 때문이다.
 
+## 백업 위치
+
+`make sync`가 덮어쓸 파일을 백업하는 곳은 타겟 레포 안이 아니라 **단일
+OMT 소유 루트**다:
+
+```
+<base>/sync-backup/<target>-<worktree>-<hex>/<platform>/<category>/
+```
+
+- `<base>`는 `$OMT_DIR`, 없으면 `~/.omt/<projectName>`.
+- `<target>`은 `sync.yaml`의 `path`(컨테이너), `<worktree>`는 그 경로가
+  해석된 개별 워크트리, `<hex>`는 deploy(target×worktree) 하나당 새로
+  생성된다.
+- 백업은 write-only다 — restore 경로는 없다. 나이 기준으로만
+  프룬한다(`backup_retention_days`, 기본 3일).
+
+타겟 레포 안에 `.sync-backup/`이 남던 예전 동작과 달리, 이제 백업이
+그 레포의 CI나 prettier를 오염시키지 않는다.
+
+## startup fail-fast
+
+백업 base(`<base>`)가 degenerate하면 — 상대경로, `/`, 또는 홈
+디렉토리면 — `make sync`(그리고 `make sync-dry`)는 배포를 시작하기
+**전에** `UnsafeBackupRootError`로 중단하고 `process.exit(1)` 한다.
+이 경우 워크트리 해석이나 파일 쓰기는 전혀 일어나지 않는다.
+
 ## 중복 처리(dedup)
 
 처리된 경로는 컨테이너 경로가 아니라 **정규 워크트리 경로** 기준으로 기록된다.

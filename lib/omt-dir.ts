@@ -82,7 +82,7 @@ export function resolveProjectRoot(cwd: string = process.cwd()): string {
 	}
 }
 
-function deriveProjectName(cwd: string): string {
+export function deriveProjectName(cwd: string): string {
 	try {
 		const gitCommonDir = execSync("git rev-parse --git-common-dir", {
 			cwd,

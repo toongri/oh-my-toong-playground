@@ -12,7 +12,7 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { existsSync } from "fs";
+import { existsSync, realpathSync } from "fs";
 import { execFileSync } from "node:child_process";
 
 import type {
@@ -36,7 +36,14 @@ import { parseCodexVersion, assertCodexVersionAllowed } from "./lib/codex-versio
 import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import { resolvePlatforms, resolveComponentPath, setProjectContext } from "./lib/resolver.ts";
-import { generateBackupSessionId, backupCategory, backupDocs, cleanupOldBackups } from "./lib/backup.ts";
+import {
+	backupCategory,
+	backupDocs,
+	cleanupOldBackups,
+	generateBackupSessionId,
+	isSafeBackupRoot,
+} from "./lib/backup.ts";
+import { resolveOmtDir, getOmtDir, deriveProjectName } from "../lib/omt-dir.ts";
 import { reconcilePairManifest, removeManifestPair } from "./lib/deploy-manifest.ts";
 import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
@@ -349,7 +356,7 @@ export async function syncCategory(
 					deployRoot,
 					deployLocationForManifest(platform, category),
 					category,
-					context.backupSession,
+					context.backupDest,
 				);
 				preparedKeys.add(prepKey);
 			}
@@ -407,7 +414,7 @@ export async function syncCategory(
 	if (category === "skills" && deployedNames.has("agents")) {
 		await cleanupCodexSkillsFossil(
 			deployRoot,
-			context.backupSession,
+			context.backupDest,
 			context.dryRun,
 			deployedNames.get("agents") ?? new Set(),
 		);
@@ -935,7 +942,7 @@ export async function syncDocs(
 				managedTargets.add(candidate);
 				logDry(`docs: would remove ${candidate}`);
 			} else {
-				await deleteDocsTarget(candidate, deployRoot, context.backupSession);
+				await deleteDocsTarget(candidate, deployRoot, context.backupDest);
 			}
 			continue;
 		}
@@ -947,7 +954,7 @@ export async function syncDocs(
 				managedTargets.add(plan.finalTarget);
 				logDry(`docs: would write ${plan.finalTarget}`);
 			} else {
-				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupSession);
+				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupDest);
 			}
 			continue;
 		}
@@ -961,7 +968,7 @@ export async function syncDocs(
 				logDry(`docs: would write ${dest}`);
 			}
 		} else {
-			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupSession);
+			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupDest);
 		}
 	}
 
@@ -1597,6 +1604,25 @@ export async function processYaml(
 
 	for (const deployRoot of deployRoots) {
 		try {
+			// Per-deploy backup destination (D-5): computed once per (target,
+			// worktree), before any deploy step. This is the only site that holds
+			// targetPath (the container) and deployRoot (the worktree)
+			// simultaneously, so it is the only site where the id CAN be computed —
+			// generating it lower (e.g. inside backupDocs, called from 6+ places)
+			// would scatter one deploy's backups across 6+ random directories.
+			// Writers read this back off the context exactly as they read
+			// context.backupDest at HEAD, so their signatures never change.
+			context.backupDest = path.join(
+				context.backupBase,
+				"sync-backup",
+				`${deriveProjectName(targetPath)}-${path.basename(deployRoot)}-${generateBackupSessionId()}`,
+			);
+			// This deploy's actual backup directory — the only breadcrumb an
+			// operator has to recover from a clobber, since this backup design
+			// has no restore path (logBackupLocation only prints the shared
+			// parent, not this per-deploy destination).
+			logInfo(`백업 대상: ${context.backupDest}`);
+
 			// Each worktree's deploy is independent — fresh source-root accumulator so
 			// syncLib targets this deployRoot's .{platform}/lib only.
 			const libSourceRoots: LibSourceRoots = new Map();
@@ -1646,12 +1672,6 @@ export async function processYaml(
 			// platform-agnostic and lands directly under deployRoot, so a docs-only
 			// project (no CATEGORIES items, no .claude) must still deploy its docs.
 			await syncDocs(context, syncYaml, rootDir, deployRoot);
-
-			// Record this worktree as a backup root ONLY after all sync steps succeeded.
-			// Registering before the steps (or on failure) would let retention cleanup
-			// prune the last good backup of a worktree whose deploy threw — it must hold
-			// a success-only invariant: failed worktrees go to failedTargets, not here.
-			context.backupRoots.add(deployRoot);
 
 			// Rewrite platform paths for non-claude platforms
 			const nonClaudePlatforms: Platform[] = ["gemini", "codex", "opencode"];
@@ -1725,6 +1745,58 @@ export async function loadRootModelMaps(rootDir: string): Promise<Map<Platform, 
 	return out;
 }
 
+/**
+ * Thrown by resolveBackupBase() when the resolved OMT_DIR would make the
+ * backup-retention pruner's recursive rm far more destructive than intended
+ * (relative path, "/", or the user's home directory). Never process.exit —
+ * that would kill the in-process test runner. The CLI entry point is
+ * responsible for catching this and exiting non-zero.
+ */
+export class UnsafeBackupRootError extends Error {}
+
+/**
+ * Resolves the OMT-owned backup root for this run and guarantees the
+ * directory exists — WITHOUT ever creating a degenerate root first.
+ *
+ * Order is load-bearing: resolveOmtDir() only computes the path (no fs
+ * writes), so isSafeBackupRoot() can reject it BEFORE getOmtDir()'s
+ * unconditional mkdirSync ever runs. Calling getOmtDir() first would create
+ * the degenerate directory (e.g. <cwd>/rel/ for a relative OMT_DIR) and then
+ * refuse to prune it — exactly the pollution this function exists to avoid.
+ * The guard runs regardless of dryRun, so a degenerate root still throws
+ * during a dry run.
+ *
+ * @param dryRun - When true, skip getOmtDir()'s mkdirSync and return the
+ *                 already-computed path instead — a dry run must not create
+ *                 the base directory as a side effect.
+ */
+export function resolveBackupBase(dryRun = false): string {
+	const base = resolveOmtDir();
+	if (!isSafeBackupRoot(base)) {
+		throw new UnsafeBackupRootError(`안전하지 않은 백업 루트: ${base}`);
+	}
+	// The string guard above accepts a non-degenerate *spelling*, but base may
+	// be an absolute symlink whose real target is "/" or $HOME. The write path
+	// (context.backupDest → backup writers) follows that symlink and dumps
+	// backups into the degenerate location, which cleanupOldBackups's F2 guard
+	// then refuses to prune — so backups pile up unreachable. Re-validate the
+	// real path here so both `make sync` and `make sync-dry` fail-fast, exactly
+	// as cleanupOldBackups does before pruning.
+	let realBase = base;
+	try {
+		realBase = realpathSync(base);
+	} catch (err) {
+		// base doesn't exist yet (first run) — can't be a symlink, fall through.
+		if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== "ENOENT") {
+			throw err;
+		}
+	}
+	if (!isSafeBackupRoot(realBase)) {
+		throw new UnsafeBackupRootError(`안전하지 않은 백업 루트(실제 경로): ${realBase}`);
+	}
+	return dryRun ? base : getOmtDir();
+}
+
 // ---------------------------------------------------------------------------
 // createContext
 // ---------------------------------------------------------------------------
@@ -1733,17 +1805,23 @@ export async function loadRootModelMaps(rootDir: string): Promise<Map<Platform, 
  * Create an initial SyncContext for a sync run.
  */
 export function createContext(dryRun: boolean): SyncContext {
+	const backupBase = resolveBackupBase(dryRun);
 	return {
 		dryRun,
 		projectName: "",
 		projectDir: "",
 		isRootYaml: true,
-		backupSession: generateBackupSessionId(),
+		backupBase,
+		// Initialized to backupBase, never "" — an empty string would make
+		// join("", platform, category) relative, so any reader that ran before
+		// the fan-out assignment (sync.ts fan-out loop) would write into the
+		// process cwd. No such reader exists today (every writer runs inside
+		// the fan-out loop); this is a cheap seatbelt against that defect class.
+		backupDest: backupBase,
 		modelMaps: new Map(),
 		rootModelMaps: new Map(),
 		processedPaths: new Set(),
 		platformYamlSections: new Map(),
-		backupRoots: new Set(),
 		failedTargets: [],
 	};
 }
@@ -1991,6 +2069,27 @@ export async function assertCodexVersionIfTargeted(
 	assertCodexVersionAllowed(observed, allowed);
 }
 
+/**
+ * Logs the OMT-owned sync-backup root for this run.
+ */
+export function logBackupLocation(base: string): void {
+	logInfo(`백업 위치: ${base}/sync-backup`);
+}
+
+/**
+ * Prunes old backups under the OMT-owned shared root. Prune the single shared
+ * OMT-owned root only — no longer a union with the per-worktree deploy-root
+ * set. This deliberately gives up the prior success-only invariant (only
+ * worktrees that finished cleanly were pruned): the shared root is pruned
+ * unconditionally now, by age. See the plan's ACCEPTED CONSEQUENCES — backups
+ * are write-only and git-recoverable, so this trade is accepted.
+ */
+export async function cleanupRunBackups(base: string, dryRun: boolean): Promise<void> {
+	if (dryRun) return;
+	const retentionDays = await getBackupRetentionDays();
+	await cleanupOldBackups(base, retentionDays).catch(() => {});
+}
+
 // ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
@@ -2009,11 +2108,19 @@ if (import.meta.main) {
 		process.exit(1);
 	}
 
-	const context = createContext(dryRun);
+	let context: SyncContext;
+	try {
+		context = createContext(dryRun);
+	} catch (err) {
+		if (err instanceof UnsafeBackupRootError) {
+			logError(err.message);
+			process.exit(1);
+		}
+		throw err;
+	}
 	context.rootModelMaps = await loadRootModelMaps(rootDir);
 
-	logInfo(`백업 세션: ${context.backupSession}`);
-	logInfo(`백업 위치: ${rootDir}/.sync-backup/${context.backupSession}/`);
+	logBackupLocation(context.backupBase);
 
 	const adapters: AdapterMap = new Map<Platform, PlatformAdapter>();
 	adapters.set("claude", new ClaudeAdapter());
@@ -2071,26 +2178,13 @@ if (import.meta.main) {
 			}
 		}
 
-		// 오래된 백업 정리
-		const cleanupPromises: Promise<void>[] = [];
-		if (!dryRun) {
-			const retentionDays = await getBackupRetentionDays();
-			// Union of processedPaths (container, drives deploy dedup) and backupRoots (per-worktree
-			// deploy roots populated during fan-out). Set-union ensures a non-bare path present in
-			// both is cleaned exactly once.
-			const cleanupTargets = new Set<string>([...context.processedPaths, ...context.backupRoots]);
-			for (const target of cleanupTargets) {
-				cleanupPromises.push(cleanupOldBackups(target, retentionDays).catch(() => {}));
-			}
-		}
-
 		if (dryRun) {
 			logWarn("========== DRY-RUN 완료 ==========");
 		} else {
 			logSuccess("========== 동기화 완료 ==========");
 		}
 
-		await Promise.all(cleanupPromises);
+		await cleanupRunBackups(context.backupBase, dryRun);
 		// Any worktree that failed during the best-effort fan-out forces a non-zero
 		// exit: an unwritable worktree must never be reported as a clean sync.
 		if (context.failedTargets.length > 0) {
