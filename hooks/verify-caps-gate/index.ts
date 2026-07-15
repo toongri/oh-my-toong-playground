@@ -219,11 +219,14 @@ function buildDenyReason(runnerName: string, scopeFlags: string[]): string {
 }
 
 // -----------------------------------------------------------------------------
-// Rule (b) — cap injection, applied to the whole command (not per segment).
-// env caps: unconditional (the runner just needs to be the command's first
-// token); a VAR already present in the command is skipped.
-// flag caps: only on a single simple command (no compound marker, no
-// standalone `--`); a flag key already present is skipped.
+// Rule (b) — cap injection. Never touches a compound command: injecting forces
+// permissionDecision:allow, and allow auto-approves the WHOLE command, so a
+// verification first segment (`pnpm test:changed && pnpm publish`) would smuggle
+// an auto-approval for arbitrary later segments. Only a single command the hook
+// fully controls is capped; a compound falls through to the normal prompt.
+// env caps: prepended when the runner is the command's first token (a VAR already
+// present is skipped). flag caps: additionally require no end-of-options `--`
+// marker (tail-appending after `--` lands the flag as a positional arg).
 // Returns the modified command, or null if nothing changed.
 // -----------------------------------------------------------------------------
 function applyInjections(command: string, config: VerifyCapsConfig): string | null {
@@ -246,6 +249,14 @@ function applyInjections(command: string, config: VerifyCapsConfig): string | nu
 		return null;
 	}
 
+	// A compound command (A && B, A | B, …) must not be injected+allowed: allow
+	// covers the WHOLE command, so a verification first segment would auto-approve
+	// every later segment past the Bash prompt (`pnpm test:changed && pnpm
+	// publish`). Only a single command the hook fully controls is capped; a
+	// compound falls through to the normal prompt (losing the cap, never
+	// broadening permission). Subsumes the flag path's own compound guard below.
+	if (isCompound(command)) return null;
+
 	let result = command;
 	let changed = false;
 
@@ -260,7 +271,7 @@ function applyInjections(command: string, config: VerifyCapsConfig): string | nu
 	}
 
 	const scopeOk = rule.flag_requires_scope !== true || hasAnyScopeFlag(command, rule.deny?.scope_flags ?? []);
-	if (rule.flag !== undefined && scopeOk && !isCompound(command) && !hasEndOfOptionsMarker(command)) {
+	if (rule.flag !== undefined && scopeOk && !hasEndOfOptionsMarker(command)) {
 		const flagKey = rule.flag.split("=")[0];
 		if (!hasFlag(command, flagKey)) {
 			result = `${result} ${rule.flag}`;
