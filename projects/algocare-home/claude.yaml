@@ -12,8 +12,11 @@ config:
 hooks:
   PreToolUse:
     # verify-caps-gate: 무필터 test/lint deny + 러너별 메모리 캡.
-    # 정책 파일 hooks/verify-caps-gate/verify-caps.yaml.
-    - component: verify-caps-gate
+    # 스크립트는 글로벌 단일본($HOME/.claude/scripts/verify-caps-gate/)으로 배포되고
+    # (루트 sync.yaml scripts 섹션), 여기서는 raw command로 그 경로를 참조해 등록만 한다
+    # — 워크트리마다 복사하지 않고, 발동은 algocare-home 한정. 정책 파일 verify-caps.yaml은
+    # index.ts가 import.meta.url 기준(스크립트 옆)으로 로드하므로 글로벌 위치에서 정상 동작.
+    - command: "bun run $HOME/.claude/scripts/verify-caps-gate/index.ts"
       matcher: "Bash"
       timeout: 10
 

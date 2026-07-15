@@ -115,7 +115,7 @@ skills:
 - **keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context
 - **persistent-mode/**: Prevents stopping when work remains incomplete (Stop hook, TypeScript directory)
 - **pre-tool-enforcer.sh**: Tool execution gate (TaskOutput blocking)
-- **verify-caps-gate/**: PreToolUse Bash gate — denies unfiltered whole-monorepo test/lint commands and injects per-runner memory caps (env caps for vitest/turbo/pnpm, flag caps for jest/turbo) per declarative `verify-caps.yaml` policy
+- **scripts/verify-caps-gate/**: PreToolUse Bash gate engine — denies unfiltered whole-monorepo test/lint commands and injects per-runner memory caps (env caps for vitest/turbo/pnpm, flag caps for jest/turbo) per declarative `verify-caps.yaml` policy. Lives under `scripts/` (not `hooks/`): deployed globally as a single script package (`$HOME/.claude/scripts/verify-caps-gate/`, no registration) via the root `sync.yaml` scripts section, then registered as a hook **only in algocare-home** through a raw `command:` in `projects/algocare-home/claude.yaml` that references that global path. The policy file loads from the script's own directory (`import.meta.url`), so the global location works unchanged.
 
 ### Key Workflows
 
