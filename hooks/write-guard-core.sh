@@ -57,6 +57,32 @@ _wg_core_normpath() {
     }'
 }
 
+# _wg_core_pathwise_glob_match <candidate-pattern-path> <concrete-ledger-path>
+# Component-wise glob match WITH depth (segment-count) equality: splits both
+# paths on '/' and compares segment-by-segment, using each candidate segment
+# AS a glob pattern against the corresponding ledger segment. Returns 0 (match
+# -> deny-worthy) only if EVERY segment matches AND both paths have the SAME
+# number of segments. This mirrors real shell pathname expansion, where '*'
+# matches within a single path segment and never spans '/' -- unlike a bash
+# `case` pattern tested against the whole path, which would let '*' wrongly
+# span directory boundaries. Absolute paths share a leading empty segment
+# (the text before the leading '/') on both sides, so they stay in lockstep.
+# Bash 3.2 compatible: no arrays, segments are peeled off with
+# ${x%%/*} / ${x#*/} instead.
+_wg_core_pathwise_glob_match() {
+    local cand="$1" led="$2" cseg lseg
+    while :; do
+        if [ -z "$cand" ] && [ -z "$led" ]; then return 0; fi
+        if [ -z "$cand" ] || [ -z "$led" ]; then return 1; fi
+        cseg="${cand%%/*}"
+        case "$cand" in */*) cand="${cand#*/}" ;; *) cand="" ;; esac
+        lseg="${led%%/*}"
+        case "$led" in */*) led="${led#*/}" ;; *) led="" ;; esac
+        # Intentionally unquoted: $cseg is used AS the glob pattern.
+        case "$lseg" in $cseg) ;; *) return 1 ;; esac
+    done
+}
+
 # write_guard_core_run <OMT_DIR> <session_id>
 # Reads newline-separated already-absolutized candidate target paths on
 # stdin. Emits the deny JSON to stdout iff any candidate is FULL-PATH EXACT
@@ -71,7 +97,6 @@ write_guard_core_run() {
     local ledger_path
     ledger_path="$(_wg_core_normpath "$omt_dir/session-ledger-$session_id.md")"
     local candidate norm_candidate
-    local cand_dir cand_base ledger_dir ledger_base
     while IFS= read -r candidate; do
         norm_candidate="$(_wg_core_normpath "$candidate")"
         if [ "$norm_candidate" = "$ledger_path" ]; then
@@ -84,31 +109,22 @@ write_guard_core_run() {
         # ACTUALLY match the single known ledger path are denied; a
         # non-matching glob stays allow, so no false block.
         #
-        # Match is constrained to SINGLE-LEVEL glob semantics: the
-        # candidate's directory part must be EXACT-equal to the ledger's
-        # directory, and only the candidate's basename is used as the glob
-        # pattern (tested against the ledger's basename). A bash `case`
-        # pattern lets `*` span the `/` separator -- unlike real shell
-        # pathname expansion, where `*` matches within one path segment only
-        # -- so testing the whole candidate against the whole ledger path
-        # would wrongly deny an ANCESTOR-level glob (e.g. "$HOME/*") whose
-        # `*` never actually reaches a nested ledger at real runtime.
+        # Match is component-wise WITH depth (segment-count) equality (see
+        # _wg_core_pathwise_glob_match above): each candidate path segment is
+        # used as a glob pattern against the ledger's SAME-position segment,
+        # and the two paths must have the same segment count. This mirrors
+        # real shell pathname expansion, where '*' matches within one path
+        # segment only and never spans '/'. It correctly DENIES a glob
+        # segment anywhere in the path -- basename (e.g. "$OMT_DIR/*") or an
+        # intermediate directory component at the ledger's own depth (e.g.
+        # "$HOME/.omt/"*"/session-ledger-<sid>.md") -- while still ALLOWing
+        # an ancestor-level or depth-mismatched glob (e.g. "$HOME/*") whose
+        # '*' never actually reaches the nested ledger at real runtime.
         case "$norm_candidate" in
             *[*?[]*)
-                cand_dir="${norm_candidate%/*}"
-                cand_base="${norm_candidate##*/}"
-                ledger_dir="${ledger_path%/*}"
-                ledger_base="${ledger_path##*/}"
-                if [ "$cand_dir" = "$ledger_dir" ]; then
-                    # Intentionally unquoted: $cand_base is used AS the glob
-                    # pattern; it has no '/', so '*' cannot span a path
-                    # separator here -- this is a real single-level glob.
-                    case "$ledger_base" in
-                        $cand_base)
-                            printf '%s\n' "$_wg_core_deny_json"
-                            return 0
-                            ;;
-                    esac
+                if _wg_core_pathwise_glob_match "$norm_candidate" "$ledger_path"; then
+                    printf '%s\n' "$_wg_core_deny_json"
+                    return 0
                 fi
                 ;;
         esac

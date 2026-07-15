@@ -240,6 +240,50 @@ test_glob_ancestor_star_allows() {
 }
 
 # =============================================================================
+# Glob bypass (CONFIRMED P1 defect) -- a glob in a DIRECTORY component (not
+# the basename) at the SAME depth as the ledger's own parent segment. At real
+# runtime, e.g. `rm "$OMT_DIR/"*"/session-ledger-<sid>.md"`, the `*` expands
+# within the single project-dir segment and reaches the real ledger -- but
+# the old dir-EXACT + basename-glob check compared the candidate's whole
+# directory part ("$OMT_DIR/*") against the ledger's directory part
+# ("$OMT_DIR/omt-wg") with plain string `=`, which never matches, so it
+# WRONGLY ALLOWED. The fix does a component-wise glob match with depth
+# (segment-count) equality instead.
+# =============================================================================
+test_glob_dir_component_denies() {
+    local out cand
+    cand="${OD%/*}/*/session-ledger-$SID.md"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-dir-component: expected deny for '$cand', got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Depth-mismatch regression (precision defect) -- a dir-component glob that
+# is ONE segment SHALLOWER than the ledger (it stops at the ledger's parent
+# dir, never supplying a filename segment) must ALLOW: at real runtime
+# "$TEST_TMP_DIR"/* only expands to $TEST_TMP_DIR's direct children (the
+# "omt-wg" dir itself), never descending into it to reach the ledger file.
+# Proves the component-wise match enforces equal segment count, not just
+# per-segment glob matching.
+# =============================================================================
+test_glob_dir_component_wrong_depth_allows() {
+    local out cand
+    cand="${OD%/*}/*"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED glob-dir-component-wrong-depth: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -260,6 +304,8 @@ main() {
     run_test test_glob_dir_star_denies
     run_test test_glob_non_matching_star_allows
     run_test test_glob_ancestor_star_allows
+    run_test test_glob_dir_component_denies
+    run_test test_glob_dir_component_wrong_depth_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
