@@ -342,6 +342,80 @@ test_ac5_codex_recovery_marker_is_bare() {
 }
 
 # =============================================================================
+# Writer-path leak fix: the CODEX recording instruction teaches the agent to
+# run omt-ledger.sh append/now IN THE AGENT'S OWN ENVIRONMENT, where a leaked
+# OMT_SESSION_ID (Claude-only carrier) can still be set from an ambient
+# parent shell. omt-ledger.sh:59-63 resolves OMT_SESSION_ID ?? CODEX_THREAD_ID
+# (OMT_SESSION_ID wins if present), so an unscrubbed leak routes those writes
+# to a FOREIGN session's ledger. Fix: the codex branch of the recording
+# instruction must prepend `env -u OMT_SESSION_ID` to each of the three
+# omt-ledger.sh invocations (append Decisions, append Pending, now), scrubbing
+# the leaked carrier at the writer call site while leaving CODEX_THREAD_ID
+# (Codex's authoritative identity) untouched. This mirrors the recovery-read
+# scrub already applied on the Claude/recovery side.
+# =============================================================================
+test_codex_recording_scrubs_omt_session_id() {
+    local out ok=0
+    out=$(printf '{"source":"startup","session_id":"s","cwd":"/tmp"}' \
+        | OMT_DIR=/tmp/x OMT_SESSION_ID=s bash -c "source '$LEDGER_CORE'; ledger_core_run codex")
+
+    # Adjacency: `env -u OMT_SESSION_ID` must sit immediately before the
+    # opening quote of each omt-ledger.sh invocation -- not just appear
+    # somewhere in the output. Count occurrences of the exact adjacency
+    # substring (raw stdout has JSON-escaped quotes, i.e. `\"`).
+    local adjacency_count
+    adjacency_count=$(printf '%s' "$out" | grep -o 'OMT_SESSION_ID \\"${CODEX_HOME' | wc -l | tr -d ' ')
+
+    if [ "$adjacency_count" = "3" ]; then
+        ok=1
+    fi
+
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
+# Guard: the CLAUDE branch must stay byte-unchanged -- OMT_SESSION_ID is
+# Claude's own legitimate authoritative identity there, so it must NEVER be
+# scrubbed. This guards against the codex-branch fix accidentally bleeding
+# into the shared/claude branch.
+# =============================================================================
+test_claude_recording_no_scrub_omt_session_id() {
+    local out ok=0
+    out=$(printf '{"source":"startup","session_id":"s","cwd":"/tmp"}' \
+        | OMT_DIR=/tmp/x OMT_SESSION_ID=s bash -c "source '$LEDGER_CORE'; ledger_core_run claude")
+
+    if [ "$(printf '%s' "$out" | grep -c 'env -u OMT_SESSION_ID')" = "0" ]; then
+        ok=1
+    fi
+
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
+# Behavioral proof: the emitted `env -u OMT_SESSION_ID <path>` form, run
+# verbatim, routes an append write to THIS session's ledger even when
+# OMT_SESSION_ID is leaked in from a foreign session -- reproducing the
+# probe from the bug report (foreign OMT_SESSION_ID + self CODEX_THREAD_ID),
+# confirmed to write to session-ledger-self.md, not session-ledger-foreign.md.
+# =============================================================================
+test_codex_env_dash_u_scrub_routes_to_self_ledger() {
+    local SBX OD ok=0
+    SBX=$(mktemp -d)
+    OD="$SBX/omt"
+    mkdir -p "$OD"
+
+    printf 'note' | env OMT_SESSION_ID=foreign CODEX_THREAD_ID=self OMT_DIR="$OD" \
+        env -u OMT_SESSION_ID bash "$SCRIPT_DIR/omt-ledger.sh" append Decisions
+
+    if [ -f "$OD/session-ledger-self.md" ] && [ ! -f "$OD/session-ledger-foreign.md" ]; then
+        ok=1
+    fi
+
+    rm -rf "$SBX"
+    [ "$ok" = "1" ]
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 main() {
@@ -360,6 +434,9 @@ main() {
     run_test test_codex_noncompact_recording_only
     run_test test_ac4_claude_recovery_marker_has_compaction_suffix
     run_test test_ac5_codex_recovery_marker_is_bare
+    run_test test_codex_recording_scrubs_omt_session_id
+    run_test test_claude_recording_no_scrub_omt_session_id
+    run_test test_codex_env_dash_u_scrub_routes_to_self_ledger
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
