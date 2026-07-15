@@ -41,7 +41,25 @@ SCRIPT_DIR_CL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hooks/ledger-core.sh
 source "$SCRIPT_DIR_CL/ledger-core.sh"
 
-CORE_OUT=$(ledger_core_run codex)
+# Run in a subshell with ONLY OMT_SESSION_ID cleared (CODEX_THREAD_ID is
+# deliberately preserved): OMT_SESSION_ID is Claude-only (delivered via
+# CLAUDE_ENV_FILE, which does not exist on Codex), so any value seen here is
+# always either absent or a stale leak from a parent process -- e.g. a Claude
+# session that spawned this Codex invocation. ledger_core_run's env-first sid
+# precedence (OMT_SESSION_ID ?? CODEX_THREAD_ID ?? stdin.session_id) would let
+# that leaked value shadow CODEX_THREAD_ID, which IS this session's own
+# authoritative self-identity on Codex, causing compaction recovery to read
+# ANOTHER session's ledger. Unlike hooks/session-start.sh's twin (which clears
+# both vars because Claude's authoritative identity is stdin.session_id and
+# neither env var is authoritative there), CODEX_THREAD_ID must stay set here
+# or sid resolution falls through to stdin.session_id, which is often empty
+# for Codex and would break the ledger entirely. Subshell-local; nothing
+# outside this command substitution is affected, and stdin (fd 0) is inherited
+# through unchanged since no explicit piping is introduced here.
+CORE_OUT=$(
+  unset OMT_SESSION_ID
+  ledger_core_run codex
+)
 
 if [ -n "$CORE_OUT" ]; then
   # jq is invoked inside an `if` condition so a present-but-failing binary
