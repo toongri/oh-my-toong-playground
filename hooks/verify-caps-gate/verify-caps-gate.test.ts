@@ -243,7 +243,7 @@ describe("decide — defect1: turbo --concurrency requires a scope flag", () => 
 	});
 });
 
-describe("decide — `--` and compound guards (flag append skipped, env prepend kept)", () => {
+describe("decide — `--` and compound guards (`--` keeps env; compound skips injection entirely)", () => {
 	test("`vitest run -- --coverage` still gets env prepended", () => {
 		const result = decide("vitest run -- --coverage", FIXTURE);
 		expect(result.action).toBe("allow");
@@ -266,6 +266,24 @@ describe("decide — `--` and compound guards (flag append skipped, env prepend 
 			);
 			expect(result.command).not.toContain("--concurrency");
 		}
+	});
+
+	// A compound command must never be injected+allowed: allow covers the whole
+	// command, so a verification first segment would auto-approve every later
+	// segment past the Bash prompt.
+	test("`pnpm test:changed && pnpm publish` is passthrough (compound must not auto-approve the trailing segment)", () => {
+		const result = decide("pnpm test:changed && pnpm publish", FIXTURE);
+		expect(result.action).toBe("passthrough");
+	});
+
+	test("`pnpm test --filter=web && pnpm publish` is passthrough (a scope-flagged verification segment still can't smuggle an auto-approval)", () => {
+		const result = decide("pnpm test --filter=web && pnpm publish", FIXTURE);
+		expect(result.action).toBe("passthrough");
+	});
+
+	test("`vitest run && rm -rf tmp` is passthrough (dedicated runner too — no cap+allow on a compound)", () => {
+		const result = decide("vitest run && rm -rf tmp", FIXTURE);
+		expect(result.action).toBe("passthrough");
 	});
 
 	test("`cd x && jest` is untouched (jest isn't the command's first token)", () => {
