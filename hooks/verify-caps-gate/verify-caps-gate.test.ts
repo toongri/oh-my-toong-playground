@@ -283,11 +283,16 @@ describe("decide — general-purpose runners inject only on verification scripts
 	// pnpm/turbo are general-purpose: injecting env forces permissionDecision
 	// "allow" (auto-approve), so a non-verification command must NOT be injected
 	// — otherwise the hook silently bypasses the Bash permission prompt for
-	// pnpm publish / pnpm dlx / turbo gen etc. (permission broadening).
+	// pnpm publish / pnpm dlx / turbo gen etc. (permission broadening). This
+	// includes a verification-prefix word sitting in an ARGUMENT position
+	// (`pnpm add test`, `pnpm dlx playwright test`): it is not a script run, so
+	// only a prefix in script position (first bareword after the runner) injects.
 	test.each([
 		["pnpm publish"],
 		["pnpm dlx cowsay hi"],
 		["pnpm add lodash"],
+		["pnpm add test"],
+		["pnpm dlx playwright test"],
 		["pnpm install"],
 		["turbo gen component"],
 		["turbo login"],
@@ -297,7 +302,8 @@ describe("decide — general-purpose runners inject only on verification scripts
 	});
 
 	// Verification invocations still inject — including the flags-before-script
-	// form (`pnpm --filter x test:changed`) that position-based matching misses.
+	// form (`pnpm --filter x test:changed`), where the `--filter x` value is
+	// skipped as a leading token so the script after it stays recognized.
 	test("`pnpm test --filter=web` still injects env (verification preserved)", () => {
 		const result = decide("pnpm test --filter=web", FIXTURE);
 		expect(result.action).toBe("allow");

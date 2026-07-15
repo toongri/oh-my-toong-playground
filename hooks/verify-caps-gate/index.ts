@@ -166,17 +166,40 @@ function hasAnyScopeFlag(command: string, scopeFlags: string[]): boolean {
 	return scopeFlags.some((flag) => new RegExp(`(^|\\s)${escapeRegExp(flag)}([\\s=]|$)`).test(command));
 }
 
-// True if any whitespace-delimited word in the command begins with one of the
-// given verification-script prefixes at a word boundary: "test" matches the
-// word `test` and the sub-scripted `test:changed`, "verify" matches
-// `verify:quick` — but a word merely containing the prefix mid-token
-// (`test-utils`, `latest`) does NOT match. Lets a general-purpose runner
-// recognize a verification invocation regardless of the script's position
-// (before or after flags) without enumerating every script name.
-function hasAnyScriptPrefix(command: string, prefixes: string[]): boolean {
-	return prefixes.some((prefix) =>
-		new RegExp(`(^|\\s)${escapeRegExp(prefix)}(:\\S+)?(\\s|$)`).test(command),
+// True only when a general-purpose runner's command invokes one of the
+// verification-script prefixes IN SCRIPT POSITION — the prefix must be the first
+// bareword after the runner, optionally preceded by `run`, the whole-workspace
+// flags `-r`/`--recursive`, or a scope flag (its space- or `=`-joined value
+// consumed as one unit). A prefix word sitting in an ARGUMENT position —
+// `pnpm add test`, `pnpm dlx playwright test` — is not a script run; matching it
+// there would inject env and force permissionDecision:allow, auto-approving a
+// package/exec command past the Bash prompt (permission broadening). "test"
+// still matches the sub-scripted `test:changed`; `test-utils` does not (word
+// boundary). A scoped run like `pnpm --filter <pkg> test:changed` still counts —
+// the `--filter <pkg>` value is skipped as a leading token so the script after
+// it is still recognized.
+function invokesVerificationScript(
+	command: string,
+	runnerName: string,
+	prefixes: string[],
+	scopeFlags: string[],
+): boolean {
+	const leadingForms = ["run", "-r", "--recursive"];
+	for (const flag of scopeFlags) {
+		// A value-taking scope flag (`--filter x` / `--filter=x`) is consumed with
+		// its value as one leading token, so the following token is still seen as
+		// the script; listed before the bare-flag catch-all so the value isn't left
+		// dangling and mistaken for the script. A boolean flag (`--affected`) only
+		// ever matches the bare-flag catch-all below.
+		leadingForms.push(`${escapeRegExp(flag)}(?:=\\S+|\\s+\\S+)`);
+	}
+	leadingForms.push("-\\S+"); // any other boolean flag (--silent, --affected, …)
+	const leading = leadingForms.join("|");
+	const script = prefixes.map(escapeRegExp).join("|");
+	const re = new RegExp(
+		`^${escapeRegExp(runnerName)}(?:\\s+(?:${leading}))*\\s+(?:${script})(?::\\S+)?(?:\\s|$)`,
 	);
+	return re.test(stripLeadingEnvAssignments(command));
 }
 
 // A scope flag (--filter/-F/--affected) that appears after a segment's `--`
@@ -216,7 +239,10 @@ function applyInjections(command: string, config: VerifyCapsConfig): string | nu
 	// permission prompt (permission broadening). A runner with no inject_scripts
 	// (vitest/jest — dedicated test runners with no dangerous subcommands)
 	// injects unconditionally.
-	if (rule.inject_scripts !== undefined && !hasAnyScriptPrefix(command, rule.inject_scripts)) {
+	if (
+		rule.inject_scripts !== undefined &&
+		!invokesVerificationScript(command, runnerName, rule.inject_scripts, rule.deny?.scope_flags ?? [])
+	) {
 		return null;
 	}
 
