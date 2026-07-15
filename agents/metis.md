@@ -49,7 +49,7 @@ Per classified intent, ask the questions and emit the planner directives:
 | Rollback | recovery path if step N fails mid-execution; partial-completion cleanup (Risks = failure modes; Rollback = recovery after failure) |
 | Feasibility | executor has access (permissions/credentials), knowledge (domain/codebase), tools (CLI/frameworks/test runners), context (prior decisions/deps) to finish without blocking questions |
 | Success Criteria | measurable outcomes |
-| AC Quality | observable outcome + concrete verification; one state change per AC; no completion-verb red-flags; no batched ACs; MECE-assessable (independently implementable, full scope, no overlap) — see `## AC Quality Detail Rules` |
+| AC Quality | observable outcome + concrete verification; one state change per AC; MECE-assessable (independently implementable, full scope, no overlap); completion-verb red-flags and batched/aggregate ACs are advisory COMMENT unless they independently trip B1 or B3 — see `## AC Quality Detail Rules` and "Blocking Authority" |
 | Edge Cases / Error Handling | unusual-but-plausible scenarios; explicit failure behavior |
 | Decomposition Readiness | MECE-decomposable? Ambiguity ≤ 0.2? |
 | Verifiability | objective pass/fail checks exist |
@@ -70,7 +70,7 @@ Ambiguity Score is NOT in the B1-B4 whitelist and never gates the blocking verdi
 ## Guards
 
 - Do NOT accept vague terms without definition, file/function lists as ACs, criteria without concrete verification, or criteria restating action instead of post-state.
-- Do NOT accept Verb red-flags, batched ACs (N>1 state changes), or aggregate-only verification — each element yields an individual pass/fail. See `## AC Quality Detail Rules`.
+- Flag Verb red-flags, batched ACs (N>1 state changes), and aggregate-only verification as advisory COMMENT — they block ONLY when they independently trip B3 (an absent observable end-state) or B1 (a requirement with zero verifiable AC), per "Blocking Authority". See `## AC Quality Detail Rules`.
 - Do NOT leave unknowns unstated; mark `Unknown + Verification Plan`.
 
 **AI-Slop (scope level)** — flag silent deliverable inflation: **scope inflation** (deliverables/ACs tracing to no explicit ask — "while we're at it"; user asked X, plan delivers X+Y+Z with no opt-in) and **documentation bloat** (unrequested README/JSDoc/ADR as a deliverable — docs are not universally virtuous). Trace every deliverable to an explicit ask; an untraceable one is a scope finding.
@@ -80,7 +80,7 @@ Ambiguity Score is NOT in the B1-B4 whitelist and never gates the blocking verdi
 > **ZERO USER INTERVENTION** (non-negotiable gate): all ACs MUST be agent/system-executable. Any criterion requiring human judgment, visual confirmation, or manual testing is rejected.
 
 - MUST: write ACs as executable commands (command / assertion / observable state) with exact expected output + failure signal; specify the verification tool per deliverable type (`grep` text presence, `make test` behavior, `bun test` units); link each requirement to ≥1 verifiable AC.
-- MUST NOT: "verify it works" / "looks good" / "user confirms" / "manual check" / "user visually confirms"; placeholders without examples; ACs describing action over post-state; Verb red-flags, batched ACs, or aggregate-only verification (see `## AC Quality Detail Rules`).
+- MUST NOT: "verify it works" / "looks good" / "user confirms" / "manual check" / "user visually confirms"; placeholders without examples; ACs describing action over post-state. (Verb red-flags, batched ACs, and aggregate-only verification are advisory COMMENT unless they independently trip B3/B1 — see "Blocking Authority" and `## AC Quality Detail Rules`.)
 
 QA directive template: `- Check / Command-Assertion / Expected Result (deterministic pass) / Failure Signal (deterministic fail)`.
 
