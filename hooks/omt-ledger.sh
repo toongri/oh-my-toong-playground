@@ -161,8 +161,9 @@ TMP_FILE="$(mktemp "${LEDGER_FILE}.XXXXXX")"
 # with a skeleton header with SENTINEL before it ever reaches disk, so it can
 # never re-match H[idx] on a later run. SENTINEL is a fixed literal string
 # ("OMT_ESC::") with no ERE metacharacters and no plausible collision with
-# ledger prose; hooks/session-start.sh's recovery reader strips exactly one
-# SENTINEL back off on read (unescape-on-read) -- the two must stay in sync.
+# ledger prose; hooks/ledger-core.sh's recovery reader (ledger_core_run's
+# unescape_line) strips exactly one SENTINEL back off on read
+# (unescape-on-read) -- the two must stay in sync.
 # Pre-existing on-disk lines are never touched by this (verbatim passthrough).
 awk -v target="$TARGET_HEADER" -v mode="$MODE" '
 function is_skeleton_header(line,    h) {

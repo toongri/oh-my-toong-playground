@@ -8,11 +8,9 @@ INPUT=$(cat)
 # Get session ID and directory
 SESSION_ID=""
 DIRECTORY=""
-SOURCE=""
 if command -v jq &> /dev/null; then
   SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null)
   DIRECTORY=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null)
-  SOURCE=$(echo "$INPUT" | jq -r '.source // ""' 2>/dev/null)
 fi
 
 if [ -z "$DIRECTORY" ] || [ "$DIRECTORY" = "null" ]; then
@@ -115,7 +113,7 @@ LEDGER_DELEGATED_ESCAPED=""
 if [ -n "$LEDGER_CORE_OUT" ]; then
   # Extract the already-escaped additionalContext value verbatim (no
   # decode/re-encode) from ledger-core.sh's own JSON output template
-  # (`"additionalContext": "...."}}`, hooks/ledger-core.sh:175) via plain
+  # (`"additionalContext": "...."}}`, hooks/ledger-core.sh:205) via plain
   # prefix/suffix stripping -- re-escaping it here would double-escape the
   # quotes/backslashes ledger-core.sh's own sed/jq -Rs pipeline already
   # produced.

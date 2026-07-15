@@ -78,13 +78,18 @@ _wg_strip_dquotes() {
 #
 # ${p//find/replace} is a pure bash string substitution -- never eval/
 # envsubst, which would let an arbitrary $(...) or other variable reference
-# inside an untrusted Bash tool_input.command execute. Only OMT_DIR and
-# OMT_SESSION_ID are expanded: they are the only two variables that compose
-# the ledger path (write-guard-core.sh:29); $_wg_omt_dir is already the
-# fully-resolved OMT_DIR value, so expanding HOME/PWD/CLAUDE_PROJECT_DIR/etc
-# would be pure surface with no guard benefit. The braced form (${VAR}) is
-# substituted before the bare $VAR form so substituting "$OMT_DIR" first
-# would not leave a stray "{}" around the resolved value inside "${OMT_DIR}".
+# inside an untrusted Bash tool_input.command execute. OMT_DIR, OMT_SESSION_ID,
+# HOME, and a leading ~ are expanded: OMT_DIR/OMT_SESSION_ID compose the
+# ledger path directly (write-guard-core.sh:29), and $_wg_omt_dir is always
+# $HOME/.omt/<proj> -- so a $HOME- or ~-relative spelling of that same path
+# composes the identical ledger file and must be matched too, or it silently
+# bypasses the guard. PWD/CLAUDE_PROJECT_DIR/etc are still NOT expanded: they
+# do not compose the ledger path, so expanding them would be pure surface
+# with no guard benefit. The braced form (${VAR}) is substituted before the
+# bare $VAR form so substituting "$OMT_DIR" first would not leave a stray
+# "{}" around the resolved value inside "${OMT_DIR}". If HOME is unset/empty,
+# the $HOME token is simply dropped and the path won't match the ledger --
+# the safe direction (ALLOW), never a false block.
 #
 # KNOWN LIMITATION: a single-quoted reference (`rm '$OMT_DIR/...'`) is an
 # inert shell literal that never actually expands at real execution time
@@ -94,6 +99,15 @@ _wg_strip_dquotes() {
 # substituted (and matched) the same way. That command is inert and
 # harmless to begin with, so denying it is a safe false-positive, not a
 # bypass.
+#
+# OUT OF SCOPE (best-effort literal-text scan, not a shell interpreter):
+# acknowledged, not fixed. cd into the ledger dir then a relative-path
+# write/delete; variable indirection (p=$OMT_DIR; rm "$p/session-ledger-...");
+# parameter expansion other than the handled $OMT_DIR/$OMT_SESSION_ID/$HOME/~;
+# process substitution; brace expansion (rm session-ledger-{<sid>,x}.md);
+# ANSI-C $'...' quoting; adjacent/combined multi-target redirects glued
+# without whitespace (>a>b, >&file); and an OMT_DIR containing whitespace
+# (operand splitting).
 _wg_absolutize() {
     local p
     p="$(_wg_strip_dquotes "$1")"
@@ -101,6 +115,12 @@ _wg_absolutize() {
     p="${p//\$\{OMT_SESSION_ID\}/$_wg_sid}"
     p="${p//\$OMT_DIR/$_wg_omt_dir}"
     p="${p//\$OMT_SESSION_ID/$_wg_sid}"
+    p="${p//\$\{HOME\}/${HOME:-}}"
+    p="${p//\$HOME/${HOME:-}}"
+    case "$p" in
+        "~") p="${HOME:-}" ;;
+        "~/"*) p="${HOME:-}/${p#\~/}" ;;
+    esac
     case "$p" in
         /*) printf '%s\n' "$p" ;;
         *) printf '%s\n' "$PWD/$p" ;;
@@ -137,7 +157,12 @@ _wg_extract_bash_targets() {
             ;;
         sed)
             if echo "$seg" | grep -q -- '-i'; then
-                echo "$seg" | awk '{print $NF}'
+                # Every non-option operand, not just the last -- mirrors the
+                # tee/rm/truncate fix above (`sed -i SCRIPT file1 file2` edits
+                # EVERY file operand in place, not just the final one). This
+                # over-extracts the SCRIPT operand too, which is harmless: it
+                # never EXACT-matches the ledger path.
+                echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             fi
             ;;
         cp|mv)

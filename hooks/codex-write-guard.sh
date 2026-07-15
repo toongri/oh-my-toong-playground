@@ -24,11 +24,23 @@
 # The substring-blacklist -> full-path-EXACT-match migration (write-guard-
 # core.sh) narrowed the contract on purpose: forms the old substring scan
 # used to catch are OUT OF SCOPE here and are not going to be chased with
-# more parsing -- `cd "$OMT_DIR" && rm session-ledger-$SID.md` (relative
-# target resolved against a pre-`cd` cwd this hook never sees), variable
-# indirection (`f="$OMT_DIR/..."; > "$f"`), parameter expansion
-# (`> "${OMT_DIR%/}/..."`), and process substitution. This shim stays a
-# best-effort literal-text scan, not a shell interpreter.
+# more parsing. This shim is a best-effort literal-text scan, not a shell
+# interpreter, and cannot tractably catch:
+#   - cd into the ledger dir then a relative-path write/delete
+#     (`cd "$OMT_DIR" && rm session-ledger-$SID.md` -- relative target
+#     resolved against a pre-`cd` cwd this hook never sees)
+#   - variable indirection (`p=$OMT_DIR; rm "$p/session-ledger-..."`)
+#   - parameter expansion other than the handled $OMT_DIR/$OMT_SESSION_ID/
+#     $CODEX_THREAD_ID/$HOME/~ (e.g. `> "${OMT_DIR%/}/..."`)
+#   - process substitution
+#   - brace expansion (`rm session-ledger-{<sid>,x}.md`)
+#   - ANSI-C $'...' quoting
+#   - adjacent/combined multi-target redirects glued without whitespace
+#     (`>a>b`, `>&file`)
+#   - an OMT_DIR containing whitespace (operand splitting)
+# This same list is kept in wording-parity with the Claude twin's best-effort
+# discussion (hooks/pre-tool-enforcer.sh) so the two shims stay in sync on
+# what is acknowledged-but-not-chased.
 #
 # omt-hook-dep: lib/omt-dir.sh
 # =============================================================================
@@ -212,7 +224,7 @@ _cwg_extract_shell_targets() {
             ;;
         sed)
             if printf '%s\n' "$seg" | grep -q -- '-i'; then
-                printf '%s\n' "$seg" | awk '{print $NF}'
+                printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
             fi
             ;;
         dd)
@@ -308,12 +320,22 @@ _cwg_strip_quotes() {
 # SessionStart recovery pointer teaches agents to reproduce.
 #
 # ${p//find/replace} is a pure bash string substitution -- never eval/
-# envsubst. THREE variables are expanded (one more than the Claude twin):
-# $OMT_DIR -> $omt_dir, and BOTH $OMT_SESSION_ID and $CODEX_THREAD_ID ->
+# envsubst. FIVE variables/forms are expanded (three more than the Claude
+# twin): $OMT_DIR -> $omt_dir; BOTH $OMT_SESSION_ID and $CODEX_THREAD_ID ->
 # $sid, because Codex's resolved session id is OMT_SESSION_ID ?? CODEX_
 # THREAD_ID (resolved above at :74-89) -- either env-var spelling composes
-# the same real ledger path. The braced form (${VAR}) is substituted before
-# the bare $VAR form to avoid a partial-match artifact.
+# the same real ledger path; and $HOME/${HOME}/a leading `~` -> env $HOME,
+# because the resolved omt_dir is ALWAYS $HOME/.omt/<proj> (lib/omt-dir.sh),
+# so a home-relative spelling of the ledger (`rm "$HOME/.omt/<proj>/
+# session-ledger-<sid>.md"`, `rm ~/.omt/<proj>/session-ledger-<sid>.md`)
+# composes the exact same real path and must resolve the same way -- leaving
+# $HOME/~ unexpanded let both forms bypass the guard (main's old substring
+# scan caught these; this was a regression). Expanding $HOME is a strict
+# widening of what can match, never a narrowing: an unset/empty $HOME makes
+# the substitution a no-op, which never accidentally equals the ledger path,
+# so the safe direction (no false block) holds either way. The braced form
+# (${VAR}) is substituted before the bare $VAR form to avoid a partial-match
+# artifact.
 #
 # KNOWN LIMITATION: a single-quoted env-var reference (`rm '$OMT_DIR/...'`)
 # is an inert shell literal that never expands at real execution time
@@ -330,6 +352,12 @@ _cwg_absolutize() {
     p="${p//\$OMT_DIR/$omt_dir}"
     p="${p//\$OMT_SESSION_ID/$sid}"
     p="${p//\$CODEX_THREAD_ID/$sid}"
+    p="${p//\$\{HOME\}/${HOME:-}}"
+    p="${p//\$HOME/${HOME:-}}"
+    case "$p" in
+        "~") p="${HOME:-}" ;;
+        "~/"*) p="${HOME:-}/${p#\~/}" ;;
+    esac
     case "$p" in
         /*) printf '%s\n' "$p" ;;
         *) printf '%s\n' "$cwd/$p" ;;
