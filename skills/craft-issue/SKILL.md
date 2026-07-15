@@ -211,7 +211,7 @@ If this does not print a `RULES_RESOLVED` line, do not dispatch and do not write
 Dispatch payload (inline text, not file paths):
 <original raw request, verbatim>
 <parent body, if any — omit this block when there is no parent>
-<one child:<title-slug> block per child issue>
+<one child:<title-slug> block per issue body in the set — an unsliced single issue (Stage 5 "write as-is") is still emitted as exactly one child:<title-slug> block, never sent body-less>
 ```
 
 Rule files are passed as the two absolute paths printed by the RULES_RESOLVED step.
