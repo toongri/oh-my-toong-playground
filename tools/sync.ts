@@ -1833,6 +1833,13 @@ export async function loadRootModelMaps(rootDir: string): Promise<Map<Platform, 
 export class UnsafeBackupRootError extends Error {}
 
 /**
+ * Returns true if `err` is a Node.js errno exception (has a `code` field).
+ */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+	return err instanceof Error && "code" in err;
+}
+
+/**
  * Resolves the OMT-owned backup root for this run and guarantees the
  * directory exists — WITHOUT ever creating a degenerate root first.
  *
@@ -1865,7 +1872,7 @@ export function resolveBackupBase(dryRun = false): string {
 		realBase = realpathSync(base);
 	} catch (err) {
 		// base doesn't exist yet (first run) — can't be a symlink, fall through.
-		if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== "ENOENT") {
+		if (!isErrnoException(err) || err.code !== "ENOENT") {
 			throw err;
 		}
 	}
