@@ -62,6 +62,7 @@ export type SyncYaml = {
 	rules?: SyncSection;
 	docs?: DocsSection;
 	provision?: ProvisionItem[];
+	format?: string;
 };
 
 export type PlatformYamlHookItem = {

@@ -429,6 +429,50 @@ agents:
 			expect(fileErrors).toHaveLength(0);
 		});
 	});
+
+	// --- format 최상위 필드 ---
+	describe("format 최상위 필드", () => {
+		it("produces no errors when format is a string via `validateSyncYaml`", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+format: "pnpm exec prettier --write"
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors).toHaveLength(0);
+		});
+
+		it("returns error when format is not a string via `validateSyncYaml`", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+format: true
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.length).toBeGreaterThan(0);
+		});
+
+		it("produces no errors when format is absent via `validateSyncYaml`", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+agents:
+  items:
+    - oracle
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors).toHaveLength(0);
+		});
+	});
 });
 
 // ---------------------------------------------------------------------------
