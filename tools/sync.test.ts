@@ -4797,7 +4797,7 @@ describe("syncDocs", () => {
 		};
 		const context = makeContext();
 
-		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toBeUndefined();
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toEqual([]);
 	});
 
 	// F2: a delete item has no source, so resolveDocsTarget only gives its bare,
@@ -4816,7 +4816,7 @@ describe("syncDocs", () => {
 		expect(await exists(path.join(deployRoot, "docs", "intro.md"))).toBe(false);
 
 		// Idempotent: a second run against the now-absent leaf is a no-op.
-		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toBeUndefined();
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toEqual([]);
 	});
 
 	it("docs delete real leaf: a similarly-named file is never treated as a tombstone candidate", async () => {
@@ -5230,6 +5230,45 @@ describe("syncDocs", () => {
 
 		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
 		expect(await readFile(externalFile)).toBe("external content\n");
+	});
+
+	// --- return value: written leaves (feeds formatDeployedRoots' docsDests) ---
+
+	it("docs return value: non-dry file-form deploy returns the finalTarget", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext();
+
+		const result = await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(result).toEqual([path.join(deployRoot, "docs", "intro.md")]);
+	});
+
+	it("docs return value: non-dry dir-form deploy returns each written leaf's dest, not the base dir", async () => {
+		await writeFile(path.join(rootDir, "docs", "bundle", "one.md"), "# One\n");
+		await writeFile(path.join(rootDir, "docs", "bundle", "sub", "two.md"), "# Two\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["bundle"] } };
+		const context = makeContext();
+
+		const result = await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect([...result].sort()).toEqual(
+			[
+				path.join(deployRoot, "docs", "bundle", "one.md"),
+				path.join(deployRoot, "docs", "bundle", "sub", "two.md"),
+			].sort(),
+		);
+		expect(result).not.toContain(path.join(deployRoot, "docs", "bundle"));
+	});
+
+	it("docs return value: dry-run returns an empty array regardless of planned writes", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext({ dryRun: true });
+
+		const result = await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(result).toEqual([]);
 	});
 });
 
