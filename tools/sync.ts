@@ -1369,7 +1369,7 @@ export async function rewritePlatformPaths(
 
 /**
  * Runs a declared post-deploy format command (SyncYaml `format:`) against the
- * OMT-managed roots under `deployRoot` — the platform dirs OMT actually wrote
+ * OMT-managed roots under `deployRoot` — the existing OMT-managed platform dirs
  * (`.claude`/`.gemini`/`.codex`/`.opencode`), the per-name Codex skill dirs
  * OMT owns this run, and the docs leaf paths the caller deployed. Called from
  * processYaml's per-worktree deploy loop, right after `rewritePlatformPaths`,
@@ -1382,13 +1382,15 @@ export async function rewritePlatformPaths(
  * passed whole, only per-name entries in `codexSkillNames`, so a foreign
  * resident skill directory is never handed to an external formatter.
  *
- * The spawn is wrapped in try/catch because, unlike the vendoring spawn above
- * (`bun`, always present), `formatCmd` is an arbitrary user-declared command —
- * a missing binary throws synchronously from Bun.spawn (ENOENT), not via a
- * rejected promise or non-zero exit. The catch normalizes both a synchronous
- * ENOENT throw and a non-zero exit into a re-thrown plain Error, so the
- * caller's best-effort handling (a fatal-sync-error subclass check) does not
- * mistake this for a fatal sync error.
+ * Only the `Bun.spawn` call itself is wrapped in try/catch because, unlike
+ * the vendoring spawn above (`bun`, always present), `formatCmd` is an
+ * arbitrary user-declared command — a missing binary throws synchronously
+ * from `Bun.spawn` (ENOENT); `await proc.exited` never throws. The catch
+ * re-throws that synchronous ENOENT as a plain Error; a non-zero exit is
+ * checked and thrown separately, outside the try, so neither path double-wraps
+ * the other's message. Either way the caller's best-effort handling (a
+ * fatal-sync-error subclass check) does not mistake this for a fatal sync
+ * error.
  */
 export async function formatDeployedRoots(
 	deployRoot: string,
@@ -1400,7 +1402,7 @@ export async function formatDeployedRoots(
 	if (argv.length === 0) return;
 
 	const managedRoots: string[] = [];
-	for (const platform of ["claude", "gemini", "codex", "opencode"] as const) {
+	for (const platform of KNOWN_PLATFORMS) {
 		const platformDir = path.join(deployRoot, `.${platform}`);
 		if (existsSync(platformDir)) managedRoots.push(platformDir);
 	}
@@ -1412,21 +1414,22 @@ export async function formatDeployedRoots(
 
 	if (managedRoots.length === 0) return;
 
+	let proc: ReturnType<typeof Bun.spawn>;
 	try {
-		const proc = Bun.spawn([...argv, ...managedRoots], {
+		proc = Bun.spawn([...argv, ...managedRoots], {
 			cwd: deployRoot,
 			stdout: "inherit",
 			stderr: "inherit",
 		});
-		await proc.exited;
-		if (proc.exitCode !== 0) {
-			throw new Error(`format command '${formatCmd}' failed (exit ${proc.exitCode})`);
-		}
 	} catch (err) {
 		throw new Error(
 			`format command '${formatCmd}' failed: ${err instanceof Error ? err.message : String(err)}`,
 			{ cause: err },
 		);
+	}
+	await proc.exited;
+	if (proc.exitCode !== 0) {
+		throw new Error(`format command '${formatCmd}' failed (exit ${proc.exitCode})`);
 	}
 }
 
