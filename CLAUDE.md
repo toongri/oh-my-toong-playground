@@ -92,7 +92,7 @@ skills:
 |----------|-----------|---------------------|-------|
 | claude | `.claude/` | agents, commands, skills, scripts, rules | Full native support |
 | gemini | `.gemini/` | commands, skills, scripts | Hooks/config via syncPlatformYaml |
-| codex | `.codex/` | skills, scripts, hooks | Hooks/config via syncPlatformYaml |
+| codex | `.codex/` | agents, skills, scripts, hooks | Agents: md→toml translate (leaf-guard injected); Hooks/config via syncPlatformYaml |
 | opencode | `.opencode/` | agents, commands, skills, scripts, rules | Hooks not supported |
 
 ### Core Skills
