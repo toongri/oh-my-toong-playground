@@ -2,6 +2,7 @@
 name: librarian
 description: Use when researching external documentation, APIs, libraries, and open-source implementations. Returns findings with mandatory source URLs.
 model: sonnet
+disallowedTools: Agent
 ---
 
 # Librarian - External Documentation Researcher

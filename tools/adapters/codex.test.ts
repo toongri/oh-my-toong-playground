@@ -207,6 +207,96 @@ describe("CodexAdapter", () => {
 			expect(parsed).not.toHaveProperty("skills");
 		});
 
+		it("injects the leaf guard into developer_instructions when frontmatter denies the Agent tool via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "explore.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: explore",
+					"description: Fast codebase search",
+					"model: sonnet",
+					"disallowedTools: Agent",
+					"---",
+					"",
+					"You are Explorer. Find files and patterns.",
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(targetBase, "explore", sourceFile, [], [], false, modelMap);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "explore.toml");
+			const parsed = parse(await fs.readFile(targetFile, "utf-8")) as Record<string, unknown>;
+
+			// The emit-allowlist is unchanged — the guard rides inside developer_instructions, not a new key.
+			expect(Object.keys(parsed).sort()).toEqual(
+				["description", "developer_instructions", "model", "model_reasoning_effort", "name"].sort(),
+			);
+			expect(parsed.developer_instructions).toContain("<native_subagent_leaf_guard>");
+			expect(parsed.developer_instructions).toContain(
+				"do not call Task, Agent, spawn_agent, or native child agents",
+			);
+			// The original body survives ahead of the appended guard.
+			expect(parsed.developer_instructions).toContain("You are Explorer. Find files and patterns.");
+		});
+
+		it("injects the leaf guard when a tools allowlist omits the Agent tool via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "metis.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: metis",
+					"description: Plan reviewer",
+					"model: opus",
+					"tools: Read, Glob, Grep, Bash",
+					"---",
+					"",
+					"You are Metis.",
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(targetBase, "metis", sourceFile, [], [], false, modelMap);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "metis.toml");
+			const parsed = parse(await fs.readFile(targetFile, "utf-8")) as Record<string, unknown>;
+			expect(parsed.developer_instructions).toContain("<native_subagent_leaf_guard>");
+		});
+
+		it("omits the leaf guard for a delegation-allowed agent with no spawn restriction via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "code-reviewer.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: code-reviewer",
+					"description: Review orchestrator",
+					"model: opus",
+					"---",
+					"",
+					"You are the code-reviewer. Fan out chunk-reviewer and verifiers.",
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { opus: { model: "gpt-5.6-sol", effort: "high" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(targetBase, "code-reviewer", sourceFile, [], [], false, modelMap);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "code-reviewer.toml");
+			const parsed = parse(await fs.readFile(targetFile, "utf-8")) as Record<string, unknown>;
+			expect(parsed.developer_instructions).not.toContain("native_subagent_leaf_guard");
+			expect(parsed.developer_instructions).toBe(
+				"You are the code-reviewer. Fan out chunk-reviewer and verifiers.",
+			);
+		});
+
 		it("rewrites Claude vocabulary in description/developer_instructions via PLATFORM_REWRITE_RULES.codex before TOML serialization (TODO 4) — name/model/model_reasoning_effort untouched", async () => {
 			// Real carrier shape: agent bodies invoke skills and reference
 			// subagent_type in prose (e.g. agents/sisyphus-junior.md:102-103).

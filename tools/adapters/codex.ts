@@ -265,6 +265,50 @@ export async function cleanupCodexSkillsFossil(
 }
 
 // =============================================================================
+// Leaf-subagent gate (Claude `disallowedTools: Agent` → Codex prompt guard)
+// =============================================================================
+
+// Claude Code enforces leaf-ness at runtime by withholding the `Agent`
+// (subagent-spawning) tool; Codex has no equivalent per-agent tool field, so the
+// canonical leaf gate for a native Codex subagent is a developer-instruction
+// text guard (mirrors oh-my-codex `NATIVE_SUBAGENT_LEAF_GUARD`). We inject it
+// whenever the source frontmatter denies the spawn tool — the SAME signal Claude
+// Code resolves — so a single source edit gates both platforms.
+const CODEX_LEAF_GUARD = [
+	"<native_subagent_leaf_guard>",
+	"",
+	"Leaf native subagent: do not call Task, Agent, spawn_agent, or native child agents.",
+	"Use local tools; report missing specialist coverage to your caller instead of spawning.",
+	"",
+	"</native_subagent_leaf_guard>",
+].join("\n");
+
+// The tool names that let an agent spawn other agents. `Task` is the pre-2.1.63
+// alias of `Agent`; both must be recognized on either side of the gate.
+const SPAWN_TOOL_NAMES = new Set(["Agent", "Task"]);
+
+/** Normalize a frontmatter tools value (YAML array OR comma-separated string) to trimmed tokens. */
+function toToolList(value: unknown): string[] {
+	if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+	if (typeof value === "string") return value.split(",").map((s) => s.trim()).filter(Boolean);
+	return [];
+}
+
+/**
+ * A source agent is a leaf (cannot spawn subagents) exactly when Claude Code
+ * would withhold the spawn tool: `disallowedTools` lists it, OR a non-empty
+ * `tools` allowlist omits it. Frontmatter with neither restriction inherits all
+ * tools (delegation-allowed, e.g. code-reviewer) and gets no guard.
+ */
+function isLeafAgent(frontmatter: Record<string, unknown>): boolean {
+	const disallowed = toToolList(frontmatter.disallowedTools);
+	if (disallowed.some((t) => SPAWN_TOOL_NAMES.has(t))) return true;
+	const tools = toToolList(frontmatter.tools);
+	if (tools.length > 0 && !tools.some((t) => SPAWN_TOOL_NAMES.has(t))) return true;
+	return false;
+}
+
+// =============================================================================
 // CodexAdapter
 // =============================================================================
 
@@ -352,11 +396,17 @@ export class CodexAdapter implements PlatformAdapter {
 			developer_instructions,
 			PLATFORM_REWRITE_RULES.codex,
 		);
+		// Leaf gate: the guard is static English (no Claude vocabulary), so it is
+		// appended AFTER rewrite to keep it verbatim. Delegation-allowed agents
+		// (e.g. code-reviewer) carry no spawn restriction and get no guard.
+		const gatedInstructions = isLeafAgent(frontmatter)
+			? `${rewrittenInstructions}\n\n${CODEX_LEAF_GUARD}`
+			: rewrittenInstructions;
 
 		const tomlObj = {
 			name,
 			description: rewrittenDescription,
-			developer_instructions: rewrittenInstructions,
+			developer_instructions: gatedInstructions,
 			...modelFields,
 		};
 
