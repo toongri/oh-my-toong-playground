@@ -1,0 +1,2 @@
+The new health handler returns HTTP 200.
+The handler is exported from its module.
