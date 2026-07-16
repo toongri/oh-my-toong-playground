@@ -1787,7 +1787,7 @@ export function resolveBackupBase(dryRun = false): string {
 		realBase = realpathSync(base);
 	} catch (err) {
 		// base doesn't exist yet (first run) — can't be a symlink, fall through.
-		if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== "ENOENT") {
+		if (!(err instanceof Error) || !("code" in err) || err.code !== "ENOENT") {
 			throw err;
 		}
 	}
