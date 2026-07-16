@@ -59,7 +59,7 @@ Each verification point below is walked the same way:
      confirmed intent** (`agents/code-reviewer.md`'s Input: "plus any intent/requirements
      context provided by the caller") — this lands `SKILL.md`'s Step 0 ("Intent and Context
      Acquisition") Intent Block Gate directly on "Intent confirmed," skipping interview
-   - **exception — V4 (hybrid-field)**: instead of passing `requirements.txt` as intent,
+   - **exception — CD-4 (hybrid-field)**: instead of passing `requirements.txt` as intent,
      dispatch with an explicit **code-quality-only deferral** (e.g. "code quality only,
      skip intent") so Step 0 itself lands on the "User explicit deferral" branch and sets
      the `{REQUIREMENTS}` sentinel
@@ -74,9 +74,9 @@ source directly.
 
 ---
 
-## Verification Points (V*)
+## Scenarios (CD-*)
 
-### V1 — RED: unedited skill, omission fixture
+### CD-1 — RED: unedited skill, omission fixture
 
 **Given**: `skills/code-review/SKILL.md` at its **pre-edit HEAD** state (no absent-change
 derivation sub-step yet), synced to the deployed skill location; the `omission` fixture
@@ -97,11 +97,11 @@ between `before/` and `change/` — still only `ping`, `echo`, `time`); dispatch
 
 ---
 
-### V2 — GREEN: edited skill, omission fixture
+### CD-2 — GREEN: edited skill, omission fixture
 
 **Given**: `skills/code-review/SKILL.md` **post-Step-0-edit** (the absent-change derivation
 sub-step landed), synced to the deployed skill location; the same `omission` fixture, realized
-and dispatched identically to V1 (fixture's `requirements.txt` as caller-supplied confirmed
+and dispatched identically to CD-1 (fixture's `requirements.txt` as caller-supplied confirmed
 intent).
 
 **Then**:
@@ -118,9 +118,9 @@ intent).
 
 ---
 
-### V3 — False-positive guard: edited skill, clean fixture
+### CD-3 — False-positive guard: edited skill, clean fixture
 
-**Given**: the same **post-Step-0-edit** skill as V2, synced to deployed; the `clean` fixture
+**Given**: the same **post-Step-0-edit** skill as CD-2, synced to deployed; the `clean` fixture
 (`skills/code-review/tests/fixtures/clean/`) realized per the recipe above — the same 3
 registered handlers, plus the 4th `health` handler added **with** its matching `registry.ts`
 entry (the pairing is complete, no citable absence); dispatched with the fixture's
@@ -138,10 +138,10 @@ entry (the pairing is complete, no citable absence); dispatched with the fixture
 
 ---
 
-### V4 — Hybrid-field: edited skill, omission fixture, code-quality-only deferral mode
+### CD-4 — Hybrid-field: edited skill, omission fixture, code-quality-only deferral mode
 
-**Given**: the same **post-Step-0-edit** skill as V2/V3, synced to deployed; the same
-`omission` fixture as V1/V2, realized identically — but dispatched with an explicit
+**Given**: the same **post-Step-0-edit** skill as CD-2/CD-3, synced to deployed; the same
+`omission` fixture as CD-1/CD-2, realized identically — but dispatched with an explicit
 **code-quality-only deferral** as the intent (e.g. "code quality only," "skip," or an
 unambiguous equivalent per `SKILL.md`'s Intent Block Gate) **instead of** the
 `requirements.txt` content, so Step 0 itself sets the `{REQUIREMENTS}` sentinel
@@ -154,7 +154,7 @@ branch — the derivation runs unconditionally, regardless of how intent was rea
 |----|-------------------|
 | V1 | The absent-change derivation step's "Derived Expected Items" sub-block **replaces** the sentinel — no self-contradictory "N/A + Derived Items" field reaches the coverage checker |
 | V2 | `orchestrate-review/scripts/prompts/coverage.md` maps the derived item exactly as it would any other `{REQUIREMENTS}` entry (no special-case coverage path for a derived item) |
-| V3 | Dispatching `code-reviewer` yields **exactly 1** `requirement-gap` finding — the same absent `registry.ts` entry for `health` as V2 |
+| V3 | Dispatching `code-reviewer` yields **exactly 1** `requirement-gap` finding — the same absent `registry.ts` entry for `health` as CD-2 |
 
 **Dispatch**: `code-reviewer` / omission fixture / post-edit / explicit code-quality-only deferral (no requirements.txt passed as intent)
 **Expected `requirement-gap` count**: **1**
@@ -165,10 +165,10 @@ branch — the derivation runs unconditionally, regardless of how intent was rea
 
 | Point | Skill state | Fixture | Intent mode | Expected `requirement-gap` |
 |-------|------------|---------|--------------|------------------------------|
-| V1 (RED) | pre-edit HEAD | omission | requirements.txt as caller intent | 0 |
-| V2 (GREEN) | post-Step-0-edit | omission | requirements.txt as caller intent | 1 (cited, verdict-carrying) |
-| V3 (false-positive) | post-Step-0-edit | clean | requirements.txt as caller intent | 0 |
-| V4 (hybrid-field) | post-Step-0-edit | omission | explicit code-quality-only deferral | 1 |
+| CD-1 (RED) | pre-edit HEAD | omission | requirements.txt as caller intent | 0 |
+| CD-2 (GREEN) | post-Step-0-edit | omission | requirements.txt as caller intent | 1 (cited, verdict-carrying) |
+| CD-3 (false-positive) | post-Step-0-edit | clean | requirements.txt as caller intent | 0 |
+| CD-4 (hybrid-field) | post-Step-0-edit | omission | explicit code-quality-only deferral | 1 |
 
-Downstream stories walk this file as their assertion checklist: V1 is captured before the Step
-0 edit lands; V2, V3, V4 are captured after.
+Downstream stories walk this file as their assertion checklist: CD-1 is captured before the Step
+0 edit lands; CD-2, CD-3, CD-4 are captured after.
