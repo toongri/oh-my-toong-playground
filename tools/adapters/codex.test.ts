@@ -1143,6 +1143,14 @@ describe("cleanupCodexSkillsFossil", () => {
 		return path.join(tmpDir, ".agents", "skills", ...segments);
 	}
 
+	// Absolute per-test backup destination under the new backupCategory
+	// contract, which now assembles join(backupDest, platform, category)
+	// directly (no session-id join happens inside the writer). Each test
+	// passes its own label so backups land in distinct, inspectable dirs.
+	function backupDest(...segments: string[]): string {
+		return path.join(tmpDir, "backup", ...segments);
+	}
+
 	async function pathExists(p: string): Promise<boolean> {
 		return fs
 			.stat(p)
@@ -1155,24 +1163,16 @@ describe("cleanupCodexSkillsFossil", () => {
 		await fs.writeFile(fossilPath("skill-a", "SKILL.md"), "# skill-a\n");
 		await fs.mkdir(newPath("skill-a"), { recursive: true });
 		await fs.writeFile(newPath("skill-a", "SKILL.md"), "# skill-a\n");
-		await fs.writeFile(path.join(tmpDir, ".codex", "config.toml"), "model = \"o3\"\n");
+		await fs.writeFile(path.join(tmpDir, ".codex", "config.toml"), 'model = "o3"\n');
 
-		await cleanupCodexSkillsFossil(tmpDir, "sid-happy", false, new Set(["skill-a"]));
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("happy"), false, new Set(["skill-a"]));
 
 		expect(await pathExists(fossilPath("skill-a"))).toBe(false);
 		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(false);
 		expect(await fs.readFile(path.join(tmpDir, ".codex", "config.toml"), "utf-8")).toBe(
 			'model = "o3"\n',
 		);
-		const backedUp = path.join(
-			tmpDir,
-			".sync-backup",
-			"sid-happy",
-			"codex",
-			"skills",
-			"skill-a",
-			"SKILL.md",
-		);
+		const backedUp = path.join(backupDest("happy"), "codex", "skills", "skill-a", "SKILL.md");
 		expect(await fs.readFile(backedUp, "utf-8")).toBe("# skill-a\n");
 	});
 
@@ -1188,7 +1188,7 @@ describe("cleanupCodexSkillsFossil", () => {
 		await fs.mkdir(newPath("foo"), { recursive: true });
 		await fs.writeFile(newPath("foo", "SKILL.md"), "See .claude/scripts/run.sh for details.\n");
 
-		await cleanupCodexSkillsFossil(tmpDir, "sid-drift", false, new Set(["foo"]));
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("drift"), false, new Set(["foo"]));
 
 		expect(await pathExists(fossilPath("foo"))).toBe(false);
 	});
@@ -1201,12 +1201,10 @@ describe("cleanupCodexSkillsFossil", () => {
 		// Positive control: prove the fixture actually exists before the call.
 		expect(await pathExists(fossilPath(".system"))).toBe(true);
 
-		await cleanupCodexSkillsFossil(tmpDir, "sid-foreign", false, new Set());
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("foreign"), false, new Set());
 
 		expect(await pathExists(fossilPath(".system"))).toBe(true);
-		expect(await fs.readFile(fossilPath(".system", "note.txt"), "utf-8")).toBe(
-			"not OMT-managed\n",
-		);
+		expect(await fs.readFile(fossilPath(".system", "note.txt"), "utf-8")).toBe("not OMT-managed\n");
 		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(true);
 	});
 
@@ -1222,21 +1220,15 @@ describe("cleanupCodexSkillsFossil", () => {
 		await fs.mkdir(fossilPath(".system"), { recursive: true });
 		await fs.writeFile(fossilPath(".system", "note.txt"), "not OMT-managed\n");
 		await fs.mkdir(fossilPath("plannotator-compound"), { recursive: true });
-		await fs.writeFile(
-			fossilPath("plannotator-compound", "SKILL.md"),
-			"not OMT-managed either\n",
-		);
+		await fs.writeFile(fossilPath("plannotator-compound", "SKILL.md"), "not OMT-managed either\n");
 		await fs.mkdir(newPath("plannotator-compound"), { recursive: true });
-		await fs.writeFile(
-			newPath("plannotator-compound", "SKILL.md"),
-			"not OMT-managed either\n",
-		);
+		await fs.writeFile(newPath("plannotator-compound", "SKILL.md"), "not OMT-managed either\n");
 
-		await cleanupCodexSkillsFossil(tmpDir, "sid-foreign-by-name", false, new Set());
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("foreign-by-name"), false, new Set());
 
 		expect(await pathExists(fossilPath(".system"))).toBe(true);
 		expect(await pathExists(fossilPath("plannotator-compound"))).toBe(true);
-		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+		expect(await pathExists(backupDest("foreign-by-name"))).toBe(false);
 	});
 
 	it("ownedSkillNames empty: nothing removed, no backup written, no throw", async () => {
@@ -1249,10 +1241,10 @@ describe("cleanupCodexSkillsFossil", () => {
 		await fs.mkdir(newPath("skill-j"), { recursive: true });
 		await fs.writeFile(newPath("skill-j", "SKILL.md"), "j\n");
 
-		await cleanupCodexSkillsFossil(tmpDir, "sid-empty-owned", false, new Set());
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("empty-owned"), false, new Set());
 
 		expect(await pathExists(fossilPath("skill-j"))).toBe(true);
-		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+		expect(await pathExists(backupDest("empty-owned"))).toBe(false);
 		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(true);
 	});
 
@@ -1262,7 +1254,7 @@ describe("cleanupCodexSkillsFossil", () => {
 		// .agents/skills intentionally never created.
 
 		await expect(
-			cleanupCodexSkillsFossil(tmpDir, "sid-no-newdir", false, new Set(["skill-d"])),
+			cleanupCodexSkillsFossil(tmpDir, backupDest("no-newdir"), false, new Set(["skill-d"])),
 		).rejects.toThrow(/\.agents.*skills.*\.codex.*skills|\.codex.*skills.*\.agents.*skills/s);
 
 		expect(await pathExists(fossilPath("skill-d"))).toBe(true);
@@ -1274,11 +1266,11 @@ describe("cleanupCodexSkillsFossil", () => {
 		// .agents/skills intentionally never created — this is the fresh-target
 		// first-dry-run scenario: dry-run writes nothing, so it can never exist yet.
 
-		await cleanupCodexSkillsFossil(tmpDir, "sid-dry-no-newdir", true, new Set(["skill-g"]));
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("dry-no-newdir"), true, new Set(["skill-g"]));
 
 		expect(await pathExists(fossilPath("skill-g"))).toBe(true);
 		expect(await fs.readFile(fossilPath("skill-g", "SKILL.md"), "utf-8")).toBe("g\n");
-		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+		expect(await pathExists(backupDest("dry-no-newdir"))).toBe(false);
 	});
 
 	it("does NOT throw in dry-run when .agents/skills exists but only holds a foreign resident, leaving the owned fossil entry untouched", async () => {
@@ -1290,20 +1282,14 @@ describe("cleanupCodexSkillsFossil", () => {
 		await fs.mkdir(fossilPath("skill-x"), { recursive: true });
 		await fs.writeFile(fossilPath("skill-x", "SKILL.md"), "x\n");
 		await fs.mkdir(fossilPath("plannotator-compound"), { recursive: true });
-		await fs.writeFile(
-			fossilPath("plannotator-compound", "SKILL.md"),
-			"not OMT-managed\n",
-		);
+		await fs.writeFile(fossilPath("plannotator-compound", "SKILL.md"), "not OMT-managed\n");
 		await fs.mkdir(newPath("plannotator-compound"), { recursive: true });
-		await fs.writeFile(
-			newPath("plannotator-compound", "SKILL.md"),
-			"not OMT-managed\n",
-		);
+		await fs.writeFile(newPath("plannotator-compound", "SKILL.md"), "not OMT-managed\n");
 		// newPath("skill-x") intentionally never created.
 
 		await cleanupCodexSkillsFossil(
 			tmpDir,
-			"sid-dry-newdir-exists",
+			backupDest("dry-newdir-exists"),
 			true,
 			new Set(["skill-x"]),
 		);
@@ -1311,7 +1297,7 @@ describe("cleanupCodexSkillsFossil", () => {
 		expect(await pathExists(fossilPath("skill-x"))).toBe(true);
 		expect(await fs.readFile(fossilPath("skill-x", "SKILL.md"), "utf-8")).toBe("x\n");
 		expect(await pathExists(fossilPath("plannotator-compound"))).toBe(true);
-		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+		expect(await pathExists(backupDest("dry-newdir-exists"))).toBe(false);
 	});
 
 	it("throws naming the entry, deletes nothing, and writes no backup when an owned entry has no counterpart under .agents/skills", async () => {
@@ -1323,11 +1309,16 @@ describe("cleanupCodexSkillsFossil", () => {
 		// no such directory actually exists under .agents/skills.
 
 		await expect(
-			cleanupCodexSkillsFossil(tmpDir, "sid-missing-counterpart", false, new Set(["skill-h"])),
+			cleanupCodexSkillsFossil(
+				tmpDir,
+				backupDest("missing-counterpart"),
+				false,
+				new Set(["skill-h"]),
+			),
 		).rejects.toThrow(/skill-h/);
 
 		expect(await pathExists(fossilPath("skill-h"))).toBe(true);
-		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+		expect(await pathExists(backupDest("missing-counterpart"))).toBe(false);
 	});
 
 	it("does NOT throw under dry-run when an owned entry has no counterpart under .agents/skills — the counterpart check is real-run-only", async () => {
@@ -1340,10 +1331,15 @@ describe("cleanupCodexSkillsFossil", () => {
 		await fs.mkdir(newPath(), { recursive: true });
 		// newPath("skill-i") intentionally never created.
 
-		await cleanupCodexSkillsFossil(tmpDir, "sid-dry-missing-counterpart", true, new Set(["skill-i"]));
+		await cleanupCodexSkillsFossil(
+			tmpDir,
+			backupDest("dry-missing-counterpart"),
+			true,
+			new Set(["skill-i"]),
+		);
 
 		expect(await pathExists(fossilPath("skill-i"))).toBe(true);
-		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+		expect(await pathExists(backupDest("dry-missing-counterpart"))).toBe(false);
 	});
 
 	it("dry-run deletes nothing and writes no backup", async () => {
@@ -1352,17 +1348,17 @@ describe("cleanupCodexSkillsFossil", () => {
 		await fs.mkdir(newPath("skill-e"), { recursive: true });
 		await fs.writeFile(newPath("skill-e", "SKILL.md"), "e\n");
 
-		await cleanupCodexSkillsFossil(tmpDir, "sid-dry", true, new Set(["skill-e"]));
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("dry"), true, new Set(["skill-e"]));
 
 		expect(await pathExists(fossilPath("skill-e"))).toBe(true);
-		expect(await pathExists(path.join(tmpDir, ".sync-backup"))).toBe(false);
+		expect(await pathExists(backupDest("dry"))).toBe(false);
 	});
 
 	it("returns silently (no throw) when the fossil directory is absent, and is idempotent on a repeat call", async () => {
 		// No .codex/skills at all, and no .agents/skills either — must still
 		// short-circuit BEFORE the newDir-must-exist check.
-		await cleanupCodexSkillsFossil(tmpDir, "sid-absent-1", false, new Set());
-		await cleanupCodexSkillsFossil(tmpDir, "sid-absent-2", false, new Set());
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("absent-1"), false, new Set());
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("absent-2"), false, new Set());
 
 		expect(await pathExists(path.join(tmpDir, ".codex"))).toBe(false);
 	});
@@ -1373,11 +1369,11 @@ describe("cleanupCodexSkillsFossil", () => {
 		await fs.mkdir(newPath("skill-f"), { recursive: true });
 		await fs.writeFile(newPath("skill-f", "SKILL.md"), "f\n");
 
-		await cleanupCodexSkillsFossil(tmpDir, "sid-idem-1", false, new Set(["skill-f"]));
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("idem-1"), false, new Set(["skill-f"]));
 		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(false);
 
 		// Second call: fossilDir is gone, so this must return silently.
-		await cleanupCodexSkillsFossil(tmpDir, "sid-idem-2", false, new Set(["skill-f"]));
+		await cleanupCodexSkillsFossil(tmpDir, backupDest("idem-2"), false, new Set(["skill-f"]));
 		expect(await pathExists(path.join(tmpDir, ".codex", "skills"))).toBe(false);
 	});
 });

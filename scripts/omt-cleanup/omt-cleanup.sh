@@ -51,6 +51,8 @@ toong
 #   P2 — name is "oh-my-toong-playground"
 #   P3 — name is "cache"
 #   P4 — directory contains a goal-state-*.json file with "active":true
+#   P4b — directory contains an ultragoal-state-*.json file with "active":true
+#         (ultragoal shares GoalState's exact JSON shape)
 #   P5 — directory contains a deep-interview-active-state-*.json file
 #   P6 — directory contains a prometheus-state-*.json file
 #   P7 — directory contains a qa-state-*.json file
@@ -72,6 +74,7 @@ list_state_files() {
     local dir="$1" f
     for f in \
         "$dir"/goal-state-*.json \
+        "$dir"/ultragoal-state-*.json \
         "$dir"/prometheus-state-*.json \
         "$dir"/deep-interview-active-state-*.json \
         "$dir"/qa-state-*.json; do
@@ -81,7 +84,7 @@ list_state_files() {
 }
 
 has_any_state_file() {
-    # Returns 0 (true) iff dir contains at least one state file (live or dead) across the 3 managed prefixes.
+    # Returns 0 (true) iff dir contains at least one state file (live or dead) across the managed prefixes.
     local dir="$1"
     local f
     while IFS= read -r f; do
@@ -91,7 +94,7 @@ has_any_state_file() {
 }
 
 has_live_state() {
-    # Returns 0 (true) iff dir contains at least one LIVE state file across the 3 managed prefixes.
+    # Returns 0 (true) iff dir contains at least one LIVE state file across the managed prefixes.
     # Liveness is defined by is_state_live from hooks/lib/state-liveness.sh.
     local dir="$1"
     local f
@@ -119,7 +122,7 @@ is_preserved() {
         [[ "$name" == "algocare-home-stage" ]] || return 0
     fi
 
-    # P4/P5/P6/P7: contains at least one LIVE state file (goal, prometheus, deep-interview, or qa)
+    # P4/P4b/P5/P6/P7: contains at least one LIVE state file (goal, ultragoal, prometheus, deep-interview, or qa)
     has_live_state "$dir" && return 0
 
     return 1

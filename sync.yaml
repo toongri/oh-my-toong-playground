@@ -29,9 +29,21 @@ skills:
       platforms: [claude]
     - component: goal
       platforms: [claude]
+    - component: ultragoal
+      platforms: [claude]
     - agent-browser
+
+scripts:
+  items:
+    # verify-caps-gate: 무필터 test/lint deny + 러너별 메모리 캡 주입 엔진.
+    # scripts로 배포(등록 없음)하여 $HOME/.claude/scripts/verify-caps-gate/에 단일본으로 두고,
+    # 실제 hook 등록은 projects/algocare-home/claude.yaml이 raw command로 이 경로를 참조한다.
+    # 정책 파일 verify-caps.yaml은 index.ts가 import.meta.url 기준(자기 옆)으로 로드.
+    - component: verify-caps-gate
+      platforms: [claude]
 
 rules:
   items:
     - communication-style
     - convention-grounding
+    - verification-discipline

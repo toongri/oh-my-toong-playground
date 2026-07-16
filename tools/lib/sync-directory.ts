@@ -5,7 +5,13 @@ import { detectBareImports } from "../adapters/ts-lib-deps.ts";
 /** Python cache patterns that are always excluded, regardless of any caller-supplied list. */
 export const PY_CACHE_EXCLUDE = ["__pycache__", ".pytest_cache", "*.pyc"];
 
-export const DEFAULT_EXCLUDE = [...PY_CACHE_EXCLUDE, "*.test.ts"];
+/**
+ * Names never deployed, regardless of any caller-supplied exclude list.
+ * Note: __fixtures__ is also pruned from collectFiles' default walk, so a .ts file
+ * under __fixtures__ would be skipped by the bare-import scan (lib-imports.ts).
+ */
+export const ALWAYS_PRUNE = [...PY_CACHE_EXCLUDE, "__fixtures__"];
+export const DEFAULT_EXCLUDE = [...ALWAYS_PRUNE, "*.test.ts"];
 
 function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
 	return typeof err === "object" && err !== null && "code" in err;
@@ -227,9 +233,10 @@ export async function syncDirectory(
 	target: string,
 	options?: { exclude?: string[]; platformRoot?: string },
 ): Promise<void> {
-	// PY_CACHE_EXCLUDE is always prepended so callers that supply a custom list
-	// (e.g. { exclude: ["*.test.ts"] }) do not accidentally lose Python cache pruning.
-	const exclude = [...PY_CACHE_EXCLUDE, ...(options?.exclude ?? ["*.test.ts"])];
+	// ALWAYS_PRUNE is always prepended so callers that supply a custom list
+	// (e.g. { exclude: ["*.test.ts"] }) do not accidentally lose Python cache pruning
+	// or __fixtures__ pruning.
+	const exclude = [...ALWAYS_PRUNE, ...(options?.exclude ?? ["*.test.ts"])];
 	const platformRoot = options?.platformRoot;
 
 	// 1. Ensure target directory exists

@@ -11,7 +11,7 @@ A context-synthesis pipeline that turns an assigned PM issue OR an abstract free
 
 ## Pipeline Overview
 
-The pipeline runs in five sequential stages:
+The pipeline runs in six sequential stages:
 
 ```
 intake
@@ -20,7 +20,7 @@ intake
                            cause is unknown, run the diagnosis sub-pipeline — READ references/diagnose-rootcause.md)
       → record            (best-practice body — READ references/issue-craft.md at this stage)
         → slice           (Model A INVEST — READ references/issue-craft.md at this stage)
-          → write tail    (autonomous post-hoc write to PM tool)
+          → write tail    (checklist gate → autonomous write; human review post-hoc)
 ```
 
 Each stage is described below. Refuse-to-file conditions, duplicate policy, and the INVEST slice gate are inline gates within this spine — do not skip them.
@@ -88,6 +88,17 @@ cause-finding):
 - Non-code gather (docs, PM, messenger, logs) stays inline — do not route it through `explore` or `oracle`.
 - The output of this stage feeds the **Pre-Context** section at Stage 4 (sub-items: **Affected Areas**, **Premises**, **Blockers & Risks**), and additionally feeds the "Root Cause" and "Evidence" fields for bug-genre issues.
 - When the requirement does not touch code, skip this stage. In that case, the Pre-Context section at Stage 4 is filled from gathered documents or each item is marked `TBD — needs validation via {method}`.
+
+### Design-Research Trigger
+
+Design-research trigger test (both must be true):
+
+1. The open item changes the issue's AC, Non-Goals, or slicing — a pure implementation detail does not register here; it stays a `prometheus`/`sisyphus` concern downstream.
+2. The answer depends on external knowledge — current outside best practice, a published standard, or upstream/vendor behavior — not a repo-local fact or an existing local convention (a repo-local answer routes to `explore` instead, not design research).
+
+When both hold, and the same open decision has not already been researched for this issue set (one dispatch per decision, never one per child — a child references the parent's research record instead of re-researching it): Dispatch the bounded librarian engine for that decision. Record the result under the issue's Decisions Needed section as an alternatives table (option / pros / cons / source URL) plus a recommendation. Name the decision and its owner. State no option as chosen. Record the recommendation as a `proposal — not decided in this issue`, never as the entry's chosen answer. When no source URL is available for an alternative, mark it `TBD — needs validation via {method}` rather than dropping it.
+
+If neither condition holds, do not create a Decisions Needed section for this purpose — Lean by Default (`references/issue-craft.md`) still governs whether the section exists at all.
 
 ---
 
@@ -169,7 +180,7 @@ Before writing, check for existing issues covering the same issue:
 
 ## Stage 6: Write Tail (Autonomous Post-Hoc)
 
-Write to the PM tool autonomously once all refuse-to-file conditions pass. No pre-write human approval gate.
+Write to the PM tool autonomously once all refuse-to-file conditions pass. No pre-write human approval gate — the Checklist Review Gate is an agent gate.
 
 ### Plain-Language Gate (before any write)
 
@@ -181,6 +192,35 @@ Before executing the write steps below, check the **body about to be emitted to 
 4. **Reader-facing humanizer pass**: when the body's language is Korean (the team's working language), invoke `Skill(humanizer)` on the reader-facing prose immediately before the write — this is the point where engineer-shorthand register becomes PM-reader register.
 
 Gate failure means: do not write. Correct the header, symbol, shorthand, or prose issue, then re-run the four checks.
+
+### Checklist Review Gate (before any write)
+
+Before executing the Abstract write steps below, dispatch the `issue-reviewer` agent (`agents/issue-reviewer.md`, READ-ONLY) against the full issue set being written — the parent body (if any) plus every child body — and do not write until it returns `**Status:** PASS`.
+
+**Step 1 — resolve the rule files.** Run:
+
+```
+test -f "${CLAUDE_SKILL_DIR}/SKILL.md" && test -f "${CLAUDE_SKILL_DIR}/references/issue-craft.md" && echo "RULES_RESOLVED ${CLAUDE_SKILL_DIR}/SKILL.md ${CLAUDE_SKILL_DIR}/references/issue-craft.md"
+```
+
+If this does not print a `RULES_RESOLVED` line, do not dispatch and do not write.
+
+**Step 2 — assemble the dispatch payload.** Preserve the raw request verbatim from Stage 1 — do not paraphrase or summarize it for the reviewer.
+
+```
+Dispatch payload (inline text, not file paths):
+<original raw request, verbatim>
+<parent body, if any — omit this block when there is no parent>
+<one child:<title-slug> block per issue body in the set — an unsliced single issue (Stage 5 "write as-is") is still emitted as exactly one child:<title-slug> block, never sent body-less>
+```
+
+Rule files are passed as the two absolute paths printed by the RULES_RESOLVED step.
+
+**Step 3 — dispatch and interpret the verdict.** If the reviewer cannot be dispatched, do not write — report the failure to the caller. A reviewer response with no **Status:** line is treated as REQUEST_CHANGES and consumes a cycle. On `**Status:** PASS`, proceed to the Abstract write steps below. On `**Status:** REQUEST_CHANGES`, revise the flagged body per the findings. Re-run the Plain-Language Gate (including `Skill(humanizer)`) on the revised body before re-dispatching. The terminal Notes block described under Terminal exit below is the only exception to this re-run requirement. Then dispatch a fresh reviewer instance per the Loop contract below.
+
+**Loop contract:** cycle starts at 0 and increments at reviewer dispatch; max_cycles=5 permits exactly 5 dispatches. A REQUEST_CHANGES on the 5th dispatch is terminal — no further revision is produced. Dispatch a fresh agent instance each cycle. Do not pass the prior verdict or its findings into the new prompt. The writer's self-assessment cannot substitute for a reviewer verdict. Same-Rule key = target + the **Rule:** string verbatim. Pin each target identifier at cycle 1 and never recompute it. Two verdicts are "the same" iff the Same-Rule key matches; the count resets to 1 when a different key appears. Three consecutive same-key verdicts trigger `Same-Rule-3x` termination — the same early-exit as exhausting `max_cycles=5`.
+
+**On loop exhaustion:** Terminal exit (max_cycles=5 exhausted, or Same-Rule-3x): write the issue anyway, and append the unresolved findings verbatim under Notes. The terminal write must record every unresolved finding verbatim under Notes — no other section receives them. The bytes written are exactly the body as last dispatched to the reviewer. The findings from that final verdict are recorded, not acted on — no post-terminal revision is produced. This terminal Notes block is appended after the Plain-Language Gate and is exempt from it — it is a verbatim machine record of the final reviewer verdict, not reader-facing prose, and is the only exception to the reviewed-bytes-equal-written-bytes invariant that governs every other write in this pipeline. Report the terminal write to the caller: the issue was written with N unresolved findings on <rule>; see Notes.
 
 Abstract write steps (in order):
 
@@ -194,7 +234,7 @@ Abstract write steps (in order):
 
 **Linear auto-relation fact**: Linear auto-creates a native `relatedTo` relation from any unescaped issue reference placed in a description body, including a bare issue key (for example, `B2C-4992` as normal text), an issue markdown link, or an issue URL. Therefore, when the PM tool is Linear: `relatedTo` is written only for the curated related set (step 1 above), `parentId` only for parent assignment (step 2 above), and PM issues that must be referenced in the body without becoming related — parent epics, context-only mentions, or duplicate-policy distinct siblings — are rendered as inline-code issue identifiers (for example, `` `B2C-4992` ``), which preserves literal text and does not create a Linear issue mention/relation. Do not render must-not-relate Linear issue references as bare keys, markdown issue links, or issue URLs in the body.
 
-Review is post-hoc: the issue is written first; the caller can review and request changes afterward.
+Human review is post-hoc: the issue is written first; the caller can review and request changes afterward. The Checklist Review Gate above is an agent gate and runs before the write.
 
 ---
 

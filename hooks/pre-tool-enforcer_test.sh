@@ -426,6 +426,71 @@ test_seed_goal_is_idempotent() {
 }
 
 # =============================================================================
+# seed-ultragoal — Skill(ultragoal) seeds the pristine ultragoal skeleton
+# (mirrors seed-goal; ultragoal-state.ts is a structural copy of goal-state.ts
+# with its own prefix, so the seed skeleton content is identical to goal's)
+# =============================================================================
+
+test_seed_ultragoal_creates_skeleton() {
+    local state_file="$OMT_DIR/ultragoal-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "ultragoal state file should be created" || return 1
+
+    jq -e '.phase == "planning" and .iteration == 0 and .outcome == "" and .active == true
+        and (.started_at | length > 0) and (.last_touched_at | length > 0)' \
+        "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: ultragoal seed does not match pristine skeleton"; return 1; }
+}
+
+# =============================================================================
+# seed-ultragoal-idem — second ultragoal seed run leaves the existing file unchanged
+# =============================================================================
+
+test_seed_ultragoal_is_idempotent() {
+    local state_file="$OMT_DIR/ultragoal-state-test-sid.json"
+
+    # First seed
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$state_file" "ultragoal state file should exist after first seed" || return 1
+
+    # Mutate iteration to 3
+    local tmp
+    tmp=$(mktemp)
+    jq '.iteration = 3' "$state_file" > "$tmp" && mv "$tmp" "$state_file"
+
+    jq -e '.iteration == 3' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: mutation of iteration to 3 failed"; return 1; }
+
+    # Re-fire seed
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    jq -e '.iteration == 3' "$state_file" > /dev/null 2>&1 \
+        || { echo "ASSERTION FAILED: re-fire seed must not reset iteration (create-if-absent only)"; return 1; }
+}
+
+# =============================================================================
+# seed-ultragoal-separate-prefix — Skill(ultragoal) seeds ultragoal-state-*,
+# never goal-state-* (separate prefix; goal's own seeding is untouched)
+# =============================================================================
+
+test_seed_ultragoal_does_not_seed_goal_state() {
+    local ultragoal_file="$OMT_DIR/ultragoal-state-test-sid.json"
+    local goal_file="$OMT_DIR/goal-state-test-sid.json"
+
+    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+
+    assert_file_exists "$ultragoal_file" "ultragoal state file should be created" || return 1
+    assert_file_not_exists "$goal_file" "goal state file should NOT be created for ultragoal skill" || return 1
+}
+
+# =============================================================================
 # B1 — [CONTRACT-INVERTED] session_id absent from env: derive from stdin or fail loudly
 #
 # New contract (two sub-cases):
@@ -1003,6 +1068,269 @@ test_wg_k_pipe_and_gt_inside_quotes_passes() {
 }
 
 # =============================================================================
+# (l) regression (defect A) -- an unexpanded env-var-literal ledger path
+# bypasses the EXACT match: _wg_absolutize used to recognize ONLY a leading
+# '/' as an absolute path, so a literal "$OMT_DIR/session-ledger-$OMT_
+# SESSION_ID.md" token (never itself expanded, since the guard inspects
+# tool_input.command text, not what the real shell would later expand it
+# to) was treated as RELATIVE and got $PWD prefixed instead -- silently
+# ALLOWING the exact form that hooks/omt-ledger.sh's SessionStart recovery
+# pointer (`cat "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"`) itself teaches
+# agents to reproduce. Each form below must DENY.
+# =============================================================================
+test_wg_l1_env_var_dquoted_denied() {
+    wg_assert_deny 'echo x > "$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"' "WG-L1(dquoted env-var)"
+}
+
+test_wg_l2_env_var_unquoted_denied() {
+    wg_assert_deny 'echo x > $OMT_DIR/session-ledger-$OMT_SESSION_ID.md' "WG-L2(unquoted env-var)"
+}
+
+test_wg_l3_env_var_braced_denied() {
+    wg_assert_deny 'echo x > "${OMT_DIR}/session-ledger-${OMT_SESSION_ID}.md"' "WG-L3(braced env-var)"
+}
+
+# =============================================================================
+# (m) regression (defect B) -- tee/rm/truncate only inspected the LAST
+# operand (awk '{print $NF}'), so `rm <ledger> <other>` extracted only
+# "<other>" and the real ledger operand went unchecked. Mirrors the
+# already-correct Codex extractor (_cwg_extract_shell_targets, hooks/codex-
+# write-guard.sh:167-169), which emits every non-option operand. Each DENY
+# case below places the ledger as a NON-final operand; the control proves a
+# genuinely non-ledger multi-target command still passes.
+# =============================================================================
+test_wg_m1_rm_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "rm \"$ledger\" /tmp/other" "WG-M1(rm multi-target)"
+}
+
+test_wg_m2_rm_flag_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "rm -f \"$ledger\" /tmp/other" "WG-M2(rm -f multi-target)"
+}
+
+test_wg_m3_truncate_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "truncate -s0 \"$ledger\" /tmp/other" "WG-M3(truncate multi-target)"
+}
+
+test_wg_m4_tee_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "tee \"$ledger\" /tmp/other" "WG-M4(tee multi-target)"
+}
+
+test_wg_m5_rm_multitarget_nonledger_control_allows() {
+    local out
+    out=$(printf '%s' "$(hg_bash_json 'rm /tmp/a /tmp/b')" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-M5: non-ledger multi-target rm should pass. Got: $out"; return 1; }
+}
+
+# =============================================================================
+# (n) regression (Claude write-guard defect #4) -- _wg_strip_dquotes stripped
+# only the OUTERMOST double-quote pair, so a redirect target assembled from
+# PER-TOKEN double-quoted spans glued together with no separating whitespace
+# (e.g. "$OMT_DIR"/"session-ledger-$OMT_SESSION_ID.md") still carried
+# embedded quote characters after the outer-pair strip, breaking the
+# byte-EXACT compare in write-guard-core.sh even though the real shell
+# concatenates adjacent quoted spans into the exact ledger path (quote
+# characters vanish entirely on word expansion). Fix: strip EVERY double
+# quote character in the token, not just the outermost pair.
+# =============================================================================
+test_wg_n1_per_segment_dquoted_ledger_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    # Target assembled from two double-quoted spans glued by an unquoted '/'
+    # -- a single shell word, no whitespace inside, so the extractor captures
+    # the whole thing as one candidate token.
+    wg_assert_deny 'echo x > "$OMT_DIR"/"session-ledger-$OMT_SESSION_ID.md"' "WG-N1(per-segment dquoted)"
+}
+
+test_wg_n2_per_segment_dquoted_nonledger_control_allows() {
+    local out
+    out=$(printf '%s' "$(hg_bash_json 'echo x > "/tmp"/"notes.md"')" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-N2: non-ledger per-segment dquoted target should pass. Got: $out"; return 1; }
+}
+
+# =============================================================================
+# (o) regression (Claude write-guard defect #2) -- the write-guard block read
+# ONLY OMT_SESSION_ID/OMT_DIR from the environment and skipped the entire
+# guard (silent no-op) when either was absent, unlike the Skill-seed block a
+# few dozen lines below it, which falls back to stdin session_id/cwd via
+# resolve_omt_dir. During the session bootstrap window (before CLAUDE_ENV_
+# FILE exports are sourced), env is absent but the stdin payload still
+# carries session_id + cwd -- the guard must not go dark in that window.
+# WG-O1 proves the DENY now fires via stdin fallback; WG-O2 proves the
+# safety-charset validation on the stdin session_id is still enforced (an
+# unsafe id must not arm the guard).
+# =============================================================================
+test_wg_o1_env_absent_stdin_fallback_rm_denied() {
+    local exit_code=0
+    local out
+
+    local project_cwd="$SCRIPT_DIR"
+    local stdin_sid="wg-env-fallback-sid"
+    local fake_home="$TEST_TMP_DIR/home_wgo1"
+    mkdir -p "$fake_home"
+
+    local derived_omt_dir
+    derived_omt_dir=$(
+        unset OMT_DIR
+        export HOME="$fake_home"
+        source "$SCRIPT_DIR/lib/omt-dir.sh" && resolve_omt_dir "$project_cwd"
+    )
+
+    local ledger_path="$derived_omt_dir/session-ledger-${stdin_sid}.md"
+
+    out=$(
+        unset OMT_DIR OMT_SESSION_ID CODEX_THREAD_ID
+        export HOME="$fake_home"
+        jq -n --arg cmd "rm \"$ledger_path\"" --arg sid "$stdin_sid" --arg cwd "$project_cwd" \
+            '{tool_name: "Bash", tool_input: {command: $cmd}, session_id: $sid, cwd: $cwd}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED WG-O1: hook should exit 0 (exit=$exit_code)"; return 1; }
+
+    hg_is_deny "$out" \
+        || { echo "ASSERTION FAILED WG-O1: env-absent write-guard should DENY via stdin session_id/cwd fallback. Got: $out"; return 1; }
+}
+
+test_wg_o2_unsafe_stdin_sid_does_not_arm_guard() {
+    local exit_code=0
+    local out
+
+    local project_cwd="$SCRIPT_DIR"
+    local unsafe_sid="../escape"
+    local fake_home="$TEST_TMP_DIR/home_wgo2"
+    mkdir -p "$fake_home"
+
+    out=$(
+        unset OMT_DIR OMT_SESSION_ID CODEX_THREAD_ID
+        export HOME="$fake_home"
+        jq -n --arg cmd 'rm /tmp/whatever' --arg sid "$unsafe_sid" --arg cwd "$project_cwd" \
+            '{tool_name: "Bash", tool_input: {command: $cmd}, session_id: $sid, cwd: $cwd}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED WG-O2: hook should exit 0 (exit=$exit_code)"; return 1; }
+
+    hg_is_allow "$out" \
+        || { echo "ASSERTION FAILED WG-O2: unsafe stdin session_id must not arm the write-guard. Got: $out"; return 1; }
+}
+
+# =============================================================================
+# (p) regression (sed arm left behind (m)'s fix) -- the sed `-i` arm still
+# extracted only the LAST operand (awk '{print $NF}'), unlike the tee/rm/
+# truncate arm (m) which was already fixed to extract every non-option
+# operand. `sed -i SCRIPT file1 file2` edits EVERY file operand in place, so
+# placing the ledger as a NON-final operand bypassed detection entirely.
+# =============================================================================
+test_wg_p1_sed_i_multitarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "sed -i 's/a/b/' \"$ledger\" /tmp/other" "WG-P1(sed -i multi-target)"
+}
+
+test_wg_p2_sed_i_multitarget_nonledger_control_allows() {
+    local out
+    out=$(printf '%s' "$(hg_bash_json "sed -i 's/a/b/' /tmp/other.txt")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-P2: non-ledger sed -i should pass. Got: $out"; return 1; }
+}
+
+test_wg_p3_sed_i_singletarget_denied() {
+    local ledger; ledger=$(wg_ledger_path)
+    wg_assert_deny "sed -i 's/a/b/' \"$ledger\"" "WG-P3(sed -i single/last-target, pre-existing case)"
+}
+
+# =============================================================================
+# (q) regression (defect: $HOME/~ ledger-path bypass) -- _wg_absolutize
+# substituted only $OMT_DIR/$OMT_SESSION_ID, never $HOME or a leading '~',
+# even though the resolved OMT_DIR is ALWAYS $HOME/.omt/<proj> -- so a
+# home-relative spelling of the ledger composes the SAME file but never
+# EXACT-matched, silently ALLOWING it (bypass). wg_home_ledger_invoke
+# sandboxes HOME under a fresh mktemp -d and places OMT_DIR at
+# $HOME/.omt/proj so the $HOME-spelled and $OMT_DIR-spelled paths resolve to
+# one identical file; cleans up its own tmphome after each invocation.
+# =============================================================================
+
+wg_home_ledger_invoke() {
+    # $1 = raw Bash command string (containing literal $HOME / ~ tokens,
+    # single-quoted at the call site so this function receives them
+    # unexpanded, matching the literal-command-text shape the guard inspects)
+    local cmd="$1"
+    local tmphome od out
+    tmphome=$(mktemp -d)
+    od="$tmphome/.omt/proj"
+    mkdir -p "$od"
+
+    out=$(
+        export HOME="$tmphome"
+        export OMT_SESSION_ID="cx"
+        export OMT_DIR="$od"
+        jq -n --arg cmd "$cmd" --arg cwd "$od" \
+            '{tool_name: "Bash", tool_input: {command: $cmd}, session_id: "cx", cwd: $cwd}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    )
+    rm -rf "$tmphome"
+    printf '%s' "$out"
+}
+
+test_wg_q1_home_dquoted_var_ledger_denied() {
+    local out
+    out=$(wg_home_ledger_invoke 'rm "$HOME/.omt/proj/session-ledger-cx.md"')
+    hg_is_deny "$out" || { echo "ASSERTION FAILED WG-Q1(\$HOME dquoted ledger): expected deny. Got: $out"; return 1; }
+}
+
+test_wg_q2_home_tilde_ledger_denied() {
+    local out
+    out=$(wg_home_ledger_invoke 'rm ~/.omt/proj/session-ledger-cx.md')
+    hg_is_deny "$out" || { echo "ASSERTION FAILED WG-Q2(~ ledger): expected deny. Got: $out"; return 1; }
+}
+
+test_wg_q3_home_dquoted_var_nonledger_allows() {
+    local out
+    out=$(wg_home_ledger_invoke 'rm "$HOME/.omt/proj/other-file.md"')
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-Q3(\$HOME dquoted non-ledger): expected allow. Got: $out"; return 1; }
+}
+
+test_wg_q4_home_toplevel_nonledger_allows() {
+    local out
+    out=$(wg_home_ledger_invoke 'rm "$HOME/notes.md"')
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-Q4(\$HOME top-level non-ledger): expected allow. Got: $out"; return 1; }
+}
+
+# =============================================================================
+# (r) regression (fail-open under set -u when HOME is unset) -- _wg_absolutize
+# used BARE $HOME (four occurrences) to expand the $HOME/~ forms added in
+# section (q) above. Under this script's `set -euo pipefail` (nounset), a
+# bare reference to an unset HOME aborts the whole hook with "unbound
+# variable" BEFORE any deny JSON is emitted -- fail-OPEN, worse than a
+# silent allow. Must use ${HOME:-} (matching the Codex twin's
+# _cwg_absolutize) so an unset HOME degrades to empty: the $HOME token drops
+# out of that substitution, but the ORIGINAL $OMT_DIR-spelled candidate
+# (untouched by the HOME substitution) still EXACT-matches the ledger and
+# denies normally -- no abort, no fail-open.
+# =============================================================================
+
+test_wg_r1_unset_home_no_fail_open_denied() {
+    local exit_code=0
+    local out
+    local ledger; ledger=$(wg_ledger_path)
+
+    out=$(
+        unset HOME
+        jq -n --arg cmd "rm \"$ledger\"" '{tool_name: "Bash", tool_input: {command: $cmd}}' \
+            | bash "$SCRIPT_DIR/pre-tool-enforcer.sh"
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED WG-R1: hook must exit 0 even when HOME is unset (no fail-open abort). exit=$exit_code output=$out"; return 1; }
+
+    hg_is_deny "$out" \
+        || { echo "ASSERTION FAILED WG-R1: \$OMT_DIR-spelled ledger delete must still DENY when HOME is unset. Got: $out"; return 1; }
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1031,6 +1359,9 @@ main() {
     run_test test_seed_di_no_session_id_field
     run_test test_seed_goal_creates_skeleton
     run_test test_seed_goal_is_idempotent
+    run_test test_seed_ultragoal_creates_skeleton
+    run_test test_seed_ultragoal_is_idempotent
+    run_test test_seed_ultragoal_does_not_seed_goal_state
     run_test test_b1_absent_session_id_skips_and_warns
     run_test test_b3_unsafe_session_id_skips_and_warns
     run_test test_fail_loud_write_failure_warns_not_silent
@@ -1072,6 +1403,26 @@ main() {
     run_test test_wg_j8_truncate_cmd_singlequoted_denied
     run_test test_wg_j9_sed_i_singlequoted_denied
     run_test test_wg_k_pipe_and_gt_inside_quotes_passes
+    run_test test_wg_l1_env_var_dquoted_denied
+    run_test test_wg_l2_env_var_unquoted_denied
+    run_test test_wg_l3_env_var_braced_denied
+    run_test test_wg_m1_rm_multitarget_denied
+    run_test test_wg_m2_rm_flag_multitarget_denied
+    run_test test_wg_m3_truncate_multitarget_denied
+    run_test test_wg_m4_tee_multitarget_denied
+    run_test test_wg_m5_rm_multitarget_nonledger_control_allows
+    run_test test_wg_n1_per_segment_dquoted_ledger_denied
+    run_test test_wg_n2_per_segment_dquoted_nonledger_control_allows
+    run_test test_wg_o1_env_absent_stdin_fallback_rm_denied
+    run_test test_wg_o2_unsafe_stdin_sid_does_not_arm_guard
+    run_test test_wg_p1_sed_i_multitarget_denied
+    run_test test_wg_p2_sed_i_multitarget_nonledger_control_allows
+    run_test test_wg_p3_sed_i_singletarget_denied
+    run_test test_wg_q1_home_dquoted_var_ledger_denied
+    run_test test_wg_q2_home_tilde_ledger_denied
+    run_test test_wg_q3_home_dquoted_var_nonledger_allows
+    run_test test_wg_q4_home_toplevel_nonledger_allows
+    run_test test_wg_r1_unset_home_no_fail_open_denied
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
