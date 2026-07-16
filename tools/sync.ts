@@ -1359,6 +1359,69 @@ export async function rewritePlatformPaths(
 	}
 }
 
+// ---------------------------------------------------------------------------
+// formatDeployedRoots
+// ---------------------------------------------------------------------------
+
+/**
+ * Runs a declared post-deploy format command (SyncYaml `format:`) against the
+ * OMT-managed roots under `deployRoot` — the platform dirs OMT actually wrote
+ * (`.claude`/`.gemini`/`.codex`/`.opencode`), the per-name Codex skill dirs
+ * OMT owns this run, and the docs leaf paths the caller deployed. Deliberately
+ * dry-run-agnostic and not wired into the deploy loop — the caller decides
+ * whether/when to invoke this (a later change wires this into processYaml's
+ * deploy loop, gated on dry-run); this function always runs when given a
+ * non-empty command and a non-empty root set.
+ *
+ * Ownership boundaries mirror rewritePlatformPaths: `.agents/skills` is never
+ * passed whole, only per-name entries in `codexSkillNames`, so a foreign
+ * resident skill directory is never handed to an external formatter.
+ *
+ * The spawn is wrapped in try/catch because, unlike the vendoring spawn above
+ * (`bun`, always present), `formatCmd` is an arbitrary user-declared command —
+ * a missing binary throws synchronously from Bun.spawn (ENOENT), not via a
+ * rejected promise or non-zero exit. The catch normalizes both a synchronous
+ * ENOENT throw and a non-zero exit into a re-thrown plain Error, so the
+ * caller's best-effort handling (a fatal-sync-error subclass check) does not
+ * mistake this for a fatal sync error.
+ */
+export async function formatDeployedRoots(
+	deployRoot: string,
+	formatCmd: string,
+	docsDests: string[],
+	codexSkillNames: ReadonlySet<string>,
+): Promise<void> {
+	const argv = formatCmd.split(/\s+/).filter(Boolean);
+	if (argv.length === 0) return;
+
+	const managedRoots: string[] = [];
+	for (const platform of ["claude", "gemini", "codex", "opencode"] as const) {
+		const platformDir = path.join(deployRoot, `.${platform}`);
+		if (existsSync(platformDir)) managedRoots.push(platformDir);
+	}
+	for (const name of codexSkillNames) {
+		const skillDir = path.join(codexSkillsDir(deployRoot), name);
+		if (existsSync(skillDir)) managedRoots.push(skillDir);
+	}
+	managedRoots.push(...docsDests);
+
+	if (managedRoots.length === 0) return;
+
+	try {
+		const proc = Bun.spawn([...argv, ...managedRoots], {
+			cwd: deployRoot,
+			stdout: "inherit",
+			stderr: "inherit",
+		});
+		await proc.exited;
+		if (proc.exitCode !== 0) {
+			throw new Error(`format command '${formatCmd}' failed (exit ${proc.exitCode})`);
+		}
+	} catch (err) {
+		throw new Error(`format command '${formatCmd}' failed: ${err instanceof Error ? err.message : String(err)}`);
+	}
+}
+
 /**
  * Apply `rules` (plus an optional per-file `extraTransform`, e.g. the
  * ${CLAUDE_SKILL_DIR} bake) to every rewrite-candidate file under `dir`,
