@@ -8,15 +8,22 @@
  * with `{"incomplete": <N>}`. Always writes, including N=0 — that zero-write
  * is the release valve that unblocks the reader once a plan finishes.
  *
- * `hook stop` (reader, G6-1 / G6-3): reads that same file. Blocks
- * (`{"decision":"block","reason":...}`) iff incomplete > 0. Fails open
- * (prints nothing, exits 0) for every other case — file absent, unreadable,
- * malformed, non-number, NaN, negative, zero, or an unsafe session_id.
+ * `hook stop` (reader, G6-1 / G6-3): reads that same file to derive
+ * `incompleteTodoCount` (absent/unreadable/malformed → 0, never an early
+ * return) and hands it, plus `last_assistant_message`, to the shared
+ * `makeDecision` core (`@lib/persistent-mode-core/decision`) — the same
+ * continuation contract hooks/persistent-mode/ (Claude) uses. That core
+ * decides block vs. allow-stop: an `<awaiting-user/>` or deep-interview
+ * done-token takes priority over a pending todo count; otherwise it blocks
+ * (`{"decision":"block","reason":...}`) iff incomplete > 0. Codex's
+ * allow-stop contract is silence (exit 0, no stdout) — this hook only ever
+ * prints on an explicit block, never `{"continue":true}`. An unsafe
+ * session_id fails open with nothing printed.
  *
- * Deliberately independent of hooks/persistent-mode/ (Claude-only) and of
- * lib/state-core.ts's STATE_PREFIX registry — this mirror is a per-session
- * derived cache, not a resumable skill mode. See
- * $OMT_DIR-relative design doc: oracle-todo8-spec.md for the full rationale.
+ * Deliberately independent of lib/state-core.ts's STATE_PREFIX registry —
+ * this mirror is a per-session derived cache, not a resumable skill mode.
+ * See $OMT_DIR-relative design doc: oracle-todo8-spec.md for the full
+ * rationale on the mirror file itself.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -25,6 +32,7 @@ import { join } from "node:path";
 
 import { isSafeSessionId } from "@lib/state-core";
 import { resolveOmtDir } from "@lib/omt-dir";
+import { makeDecision, DecisionContext } from "@lib/persistent-mode-core/decision";
 
 const command = process.argv[2];
 const subcommand = process.argv[3];
@@ -64,20 +72,46 @@ function runPostToolUse(input: Record<string, unknown>): void {
 function runStop(input: Record<string, unknown>): void {
 	const sessionId = input["session_id"];
 	if (typeof sessionId !== "string" || !isSafeSessionId(sessionId)) return;
-	const omtDir = resolveOmtDir(cwdOf(input));
-	// Any throw here (ENOENT, permission, malformed JSON) is caught by the outer
-	// try/catch in runHookCli, which fails open — nothing printed, exit 0.
-	const raw = readFileSync(mirrorPath(omtDir, sessionId), "utf8");
-	const parsed: unknown = JSON.parse(raw);
-	if (!isRecord(parsed)) return;
-	const incomplete = parsed["incomplete"];
-	if (typeof incomplete !== "number" || !Number.isFinite(incomplete) || incomplete <= 0) return;
-	// lazy: no MAX_BLOCK_COUNT stuck-agent escape hatch (compare
-	// hooks/persistent-mode/decision.ts:322-334). Add a per-sid block-counter
-	// valve here if a Codex session is observed wedging on a stuck plan.
-	process.stdout.write(
-		JSON.stringify({ decision: "block", reason: `${incomplete} incomplete plan step(s) remaining` }),
-	);
+	const cwd = cwdOf(input);
+	// Align process.env.OMT_DIR with this hook's cwd-derived resolution so
+	// makeDecision's internal getOmtDir() (which falls back to process.cwd()
+	// when OMT_DIR is unset) reads/writes the same directory as the mirror
+	// file below, rather than a directory derived from the hook process's own cwd.
+	process.env.OMT_DIR = resolveOmtDir(cwd);
+	const omtDir = process.env.OMT_DIR;
+
+	// Mirror read: absent/unreadable/malformed all collapse to 0 (no early
+	// return) so makeDecision is always reached — awaiting-user and
+	// deep-interview done-tokens must be checked regardless of todo state.
+	let incompleteTodoCount = 0;
+	try {
+		const raw = readFileSync(mirrorPath(omtDir, sessionId), "utf8");
+		const parsed: unknown = JSON.parse(raw);
+		if (isRecord(parsed)) {
+			const n = parsed["incomplete"];
+			if (typeof n === "number" && Number.isFinite(n) && n > 0) incompleteTodoCount = n;
+		}
+	} catch {
+		// absent/unreadable/malformed mirror file → 0
+	}
+
+	const lam = input["last_assistant_message"];
+	const context: DecisionContext = {
+		sessionId,
+		lastAssistantMessage: typeof lam === "string" ? lam : null,
+		projectRoot: cwd,
+		incompleteTodoCount,
+		activeSubagentCount: 0,
+	};
+
+	const output = makeDecision(context);
+
+	// Option A: Codex's existing allow-stop contract is silence (exit 0, no
+	// stdout) — preserve that. Only print on an explicit block; continue is
+	// left silent rather than emitting {continue:true}.
+	if (output.decision === "block") {
+		process.stdout.write(JSON.stringify(output));
+	}
 }
 
 /** Counts `plan` entries whose `status !== "completed"`. Never throws. */

@@ -38,12 +38,16 @@ function postToolUsePayload(sessionId: string, cwd: string, toolName: string, to
 	};
 }
 
-function stopPayload(sessionId: string, cwd: string) {
-	return {
+function stopPayload(sessionId: string, cwd: string, lastAssistantMessage?: string) {
+	const payload: Record<string, unknown> = {
 		session_id: sessionId,
 		cwd,
 		hook_event_name: "Stop",
 	};
+	if (lastAssistantMessage !== undefined) {
+		payload["last_assistant_message"] = lastAssistantMessage;
+	}
+	return payload;
 }
 
 async function runCli(
@@ -199,6 +203,96 @@ describe("codex-persistent-mode cli", () => {
 				expect(stdout).toBe("");
 			});
 		}
+	});
+
+	describe("hook stop: shared continuation contract (makeDecision integration)", () => {
+		test("awaiting-user token allows stop even with incomplete=2 (priority over baseline-todo)", async () => {
+			const sid = "sid-awaiting-with-incomplete";
+			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
+			const { exitCode, stdout } = await runCli(
+				"stop",
+				stopPayload(sid, projectDir, "wrapping up for now <awaiting-user/>"),
+				omtDir,
+			);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+		});
+
+		test("awaiting-user token allows stop with incomplete=0", async () => {
+			const sid = "sid-awaiting-no-incomplete";
+			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 0 }));
+			const { exitCode, stdout } = await runCli(
+				"stop",
+				stopPayload(sid, projectDir, "<awaiting-user/>"),
+				omtDir,
+			);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+		});
+
+		test("active deep-interview state blocks stop when no done-token", async () => {
+			const sid = "sid-deep-interview-active-blocks";
+			writeFileSync(
+				join(omtDir, `deep-interview-active-state-${sid}.json`),
+				JSON.stringify({
+					active: true,
+					sessionId: sid,
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
+					state: { phase: "in_progress" },
+				}),
+			);
+			const { exitCode, stdout } = await runCli(
+				"stop",
+				stopPayload(sid, projectDir, "still interviewing, no token yet"),
+				omtDir,
+			);
+			expect(exitCode).toBe(0);
+			const parsed = JSON.parse(stdout);
+			expect(parsed.decision).toBe("block");
+			expect(parsed.reason).toContain("<deep-interview-continuation>");
+		});
+
+		test("deep-interview done-token clears active state and allows stop", async () => {
+			const sid = "sid-deep-interview-done";
+			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
+			writeFileSync(
+				statePath,
+				JSON.stringify({
+					active: true,
+					sessionId: sid,
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
+					state: { phase: "in_progress" },
+				}),
+			);
+			const { exitCode, stdout } = await runCli(
+				"stop",
+				stopPayload(sid, projectDir, "interview complete <deep-interview-done/>"),
+				omtDir,
+			);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+			expect(existsSync(statePath)).toBe(false);
+		});
+
+		test("last_assistant_message absent + incomplete=2 blocks (fail-open defers to incomplete count)", async () => {
+			const sid = "sid-no-lam-blocks";
+			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
+			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			expect(exitCode).toBe(0);
+			const parsed = JSON.parse(stdout);
+			expect(parsed.decision).toBe("block");
+			expect(parsed.reason).toContain("2");
+		});
+
+		test("last_assistant_message absent + incomplete=0 allows stop", async () => {
+			const sid = "sid-no-lam-allows";
+			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 0 }));
+			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+		});
 	});
 
 	describe("path-traversal guard", () => {
