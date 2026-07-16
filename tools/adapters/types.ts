@@ -93,6 +93,8 @@ export interface PlatformAdapter {
 
 	/**
 	 * Optional: prepare a category target directory before sync (e.g., backup).
+	 * `backupDest` is the absolute per-deploy backup destination directory
+	 * (not a session id).
 	 */
-	prepareCategory?(targetPath: string, category: string, backupSession: string): Promise<void>;
+	prepareCategory?(targetPath: string, category: string, backupDest: string): Promise<void>;
 }

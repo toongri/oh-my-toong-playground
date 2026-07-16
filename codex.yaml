@@ -35,10 +35,16 @@ hooks:
     - component: rules-injector
       type: command
       command: "bun run .codex/hooks/rules-injector/cli.ts hook session-start"
+    - component: codex-ledger.sh
+      type: command
   UserPromptSubmit:
     - component: rules-injector
       type: command
       command: "bun run .codex/hooks/rules-injector/cli.ts hook user-prompt-submit"
+  PreToolUse:
+    - component: codex-write-guard.sh
+      type: command
+      matcher: "Bash|bash|apply_patch|exec_command|shell_command|Edit|Write|edit|write|multiedit|multi_edit"
   PostToolUse:
     - component: rules-injector
       type: command

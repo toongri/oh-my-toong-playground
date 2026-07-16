@@ -164,14 +164,11 @@ Edges: (controller→UserService.getUser, passes enrich flag; UserService.getUse
 ### Verification Commands
 
 \`\`\`bash
-# Build
-{build-command}  # Expected: exit 0
-
-# Tests
-{test-command}  # Expected: all pass
-
-# Lint
-{lint-command}  # Expected: no errors
+# Verify the CHANGE, not the whole project — scope each command to what changed
+# (the project's change-affected / changed-files command), not a whole-suite run.
+{test-command}  # the project's change-scoped test command
+{lint-command}  # scoped to the changed files where the tooling supports it
+{build-command}  # only when the change can break the build
 \`\`\`
 
 ### Final Checklist
@@ -180,5 +177,5 @@ Edges: (controller→UserService.getUser, passes enrich flag; UserService.getUse
 - [ ] All QA scenarios pass
 - [ ] Evidence artifacts saved to `$OMT_DIR/evidence/{plan-name}/`
 - [ ] No scope creep detected
-- [ ] Build + lint + tests green
+- [ ] Change-scoped build + lint + tests green
 ```

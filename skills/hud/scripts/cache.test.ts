@@ -1,5 +1,5 @@
 import { jest, describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { initCache, getCached, setCache } from "./cache.ts";
@@ -174,5 +174,20 @@ describe("atomic write", () => {
 		const raw = readFileSync(cachePath, "utf8");
 		const parsed = JSON.parse(raw);
 		expect(Object.keys(parsed)).toHaveLength(20);
+	});
+
+	it("frozen clock (fake timers) writes stay collision-free and leave no temp", () => {
+		// Fake timers freeze Date.now(), the condition that made a Date.now()-keyed
+		// temp path collide across writes. Each write must still land uniquely and
+		// clean up its temp; the store stays valid and only the cache file remains.
+		jest.useFakeTimers();
+		for (let i = 0; i < 20; i++) {
+			setCache(`frozen-${i}`, `v-${i}`, 60000);
+		}
+		for (let i = 0; i < 20; i++) {
+			expect(getCached<string>(`frozen-${i}`)).toBe(`v-${i}`);
+		}
+		const leftovers = readdirSync(tempDir).filter((f) => f.endsWith(".tmp"));
+		expect(leftovers).toHaveLength(0);
 	});
 });

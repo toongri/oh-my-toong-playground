@@ -1,7 +1,3 @@
----
-paths: ["**/*.ts", "**/*.tsx"]
----
-
 # TypeScript 판단 규칙
 
 - **불가능한 상태를 표현 불가능하게**: optional 자루(`{ status; data?; error? }`) 대신 discriminated union(`{ status: 'ok'; data } | { status: 'err'; error }`). 이런 union을 `switch`할 땐 `default`에서 `never`로 빠짐 없이.

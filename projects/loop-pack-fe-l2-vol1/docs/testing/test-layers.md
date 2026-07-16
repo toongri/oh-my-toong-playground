@@ -38,6 +38,8 @@ Dodds는 이 중 **integration에 가장 많이 투자하라**고 권한다(http
 
 구현 세부를 assert하면 이 둘을 동시에 유발한다 — "무엇이 일어났는가"가 아니라 "어떻게 일어났는가"에 결합되기 때문이다. 사용자가 관찰할 수 있는 결과(동작)만 assert하면 리팩터에도 안 깨지고(false negative 회피), 배선이 끊기면 확실히 빨개진다(false positive 회피).
 
+> 아래 예제는 간결성을 위해 import를 생략한다 — `globals: false`라 실제 파일 맨 위엔 `import { test, expect, vi } from "vitest"`와 `@testing-library/react`·`user-event` import가 필요하다.
+
 ```tsx
 // ❌ 구현 세부에 결합 — 내부 호출 여부만 확인, 리팩터하면 빨갛게
 test("담기를 누르면 addItem이 호출된다", async () => {
@@ -58,6 +60,52 @@ test("담기를 누르면 장바구니 개수가 올라간다", async () => {
 ```
 
 무엇을 테스트하고 어떤 쿼리·모킹 관용구를 쓸지는 conventions.md의 안티패턴 표를 참조한다 — 이 문서는 그 관용구가 "왜 필요한가"의 근거만 다룬다.
+
+## 관찰 가능한 결과가 없을 때
+
+위 원칙은 **사용자가 관찰할 수 있는 결과가 존재할 때** 성립한다. 애널리틱스·모니터링처럼 서드파티로 단방향 전송만 하는 호출은 화면에 아무 결과도 남기지 않는다 — assert할 DOM이 없다.
+
+MSW 공식 문서는 요청 자체를 assert하는 데 기본적으로 반대한다(https://mswjs.io/docs/best-practices/avoid-request-assertions):
+
+> "We highly discourage against such assertions as they represent implementation detail testing... Treat this as the default recommendation when testing with MSW."
+
+그런데 같은 문서가 스스로 이 상황을 짚어 별도로 허용한다:
+
+> "there are scenarios when a performed request has no indication in the application that can be asserted. These are usually one-way requests against third-party services, like analytics or monitoring. For those cases, please use the Life-cycle events API to provide direct assertions on requests/responses."
+
+이 허용이 힘을 갖는 이유는 출처에 있다. MSW는 이 문서 세트가 네트워크 모킹 기본값으로 쓰는 도구이자, 요청 assert에 반대하는 목소리 중 가장 크다. 가장 엄격한 출처가 스스로 이 조건을 지정했다면, 이건 스파이를 쓰고 싶은 사람이 밀수한 게 아니라 규칙의 저자가 직접 허가한 것이다. (MSW는 이런 경우를 위해 Life-cycle events API로 요청·응답에 직접 assert를 붙이는 길을 열어둔다 — 이 문서는 레이어 투자 판단 문서이므로 API 사용법은 다루지 않는다.)
+
+이론적 근거는 GOOS(Freeman & Pryce, *Growing Object-Oriented Software, Guided by Tests*, 2009)의 "Allow Queries; Expect Commands"다. 반환값이 없고 부작용만 있는 command는 무엇을 반환했는지가 아니라 무엇을 호출했는지 자체가 검증 대상이 된다 — query처럼 assert할 반환값이 없기 때문이다. 이 매핑의 원출처는 GOOS다. Fowler의 mocksArentStubs 글에는 이 매핑이 없다 — query/command 구분과 mock/stub 구분을 같은 글의 것으로 오귀속하는 경우가 흔하니 짚어둔다.
+
+이 조건에는 가드 두 개가 따라붙는다. 없으면 조건이 규칙 전체를 집어삼킨다.
+
+**(i) 트리거는 여전히 실제 사용자 상호작용이어야 한다.** 이 조건이 허용하는 건 *어디서 관측하는가*(스파이로도 된다)이지 *어떻게 촉발하는가*가 아니다. 버튼을 클릭한 다음 스파이를 assert하는 것과, 훅이 반환한 함수를 직접 불러서 같은 스파이를 assert하는 것은 다르다. 후자는 "이 함수를 부르면 이 함수가 그걸 부르는가"라는 동어반복이고, 그 함수가 실제 버튼에 연결돼 있지 않아도 초록으로 통과한다 — 위 표가 정의한 바로 그 false positive다. 훅을 격리해서 테스트할지 컴포넌트를 통해 테스트할지의 판단 기준은 [hooks.md](./hooks.md)에서 다룬다.
+
+**(ii) 인자까지 assert한다.** `toHaveBeenCalled()`(호출 여부)가 아니라 `toHaveBeenCalledWith(...)`(command와 그 인자)를 쓴다. GOOS의 "Expect Commands"는 command 자체가 아니라 command와 그 인자에 대한 것이다. 위 ❌ 예시가 맨 `toHaveBeenCalled()`를 쓴다는 데 주목한다 — 이 조건이 요구하는 최소 기준은 그 ❌보다 한 단계 높다.
+
+```tsx
+// ❌ 트리거가 실제 상호작용이 아니다 — 훅을 격리 렌더하고 반환된 함수를 직접 호출, 화면 assert가 0개
+test("장바구니 담기를 호출하면 트래킹된다", () => {
+  const trackEvent = vi.fn();
+  const { result } = renderHook(() => useAddToCart({ trackEvent }));
+  result.current.addToCart("item-1"); // 버튼이 이 훅에 연결돼 있는지는 아무것도 확인 안 함
+  expect(trackEvent).toHaveBeenCalled();
+});
+
+// ✅ 실제 상호작용으로 촉발 → 관찰 가능한 결과를 먼저 assert → 스파이 assert는 추가분
+test("담기를 누르면 장바구니가 갱신되고 트래킹된다", async () => {
+  const trackEvent = vi.fn();
+  const user = userEvent.setup();
+  render(<Cart onTrack={trackEvent} />);
+  await user.click(screen.getByRole("button", { name: "담기" }));
+  expect(await screen.findByText("장바구니 1개")).toBeInTheDocument(); // 관찰 가능한 결과
+  expect(trackEvent).toHaveBeenCalledWith("add_to_cart", { itemId: "item-1" }); // 대체가 아니라 추가
+});
+```
+
+> **주의**: 애널리틱스 검증에 벤더 공식 처방은 없다. Amplitude 공식 가이드(https://amplitude.com/docs/get-started/track-your-progress)가 처방하는 건 자동화 테스트가 아니라 수동 QA다 — User Activity 피드에 이벤트가 뜨는지 눈으로 확인하라는 것뿐이다. Segment Typewriter가 유일하게 벤더가 공식 제공한 자동화 메커니즘이었으나, 공식 문서가 "not actively maintained"라고 명시한다. 따라서 이 절의 입장(스파이 assert + 두 가드)은 이 문서 세트의 추론이지, 벤더가 위임한 정석이 아니다.
+
+스파이를 위한 모킹 배선을 셋업에 얼마나 투자할지는 [setup-and-coupling.md](./setup-and-coupling.md)를 참조한다.
 
 ## 서버 컴포넌트와 무게중심 이동
 

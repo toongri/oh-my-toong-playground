@@ -200,7 +200,7 @@ flowchart TB
 
 ## 7. Delegation Agent Roster
 
-If skills are the *methodologies*, agents are the *delegation targets*. sisyphus and prometheus pick from the agents below by task type and have them work in isolated subagent contexts. There are currently 11 agents. (A verify task needing a PASS/FAIL verdict is not a delegation target — sisyphus handles it inline itself.)
+If skills are the *methodologies*, agents are the *delegation targets*. sisyphus and prometheus pick from the agents below by task type and have them work in isolated subagent contexts. There are currently 14 agents. (A verify task needing a PASS/FAIL verdict is not a delegation target — sisyphus handles it inline itself.)
 
 | Agent | Role | When used |
 |-------|------|-----------|
@@ -208,13 +208,16 @@ If skills are the *methodologies*, agents are the *delegation targets*. sisyphus
 | oracle | Returns root cause + prioritized recommendations with file:line citations. Never modifies files | When architecture analysis or debugging diagnosis is needed |
 | explore | Codebase searcher returning structured results with absolute paths | When finding files, patterns, or implementations (not external docs) |
 | librarian | External documentation researcher with mandatory source URLs | When researching external APIs, libraries, or open-source implementations |
-| metis | Plan reviewer that catches missing questions, undefined guardrails, unvalidated assumptions, and scope risks | When checking plans/specs/requirements before implementation (consulted by prometheus) |
+| metis | Plan reviewer that catches missing questions, undefined guardrails, unvalidated assumptions, and scope risks. Blocking (REQUEST_CHANGES) fires only on a finite four-axis whitelist (requirements traceability, scope boundary, AC unverifiability, unvalidated load-bearing assumption); everything else is demoted to COMMENT (advisory), and a same-item deadlock is capped after 3 rounds by prometheus recording it as carried-forward and proceeding | When checking plans/specs/requirements before implementation (consulted by prometheus) |
 | momus | Returns simulation-based work-plan critique with certainty-classified findings and a verdict | When critiquing a work plan before execution |
 | daedalus | Reviews designs with steelman antithesis and tradeoff tension analysis | When weighing the soundness of a plan/design |
 | mnemosyne | Git specialist performing atomic commits in an isolated context | When preventing commits from polluting the conversation context |
 | chunk-reviewer | Reviews a completed major step against the original plan and coding standards | When wrapping up a large step and running a review round |
 | tech-claim-examiner | CTO-perspective examiner evaluating resume technical claims with a 5-axis framework | When verifying technical claims on a resume |
 | spec-reviewer | deep-interview-dispatched advisory that reviews a draft spec for gaps, contradictions, and underspecified ACs before handoff to prometheus | Dispatched by deep-interview during Phase 4 spec crystallization to validate the draft spec before handoff (not a sisyphus/prometheus delegation target) |
+| code-reviewer | Orchestrator that runs the full code-review skill in an isolated context — intent acquisition → evidence verification → chunk-reviewer dispatch → per-candidate verifier fan-out → findings synthesis | When a pure code review needs to run in an isolated context and return findings only |
+| hermes | Depth-escalation peer to explore/librarian that extracts blocked, authenticated, or bot-protected sources through three tiers — curl_cffi → agent-reach → Chrome stealth | When fetching content from a source that resists plain HTTP (blocked, auth-gated, bot-protected) |
+| issue-reviewer | READ-ONLY checklist reviewer — at craft-issue Stage 6's Checklist Review Gate, checks the issue set being written against the rule files already in the repo, immediately before any write | When craft-issue gates an issue set against the checklist before writing (it never writes itself) |
 
 ---
 

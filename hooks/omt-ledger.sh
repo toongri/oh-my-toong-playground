@@ -15,6 +15,10 @@
 # =============================================================================
 set -euo pipefail
 
+SCRIPT_DIR_OL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=hooks/lib/omt-dir.sh
+source "$SCRIPT_DIR_OL/lib/omt-dir.sh"
+
 usage() {
   echo "usage: omt-ledger.sh append <section> | omt-ledger.sh now" >&2
   exit 1
@@ -45,9 +49,41 @@ case "$SECTION_NAME" in
     ;;
 esac
 
-if [ -z "${OMT_SESSION_ID:-}" ] || [ "$OMT_SESSION_ID" = "default" ]; then
-  echo "omt-ledger: refusing -- OMT_SESSION_ID unset or default" >&2
+# Session-id self-resolution (additive): OMT_SESSION_ID ?? CODEX_THREAD_ID
+# with STRICT EMPTY-ONLY coalescing, mirroring lib/state-core.ts:88-107
+# resolveSessionIdOrThrow's authoritative-env-first semantics so this bash
+# CLI and the TypeScript state CLIs resolve the SAME identity for a given
+# session. Only an UNSET/EMPTY OMT_SESSION_ID falls through to
+# CODEX_THREAD_ID (Codex agent shell); a PRESENT value is authoritative and
+# is never abandoned in favor of CODEX_THREAD_ID, safe or not.
+if [ -n "${OMT_SESSION_ID:-}" ]; then
+  RESOLVED_SESSION_ID="$OMT_SESSION_ID"
+else
+  RESOLVED_SESSION_ID="${CODEX_THREAD_ID:-}"
+fi
+
+if [ -z "$RESOLVED_SESSION_ID" ] || [ "$RESOLVED_SESSION_ID" = "default" ]; then
+  echo "omt-ledger: refusing -- OMT_SESSION_ID/CODEX_THREAD_ID unset or default" >&2
   exit 1
+fi
+
+# NEW refusal path (path-traversal hardening): the resolved sid is
+# interpolated into the session-ledger-<sid>.md filename below, so it must be
+# restricted to a safe charset BEFORE that interpolation happens -- mirrors
+# lib/state-core.ts isSafeSessionId's ^[A-Za-z0-9_-]+$, length 1..200 contract.
+case "$RESOLVED_SESSION_ID" in
+  *[!A-Za-z0-9_-]*)
+    echo "omt-ledger: refusing -- session id contains unsafe characters (must match ^[A-Za-z0-9_-]{1,200}\$)" >&2
+    exit 1
+    ;;
+esac
+if [ "${#RESOLVED_SESSION_ID}" -gt 200 ]; then
+  echo "omt-ledger: refusing -- session id exceeds 200 characters" >&2
+  exit 1
+fi
+
+if [ -z "${OMT_DIR:-}" ]; then
+  OMT_DIR="$(resolve_omt_dir "$PWD")"
 fi
 
 if [ -z "${OMT_DIR:-}" ]; then
@@ -55,7 +91,7 @@ if [ -z "${OMT_DIR:-}" ]; then
   exit 1
 fi
 
-LEDGER_FILE="$OMT_DIR/session-ledger-$OMT_SESSION_ID.md"
+LEDGER_FILE="$OMT_DIR/session-ledger-$RESOLVED_SESSION_ID.md"
 
 # Serialize the read-modify-write critical section below (skeleton bootstrap
 # through the final mv) across concurrent append/now invocations racing on
@@ -125,8 +161,9 @@ TMP_FILE="$(mktemp "${LEDGER_FILE}.XXXXXX")"
 # with a skeleton header with SENTINEL before it ever reaches disk, so it can
 # never re-match H[idx] on a later run. SENTINEL is a fixed literal string
 # ("OMT_ESC::") with no ERE metacharacters and no plausible collision with
-# ledger prose; hooks/session-start.sh's recovery reader strips exactly one
-# SENTINEL back off on read (unescape-on-read) -- the two must stay in sync.
+# ledger prose; hooks/ledger-core.sh's recovery reader (ledger_core_run's
+# unescape_line) strips exactly one SENTINEL back off on read
+# (unescape-on-read) -- the two must stay in sync.
 # Pre-existing on-disk lines are never touched by this (verbatim passthrough).
 awk -v target="$TARGET_HEADER" -v mode="$MODE" '
 function is_skeleton_header(line,    h) {

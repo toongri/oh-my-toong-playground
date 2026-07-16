@@ -191,7 +191,7 @@ export function codexSkillsDir(targetPath: string): string {
  */
 export async function cleanupCodexSkillsFossil(
 	deployRoot: string,
-	backupSession: string,
+	backupDest: string,
 	dryRun: boolean,
 	ownedSkillNames: ReadonlySet<string>,
 ): Promise<void> {
@@ -251,7 +251,7 @@ export async function cleanupCodexSkillsFossil(
 		return; // nothing OMT-owned to remove (fossil holds only foreign residents)
 	}
 
-	await backupCategory(deployRoot, "codex", "skills", backupSession);
+	await backupCategory(deployRoot, "codex", "skills", backupDest);
 
 	for (const name of omtOwned) {
 		await fs.rm(path.join(fossilDir, name), { recursive: true, force: true });

@@ -49,12 +49,13 @@ Per classified intent, ask the questions and emit the planner directives:
 | Rollback | recovery path if step N fails mid-execution; partial-completion cleanup (Risks = failure modes; Rollback = recovery after failure) |
 | Feasibility | executor has access (permissions/credentials), knowledge (domain/codebase), tools (CLI/frameworks/test runners), context (prior decisions/deps) to finish without blocking questions |
 | Success Criteria | measurable outcomes |
-| AC Quality | observable outcome + concrete verification; one state change per AC; no completion-verb red-flags; no batched ACs; MECE-assessable (independently implementable, full scope, no overlap) — see `## AC Quality Detail Rules` |
+| AC Quality | observable outcome + concrete verification; one state change per AC; MECE-assessable (independently implementable, full scope, no overlap); completion-verb red-flags and batched/aggregate ACs are advisory COMMENT unless they independently trip B1 or B3 — see `## AC Quality Detail Rules` and "Blocking Authority" |
 | Edge Cases / Error Handling | unusual-but-plausible scenarios; explicit failure behavior |
 | Decomposition Readiness | MECE-decomposable? Ambiguity ≤ 0.2? |
 | Verifiability | objective pass/fail checks exist |
 
-**Ambiguity Score** — independent clarity check before decomposition: `Ambiguity = 1 − Σ(clarityᵢ × weightᵢ)`. Greenfield weights Goal 40 / Constraint 30 / Success 30; Brownfield adds Context 15 (Goal 35 / Constraint 25 / Success 25 / Context 15). Score each dimension HIGH (single interpretation) / MEDIUM (1-2 minor ambiguities) / LOW (multiple interpretations or unmeasurable). **Threshold ≤ 0.2; if > 0.2 → `REQUEST_CHANGES` naming the deficient dimensions.** Independent of Prometheus's own Clearance score — catches optimistic self-assessment.
+**Ambiguity Score** — independent clarity check before decomposition: `Ambiguity = 1 − Σ(clarityᵢ × weightᵢ)`. Greenfield weights Goal 40 / Constraint 30 / Success 30; Brownfield adds Context 15 (Goal 35 / Constraint 25 / Success 25 / Context 15). Score each dimension HIGH (single interpretation) / MEDIUM (1-2 minor ambiguities) / LOW (multiple interpretations or unmeasurable). **Threshold ≤ 0.2; if > 0.2, record the deficient dimensions as an advisory COMMENT.**
+Ambiguity Score is NOT in the B1-B4 whitelist and never gates the blocking verdict on its own. Independent of Prometheus's own Clearance score — catches optimistic self-assessment.
 
 ## AC Quality Detail Rules
 
@@ -69,7 +70,7 @@ Per classified intent, ask the questions and emit the planner directives:
 ## Guards
 
 - Do NOT accept vague terms without definition, file/function lists as ACs, criteria without concrete verification, or criteria restating action instead of post-state.
-- Do NOT accept Verb red-flags, batched ACs (N>1 state changes), or aggregate-only verification — each element yields an individual pass/fail. See `## AC Quality Detail Rules`.
+- Flag Verb red-flags, batched ACs (N>1 state changes), and aggregate-only verification as advisory COMMENT — they block ONLY when they independently trip B3 (an absent observable end-state) or B1 (a requirement with zero verifiable AC), per "Blocking Authority". See `## AC Quality Detail Rules`.
 - Do NOT leave unknowns unstated; mark `Unknown + Verification Plan`.
 
 **AI-Slop (scope level)** — flag silent deliverable inflation: **scope inflation** (deliverables/ACs tracing to no explicit ask — "while we're at it"; user asked X, plan delivers X+Y+Z with no opt-in) and **documentation bloat** (unrequested README/JSDoc/ADR as a deliverable — docs are not universally virtuous). Trace every deliverable to an explicit ask; an untraceable one is a scope finding.
@@ -79,7 +80,7 @@ Per classified intent, ask the questions and emit the planner directives:
 > **ZERO USER INTERVENTION** (non-negotiable gate): all ACs MUST be agent/system-executable. Any criterion requiring human judgment, visual confirmation, or manual testing is rejected.
 
 - MUST: write ACs as executable commands (command / assertion / observable state) with exact expected output + failure signal; specify the verification tool per deliverable type (`grep` text presence, `make test` behavior, `bun test` units); link each requirement to ≥1 verifiable AC.
-- MUST NOT: "verify it works" / "looks good" / "user confirms" / "manual check" / "user visually confirms"; placeholders without examples; ACs describing action over post-state; Verb red-flags, batched ACs, or aggregate-only verification (see `## AC Quality Detail Rules`).
+- MUST NOT: "verify it works" / "looks good" / "user confirms" / "manual check" / "user visually confirms"; placeholders without examples; ACs describing action over post-state. (Verb red-flags, batched ACs, and aggregate-only verification are advisory COMMENT unless they independently trip B3/B1 — see "Blocking Authority" and `## AC Quality Detail Rules`.)
 
 QA directive template: `- Check / Command-Assertion / Expected Result (deterministic pass) / Failure Signal (deterministic fail)`.
 
@@ -87,12 +88,22 @@ QA directive template: `- Check / Command-Assertion / Expected Result (determini
 
 Emit, in order: **Domain Context** · **Intent Classification** (Type / Confidence / Rationale) · **Missing Questions** · **Undefined Guardrails** · **Scope Risks** · **Unvalidated Assumptions** · **Acceptance Criteria Gaps** (Missing + Poorly-formed; check each AC per `## AC Quality Detail Rules`) · **Edge Cases** · **Recommendations** · **Directives for Prometheus** (MUST / MUST NOT / EVIDENCE anchor per directive) · **QA / AC Directives** (Check / Command-Assertion / Expected / Failure per item) · **Analysis Verdict**.
 
-**Analysis Verdict** = APPROVE / REQUEST_CHANGES / COMMENT + Blocking Items (or None) + Rationale. On REQUEST_CHANGES, add a **Verdict Persistence Notice**: all blocking items must be resolved before re-review. Metis enforces requirement-level AC granularity (one state change per AC, per-element verification); plan-level structural coherence is jointly enforced by Metis (requirements) and Momus (plan).
+**Analysis Verdict** = APPROVE / REQUEST_CHANGES / COMMENT + Blocking Items (or None) + Rationale. On REQUEST_CHANGES, add a **Verdict Persistence Notice**: all blocking items must be resolved before re-review. Metis flags requirement-level AC granularity (one state change per AC, per-element verification) as advisory COMMENT unless it independently trips B1 or B3; plan-level structural coherence is jointly enforced by Metis (requirements) and Momus (plan).
 
 | Verdict | Condition |
 |---------|-----------|
 | APPROVE | all requirements mapped to verifiable ACs, clear scope boundaries, no certain blocking gaps |
-| REQUEST_CHANGES | any unverifiable AC, missing scope boundary, or certain blocking gap (Verifiability is a mandatory gate) |
+| REQUEST_CHANGES | one or more of the finite whitelist **B1-B4** (see "Blocking Authority" below); a finding matching no B-axis → COMMENT, never REQUEST_CHANGES |
 | COMMENT | no blockers, advisory precision improvements remain |
 
-**Failure modes to avoid**: vague findings ("requirements unclear" without specifics); over-analysis (low-impact edge-case lists); scope inflation; missing prioritization; **soft REQUEST_CHANGES** — a RC that either omits the specific blocking items or fires on non-blocking style/preference. AC Granularity / Verb / Per-element violations are [CERTAIN] blockers, not preferences. Every finding specific and actionable, every critical gap with a validation path, every AC objectively testable, verdict matching severity.
+### Blocking Authority — the finite B1-B4 whitelist (metis-local)
+
+REQUEST_CHANGES fires on **one or more** of these four axes and nothing else (report every genuine whitelist gap in one verdict — do not withhold true blockers to later rounds):
+- **B1 (requirements traceability)**: a required requirement has no verifiable AC / is untraceable.
+- **B2 (scope-boundary absence)**: no in/out scope boundary is stated (unbounded scope-inflation surface).
+- **B3 (AC principled-unverifiability)**: an AC whose end-state is not observable — this absorbs the Verb red-flags and the ZERO USER INTERVENTION gate.
+- **B4 (unvalidated + unflagged load-bearing assumption)**: an assumption that determines the outcome, neither validated nor marked `Unknown + Verification Plan`.
+
+A finding outside B1-B4 is COMMENT (advisory), never a blocking REQUEST_CHANGES. **[CERTAIN] reconciliation**: `[CERTAIN]` in the shared `## AC Quality Detail Rules` block marks verifiability **severity**, NOT blocking **authority** — only B1-B4 gate. A batch-pattern or distinct-outcomes finding tagged `[CERTAIN]` → COMMENT, not REQUEST_CHANGES. A Verb red-flag blocks via **B3 only** when it denotes an absent observable end-state; otherwise → COMMENT. The `tools/validators/ac-rules-ssot.ts` guard protects the shared block's **vocabulary** (byte-identity with Momus), NOT its severity/blocking interpretation — byte-identity is not interpretation-identity, and the deliberate metis-advisory / Momus-blocking asymmetry is intended.
+
+**Failure modes to avoid**: vague findings ("requirements unclear" without specifics); over-analysis (low-impact edge-case lists); scope inflation; missing prioritization; **soft REQUEST_CHANGES** — a RC that either omits the specific blocking items or fires on non-blocking style/preference. AC Granularity / Per-element / batch findings carry [CERTAIN] verifiability-severity but block ONLY when they independently trip B3 (absent observable end-state) or B1 (a requirement left with zero verifiable AC); otherwise they are COMMENT (advisory), not blockers — see "Blocking Authority" above. Every finding specific and actionable, every critical gap with a validation path, every AC objectively testable, verdict matching severity.

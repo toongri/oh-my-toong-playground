@@ -61,7 +61,7 @@ Run automated checks BEFORE any code analysis. This is not optional.
 ### Execution Order
 
 1. Run build/compile first
-2. Run full test suite
+2. Run the project's declared test command (its verification contract's scopeable form — not necessarily the entire suite)
 3. Run linter/static analysis
 
 **Any failure -> Immediate `REQUEST_CHANGES`**

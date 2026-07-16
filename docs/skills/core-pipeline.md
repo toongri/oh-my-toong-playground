@@ -200,7 +200,7 @@ flowchart TB
 
 ## 7. 위임 에이전트 명단
 
-스킬이 *방법론*이라면, 에이전트는 *위임 대상*입니다. sisyphus와 prometheus는 작업 유형에 따라 아래 에이전트를 골라 격리된 서브에이전트 컨텍스트에서 일을 시킵니다. 현재 11개 에이전트가 있습니다. (PASS/FAIL 판정이 필요한 검증 태스크는 위임 대상이 아니라 sisyphus가 인라인으로 직접 처리합니다.)
+스킬이 *방법론*이라면, 에이전트는 *위임 대상*입니다. sisyphus와 prometheus는 작업 유형에 따라 아래 에이전트를 골라 격리된 서브에이전트 컨텍스트에서 일을 시킵니다. 현재 14개 에이전트가 있습니다. (PASS/FAIL 판정이 필요한 검증 태스크는 위임 대상이 아니라 sisyphus가 인라인으로 직접 처리합니다.)
 
 | 에이전트 | 역할 | 언제 쓰나 |
 |----------|------|-----------|
@@ -208,13 +208,16 @@ flowchart TB
 | oracle | 근본 원인 + 우선순위 권고를 file:line으로 반환. 파일 미변경 | 아키텍처 분석·디버깅 진단이 필요할 때 |
 | explore | 절대 경로 기반 구조화 결과를 반환하는 코드베이스 검색기 | 파일·패턴·구현을 찾을 때 (외부 문서 제외) |
 | librarian | 출처 URL을 필수로 다는 외부 문서 연구자 | 외부 API·라이브러리·오픈소스 구현을 조사할 때 |
-| metis | 빠진 질문·미정의 가드레일·미검증 가정·범위 리스크를 잡는 계획 검토자 | 구현 전 계획·스펙·요구사항을 점검할 때 (prometheus가 상담) |
+| metis | 빠진 질문·미정의 가드레일·미검증 가정·범위 리스크를 잡는 계획 검토자. 차단(REQUEST_CHANGES)은 유한 4축 화이트리스트(요구사항 추적성·범위 경계·AC 검증불가능성·미검증 load-bearing 가정)에서만 발동하고 나머지는 COMMENT(권고)로 강등하며, 동일 항목이 3라운드 반복되면 prometheus가 carried-forward로 기록하고 진행한다 | 구현 전 계획·스펙·요구사항을 점검할 때 (prometheus가 상담) |
 | momus | 시뮬레이션 기반 작업 계획 비평을, 확신도 분류와 판정으로 반환 | 실행 전 작업 계획을 비평할 때 |
 | daedalus | 스틸맨 반론과 트레이드오프 긴장 분석으로 설계를 검토 | 계획·설계의 건전성을 따져볼 때 |
 | mnemosyne | 격리된 컨텍스트에서 atomic 커밋을 수행하는 Git 전문가 | 커밋으로 대화 컨텍스트가 오염되는 걸 막을 때 |
 | chunk-reviewer | 주요 단계 완료분을 원래 계획·코딩 표준에 비추어 리뷰 | 큰 단계를 마치고 리뷰 라운드를 돌릴 때 |
 | tech-claim-examiner | 5축 프레임워크로 이력서 기술 주장을 평가하는 CTO 관점 심사자 | 이력서의 기술적 주장을 검증할 때 |
 | spec-reviewer | 명세 초안의 갭·모순·미명세 AC를 검토해 prometheus 핸드오프 전 조언을 제공하는 자문 에이전트 | deep-interview가 Phase 4 명세 작성 단계에서 초안 검토를 파견할 때 (sisyphus/prometheus 위임 대상 아님) |
+| code-reviewer | intent 확보 → 증거 검증 → chunk-reviewer 파견 → 후보별 verifier 팬아웃 → findings 종합까지 code-review 스킬 전체를 격리된 컨텍스트에서 실행하는 오케스트레이터 | 순수 코드 리뷰를 격리된 컨텍스트에서 받아 findings만 얻을 때 |
+| hermes | curl_cffi → agent-reach → Chrome stealth 3단계로 깊이-에스컬레이션하며 차단·인증·봇방지 소스를 추출하는, explore/librarian의 깊이 피어 | 일반 HTTP로 막히는 차단·인증·봇방지 소스에서 콘텐츠를 가져와야 할 때 |
+| issue-reviewer | READ-ONLY 체크리스트 리뷰어 — craft-issue Stage 6의 Checklist Review Gate에서 write 직전 이슈 세트를 레포에 이미 있는 규칙 파일과 대조 | craft-issue 파이프라인이 write 전 이슈 세트를 체크리스트 게이트로 심사할 때 (write는 하지 않음) |
 
 ---
 
