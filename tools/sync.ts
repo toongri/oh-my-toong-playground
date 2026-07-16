@@ -1422,7 +1422,7 @@ export async function formatDeployedRoots(
 			throw new Error(`format command '${formatCmd}' failed (exit ${proc.exitCode})`);
 		}
 	} catch (err) {
-		throw new Error(`format command '${formatCmd}' failed: ${err instanceof Error ? err.message : String(err)}`);
+		throw new Error(`format command '${formatCmd}' failed`, { cause: err });
 	}
 }
 
@@ -1738,7 +1738,7 @@ export async function processYaml(
 			// Sync docs — unconditional (not gated on shouldMkdirClaude): docs is
 			// platform-agnostic and lands directly under deployRoot, so a docs-only
 			// project (no CATEGORIES items, no .claude) must still deploy its docs.
-			await syncDocs(context, syncYaml, rootDir, deployRoot);
+			const docsDests = await syncDocs(context, syncYaml, rootDir, deployRoot);
 
 			// Rewrite platform paths for non-claude platforms
 			const nonClaudePlatforms: Platform[] = ["gemini", "codex", "opencode"];
@@ -1764,6 +1764,10 @@ export async function processYaml(
 						await rewritePlatformPaths(deployRoot, platform, codexSkillNames);
 					}
 				}
+			}
+
+			if (syncYaml.format && !context.dryRun) {
+				await formatDeployedRoots(deployRoot, syncYaml.format, docsDests, codexSkillNames);
 			}
 		} catch (err) {
 			// Fatal errors (MCP key-derivation or topology failure) must never be
