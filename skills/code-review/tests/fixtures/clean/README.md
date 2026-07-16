@@ -14,8 +14,10 @@ that returns HTTP 200, **and** adds the matching `health` entry to
 new handler is exported, returns 200, and is reachable through dispatch.
 
 `requirements.txt` is identical to the `omission` fixture's — it names
-only requirements the diff already satisfies (the handler returns 200,
-the handler is exported) and does not mention registration or wiring.
+only wiring-independent, local structural facts about `handlers/health.ts`
+itself (the module is added, it exports a function named `health`, that
+function returns an object literal of the shape `{ status: number; body:
+string }`) and does not mention registration or wiring.
 
 ## Realizing the diff
 

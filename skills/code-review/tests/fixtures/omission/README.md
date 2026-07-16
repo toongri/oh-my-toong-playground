@@ -14,9 +14,11 @@ that returns HTTP 200 — but does NOT add a `health` entry to
 is never dispatched, because `registry.ts` (and `index.ts`, unchanged)
 still only knows about `ping`, `echo`, and `time`.
 
-`requirements.txt` names only requirements the diff already satisfies
-(the handler returns 200, the handler is exported). It does not mention
-registration or wiring — the missing registry entry is meant to be an
+`requirements.txt` names only wiring-independent, local structural facts
+about `handlers/health.ts` itself (the module is added, it exports a
+function named `health`, that function returns an object literal of the
+shape `{ status: number; body: string }`) — all satisfied by the diff. It
+does not mention registration or wiring — the missing registry entry is meant to be an
 *unwritten* gap, discoverable only by generalizing the 3-instance analog
 pattern against the diff, not a requirement the diff fails against text
 that already names it.
