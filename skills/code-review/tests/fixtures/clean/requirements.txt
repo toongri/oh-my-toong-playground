@@ -1,2 +1,3 @@
-The new health handler returns HTTP 200.
-The handler is exported from its module.
+A new handler module handlers/health.ts is added.
+handlers/health.ts exports a function named health.
+The health function returns an object literal of the shape { status: number; body: string }.
