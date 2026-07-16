@@ -812,10 +812,10 @@ export async function syncDocs(
 	syncYaml: SyncYaml,
 	rootDir: string,
 	deployRoot: string,
-): Promise<void> {
+): Promise<string[]> {
 	const section = syncYaml.docs;
 	if (!section || !Array.isArray(section.items) || section.items.length === 0) {
-		return;
+		return [];
 	}
 
 	const items = section.items;
@@ -922,6 +922,7 @@ export async function syncDocs(
 	// removal is already reported via its own dry-run line, so it must not
 	// also surface as advisory drift.
 	const managedTargets = new Set<string>();
+	const writtenLeaves: string[] = [];
 
 	for (const plan of plans) {
 		if (!plan) continue;
@@ -955,6 +956,7 @@ export async function syncDocs(
 				logDry(`docs: would write ${plan.finalTarget}`);
 			} else {
 				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupDest);
+				writtenLeaves.push(plan.finalTarget);
 			}
 			continue;
 		}
@@ -969,10 +971,11 @@ export async function syncDocs(
 			}
 		} else {
 			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupDest);
+			writtenLeaves.push(...plan.files.map((f) => f.dest));
 		}
 	}
 
-	if (!context.dryRun) return;
+	if (!context.dryRun) return writtenLeaves;
 
 	// Advisory unmanaged-file list (AC5.2c): every file already sitting under
 	// the docs base that no item above would write or delete. NOT an error and
@@ -985,6 +988,7 @@ export async function syncDocs(
 			logDry(`docs: advisory (unmanaged): ${existingFile}`);
 		}
 	}
+	return [];
 }
 
 // ---------------------------------------------------------------------------
