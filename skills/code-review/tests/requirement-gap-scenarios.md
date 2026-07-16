@@ -16,12 +16,13 @@ Both fixtures under `skills/code-review/tests/fixtures/{omission,clean}/` ship a
 `requirements.txt`:
 
 ```
-The new health handler returns HTTP 200.
-The handler is exported from its module.
+A new handler module handlers/health.ts is added.
+handlers/health.ts exports a function named health.
+The health function returns an object literal of the shape { status: number; body: string }.
 ```
 
-Neither line names registration or wiring, and both are already satisfied by the diff in
-every scenario below. Consequently, **each fixture's written `requirements.txt` yields zero
+None of the three lines names registration or wiring, and all three are already satisfied by
+the diff in every scenario below. Consequently, **each fixture's written `requirements.txt` yields zero
 `requirement-gap` findings on its own** — no scenario's `requirement-gap` count can come from
 the caller-supplied text itself. Because of this isolation, the **total** `requirement-gap`
 count observed in a dispatch equals the **derivation-origin** count (findings produced by the
