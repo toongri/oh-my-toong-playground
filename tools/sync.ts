@@ -1371,11 +1371,12 @@ export async function rewritePlatformPaths(
  * Runs a declared post-deploy format command (SyncYaml `format:`) against the
  * OMT-managed roots under `deployRoot` — the platform dirs OMT actually wrote
  * (`.claude`/`.gemini`/`.codex`/`.opencode`), the per-name Codex skill dirs
- * OMT owns this run, and the docs leaf paths the caller deployed. Deliberately
- * dry-run-agnostic and not wired into the deploy loop — the caller decides
- * whether/when to invoke this (a later change wires this into processYaml's
- * deploy loop, gated on dry-run); this function always runs when given a
- * non-empty command and a non-empty root set.
+ * OMT owns this run, and the docs leaf paths the caller deployed. Called from
+ * processYaml's per-worktree deploy loop, right after `rewritePlatformPaths`,
+ * when `syncYaml.format` is declared AND the run is non-dry-run. Deliberately
+ * dry-run-agnostic itself — dry-run gating is the caller's responsibility, not
+ * this function's; it always runs when given a non-empty command and a
+ * non-empty root set.
  *
  * Ownership boundaries mirror rewritePlatformPaths: `.agents/skills` is never
  * passed whole, only per-name entries in `codexSkillNames`, so a foreign
@@ -1422,7 +1423,10 @@ export async function formatDeployedRoots(
 			throw new Error(`format command '${formatCmd}' failed (exit ${proc.exitCode})`);
 		}
 	} catch (err) {
-		throw new Error(`format command '${formatCmd}' failed`, { cause: err });
+		throw new Error(
+			`format command '${formatCmd}' failed: ${err instanceof Error ? err.message : String(err)}`,
+			{ cause: err },
+		);
 	}
 }
 
