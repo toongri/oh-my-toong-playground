@@ -128,6 +128,173 @@ describe("makeDecision", () => {
 		});
 	});
 
+	describe("Priority 0.5: awaiting-user pause token", () => {
+		it("CRITICAL: awaiting-user token allows stop even during an active+live deep interview, keeps state, resets block-count", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", answers: {} },
+				}),
+			);
+			await writeFile(join(stateDir, "block-count-test-session"), "3");
+
+			const context = createContext({
+				lastAssistantMessage: "Waiting on you to decide. <awaiting-user/>",
+			});
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+			// AC4: state is KEPT, not cleared — the interview marker still exists
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(true);
+			// Block-count is reset
+			expect(existsSync(join(stateDir, "block-count-test-session"))).toBe(false);
+		});
+
+		it("AC3: awaiting-user allows stop during an active goal pursuit, leaving iteration untouched", async () => {
+			const goalPath = join(omtDir, "goal-state-test-session.json");
+			await writeFile(
+				goalPath,
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					objective_verdict: "",
+					iteration: 2,
+					max_iterations: 10,
+					outcome: "goal objective text",
+				}),
+			);
+
+			const context = createContext({
+				lastAssistantMessage: "Need your input. <awaiting-user/>",
+			});
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+			const { readFileSync } = await import("fs");
+			const after = JSON.parse(readFileSync(goalPath, "utf8"));
+			expect(after.iteration).toBe(2);
+		});
+
+		it("AC3: awaiting-user allows stop during an active ultragoal pursuit, leaving iteration untouched", async () => {
+			const ultragoalPath = join(omtDir, "ultragoal-state-test-session.json");
+			await writeFile(
+				ultragoalPath,
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					objective_verdict: "",
+					iteration: 2,
+					max_iterations: 10,
+					outcome: "ultragoal objective text",
+				}),
+			);
+
+			const context = createContext({
+				lastAssistantMessage: "Need your input. <awaiting-user/>",
+			});
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+			const { readFileSync } = await import("fs");
+			const after = JSON.parse(readFileSync(ultragoalPath, "utf8"));
+			expect(after.iteration).toBe(2);
+		});
+
+		it("AC3: awaiting-user allows stop during an active prometheus session, keeping state", async () => {
+			const fresh = new Date().toISOString();
+			const prometheusPath = join(omtDir, "prometheus-state-test-session.json");
+			await writeFile(
+				prometheusPath,
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+				}),
+			);
+
+			const context = createContext({
+				lastAssistantMessage: "Need your input. <awaiting-user/>",
+			});
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+			const { existsSync } = await import("fs");
+			expect(existsSync(prometheusPath)).toBe(true);
+		});
+
+		it("AC3: awaiting-user allows stop when only incomplete todos are outstanding", () => {
+			const context = createContext({
+				incompleteTodoCount: 5,
+				lastAssistantMessage: "Need your input. <awaiting-user/>",
+			});
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+		});
+
+		it("AC5: awaiting-user allows stop regardless of block-count value (distinct from MAX_BLOCK_COUNT escape)", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", answers: {} },
+				}),
+			);
+			// No block-count file pre-loaded — count is 0, far below MAX_BLOCK_COUNT (5).
+
+			const context = createContext({
+				lastAssistantMessage: "Waiting on you. <awaiting-user/>",
+			});
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+		});
+
+		it("resets the prometheus-namespaced block-count (not just the base counter) on awaiting-user", async () => {
+			const fresh = new Date().toISOString();
+			const prometheusPath = join(omtDir, "prometheus-state-test-session.json");
+			await writeFile(
+				prometheusPath,
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+				}),
+			);
+			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "3");
+
+			const context = createContext({
+				lastAssistantMessage: "pausing. <awaiting-user/>",
+			});
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+			const { existsSync } = await import("fs");
+			expect(existsSync(join(stateDir, "block-count-prometheus-test-session"))).toBe(false);
+		});
+	});
+
 	describe("Priority 1.5: Deep Interview Protection", () => {
 		it("makeDecision blocks with deep-interview-continuation when state active and no token", async () => {
 			const deepInterviewState = {
@@ -293,11 +460,11 @@ describe("makeDecision", () => {
 	describe("Priority 1.5: Prometheus State Protection", () => {
 		it("makeDecision blocks with prometheus-continuation when state active and no token", async () => {
 			const prometheusState = {
-			active: true,
-			sessionId: "test-session",
-			started_at: new Date().toISOString(),
-			last_touched_at: new Date().toISOString(),
-		};
+				active: true,
+				sessionId: "test-session",
+				started_at: new Date().toISOString(),
+				last_touched_at: new Date().toISOString(),
+			};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -313,11 +480,11 @@ describe("makeDecision", () => {
 
 		it("makeDecision cleans up prometheus state when token present in lastAssistantMessage", async () => {
 			const prometheusState = {
-			active: true,
-			sessionId: "test-session",
-			started_at: new Date().toISOString(),
-			last_touched_at: new Date().toISOString(),
-		};
+				active: true,
+				sessionId: "test-session",
+				started_at: new Date().toISOString(),
+				last_touched_at: new Date().toISOString(),
+			};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -334,11 +501,11 @@ describe("makeDecision", () => {
 
 		it("makeDecision allows stop after MAX_BLOCK_COUNT token-less blocks (bounded escape)", async () => {
 			const prometheusState = {
-			active: true,
-			sessionId: "test-session",
-			started_at: new Date().toISOString(),
-			last_touched_at: new Date().toISOString(),
-		};
+				active: true,
+				sessionId: "test-session",
+				started_at: new Date().toISOString(),
+				last_touched_at: new Date().toISOString(),
+			};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -365,11 +532,11 @@ describe("makeDecision", () => {
 			await writeFile(join(stateDir, "block-count-test-session"), "5");
 
 			const prometheusState = {
-			active: true,
-			sessionId: "test-session",
-			started_at: new Date().toISOString(),
-			last_touched_at: new Date().toISOString(),
-		};
+				active: true,
+				sessionId: "test-session",
+				started_at: new Date().toISOString(),
+				last_touched_at: new Date().toISOString(),
+			};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -389,11 +556,11 @@ describe("makeDecision", () => {
 			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "5");
 
 			const prometheusState = {
-			active: true,
-			sessionId: "test-session",
-			started_at: new Date().toISOString(),
-			last_touched_at: new Date().toISOString(),
-		};
+				active: true,
+				sessionId: "test-session",
+				started_at: new Date().toISOString(),
+				last_touched_at: new Date().toISOString(),
+			};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -413,11 +580,11 @@ describe("makeDecision", () => {
 			await writeFile(join(stateDir, "block-count-prometheus-test-session"), "3");
 
 			const prometheusState = {
-			active: true,
-			sessionId: "test-session",
-			started_at: new Date().toISOString(),
-			last_touched_at: new Date().toISOString(),
-		};
+				active: true,
+				sessionId: "test-session",
+				started_at: new Date().toISOString(),
+				last_touched_at: new Date().toISOString(),
+			};
 			await writeFile(
 				join(omtDir, "prometheus-state-test-session.json"),
 				JSON.stringify(prometheusState),
@@ -1428,6 +1595,116 @@ describe("makeDecision", () => {
 			);
 			expect(result.decision).toBe("block");
 			expect(result.reason).toContain("<todo-continuation>");
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// Story 3: the shared continuation-contract skeleton (continuationContract())
+	// must appear in every continuation builder's output, with per-family ask
+	// posture: "preferred" (deep-interview/prometheus/todo) vs "exceptional"
+	// (goal/ultragoal). Mirrors rules/continuation-contract.md (the SSOT).
+	// -------------------------------------------------------------------------
+	describe("continuation message skeleton", () => {
+		const assertSharedSkeleton = (reason: string) => {
+			expect(reason).toContain(".claude/rules/continuation-contract.md");
+			expect(reason).toContain("<awaiting-user/>");
+			expect(reason).toContain("should I continue?");
+			expect(reason).toContain("block-count escape");
+			expect(reason).toContain("AskUserQuestion");
+		};
+
+		it("deep-interview continuation includes the shared skeleton (preferred posture)", async () => {
+			const fresh = new Date().toISOString();
+			await writeFile(
+				join(omtDir, "deep-interview-active-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", answers: {} },
+				}),
+			);
+
+			const context = createContext({ lastAssistantMessage: "some message without done token" });
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			const reason = result.reason!;
+			assertSharedSkeleton(reason);
+			expect(reason).toContain("Prefer this");
+		});
+
+		it("goal continuation includes the shared skeleton (exceptional posture)", async () => {
+			await writeFile(
+				join(omtDir, "goal-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					objective_verdict: "",
+					iteration: 1,
+					max_iterations: 10,
+					outcome: "goal objective text",
+				}),
+			);
+
+			const result = makeDecision(createContext());
+
+			expect(result.decision).toBe("block");
+			const reason = result.reason!;
+			assertSharedSkeleton(reason);
+			expect(reason).toContain("EXCEPTIONAL");
+		});
+
+		it("ultragoal continuation includes the shared skeleton (exceptional posture)", async () => {
+			await writeFile(
+				join(omtDir, "ultragoal-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					objective_verdict: "",
+					iteration: 1,
+					max_iterations: 10,
+					outcome: "ultragoal objective text",
+				}),
+			);
+
+			const result = makeDecision(createContext());
+
+			expect(result.decision).toBe("block");
+			const reason = result.reason!;
+			assertSharedSkeleton(reason);
+			expect(reason).toContain("EXCEPTIONAL");
+		});
+
+		it("prometheus continuation includes the shared skeleton (preferred posture)", async () => {
+			await writeFile(
+				join(omtDir, "prometheus-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					sessionId: "test-session",
+					started_at: new Date().toISOString(),
+					last_touched_at: new Date().toISOString(),
+				}),
+			);
+
+			const context = createContext({ lastAssistantMessage: "some message without done token" });
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			const reason = result.reason!;
+			assertSharedSkeleton(reason);
+			expect(reason).toContain("Prefer this");
+		});
+
+		it("todo continuation includes the shared skeleton (preferred posture)", () => {
+			const context = createContext({ incompleteTodoCount: 5 });
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			const reason = result.reason!;
+			assertSharedSkeleton(reason);
+			expect(reason).toContain("Prefer this");
 		});
 	});
 });
