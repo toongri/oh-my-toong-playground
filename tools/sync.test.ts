@@ -4597,6 +4597,119 @@ describe("component fan-out", () => {
 
 		expect(context.failedTargets).toContain(worktrees[0]);
 	});
+
+	// -----------------------------------------------------------------------
+	// TODO 4 (S4) — formatDeployedRoots wired into processYaml's per-worktree
+	// deploy loop, gated on `format:` declared AND non-dry-run, run after
+	// rewritePlatformPaths.
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Writes an executable fake formatter shell script that logs each received
+	 * argv (one per line, via `printf '%s\n' "$@"`) to `logPath`, then exits
+	 * with `exitCode`. Mirrors tools/format-on-deploy.test.ts's writeFakeFormatter.
+	 */
+	async function writeFakeFormatter(scriptPath: string, logPath: string, exitCode = 0): Promise<void> {
+		const script = `#!/bin/sh\nprintf '%s\\n' "$@" >> '${logPath}'\nexit ${exitCode}\n`;
+		await fs.writeFile(scriptPath, script, "utf8");
+		await fs.chmod(scriptPath, 0o755);
+	}
+
+	it("format wired: a declared format command runs once after deploy, recording the docs dest as a managed root", async () => {
+		const { container, worktrees } = makeBareTopology("repo", ["wt1"]);
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+
+		const scriptPath = path.join(tmpDir, "fake-formatter.sh");
+		const logPath = path.join(tmpDir, "log.txt");
+		await writeFakeFormatter(scriptPath, logPath, 0);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${container}\nformat: ${scriptPath}\ndocs:\n  items:\n    - intro\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ dryRun: false });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const logContent = await fs.readFile(logPath, "utf8");
+		expect(logContent).toContain(path.join(worktrees[0]!, "docs", "intro.md"));
+	});
+
+	it("format wired: no format declared skips the formatter (no LOG written)", async () => {
+		const { container } = makeBareTopology("repo", ["wt1"]);
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+
+		const scriptPath = path.join(tmpDir, "fake-formatter.sh");
+		const logPath = path.join(tmpDir, "log.txt");
+		await writeFakeFormatter(scriptPath, logPath, 0);
+		// scriptPath is never referenced by the sync.yaml below — the LOG only
+		// appears if something calls it unconditionally, which would be wrong.
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${container}\ndocs:\n  items:\n    - intro\n`);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ dryRun: false });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(await exists(logPath)).toBe(false);
+	});
+
+	it("format wired: dry-run skips the formatter even when format is declared (no LOG written)", async () => {
+		const { container } = makeBareTopology("repo", ["wt1"]);
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+
+		const scriptPath = path.join(tmpDir, "fake-formatter.sh");
+		const logPath = path.join(tmpDir, "log.txt");
+		await writeFakeFormatter(scriptPath, logPath, 0);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${container}\nformat: ${scriptPath}\ndocs:\n  items:\n    - intro\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ dryRun: true });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(await exists(logPath)).toBe(false);
+	});
+
+	it("format wired: a non-zero-exit format command does not abort processYaml, routes the deployRoot to failedTargets", async () => {
+		const { container, worktrees } = makeBareTopology("repo", ["wt1"]);
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+
+		const scriptPath = path.join(tmpDir, "fake-formatter-fail.sh");
+		const logPath = path.join(tmpDir, "log.txt");
+		await writeFakeFormatter(scriptPath, logPath, 1);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${container}\nformat: ${scriptPath}\ndocs:\n  items:\n    - intro\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ dryRun: false });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(context.failedTargets).toContain(worktrees[0]);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -4797,7 +4910,7 @@ describe("syncDocs", () => {
 		};
 		const context = makeContext();
 
-		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toBeUndefined();
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toEqual([]);
 	});
 
 	// F2: a delete item has no source, so resolveDocsTarget only gives its bare,
@@ -4816,7 +4929,7 @@ describe("syncDocs", () => {
 		expect(await exists(path.join(deployRoot, "docs", "intro.md"))).toBe(false);
 
 		// Idempotent: a second run against the now-absent leaf is a no-op.
-		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toBeUndefined();
+		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).resolves.toEqual([]);
 	});
 
 	it("docs delete real leaf: a similarly-named file is never treated as a tombstone candidate", async () => {
@@ -5230,6 +5343,45 @@ describe("syncDocs", () => {
 
 		await expect(syncDocs(context, syncYaml, rootDir, deployRoot)).rejects.toThrow();
 		expect(await readFile(externalFile)).toBe("external content\n");
+	});
+
+	// --- return value: written leaves (feeds formatDeployedRoots' docsDests) ---
+
+	it("docs return value: non-dry file-form deploy returns the finalTarget", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext();
+
+		const result = await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(result).toEqual([path.join(deployRoot, "docs", "intro.md")]);
+	});
+
+	it("docs return value: non-dry dir-form deploy returns each written leaf's dest, not the base dir", async () => {
+		await writeFile(path.join(rootDir, "docs", "bundle", "one.md"), "# One\n");
+		await writeFile(path.join(rootDir, "docs", "bundle", "sub", "two.md"), "# Two\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["bundle"] } };
+		const context = makeContext();
+
+		const result = await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect([...result].sort()).toEqual(
+			[
+				path.join(deployRoot, "docs", "bundle", "one.md"),
+				path.join(deployRoot, "docs", "bundle", "sub", "two.md"),
+			].sort(),
+		);
+		expect(result).not.toContain(path.join(deployRoot, "docs", "bundle"));
+	});
+
+	it("docs return value: dry-run returns an empty array regardless of planned writes", async () => {
+		await writeFile(path.join(rootDir, "docs", "intro.md"), "# Intro\n");
+		const syncYaml: SyncYaml = { path: deployRoot, docs: { items: ["intro"] } };
+		const context = makeContext({ dryRun: true });
+
+		const result = await syncDocs(context, syncYaml, rootDir, deployRoot);
+
+		expect(result).toEqual([]);
 	});
 });
 

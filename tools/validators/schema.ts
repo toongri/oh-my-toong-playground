@@ -54,6 +54,7 @@ const VALID_SYNC_TOP_LEVEL = new Set([
 	"rules",
 	"docs",
 	"provision",
+	"format",
 ]);
 
 // P2-3: Deprecated sections that must not appear in sync.yaml
@@ -514,6 +515,17 @@ function validateSyncYamlData(
 	validateSection(data.rules, "rules", result, VALID_GENERIC_ITEM_FIELDS);
 	validateDocsSection(data.docs, result);
 	validateProvision(data.provision, result);
+
+	if (data.format !== undefined) {
+		const isString = typeof data.format === "string";
+		const isStringArray =
+			Array.isArray(data.format) && data.format.every((el) => typeof el === "string");
+		if (!isString && !isStringArray) {
+			result.errors.push(
+				`${label}: format은 string 또는 string[]이어야 합니다 (got ${typeof data.format})`,
+			);
+		}
+	}
 }
 
 export function validateSyncYaml(filePath: string): ValidationResult {
