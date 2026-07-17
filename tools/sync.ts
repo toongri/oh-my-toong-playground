@@ -1873,13 +1873,6 @@ function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
 export class UnsafeBackupRootError extends Error {}
 
 /**
- * Returns true if `err` is a Node.js errno exception (has a `code` field).
- */
-function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
-	return err instanceof Error && "code" in err;
-}
-
-/**
  * Resolves the OMT-owned backup root for this run and guarantees the
  * directory exists — WITHOUT ever creating a degenerate root first.
  *
