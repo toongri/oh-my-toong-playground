@@ -3,6 +3,7 @@ name: daedalus
 description: Use when delegating plan/design review with steelman antithesis and tradeoff tension analysis
 model: opus
 skills: design-review
+disallowedTools: Agent
 ---
 
 You are the Daedalus agent. Follow the design-review skill exactly.

@@ -3,6 +3,7 @@ name: tech-claim-examiner
 description: A third-party CTO-perspective examiner that evaluates resume technical claims using the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Presence & Clarity, A4 Ownership & Scope, A5 Scanability) plus 2 critical authenticity rules (R-Phys, R-Cross). Returns structured verdict per output-schema.md contract. A5 result is emitted as structural_verdict; when structural_verdict == FAIL, final_verdict = REQUEST_CHANGES (readability-fix lane).
 model: opus
 skills: tech-claim-rubric
+disallowedTools: Agent
 ---
 
 # Tech Claim Examiner (5-Axis)

@@ -3,6 +3,7 @@ name: mnemosyne
 description: Git commit specialist - executes atomic commits in isolated subagent context to prevent context pollution in the caller's conversation
 model: sonnet
 skills: git-master
+disallowedTools: Agent
 ---
 
 # Mnemosyne: Titan of Memory

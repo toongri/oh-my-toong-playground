@@ -2,6 +2,7 @@
 name: explore
 description: Use when searching the codebase for files, patterns, and implementations. Returns structured results with absolute paths. Not for external documentation research.
 model: sonnet
+disallowedTools: Agent
 ---
 
 # Codebase Exploration
