@@ -1394,12 +1394,16 @@ export async function rewritePlatformPaths(
  */
 export async function formatDeployedRoots(
 	deployRoot: string,
-	formatCmd: string,
+	formatCmd: string | string[],
 	docsDests: string[],
 	codexSkillNames: ReadonlySet<string>,
 ): Promise<void> {
-	const argv = formatCmd.split(/\s+/).filter(Boolean);
+	// A string form is whitespace-tokenized (simple case, no quoting); an array
+	// form is used verbatim as argv, so arguments containing spaces (e.g. a
+	// config path) survive intact.
+	const argv = (Array.isArray(formatCmd) ? formatCmd : formatCmd.split(/\s+/)).filter(Boolean);
 	if (argv.length === 0) return;
+	const cmdDisplay = Array.isArray(formatCmd) ? formatCmd.join(" ") : formatCmd;
 
 	const managedRoots: string[] = [];
 	for (const platform of KNOWN_PLATFORMS) {
@@ -1423,13 +1427,13 @@ export async function formatDeployedRoots(
 		});
 	} catch (err) {
 		throw new Error(
-			`format command '${formatCmd}' failed: ${err instanceof Error ? err.message : String(err)}`,
+			`format command '${cmdDisplay}' failed: ${err instanceof Error ? err.message : String(err)}`,
 			{ cause: err },
 		);
 	}
 	await proc.exited;
 	if (proc.exitCode !== 0) {
-		throw new Error(`format command '${formatCmd}' failed (exit ${proc.exitCode})`);
+		throw new Error(`format command '${cmdDisplay}' failed (exit ${proc.exitCode})`);
 	}
 }
 

@@ -458,6 +458,38 @@ format: true
 			expect(result.errors.length).toBeGreaterThan(0);
 		});
 
+		it("produces no errors when format is a string array via `validateSyncYaml`", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+format:
+  - pnpm
+  - exec
+  - prettier
+  - --write
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors).toHaveLength(0);
+		});
+
+		it("returns error when format is an array with a non-string element via `validateSyncYaml`", () => {
+			const path = writeYaml(
+				dir,
+				"sync.yaml",
+				`
+path: /target
+format:
+  - prettier
+  - 42
+`,
+			);
+			const result = validateSyncYaml(path);
+			expect(result.errors.length).toBeGreaterThan(0);
+		});
+
 		it("produces no errors when format is absent via `validateSyncYaml`", () => {
 			const path = writeYaml(
 				dir,

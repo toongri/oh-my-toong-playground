@@ -516,8 +516,15 @@ function validateSyncYamlData(
 	validateDocsSection(data.docs, result);
 	validateProvision(data.provision, result);
 
-	if (data.format !== undefined && typeof data.format !== "string") {
-		result.errors.push(`${label}: format은 string이어야 합니다 (got ${typeof data.format})`);
+	if (data.format !== undefined) {
+		const isString = typeof data.format === "string";
+		const isStringArray =
+			Array.isArray(data.format) && data.format.every((el) => typeof el === "string");
+		if (!isString && !isStringArray) {
+			result.errors.push(
+				`${label}: format은 string 또는 string[]이어야 합니다 (got ${typeof data.format})`,
+			);
+		}
 	}
 }
 
