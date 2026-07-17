@@ -11,7 +11,7 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 
 These two premises are non-negotiable. They are forwarded to every chunk-reviewer dispatch and they govern every decision in this skill.
 
-1. **Post-change state** — The working directory reflects the post-change state of the target ref. PR mode achieves this by checking out the PR head into a dedicated linked worktree (see Step 1). Non-PR modes (branch comparison, auto-detect) achieve this by verifying HEAD-match + clean-tree on the current working directory (also Step 1). Either way: read code freely from the working directory — the diff is the delta, the working directory is the result. Do not pretend the file system is read-only or stuck at base.
+1. **Post-change state** — The working directory reflects the post-change state of the target ref. PR mode achieves this by checking out the PR head into a dedicated linked worktree (see Step 0). Non-PR modes (branch comparison, auto-detect) achieve this by verifying HEAD-match + clean-tree on the current working directory (also Step 0). Either way: read code freely from the working directory — the diff is the delta, the working directory is the result. Do not pretend the file system is read-only or stuck at base.
 
 2. **No diff-only review** — A diff is a delta. The unit of review is the *system the diff produces*. Always trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
 
@@ -98,101 +98,9 @@ digraph role_separation {
 
 **RULE**: Inline judgment for non-escalated candidates runs in your context. Only escalated candidates are delegated to verifier subagents. You CANNOT run the raw diff command or modify files.
 
-## Step 0: Intent and Context Acquisition
+## Step 0: Input Parsing
 
-**Intent acquisition is non-negotiable.** Either intent is confirmed (from artifacts, interview, or both), or the user explicitly defers to a code-quality-only review. There is no third option — proceeding without intent and without explicit deferral is forbidden. Reviewing without intent produces wrong severities, missed scope creep, and false positives born from misunderstanding the author's goal.
-
-### Acquisition order
-
-1. **PR/branch artifacts** — PR title, description, labels, commit history, code review comments and threads
-2. **Linked references (recursive)** — every link found in the artifacts above, followed transitively until the trail ends
-3. **Codebase signals** — CLAUDE.md, README, ADRs, related history in changed paths
-4. **User interview** — only for what the artifacts cannot reveal
-
-### Acquire all reachable references
-
-PR descriptions, commits, and comments routinely link to richer context (issue trackers, design docs, chat threads). **Follow every link recursively** — a linked ticket may itself link to a doc which links to a discussion thread; keep following until the trail ends.
-
-Do not name specific tools. Use whatever fetch capability the environment provides for each link type. If a link cannot be fetched directly (no credential, no MCP for that platform, network unreachable), do not skip it — mark it for the user interview step.
-
-Sources to consult per input mode:
-
-| Input mode | Sources |
-|------------|---------|
-| PR | `gh pr view --json title,body,labels,comments,reviews`, `gh pr view --comments`, linked issues, `gh issue view <n>`, every external link found in the chain, commit messages on the PR branch |
-| Branch comparison | Commit messages, branch name conventions, any linked tickets discovered in commits, related issues |
-| Auto-detect | Recent commit messages on HEAD, any linked tickets found there |
-
-### User interview — only for what artifacts cannot reveal
-
-After exhausting fetchable sources, ask the user about:
-- **Intent** — what problem is this PR solving and why was this approach chosen
-- **Alternatives** — what was considered and rejected, and why
-- **Constraints** — deadlines, dependencies, compatibility commitments, hidden requirements
-- **Concerns** — known risks, untested paths, areas the author is uncertain about
-
-DO NOT interview the user about codebase facts (file locations, patterns, architecture, who calls what). Use Read/Grep/Glob and the explore agent for those — they are reachable from the working directory.
-
-### Intent Block Gate (hard exit condition)
-
-Before exiting Step 0, the state must be one of:
-
-| State | Action |
-|-------|--------|
-| **Intent confirmed** — author's goal, approach, and constraints are understood from artifacts and/or interview | Proceed to Step 1 |
-| **User explicit deferral** — user says "skip", "그냥 리뷰해줘", "없어", "code quality only", or unambiguous equivalent | Set {REQUIREMENTS} = "N/A — code-quality-only review (user deferred)" and proceed |
-| **Non-interactive dispatch (completion-gate)** — the dispatch prompt itself carries a `{gate}-codereview-{sid}.json` artifact path alongside a 4-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`) | Treat as **Intent confirmed (non-interactive, no user interview)** and proceed to Step 1. Acquisition steps 1-3 (PR/branch artifacts, linked references, codebase signals) still run — they backfill any slot whose value is the `(none provided)` marker. Only step 4 (user interview) is replaced by the payload. |
-| **Neither** — artifacts thin and user not yet asked, OR user gave vague answers without explicit deferral | **BLOCK**. Do not proceed. Continue interview until one of the two states above is reached. |
-
-There is no "I tried hard enough, just review" path. The block IS the safety mechanism.
-
-A fresh code-reviewer agent has no ambient session to check for an active artifact path — the non-interactive discriminator above is prompt-borne: whether the dispatch prompt includes the path, not whether a session-scoped artifact happens to exist. This is the same `{gate}-codereview-{sid}.json` signal Step 5 later reads as `runId` (Find Phase Sink, below); Step 0 is where it first enters the pipeline. When the signal is absent, the main-session interactive gate above (**Neither** → BLOCK) is unchanged.
-
-### Vague answer refinement
-
-When the user gives a vague answer that is not an explicit deferral, refine ONCE with a specific follow-up:
-
-각 follow-up 메시지는 deferral 옵션을 함께 안내하여 사용자가 "skip / 그냥 리뷰해줘 / 없어" 어휘를 몰라도 escape 가능하도록 한다.
-
-| User says | Follow-up |
-|-----------|-----------|
-| "대충 있어" / "뭐 좀 있긴 한데" | "어디서 찾을 수 있나요? 링크나 문서 위치를 알려주세요. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
-| "그냥 성능 개선이야" | "어떤 지표를 개선하려 했나요? (latency, throughput, memory 등 — 답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
-| "여러 가지 고쳤어" | "가장 중요한 1-2개만 알려주세요. 나머지는 코드에서 식별하겠습니다. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
-
-If refinement still yields a vague answer, surface the block explicitly to the user:
-
-> "의도를 명확히 잡기 어렵습니다. 둘 중 하나를 선택해주세요: (1) [구체적 질문]에 답하여 의도 확정, 또는 (2) 'skip / 코드 품질만 리뷰' 명시적 deferral. 둘 중 하나를 명시하기 전까지 리뷰는 시작하지 않습니다."
-
-This is not adversarial — it is refusing to silently produce a worse review.
-
-### Question discipline
-
-| Situation | Method |
-|-----------|--------|
-| 2-4 structured choices (review scope, focus areas) | AskUserQuestion tool |
-| Free-form / subjective (intent, alternatives, constraints, concerns) | Plain text question |
-
-**One question per message.** Never bundle. Wait for the answer before the next question.
-
-**Question quality** — every question must include either a specific anchor (a summary the user can correct) or a default action in parentheses (so progress is possible without an answer):
-
-| BAD | GOOD |
-|-----|------|
-| "요구사항이 있나요?" | "PR 본문과 연결된 이슈에서 [요약]을 추출했습니다. 보완할 부분이 있나요?" |
-| "어떤 부분을 볼까요?" | "23개 파일이 변경됐습니다. 집중할 영역이 있나요? (없으면 전체 리뷰)" |
-
-### Project Context
-
-Include project context when interpolating the chunk-reviewer prompt template in Step 5. Describe what kind of software this is, who uses it, how it runs, and what depends on it — based on CLAUDE.md, README.md, and the artifacts gathered above.
-
-If available context is insufficient to characterize the project, ask the user once: "What kind of software is this? (e.g., personal CLI tool, internal team service, public-facing API, shared library, etc.)"
-
-### Step 0 Exit Condition
-
-Proceed to Step 1 only when the Intent Block Gate state is **Intent confirmed** or **User explicit deferral**. Any other state → continue at Step 0.
-
-## Step 1: Input Parsing
+Environment setup runs first — resolve the range and, in PR mode, check out the post-change code into the worktree **before** any code-reading step (intent acquisition, the derived-context sub-step, chunk-review). Every downstream step reads the working directory, so the working directory must already hold the post-change state.
 
 Determine range and setup for subsequent steps:
 
@@ -249,17 +157,144 @@ All range formats use **three-dot syntax** (`A...B`), which is equivalent to `gi
 
 All subsequent steps use `{range}` from this table. All diff commands use `git diff {range} -- <files>` for path-filtered output. After checkout, code reading via Read/Grep/Glob reflects the **post-change** state, which is the intended behavior — diff shows the delta, the working directory shows the result.
 
-## Early Exit
+### Early Exit
 
-After Input Parsing, before proceeding to Step 2:
+After the range is resolved and (PR mode) the checkout is done, before proceeding to Step 1:
 
-1. Run `git diff {range} --stat` (using the range determined in Step 1)
+1. Run `git diff {range} --stat` (using the range determined above)
 2. If empty diff: report "No changes detected (between <base> and <target>)" and exit
 3. If binary-only diff: report "Only binary file changes detected" and exit
 
+Early Exit runs before intent acquisition on purpose — an empty or binary-only diff needs no interview.
+
+## Step 1: Intent and Context Acquisition
+
+**Intent acquisition is non-negotiable.** Either intent is confirmed (from artifacts, interview, or both), or the user explicitly defers to a code-quality-only review. There is no third option — proceeding without intent and without explicit deferral is forbidden. Reviewing without intent produces wrong severities, missed scope creep, and false positives born from misunderstanding the author's goal.
+
+### Acquisition order
+
+1. **PR/branch artifacts** — PR title, description, labels, commit history, code review comments and threads
+2. **Linked references (recursive)** — every link found in the artifacts above, followed transitively until the trail ends
+3. **Codebase signals** — CLAUDE.md, README, ADRs, related history in changed paths
+4. **User interview** — only for what the artifacts cannot reveal
+
+### Acquire all reachable references
+
+PR descriptions, commits, and comments routinely link to richer context (issue trackers, design docs, chat threads). **Follow every link recursively** — a linked ticket may itself link to a doc which links to a discussion thread; keep following until the trail ends.
+
+Do not name specific tools. Use whatever fetch capability the environment provides for each link type. If a link cannot be fetched directly (no credential, no MCP for that platform, network unreachable), do not skip it — mark it for the user interview step.
+
+Sources to consult per input mode:
+
+| Input mode | Sources |
+|------------|---------|
+| PR | `gh pr view --json title,body,labels,comments,reviews`, `gh pr view --comments`, linked issues, `gh issue view <n>`, every external link found in the chain, commit messages on the PR branch |
+| Branch comparison | Commit messages, branch name conventions, any linked tickets discovered in commits, related issues |
+| Auto-detect | Recent commit messages on HEAD, any linked tickets found there |
+
+### User interview — only for what artifacts cannot reveal
+
+After exhausting fetchable sources, ask the user about:
+- **Intent** — what problem is this PR solving and why was this approach chosen
+- **Alternatives** — what was considered and rejected, and why
+- **Constraints** — deadlines, dependencies, compatibility commitments, hidden requirements
+- **Concerns** — known risks, untested paths, areas the author is uncertain about
+
+DO NOT interview the user about codebase facts (file locations, patterns, architecture, who calls what). Use Read/Grep/Glob and the explore agent for those — they are reachable from the working directory.
+
+### Intent Block Gate (hard exit condition)
+
+Before exiting Step 1, the state must be one of:
+
+| State | Action |
+|-------|--------|
+| **Intent confirmed** — author's goal, approach, and constraints are understood from artifacts and/or interview | Proceed to Step 2 |
+| **User explicit deferral** — user says "skip", "그냥 리뷰해줘", "없어", "code quality only", or unambiguous equivalent | Set {REQUIREMENTS} = "N/A — code-quality-only review (user deferred)" and proceed |
+| **Non-interactive dispatch (completion-gate)** — the dispatch prompt itself carries a `{gate}-codereview-{sid}.json` artifact path alongside a 4-slot intent payload (`what_was_implemented`/`description`/`requirements`/`project_context`) | Treat as **Intent confirmed (non-interactive, no user interview)** and proceed to Step 2. Acquisition steps 1-3 (PR/branch artifacts, linked references, codebase signals) still run — they backfill any slot whose value is the `(none provided)` marker. Only step 4 (user interview) is replaced by the payload. |
+| **Neither** — artifacts thin and user not yet asked, OR user gave vague answers without explicit deferral | **BLOCK**. Do not proceed. Continue interview until one of the two states above is reached. |
+
+There is no "I tried hard enough, just review" path. The block IS the safety mechanism.
+
+A fresh code-reviewer agent has no ambient session to check for an active artifact path — the non-interactive discriminator above is prompt-borne: whether the dispatch prompt includes the path, not whether a session-scoped artifact happens to exist. This is the same `{gate}-codereview-{sid}.json` signal Step 5 later reads as `runId` (Find Phase Sink, below); Step 1 is where it first enters the pipeline. When the signal is absent, the main-session interactive gate above (**Neither** → BLOCK) is unchanged.
+
+### Vague answer refinement
+
+When the user gives a vague answer that is not an explicit deferral, refine ONCE with a specific follow-up:
+
+각 follow-up 메시지는 deferral 옵션을 함께 안내하여 사용자가 "skip / 그냥 리뷰해줘 / 없어" 어휘를 몰라도 escape 가능하도록 한다.
+
+| User says | Follow-up |
+|-----------|-----------|
+| "대충 있어" / "뭐 좀 있긴 한데" | "어디서 찾을 수 있나요? 링크나 문서 위치를 알려주세요. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
+| "그냥 성능 개선이야" | "어떤 지표를 개선하려 했나요? (latency, throughput, memory 등 — 답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
+| "여러 가지 고쳤어" | "가장 중요한 1-2개만 알려주세요. 나머지는 코드에서 식별하겠습니다. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
+
+If refinement still yields a vague answer, surface the block explicitly to the user:
+
+> "의도를 명확히 잡기 어렵습니다. 둘 중 하나를 선택해주세요: (1) [구체적 질문]에 답하여 의도 확정, 또는 (2) 'skip / 코드 품질만 리뷰' 명시적 deferral. 둘 중 하나를 명시하기 전까지 리뷰는 시작하지 않습니다."
+
+This is not adversarial — it is refusing to silently produce a worse review.
+
+### Question discipline
+
+| Situation | Method |
+|-----------|--------|
+| 2-4 structured choices (review scope, focus areas) | AskUserQuestion tool |
+| Free-form / subjective (intent, alternatives, constraints, concerns) | Plain text question |
+
+**One question per message.** Never bundle. Wait for the answer before the next question.
+
+**Question quality** — every question must include either a specific anchor (a summary the user can correct) or a default action in parentheses (so progress is possible without an answer):
+
+| BAD | GOOD |
+|-----|------|
+| "요구사항이 있나요?" | "PR 본문과 연결된 이슈에서 [요약]을 추출했습니다. 보완할 부분이 있나요?" |
+| "어떤 부분을 볼까요?" | "23개 파일이 변경됐습니다. 집중할 영역이 있나요? (없으면 전체 리뷰)" |
+
+### Project Context
+
+Include project context when interpolating the chunk-reviewer prompt template in Step 5. Describe what kind of software this is, who uses it, how it runs, and what depends on it — based on CLAUDE.md, README.md, and the artifacts gathered above.
+
+If available context is insufficient to characterize the project, ask the user once: "What kind of software is this? (e.g., personal CLI tool, internal team service, public-facing API, shared library, etc.)"
+
+### Step 1 Exit Condition
+
+Proceed to Step 2 only when the Intent Block Gate state is **Intent confirmed** or **User explicit deferral**. Any other state → continue at Step 1.
+
+### Bounded derived context (derived expected-items)
+
+By this point `{REQUIREMENTS}` has settled — via interview, the deferral sentinel, or the completion-gate payload. This sub-step adds one more thing to it: **bounded derived context**, a codebase-grounded prediction of expected-items, kept distinct from intent *acquisition* above. "Intent acquisition is non-negotiable" (the Step 1 charter) means received, stated author intent is authoritative; this sub-step instead generates a hypothesis from the codebase's own "Codebase signals" (acquisition step 3) — it does not receive stated intent, it infers from what the codebase already does.
+
+Mirror the same reasoning shape the regression and cleanup finder angles use: name a thing the codebase already establishes, then check whether the change re-establishes it. Here: name a same-role analog already in the codebase, then check whether the change wires the new addition into it the same way. Derive an expected-item only through this named-necessity gate:
+
+| State | Condition | Action |
+|-------|-----------|--------|
+| Grounded + necessity-named | A citable codebase analog exists with a concrete `file:line`, AND a concrete runtime consequence of the item's absence can be named | **Keep** — emit the derived item |
+| Uncertain | Only one of the two holds, or either is fuzzy | **Drop** |
+| Neither | No citable analog, no nameable consequence | **never invent** |
+
+For each kept item, emit one bullet carrying four fields — self-labeling for provenance, so the downstream `requirement-gap` finding needs no new field to explain where it came from:
+
+- **Analog (`file:line`)** — the existing code whose role the missing item should mirror
+- **Why same role** — why the analog and the missing item play the same structural role
+- **Expected item absent here** — what the analog implies should exist in the changed code, and doesn't
+- **Runtime consequence of its absence** — what breaks, silently or loudly, if it stays missing
+
+Phrase the bullet itself like "Codebase analog at `file:line` implies `<wiring>`; absent here" — never "a requirement you stated is absent." The label must stay honest: a same-role analog implies wiring that is absent here, not a stated requirement that is absent.
+
+Fold kept items into `{REQUIREMENTS}` as a `Derived Expected Items` sub-block:
+
+- `{REQUIREMENTS}` already holds real content (caller/goal-lane requirements, or the completion-gate dispatch payload's `requirements` field) → **append** the sub-block after it; preserve what's there.
+- `{REQUIREMENTS}` holds the deferral sentinel `N/A — code-quality-only review (user deferred)` (set at the Intent Block Gate above) AND at least one item was derived → **replace** the sentinel with the sub-block, so coverage never sees a self-contradictory "N/A" plus derived items.
+- Zero items derived → leave `{REQUIREMENTS}` exactly as it was — no empty sub-block, no sentinel change.
+
+This sub-step is unconditional on intent-source: it runs the same way regardless of whether intent came from a live interview, a caller-supplied artifact, the completion-gate dispatch payload, or explicit code-quality-only deferral. It never gates on live-interview-only or on requirements already being present — it derives wherever the codebase grounds an item, and stays silent otherwise.
+
+When the deferral is an explicit *human* code-quality-only deferral (a person typed "skip" / "그냥 리뷰해줘" / "code quality only" at the Intent Block Gate) rather than the completion-gate's non-interactive payload, derived items are still surfaced — always-run holds even here — but their `Runtime consequence of its absence` text carries a short note such as "surfaced despite quality-only deferral," so the one mode where a person actively deferred scope stays framed honestly.
+
 ## Step 2: Context Gathering
 
-Collect in parallel (using `{range}` from Step 1):
+Collect in parallel (using `{range}` from Step 0):
 
 1. `git diff {range} --stat` (change scale)
 2. `git diff {range} --name-only` (file list)
@@ -291,7 +326,7 @@ Run in sequence — stop immediately on first failure:
 2. Project's declared test command (its verification contract's scopeable form — not necessarily the entire suite)
 3. Linter / static analysis
 
-**Any failure → do NOT dispatch chunk-reviewer agents.** See Fail-Fast Gate below for the exact exit sequence (it branches on whether this run carries the completion-gate dispatch signal from Step 0).
+**Any failure → do NOT dispatch chunk-reviewer agents.** See Fail-Fast Gate below for the exact exit sequence (it branches on whether this run carries the completion-gate dispatch signal from Step 1).
 
 ### Output Format: {EVIDENCE_RESULTS}
 
@@ -330,7 +365,7 @@ If any check fails:
 1. Populate {EVIDENCE_RESULTS} Part 1 with the failure details (last 30 lines of failing command output)
 2. Omit Part 2 (Test Coverage Mapping) — it is not needed on failure
 3. Do NOT proceed to Step 4 or dispatch chunk-reviewer agents
-4. **Completion-gate dispatch signal present** (the dispatch prompt carried a `{gate}-codereview-{sid}.json` artifact path — the same non-interactive discriminator Step 0 uses): before reporting, write that artifact directly — `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}`. This is the exact code-review artifact schema `skills/{gate}/references/completion-gate.md` defines. A build/test/lint fail-fast is neither a finished review (`status: "COMPLETE"`) nor a confirmed defect (`findings` stays empty — the failing command and its last 30 lines of output belong in this reviewer's own failure report surfaced to the dispatching gate, not folded into a per-finding `ref`) — it is the review itself failing to complete, which is exactly what `INCONCLUSIVE` means. Writing `status: "INCONCLUSIVE"` is sufficient by itself: it structurally blocks `request-complete` (the never-false-complete gate in `{gate}-state.ts`) without promoting to `status: "COMPLETE"` or introducing any new status value. If the artifact write itself fails, do not retry or invent a status — leave the artifact absent, which `request-complete`'s existing absent-artifact refusal already blocks on.
+4. **Completion-gate dispatch signal present** (the dispatch prompt carried a `{gate}-codereview-{sid}.json` artifact path — the same non-interactive discriminator Step 1 uses): before reporting, write that artifact directly — `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}`. This is the exact code-review artifact schema `skills/{gate}/references/completion-gate.md` defines. A build/test/lint fail-fast is neither a finished review (`status: "COMPLETE"`) nor a confirmed defect (`findings` stays empty — the failing command and its last 30 lines of output belong in this reviewer's own failure report surfaced to the dispatching gate, not folded into a per-finding `ref`) — it is the review itself failing to complete, which is exactly what `INCONCLUSIVE` means. Writing `status: "INCONCLUSIVE"` is sufficient by itself: it structurally blocks `request-complete` (the never-false-complete gate in `{gate}-state.ts`) without promoting to `status: "COMPLETE"` or introducing any new status value. If the artifact write itself fails, do not retry or invent a status — leave the artifact absent, which `request-complete`'s existing absent-artifact refusal already blocks on.
 5. **Completion-gate dispatch signal absent** (interactive main-session review — no completion-gate artifact path in play): no artifact write; this path is unchanged from before.
 6. Report {EVIDENCE_RESULTS} and exit immediately
 
@@ -365,16 +400,16 @@ The orchestrator constructs this command string but does NOT execute it. The com
 
 1. Read dispatch template from `${CLAUDE_SKILL_DIR}/../orchestrate-review/scripts/chunk-reviewer-prompt.md`
 2. Interpolate placeholders with context from Steps 0-4:
-   - {WHAT_WAS_IMPLEMENTED} ← Step 0 description (interactive) / JSON field `what_was_implemented` (structured-output completion-gate dispatch)
-   - {DESCRIPTION} ← Step 0 or commit messages (interactive) / JSON field `description` (completion-gate dispatch)
-   - {REQUIREMENTS} ← Step 0 requirements or "N/A - code quality review only" (interactive) / JSON field `requirements` (completion-gate dispatch)
-   - {PROJECT_CONTEXT} ← Step 0 project context (interactive) / JSON field `project_context` (completion-gate dispatch); if it resolves to the literal `"(none provided)"` backfill marker, backfill from codebase signals gathered in Step 0 acquisition steps 1-3 (CLAUDE.md/README/ADR)
+   - {WHAT_WAS_IMPLEMENTED} ← Step 1 description (interactive) / JSON field `what_was_implemented` (structured-output completion-gate dispatch)
+   - {DESCRIPTION} ← Step 1 or commit messages (interactive) / JSON field `description` (completion-gate dispatch)
+   - {REQUIREMENTS} ← Step 1 requirements or "N/A - code quality review only" (interactive) / JSON field `requirements` (completion-gate dispatch)
+   - {PROJECT_CONTEXT} ← Step 1 project context (interactive) / JSON field `project_context` (completion-gate dispatch); if it resolves to the literal `"(none provided)"` backfill marker, backfill from codebase signals gathered in Step 1 acquisition steps 1-3 (CLAUDE.md/README/ADR)
    - {FILE_LIST} ← Step 2 file list
    - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
    - {COMMIT_HISTORY} ← Step 2 commit history
    - {EVIDENCE_RESULTS} ← Step 3 evidence summary (Source: Step 3. Fallback: "Evidence verification unavailable — no build/test/lint commands discovered")
 
-   The four intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}) source differently depending on mode — the same `{gate}-codereview-{sid}.json` dispatch signal Step 0's Intent Block Gate uses to discriminate non-interactive dispatch. In structured-output mode (completion-gate dispatch), the Step 0 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, follow the same INCONCLUSIVE artifact bridge Step 3 uses on build failure and stop before dispatching chunk-reviewer agents — do not guess field values from malformed input.
+   The four intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}) source differently depending on mode — the same `{gate}-codereview-{sid}.json` dispatch signal Step 1's Intent Block Gate uses to discriminate non-interactive dispatch. In structured-output mode (completion-gate dispatch), the Step 1 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, follow the same INCONCLUSIVE artifact bridge Step 3 uses on build failure and stop before dispatching chunk-reviewer agents — do not guess field values from malformed input.
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
 
 **Dispatch rules:**
