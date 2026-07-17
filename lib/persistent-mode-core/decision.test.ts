@@ -1606,7 +1606,7 @@ describe("makeDecision", () => {
 	// -------------------------------------------------------------------------
 	describe("continuation message skeleton", () => {
 		const assertSharedSkeleton = (reason: string) => {
-			expect(reason).toContain(".claude/rules/continuation-contract.md");
+			expect(reason).toContain("always-on Continuation Contract rule");
 			expect(reason).toContain("<awaiting-user/>");
 			expect(reason).toContain("should I continue?");
 			expect(reason).toContain("block-count escape");

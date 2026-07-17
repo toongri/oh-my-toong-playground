@@ -70,7 +70,7 @@ function continuationContract(askPosture: AskPosture): string {
 		askPosture === "preferred"
 			? "2. Need a user decision or fact only they hold? Ask via the AskUserQuestion tool — asking is NOT stopping (a tool call keeps the turn alive). Prefer this over ending the turn with a question in prose."
 			: "2. Asking is EXCEPTIONAL here — this loop is autonomous (autonomy is post-planning). Only when a decision is the user's alone (a human-only gate) or a boundary is unsafe, ask via the AskUserQuestion tool — asking is NOT stopping. Otherwise keep working.";
-	return `Continuation contract (see the always-on Continuation Contract rule at .claude/rules/continuation-contract.md) — at this turn boundary, exactly ONE applies:
+	return `Continuation contract (see the always-on Continuation Contract rule) — at this turn boundary, exactly ONE applies:
 1. Work remains? Keep working — do not stop, do not ask.
 ${askLine}
 3. Only the user can decide, or a structured question was just declined? Yield: end your turn with the literal token <awaiting-user/>. The hook allows the stop, KEEPS all session state (this session resumes on the user's next reply), and does NOT mark the work complete. This clean yield is distinct from being force-continued after repeated blocks (the block-count escape) — it is an intentional pause, not a failure.
