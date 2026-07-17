@@ -49,6 +49,9 @@
   (`.agents/skills/<name>`, OMT가 이번 run에 배포한 이름만 — 공유 공간의 foreign
   resident는 제외) + 배포한 docs leaf 파일. `.`(전체 레포)은 절대 안 넘긴다. 루트
   **내부**의 실제 포맷 대상은 타겟 자기 `.prettierignore`/`.prettierrc`가 결정한다.
+  각 루트는 realpath가 deployRoot 하위에 있어야 넘어간다 — 워크트리 밖으로의
+  **심링크 탈출**(예: `.claude`가 `$HOME/.claude`로의 링크)은 제외해, 포매터가
+  deploy root 밖을 재귀 재작성하지 못하게 한다.
 - **실패 처리**: format 실패(non-zero exit 또는 명령 미설치 ENOENT)는 그 워크트리를
   위 "배포 독립성과 실패 처리"의 `failedTargets`로 흘려 **best-effort**로 처리한다 —
   다른 워크트리는 계속되고, 하나라도 실패하면 전체 sync가 non-zero exit이다.

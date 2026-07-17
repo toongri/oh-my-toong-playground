@@ -1380,7 +1380,9 @@ export async function rewritePlatformPaths(
  *
  * Ownership boundaries mirror rewritePlatformPaths: `.agents/skills` is never
  * passed whole, only per-name entries in `codexSkillNames`, so a foreign
- * resident skill directory is never handed to an external formatter.
+ * resident skill directory is never handed to an external formatter. Any root
+ * whose realpath resolves outside `deployRoot` (a symlink escape) is dropped, so
+ * the formatter can never recurse beyond the deploy root.
  *
  * Only the `Bun.spawn` call itself is wrapped in try/catch because, unlike
  * the vendoring spawn above (`bun`, always present), `formatCmd` is an
@@ -1405,16 +1407,43 @@ export async function formatDeployedRoots(
 	if (argv.length === 0) return;
 	const cmdDisplay = Array.isArray(formatCmd) ? formatCmd.join(" ") : formatCmd;
 
+	// existsSync follows symlinks, so a platform dir (or skill/docs path)
+	// symlinked outside the worktree would let the formatter recurse into and
+	// rewrite files beyond deployRoot, escaping the OMT-managed boundary. Resolve
+	// each candidate's realpath and keep only those that stay under deployRoot —
+	// the same lstat/realpath escape guard backup.ts uses. The original
+	// (non-resolved) path is handed to the formatter; realpath is used solely for
+	// the boundary check.
+	let realDeployRoot: string;
+	try {
+		realDeployRoot = realpathSync(deployRoot);
+	} catch {
+		return;
+	}
 	const managedRoots: string[] = [];
+	const addIfUnderRoot = (candidate: string) => {
+		if (!existsSync(candidate)) return;
+		let real: string;
+		try {
+			real = realpathSync(candidate);
+		} catch {
+			return;
+		}
+		if (real === realDeployRoot || real.startsWith(realDeployRoot + path.sep)) {
+			managedRoots.push(candidate);
+		} else {
+			logWarn(`format: '${candidate}' resolves outside deploy root (symlink escape) — skipping`);
+		}
+	};
 	for (const platform of KNOWN_PLATFORMS) {
-		const platformDir = path.join(deployRoot, `.${platform}`);
-		if (existsSync(platformDir)) managedRoots.push(platformDir);
+		addIfUnderRoot(path.join(deployRoot, `.${platform}`));
 	}
 	for (const name of codexSkillNames) {
-		const skillDir = path.join(codexSkillsDir(deployRoot), name);
-		if (existsSync(skillDir)) managedRoots.push(skillDir);
+		addIfUnderRoot(path.join(codexSkillsDir(deployRoot), name));
 	}
-	managedRoots.push(...docsDests);
+	for (const dest of docsDests) {
+		addIfUnderRoot(dest);
+	}
 
 	if (managedRoots.length === 0) return;
 

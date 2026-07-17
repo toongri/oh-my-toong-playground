@@ -137,6 +137,23 @@ describe("formatDeployedRoots", () => {
 		expect(loggedArgs).not.toContain(foreignSkillDir);
 	});
 
+	it("는 deploy root 밖으로 탈출하는 심링크 플랫폼 dir을 argv에서 제외한다", async () => {
+		await writeFakeFormatter(scriptPath, logPath, 0);
+		// .gemini는 deployRoot 하위 실디렉터리(포함), .claude는 워크트리 밖으로의
+		// 심링크(제외) — existsSync만으로는 심링크를 따라가 밖을 포맷하게 된다.
+		await fs.mkdir(path.join(deployRoot, ".gemini"), { recursive: true });
+		const outside = path.join(tmpDir, "outside-claude");
+		await fs.mkdir(outside, { recursive: true });
+		await fs.symlink(outside, path.join(deployRoot, ".claude"));
+
+		await formatDeployedRoots(deployRoot, scriptPath, [], new Set());
+
+		const lines = await readLogLines(logPath);
+		const loggedArgs = lines.slice(1);
+		expect(loggedArgs).toEqual([path.join(deployRoot, ".gemini")]);
+		expect(loggedArgs).not.toContain(path.join(deployRoot, ".claude"));
+	});
+
 	it("는 formatCmd가 빈 문자열이면 spawn하지 않는다 (skip)", async () => {
 		await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
 
