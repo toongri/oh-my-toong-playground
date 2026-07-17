@@ -113,7 +113,8 @@ skills:
 
 - **session-start.sh**: Restores persistent mode states (goal, incomplete todos)
 - **keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context
-- **persistent-mode/**: Prevents stopping when work remains incomplete (Stop hook, TypeScript directory)
+- **persistent-mode/**: Claude Stop-hook adapter — prevents stopping when work remains incomplete. Decision logic (`makeDecision`) lives in `lib/persistent-mode-core/`, shared with the Codex adapter below.
+- **codex-persistent-mode/**: Codex Stop/PostToolUse adapter over the same shared `makeDecision` core.
 - **pre-tool-enforcer.sh**: Tool execution gate (TaskOutput blocking)
 - **scripts/verify-caps-gate/**: PreToolUse Bash gate engine — denies unfiltered whole-monorepo test/lint commands and injects per-runner memory caps (env caps for vitest/turbo/pnpm, flag caps for jest/turbo) per declarative `verify-caps.yaml` policy. Lives under `scripts/` (not `hooks/`): deployed globally as a single script package (`$HOME/.claude/scripts/verify-caps-gate/`, no registration) via the root `sync.yaml` scripts section, then registered as a hook **only in algocare-home** through a raw `command:` in `projects/algocare-home/claude.yaml` that references that global path. The policy file loads from the script's own directory (`import.meta.url`), so the global location works unchanged.
 
