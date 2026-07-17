@@ -1,7 +1,6 @@
 ---
 name: code-review
 description: Use when reviewing code changes for quality, correctness, and production readiness before merge
-disable-model-invocation: true
 ---
 
 # Code Review
