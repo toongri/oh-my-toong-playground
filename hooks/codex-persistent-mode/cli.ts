@@ -95,6 +95,9 @@ function runStop(input: Record<string, unknown>): void {
 		// absent/unreadable/malformed mirror file → 0
 	}
 
+	// `last_assistant_message`는 codex-rs 새 hooks 시스템 Stop payload의 확정 snake_case 키
+	// (codex-rs/hooks/schema/generated/stop.command.input.schema.json의 required 필드, StopCommandInput).
+	// Stop/SubagentStop 이벤트만 이 필드를 실음. 부재 시 null fail-open(토큰 미발화).
 	const lam = input["last_assistant_message"];
 	const context: DecisionContext = {
 		sessionId,
