@@ -1,6 +1,6 @@
 import { readStdin, parseInput } from "./stdin.ts";
-import { getProjectRoot } from "./utils.ts";
-import { makeDecision, DecisionContext } from "./decision.ts";
+import { getProjectRoot } from "@lib/persistent-mode-core/utils";
+import { makeDecision, DecisionContext } from "@lib/persistent-mode-core/decision";
 import { readTasksFromDirectory, countIncompleteTasks } from "@lib/task-reader";
 import { join } from "path";
 import { initLogger, logStart, logEnd, logInfo, logDebug, logError } from "@lib/logging";
