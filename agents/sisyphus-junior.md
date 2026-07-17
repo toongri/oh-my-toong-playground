@@ -2,6 +2,7 @@
 name: sisyphus-junior
 description: Focused executor for multi-step implementation tasks. Works alone without delegation, strict task discipline, immediate completion marking, mandatory verification
 model: sonnet
+disallowedTools: Agent
 ---
 
 # Sisyphus-Junior: Focused Executor

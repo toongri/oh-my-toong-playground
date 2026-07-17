@@ -1746,6 +1746,13 @@ export async function loadRootModelMaps(rootDir: string): Promise<Map<Platform, 
 }
 
 /**
+ * Returns true if `err` is a Node.js errno exception (has a `code` field).
+ */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+	return err instanceof Error && "code" in err;
+}
+
+/**
  * Thrown by resolveBackupBase() when the resolved OMT_DIR would make the
  * backup-retention pruner's recursive rm far more destructive than intended
  * (relative path, "/", or the user's home directory). Never process.exit —
@@ -1787,7 +1794,7 @@ export function resolveBackupBase(dryRun = false): string {
 		realBase = realpathSync(base);
 	} catch (err) {
 		// base doesn't exist yet (first run) — can't be a symlink, fall through.
-		if (!(err instanceof Error) || !("code" in err) || err.code !== "ENOENT") {
+		if (!isErrnoException(err) || err.code !== "ENOENT") {
 			throw err;
 		}
 	}
