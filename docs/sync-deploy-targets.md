@@ -35,9 +35,11 @@
 
 ## 배포후 포맷(format-on-deploy)
 
-`sync.yaml`이 top-level `format: "<명령>"`(예: `pnpm exec prettier --write`)을
+`sync.yaml`이 top-level `format`(예: `format: "pnpm exec prettier --write"`)을
 선언하면, 각 워크트리 배포가 끝난 뒤(플랫폼 경로 rewrite 다음, 워크트리 catch
-직전) 그 명령을 **타겟 cwd(deployRoot)**에서 한 번 실행한다. 목적은 배포 `.md`
+직전) 그 명령을 **타겟 cwd(deployRoot)**에서 한 번 실행한다. `format`은 **문자열**
+(공백 토큰화 — 단순 케이스, 셸 인용 미지원) 또는 **문자열 배열**(argv로 그대로 사용
+— 공백 든 인자, 예: config 경로가 필요할 때)을 받는다. 목적은 배포 `.md`
 —특히 CJK 표—가 타겟 **자기 포매터의 정규형 바이트**로 착지하게 하는 것이다.
 그러지 않으면 OMT-raw로 착지한 `.md`를 타겟 prettier가 커밋/CI(`prettier --check`)
 마다 재포맷해, 매 sync마다 **가짜 diff(ping-pong churn)**가 떠 진짜 변경을 가린다.

@@ -83,6 +83,32 @@ describe("formatDeployedRoots", () => {
 		]);
 	});
 
+	it("는 배열 형식 formatCmd를 argv로 그대로 넘겨 공백 포함 인자를 보존한다", async () => {
+		await writeFakeFormatter(scriptPath, logPath, 0);
+		await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
+
+		// 공백이 든 인자(예: config 경로)가 한 토큰으로 살아남아야 한다 — 문자열
+		// 공백 분해였다면 "my config.mjs"가 두 인자로 쪼개졌을 것.
+		await formatDeployedRoots(
+			deployRoot,
+			[scriptPath, "--config", "my config.mjs"],
+			[],
+			new Set(),
+		);
+
+		const lines = await readLogLines(logPath);
+		const loggedArgs = lines.slice(1);
+		expect(loggedArgs).toEqual(["--config", "my config.mjs", path.join(deployRoot, ".claude")]);
+	});
+
+	it("는 배열 형식이 비어 있으면 spawn하지 않는다 (skip)", async () => {
+		await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
+
+		await formatDeployedRoots(deployRoot, [], [], new Set());
+
+		expect(await logExists(logPath)).toBe(false);
+	});
+
 	it("는 존재하지 않는 플랫폼 dir을 argv에서 제외한다", async () => {
 		await writeFakeFormatter(scriptPath, logPath, 0);
 		await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
