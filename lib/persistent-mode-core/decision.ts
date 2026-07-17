@@ -13,7 +13,11 @@ import {
 	cleanupBlockCountFiles,
 	MAX_BLOCK_COUNT,
 } from "./state.ts";
-import { detectDeepInterviewDone, detectPrometheusDone } from "./transcript-detector.ts";
+import {
+	detectDeepInterviewDone,
+	detectPrometheusDone,
+	detectAwaitingUser,
+} from "./transcript-detector.ts";
 import { generateAttemptId, ensureDir } from "./utils.ts";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
@@ -55,6 +59,24 @@ function truncateText(text: string, maxLength: number): string {
 	return text;
 }
 
+type AskPosture = "preferred" | "exceptional";
+
+// Shared continuation-contract skeleton emitted by every continuation builder.
+// Mirrors the always-on rule rules/continuation-contract.md (the SSOT). Only the
+// case-2 ask posture varies per family: "preferred" (deep-interview/prometheus/todo)
+// vs "exceptional" (goal/ultragoal — autonomy is post-planning, asking is the rare case).
+function continuationContract(askPosture: AskPosture): string {
+	const askLine =
+		askPosture === "preferred"
+			? "2. Need a user decision or fact only they hold? Ask via the AskUserQuestion tool — asking is NOT stopping (a tool call keeps the turn alive). Prefer this over ending the turn with a question in prose."
+			: "2. Asking is EXCEPTIONAL here — this loop is autonomous (autonomy is post-planning). Only when a decision is the user's alone (a human-only gate) or a boundary is unsafe, ask via the AskUserQuestion tool — asking is NOT stopping. Otherwise keep working.";
+	return `Continuation contract (see the always-on Continuation Contract rule) — at this turn boundary, exactly ONE applies:
+1. Work remains? Keep working — do not stop, do not ask.
+${askLine}
+3. Only the user can decide, or a structured question was just declined? Yield: end your turn with the literal token <awaiting-user/>. The hook allows the stop, KEEPS all session state (this session resumes on the user's next reply), and does NOT mark the work complete. This clean yield is distinct from being force-continued after repeated blocks (the block-count escape) — it is an intentional pause, not a failure.
+Never end a turn with a softener ("should I continue?", "If you want, I can…", "If you'd like, I can…", "Would you like me to…") — each is case 1, 2, or 3 in disguise; pick the real one.`;
+}
+
 function buildDeepInterviewContinuationMessage(): string {
 	return `<deep-interview-continuation>
 
@@ -67,6 +89,8 @@ INSTRUCTIONS:
 2. Ask the next unanswered question or follow up on incomplete answers
 3. When all questions have been fully answered, output: <deep-interview-done/>
 4. Do NOT stop until the interview is complete
+
+${continuationContract("preferred")}
 
 </deep-interview-continuation>
 
@@ -83,10 +107,11 @@ A prometheus planning session is currently active. You must complete the session
 
 INSTRUCTIONS:
 1. Review the current pipeline stage and any pending decisions
-2. If a human decision is awaited, re-surface the pending question via AskUserQuestion — do NOT stop to wait
-3. Never interpret a user "continue" reply as permission to bypass a human gate (S2, design gate, S7)
-4. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
-5. Do NOT stop until <prometheus-done/> is emitted
+2. Never interpret a user "continue" reply as permission to bypass a human gate (S2, design gate, S7)
+3. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
+4. Do NOT stop until <prometheus-done/> is emitted
+
+${continuationContract("preferred")}
 
 </prometheus-continuation>
 
@@ -105,9 +130,10 @@ INSTRUCTIONS:
 1. Review your remaining tasks
 2. Complete remaining tasks
 3. Mark each task as completed when done
-4. If you are waiting for user input (e.g., after asking a question), use the AskUserQuestion tool to prompt the user — do NOT stop to wait
 
 Do NOT stop until all tasks are completed.
+
+${continuationContract("preferred")}
 
 </todo-continuation>
 
@@ -143,6 +169,8 @@ A) Work remains → take the next concrete action toward the objective. Do NOT c
 B) You believe the objective is MET → do NOT stop here. Your 'done' is a claim to disprove — not trusted until verified. Completion is never self-declared and never happens by stopping. Run the completion gate defined in the goal skill — the objective-level self-check lane AND the independent code-review lane — then run the request-complete sequence. If either lane is non-clean, that is remaining work → branch A.
 
 Completion fires ONLY through request-complete. Stopping without it does NOT complete the objective. If you are truly blocked with no actionable next step, report the blocker and stop.
+
+${continuationContract("exceptional")}
 
 </goal-continuation>
 
@@ -206,6 +234,8 @@ B) You believe the objective is MET → do NOT stop here. Your 'done' is a claim
 
 Completion fires ONLY through request-complete. Stopping without it does NOT complete the objective. If you are truly blocked with no actionable next step, report the blocker and stop.
 
+${continuationContract("exceptional")}
+
 </ultragoal-continuation>
 
 ---
@@ -251,6 +281,21 @@ export function makeDecision(context: DecisionContext): HookOutput {
 
 	// Ensure state directory exists
 	ensureDir(stateDir);
+
+	// Priority 0.5: awaiting-user pause token — a legitimate model-originated yield.
+	// Placed BEFORE all family branches (incl. the deep-interview active+live always-block
+	// branch below, which otherwise blocks unconditionally until <deep-interview-done/>)
+	// so it is reachable for EVERY family. Semantics distinct from done-tokens: KEEP all state
+	// (no cleanup, no completion — we return before any family branch reads/writes/deletes state)
+	// and reset the block-count — both the base counter (goal/ultragoal/baseline-todo) and the
+	// prometheus-namespaced counter (prometheus tracks its own under `prometheus-${attemptId}`).
+	// Distinct from the MAX_BLOCK_COUNT failure-escape: this is an intentional pause, allowed
+	// regardless of the current block-count value.
+	if (detectAwaitingUser(lastAssistantMessage)) {
+		cleanupBlockCountFiles(stateDir, attemptId);
+		cleanupBlockCountFiles(stateDir, `prometheus-${attemptId}`);
+		return formatContinueOutput();
+	}
 
 	// Priority 1.4: Goal autonomous pursuit loop
 	const goalRaw = readGoalStateRaw(sessionId);

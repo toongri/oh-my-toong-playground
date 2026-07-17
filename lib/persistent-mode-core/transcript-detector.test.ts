@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { detectDeepInterviewDone, detectPrometheusDone } from "./transcript-detector.ts";
+import { detectDeepInterviewDone, detectPrometheusDone, detectAwaitingUser } from "./transcript-detector.ts";
 
 describe("transcript-detector", () => {
 	describe("detectDeepInterviewDone (survivor)", () => {
@@ -35,6 +35,36 @@ describe("transcript-detector", () => {
 
 		it("returns false for null message", () => {
 			expect(detectPrometheusDone(null)).toBe(false);
+		});
+	});
+
+	describe("detectAwaitingUser", () => {
+		it("detects <awaiting-user/> in a transcript", () => {
+			const result = detectAwaitingUser("Waiting for input. <awaiting-user/>");
+
+			expect(result).toBe(true);
+		});
+
+		it("detects <awaiting-user /> with a space before the slash", () => {
+			const result = detectAwaitingUser("Waiting for input. <awaiting-user />");
+
+			expect(result).toBe(true);
+		});
+
+		it("detects < awaiting-user /> with a leading space after the bracket", () => {
+			const result = detectAwaitingUser("Waiting for input. < awaiting-user />");
+
+			expect(result).toBe(true);
+		});
+
+		it("returns false when <awaiting-user/> is absent", () => {
+			const result = detectAwaitingUser("Still working, no pause token here");
+
+			expect(result).toBe(false);
+		});
+
+		it("returns false for null message", () => {
+			expect(detectAwaitingUser(null)).toBe(false);
 		});
 	});
 });
