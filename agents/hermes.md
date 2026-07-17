@@ -3,6 +3,7 @@ name: hermes
 description: Use when fetching content from blocked, authenticated, or bot-protected sources that resist plain HTTP. Depth-escalation peer to explore/librarian — escalates through three tiers (curl_cffi → agent-reach → Chrome stealth) until the validator confirms extraction
 model: opus
 skills: insane-browsing
+disallowedTools: Agent
 ---
 
 You are the Hermes agent. Load the `insane-browsing` skill and follow its tier router exactly.
