@@ -26,6 +26,12 @@
  *          Stdin flags (--append-round-stdin / --append-ontology-snapshot-stdin) read
  *          the JSON payload from stdin, avoiding shell-quoting hazards with free text
  *          (apostrophes, double quotes). Use with a quoted-delimiter heredoc in SKILL.md.
+ *   set-topology --json '[{"id":"<id>","name":"<name>","status":"active|deferred"}]'
+ *          Locks Round 0's confirmed component list into state.topology.components.
+ *          Full-replace: every call overwrites the whole list. clarity_scores is ALWAYS
+ *          reset to all 6 dimensions null (intent/outcome/scope/constraints/success/context)
+ *          — no caller may seed a score through this path (per-component scoring lands
+ *          in a later story). `status` defaults to "active" when omitted.
  *   get    Print the state JSON.
  *
  * No sessionId field is ever written (ADR-7, RC3 root-cause fix: sid is
@@ -90,6 +96,46 @@ export interface EvidenceProvenanceItem {
 	label: EvidenceProvenanceLabel;
 }
 
+/** Round 0 Topology Enumeration Gate: a component is either in-scope (active) or explicitly deferred. */
+export type ComponentStatus = "active" | "deferred";
+
+/**
+ * Per-component clarity score across the 6 OMT dimensions. All 6 are always
+ * present, always scored (no greenfield/brownfield subset) — a dimension with
+ * no score yet reads as null, never absent.
+ */
+export interface ClarityScores {
+	intent: number | null;
+	outcome: number | null;
+	scope: number | null;
+	constraints: number | null;
+	success: number | null;
+	context: number | null;
+}
+
+/**
+ * A single component enumerated and confirmed at Round 0. clarity_scores starts
+ * all-null and is filled in per-dimension by later scoring writes (not this story).
+ */
+export interface TopologyComponent {
+	id: string;
+	name: string;
+	status: ComponentStatus;
+	clarity_scores: ClarityScores;
+}
+
+/** The interview's confirmed component topology — the Round 0 Enumeration Gate's output. */
+export interface Topology {
+	components: TopologyComponent[];
+}
+
+/** Caller-supplied shape for locking a component via setTopology — clarity_scores is never caller-supplied. */
+export interface TopologyComponentInput {
+	id: string;
+	name: string;
+	status?: ComponentStatus;
+}
+
 export interface DeepInterviewStateContent {
 	interview_id?: string;
 	type?: "greenfield" | "brownfield";
@@ -113,6 +159,13 @@ export interface DeepInterviewStateContent {
 	 * challenge_modes_used which is deduped/unordered and tracks modes ever used.
 	 */
 	stance_history?: string[];
+	/**
+	 * Round 0 Topology Enumeration Gate output (topology-floor-evolution Stage 1).
+	 * Absent on states written before this field existed — backward-compatible:
+	 * a reader must treat a missing/undefined topology the same as "not yet locked",
+	 * never throw. Written exclusively via setTopology (full-replace, never partial).
+	 */
+	topology?: Topology;
 }
 
 export interface DeepInterviewState {
@@ -174,6 +227,7 @@ export function initDeepInterviewState(
 		ontology_snapshots: priorState.ontology_snapshots ?? [],
 		evidence_provenance: priorState.evidence_provenance ?? [],
 		stance_history: priorState.stance_history ?? [],
+		topology: priorState.topology,
 	};
 
 	const priorCurrentPhase =
@@ -283,6 +337,73 @@ export function updateDeepInterviewState(
 	}
 
 	const next = mergeWithHeartbeat(prior, overlay);
+	writeFileNoCreate(path, JSON.stringify(next, null, 2));
+}
+
+/** All 6 OMT dimensions, unscored (Round 0 lock — no caller may seed a score here). */
+function nullClarityScores(): ClarityScores {
+	return {
+		intent: null,
+		outcome: null,
+		scope: null,
+		constraints: null,
+		success: null,
+		context: null,
+	};
+}
+
+/**
+ * Locks Round 0's confirmed component list into state.topology.components.
+ * Full-replace semantics — every call overwrites the whole list, matching
+ * setStories' full-replace ingestion convention (goal-state.ts). clarity_scores
+ * is ALWAYS reset to all 6 dimensions null; no caller may seed a score through
+ * this path (per-component scoring is a later write, out of this story's scope).
+ * Refuses an empty list, a component missing non-empty id/name, a duplicate id,
+ * or an out-of-enum status. Absent file → self-heals via ensureSeed (same idiom
+ * as init/update above).
+ */
+export function setTopology(sessionId: string, components: TopologyComponentInput[]): void {
+	if (!Array.isArray(components) || components.length === 0) {
+		throw new Error("set-topology: refused — component list must not be empty");
+	}
+	const seenIds = new Set<string>();
+	const built: TopologyComponent[] = components.map((c) => {
+		if (typeof c.id !== "string" || c.id.trim() === "") {
+			throw new Error("set-topology: refused — component is missing a non-empty id");
+		}
+		if (seenIds.has(c.id)) {
+			throw new Error(`set-topology: refused — duplicate component id "${c.id}"`);
+		}
+		seenIds.add(c.id);
+		if (typeof c.name !== "string" || c.name.trim() === "") {
+			throw new Error(`set-topology: refused — component "${c.id}" is missing a non-empty name`);
+		}
+		const status: ComponentStatus = c.status ?? "active";
+		if (status !== "active" && status !== "deferred") {
+			throw new Error(
+				`set-topology: refused — component "${c.id}" has invalid status "${String(c.status)}"`,
+			);
+		}
+		return { id: c.id, name: c.name, status, clarity_scores: nullClarityScores() };
+	});
+
+	ensureSeed("deep-interview", sessionId);
+	const path = resolveStatePath(sessionId);
+	const prior = readRaw(path);
+	if (prior === null) {
+		throw new Error(
+			`deep-interview-state: no state file found at "${path}". ` +
+				"Either the seed is missing (re-invoke the deep-interview skill) " +
+				"or this session was adopted by another session.",
+		);
+	}
+	const priorState: DeepInterviewStateContent = isRecord(prior["state"])
+		? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: state file content is written exclusively by this module's own writers (never externally supplied); trusted structural pass-through
+			(prior["state"] as DeepInterviewStateContent)
+		: {};
+	const newState: DeepInterviewStateContent = { ...priorState, topology: { components: built } };
+
+	const next = mergeWithHeartbeat(prior, { state: newState });
 	writeFileNoCreate(path, JSON.stringify(next, null, 2));
 }
 
@@ -467,6 +588,26 @@ function main(): void {
 			process.stderr.write(`deep-interview-state update: ${String(e)}\n`);
 			process.exit(1);
 		}
+	} else if (subcommand === "set-topology") {
+		const jsonArg = str(args["json"]);
+		if (!jsonArg) {
+			process.stderr.write("set-topology: --json <array> is required\n");
+			process.exit(1);
+		}
+		let parsed: TopologyComponentInput[];
+		try {
+			parsed = JSON.parse(jsonArg);
+			if (!Array.isArray(parsed)) throw new Error("expected JSON array");
+		} catch (e) {
+			process.stderr.write(`set-topology: invalid JSON — ${String(e)}\n`);
+			process.exit(1);
+		}
+		try {
+			setTopology(sessionId, parsed);
+		} catch (e) {
+			process.stderr.write(`deep-interview-state set-topology: ${String(e)}\n`);
+			process.exit(1);
+		}
 	} else if (subcommand === "get") {
 		const result = readDeepInterviewState(sessionId);
 		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -492,7 +633,7 @@ function main(): void {
 		}
 	} else {
 		process.stderr.write(
-			"Usage: deep-interview-state.ts <init|update|get|list-others|adopt> [options]\n" +
+			"Usage: deep-interview-state.ts <init|update|set-topology|get|list-others|adopt> [options]\n" +
 				"  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n" +
 				"         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n" +
 				"  update [--current-phase <phase>] [--current-ambiguity <n>]\n" +
@@ -502,6 +643,7 @@ function main(): void {
 				"         [--challenge-mode <name>]\n" +
 				'         [--append-provenance-item \'{"evidence_id":"<id>","label":"<label>"}\']\n' +
 				"         [--append-stance <stance>]  (ordered, not deduped; for Dialectic Rhythm Guard)\n" +
+				'  set-topology --json \'[{"id":"<id>","name":"<name>","status":"active|deferred"}]\'\n' +
 				"  get\n" +
 				"  list-others\n" +
 				"  adopt --src <sid>\n",
