@@ -9,6 +9,7 @@ import {
 	readDeepInterviewState,
 	resolveStatePath,
 	computeAmbiguityFloor,
+	computeTopologyMigrationStatus,
 } from "./deep-interview-state.ts";
 import type { DeepInterviewStateContent, ClarityScores } from "./deep-interview-state.ts";
 
@@ -753,6 +754,37 @@ describe("deep-interview-state CLI main()", () => {
 		// State file is byte-identical — the refused write never reached mergeWrite.
 		const after = readFileSync(path, "utf8");
 		expect(after).toBe(before);
+	});
+
+	// ---------------------------------------------------------------------------
+	// topology-floor-evolution Stage 6: legacy migration (UC11 — see
+	// /Users/toong/.omt/oh-my-toong-playground/deep-interview/topology-floor-evolution.md)
+	// ---------------------------------------------------------------------------
+
+	// UC11 — legacy migration: a state written before the topology field existed (no
+	// `state.topology` at all — the pre-Stage-1 shape) reads as "legacy_missing", the
+	// signal that Round 0 (topology enumeration) must run before the next per-component
+	// scoring write. A state that has already locked topology — even with zero
+	// components — is never legacy_missing, regardless of scoring progress elsewhere.
+	test("UC11: topology-absent state reads as legacy_missing; topology-present state does not", () => {
+		const legacy: DeepInterviewStateContent = {
+			initial_idea: "pre-topology state",
+			current_ambiguity: 0.4,
+		};
+		expect(computeTopologyMigrationStatus(legacy)).toBe("legacy_missing");
+
+		const migrated: DeepInterviewStateContent = {
+			initial_idea: "post-topology state",
+			topology: { components: [] },
+		};
+		expect(computeTopologyMigrationStatus(migrated)).toBe("current");
+	});
+
+	// UC11 — undefined/null state (no state object written at all yet) is also
+	// legacy_missing, matching computeAmbiguityFloor's undefined/null-safe convention.
+	test("UC11: undefined/null state also reads as legacy_missing", () => {
+		expect(computeTopologyMigrationStatus(undefined)).toBe("legacy_missing");
+		expect(computeTopologyMigrationStatus(null)).toBe("legacy_missing");
 	});
 });
 
