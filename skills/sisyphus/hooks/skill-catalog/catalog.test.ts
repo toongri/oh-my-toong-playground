@@ -1,7 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { SITUATIONS, SKILL_HASHMAP, buildCatalog, formatCatalog } from "./catalog.ts";
 
-const SUPERPOWERS_PLUGIN = "superpowers@claude-plugins-official";
 const FRONTEND_DESIGN_PLUGIN = "frontend-design@claude-plugins-official";
 
 describe("SITUATIONS", () => {
@@ -33,19 +32,19 @@ describe("SKILL_HASHMAP", () => {
 	});
 
 	it("TDD 스킬이 올바른 키로 존재한다", () => {
-		expect(SKILL_HASHMAP.has("superpowers:test-driven-development")).toBe(true);
+		expect(SKILL_HASHMAP.has("test-driven-development")).toBe(true);
 	});
 
-	it("TDD 스킬은 pluginId와 situationIds를 가진다", () => {
-		const tdd = SKILL_HASHMAP.get("superpowers:test-driven-development")!;
-		expect(tdd.pluginId).toBe(SUPERPOWERS_PLUGIN);
+	it("TDD 스킬은 pluginId 없이 situationIds를 가진다", () => {
+		const tdd = SKILL_HASHMAP.get("test-driven-development")!;
+		expect(tdd.pluginId).toBeUndefined();
 		expect(tdd.situationIds).toContain("bugfix");
 		expect(tdd.situationIds).toContain("implementation");
 		expect(tdd.situationIds).toContain("refactoring");
 	});
 
 	it("TDD 스킬에 criteria, examples 필드가 없다", () => {
-		const tdd = SKILL_HASHMAP.get("superpowers:test-driven-development")!;
+		const tdd = SKILL_HASHMAP.get("test-driven-development")!;
 		expect((tdd as any).criteria).toBeUndefined();
 		expect((tdd as any).examples).toBeUndefined();
 	});
@@ -87,18 +86,17 @@ describe("SKILL_HASHMAP", () => {
 });
 
 describe("buildCatalog", () => {
-	it("플러그인 활성화 시 superpowers 스킬이 카탈로그에 포함된다", () => {
-		const enabledPlugins = new Set([SUPERPOWERS_PLUGIN]);
-		const entries = buildCatalog([], enabledPlugins);
-		const tdd = entries.find((e) => e.name === "superpowers:test-driven-development");
+	it("발견(discovered) 시 tdd 스킬이 full entry로 포함된다", () => {
+		const entries = buildCatalog(["test-driven-development"], new Set());
+		const tdd = entries.find((e) => e.name === "test-driven-development");
 		expect(tdd).toBeDefined();
 		expect(tdd!.discoveredOnly).toBe(false);
 		expect(tdd!.description).toBeDefined();
 	});
 
-	it("플러그인 비활성화 시 superpowers 스킬이 카탈로그에서 제외된다", () => {
+	it("미발견 시 tdd 스킬이 카탈로그에서 제외된다", () => {
 		const entries = buildCatalog([], new Set());
-		const tdd = entries.find((e) => e.name === "superpowers:test-driven-development");
+		const tdd = entries.find((e) => e.name === "test-driven-development");
 		expect(tdd).toBeUndefined();
 	});
 
@@ -110,27 +108,25 @@ describe("buildCatalog", () => {
 		expect(custom!.description).toBeUndefined();
 	});
 
-	it("플러그인 활성화 + 스킬 디스커버리 시 중복 없이 하나만 포함된다", () => {
-		const enabledPlugins = new Set([SUPERPOWERS_PLUGIN]);
-		const entries = buildCatalog(["superpowers:test-driven-development"], enabledPlugins);
-		const tddEntries = entries.filter((e) => e.name === "superpowers:test-driven-development");
+	it("발견된 tdd 스킬이 중복 없이 하나만 포함된다", () => {
+		const entries = buildCatalog(["test-driven-development"], new Set());
+		const tddEntries = entries.filter((e) => e.name === "test-driven-development");
 		expect(tddEntries).toHaveLength(1);
 	});
 
 	it("CatalogEntry에 criteria, examples 필드가 없다", () => {
-		const enabledPlugins = new Set([SUPERPOWERS_PLUGIN]);
-		const entries = buildCatalog([], enabledPlugins);
-		const tdd = entries.find((e) => e.name === "superpowers:test-driven-development")!;
+		const entries = buildCatalog(["test-driven-development"], new Set());
+		const tdd = entries.find((e) => e.name === "test-driven-development")!;
 		expect((tdd as any).criteria).toBeUndefined();
 		expect((tdd as any).examples).toBeUndefined();
 	});
 
 	it("pluginId가 있지만 disabled인 discovered 스킬이 buildCatalog에서 제외된다", () => {
-		// superpowers:test-driven-development는 pluginId가 있는 스킬
+		// frontend-design은 pluginId가 있는 스킬
 		// discoveredSkillNames에는 포함하되 enabledPluginIds에서 제외하면 카탈로그에 나타나지 않아야 한다
-		const entries = buildCatalog(["superpowers:test-driven-development"], new Set());
-		const tdd = entries.find((e) => e.name === "superpowers:test-driven-development");
-		expect(tdd).toBeUndefined();
+		const entries = buildCatalog(["frontend-design"], new Set());
+		const fd = entries.find((e) => e.name === "frontend-design");
+		expect(fd).toBeUndefined();
 	});
 
 	it("frontend-design 플러그인 활성화 시 카탈로그에 포함된다", () => {
@@ -151,28 +147,28 @@ describe("buildCatalog", () => {
 
 describe("formatCatalog", () => {
 	it("skill-catalog 태그를 포함한다", () => {
-		const entries = buildCatalog([], new Set([SUPERPOWERS_PLUGIN]));
+		const entries = buildCatalog([], new Set([FRONTEND_DESIGN_PLUGIN]));
 		const output = formatCatalog(entries);
 		expect(output).toContain("<skill-catalog>");
 		expect(output).toContain("</skill-catalog>");
 	});
 
 	it("Load Skills 헤더를 포함한다", () => {
-		const entries = buildCatalog([], new Set([SUPERPOWERS_PLUGIN]));
+		const entries = buildCatalog([], new Set([FRONTEND_DESIGN_PLUGIN]));
 		const output = formatCatalog(entries);
 		expect(output).toContain("## Load Skills");
 	});
 
 	it("상황별 테이블이 available 스킬을 포함한다", () => {
-		const entries = buildCatalog([], new Set([SUPERPOWERS_PLUGIN]));
+		const entries = buildCatalog(["test-driven-development"], new Set());
 		const output = formatCatalog(entries);
 		// TDD has bugfix, new-feature, refactoring situationIds
 		expect(output).toContain("Bug fix");
-		expect(output).toContain("superpowers:test-driven-development");
+		expect(output).toContain("test-driven-development");
 	});
 
 	it("How to evaluate 섹션에 reasoning이 포함된다", () => {
-		const entries = buildCatalog([], new Set([SUPERPOWERS_PLUGIN]));
+		const entries = buildCatalog(["test-driven-development"], new Set());
 		const output = formatCatalog(entries);
 		expect(output).toContain("### How to evaluate");
 		// bugfix situation reasoning
