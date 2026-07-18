@@ -52,7 +52,6 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 |------|------|
 | [코어 파이프라인](docs/skills/core-pipeline.md) | 정의→기획→실행→검증 파이프라인 (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 위임 에이전트 14종 |
 | [리뷰/품질](docs/skills/review-quality.md) | code-review · orchestrate-review · design-review · slides-review · qa · performance-optimizer |
-| [개발 방법론](docs/skills/methodology.md) | superpowers에서 추출한 개발 방법론 벤더 스킬 — test-driven-development · receiving-code-review · writing-skills |
 | [문서/콘텐츠·유틸](docs/skills/authoring.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [지식 그래프(pins)](docs/skills/knowledge-graph-pins.md) | pins 지식 그래프 — pin-setup · record · query · audit · wrap-up |
 | [유틸·개인 워크플로우](docs/skills/utilities-personal.md) | hud · resume · jd · mock-interview 등 |
