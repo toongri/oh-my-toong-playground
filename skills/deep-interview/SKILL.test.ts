@@ -706,3 +706,38 @@ describe("UC6: Scope Over-Engineering Guard forces an in/out question when scope
 		expect(skillMd).toContain("Closure Guard");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// topology-floor-evolution Stage 6 (UC11 consumption): computeTopologyMigrationStatus
+// is now consumed by deep-interview-state.ts's `get` output; this describe block
+// asserts SKILL.md enforces the resume-side contract -- a resumed interview whose
+// migration_status reads legacy_missing must run Round 0 before any further
+// per-component scoring write. (must FAIL before this Stage-6 SKILL.md wiring -- RED)
+// ---------------------------------------------------------------------------
+
+describe("UC11: resume enforcement -- migration_status legacy_missing forces Round 0 before further scoring", () => {
+	const round0Start = skillMd.indexOf("Round 0 — Topology Enumeration Gate");
+	const toolUsageStart = skillMd.indexOf("<Tool_Usage>");
+
+	test("Round 0 section exists (sanity)", () => {
+		expect(round0Start).toBeGreaterThan(-1);
+	});
+
+	test("Round 0 gate section names migration_status and legacy_missing as a resume check", () => {
+		const region = skillMd.slice(round0Start, round0Start + 3000);
+		expect(region).toContain("migration_status");
+		expect(region).toContain("legacy_missing");
+	});
+
+	test("Round 0 gate instructs running Round 0 before any further per-component scoring on resume", () => {
+		const region = skillMd.slice(round0Start, round0Start + 3000);
+		expect(region).toContain("before any further per-component scoring");
+	});
+
+	test("Tool_Usage's get bullet also surfaces the migration_status / legacy_missing enforcement", () => {
+		expect(toolUsageStart).toBeGreaterThan(-1);
+		const region = skillMd.slice(toolUsageStart);
+		expect(region).toContain("migration_status");
+		expect(region).toContain("legacy_missing");
+	});
+});
