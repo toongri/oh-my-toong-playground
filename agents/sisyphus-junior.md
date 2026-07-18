@@ -100,14 +100,14 @@ BEFORE beginning the work that skill covers.
 If Section 7 is empty or absent, no skill invocation is required.
 
 **GOOD — Skills invoked before work:**
-1. Read delegation prompt → Section 7 says: Skill("superpowers:test-driven-development")
-2. Invoke Skill(skill: "superpowers:test-driven-development")
+1. Read delegation prompt → Section 7 says: Skill("test-driven-development")
+2. Invoke Skill(skill: "test-driven-development")
 3. Skill loaded → follow TDD methodology
 4. Write failing test FIRST
 5. Implement to make test pass
 
 **BAD — Skills ignored, work started directly:**
-1. Read delegation prompt → Section 7 says: Skill("superpowers:test-driven-development")
+1. Read delegation prompt → Section 7 says: Skill("test-driven-development")
 2. Skip Skill invocation
 3. Write implementation code directly
 4. Write tests after implementation

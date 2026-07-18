@@ -77,7 +77,7 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 - Prior task results: Auth middleware was refactored in Task #3, middleware chain order matters
 
 ## 7. MANDATORY SKILLS
-- superpowers:test-driven-development
+- test-driven-development
 ```
 
 ### Prompt Quality Check

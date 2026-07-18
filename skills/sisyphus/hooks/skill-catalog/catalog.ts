@@ -37,11 +37,10 @@ export const SITUATIONS: Situation[] = [
 // Internal hashmap of known skills with rich metadata
 export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
 	[
-		"superpowers:test-driven-development",
+		"test-driven-development",
 		{
 			description:
 				"Test-Driven Development methodology — write failing tests first, then implement to pass",
-			pluginId: "superpowers@claude-plugins-official",
 			situationIds: ["bugfix", "implementation", "refactoring"],
 		},
 	],

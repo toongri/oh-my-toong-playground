@@ -46,7 +46,7 @@ During sync, an **Upward Search** logic applies. When a project's `sync.yaml` re
 
 ## Documentation
 
-The details of the library's skills (33), agents (14), and commands (2) live under `docs/`.
+The details of the library's skills (36), agents (14), and commands (2) live under `docs/`.
 
 | Doc | Contents |
 |-----|----------|
