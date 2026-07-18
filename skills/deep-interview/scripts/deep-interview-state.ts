@@ -611,6 +611,28 @@ export function readDeepInterviewState(sessionId: string): Record<string, unknow
 	return readRaw(resolveStatePath(sessionId));
 }
 
+/**
+ * Round 0 Topology Enumeration Gate migration status (topology-floor-evolution Stage 6):
+ * "legacy_missing" for any state written before the `topology` field existed (Stage 1) —
+ * `state.topology` is absent/undefined, including a wholly missing/null state. "current"
+ * once topology has been locked via setTopology, even with zero components.
+ */
+export type TopologyMigrationStatus = "legacy_missing" | "current";
+
+/**
+ * Pure, deterministic legacy-migration judgment (topology-floor-evolution Stage 6, UC11):
+ * a state with no `topology` field reads as "legacy_missing" — the signal that Round 0
+ * (topology enumeration) must run before the next per-component scoring write, since
+ * computeAmbiguityFloor/validateScoredTransition assume `state.topology.components`
+ * already exists. Never throws on an absent/malformed state (same undefined/null-safe
+ * convention as computeAmbiguityFloor).
+ */
+export function computeTopologyMigrationStatus(
+	state: DeepInterviewStateContent | undefined | null,
+): TopologyMigrationStatus {
+	return state?.topology === undefined ? "legacy_missing" : "current";
+}
+
 // ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
