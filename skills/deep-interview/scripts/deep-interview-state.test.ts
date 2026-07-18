@@ -778,6 +778,51 @@ describe("deep-interview-state CLI main()", () => {
 	});
 
 	// ---------------------------------------------------------------------------
+	// non-finite --current-ambiguity guard: `Number(reported)` on a non-numeric or
+	// non-finite CLI value silently produces NaN, which `JSON.stringify` then
+	// serializes as `null` — a null current_ambiguity fail-opens past the Stop-hook's
+	// `ambiguity > threshold` cross-check (hooks/persistent-mode/decision.ts). The CLI
+	// must refuse before any write reaches the state file.
+	// ---------------------------------------------------------------------------
+
+	test("update --current-ambiguity abc (non-numeric string): CLI exits non-zero; current_ambiguity stays at its prior value (never null)", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "guard idea" });
+		run("update --current-ambiguity 0.3");
+
+		const path = resolveStatePath(SID);
+		const before = readFileSync(path, "utf8");
+
+		expect(() => run("update --current-ambiguity abc")).toThrow();
+
+		const after = readFileSync(path, "utf8");
+		expect(after).toBe(before);
+		const nested = (JSON.parse(after) as Record<string, unknown>)["state"] as Record<
+			string,
+			unknown
+		>;
+		expect(nested["current_ambiguity"]).not.toBeNull();
+		expect(nested["current_ambiguity"]).toBe(0.3);
+	});
+
+	test.each([["Infinity"], ["-Infinity"], ["NaN"]])(
+		"update --current-ambiguity %s (non-finite): CLI exits non-zero; state file byte-unchanged",
+		(value) => {
+			writeSeed();
+			initDeepInterviewState(SID, { initial_idea: "guard idea" });
+			run("update --current-ambiguity 0.3");
+
+			const path = resolveStatePath(SID);
+			const before = readFileSync(path, "utf8");
+
+			expect(() => run(`update --current-ambiguity ${value}`)).toThrow();
+
+			const after = readFileSync(path, "utf8");
+			expect(after).toBe(before);
+		},
+	);
+
+	// ---------------------------------------------------------------------------
 	// topology-floor-evolution Stage 6: legacy migration (UC11 — see
 	// topology-floor-evolution.md)
 	// ---------------------------------------------------------------------------

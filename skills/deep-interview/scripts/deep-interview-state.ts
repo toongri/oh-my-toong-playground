@@ -361,6 +361,17 @@ export function updateDeepInterviewState(
 			// the original reported figure is kept verbatim under reported_ambiguity so the
 			// clamp is never silently lossy.
 			const reported = partial.current_ambiguity;
+			// Fail-closed input guard: a non-numeric CLI value parses to NaN (Number("abc")),
+			// and Infinity/-Infinity are numeric but not finite. Either would flow through
+			// Math.max/JSON.stringify below and land as `null` in the state file, silently
+			// fail-opening the Stop-hook's `ambiguity > threshold` cross-check
+			// (hooks/persistent-mode/decision.ts). Thrown before any assignment to
+			// updatedState, so the state file stays byte-identical (UC5 idiom above).
+			if (!Number.isFinite(reported)) {
+				throw new Error(
+					`update: refused — current-ambiguity must be a finite number, got ${String(reported)}`,
+				);
+			}
 			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: same trusted structural pass-through as other readers in this module
 			const stateForCheck = priorState as DeepInterviewStateContent;
 			const floor = computeAmbiguityFloor(stateForCheck);
