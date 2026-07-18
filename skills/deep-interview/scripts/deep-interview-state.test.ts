@@ -690,6 +690,132 @@ describe("deep-interview-state CLI main()", () => {
 	});
 
 	// ---------------------------------------------------------------------------
+	// topology-floor-evolution Stage 2 writer: append_round → clarity_scores
+	// propagation (UC-C1, UC-C2, UC-C3) — the writer wiring that fills what
+	// setTopology always seeds null, so computeAmbiguityFloor's
+	// unscored_component_count can actually drop at runtime.
+	// ---------------------------------------------------------------------------
+
+	// UC-C1 — scoring both active components via append-round (component + scores)
+	// fills clarity_scores for each, and the floor's unscored contribution drops to 0:
+	// a reported ambiguity of 0.04 with both components scored survives unclamped.
+	test("UC-C1: append-round with component+scores propagates into topology.components[].clarity_scores; floor drops to 0 once every active component is scored", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "two-component idea" });
+		run(
+			`set-topology --json '${JSON.stringify([
+				{ id: "c1", name: "Component 1" },
+				{ id: "c2", name: "Component 2" },
+			])}'`,
+		);
+
+		runStdin(
+			"update --append-round-stdin",
+			JSON.stringify({
+				n: 1,
+				component: "c1",
+				question: "q1",
+				answer: "a1",
+				scores: scoredDims(),
+				ambiguity: 0.1,
+			}),
+		);
+		runStdin(
+			"update --append-round-stdin",
+			JSON.stringify({
+				n: 2,
+				component: "c2",
+				question: "q2",
+				answer: "a2",
+				scores: scoredDims(),
+				ambiguity: 0.1,
+			}),
+		);
+
+		const state = rawState();
+		const nested = state["state"] as Record<string, unknown>;
+		const topology = nested["topology"] as Record<string, unknown>;
+		const components = topology["components"] as Record<string, unknown>[];
+		for (const comp of components) {
+			const scores = comp["clarity_scores"] as Record<string, unknown>;
+			for (const dim of CLARITY_DIMENSIONS) {
+				expect(scores[dim]).not.toBeNull();
+			}
+		}
+
+		// Both active components are now scored — the floor's unscored term is 0, so
+		// a reported ambiguity of 0.04 is NOT clamped up.
+		run("update --current-ambiguity 0.04");
+		const state2 = rawState();
+		const nested2 = state2["state"] as Record<string, unknown>;
+		expect(nested2["ambiguity_floor"]).toBe(0);
+		expect(nested2["current_ambiguity"]).toBe(0.04);
+	});
+
+	// UC-C2 — a sibling component cannot hide via propagation either: scoring c1 only
+	// leaves c2's clarity_scores untouched (still all-null from set-topology), and the
+	// floor keeps counting c2 as unscored.
+	test("UC-C2: scoring only c1 via append-round leaves c2's clarity_scores null; floor still counts c2 as unscored", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "two-component idea" });
+		run(
+			`set-topology --json '${JSON.stringify([
+				{ id: "c1", name: "Component 1" },
+				{ id: "c2", name: "Component 2" },
+			])}'`,
+		);
+
+		runStdin(
+			"update --append-round-stdin",
+			JSON.stringify({
+				n: 1,
+				component: "c1",
+				question: "q1",
+				answer: "a1",
+				scores: scoredDims(),
+				ambiguity: 0.1,
+			}),
+		);
+
+		const state = rawState();
+		const nested = state["state"] as Record<string, unknown>;
+		const topology = nested["topology"] as Record<string, unknown>;
+		const components = topology["components"] as Record<string, unknown>[];
+		const c1 = components.find((c) => c["id"] === "c1")!;
+		const c2 = components.find((c) => c["id"] === "c2")!;
+		const c1Scores = c1["clarity_scores"] as Record<string, unknown>;
+		const c2Scores = c2["clarity_scores"] as Record<string, unknown>;
+		for (const dim of CLARITY_DIMENSIONS) {
+			expect(c1Scores[dim]).not.toBeNull();
+			expect(c2Scores[dim]).toBeNull();
+		}
+
+		run("update --current-ambiguity 0.01");
+		const state2 = rawState();
+		const nested2 = state2["state"] as Record<string, unknown>;
+		expect(nested2["ambiguity_floor"]).toBe(0.05); // c2 still unscored
+	});
+
+	// UC-C3 — a round with neither component nor scores is a pure rounds-push: no
+	// component's clarity_scores changes.
+	test("UC-C3: append-round without component/scores leaves every component's clarity_scores unchanged", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "single-component idea" });
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "Component 1" }])}'`);
+
+		run(`update --append-round '{"n":1,"question":"q","answer":"a"}'`);
+
+		const state = rawState();
+		const nested = state["state"] as Record<string, unknown>;
+		const topology = nested["topology"] as Record<string, unknown>;
+		const components = topology["components"] as Record<string, unknown>[];
+		const scores = components[0]["clarity_scores"] as Record<string, unknown>;
+		for (const dim of CLARITY_DIMENSIONS) {
+			expect(scores[dim]).toBeNull();
+		}
+	});
+
+	// ---------------------------------------------------------------------------
 	// topology-floor-evolution Stage 3: established_facts disputed lifecycle +
 	// validateScoredTransition (UC4, UC5 — see
 	// topology-floor-evolution.md)
