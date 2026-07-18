@@ -359,11 +359,11 @@ describe("new-prose: Design Interview persists decisions to state", () => {
 // ---------------------------------------------------------------------------
 
 describe("regression-guard", () => {
-	test("ambiguity formula (greenfield, 5-dim canonical weights) is present", () => {
-		expect(skillMd).toContain(
-			"intent × 0.30 + outcome × 0.25 + scope × 0.20 + constraints × 0.15 + success × 0.10",
-		);
-	});
+	// The pre-Stage-4 greenfield-only 5-dim formula test is retired here: UC9
+	// (topology-floor-evolution Stage 4) replaces the dual greenfield/brownfield
+	// formula with a single 6-dim formula, so a distinct 5-dim-no-context
+	// greenfield formula no longer exists in SKILL.md by design (see the UC9
+	// describe block below, which asserts its absence directly).
 
 	test("ambiguity formula (brownfield, 6-dim canonical weights) is present", () => {
 		expect(skillMd).toContain(
@@ -636,5 +636,91 @@ describe("phase-3 template propagation: Phase-4 spec-template reflects the widen
 	test("examples do not target the retired 'Goal Clarity' dimension label", () => {
 		const examplesMd = readFileSync(join(import.meta.dir, "deep-interview-examples.md"), "utf8");
 		expect(examplesMd).not.toContain("Goal Clarity");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// STAGE-4 (topology-floor-evolution): Round 0 Topology Enumeration Gate,
+// per-component scoring, single weighted formula, Scope/Closure guards.
+// (must FAIL before the Stage-4 SKILL.md prompt edits -- RED)
+// ---------------------------------------------------------------------------
+
+describe("UC12: step 3.7 no longer narrows to a single slice -- Round 0 enumerates all topology components", () => {
+	test("old propose-only decomposition gate heading is absent", () => {
+		expect(skillMd).not.toContain("propose-only decomposition gate");
+	});
+
+	test('old "Interview ONLY that first subsystem" narrowing instruction is absent', () => {
+		expect(skillMd).not.toContain("Interview ONLY that first subsystem");
+	});
+
+	test('"Round 0" Topology Enumeration Gate heading is present', () => {
+		expect(skillMd).toContain("Round 0");
+		expect(skillMd).toContain("Topology Enumeration Gate");
+	});
+
+	test("Round 0 enumerates ALL components rather than narrowing to one slice", () => {
+		expect(skillMd).toContain("Enumerate ALL topology components");
+	});
+});
+
+describe("UC1 prompt contract: Round 0 surfaces components and gets user confirm/add/merge/defer", () => {
+	const start = skillMd.indexOf("Round 0 — Topology Enumeration Gate");
+
+	test("Round 0 section exists (sanity)", () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("Round 0 asks the user to confirm/add/merge/defer the component list", () => {
+		const region = skillMd.slice(start, start + 2000);
+		expect(region).toContain("**confirm**");
+		expect(region).toContain("**add**");
+		expect(region).toContain("**merge**");
+		expect(region).toContain("**defer**");
+	});
+
+	test("Round 0 locks the confirmed list via set-topology", () => {
+		const region = skillMd.slice(start, start + 2000);
+		expect(region).toContain("set-topology");
+		expect(region).toContain("--json");
+	});
+});
+
+describe("UC9: single weighted ambiguity formula replaces the greenfield/brownfield dual formula", () => {
+	test("the old greenfield-only 5-dim formula (no context) is absent", () => {
+		expect(skillMd).not.toContain(
+			"intent × 0.30 + outcome × 0.25 + scope × 0.20 + constraints × 0.15 + success × 0.10",
+		);
+	});
+
+	test('a distinct "Greenfield:"-labeled formula line no longer exists', () => {
+		expect(skillMd).not.toMatch(/Greenfield:\s*`ambiguity = 1 - \(/);
+	});
+
+	test('a distinct "Brownfield:"-labeled formula line no longer exists (unified, not type-branched)', () => {
+		expect(skillMd).not.toMatch(/Brownfield:\s*`ambiguity = 1 - \(/);
+	});
+
+	test("exactly one ambiguity weighted-sum formula appears in the doc", () => {
+		const matches = skillMd.match(/ambiguity = 1 - \(/g) || [];
+		expect(matches.length).toBe(1);
+	});
+});
+
+describe("UC6: Scope Over-Engineering Guard forces an in/out question when scope is unscored or low", () => {
+	test('"Scope Over-Engineering Guard" phrase is present', () => {
+		expect(skillMd).toContain("Scope Over-Engineering Guard");
+	});
+
+	test('guard forces a "what\'s in vs what\'s out" boundary question', () => {
+		expect(skillMd).toContain("what's in vs what's out");
+	});
+
+	test("guard names gold-plating as the failure it blocks", () => {
+		expect(skillMd).toContain("gold-plating");
+	});
+
+	test("Closure Guard blocks convergence while any active component is unscored", () => {
+		expect(skillMd).toContain("Closure Guard");
 	});
 });

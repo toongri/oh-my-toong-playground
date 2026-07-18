@@ -72,10 +72,15 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
    - If the initial context is oversized or likely to crowd out downstream prompts, produce a concise prompt-safe summary that preserves user intent, decisions, constraints, unknowns, cited files/symbols, and any explicit non-goals.
    - Treat the summary as the canonical `initial_idea` and store the raw oversized material only as external/advisory context if it can be referenced safely; do not paste the raw oversized context into question-generation, ambiguity-scoring, spec-crystallization, or execution-handoff prompts.
    - Wait until the summary exists before ambiguity scoring, weakest-dimension selection, brownfield exploration prompts, or any bridge to prometheus or sisyphus.
-3.7. **Detect multi-subsystem mega-idea (propose-only decomposition gate)**:
-   - Assess whether the parsed idea spans ≥2 independent subsystems — two subsystems are independent when neither forces the other to be built first (cross-cutting integration glue such as webhooks, shared identity, or event wiring is NOT a build-order dependency, and a suggested interview/build order is not one either). Judge this for brownfield from both the user's framing and the step-3 explore summary (codebase coupling); for greenfield (no explore), judge it from the idea prose alone.
-   - If yes: PROPOSE a decomposition — name each subsystem, describe how they relate, and suggest an interview order — then ask the user which subsystem to address first via `AskUserQuestion`. Interview ONLY that first subsystem in this session. Do NOT auto-split into multiple specs and do NOT add any new state fields; this gate is propose-only and narrows the scope to one slice before continuing.
-   - If no (single-system scope): continue without decomposition.
+3.7. **Round 0 — Topology Enumeration Gate**:
+   - Enumerate ALL topology components the parsed idea implies — do NOT narrow to a single slice. A component is a subsystem that can be interviewed and scored somewhat independently (neither forces the other to be built first; cross-cutting integration glue such as webhooks, shared identity, or event wiring is NOT itself a component). Judge this for brownfield from both the user's framing and the step-3 explore summary (codebase coupling); for greenfield (no explore), judge it from the idea prose alone. A single-system idea still enumerates as one component — Round 0 always runs, whether the count is 1 or N.
+   - Surface the full enumerated list to the user via `AskUserQuestion`: name each component, describe how it relates to the others, and ask the user to **confirm** the list, **add** a component you missed, **merge** two that are really one, or **defer** a component out of this interview's scope.
+   - Lock the confirmed list into state — every enumerated component, active or deferred, is recorded:
+     ```bash
+     bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts set-topology \
+       --json '[{"id":"<id>","name":"<name>","status":"active|deferred"}]'
+     ```
+   - Every named component is either **active** (scored across all 6 dimensions in Phase 2) or explicitly **deferred** (visible in `state.topology`, excluded from active-component floor pressure) — never silently dropped.
 4. **Initialize state** by invoking the CLI:
 
 ```bash
@@ -133,6 +138,8 @@ Repeat until `ambiguity ≤ threshold`; when the threshold is reached, run the r
 
 This is the single reusable stopping-and-checking pattern used at every phase exit in this skill — defined once here, referenced by both the requirements-threshold exit (Step 2d, below) and the design-completion exit (Design Interview phase, below). Do not bare-announce completion at either exit. Instead:
 
+**Closure Guard (precondition):** before running steps 1-2 below, check every active topology component's `clarity_scores` in state. If any active component still carries an unscored (`null`) dimension, convergence cannot be declared — loop back into the interview loop targeting that component's weakest (unscored) dimension instead of running this seam. An `ambiguity ≤ threshold` reading that ignores an unscored sibling component is not real convergence; it means the interview has not yet asked, not that there is nothing left to ask.
+
 1. Reflect the residual ambiguity that remains — name any unresolved gap, weak dimension, or open design point, however small, instead of declaring the interview simply "done".
 2. Ask the user, via `AskUserQuestion`, whether to continue (keep clarifying requirements, or keep resolving design branches) or proceed to the next phase.
 
@@ -183,12 +190,12 @@ Taken ONLY when the selector chose Fact-ground. This round dispatches a research
    ```
 3. **Re-score ambiguity** with the new fact folded into the scoring context (same Step 2c scoring prompt and ambiguity formula), but WITHOUT any user Q&A — the transcript gains a grounding event, not a user exchange. Mark the dimension's fact as grounded so the per-dimension dedup (rotation rule #1) does not re-ground it.
 4. **Report progress** as in Step 2d, noting that this round was a grounding event (no user question asked).
-5. **Append the round in a fact-derived shape** — mark it a grounding event rather than a user Q&A exchange. Do NOT stuff the fact into the `answer` field as if a user said it; omit `question`/`answer` and record the grounded fact and its provenance label instead:
+5. **Append the round in a fact-derived shape** — mark it a grounding event rather than a user Q&A exchange. Do NOT stuff the fact into the `answer` field as if a user said it; omit `question`/`answer` and record the grounded fact and its provenance label instead, scoped to the one component this grounding round improves:
 
    ```bash
    bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
      --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
-   {"n":<round_number>,"kind":"fact-ground","dimension":"<weakest_dimension>","fact":"<grounded fact>","provenance":"<one-of-the-four-labels>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>},"ambiguity":<ambiguity>}
+   {"n":<round_number>,"kind":"fact-ground","component":"<component_id>","dimension":"<weakest_dimension>","fact":"<grounded fact>","provenance":"<one-of-the-four-labels>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>,"context":<context>},"ambiguity":<ambiguity>}
    OMT_DI_PAYLOAD_EOF
 
    bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
@@ -196,7 +203,7 @@ Taken ONLY when the selector chose Fact-ground. This round dispatches a research
      --current-ambiguity <ambiguity>
    ```
 
-   (For brownfield, include `context` in the `scores` object exactly as Step 2e does.) The `--append-round-stdin` payload accepts any valid JSON shape, so the fact-derived `kind:"fact-ground"` round persists alongside user Q&A rounds without a schema change.
+   `context` is always included in the `scores` object — every component, every round, unconditionally — exactly as Step 2e does. The `--append-round-stdin` payload accepts any valid JSON shape, so the fact-derived `kind:"fact-ground"` round persists alongside user Q&A rounds without a schema change.
 6. **Return to the loop head** (Step 2-head) for the next round. The fact-ground round is now part of the transcript and counts toward the soft/hard round limits in Step 2f.
 
 ### Step 2a: Generate Next Question
@@ -225,8 +232,10 @@ If any prompt input is too large, summarize it first and then continue from the 
 | Scope Clarity | "What's in vs out?" | "Is user authentication part of this feature, or a separate concern to build later?" |
 | Constraint Clarity | "What are the boundaries?" | "Should this work offline, or is internet connectivity assumed?" |
 | Success Criteria | "How do we know it works?" | "If I showed you the finished product, what would make you say 'yes, that's it'?" |
-| Context Clarity (brownfield) | "How does this fit?" | "I found JWT auth middleware in `src/auth/` (pattern: passport + JWT). Should this feature extend that path or intentionally diverge from it?" |
+| Context Clarity | "How does this fit?" | "I found JWT auth middleware in `src/auth/` (pattern: passport + JWT). Should this feature extend that path or intentionally diverge from it?" |
 | Scope-fuzzy / ontology stress | "What IS the core thing here?" | "You have named Tasks, Projects, and Workspaces across the last rounds. Which one is the core entity, and which are supporting views or containers?" |
+
+**Scope Over-Engineering Guard:** if a component's `scope` dimension is unscored (`null`) or scored below 0.5, the very next question for that component MUST be a boundary question — what's in vs what's out for this component — before any other dimension is targeted, even if another dimension scores lower. This guard exists to block gold-plating: a component is never considered understood while its boundary is still fuzzy, no matter how clear its other five dimensions look.
 
 ### Step 2b: Ask the Question
 
@@ -242,17 +251,17 @@ Options should include contextually relevant choices plus free-text.
 
 ### Step 2c: Score Ambiguity
 
-After receiving the user's answer, score clarity across all dimensions.
+After receiving the user's answer, score clarity **per active topology component** — every component in `state.topology.components` with `status:"active"` gets its own score across the same 6 dimensions below. A component's high scores never average away or hide a sibling component's gaps: an unscored sibling still holds the interview back (Closure Guard, Step 2-exit).
 
-**Scoring prompt** (temperature 0.1 for consistency):
+**Scoring prompt** (run once per active component that has at least one unscored dimension; temperature 0.1 for consistency):
 
 ```
-Given the following interview transcript for a {greenfield|brownfield} project, score clarity on each dimension from 0.0 to 1.0. If the initial context or transcript was summarized for prompt safety, score from that summary plus the preserved round decisions/gaps; do not re-expand raw oversized context.
+Given the following interview transcript for the component "{component_name}" (project type: {greenfield|brownfield}), score clarity on each dimension from 0.0 to 1.0. If the initial context or transcript was summarized for prompt safety, score from that summary plus the preserved round decisions/gaps; do not re-expand raw oversized context.
 
 Original idea or prompt-safe initial-context summary: {idea_or_initial_context_summary}
 
-Transcript or prompt-safe transcript summary:
-{all rounds Q&A or summarized transcript}
+Transcript or prompt-safe transcript summary (this component's slice):
+{all rounds Q&A or summarized transcript for this component}
 
 Score each dimension:
 1. Intent Clarity (0.0-1.0): Is the primary objective unambiguous? Can you state it in one sentence without qualifiers? Can you name the key entities (nouns) and their relationships (verbs) without ambiguity?
@@ -260,7 +269,7 @@ Score each dimension:
 3. Scope Clarity (0.0-1.0): Are the boundaries of what's included versus excluded from this piece of work clear?
 4. Constraint Clarity (0.0-1.0): Are the boundaries, limitations, and non-goals clear?
 5. Success Criteria Clarity (0.0-1.0): Could you write a test that verifies success? Are acceptance criteria concrete?
-{6. Context Clarity (0.0-1.0): [brownfield only] Do we understand the existing system well enough to modify it safely? Do the identified entities map cleanly to existing codebase structures?}
+6. Context Clarity (0.0-1.0): Do we understand the environment this component sits in well enough to build or modify it safely — existing codebase structures it must map to (brownfield), or the platform/integration surface it must fit (greenfield)? Context is scored every round, for every component — it is never optional.
 
 For each dimension provide:
 - score: float (0.0-1.0)
@@ -268,7 +277,7 @@ For each dimension provide:
 - gap: what's still unclear (if score < 0.9)
 
 Also identify:
-- weakest_dimension: the single lowest-confidence dimension this round
+- weakest_dimension: the single lowest-confidence dimension for this component this round
 - weakest_dimension_rationale: one sentence explaining why it is the highest-leverage target for the next question
 
 7. Ontology Extraction: Identify all key entities (nouns) discussed in the transcript.
@@ -284,10 +293,23 @@ For each entity provide:
 Respond as JSON. Include an additional "ontology" key containing the entities array alongside the dimension scores.
 ```
 
-**Calculate ambiguity:**
+**Calculate ambiguity** (single weighted formula — no greenfield/brownfield branch; every component is scored on all 6 dimensions, always):
 
-Greenfield: `ambiguity = 1 - (intent × 0.30 + outcome × 0.25 + scope × 0.20 + constraints × 0.15 + success × 0.10)`
-Brownfield: `ambiguity = 1 - (intent × 0.27 + outcome × 0.22 + scope × 0.18 + constraints × 0.14 + success × 0.09 + context × 0.10)`
+`ambiguity = 1 - (intent × 0.27 + outcome × 0.22 + scope × 0.18 + constraints × 0.14 + success × 0.09 + context × 0.10)`
+
+Compute this per component, then take the interview's overall ambiguity as the ambiguity of the weakest-scoring active component — the component floor, so one well-scored component can never mask a poorly-scored sibling.
+
+**Reversals raise ambiguity, non-monotonically:** if this round's answer contradicts or retracts a fact the interview already established, mark that fact disputed instead of silently overwriting it:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --dispute-fact <established_fact_id>
+```
+
+A disputed, unresolved fact raises the ambiguity floor the state CLI enforces on the next `--current-ambiguity` write — ambiguity can come back HIGHER than last round's, with no re-scoring call at all. Do not treat this as a bug: ambiguity is not guaranteed to fall every round. When a round instead settles a durable, load-bearing fact for the first time, record it the same way:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --establish-fact '{"id":"<id>","statement":"<fact>","component":"<component_id>"}'
+```
 
 **Calculate ontology stability:**
 
@@ -317,36 +339,38 @@ Use `--append-ontology-snapshot-stdin` with a quoted-delimiter heredoc (`<<'OMT_
 
 ### Step 2d: Report Progress
 
-After scoring, show the user their progress:
+After scoring, show the user their progress **per component**:
 
 ```
-Round {n} complete.
+Round {n} complete. | Component scored: {component_name}
 
 | Dimension | Score | Weight | Weighted | Gap |
 |-----------|-------|--------|----------|-----|
-| Intent | {s} | {w} | {s*w} | {gap or "Clear"} |
-| Outcome | {s} | {w} | {s*w} | {gap or "Clear"} |
-| Scope | {s} | {w} | {s*w} | {gap or "Clear"} |
-| Constraints | {s} | {w} | {s*w} | {gap or "Clear"} |
-| Success Criteria | {s} | {w} | {s*w} | {gap or "Clear"} |
-| Context (brownfield) | {s} | {w} | {s*w} | {gap or "Clear"} |
-| **Ambiguity** | | | **{score}%** | |
+| Intent | {s} | 0.27 | {s*w} | {gap or "Clear"} |
+| Outcome | {s} | 0.22 | {s*w} | {gap or "Clear"} |
+| Scope | {s} | 0.18 | {s*w} | {gap or "Clear"} |
+| Constraints | {s} | 0.14 | {s*w} | {gap or "Clear"} |
+| Success Criteria | {s} | 0.09 | {s*w} | {gap or "Clear"} |
+| Context | {s} | 0.10 | {s*w} | {gap or "Clear"} |
+| **Component Ambiguity** | | | **{component_ambiguity}%** | |
+
+**All components:** {for each active component: name — component_ambiguity%, or "unscored" while any dimension is still null}
 
 **Ontology:** {entity_count} entities | Stability: {stability_ratio} | New: {new} | Changed: {changed} | Stable: {stable}
 
-**Next target:** {weakest_dimension} — {weakest_dimension_rationale}
+**Next target:** {weakest_component} / {weakest_dimension} — {weakest_dimension_rationale}
 
-{score <= threshold ? "Threshold met — reflecting residual ambiguity via the Step 2-exit seam before proceeding." : "Focusing next question on: {weakest_dimension}"}
+{overall_ambiguity <= threshold && every active component fully scored ? "Threshold met — reflecting residual ambiguity via the Step 2-exit seam before proceeding." : "Focusing next question on: {weakest_component} / {weakest_dimension}"}
 ```
 
 ### Step 2e: Update State
 
-Update interview state with the new round and scores by invoking the CLI twice — once to record the round, once to advance the phase and ambiguity:
+Update interview state with the new round and scores by invoking the CLI twice — once to record the round, once to advance the phase and ambiguity. Every round scores exactly one component and always includes `context` — there is no separate brownfield-only variant, because context is scored every round, for every component, unconditionally:
 
 ```bash
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
   --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
-{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>},"ambiguity":<ambiguity>}
+{"n":<round_number>,"component":"<component_id>","question":"<question>","answer":"<answer>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>,"context":<context>},"ambiguity":<ambiguity>}
 OMT_DI_PAYLOAD_EOF
 
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
@@ -356,16 +380,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
 
 Use `--append-round-stdin` with a quoted-delimiter heredoc (`<<'OMT_DI_PAYLOAD_EOF'`) to protect shell quoting (apostrophes, `$`, backticks in question/answer text are not expanded). This heredoc guards the shell layer only — all substituted string values (`<question>`, `<answer>`) must be JSON-encoded (`\"`, `\\`, newlines as `\n`) so the payload remains valid JSON. The CLI reads stdin, validates JSON, and exits 1 loudly on invalid input.
 
-For brownfield interviews, include the `context` score in the `scores` object:
-
-```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update \
-  --append-round-stdin <<'OMT_DI_PAYLOAD_EOF'
-{"n":<round_number>,"question":"<question>","answer":"<answer>","scores":{"intent":<intent>,"outcome":<outcome>,"scope":<scope>,"constraints":<constraints>,"success":<success>,"context":<context>},"ambiguity":<ambiguity>}
-OMT_DI_PAYLOAD_EOF
-```
-
-`context` carries 10% of the ambiguity formula for brownfield (`context × 0.10`) and is required for accurate resume after `adopt`.
+`context` carries 10% of the single ambiguity formula (`context × 0.10`), for every component, in every interview — never conditional on project type — and is required for accurate resume after `adopt`.
 
 **Record the answer's provenance** via the same CLI used in Step 2-fact, labeled `[from-user]` since this round's fact came from the user's own answer rather than a research or codebase read:
 
