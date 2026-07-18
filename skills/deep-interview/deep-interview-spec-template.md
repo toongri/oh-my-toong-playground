@@ -21,7 +21,7 @@
 | Scope Clarity | {s} | {w} | {s*w} |
 | Constraint Clarity | {s} | {w} | {s*w} |
 | Success Criteria | {s} | {w} | {s*w} |
-| Context Clarity (brownfield) | {s} | {w} | {s*w} |
+| Context Clarity | {s} | {w} | {s*w} |
 | **Total Clarity** | | | **{total}** |
 | **Ambiguity** | | | **{1-total}** |
 
@@ -55,6 +55,16 @@
 - **Tradeoffs:** {what is gained and what is given up with this approach}
 
 Downstream (prometheus) consumes this as a FIXED input — does not re-decide the approach. When a user-forced exit left a design branch unresolved, do NOT invent a Selected approach — record the fork under **Risks & Unresolved Forks** below.
+
+## Topology
+Round 0 (Topology Enumeration Gate) enumerated and confirmed the component list below. Every component is either **active** (scored across all 6 dimensions in Phase 2) or explicitly **deferred** (excluded from floor pressure, never silently dropped).
+
+| Component | Status | Intent | Outcome | Scope | Constraints | Success | Context | Weakest Dimension |
+|-----------|--------|--------|---------|-------|-------------|---------|---------|--------------------|
+| {component.id} — {component.name} | {active \| deferred} | {s} | {s} | {s} | {s} | {s} | {s} | {weakest dimension} |
+| ... | ... | ... | ... | ... | ... | ... | ... | ... |
+
+An unscored ({null}) dimension on any active component holds the interview's overall convergence back (Closure Guard) even when every other component and dimension is fully scored.
 
 ## Diagrams
 The coverage table below comes first and lists all six deep-interview lenses; a subsection follows for each lens that was actually drawn, in Why → Diagram → Interpretation form.
@@ -113,7 +123,7 @@ erDiagram
 ### Round 1
 **Q:** {question}
 **A:** {answer}
-**Ambiguity:** {score}% (Intent: {i}, Outcome: {o}, Scope: {sc}, Constraints: {con}, Success: {su}{brownfield: , Context: {cx}})
+**Ambiguity:** {score}% (Intent: {i}, Outcome: {o}, Scope: {sc}, Constraints: {con}, Success: {su}, Context: {cx})
 
 ...
 </details>

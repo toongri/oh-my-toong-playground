@@ -741,3 +741,49 @@ describe("UC11: resume enforcement -- migration_status legacy_missing forces Rou
 		expect(region).toContain("legacy_missing");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// topology-floor-evolution Stage 6c (doc-currency): the Phase-4 spec-template
+// gained a "## Topology" per-component section (Round 0's enumerated
+// components + their 6-dim clarity), and the Clarity Breakdown's Context row
+// lost its stale "(brownfield)" qualifier -- context is scored on every
+// component, greenfield or brownfield, per the Stage-4 single formula.
+// ---------------------------------------------------------------------------
+
+describe("template: Topology section reflects the per-component floor model", () => {
+	const start = template.indexOf("## Topology");
+	const end = template.indexOf("\n## ", start + 1);
+	const section = end === -1 ? template.slice(start) : template.slice(start, end);
+
+	test('"## Topology" heading is present', () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("Topology section documents active | deferred component status", () => {
+		expect(section).toContain("active");
+		expect(section).toContain("deferred");
+	});
+
+	test("Topology section lists all 6 canonical clarity dimensions per component", () => {
+		expect(section).toContain("Intent");
+		expect(section).toContain("Outcome");
+		expect(section).toContain("Scope");
+		expect(section).toContain("Constraints");
+		expect(section).toContain("Success");
+		expect(section).toContain("Context");
+	});
+});
+
+describe("template: Clarity Breakdown's Context row is no longer brownfield-qualified", () => {
+	test('"Context Clarity (brownfield)" is absent', () => {
+		expect(template).not.toContain("Context Clarity (brownfield)");
+	});
+
+	test('"| Context Clarity |" is present (context always scored)', () => {
+		expect(template).toContain("| Context Clarity |");
+	});
+
+	test("transcript ambiguity breakdown no longer gates Context behind a brownfield-only clause", () => {
+		expect(template).not.toContain("{brownfield: , Context: {cx}}");
+	});
+});
