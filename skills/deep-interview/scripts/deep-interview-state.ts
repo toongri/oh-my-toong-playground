@@ -22,6 +22,10 @@
  *          [--challenge-mode <name>]
  *          [--append-provenance-item '<json>'] (append one {evidence_id, label} item to evidence_provenance)
  *          [--append-stance <stance>]          (append one stance string to stance_history; ordered, NOT deduped)
+ *          [--establish-fact '<json>']         (append one {id, statement, component?} active established_fact)
+ *          [--dispute-fact <id>]                (mark an established_fact disputed by id; raises the
+ *                                                ambiguity floor +0.10 per unresolved disputed fact on the
+ *                                                next --current-ambiguity write, no scorer re-call needed)
  *          Strict-overlay merge refreshing last_touched_at.
  *          Stdin flags (--append-round-stdin / --append-ontology-snapshot-stdin) read
  *          the JSON payload from stdin, avoiding shell-quoting hazards with free text
@@ -136,6 +140,30 @@ export interface TopologyComponentInput {
 	status?: ComponentStatus;
 }
 
+/**
+ * An established fact's disputed lifecycle (topology-floor-evolution Stage 3, Entity
+ * lifecycle diagram): active (disputed=false) → disputed (user retracts/contradicts,
+ * floor +0.10) → superseded (a replacement fact confirmed, floor pressure released).
+ * `superseded_by` holds the replacement fact's id once resolved; null/absent while
+ * unresolved. Written exclusively via the `update --establish-fact` / `--dispute-fact`
+ * CLI paths (never partial elsewhere).
+ */
+export interface EstablishedFact {
+	id: string;
+	statement: string;
+	disputed: boolean;
+	superseded_by: string | null;
+	/** Optional topology component id this fact is about. */
+	component?: string;
+}
+
+/** Caller-supplied shape for establishing a new fact via `update --establish-fact`. */
+export interface EstablishedFactInput {
+	id: string;
+	statement: string;
+	component?: string;
+}
+
 export interface DeepInterviewStateContent {
 	interview_id?: string;
 	type?: "greenfield" | "brownfield";
@@ -179,6 +207,13 @@ export interface DeepInterviewStateContent {
 	 * never throw. Written exclusively via setTopology (full-replace, never partial).
 	 */
 	topology?: Topology;
+	/**
+	 * established_facts disputed lifecycle (topology-floor-evolution Stage 3). Absent on
+	 * states written before this field existed — a reader must treat a missing array the
+	 * same as "no facts established yet". disputed_count in computeAmbiguityFloor counts
+	 * entries where disputed=true and superseded_by is not yet set.
+	 */
+	established_facts?: EstablishedFact[];
 }
 
 export interface DeepInterviewState {
@@ -277,6 +312,10 @@ export function updateDeepInterviewState(
 		append_provenance_item?: EvidenceProvenanceItem;
 		/** Append one stance string to stance_history (ordered, NOT deduped). */
 		append_stance?: string;
+		/** Append one active established_fact (disputed=false, superseded_by=null). */
+		establish_fact?: EstablishedFactInput;
+		/** Mark the established_fact with this id disputed=true. Throws if the id is unknown. */
+		dispute_fact?: string;
 	},
 ): void {
 	// Self-heal: seed the pristine skeleton if the PreToolUse hook never fired
@@ -303,7 +342,9 @@ export function updateDeepInterviewState(
 		partial.append_ontology_snapshot !== undefined ||
 		partial.challenge_mode !== undefined ||
 		partial.append_provenance_item !== undefined ||
-		partial.append_stance !== undefined;
+		partial.append_stance !== undefined ||
+		partial.establish_fact !== undefined ||
+		partial.dispute_fact !== undefined;
 
 	if (needsStateOverlay) {
 		// current_ambiguity lives under state per the SKILL.md rich shape
@@ -318,11 +359,15 @@ export function updateDeepInterviewState(
 			// the original reported figure is kept verbatim under reported_ambiguity so the
 			// clamp is never silently lossy.
 			const reported = partial.current_ambiguity;
-			const floor = computeAmbiguityFloor(
-				// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: same trusted structural pass-through as other readers in this module
-				priorState as DeepInterviewStateContent,
-			);
-			updatedState["current_ambiguity"] = Math.max(reported, floor);
+			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: same trusted structural pass-through as other readers in this module
+			const stateForCheck = priorState as DeepInterviewStateContent;
+			const floor = computeAmbiguityFloor(stateForCheck);
+			const effective = Math.max(reported, floor);
+			// Fail-closed transition gate (topology-floor-evolution Stage 3): validated BEFORE
+			// any assignment to updatedState, so a refusal here never reaches mergeWrite below —
+			// the state file stays byte-identical (qa-state.ts:257-269 incCycle idiom).
+			validateScoredTransition(stateForCheck, effective);
+			updatedState["current_ambiguity"] = effective;
 			updatedState["reported_ambiguity"] = reported;
 			updatedState["ambiguity_floor"] = floor;
 		}
@@ -356,6 +401,40 @@ export function updateDeepInterviewState(
 				? priorState["stance_history"]
 				: [];
 			updatedState["stance_history"] = [...existing, partial.append_stance];
+		}
+		if (partial.establish_fact !== undefined || partial.dispute_fact !== undefined) {
+			// established_facts disputed lifecycle (topology-floor-evolution Stage 3): establish
+			// runs before dispute so a single call may do both against the same array.
+			let facts: EstablishedFact[] = Array.isArray(priorState["established_facts"])
+				? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: same trusted structural pass-through as other readers in this module
+					(priorState["established_facts"] as EstablishedFact[])
+				: [];
+			if (partial.establish_fact !== undefined) {
+				const input = partial.establish_fact;
+				if (facts.some((f) => f.id === input.id)) {
+					throw new Error(`update: refused — established_fact id "${input.id}" already exists`);
+				}
+				facts = [
+					...facts,
+					{
+						id: input.id,
+						statement: input.statement,
+						disputed: false,
+						superseded_by: null,
+						component: input.component,
+					},
+				];
+			}
+			if (partial.dispute_fact !== undefined) {
+				const idx = facts.findIndex((f) => f.id === partial.dispute_fact);
+				if (idx === -1) {
+					throw new Error(
+						`update: refused — dispute-fact: no established_fact with id "${String(partial.dispute_fact)}"`,
+					);
+				}
+				facts = facts.map((f, i) => (i === idx ? { ...f, disputed: true } : f));
+			}
+			updatedState["established_facts"] = facts;
 		}
 
 		overlay["state"] = updatedState;
@@ -397,25 +476,77 @@ function isComponentUnscored(scores: ClarityScores): boolean {
 }
 
 /**
- * Deterministic ambiguity floor (topology-floor-evolution Stage 2):
+ * The subset of `established_facts` currently pressuring the ambiguity floor: disputed
+ * and not yet superseded. A superseded fact (its dispute resolved by a replacement)
+ * releases floor pressure per the Entity lifecycle (active → disputed → superseded).
+ */
+function activeDisputedFacts(state: DeepInterviewStateContent | undefined | null): EstablishedFact[] {
+	const facts = state?.established_facts ?? [];
+	return facts.filter((f) => f.disputed === true && !f.superseded_by);
+}
+
+/**
+ * Deterministic ambiguity floor (topology-floor-evolution Stage 2, disputed term
+ * activated in Stage 3):
  *
  *   floor = 0.10 * disputed_count + 0.05 * unscored_component_count + 0.05 * auto_answer_ratio
  *
  * unscored_component_count counts ACTIVE topology components (deferred components are
  * excluded from floor pressure) that have at least one null clarity_scores dimension.
- * disputed_count and auto_answer_ratio read as 0 for now — their backing state fields
- * (established_facts disputed lifecycle / auto_answered_rounds tracking) don't exist
- * yet and land in topology-floor-evolution Stage 3; the 3-term structure is fixed here
- * so Stage 3 only has to supply real values for those two terms.
+ * disputed_count counts established_facts that are disputed and not yet superseded
+ * (activeDisputedFacts) — a user reversal raises this term without any scorer re-call.
+ * auto_answer_ratio still reads as 0 — its backing state field (auto_answered_rounds
+ * tracking) doesn't exist yet and is out of this story's scope.
  */
 export function computeAmbiguityFloor(state: DeepInterviewStateContent | undefined | null): number {
 	const components = state?.topology?.components ?? [];
 	const unscoredComponentCount = components.filter(
 		(c) => c.status === "active" && isComponentUnscored(c.clarity_scores),
 	).length;
-	const disputedCount = 0; // Stage 3: established_facts disputed lifecycle
-	const autoAnswerRatio = 0; // Stage 3: auto_answered_rounds tracking
+	const disputedCount = activeDisputedFacts(state).length;
+	const autoAnswerRatio = 0; // out of scope for this story: auto_answered_rounds tracking
 	return 0.1 * disputedCount + 0.05 * unscoredComponentCount + 0.05 * autoAnswerRatio;
+}
+
+/**
+ * True iff at least one ACTIVE topology component has at least one non-null clarity
+ * dimension — i.e. some scoring progress has been claimed (a rise from the unscored
+ * baseline in at least one of the 6 dimensions).
+ */
+function hasScoredClarityDimension(state: DeepInterviewStateContent | undefined | null): boolean {
+	const components = state?.topology?.components ?? [];
+	return components.some(
+		(c) => c.status === "active" && CLARITY_DIMENSIONS.some((dim) => c.clarity_scores[dim] !== null),
+	);
+}
+
+/**
+ * Fail-closed transition gate (topology-floor-evolution Stage 3; qa-state.ts:257-269
+ * incCycle's "refuse before any write" idiom, adapted for a two-condition transition):
+ * refuses a write that, WHILE an active trigger exists (an unresolved disputed
+ * established_fact — see activeDisputedFacts), simultaneously claims BOTH a
+ * clarity-dimension improvement (hasScoredClarityDimension) and an ambiguity decrease
+ * (effectiveAmbiguity below the currently-stored current_ambiguity). Throws — the
+ * caller (updateDeepInterviewState) must call this BEFORE building the write overlay,
+ * so a refusal never reaches mergeWrite/writeFileNoCreate and the state file stays
+ * byte-identical (same "validate first, write second" shape as qa-state's incCycle and
+ * goal-state's setStories).
+ */
+export function validateScoredTransition(
+	priorState: DeepInterviewStateContent | undefined | null,
+	effectiveAmbiguity: number,
+): void {
+	if (activeDisputedFacts(priorState).length === 0) return;
+	const priorAmbiguity = priorState?.current_ambiguity ?? 1.0;
+	const ambiguityDropped = effectiveAmbiguity < priorAmbiguity;
+	const dimensionImproved = hasScoredClarityDimension(priorState);
+	if (ambiguityDropped && dimensionImproved) {
+		throw new Error(
+			"validateScoredTransition: refused — an unresolved disputed established_fact blocks a write " +
+				"that simultaneously claims a clarity-dimension improvement and an ambiguity decrease; " +
+				"supersede the disputed fact before converging further",
+		);
+	}
 }
 
 /**
@@ -640,6 +771,37 @@ function main(): void {
 			appendProvenanceItem = parsed as unknown as EvidenceProvenanceItem;
 		}
 
+		const establishFactRaw = str(args["establish-fact"]);
+		let establishFact: EstablishedFactInput | undefined;
+		if (establishFactRaw !== undefined) {
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(establishFactRaw);
+			} catch {
+				process.stderr.write(
+					`deep-interview-state update: --establish-fact: invalid JSON: ${establishFactRaw}\n`,
+				);
+				process.exit(1);
+			}
+			if (
+				!isRecord(parsed) ||
+				typeof parsed["id"] !== "string" ||
+				typeof parsed["statement"] !== "string" ||
+				(parsed["component"] !== undefined && typeof parsed["component"] !== "string")
+			) {
+				process.stderr.write(
+					`deep-interview-state update: --establish-fact: must be {"id":"<str>","statement":"<str>","component"?:"<str>"}\n`,
+				);
+				process.exit(1);
+			}
+			establishFact = {
+				id: parsed["id"],
+				statement: parsed["statement"],
+				component: typeof parsed["component"] === "string" ? parsed["component"] : undefined,
+			};
+		}
+		const disputeFact = str(args["dispute-fact"]);
+
 		try {
 			updateDeepInterviewState(sessionId, {
 				current_phase: str(args["current-phase"]),
@@ -649,6 +811,8 @@ function main(): void {
 				challenge_mode: challengeMode,
 				append_provenance_item: appendProvenanceItem,
 				append_stance: appendStance,
+				establish_fact: establishFact,
+				dispute_fact: disputeFact,
 			});
 		} catch (e) {
 			process.stderr.write(`deep-interview-state update: ${String(e)}\n`);
@@ -709,6 +873,9 @@ function main(): void {
 				"         [--challenge-mode <name>]\n" +
 				'         [--append-provenance-item \'{"evidence_id":"<id>","label":"<label>"}\']\n' +
 				"         [--append-stance <stance>]  (ordered, not deduped; for Dialectic Rhythm Guard)\n" +
+				'         [--establish-fact \'{"id":"<id>","statement":"<text>","component"?:"<comp-id>"}\']\n' +
+				"         [--dispute-fact <id>]  (marks an established_fact disputed; raises the ambiguity\n" +
+				"                                floor +0.10 on the next --current-ambiguity write)\n" +
 				'  set-topology --json \'[{"id":"<id>","name":"<name>","status":"active|deferred"}]\'\n' +
 				"  get\n" +
 				"  list-others\n" +

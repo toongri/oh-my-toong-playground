@@ -666,6 +666,94 @@ describe("deep-interview-state CLI main()", () => {
 		};
 		expect(computeAmbiguityFloor(unblocked)).toBe(0);
 	});
+
+	// ---------------------------------------------------------------------------
+	// topology-floor-evolution Stage 3: established_facts disputed lifecycle +
+	// validateScoredTransition (UC4, UC5 — see
+	// /Users/toong/.omt/oh-my-toong-playground/deep-interview/topology-floor-evolution.md)
+	// ---------------------------------------------------------------------------
+
+	// UC4 — 번복 시 양방향 상승: a user reversing an earlier answer (A→B) marks the
+	// backing established_fact disputed via the CLI --dispute-fact path. The very next
+	// ambiguity write — reporting the SAME value as before, i.e. no scorer re-call —
+	// clamps up by exactly +0.10 purely because computeAmbiguityFloor's disputed_count
+	// term is now active. A disputed fact that has since been superseded must NOT
+	// contribute (disputed_count excludes superseded facts).
+	test("UC4: disputing an established fact raises the floor +0.10 on the next ambiguity write, without any scorer re-call", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "reversal idea" });
+		run(`update --establish-fact '{"id":"f1","statement":"uses PostgreSQL"}'`);
+
+		// Baseline write, no dispute yet: floor is 0 (no topology, no disputed facts).
+		run("update --current-ambiguity 0.05");
+		let state = rawState();
+		let nested = state["state"] as Record<string, unknown>;
+		expect(nested["current_ambiguity"]).toBe(0.05);
+		expect(nested["ambiguity_floor"]).toBe(0);
+
+		// User reverses the earlier answer — mark f1 disputed via the CLI dispute path.
+		run("update --dispute-fact f1");
+		state = rawState();
+		nested = state["state"] as Record<string, unknown>;
+		const facts = nested["established_facts"] as Record<string, unknown>[];
+		expect(facts).toHaveLength(1);
+		expect(facts[0]["disputed"]).toBe(true);
+
+		// Same reported ambiguity as before (no re-scoring happened) — yet the floor now
+		// carries the disputed term, clamping the effective value up by exactly +0.10.
+		run("update --current-ambiguity 0.05");
+		state = rawState();
+		nested = state["state"] as Record<string, unknown>;
+		expect(nested["reported_ambiguity"]).toBe(0.05);
+		expect(nested["ambiguity_floor"]).toBe(0.1);
+		expect(nested["current_ambiguity"]).toBe(0.1);
+
+		// disputed_count excludes a disputed fact once it has been superseded.
+		const resolved: DeepInterviewStateContent = {
+			established_facts: [
+				{ id: "f1", statement: "uses PostgreSQL", disputed: true, superseded_by: "f2" },
+			],
+		};
+		expect(computeAmbiguityFloor(resolved)).toBe(0);
+	});
+
+	// UC5 — validateScoredTransition fail-closed: an unresolved disputed established_fact
+	// (active trigger) blocks a write that simultaneously claims a clarity-dimension
+	// improvement (a component already fully scored) and an ambiguity decrease. The CLI
+	// must reject with a non-zero exit and leave the state file byte-identical.
+	test("UC5: an active unresolved disputed fact rejects a write claiming both a clarity-dimension rise and an ambiguity drop; state file unchanged", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "fail-closed idea" });
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "only component" }])}'`);
+
+		// Simulate a completed per-component scoring write (the per-component scoring CLI
+		// lands in a later story — patch the raw file directly, same fixture idiom as UC2).
+		const path = resolveStatePath(SID);
+		const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+		const nestedRaw = raw["state"] as Record<string, unknown>;
+		const topology = nestedRaw["topology"] as Record<string, unknown>;
+		const components = topology["components"] as Record<string, unknown>[];
+		components[0]["clarity_scores"] = scoredDims();
+		writeFileSync(path, JSON.stringify(raw, null, 2), "utf8");
+
+		// Baseline ambiguity, set BEFORE any dispute exists — succeeds normally.
+		run("update --current-ambiguity 0.5");
+
+		// A user reversal establishes the active trigger.
+		run(`update --establish-fact '{"id":"f1","statement":"uses REST"}'`);
+		run("update --dispute-fact f1");
+
+		const before = readFileSync(path, "utf8");
+
+		// Attempt to converge further (ambiguity drop) while the dispute is unresolved and
+		// the component's clarity dimensions are already scored (improvement claim) — must
+		// be refused.
+		expect(() => run("update --current-ambiguity 0.1")).toThrow();
+
+		// State file is byte-identical — the refused write never reached mergeWrite.
+		const after = readFileSync(path, "utf8");
+		expect(after).toBe(before);
+	});
 });
 
 // ---------------------------------------------------------------------------
