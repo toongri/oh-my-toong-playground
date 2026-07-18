@@ -27,8 +27,12 @@ const advancedMd = readFileSync(join(import.meta.dir, "deep-interview-advanced.m
 //
 // Three sources express the same {dim: weight} data in three different
 // shapes (bare inline formula, comma-separated decimal table, percentage
-// table). `normalizeDim` collapses any of their spellings ("Goal Clarity",
-// "Constraint", "criteria", "Success Criteria", "constraints", ...) down to
+// table). Since topology-floor-evolution Stage 4 (the SKILL.md prompt rewrite
+// stage of the topology-floor-evolution spec) collapsed the greenfield/
+// brownfield dual formula into ONE single 6-dim weighted formula (context
+// always scored, per-component), all three sources now carry exactly one
+// weight map each. `normalizeDim` collapses any of their spellings
+// ("Constraint Clarity", "constraints", "Success Criteria", ...) down to
 // one canonical short key so cross-representation comparisons are MAP
 // equality, never raw string identity.
 // ---------------------------------------------------------------------------
@@ -48,11 +52,11 @@ function normalizeWeightMap(m: Record<string, number>): Record<string, number> {
 	return out;
 }
 
-/** Parses deep-interview's canonical inline formula, e.g.
- *  `Greenfield: \`ambiguity = 1 - (intent × 0.30 + outcome × 0.25 + ...)\`` */
-function parseInlineFormula(md: string, variant: "Greenfield" | "Brownfield"): Record<string, number> {
-	const re = new RegExp(variant + ":\\s*`ambiguity = 1 - \\(([^)]*)\\)`");
-	const m = md.match(re);
+/** Parses deep-interview's single canonical inline formula, e.g.
+ *  `ambiguity = 1 - (intent × 0.27 + outcome × 0.22 + ...)` -- unified, no
+ *  greenfield/brownfield variant label (topology-floor-evolution Stage 4). */
+function parseInlineFormula(md: string): Record<string, number> {
+	const m = md.match(/ambiguity = 1 - \(([^)]*)\)/);
 	if (!m) return {};
 	const map: Record<string, number> = {};
 	const pairRe = /([A-Za-z]+)\s*×\s*(\d+\.\d+)/g;
@@ -63,47 +67,37 @@ function parseInlineFormula(md: string, variant: "Greenfield" | "Brownfield"): R
 	return map;
 }
 
-/** Parses prometheus's decimal weight table rows, e.g.
- *  `| **Greenfield** | Intent, Outcome, ... | 0.30, 0.25, ... |` */
-function parsePrometheusTable(md: string): { greenfield: Record<string, number>; brownfield: Record<string, number> } {
+/** Parses prometheus's single decimal weight-table row, e.g.
+ *  `| Intent, Outcome, Scope, Constraints, Success, Context | 0.27, 0.22, ... |` */
+function parsePrometheusTable(md: string): Record<string, number> {
 	const start = md.indexOf("**Ambiguity Score**:");
 	const end = md.indexOf("## Failure Modes to Avoid");
 	const region = md.slice(start === -1 ? 0 : start, end === -1 ? undefined : end);
-	const rowRe = /\|\s*\*\*(Greenfield|Brownfield)\*\*\s*\|([^|]+)\|([^|]+)\|/g;
-	const result: { greenfield: Record<string, number>; brownfield: Record<string, number> } = {
-		greenfield: {},
-		brownfield: {},
-	};
-	let m: RegExpExecArray | null;
-	while ((m = rowRe.exec(region)) !== null) {
-		const variant = m[1].toLowerCase() as "greenfield" | "brownfield";
-		const dims = m[2].split(",").map((s) => normalizeDim(s));
-		const weights = m[3].split(",").map((s) => parseFloat(s.trim()));
-		const map: Record<string, number> = {};
-		dims.forEach((d, i) => {
-			map[d] = weights[i];
-		});
-		result[variant] = map;
-	}
-	return result;
+	const rowRe = /\|\s*([A-Za-z][A-Za-z, ]*[A-Za-z])\s*\|\s*(\d+\.\d+(?:\s*,\s*\d+\.\d+)*)\s*\|/;
+	const m = region.match(rowRe);
+	if (!m) return {};
+	const dims = m[1].split(",").map((s) => normalizeDim(s));
+	const weights = m[2].split(",").map((s) => parseFloat(s.trim()));
+	const map: Record<string, number> = {};
+	dims.forEach((d, i) => {
+		map[d] = weights[i];
+	});
+	return map;
 }
 
-/** Parses deep-interview-advanced.md's percentage weight table, e.g.
- *  `| Intent Clarity | 30% | 27% |` under the `Greenfield | Brownfield` header. */
-function parseAdvancedPercentTable(md: string): { greenfield: Record<string, number>; brownfield: Record<string, number> } {
-	const start = md.indexOf("## Brownfield vs Greenfield Weights");
-	const end = md.indexOf("## Challenge Agent Modes");
+/** Parses deep-interview-advanced.md's single percentage weight table, e.g.
+ *  `| Intent Clarity | 27% |` under the `## Ambiguity Weights` heading. */
+function parseAdvancedPercentTable(md: string): Record<string, number> {
+	const start = md.indexOf("## Ambiguity Weights");
+	const end = md.indexOf("## Ambiguity Floor");
 	const region = md.slice(start === -1 ? 0 : start, end === -1 ? undefined : end);
-	const rowRe = /\|\s*([A-Za-z][A-Za-z ]*?)\s*\|\s*(N\/A|\d+%)\s*\|\s*(N\/A|\d+%)\s*\|/g;
-	const greenfield: Record<string, number> = {};
-	const brownfield: Record<string, number> = {};
+	const rowRe = /\|\s*([A-Za-z][A-Za-z ]*?)\s*\|\s*(\d+)%\s*\|/g;
+	const map: Record<string, number> = {};
 	let m: RegExpExecArray | null;
 	while ((m = rowRe.exec(region)) !== null) {
-		const dim = normalizeDim(m[1]);
-		if (m[2] !== "N/A") greenfield[dim] = parseInt(m[2], 10) / 100;
-		if (m[3] !== "N/A") brownfield[dim] = parseInt(m[3], 10) / 100;
+		map[normalizeDim(m[1])] = parseInt(m[2], 10) / 100;
 	}
-	return { greenfield, brownfield };
+	return map;
 }
 
 /** Parses the inner keys of the FIRST `"scores":{...}` object found after `anchorText`. */
@@ -123,17 +117,12 @@ function extractScoresKeys(md: string, anchorText: string): string[] {
 	return keys;
 }
 
-// D-5 canonical decided weights (both sum to 1.00) -- the single source of
-// dims that the formula, the payload key-sets, and the two mirror tables
-// (prometheus, deep-interview-advanced.md) must all agree with.
-const EXPECTED_GREENFIELD_WEIGHTS = normalizeWeightMap({
-	intent: 0.3,
-	outcome: 0.25,
-	scope: 0.2,
-	constraints: 0.15,
-	success: 0.1,
-});
-const EXPECTED_BROWNFIELD_WEIGHTS = normalizeWeightMap({
+// Canonical single 6-dim weights (sum to 1.00) -- the single source of dims
+// that the formula, the payload key-sets, and the two mirror tables
+// (prometheus, deep-interview-advanced.md) must all agree with. The
+// greenfield/brownfield dual-weight formula is retired (topology-floor-
+// evolution Stage 4): every interview scores all 6 dimensions, always.
+const EXPECTED_WEIGHTS = normalizeWeightMap({
 	intent: 0.27,
 	outcome: 0.22,
 	scope: 0.18,
@@ -494,75 +483,68 @@ describe("removed: mermaid visualization assets", () => {
 // (must FAIL before tasks #15/#16/#17 -- RED)
 // ---------------------------------------------------------------------------
 
-describe("phase-3 new-dims: scoring probe (deep-interview formula widened to D-5 canonical weights)", () => {
-	test("greenfield formula parses to the canonical 5-dim weight map", () => {
-		expect(normalizeWeightMap(parseInlineFormula(skillMd, "Greenfield"))).toEqual(EXPECTED_GREENFIELD_WEIGHTS);
+describe("phase-3 new-dims: scoring probe (deep-interview formula unified to the single 6-dim canonical weights)", () => {
+	test("the single formula's parsed dimension key-set is exactly the 6 canonical dimensions", () => {
+		const parsed = normalizeWeightMap(parseInlineFormula(skillMd));
+		expect(new Set(Object.keys(parsed))).toEqual(new Set(Object.keys(EXPECTED_WEIGHTS)));
 	});
 
-	test("brownfield formula parses to the canonical 6-dim weight map", () => {
-		expect(normalizeWeightMap(parseInlineFormula(skillMd, "Brownfield"))).toEqual(EXPECTED_BROWNFIELD_WEIGHTS);
-	});
-});
-
-describe("phase-3 parity: greenfield + brownfield weight maps agree across all 3 sources (normalized maps, not raw strings)", () => {
-	const diGreenfield = normalizeWeightMap(parseInlineFormula(skillMd, "Greenfield"));
-	const diBrownfield = normalizeWeightMap(parseInlineFormula(skillMd, "Brownfield"));
-	const promTables = parsePrometheusTable(prometheusMd);
-	const advancedTables = parseAdvancedPercentTable(advancedMd);
-	const promGreenfield = normalizeWeightMap(promTables.greenfield);
-	const promBrownfield = normalizeWeightMap(promTables.brownfield);
-	const advancedGreenfield = normalizeWeightMap(advancedTables.greenfield);
-	const advancedBrownfield = normalizeWeightMap(advancedTables.brownfield);
-
-	test("greenfield: deep-interview formula == prometheus decimal table", () => {
-		expect(diGreenfield).toEqual(promGreenfield);
-	});
-
-	test("greenfield: deep-interview formula == deep-interview-advanced.md percentage table", () => {
-		expect(diGreenfield).toEqual(advancedGreenfield);
-	});
-
-	test("brownfield: deep-interview formula == prometheus decimal table", () => {
-		expect(diBrownfield).toEqual(promBrownfield);
-	});
-
-	test("brownfield: deep-interview formula == deep-interview-advanced.md percentage table", () => {
-		expect(diBrownfield).toEqual(advancedBrownfield);
-	});
-
-	test("greenfield map matches the D-5 canonical weights (sanity anchor)", () => {
-		expect(diGreenfield).toEqual(EXPECTED_GREENFIELD_WEIGHTS);
-	});
-
-	test("brownfield map matches the D-5 canonical weights (sanity anchor)", () => {
-		expect(diBrownfield).toEqual(EXPECTED_BROWNFIELD_WEIGHTS);
+	test("the single formula parses to the canonical 6-dim weight map (values, not just keys)", () => {
+		expect(normalizeWeightMap(parseInlineFormula(skillMd))).toEqual(EXPECTED_WEIGHTS);
 	});
 });
 
-describe("phase-3 payload key-set guard: scores{} key-sets match the D-5 canonical dimension set", () => {
-	const EXPECTED_GREENFIELD_KEYS = new Set(Object.keys(EXPECTED_GREENFIELD_WEIGHTS));
-	const EXPECTED_BROWNFIELD_KEYS = new Set(Object.keys(EXPECTED_BROWNFIELD_WEIGHTS));
+describe("phase-3 parity: single 6-dim weight map agrees across all 3 sources (normalized maps, not raw strings)", () => {
+	const diWeights = normalizeWeightMap(parseInlineFormula(skillMd));
+	const promWeights = normalizeWeightMap(parsePrometheusTable(prometheusMd));
+	const advancedWeights = normalizeWeightMap(parseAdvancedPercentTable(advancedMd));
 
-	test("fact-ground payload (~:191) scores key-set is the 5-key greenfield set", () => {
+	test("SKILL.md's formula matches the canonical single 6-dim weights (sanity anchor)", () => {
+		expect(diWeights).toEqual(EXPECTED_WEIGHTS);
+	});
+
+	test("prometheus/SKILL.md's weight table matches the canonical single 6-dim weights (sanity anchor)", () => {
+		expect(promWeights).toEqual(EXPECTED_WEIGHTS);
+	});
+
+	test("deep-interview-advanced.md's weight table matches the canonical single 6-dim weights (sanity anchor)", () => {
+		expect(advancedWeights).toEqual(EXPECTED_WEIGHTS);
+	});
+
+	test("SKILL.md formula == prometheus/SKILL.md weight table", () => {
+		expect(diWeights).toEqual(promWeights);
+	});
+
+	test("SKILL.md formula == deep-interview-advanced.md weight table", () => {
+		expect(diWeights).toEqual(advancedWeights);
+	});
+
+	test("prometheus/SKILL.md weight table == deep-interview-advanced.md weight table", () => {
+		expect(promWeights).toEqual(advancedWeights);
+	});
+});
+
+describe("phase-3 payload key-set guard: scores{} key-sets match the single canonical 6-dim dimension set", () => {
+	const EXPECTED_KEYS = new Set(Object.keys(EXPECTED_WEIGHTS));
+
+	test("fact-ground payload (~:198) scores key-set is the single canonical 6-key set", () => {
 		const keys = extractScoresKeys(skillMd, '"kind":"fact-ground"');
-		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_GREENFIELD_KEYS);
+		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_KEYS);
 	});
 
-	test("Step 2e greenfield payload (~:343) scores key-set is the 5-key greenfield set", () => {
+	test("Step 2e round payload (~:373) scores key-set is the single canonical 6-key set", () => {
 		const keys = extractScoresKeys(skillMd, "### Step 2e: Update State");
-		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_GREENFIELD_KEYS);
+		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_KEYS);
 	});
 
-	test("Step 2e brownfield payload (~:358) scores key-set is the 6-key brownfield set", () => {
-		const keys = extractScoresKeys(skillMd, "For brownfield interviews, include the");
-		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_BROWNFIELD_KEYS);
+	test('no separate "brownfield-only" payload framing survives (single unconditional 6-key payload everywhere)', () => {
+		expect(skillMd).not.toContain("For brownfield interviews, include the");
 	});
 
-	test("no {goal,constraints,criteria} survivor at any payload site", () => {
+	test("no {goal,constraints,criteria} survivor at either payload site", () => {
 		const allKeys = [
 			...extractScoresKeys(skillMd, '"kind":"fact-ground"'),
 			...extractScoresKeys(skillMd, "### Step 2e: Update State"),
-			...extractScoresKeys(skillMd, "For brownfield interviews, include the"),
 		];
 		expect(allKeys).not.toContain("goal");
 		expect(allKeys).not.toContain("criteria");
