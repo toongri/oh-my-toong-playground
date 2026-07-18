@@ -420,6 +420,25 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// Terminal marker — interview already concluded. Delete the orphan unconditionally.
 			cleanupDeepInterviewState(sessionId);
 		} else if (detectDeepInterviewDone(lastAssistantMessage)) {
+			// UC10 (topology-floor-evolution Stage 5): a done-token alone is not proof of
+			// genuine convergence — the interviewer LLM can claim done prematurely. Cross-
+			// validate against the code-enforced state.current_ambiguity/state.threshold
+			// (computeAmbiguityFloor's clamp target) before honoring the token.
+			// Fail-open: current_ambiguity/threshold absent (legacy/foreign interview shape)
+			// falls through to the existing cleanup. Liveness-gated like the no-token block
+			// branch below: a TTL-stale interview is already a corpse — cross-checking it
+			// would wedge the session on a dead interview forever, so stale states also
+			// fall through to cleanup regardless of ambiguity.
+			const ambiguity = deepInterviewStateRaw.state?.current_ambiguity;
+			const threshold = deepInterviewStateRaw.state?.threshold;
+			if (
+				ambiguity !== undefined &&
+				threshold !== undefined &&
+				ambiguity > threshold &&
+				isStateLive(deepInterviewStateRaw, nowEpoch)
+			) {
+				return formatBlockOutput(buildDeepInterviewContinuationMessage());
+			}
 			cleanupDeepInterviewState(sessionId);
 		} else if (
 			!isPristine("deep-interview", toRecord(deepInterviewStateRaw)) &&

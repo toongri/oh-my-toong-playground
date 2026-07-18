@@ -174,6 +174,88 @@ describe("makeDecision", () => {
 			expect(result.reason ?? "").not.toContain("<deep-interview-continuation>");
 		});
 
+		// -------------------------------------------------------------------------
+		// UC10 (topology-floor-evolution Stage 5): a done-token alone is not proof of
+		// genuine convergence — cross-validate against the code-enforced
+		// state.current_ambiguity/state.threshold before honoring it.
+		// -------------------------------------------------------------------------
+
+		it("UC10: done-token with current_ambiguity > threshold still blocks (false-convergence guard)", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", current_ambiguity: 0.4, threshold: 0.15 },
+				}),
+			);
+
+			const context = createContext({
+				lastAssistantMessage: "Interview complete. <deep-interview-done/>",
+			});
+
+			const result = makeDecision(context);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(true);
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<deep-interview-continuation>");
+		});
+
+		it("UC10: done-token with current_ambiguity <= threshold cleans up normally", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", current_ambiguity: 0.1, threshold: 0.15 },
+				}),
+			);
+
+			const context = createContext({
+				lastAssistantMessage: "Interview complete. <deep-interview-done/>",
+			});
+
+			const result = makeDecision(context);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(false);
+			expect(result.reason ?? "").not.toContain("<deep-interview-continuation>");
+		});
+
+		it("UC10: done-token with high ambiguity but TTL-stale state still cleans up (no wedge on a corpse)", async () => {
+			// Mirrors the no-token block branch's liveness fall-through: a TTL-stale
+			// interview is effectively dead, so the ambiguity cross-check must not wedge
+			// the session on it even when current_ambiguity > threshold.
+			const stale = "2020-01-01T00:00:00+00:00";
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: stale,
+					last_touched_at: stale,
+					state: { phase: "in_progress", current_ambiguity: 0.4, threshold: 0.15 },
+				}),
+			);
+
+			const context = createContext({
+				lastAssistantMessage: "Interview complete. <deep-interview-done/>",
+			});
+
+			const result = makeDecision(context);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(false);
+			expect(result.reason ?? "").not.toContain("<deep-interview-continuation>");
+		});
+
 		it("makeDecision deletes active:false terminal marker via raw reader (no done-token required)", async () => {
 			// Seed an active:false terminal marker — the normal readDeepInterviewState folds this to null,
 			// so without the raw reader the delete branch never fires and the file orphans.
