@@ -204,7 +204,7 @@ Taken ONLY when the selector chose Fact-ground. This round dispatches a research
      --current-ambiguity <ambiguity>
    ```
 
-   `context` is always included in the `scores` object — every component, every round, unconditionally — exactly as Step 2e does. The `--append-round-stdin` payload accepts any valid JSON shape, so the fact-derived `kind:"fact-ground"` round persists alongside user Q&A rounds without a schema change.
+   `context` is always included in the `scores` object — every component, every round, unconditionally — exactly as Step 2e does. The `--append-round-stdin` payload accepts any valid JSON shape, so the fact-derived `kind:"fact-ground"` round persists alongside user Q&A rounds without a schema change. This `component`+`scores` payload also updates that component's `clarity_scores` in state — the write that lets the Closure Guard and the ambiguity floor's unscored count actually drop as scoring rounds land, not just the fact-ground round shown here.
 6. **Return to the loop head** (Step 2-head) for the next round. The fact-ground round is now part of the transcript and counts toward the soft/hard round limits in Step 2f.
 
 ### Step 2a: Generate Next Question

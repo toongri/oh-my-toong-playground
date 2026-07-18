@@ -387,6 +387,43 @@ export function updateDeepInterviewState(
 		if (partial.append_round !== undefined) {
 			const existing: unknown[] = Array.isArray(priorState["rounds"]) ? priorState["rounds"] : [];
 			updatedState["rounds"] = [...existing, partial.append_round];
+
+			// Scoring writer (topology-floor-evolution Stage 2): a round payload carrying
+			// {component, scores} propagates into the matching topology component's
+			// clarity_scores — the only path that fills what setTopology (:586) always
+			// seeds null. No-op when topology is absent, no component id matches, or the
+			// round carries no component/scores (pure rounds-push, e.g. a fact-ground round
+			// without a scoring payload).
+			const round = partial.append_round;
+			const priorTopology = isRecord(priorState["topology"]) ? priorState["topology"] : undefined;
+			const priorComponents =
+				priorTopology !== undefined && Array.isArray(priorTopology["components"])
+					? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: same trusted structural pass-through as other readers in this module
+						(priorTopology["components"] as TopologyComponent[])
+					: undefined;
+			if (
+				isRecord(round) &&
+				typeof round["component"] === "string" &&
+				isRecord(round["scores"]) &&
+				priorComponents !== undefined
+			) {
+				const scores = round["scores"];
+				const matchIdx = priorComponents.findIndex((c) => c.id === round["component"]);
+				if (matchIdx !== -1) {
+					const nextComponents = priorComponents.map((c, i) => {
+						if (i !== matchIdx) return c;
+						const nextScores: ClarityScores = { ...c.clarity_scores };
+						for (const dim of CLARITY_DIMENSIONS) {
+							const val = scores[dim];
+							if (typeof val === "number" && Number.isFinite(val)) {
+								nextScores[dim] = val;
+							}
+						}
+						return { ...c, clarity_scores: nextScores };
+					});
+					updatedState["topology"] = { components: nextComponents };
+				}
+			}
 		}
 		if (partial.append_ontology_snapshot !== undefined) {
 			const existing: unknown[] = Array.isArray(priorState["ontology_snapshots"])
