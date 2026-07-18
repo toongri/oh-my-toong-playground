@@ -8,7 +8,9 @@ import {
 	updateDeepInterviewState,
 	readDeepInterviewState,
 	resolveStatePath,
+	computeAmbiguityFloor,
 } from "./deep-interview-state.ts";
+import type { DeepInterviewStateContent, ClarityScores } from "./deep-interview-state.ts";
 
 let tmpDir: string;
 const originalOmtDir = process.env.OMT_DIR;
@@ -554,6 +556,115 @@ describe("deep-interview-state CLI main()", () => {
 		for (const dim of CLARITY_DIMENSIONS) {
 			expect(scores[dim]).toBeNull();
 		}
+	});
+
+	// ---------------------------------------------------------------------------
+	// topology-floor-evolution Stage 2: computeAmbiguityFloor + write clamp
+	// (UC2, UC3, UC7 — see /Users/toong/.omt/oh-my-toong-playground/deep-interview/topology-floor-evolution.md)
+	// ---------------------------------------------------------------------------
+
+	/** A fully-scored ClarityScores fixture — all 6 dimensions non-null. */
+	function scoredDims(overrides: Partial<ClarityScores> = {}): ClarityScores {
+		return {
+			intent: 0.9,
+			outcome: 0.9,
+			scope: 0.9,
+			constraints: 0.9,
+			success: 0.9,
+			context: 0.9,
+			...overrides,
+		};
+	}
+
+	// UC3 — floor clamp (anchor numbers): LLM reports ambiguity 0.04 while 1 active
+	// component is still unscored → floor = 0.05·1 = 0.05 → effective = max(0.04, 0.05)
+	// = 0.05 is what gets persisted as current_ambiguity, and the raw 0.04 the LLM
+	// reported is preserved separately under reported_ambiguity (not overwritten).
+	test("UC3: reported ambiguity 0.04 with 1 unscored component clamps to floor 0.05; reported_ambiguity preserved", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "single-slice idea" });
+		// One active component, never scored (set-topology always seeds null scores).
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "only component" }])}'`);
+
+		run("update --current-ambiguity 0.04");
+
+		const state = rawState();
+		const nested = state["state"] as Record<string, unknown>;
+		expect(nested["current_ambiguity"]).toBe(0.05);
+		expect(nested["reported_ambiguity"]).toBe(0.04);
+		expect(nested["ambiguity_floor"]).toBe(0.05);
+	});
+
+	// UC2 — sibling component cannot hide an unscored one: Review UI is fully scored
+	// on all 6 dimensions, but Export has zero dimensions scored. Floor pressure
+	// (0.05 for the one unscored component) survives regardless of Review UI's
+	// completeness, and the fixture's threshold (0.03) sits below that floor —
+	// so the clamped effective ambiguity can never read as "under threshold" no
+	// matter how low the LLM's reported value is.
+	test("UC2: Export left unscored keeps floor active even though Review UI is fully scored — effective ambiguity cannot drop below threshold", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "review + export idea", threshold: 0.03 });
+		run(
+			`set-topology --json '${JSON.stringify([
+				{ id: "review-ui", name: "Review UI" },
+				{ id: "export", name: "Export" },
+			])}'`,
+		);
+		// Simulate a completed per-component scoring write for Review UI only (that
+		// write path is a later story — patch the raw file directly here to set up
+		// the fixture). Export is left at set-topology's all-null default.
+		const path = resolveStatePath(SID);
+		const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+		const nestedRaw = raw["state"] as Record<string, unknown>;
+		const topology = nestedRaw["topology"] as Record<string, unknown>;
+		const components = topology["components"] as Record<string, unknown>[];
+		components[0]["clarity_scores"] = scoredDims();
+		writeFileSync(path, JSON.stringify(raw, null, 2), "utf8");
+
+		// LLM reports an ambiguity well under the threshold — this must NOT survive as-is.
+		run("update --current-ambiguity 0.01");
+
+		const state = rawState();
+		const nested = state["state"] as Record<string, unknown>;
+		const threshold = nested["threshold"] as number;
+		const effective = nested["current_ambiguity"] as number;
+		expect(effective).toBe(0.05); // one unscored component (Export) → floor 0.05
+		expect(effective).toBeGreaterThan(threshold);
+		expect(nested["reported_ambiguity"]).toBe(0.01);
+	});
+
+	// UC7 — context is not a special dimension, just one of the 6: a component with
+	// every dimension scored EXCEPT context is still unscored and contributes floor
+	// pressure; once context is scored alongside the other 5, the same component no
+	// longer contributes and the floor drops to 0.
+	test("UC7: a null context dimension keeps a component unscored (blocks); scoring context removes the block", () => {
+		const blocked: DeepInterviewStateContent = {
+			topology: {
+				components: [
+					{
+						id: "c1",
+						name: "greenfield component",
+						status: "active",
+						clarity_scores: scoredDims({ context: null }),
+					},
+				],
+			},
+		};
+		expect(computeAmbiguityFloor(blocked)).toBe(0.05);
+
+		const unblocked: DeepInterviewStateContent = {
+			topology: {
+				components: [
+					{
+						id: "c1",
+						name: "greenfield component",
+						status: "active",
+						clarity_scores: scoredDims({ context: 0.9 }),
+					},
+				],
+			},
+		};
+		expect(computeAmbiguityFloor(unblocked)).toBe(0);
 	});
 });
 

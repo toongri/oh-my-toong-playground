@@ -160,6 +160,19 @@ export interface DeepInterviewStateContent {
 	 */
 	stance_history?: string[];
 	/**
+	 * The raw ambiguity value as reported by the LLM before floor clamping
+	 * (topology-floor-evolution Stage 2). Preserved verbatim so a floor-clamped
+	 * write never loses the interviewer's original self-assessment.
+	 */
+	reported_ambiguity?: number;
+	/**
+	 * The deterministic floor computed at the moment current_ambiguity was last
+	 * written (see computeAmbiguityFloor). current_ambiguity itself always holds
+	 * max(reported_ambiguity, ambiguity_floor) — this field exposes the floor term
+	 * for transparency/debugging.
+	 */
+	ambiguity_floor?: number;
+	/**
 	 * Round 0 Topology Enumeration Gate output (topology-floor-evolution Stage 1).
 	 * Absent on states written before this field existed — backward-compatible:
 	 * a reader must treat a missing/undefined topology the same as "not yet locked",
@@ -299,7 +312,19 @@ export function updateDeepInterviewState(
 		const updatedState: Record<string, unknown> = { ...priorState };
 
 		if (partial.current_ambiguity !== undefined) {
-			updatedState["current_ambiguity"] = partial.current_ambiguity;
+			// Deterministic floor clamp (topology-floor-evolution Stage 2): the LLM-reported
+			// value alone is never trusted at face value — it is floored against
+			// computeAmbiguityFloor(state) before being persisted as current_ambiguity, and
+			// the original reported figure is kept verbatim under reported_ambiguity so the
+			// clamp is never silently lossy.
+			const reported = partial.current_ambiguity;
+			const floor = computeAmbiguityFloor(
+				// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: same trusted structural pass-through as other readers in this module
+				priorState as DeepInterviewStateContent,
+			);
+			updatedState["current_ambiguity"] = Math.max(reported, floor);
+			updatedState["reported_ambiguity"] = reported;
+			updatedState["ambiguity_floor"] = floor;
 		}
 		if (partial.append_round !== undefined) {
 			const existing: unknown[] = Array.isArray(priorState["rounds"]) ? priorState["rounds"] : [];
@@ -350,6 +375,47 @@ function nullClarityScores(): ClarityScores {
 		success: null,
 		context: null,
 	};
+}
+
+/** All 6 OMT dimensions in canonical order — shared by clarity_scores and unscored-detection. */
+const CLARITY_DIMENSIONS: readonly (keyof ClarityScores)[] = [
+	"intent",
+	"outcome",
+	"scope",
+	"constraints",
+	"success",
+	"context",
+];
+
+/**
+ * True iff any of the 6 clarity_scores dimensions is null (per spec: a component is
+ * "미채점/unscored" the moment even one of its 6 dimensions has no finite score —
+ * context is not special, it is just one of the 6).
+ */
+function isComponentUnscored(scores: ClarityScores): boolean {
+	return CLARITY_DIMENSIONS.some((dim) => scores[dim] === null);
+}
+
+/**
+ * Deterministic ambiguity floor (topology-floor-evolution Stage 2):
+ *
+ *   floor = 0.10 * disputed_count + 0.05 * unscored_component_count + 0.05 * auto_answer_ratio
+ *
+ * unscored_component_count counts ACTIVE topology components (deferred components are
+ * excluded from floor pressure) that have at least one null clarity_scores dimension.
+ * disputed_count and auto_answer_ratio read as 0 for now — their backing state fields
+ * (established_facts disputed lifecycle / auto_answered_rounds tracking) don't exist
+ * yet and land in topology-floor-evolution Stage 3; the 3-term structure is fixed here
+ * so Stage 3 only has to supply real values for those two terms.
+ */
+export function computeAmbiguityFloor(state: DeepInterviewStateContent | undefined | null): number {
+	const components = state?.topology?.components ?? [];
+	const unscoredComponentCount = components.filter(
+		(c) => c.status === "active" && isComponentUnscored(c.clarity_scores),
+	).length;
+	const disputedCount = 0; // Stage 3: established_facts disputed lifecycle
+	const autoAnswerRatio = 0; // Stage 3: auto_answered_rounds tracking
+	return 0.1 * disputedCount + 0.05 * unscoredComponentCount + 0.05 * autoAnswerRatio;
 }
 
 /**
