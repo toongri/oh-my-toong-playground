@@ -503,6 +503,58 @@ describe("deep-interview-state CLI main()", () => {
 		const recorded = history[history.length - 1];
 		expect(recorded).toBe("Ontologist");
 	});
+
+	// ---------------------------------------------------------------------------
+	// topology-floor-evolution Stage 1: topology + per-component clarity_scores
+	// (UC1, UC8 — see /Users/toong/.omt/oh-my-toong-playground/deep-interview/topology-floor-evolution.md)
+	// ---------------------------------------------------------------------------
+
+	const CLARITY_DIMENSIONS = ["intent", "outcome", "scope", "constraints", "success", "context"];
+
+	// UC1 — Round 0 다중 컴포넌트 열거(greenfield): a 4-component idea locks 4 active
+	// components into state.topology.components, each with all 6 clarity_scores null.
+	test("UC1: set-topology locks 4 active components, each with 6 null clarity_scores", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "CSV 수집 → 정규화 → 리뷰 UI → 내보내기" });
+		const components = [
+			{ id: "c1", name: "CSV 수집" },
+			{ id: "c2", name: "정규화" },
+			{ id: "c3", name: "리뷰 UI" },
+			{ id: "c4", name: "내보내기" },
+		];
+		run(`set-topology --json '${JSON.stringify(components)}'`);
+		const state = rawState();
+		const nested = state["state"] as Record<string, unknown>;
+		const topology = nested["topology"] as Record<string, unknown>;
+		const locked = topology["components"] as Record<string, unknown>[];
+		expect(locked).toHaveLength(4);
+		for (const comp of locked) {
+			expect(comp["status"]).toBe("active");
+			const scores = comp["clarity_scores"] as Record<string, unknown>;
+			for (const dim of CLARITY_DIMENSIONS) {
+				expect(scores[dim]).toBeNull();
+			}
+		}
+	});
+
+	// UC8 — 단일 컴포넌트 pass-through: a 1-component idea locks topology.components[0]
+	// as the lone active component, with the same 6-null clarity_scores shape.
+	test("UC8: set-topology with a single-component idea locks topology.components[0] as the lone active component", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "standalone script" });
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "standalone script" }])}'`);
+		const state = rawState();
+		const nested = state["state"] as Record<string, unknown>;
+		const topology = nested["topology"] as Record<string, unknown>;
+		const locked = topology["components"] as Record<string, unknown>[];
+		expect(locked).toHaveLength(1);
+		const only = locked[0] as Record<string, unknown>;
+		expect(only["status"]).toBe("active");
+		const scores = only["clarity_scores"] as Record<string, unknown>;
+		for (const dim of CLARITY_DIMENSIONS) {
+			expect(scores[dim]).toBeNull();
+		}
+	});
 });
 
 // ---------------------------------------------------------------------------
