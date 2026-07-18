@@ -874,10 +874,27 @@ function main(): void {
 		}
 		const disputeFact = str(args["dispute-fact"]);
 
+		// Raw-string decimal guard: `Number("")` and `Number("   ")` both coerce to the
+		// finite value 0, which the Number.isFinite guard downstream cannot distinguish
+		// from a genuine "0" — silently fail-opening the Stop-hook's
+		// `ambiguity > threshold` cross-check. Validated on the raw string, before
+		// Number() ever runs, so a refusal here never reaches updateDeepInterviewState.
+		let currentAmbiguity: number | undefined;
+		if (ambiguity !== undefined) {
+			const s = ambiguity.trim();
+			if (s.length === 0 || !/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(s)) {
+				process.stderr.write(
+					`deep-interview-state update: --current-ambiguity: must be a decimal number, got "${ambiguity}"\n`,
+				);
+				process.exit(1);
+			}
+			currentAmbiguity = Number(s);
+		}
+
 		try {
 			updateDeepInterviewState(sessionId, {
 				current_phase: str(args["current-phase"]),
-				current_ambiguity: ambiguity !== undefined ? Number(ambiguity) : undefined,
+				current_ambiguity: currentAmbiguity,
 				append_round: appendRound,
 				append_ontology_snapshot: appendSnapshot,
 				challenge_mode: challengeMode,

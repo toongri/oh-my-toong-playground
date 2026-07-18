@@ -949,6 +949,78 @@ describe("deep-interview-state CLI main()", () => {
 	);
 
 	// ---------------------------------------------------------------------------
+	// fail-open closure: `Number("")` and `Number("   ")` both coerce to the finite
+	// value `0`, which passes the `Number.isFinite` guard above and gets accepted as
+	// a legitimate ambiguity=0 write — fail-opening the Stop-hook's
+	// `ambiguity > threshold` cross-check via a *finite* value the isFinite guard
+	// cannot distinguish from a genuine "0". The CLI must refuse at the raw-string
+	// layer, before Number() ever runs on the value.
+	// ---------------------------------------------------------------------------
+
+	test('update --current-ambiguity "" (empty string): CLI exits non-zero; current_ambiguity stays at its prior value (never coerced to 0)', () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "guard idea" });
+		run("update --current-ambiguity 0.3");
+
+		const path = resolveStatePath(SID);
+		const before = readFileSync(path, "utf8");
+
+		expect(() => run('update --current-ambiguity ""')).toThrow();
+
+		const after = readFileSync(path, "utf8");
+		expect(after).toBe(before);
+		const nested = (JSON.parse(after) as Record<string, unknown>)["state"] as Record<
+			string,
+			unknown
+		>;
+		expect(nested["current_ambiguity"]).toBe(0.3);
+	});
+
+	test('update --current-ambiguity "   " (whitespace-only): CLI exits non-zero; state file byte-unchanged', () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "guard idea" });
+		run("update --current-ambiguity 0.3");
+
+		const path = resolveStatePath(SID);
+		const before = readFileSync(path, "utf8");
+
+		expect(() => run('update --current-ambiguity "   "')).toThrow();
+
+		const after = readFileSync(path, "utf8");
+		expect(after).toBe(before);
+	});
+
+	test.each([["0x1a"]])(
+		"update --current-ambiguity %s (non-decimal format): CLI exits non-zero; state file byte-unchanged",
+		(value) => {
+			writeSeed();
+			initDeepInterviewState(SID, { initial_idea: "guard idea" });
+			run("update --current-ambiguity 0.3");
+
+			const path = resolveStatePath(SID);
+			const before = readFileSync(path, "utf8");
+
+			expect(() => run(`update --current-ambiguity ${value}`)).toThrow();
+
+			const after = readFileSync(path, "utf8");
+			expect(after).toBe(before);
+		},
+	);
+
+	test.each([["0"], ["0.04"], ["1"]])(
+		"update --current-ambiguity %s (valid decimal): CLI exits zero; current_ambiguity is stored as reported",
+		(value) => {
+			writeSeed();
+			initDeepInterviewState(SID, { initial_idea: "guard idea" });
+
+			run(`update --current-ambiguity ${value}`);
+
+			const nested = rawState()["state"] as Record<string, unknown>;
+			expect(nested["current_ambiguity"]).toBe(Number(value));
+		},
+	);
+
+	// ---------------------------------------------------------------------------
 	// topology-floor-evolution Stage 6: legacy migration (UC11 — see
 	// topology-floor-evolution.md)
 	// ---------------------------------------------------------------------------
