@@ -455,7 +455,7 @@ Decomposition Formalism (line 161-170) requires MECE + Atomicity + Anti-pattern 
 
 ```
 ## Decomposition Self-Check
-- Ambiguity Score (recalculated post-AC): <value> (variant: Greenfield/Brownfield)
+- Ambiguity Score (recalculated post-AC): <value>
 - MECE validation:
   - Overlap: <none / found at TODO X & Y — resolved by ...>
   - Gap: <none / found in scope area Z — added TODO N>
@@ -605,7 +605,7 @@ Round {n} | Ambiguity: {score}%
 | Scope                 | {s}   | {gap or "Clear"}    |
 | Constraints           | {s}   | {gap or "Clear"}    |
 | Success               | {s}   | {gap or "Clear"}    |
-| Context (brownfield)  | {s}   | {gap or "Clear"}    |
+| Context               | {s}   | {gap or "Clear"}    |
 
 → Next question targets: {weakest dimension}
 ```

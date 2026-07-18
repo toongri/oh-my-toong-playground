@@ -530,7 +530,7 @@ describe("deep-interview-state CLI main()", () => {
 
 	// ---------------------------------------------------------------------------
 	// topology-floor-evolution Stage 1: topology + per-component clarity_scores
-	// (UC1, UC8 — see /Users/toong/.omt/oh-my-toong-playground/deep-interview/topology-floor-evolution.md)
+	// (UC1, UC8 — see topology-floor-evolution.md)
 	// ---------------------------------------------------------------------------
 
 	const CLARITY_DIMENSIONS = ["intent", "outcome", "scope", "constraints", "success", "context"];
@@ -582,7 +582,7 @@ describe("deep-interview-state CLI main()", () => {
 
 	// ---------------------------------------------------------------------------
 	// topology-floor-evolution Stage 2: computeAmbiguityFloor + write clamp
-	// (UC2, UC3, UC7 — see /Users/toong/.omt/oh-my-toong-playground/deep-interview/topology-floor-evolution.md)
+	// (UC2, UC3, UC7 — see topology-floor-evolution.md)
 	// ---------------------------------------------------------------------------
 
 	/** A fully-scored ClarityScores fixture — all 6 dimensions non-null. */
@@ -692,7 +692,7 @@ describe("deep-interview-state CLI main()", () => {
 	// ---------------------------------------------------------------------------
 	// topology-floor-evolution Stage 3: established_facts disputed lifecycle +
 	// validateScoredTransition (UC4, UC5 — see
-	// /Users/toong/.omt/oh-my-toong-playground/deep-interview/topology-floor-evolution.md)
+	// topology-floor-evolution.md)
 	// ---------------------------------------------------------------------------
 
 	// UC4 — 번복 시 양방향 상승: a user reversing an earlier answer (A→B) marks the
@@ -779,7 +779,7 @@ describe("deep-interview-state CLI main()", () => {
 
 	// ---------------------------------------------------------------------------
 	// topology-floor-evolution Stage 6: legacy migration (UC11 — see
-	// /Users/toong/.omt/oh-my-toong-playground/deep-interview/topology-floor-evolution.md)
+	// topology-floor-evolution.md)
 	// ---------------------------------------------------------------------------
 
 	// UC11 — legacy migration: a state written before the topology field existed (no
