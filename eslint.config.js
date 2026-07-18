@@ -38,6 +38,8 @@ export default defineConfig(
       // TS 기준으로 저작한 소스가 아니다 — 린트 대상에서 제외(no-undef/require 오탐 방지).
       "hooks/rules-injector/picomatch/**",
       "skills/insane-browsing/engine/templates/**",
+      // superpowers에서 벤더링한 그래프 렌더 스크립트(CJS)도 같은 이유로 제외.
+      "skills/writing-skills/render-graphs.js",
     ],
   },
 
