@@ -65,7 +65,7 @@ describe("main (통합)", () => {
 		await mkdir(join(fakeHome, ".claude"), { recursive: true });
 		await writeFile(
 			join(fakeHome, ".claude", "settings.json"),
-			JSON.stringify({ enabledPlugins: { "superpowers@claude-plugins-official": true } }),
+			JSON.stringify({ enabledPlugins: { "frontend-design@claude-plugins-official": true } }),
 		);
 		process.env.HOME = fakeHome;
 
@@ -75,7 +75,7 @@ describe("main (통합)", () => {
 		const joined = consoleOutput.join("\n");
 		expect(joined).toContain("<skill-catalog>");
 		expect(joined).toContain("</skill-catalog>");
-		expect(joined).toContain("superpowers:test-driven-development");
+		expect(joined).toContain("frontend-design");
 	});
 
 	it("플러그인 활성화 시 스킬 디렉토리 없어도 plugin 스킬 포함", async () => {
@@ -83,7 +83,7 @@ describe("main (통합)", () => {
 		await mkdir(join(fakeHome, ".claude"), { recursive: true });
 		await writeFile(
 			join(fakeHome, ".claude", "settings.json"),
-			JSON.stringify({ enabledPlugins: { "superpowers@claude-plugins-official": true } }),
+			JSON.stringify({ enabledPlugins: { "frontend-design@claude-plugins-official": true } }),
 		);
 		process.env.HOME = fakeHome;
 
@@ -91,7 +91,7 @@ describe("main (통합)", () => {
 
 		expect(consoleOutput.length).toBeGreaterThan(0);
 		const joined = consoleOutput.join("\n");
-		expect(joined).toContain("superpowers:test-driven-development");
+		expect(joined).toContain("frontend-design");
 	});
 
 	it("plain-text 출력에 Load Skills 헤더가 포함된다", async () => {
@@ -99,7 +99,7 @@ describe("main (통합)", () => {
 		await mkdir(join(fakeHome, ".claude"), { recursive: true });
 		await writeFile(
 			join(fakeHome, ".claude", "settings.json"),
-			JSON.stringify({ enabledPlugins: { "superpowers@claude-plugins-official": true } }),
+			JSON.stringify({ enabledPlugins: { "frontend-design@claude-plugins-official": true } }),
 		);
 		process.env.HOME = fakeHome;
 
@@ -114,7 +114,7 @@ describe("main (통합)", () => {
 		await mkdir(join(fakeHome, ".claude"), { recursive: true });
 		await writeFile(
 			join(fakeHome, ".claude", "settings.json"),
-			JSON.stringify({ enabledPlugins: { "superpowers@claude-plugins-official": true } }),
+			JSON.stringify({ enabledPlugins: { "frontend-design@claude-plugins-official": true } }),
 		);
 		process.env.HOME = fakeHome;
 
@@ -128,8 +128,10 @@ describe("main (통합)", () => {
 	});
 
 	it("main stdout is byte-identical across two consecutive invocations (AC1c)", async () => {
-		// Controls: fake HOME with two known enabled plugins + no skill dirs,
-		// so both invocations see the same environment and filesystem state.
+		// Controls: fake HOME with two enabled plugins (frontend-design maps to a
+		// catalog skill; other-plugin@vendor is an unmapped enabled plugin that still
+		// exercises enabledPlugins Set ordering) + no skill dirs, so both invocations
+		// see identical environment/filesystem state.
 		// This test documents the guarantee that Set/Map iteration order in
 		// readEnabledPlugins / buildCatalog never introduces session-to-session variance.
 		const fakeHome = join(tempDir, "fakehome");
@@ -138,8 +140,8 @@ describe("main (통합)", () => {
 			join(fakeHome, ".claude", "settings.json"),
 			JSON.stringify({
 				enabledPlugins: {
-					"superpowers@claude-plugins-official": true,
 					"frontend-design@claude-plugins-official": true,
+					"other-plugin@vendor": true,
 				},
 			}),
 		);

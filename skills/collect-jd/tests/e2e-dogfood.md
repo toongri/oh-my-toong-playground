@@ -621,7 +621,7 @@ Extension:
 
 ### Trigger
 
-User interview via `/superpowers:writing-skills` raised three pressure-scenario gaps observed during T11-a~d dogfood:
+User interview via `writing-skills` raised three pressure-scenario gaps observed during T11-a~d dogfood:
 
 1. **Detail Split**: a single list anchor sometimes resolves to multiple sub-positions (affiliate / team / sub-role). Toss "외 5개 계열사" anchor → 6 distinct JDs squeezed into 1.
 2. **HWM as cognitive burden**: per-site crawl-state should be auto-managed so the next run becomes a single set-difference call rather than manual re-reasoning.
