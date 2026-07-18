@@ -227,6 +227,27 @@ describe("deep-interview-state CLI main()", () => {
 		expect((parsed["state"] as Record<string, unknown>)["initial_idea"]).toBe("get test");
 	});
 
+	// topology-floor-evolution Stage 6 (UC11 consumption): `get` derives migration_status via
+	// computeTopologyMigrationStatus so the resume path (get/adopt) can enforce Round 0 on a
+	// pre-topology state. A state that never called set-topology reads as legacy_missing.
+	test("get subcommand output includes migration_status: legacy_missing for topology-absent state", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "no topology yet" });
+		const output = run("get");
+		const parsed = JSON.parse(output) as Record<string, unknown>;
+		expect(parsed["migration_status"]).toBe("legacy_missing");
+	});
+
+	// A state that has locked topology (even a single component) reads as current.
+	test("get subcommand output includes migration_status: current once topology is locked", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "with topology" });
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "only component" }])}'`);
+		const output = run("get");
+		const parsed = JSON.parse(output) as Record<string, unknown>;
+		expect(parsed["migration_status"]).toBe("current");
+	});
+
 	// CLI absent-file → self-heal (exit 0, file created) — slash-command entry path
 	test("init on absent file self-heals via CLI (exit 0, file created)", () => {
 		// No seed written — init self-heals by seeding the pristine skeleton first

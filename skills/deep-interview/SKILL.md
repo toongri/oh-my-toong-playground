@@ -81,6 +81,7 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
        --json '[{"id":"<id>","name":"<name>","status":"active|deferred"}]'
      ```
    - Every named component is either **active** (scored across all 6 dimensions in Phase 2) or explicitly **deferred** (visible in `state.topology`, excluded from active-component floor pressure) — never silently dropped.
+   - **Resume + legacy migration (topology-floor-evolution Stage 6, UC11)**: when resuming an interrupted session, `deep-interview-state.ts get`'s output carries a `migration_status` field derived from `computeTopologyMigrationStatus`. If `migration_status` is `legacy_missing` — this state predates the `topology` field entirely, never having run Round 0 — run this Round 0 gate now, before any further per-component scoring write, even if the resumed state already has rounds or a scored ambiguity from before topology existed. `current` means topology is already locked; resume straight into Phase 2 as usual.
 4. **Initialize state** by invoking the CLI:
 
 ```bash
@@ -492,7 +493,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - Use temperature 0.1 for ambiguity scoring — consistency is critical
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts init` to initialize interview state (Phase-1 step 4)
 - Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update` to update state after each round (Phase-2 step 2e)
-- Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get` to read back state when resuming an interrupted session
+- Use `bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts get` to read back state when resuming an interrupted session — check its `migration_status` field: `legacy_missing` means this state predates `topology` and Round 0 (step 3.7) must run before any further per-component scoring
 - Use `Write` tool to save the final spec to `$OMT_DIR/deep-interview/{slug}.md`
 - Use `Skill()` to bridge to execution modes — never implement directly
 - Challenge agent modes are prompt injections, not separate agent spawns

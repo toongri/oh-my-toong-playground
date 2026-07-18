@@ -36,7 +36,9 @@
  *          reset to all 6 dimensions null (intent/outcome/scope/constraints/success/context)
  *          — no caller may seed a score through this path (per-component scoring lands
  *          in a later story). `status` defaults to "active" when omitted.
- *   get    Print the state JSON.
+ *   get    Print the state JSON, plus a derived `migration_status` field
+ *          ("legacy_missing" | "current") from computeTopologyMigrationStatus,
+ *          so the resume path (get/adopt) can detect a pre-topology state.
  *
  * No sessionId field is ever written (ADR-7, RC3 root-cause fix: sid is
  * derived from the FILENAME only, never from file content).
@@ -862,7 +864,19 @@ function main(): void {
 		}
 	} else if (subcommand === "get") {
 		const result = readDeepInterviewState(sessionId);
-		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+		const output =
+			result === null
+				? null
+				: {
+						...result,
+						migration_status: computeTopologyMigrationStatus(
+							isRecord(result["state"])
+								? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: state file content is written exclusively by this module's own writers (never externally supplied); trusted structural pass-through, same convention as the read at :599-601
+									(result["state"] as DeepInterviewStateContent)
+								: undefined,
+						),
+					};
+		process.stdout.write(JSON.stringify(output, null, 2) + "\n");
 	} else if (subcommand === "list-others") {
 		const candidates = listOthers("deep-interview");
 		for (const c of candidates) {
