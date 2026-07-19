@@ -669,3 +669,80 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 		expect(context).toContain("self-contained");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Detection axis — requirement coverage gate (RED test, TDD: authored before
+// the SKILL.md edit). Diagnosis: the material axis (digest toward "declared
+// requirement items", :106) and the place axis (REPORT as deliverable) are
+// both already in place, but nothing DECLARES the requirement items in the
+// first place, and nothing forces a per-item coverage check against them at
+// synthesis time. Without a pre-declared item list, "gap" has no state to be
+// gap FROM — omissions vanish silently instead of surfacing as a blank,
+// defect-flagged row. The fix: Phase 0 declares requirement items (derived
+// from its own axis decomposition, not a second classifier) before any
+// worker spawns; Phase 4 forces a per-item coverage table with a two-value
+// Status enum where a blank cell is explicitly a defect, resolved by an
+// immediate REPORT.md record from journal material already in hand — never
+// a re-launched wave; and the final chat message is contracted to be that
+// coverage table plus one entry point, explicitly a requirement checklist
+// rather than a deliverable inventory.
+// FAILS on the current unmodified SKILL.md; PASSES after the detection-axis
+// edit. Item 8 (negative assert on Phase 4) already passes on HEAD — the
+// current Phase 4 section is short and does not use "deliverable" — and is
+// kept here as a regression guard for the edit that follows.
+// ---------------------------------------------------------------------------
+
+describe("detection axis — requirement coverage gate", () => {
+	test("Phase 0 declares requirement items before any worker spawns", () => {
+		const idx = skill.indexOf("## Phase 0");
+		expect(idx).toBeGreaterThan(-1);
+		const context = skill.slice(idx, idx + 2000);
+		expect(context).toContain("declare the requirement items");
+		expect(context).toContain("before any worker spawns");
+	});
+
+	test("requirement items are declared to originate from Phase 0's own axis decomposition, not a separate classifier", () => {
+		expect(skill).toContain("requirement items are the Phase 0 axes");
+	});
+
+	test("Phase 4 requires a per-item coverage table", () => {
+		const idx = skill.indexOf("## Phase 4");
+		expect(idx).toBeGreaterThan(-1);
+		const context = skill.slice(idx, idx + 3000);
+		expect(context).toContain("coverage table");
+	});
+
+	test("coverage row Status values are restricted to a covered / not-applicable enum", () => {
+		expect(skill).toContain("`covered`");
+		expect(skill).toContain("`not applicable`");
+	});
+
+	test("a blank Status value is stated to be a defect", () => {
+		expect(skill).toContain("a blank Status is a defect");
+	});
+
+	test("blank-Status resolution is an immediate REPORT.md record from journal material already in hand, never a re-launched wave", () => {
+		expect(skill).toContain("record it in REPORT.md immediately");
+		expect(skill).toContain("without relaunching a wave");
+	});
+
+	describe("chat response contract", () => {
+		test("the final chat message is stated to be the coverage table plus one entry point", () => {
+			expect(skill).toContain("the coverage table plus one entry point");
+		});
+
+		test("the final chat message is stated to be a requirement checklist, not a deliverable inventory", () => {
+			expect(skill).toContain("a requirement checklist, not a deliverable inventory");
+		});
+	});
+
+	test('"deliverable" is absent from the Phase 4 section (Phase 4 must not call itself the deliverable)', () => {
+		const idx = skill.indexOf("## Phase 4");
+		expect(idx).toBeGreaterThan(-1);
+		const nextHeadingIdx = skill.indexOf("\n## ", idx + 1);
+		expect(nextHeadingIdx).toBeGreaterThan(idx);
+		const phase4Section = skill.slice(idx, nextHeadingIdx);
+		expect(count.call(null, "deliverable")).toBeGreaterThan(0); // sanity: token exists elsewhere in the doc (Artifact_Contract's REPORT heading)
+		expect(phase4Section).not.toContain("deliverable");
+	});
+});

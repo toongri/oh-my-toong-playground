@@ -88,6 +88,8 @@ Decompose the query into 3+ orthogonal axes, classify the posture and tier (see 
 
 Seed `intent-diff.md` here, in Phase 0, before any worker spawns — one row per expected truth derived from the user's intent, spec/design text, branch history, or authoritative docs. Required fields: `intent_id`, expected truth, observed reality, diff, violated invariant, intent source, supporting observations, status (`true`, `violated`, or `unknown`), and linked claim ids. Every wave's findings are then checked against this pre-declared expectation instead of being invented post hoc.
 
+Also here, before any worker spawns, declare the requirement items the query demands. The timing matters for the same reason `intent-diff.md` above is seeded pre-spawn, not invented post hoc: a requirement item declared after the fact lets its own omission vanish silently instead of surfacing as a gap. The requirement items are the Phase 0 axes — the axis decomposition above, not a second classifier. One decomposition drives worker assignment (Phase 1), the requirement items declared here, and the REPORT table of contents (Artifact Contract) alike.
+
   - **Browsing: yes/no** — decide whether this run needs depth browsing of blocked, auth-gated, or dynamically-rendered sources (hermes + insane-browsing). Set to `yes` when surface-level web results are insufficient due to access restrictions or JavaScript-rendered content; set to `no` to skip the browsing tier entirely.
 
 ## Phase 1 — Saturation wave
@@ -150,6 +152,10 @@ A high-risk non-code claim may enter the `verified-claims digest` ONLY if it cle
 ## Phase 4 — Synthesize
 
 After convergence and the verification pass, re-read the whole journal and write the artifacts. See the Artifact Contract section for the exact shape and the single-snapshot write-ordering.
+
+### Coverage gate — per-item check against the declared requirement items
+
+After the REPORT.md draft is written — not before, since the gate judges what actually made it into REPORT.md and there is nothing to judge until that draft exists — build a **coverage table**: one row per requirement item declared in Phase 0, Status restricted to exactly two values — `covered` or `not applicable` (with a reason for the latter). The gate's whole operating principle is one sentence: a blank Status is a defect, not a state to be tolerated — catching that blank is what the gate is for. When the covering material already sits in the journal but never made it into REPORT.md, resolve the blank cell by editing REPORT.md — record it in REPORT.md immediately, without relaunching a wave. The material is already in hand, so re-gathering is never the fix, and the convergence rules above stay untouched. Only an item with no gathered material at all is `not applicable`. Run this self-check, and any resulting REPORT.md edits, before the HTML render copy is produced and before the final chat response is sent, so the render copy and the response both reflect the corrected table rather than the pre-fix draft.
 
 </Engine>
 
@@ -251,6 +257,10 @@ The artifact SET tier-scales with the existing complexity tier while the SCHEMA 
 ## Zero verified claims
 
 An explicit run that converges with **0 verified claims still emits `SYNTHESIS.md`** — with an empty verified-claims section and an explicit "no verified claims" note. Zero verified claims is a real, honest outcome (the contested claims landed in gaps/contradictions), not a reason to suppress the artifact.
+
+## Final chat response contract
+
+The final message returned to the user is **the coverage table plus one entry point** — the Phase 4 coverage table and the `REPORT.md` path, nothing more. That table is a requirement checklist, not a deliverable inventory: an inventory answers "what files exist," a checklist answers "what did we answer," and only the checklist surfaces an uncovered item on the user's first screen instead of leaving it buried in a file listing.
 
 </Artifact_Contract>
 
