@@ -22,7 +22,9 @@
  *          [--challenge-mode <name>]
  *          [--append-provenance-item '<json>'] (append one {evidence_id, label} item to evidence_provenance)
  *          [--append-stance <stance>]          (append one stance string to stance_history; ordered, NOT deduped)
- *          [--establish-fact '<json>']         (append one {id, statement, component?} active established_fact)
+ *          [--establish-fact '<json>']         (append one {id, statement, component?, supersedes?} active
+ *                                                established_fact; `supersedes` marks that disputed
+ *                                                predecessor superseded, releasing its floor pressure)
  *          [--dispute-fact <id>]                (mark an established_fact disputed by id; raises the
  *                                                ambiguity floor +0.10 per unresolved disputed fact on the
  *                                                next --current-ambiguity write, no scorer re-call needed)
@@ -144,8 +146,13 @@ export interface TopologyComponentInput {
 
 /**
  * An established fact's disputed lifecycle (topology-floor-evolution Stage 3, Entity
- * lifecycle diagram): active (disputed=false) → disputed (user retracts/contradicts,
- * floor +0.10) → superseded (a replacement fact confirmed, floor pressure released).
+ * lifecycle diagram). Every edge names the CLI flag that drives it — an edge with no
+ * driver is an unreachable state, not a documented one:
+ *
+ *   (none) --establish-fact-------------> active     (disputed=false, superseded_by=null)
+ *   active --dispute-fact---------------> disputed   (floor +0.10 while unresolved)
+ *   disputed --establish-fact supersedes-> superseded (floor pressure released)
+ *
  * `superseded_by` holds the replacement fact's id once resolved; null/absent while
  * unresolved. Written exclusively via the `update --establish-fact` / `--dispute-fact`
  * CLI paths (never partial elsewhere).
@@ -164,6 +171,15 @@ export interface EstablishedFactInput {
 	id: string;
 	statement: string;
 	component?: string;
+	/**
+	 * Id of the disputed fact this new fact replaces. Supplying it performs the
+	 * disputed → superseded transition on that predecessor — its `superseded_by`
+	 * becomes this fact's id, releasing its +0.10 ambiguity-floor pressure and
+	 * clearing validateScoredTransition's active trigger. Confirming the
+	 * replacement IS the resolution event, so it rides the same atomic write.
+	 * Refused unless the target exists and is an unresolved disputed fact.
+	 */
+	supersedes?: string;
 }
 
 export interface DeepInterviewStateContent {
@@ -474,6 +490,24 @@ export function updateDeepInterviewState(
 						component: input.component,
 					},
 				];
+				if (input.supersedes !== undefined) {
+					// disputed → superseded, the transition that releases floor pressure. Refuses
+					// loudly rather than no-op'ing: a silently-ignored supersedes leaves the floor
+					// pressured while the caller believes the dispute is resolved, which is exactly
+					// the failure mode that kept this missing transition invisible.
+					const target = facts.find((f) => f.id === input.supersedes);
+					if (target === undefined) {
+						throw new Error(
+							`update: refused — establish-fact supersedes: no established_fact with id "${input.supersedes}"`,
+						);
+					}
+					if (target.disputed !== true || target.superseded_by) {
+						throw new Error(
+							`update: refused — establish-fact supersedes: established_fact "${input.supersedes}" is not an unresolved disputed fact; only a disputed fact can be superseded`,
+						);
+					}
+					facts = facts.map((f) => (f.id === input.supersedes ? { ...f, superseded_by: input.id } : f));
+				}
 			}
 			if (partial.dispute_fact !== undefined) {
 				const idx = facts.findIndex((f) => f.id === partial.dispute_fact);
@@ -594,7 +628,8 @@ export function validateScoredTransition(
 		throw new Error(
 			"validateScoredTransition: refused — an unresolved disputed established_fact blocks a write " +
 				"that simultaneously claims a clarity-dimension improvement and an ambiguity decrease; " +
-				"supersede the disputed fact before converging further",
+				"resolve it by establishing the replacement fact that supersedes it: " +
+				`update --establish-fact '{"id":"<new-id>","statement":"<text>","supersedes":"<disputed-id>"}'`,
 		);
 	}
 }
@@ -859,10 +894,11 @@ function main(): void {
 				!isRecord(parsed) ||
 				typeof parsed["id"] !== "string" ||
 				typeof parsed["statement"] !== "string" ||
-				(parsed["component"] !== undefined && typeof parsed["component"] !== "string")
+				(parsed["component"] !== undefined && typeof parsed["component"] !== "string") ||
+				(parsed["supersedes"] !== undefined && typeof parsed["supersedes"] !== "string")
 			) {
 				process.stderr.write(
-					`deep-interview-state update: --establish-fact: must be {"id":"<str>","statement":"<str>","component"?:"<str>"}\n`,
+					`deep-interview-state update: --establish-fact: must be {"id":"<str>","statement":"<str>","component"?:"<str>","supersedes"?:"<str>"}\n`,
 				);
 				process.exit(1);
 			}
@@ -870,6 +906,7 @@ function main(): void {
 				id: parsed["id"],
 				statement: parsed["statement"],
 				component: typeof parsed["component"] === "string" ? parsed["component"] : undefined,
+				supersedes: typeof parsed["supersedes"] === "string" ? parsed["supersedes"] : undefined,
 			};
 		}
 		const disputeFact = str(args["dispute-fact"]);
@@ -974,7 +1011,10 @@ function main(): void {
 				"         [--challenge-mode <name>]\n" +
 				'         [--append-provenance-item \'{"evidence_id":"<id>","label":"<label>"}\']\n' +
 				"         [--append-stance <stance>]  (ordered, not deduped; for Dialectic Rhythm Guard)\n" +
-				'         [--establish-fact \'{"id":"<id>","statement":"<text>","component"?:"<comp-id>"}\']\n' +
+				'         [--establish-fact \'{"id":"<id>","statement":"<text>","component"?:"<comp-id>",\n' +
+				'                             "supersedes"?:"<disputed-id>"}\']\n' +
+				"                                (supersedes: resolves that disputed fact — releases its +0.10\n" +
+				"                                 floor pressure. Refused unless it names an unresolved disputed fact)\n" +
 				"         [--dispute-fact <id>]  (marks an established_fact disputed; raises the ambiguity\n" +
 				"                                floor +0.10 on the next --current-ambiguity write)\n" +
 				'  set-topology --json \'[{"id":"<id>","name":"<name>","status":"active|deferred"}]\'\n' +

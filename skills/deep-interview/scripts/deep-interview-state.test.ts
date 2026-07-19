@@ -903,6 +903,69 @@ describe("deep-interview-state CLI main()", () => {
 		expect(after).toBe(before);
 	});
 
+	// UC6 — the disputed → superseded transition itself. UC4 above asserts that
+	// computeAmbiguityFloor excludes a superseded fact, but it builds that state as an
+	// object literal: no CLI path ever produced it, so the transition went untested AND
+	// unimplemented, leaving validateScoredTransition's own remediation advice
+	// ("supersede the disputed fact") pointing at a capability that did not exist.
+	// Establishing the replacement WITH `supersedes` is the resolution event — it marks
+	// the disputed predecessor superseded, releasing floor pressure and unblocking the
+	// very convergence write UC5 proves is refused while the dispute is unresolved.
+	test("UC6: establishing a replacement with supersedes marks the predecessor superseded, releasing floor pressure and unblocking convergence", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "supersede idea" });
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "only component" }])}'`);
+		// Score the component through the runtime append-round path (not a raw patch), so
+		// hasScoredClarityDimension reflects a real scoring write.
+		run(
+			`update --append-round '${JSON.stringify({ n: 1, component: "c1", scores: scoredDims() })}'`,
+		);
+
+		run("update --current-ambiguity 0.5");
+		run(`update --establish-fact '{"id":"f1","statement":"uses REST"}'`);
+		run("update --dispute-fact f1");
+
+		// While the dispute is unresolved, convergence stays refused (UC5's invariant).
+		expect(() => run("update --current-ambiguity 0.1")).toThrow();
+
+		// The resolution event: the replacement fact declares what it supersedes.
+		run(`update --establish-fact '{"id":"f2","statement":"uses GraphQL","supersedes":"f1"}'`);
+		const facts = (rawState()["state"] as Record<string, unknown>)[
+			"established_facts"
+		] as Record<string, unknown>[];
+		expect(facts.find((f) => f["id"] === "f1")?.["superseded_by"]).toBe("f2");
+
+		// Floor pressure released — the identical convergence write now succeeds.
+		run("update --current-ambiguity 0.1");
+		const nested = rawState()["state"] as Record<string, unknown>;
+		expect(nested["ambiguity_floor"]).toBe(0);
+		expect(nested["current_ambiguity"]).toBe(0.1);
+	});
+
+	// UC7 — a `supersedes` that does not name an unresolved disputed fact must be a LOUD
+	// refusal, never a silent no-op. Silently ignoring it is exactly how the missing
+	// transition stayed invisible: the floor would stay pressured while the caller
+	// believed it had been released.
+	test("UC7: supersedes referencing an unknown or undisputed fact is refused; state file unchanged", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "supersede guard idea" });
+		run(`update --establish-fact '{"id":"f1","statement":"active fact"}'`);
+		const path = resolveStatePath(SID);
+		const before = readFileSync(path, "utf8");
+
+		// Unknown id.
+		expect(() =>
+			run(`update --establish-fact '{"id":"fx","statement":"x","supersedes":"nope"}'`),
+		).toThrow();
+		// Exists but is NOT disputed — superseding an active fact releases no pressure, so
+		// accepting it would hand back a false "resolved" signal.
+		expect(() =>
+			run(`update --establish-fact '{"id":"fy","statement":"y","supersedes":"f1"}'`),
+		).toThrow();
+
+		expect(readFileSync(path, "utf8")).toBe(before);
+	});
+
 	// ---------------------------------------------------------------------------
 	// non-finite --current-ambiguity guard: `Number(reported)` on a non-numeric or
 	// non-finite CLI value silently produces NaN, which `JSON.stringify` then
