@@ -31,6 +31,30 @@ export interface DeepInterviewState {
 	/** Heartbeat timestamps (managed StateType) — read by the isStateLive TTL check. */
 	last_touched_at?: string;
 	started_at?: string;
+	/**
+	 * Rich interview data (topology-floor-evolution). On disk this is nested under
+	 * `state` (see skills/deep-interview/scripts/deep-interview-state.ts
+	 * DeepInterviewStateContent) — current_ambiguity/threshold are NOT top-level.
+	 * Absent on legacy/foreign interview states written before this field existed;
+	 * the Stop-hook's ambiguity cross-check (decision.ts) must fail-open when either
+	 * is missing rather than assume a shape that isn't there.
+	 */
+	state?: {
+		current_ambiguity?: number;
+		threshold?: number;
+		/**
+		 * Round 0's locked component list. The Stop-hook reads it for the Closure Guard's
+		 * completeness check — an ACTIVE component carrying any null clarity dimension
+		 * means convergence cannot be declared, whatever the ambiguity magnitude says.
+		 * Absent on legacy/foreign shapes, which fail open exactly like the fields above.
+		 */
+		topology?: {
+			components?: {
+				status?: string;
+				clarity_scores?: Record<string, number | null>;
+			}[];
+		};
+	};
 }
 
 /**

@@ -27,8 +27,12 @@ const advancedMd = readFileSync(join(import.meta.dir, "deep-interview-advanced.m
 //
 // Three sources express the same {dim: weight} data in three different
 // shapes (bare inline formula, comma-separated decimal table, percentage
-// table). `normalizeDim` collapses any of their spellings ("Goal Clarity",
-// "Constraint", "criteria", "Success Criteria", "constraints", ...) down to
+// table). Since topology-floor-evolution Stage 4 (the SKILL.md prompt rewrite
+// stage of the topology-floor-evolution spec) collapsed the greenfield/
+// brownfield dual formula into ONE single 6-dim weighted formula (context
+// always scored, per-component), all three sources now carry exactly one
+// weight map each. `normalizeDim` collapses any of their spellings
+// ("Constraint Clarity", "constraints", "Success Criteria", ...) down to
 // one canonical short key so cross-representation comparisons are MAP
 // equality, never raw string identity.
 // ---------------------------------------------------------------------------
@@ -48,11 +52,11 @@ function normalizeWeightMap(m: Record<string, number>): Record<string, number> {
 	return out;
 }
 
-/** Parses deep-interview's canonical inline formula, e.g.
- *  `Greenfield: \`ambiguity = 1 - (intent × 0.30 + outcome × 0.25 + ...)\`` */
-function parseInlineFormula(md: string, variant: "Greenfield" | "Brownfield"): Record<string, number> {
-	const re = new RegExp(variant + ":\\s*`ambiguity = 1 - \\(([^)]*)\\)`");
-	const m = md.match(re);
+/** Parses deep-interview's single canonical inline formula, e.g.
+ *  `ambiguity = 1 - (intent × 0.27 + outcome × 0.22 + ...)` -- unified, no
+ *  greenfield/brownfield variant label (topology-floor-evolution Stage 4). */
+function parseInlineFormula(md: string): Record<string, number> {
+	const m = md.match(/ambiguity = 1 - \(([^)]*)\)/);
 	if (!m) return {};
 	const map: Record<string, number> = {};
 	const pairRe = /([A-Za-z]+)\s*×\s*(\d+\.\d+)/g;
@@ -63,47 +67,37 @@ function parseInlineFormula(md: string, variant: "Greenfield" | "Brownfield"): R
 	return map;
 }
 
-/** Parses prometheus's decimal weight table rows, e.g.
- *  `| **Greenfield** | Intent, Outcome, ... | 0.30, 0.25, ... |` */
-function parsePrometheusTable(md: string): { greenfield: Record<string, number>; brownfield: Record<string, number> } {
+/** Parses prometheus's single decimal weight-table row, e.g.
+ *  `| Intent, Outcome, Scope, Constraints, Success, Context | 0.27, 0.22, ... |` */
+function parsePrometheusTable(md: string): Record<string, number> {
 	const start = md.indexOf("**Ambiguity Score**:");
 	const end = md.indexOf("## Failure Modes to Avoid");
 	const region = md.slice(start === -1 ? 0 : start, end === -1 ? undefined : end);
-	const rowRe = /\|\s*\*\*(Greenfield|Brownfield)\*\*\s*\|([^|]+)\|([^|]+)\|/g;
-	const result: { greenfield: Record<string, number>; brownfield: Record<string, number> } = {
-		greenfield: {},
-		brownfield: {},
-	};
-	let m: RegExpExecArray | null;
-	while ((m = rowRe.exec(region)) !== null) {
-		const variant = m[1].toLowerCase() as "greenfield" | "brownfield";
-		const dims = m[2].split(",").map((s) => normalizeDim(s));
-		const weights = m[3].split(",").map((s) => parseFloat(s.trim()));
-		const map: Record<string, number> = {};
-		dims.forEach((d, i) => {
-			map[d] = weights[i];
-		});
-		result[variant] = map;
-	}
-	return result;
+	const rowRe = /\|\s*([A-Za-z][A-Za-z, ]*[A-Za-z])\s*\|\s*(\d+\.\d+(?:\s*,\s*\d+\.\d+)*)\s*\|/;
+	const m = region.match(rowRe);
+	if (!m) return {};
+	const dims = m[1].split(",").map((s) => normalizeDim(s));
+	const weights = m[2].split(",").map((s) => parseFloat(s.trim()));
+	const map: Record<string, number> = {};
+	dims.forEach((d, i) => {
+		map[d] = weights[i];
+	});
+	return map;
 }
 
-/** Parses deep-interview-advanced.md's percentage weight table, e.g.
- *  `| Intent Clarity | 30% | 27% |` under the `Greenfield | Brownfield` header. */
-function parseAdvancedPercentTable(md: string): { greenfield: Record<string, number>; brownfield: Record<string, number> } {
-	const start = md.indexOf("## Brownfield vs Greenfield Weights");
-	const end = md.indexOf("## Challenge Agent Modes");
+/** Parses deep-interview-advanced.md's single percentage weight table, e.g.
+ *  `| Intent Clarity | 27% |` under the `## Ambiguity Weights` heading. */
+function parseAdvancedPercentTable(md: string): Record<string, number> {
+	const start = md.indexOf("## Ambiguity Weights");
+	const end = md.indexOf("## Ambiguity Floor");
 	const region = md.slice(start === -1 ? 0 : start, end === -1 ? undefined : end);
-	const rowRe = /\|\s*([A-Za-z][A-Za-z ]*?)\s*\|\s*(N\/A|\d+%)\s*\|\s*(N\/A|\d+%)\s*\|/g;
-	const greenfield: Record<string, number> = {};
-	const brownfield: Record<string, number> = {};
+	const rowRe = /\|\s*([A-Za-z][A-Za-z ]*?)\s*\|\s*(\d+)%\s*\|/g;
+	const map: Record<string, number> = {};
 	let m: RegExpExecArray | null;
 	while ((m = rowRe.exec(region)) !== null) {
-		const dim = normalizeDim(m[1]);
-		if (m[2] !== "N/A") greenfield[dim] = parseInt(m[2], 10) / 100;
-		if (m[3] !== "N/A") brownfield[dim] = parseInt(m[3], 10) / 100;
+		map[normalizeDim(m[1])] = parseInt(m[2], 10) / 100;
 	}
-	return { greenfield, brownfield };
+	return map;
 }
 
 /** Parses the inner keys of the FIRST `"scores":{...}` object found after `anchorText`. */
@@ -123,17 +117,12 @@ function extractScoresKeys(md: string, anchorText: string): string[] {
 	return keys;
 }
 
-// D-5 canonical decided weights (both sum to 1.00) -- the single source of
-// dims that the formula, the payload key-sets, and the two mirror tables
-// (prometheus, deep-interview-advanced.md) must all agree with.
-const EXPECTED_GREENFIELD_WEIGHTS = normalizeWeightMap({
-	intent: 0.3,
-	outcome: 0.25,
-	scope: 0.2,
-	constraints: 0.15,
-	success: 0.1,
-});
-const EXPECTED_BROWNFIELD_WEIGHTS = normalizeWeightMap({
+// Canonical single 6-dim weights (sum to 1.00) -- the single source of dims
+// that the formula, the payload key-sets, and the two mirror tables
+// (prometheus, deep-interview-advanced.md) must all agree with. The
+// greenfield/brownfield dual-weight formula is retired (topology-floor-
+// evolution Stage 4): every interview scores all 6 dimensions, always.
+const EXPECTED_WEIGHTS = normalizeWeightMap({
 	intent: 0.27,
 	outcome: 0.22,
 	scope: 0.18,
@@ -359,11 +348,11 @@ describe("new-prose: Design Interview persists decisions to state", () => {
 // ---------------------------------------------------------------------------
 
 describe("regression-guard", () => {
-	test("ambiguity formula (greenfield, 5-dim canonical weights) is present", () => {
-		expect(skillMd).toContain(
-			"intent × 0.30 + outcome × 0.25 + scope × 0.20 + constraints × 0.15 + success × 0.10",
-		);
-	});
+	// The pre-Stage-4 greenfield-only 5-dim formula test is retired here: UC9
+	// (topology-floor-evolution Stage 4) replaces the dual greenfield/brownfield
+	// formula with a single 6-dim formula, so a distinct 5-dim-no-context
+	// greenfield formula no longer exists in SKILL.md by design (see the UC9
+	// describe block below, which asserts its absence directly).
 
 	test("ambiguity formula (brownfield, 6-dim canonical weights) is present", () => {
 		expect(skillMd).toContain(
@@ -494,75 +483,68 @@ describe("removed: mermaid visualization assets", () => {
 // (must FAIL before tasks #15/#16/#17 -- RED)
 // ---------------------------------------------------------------------------
 
-describe("phase-3 new-dims: scoring probe (deep-interview formula widened to D-5 canonical weights)", () => {
-	test("greenfield formula parses to the canonical 5-dim weight map", () => {
-		expect(normalizeWeightMap(parseInlineFormula(skillMd, "Greenfield"))).toEqual(EXPECTED_GREENFIELD_WEIGHTS);
+describe("phase-3 new-dims: scoring probe (deep-interview formula unified to the single 6-dim canonical weights)", () => {
+	test("the single formula's parsed dimension key-set is exactly the 6 canonical dimensions", () => {
+		const parsed = normalizeWeightMap(parseInlineFormula(skillMd));
+		expect(new Set(Object.keys(parsed))).toEqual(new Set(Object.keys(EXPECTED_WEIGHTS)));
 	});
 
-	test("brownfield formula parses to the canonical 6-dim weight map", () => {
-		expect(normalizeWeightMap(parseInlineFormula(skillMd, "Brownfield"))).toEqual(EXPECTED_BROWNFIELD_WEIGHTS);
-	});
-});
-
-describe("phase-3 parity: greenfield + brownfield weight maps agree across all 3 sources (normalized maps, not raw strings)", () => {
-	const diGreenfield = normalizeWeightMap(parseInlineFormula(skillMd, "Greenfield"));
-	const diBrownfield = normalizeWeightMap(parseInlineFormula(skillMd, "Brownfield"));
-	const promTables = parsePrometheusTable(prometheusMd);
-	const advancedTables = parseAdvancedPercentTable(advancedMd);
-	const promGreenfield = normalizeWeightMap(promTables.greenfield);
-	const promBrownfield = normalizeWeightMap(promTables.brownfield);
-	const advancedGreenfield = normalizeWeightMap(advancedTables.greenfield);
-	const advancedBrownfield = normalizeWeightMap(advancedTables.brownfield);
-
-	test("greenfield: deep-interview formula == prometheus decimal table", () => {
-		expect(diGreenfield).toEqual(promGreenfield);
-	});
-
-	test("greenfield: deep-interview formula == deep-interview-advanced.md percentage table", () => {
-		expect(diGreenfield).toEqual(advancedGreenfield);
-	});
-
-	test("brownfield: deep-interview formula == prometheus decimal table", () => {
-		expect(diBrownfield).toEqual(promBrownfield);
-	});
-
-	test("brownfield: deep-interview formula == deep-interview-advanced.md percentage table", () => {
-		expect(diBrownfield).toEqual(advancedBrownfield);
-	});
-
-	test("greenfield map matches the D-5 canonical weights (sanity anchor)", () => {
-		expect(diGreenfield).toEqual(EXPECTED_GREENFIELD_WEIGHTS);
-	});
-
-	test("brownfield map matches the D-5 canonical weights (sanity anchor)", () => {
-		expect(diBrownfield).toEqual(EXPECTED_BROWNFIELD_WEIGHTS);
+	test("the single formula parses to the canonical 6-dim weight map (values, not just keys)", () => {
+		expect(normalizeWeightMap(parseInlineFormula(skillMd))).toEqual(EXPECTED_WEIGHTS);
 	});
 });
 
-describe("phase-3 payload key-set guard: scores{} key-sets match the D-5 canonical dimension set", () => {
-	const EXPECTED_GREENFIELD_KEYS = new Set(Object.keys(EXPECTED_GREENFIELD_WEIGHTS));
-	const EXPECTED_BROWNFIELD_KEYS = new Set(Object.keys(EXPECTED_BROWNFIELD_WEIGHTS));
+describe("phase-3 parity: single 6-dim weight map agrees across all 3 sources (normalized maps, not raw strings)", () => {
+	const diWeights = normalizeWeightMap(parseInlineFormula(skillMd));
+	const promWeights = normalizeWeightMap(parsePrometheusTable(prometheusMd));
+	const advancedWeights = normalizeWeightMap(parseAdvancedPercentTable(advancedMd));
 
-	test("fact-ground payload (~:191) scores key-set is the 5-key greenfield set", () => {
+	test("SKILL.md's formula matches the canonical single 6-dim weights (sanity anchor)", () => {
+		expect(diWeights).toEqual(EXPECTED_WEIGHTS);
+	});
+
+	test("prometheus/SKILL.md's weight table matches the canonical single 6-dim weights (sanity anchor)", () => {
+		expect(promWeights).toEqual(EXPECTED_WEIGHTS);
+	});
+
+	test("deep-interview-advanced.md's weight table matches the canonical single 6-dim weights (sanity anchor)", () => {
+		expect(advancedWeights).toEqual(EXPECTED_WEIGHTS);
+	});
+
+	test("SKILL.md formula == prometheus/SKILL.md weight table", () => {
+		expect(diWeights).toEqual(promWeights);
+	});
+
+	test("SKILL.md formula == deep-interview-advanced.md weight table", () => {
+		expect(diWeights).toEqual(advancedWeights);
+	});
+
+	test("prometheus/SKILL.md weight table == deep-interview-advanced.md weight table", () => {
+		expect(promWeights).toEqual(advancedWeights);
+	});
+});
+
+describe("phase-3 payload key-set guard: scores{} key-sets match the single canonical 6-dim dimension set", () => {
+	const EXPECTED_KEYS = new Set(Object.keys(EXPECTED_WEIGHTS));
+
+	test("fact-ground payload (~:198) scores key-set is the single canonical 6-key set", () => {
 		const keys = extractScoresKeys(skillMd, '"kind":"fact-ground"');
-		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_GREENFIELD_KEYS);
+		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_KEYS);
 	});
 
-	test("Step 2e greenfield payload (~:343) scores key-set is the 5-key greenfield set", () => {
+	test("Step 2e round payload (~:373) scores key-set is the single canonical 6-key set", () => {
 		const keys = extractScoresKeys(skillMd, "### Step 2e: Update State");
-		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_GREENFIELD_KEYS);
+		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_KEYS);
 	});
 
-	test("Step 2e brownfield payload (~:358) scores key-set is the 6-key brownfield set", () => {
-		const keys = extractScoresKeys(skillMd, "For brownfield interviews, include the");
-		expect(new Set(keys.map(normalizeDim))).toEqual(EXPECTED_BROWNFIELD_KEYS);
+	test('no separate "brownfield-only" payload framing survives (single unconditional 6-key payload everywhere)', () => {
+		expect(skillMd).not.toContain("For brownfield interviews, include the");
 	});
 
-	test("no {goal,constraints,criteria} survivor at any payload site", () => {
+	test("no {goal,constraints,criteria} survivor at either payload site", () => {
 		const allKeys = [
 			...extractScoresKeys(skillMd, '"kind":"fact-ground"'),
 			...extractScoresKeys(skillMd, "### Step 2e: Update State"),
-			...extractScoresKeys(skillMd, "For brownfield interviews, include the"),
 		];
 		expect(allKeys).not.toContain("goal");
 		expect(allKeys).not.toContain("criteria");
@@ -636,5 +618,172 @@ describe("phase-3 template propagation: Phase-4 spec-template reflects the widen
 	test("examples do not target the retired 'Goal Clarity' dimension label", () => {
 		const examplesMd = readFileSync(join(import.meta.dir, "deep-interview-examples.md"), "utf8");
 		expect(examplesMd).not.toContain("Goal Clarity");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// STAGE-4 (topology-floor-evolution): Round 0 Topology Enumeration Gate,
+// per-component scoring, single weighted formula, Scope/Closure guards.
+// (must FAIL before the Stage-4 SKILL.md prompt edits -- RED)
+// ---------------------------------------------------------------------------
+
+describe("UC12: step 3.7 no longer narrows to a single slice -- Round 0 enumerates all topology components", () => {
+	test("old propose-only decomposition gate heading is absent", () => {
+		expect(skillMd).not.toContain("propose-only decomposition gate");
+	});
+
+	test('old "Interview ONLY that first subsystem" narrowing instruction is absent', () => {
+		expect(skillMd).not.toContain("Interview ONLY that first subsystem");
+	});
+
+	test('"Round 0" Topology Enumeration Gate heading is present', () => {
+		expect(skillMd).toContain("Round 0");
+		expect(skillMd).toContain("Topology Enumeration Gate");
+	});
+
+	test("Round 0 enumerates ALL components rather than narrowing to one slice", () => {
+		expect(skillMd).toContain("Enumerate ALL topology components");
+	});
+});
+
+describe("UC1 prompt contract: Round 0 surfaces components and gets user confirm/add/merge/defer", () => {
+	const start = skillMd.indexOf("Round 0 — Topology Enumeration Gate");
+
+	test("Round 0 section exists (sanity)", () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("Round 0 asks the user to confirm/add/merge/defer the component list", () => {
+		const region = skillMd.slice(start, start + 2000);
+		expect(region).toContain("**confirm**");
+		expect(region).toContain("**add**");
+		expect(region).toContain("**merge**");
+		expect(region).toContain("**defer**");
+	});
+
+	test("Round 0 locks the confirmed list via set-topology", () => {
+		const region = skillMd.slice(start, start + 2000);
+		expect(region).toContain("set-topology");
+		expect(region).toContain("--json");
+	});
+});
+
+describe("UC9: single weighted ambiguity formula replaces the greenfield/brownfield dual formula", () => {
+	test("the old greenfield-only 5-dim formula (no context) is absent", () => {
+		expect(skillMd).not.toContain(
+			"intent × 0.30 + outcome × 0.25 + scope × 0.20 + constraints × 0.15 + success × 0.10",
+		);
+	});
+
+	test('a distinct "Greenfield:"-labeled formula line no longer exists', () => {
+		expect(skillMd).not.toMatch(/Greenfield:\s*`ambiguity = 1 - \(/);
+	});
+
+	test('a distinct "Brownfield:"-labeled formula line no longer exists (unified, not type-branched)', () => {
+		expect(skillMd).not.toMatch(/Brownfield:\s*`ambiguity = 1 - \(/);
+	});
+
+	test("exactly one ambiguity weighted-sum formula appears in the doc", () => {
+		const matches = skillMd.match(/ambiguity = 1 - \(/g) || [];
+		expect(matches.length).toBe(1);
+	});
+});
+
+describe("UC6: Scope Over-Engineering Guard forces an in/out question when scope is unscored or low", () => {
+	test('"Scope Over-Engineering Guard" phrase is present', () => {
+		expect(skillMd).toContain("Scope Over-Engineering Guard");
+	});
+
+	test('guard forces a "what\'s in vs what\'s out" boundary question', () => {
+		expect(skillMd).toContain("what's in vs what's out");
+	});
+
+	test("guard names gold-plating as the failure it blocks", () => {
+		expect(skillMd).toContain("gold-plating");
+	});
+
+	test("Closure Guard blocks convergence while any active component is unscored", () => {
+		expect(skillMd).toContain("Closure Guard");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// topology-floor-evolution Stage 6 (UC11 consumption): computeTopologyMigrationStatus
+// is now consumed by deep-interview-state.ts's `get` output; this describe block
+// asserts SKILL.md enforces the resume-side contract -- a resumed interview whose
+// migration_status reads legacy_missing must run Round 0 before any further
+// per-component scoring write. (must FAIL before this Stage-6 SKILL.md wiring -- RED)
+// ---------------------------------------------------------------------------
+
+describe("UC11: resume enforcement -- migration_status legacy_missing forces Round 0 before further scoring", () => {
+	const round0Start = skillMd.indexOf("Round 0 — Topology Enumeration Gate");
+	const toolUsageStart = skillMd.indexOf("<Tool_Usage>");
+
+	test("Round 0 section exists (sanity)", () => {
+		expect(round0Start).toBeGreaterThan(-1);
+	});
+
+	test("Round 0 gate section names migration_status and legacy_missing as a resume check", () => {
+		const region = skillMd.slice(round0Start, round0Start + 3000);
+		expect(region).toContain("migration_status");
+		expect(region).toContain("legacy_missing");
+	});
+
+	test("Round 0 gate instructs running Round 0 before any further per-component scoring on resume", () => {
+		const region = skillMd.slice(round0Start, round0Start + 3000);
+		expect(region).toContain("before any further per-component scoring");
+	});
+
+	test("Tool_Usage's get bullet also surfaces the migration_status / legacy_missing enforcement", () => {
+		expect(toolUsageStart).toBeGreaterThan(-1);
+		const region = skillMd.slice(toolUsageStart);
+		expect(region).toContain("migration_status");
+		expect(region).toContain("legacy_missing");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// topology-floor-evolution Stage 6c (doc-currency): the Phase-4 spec-template
+// gained a "## Topology" per-component section (Round 0's enumerated
+// components + their 6-dim clarity), and the Clarity Breakdown's Context row
+// lost its stale "(brownfield)" qualifier -- context is scored on every
+// component, greenfield or brownfield, per the Stage-4 single formula.
+// ---------------------------------------------------------------------------
+
+describe("template: Topology section reflects the per-component floor model", () => {
+	const start = template.indexOf("## Topology");
+	const end = template.indexOf("\n## ", start + 1);
+	const section = end === -1 ? template.slice(start) : template.slice(start, end);
+
+	test('"## Topology" heading is present', () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("Topology section documents active | deferred component status", () => {
+		expect(section).toContain("active");
+		expect(section).toContain("deferred");
+	});
+
+	test("Topology section lists all 6 canonical clarity dimensions per component", () => {
+		expect(section).toContain("Intent");
+		expect(section).toContain("Outcome");
+		expect(section).toContain("Scope");
+		expect(section).toContain("Constraints");
+		expect(section).toContain("Success");
+		expect(section).toContain("Context");
+	});
+});
+
+describe("template: Clarity Breakdown's Context row is no longer brownfield-qualified", () => {
+	test('"Context Clarity (brownfield)" is absent', () => {
+		expect(template).not.toContain("Context Clarity (brownfield)");
+	});
+
+	test('"| Context Clarity |" is present (context always scored)', () => {
+		expect(template).toContain("| Context Clarity |");
+	});
+
+	test("transcript ambiguity breakdown no longer gates Context behind a brownfield-only clause", () => {
+		expect(template).not.toContain("{brownfield: , Context: {cx}}");
 	});
 });
