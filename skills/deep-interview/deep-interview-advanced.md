@@ -60,7 +60,7 @@ The interviewer LLM's self-reported ambiguity is never trusted at face value. `d
 `floor = 0.10 × disputed_count + 0.05 × unscored_component_count + 0.05 × auto_answer_ratio`
 `effective_ambiguity = max(reported_ambiguity, floor)`
 
-- `disputed_count` — established facts currently disputed (raised, not yet superseded) across the interview's active components.
+- `disputed_count` — established facts currently disputed (raised, not yet superseded). Interview-global, not per-component: a fact is an assertion about the design, and disputing one is a user reversal that pressures the whole interview. This is deliberately unlike `unscored_component_count` below, whose active-only scope follows from it counting components.
 - `unscored_component_count` — active topology components with at least one of the 6 dimensions still unscored.
 - `auto_answer_ratio` — fraction of rounds answered automatically rather than by the user.
 

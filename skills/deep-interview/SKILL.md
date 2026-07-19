@@ -311,7 +311,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --dispute-fact <e
 A disputed, unresolved fact raises the ambiguity floor the state CLI enforces on the next `--current-ambiguity` write — ambiguity can come back HIGHER than last round's, with no re-scoring call at all. Do not treat this as a bug: ambiguity is not guaranteed to fall every round. When a round instead settles a durable, load-bearing fact for the first time, record it the same way:
 
 ```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --establish-fact '{"id":"<id>","statement":"<fact>","component":"<component_id>"}'
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --establish-fact '{"id":"<id>","statement":"<fact>"}'
 ```
 
 **Resolve a dispute by superseding it, not by ignoring it:** a disputed fact keeps its +0.10 floor pressure until a replacement supersedes it, and while it is unresolved the CLI refuses any write that claims both a clarity rise and an ambiguity drop. Once the round settles what replaces the retracted fact, establish the replacement and name what it supersedes in the same call:
