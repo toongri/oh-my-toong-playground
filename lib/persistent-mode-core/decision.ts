@@ -490,10 +490,22 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// branch below: a TTL-stale interview is already a corpse — cross-checking it
 			// would wedge the session on a dead interview forever, so stale states also
 			// fall through to cleanup regardless of ambiguity.
+			// Fail-open is a promise about VALUE, not key presence. A NaN written by an
+			// unguarded Number() serializes to `null`, which survives an `!== undefined`
+			// test and then coerces to 0 inside the comparison: a null threshold makes every
+			// positive ambiguity read as unconverged and wedges the interview forever, the
+			// exact opposite of the fall-through promised above. Requiring both operands to
+			// be finite numbers is what actually delivers it — and it makes the mirror case
+			// (a null ambiguity, where `null > 0.15` merely happens to read false) fall open
+			// by decision rather than by coercion luck.
 			const ambiguity = deepInterviewStateRaw.state?.current_ambiguity;
 			const threshold = deepInterviewStateRaw.state?.threshold;
 			const magnitudeUnconverged =
-				ambiguity !== undefined && threshold !== undefined && ambiguity > threshold;
+				typeof ambiguity === "number" &&
+				Number.isFinite(ambiguity) &&
+				typeof threshold === "number" &&
+				Number.isFinite(threshold) &&
+				ambiguity > threshold;
 
 			// Closure Guard completeness check (SKILL.md "Closure Guard (precondition)").
 			// The guard is CATEGORICAL — any active component with an unscored dimension

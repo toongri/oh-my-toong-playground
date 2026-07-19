@@ -794,6 +794,30 @@ function asInterviewType(v: string | undefined): "greenfield" | "brownfield" | u
 	return v === "greenfield" || v === "brownfield" ? v : undefined;
 }
 
+/**
+ * Raw-string decimal guard for the two operands of the Stop-hook's convergence comparison
+ * (`state.current_ambiguity > state.threshold`). Validated on the raw string BEFORE
+ * Number() runs, then refused at the CLI boundary so a bad value never reaches a writer.
+ *
+ * Number() is too permissive on both ends. `Number("")` and `Number("   ")` coerce to the
+ * finite value 0, indistinguishable downstream from a genuine "0". `Number("abc")` yields
+ * NaN, which JSON.stringify persists as `null` — and `null` passes an `!== undefined`
+ * presence test while coercing to 0 in the comparison, so a null threshold reads as
+ * "every positive ambiguity is unconverged" and wedges the interview permanently. Neither
+ * failure is visible to a Number.isFinite check applied after the fact.
+ */
+function decimalFlag(raw: string | undefined, subcommand: string, flag: string): number | undefined {
+	if (raw === undefined) return undefined;
+	const s = raw.trim();
+	if (s.length === 0 || !/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(s)) {
+		process.stderr.write(
+			`deep-interview-state ${subcommand}: ${flag}: must be a decimal number, got "${raw}"\n`,
+		);
+		process.exit(1);
+	}
+	return Number(s);
+}
+
 function main(): void {
 	let sessionId: string;
 	try {
@@ -807,14 +831,13 @@ function main(): void {
 	const subcommand = args["_subcommand"];
 
 	if (subcommand === "init") {
-		const threshold = str(args["threshold"]);
 		try {
 			initDeepInterviewState(sessionId, {
 				initial_idea: str(args["initial-idea"]),
 				interview_id: str(args["interview-id"]),
 				type: asInterviewType(str(args["type"])),
 				current_phase: str(args["current-phase"]),
-				threshold: threshold !== undefined ? Number(threshold) : undefined,
+				threshold: decimalFlag(str(args["threshold"]), "init", "--threshold"),
 				codebase_context: str(args["codebase-context"]),
 			});
 		} catch (e) {
@@ -952,22 +975,7 @@ function main(): void {
 		}
 		const disputeFact = str(args["dispute-fact"]);
 
-		// Raw-string decimal guard: `Number("")` and `Number("   ")` both coerce to the
-		// finite value 0, which the Number.isFinite guard downstream cannot distinguish
-		// from a genuine "0" — silently fail-opening the Stop-hook's
-		// `ambiguity > threshold` cross-check. Validated on the raw string, before
-		// Number() ever runs, so a refusal here never reaches updateDeepInterviewState.
-		let currentAmbiguity: number | undefined;
-		if (ambiguity !== undefined) {
-			const s = ambiguity.trim();
-			if (s.length === 0 || !/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(s)) {
-				process.stderr.write(
-					`deep-interview-state update: --current-ambiguity: must be a decimal number, got "${ambiguity}"\n`,
-				);
-				process.exit(1);
-			}
-			currentAmbiguity = Number(s);
-		}
+		const currentAmbiguity = decimalFlag(ambiguity, "update", "--current-ambiguity");
 
 		try {
 			updateDeepInterviewState(sessionId, {

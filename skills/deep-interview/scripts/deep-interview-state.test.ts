@@ -1056,6 +1056,22 @@ describe("deep-interview-state CLI main()", () => {
 		expect(() => run("update --current-ambiguity 0")).toThrow();
 	});
 
+	// UC11 — `--threshold` is the other operand of the Stop-hook's convergence comparison,
+	// but it was parsed with a bare Number(), unlike --current-ambiguity's raw-string
+	// decimal guard right beside it. Number("abc") is NaN, which JSON.stringify writes as
+	// `null`; the hook then compares against null-coerced-to-0 and blocks every done token
+	// forever. Refuse at the CLI boundary so a non-finite threshold never reaches disk.
+	test("UC11: init refuses a non-decimal --threshold instead of persisting NaN as null", () => {
+		writeSeed();
+		expect(() => run(`init --initial-idea 'x' --threshold abc`)).toThrow();
+		expect(() => run(`init --initial-idea 'x' --threshold ''`)).toThrow();
+		expect(() => run(`init --initial-idea 'x' --threshold NaN`)).toThrow();
+
+		// A valid threshold still lands.
+		run(`init --initial-idea 'x' --threshold 0.15`);
+		expect((rawState()["state"] as Record<string, unknown>)["threshold"]).toBe(0.15);
+	});
+
 	// ---------------------------------------------------------------------------
 	// non-finite --current-ambiguity guard: `Number(reported)` on a non-numeric or
 	// non-finite CLI value silently produces NaN, which `JSON.stringify` then
