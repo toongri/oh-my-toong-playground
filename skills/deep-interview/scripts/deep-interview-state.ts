@@ -274,6 +274,22 @@ export function initDeepInterviewState(
 		);
 	}
 
+	// Closed [0,1] range guard, the mirror of updateDeepInterviewState's current_ambiguity
+	// check — threshold is the other operand of the Stop-hook's `ambiguity > threshold`
+	// comparison, so it lives on the same 0–1 scale. Off-scale values disable that
+	// comparison in opposite directions: above 1, nothing can exceed it, so every done token
+	// passes and the convergence gate is silently off; below 0, even a fully converged 0
+	// exceeds it, so the interview can never finish. Validated at the writer (not only the
+	// CLI) so the programmatic path is guarded too, and before any write reaches disk.
+	if (payload.threshold !== undefined) {
+		const t = payload.threshold;
+		if (!Number.isFinite(t) || t < 0 || t > 1) {
+			throw new Error(
+				`init: refused — threshold must be a finite number within the closed 0-1 range, got ${String(t)}`,
+			);
+		}
+	}
+
 	// Build the state object: merge with any existing state content
 	const priorState: DeepInterviewStateContent = isRecord(prior["state"])
 		? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: state file content is written exclusively by this module's own writers (never externally supplied); trusted structural pass-through

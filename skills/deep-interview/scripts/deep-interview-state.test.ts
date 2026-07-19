@@ -1072,6 +1072,25 @@ describe("deep-interview-state CLI main()", () => {
 		expect((rawState()["state"] as Record<string, unknown>)["threshold"]).toBe(0.15);
 	});
 
+	// UC12 — threshold is the OTHER operand of `current_ambiguity > threshold`, so it lives
+	// on the same 0–1 scale and needs the same closed-range guard current_ambiguity already
+	// has. Syntactically valid but off-scale values disable the comparison in both
+	// directions: above 1, no ambiguity can ever exceed it, so a done token always passes
+	// and the convergence gate is off; below 0, even a fully converged 0 exceeds it, so the
+	// interview can never finish. Decimal syntax alone does not make a threshold meaningful.
+	test("UC12: init refuses an off-scale --threshold; both closed endpoints stay legal", () => {
+		writeSeed();
+		expect(() => run(`init --initial-idea 'x' --threshold 2`)).toThrow();
+		expect(() => run(`init --initial-idea 'x' --threshold -1`)).toThrow();
+		expect(() => run(`init --initial-idea 'x' --threshold 1.5`)).toThrow();
+		expect(() => run(`init --initial-idea 'x' --threshold -0.5`)).toThrow();
+
+		run(`init --initial-idea 'x' --threshold 0`);
+		expect((rawState()["state"] as Record<string, unknown>)["threshold"]).toBe(0);
+		run(`init --initial-idea 'x' --threshold 1`);
+		expect((rawState()["state"] as Record<string, unknown>)["threshold"]).toBe(1);
+	});
+
 	// ---------------------------------------------------------------------------
 	// non-finite --current-ambiguity guard: `Number(reported)` on a non-numeric or
 	// non-finite CLI value silently produces NaN, which `JSON.stringify` then
