@@ -370,44 +370,6 @@ export function updateDeepInterviewState(
 
 		const updatedState: Record<string, unknown> = { ...priorState };
 
-		if (partial.current_ambiguity !== undefined) {
-			// Deterministic floor clamp (topology-floor-evolution Stage 2): the LLM-reported
-			// value alone is never trusted at face value — it is floored against
-			// computeAmbiguityFloor(state) before being persisted as current_ambiguity, and
-			// the original reported figure is kept verbatim under reported_ambiguity so the
-			// clamp is never silently lossy.
-			const reported = partial.current_ambiguity;
-			// Fail-closed input guard: a non-numeric CLI value parses to NaN (Number("abc")),
-			// and Infinity/-Infinity are numeric but not finite. Either would flow through
-			// Math.max/JSON.stringify below and land as `null` in the state file, silently
-			// fail-opening the Stop-hook's `ambiguity > threshold` cross-check
-			// (hooks/persistent-mode/decision.ts). Thrown before any assignment to
-			// updatedState, so the state file stays byte-identical (UC5 idiom above).
-			// Closed [0,1] range guard: the scoring contract defines ambiguity on a 0.0–1.0
-			// scale, and the two ends escape in OPPOSITE directions, so neither is covered by
-			// the other. Below 0, Math.max(reported, floor) clamps the value away — but the
-			// out-of-contract figure still lands verbatim in reported_ambiguity, the audit
-			// field. Above 1, nothing clamps downward: the value persists into
-			// current_ambiguity and pins the Stop-hook's `ambiguity > threshold` cross-check
-			// permanently true, blocking every done token until a valid write lands. Both
-			// endpoints stay legal — 1.0 is the seeded starting ambiguity, 0 a converged claim.
-			if (!Number.isFinite(reported) || reported < 0 || reported > 1) {
-				throw new Error(
-					`update: refused — current-ambiguity must be a finite number within the closed 0-1 range, got ${String(reported)}`,
-				);
-			}
-			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: same trusted structural pass-through as other readers in this module
-			const stateForCheck = priorState as DeepInterviewStateContent;
-			const floor = computeAmbiguityFloor(stateForCheck);
-			const effective = Math.max(reported, floor);
-			// Fail-closed transition gate (topology-floor-evolution Stage 3): validated BEFORE
-			// any assignment to updatedState, so a refusal here never reaches mergeWrite below —
-			// the state file stays byte-identical (qa-state.ts:257-269 incCycle idiom).
-			validateScoredTransition(stateForCheck, effective);
-			updatedState["current_ambiguity"] = effective;
-			updatedState["reported_ambiguity"] = reported;
-			updatedState["ambiguity_floor"] = floor;
-		}
 		if (partial.append_round !== undefined) {
 			const existing: unknown[] = Array.isArray(priorState["rounds"]) ? priorState["rounds"] : [];
 			updatedState["rounds"] = [...existing, partial.append_round];
@@ -529,6 +491,59 @@ export function updateDeepInterviewState(
 			updatedState["established_facts"] = facts;
 		}
 
+		// LAST among the update blocks, by requirement — not by accident. The floor and the
+		// transition gate below judge the state this call PRODUCES, so every block that can
+		// move either input must have already run: append_round's score propagation (which
+		// lowers the floor and constitutes the improvement claim) and the establish/dispute
+		// fact lifecycle (which raises or releases floor pressure). Judging priorState instead
+		// made a single combined `update --append-round … --current-ambiguity 0` succeed where
+		// the same two flags sent as two calls are refused — the gate read a pre-round state
+		// that had neither the scores nor the fact edits the very same write was applying.
+		// Reordering the caller's flags must never change the verdict.
+		if (partial.current_ambiguity !== undefined) {
+			// Deterministic floor clamp (topology-floor-evolution Stage 2): the LLM-reported
+			// value alone is never trusted at face value — it is floored against
+			// computeAmbiguityFloor(state) before being persisted as current_ambiguity, and
+			// the original reported figure is kept verbatim under reported_ambiguity so the
+			// clamp is never silently lossy.
+			const reported = partial.current_ambiguity;
+			// Fail-closed input guard: a non-numeric CLI value parses to NaN (Number("abc")),
+			// and Infinity/-Infinity are numeric but not finite. Either would flow through
+			// Math.max/JSON.stringify below and land as `null` in the state file, silently
+			// fail-opening the Stop-hook's `ambiguity > threshold` cross-check
+			// (hooks/persistent-mode/decision.ts). Thrown before any write reaches disk, so
+			// the state file stays byte-identical (UC5 idiom above).
+			// Closed [0,1] range guard: the scoring contract defines ambiguity on a 0.0–1.0
+			// scale, and the two ends escape in OPPOSITE directions, so neither is covered by
+			// the other. Below 0, Math.max(reported, floor) clamps the value away — but the
+			// out-of-contract figure still lands verbatim in reported_ambiguity, the audit
+			// field. Above 1, nothing clamps downward: the value persists into
+			// current_ambiguity and pins the Stop-hook's `ambiguity > threshold` cross-check
+			// permanently true, blocking every done token until a valid write lands. Both
+			// endpoints stay legal — 1.0 is the seeded starting ambiguity, 0 a converged claim.
+			if (!Number.isFinite(reported) || reported < 0 || reported > 1) {
+				throw new Error(
+					`update: refused — current-ambiguity must be a finite number within the closed 0-1 range, got ${String(reported)}`,
+				);
+			}
+			// The PROSPECTIVE state: prior plus this call's own round scores and fact-lifecycle
+			// edits. current_ambiguity is deliberately still the stored one — it is assigned
+			// below, after the gate — so validateScoredTransition's drop comparison keeps
+			// reading the true prior value as its baseline.
+			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: same trusted structural pass-through as other readers in this module
+			const stateForCheck = updatedState as DeepInterviewStateContent;
+			const floor = computeAmbiguityFloor(stateForCheck);
+			const effective = Math.max(reported, floor);
+			// Fail-closed transition gate (topology-floor-evolution Stage 3): validated BEFORE
+			// mergeWrite below, so a refusal leaves the state file byte-identical no matter how
+			// much of updatedState the earlier blocks already populated in memory
+			// (qa-state.ts:257-269 incCycle idiom).
+			validateScoredTransition(stateForCheck, effective);
+			updatedState["current_ambiguity"] = effective;
+			updatedState["reported_ambiguity"] = reported;
+			updatedState["ambiguity_floor"] = floor;
+		}
+
 		overlay["state"] = updatedState;
 	}
 
@@ -619,19 +634,22 @@ function hasScoredClarityDimension(state: DeepInterviewStateContent | undefined 
  * established_fact — see activeDisputedFacts), simultaneously claims BOTH a
  * clarity-dimension improvement (hasScoredClarityDimension) and an ambiguity decrease
  * (effectiveAmbiguity below the currently-stored current_ambiguity). Throws — the
- * caller (updateDeepInterviewState) must call this BEFORE building the write overlay,
- * so a refusal never reaches mergeWrite/writeFileNoCreate and the state file stays
- * byte-identical (same "validate first, write second" shape as qa-state's incCycle and
- * goal-state's setStories).
+ * caller (updateDeepInterviewState) passes the PROSPECTIVE state (prior plus the same
+ * write's own round scores and fact-lifecycle edits, with current_ambiguity not yet
+ * reassigned) and calls this BEFORE mergeWrite/writeFileNoCreate, so a refusal never
+ * reaches disk and the state file stays byte-identical (same "validate first, write
+ * second" shape as qa-state's incCycle and goal-state's setStories). Judging the
+ * pre-write state instead would let a caller batch the improvement and the drop into
+ * one invocation to escape the gate.
  */
 export function validateScoredTransition(
-	priorState: DeepInterviewStateContent | undefined | null,
+	state: DeepInterviewStateContent | undefined | null,
 	effectiveAmbiguity: number,
 ): void {
-	if (activeDisputedFacts(priorState).length === 0) return;
-	const priorAmbiguity = priorState?.current_ambiguity ?? 1.0;
+	if (activeDisputedFacts(state).length === 0) return;
+	const priorAmbiguity = state?.current_ambiguity ?? 1.0;
 	const ambiguityDropped = effectiveAmbiguity < priorAmbiguity;
-	const dimensionImproved = hasScoredClarityDimension(priorState);
+	const dimensionImproved = hasScoredClarityDimension(state);
 	if (ambiguityDropped && dimensionImproved) {
 		throw new Error(
 			"validateScoredTransition: refused — an unresolved disputed established_fact blocks a write " +
