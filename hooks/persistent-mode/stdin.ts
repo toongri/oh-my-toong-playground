@@ -1,4 +1,4 @@
-import { HookInput, ParsedInput } from "./types.ts";
+import { HookInput, ParsedInput } from "@lib/persistent-mode-core/types";
 
 export async function readStdin(): Promise<string> {
 	return new Promise((resolve) => {

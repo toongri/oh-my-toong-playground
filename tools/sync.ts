@@ -812,10 +812,10 @@ export async function syncDocs(
 	syncYaml: SyncYaml,
 	rootDir: string,
 	deployRoot: string,
-): Promise<void> {
+): Promise<string[]> {
 	const section = syncYaml.docs;
 	if (!section || !Array.isArray(section.items) || section.items.length === 0) {
-		return;
+		return [];
 	}
 
 	const items = section.items;
@@ -922,6 +922,7 @@ export async function syncDocs(
 	// removal is already reported via its own dry-run line, so it must not
 	// also surface as advisory drift.
 	const managedTargets = new Set<string>();
+	const writtenLeaves: string[] = [];
 
 	for (const plan of plans) {
 		if (!plan) continue;
@@ -955,6 +956,7 @@ export async function syncDocs(
 				logDry(`docs: would write ${plan.finalTarget}`);
 			} else {
 				await deployDocsFile(plan.sourceFile, plan.finalTarget, deployRoot, context.backupDest);
+				writtenLeaves.push(plan.finalTarget);
 			}
 			continue;
 		}
@@ -969,10 +971,11 @@ export async function syncDocs(
 			}
 		} else {
 			await deployDocsDir(plan.absTarget, plan.files, deployRoot, context.backupDest);
+			writtenLeaves.push(...plan.files.map((f) => f.dest));
 		}
 	}
 
-	if (!context.dryRun) return;
+	if (!context.dryRun) return writtenLeaves;
 
 	// Advisory unmanaged-file list (AC5.2c): every file already sitting under
 	// the docs base that no item above would write or delete. NOT an error and
@@ -985,6 +988,7 @@ export async function syncDocs(
 			logDry(`docs: advisory (unmanaged): ${existingFile}`);
 		}
 	}
+	return [];
 }
 
 // ---------------------------------------------------------------------------
@@ -1359,6 +1363,109 @@ export async function rewritePlatformPaths(
 	}
 }
 
+// ---------------------------------------------------------------------------
+// formatDeployedRoots
+// ---------------------------------------------------------------------------
+
+/**
+ * Runs a declared post-deploy format command (SyncYaml `format:`) against the
+ * OMT-managed roots under `deployRoot` — the existing OMT-managed platform dirs
+ * (`.claude`/`.gemini`/`.codex`/`.opencode`), the per-name Codex skill dirs
+ * OMT owns this run, and the docs leaf paths the caller deployed. Called from
+ * processYaml's per-worktree deploy loop, right after `rewritePlatformPaths`,
+ * when `syncYaml.format` is declared AND the run is non-dry-run. Deliberately
+ * dry-run-agnostic itself — dry-run gating is the caller's responsibility, not
+ * this function's; it always runs when given a non-empty command and a
+ * non-empty root set.
+ *
+ * Ownership boundaries mirror rewritePlatformPaths: `.agents/skills` is never
+ * passed whole, only per-name entries in `codexSkillNames`, so a foreign
+ * resident skill directory is never handed to an external formatter. Any root
+ * whose realpath resolves outside `deployRoot` (a symlink escape) is dropped, so
+ * the formatter can never recurse beyond the deploy root.
+ *
+ * Only the `Bun.spawn` call itself is wrapped in try/catch because, unlike
+ * the vendoring spawn above (`bun`, always present), `formatCmd` is an
+ * arbitrary user-declared command — a missing binary throws synchronously
+ * from `Bun.spawn` (ENOENT); `await proc.exited` never throws. The catch
+ * re-throws that synchronous ENOENT as a plain Error; a non-zero exit is
+ * checked and thrown separately, outside the try, so neither path double-wraps
+ * the other's message. Either way the caller's best-effort handling (a
+ * fatal-sync-error subclass check) does not mistake this for a fatal sync
+ * error.
+ */
+export async function formatDeployedRoots(
+	deployRoot: string,
+	formatCmd: string | string[],
+	docsDests: string[],
+	codexSkillNames: ReadonlySet<string>,
+): Promise<void> {
+	// A string form is whitespace-tokenized (simple case, no quoting); an array
+	// form is used verbatim as argv, so arguments containing spaces (e.g. a
+	// config path) survive intact.
+	const argv = (Array.isArray(formatCmd) ? formatCmd : formatCmd.split(/\s+/)).filter(Boolean);
+	if (argv.length === 0) return;
+	const cmdDisplay = Array.isArray(formatCmd) ? formatCmd.join(" ") : formatCmd;
+
+	// existsSync follows symlinks, so a platform dir (or skill/docs path)
+	// symlinked outside the worktree would let the formatter recurse into and
+	// rewrite files beyond deployRoot, escaping the OMT-managed boundary. Resolve
+	// each candidate's realpath and keep only those that stay under deployRoot —
+	// the same lstat/realpath escape guard backup.ts uses. The original
+	// (non-resolved) path is handed to the formatter; realpath is used solely for
+	// the boundary check.
+	let realDeployRoot: string;
+	try {
+		realDeployRoot = realpathSync(deployRoot);
+	} catch {
+		return;
+	}
+	const managedRoots: string[] = [];
+	const addIfUnderRoot = (candidate: string) => {
+		if (!existsSync(candidate)) return;
+		let real: string;
+		try {
+			real = realpathSync(candidate);
+		} catch {
+			return;
+		}
+		if (real === realDeployRoot || real.startsWith(realDeployRoot + path.sep)) {
+			managedRoots.push(candidate);
+		} else {
+			logWarn(`format: '${candidate}' resolves outside deploy root (symlink escape) — skipping`);
+		}
+	};
+	for (const platform of KNOWN_PLATFORMS) {
+		addIfUnderRoot(path.join(deployRoot, `.${platform}`));
+	}
+	for (const name of codexSkillNames) {
+		addIfUnderRoot(path.join(codexSkillsDir(deployRoot), name));
+	}
+	for (const dest of docsDests) {
+		addIfUnderRoot(dest);
+	}
+
+	if (managedRoots.length === 0) return;
+
+	let proc: ReturnType<typeof Bun.spawn>;
+	try {
+		proc = Bun.spawn([...argv, ...managedRoots], {
+			cwd: deployRoot,
+			stdout: "inherit",
+			stderr: "inherit",
+		});
+	} catch (err) {
+		throw new Error(
+			`format command '${cmdDisplay}' failed: ${err instanceof Error ? err.message : String(err)}`,
+			{ cause: err },
+		);
+	}
+	await proc.exited;
+	if (proc.exitCode !== 0) {
+		throw new Error(`format command '${cmdDisplay}' failed (exit ${proc.exitCode})`);
+	}
+}
+
 /**
  * Apply `rules` (plus an optional per-file `extraTransform`, e.g. the
  * ${CLAUDE_SKILL_DIR} bake) to every rewrite-candidate file under `dir`,
@@ -1671,7 +1778,7 @@ export async function processYaml(
 			// Sync docs — unconditional (not gated on shouldMkdirClaude): docs is
 			// platform-agnostic and lands directly under deployRoot, so a docs-only
 			// project (no CATEGORIES items, no .claude) must still deploy its docs.
-			await syncDocs(context, syncYaml, rootDir, deployRoot);
+			const docsDests = await syncDocs(context, syncYaml, rootDir, deployRoot);
 
 			// Rewrite platform paths for non-claude platforms
 			const nonClaudePlatforms: Platform[] = ["gemini", "codex", "opencode"];
@@ -1697,6 +1804,10 @@ export async function processYaml(
 						await rewritePlatformPaths(deployRoot, platform, codexSkillNames);
 					}
 				}
+			}
+
+			if (syncYaml.format && !context.dryRun) {
+				await formatDeployedRoots(deployRoot, syncYaml.format, docsDests, codexSkillNames);
 			}
 		} catch (err) {
 			// Fatal errors (MCP key-derivation or topology failure) must never be
@@ -1746,6 +1857,13 @@ export async function loadRootModelMaps(rootDir: string): Promise<Map<Platform, 
 }
 
 /**
+ * Returns true if `err` is a Node.js errno exception (has a `code` field).
+ */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+	return err instanceof Error && "code" in err;
+}
+
+/**
  * Thrown by resolveBackupBase() when the resolved OMT_DIR would make the
  * backup-retention pruner's recursive rm far more destructive than intended
  * (relative path, "/", or the user's home directory). Never process.exit —
@@ -1787,7 +1905,7 @@ export function resolveBackupBase(dryRun = false): string {
 		realBase = realpathSync(base);
 	} catch (err) {
 		// base doesn't exist yet (first run) — can't be a symlink, fall through.
-		if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== "ENOENT") {
+		if (!isErrnoException(err) || err.code !== "ENOENT") {
 			throw err;
 		}
 	}

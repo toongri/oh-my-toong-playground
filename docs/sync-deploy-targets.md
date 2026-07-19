@@ -33,6 +33,31 @@
   해석되거나 `git worktree list` 자체가 실패하면 `DeployTargetsError`로 **시끄럽게**
   실패한다. 조용히 빈 타겟을 반환하면 아무것도 안 쓰고도 성공처럼 보이기 때문이다.
 
+## 배포후 포맷(format-on-deploy)
+
+`sync.yaml`이 top-level `format`(예: `format: "pnpm exec prettier --write"`)을
+선언하면, 각 워크트리 배포가 끝난 뒤(플랫폼 경로 rewrite 다음, 워크트리 catch
+직전) 그 명령을 **타겟 cwd(deployRoot)**에서 한 번 실행한다. `format`은 **문자열**
+(공백 토큰화 — 단순 케이스, 셸 인용 미지원) 또는 **문자열 배열**(argv로 그대로 사용
+— 공백 든 인자, 예: config 경로가 필요할 때)을 받는다. 목적은 배포 `.md`
+—특히 CJK 표—가 타겟 **자기 포매터의 정규형 바이트**로 착지하게 하는 것이다.
+그러지 않으면 OMT-raw로 착지한 `.md`를 타겟 prettier가 커밋/CI(`prettier --check`)
+마다 재포맷해, 매 sync마다 **가짜 diff(ping-pong churn)**가 떠 진짜 변경을 가린다.
+
+- **대상(소유권 경계)**: 포매터에 넘기는 것은 **OMT-관리 루트만**이다 — 존재하는
+  플랫폼 dir(`.claude`/`.gemini`/`.codex`/`.opencode`) + codex 스킬 per-name
+  (`.agents/skills/<name>`, OMT가 이번 run에 배포한 이름만 — 공유 공간의 foreign
+  resident는 제외) + 배포한 docs leaf 파일. `.`(전체 레포)은 절대 안 넘긴다. 루트
+  **내부**의 실제 포맷 대상은 타겟 자기 `.prettierignore`/`.prettierrc`가 결정한다.
+  각 루트는 realpath가 deployRoot 하위에 있어야 넘어간다 — 워크트리 밖으로의
+  **심링크 탈출**(예: `.claude`가 `$HOME/.claude`로의 링크)은 제외해, 포매터가
+  deploy root 밖을 재귀 재작성하지 못하게 한다.
+- **실패 처리**: format 실패(non-zero exit 또는 명령 미설치 ENOENT)는 그 워크트리를
+  위 "배포 독립성과 실패 처리"의 `failedTargets`로 흘려 **best-effort**로 처리한다 —
+  다른 워크트리는 계속되고, 하나라도 실패하면 전체 sync가 non-zero exit이다.
+- **dry-run skip**: `make sync-dry`는 이 포맷 패스를 실행하지 않는다.
+- 미선언(`format` 없음) 타겟은 이 단계 없이 기존대로 raw 배포된다(하위호환).
+
 ## 백업 위치
 
 `make sync`가 덮어쓸 파일을 백업하는 곳은 타겟 레포 안이 아니라 **단일

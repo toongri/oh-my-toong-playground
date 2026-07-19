@@ -64,6 +64,7 @@ The sync tool (`tools/sync.ts`) reads `sync.yaml` files and deploys components t
 **sync.yaml format** (object with `items` array):
 ```yaml
 path: /path/to/target/project
+format: "pnpm exec prettier --write"   # Optional: post-deploy format pass (see below)
 agents:
   items:
     - oracle                           # String shorthand
@@ -81,6 +82,8 @@ skills:
 **Component resolution** (scoped, upward search):
 - Root `sync.yaml`: global paths only (`skills/`, `agents/`, etc.)
 - Project `sync.yaml`: own project first (`projects/<name>/skills/`), then global fallback. Cross-project references are blocked.
+
+**Post-deploy format** (top-level `format: "<command>"` or `format: ["<arg>", …]`): Optional. Accepts either a string (whitespace-tokenized — the simple case, no shell quoting) or an argument array used verbatim as argv (for arguments that contain spaces, e.g. a config path). When declared, each worktree's deploy runs the command once at the target cwd (`deployRoot`) after all components land, so deployed `.md` (notably CJK tables) arrives already in the target's own formatter normal form — eliminating the ping-pong churn (fake diff) that otherwise appears every sync when the target's prettier reformats OMT-raw bytes on commit/CI. Only OMT-managed roots are passed to the formatter (existing platform dirs + per-name codex skill dirs under `.agents/skills/` + deployed docs leaf files) — never `.`/the whole repo; the target's own `.prettierignore`/`.prettierrc` decides the actual targets within those roots. A format failure (non-zero exit or missing binary/ENOENT) routes that worktree to `failedTargets` for a non-zero exit (same best-effort fan-out as a deploy failure); `--dry-run` skips the format pass. See `docs/sync-deploy-targets.md`.
 
 **Per-platform YAML** (`{platform}.yaml`): Colocated with `sync.yaml`, inheriting its `path`. Manages config/hooks/mcps/plugins per platform — separate from `sync.yaml` which handles component deployment only (agents, commands, skills, scripts, rules). Config/hooks/mcps deep-merge into the target's gitignored `.claude/settings.local.json` (global sync uses `settings.json`); see `docs/platform-yaml-config-deployment.md` for the deployment target and the two-layer gitignore mechanism (why a personal absolute path is safe in `claude.yaml`, not just `claude.local.yaml`).
 
@@ -113,7 +116,8 @@ skills:
 
 - **session-start.sh**: Restores persistent mode states (goal, incomplete todos)
 - **keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context
-- **persistent-mode/**: Prevents stopping when work remains incomplete (Stop hook, TypeScript directory)
+- **persistent-mode/**: Claude Stop-hook adapter — prevents stopping when work remains incomplete. Decision logic (`makeDecision`) lives in `lib/persistent-mode-core/`, shared with the Codex adapter below.
+- **codex-persistent-mode/**: Codex Stop/PostToolUse adapter over the same shared `makeDecision` core.
 - **pre-tool-enforcer.sh**: Tool execution gate (TaskOutput blocking)
 - **scripts/verify-caps-gate/**: PreToolUse Bash gate engine — denies unfiltered whole-monorepo test/lint commands and injects per-runner memory caps (env caps for vitest/turbo/pnpm, flag caps for jest/turbo) per declarative `verify-caps.yaml` policy. Lives under `scripts/` (not `hooks/`): deployed globally as a single script package (`$HOME/.claude/scripts/verify-caps-gate/`, no registration) via the root `sync.yaml` scripts section, then registered as a hook **only in algocare-home** through a raw `command:` in `projects/algocare-home/claude.yaml` that references that global path. The policy file loads from the script's own directory (`import.meta.url`), so the global location works unchanged.
 
