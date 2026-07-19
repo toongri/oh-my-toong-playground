@@ -1026,6 +1026,36 @@ describe("deep-interview-state CLI main()", () => {
 		expect(scores["success"]).toBe(0.5);
 	});
 
+	// UC10 — `init` is a merge, not a reset: every field it names is carried forward from
+	// priorState, which is what makes re-invoking it on a live interview safe. It named
+	// those fields as a fixed list, so a field added later is silently dropped instead —
+	// and the fields this story added are exactly the ones carrying convergence pressure.
+	// Re-running init then launders an unresolved dispute out of the state and unblocks
+	// the very convergence write UC5/UC8 refuse.
+	test("UC10: re-running init preserves established_facts and the ambiguity audit fields", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "relaunder idea", threshold: 0.15 });
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "only component" }])}'`);
+		run("update --current-ambiguity 0.5");
+		run(`update --establish-fact '{"id":"f1","statement":"uses REST"}'`);
+		run("update --dispute-fact f1");
+
+		run(`init --initial-idea 'relaunder idea'`);
+
+		const state = rawState()["state"] as Record<string, unknown>;
+		const facts = state["established_facts"] as Record<string, unknown>[] | undefined;
+		expect(facts).toHaveLength(1);
+		expect(facts?.[0]?.["disputed"]).toBe(true);
+		// The clamp's audit trail survives too — losing it makes the stored ambiguity
+		// unauditable, since reported vs floor is no longer recoverable.
+		expect(state["reported_ambiguity"]).toBe(0.5);
+		expect(state["ambiguity_floor"]).toBe(0.05);
+
+		// The laundering payoff must stay closed: the dispute still blocks convergence.
+		run(`update --append-round '${JSON.stringify({ n: 1, component: "c1", scores: scoredDims() })}'`);
+		expect(() => run("update --current-ambiguity 0")).toThrow();
+	});
+
 	// ---------------------------------------------------------------------------
 	// non-finite --current-ambiguity guard: `Number(reported)` on a non-numeric or
 	// non-finite CLI value silently produces NaN, which `JSON.stringify` then
