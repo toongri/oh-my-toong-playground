@@ -141,6 +141,8 @@ This is the single reusable stopping-and-checking pattern used at every phase ex
 
 **Closure Guard (precondition):** before running steps 1-2 below, check every active topology component's `clarity_scores` in state. If any active component still carries an unscored (`null`) dimension, convergence cannot be declared — loop back into the interview loop targeting that component's weakest (unscored) dimension instead of running this seam. An `ambiguity ≤ threshold` reading that ignores an unscored sibling component is not real convergence; it means the interview has not yet asked, not that there is nothing left to ask.
 
+This precondition is enforced in code, not just here: the Stop-hook refuses a `<deep-interview-done/>` token while any active component still carries an unscored dimension, independent of the ambiguity reading and of whichever threshold this run resolved. Emitting the token early does not end the interview — it loops you back.
+
 1. Reflect the residual ambiguity that remains — name any unresolved gap, weak dimension, or open design point, however small, instead of declaring the interview simply "done".
 2. Ask the user, via `AskUserQuestion`, whether to continue (keep clarifying requirements, or keep resolving design branches) or proceed to the next phase.
 

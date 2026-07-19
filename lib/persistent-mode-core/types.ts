@@ -42,6 +42,18 @@ export interface DeepInterviewState {
 	state?: {
 		current_ambiguity?: number;
 		threshold?: number;
+		/**
+		 * Round 0's locked component list. The Stop-hook reads it for the Closure Guard's
+		 * completeness check — an ACTIVE component carrying any null clarity dimension
+		 * means convergence cannot be declared, whatever the ambiguity magnitude says.
+		 * Absent on legacy/foreign shapes, which fail open exactly like the fields above.
+		 */
+		topology?: {
+			components?: {
+				status?: string;
+				clarity_scores?: Record<string, number | null>;
+			}[];
+		};
 	};
 }
 
