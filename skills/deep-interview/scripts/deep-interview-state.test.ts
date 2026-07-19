@@ -992,6 +992,40 @@ describe("deep-interview-state CLI main()", () => {
 		expect(readFileSync(path, "utf8")).toBe(before);
 	});
 
+	// UC9 — a clarity score is contractually in [0,1]. Any finite number used to pass,
+	// so a scorer emitting 2 or -1 marked the component "scored" and satisfied the
+	// Stop-hook's Closure Guard completeness check, which only asks whether a dimension
+	// is null. Out-of-range values are not applied, so the dimension stays null and the
+	// guard keeps blocking — same skip semantics the sibling non-numeric check already
+	// uses, rather than a second, louder failure mode for the same class of bad input.
+	test("UC9: out-of-range clarity scores are not applied; the dimension stays unscored", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "score range idea" });
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "only component" }])}'`);
+
+		run(
+			`update --append-round '${JSON.stringify({
+				n: 1,
+				component: "c1",
+				scores: { intent: 2, outcome: -1, scope: 1, constraints: 0, success: 0.5, context: 1.5 },
+			})}'`,
+		);
+
+		const components = (
+			(rawState()["state"] as Record<string, unknown>)["topology"] as Record<string, unknown>
+		)["components"] as Record<string, unknown>[];
+		const scores = components[0]["clarity_scores"] as Record<string, unknown>;
+
+		// Out of range → never applied.
+		expect(scores["intent"]).toBeNull();
+		expect(scores["outcome"]).toBeNull();
+		expect(scores["context"]).toBeNull();
+		// In range, including both closed endpoints → applied.
+		expect(scores["scope"]).toBe(1);
+		expect(scores["constraints"]).toBe(0);
+		expect(scores["success"]).toBe(0.5);
+	});
+
 	// ---------------------------------------------------------------------------
 	// non-finite --current-ambiguity guard: `Number(reported)` on a non-numeric or
 	// non-finite CLI value silently produces NaN, which `JSON.stringify` then
