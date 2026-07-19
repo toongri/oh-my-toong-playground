@@ -571,6 +571,61 @@ describe("makeDecision", () => {
 			expect(result.reason ?? "").not.toContain("<deep-interview-continuation>");
 		});
 
+		// UC12 — the fail-open contract is about VALUE, not key presence. `init --threshold abc`
+		// coerces to NaN, which JSON.stringify persists as `null`; `null !== undefined` passes
+		// the presence test, then `ambiguity > null` coerces null to 0, so every positive
+		// ambiguity compares as unconverged and the interview can never emit a done token.
+		// A non-finite threshold is exactly the malformed shape the surrounding comment
+		// promises to fall open on — the presence test alone does not deliver that promise.
+		it("UC12: a null (NaN-serialized) threshold falls open rather than wedging the interview", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", current_ambiguity: 1, threshold: null },
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ lastAssistantMessage: "Interview complete. <deep-interview-done/>" }),
+			);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(false);
+			expect(result.reason ?? "").not.toContain("<deep-interview-continuation>");
+		});
+
+		// The mirror operand, pinned as a characterization test — NOT a defect reproduction:
+		// it already passes, because `null > 0.15` happens to read false and lands on the
+		// same fall-open outcome. That is coercion luck, not a decision the code made: the
+		// comparison silently did not run. This test pins the outcome so the finite-value
+		// guard below reaches it deliberately and keeps reaching it.
+		it("UC12: a null current_ambiguity falls open through the value guard, not through a false comparison", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: { phase: "in_progress", current_ambiguity: null, threshold: 0.15 },
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ lastAssistantMessage: "Interview complete. <deep-interview-done/>" }),
+			);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(false);
+			expect(result.reason ?? "").not.toContain("<deep-interview-continuation>");
+		});
+
 		it("UC11: an unscored component in a TTL-stale state still cleans up (no wedge on a corpse)", async () => {
 			const stale = "2020-01-01T00:00:00+00:00";
 			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
