@@ -176,5 +176,6 @@ OCR 정밀값(해시, 포트, 버전 등)은 컨텍스트 추론 금지 — `get
 - 관련 스킬 문서:
   - [핵심 파이프라인](./core-pipeline.md)
   - [리뷰 및 품질](./review-quality.md)
+  - [리서치](./research.md)
   - [Knowledge Graph Pins](./knowledge-graph-pins.md)
   - [유틸리티·개인 도구](./utilities-personal.md)
