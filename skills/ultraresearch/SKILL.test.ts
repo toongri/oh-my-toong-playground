@@ -578,3 +578,94 @@ describe("epistemic suite / claim-graph gate", () => {
 		});
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Material axis — digest instruction has a goal (RED test, TDD: authored
+// before the SKILL.md edit). Diagnosis: Phase 2's "digest ... into wave-*.md"
+// (currently :106) has no object — the digest is not told what it summarizes
+// TOWARD — so the agent compresses toward the one explicit shape it can see
+// (the SYNTHESIS eight-section skeleton) instead of the user's actual
+// requirement items. The fix has two parts: (1) give digest a declared
+// target, and (2) make verbatim-carry a reconstructability rule, not a
+// shape rule (not "tables/enumerations/code are exempt from summarization"
+// but "material that summarization would make irrecoverable must be
+// carried verbatim") — plus require content, not just file:line coordinates,
+// from the codebase worker role protocol.
+// FAILS on the current unmodified SKILL.md; PASSES after the digest-target
+// and reconstructability-rule edits.
+// ---------------------------------------------------------------------------
+
+describe("material axis — digest instruction has a goal", () => {
+	test("digest instruction states what the digest is toward (target of summarization)", () => {
+		expect(skill).toContain("toward the declared requirement items");
+	});
+
+	test("verbatim-carry rule is defined by reconstructability, not by shape (table/list/code)", () => {
+		expect(skill).toContain("cannot be reconstructed");
+	});
+
+	test("codebase worker role protocol requires content in addition to file:line coordinates", () => {
+		const idx = skill.indexOf("Report absolute file paths");
+		expect(idx).toBeGreaterThan(-1);
+		const context = skill.slice(idx, idx + 200);
+		expect(context).toContain("file:line");
+		expect(context).toContain("quoted content");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Place axis — REPORT is the deliverable, SYNTHESIS is intermediate (RED
+// test, TDD: authored before the SKILL.md edit). Diagnosis: SKILL.md has
+// zero occurrences of "REPORT" today, and the posture table (currently
+// :166) promotes SYNTHESIS.md itself to "(the deliverable)". The fix
+// demotes SYNTHESIS.md to a citation source-of-truth intermediate and
+// introduces REPORT.md + REPORT.html (self-contained) as the actual
+// deliverable, with its table of contents derived from the Phase 0 axis
+// decomposition rather than the fixed eight-section skeleton.
+// FAILS on the current unmodified SKILL.md; PASSES after the REPORT
+// artifact and SYNTHESIS-demotion edits.
+// ---------------------------------------------------------------------------
+
+describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", () => {
+	test("REPORT.md filename is present", () => {
+		expect(skill).toContain("REPORT.md");
+	});
+
+	test("REPORT.html filename is present", () => {
+		expect(skill).toContain("REPORT.html");
+	});
+
+	test("REPORT is declared inside the Artifact Contract section", () => {
+		const idx = skill.indexOf("<Artifact_Contract>");
+		expect(idx).toBeGreaterThan(-1);
+		const context = skill.slice(idx);
+		expect(context).toContain("REPORT");
+	});
+
+	test("REPORT's table of contents is derived from the Phase 0 axis decomposition", () => {
+		expect(skill).toContain("derived from the Phase 0 axis decomposition");
+	});
+
+	test("SYNTHESIS.md is regulated as the citation source of truth (intermediate, not the deliverable)", () => {
+		expect(skill).toContain("citation source of truth");
+	});
+
+	test('"(the deliverable)" is absent — SYNTHESIS is no longer promoted to final artifact', () => {
+		expect(count("(the deliverable)")).toBe(0);
+	});
+
+	test('"weasyprint" is absent — no new external dependency introduced', () => {
+		expect(count("weasyprint")).toBe(0);
+	});
+
+	test('"uv run" is absent — no new external dependency introduced', () => {
+		expect(count("uv run")).toBe(0);
+	});
+
+	test("REPORT.html is specified as a single self-contained file", () => {
+		const idx = skill.indexOf("REPORT.html");
+		expect(idx).toBeGreaterThan(-1);
+		const context = skill.slice(idx, idx + 200);
+		expect(context).toContain("self-contained");
+	});
+});
