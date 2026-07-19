@@ -280,7 +280,16 @@ export function initDeepInterviewState(
 			(prior["state"] as DeepInterviewStateContent)
 		: {};
 
+	// Spread FIRST, then let the init-owned fields below win. init is a merge, not a reset —
+	// every field below already reads `payload.X ?? priorState.X`, so re-invoking it on a
+	// live interview is meant to be safe. Naming the carried fields as a fixed list broke
+	// that promise for anything added later: established_facts, reported_ambiguity and
+	// ambiguity_floor were dropped, so a re-init laundered an unresolved dispute out of the
+	// state and unblocked the convergence write validateScoredTransition exists to refuse.
+	// The spread makes carry-forward the default, so the next field added is safe by
+	// construction rather than by remembering to extend this list.
 	const newState: DeepInterviewStateContent = {
+		...priorState,
 		interview_id: payload.interview_id ?? priorState.interview_id,
 		type: payload.type ?? priorState.type,
 		initial_idea: payload.initial_idea ?? priorState.initial_idea,
