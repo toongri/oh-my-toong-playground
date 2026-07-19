@@ -27,7 +27,7 @@ council:
       emoji: "🤖"
       color: "BLUE"
       model: "gpt-5.6-sol"
-      effort_level: "xhigh"
+      effort_level: "high"
       output_format: json
 
     - name: glm
