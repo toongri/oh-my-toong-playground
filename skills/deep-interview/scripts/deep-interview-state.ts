@@ -401,7 +401,13 @@ export function updateDeepInterviewState(
 						const nextScores: ClarityScores = { ...c.clarity_scores };
 						for (const dim of CLARITY_DIMENSIONS) {
 							const val = scores[dim];
-							if (typeof val === "number" && Number.isFinite(val)) {
+							// Closed [0,1] contract, enforced by NOT applying an out-of-range value: the
+							// dimension stays null, so isComponentUnscored keeps the component unscored and
+							// both the floor term and the Stop-hook's completeness gate keep blocking. An
+							// applied `2` or `-1` would instead read as "scored" to every consumer — the
+							// completeness gate only asks whether a dimension is null, not whether its value
+							// is in contract. Same silent-skip shape as the non-numeric case it extends.
+							if (typeof val === "number" && Number.isFinite(val) && val >= 0 && val <= 1) {
 								nextScores[dim] = val;
 							}
 						}
