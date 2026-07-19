@@ -312,6 +312,14 @@ A disputed, unresolved fact raises the ambiguity floor the state CLI enforces on
 bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --establish-fact '{"id":"<id>","statement":"<fact>","component":"<component_id>"}'
 ```
 
+**Resolve a dispute by superseding it, not by ignoring it:** a disputed fact keeps its +0.10 floor pressure until a replacement supersedes it, and while it is unresolved the CLI refuses any write that claims both a clarity rise and an ambiguity drop. Once the round settles what replaces the retracted fact, establish the replacement and name what it supersedes in the same call:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts update --establish-fact '{"id":"<new_id>","statement":"<replacement_fact>","supersedes":"<disputed_fact_id>"}'
+```
+
+Confirming the replacement IS the resolution event — there is no separate "un-dispute" step. `supersedes` is refused unless it names an unresolved disputed fact, so a typo surfaces as an error rather than a silently still-pressured floor.
+
 **Calculate ontology stability:**
 
 **Round 1 special case:** For the first round, skip stability comparison. All entities are "new". Set stability_ratio = null (JSON null — never the bare token N/A). If any round produces zero entities, set stability_ratio = null (avoids division by zero).
