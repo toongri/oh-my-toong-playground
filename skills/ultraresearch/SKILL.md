@@ -94,7 +94,7 @@ Seed `intent-diff.md` here, in Phase 0, before any worker spawns — one row per
 
 Launch the entire first wave in one response — every Phase-0 axis at once, as foreground Agent workers. Sequential launches and "start with one and see" defeat the engine. Embed the relevant role protocol in each spawn message:
 
-- **Codebase (explore), per the tier floor.** Grep with 3+ keyword variations; structural/AST search; LSP definitions and references; file-name globs; `git log --all -S` and `--grep` for history including deleted code. Report absolute file paths, `file:line` patterns, and how findings connect.
+- **Codebase (explore), per the tier floor.** Grep with 3+ keyword variations; structural/AST search; LSP definitions and references; file-name globs; `git log --all -S` and `--grep` for history including deleted code. Report absolute file paths, `file:line` patterns, and how findings connect — plus the quoted content at each coordinate (column definitions, enum values, signatures, endpoints): a coordinate alone does not tell the orchestrator what lives there.
 - **Web (librarian), per the tier floor.** At least 10 distinct websearch queries per worker, each with a different operator or angle; fetch the full page for every result that matters. Real-world usage via `gh search` and grep.app; official docs via sitemap discovery.
 - **Browsing (hermes, insane-browsing 로드), per the tier floor.** Full authenticated and JavaScript-rendered page access for sources blocked or insufficiently covered by surface-level web retrieval; only dispatched when Phase-0 Browsing gate is `yes`.
 
@@ -103,7 +103,7 @@ Launch the entire first wave in one response — every Phase-0 axis at once, as 
 This loop is what makes the engine research rather than search. Each wave:
 
 1. **Barrier collect**: wait for every worker in the wave to return.
-2. **Journal**: digest each return plus its verbatim EXPAND markers into `wave-*.md`.
+2. **Journal**: digest each return plus its verbatim EXPAND markers into `wave-*.md`, toward the declared requirement items (the axes decomposed in Phase 0). Digesting without that target compresses toward the nearest explicit shape instead of what the user asked for. Carry material verbatim, not summarized, when it cannot be reconstructed from a summary — the rule is reconstructability, not a fixed list of shapes (tables, enumerations, and code often qualify, but the list is not exhaustive: anything a summary would irreversibly lose belongs verbatim).
 3. **Deduplicate** new markers against `expansion-log.md` (every lead ever seen, not just confirmed ones, or rejected leads resurface each wave).
 4. **Spawn the next wave**: one expansion worker per new unchecked lead, all dispatched in one response.
 5. **Record** the wave in `expansion-log.md`: workers spawned, markers gained, leads opened/closed, and any OPEN CHAIN carried over.
@@ -163,7 +163,7 @@ The same engine runs in one of two postures, selected in Phase 0. The posture ch
 
 | Posture | Selected when | Emits |
 |---|---|---|
-| **explicit research** | the user explicitly demanded research (`/ultraresearch <question>`) | terminal cited `SYNTHESIS.md` (the deliverable) |
+| **explicit research** | the user explicitly demanded research (`/ultraresearch <question>`) | terminal `REPORT.md` + `REPORT.html` (self-contained), citing `SYNTHESIS.md` |
 | **pre-work CLEAR** | invoked by `deep-interview` (or a caller) to ground facts while a human is in the loop answering the decisions; the goal/decisions are clear, only the facts are missing | grounded facts returned to the caller; `SYNTHESIS.md` as backing |
 
 CLEAR is the primary interactive pre-work path (a human answers the decisions via deep-interview; the engine fills the facts).
@@ -216,6 +216,14 @@ The grounding handoff must NOT silently unlock execution: it is presented for hu
 
 Every claim in `SYNTHESIS.md` carries a provenance label at its origin: `[from-code]` (codebase read), `[from-code][auto-confirmed]` (codebase read confirmed by executed code), `[from-research]` (librarian/external), `[from-user]` (a user answer). Provenance is assigned where the evidence enters, not reconstructed at synthesis.
 
+`SYNTHESIS.md` is an intermediate, not the deliverable: it is the **citation source of truth** the deliverable below cites for verification backing, not itself the artifact handed to the user.
+
+## REPORT.md and REPORT.html — the deliverable
+
+`$SESSION_DIR/REPORT.md` is the SSOT deliverable. `$SESSION_DIR/REPORT.html` is a single self-contained render copy of it — no external CSS, JS, fonts, or images; everything inlined into the one file. There is no rendered-document (e.g. PDF) output and no new external tooling dependency added to produce one.
+
+REPORT's table of contents is derived from the Phase 0 axis decomposition — the orthogonal axes the query was broken into — not a fixed section list. The axes ARE the table of contents, so REPORT answers what the user actually asked rather than compressing toward SYNTHESIS's eight-section skeleton. REPORT quotes material directly from the journal (`wave-*.md`) and cites `SYNTHESIS.md` for the verification backing behind each claim.
+
 ## Epistemic-instrumentation artifacts
 
 The orchestrator maintains these files in `$SESSION_DIR` (the incremental trace, written wave-by-wave; every file here is orchestrator-owned — see Worker ground rules):
@@ -238,7 +246,7 @@ The artifact SET tier-scales with the existing complexity tier while the SCHEMA 
 
 ## Single-snapshot write-ordering
 
-`SYNTHESIS.md` and the handoff are generated **once, from a single post-convergence snapshot of the claim-graph** — they are NOT accreted per-wave. The per-wave `wave-*.md` journal is the incremental trace; the two consumable artifacts (`SYNTHESIS.md` and the deep-interview-schema handoff) are written at convergence from the final post-convergence claim-graph snapshot, guaranteeing both derive from one snapshot. (A late wave can overturn an earlier "verified" claim, so the consumables must derive from the final snapshot, never from mid-run state.)
+`SYNTHESIS.md`, `REPORT.md`/`REPORT.html`, and the handoff are all generated **once, from a single post-convergence snapshot of the claim-graph** — they are NOT accreted per-wave. The per-wave `wave-*.md` journal is the incremental trace; everything else is written at convergence, in dependency order, from the final post-convergence snapshot: `SYNTHESIS.md` first (the citation source of truth), then `REPORT.md` (which quotes the journal and cites `SYNTHESIS.md` for verification backing), then `REPORT.html` (a render copy of `REPORT.md`) — plus the deep-interview-schema handoff on pre-work postures. (A late wave can overturn an earlier "verified" claim, so every one of these must derive from the final snapshot, never from mid-run state.)
 
 ## Zero verified claims
 
