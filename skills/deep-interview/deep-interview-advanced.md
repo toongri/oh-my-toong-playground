@@ -64,7 +64,9 @@ The interviewer LLM's self-reported ambiguity is never trusted at face value. `d
 - `unscored_component_count` — active topology components with at least one of the 6 dimensions still unscored.
 - `auto_answer_ratio` — fraction of rounds answered automatically rather than by the user.
 
-Every state write also runs `validateScoredTransition`, which fail-closed rejects (exit 1, state left unchanged) a write that claims a dimension improved and ambiguity dropped while an unresolved disputed fact remains active — the code-enforced guard against false convergence that honor-system self-scoring cannot provide on its own.
+Every state write also runs `validateScoredTransition`, which fail-closed rejects (exit 1, state left unchanged) an ambiguity **decrease** while an unresolved disputed fact remains active and the interview already carries clarity scoring — the code-enforced guard against false convergence that honor-system self-scoring cannot provide on its own.
+
+The scoring condition reads the interview's standing state, not the individual write: a later round that lowers ambiguity without re-scoring anything is refused just the same, because scoring and the drop can be split across two calls and a per-write check would be bypassed by sending them separately. This is not a wedge — raising or holding ambiguity stays allowed while a dispute is open, and superseding the disputed fact releases the block. Only lowering is refused, and only while the dispute stands.
 
 ## Challenge Agent Modes
 

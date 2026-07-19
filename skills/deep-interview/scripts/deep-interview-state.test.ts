@@ -869,7 +869,11 @@ describe("deep-interview-state CLI main()", () => {
 	// (active trigger) blocks a write that simultaneously claims a clarity-dimension
 	// improvement (a component already fully scored) and an ambiguity decrease. The CLI
 	// must reject with a non-zero exit and leave the state file byte-identical.
-	test("UC5: an active unresolved disputed fact rejects a write claiming both a clarity-dimension rise and an ambiguity drop; state file unchanged", () => {
+	// The name states what this actually asserts: the scores land in an EARLIER call, and the
+	// pure ambiguity drop that follows is still refused. The scoring condition is the
+	// interview's standing state, not a property of the refused write — narrowing it to an
+	// in-write transition would let the same two steps through by sending them separately.
+	test("UC5: an active unresolved disputed fact rejects a later ambiguity drop once the interview carries clarity scoring, even though that write applies no score; state file unchanged", () => {
 		writeSeed();
 		initDeepInterviewState(SID, { initial_idea: "fail-closed idea" });
 		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "only component" }])}'`);
@@ -1070,6 +1074,40 @@ describe("deep-interview-state CLI main()", () => {
 		// A valid threshold still lands.
 		run(`init --initial-idea 'x' --threshold 0.15`);
 		expect((rawState()["state"] as Record<string, unknown>)["threshold"]).toBe(0.15);
+	});
+
+	// UC13 — the counterweight that makes UC5's strictness safe rather than a wedge. UC5
+	// pins what the guard refuses; nothing pinned what it must still ALLOW, so a future
+	// "simplification" to "refuse every write while disputed" would pass the whole suite
+	// while stranding the interview with no way to record an honest ambiguity rise. The
+	// guard is directional by design — SKILL.md tells the interviewer ambiguity may come
+	// back HIGHER after a reversal, which is only usable if raising it is permitted.
+	test("UC13: while a dispute is unresolved, raising or holding ambiguity stays allowed; only lowering is refused", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "directional guard idea" });
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "only component" }])}'`);
+		run(`update --append-round '${JSON.stringify({ n: 1, component: "c1", scores: scoredDims() })}'`);
+		run("update --current-ambiguity 0.5");
+		run(`update --establish-fact '{"id":"f1","statement":"uses REST"}'`);
+		run("update --dispute-fact f1");
+
+		const read = () =>
+			(rawState()["state"] as Record<string, unknown>)["current_ambiguity"] as number;
+
+		// Raising: the reversal genuinely made the interview less certain.
+		run("update --current-ambiguity 0.6");
+		expect(read()).toBe(0.6);
+		// Holding: a round that settles nothing either way.
+		run("update --current-ambiguity 0.6");
+		expect(read()).toBe(0.6);
+		// Lowering: the one direction the open dispute forbids.
+		expect(() => run("update --current-ambiguity 0.5")).toThrow();
+		expect(read()).toBe(0.6);
+
+		// Superseding the dispute releases the block — the documented way out.
+		run(`update --establish-fact '{"id":"f2","statement":"uses gRPC","supersedes":"f1"}'`);
+		run("update --current-ambiguity 0.5");
+		expect(read()).toBe(0.5);
 	});
 
 	// UC12 — threshold is the OTHER operand of `current_ambiguity > threshold`, so it lives
