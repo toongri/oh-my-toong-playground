@@ -1053,6 +1053,49 @@ describe("deep-interview-state CLI main()", () => {
 		expect(after).toBe(before);
 	});
 
+	// Closed [0,1] range guard. The scoring contract defines ambiguity on a 0.0–1.0
+	// scale, but Number.isFinite alone admits any finite value. The two ends fail in
+	// OPPOSITE directions, which is why neither is caught by the other's guard:
+	//   below 0 — Math.max(reported, floor) clamps it away, so current_ambiguity never
+	//             goes negative; the out-of-contract figure still lands verbatim in
+	//             reported_ambiguity, the field the audit trail is read from.
+	//   above 1 — nothing clamps downward, so the value persists into current_ambiguity
+	//             and pins the Stop-hook's `ambiguity > threshold` cross-check
+	//             permanently true, blocking every done token until a valid write lands.
+	// Refuse both ends at the boundary rather than persisting an undefined value.
+	test.each([["-1"], ["-0.5"], ["5"], ["1.5"]])(
+		"update --current-ambiguity %s (outside closed 0-1 range): CLI exits non-zero; state file byte-unchanged",
+		(value) => {
+			writeSeed();
+			initDeepInterviewState(SID, { initial_idea: "range guard idea" });
+			run("update --current-ambiguity 0.3");
+
+			const path = resolveStatePath(SID);
+			const before = readFileSync(path, "utf8");
+
+			expect(() => run(`update --current-ambiguity ${value}`)).toThrow();
+
+			expect(readFileSync(path, "utf8")).toBe(before);
+		},
+	);
+
+	// The range is CLOSED — both endpoints are legal. 1.0 is the seeded starting
+	// ambiguity and 0 is a legitimate fully-converged claim, so an off-by-one guard
+	// that rejected either endpoint would break the normal interview lifecycle.
+	test.each([
+		["0", 0],
+		["1", 1],
+	])("update --current-ambiguity %s (closed-range endpoint) is accepted", (value, expected) => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "range endpoint idea" });
+
+		run(`update --current-ambiguity ${value}`);
+
+		const nested = rawState()["state"] as Record<string, unknown>;
+		expect(nested["current_ambiguity"]).toBe(expected);
+		expect(nested["reported_ambiguity"]).toBe(expected);
+	});
+
 	test.each([["0x1a"]])(
 		"update --current-ambiguity %s (non-decimal format): CLI exits non-zero; state file byte-unchanged",
 		(value) => {
