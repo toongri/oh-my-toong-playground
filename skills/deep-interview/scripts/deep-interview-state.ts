@@ -22,7 +22,7 @@
  *          [--challenge-mode <name>]
  *          [--append-provenance-item '<json>'] (append one {evidence_id, label} item to evidence_provenance)
  *          [--append-stance <stance>]          (append one stance string to stance_history; ordered, NOT deduped)
- *          [--establish-fact '<json>']         (append one {id, statement, component?, supersedes?} active
+ *          [--establish-fact '<json>']         (append one {id, statement, supersedes?} active
  *                                                established_fact; `supersedes` marks that disputed
  *                                                predecessor superseded, releasing its floor pressure)
  *          [--dispute-fact <id>]                (mark an established_fact disputed by id; raises the
@@ -162,15 +162,12 @@ export interface EstablishedFact {
 	statement: string;
 	disputed: boolean;
 	superseded_by: string | null;
-	/** Optional topology component id this fact is about. */
-	component?: string;
 }
 
 /** Caller-supplied shape for establishing a new fact via `update --establish-fact`. */
 export interface EstablishedFactInput {
 	id: string;
 	statement: string;
-	component?: string;
 	/**
 	 * Id of the disputed fact this new fact replaces. Supplying it performs the
 	 * disputed → superseded transition on that predecessor — its `superseded_by`
@@ -488,7 +485,6 @@ export function updateDeepInterviewState(
 						statement: input.statement,
 						disputed: false,
 						superseded_by: null,
-						component: input.component,
 					},
 				];
 				if (input.supersedes !== undefined) {
@@ -633,6 +629,12 @@ function activeDisputedFacts(state: DeepInterviewStateContent | undefined | null
  * excluded from floor pressure) that have at least one null clarity_scores dimension.
  * disputed_count counts established_facts that are disputed and not yet superseded
  * (activeDisputedFacts) — a user reversal raises this term without any scorer re-call.
+ * It is interview-GLOBAL, deliberately unlike the active-only term above: a fact is an
+ * assertion about the design rather than a property of one component, so there is nothing
+ * to scope it by. The deferred-component exclusion documented at the Topology Enumeration
+ * Gate — the Round 0 step where every component is confirmed either active or explicitly
+ * deferred — reads "excluded from active-component floor pressure": a statement about
+ * counting components, which does not extend to facts.
  * auto_answer_ratio still reads as 0 — its backing state field (auto_answered_rounds
  * tracking) doesn't exist yet and is out of this story's scope.
  */
@@ -974,18 +976,16 @@ function main(): void {
 				!isRecord(parsed) ||
 				typeof parsed["id"] !== "string" ||
 				typeof parsed["statement"] !== "string" ||
-				(parsed["component"] !== undefined && typeof parsed["component"] !== "string") ||
 				(parsed["supersedes"] !== undefined && typeof parsed["supersedes"] !== "string")
 			) {
 				process.stderr.write(
-					`deep-interview-state update: --establish-fact: must be {"id":"<str>","statement":"<str>","component"?:"<str>","supersedes"?:"<str>"}\n`,
+					`deep-interview-state update: --establish-fact: must be {"id":"<str>","statement":"<str>","supersedes"?:"<str>"}\n`,
 				);
 				process.exit(1);
 			}
 			establishFact = {
 				id: parsed["id"],
 				statement: parsed["statement"],
-				component: typeof parsed["component"] === "string" ? parsed["component"] : undefined,
 				supersedes: typeof parsed["supersedes"] === "string" ? parsed["supersedes"] : undefined,
 			};
 		}
@@ -1076,8 +1076,7 @@ function main(): void {
 				"         [--challenge-mode <name>]\n" +
 				'         [--append-provenance-item \'{"evidence_id":"<id>","label":"<label>"}\']\n' +
 				"         [--append-stance <stance>]  (ordered, not deduped; for Dialectic Rhythm Guard)\n" +
-				'         [--establish-fact \'{"id":"<id>","statement":"<text>","component"?:"<comp-id>",\n' +
-				'                             "supersedes"?:"<disputed-id>"}\']\n' +
+				'         [--establish-fact \'{"id":"<id>","statement":"<text>","supersedes"?:"<disputed-id>"}\']\n' +
 				"                                (supersedes: resolves that disputed fact — releases its +0.10\n" +
 				"                                 floor pressure. Refused unless it names an unresolved disputed fact)\n" +
 				"         [--dispute-fact <id>]  (marks an established_fact disputed; raises the ambiguity\n" +
