@@ -966,6 +966,32 @@ describe("deep-interview-state CLI main()", () => {
 		expect(readFileSync(path, "utf8")).toBe(before);
 	});
 
+	// UC8 — the transition gate must judge the state the write PRODUCES, not the one it
+	// started from. Scoring a component and dropping ambiguity in a single `update` is
+	// exactly the move UC5 refuses; batching the two flags into one invocation must not
+	// buy an exemption. Whether the caller sends one call or two is a caller convenience,
+	// never a semantic difference.
+	test("UC8: a combined --append-round + --current-ambiguity write is refused on the same terms as two separate writes", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "combined write idea" });
+		run(`set-topology --json '${JSON.stringify([{ id: "c1", name: "only component" }])}'`);
+		run("update --current-ambiguity 0.5");
+		run(`update --establish-fact '{"id":"f1","statement":"uses REST"}'`);
+		run("update --dispute-fact f1");
+
+		const path = resolveStatePath(SID);
+		const before = readFileSync(path, "utf8");
+
+		// One invocation carrying BOTH the six scores and the ambiguity drop.
+		expect(() =>
+			run(
+				`update --append-round '${JSON.stringify({ n: 1, component: "c1", scores: scoredDims() })}' --current-ambiguity 0`,
+			),
+		).toThrow();
+
+		expect(readFileSync(path, "utf8")).toBe(before);
+	});
+
 	// ---------------------------------------------------------------------------
 	// non-finite --current-ambiguity guard: `Number(reported)` on a non-numeric or
 	// non-finite CLI value silently produces NaN, which `JSON.stringify` then
