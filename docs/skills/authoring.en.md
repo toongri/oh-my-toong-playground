@@ -176,5 +176,6 @@ What do you need to produce?
 - Related skill pages:
   - [Core Pipeline](./core-pipeline.en.md)
   - [Review & Quality](./review-quality.en.md)
+  - [Research](./research.en.md)
   - [Knowledge Graph Pins](./knowledge-graph-pins.en.md)
   - [Utilities & Personal Tools](./utilities-personal.en.md)

@@ -36,5 +36,6 @@ HUD는 Claude Code의 statusLine에 Oh-My-Toong 운영 상태를 실시간으로
 - [README](../../README.md) — 프로젝트 개요
 - [핵심 파이프라인 스킬](./core-pipeline.md) — deep-interview, prometheus, sisyphus
 - [리뷰 품질 스킬](./review-quality.md) — code-review, orchestrate-review, qa
+- [리서치 스킬](./research.md) — ultraresearch, insane-browsing
 - [저작 스킬](./authoring.md) — 문서·콘텐츠 저작 + 공용 유틸
 - [지식 그래프 & Pins](./knowledge-graph-pins.md) — pin 스킬 시리즈

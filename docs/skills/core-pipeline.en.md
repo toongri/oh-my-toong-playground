@@ -6,12 +6,13 @@ oh-my-toong is a library that version-controls AI agent configuration centrally 
 
 For skills in other areas, see the separate documents.
 
-- [Code/design review and quality](./review-quality.md)
-- [Docs, slides, and PR authoring](./authoring.md)
-- [Knowledge graph (pins)](./knowledge-graph-pins.md)
-- [Utilities and personal workflows](./utilities-personal.md)
+- [Code/design review and quality](./review-quality.en.md)
+- [Research](./research.en.md)
+- [Docs, slides, and PR authoring](./authoring.en.md)
+- [Knowledge graph (pins)](./knowledge-graph-pins.en.md)
+- [Utilities and personal workflows](./utilities-personal.en.md)
 
-For the full picture, see the [README](../../README.md).
+For the full picture, see the [README](../../README.en.md).
 
 ---
 
@@ -225,6 +226,7 @@ If skills are the *methodologies*, agents are the *delegation targets*. sisyphus
 
 - [README](../../README.en.md) — project overview and the central-management + per-project-differentiation story
 - [Code/design review and quality](./review-quality.en.md)
+- [Research](./research.en.md)
 - [Docs, slides, and PR authoring](./authoring.en.md)
 - [Knowledge graph (pins)](./knowledge-graph-pins.en.md)
 - [Utilities and personal workflows](./utilities-personal.en.md)
