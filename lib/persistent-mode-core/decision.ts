@@ -52,6 +52,22 @@ function formatContinueOutput(): HookOutput {
 
 const MAX_PROMPT_LENGTH = 2000;
 
+/**
+ * The 6 clarity dimensions a topology component is scored on. Duplicated from
+ * skills/deep-interview/scripts/deep-interview-state.ts (CLARITY_DIMENSIONS), which
+ * owns the list — importing it here would point this hook library at a skill script,
+ * inverting the dependency direction. Kept as a literal so the Closure Guard
+ * completeness check below reads the same 6 keys the writer seeds.
+ */
+const DEEP_INTERVIEW_CLARITY_DIMENSIONS = [
+	"intent",
+	"outcome",
+	"scope",
+	"constraints",
+	"success",
+	"context",
+] as const;
+
 function truncateText(text: string, maxLength: number): string {
 	if (text.length > maxLength) {
 		return text.substring(0, maxLength) + `...[truncated from ${text.length} chars]`;
@@ -465,6 +481,63 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// Terminal marker — interview already concluded. Delete the orphan unconditionally.
 			cleanupDeepInterviewState(sessionId);
 		} else if (detectDeepInterviewDone(lastAssistantMessage)) {
+			// UC10 (topology-floor-evolution Stage 5): a done-token alone is not proof of
+			// genuine convergence — the interviewer LLM can claim done prematurely. Cross-
+			// validate against the code-enforced state.current_ambiguity/state.threshold
+			// (computeAmbiguityFloor's clamp target) before honoring the token.
+			// Fail-open: current_ambiguity/threshold absent (legacy/foreign interview shape)
+			// falls through to the existing cleanup. Liveness-gated like the no-token block
+			// branch below: a TTL-stale interview is already a corpse — cross-checking it
+			// would wedge the session on a dead interview forever, so stale states also
+			// fall through to cleanup regardless of ambiguity.
+			// Fail-open is a promise about VALUE, not key presence. A NaN written by an
+			// unguarded Number() serializes to `null`, which survives an `!== undefined`
+			// test and then coerces to 0 inside the comparison: a null threshold makes every
+			// positive ambiguity read as unconverged and wedges the interview forever, the
+			// exact opposite of the fall-through promised above. Requiring both operands to
+			// be finite numbers is what actually delivers it — and it makes the mirror case
+			// (a null ambiguity, where `null > 0.15` merely happens to read false) fall open
+			// by decision rather than by coercion luck.
+			const ambiguity = deepInterviewStateRaw.state?.current_ambiguity;
+			const threshold = deepInterviewStateRaw.state?.threshold;
+			const magnitudeUnconverged =
+				typeof ambiguity === "number" &&
+				Number.isFinite(ambiguity) &&
+				typeof threshold === "number" &&
+				Number.isFinite(threshold) &&
+				ambiguity > threshold;
+
+			// Closure Guard completeness check (SKILL.md "Closure Guard (precondition)").
+			// The guard is CATEGORICAL — any active component with an unscored dimension
+			// means convergence cannot be declared — so it cannot ride on the magnitude
+			// check above. computeAmbiguityFloor contributes only +0.05 per unscored
+			// component, which loses to the documented default threshold of 0.15: one
+			// unscored component floors ambiguity at 0.05 and two at 0.10, so a done-token
+			// would sail through with nothing scored at all. Encoding a categorical rule as
+			// arithmetic that must out-race a per-run configurable threshold is what left
+			// that hole; this check restates the rule directly and is threshold-independent.
+			// Fail-open on a missing topology, same as the ambiguity fields above. An absent
+			// dimension key counts as unscored (null OR undefined), deliberately wider than
+			// isComponentUnscored's null-only test: a hook reading raw JSON cannot assume the
+			// writer filled every key.
+			const components = deepInterviewStateRaw.state?.topology?.components;
+			const hasUnscoredActiveComponent =
+				Array.isArray(components) &&
+				components.some(
+					(component) =>
+						component?.status === "active" &&
+						DEEP_INTERVIEW_CLARITY_DIMENSIONS.some((dim) => {
+							const score = component?.clarity_scores?.[dim];
+							return score === null || score === undefined;
+						}),
+				);
+
+			if (
+				(magnitudeUnconverged || hasUnscoredActiveComponent) &&
+				isStateLive(deepInterviewStateRaw, nowEpoch)
+			) {
+				return formatBlockOutput(buildDeepInterviewContinuationMessage());
+			}
 			cleanupDeepInterviewState(sessionId);
 		} else if (
 			!isPristine("deep-interview", toRecord(deepInterviewStateRaw)) &&

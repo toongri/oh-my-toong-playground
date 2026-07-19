@@ -40,18 +40,33 @@ If candidates exist, present them via AskUserQuestion with one option per candid
 
 If no candidates exist, say so and proceed fresh. The branch never renames on its own — adoption requires an explicit user selection.
 
-## Brownfield vs Greenfield Weights
+## Ambiguity Weights
 
-| Dimension | Greenfield | Brownfield |
-|-----------|-----------|------------|
-| Intent Clarity | 30% | 27% |
-| Outcome Clarity | 25% | 22% |
-| Scope Clarity | 20% | 18% |
-| Constraint Clarity | 15% | 14% |
-| Success Criteria | 10% | 9% |
-| Context Clarity | N/A | 10% |
+Single 6-dimension weighted formula — no greenfield/brownfield branch; every component is scored on all 6 dimensions, always (mirrors `SKILL.md`'s canonical formula and the `prometheus/SKILL.md` decision-checklist table):
 
-Brownfield adds Context Clarity because modifying existing code safely requires understanding the system being changed.
+| Dimension | Weight |
+|-----------|--------|
+| Intent Clarity | 27% |
+| Outcome Clarity | 22% |
+| Scope Clarity | 18% |
+| Constraint Clarity | 14% |
+| Success Criteria | 9% |
+| Context Clarity | 10% |
+
+## Ambiguity Floor (code-enforced)
+
+The interviewer LLM's self-reported ambiguity is never trusted at face value. `deep-interview-state.ts` computes a deterministic floor at write time and clamps the reported value upward against it:
+
+`floor = 0.10 × disputed_count + 0.05 × unscored_component_count + 0.05 × auto_answer_ratio`
+`effective_ambiguity = max(reported_ambiguity, floor)`
+
+- `disputed_count` — established facts currently disputed (raised, not yet superseded). Interview-global, not per-component: a fact is an assertion about the design, and disputing one is a user reversal that pressures the whole interview. This is deliberately unlike `unscored_component_count` below, whose active-only scope follows from it counting components.
+- `unscored_component_count` — active topology components with at least one of the 6 dimensions still unscored.
+- `auto_answer_ratio` — fraction of rounds answered automatically rather than by the user.
+
+Every state write also runs `validateScoredTransition`, which fail-closed rejects (exit 1, state left unchanged) an ambiguity **decrease** while an unresolved disputed fact remains active and the interview already carries clarity scoring — the code-enforced guard against false convergence that honor-system self-scoring cannot provide on its own.
+
+The scoring condition reads the interview's standing state, not the individual write: a later round that lowers ambiguity without re-scoring anything is refused just the same, because scoring and the drop can be split across two calls and a per-write check would be bypassed by sending them separately. This is not a wedge — raising or holding ambiguity stays allowed while a dispute is open, and superseding the disputed fact releases the block. Only lowering is refused, and only while the dispute stands.
 
 ## Challenge Agent Modes
 

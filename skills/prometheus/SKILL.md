@@ -218,10 +218,11 @@ After loading context, classify the user's request. Classification determines in
 
 **Ambiguity Score**: `Ambiguity = 1 − Σ(clarityᵢ × weightᵢ)`
 
-| Variant | Dimensions | Weights |
-|---------|-----------|---------|
-| **Greenfield** | Intent, Outcome, Scope, Constraints, Success | 0.30, 0.25, 0.20, 0.15, 0.10 |
-| **Brownfield** | Intent, Outcome, Scope, Constraints, Success, Context | 0.27, 0.22, 0.18, 0.14, 0.09, 0.10 |
+Single 6-dimension weighted formula — no greenfield/brownfield branch; every component is scored on all 6 dimensions, always (mirrors deep-interview's `SKILL.md` canonical formula):
+
+| Dimensions | Weights |
+|-----------|---------|
+| Intent, Outcome, Scope, Constraints, Success, Context | 0.27, 0.22, 0.18, 0.14, 0.09, 0.10 |
 
 Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below.
 **All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below.
@@ -454,7 +455,7 @@ Decomposition Formalism (line 161-170) requires MECE + Atomicity + Anti-pattern 
 
 ```
 ## Decomposition Self-Check
-- Ambiguity Score (recalculated post-AC): <value> (variant: Greenfield/Brownfield)
+- Ambiguity Score (recalculated post-AC): <value>
 - MECE validation:
   - Overlap: <none / found at TODO X & Y — resolved by ...>
   - Gap: <none / found in scope area Z — added TODO N>
@@ -604,7 +605,7 @@ Round {n} | Ambiguity: {score}%
 | Scope                 | {s}   | {gap or "Clear"}    |
 | Constraints           | {s}   | {gap or "Clear"}    |
 | Success               | {s}   | {gap or "Clear"}    |
-| Context (brownfield)  | {s}   | {gap or "Clear"}    |
+| Context               | {s}   | {gap or "Clear"}    |
 
 → Next question targets: {weakest dimension}
 ```
