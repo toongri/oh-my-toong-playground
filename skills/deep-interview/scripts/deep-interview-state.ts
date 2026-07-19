@@ -663,10 +663,22 @@ function hasScoredClarityDimension(state: DeepInterviewStateContent | undefined 
 /**
  * Fail-closed transition gate (topology-floor-evolution Stage 3; qa-state.ts:257-269
  * incCycle's "refuse before any write" idiom, adapted for a two-condition transition):
- * refuses a write that, WHILE an active trigger exists (an unresolved disputed
- * established_fact — see activeDisputedFacts), simultaneously claims BOTH a
- * clarity-dimension improvement (hasScoredClarityDimension) and an ambiguity decrease
- * (effectiveAmbiguity below the currently-stored current_ambiguity). Throws — the
+ * refuses an ambiguity DECREASE (effectiveAmbiguity below the currently-stored
+ * current_ambiguity) while an active trigger exists (an unresolved disputed
+ * established_fact — see activeDisputedFacts) and the interview already carries clarity
+ * scoring (hasScoredClarityDimension).
+ *
+ * The scoring condition is a STANDING STATE, not a per-write transition: it asks whether
+ * any active component carries a score at all, not whether THIS write applied one. That
+ * is deliberate and load-bearing. Scoring and the drop can be split across two calls, so
+ * a gate that fired only when a single write did both would be bypassed by sending them
+ * separately — the same call-shape asymmetry the prospective-state ordering below exists
+ * to remove. Narrowing it to an in-write transition measurably re-opens that bypass: it
+ * makes UC5, UC6 and UC10 fail.
+ *
+ * The block is therefore directional, not a wedge, and needs no escape valve beyond the
+ * documented one: raising or holding ambiguity stays allowed while a dispute is open, and
+ * superseding the disputed fact releases the block outright (UC13 pins both). Throws — the
  * caller (updateDeepInterviewState) passes the PROSPECTIVE state (prior plus the same
  * write's own round scores and fact-lifecycle edits, with current_ambiguity not yet
  * reassigned) and calls this BEFORE mergeWrite/writeFileNoCreate, so a refusal never
@@ -685,9 +697,10 @@ export function validateScoredTransition(
 	const dimensionImproved = hasScoredClarityDimension(state);
 	if (ambiguityDropped && dimensionImproved) {
 		throw new Error(
-			"validateScoredTransition: refused — an unresolved disputed established_fact blocks a write " +
-				"that simultaneously claims a clarity-dimension improvement and an ambiguity decrease; " +
-				"resolve it by establishing the replacement fact that supersedes it: " +
+			"validateScoredTransition: refused — an unresolved disputed established_fact blocks an " +
+				"ambiguity decrease while this interview already carries clarity scoring, whether or not " +
+				"this particular write applied a score. Raising or holding ambiguity is still allowed; " +
+				"to lower it, resolve the dispute by establishing the replacement fact that supersedes it: " +
 				`update --establish-fact '{"id":"<new-id>","statement":"<text>","supersedes":"<disputed-id>"}'`,
 		);
 	}
