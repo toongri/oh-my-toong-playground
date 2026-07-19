@@ -20,7 +20,7 @@ const CODEX_FIXTURE_LINES = [
 	"See CLAUDE.md for repository overview.",
 	"Skill(humanizer)",
 	'Skill(skill: "sisyphus")',
-	'Skill("superpowers:test-driven-development")',
+	'Skill("test-driven-development")',
 	'Skill(skill: "${entry.name}")',
 	"MUST invoke via Skill()",
 	"WebFetch call forbidden",
@@ -128,13 +128,10 @@ describe("codex 규칙 — `Skill(` 형태", () => {
 		);
 	});
 
-	it('\'Skill("superpowers:test-driven-development")\' -> "the superpowers:test-driven-development skill"', () => {
+	it('\'Skill("test-driven-development")\' -> "the test-driven-development skill"', () => {
 		expect(
-			applyRewriteRules(
-				'Skill("superpowers:test-driven-development")',
-				PLATFORM_REWRITE_RULES.codex,
-			),
-		).toBe("the superpowers:test-driven-development skill");
+			applyRewriteRules('Skill("test-driven-development")', PLATFORM_REWRITE_RULES.codex),
+		).toBe("the test-driven-development skill");
 	});
 
 	it('\'Skill(skill: "${entry.name}")\' -> "the ${entry.name} skill"', () => {

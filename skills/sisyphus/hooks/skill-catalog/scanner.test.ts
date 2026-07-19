@@ -172,7 +172,7 @@ describe("readEnabledPlugins", () => {
 			join(claudeDir, "settings.json"),
 			JSON.stringify({
 				enabledPlugins: {
-					"superpowers@claude-plugins-official": true,
+					"frontend-design@claude-plugins-official": true,
 					"other-plugin@vendor": true,
 				},
 			}),
@@ -181,7 +181,7 @@ describe("readEnabledPlugins", () => {
 
 		const result = readEnabledPlugins();
 		expect(result.size).toBe(2);
-		expect(result.has("superpowers@claude-plugins-official")).toBe(true);
+		expect(result.has("frontend-design@claude-plugins-official")).toBe(true);
 		expect(result.has("other-plugin@vendor")).toBe(true);
 	});
 
@@ -193,7 +193,7 @@ describe("readEnabledPlugins", () => {
 			join(claudeDir, "settings.json"),
 			JSON.stringify({
 				enabledPlugins: {
-					"superpowers@claude-plugins-official": true,
+					"frontend-design@claude-plugins-official": true,
 					"disabled-plugin@vendor": false,
 				},
 			}),
@@ -202,7 +202,7 @@ describe("readEnabledPlugins", () => {
 
 		const result = readEnabledPlugins();
 		expect(result.size).toBe(1);
-		expect(result.has("superpowers@claude-plugins-official")).toBe(true);
+		expect(result.has("frontend-design@claude-plugins-official")).toBe(true);
 		expect(result.has("disabled-plugin@vendor")).toBe(false);
 	});
 });

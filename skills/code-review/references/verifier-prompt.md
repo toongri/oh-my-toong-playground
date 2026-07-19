@@ -13,13 +13,13 @@ code deeply. This is the precision gate behind the finders' recall.
 
 | Placeholder | Source |
 |-------------|--------|
-| `{RANGE}` | the review range from Step 1 (e.g. `origin/main...HEAD`) |
+| `{RANGE}` | the review range from Step 0 (e.g. `origin/main...HEAD`) |
 | `{CANDIDATE_FILE}` | the candidate's file path |
 | `{CANDIDATE_LINE}` | the candidate's line (or `?` if none) |
 | `{CANDIDATE_SUMMARY}` | the candidate's one-line summary |
 | `{CANDIDATE_FAILURE_SCENARIO}` | the candidate's stated failure scenario / cost |
 | `{CANDIDATE_FOUND_BY}` | the angle(s) that surfaced it |
-| `{INTENT}` | Step 0 intent/requirements (or `N/A — code-quality-only review`) |
+| `{INTENT}` | Step 1 intent/requirements (or `N/A — code-quality-only review`) |
 
 Everything below the marker is the verifier's prompt.
 

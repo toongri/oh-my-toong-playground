@@ -818,9 +818,9 @@ No separate verify tasks exist for these.
 ```
 Task: "Add input validation to the registration API endpoint"
 Skill catalog injected at session start contains:
-- superpowers:test-driven-development
-- superpowers:systematic-debugging
-- superpowers:verification-before-completion
+- test-driven-development
+- diagnose
+- qa
 
 Sisyphus is about to delegate this code implementation task to sisyphus-junior.
 ```
@@ -830,10 +830,10 @@ Sisyphus is about to delegate this code implementation task to sisyphus-junior.
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Evaluates skill catalog before delegation | Sisyphus reviews the skill catalog (looks for `<skill-catalog>` or session skill list) BEFORE constructing the delegation prompt |
-| V2 | Identifies TDD as relevant to code implementation | Recognizes that superpowers:test-driven-development overlaps with a code implementation task — writing new validation code |
-| V3 | Section 7 includes TDD with exact Skill() syntax | Section 7 contains `Skill(skill: "superpowers:test-driven-development")` — not vague "use testing skill" |
+| V2 | Identifies TDD as relevant to code implementation | Recognizes that test-driven-development overlaps with a code implementation task — writing new validation code |
+| V3 | Section 7 includes TDD with exact Skill() syntax | Section 7 contains `Skill(skill: "test-driven-development")` — not vague "use testing skill" |
 | V4 | Section 7 includes invocation timing | The entry specifies WHEN to invoke (e.g., "Invoke BEFORE writing implementation code") — not just the skill name |
-| V5 | Non-relevant skills correctly omitted | systematic-debugging and verification-before-completion are NOT included — they don't overlap with the implementation task |
+| V5 | Non-relevant skills correctly omitted | diagnose and qa are NOT included — they don't overlap with the implementation task |
 
 ---
 
@@ -845,8 +845,8 @@ Sisyphus is about to delegate this code implementation task to sisyphus-junior.
 ```
 Task: "Update the README.md with new API endpoint documentation"
 Skill catalog contains:
-- superpowers:test-driven-development
-- superpowers:systematic-debugging
+- test-driven-development
+- diagnose
 
 Sisyphus is about to delegate this documentation-only task to sisyphus-junior.
 No code changes involved — purely updating markdown documentation.
@@ -857,28 +857,27 @@ No code changes involved — purely updating markdown documentation.
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Evaluates skill catalog before delegation | Sisyphus reviews the skill catalog even for documentation tasks — evaluation is MANDATORY for every delegation |
-| V2 | Correctly determines no skills are relevant | TDD is for code implementation, systematic-debugging is for bugs — neither overlaps with documentation writing |
+| V2 | Correctly determines no skills are relevant | TDD is for code implementation, diagnose is for debugging/root-cause — neither overlaps with documentation writing |
 | V3 | Section 7 is empty or omitted WITH evaluation | Section 7 is explicitly empty or omitted — but only because evaluation concluded no skills are relevant, not because evaluation was skipped |
 | V4 | Does NOT force-include TDD for non-code task | Does NOT rationalize "documentation needs testing too" to include TDD — the skill is specifically for code implementation |
 
 ---
 
-## Scenario S-32: Skill Selection Protocol — Multiple Relevant Skills
+## Scenario S-32: Skill Selection Protocol — Loadable Skill vs Routed Concern
 
-**Primary Technique:** Skill Selection Protocol — when multiple cataloged skills overlap with task domain, all are included
+**Primary Technique:** Skill Selection Protocol — when a task mixes a debugging concern with a code fix, load the executor skill (TDD) into the junior delegation, route the diagnosis to oracle, and run verification as a verify task — never cram a diagnosis or verification skill into the junior prompt
 
 **Input:**
 ```
 Task: "Fix the flaky test in payment.test.ts that intermittently fails with timeout"
 Skill catalog contains:
-- superpowers:test-driven-development
-- superpowers:systematic-debugging
-- superpowers:verification-before-completion
+- test-driven-development
+- diagnose
+- qa
 
-The task involves debugging an intermittent test failure AND modifying test code.
+The task mixes an unknown-root-cause debugging concern AND test-code modification.
 Root cause is UNKNOWN — no prior oracle diagnosis has been performed.
 The failure is intermittent (passes sometimes, fails with timeout other times).
-Junior must investigate the root cause AND implement the fix.
 ```
 
 **Verification Points:**
@@ -886,10 +885,10 @@ Junior must investigate the root cause AND implement the fix.
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Evaluates ALL cataloged skills against the task | Each skill in the catalog is evaluated — not just the first match |
-| V2 | systematic-debugging included for flaky bug investigation | Recognizes flaky/intermittent test failure with unknown root cause as a debugging scenario that overlaps with systematic-debugging |
-| V3 | TDD included for test code modification | Recognizes that modifying test code overlaps with test-driven-development |
-| V4 | Each skill has exact Skill() syntax and timing | Both entries use `Skill(skill: "...")` format with specific invocation timing (e.g., "systematic-debugging FIRST to diagnose, then TDD for fix") |
-| V5 | Invocation order reflects logical sequence | Debugging skill is specified to invoke BEFORE TDD — diagnose the root cause first, then apply TDD to fix |
+| V2 | diagnose recognized as relevant but ROUTED, not loaded | The unknown-root-cause investigation is recognized as a diagnose concern that routes to oracle as a separate diagnose task (RULE 5: diagnose → oracle, NEVER junior) — diagnose is NOT injected into the junior delegation |
+| V3 | qa recognized but handled as a verify task, not loaded | Confirming the fix holds is recognized as a verification concern handled by a separate verify task sisyphus runs inline (RULE 4) — qa is NOT injected into the junior delegation |
+| V4 | TDD loaded for the test-code fix | Modifying test code overlaps with test-driven-development; TDD is the one skill injected into the junior implement task's Section 7, using exact `Skill(skill: "test-driven-development")` syntax with timing (invoke before writing the fix) |
+| V5 | Order expressed as task decomposition | The sequence is diagnose (oracle) → implement/fix (junior + TDD) → verify (inline) — expressed as decomposed, sequenced tasks, NOT as multiple skills loaded into one delegation |
 
 ---
 

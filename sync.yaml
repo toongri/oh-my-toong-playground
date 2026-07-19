@@ -32,6 +32,12 @@ skills:
     - component: ultragoal
       platforms: [claude]
     - agent-browser
+    - component: receiving-code-review
+      platforms: [claude]
+    - component: test-driven-development
+      platforms: [claude]
+    - component: writing-skills
+      platforms: [claude]
 
 scripts:
   items:
@@ -45,5 +51,6 @@ scripts:
 rules:
   items:
     - communication-style
+    - continuation-contract
     - convention-grounding
     - verification-discipline
