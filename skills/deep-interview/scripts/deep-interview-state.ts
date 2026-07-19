@@ -383,9 +383,17 @@ export function updateDeepInterviewState(
 			// fail-opening the Stop-hook's `ambiguity > threshold` cross-check
 			// (hooks/persistent-mode/decision.ts). Thrown before any assignment to
 			// updatedState, so the state file stays byte-identical (UC5 idiom above).
-			if (!Number.isFinite(reported)) {
+			// Closed [0,1] range guard: the scoring contract defines ambiguity on a 0.0–1.0
+			// scale, and the two ends escape in OPPOSITE directions, so neither is covered by
+			// the other. Below 0, Math.max(reported, floor) clamps the value away — but the
+			// out-of-contract figure still lands verbatim in reported_ambiguity, the audit
+			// field. Above 1, nothing clamps downward: the value persists into
+			// current_ambiguity and pins the Stop-hook's `ambiguity > threshold` cross-check
+			// permanently true, blocking every done token until a valid write lands. Both
+			// endpoints stay legal — 1.0 is the seeded starting ambiguity, 0 a converged claim.
+			if (!Number.isFinite(reported) || reported < 0 || reported > 1) {
 				throw new Error(
-					`update: refused — current-ambiguity must be a finite number, got ${String(reported)}`,
+					`update: refused — current-ambiguity must be a finite number within the closed 0-1 range, got ${String(reported)}`,
 				);
 			}
 			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: same trusted structural pass-through as other readers in this module
