@@ -627,11 +627,19 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 		expect(skill).toContain("REPORT.html");
 	});
 
-	test("REPORT is declared inside the Artifact Contract section", () => {
-		const idx = skill.indexOf("<Artifact_Contract>");
+	test("REPORT is declared inside its own dedicated subsection, with the SSOT-deliverable and Phase-0-derived-TOC contract stated there", () => {
+		// Scoped to the "## REPORT.md and REPORT.html" subsection itself
+		// (through the next heading), not <Artifact_Contract> to EOF — an
+		// unbounded slice would still contain the bare token "REPORT" even if
+		// this entire subsection (and the SSOT-deliverable / TOC-derivation
+		// contract it states) were deleted outright.
+		const idx = skill.indexOf("## REPORT.md and REPORT.html");
 		expect(idx).toBeGreaterThan(-1);
-		const context = skill.slice(idx);
-		expect(context).toContain("REPORT");
+		const endIdx = skill.indexOf("## Epistemic-instrumentation artifacts", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("is the SSOT deliverable");
+		expect(context).toContain("derived from the Phase 0 axis decomposition");
 	});
 
 	test("REPORT's table of contents is derived from the Phase 0 axis decomposition", () => {
@@ -766,6 +774,14 @@ describe("detection axis — requirement coverage gate", () => {
 	});
 
 	test("blank-Status resolution is an immediate REPORT.md record from journal material already in hand, never a re-launched wave", () => {
+		// The name asserts a PRECONDITION ("material already sits in the
+		// journal"); asserting only the two imperative tokens below leaves that
+		// precondition unchecked — deleting it turns the surviving contract into
+		// "always record immediately, never relaunch," which lets a blank cell
+		// be filled with no material in hand at all (a fabricated `covered`).
+		expect(skill).toContain(
+			"When the covering material already sits in the journal but never made it into REPORT.md",
+		);
 		expect(skill).toContain("record it in REPORT.md immediately");
 		expect(skill).toContain("without relaunching a wave");
 	});
