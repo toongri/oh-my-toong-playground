@@ -4,7 +4,7 @@ English | [한국어](review-quality.md)
 
 # Review & Quality Skills
 
-oh-my-toong's review and quality skills systematically verify the completeness of code, design, slides, and performance. Each skill has a clear review target and role boundary, and they can call each other or be combined.
+oh-my-toong's review and quality skills systematically verify the completeness of code, design, and slides. Each skill has a clear review target and role boundary, and they can call each other or be combined.
 
 ---
 
@@ -17,7 +17,6 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 | `design-review` | Tradeoff tension analysis of designs and plans | Design question, plan doc, architectural concerns | Reviewing an architecture decision or implementation plan |
 | `slides-review` | Visual design review of HTML slides | HTML file path | After create-slides, or when improving HTML slide aesthetics |
 | `qa` | Implementation correctness verification guardian | QA REQUEST (Spec + Scope + verification method) | After implementation is done and needs independent QA |
-| `performance-optimizer` | Systematic performance analysis and optimization cycle | Performance goals, test scenario, current system | Finding bottlenecks and measuring improvement impact |
 
 ---
 
@@ -119,32 +118,6 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 
 ---
 
-### performance-optimizer
-
-**Purpose**: Systematically eliminates performance bottlenecks through a repeated measure → analyze → improve → verify cycle. "Never optimize without measurement" governs the entire workflow.
-
-**What it analyzes and improves**:
-- Establishes a baseline of current performance
-- Identifies bottlenecks across request flow, code, DB, and infrastructure
-- Compares Before/After using the identical test scenario
-- Makes tradeoffs explicit — all optimizations carry a cost
-
-**10-step workflow**:
-1. Define performance goals (SLO)
-2. Design test scenario
-3. Measure baseline
-4. System and code analysis
-5. Identify and prioritize bottlenecks
-6. Design improvements
-7. Implementation plan
-8. Verify improvement impact
-9. Document results
-10. Generate final report (`$OMT_DIR/performance-reports/*.md`)
-
-**When to use**: When a performance problem has been identified or you need to systematically verify SLO achievement. Approaches the problem as an iterative cycle, not a one-off fix.
-
----
-
 ## Skill Selection Guide
 
 ```
@@ -153,7 +126,6 @@ What is the review target?
   |-- Design or architecture plan   -> design-review
   |-- HTML slides                   -> slides-review
   |-- Implementation done, need QA  -> qa
-  |-- Performance bottleneck        -> performance-optimizer
 
 When you run code-review:
   orchestrate-review coordinates multi-AI finders internally.

@@ -24,9 +24,6 @@ model-map:
     oracle:
       model: gpt-5.6-sol
       effort: high
-    spec-reviewer:
-      model: gpt-5.6-sol
-      effort: high
     tech-claim-examiner:
       model: gpt-5.6-sol
       effort: high

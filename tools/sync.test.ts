@@ -27,6 +27,7 @@ import {
 	deployLocationForManifest,
 	logBackupLocation,
 	cleanupRunBackups,
+	runPreflight,
 	type AdapterMap,
 	type LibSourceRoots,
 } from "./sync.ts";
@@ -40,6 +41,7 @@ import { CodexAdapter } from "./adapters/codex.ts";
 import { cleanupOldBackups, isSafeBackupRoot } from "./lib/backup.ts";
 import { deriveProjectName } from "../lib/omt-dir.ts";
 import { execFileSync } from "child_process";
+import { PreflightGitError } from "./lib/preflight-git.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -5919,5 +5921,221 @@ describe("CLI wiring extraction (logBackupLocation, cleanupRunBackups)", () => {
 		const output = chunks.join("");
 		expect(output).toContain(`${base}/sync-backup`);
 		expect(output).not.toContain("/.sync-backup/");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: CLI wiring extraction (runPreflight)
+//
+// Covers the third piece pulled out of the `import.meta.main` CLI block, same
+// rationale as the logBackupLocation/cleanupRunBackups suite above: the
+// gate's wiring (dryRun-only skip, call order) is the acceptance criterion,
+// not just the underlying assertDefaultBranch / assertCleanWorktree
+// functions (already covered by preflight-git.test.ts).
+// ---------------------------------------------------------------------------
+
+describe("CLI wiring extraction (runPreflight)", () => {
+	let tmpDir: string;
+
+	// Only passed to the fixture-building execFileSync calls below (git
+	// init/commit/remote/push/...), never to runPreflight's own git calls —
+	// those go through preflight-git.ts's runGit, which invokes git at a
+	// fixed absolute path and passes only HOME/XDG_CONFIG_HOME through,
+	// ignoring this object entirely. GIT_CONFIG_GLOBAL/SYSTEM here only keep
+	// fixture construction deterministic regardless of the host's git
+	// config.
+	const GIT_ENV = {
+		...process.env,
+		GIT_AUTHOR_NAME: "T",
+		GIT_AUTHOR_EMAIL: "t@t.com",
+		GIT_COMMITTER_NAME: "T",
+		GIT_COMMITTER_EMAIL: "t@t.com",
+		GIT_CONFIG_GLOBAL: "/dev/null",
+		GIT_CONFIG_SYSTEM: "/dev/null",
+	};
+
+	/**
+	 * git init -b main + one commit, no origin remote — violates
+	 * assertDefaultBranch (origin/HEAD unresolvable) AND assertCleanWorktree
+	 * (untracked file), so the dryRun=true no-op test below actually proves
+	 * dry-run skips both gates, not just the branch one.
+	 */
+	function initViolatingRepo(dir: string): void {
+		fs2.mkdirSync(dir, { recursive: true });
+		execFileSync("git", ["init", "-b", "main", dir], { stdio: "pipe", env: GIT_ENV });
+		execFileSync("git", ["-C", dir, "commit", "--allow-empty", "-m", "init"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		fs2.writeFileSync(path.join(dir, "dirty.txt"), "x");
+	}
+
+	/**
+	 * Repo violating BOTH gates at once: checked out on a non-default branch
+	 * (assertDefaultBranch) AND carrying an untracked file (assertCleanWorktree).
+	 * Used to prove call order — only the first gate's error can surface.
+	 */
+	function initDualViolationRepo(dir: string): void {
+		const bareDir = `${dir}-bare`;
+		fs2.mkdirSync(dir, { recursive: true });
+		execFileSync("git", ["init", "-b", "main", dir], { stdio: "pipe", env: GIT_ENV });
+		execFileSync("git", ["-C", dir, "commit", "--allow-empty", "-m", "init"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		execFileSync("git", ["init", "--bare", "-b", "main", bareDir], { stdio: "pipe" });
+		execFileSync("git", ["-C", dir, "remote", "add", "origin", bareDir], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		execFileSync("git", ["-C", dir, "push", "origin", "main"], { stdio: "pipe", env: GIT_ENV });
+		execFileSync("git", ["-C", dir, "remote", "set-head", "origin", "main"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		execFileSync("git", ["-C", dir, "checkout", "-b", "feature/x"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		fs2.writeFileSync(path.join(dir, "dirty.txt"), "uncommitted");
+	}
+
+	/**
+	 * Single-violation repo: origin wired the same way as
+	 * initDualViolationRepo (origin/HEAD → main), but stays checked out on
+	 * main — assertDefaultBranch passes — with one untracked file, so only
+	 * assertCleanWorktree can fail. Needed because initDualViolationRepo's
+	 * branch violation always shadows assertCleanWorktree; without a fixture
+	 * where assertDefaultBranch passes, assertCleanWorktree is never
+	 * actually exercised.
+	 */
+	function initDirtyOnlyRepo(dir: string): void {
+		const bareDir = `${dir}-bare`;
+		fs2.mkdirSync(dir, { recursive: true });
+		execFileSync("git", ["init", "-b", "main", dir], { stdio: "pipe", env: GIT_ENV });
+		execFileSync("git", ["-C", dir, "commit", "--allow-empty", "-m", "init"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		execFileSync("git", ["init", "--bare", "-b", "main", bareDir], { stdio: "pipe" });
+		execFileSync("git", ["-C", dir, "remote", "add", "origin", bareDir], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		execFileSync("git", ["-C", dir, "push", "origin", "main"], { stdio: "pipe", env: GIT_ENV });
+		execFileSync("git", ["-C", dir, "remote", "set-head", "origin", "main"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		fs2.writeFileSync(path.join(dir, "dirty.txt"), "uncommitted");
+	}
+
+	/**
+	 * Fully-compliant repo: same origin wiring as initDirtyOnlyRepo (origin/HEAD
+	 * → main), checked out on main, no uncommitted changes — passes both
+	 * assertDefaultBranch and assertCleanWorktree. Needed because none of the
+	 * other fixtures in this suite ever let runPreflight(dir, false) return
+	 * normally; without this fixture, a mutant that makes runPreflight
+	 * unconditionally throw after its two assertions still satisfies every
+	 * other test in this describe block.
+	 */
+	function initCleanRepo(dir: string): void {
+		const bareDir = `${dir}-bare`;
+		fs2.mkdirSync(dir, { recursive: true });
+		execFileSync("git", ["init", "-b", "main", dir], { stdio: "pipe", env: GIT_ENV });
+		execFileSync("git", ["-C", dir, "commit", "--allow-empty", "-m", "init"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		execFileSync("git", ["init", "--bare", "-b", "main", bareDir], { stdio: "pipe" });
+		execFileSync("git", ["-C", dir, "remote", "add", "origin", bareDir], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+		execFileSync("git", ["-C", dir, "push", "origin", "main"], { stdio: "pipe", env: GIT_ENV });
+		execFileSync("git", ["-C", dir, "remote", "set-head", "origin", "main"], {
+			stdio: "pipe",
+			env: GIT_ENV,
+		});
+	}
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "run-preflight-test-"));
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("dryRun=true is a no-op even against a violating repo", () => {
+		const dir = path.join(tmpDir, "repo");
+		initViolatingRepo(dir);
+
+		expect(() => runPreflight(dir, true)).not.toThrow();
+	});
+
+	it("dryRun=false runs assertDefaultBranch before assertCleanWorktree — throws on the branch violation first", () => {
+		const dir = path.join(tmpDir, "repo");
+		initDualViolationRepo(dir);
+
+		let caught: unknown;
+		try {
+			runPreflight(dir, false);
+		} catch (err) {
+			caught = err;
+		}
+
+		expect(caught).toBeInstanceOf(PreflightGitError);
+		const message = (caught as PreflightGitError).message;
+		// Only the branch-mismatch message (assertDefaultBranch, called first)
+		// may surface — the dirty-worktree message (assertCleanWorktree) never
+		// gets a chance to run, proving the required call order.
+		expect(message).toContain("feature/x");
+		expect(message).not.toContain("커밋되지 않은 변경사항");
+	});
+
+	it("dryRun=false reaches assertCleanWorktree and throws when only the worktree is dirty", () => {
+		const dir = path.join(tmpDir, "repo");
+		initDirtyOnlyRepo(dir);
+
+		let caught: unknown;
+		try {
+			runPreflight(dir, false);
+		} catch (err) {
+			caught = err;
+		}
+
+		expect(caught).toBeInstanceOf(PreflightGitError);
+		const message = (caught as PreflightGitError).message;
+		expect(message).toContain("커밋되지 않은 변경사항");
+		expect(message).toContain("dirty.txt");
+	});
+
+	it("dryRun=false returns normally against a fully-compliant repo", () => {
+		const dir = path.join(tmpDir, "repo");
+		initCleanRepo(dir);
+
+		expect(() => runPreflight(dir, false)).not.toThrow();
+	});
+
+	// This is a source-text structural assertion, not a runtime check — it
+	// proves the entry-point block still WIRES runPreflight before
+	// createContext, not that the gate fires end-to-end. A rename of either
+	// call would false-RED here (loudly), which is the accepted trade-off:
+	// see AC5.1 (deriveClaudeProjectKey call-site count) above for the same
+	// idiom. Line comments are stripped before searching so `// runPreflight(...)`
+	// (call deleted but left as a dead comment) doesn't count as present.
+	it("AC: import.meta.main calls runPreflight before createContext", () => {
+		const src = fs2.readFileSync(path.join(import.meta.dir, "sync.ts"), "utf8");
+		const main = src
+			.slice(src.indexOf("if (import.meta.main)"))
+			.split("\n")
+			.map((line) => line.replace(/\/\/.*$/, ""))
+			.join("\n");
+		const preflightAt = main.indexOf("runPreflight(rootDir, dryRun)");
+		const contextAt = main.indexOf("createContext(dryRun)");
+		expect(preflightAt).toBeGreaterThan(-1);
+		expect(contextAt).toBeGreaterThan(-1);
+		expect(preflightAt).toBeLessThan(contextAt);
 	});
 });
