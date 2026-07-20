@@ -49,6 +49,7 @@ import { resolveDocsTarget, detectDocsTargetCollisions } from "./lib/path-utils.
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { ProjectKeyError } from "./lib/git-key.ts";
 import { resolveDeployTargets, DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
+import { assertCleanWorktree, assertDefaultBranch, PreflightGitError } from "./lib/preflight-git.ts";
 import { rewriteLibImports } from "./lib/sync-directory.ts";
 import {
 	collectRequiredLibModulesFromSources,
@@ -2208,6 +2209,21 @@ export async function cleanupRunBackups(base: string, dryRun: boolean): Promise<
 	await cleanupOldBackups(base, retentionDays).catch(() => {});
 }
 
+/**
+ * Runs the preflight git gates (assertDefaultBranch → assertCleanWorktree)
+ * before any sync write happens. No-op when dryRun is true — `--dry-run`
+ * previews without touching anything, and gating it would remove the only
+ * pre-commit preview path. Lets PreflightGitError (and anything else)
+ * propagate — the `import.meta.main` entry point is responsible for
+ * logging and exiting on PreflightGitError (see PreflightGitError's own doc
+ * comment for why there is no bypass).
+ */
+export function runPreflight(rootDir: string, dryRun: boolean): void {
+	if (dryRun) return;
+	assertDefaultBranch(rootDir);
+	assertCleanWorktree(rootDir);
+}
+
 // ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
@@ -2224,6 +2240,16 @@ if (import.meta.main) {
 	if (!rootDir) {
 		logError("config.yaml를 찾을 수 없음. 실행 위치를 확인하세요.");
 		process.exit(1);
+	}
+
+	try {
+		runPreflight(rootDir, dryRun);
+	} catch (err) {
+		if (err instanceof PreflightGitError) {
+			logError(err.message);
+			process.exit(1);
+		}
+		throw err;
 	}
 
 	let context: SyncContext;
