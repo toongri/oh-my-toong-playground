@@ -5,6 +5,78 @@
 워크트리를 거느린 `.bare` 컨테이너)면 한 경로가 **여러 워크트리로 fan-out**된다.
 이 해석은 `tools/lib/resolve-deploy-targets.ts`가 담당한다.
 
+## preflight 게이트: default 브랜치 + clean 트리
+
+`make sync`(dry-run 제외)는 워크트리 해석이 시작되기도 전에 OMT 레포 **자신**의
+상태를 검사한다. 검사 대상은 이 OMT 레포 자체이지, 배포 타겟 레포(algocare-home
+등, 아래 절들이 다루는 "워크트리")가 아니다. 게이트는 `tools/lib/preflight-git.ts`에
+있고 `tools/sync.ts`의 진입점에서 순서대로 호출된다(`assertDefaultBranch` →
+`assertCleanWorktree`) — 브랜치가 틀린 게 더 근본적인 문제이므로 브랜치를 먼저
+본다.
+
+- **default 브랜치 게이트** — 현재 브랜치가 `git symbolic-ref
+  refs/remotes/origin/HEAD`로 해석한 default 브랜치가 아니면 non-zero exit.
+  origin/HEAD를 해석할 수 없으면(설정 안 됨) 통과가 아니라 거부한다 — "모르겠으니
+  통과"는 게이트를 무력화하므로 "모르겠으니 거부"로 degrade한다(복구 힌트:
+  `git remote set-head origin -a`). detached HEAD도 거부한다.
+- **clean 트리 게이트** — `git status --porcelain --untracked-files=normal`에
+  staged / unstaged / untracked 중 하나라도 잡히면 non-zero exit.
+  `--untracked-files=normal`은 repo-local/global/`GIT_CONFIG_*`의
+  `status.showUntrackedFiles=no` 설정이 untracked 파일을 숨기는 걸 막기 위해
+  반드시 붙여야 하는 반면, `--ignored`는 여전히 붙이면 안 된다 — gitignored
+  파일은 이 명령의 출력에 안 잡히므로 더티로 세지 않는다. 이 레포의
+  `sync.local.yaml`이 gitignored인데(`.gitignore:12`의 `**/*.local.yaml`) 이걸
+  더티로 세면 `make sync`가 영구히 막힌다.
+- **`--dry-run`은 게이트 대상이 아니다** — `make sync-dry`는 더티 트리나
+  비-default 브랜치에서도 그대로 동작한다. 쓰기가 없으므로 커밋 전 미리보기
+  수단을 남겨두려는 의도적 예외다.
+- **게이트를 끄는 전용 스위치는 없다 — 사고 방지 장치이지 적대자 방지
+  장치는 아니다.** 게이트를 끄는 전용 환경변수도 CLI 플래그도 없다
+  (`tools/lib/preflight-git.ts`의 `GIT_BINARY`/`runGit` 주석 참고 — 고정
+  절대경로 호출로 PATH shim 축이 닫혔다). env는 `HOME`/`XDG_CONFIG_HOME`만
+  통과시킨다 — `GIT_DIR`/`GIT_WORK_TREE`/`GIT_CONFIG_*`처럼 레포를
+  리디렉션하거나 config를 주입하는 축은 계속 막되, 이 둘은 git이 **전역
+  excludes파일**(`$XDG_CONFIG_HOME/git/ignore` → `$HOME/.config/git/ignore`)을
+  찾는 경로라 열어둔다 — 막으면 그 파일로만 제외되던 항목이 더티로 잡혀
+  `make sync`가 영구히 막힌다. 바로 아래 `sync.local.yaml` 예외와 **같은
+  요구사항**이다. 목적은 AI 에이전트가 승인 없이 미커밋 상태나 엉뚱한
+  브랜치에서 무심코 배포하는 것을 막는 것이고, 그 목적은 달성됐다.
+
+  다만 그 대가로 실제 우회 경로가 하나 열려 있다(실측됨) — 아래 두 축과
+  달리 레포 자체는 건드리지 않고 레포 **밖의 ambient 환경**만 바꿔서
+  닿는다: `HOME`을 다른 디렉토리로 갈아끼우고 그 아래 `.gitconfig`에
+  `core.excludesFile`이 `*` 한 줄짜리 파일을 가리키게 하면, 실제 미커밋
+  파일이 있는 레포에서도 `assertCleanWorktree`가 clean으로 오판한다.
+  에이전트 입장에서는 `HOME=/tmp/x make sync`처럼 명령 앞에 접두어 한
+  토큰을 붙이는 것과 같다. `os.homedir()`도 env `HOME` 변조를 그대로
+  따라가 spoof-proof한 대안이 없어(실측 확인) 코드로 닫을 수 없고, 이 두
+  env var를 아예 막으면 `core.excludesFile` 요구사항 자체가 깨지므로(환경변수를
+  전부 비웠던 단계에서 전역 excludes 파일에 도달하지 못하게 됐던 것과 같은
+  회귀) — 의도적 미차단이다.
+
+  레포 안에서 **의도적으로** 조작하면 다음 축들도 여전히 열려 있다(실측됨)
+  — 새 형태(예: `core.worktree` 리디렉션, 조작된 `core.fsmonitor` hook)가
+  나올 수 있어 개수를 고정하지 않는다:
+  - `.git/info/exclude`에 `*` 한 줄 또는 repo-local `core.excludesFile` —
+    둘 다 untracked 파일을 `git status`에서 지워 clean으로 오판시킨다. 위
+    `sync.local.yaml` gitignore 예외와 **같은 메커니즘**이지 별개의 구멍이
+    아니다.
+  - 인덱스 플래그 `git update-index --assume-unchanged <file>` 또는
+    `--skip-worktree <file>`로 추적 파일의 수정을 숨긴다(실측: 수정 후
+    `--skip-worktree`를 걸면 `git status --porcelain
+    --untracked-files=normal`이 빈 출력을 낸다).
+
+  전부 코드로 막지 않는다 — gitignored 파일을 더티로 세지 않아야 한다는
+  요구사항과 `.git/info/exclude`가 **바로 그 gitignore 메커니즘 자체**라는
+  사실이 충돌하기 때문이다. 코드로 분리하려면 "무엇이 무시 가능한가"의 판단을
+  git에서 OMT 소스로 옮기고 명시적 예외 목록을 새로 유지해야 하는데, 이는 위험한
+  git 환경변수를 하나하나 열거해 제거하던 deny-list 방식에서 없앤 열거 실패
+  모드를 다시 들여오는 것이다. 의도적 미차단이며, 이 트레이드오프를 문서에 적는 것이 그 결정이다.
+- **`Makefile`이 아니라 `tools/sync.ts` 진입점에 있다** — Makefile
+  prerequisite로 걸었다면 `bun run tools/sync.ts`로 직접 호출해 우회할 수
+  있었을 것이다. 진입점 자체에 박아 `make sync` 경로와 직접 호출 경로 둘 다
+  막는다.
+
 ## 단일 경로 vs bare fan-out
 
 - **평범한 디렉토리** → 그 경로 하나가 타겟(`[path]`).
