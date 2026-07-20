@@ -9,7 +9,7 @@ import {
 	appendFileSync,
 	unlinkSync,
 } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -892,6 +892,24 @@ function runCli(args: string, env?: Record<string, string>): string {
 		encoding: "utf8",
 		env: { ...process.env, ...env },
 	});
+}
+
+/** Like runCli but never throws and captures stderr + exit status separately —
+ * needed to assert on stderr text (e.g. "phase auto-advanced") that runCli's
+ * stdout-only, throw-on-nonzero capture cannot make visible. Also differs in
+ * argument handling: runCli hands the whole command string to execSync's
+ * shell, which honors quoting, while this naively splits `args` on spaces
+ * into spawnSync's argv — a quoted argument containing a space would be split
+ * into separate tokens. No current caller passes one. */
+function runCliCaptured(
+	args: string,
+	env?: Record<string, string>,
+): { stdout: string; stderr: string; status: number | null } {
+	const result = spawnSync("bun", [script, ...args.split(" ")], {
+		encoding: "utf8",
+		env: { ...process.env, ...env },
+	});
+	return { stdout: result.stdout, stderr: result.stderr, status: result.status };
 }
 
 describe("adoption: list-others + adopt (goal CLI)", () => {
@@ -2911,5 +2929,162 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 
 		// A genuinely missing value (last token) must still be refused.
 		expect(() => runCli("retire-story story-1 --evidence")).toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// set-verdict phase auto-advance (recovery device — ultragoal-arming-gap)
+//
+// 이 핸들러의 도달 범위·측정 출처: ultragoal-state.ts의 set-verdict 핸들러 주석 참조.
+//
+// 아래 AC 중 AC1·AC2·AC5·AC7은 구현 전 HEAD에서 진짜 RED였다(기능 부재로 실패) —
+// AC7도 마찬가지로 자동 전환 자체가 없던 시점에는 `--verdict absent` 기록이
+// phase를 pursuing으로 올리지 않았다. 반면 AC3·AC4·AC6은 보존 가드(terminal
+// phase 불변 / 이미 pursuing이면 무보고 / verdict 값 보존)라서 구현 전에도
+// HEAD에서 통과하는 것이 정상이다 — 애초에 이 핸들러가 "고칠" 대상이 아니라
+// "건드리지 않아야 할" 대상을 검증하기 때문이다.
+// 이 셋의 비공허성은 HEAD 통과 여부가 아니라 뮤턴트 주입으로 확인했다: 조건을
+// `prior.phase === "planning"` → `prior.phase !== "pursuing"`으로 바꾼 변형은
+// 단독으로 AC3을 `Expected "complete", Received "pursuing"`으로 실패시킨다 — AC3
+// 비공허성의 증거다. `readPrior`를 `readGoalState(sessionId) ?? {}`로 바꾼 변형(리더
+// 교체)은 단독으로는 AC3을 깨뜨리지 않는다: readGoalState가 active:false 상태를
+// null로 접으므로(:311) `?? {}`를 거치면 prior.phase가 undefined가 되고
+// `=== "planning"` 조건이 거짓이 되어 terminal phase를 건드리지 않는다 — 즉 리더
+// 교체는 조건이 함께 넓어질 때에만 위험해진다. (참고: 비앵커 위치인 mergeWrite
+// 내부의 const prior(:229)를 잘못 건드렸을 때도 AC3은 실패했지만 메시지는
+// `Received "planning"`으로 달랐다 — 즉 위에 인용한 실패 메시지는 그 자리의 것이
+// 아니다.)
+// AC4와 AC6도 같은 방식으로 확인했다(각각 주입 후 실행, 실패 메시지 채증, 원복).
+// 조건을 `if (prior.phase === "planning")` → `if (true)`로 바꾼 변형은 AC4를
+// `Expected to not contain: "phase auto-advanced", Received: "set-verdict: phase
+// auto-advanced planning -> pursuing\n"`으로 실패시킨다(같은 변형이 AC3도 함께
+// 깨뜨린다 — AC4 비공허성의 증거로는 그 실패로 충분하다). `setVerdict(sessionId, v)`를
+// `setVerdict(sessionId, "APPROVE")`로 바꾼 변형은 AC6을 `Expected: "REQUEST_CHANGES",
+// Received: "APPROVE"`로 실패시킨다(AC7도 함께 깨진다) — AC6 비공허성의 증거다.
+// ---------------------------------------------------------------------------
+
+describe("set-verdict phase auto-advance (recovery)", () => {
+	// AC1: planning(스토리 전부 confirmed 또는 스토리 없음)에서 set-verdict 실행 후
+	// phase가 pursuing으로 오른다.
+	test("AC1: set-verdict from planning auto-advances phase to pursuing", () => {
+		// beforeEach seeds S with phase=planning, stories=[] (the no-stories case)
+		runCli("set-verdict --verdict APPROVE");
+		expect(readGoalState(S)!.phase).toBe("pursuing");
+	});
+
+	// AC2: 같은 실행의 stderr에 "phase auto-advanced"가 포함된다.
+	test("AC2: auto-advance execution reports 'phase auto-advanced' on stderr", () => {
+		const result = runCliCaptured("set-verdict --verdict APPROVE");
+		expect(result.stderr).toContain("phase auto-advanced");
+		// Reporting is stderr-only — stdout is reserved for machine-readable payload.
+		expect(result.stdout).not.toContain("auto-advanced");
+	});
+
+	// AC3: complete/blocked/budget_limited에서는 phase가 그대로이고 active도 false로
+	// 유지된다 (예산·차단 브레이크 보존 회귀 가드). 세 상태 각각을 덮는다.
+	test("AC3: terminal phases (complete/blocked/budget_limited) are untouched by set-verdict", () => {
+		// complete — via the real request-complete gate, mirroring the "terminal
+		// phases set active false" fixture above.
+		const Sc = "terminal-complete";
+		seedGoalFile(Sc);
+		setGoalState(Sc, { phase: "planning", outcome: "x", verification_surface: "v" });
+		setSingleStory(Sc);
+		setGoalState(Sc, { phase: "pursuing", completion_evidence_paths: [`${tmpDir}/p`] });
+		setVerdict(Sc, "APPROVE");
+		writeFileSync(
+			`${tmpDir}/ultragoal-verdict-${Sc}.json`,
+			JSON.stringify({
+				objective_verdict: "APPROVE",
+				stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: ["p"] }],
+				verifier: "orchestrator",
+				at: "2026-06-12T00:00:00",
+			}),
+			"utf8",
+		);
+		writeCodeReviewArtifact(Sc, {
+			status: "COMPLETE",
+			findings: [],
+			reviewer: "code-reviewer",
+			at: "2026-06-12T00:00:00",
+		});
+		expect(requestComplete(Sc)).toBe(true);
+		expect(rawStateOf(Sc).phase).toBe("complete");
+		runCli("set-verdict --verdict APPROVE", { OMT_SESSION_ID: Sc });
+		expect(rawStateOf(Sc).phase).toBe("complete");
+		expect(rawStateOf(Sc).active).toBe(false);
+
+		// budget_limited
+		const Sb = "terminal-budget";
+		seedGoalFile(Sb);
+		setGoalState(Sb, { phase: "pursuing" });
+		setBudgetLimited(Sb);
+		runCli("set-verdict --verdict APPROVE", { OMT_SESSION_ID: Sb });
+		expect(rawStateOf(Sb).phase).toBe("budget_limited");
+		expect(rawStateOf(Sb).active).toBe(false);
+
+		// blocked
+		const Sk = "terminal-blocked";
+		seedGoalFile(Sk);
+		setGoalState(Sk, { phase: "pursuing" });
+		setBlocked(Sk, "no path");
+		runCli("set-verdict --verdict APPROVE", { OMT_SESSION_ID: Sk });
+		expect(rawStateOf(Sk).phase).toBe("blocked");
+		expect(rawStateOf(Sk).active).toBe(false);
+	});
+
+	// AC4: phase가 이미 pursuing이면 auto-advance 문구가 나오지 않는다 (불필요한 잡음 방지).
+	test("AC4: no auto-advance report when phase is already pursuing", () => {
+		setGoalState(S, { phase: "pursuing" });
+		const result = runCliCaptured("set-verdict --verdict APPROVE");
+		expect(result.stderr).not.toContain("phase auto-advanced");
+		expect(readGoalState(S)!.phase).toBe("pursuing");
+	});
+
+	// AC5: unconfirmed 스토리가 남은 planning에서 set-verdict를 실행하면 기존
+	// unconfirmed 가드 메시지와 함께 실패한다(가드 우회 금지).
+	test("AC5: unconfirmed story guard still refuses set-verdict from planning", () => {
+		setGoalState(S, { phase: "planning", outcome: "A", verification_surface: "v" });
+		setStories(S, [
+			{
+				id: "S1",
+				story: "s1",
+				acceptance_criteria: ["ac"],
+				verification_surface: "v",
+				status: "unconfirmed",
+			},
+		]);
+		const stateBefore = readFileSync(resolveStatePath(S), "utf8");
+		const result = runCliCaptured("set-verdict --verdict APPROVE");
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain("pursuing refused");
+		expect(result.stderr).toContain("unconfirmed");
+		expect(result.stderr).toContain("S1");
+		// State must be unchanged — the guard throw fires before mergeWrite.
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
+	});
+
+	// AC6: objective_verdict 값 자체는 자동 전환 여부와 무관하게 요청한 값 그대로 기록된다.
+	test("AC6: objective_verdict is recorded as requested regardless of auto-advance", () => {
+		// planning path (auto-advance fires)
+		runCli("set-verdict --verdict REQUEST_CHANGES");
+		expect(readGoalState(S)!.objective_verdict).toBe("REQUEST_CHANGES");
+
+		// pursuing path (no auto-advance — phase is already pursuing after the call above)
+		runCli("set-verdict --verdict COMMENT");
+		expect(readGoalState(S)!.objective_verdict).toBe("COMMENT");
+	});
+
+	// AC7: --verdict absent (SKILL.md:33의 유효값)도 다른 verdict 값과 똑같이
+	// planning→pursuing 자동 전환을 무장시킨다. 핸들러는 planning에서의 "어떤"
+	// verdict 기록에도 무장하도록 짜여 있고(v 값을 조건에서 참조하지 않음), 그래서
+	// 의미상 리셋인 absent 기록조차 phase를 pursuing으로 올리고 active:true로
+	// 만든다. 이것은 의도적으로 재설계할 대상이 아니라 — 이번 리뷰에서 사용자가
+	// "복구 층의 설계는 바꾸지 않는다"고 결정했다 — 현재 동작을 계약으로 고정해
+	// 다음 변경이 조용히 이 부수효과를 바꾸지 못하게 잠그는 회귀 가드다.
+	test("AC7: --verdict absent also arms the planning-to-pursuing auto-advance (current-behavior lock, not an endorsement)", () => {
+		// beforeEach seeds S with phase=planning, stories=[] (the no-stories case)
+		runCli("set-verdict --verdict absent");
+		expect(readGoalState(S)!.phase).toBe("pursuing");
+		expect(readGoalState(S)!.objective_verdict).toBe("absent");
 	});
 });
