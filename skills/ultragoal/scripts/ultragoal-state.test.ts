@@ -2944,18 +2944,28 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 // 않는다 — 이 핸들러가 실제로 발동하는 유일한 문서 경로는 completion-gate.md:59의
 // `set --phase pursuing --completion-evidence`를 건너뛴 완료 시퀀스뿐이다(최후의
 // 그물). 실행 구간(첫 스토리 디스패치)의 진짜 방어선은 문서 층(SKILL.md 1단계)이며,
-// 그 쪽은 RED 0/3 → GREEN 3/3로 SKILL.test.ts에서 별도로 실측됐다. 자세한 근거는
-// ultragoal-state.ts의 set-verdict 핸들러 주석(같은 인용 포함)을 참조.
+// 그 쪽은 두 갈래 근거로 뒷받침된다: SKILL.test.ts는 문서가 그 순서를 갖는지를
+// 정적 문자열 순서 단언(toContain/indexOf)으로 고정할 뿐 실행도 RED/GREEN도 없고,
+// 실제 RED 0/3 → GREEN 3/3 행동 측정은 서브에이전트 압박 시나리오 실행에서
+// 나왔으며 그 기록은 레포 밖에 있다(~/.omt/oh-my-toong-playground/
+// ultragoal-arming-gap-red.md, -green.md). 자세한 근거는 ultragoal-state.ts의
+// set-verdict 핸들러 주석(같은 인용 포함)을 참조.
 //
 // 아래 AC 중 AC1·AC2·AC5는 구현 전 HEAD에서 진짜 RED였다(기능 부재로 실패). 반면
 // AC3·AC4·AC6은 보존 가드(terminal phase 불변 / 이미 pursuing이면 무보고 /
 // verdict 값 보존)라서 구현 전에도 HEAD에서 통과하는 것이 정상이다 — 애초에 이
 // 핸들러가 "고칠" 대상이 아니라 "건드리지 않아야 할" 대상을 검증하기 때문이다.
 // 이 셋의 비공허성은 HEAD 통과 여부가 아니라 뮤턴트 주입으로 확인했다: 조건을
-// `prior.phase === "planning"` → `prior.phase !== "pursuing"`으로 바꾼 변형과,
-// `readPrior`를 `readGoalState(sessionId) ?? {}`로 바꾼 변형 둘 다 AC3을
-// `Expected "complete", Received "pursuing"`으로 실패시켰다 — 즉 이 assertion들은
-// 실제로 뭔가를 검사하고 있다.
+// `prior.phase === "planning"` → `prior.phase !== "pursuing"`으로 바꾼 변형은
+// 단독으로 AC3을 `Expected "complete", Received "pursuing"`으로 실패시킨다 — AC3
+// 비공허성의 증거다. `readPrior`를 `readGoalState(sessionId) ?? {}`로 바꾼 변형(리더
+// 교체)은 단독으로는 AC3을 깨뜨리지 않는다: readGoalState가 active:false 상태를
+// null로 접으므로(:311) `?? {}`를 거치면 prior.phase가 undefined가 되고
+// `=== "planning"` 조건이 거짓이 되어 terminal phase를 건드리지 않는다 — 즉 리더
+// 교체는 조건이 함께 넓어질 때에만 위험해진다. (참고: 비앵커 위치인 setGoalState
+// 내부의 const prior(:229)를 잘못 건드렸을 때도 AC3은 실패했지만 메시지는
+// `Received "planning"`으로 달랐다 — 즉 위에 인용한 실패 메시지는 그 자리의 것이
+// 아니다.)
 // ---------------------------------------------------------------------------
 
 describe("set-verdict phase auto-advance (recovery)", () => {
