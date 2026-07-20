@@ -46,12 +46,12 @@ During sync, an **Upward Search** logic applies. When a project's `sync.yaml` re
 
 ## Documentation
 
-The details of the library's skills (43) and agents (14) live under `docs/`.
+The details of the library's skills (42) and agents (13) live under `docs/`.
 
 | Doc | Contents |
 |-----|----------|
-| [Core Pipeline](docs/skills/core-pipeline.en.md) | Definition→Planning→Execution→Verification pipeline (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 14 delegation agents |
-| [Review/Quality](docs/skills/review-quality.en.md) | code-review · orchestrate-review · design-review · slides-review · qa · performance-optimizer |
+| [Core Pipeline](docs/skills/core-pipeline.en.md) | Definition→Planning→Execution→Verification pipeline (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 13 delegation agents |
+| [Review/Quality](docs/skills/review-quality.en.md) | code-review · orchestrate-review · design-review · slides-review · qa |
 | [Research](docs/skills/research.en.md) | ultraresearch · insane-browsing — saturation research engine and blocked-source browsing |
 | [Authoring/Utilities](docs/skills/authoring.en.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [Knowledge Graph (pins)](docs/skills/knowledge-graph-pins.en.md) | pins knowledge graph — pin-setup · record · query · audit · wrap-up |
