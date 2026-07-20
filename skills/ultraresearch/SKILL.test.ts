@@ -973,3 +973,68 @@ describe("posture exclusivity — REPORT is explicit-posture only", () => {
 		expect(preworkBullet).not.toContain("REPORT.html");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Coverage-table persistence — closes the gap where the Phase 4 gate builds
+// a coverage table but never states where that table lives. Four facts pin
+// this so the table can't quietly go back to existing only in the final chat
+// message: (1) the Coverage gate section names REPORT.md as the write
+// destination and the top of the file, above the per-axis sections, as the
+// position; (2) the REPORT.md and REPORT.html section states the same
+// opening-position fact from the artifact-shape side; (3) Single-snapshot
+// write-ordering states the table is already in the REPORT.md draft before
+// the REPORT.html render copy is produced, not added after; (4) Final chat
+// response contract states REPORT.md is the table's one authority and the
+// chat copy is a view onto it, never a second table generated independently.
+// Each assertion is a full relational phrase (not a bare token) so a rewrite
+// that keeps the surrounding words but drops the actual relation — e.g.
+// keeps "REPORT.md" and "coverage table" in the paragraph while retargeting
+// the table to the chat message, or keeps both artifacts named while
+// dropping the before/after render-copy ordering — still fails the check.
+// ---------------------------------------------------------------------------
+
+describe("coverage table is persisted, positioned, and single-authority — not chat-only", () => {
+	test("Coverage gate: the table's write destination is REPORT.md, at the top of the file, above the per-axis sections", () => {
+		const idx = skill.indexOf("### Coverage gate");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("</Engine>", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain(
+			"write it into `REPORT.md` itself, at the top of the file, above the per-axis sections",
+		);
+	});
+
+	test("REPORT.md and REPORT.html section: REPORT opens with the coverage table, placed above every per-axis section", () => {
+		const idx = skill.indexOf("## REPORT.md and REPORT.html");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("## Epistemic-instrumentation artifacts", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("REPORT opens with the Phase 4 coverage table");
+		expect(context).toContain("placed above every per-axis section");
+	});
+
+	test("Single-snapshot write-ordering: the table is already in the REPORT.md draft before the REPORT.html render copy is produced", () => {
+		const idx = skill.indexOf("## Single-snapshot write-ordering");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("## Zero verified claims", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain(
+			"with the Phase 4 coverage-gate table already in place at the top of the draft before the render copy is produced",
+		);
+	});
+
+	test("Final chat response contract: REPORT.md is the table's single authority, the chat message is a view onto it, never a second independently-generated table", () => {
+		const idx = skill.indexOf("## Final chat response contract");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("</Artifact_Contract>", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain(
+			"the chat message is a view onto that table, not a second table generated independently",
+		);
+	});
+});
+
