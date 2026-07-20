@@ -275,17 +275,16 @@ describe("identity: frontmatter and state-namespace point at ultragoal, not goal
 // while `phase === "pursuing"`. The Execution Dispatch numbered list must
 // carry the `set --phase pursuing` transition BEFORE the first sisyphus
 // dispatch step, or an agent that follows the list verbatim leaves the first
-// story's entire execution window unarmed. Scoped to the Execution Dispatch
-// section specifically — `Skill(skill: "sisyphus")` first appears at the Role
-// section's "Single-story degrade" paragraph, which is not this loop.
+// story's entire execution window unarmed.
 // ---------------------------------------------------------------------------
 
 describe("Stop-hook arming gap: pursuing transition precedes first dispatch", () => {
 	// Scoped to the numbered list itself, not the whole Execution Dispatch
 	// section — the section also contains the "### Phase transitions"
-	// subsection, which carried a `set --phase pursuing` mention at HEAD
-	// before this commit (at the wrong point in the loop; SKILL.md:99 now
-	// correctly reads "Before the first sisyphus dispatch"). Widening the
+	// subsection, which carried a `set --phase pursuing` mention before the
+	// "ultragoal phase 전환을 첫 sisyphus 디스패치 전으로 승격" commit (at the
+	// wrong point in the loop; SKILL.md:99 now correctly reads "Before the
+	// first sisyphus dispatch"). Widening the
 	// scope to the whole section would have let AC1/AC2 pass on that
 	// pre-existing mention even while it sat at the wrong point, missing the
 	// actual defect: the step being absent from the numbered list an agent
@@ -322,8 +321,9 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 
 	test("the narrative arrow order reads set --phase pursuing before dispatch story #1", () => {
 		// Scoped to the "Initial path" narrative sentence specifically — a bare
-		// whole-file indexOf comparison would have passed spuriously even at
-		// HEAD before this commit's fix, since the Phase-transitions code
+		// whole-file indexOf comparison would have passed spuriously even
+		// before the "ultragoal phase 전환을 첫 sisyphus 디스패치 전으로 승격"
+		// commit's fix, since the Phase-transitions code
 		// block's `set --phase pursuing` mention sits earlier in the file than
 		// the narrative's "dispatch story #1", regardless of the narrative
 		// sentence's own arrow order — which, at that point, was reversed (now

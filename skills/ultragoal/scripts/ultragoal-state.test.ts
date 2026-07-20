@@ -2945,8 +2945,9 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 // `set --phase pursuing --completion-evidence`를 건너뛴 완료 시퀀스뿐이다(최후의
 // 그물). 실행 구간(첫 스토리 디스패치)의 진짜 방어선은 문서 층(SKILL.md 1단계)이며,
 // 그 쪽은 두 갈래 근거로 뒷받침된다: SKILL.test.ts는 문서가 그 순서를 갖는지를
-// 정적 문자열 순서 단언(toContain/indexOf)으로 고정할 뿐 실행도 RED/GREEN도 없고,
-// 실제 RED 0/3 → GREEN 3/3 행동 측정은 서브에이전트 압박 시나리오 실행에서
+// 정적 문자열 순서 단언(toContain/indexOf)으로 고정하며(그 단언들 자체는 구현 전
+// HEAD에서 실패하는 정상적인 RED/GREEN을 거쳤다), 서브에이전트 행동 측정은 여기
+// 없고, 실제 RED 0/3 → GREEN 3/3 행동 측정은 서브에이전트 압박 시나리오 실행에서
 // 나왔으며 그 기록은 레포 밖에 있다(~/.omt/oh-my-toong-playground/
 // ultragoal-arming-gap-red.md, -green.md). 자세한 근거는 ultragoal-state.ts의
 // set-verdict 핸들러 주석(같은 인용 포함)을 참조.
