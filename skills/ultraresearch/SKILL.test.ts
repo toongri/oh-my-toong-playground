@@ -746,12 +746,18 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 
 	// These two are a NARROW regression guard against reintroducing the two
 	// specific render tools evaluated and rejected during design — not a
-	// general "no new external dependency" invariant. This file cannot enforce
-	// that general invariant (any other tool name would slip a literal
-	// blacklist); the actual enforcement point is `make validate`'s bare-import
-	// guard against `package.json`/`bun.lock`, which covers arbitrary future
-	// tool names. Duplicating that enforcement here would be redundant and
-	// still incomplete, so this stays scoped to the two named rejects.
+	// general "no new external dependency" invariant. SKILL.md's prose
+	// contract ("no new external tooling dependency added to produce one",
+	// Artifact_Contract) is NOT automatically enforced anywhere: `make
+	// validate`'s bare-import guard (tools/validators/lib-imports.ts) only
+	// scans `.ts` sources (explicitly skipping `.test.ts`/`.d.ts`) for
+	// relative-into-lib and bare-npm *import statements* — it never reads
+	// markdown prose, and the violation shape this contract guards against is
+	// a CLI tool name invoked via Bash at runtime, not a TypeScript import. So
+	// that axis and this one never meet. This stays scoped to the two named
+	// rejects (rather than growing into a general CLI-tool blacklist) because
+	// matching arbitrary future tool names by literal string is
+	// unenforceable in principle, not because something else covers it.
 	test('"weasyprint" is absent — rejected render-tool regression guard, not a general dependency invariant', () => {
 		expect(count("weasyprint")).toBe(0);
 	});
