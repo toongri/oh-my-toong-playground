@@ -101,7 +101,7 @@ The autonomous loop blocks ONLY when `phase=pursuing`. Set the phase around deco
   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase pursuing
   ```
 
-Initial path: `set --phase planning` (seed slots) → auto-generate the Story set → user bulk-approves via `confirm-all-stories` → `set --phase pursuing` → dispatch story #1 to sisyphus. Re-plan loop-back: `set --phase planning` (clears the verdict) → re-generate or steer the Story set (`add-story`/`revise-story`/`retire-story`/`reorder-stories`) → `confirm-all-stories` → `set --phase pursuing` → dispatch the fresh sisyphus call.
+Initial path: `set --phase planning` (seed slots) → auto-generate the Story set → user bulk-approves via `confirm-all-stories` → `set --phase pursuing` → dispatch story #1 to sisyphus. Re-plan loop-back: `set --phase planning` (clears the verdict) → re-generate or steer the Story set (`add-story`/`revise-story`/`retire-story`/`reorder-stories`) → user re-approves via `confirm-all-stories` → `set --phase pursuing` → dispatch the fresh sisyphus call.
 
 ---
 
