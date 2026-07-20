@@ -102,6 +102,8 @@ The details of the library's skills (42) and agents (13) live under `docs/`.
    make sync        # Apply synchronization
    ```
 
+   `make sync` fails unless the current branch is the default branch and the working tree has no staged, unstaged, or untracked changes — synchronization only runs after a commit. There is no dedicated env var or CLI flag that turns the gate off, though redirecting `HOME` can still bypass it via your ambient global git config. `make sync-dry` is exempt from this gate, so it stays usable as a preview even before committing. See `docs/sync-deploy-targets.md` (Korean) for the gate's exact scope and trade-offs.
+
 ### Per-Project Skill Differentiation
 
 When skills with the same name need different conventions per project's language/framework, create project-specific overrides in the `projects/` directory.
