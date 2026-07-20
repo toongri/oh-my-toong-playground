@@ -580,19 +580,15 @@ describe("epistemic suite / claim-graph gate", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Material axis — digest instruction has a goal (RED test, TDD: authored
-// before the SKILL.md edit). Diagnosis: Phase 2's "digest ... into wave-*.md"
-// (currently :106) has no object — the digest is not told what it summarizes
-// TOWARD — so the agent compresses toward the one explicit shape it can see
-// (the SYNTHESIS eight-section skeleton) instead of the user's actual
-// requirement items. The fix has two parts: (1) give digest a declared
-// target, and (2) make verbatim-carry a reconstructability rule, not a
-// shape rule (not "tables/enumerations/code are exempt from summarization"
-// but "material that summarization would make irrecoverable must be
-// carried verbatim") — plus require content, not just file:line coordinates,
-// from the codebase worker role protocol.
-// FAILS on the current unmodified SKILL.md; PASSES after the digest-target
-// and reconstructability-rule edits.
+// Material axis — the digest instruction names a target, and verbatim-carry
+// is a reconstructability rule rather than a fixed-shape rule. Phase 2's
+// "digest ... into wave-*.md" step states what it summarizes TOWARD (the
+// declared requirement items from Phase 0), instead of leaving the agent to
+// compress toward the nearest explicit shape (the SYNTHESIS eight-section
+// skeleton). Verbatim carry-over is triggered by reconstructability
+// ("material that summarization would make irrecoverable"), not by a fixed
+// list of shapes (tables/enumerations/code). The codebase worker role
+// protocol also requires quoted content, not just file:line coordinates.
 // ---------------------------------------------------------------------------
 
 describe("material axis — digest instruction has a goal", () => {
@@ -614,16 +610,12 @@ describe("material axis — digest instruction has a goal", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Place axis — REPORT is the deliverable, SYNTHESIS is intermediate (RED
-// test, TDD: authored before the SKILL.md edit). Diagnosis: SKILL.md has
-// zero occurrences of "REPORT" today, and the posture table (currently
-// :166) promotes SYNTHESIS.md itself to "(the deliverable)". The fix
-// demotes SYNTHESIS.md to a citation source-of-truth intermediate and
-// introduces REPORT.md + REPORT.html (self-contained) as the actual
-// deliverable, with its table of contents derived from the Phase 0 axis
-// decomposition rather than the fixed eight-section skeleton.
-// FAILS on the current unmodified SKILL.md; PASSES after the REPORT
-// artifact and SYNTHESIS-demotion edits.
+// Place axis — REPORT.md/REPORT.html is the deliverable; SYNTHESIS.md is
+// demoted to an intermediate citation source of truth, not the deliverable
+// itself. REPORT's table of contents is derived from the Phase 0 axis
+// decomposition rather than SYNTHESIS's fixed eight-section skeleton, and
+// REPORT.html is a single self-contained render copy (no external CSS, JS,
+// fonts, or images).
 // ---------------------------------------------------------------------------
 
 describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", () => {
@@ -647,7 +639,18 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 	});
 
 	test("SYNTHESIS.md is regulated as the citation source of truth (intermediate, not the deliverable)", () => {
-		expect(skill).toContain("citation source of truth");
+		// "citation source of truth" appears twice in the doc — once at the
+		// intended demotion sentence inside Artifact_Contract, once later in the
+		// unrelated write-ordering section. Scope to Artifact_Contract, then
+		// require the demotion clause and "citation source of truth" to be
+		// adjacent in the same sentence, so the demotion itself is what's
+		// checked rather than an incidental nearby occurrence of the phrase.
+		const acIdx = skill.indexOf("<Artifact_Contract>");
+		expect(acIdx).toBeGreaterThan(-1);
+		const afterAC = skill.slice(acIdx);
+		expect(afterAC).toMatch(
+			/is an intermediate, not the deliverable[\s\S]{0,50}citation source of truth/,
+		);
 	});
 
 	test('"(the deliverable)" is absent — SYNTHESIS is no longer promoted to final artifact', () => {
@@ -662,43 +665,54 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 		expect(count("uv run")).toBe(0);
 	});
 
-	test("REPORT.html is specified as a single self-contained file", () => {
-		const idx = skill.indexOf("REPORT.html");
-		expect(idx).toBeGreaterThan(-1);
+	test("REPORT.html is specified as a single self-contained file with no external assets", () => {
+		// "REPORT.html" also appears earlier (Phase 4 overview line, posture
+		// table) — anchor past <Artifact_Contract> so this doesn't match one of
+		// those incidental mentions instead of the actual self-containedness
+		// contract sentence.
+		const acIdx = skill.indexOf("<Artifact_Contract>");
+		expect(acIdx).toBeGreaterThan(-1);
+		const idx = skill.indexOf("REPORT.html", acIdx);
+		expect(idx).toBeGreaterThan(acIdx);
 		const context = skill.slice(idx, idx + 200);
 		expect(context).toContain("self-contained");
+		expect(context).toContain("no external CSS, JS, fonts, or images");
 	});
 });
 
 // ---------------------------------------------------------------------------
-// Detection axis — requirement coverage gate (RED test, TDD: authored before
-// the SKILL.md edit). Diagnosis: the material axis (digest toward "declared
-// requirement items", :106) and the place axis (REPORT as deliverable) are
-// both already in place, but nothing DECLARES the requirement items in the
-// first place, and nothing forces a per-item coverage check against them at
-// synthesis time. Without a pre-declared item list, "gap" has no state to be
-// gap FROM — omissions vanish silently instead of surfacing as a blank,
-// defect-flagged row. The fix: Phase 0 declares requirement items (derived
-// from its own axis decomposition, not a second classifier) before any
-// worker spawns; Phase 4 forces a per-item coverage table with a two-value
-// Status enum where a blank cell is explicitly a defect, resolved by an
-// immediate REPORT.md record from journal material already in hand — never
-// a re-launched wave; and the final chat message is contracted to be that
+// Detection axis — the requirement coverage gate. The engine declares
+// requirement items up front (Phase 0, before any worker spawns, derived
+// from its own axis decomposition rather than a second classifier), then
+// forces a per-item coverage check against them at synthesis time. Without
+// a pre-declared item list, a gap has no state to be a gap FROM — omissions
+// vanish silently instead of surfacing as a blank, defect-flagged row. The
+// synthesis-time step forces a per-item coverage table with a three-value
+// Status enum (`covered` / `not applicable: <reason>` / `uncovered: <reason>`)
+// where a blank cell is explicitly a defect, resolved by an immediate
+// REPORT.md record from journal material already in hand — never a
+// re-launched wave. The final chat message is contracted to be that
 // coverage table plus one entry point, explicitly a requirement checklist
-// rather than a deliverable inventory.
-// FAILS on the current unmodified SKILL.md; PASSES after the detection-axis
-// edit. Item 8 (negative assert on Phase 4) already passes on HEAD — the
-// current Phase 4 section is short and does not use "deliverable" — and is
-// kept here as a regression guard for the edit that follows.
+// rather than a deliverable inventory. The negative assert on the synthesis
+// section (it must not call itself "the deliverable") is a regression guard
+// against that word creeping back into the section describing the gate.
 // ---------------------------------------------------------------------------
 
 describe("detection axis — requirement coverage gate", () => {
-	test("Phase 0 declares requirement items before any worker spawns", () => {
+	test("Phase 0 declares requirement items before any worker spawns, in one adjacent sentence", () => {
 		const idx = skill.indexOf("## Phase 0");
 		expect(idx).toBeGreaterThan(-1);
-		const context = skill.slice(idx, idx + 2000);
-		expect(context).toContain("declare the requirement items");
-		expect(context).toContain("before any worker spawns");
+		// Bound the search to the Phase 0 section itself (up to the next phase
+		// heading) rather than a fixed char count, so the window tracks the
+		// section instead of silently losing coverage if it grows.
+		const nextPhaseIdx = skill.indexOf("## Phase 1", idx);
+		expect(nextPhaseIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, nextPhaseIdx);
+		// A single regex requires the two tokens to be adjacent in one sentence,
+		// not merely both present anywhere in the section — otherwise the timing
+		// qualifier ("before any worker spawns") could survive detached from the
+		// declaration it's supposed to qualify.
+		expect(context).toMatch(/before any worker spawns, declare the requirement items/);
 	});
 
 	test("requirement items are declared to originate from Phase 0's own axis decomposition, not a separate classifier", () => {
@@ -708,13 +722,27 @@ describe("detection axis — requirement coverage gate", () => {
 	test("Phase 4 requires a per-item coverage table", () => {
 		const idx = skill.indexOf("## Phase 4");
 		expect(idx).toBeGreaterThan(-1);
-		const context = skill.slice(idx, idx + 3000);
+		// Bound to the Engine block's actual close rather than a fixed char
+		// count — Phase 4 is the Engine block's last section.
+		const engineEndIdx = skill.indexOf("</Engine>", idx);
+		expect(engineEndIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, engineEndIdx);
 		expect(context).toContain("coverage table");
 	});
 
-	test("coverage row Status values are restricted to a covered / not-applicable enum", () => {
+	test("coverage row Status is restricted to a three-value enum: covered / not applicable / uncovered", () => {
+		// The enum's point is that Status is CONFINED to these values, not merely
+		// that the value names appear somewhere in the doc — assert the
+		// confinement clause itself, not just the tokens.
+		expect(skill).toContain("restricted to exactly three values");
 		expect(skill).toContain("`covered`");
-		expect(skill).toContain("`not applicable`");
+		expect(skill).toContain("not applicable:");
+		expect(skill).toContain("uncovered:");
+		// Load-bearing collapse-guard: forbids folding a demanded-but-ungathered
+		// item ("uncovered") into "not applicable" (never demanded). Losing this
+		// sentence lets the three-value enum revert to two-value in practice
+		// while the enum names themselves stay intact.
+		expect(skill).toContain("never `not applicable`");
 	});
 
 	test("a blank Status value is stated to be a defect", () => {
@@ -739,10 +767,16 @@ describe("detection axis — requirement coverage gate", () => {
 	test('"deliverable" is absent from the Phase 4 section (Phase 4 must not call itself the deliverable)', () => {
 		const idx = skill.indexOf("## Phase 4");
 		expect(idx).toBeGreaterThan(-1);
-		const nextHeadingIdx = skill.indexOf("\n## ", idx + 1);
-		expect(nextHeadingIdx).toBeGreaterThan(idx);
-		const phase4Section = skill.slice(idx, nextHeadingIdx);
-		expect(count.call(null, "deliverable")).toBeGreaterThan(0); // sanity: token exists elsewhere in the doc (Artifact_Contract's REPORT heading)
+		// "\n## " does not match the "### Coverage gate" sub-heading that follows
+		// Phase 4 (three #'s), so that boundary lets the slice run past
+		// </Engine> and <Postures> into "## Posture selection criteria" —
+		// pulling an unrelated section into what's supposed to be a Phase-4-only
+		// check. </Engine> is the Engine block's real close and Phase 4 is its
+		// last section, so anchor there instead.
+		const engineEndIdx = skill.indexOf("</Engine>", idx);
+		expect(engineEndIdx).toBeGreaterThan(idx);
+		const phase4Section = skill.slice(idx, engineEndIdx);
+		expect(count("deliverable")).toBeGreaterThan(0); // sanity: token exists elsewhere in the doc (Artifact_Contract's REPORT heading)
 		expect(phase4Section).not.toContain("deliverable");
 	});
 });
