@@ -236,7 +236,7 @@ describe("single-snapshot write-ordering", () => {
 	});
 
 	test("artifacts are NOT accreted per-wave — explicit statement is present", () => {
-		expect(skill).toContain("NOT accreted per-wave");
+		expect(skill).toContain("none of them are accreted per-wave");
 	});
 });
 
@@ -794,5 +794,33 @@ describe("detection axis — requirement coverage gate", () => {
 		const phase4Section = skill.slice(idx, engineEndIdx);
 		expect(count("deliverable")).toBeGreaterThan(0); // sanity: token exists elsewhere in the doc (Artifact_Contract's REPORT heading)
 		expect(phase4Section).not.toContain("deliverable");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Posture exclusivity — REPORT.md/REPORT.html are an explicit-research-posture
+// artifact only. Pre-work CLEAR grounds facts and returns a deep-interview-
+// schema handoff instead; it never emits REPORT. Nothing above pinned this
+// exclusivity directly, so the write-ordering sentence that enforces it could
+// regress unnoticed.
+// ---------------------------------------------------------------------------
+
+describe("posture exclusivity — REPORT is explicit-posture only", () => {
+	test("the coverage gate is scoped to the explicit research posture (within Phase 4 through the Engine block's close)", () => {
+		const idx = skill.indexOf("## Phase 4");
+		expect(idx).toBeGreaterThan(-1);
+		const engineEndIdx = skill.indexOf("</Engine>", idx);
+		expect(engineEndIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, engineEndIdx);
+		expect(context).toContain("This gate is scoped to the explicit research posture");
+	});
+
+	test("Single-snapshot write-ordering states REPORT.md/REPORT.html are written only on the explicit research posture", () => {
+		const idx = skill.indexOf("## Single-snapshot write-ordering");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("## Zero verified claims", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("written only on the explicit research posture");
 	});
 });
