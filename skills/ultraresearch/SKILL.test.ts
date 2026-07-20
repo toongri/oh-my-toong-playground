@@ -770,12 +770,19 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 		// "REPORT.html" also appears earlier (Phase 4 overview line, posture
 		// table) — anchor past <Artifact_Contract> so this doesn't match one of
 		// those incidental mentions instead of the actual self-containedness
-		// contract sentence.
+		// contract sentence. Bound the search to the enclosing section (through
+		// the next heading) rather than a fixed char count — a 200-char window
+		// only has single-digit slack past the contract phrase (measured: ~8
+		// chars), so a contract-preserving heading rename or one inserted word
+		// upstream pushes the phrase out of the window and reads as a false
+		// failure instead of tracking the section.
 		const acIdx = skill.indexOf("<Artifact_Contract>");
 		expect(acIdx).toBeGreaterThan(-1);
 		const idx = skill.indexOf("REPORT.html", acIdx);
 		expect(idx).toBeGreaterThan(acIdx);
-		const context = skill.slice(idx, idx + 200);
+		const endIdx = skill.indexOf("## Epistemic-instrumentation artifacts", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
 		expect(context).toContain("self-contained");
 		expect(context).toContain("no external CSS, JS, fonts, or images");
 	});
