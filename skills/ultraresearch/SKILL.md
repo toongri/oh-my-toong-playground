@@ -1,6 +1,6 @@
 ---
 name: ultraresearch
-description: "Maximum-saturation research orchestration as ONE engine with two postures. Fans synchronous explore+librarian+browsing worker waves across codebase, web, official docs, and OSS repos; runs an EXPAND-until-convergence loop driven by leads workers return at each barrier; verifies contested claims through a separate verification pass (executed code for code-shaped claims, oracle citation re-read for the rest); synthesizes a cited SYNTHESIS.md. ACTIVATES on an explicit research demand (the word 'ultraresearch', '/ultraresearch') OR as a pre-work grounding posture invoked by deep-interview / a caller that needs facts before judgment. Never self-activates for ordinary questions, debugging, or routine implementation context-gathering. While active it overrides exploration-bounding defaults: exhaustive coverage is the goal."
+description: "Maximum-saturation research orchestration as ONE engine with two postures. Fans synchronous explore+librarian+browsing worker waves across codebase, web, official docs, and OSS repos; runs an EXPAND-until-convergence loop driven by leads workers return at each barrier; verifies contested claims through a separate verification pass (executed code for code-shaped claims, oracle citation re-read for the rest); on the explicit research posture, produces a cited REPORT.md (+ self-contained REPORT.html) backed by an intermediate SYNTHESIS.md. ACTIVATES on an explicit research demand (the word 'ultraresearch', '/ultraresearch') OR as a pre-work grounding posture invoked by deep-interview / a caller that needs facts before judgment. Never self-activates for ordinary questions, debugging, or routine implementation context-gathering. While active it overrides exploration-bounding defaults: exhaustive coverage is the goal."
 ---
 
 <Role>
@@ -49,7 +49,7 @@ The engine has five phases:
 2. **Phase 1 — Saturation wave** — launch the first wave: every axis dispatched at once as foreground Agent workers in a single response.
 3. **Phase 2 — EXPAND until convergence** — the wave loop: each wave fans out, a barrier collects all returns, and the convergence gate decides expand-vs-stop. This is what makes the engine research rather than search.
 4. **Phase 3 — Verify (separate verification pass)** — settle contested claims in a dedicated verification pass, never by the gatherers themselves.
-5. **Phase 4 — Synthesize** — generate `SYNTHESIS.md` and (for the pre-work postures) the handoff, once, from a single post-convergence snapshot.
+5. **Phase 4 — Synthesize** — generate `SYNTHESIS.md`, then (on the explicit research posture) `REPORT.md` and `REPORT.html`, or (on the pre-work postures) the handoff — once, from a single post-convergence snapshot.
 
 ## Substrate: synchronous batched waves (NO async swarm)
 
@@ -64,7 +64,7 @@ The vocabulary is therefore: **wave → barrier collect → next wave**. There i
 ## Worker ground rules
 
 - **Read-only gatherers.** Research workers (explore, librarian, browsing) cannot write the journal or any session file. Every journal write is yours.
-- **Artifacts are orchestrator-owned.** Workers never write the journal or any epistemic-instrumentation artifact directly — they return marker text only: the `## EXPAND` tail, and for claim/observation candidates a `## CLAIMS` channel, the same mechanism as `## EXPAND`. The orchestrator is the sole writer of every artifact, from `wave-*.md` through the claim graph and its siblings.
+- **Artifacts are orchestrator-owned.** Workers never write the journal or any epistemic-instrumentation artifact directly — they return everything as reply text instead: their findings (for a codebase coordinate, that means the quoted content at that `file:line`, not the coordinate alone), the `## EXPAND` lead tail, and for claim/observation candidates a `## CLAIMS` channel, the same mechanism as `## EXPAND`. The orchestrator is the sole writer of every artifact, from `wave-*.md` through the claim graph and its siblings.
 - **No worker recursion.** Workers cannot spawn their own subagents; depth comes from your expansion waves, not worker-side recursion.
 - **Lift the budget in the spawn message.** Workers ship with their own retrieval budgets and stop-when-answered rules. Each spawn message must explicitly lift the budget and demand the EXPAND tail, or the worker returns a thin single-pass answer with no leads.
 - **One unique angle per worker.** No two workers in a wave share an angle. Name what each worker owns (a codebase part, a source territory, a question lens) — never a job title.
@@ -88,13 +88,15 @@ Decompose the query into 3+ orthogonal axes, classify the posture and tier (see 
 
 Seed `intent-diff.md` here, in Phase 0, before any worker spawns — one row per expected truth derived from the user's intent, spec/design text, branch history, or authoritative docs. Required fields: `intent_id`, expected truth, observed reality, diff, violated invariant, intent source, supporting observations, status (`true`, `violated`, or `unknown`), and linked claim ids. Every wave's findings are then checked against this pre-declared expectation instead of being invented post hoc.
 
+Also here, before any worker spawns, declare the requirement items the query provisionally appears to demand. This declaration is a tentative judgment, not a final fact: it is derived from the axis decomposition, and axis decomposition can over-decompose — a facet named here can later turn out, once research runs, to be something the query never actually demanded. That correction has an explicit landing spot: the coverage gate's `not applicable` status (Phase 4) exists precisely to record it, never to silently drop the row. The timing of the initial declaration still matters for the same reason `intent-diff.md` above is seeded pre-spawn, not invented post hoc: a requirement item declared after the fact lets its own omission vanish silently instead of surfacing as a gap. The requirement items are the Phase 0 axes — the axis decomposition above, not a second classifier. One decomposition drives worker assignment (Phase 1), the requirement items declared here, and the REPORT table of contents (Artifact Contract) alike.
+
   - **Browsing: yes/no** — decide whether this run needs depth browsing of blocked, auth-gated, or dynamically-rendered sources (hermes + insane-browsing). Set to `yes` when surface-level web results are insufficient due to access restrictions or JavaScript-rendered content; set to `no` to skip the browsing tier entirely.
 
 ## Phase 1 — Saturation wave
 
 Launch the entire first wave in one response — every Phase-0 axis at once, as foreground Agent workers. Sequential launches and "start with one and see" defeat the engine. Embed the relevant role protocol in each spawn message:
 
-- **Codebase (explore), per the tier floor.** Grep with 3+ keyword variations; structural/AST search; LSP definitions and references; file-name globs; `git log --all -S` and `--grep` for history including deleted code. Report absolute file paths, `file:line` patterns, and how findings connect.
+- **Codebase (explore), per the tier floor.** Grep with 3+ keyword variations; structural/AST search; LSP definitions and references; file-name globs; `git log --all -S` and `--grep` for history including deleted code. Report absolute file paths, `file:line` patterns, and how findings connect — plus the quoted content at each coordinate (column definitions, enum values, signatures, endpoints): a coordinate alone does not tell the orchestrator what lives there.
 - **Web (librarian), per the tier floor.** At least 10 distinct websearch queries per worker, each with a different operator or angle; fetch the full page for every result that matters. Real-world usage via `gh search` and grep.app; official docs via sitemap discovery.
 - **Browsing (hermes, insane-browsing 로드), per the tier floor.** Full authenticated and JavaScript-rendered page access for sources blocked or insufficiently covered by surface-level web retrieval; only dispatched when Phase-0 Browsing gate is `yes`.
 
@@ -103,7 +105,7 @@ Launch the entire first wave in one response — every Phase-0 axis at once, as 
 This loop is what makes the engine research rather than search. Each wave:
 
 1. **Barrier collect**: wait for every worker in the wave to return.
-2. **Journal**: digest each return plus its verbatim EXPAND markers into `wave-*.md`.
+2. **Journal**: digest each return plus its verbatim EXPAND markers into `wave-*.md`, toward the declared requirement items (the axes decomposed in Phase 0). Digesting without that target compresses toward the nearest explicit shape instead of what the user asked for. Carry material verbatim, not summarized, when it cannot be reconstructed from a summary — the rule is reconstructability, not a fixed list of shapes (tables, enumerations, and code often qualify, but the list is not exhaustive: anything a summary would irreversibly lose belongs verbatim).
 3. **Deduplicate** new markers against `expansion-log.md` (every lead ever seen, not just confirmed ones, or rejected leads resurface each wave).
 4. **Spawn the next wave**: one expansion worker per new unchecked lead, all dispatched in one response.
 5. **Record** the wave in `expansion-log.md`: workers spawned, markers gained, leads opened/closed, and any OPEN CHAIN carried over.
@@ -151,6 +153,10 @@ A high-risk non-code claim may enter the `verified-claims digest` ONLY if it cle
 
 After convergence and the verification pass, re-read the whole journal and write the artifacts. See the Artifact Contract section for the exact shape and the single-snapshot write-ordering.
 
+### Coverage gate — per-item check against the declared requirement items
+
+This gate is scoped to the explicit research posture — the posture that emits REPORT.md. On pre-work CLEAR the engine returns grounded facts to its caller and writes no REPORT, so there is nothing for a REPORT coverage table to judge; the caller's own contract governs there instead. On the explicit research posture, after the REPORT.md draft is written — not before, since the gate judges what actually made it into REPORT.md and there is nothing to judge until that draft exists — build a **coverage table** and write it into `REPORT.md` itself, at the top of the file, above the per-axis sections — the same reason the final chat response leads with this table (an uncovered item must land on the reader's first screen, not stay buried past the axis sections) is why the persisted file leads with it too: one row per requirement item declared in Phase 0, Status restricted to exactly three values — `covered`, `not applicable: <reason Phase 0 mis-derived this axis as demanded>`, or `uncovered: <why no material was gathered>`. The gate's whole operating principle is one sentence: a blank Status is a defect, not a state to be tolerated — catching that blank is what the gate is for. When the covering material already sits in the journal but never made it into REPORT.md, resolve the blank cell by editing REPORT.md — record it in REPORT.md immediately, without relaunching a wave. The material is already in hand, so re-gathering is never the fix, and the convergence rules above stay untouched. The Phase 0 declaration is provisional (see Phase 0 — Decompose and intent-route): `not applicable` is reserved for the specific case where research completed and showed a Phase-0 axis was over-decomposition — the query never actually demanded it, even though Phase 0 provisionally captured it as a requirement item. An item the query DID demand, where the research simply failed to gather material for it, is `uncovered` — never `not applicable`. Collapsing the two would let a research gap read as a question nobody asked, which is the exact silence this gate exists to break. Run this self-check, and any resulting REPORT.md edits, before the HTML render copy is produced and before the final chat response is sent, so the render copy and the response both reflect the corrected table rather than the pre-fix draft.
+
 </Engine>
 
 <Postures>
@@ -163,7 +169,7 @@ The same engine runs in one of two postures, selected in Phase 0. The posture ch
 
 | Posture | Selected when | Emits |
 |---|---|---|
-| **explicit research** | the user explicitly demanded research (`/ultraresearch <question>`) | terminal cited `SYNTHESIS.md` (the deliverable) |
+| **explicit research** | the user explicitly demanded research (`/ultraresearch <question>`) | terminal `REPORT.md` + `REPORT.html` (self-contained), citing `SYNTHESIS.md` |
 | **pre-work CLEAR** | invoked by `deep-interview` (or a caller) to ground facts while a human is in the loop answering the decisions; the goal/decisions are clear, only the facts are missing | grounded facts returned to the caller; `SYNTHESIS.md` as backing |
 
 CLEAR is the primary interactive pre-work path (a human answers the decisions via deep-interview; the engine fills the facts).
@@ -216,6 +222,16 @@ The grounding handoff must NOT silently unlock execution: it is presented for hu
 
 Every claim in `SYNTHESIS.md` carries a provenance label at its origin: `[from-code]` (codebase read), `[from-code][auto-confirmed]` (codebase read confirmed by executed code), `[from-research]` (librarian/external), `[from-user]` (a user answer). Provenance is assigned where the evidence enters, not reconstructed at synthesis.
 
+`SYNTHESIS.md` is an intermediate, not the deliverable: it is the **citation source of truth** the deliverable below cites for verification backing, not itself the artifact handed to the user.
+
+## REPORT.md and REPORT.html — the deliverable
+
+`$SESSION_DIR/REPORT.md` is the SSOT deliverable. `$SESSION_DIR/REPORT.html` is a single self-contained render copy of it — no external CSS, JS, fonts, or images; everything inlined into the one file. There is no rendered-document (e.g. PDF) output and no new external tooling dependency added to produce one.
+
+REPORT opens with the Phase 4 coverage table (the coverage gate's per-item table; see Coverage gate) — one row per requirement item declared in Phase 0 — placed above every per-axis section, so an uncovered item is visible before the reader descends into any one axis. Below that table, REPORT's table of contents is derived from the Phase 0 axis decomposition — the orthogonal axes the query was broken into — not a fixed section list. The axes ARE the table of contents, so REPORT answers what the user actually asked rather than compressing toward SYNTHESIS's eight-section skeleton. REPORT quotes material directly from the journal (`wave-*.md`) and cites `SYNTHESIS.md` for the verification backing behind each claim.
+
+Because REPORT quotes source material verbatim — code, config, and markup among it — the render escapes `<`, `>`, and `&` in that quoted content rather than emitting it raw; an unescaped angle bracket in a quoted snippet silently swallows the rest of the document in a browser.
+
 ## Epistemic-instrumentation artifacts
 
 The orchestrator maintains these files in `$SESSION_DIR` (the incremental trace, written wave-by-wave; every file here is orchestrator-owned — see Worker ground rules):
@@ -238,11 +254,21 @@ The artifact SET tier-scales with the existing complexity tier while the SCHEMA 
 
 ## Single-snapshot write-ordering
 
-`SYNTHESIS.md` and the handoff are generated **once, from a single post-convergence snapshot of the claim-graph** — they are NOT accreted per-wave. The per-wave `wave-*.md` journal is the incremental trace; the two consumable artifacts (`SYNTHESIS.md` and the deep-interview-schema handoff) are written at convergence from the final post-convergence claim-graph snapshot, guaranteeing both derive from one snapshot. (A late wave can overturn an earlier "verified" claim, so the consumables must derive from the final snapshot, never from mid-run state.)
+Every artifact this section covers is generated **once, from a single post-convergence snapshot of the claim-graph** — none of them are accreted per-wave. This single-snapshot rule is common to both postures: a late wave can overturn an earlier "verified" claim, so no matter which artifacts a given posture writes, every one of them must derive from the final snapshot, never from mid-run state. What differs by posture is WHICH of these get written, not WHEN they get written relative to convergence:
+
+- `SYNTHESIS.md` is written on both postures — the citation source of truth every downstream artifact cites for verification backing.
+- `REPORT.md` and `REPORT.html` are written only on the explicit research posture (see Posture selection criteria): `REPORT.md` next, quoting the journal and citing `SYNTHESIS.md`, with the Phase 4 coverage-gate table already in place at the top of the draft before the render copy is produced (see Coverage gate) — then `REPORT.html` as a render copy of `REPORT.md`.
+- The deep-interview-schema handoff is written only on the pre-work postures, in place of REPORT.
+
+The per-wave `wave-*.md` journal remains the incremental trace throughout; everything above is written only at convergence, in this dependency order, from the final post-convergence snapshot.
 
 ## Zero verified claims
 
-An explicit run that converges with **0 verified claims still emits `SYNTHESIS.md`** — with an empty verified-claims section and an explicit "no verified claims" note. Zero verified claims is a real, honest outcome (the contested claims landed in gaps/contradictions), not a reason to suppress the artifact.
+An explicit run that converges with **0 verified claims still emits `SYNTHESIS.md` and `REPORT.md`/`REPORT.html`** — `SYNTHESIS.md` with an empty verified-claims section and an explicit "no verified claims" note, and REPORT still answering each declared requirement item from the journal, marking the verification backing as absent rather than omitting the item. Zero verified claims is a real, honest outcome (the contested claims landed in gaps/contradictions), not a reason to suppress the artifact.
+
+## Final chat response contract
+
+This contract, like the coverage gate above, is scoped to the explicit research posture; pre-work CLEAR returns its facts to the calling skill rather than to a user-facing chat message. The final message returned to the user is **the coverage table plus one entry point** — the same coverage table that now sits at the top of `REPORT.md` (see Coverage gate and REPORT.md and REPORT.html — the deliverable), copied into the chat reply as-is, plus the `REPORT.md` path, nothing more. `REPORT.md` is the table's single source of truth; the chat message is a view onto that table, not a second table generated independently — generating it twice would give the table two authorities that could drift apart. The table is a requirement checklist, not a deliverable inventory: an inventory answers "what files exist," a checklist answers "what did we answer," and only the checklist surfaces an uncovered item on the user's first screen instead of leaving it buried in a file listing.
 
 </Artifact_Contract>
 
@@ -258,7 +284,7 @@ An explicit run that converges with **0 verified claims still emits `SYNTHESIS.m
 | A gather worker certifying its own claim as verified | Gatherer ≠ verifier — verification is a separate verification pass; gather workers must not self-certify |
 | Asserting a high-risk claim that did not clear the graph gate | The verified set is the sole allowlist; uncleared claims go to gaps/contradictions |
 | Dispatching the oracle as a gather worker | The oracle is never a gatherer — only the non-code verification re-read |
-| Accreting SYNTHESIS.md per wave | Single post-convergence snapshot write-ordering — both consumables generated once at convergence |
+| Accreting SYNTHESIS.md per wave | Single post-convergence snapshot write-ordering — every convergence-time artifact generated once at convergence |
 
 </Failure_Modes>
 

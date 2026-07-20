@@ -166,6 +166,7 @@ When you run code-review:
 
 - [README](../../README.en.md) — Project overview
 - [Core Pipeline Skills](./core-pipeline.en.md) — prometheus, sisyphus, sisyphus-junior
+- [Research Skills](./research.en.md) — ultraresearch, insane-browsing
 - [Authoring Skills](./authoring.en.md) — Document and slide generation
 - [Knowledge Graph & Pins](./knowledge-graph-pins.en.md) — Graphiti, Pin skills
 - [Utilities & Personal](./utilities-personal.en.md) — Configuration, keybindings, and more
