@@ -25,6 +25,33 @@ function count(token: string): number {
 }
 
 // ---------------------------------------------------------------------------
+// Frontmatter description — the surface read before the body loads and that
+// stays resident in context. It must name the actual final deliverable
+// (REPORT.md, backed by SYNTHESIS.md), not advertise SYNTHESIS.md itself as
+// what gets produced — that stale claim regressed once already.
+// ---------------------------------------------------------------------------
+
+describe("frontmatter description — final deliverable claim", () => {
+	const fmMatch = skill.match(/^---\n([\s\S]*?)\n---/);
+	const frontmatter = fmMatch ? fmMatch[1] : "";
+
+	test("frontmatter block is present and non-empty (sanity)", () => {
+		expect(frontmatter.length).toBeGreaterThan(0);
+	});
+
+	test("description names REPORT.md (+ REPORT.html) as what the explicit posture produces", () => {
+		expect(frontmatter).toContain("produces a cited REPORT.md (+ self-contained REPORT.html)");
+	});
+
+	test("description demotes SYNTHESIS.md to a backing artifact, not the produced deliverable", () => {
+		expect(frontmatter).toContain("backed by an intermediate SYNTHESIS.md");
+		// Regression guard: description must not revert to advertising
+		// SYNTHESIS.md itself as the thing produced.
+		expect(frontmatter).not.toContain("produces a cited SYNTHESIS.md");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Engine phases
 // ---------------------------------------------------------------------------
 
@@ -171,6 +198,22 @@ describe("no async / synchronous waves only", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Worker reply-channel markers — a CLOSED set (## EXPAND, ## CLAIMS only).
+// Naming the two channels that exist does not, by itself, forbid a third —
+// only checking the set's membership does. A worker returning a marker
+// channel outside this set has no orchestrator-side handler for it, so a
+// new channel silently drops whatever the worker put there.
+// ---------------------------------------------------------------------------
+
+describe("worker reply-channel markers are a closed set", () => {
+	test("only ## EXPAND and ## CLAIMS exist as backtick-quoted marker channels", () => {
+		const channels = [...skill.matchAll(/`## ([A-Z]+)`/g)].map((m) => m[1]);
+		const unique = [...new Set(channels)].sort();
+		expect(unique).toEqual(["CLAIMS", "EXPAND"]);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // SYNTHESIS.md — eight sections
 // ---------------------------------------------------------------------------
 
@@ -209,6 +252,35 @@ describe("SYNTHESIS.md eight sections", () => {
 });
 
 // ---------------------------------------------------------------------------
+// SYNTHESIS.md — the eight-section list is COUNT- and ORDER-fixed, not just
+// a set of eight substrings present somewhere in the doc. The per-section
+// presence tests above would still pass if the list grew a ninth section or
+// its items were reordered; this test parses the actual numbered list under
+// the section heading and pins both invariants.
+// ---------------------------------------------------------------------------
+
+describe("SYNTHESIS.md eight sections — count and order are fixed", () => {
+	test("exactly eight numbered sections, in the canonical order, under the section heading", () => {
+		const idx = skill.indexOf("## SYNTHESIS.md — eight sections");
+		expect(idx).toBeGreaterThan(-1);
+		const nextIdx = skill.indexOf("\n## ", idx + 1);
+		expect(nextIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, nextIdx);
+		const names = [...context.matchAll(/^\d+\.\s+\*\*(.+?)\*\*/gm)].map((m) => m[1]);
+		expect(names).toEqual([
+			"executive summary",
+			"findings by theme",
+			"codebase findings",
+			"ranked sources",
+			"verified claims",
+			"contradictions",
+			"gaps",
+			"expansion trace",
+		]);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Three journal files
 // ---------------------------------------------------------------------------
 
@@ -236,7 +308,7 @@ describe("single-snapshot write-ordering", () => {
 	});
 
 	test("artifacts are NOT accreted per-wave — explicit statement is present", () => {
-		expect(skill).toContain("NOT accreted per-wave");
+		expect(skill).toContain("none of them are accreted per-wave");
 	});
 });
 
@@ -578,3 +650,391 @@ describe("epistemic suite / claim-graph gate", () => {
 		});
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Material axis — the digest instruction names a target, and verbatim-carry
+// is a reconstructability rule rather than a fixed-shape rule. Phase 2's
+// "digest ... into wave-*.md" step states what it summarizes TOWARD (the
+// declared requirement items from Phase 0), instead of leaving the agent to
+// compress toward the nearest explicit shape (the SYNTHESIS eight-section
+// skeleton). Verbatim carry-over is triggered by reconstructability
+// ("material that summarization would make irrecoverable"), not by a fixed
+// list of shapes (tables/enumerations/code). The codebase worker role
+// protocol also requires quoted content, not just file:line coordinates.
+// ---------------------------------------------------------------------------
+
+describe("material axis — digest instruction has a goal", () => {
+	test("digest instruction states what the digest is toward (target of summarization)", () => {
+		expect(skill).toContain("toward the declared requirement items");
+	});
+
+	test("verbatim-carry rule is defined by reconstructability, not by shape (table/list/code)", () => {
+		expect(skill).toContain("cannot be reconstructed");
+		// Load-bearing: without this clause, rewriting the rule as a fixed-shape
+		// allowlist ("Carry tables, enumerations, and code verbatim, since those
+		// cannot be reconstructed…") still contains "cannot be reconstructed" and
+		// would pass here, while a quoted line or inline figure outside that
+		// allowlist gets summarized away again — the exact material-loss failure
+		// this rule exists to prevent.
+		expect(skill).toContain("not a fixed list of shapes");
+	});
+
+	test("codebase worker role protocol requires content in addition to file:line coordinates", () => {
+		const idx = skill.indexOf("Report absolute file paths");
+		expect(idx).toBeGreaterThan(-1);
+		const context = skill.slice(idx, idx + 200);
+		expect(context).toContain("file:line");
+		expect(context).toContain("quoted content");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Place axis — REPORT.md/REPORT.html is the deliverable; SYNTHESIS.md is
+// demoted to an intermediate citation source of truth, not the deliverable
+// itself. REPORT's table of contents is derived from the Phase 0 axis
+// decomposition rather than SYNTHESIS's fixed eight-section skeleton, and
+// REPORT.html is a single self-contained render copy (no external CSS, JS,
+// fonts, or images).
+// ---------------------------------------------------------------------------
+
+describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", () => {
+	test("REPORT.md filename is present", () => {
+		expect(skill).toContain("REPORT.md");
+	});
+
+	test("REPORT.html filename is present", () => {
+		expect(skill).toContain("REPORT.html");
+	});
+
+	test("REPORT is declared inside its own dedicated subsection, with the SSOT-deliverable and Phase-0-derived-TOC contract stated there", () => {
+		// Scoped to the "## REPORT.md and REPORT.html" subsection itself
+		// (through the next heading), not <Artifact_Contract> to EOF — an
+		// unbounded slice would still contain the bare token "REPORT" even if
+		// this entire subsection (and the SSOT-deliverable / TOC-derivation
+		// contract it states) were deleted outright.
+		const idx = skill.indexOf("## REPORT.md and REPORT.html");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("## Epistemic-instrumentation artifacts", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("is the SSOT deliverable");
+		expect(context).toContain("derived from the Phase 0 axis decomposition");
+	});
+
+	test("REPORT's table of contents is derived from the Phase 0 axis decomposition", () => {
+		expect(skill).toContain("derived from the Phase 0 axis decomposition");
+	});
+
+	test("SYNTHESIS.md is regulated as the citation source of truth (intermediate, not the deliverable)", () => {
+		// "citation source of truth" appears twice in the doc — once at the
+		// intended demotion sentence inside Artifact_Contract, once later in the
+		// unrelated write-ordering section. Scope to Artifact_Contract, then
+		// require the demotion clause and "citation source of truth" to be
+		// adjacent in the same sentence, so the demotion itself is what's
+		// checked rather than an incidental nearby occurrence of the phrase.
+		const acIdx = skill.indexOf("<Artifact_Contract>");
+		expect(acIdx).toBeGreaterThan(-1);
+		const afterAC = skill.slice(acIdx);
+		expect(afterAC).toMatch(
+			/is an intermediate, not the deliverable[\s\S]{0,50}citation source of truth/,
+		);
+	});
+
+	test('"(the deliverable)" is absent — SYNTHESIS is no longer promoted to final artifact', () => {
+		expect(count("(the deliverable)")).toBe(0);
+	});
+
+	// These two are a NARROW regression guard against reintroducing the two
+	// specific render tools evaluated and rejected during design — not a
+	// general "no new external dependency" invariant. SKILL.md's prose
+	// contract ("no new external tooling dependency added to produce one",
+	// Artifact_Contract) is NOT automatically enforced anywhere: `make
+	// validate`'s bare-import guard (tools/validators/lib-imports.ts) only
+	// scans `.ts` sources (explicitly skipping `.test.ts`/`.d.ts`) for
+	// relative-into-lib and bare-npm *import statements* — it never reads
+	// markdown prose, and the violation shape this contract guards against is
+	// a CLI tool name invoked via Bash at runtime, not a TypeScript import. So
+	// that axis and this one never meet. This stays scoped to the two named
+	// rejects (rather than growing into a general CLI-tool blacklist) because
+	// matching arbitrary future tool names by literal string is
+	// unenforceable in principle, not because something else covers it.
+	test('"weasyprint" is absent — rejected render-tool regression guard, not a general dependency invariant', () => {
+		expect(count("weasyprint")).toBe(0);
+	});
+
+	test('"uv run" is absent — rejected render-tool regression guard, not a general dependency invariant', () => {
+		expect(count("uv run")).toBe(0);
+	});
+
+	test("REPORT.html is specified as a single self-contained file with no external assets", () => {
+		// "REPORT.html" also appears earlier (Phase 4 overview line, posture
+		// table) — anchor past <Artifact_Contract> so this doesn't match one of
+		// those incidental mentions instead of the actual self-containedness
+		// contract sentence. Bound the search to the enclosing section (through
+		// the next heading) rather than a fixed char count — a 200-char window
+		// only has single-digit slack past the contract phrase (measured: ~8
+		// chars), so a contract-preserving heading rename or one inserted word
+		// upstream pushes the phrase out of the window and reads as a false
+		// failure instead of tracking the section.
+		const acIdx = skill.indexOf("<Artifact_Contract>");
+		expect(acIdx).toBeGreaterThan(-1);
+		const idx = skill.indexOf("REPORT.html", acIdx);
+		expect(idx).toBeGreaterThan(acIdx);
+		const endIdx = skill.indexOf("## Epistemic-instrumentation artifacts", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("self-contained");
+		expect(context).toContain("no external CSS, JS, fonts, or images");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Detection axis — the requirement coverage gate. The engine declares
+// requirement items up front (Phase 0, before any worker spawns, derived
+// from its own axis decomposition rather than a second classifier), then
+// forces a per-item coverage check against them at synthesis time. Without
+// a pre-declared item list, a gap has no state to be a gap FROM — omissions
+// vanish silently instead of surfacing as a blank, defect-flagged row. The
+// synthesis-time step forces a per-item coverage table with a three-value
+// Status enum (`covered` / `not applicable: <reason>` / `uncovered: <reason>`)
+// where a blank cell is explicitly a defect, resolved by an immediate
+// REPORT.md record from journal material already in hand — never a
+// re-launched wave. The final chat message is contracted to be that
+// coverage table plus one entry point, explicitly a requirement checklist
+// rather than a deliverable inventory. The negative assert on the synthesis
+// section (it must not call itself "the deliverable") is a regression guard
+// against that word creeping back into the section describing the gate.
+// ---------------------------------------------------------------------------
+
+describe("detection axis — requirement coverage gate", () => {
+	test("Phase 0 declares requirement items before any worker spawns, in one adjacent sentence", () => {
+		const idx = skill.indexOf("## Phase 0");
+		expect(idx).toBeGreaterThan(-1);
+		// Bound the search to the Phase 0 section itself (up to the next phase
+		// heading) rather than a fixed char count, so the window tracks the
+		// section instead of silently losing coverage if it grows.
+		const nextPhaseIdx = skill.indexOf("## Phase 1", idx);
+		expect(nextPhaseIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, nextPhaseIdx);
+		// A single regex requires the two tokens to be adjacent in one sentence,
+		// not merely both present anywhere in the section — otherwise the timing
+		// qualifier ("before any worker spawns") could survive detached from the
+		// declaration it's supposed to qualify.
+		expect(context).toMatch(/before any worker spawns, declare the requirement items/);
+	});
+
+	test("requirement items are declared to originate from Phase 0's own axis decomposition, not a separate classifier", () => {
+		expect(skill).toContain("requirement items are the Phase 0 axes");
+	});
+
+	test("Phase 4 instructs building a coverage table with one row per Phase 0 requirement item", () => {
+		const idx = skill.indexOf("## Phase 4");
+		expect(idx).toBeGreaterThan(-1);
+		// Bound to the Engine block's actual close rather than a fixed char
+		// count — Phase 4 is the Engine block's last section.
+		const engineEndIdx = skill.indexOf("</Engine>", idx);
+		expect(engineEndIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, engineEndIdx);
+		// "coverage table" alone is not discriminating: the same window also
+		// contains a negative clause ("...nothing for a REPORT coverage table
+		// to judge") that keeps the bare token alive even if the actual gate
+		// instruction is deleted. Assert the row-granularity phrase, which
+		// exists only in the instruction body, not the negative clause.
+		expect(context).toContain("build a **coverage table**");
+		expect(context).toContain("one row per requirement item declared in Phase 0");
+	});
+
+	test("coverage row Status is restricted to a three-value enum: covered / not applicable / uncovered", () => {
+		// The enum's point is that Status is CONFINED to these values, not merely
+		// that the value names appear somewhere in the doc — assert the
+		// confinement clause itself, not just the tokens.
+		expect(skill).toContain("restricted to exactly three values");
+		expect(skill).toContain("`covered`");
+		expect(skill).toContain("not applicable:");
+		expect(skill).toContain("uncovered:");
+		// Load-bearing collapse-guard: forbids folding a demanded-but-ungathered
+		// item ("uncovered") into "not applicable" (never demanded). Losing this
+		// sentence lets the three-value enum revert to two-value in practice
+		// while the enum names themselves stay intact.
+		expect(skill).toContain("never `not applicable`");
+	});
+
+	test("`not applicable`'s reachability path (Phase 0 over-decomposition correction) is stated", () => {
+		// Without this sentence, `not applicable` has no documented path a value
+		// could ever reach it through — it becomes a dead enum member that gets
+		// reused as an escape hatch out of an honest `uncovered`, even though the
+		// two-value enum names themselves stay intact in the doc.
+		expect(skill).toContain(
+			"is reserved for the specific case where research completed and showed a Phase-0 axis was over-decomposition",
+		);
+	});
+
+	test("Phase 0's requirement-item declaration is stated as provisional — the precondition `not applicable` needs to be reachable at all", () => {
+		// `not applicable` can only ever fire if Phase 0's declaration is
+		// provisional (over-decomposable). If Phase 0 instead declares "the
+		// requirement items the query demands" as settled fact, every declared
+		// item is true by construction and the value is dead on arrival — the
+		// Phase 4 reachability-path sentence above would describe a path that
+		// starts nowhere. Scoped to the Phase 0 section itself.
+		const idx = skill.indexOf("## Phase 0");
+		expect(idx).toBeGreaterThan(-1);
+		const nextPhaseIdx = skill.indexOf("## Phase 1", idx);
+		expect(nextPhaseIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, nextPhaseIdx);
+		expect(context).toContain("the query provisionally appears to demand");
+		expect(context).toContain("This declaration is a tentative judgment, not a final fact");
+	});
+
+	test("a blank Status value is stated to be a defect", () => {
+		expect(skill).toContain("a blank Status is a defect");
+	});
+
+	test("blank-Status resolution is an immediate REPORT.md record from journal material already in hand, never a re-launched wave", () => {
+		// The name asserts a PRECONDITION ("material already sits in the
+		// journal"); asserting only the two imperative tokens below leaves that
+		// precondition unchecked — deleting it turns the surviving contract into
+		// "always record immediately, never relaunch," which lets a blank cell
+		// be filled with no material in hand at all (a fabricated `covered`).
+		expect(skill).toContain(
+			"When the covering material already sits in the journal but never made it into REPORT.md",
+		);
+		expect(skill).toContain("record it in REPORT.md immediately");
+		expect(skill).toContain("without relaunching a wave");
+	});
+
+	describe("chat response contract", () => {
+		test("the final chat message is stated to be the coverage table plus one entry point", () => {
+			expect(skill).toContain("the coverage table plus one entry point");
+		});
+
+		test("the final chat message is stated to be a requirement checklist, not a deliverable inventory", () => {
+			expect(skill).toContain("a requirement checklist, not a deliverable inventory");
+		});
+	});
+
+	test('"deliverable" is absent from the Phase 4 section (Phase 4 must not call itself the deliverable)', () => {
+		const idx = skill.indexOf("## Phase 4");
+		expect(idx).toBeGreaterThan(-1);
+		// "\n## " does not match the "### Coverage gate" sub-heading that follows
+		// Phase 4 (three #'s), so that boundary lets the slice run past
+		// </Engine> and <Postures> into "## Posture selection criteria" —
+		// pulling an unrelated section into what's supposed to be a Phase-4-only
+		// check. </Engine> is the Engine block's real close and Phase 4 is its
+		// last section, so anchor there instead.
+		const engineEndIdx = skill.indexOf("</Engine>", idx);
+		expect(engineEndIdx).toBeGreaterThan(idx);
+		const phase4Section = skill.slice(idx, engineEndIdx);
+		expect(count("deliverable")).toBeGreaterThan(0); // sanity: token exists elsewhere in the doc (Artifact_Contract's REPORT heading)
+		expect(phase4Section).not.toContain("deliverable");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Posture exclusivity — REPORT.md/REPORT.html are an explicit-research-posture
+// artifact only. Pre-work CLEAR grounds facts and returns a deep-interview-
+// schema handoff instead; it never emits REPORT. Nothing above pinned this
+// exclusivity directly, so the write-ordering sentence that enforces it could
+// regress unnoticed.
+// ---------------------------------------------------------------------------
+
+describe("posture exclusivity — REPORT is explicit-posture only", () => {
+	test("the coverage gate is scoped to the explicit research posture (within Phase 4 through the Engine block's close)", () => {
+		const idx = skill.indexOf("## Phase 4");
+		expect(idx).toBeGreaterThan(-1);
+		const engineEndIdx = skill.indexOf("</Engine>", idx);
+		expect(engineEndIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, engineEndIdx);
+		expect(context).toContain("This gate is scoped to the explicit research posture");
+	});
+
+	test("Single-snapshot write-ordering binds BOTH REPORT.md and REPORT.html to the explicit-research-only clause, and the pre-work bullet carries no REPORT-family artifact", () => {
+		const idx = skill.indexOf("## Single-snapshot write-ordering");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("## Zero verified claims", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		// Both artifact names must sit in the SAME clause that restricts them to
+		// the explicit research posture. Splitting them into separate sentences
+		// (e.g. "REPORT.md is written only on the explicit posture; REPORT.html
+		// is additionally written on pre-work CLEAR") would leave REPORT.html
+		// ungoverned by this clause even though the bare "written only on the
+		// explicit research posture" token would still appear elsewhere.
+		expect(context).toContain(
+			"`REPORT.md` and `REPORT.html` are written only on the explicit research posture",
+		);
+		// The pre-work bullet must name only the deep-interview-schema handoff —
+		// no REPORT-family artifact riding along into pre-work postures.
+		const preworkIdx = context.indexOf(
+			"The deep-interview-schema handoff is written only on the pre-work postures",
+		);
+		expect(preworkIdx).toBeGreaterThan(-1);
+		const preworkBullet = context.slice(preworkIdx, preworkIdx + 150);
+		expect(preworkBullet).not.toContain("REPORT.md");
+		expect(preworkBullet).not.toContain("REPORT.html");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Coverage-table persistence — closes the gap where the Phase 4 gate builds
+// a coverage table but never states where that table lives. Four facts pin
+// this so the table can't quietly go back to existing only in the final chat
+// message: (1) the Coverage gate section names REPORT.md as the write
+// destination and the top of the file, above the per-axis sections, as the
+// position; (2) the REPORT.md and REPORT.html section states the same
+// opening-position fact from the artifact-shape side; (3) Single-snapshot
+// write-ordering states the table is already in the REPORT.md draft before
+// the REPORT.html render copy is produced, not added after; (4) Final chat
+// response contract states REPORT.md is the table's one authority and the
+// chat copy is a view onto it, never a second table generated independently.
+// Each assertion is a full relational phrase (not a bare token) so a rewrite
+// that keeps the surrounding words but drops the actual relation — e.g.
+// keeps "REPORT.md" and "coverage table" in the paragraph while retargeting
+// the table to the chat message, or keeps both artifacts named while
+// dropping the before/after render-copy ordering — still fails the check.
+// ---------------------------------------------------------------------------
+
+describe("coverage table is persisted, positioned, and single-authority — not chat-only", () => {
+	test("Coverage gate: the table's write destination is REPORT.md, at the top of the file, above the per-axis sections", () => {
+		const idx = skill.indexOf("### Coverage gate");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("</Engine>", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain(
+			"write it into `REPORT.md` itself, at the top of the file, above the per-axis sections",
+		);
+	});
+
+	test("REPORT.md and REPORT.html section: REPORT opens with the coverage table, placed above every per-axis section", () => {
+		const idx = skill.indexOf("## REPORT.md and REPORT.html");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("## Epistemic-instrumentation artifacts", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain("REPORT opens with the Phase 4 coverage table");
+		expect(context).toContain("placed above every per-axis section");
+	});
+
+	test("Single-snapshot write-ordering: the table is already in the REPORT.md draft before the REPORT.html render copy is produced", () => {
+		const idx = skill.indexOf("## Single-snapshot write-ordering");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("## Zero verified claims", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain(
+			"with the Phase 4 coverage-gate table already in place at the top of the draft before the render copy is produced",
+		);
+	});
+
+	test("Final chat response contract: REPORT.md is the table's single authority, the chat message is a view onto it, never a second independently-generated table", () => {
+		const idx = skill.indexOf("## Final chat response contract");
+		expect(idx).toBeGreaterThan(-1);
+		const endIdx = skill.indexOf("</Artifact_Contract>", idx);
+		expect(endIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, endIdx);
+		expect(context).toContain(
+			"the chat message is a view onto that table, not a second table generated independently",
+		);
+	});
+});
+

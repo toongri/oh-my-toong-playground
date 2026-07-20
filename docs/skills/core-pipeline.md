@@ -7,6 +7,7 @@ oh-my-toong은 AI 에이전트 설정을 중앙에서 버전 관리하고 프로
 다른 영역의 스킬은 별도 문서를 참고하세요.
 
 - [코드/디자인 리뷰 및 품질](./review-quality.md)
+- [리서치](./research.md)
 - [문서·발표·PR 작성](./authoring.md)
 - [지식 그래프(pins)](./knowledge-graph-pins.md)
 - [유틸리티 및 개인 워크플로우](./utilities-personal.md)
@@ -225,6 +226,7 @@ flowchart TB
 
 - [README](../../README.md) — 프로젝트 개요와 중앙 관리 + 프로젝트 분화 스토리
 - [코드/디자인 리뷰 및 품질](./review-quality.md)
+- [리서치](./research.md)
 - [문서·발표·PR 작성](./authoring.md)
 - [지식 그래프(pins)](./knowledge-graph-pins.md)
 - [유틸리티 및 개인 워크플로우](./utilities-personal.md)

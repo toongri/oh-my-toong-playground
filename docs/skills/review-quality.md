@@ -166,6 +166,7 @@ code-review를 실행하면:
 
 - [README](../../README.md) — 프로젝트 개요
 - [핵심 파이프라인 스킬](./core-pipeline.md) — prometheus, sisyphus, sisyphus-junior
+- [리서치 스킬](./research.md) — ultraresearch, insane-browsing
 - [저작 스킬](./authoring.md) — 문서·슬라이드 생성
 - [지식 그래프 & Pins](./knowledge-graph-pins.md) — Graphiti, Pin 스킬
 - [유틸리티 & 개인화](./utilities-personal.md) — 설정, 단축키, 기타

@@ -228,5 +228,6 @@ Pins의 권장 운용 패턴은 세 단계로 나뉜다.
 - [README](../../README.md) — 프로젝트 전체 개요
 - [핵심 파이프라인 스킬](./core-pipeline.md) — deep-interview / prometheus / sisyphus
 - [리뷰 품질 스킬](./review-quality.md) — code-review / design-review
+- [리서치 스킬](./research.md) — ultraresearch / insane-browsing
 - [저작 스킬](./authoring.md) — technical-writing / humanizer
 - [개인 유틸리티 스킬](./utilities-personal.md) — hud / mock-interview
