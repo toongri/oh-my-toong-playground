@@ -4,7 +4,7 @@ English | [한국어](research.md)
 
 # Research Skills
 
-oh-my-toong's research skills gather and verify facts at saturation before a judgment is made. The research axis is a single engine (`ultraresearch`) that runs in two postures, with `insane-browsing` attached inside it as a worker whenever a source requires authentication or JS rendering that surface-level web search cannot reach.
+oh-my-toong's research skills gather and verify facts at saturation before a judgment is made. The research axis is a single engine (`ultraresearch`) that runs in two postures, with a `hermes` worker loading the `insane-browsing` skill whenever a source requires authentication or JS rendering that surface-level web search cannot reach.
 
 ---
 
