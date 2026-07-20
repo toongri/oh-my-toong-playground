@@ -254,7 +254,13 @@ The artifact SET tier-scales with the existing complexity tier while the SCHEMA 
 
 ## Single-snapshot write-ordering
 
-`SYNTHESIS.md`, `REPORT.md`/`REPORT.html`, and the handoff are all generated **once, from a single post-convergence snapshot of the claim-graph** — they are NOT accreted per-wave. The per-wave `wave-*.md` journal is the incremental trace; everything else is written at convergence, in dependency order, from the final post-convergence snapshot: `SYNTHESIS.md` first (the citation source of truth), then `REPORT.md` (which quotes the journal and cites `SYNTHESIS.md` for verification backing), then `REPORT.html` (a render copy of `REPORT.md`) — plus the deep-interview-schema handoff on pre-work postures. (A late wave can overturn an earlier "verified" claim, so every one of these must derive from the final snapshot, never from mid-run state.)
+Every artifact this section covers is generated **once, from a single post-convergence snapshot of the claim-graph** — none of them are accreted per-wave. This single-snapshot rule is common to both postures: a late wave can overturn an earlier "verified" claim, so no matter which artifacts a given posture writes, every one of them must derive from the final snapshot, never from mid-run state. What differs by posture is WHICH of these get written, not WHEN they get written relative to convergence:
+
+- `SYNTHESIS.md` is written on both postures — the citation source of truth every downstream artifact cites for verification backing.
+- `REPORT.md` and `REPORT.html` are written only on the explicit research posture (see Posture selection criteria): `REPORT.md` next, quoting the journal and citing `SYNTHESIS.md`, then `REPORT.html` as a render copy of `REPORT.md`.
+- The deep-interview-schema handoff is written only on the pre-work postures, in place of REPORT.
+
+The per-wave `wave-*.md` journal remains the incremental trace throughout; everything above is written only at convergence, in this dependency order, from the final post-convergence snapshot.
 
 ## Zero verified claims
 
