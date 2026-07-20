@@ -25,6 +25,33 @@ function count(token: string): number {
 }
 
 // ---------------------------------------------------------------------------
+// Frontmatter description — the surface read before the body loads and that
+// stays resident in context. It must name the actual final deliverable
+// (REPORT.md, backed by SYNTHESIS.md), not advertise SYNTHESIS.md itself as
+// what gets produced — that stale claim regressed once already.
+// ---------------------------------------------------------------------------
+
+describe("frontmatter description — final deliverable claim", () => {
+	const fmMatch = skill.match(/^---\n([\s\S]*?)\n---/);
+	const frontmatter = fmMatch ? fmMatch[1] : "";
+
+	test("frontmatter block is present and non-empty (sanity)", () => {
+		expect(frontmatter.length).toBeGreaterThan(0);
+	});
+
+	test("description names REPORT.md (+ REPORT.html) as what the explicit posture produces", () => {
+		expect(frontmatter).toContain("produces a cited REPORT.md (+ self-contained REPORT.html)");
+	});
+
+	test("description demotes SYNTHESIS.md to a backing artifact, not the produced deliverable", () => {
+		expect(frontmatter).toContain("backed by an intermediate SYNTHESIS.md");
+		// Regression guard: description must not revert to advertising
+		// SYNTHESIS.md itself as the thing produced.
+		expect(frontmatter).not.toContain("produces a cited SYNTHESIS.md");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Engine phases
 // ---------------------------------------------------------------------------
 
@@ -171,6 +198,22 @@ describe("no async / synchronous waves only", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Worker reply-channel markers — a CLOSED set (## EXPAND, ## CLAIMS only).
+// Naming the two channels that exist does not, by itself, forbid a third —
+// only checking the set's membership does. A worker returning a marker
+// channel outside this set has no orchestrator-side handler for it, so a
+// new channel silently drops whatever the worker put there.
+// ---------------------------------------------------------------------------
+
+describe("worker reply-channel markers are a closed set", () => {
+	test("only ## EXPAND and ## CLAIMS exist as backtick-quoted marker channels", () => {
+		const channels = [...skill.matchAll(/`## ([A-Z]+)`/g)].map((m) => m[1]);
+		const unique = [...new Set(channels)].sort();
+		expect(unique).toEqual(["CLAIMS", "EXPAND"]);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // SYNTHESIS.md — eight sections
 // ---------------------------------------------------------------------------
 
@@ -205,6 +248,35 @@ describe("SYNTHESIS.md eight sections", () => {
 
 	test("expansion trace section is present", () => {
 		expect(skill).toContain("expansion trace");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// SYNTHESIS.md — the eight-section list is COUNT- and ORDER-fixed, not just
+// a set of eight substrings present somewhere in the doc. The per-section
+// presence tests above would still pass if the list grew a ninth section or
+// its items were reordered; this test parses the actual numbered list under
+// the section heading and pins both invariants.
+// ---------------------------------------------------------------------------
+
+describe("SYNTHESIS.md eight sections — count and order are fixed", () => {
+	test("exactly eight numbered sections, in the canonical order, under the section heading", () => {
+		const idx = skill.indexOf("## SYNTHESIS.md — eight sections");
+		expect(idx).toBeGreaterThan(-1);
+		const nextIdx = skill.indexOf("\n## ", idx + 1);
+		expect(nextIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, nextIdx);
+		const names = [...context.matchAll(/^\d+\.\s+\*\*(.+?)\*\*/gm)].map((m) => m[1]);
+		expect(names).toEqual([
+			"executive summary",
+			"findings by theme",
+			"codebase findings",
+			"ranked sources",
+			"verified claims",
+			"contradictions",
+			"gaps",
+			"expansion trace",
+		]);
 	});
 });
 
@@ -598,6 +670,13 @@ describe("material axis — digest instruction has a goal", () => {
 
 	test("verbatim-carry rule is defined by reconstructability, not by shape (table/list/code)", () => {
 		expect(skill).toContain("cannot be reconstructed");
+		// Load-bearing: without this clause, rewriting the rule as a fixed-shape
+		// allowlist ("Carry tables, enumerations, and code verbatim, since those
+		// cannot be reconstructed…") still contains "cannot be reconstructed" and
+		// would pass here, while a quoted line or inline figure outside that
+		// allowlist gets summarized away again — the exact material-loss failure
+		// this rule exists to prevent.
+		expect(skill).toContain("not a fixed list of shapes");
 	});
 
 	test("codebase worker role protocol requires content in addition to file:line coordinates", () => {
@@ -665,11 +744,19 @@ describe("place axis — REPORT is the deliverable, SYNTHESIS is intermediate", 
 		expect(count("(the deliverable)")).toBe(0);
 	});
 
-	test('"weasyprint" is absent — no new external dependency introduced', () => {
+	// These two are a NARROW regression guard against reintroducing the two
+	// specific render tools evaluated and rejected during design — not a
+	// general "no new external dependency" invariant. This file cannot enforce
+	// that general invariant (any other tool name would slip a literal
+	// blacklist); the actual enforcement point is `make validate`'s bare-import
+	// guard against `package.json`/`bun.lock`, which covers arbitrary future
+	// tool names. Duplicating that enforcement here would be redundant and
+	// still incomplete, so this stays scoped to the two named rejects.
+	test('"weasyprint" is absent — rejected render-tool regression guard, not a general dependency invariant', () => {
 		expect(count("weasyprint")).toBe(0);
 	});
 
-	test('"uv run" is absent — no new external dependency introduced', () => {
+	test('"uv run" is absent — rejected render-tool regression guard, not a general dependency invariant', () => {
 		expect(count("uv run")).toBe(0);
 	});
 
@@ -769,6 +856,22 @@ describe("detection axis — requirement coverage gate", () => {
 		);
 	});
 
+	test("Phase 0's requirement-item declaration is stated as provisional — the precondition `not applicable` needs to be reachable at all", () => {
+		// `not applicable` can only ever fire if Phase 0's declaration is
+		// provisional (over-decomposable). If Phase 0 instead declares "the
+		// requirement items the query demands" as settled fact, every declared
+		// item is true by construction and the value is dead on arrival — the
+		// Phase 4 reachability-path sentence above would describe a path that
+		// starts nowhere. Scoped to the Phase 0 section itself.
+		const idx = skill.indexOf("## Phase 0");
+		expect(idx).toBeGreaterThan(-1);
+		const nextPhaseIdx = skill.indexOf("## Phase 1", idx);
+		expect(nextPhaseIdx).toBeGreaterThan(idx);
+		const context = skill.slice(idx, nextPhaseIdx);
+		expect(context).toContain("the query provisionally appears to demand");
+		expect(context).toContain("This declaration is a tentative judgment, not a final fact");
+	});
+
 	test("a blank Status value is stated to be a defect", () => {
 		expect(skill).toContain("a blank Status is a defect");
 	});
@@ -831,12 +934,29 @@ describe("posture exclusivity — REPORT is explicit-posture only", () => {
 		expect(context).toContain("This gate is scoped to the explicit research posture");
 	});
 
-	test("Single-snapshot write-ordering states REPORT.md/REPORT.html are written only on the explicit research posture", () => {
+	test("Single-snapshot write-ordering binds BOTH REPORT.md and REPORT.html to the explicit-research-only clause, and the pre-work bullet carries no REPORT-family artifact", () => {
 		const idx = skill.indexOf("## Single-snapshot write-ordering");
 		expect(idx).toBeGreaterThan(-1);
 		const endIdx = skill.indexOf("## Zero verified claims", idx);
 		expect(endIdx).toBeGreaterThan(idx);
 		const context = skill.slice(idx, endIdx);
-		expect(context).toContain("written only on the explicit research posture");
+		// Both artifact names must sit in the SAME clause that restricts them to
+		// the explicit research posture. Splitting them into separate sentences
+		// (e.g. "REPORT.md is written only on the explicit posture; REPORT.html
+		// is additionally written on pre-work CLEAR") would leave REPORT.html
+		// ungoverned by this clause even though the bare "written only on the
+		// explicit research posture" token would still appear elsewhere.
+		expect(context).toContain(
+			"`REPORT.md` and `REPORT.html` are written only on the explicit research posture",
+		);
+		// The pre-work bullet must name only the deep-interview-schema handoff —
+		// no REPORT-family artifact riding along into pre-work postures.
+		const preworkIdx = context.indexOf(
+			"The deep-interview-schema handoff is written only on the pre-work postures",
+		);
+		expect(preworkIdx).toBeGreaterThan(-1);
+		const preworkBullet = context.slice(preworkIdx, preworkIdx + 150);
+		expect(preworkBullet).not.toContain("REPORT.md");
+		expect(preworkBullet).not.toContain("REPORT.html");
 	});
 });
