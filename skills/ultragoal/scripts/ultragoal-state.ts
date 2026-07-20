@@ -1374,9 +1374,11 @@ function main(): void {
 			// window (first story dispatch) is the documentation layer — SKILL.md's Execution
 			// Dispatch step 1 running the phase flip before dispatch. Two separate artifacts
 			// back this, not one: SKILL.test.ts's static string-order assertions (`toContain`/
-			// `indexOf` on the markdown) pin that the prose *has* this ordering — no execution,
-			// no RED/GREEN there. The actual RED 0/3 → GREEN 3/3 behavioral count came from a
-			// subagent pressure-scenario measurement recorded outside this repo, not by this
+			// `indexOf` on the markdown) pin that the prose *has* this ordering — those
+			// assertions themselves went through an ordinary RED/GREEN (failing pre-
+			// implementation at HEAD), but no subagent-behavioral RED/GREEN happens there.
+			// The actual RED 0/3 → GREEN 3/3 behavioral count came from a subagent
+			// pressure-scenario measurement recorded outside this repo, not by this
 			// code path — see `~/.omt/oh-my-toong-playground/ultragoal-arming-gap-red.md` and
 			// `-green.md`.
 			//
