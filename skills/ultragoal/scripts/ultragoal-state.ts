@@ -1378,10 +1378,12 @@ function main(): void {
 			// assertions themselves went through an ordinary RED/GREEN (failing before the
 			// "ultragoal phase 전환을 첫 sisyphus 디스패치 전으로 승격" commit), but no
 			// subagent-behavioral RED/GREEN happens there. The actual RED 0/3 → GREEN 3/3
-			// behavioral count came from a faithful-reproduction subagent scenario — the
-			// same scenario run 3x against the /tmp/ultragoal-before snapshot, not by this
-			// code path — see `~/.omt/oh-my-toong-playground/ultragoal-arming-gap-red.md`
-			// and `-green.md`.
+			// behavioral count came from a faithful-reproduction subagent scenario with a
+			// byte-identical prompt, run 3x per arm (6 runs total): RED against the
+			// /tmp/ultragoal-before snapshot, GREEN against /tmp/ultragoal-after — the
+			// snapshot path is the only variable between the two arms, not this code path
+			// — see `~/.omt/oh-my-toong-playground/ultragoal-arming-gap-red.md` and
+			// `-green.md`.
 			//
 			// readPrior (not readGoalState) — readGoalState folds any active:false state to
 			// null, so it can't see phase in a terminal state. Condition is exactly
