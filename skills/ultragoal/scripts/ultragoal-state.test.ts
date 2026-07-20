@@ -2951,10 +2951,12 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 // ultragoal-arming-gap-red.md, -green.md). 자세한 근거는 ultragoal-state.ts의
 // set-verdict 핸들러 주석(같은 인용 포함)을 참조.
 //
-// 아래 AC 중 AC1·AC2·AC5는 구현 전 HEAD에서 진짜 RED였다(기능 부재로 실패). 반면
-// AC3·AC4·AC6은 보존 가드(terminal phase 불변 / 이미 pursuing이면 무보고 /
-// verdict 값 보존)라서 구현 전에도 HEAD에서 통과하는 것이 정상이다 — 애초에 이
-// 핸들러가 "고칠" 대상이 아니라 "건드리지 않아야 할" 대상을 검증하기 때문이다.
+// 아래 AC 중 AC1·AC2·AC5·AC7은 구현 전 HEAD에서 진짜 RED였다(기능 부재로 실패) —
+// AC7도 마찬가지로 자동 전환 자체가 없던 시점에는 `--verdict absent` 기록이
+// phase를 pursuing으로 올리지 않았다. 반면 AC3·AC4·AC6은 보존 가드(terminal
+// phase 불변 / 이미 pursuing이면 무보고 / verdict 값 보존)라서 구현 전에도
+// HEAD에서 통과하는 것이 정상이다 — 애초에 이 핸들러가 "고칠" 대상이 아니라
+// "건드리지 않아야 할" 대상을 검증하기 때문이다.
 // 이 셋의 비공허성은 HEAD 통과 여부가 아니라 뮤턴트 주입으로 확인했다: 조건을
 // `prior.phase === "planning"` → `prior.phase !== "pursuing"`으로 바꾼 변형은
 // 단독으로 AC3을 `Expected "complete", Received "pursuing"`으로 실패시킨다 — AC3

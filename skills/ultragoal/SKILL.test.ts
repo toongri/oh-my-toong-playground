@@ -283,11 +283,13 @@ describe("identity: frontmatter and state-namespace point at ultragoal, not goal
 describe("Stop-hook arming gap: pursuing transition precedes first dispatch", () => {
 	// Scoped to the numbered list itself, not the whole Execution Dispatch
 	// section — the section also contains the "### Phase transitions"
-	// subsection, which already carries a `set --phase pursuing` mention
-	// today (just at the wrong point in the loop). Widening the scope to the
-	// whole section would let AC1/AC2 pass at HEAD on that pre-existing
-	// mention, missing the actual defect: the step is absent from the
-	// numbered list an agent reads to drive the dispatch loop.
+	// subsection, which carried a `set --phase pursuing` mention at HEAD
+	// before this commit (at the wrong point in the loop; SKILL.md:99 now
+	// correctly reads "Before the first sisyphus dispatch"). Widening the
+	// scope to the whole section would have let AC1/AC2 pass on that
+	// pre-existing mention even while it sat at the wrong point, missing the
+	// actual defect: the step being absent from the numbered list an agent
+	// reads to drive the dispatch loop.
 	const numberedList = skillMd.slice(
 		skillMd.indexOf("## Execution Dispatch"),
 		skillMd.indexOf("### Phase transitions"),
@@ -298,12 +300,19 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 	});
 
 	test("the pursuing transition is positioned before the sisyphus dispatch instruction", () => {
+		// Anchored to "Dispatch ONLY that one story" (step 3's actual dispatch
+		// instruction), not a bare `Skill(skill: "sisyphus")` lookup — that
+		// string's FIRST occurrence in numberedList is step 1's own
+		// self-referential sentence ("This must run BEFORE the first
+		// `Skill(skill: "sisyphus")` call below"), not step 3's dispatch. A
+		// bare-string anchor would still pass if step 3's actual dispatch
+		// instruction were deleted and only step 1's self-reference remained.
 		expect(numberedList.indexOf("set --phase pursuing")).toBeGreaterThan(-1);
-		expect(numberedList.indexOf('Skill(skill: "sisyphus")')).toBeGreaterThan(
-			-1,
-		);
+		expect(
+			numberedList.indexOf("Dispatch ONLY that one story"),
+		).toBeGreaterThan(-1);
 		expect(numberedList.indexOf("set --phase pursuing")).toBeLessThan(
-			numberedList.indexOf('Skill(skill: "sisyphus")'),
+			numberedList.indexOf("Dispatch ONLY that one story"),
 		);
 	});
 
@@ -313,10 +322,13 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 
 	test("the narrative arrow order reads set --phase pursuing before dispatch story #1", () => {
 		// Scoped to the "Initial path" narrative sentence specifically — a bare
-		// whole-file indexOf comparison would pass spuriously even at HEAD,
-		// since the Phase-transitions code block's `set --phase pursuing`
-		// mention sits earlier in the file than the narrative's "dispatch
-		// story #1", despite the narrative's own arrow order being reversed.
+		// whole-file indexOf comparison would have passed spuriously even at
+		// HEAD before this commit's fix, since the Phase-transitions code
+		// block's `set --phase pursuing` mention sits earlier in the file than
+		// the narrative's "dispatch story #1", regardless of the narrative
+		// sentence's own arrow order — which, at that point, was reversed (now
+		// corrected to `set --phase pursuing` → `dispatch story #1`,
+		// SKILL.md:104).
 		const initialPath = skillMd.slice(
 			skillMd.indexOf("Initial path:"),
 			skillMd.indexOf("Re-plan loop-back:"),
@@ -325,6 +337,33 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 		expect(initialPath.indexOf("set --phase pursuing")).toBeGreaterThan(-1);
 		expect(initialPath.indexOf("set --phase pursuing")).toBeLessThan(
 			initialPath.indexOf("dispatch story #1"),
+		);
+	});
+
+	test("the Re-plan loop-back narrative reads confirm-all-stories before set --phase pursuing before dispatch", () => {
+		// Sliced from "Re-plan loop-back:" through the next section boundary
+		// ("## Completion Gate") — reading SKILL.md directly (line 104)
+		// confirms this slice contains exactly one Re-plan loop-back sentence
+		// and stops before the next section, so it does not repeat the scope
+		// trap the four tests above guard against (a slice wide enough to let
+		// an incidentally-ordered mention elsewhere in the file pass
+		// spuriously).
+		const replanLoopBack = skillMd.slice(
+			skillMd.indexOf("Re-plan loop-back:"),
+			skillMd.indexOf("## Completion Gate"),
+		);
+		expect(replanLoopBack.indexOf("confirm-all-stories")).toBeGreaterThan(-1);
+		expect(replanLoopBack.indexOf("set --phase pursuing")).toBeGreaterThan(
+			-1,
+		);
+		expect(
+			replanLoopBack.indexOf("dispatch the fresh sisyphus call"),
+		).toBeGreaterThan(-1);
+		expect(replanLoopBack.indexOf("confirm-all-stories")).toBeLessThan(
+			replanLoopBack.indexOf("set --phase pursuing"),
+		);
+		expect(replanLoopBack.indexOf("set --phase pursuing")).toBeLessThan(
+			replanLoopBack.indexOf("dispatch the fresh sisyphus call"),
 		);
 	});
 });
