@@ -64,7 +64,7 @@ The vocabulary is therefore: **wave → barrier collect → next wave**. There i
 ## Worker ground rules
 
 - **Read-only gatherers.** Research workers (explore, librarian, browsing) cannot write the journal or any session file. Every journal write is yours.
-- **Artifacts are orchestrator-owned.** Workers never write the journal or any epistemic-instrumentation artifact directly — they return marker text only: the `## EXPAND` tail, and for claim/observation candidates a `## CLAIMS` channel, the same mechanism as `## EXPAND`. The orchestrator is the sole writer of every artifact, from `wave-*.md` through the claim graph and its siblings.
+- **Artifacts are orchestrator-owned.** Workers never write the journal or any epistemic-instrumentation artifact directly — they return everything as reply text instead: their findings (for a codebase coordinate, that means the quoted content at that `file:line`, not the coordinate alone), the `## EXPAND` lead tail, and for claim/observation candidates a `## CLAIMS` channel, the same mechanism as `## EXPAND`. The orchestrator is the sole writer of every artifact, from `wave-*.md` through the claim graph and its siblings.
 - **No worker recursion.** Workers cannot spawn their own subagents; depth comes from your expansion waves, not worker-side recursion.
 - **Lift the budget in the spawn message.** Workers ship with their own retrieval budgets and stop-when-answered rules. Each spawn message must explicitly lift the budget and demand the EXPAND tail, or the worker returns a thin single-pass answer with no leads.
 - **One unique angle per worker.** No two workers in a wave share an angle. Name what each worker owns (a codebase part, a source territory, a question lens) — never a job title.
