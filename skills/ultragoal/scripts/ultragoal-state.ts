@@ -1348,6 +1348,24 @@ function main(): void {
 				);
 				process.exit(1);
 			}
+			// Recovery device (ultragoal-arming-gap): the persistent-mode Stop hook's ultragoal
+			// branch refuses to stop only while phase === "pursuing". SKILL.md instructs the
+			// pursuing transition to run AFTER the first story dispatch, so the first story can
+			// run unarmed if that step is missed. Detect the miss here and self-heal on the
+			// first verdict recording — planning-only fires it once per pursuit and re-plans
+			// return to planning, so the sequence self-limits without extra state.
+			//
+			// readPrior (not readGoalState) — readGoalState folds any active:false state to
+			// null, so it can't see phase in a terminal state. Condition is exactly
+			// === "planning" — setGoalState always writes active:true, so firing it from a
+			// terminal state (complete/blocked/budget_limited) would resurrect a finished goal
+			// and defeat the budget/blocked brakes. Routed through setGoalState (not a direct
+			// mergeWrite) so the unconfirmed-story pursuing guard still applies.
+			const prior = readPrior(sessionId);
+			if (prior.phase === "planning") {
+				setGoalState(sessionId, { phase: "pursuing" });
+				process.stderr.write("set-verdict: phase auto-advanced planning -> pursuing\n");
+			}
 			setVerdict(sessionId, v);
 		} else if (subcommand === "set-budget-limited") {
 			setBudgetLimited(sessionId);

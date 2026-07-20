@@ -9,7 +9,7 @@ import {
 	appendFileSync,
 	unlinkSync,
 } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -892,6 +892,20 @@ function runCli(args: string, env?: Record<string, string>): string {
 		encoding: "utf8",
 		env: { ...process.env, ...env },
 	});
+}
+
+/** Like runCli but never throws and captures stderr + exit status separately —
+ * needed to assert on stderr text (e.g. "phase auto-advanced") that runCli's
+ * stdout-only, throw-on-nonzero capture cannot make visible. */
+function runCliCaptured(
+	args: string,
+	env?: Record<string, string>,
+): { stdout: string; stderr: string; status: number | null } {
+	const result = spawnSync("bun", [script, ...args.split(" ")], {
+		encoding: "utf8",
+		env: { ...process.env, ...env },
+	});
+	return { stdout: result.stdout, stderr: result.stderr, status: result.status };
 }
 
 describe("adoption: list-others + adopt (goal CLI)", () => {
@@ -2911,5 +2925,126 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 
 		// A genuinely missing value (last token) must still be refused.
 		expect(() => runCli("retire-story story-1 --evidence")).toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// set-verdict phase auto-advance (recovery device — ultragoal-arming-gap)
+//
+// persistent-mode Stop 훅의 ultragoal 분기는 phase === "pursuing"일 때만 정지를
+// 거부한다(lib/persistent-mode-core/decision.ts:408). SKILL.md는 그 전환을 첫
+// 디스패치 "이후"에 실행하라고 지시해 첫 스토리 실행 구간 전체가 무방비할 수
+// 있다. set-verdict CLI 핸들러가 phase === "planning"을 감지하면 기존
+// setGoalState({phase:"pursuing"}) 경로를 경유해 자동으로 올리고 stderr로
+// 보고한다 — 예방(문서)이 실패해도 두 번째 verdict 기록부터는 복구된다.
+// ---------------------------------------------------------------------------
+
+describe("set-verdict phase auto-advance (recovery)", () => {
+	// AC1: planning(스토리 전부 confirmed 또는 스토리 없음)에서 set-verdict 실행 후
+	// phase가 pursuing으로 오른다.
+	test("AC1: set-verdict from planning auto-advances phase to pursuing", () => {
+		// beforeEach seeds S with phase=planning, stories=[] (the no-stories case)
+		runCli("set-verdict --verdict APPROVE");
+		expect(readGoalState(S)!.phase).toBe("pursuing");
+	});
+
+	// AC2: 같은 실행의 stderr에 "phase auto-advanced"가 포함된다.
+	test("AC2: auto-advance execution reports 'phase auto-advanced' on stderr", () => {
+		const result = runCliCaptured("set-verdict --verdict APPROVE");
+		expect(result.stderr).toContain("phase auto-advanced");
+	});
+
+	// AC3: complete/blocked/budget_limited에서는 phase가 그대로이고 active도 false로
+	// 유지된다 (예산·차단 브레이크 보존 회귀 가드). 세 상태 각각을 덮는다.
+	test("AC3: terminal phases (complete/blocked/budget_limited) are untouched by set-verdict", () => {
+		// complete — via the real request-complete gate, mirroring the "terminal
+		// phases set active false" fixture above.
+		const Sc = "terminal-complete";
+		seedGoalFile(Sc);
+		setGoalState(Sc, { phase: "planning", outcome: "x", verification_surface: "v" });
+		setSingleStory(Sc);
+		setGoalState(Sc, { phase: "pursuing", completion_evidence_paths: [`${tmpDir}/p`] });
+		setVerdict(Sc, "APPROVE");
+		writeFileSync(
+			`${tmpDir}/ultragoal-verdict-${Sc}.json`,
+			JSON.stringify({
+				objective_verdict: "APPROVE",
+				stories: [{ id: "S1", verdict: "APPROVE", evidence_refs: ["p"] }],
+				verifier: "orchestrator",
+				at: "2026-06-12T00:00:00",
+			}),
+			"utf8",
+		);
+		writeCodeReviewArtifact(Sc, {
+			status: "COMPLETE",
+			findings: [],
+			reviewer: "code-reviewer",
+			at: "2026-06-12T00:00:00",
+		});
+		expect(requestComplete(Sc)).toBe(true);
+		expect(rawStateOf(Sc).phase).toBe("complete");
+		runCli("set-verdict --verdict APPROVE", { OMT_SESSION_ID: Sc });
+		expect(rawStateOf(Sc).phase).toBe("complete");
+		expect(rawStateOf(Sc).active).toBe(false);
+
+		// budget_limited
+		const Sb = "terminal-budget";
+		seedGoalFile(Sb);
+		setGoalState(Sb, { phase: "pursuing" });
+		setBudgetLimited(Sb);
+		runCli("set-verdict --verdict APPROVE", { OMT_SESSION_ID: Sb });
+		expect(rawStateOf(Sb).phase).toBe("budget_limited");
+		expect(rawStateOf(Sb).active).toBe(false);
+
+		// blocked
+		const Sk = "terminal-blocked";
+		seedGoalFile(Sk);
+		setGoalState(Sk, { phase: "pursuing" });
+		setBlocked(Sk, "no path");
+		runCli("set-verdict --verdict APPROVE", { OMT_SESSION_ID: Sk });
+		expect(rawStateOf(Sk).phase).toBe("blocked");
+		expect(rawStateOf(Sk).active).toBe(false);
+	});
+
+	// AC4: phase가 이미 pursuing이면 auto-advance 문구가 나오지 않는다 (불필요한 잡음 방지).
+	test("AC4: no auto-advance report when phase is already pursuing", () => {
+		setGoalState(S, { phase: "pursuing" });
+		const result = runCliCaptured("set-verdict --verdict APPROVE");
+		expect(result.stderr).not.toContain("phase auto-advanced");
+		expect(readGoalState(S)!.phase).toBe("pursuing");
+	});
+
+	// AC5: unconfirmed 스토리가 남은 planning에서 set-verdict를 실행하면 기존
+	// unconfirmed 가드 메시지와 함께 실패한다(가드 우회 금지).
+	test("AC5: unconfirmed story guard still refuses set-verdict from planning", () => {
+		setGoalState(S, { phase: "planning", outcome: "A", verification_surface: "v" });
+		setStories(S, [
+			{
+				id: "S1",
+				story: "s1",
+				acceptance_criteria: ["ac"],
+				verification_surface: "v",
+				status: "unconfirmed",
+			},
+		]);
+		const stateBefore = readFileSync(resolveStatePath(S), "utf8");
+		const result = runCliCaptured("set-verdict --verdict APPROVE");
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain("pursuing refused");
+		expect(result.stderr).toContain("unconfirmed");
+		expect(result.stderr).toContain("S1");
+		// State must be unchanged — the guard throw fires before mergeWrite.
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(stateBefore);
+	});
+
+	// AC6: objective_verdict 값 자체는 자동 전환 여부와 무관하게 요청한 값 그대로 기록된다.
+	test("AC6: objective_verdict is recorded as requested regardless of auto-advance", () => {
+		// planning path (auto-advance fires)
+		runCli("set-verdict --verdict REQUEST_CHANGES");
+		expect(readGoalState(S)!.objective_verdict).toBe("REQUEST_CHANGES");
+
+		// pursuing path (no auto-advance — phase is already pursuing after the call above)
+		runCli("set-verdict --verdict COMMENT");
+		expect(readGoalState(S)!.objective_verdict).toBe("COMMENT");
 	});
 });
