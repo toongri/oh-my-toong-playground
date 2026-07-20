@@ -896,7 +896,11 @@ function runCli(args: string, env?: Record<string, string>): string {
 
 /** Like runCli but never throws and captures stderr + exit status separately —
  * needed to assert on stderr text (e.g. "phase auto-advanced") that runCli's
- * stdout-only, throw-on-nonzero capture cannot make visible. */
+ * stdout-only, throw-on-nonzero capture cannot make visible. Also differs in
+ * argument handling: runCli hands the whole command string to execSync's
+ * shell, which honors quoting, while this naively splits `args` on spaces
+ * into spawnSync's argv — a quoted argument containing a space would be split
+ * into separate tokens. No current caller passes one. */
 function runCliCaptured(
 	args: string,
 	env?: Record<string, string>,
@@ -2950,6 +2954,13 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 // 내부의 const prior(:229)를 잘못 건드렸을 때도 AC3은 실패했지만 메시지는
 // `Received "planning"`으로 달랐다 — 즉 위에 인용한 실패 메시지는 그 자리의 것이
 // 아니다.)
+// AC4와 AC6도 같은 방식으로 확인했다(각각 주입 후 실행, 실패 메시지 채증, 원복).
+// 조건을 `if (prior.phase === "planning")` → `if (true)`로 바꾼 변형은 AC4를
+// `Expected to not contain: "phase auto-advanced", Received: "set-verdict: phase
+// auto-advanced planning -> pursuing\n"`으로 실패시킨다(같은 변형이 AC3도 함께
+// 깨뜨린다 — AC4 비공허성의 증거로는 그 실패로 충분하다). `setVerdict(sessionId, v)`를
+// `setVerdict(sessionId, "APPROVE")`로 바꾼 변형은 AC6을 `Expected: "REQUEST_CHANGES",
+// Received: "APPROVE"`로 실패시킨다(AC7도 함께 깨진다) — AC6 비공허성의 증거다.
 // ---------------------------------------------------------------------------
 
 describe("set-verdict phase auto-advance (recovery)", () => {
