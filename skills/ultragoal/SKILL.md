@@ -74,11 +74,16 @@ If no candidates exist, say so and proceed fresh. The branch never renames on it
 
 Ultragoal does not reimplement execution. It decomposes the objective into the Six Slots and auto-generates a Story set itself — see `references/planning.md` — then, once the user bulk-approves via `confirm-all-stories`, dispatches the confirmed stories to sisyphus **one story at a time, in sequence**:
 
-1. Derive the **current story** — the first `confirmed` story (in stored order) that does not yet carry an `APPROVE` per-story verdict in `ultragoal-verdict-{sid}.json`. No separate "current story" state field exists; it is always re-derived from the verdict artifact, never stored.
-2. Dispatch ONLY that one story to sisyphus: `Skill(skill: "sisyphus")` with that story's WHAT statement, acceptance criteria, and verification surface — never the whole Story set at once.
-3. After sisyphus returns, run the per-story completion audit (see `references/completion-gate.md`) and re-derive that story's verdict.
-4. **Advance only on APPROVE.** A non-APPROVE per-story verdict re-dispatches `Skill(skill: "sisyphus")` at the SAME story — the loop does not proceed to the next story until this one reads APPROVE.
-5. Once the current story is APPROVE, repeat from step 1 for the next confirmed story. When every confirmed story carries an APPROVE verdict, proceed to the final code-review lane (see Completion Gate).
+1. **Arm the loop before dispatching.** Run:
+   ```
+   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase pursuing
+   ```
+   This must run BEFORE the first `Skill(skill: "sisyphus")` call below — the persistent-mode Stop hook only refuses to stop while `phase=pursuing`, so dispatching first leaves that story's entire execution window unguarded.
+2. Derive the **current story** — the first `confirmed` story (in stored order) that does not yet carry an `APPROVE` per-story verdict in `ultragoal-verdict-{sid}.json`. No separate "current story" state field exists; it is always re-derived from the verdict artifact, never stored.
+3. Dispatch ONLY that one story to sisyphus: `Skill(skill: "sisyphus")` with that story's WHAT statement, acceptance criteria, and verification surface — never the whole Story set at once.
+4. After sisyphus returns, run the per-story completion audit (see `references/completion-gate.md`) and re-derive that story's verdict.
+5. **Advance only on APPROVE.** A non-APPROVE per-story verdict re-dispatches `Skill(skill: "sisyphus")` at the SAME story — the loop does not proceed to the next story until this one reads APPROVE.
+6. Once the current story is APPROVE, repeat from step 2 for the next confirmed story. When every confirmed story carries an APPROVE verdict, proceed to the final code-review lane (see Completion Gate).
 
 sisyphus stays the sole executor throughout this loop — ultragoal never swaps sisyphus for goal and never invokes the goal skill at runtime.
 
@@ -91,12 +96,12 @@ The autonomous loop blocks ONLY when `phase=pursuing`. Set the phase around deco
   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase planning
   ```
   `--phase planning` also clears the verdict to `absent`, so a stale APPROVE can never survive a re-plan.
-- **After the first sisyphus dispatch** — once pursuit (sequential execution) begins — run:
+- **Before the first sisyphus dispatch** — see step 1 of the Execution Dispatch list above — run:
   ```
   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase pursuing
   ```
 
-Initial path: `set --phase planning` (seed slots) → auto-generate the Story set → user bulk-approves via `confirm-all-stories` → dispatch story #1 to sisyphus → `set --phase pursuing`. Re-plan loop-back: `set --phase planning` (clears the verdict) → re-generate or steer the Story set (`add-story`/`revise-story`/`retire-story`/`reorder-stories`) → `set --phase pursuing` after the fresh sisyphus dispatch.
+Initial path: `set --phase planning` (seed slots) → auto-generate the Story set → user bulk-approves via `confirm-all-stories` → `set --phase pursuing` → dispatch story #1 to sisyphus. Re-plan loop-back: `set --phase planning` (clears the verdict) → re-generate or steer the Story set (`add-story`/`revise-story`/`retire-story`/`reorder-stories`) → `set --phase pursuing` → dispatch the fresh sisyphus call.
 
 ---
 

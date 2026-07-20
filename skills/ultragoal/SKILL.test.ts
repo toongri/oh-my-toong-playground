@@ -269,3 +269,62 @@ describe("identity: frontmatter and state-namespace point at ultragoal, not goal
 		expect(skillMd).not.toMatch(/(?<!ultra)goal-state\.ts/);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Stop-hook arming gap: the persistent-mode Stop hook only refuses to stop
+// while `phase === "pursuing"`. The Execution Dispatch numbered list must
+// carry the `set --phase pursuing` transition BEFORE the first sisyphus
+// dispatch step, or an agent that follows the list verbatim leaves the first
+// story's entire execution window unarmed. Scoped to the Execution Dispatch
+// section specifically — `Skill(skill: "sisyphus")` first appears at the Role
+// section's "Single-story degrade" paragraph, which is not this loop.
+// ---------------------------------------------------------------------------
+
+describe("Stop-hook arming gap: pursuing transition precedes first dispatch", () => {
+	// Scoped to the numbered list itself, not the whole Execution Dispatch
+	// section — the section also contains the "### Phase transitions"
+	// subsection, which already carries a `set --phase pursuing` mention
+	// today (just at the wrong point in the loop). Widening the scope to the
+	// whole section would let AC1/AC2 pass at HEAD on that pre-existing
+	// mention, missing the actual defect: the step is absent from the
+	// numbered list an agent reads to drive the dispatch loop.
+	const numberedList = skillMd.slice(
+		skillMd.indexOf("## Execution Dispatch"),
+		skillMd.indexOf("### Phase transitions"),
+	);
+
+	test("the Execution Dispatch numbered list carries a set --phase pursuing step", () => {
+		expect(numberedList).toContain("set --phase pursuing");
+	});
+
+	test("the pursuing transition is positioned before the sisyphus dispatch instruction", () => {
+		expect(numberedList.indexOf("set --phase pursuing")).toBeGreaterThan(-1);
+		expect(numberedList.indexOf('Skill(skill: "sisyphus")')).toBeGreaterThan(
+			-1,
+		);
+		expect(numberedList.indexOf("set --phase pursuing")).toBeLessThan(
+			numberedList.indexOf('Skill(skill: "sisyphus")'),
+		);
+	});
+
+	test("the stale 'After the first sisyphus dispatch' ordering no longer appears", () => {
+		expect(skillMd).not.toContain("After the first sisyphus dispatch");
+	});
+
+	test("the narrative arrow order reads set --phase pursuing before dispatch story #1", () => {
+		// Scoped to the "Initial path" narrative sentence specifically — a bare
+		// whole-file indexOf comparison would pass spuriously even at HEAD,
+		// since the Phase-transitions code block's `set --phase pursuing`
+		// mention sits earlier in the file than the narrative's "dispatch
+		// story #1", despite the narrative's own arrow order being reversed.
+		const initialPath = skillMd.slice(
+			skillMd.indexOf("Initial path:"),
+			skillMd.indexOf("Re-plan loop-back:"),
+		);
+		expect(initialPath.indexOf("dispatch story #1")).toBeGreaterThan(-1);
+		expect(initialPath.indexOf("set --phase pursuing")).toBeGreaterThan(-1);
+		expect(initialPath.indexOf("set --phase pursuing")).toBeLessThan(
+			initialPath.indexOf("dispatch story #1"),
+		);
+	});
+});
