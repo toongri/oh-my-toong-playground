@@ -284,11 +284,17 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 	// subsection, which carried a `set --phase pursuing` mention before the
 	// "ultragoal phase 전환을 첫 sisyphus 디스패치 전으로 승격" commit (at the
 	// wrong point in the loop; SKILL.md:99 now correctly reads "Before the
-	// first sisyphus dispatch"). Widening the
-	// scope to the whole section would have let AC1/AC2 pass on that
-	// pre-existing mention even while it sat at the wrong point, missing the
-	// actual defect: the step being absent from the numbered list an agent
-	// reads to drive the dispatch loop.
+	// first sisyphus dispatch"). Reproduced against the pre-change SKILL.md
+	// (worktree at commit cc219293) with the scope widened to the whole
+	// section: the containment assertion (`toContain('set --phase
+	// pursuing')`) would have passed spuriously on that pre-existing mention.
+	// The ordering assertion would NOT have — the mention lives in
+	// "### Phase transitions", which sits AFTER the "Dispatch ONLY that one
+	// story" instruction, so it still fails under the widened scope at base.
+	// The containment assertion alone is enough to justify keeping the scope
+	// on the numbered list: the step being absent from the numbered list an
+	// agent reads to drive the dispatch loop is what the widened scope would
+	// hide.
 	const numberedList = skillMd.slice(
 		skillMd.indexOf("## Execution Dispatch"),
 		skillMd.indexOf("### Phase transitions"),
