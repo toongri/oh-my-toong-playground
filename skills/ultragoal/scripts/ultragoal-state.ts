@@ -1349,11 +1349,31 @@ function main(): void {
 				process.exit(1);
 			}
 			// Recovery device (ultragoal-arming-gap): the persistent-mode Stop hook's ultragoal
-			// branch refuses to stop only while phase === "pursuing". SKILL.md instructs the
-			// pursuing transition to run AFTER the first story dispatch, so the first story can
-			// run unarmed if that step is missed. Detect the miss here and self-heal on the
-			// first verdict recording — planning-only fires it once per pursuit and re-plans
-			// return to planning, so the sequence self-limits without extra state.
+			// branch refuses to stop only while phase === "pursuing". SKILL.md USED TO instruct
+			// the pursuing transition to run AFTER the first story dispatch, which let the first
+			// story run unarmed if that step was missed — this handler was written to detect the
+			// miss and self-heal on the first verdict recording. SKILL.md's Execution Dispatch
+			// step 1 has since been reordered to run `set --phase pursuing` BEFORE dispatch (see
+			// git history around the "ultragoal phase 전환을 첫 sisyphus 디스패치 전으로 승격"
+			// commit), so the prose-layer gap this device was built against no longer exists on
+			// the documented path.
+			//
+			// Actual reach of this handler, precisely stated: `set-verdict` is called from
+			// exactly one documented place, `references/completion-gate.md`'s completion
+			// sequence, and the line immediately before it there already runs
+			// `set --phase pursuing --completion-evidence …` — so by the time this handler's
+			// own `prior.phase === "planning"` check runs on that path, phase is already
+			// "pursuing" and the branch is a no-op. The PER-STORY verdict (the thing whose
+			// timing this device was originally guarding) is never recorded through this CLI at
+			// all — per completion-gate.md's "Per-story re-derivation" section, the orchestrator
+			// writes `$OMT_DIR/ultragoal-verdict-{sid}.json` directly as a file artifact, bypassing
+			// this handler entirely. So `prior.phase === "planning"` cannot go true on any
+			// documented call path today; this is a last-resort net for the completion sequence
+			// alone, catching only the case where `completion-gate.md:59`'s own
+			// `set --phase pursuing` step was itself skipped. The real defense for the execution
+			// window (first story dispatch) is the documentation layer — SKILL.md's Execution
+			// Dispatch step 1 running the phase flip before dispatch — verified by RED 0/3 →
+			// GREEN 3/3 in SKILL.test.ts's prose assertions, not by this code path.
 			//
 			// readPrior (not readGoalState) — readGoalState folds any active:false state to
 			// null, so it can't see phase in a terminal state. Condition is exactly

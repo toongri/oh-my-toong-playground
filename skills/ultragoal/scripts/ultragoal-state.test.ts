@@ -2932,11 +2932,30 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 // set-verdict phase auto-advance (recovery device — ultragoal-arming-gap)
 //
 // persistent-mode Stop 훅의 ultragoal 분기는 phase === "pursuing"일 때만 정지를
-// 거부한다(lib/persistent-mode-core/decision.ts:408). SKILL.md는 그 전환을 첫
-// 디스패치 "이후"에 실행하라고 지시해 첫 스토리 실행 구간 전체가 무방비할 수
-// 있다. set-verdict CLI 핸들러가 phase === "planning"을 감지하면 기존
-// setGoalState({phase:"pursuing"}) 경로를 경유해 자동으로 올리고 stderr로
-// 보고한다 — 예방(문서)이 실패해도 두 번째 verdict 기록부터는 복구된다.
+// 거부한다(lib/persistent-mode-core/decision.ts:408). set-verdict CLI 핸들러가
+// phase === "planning"을 감지하면 기존 setGoalState({phase:"pursuing"}) 경로를
+// 경유해 자동으로 올리고 stderr로 보고한다.
+//
+// 실제 도달 범위: SKILL.md의 Execution Dispatch 1단계가 디스패치 "전"에 phase를
+// 올리도록 이미 재배치됐고(git 히스토리 "ultragoal phase 전환을 첫 sisyphus
+// 디스패치 전으로 승격"), per-story verdict는 이 CLI를 경유하지 않고 오케스트레이터가
+// `$OMT_DIR/ultragoal-verdict-{sid}.json`에 직접 쓴다(completion-gate.md 16번째
+// 줄). 따라서 `prior.phase === "planning"`은 문서화된 실행 경로에서 참이 되지
+// 않는다 — 이 핸들러가 실제로 발동하는 유일한 문서 경로는 completion-gate.md:59의
+// `set --phase pursuing --completion-evidence`를 건너뛴 완료 시퀀스뿐이다(최후의
+// 그물). 실행 구간(첫 스토리 디스패치)의 진짜 방어선은 문서 층(SKILL.md 1단계)이며,
+// 그 쪽은 RED 0/3 → GREEN 3/3로 SKILL.test.ts에서 별도로 실측됐다. 자세한 근거는
+// ultragoal-state.ts의 set-verdict 핸들러 주석(같은 인용 포함)을 참조.
+//
+// 아래 AC 중 AC1·AC2·AC5는 구현 전 HEAD에서 진짜 RED였다(기능 부재로 실패). 반면
+// AC3·AC4·AC6은 보존 가드(terminal phase 불변 / 이미 pursuing이면 무보고 /
+// verdict 값 보존)라서 구현 전에도 HEAD에서 통과하는 것이 정상이다 — 애초에 이
+// 핸들러가 "고칠" 대상이 아니라 "건드리지 않아야 할" 대상을 검증하기 때문이다.
+// 이 셋의 비공허성은 HEAD 통과 여부가 아니라 뮤턴트 주입으로 확인했다: 조건을
+// `prior.phase === "planning"` → `prior.phase !== "pursuing"`으로 바꾼 변형과,
+// `readPrior`를 `readGoalState(sessionId) ?? {}`로 바꾼 변형 둘 다 AC3을
+// `Expected "complete", Received "pursuing"`으로 실패시켰다 — 즉 이 assertion들은
+// 실제로 뭔가를 검사하고 있다.
 // ---------------------------------------------------------------------------
 
 describe("set-verdict phase auto-advance (recovery)", () => {
@@ -2952,6 +2971,8 @@ describe("set-verdict phase auto-advance (recovery)", () => {
 	test("AC2: auto-advance execution reports 'phase auto-advanced' on stderr", () => {
 		const result = runCliCaptured("set-verdict --verdict APPROVE");
 		expect(result.stderr).toContain("phase auto-advanced");
+		// Reporting is stderr-only — stdout is reserved for machine-readable payload.
+		expect(result.stdout).not.toContain("auto-advanced");
 	});
 
 	// AC3: complete/blocked/budget_limited에서는 phase가 그대로이고 active도 false로
@@ -3046,5 +3067,19 @@ describe("set-verdict phase auto-advance (recovery)", () => {
 		// pursuing path (no auto-advance — phase is already pursuing after the call above)
 		runCli("set-verdict --verdict COMMENT");
 		expect(readGoalState(S)!.objective_verdict).toBe("COMMENT");
+	});
+
+	// AC7: --verdict absent (SKILL.md:33의 유효값)도 다른 verdict 값과 똑같이
+	// planning→pursuing 자동 전환을 무장시킨다. 핸들러는 planning에서의 "어떤"
+	// verdict 기록에도 무장하도록 짜여 있고(v 값을 조건에서 참조하지 않음), 그래서
+	// 의미상 리셋인 absent 기록조차 phase를 pursuing으로 올리고 active:true로
+	// 만든다. 이것은 의도적으로 재설계할 대상이 아니라 — 이번 리뷰에서 사용자가
+	// "복구 층의 설계는 바꾸지 않는다"고 결정했다 — 현재 동작을 계약으로 고정해
+	// 다음 변경이 조용히 이 부수효과를 바꾸지 못하게 잠그는 회귀 가드다.
+	test("AC7: --verdict absent also arms the planning-to-pursuing auto-advance (current-behavior lock, not an endorsement)", () => {
+		// beforeEach seeds S with phase=planning, stories=[] (the no-stories case)
+		runCli("set-verdict --verdict absent");
+		expect(readGoalState(S)!.phase).toBe("pursuing");
+		expect(readGoalState(S)!.objective_verdict).toBe("absent");
 	});
 });
