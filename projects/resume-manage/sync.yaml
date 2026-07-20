@@ -14,7 +14,6 @@ agents:
     - code-reviewer
     - tech-claim-examiner
     - sisyphus-junior
-    - spec-reviewer
 
 skills:
   items:

@@ -13,7 +13,6 @@ agents:
     - chunk-reviewer
     - code-reviewer
     - sisyphus-junior
-    - spec-reviewer
 
 skills:
   items:
