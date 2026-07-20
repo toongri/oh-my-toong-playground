@@ -719,7 +719,7 @@ describe("detection axis — requirement coverage gate", () => {
 		expect(skill).toContain("requirement items are the Phase 0 axes");
 	});
 
-	test("Phase 4 requires a per-item coverage table", () => {
+	test("Phase 4 instructs building a coverage table with one row per Phase 0 requirement item", () => {
 		const idx = skill.indexOf("## Phase 4");
 		expect(idx).toBeGreaterThan(-1);
 		// Bound to the Engine block's actual close rather than a fixed char
@@ -727,7 +727,13 @@ describe("detection axis — requirement coverage gate", () => {
 		const engineEndIdx = skill.indexOf("</Engine>", idx);
 		expect(engineEndIdx).toBeGreaterThan(idx);
 		const context = skill.slice(idx, engineEndIdx);
-		expect(context).toContain("coverage table");
+		// "coverage table" alone is not discriminating: the same window also
+		// contains a negative clause ("...nothing for a REPORT coverage table
+		// to judge") that keeps the bare token alive even if the actual gate
+		// instruction is deleted. Assert the row-granularity phrase, which
+		// exists only in the instruction body, not the negative clause.
+		expect(context).toContain("build a **coverage table**");
+		expect(context).toContain("one row per requirement item declared in Phase 0");
 	});
 
 	test("coverage row Status is restricted to a three-value enum: covered / not applicable / uncovered", () => {
@@ -743,6 +749,16 @@ describe("detection axis — requirement coverage gate", () => {
 		// sentence lets the three-value enum revert to two-value in practice
 		// while the enum names themselves stay intact.
 		expect(skill).toContain("never `not applicable`");
+	});
+
+	test("`not applicable`'s reachability path (Phase 0 over-decomposition correction) is stated", () => {
+		// Without this sentence, `not applicable` has no documented path a value
+		// could ever reach it through — it becomes a dead enum member that gets
+		// reused as an escape hatch out of an honest `uncovered`, even though the
+		// two-value enum names themselves stay intact in the doc.
+		expect(skill).toContain(
+			"is reserved for the specific case where research completed and showed a Phase-0 axis was over-decomposition",
+		);
 	});
 
 	test("a blank Status value is stated to be a defect", () => {
