@@ -1372,8 +1372,13 @@ function main(): void {
 			// alone, catching only the case where `completion-gate.md:59`'s own
 			// `set --phase pursuing` step was itself skipped. The real defense for the execution
 			// window (first story dispatch) is the documentation layer — SKILL.md's Execution
-			// Dispatch step 1 running the phase flip before dispatch — verified by RED 0/3 →
-			// GREEN 3/3 in SKILL.test.ts's prose assertions, not by this code path.
+			// Dispatch step 1 running the phase flip before dispatch. Two separate artifacts
+			// back this, not one: SKILL.test.ts's static string-order assertions (`toContain`/
+			// `indexOf` on the markdown) pin that the prose *has* this ordering — no execution,
+			// no RED/GREEN there. The actual RED 0/3 → GREEN 3/3 behavioral count came from a
+			// subagent pressure-scenario measurement recorded outside this repo, not by this
+			// code path — see `~/.omt/oh-my-toong-playground/ultragoal-arming-gap-red.md` and
+			// `-green.md`.
 			//
 			// readPrior (not readGoalState) — readGoalState folds any active:false state to
 			// null, so it can't see phase in a terminal state. Condition is exactly
