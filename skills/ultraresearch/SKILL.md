@@ -49,7 +49,7 @@ The engine has five phases:
 2. **Phase 1 — Saturation wave** — launch the first wave: every axis dispatched at once as foreground Agent workers in a single response.
 3. **Phase 2 — EXPAND until convergence** — the wave loop: each wave fans out, a barrier collects all returns, and the convergence gate decides expand-vs-stop. This is what makes the engine research rather than search.
 4. **Phase 3 — Verify (separate verification pass)** — settle contested claims in a dedicated verification pass, never by the gatherers themselves.
-5. **Phase 4 — Synthesize** — generate `SYNTHESIS.md` and (for the pre-work postures) the handoff, once, from a single post-convergence snapshot.
+5. **Phase 4 — Synthesize** — generate `SYNTHESIS.md`, then (on the explicit research posture) `REPORT.md` and `REPORT.html`, or (on the pre-work postures) the handoff — once, from a single post-convergence snapshot.
 
 ## Substrate: synchronous batched waves (NO async swarm)
 
@@ -155,7 +155,7 @@ After convergence and the verification pass, re-read the whole journal and write
 
 ### Coverage gate — per-item check against the declared requirement items
 
-After the REPORT.md draft is written — not before, since the gate judges what actually made it into REPORT.md and there is nothing to judge until that draft exists — build a **coverage table**: one row per requirement item declared in Phase 0, Status restricted to exactly two values — `covered` or `not applicable` (with a reason for the latter). The gate's whole operating principle is one sentence: a blank Status is a defect, not a state to be tolerated — catching that blank is what the gate is for. When the covering material already sits in the journal but never made it into REPORT.md, resolve the blank cell by editing REPORT.md — record it in REPORT.md immediately, without relaunching a wave. The material is already in hand, so re-gathering is never the fix, and the convergence rules above stay untouched. Only an item with no gathered material at all is `not applicable`. Run this self-check, and any resulting REPORT.md edits, before the HTML render copy is produced and before the final chat response is sent, so the render copy and the response both reflect the corrected table rather than the pre-fix draft.
+This gate is scoped to the explicit research posture — the posture that emits REPORT.md. On pre-work CLEAR the engine returns grounded facts to its caller and writes no REPORT, so there is nothing for a REPORT coverage table to judge; the caller's own contract governs there instead. On the explicit research posture, after the REPORT.md draft is written — not before, since the gate judges what actually made it into REPORT.md and there is nothing to judge until that draft exists — build a **coverage table**: one row per requirement item declared in Phase 0, Status restricted to exactly three values — `covered`, `not applicable: <reason the query never demanded this>`, or `uncovered: <why no material was gathered>`. The gate's whole operating principle is one sentence: a blank Status is a defect, not a state to be tolerated — catching that blank is what the gate is for. When the covering material already sits in the journal but never made it into REPORT.md, resolve the blank cell by editing REPORT.md — record it in REPORT.md immediately, without relaunching a wave. The material is already in hand, so re-gathering is never the fix, and the convergence rules above stay untouched. An item the query never actually demanded is `not applicable`; an item the query did demand but the research failed to gather material for is `uncovered` — never `not applicable`. Collapsing the two would let a research gap read as a question nobody asked, which is the exact silence this gate exists to break. Run this self-check, and any resulting REPORT.md edits, before the HTML render copy is produced and before the final chat response is sent, so the render copy and the response both reflect the corrected table rather than the pre-fix draft.
 
 </Engine>
 
@@ -230,6 +230,8 @@ Every claim in `SYNTHESIS.md` carries a provenance label at its origin: `[from-c
 
 REPORT's table of contents is derived from the Phase 0 axis decomposition — the orthogonal axes the query was broken into — not a fixed section list. The axes ARE the table of contents, so REPORT answers what the user actually asked rather than compressing toward SYNTHESIS's eight-section skeleton. REPORT quotes material directly from the journal (`wave-*.md`) and cites `SYNTHESIS.md` for the verification backing behind each claim.
 
+Because REPORT quotes source material verbatim — code, config, and markup among it — the render escapes `<`, `>`, and `&` in that quoted content rather than emitting it raw; an unescaped angle bracket in a quoted snippet silently swallows the rest of the document in a browser.
+
 ## Epistemic-instrumentation artifacts
 
 The orchestrator maintains these files in `$SESSION_DIR` (the incremental trace, written wave-by-wave; every file here is orchestrator-owned — see Worker ground rules):
@@ -256,11 +258,11 @@ The artifact SET tier-scales with the existing complexity tier while the SCHEMA 
 
 ## Zero verified claims
 
-An explicit run that converges with **0 verified claims still emits `SYNTHESIS.md`** — with an empty verified-claims section and an explicit "no verified claims" note. Zero verified claims is a real, honest outcome (the contested claims landed in gaps/contradictions), not a reason to suppress the artifact.
+An explicit run that converges with **0 verified claims still emits `SYNTHESIS.md` and `REPORT.md`/`REPORT.html`** — `SYNTHESIS.md` with an empty verified-claims section and an explicit "no verified claims" note, and REPORT still answering each declared requirement item from the journal, marking the verification backing as absent rather than omitting the item. Zero verified claims is a real, honest outcome (the contested claims landed in gaps/contradictions), not a reason to suppress the artifact.
 
 ## Final chat response contract
 
-The final message returned to the user is **the coverage table plus one entry point** — the Phase 4 coverage table and the `REPORT.md` path, nothing more. That table is a requirement checklist, not a deliverable inventory: an inventory answers "what files exist," a checklist answers "what did we answer," and only the checklist surfaces an uncovered item on the user's first screen instead of leaving it buried in a file listing.
+This contract, like the coverage gate above, is scoped to the explicit research posture; pre-work CLEAR returns its facts to the calling skill rather than to a user-facing chat message. The final message returned to the user is **the coverage table plus one entry point** — the Phase 4 coverage table and the `REPORT.md` path, nothing more. That table is a requirement checklist, not a deliverable inventory: an inventory answers "what files exist," a checklist answers "what did we answer," and only the checklist surfaces an uncovered item on the user's first screen instead of leaving it buried in a file listing.
 
 </Artifact_Contract>
 
@@ -276,7 +278,7 @@ The final message returned to the user is **the coverage table plus one entry po
 | A gather worker certifying its own claim as verified | Gatherer ≠ verifier — verification is a separate verification pass; gather workers must not self-certify |
 | Asserting a high-risk claim that did not clear the graph gate | The verified set is the sole allowlist; uncleared claims go to gaps/contradictions |
 | Dispatching the oracle as a gather worker | The oracle is never a gatherer — only the non-code verification re-read |
-| Accreting SYNTHESIS.md per wave | Single post-convergence snapshot write-ordering — both consumables generated once at convergence |
+| Accreting SYNTHESIS.md per wave | Single post-convergence snapshot write-ordering — every convergence-time artifact generated once at convergence |
 
 </Failure_Modes>
 
