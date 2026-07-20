@@ -24,7 +24,7 @@ oh-my-toong's research skills gather and verify facts at saturation before a jud
 **Purpose**: Runs one saturation-research engine in one of two postures. **Explicit research posture** fires when the user explicitly demands research; **pre-work CLEAR posture** fires when a caller such as deep-interview invokes the engine to ground facts before forming a judgment. Both postures share the identical engine: decompose → saturate → converge → verify → synthesize.
 
 **Engine overview — five phases**:
-1. **Phase 0 (decompose)** — breaks the question into 3+ orthogonal axes and settles the posture and the worker-floor tier.
+1. **Phase 0 (decompose)** — breaks the question into 3+ orthogonal axes and settles the posture and the worker-floor tier. The exception is the **CLEAR Scoped single-fact path** — deep-interview invoking this engine to ground exactly one fact while mid-interview — where Phase 0 decomposes to a **single axis** (the one fact) instead of manufacturing 3+ axes, and Phase 1 launches only one worker.
 2. **Phase 1 (saturation wave)** — dispatches every axis from Phase 0 as workers in one response, all at once.
 3. **Phase 2 (EXPAND convergence loop)** — each wave collects every worker's return at a barrier and decides whether to expand or stop.
 4. **Phase 3 (separate verification pass)** — settles only the contested claims among the gathered material, in a dedicated pass.
@@ -46,7 +46,7 @@ This contract, like the coverage gate above, is scoped to the explicit research 
 
 **The rest of the contract**:
 - The sole allowlist for verified claims is the **claim-graph five-criteria gate** (2+ independent source domains, 2+ independent observation groups, one counter-search, primary-source backing, explicit temporal evidence).
-- Convergence stop rules require the **minimum-2-waves floor** to complete first, then stop on zero unchecked leads, 3 consecutive empty waves, or depth 5.
+- Convergence stop rules require the **minimum-2-waves floor** to complete first, then stop on zero unchecked leads, 3 consecutive empty waves, or depth 5. The CLEAR Scoped single-fact path above is **exempt** from this floor — a single wave that answers the fact converges immediately. Only the floor is waived: the EXPAND convergence loop and claim verification still apply, just scaled down to the single-fact ask.
 - **Gatherer ≠ verifier** — verification is a separate pass; a gather worker cannot self-certify its own claim as verified. Code-shaped claims are verified with executed code; everything else with an oracle citation re-read of the primary source.
 - A complexity-tier → worker-floor table (Scoped / Complex / Architecture / explicit `/ultraresearch`) sets the minimum worker count per tier.
 
