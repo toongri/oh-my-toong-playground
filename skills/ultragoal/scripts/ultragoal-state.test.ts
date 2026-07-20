@@ -2931,26 +2931,7 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 // ---------------------------------------------------------------------------
 // set-verdict phase auto-advance (recovery device — ultragoal-arming-gap)
 //
-// persistent-mode Stop 훅의 ultragoal 분기는 phase === "pursuing"일 때만 정지를
-// 거부한다(lib/persistent-mode-core/decision.ts:408). set-verdict CLI 핸들러가
-// phase === "planning"을 감지하면 기존 setGoalState({phase:"pursuing"}) 경로를
-// 경유해 자동으로 올리고 stderr로 보고한다.
-//
-// 실제 도달 범위: SKILL.md의 Execution Dispatch 1단계가 디스패치 "전"에 phase를
-// 올리도록 이미 재배치됐고(git 히스토리 "ultragoal phase 전환을 첫 sisyphus
-// 디스패치 전으로 승격"), per-story verdict는 이 CLI를 경유하지 않고 오케스트레이터가
-// `$OMT_DIR/ultragoal-verdict-{sid}.json`에 직접 쓴다(completion-gate.md 16번째
-// 줄). 따라서 `prior.phase === "planning"`은 문서화된 실행 경로에서 참이 되지
-// 않는다 — 이 핸들러가 실제로 발동하는 유일한 문서 경로는 completion-gate.md:59의
-// `set --phase pursuing --completion-evidence`를 건너뛴 완료 시퀀스뿐이다(최후의
-// 그물). 실행 구간(첫 스토리 디스패치)의 진짜 방어선은 문서 층(SKILL.md 1단계)이며,
-// 그 쪽은 두 갈래 근거로 뒷받침된다: SKILL.test.ts는 문서가 그 순서를 갖는지를
-// 정적 문자열 순서 단언(toContain/indexOf)으로 고정하며(그 단언들 자체는 구현 전
-// HEAD에서 실패하는 정상적인 RED/GREEN을 거쳤다), 서브에이전트 행동 측정은 여기
-// 없고, 실제 RED 0/3 → GREEN 3/3 행동 측정은 서브에이전트 압박 시나리오 실행에서
-// 나왔으며 그 기록은 레포 밖에 있다(~/.omt/oh-my-toong-playground/
-// ultragoal-arming-gap-red.md, -green.md). 자세한 근거는 ultragoal-state.ts의
-// set-verdict 핸들러 주석(같은 인용 포함)을 참조.
+// 이 핸들러의 도달 범위·측정 출처: ultragoal-state.ts의 set-verdict 핸들러 주석 참조.
 //
 // 아래 AC 중 AC1·AC2·AC5·AC7은 구현 전 HEAD에서 진짜 RED였다(기능 부재로 실패) —
 // AC7도 마찬가지로 자동 전환 자체가 없던 시점에는 `--verdict absent` 기록이
@@ -2965,7 +2946,7 @@ describe("mid-flight steering: --evidence/--rationale required (TODO 10)", () =>
 // 교체)은 단독으로는 AC3을 깨뜨리지 않는다: readGoalState가 active:false 상태를
 // null로 접으므로(:311) `?? {}`를 거치면 prior.phase가 undefined가 되고
 // `=== "planning"` 조건이 거짓이 되어 terminal phase를 건드리지 않는다 — 즉 리더
-// 교체는 조건이 함께 넓어질 때에만 위험해진다. (참고: 비앵커 위치인 setGoalState
+// 교체는 조건이 함께 넓어질 때에만 위험해진다. (참고: 비앵커 위치인 mergeWrite
 // 내부의 const prior(:229)를 잘못 건드렸을 때도 AC3은 실패했지만 메시지는
 // `Received "planning"`으로 달랐다 — 즉 위에 인용한 실패 메시지는 그 자리의 것이
 // 아니다.)

@@ -1375,12 +1375,13 @@ function main(): void {
 			// Dispatch step 1 running the phase flip before dispatch. Two separate artifacts
 			// back this, not one: SKILL.test.ts's static string-order assertions (`toContain`/
 			// `indexOf` on the markdown) pin that the prose *has* this ordering — those
-			// assertions themselves went through an ordinary RED/GREEN (failing pre-
-			// implementation at HEAD), but no subagent-behavioral RED/GREEN happens there.
-			// The actual RED 0/3 → GREEN 3/3 behavioral count came from a subagent
-			// pressure-scenario measurement recorded outside this repo, not by this
-			// code path — see `~/.omt/oh-my-toong-playground/ultragoal-arming-gap-red.md` and
-			// `-green.md`.
+			// assertions themselves went through an ordinary RED/GREEN (failing before the
+			// "ultragoal phase 전환을 첫 sisyphus 디스패치 전으로 승격" commit), but no
+			// subagent-behavioral RED/GREEN happens there. The actual RED 0/3 → GREEN 3/3
+			// behavioral count came from a faithful-reproduction subagent scenario — the
+			// same scenario run 3x against the /tmp/ultragoal-before snapshot, not by this
+			// code path — see `~/.omt/oh-my-toong-playground/ultragoal-arming-gap-red.md`
+			// and `-green.md`.
 			//
 			// readPrior (not readGoalState) — readGoalState folds any active:false state to
 			// null, so it can't see phase in a terminal state. Condition is exactly
