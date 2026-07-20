@@ -13,7 +13,7 @@ oh-my-toong's research skills gather and verify facts at saturation before a jud
 | Skill | One-line role | Primary input | When to use |
 |-------|---------------|---------------|-------------|
 | `ultraresearch` | Saturation-research orchestration — decompose → saturate → converge → verify → synthesize, as one engine | A research question, or a decision that needs facts grounded before it is made | When the user explicitly demands deep research, or when a skill such as deep-interview needs facts grounded before it forms a judgment |
-| `insane-browsing` | A tiered browsing engine for sources that require authentication or JS rendering | A blocked URL, or `ultraresearch`'s Phase 0 Browsing gate | Dispatched as a worker inside `ultraresearch` when the Browsing gate is `yes` — rarely invoked directly |
+| `insane-browsing` | A three-tier browsing engine for sources that require authentication or JS rendering | A blocked URL, or `ultraresearch`'s Phase 0 Browsing gate | Loaded by the `hermes` agent, which is dispatched as a worker inside `ultraresearch` when the Browsing gate is `yes` — rarely invoked directly |
 
 ---
 
@@ -30,7 +30,7 @@ oh-my-toong's research skills gather and verify facts at saturation before a jud
 4. **Phase 3 (separate verification pass)** — settles only the contested claims among the gathered material, in a dedicated pass.
 5. **Phase 4 (synthesize)** — writes the deliverables once, from a single post-convergence snapshot.
 
-Workers are explore, librarian, or insane-browsing — **dispatched in full as foreground Agents in a single response**, then collected together at the barrier. OMT prohibits background dispatch of Agent tasks (`rules/tool-usage-policy.md`), so this engine runs as **synchronous batched waves** instead of an async swarm. Workers are read-only gatherers — they never write the journal or any session file directly, returning only their findings and `## EXPAND` leads as text. Every artifact, including the journal and the claim graph, is written by the orchestrator alone.
+Workers are explore, librarian, or hermes (which loads the `insane-browsing` skill when browsing is needed) — **dispatched in full as foreground Agents in a single response**, then collected together at the barrier. OMT prohibits background dispatch of Agent tasks (`rules/tool-usage-policy.md`), so this engine runs as **synchronous batched waves** instead of an async swarm. Workers are read-only gatherers — they never write the journal or any session file directly, returning only marker text: the `## EXPAND` tail, plus a `## CLAIMS` channel for claim/observation candidates. Every artifact, including the journal and the claim graph, is written by the orchestrator alone.
 
 **Output contract** (explicit research posture only — pre-work CLEAR writes no REPORT and returns grounded facts straight to its caller instead): `REPORT.md` is the deliverable (SSOT, source of truth), and `REPORT.html` is a single self-contained render copy of it with no external CSS, JS, fonts, or images. No separate rendered format such as PDF is produced, and no new external dependency is added for one. `REPORT`'s table of contents is not a fixed section list — it is derived from **the axes decomposed in Phase 0 itself**. The axes ARE the table of contents, so REPORT answers what the user actually asked.
 
@@ -58,7 +58,7 @@ This contract, like the coverage gate above, is scoped to the explicit research 
 
 **Purpose**: A three-tier browsing engine for sources behind authentication or JavaScript rendering that surface-level web search or fetch cannot reach — Tier 1 headless extraction (WAF bypass) → Tier 2 platform-native readers (Chinese and social platforms, among others) → Tier 3 Chrome stealth for real interaction, escalating from the cheapest tier only when needed.
 
-**Relationship to ultraresearch**: dispatched as a worker only when `ultraresearch`'s Phase 0 Browsing gate is set to `yes` — this skill is skipped entirely when surface-level web results are sufficient.
+**Relationship to ultraresearch**: loaded by the `hermes` agent, which is dispatched as a worker when `ultraresearch`'s Phase 0 Browsing gate is set to `yes` — this skill is skipped entirely when surface-level web results are sufficient.
 
 **Origin**: vendored from fivetaku/insane-search (MIT).
 
@@ -75,7 +75,7 @@ Is this a research situation?
   |-- Ordinary question, debugging, routine implementation context-gathering -> not this skill (answer normally)
 
 When ultraresearch runs:
-  insane-browsing attaches as a worker only if the Phase 0 Browsing gate is yes.
+  The hermes agent attaches as a worker only if the Phase 0 Browsing gate is yes, loading the insane-browsing skill.
   If the gate is no, insane-browsing is never called during that run.
 ```
 
