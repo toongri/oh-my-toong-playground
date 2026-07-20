@@ -279,9 +279,10 @@ describe("identity: frontmatter and state-namespace point at ultragoal, not goal
 // ---------------------------------------------------------------------------
 
 describe("Stop-hook arming gap: pursuing transition precedes first dispatch", () => {
-	// Scoped to the numbered list itself, not the whole Execution Dispatch
-	// section — the section also contains the "### Phase transitions"
-	// subsection, which carried a `set --phase pursuing` mention before the
+	// Scoped to "## Execution Dispatch" up to (not including) "### Phase
+	// transitions" — the slice carries the section heading, its lead-in
+	// paragraph, and the numbered list, but excludes "### Phase transitions"
+	// itself, which carried a `set --phase pursuing` mention before the
 	// "ultragoal phase 전환을 첫 sisyphus 디스패치 전으로 승격" commit (at the
 	// wrong point in the loop; SKILL.md:99 now correctly reads "Before the
 	// first sisyphus dispatch"). Reproduced against the pre-change SKILL.md
@@ -291,9 +292,9 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 	// The ordering assertion would NOT have — the mention lives in
 	// "### Phase transitions", which sits AFTER the "Dispatch ONLY that one
 	// story" instruction, so it still fails under the widened scope at base.
-	// The containment assertion alone is enough to justify keeping the scope
-	// on the numbered list: the step being absent from the numbered list an
-	// agent reads to drive the dispatch loop is what the widened scope would
+	// The containment assertion alone is enough to justify excluding "### Phase
+	// transitions" from the scope: a step's absence from the numbered list an
+	// agent reads to drive the dispatch loop is what the wider scope would
 	// hide.
 	const numberedList = skillMd.slice(
 		skillMd.indexOf("## Execution Dispatch"),

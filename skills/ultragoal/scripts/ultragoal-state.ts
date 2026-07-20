@@ -1350,9 +1350,11 @@ function main(): void {
 			}
 			// Recovery device (ultragoal-arming-gap): the persistent-mode Stop hook's ultragoal
 			// branch refuses to stop only while phase === "pursuing". SKILL.md USED TO instruct
-			// the pursuing transition to run AFTER the first story dispatch, which let the first
-			// story run unarmed if that step was missed — this handler was written to detect the
-			// miss and self-heal on the first verdict recording. SKILL.md's Execution Dispatch
+			// the pursuing transition to run AFTER the first story dispatch — under that
+			// ordering the first story's entire execution window ran unarmed structurally, not
+			// just when a step was skipped: even an agent following the list perfectly still hit
+			// the dispatch instruction before the phase flip. This handler was written to detect
+			// that gap and self-heal on the first verdict recording. SKILL.md's Execution Dispatch
 			// step 1 has since been reordered to run `set --phase pursuing` BEFORE dispatch (see
 			// git history around the "ultragoal phase 전환을 첫 sisyphus 디스패치 전으로 승격"
 			// commit), so the prose-layer gap this device was built against no longer exists on
@@ -1380,8 +1382,19 @@ function main(): void {
 			// subagent-behavioral RED/GREEN happens there. The actual RED 0/3 → GREEN 3/3
 			// behavioral count came from a faithful-reproduction subagent scenario with a
 			// byte-identical prompt, run 3x per arm (6 runs total): RED against the
-			// /tmp/ultragoal-before snapshot, GREEN against /tmp/ultragoal-after — the
-			// snapshot path is the only variable between the two arms, not this code path
+			// /tmp/ultragoal-before snapshot, GREEN against /tmp/ultragoal-after. Those are
+			// full `cp -r` directory captures, not single-file diffs — `diff -rq` shows five
+			// files differ (SKILL.md, SKILL.test.ts, scripts/ultragoal-state.ts,
+			// scripts/ultragoal-state.test.ts, tsconfig.json), and this very handler is one of
+			// them: the "phase auto-advanced" branch exists only in -after's
+			// ultragoal-state.ts, not in -before's. So the snapshot path was not the only
+			// variable, and this code path did differ between arms. What still ties the
+			// observed RED 0/3 → GREEN 3/3 to SKILL.md rather than to this handler: both
+			// records scope every trial to stop at a simulated `DISPATCH:` marker before any
+			// sisyphus dispatch, which is before `references/completion-gate.md`'s completion
+			// sequence where `set-verdict` is actually invoked — so none of the 6 trials ever
+			// reached this handler. The causal claim rests on the subagent reading SKILL.md's
+			// reordered instructions, not on this code path being exercised.
 			// — see `~/.omt/oh-my-toong-playground/ultragoal-arming-gap-red.md` and
 			// `-green.md`.
 			//
