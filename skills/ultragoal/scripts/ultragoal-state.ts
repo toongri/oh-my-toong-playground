@@ -1377,14 +1377,12 @@ function main(): void {
 			// Dispatch step 1 running the phase flip before dispatch. Two separate artifacts
 			// back this, not one: SKILL.test.ts's static string-order assertions (`toContain`/
 			// `indexOf` on the markdown) pin that the prose *has* this ordering — those
-			// assertions themselves went through an ordinary RED/GREEN, but the GREEN boundary
-			// is not a single commit: four of the five assertions in that describe block turn
-			// green at the "ultragoal phase 전환을 첫 sisyphus 디스패치 전으로 승격" commit
-			// (172647ff); the fifth — the Re-plan loop-back narrative-order assertion — stays
-			// red there and only turns green at the later "재계획 누락 단계 보완과 복구장치
-			// 주석 정직화" commit (515c7e9d), which added the missing `confirm-all-stories`
-			// step to that loop-back sentence. No subagent-behavioral RED/GREEN happens at
-			// either boundary. The actual RED 0/3 → GREEN 3/3
+			// assertions' RED/GREEN was established by replaying HEAD's `SKILL.test.ts`
+			// against pre-change `SKILL.md` snapshots — not by a lived RED/GREEN at every
+			// assertion's own historical commit — which is a different method from the
+			// subagent-behavioral RED/GREEN below; see this describe block's own per-test
+			// comments in `SKILL.test.ts` for the per-assertion snapshot detail. The actual
+			// RED 0/3 → GREEN 3/3
 			// behavioral count came from a faithful-reproduction subagent scenario with a
 			// byte-identical prompt, run 3x per arm (6 runs total): RED against the
 			// /tmp/ultragoal-before snapshot, GREEN against /tmp/ultragoal-after. Those are
