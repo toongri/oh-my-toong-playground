@@ -143,6 +143,8 @@ This is the single reusable stopping-and-checking pattern used at every phase ex
 
 This precondition is enforced in code, not just here: the Stop-hook refuses a `<deep-interview-done/>` token while any active component still carries an unscored dimension, independent of the ambiguity reading and of whichever threshold this run resolved. Emitting the token early does not end the interview — it loops you back.
 
+**Closure Guard (non-goal decider precondition):** also check, before running steps 1-2 below, whether the interview has secured at least one non-goal carrying a decider — an excluded item paired with a way to tell whether a given finding falls inside it, the same `{excluded item} | decider: {...}` shape the Phase 4 template's Non-Goals section requires. If zero non-goal-with-decider pairs exist yet, convergence cannot be declared either — loop back into the interview loop and ask for one, regardless of what the ambiguity reading says: this is a categorical precondition, not a term folded into the ambiguity arithmetic. The check is existence-only — it asks whether a decider was stated, never how precise it is; grading precision here would turn a mechanical gate into an interpretation dispute.
+
 1. Reflect the residual ambiguity that remains — name any unresolved gap, weak dimension, or open design point, however small, instead of declaring the interview simply "done".
 2. Ask the user, via `AskUserQuestion`, whether to continue (keep clarifying requirements, or keep resolving design branches) or proceed to the next phase.
 
@@ -237,6 +239,7 @@ If any prompt input is too large, summarize it first and then continue from the 
 | Success Criteria | "How do we know it works?" | "If I showed you the finished product, what would make you say 'yes, that's it'?" |
 | Context Clarity | "How does this fit?" | "I found JWT auth middleware in `src/auth/` (pattern: passport + JWT). Should this feature extend that path or intentionally diverge from it?" |
 | Scope-fuzzy / ontology stress | "What IS the core thing here?" | "You have named Tasks, Projects, and Workspaces across the last rounds. Which one is the core entity, and which are supporting views or containers?" |
+| Non-Goal Decider | "How would you tell a finding belongs to that exclusion?" | "You said this feature won't handle refunds. If a bug report comes in about a failed charge, how would you decide whether it's a refund case you're excluding, or a charge case that's in scope?" |
 
 **Scope Over-Engineering Guard:** if a component's `scope` dimension is unscored (`null`) or scored below 0.5, the very next question for that component MUST be a boundary question — what's in vs what's out for this component — before any other dimension is targeted, even if another dimension scores lower. This guard exists to block gold-plating: a component is never considered understood while its boundary is still fuzzy, no matter how clear its other five dimensions look.
 
@@ -269,7 +272,7 @@ Transcript or prompt-safe transcript summary (this component's slice):
 Score each dimension:
 1. Intent Clarity (0.0-1.0): Is the primary objective unambiguous? Can you state it in one sentence without qualifiers? Can you name the key entities (nouns) and their relationships (verbs) without ambiguity?
 2. Outcome Clarity (0.0-1.0): Is the concrete deliverable or end-state clear enough to recognize when it exists?
-3. Scope Clarity (0.0-1.0): Are the boundaries of what's included versus excluded from this piece of work clear?
+3. Scope Clarity (0.0-1.0): Are the boundaries of what's included versus excluded from this piece of work clear? Boundary clarity means more than naming what's excluded — every excluded item needs a decider, a way to tell whether a given finding falls inside that exclusion. An excluded item with no decider yet keeps this dimension short of fully clear, however well the exclusion is named.
 4. Constraint Clarity (0.0-1.0): Are the boundaries, limitations, and non-goals clear?
 5. Success Criteria Clarity (0.0-1.0): Could you write a test that verifies success? Are acceptance criteria concrete?
 6. Context Clarity (0.0-1.0): Do we understand the environment this component sits in well enough to build or modify it safely — existing codebase structures it must map to (brownfield), or the platform/integration surface it must fit (greenfield)? Context is scored every round, for every component — it is never optional.
@@ -469,7 +472,7 @@ When the Design Interview phase has exited with all design branches resolved, or
 
 2. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
 
-**Inline self-review** (after writing), 4 checks: placeholder / consistency / scope / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, no ambiguous text remains.
+**Inline self-review** (after writing), 5 checks: placeholder / consistency / scope / non-goal-decider / ambiguity — confirm no unfilled placeholders, no section contradictions, full interview coverage, every Non-Goals bullet carries a decider, no ambiguous text remains.
 
 3. **Emit the handoff token** in the final assistant message before proceeding to Phase 5. The literal token `<deep-interview-done/>` must appear in the assistant turn that announces spec completion. This signals downstream hooks that the interview phase is complete and state cleanup may proceed.
 
@@ -529,7 +532,7 @@ Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec 
 - [ ] Every round explicitly names the weakest dimension and why it is the next target
 - [ ] Challenge stances selected by the Step 2-head Dialectic Rhythm Guard at the correct rotation conditions (Contrarian round 4+, Simplifier round 6+, Ontologist on stall or round 8+ with ambiguity > 0.3)
 - [ ] Spec file written to `$OMT_DIR/deep-interview/{slug}.md`
-- [ ] Inline self-review (4 checks: placeholder / consistency / scope / ambiguity) performed
+- [ ] Inline self-review (5 checks: placeholder / consistency / scope / non-goal-decider / ambiguity) performed
 - [ ] Spec includes: goal, constraints, acceptance criteria, Approach & Design Decisions, clarity breakdown, transcript
 - [ ] Token `<deep-interview-done/>` emitted in the final assistant message before handoff
 - [ ] Execution bridge presented via AskUserQuestion
