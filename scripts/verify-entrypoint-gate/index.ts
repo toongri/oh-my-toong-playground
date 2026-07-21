@@ -71,6 +71,42 @@ import { fileURLToPath } from "node:url";
  * user, which is the exact failure class the compound-detection fix in this
  * same file was written to eliminate, not reintroduce. See
  * `scripts/verify-entrypoint-gate/` in CLAUDE.md for the one-line summary.
+ *
+ * Wrapper flat-scan fallback (step 1's tail case, when (a)/(b)/(c) all
+ * fail): `stripLeadingTransparentWrappers` only peels a bare `command`/`env`
+ * word, and `nestedShellInnerCommand` only recognizes a single exact
+ * `-c <rest>` argument — neither handles a wrapper option shaped any other
+ * way (`env --`, `env -u PATH`, `env -S "..."`, `bash -lc "..."` combined
+ * short flags, `bash -x -c "..."` multi-flag, `bash --rcfile /dev/null -c
+ * "..."`), so those segments fall through (a)/(b)/(c) unexamined and would
+ * otherwise reach `return false` untouched. When that happens AND the
+ * segment's first token is one of a fixed list of known wrapper names
+ * (`env`, `command`, `bash`, `sh`, `zsh`, `eval`, `npx`, `bunx`), a flat scan
+ * runs instead: quote characters are replaced with spaces (so a quoted span
+ * doesn't collapse into one opaque token the way `tokenize()` would leave
+ * it), the result is split on whitespace, and the word list is checked —
+ * ignoring position beyond the stated ordering — for a `runners` name
+ * anywhere, a `pnpm`/`npm`/`yarn` word followed later by an `entrypoints`
+ * word, or a `via` name (`npx`/`bunx`, or the two consecutive words
+ * `pnpm exec`/`pnpm dlx`) followed later by a `runners` name. No
+ * per-wrapper option-arity table backs this: `env -u PATH` and
+ * `bash -o errexit -c` take their option's value as a SEPARATE following
+ * token (space-joined, not `=`-joined), so "skip tokens starting with `-`"
+ * can't tell a flag from its value, and a table of exactly which flags on
+ * which wrapper take a value would drift with shell/coreutils versions the
+ * same way the removed verify:quick/verify:full policy drifted from
+ * package.json. `pnpm`/`npm`/`yarn` are deliberately NOT wrapper trigger
+ * names here: a flat scan doesn't cut at a `--` marker the way (c) above
+ * does, so treating `pnpm` as a trigger would make `pnpm start -- test`
+ * register as an attempt purely because the literal word `test` sits
+ * somewhere in the text, false-denying an entrypoint-less script forwarding
+ * its own `-- test` positional. Residual false-deny risk, accepted rather
+ * than closed (the same tradeoff as the `$IFS`-expansion gap above): if a
+ * nested-shell reduction fails for an unrelated reason and the leftover raw
+ * text happens to contain a `pnpm`/`npm`/`yarn` word followed by an
+ * `entrypoints` word, or a `runners` name, purely as inert text — e.g.
+ * `bash -lc "echo 'run pnpm test as needed'"` — this scan denies it even
+ * though no verification command is actually being run.
  */
 
 // -----------------------------------------------------------------------------
@@ -212,7 +248,7 @@ function isVerificationAttemptSegment(segment: string, entrypoints: string[], ru
 
 	const normalized = stripAfterEndOfOptions(unwrapped);
 	const tokens = tokenize(normalized);
-	if (tokens.length === 0) return false;
+	if (tokens.length === 0) return matchesWrapperFlatScanFallback(segment, entrypoints, runners, via);
 
 	const first = tokens[0];
 	if (runners.includes(first)) return true;
@@ -239,6 +275,49 @@ function isVerificationAttemptSegment(segment: string, entrypoints: string[], ru
 	if (first === "pnpm" || first === "npm" || first === "yarn") {
 		for (const tok of tokens.slice(1)) {
 			if (entrypoints.includes(tok)) return true;
+		}
+	}
+
+	return matchesWrapperFlatScanFallback(segment, entrypoints, runners, via);
+}
+
+// -----------------------------------------------------------------------------
+// Wrapper flat-scan fallback — see the header comment's dedicated paragraph
+// above for the rationale (why no option-arity table, why pnpm/npm/yarn are
+// excluded, and the accepted residual false-deny risk). Mechanics only here:
+// this only runs once (a)/(b)/(c) above have already failed to classify the
+// segment as an attempt, and only when the segment's first raw token is one
+// of the fixed WRAPPER_FLAT_SCAN_TRIGGERS below — pnpm/npm/yarn are never in
+// that list. The scan never tokenizes: quote characters are replaced with
+// spaces first (so `bash -lc "pnpm test --all"`'s quoted span splits into
+// separate words instead of collapsing into one opaque token under
+// tokenize()), then the result is split on whitespace with no further
+// normalization.
+// -----------------------------------------------------------------------------
+const WRAPPER_FLAT_SCAN_TRIGGERS = ["env", "command", "bash", "sh", "zsh", "eval", "npx", "bunx"];
+
+function matchesWrapperFlatScanFallback(segment: string, entrypoints: string[], runners: string[], via: string[]): boolean {
+	const words = segment
+		.replace(/['"]/g, " ")
+		.trim()
+		.split(/\s+/)
+		.filter((word) => word.length > 0);
+	if (words.length === 0 || !WRAPPER_FLAT_SCAN_TRIGGERS.includes(words[0])) return false;
+
+	if (words.some((word) => runners.includes(word))) return true;
+
+	for (let i = 0; i < words.length; i++) {
+		if (words[i] !== "pnpm" && words[i] !== "npm" && words[i] !== "yarn") continue;
+		if (words.slice(i + 1).some((word) => entrypoints.includes(word))) return true;
+	}
+
+	for (const entry of via) {
+		if (entry === "node_modules/.bin") continue;
+		const entryWords = entry.trim().split(/\s+/);
+		for (let i = 0; i + entryWords.length <= words.length; i++) {
+			const isMatch = entryWords.every((word, j) => words[i + j] === word);
+			if (!isMatch) continue;
+			if (words.slice(i + entryWords.length).some((word) => runners.includes(word))) return true;
 		}
 	}
 

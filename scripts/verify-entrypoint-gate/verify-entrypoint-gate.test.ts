@@ -242,6 +242,80 @@ const TABLE: Row[] = [
 		expect: "passthrough",
 		note: "따옴표 안에 박힌 pnpm 문구는 첫 토큰이 echo라 시도로 오인되지 않음",
 	},
+
+	// --- 결함 (c) — 래퍼가 stripLeadingTransparentWrappers/nestedShellInnerCommand
+	// 가정("래퍼 다음 토큰이 곧바로 목표물")을 벗어난 옵션 형태를 취하면
+	// isVerificationAttemptSegment가 시도 자체를 놓치던 우회. 세 검사 (a)/(b)/(c)가
+	// 모두 실패했을 때만 도는 래퍼 flat-스캔 fallback으로 닫는다 ---
+	{
+		command: "env -- pnpm test --all",
+		expect: "deny",
+		note: "REGRESSION FIX — env -- 뒤 pnpm 진입점 우회. stripAfterEndOfOptions가 선두 -- 에도 매치해 tokens.length===0으로 조기 반환하던 경로도 fallback이 닫음",
+	},
+	{
+		command: "env --ignore-environment pnpm test --all",
+		expect: "deny",
+		note: "REGRESSION FIX — env 뒤 공백-분리 값을 갖지 않는 플래그로 우회하던 것",
+	},
+	{ command: "env -i pnpm test --all", expect: "deny", note: "REGRESSION FIX — env -i 플래그 우회" },
+	{
+		command: "env -u PATH pnpm test --all",
+		expect: "deny",
+		note: "REGRESSION FIX — env -u 는 값을 공백으로 분리해 받아 '-로 시작하는 토큰 건너뛰기'로 안 닫힘",
+	},
+	{ command: 'env -S "pnpm test --all"', expect: "deny", note: "REGRESSION FIX — env -S 플래그 우회" },
+	{ command: "command -p pnpm test --all", expect: "deny", note: "REGRESSION FIX — command -p 플래그 우회" },
+	{ command: 'bash --noprofile -c "pnpm test --all"', expect: "deny", note: "REGRESSION FIX — bash --noprofile -c 다중 플래그 우회" },
+	{ command: 'sh -e -c "pnpm test --all"', expect: "deny", note: "REGRESSION FIX — sh -e -c 다중 플래그 우회" },
+	{ command: 'bash -x -c "pnpm test --all"', expect: "deny", note: "REGRESSION FIX — bash -x -c 다중 플래그 우회" },
+	{ command: 'bash -lc "pnpm test --all"', expect: "deny", note: "REGRESSION FIX — bash -lc 결합 단축옵션은 -c 문자열 동등비교로 안 잡힘" },
+	{ command: 'bash -xc "pnpm test --all"', expect: "deny", note: "REGRESSION FIX — bash -xc 결합 단축옵션 우회" },
+	{ command: 'bash -o errexit -c "pnpm test --all"', expect: "deny", note: "REGRESSION FIX — bash -o errexit -c 값-분리 옵션 우회" },
+	{
+		command: 'bash --rcfile /dev/null -c "pnpm test --all"',
+		expect: "deny",
+		note: "REGRESSION FIX — bash --rcfile /dev/null -c 값-분리 옵션 우회",
+	},
+	{
+		command: 'bash --rcfile /dev/null -c "npx vitest"',
+		expect: "deny",
+		note: "REGRESSION FIX — 같은 래퍼 우회 안쪽이 via(npx)+러너(vitest) 조합인 경우",
+	},
+	{
+		command: 'env -- bash -c "pnpm test --all"',
+		expect: "deny",
+		note: "REGRESSION FIX — env -- 로 감싼 뒤 다시 bash -c 로 감싼 이중 래퍼 우회",
+	},
+	{
+		command: 'bash --noprofile -c "env -- pnpm test --all"',
+		expect: "deny",
+		note: "REGRESSION FIX — bash --noprofile -c 로 감싼 뒤 다시 env -- 로 감싼 이중 래퍼 우회",
+	},
+
+	// --- 오차단 회귀 없음 — 래퍼 flat-스캔 fallback이 새로 켜졌을 때도 아래는
+	// 전부 passthrough 여야 한다 ---
+	{
+		command: "pnpm start -- test",
+		expect: "passthrough",
+		note: "fallback 트리거 목록에 pnpm을 넣었다면 -- 뒤 test 를 오탐했을 명령 — pnpm은 트리거 목록에서 제외되어 fallback 자체가 발동하지 않음",
+	},
+	{ command: "env", expect: "passthrough", note: "래퍼 단독 호출 — flat-스캔이 발동해도 pnpm/러너 단어가 전혀 없음" },
+	{
+		command: "command -v pnpm",
+		expect: "passthrough",
+		note: "pnpm 단어가 있어도 그 뒤에 entrypoints 단어가 없어 조건 2가 성립하지 않음",
+	},
+	{ command: 'bash -lc "git status"', expect: "passthrough", note: "래퍼 안쪽이 검증 명령과 무관 — flat-스캔 조건 전부 불성립" },
+	{
+		command: "npx --yes create-react-app myapp",
+		expect: "passthrough",
+		note: "via(npx) 뒤 러너 이름이 없음 — flat-스캔도 기존 (b) 판정과 동일하게 시도로 보지 않음",
+	},
+	{
+		command: 'pnpm test admin -- -t "결제|환불"',
+		expect: "passthrough",
+		note: "최우선 회귀 가드 — 첫 토큰이 pnpm이라 fallback 자체가 발동하지 않고, 기존 (c)+shape 판정 그대로 통과",
+	},
 ];
 
 describe("decide — command-to-judgment table", () => {
