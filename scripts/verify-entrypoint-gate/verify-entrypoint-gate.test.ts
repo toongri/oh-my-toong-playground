@@ -155,6 +155,28 @@ const TABLE: Row[] = [
 		note: "-- 뒤 --affected는 러너 인자일 뿐 — 애초에 turbo 직접 호출이라 무조건 deny",
 	},
 	{ command: "pnpm --filter admin test src/foo.test.ts", expect: "deny", note: "스크립트명 앞 플래그(재확인)" },
+
+	// --- 결함 (a) — isCompound가 splitSegments와 다르게 판정하던 오차단 ---
+	{
+		command: 'pnpm test admin -- -t "결제|환불"',
+		expect: "passthrough",
+		note: "REGRESSION FIX — -- 뒤 따옴표 안 `|`는 vitest -t 정규식 교대일 뿐 compound 아님",
+	},
+	{
+		command: 'pnpm test admin -- -t "a;b"',
+		expect: "passthrough",
+		note: "REGRESSION FIX — -- 뒤 따옴표 안 `;`도 리터럴",
+	},
+	{
+		command: 'pnpm test admin -- -t "a&b"',
+		expect: "passthrough",
+		note: "REGRESSION FIX — -- 뒤 따옴표 안 `&`도 리터럴",
+	},
+	{
+		command: 'pnpm test admin -- -t "a" && echo done',
+		expect: "deny",
+		note: "회귀 방지 — -- 뒤라도 따옴표 밖의 진짜 && 는 여전히 compound",
+	},
 ];
 
 describe("decide — command-to-judgment table", () => {
