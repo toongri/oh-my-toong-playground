@@ -160,11 +160,15 @@ function buildShapeMismatchReason(intersection: string[], allowedTurboOpts: stri
 // extracted and this function recurses on it. Five independent checks on the
 // unwrapped segment, any one match is enough:
 //   (a) direct runner call — segment's first token is literally a `runners`
-//       name (vitest, turbo, pytest, ...).
-//   (b) via-executor call — segment starts with a `via` prefix and the token
-//       right after it is a `runners` name (`npx vitest`, `pnpm exec jest`),
-//       or (node_modules/.bin special case) the first token's path basename
-//       is a `runners` name (`./node_modules/.bin/vitest`).
+//       name (vitest, turbo, pytest, ...). Uses `tokens` (see below).
+//   (b) via-executor call — segment starts with a `via` prefix, then skips
+//       any number of `-`-prefixed tokens (executor flags, including a bare
+//       `--`), and the first non-`-` token reached after that is a `runners`
+//       name (`npx vitest`, `pnpm exec jest`, `bunx --bun vitest run`,
+//       `npx --package=vitest -- vitest run`) — or (node_modules/.bin
+//       special case) the first token's path basename is a `runners` name
+//       (`./node_modules/.bin/vitest`). This is the one check that reads
+//       `fullTokens` instead of `tokens` — see the note below for why.
 //   (c) pnpm/npm/yarn entrypoint-family script — segment's first token is
 //       `pnpm`, `npm`, or `yarn`, and ANY later token (before a `--`
 //       end-of-options marker) exactly equals one of `entrypoints`. This is
@@ -176,7 +180,25 @@ function buildShapeMismatchReason(intersection: string[], allowedTurboOpts: stri
 //       only affects which HALF of the pipeline (attempt-detection vs
 //       shape-match) catches a given bypass; a false positive here just
 //       means step 6 also has to reject it, which it already does for
-//       anything not exactly matching the allowed shape.
+//       anything not exactly matching the allowed shape. Uses `tokens` (see
+//       below), same as (a).
+//
+// Two token streams, not one: `tokens` is `stripAfterEndOfOptions(unwrapped)`
+// tokenized — cut at the segment's first ` -- ` marker — and (a)/(c) use it
+// unchanged. (b) alone uses `fullTokens` (`unwrapped` tokenized WITHOUT that
+// cut), because `--` means the opposite thing depending on what precedes it:
+// for a via-executor like `npx`, everything after `--` is the command npx
+// itself goes on to run, and MUST be inspected (`npx --package=vitest --
+// vitest run` really does launch vitest); for `pnpm <entrypoint>`, everything
+// after `--` is the runner's own selector forwarded verbatim and must NEVER
+// be inspected (inspecting it would false-deny the load-bearing
+// `pnpm test admin -- -t "결제|환불"`). One cut can't be right for both, so
+// (b) keeps its own uncut stream instead of sharing `tokens`. Residual risk,
+// accepted rather than closed: a via flag whose value is space-separated
+// instead of `=`-joined (`npx --package vitest some-tool`) reads the value
+// `vitest` as the runner name and false-denies — no finite per-executor
+// flag-arity table closes this without becoming the kind of speculative
+// table this file avoids elsewhere.
 // All token comparisons above run against tokenize()'s output, which is
 // already quote/backslash-normalized — see normalizeToken.
 // -----------------------------------------------------------------------------
@@ -195,16 +217,23 @@ function isVerificationAttemptSegment(segment: string, entrypoints: string[], ru
 	const first = tokens[0];
 	if (runners.includes(first)) return true;
 
+	// (b) via-executor call — uses fullTokens (untruncated by
+	// stripAfterEndOfOptions), not tokens. See the header comment above.
+	const fullTokens = tokenize(unwrapped);
+
 	if (via.includes("node_modules/.bin")) {
-		const match = /(^|\/)node_modules\/\.bin\/([^/]+)$/.exec(first);
+		const match = /(^|\/)node_modules\/\.bin\/([^/]+)$/.exec(fullTokens[0] ?? "");
 		if (match !== null && runners.includes(match[2])) return true;
 	}
 
 	for (const entry of via) {
 		if (entry === "node_modules/.bin") continue;
 		const words = entry.trim().split(/\s+/);
-		const isPrefixMatch = words.every((word, i) => tokens[i] === word);
-		if (isPrefixMatch && runners.includes(tokens[words.length] ?? "")) return true;
+		const isPrefixMatch = words.every((word, i) => fullTokens[i] === word);
+		if (!isPrefixMatch) continue;
+		let i = words.length;
+		while (i < fullTokens.length && fullTokens[i].startsWith("-")) i++;
+		if (runners.includes(fullTokens[i] ?? "")) return true;
 	}
 
 	if (first === "pnpm" || first === "npm" || first === "yarn") {
