@@ -58,7 +58,9 @@ health-check endpoint for the load balancer.
 
 ## Non-Goals
 - This issue does not add dark-mode system-preference auto-detect, CSV alternatives (XLSX/PDF),
-  avatar cropping controls, or a readiness probe.
+  avatar cropping controls, or a readiness probe. | decider: any request for dark-mode
+  system-preference auto-detect, a CSV alternative, avatar cropping, or a readiness probe belongs
+  here.
 
 ## References
 - N/A — no prior art gathered for this sprint work.

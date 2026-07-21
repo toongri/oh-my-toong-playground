@@ -19,7 +19,7 @@ read of `skills/craft-issue/SKILL.md` + `skills/craft-issue/references/issue-cra
 whatever dispatch payload it receives. That live-read design has no compile-time check that the
 reviewer actually enforces what those rule files say — the only way to verify it is to dispatch real
 payloads engineered to violate one specific rule each, and confirm the reviewer's verdict names that
-rule and only that rule. That is what E1–E16 below do.
+rule and only that rule. That is what E1–E18 below do.
 
 ## Fixture → anchor mapping
 
@@ -174,6 +174,21 @@ Read the rule files at dispatch time.") reads `issue-craft.md` fresh on every di
 the rule file was sufficient to close the gate, with no agent file in the loop at all. Do not assume
 a future gate needs an `agents/issue-reviewer.md` edit to take effect — check whether the rule file
 alone already does it first.
+
+**Detection fixtures backfilled, not re-measured (2026-07-21).** The same decider-clause gap found
+in E10–E13 also existed in ten of the twelve detection fixtures the 2026-07-15 amendment measured
+(E1–E9, E14–E16): `weasel-word-ac.md`, `task-restatement-ac.md`, `compound-ac.md`,
+`unbacked-precontext.md`, `unsliced-parent.md`, `model-a-violation.md`, `over-scaffolding.md`,
+`fake-convergence.md`, `missing-request-payload.md`, and `pre-solved-decision.md` each had a
+Non-Goals item with no decider clause — a second, unintended rule violation sitting alongside the
+one each fixture is engineered to trip, which the Fixture → anchor mapping section above requires
+NOT to be there (an isolated envelope so the primary finding is the only finding). All ten were
+updated to add a decider clause, following the same clause shape as `lean-clean.md`. This makes each
+fixture more isolated than before, which can only help anchor stability. But the anchor-stability
+results the 2026-07-15 amendment recorded for these ten were dispatched against the pre-decider-clause
+bytes — no dispatch has been re-run against the updated bytes. Treat those ten fixtures' recorded
+anchors as unconfirmed against current bytes until a fresh two-run E-KEY pass is done; this README
+does not claim that re-measurement happened.
 
 ## Reproduction — how to dispatch a fixture
 

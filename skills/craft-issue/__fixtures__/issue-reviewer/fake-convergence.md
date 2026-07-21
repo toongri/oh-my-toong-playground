@@ -35,7 +35,8 @@ copy values out of the table.
       downloaded file's row count matches the on-screen row count
 
 ## Non-Goals
-- This issue does not add export formats besides CSV (e.g., XLSX, PDF).
+- This issue does not add export formats besides CSV (e.g., XLSX, PDF). | decider: any request to
+  add an export format besides CSV belongs here.
 
 ## References
 - N/A — no prior art gathered for this change.

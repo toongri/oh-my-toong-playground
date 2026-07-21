@@ -38,7 +38,8 @@ the legacy-code question, but that open decision must be recorded so it isn't lo
 - Legacy discount codes will be retired for existing users; see `DESIGN-142` for details.
 
 ## Non-Goals
-- This issue does not change how legacy-format codes are validated for existing users.
+- This issue does not change how legacy-format codes are validated for existing users. | decider:
+  any request to change legacy-format code validation for existing users belongs here.
 
 ## References
 - N/A — no prior art gathered for this change.

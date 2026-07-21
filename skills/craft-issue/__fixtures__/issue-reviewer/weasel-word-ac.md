@@ -34,7 +34,9 @@ up and keeps routing traffic to instances that are still booting.
       responds correctly.
 
 ## Non-Goals
-- This issue does not add a readiness probe or downstream dependency health checks (DB, cache).
+- This issue does not add a readiness probe or downstream dependency health checks (DB, cache). |
+  decider: any request to add a readiness probe or downstream dependency health checks belongs
+  here.
 
 ## References
 - N/A — no prior art gathered for this endpoint.
