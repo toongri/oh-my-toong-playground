@@ -242,7 +242,7 @@ evidence that it read and applied the new rule, not just happened not to fire.
 
 ### 4-cell summary
 
-| Fixture | Before the gate (HEAD) | After the gate |
+| Fixture | Before the gate | After the gate |
 |---|---|---|
 | `missing-decider.md` (decider absent) | COMMENT — not blocking (n=4) | **B3 blocking item** (n=2) |
 | `decider-present-clean.md` (decider present) | — not measured | **not blocked on the decider axis** (n=1) |

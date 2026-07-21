@@ -138,7 +138,13 @@ reviewer enforces this without any change to `agents/issue-reviewer.md`.
 | File | `git hash-object` |
 |---|---|
 | `skills/craft-issue/SKILL.md` | `e512d43c500a2dce9a8fcfebd6624eb61efc5d66` |
-| `skills/craft-issue/references/issue-craft.md` | `77c17ecf8460e9a298b571edb77d625efab77988` |
+| `skills/craft-issue/references/issue-craft.md` | `70cd00261abad1decf84999b19a60270ec9baea1` |
+
+This pin changed once since it was first recorded — a later commit escaped table-cell pipes in
+`issue-craft.md` in the same commit that touched this README, without updating the hash here. The
+rule text itself (including the Non-Goals `| decider:` requirement this measurement exercises) is
+unchanged; only the pipe-escaping shifted the byte hash. The measurement below remains valid against
+the current pin.
 
 **Measured 4-cell:**
 
