@@ -1,19 +1,17 @@
 # metis fixture — missing-decider
 
-**Expected verdict (post-extension):** REQUEST_CHANGES — but only once `agents/metis.md`'s B3 axis is
-extended, in a follow-up task, to reject an OUT-of-Scope exclusion that carries no `| decider:`
-clause. **At HEAD (no such extension exists yet), the expected observation is the opposite: this
-payload does NOT receive REQUEST_CHANGES.** That gap — a real defect the current gate cannot see — is
-the RED this fixture exists to make visible. See `README.md` § RED/GREEN judgment predicate for the
-exact before/after table.
+**Expected verdict (at HEAD):** REQUEST_CHANGES — `agents/metis.md`'s B3 axis (`agents/metis.md:104`)
+rejects an OUT-of-Scope exclusion that carries no `| decider:` clause. That gate is live at HEAD. See
+`README.md` § Measured results for the before/after record of how this fixture's classification
+changed once the gate landed.
 
-**Expected anchor (post-extension only):** `decider` (case-insensitive), co-occurring with a
-`REQUEST_CHANGES` value under the `## Analysis Verdict` section.
+**Expected anchor:** `decider` (case-insensitive), co-occurring with a `REQUEST_CHANGES` value under
+the `## Analysis Verdict` section.
 
 **Rule source:** `agents/metis.md` § Blocking Authority (B3) + `skills/prometheus/review-pipeline.md`
 § Metis Invocation Template — "Each `OUT of Scope` item must carry a decider... An exclusion without
-a decider has no edge to any finding, so it does nothing. A future gate (`agents/metis.md`, added in
-a follow-up) rejects an undecidered exclusion with REQUEST_CHANGES."
+a decider has no edge to any finding, so it does nothing. The gate at `agents/metis.md:104` (B3)
+rejects an undecidered exclusion with REQUEST_CHANGES."
 
 **Material provenance (3rd attempt — see `README.md` § Fixture authoring constraints for the two
 prior failed attempts):** this payload is assembled, not invented, from
