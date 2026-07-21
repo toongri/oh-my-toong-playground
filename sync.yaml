@@ -41,7 +41,7 @@ skills:
 
 scripts:
   items:
-    # verify-entrypoint-gate: verify-caps-gate 후속. entrypoint 화이트리스트를
+    # verify-entrypoint-gate: entrypoint 화이트리스트를
     # package.json scripts와 실시간 교집합해 존재하지 않는 스크립트를 안내하지 않는다.
     # scripts로 배포(등록 없음)하여 $HOME/.claude/scripts/verify-entrypoint-gate/에 단일본으로 두고,
     # 실제 hook 등록은 projects/algocare-home/claude.yaml이 raw command로 이 경로를 참조한다.
