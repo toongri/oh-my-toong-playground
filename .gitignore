@@ -8,8 +8,13 @@
 .superset/
 .playwright-mcp/
 
-# local overlay files (device-specific, must not be committed)
-**/*.local.yaml
+# local overlay files (device-specific, must not be committed).
+# 설정 루트 2계층에만 적용한다 — OMT 루트와 각 프로젝트 루트.
+# 컴포넌트 디렉터리 안에 중첩된 *.local.yaml 은 기기 설정이 아니라
+# 배포되는 컴포넌트 페이로드이므로 버전관리 대상이다
+# (예: projects/*/scripts/*/*.local.yaml 정책 오버레이).
+/*.local.yaml
+/projects/*/*.local.yaml
 .mcp.json
 
 *.log
