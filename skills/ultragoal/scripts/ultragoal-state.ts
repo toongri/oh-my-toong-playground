@@ -97,7 +97,7 @@ export interface Story {
 const DEFAULT_MAX_ITERATIONS = 10;
 
 export interface GoalState {
-	// --- 4 content slots ---
+	// --- 5 content slots ---
 	outcome: string;
 	verification_surface: string;
 	constraints: string;
