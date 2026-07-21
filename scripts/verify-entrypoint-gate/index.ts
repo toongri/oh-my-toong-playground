@@ -26,11 +26,15 @@ import { fileURLToPath } from "node:url";
  *      untouched, regardless of anything else about the command (this is
  *      what keeps `pnpm start`/`seed`/`build`/`install`/etc. unaffected).
  *   2. Is the verification attempt mixed into a compound command (`&&`,
- *      `||`, `|`, `;`, newline, backtick, `$(...)`)? → deny. There is no
- *      `allow` path left to make injection-then-cap safe on a compound
- *      command, so compounds carrying a verification attempt are rejected
- *      outright rather than risking one segment's outcome leaking into the
- *      next.
+ *      `||`, `|`, `;`, newline, backtick, `$(...)`)? → deny. Splitting is
+ *      quote-aware (a delimiter inside a quoted span, e.g. the `|` in
+ *      `-t "결제|환불"`, is literal text, not a separator) for everything
+ *      except backtick/`$(` (checked on the raw text regardless of quoting,
+ *      since both still expand inside double quotes — fail-closed there is
+ *      correct, not a false positive). There is no `allow` path left to make
+ *      injection-then-cap safe on a compound command, so compounds carrying
+ *      a verification attempt are rejected outright rather than risking one
+ *      segment's outcome leaking into the next.
  *   3. Walk up from `cwd` looking for `pnpm-workspace.yaml`. Not found →
  *      deny (fail-closed: an undeterminable whitelist must not collapse to
  *      "allowed", or `cd /tmp && npx vitest` becomes a free bypass).
@@ -260,8 +264,19 @@ function splitSegments(command: string): string[] {
 // gate fully controls, so any of them mixed with a verification attempt
 // denies outright (there is no `allow` path left to make injection safe on a
 // compound, unlike the old gate).
+//
+// Delegates the &&/||/|/;/newline/bare-& axis to splitSegments so there is
+// exactly one quote-aware split implementation in this file, not two that
+// can drift apart — a prior version of this function re-implemented that
+// axis as a bare regex with no quote awareness, so `-t "결제|환불"` (a
+// literal `|` inside a quoted vitest -t pattern) was misread as a pipe and
+// false-denied even though splitSegments (used one call site over, for
+// attempt-detection) correctly treated it as one segment. Backtick and `$(`
+// stay a raw-text scan on purpose (not folded into splitSegments): both
+// still expand inside double quotes, so denying on their mere presence
+// regardless of quoting is the fail-closed-correct call, not a bug to fix.
 function isCompound(command: string): boolean {
-	return /&&|\|\||\||;|\n|`|\$\(|&/.test(command);
+	return splitSegments(command).length > 1 || /`|\$\(/.test(command);
 }
 
 // A scope/turbo flag written AFTER a segment's `--` end-of-options marker is
