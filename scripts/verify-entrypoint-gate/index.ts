@@ -32,15 +32,24 @@ import { fileURLToPath } from "node:url";
  *      the command (this is what keeps `pnpm start`/`seed`/`build`/`install`
  *      /etc. unaffected).
  *   2. Is the verification attempt mixed into a compound command (`&&`,
- *      `||`, `|`, `;`, newline, backtick, `$(...)`)? → deny. Splitting is
- *      quote-aware (a delimiter inside a quoted span, e.g. the `|` in
- *      `-t "결제|환불"`, is literal text, not a separator) for everything
- *      except backtick/`$(` (checked on the raw text regardless of quoting,
- *      since both still expand inside double quotes — fail-closed there is
- *      correct, not a false positive). There is no `allow` path left to make
- *      injection-then-cap safe on a compound command, so compounds carrying
- *      a verification attempt are rejected outright rather than risking one
- *      segment's outcome leaking into the next.
+ *      `||`, `|`, `;`, newline, backtick, `$(...)`, subshell `(...)`, or
+ *      brace group `{...}`)? → deny. Splitting is quote-aware (a delimiter
+ *      inside a quoted span, e.g. the `|` in `-t "결제|환불"` or the `(`/`)`
+ *      in `-t "(결제|환불)"`, is literal text, not a separator) for
+ *      everything except backtick/`$(` (checked on the raw text regardless
+ *      of quoting, since both still expand inside double quotes —
+ *      fail-closed there is correct, not a false positive). There is no
+ *      `allow` path left to make injection-then-cap safe on a compound
+ *      command, so compounds carrying a verification attempt are rejected
+ *      outright rather than risking one segment's outcome leaking into the
+ *      next. Residual false-deny risk, accepted rather than closed: an
+ *      unquoted brace expansion used as a runner argument (e.g.
+ *      `pnpm test admin -- --grep {foo,bar}`) now reads as a segment
+ *      boundary and false-denies — self-inflicted and recoverable by
+ *      quoting the argument (`--grep "{foo,bar}"` already passes through
+ *      unaffected, see the quote-aware note above), and low-frequency in
+ *      practice since vitest/jest regex arguments are conventionally quoted
+ *      (`-t "a|b"`) rather than left as bare brace expansion.
  *   3. Walk up from `cwd` looking for `pnpm-workspace.yaml`. Not found →
  *      deny (fail-closed: an undeterminable whitelist must not collapse to
  *      "allowed", or `cd /tmp && npx vitest` becomes a free bypass).
@@ -71,6 +80,27 @@ import { fileURLToPath } from "node:url";
  * user, which is the exact failure class the compound-detection fix in this
  * same file was written to eliminate, not reintroduce. See
  * `scripts/verify-entrypoint-gate/` in CLAUDE.md for the one-line summary.
+ *
+ * Known unclosed gap, by design (second axis): a command-execution wrapper —
+ * `nice`/`time`/`nohup`/`timeout`/`stdbuf`/`setsid`/`xargs`/`sudo`, or any
+ * other ordinary command that execs the argv following it — placed in front
+ * of a runner or `pnpm` entrypoint invocation can pass step 1's attempt
+ * detection right through, since none of those names are in
+ * WRAPPER_FLAT_SCAN_TRIGGERS or peeled by stripLeadingTransparentWrappers/
+ * nestedShellInnerCommand. This set is not finite (it's every exec-style
+ * wrapper reachable on PATH), and closing it one name at a time is exactly
+ * the shape of fix this file's design already rejects elsewhere — see the
+ * spec's rejected alternatives: a `deny_args` blacklist ("always owes a debt
+ * to a variant not yet thought of") and parsing `cd` ("miss one form and it's
+ * a new bypass route"). A command-wrapper trigger list would owe the same
+ * debt. The threat model this gate defends is a cooperative agent nudged
+ * toward running tests the efficient, intended way (the originating spec's
+ * framing: "just run tests efficiently"), not a determined bypasser —
+ * `nice -n 10 vitest` or `sudo vitest` isn't a shape an agent reaches for
+ * naturally, and a determined bypasser already has the `$IFS`-expansion route
+ * above regardless of what this file does. So this axis is left an
+ * intentional, unclosed residual risk, at the same tier as the
+ * `$IFS`-expansion gap.
  *
  * Wrapper flat-scan fallback (step 1's tail case, when (a)/(b)/(c) all
  * fail): `stripLeadingTransparentWrappers` only peels a bare `command`/`env`
@@ -371,9 +401,19 @@ function matchesAllowedShape(command: string, intersection: string[], allowedTur
 // comments record the shapes that broke naive versions of these in the past.
 // -----------------------------------------------------------------------------
 
-// Quote-aware split on &&/||/|/;/newline/bare-& — a delimiter inside a quoted
-// span is literal text, not a shell separator (e.g. the `|` in
-// `echo "a | turbo run test b"`), and must not be split on.
+// Quote-aware split on &&/||/|/;/newline/bare-&/(/)/{/} — a delimiter inside
+// a quoted span is literal text, not a shell separator (e.g. the `|` in
+// `echo "a | turbo run test b"`), and must not be split on. `(`/`)` (subshell
+// grouping) and `{`/`}` (brace grouping) are included alongside the other
+// separators because both are how a shell combines a verification attempt
+// with the rest of a command — `(vitest run)` and `{ vitest run; }` still
+// route the runner call through the same "attempt mixed into something else"
+// judgment as `vitest run && true` does, so they must produce a segment
+// boundary the same way. A grouping character inside a quoted span (e.g. the
+// `(` in `-t "(결제|환불)"`) is not split on, for the same reason a quoted
+// `|` or `;` isn't — the quote-aware branch above already skips the
+// delimiter checks entirely while `quote !== null`, so this falls out of the
+// existing logic with no separate handling needed.
 function splitSegments(command: string): string[] {
 	const segments: string[] = [];
 	let current = "";
@@ -399,7 +439,7 @@ function splitSegments(command: string): string[] {
 			i += 2;
 			continue;
 		}
-		if (ch === "&" || ch === "|" || ch === ";" || ch === "\n") {
+		if (ch === "&" || ch === "|" || ch === ";" || ch === "\n" || ch === "(" || ch === ")" || ch === "{" || ch === "}") {
 			segments.push(current);
 			current = "";
 			i++;

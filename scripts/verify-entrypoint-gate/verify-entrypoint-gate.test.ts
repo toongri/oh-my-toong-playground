@@ -316,6 +316,38 @@ const TABLE: Row[] = [
 		expect: "passthrough",
 		note: "최우선 회귀 가드 — 첫 토큰이 pnpm이라 fallback 자체가 발동하지 않고, 기존 (c)+shape 판정 그대로 통과",
 	},
+
+	// --- 결함 (d) — 셸 그룹핑(서브셸 `(...)`/브레이스 그룹 `{...}`)이 splitSegments의
+	// 구분자에 없어 하나의 세그먼트로 뭉쳐지고, 첫 토큰이 `(vitest`처럼 러너로 인식
+	// 되지 않아 attempt 감지 자체를 건너뛰던 우회 ---
+	{
+		command: "(vitest run)",
+		expect: "deny",
+		note: "REGRESSION FIX — 서브셸 그룹핑으로 러너 직접 호출을 감싸던 우회, 그룹 문자가 세그먼트 경계가 되어 compound로 잡힘",
+	},
+	{
+		command: "(pnpm test --all)",
+		expect: "deny",
+		note: "REGRESSION FIX — 서브셸 그룹핑으로 --all 진입점 호출을 감싸던 우회",
+	},
+	{
+		command: "{ vitest run; }",
+		expect: "deny",
+		note: "REGRESSION FIX — 브레이스 그룹핑으로 러너 직접 호출을 감싸던 우회",
+	},
+
+	// --- 오차단 회귀 없음 — 따옴표 안의 그룹 문자는 quote-aware 로직으로 여전히
+	// 리터럴 텍스트이며 세그먼트 경계가 되지 않아야 한다 ---
+	{
+		command: 'pnpm test admin -- -t "(결제|환불)"',
+		expect: "passthrough",
+		note: "최우선 회귀 가드 — 따옴표 안 괄호는 splitSegments의 quote-aware 분기에서 세그먼트 경계로 취급되지 않음",
+	},
+	{
+		command: 'pnpm test admin -- -t "{a,b}"',
+		expect: "passthrough",
+		note: "따옴표 안 브레이스도 동일하게 리터럴 — 세그먼트 경계 아님",
+	},
 ];
 
 describe("decide — command-to-judgment table", () => {
