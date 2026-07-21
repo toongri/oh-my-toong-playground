@@ -2523,10 +2523,10 @@ describe("serialize-requirements subcommand", () => {
 // ---------------------------------------------------------------------------
 
 describe("serialize-review-context subcommand", () => {
-	// 4-slot wiring: each of the 4 contract fields is fed by a recognizably
+	// 5-slot wiring: each of the 5 contract fields is fed by a recognizably
 	// distinct per-field sentinel, proving the assembly wires each source into
 	// its documented field and not some other one.
-	test("wires distinct per-field sentinels into the correct 4 contract slots", () => {
+	test("wires distinct per-field sentinels into the correct 5 contract slots", () => {
 		setGoalState(S, {
 			phase: "planning",
 			outcome: "SENTINEL_OUTCOME",

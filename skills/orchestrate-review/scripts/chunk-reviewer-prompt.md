@@ -36,7 +36,7 @@ This describes what kind of software is being reviewed. Finders must factor this
 
 {NON_GOAL}
 
-Each declared non-goal has the form `- {what this change deliberately does not do} | 판정: {how to recognize a candidate finding that falls inside this non-goal}`. Finders must not generate a candidate finding whose failure scenario is fully explained by a declared non-goal — this is suppression at generation time, not a filter applied after generating the candidate.
+Each declared non-goal has the form `- {what this change deliberately does not do} | decider: {how to recognize a candidate finding that falls inside this non-goal}`. Finders must not generate a candidate finding whose failure scenario is fully explained by a declared non-goal — this is suppression at generation time, not a filter applied after generating the candidate.
 
 ## Evidence Results
 
