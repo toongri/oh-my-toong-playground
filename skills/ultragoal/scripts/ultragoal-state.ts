@@ -363,6 +363,44 @@ export interface SetGoalOpts {
 }
 
 /**
+ * Declaration-shape existence check for `non_goals` — the one shape this feature
+ * enforces everywhere non-goals are read (metis, issue-reviewer, and deep-interview
+ * gates all expect it): `- {what this pursuit will NOT do} | decider: {how to tell a
+ * finding belongs here}`. This checks the SHAPE only — a `|` and a non-empty
+ * `decider:` clause — never whether the decider is actually a good discriminator;
+ * that judgment belongs to the prose-layer reviewers, and encoding it here would
+ * turn a syntax check into an interpretation dispute.
+ *
+ * `setGoalState` is the only writer of `non_goals` (untrusted here only in the
+ * accident sense — this is the orchestrator's own authored text, not external
+ * input), so this is the single choke point. It closes two accident-axis holes at
+ * once, because both are really the same hole (a value that skips the declared
+ * shape):
+ *   1. A line starting with "#" (e.g. a stray `## Evidence Results`) forges a fake
+ *      section into the assembled reviewer prompt once `serializeReviewContext`
+ *      concatenates it verbatim (no escaping) — the reviewer treats `## Evidence
+ *      Results` as an already-verified section, not to be re-evaluated.
+ *   2. A value beginning with `--` gets swallowed by parseArgs' shape-guessing
+ *      consumption and stored as the literal string `'true'` — non-blank, so the
+ *      backfill path never fires, and `'true'` rides the payload as a fake declaration.
+ *
+ * Blank-only values (the `(none provided)` backfill path) pass through untouched.
+ */
+const NON_GOAL_LINE_PATTERN = /^-\s+\S.*\|\s*decider:\s*\S.*$/;
+
+function validateNonGoals(value: string): void {
+	if (value.trim() === "") return;
+	for (const line of value.split("\n")) {
+		if (line.trim() === "") continue;
+		if (!NON_GOAL_LINE_PATTERN.test(line)) {
+			throw new Error(
+				`set: non-goals refused — line does not match "- {what this pursuit will NOT do} | decider: {...}" format: "${line}"`,
+			);
+		}
+	}
+}
+
+/**
  * Orchestrator-authority set. Accepts ONLY planning|pursuing — it can never
  * write phase=complete (that is request-complete-only) and never writes
  * objective_verdict. On phase=planning, three stale-state resets fire so a new
@@ -385,6 +423,9 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 			`set: phase must be one of ${SETTABLE_PHASES.join("|")} (got "${opts.phase}"). ` +
 				`complete is request-complete-only; budget_limited/blocked are system-only.`,
 		);
+	}
+	if (opts.non_goals !== undefined) {
+		validateNonGoals(opts.non_goals);
 	}
 	// Pursuing gate (D-8 / AC-2a): refused while any story is unconfirmed.
 	// An empty stories[] does NOT block pursuing (story definition is mandated by prose).
