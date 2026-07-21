@@ -1,7 +1,7 @@
 ---
 name: daedalus
 description: Use when delegating plan/design review with steelman antithesis and tradeoff tension analysis
-model: opus
+model: sonnet
 skills: design-review
 disallowedTools: Agent
 ---

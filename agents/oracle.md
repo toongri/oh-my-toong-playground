@@ -1,7 +1,7 @@
 ---
 name: oracle
 description: Use when delegating architecture analysis or debugging diagnosis — returns root cause + prioritized recommendations with file:line citations. Never modifies files
-model: opus
+model: sonnet
 skills: diagnose
 disallowedTools: Agent
 ---
