@@ -17,11 +17,13 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 
 ## 2. SCOPE
 - **IN Scope**: [what will be built]
-- **OUT of Scope**: [what is excluded]
+- **OUT of Scope**: [what is excluded] | decider: [how to tell a finding belongs to this exclusion]
 
 ## 3. ACCEPTANCE CRITERIA
 [Confirmed AC in full — paste verbatim. No summarizing.]
 ```
+
+Each `OUT of Scope` item must carry a decider — `| decider: {how to tell a finding belongs to this exclusion}` — so a reviewer can tell whether a candidate finding falls inside it. An exclusion without a decider has no edge to any finding, so it does nothing. A future gate (`agents/metis.md`, added in a follow-up) rejects an undecidered exclusion with REQUEST_CHANGES; this template only fixes the format the gate will check.
 
 **On Metis REQUEST_CHANGES**: Return to Interview Mode. Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Ask the user to clarify the gaps Metis identified. After resolving gaps via interview, re-invoke Metis with the same 3-Section structure containing updated content. This Interview→re-invoke loop is bounded by the K=3 orchestrator-owned carried-forward cap: after the 3rd identical Metis REQUEST_CHANGES on the same `(B-axis, requirement locus)` item, prometheus records the residual as a carried-forward gap and proceeds to S2 rather than looping a 4th time (see `SKILL.md > ### State Lifecycle Directives`). metis stays round-unaware — the cap is prometheus-owned.
 

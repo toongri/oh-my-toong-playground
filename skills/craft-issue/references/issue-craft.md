@@ -141,7 +141,7 @@ every Conditional row in its table to fire together.
 | **Pre-Context** | Background facts on scope and risk the reader needs before implementation begins — three sub-items (**Affected Areas**, **Premises**, **Blockers & Risks**). See Pre-Context Rules below. |
 | **AC** | Acceptance criteria (see Section 2 below). At least one AC per issue. |
 | **Post-Release Observation** | What is watched after release — an aspirational outcome metric and/or a falsifiable predicted post-release state (value, movement, invariant, or success log) — distinct from AC, which only confirms the change was built. Escalation section; see Post-Release Observation Section below. |
-| **Non-Goals** | What this issue explicitly does NOT address. Prevents scope creep. |
+| **Non-Goals** | What this issue explicitly does NOT address. Prevents scope creep. Each item pairs with `| decider: {how to tell a finding belongs here}`. |
 | **References** | PRDs, design docs, Slack threads, incident records, code commits/PRs, and logs use markdown links. Related PM issues are linked through the native relation step, not by duplicating the relationship in the body. PM-issue mentions that must appear in the body without becoming related use a form your PM tool does not auto-link into a relation, with a one-sentence note explaining why they are context rather than related-issue links. |
 
 ### Bug-Genre Additions
