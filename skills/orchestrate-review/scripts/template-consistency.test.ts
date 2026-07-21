@@ -96,6 +96,53 @@ function extractTemplateFieldReferences(content: string): Set<string> {
 	return placeholders;
 }
 
+/**
+ * Extract the template body — everything ABOVE the "## Field Reference" heading — from
+ * chunk-reviewer-prompt.md.
+ *
+ * This is the text actually interpolated and handed to the angle finder. The
+ * Field Reference table below the heading is documentation about the body, not
+ * body content itself, so a placeholder declared only in the table and never
+ * substituted into the body never reaches the finder.
+ */
+function extractTemplateBody(content: string): string {
+	const lines = content.split("\n");
+
+	const headingIndex = lines.findIndex((line) => /^##\s+Field Reference/.test(line));
+	if (headingIndex === -1) {
+		throw new Error(
+			"chunk-reviewer-prompt.md: Could not locate '## Field Reference' heading. " +
+				"The section may have been renamed — update the parser in template-consistency.test.ts.",
+		);
+	}
+
+	return lines.slice(0, headingIndex).join("\n");
+}
+
+describe("dispatch template body coverage", () => {
+	it("every placeholder declared in the Field Reference table also appears in the template body", () => {
+		// Arrange
+		const templateContent = readFileSync(TEMPLATE_MD, "utf-8");
+		const templatePlaceholders = extractTemplateFieldReferences(templateContent);
+		const templateBody = extractTemplateBody(templateContent);
+
+		// Guard: parser must not silently return empty set (format regression detection)
+		expect(templatePlaceholders.size).toBeGreaterThan(0);
+
+		// Act: find placeholders declared in the table but absent from the body actually
+		// interpolated and sent to the angle finder
+		const missingFromBody = [...templatePlaceholders].filter(
+			(placeholder) => !templateBody.includes(placeholder),
+		);
+
+		// Assert
+		expect(
+			missingFromBody,
+			`Declared in Field Reference table but MISSING from template body (never reaches the finder): ${missingFromBody.join(", ")}`,
+		).toEqual([]);
+	});
+});
+
 describe("dispatch template placeholder consistency", () => {
 	it("SKILL.md Step 5 and chunk-reviewer-prompt.md Field Reference declare the same placeholder set", () => {
 		// Arrange
