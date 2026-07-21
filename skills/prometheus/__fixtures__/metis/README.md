@@ -2,10 +2,10 @@
 
 Two behavioral-verification fixtures for the `metis` agent (`agents/metis.md`), the pre-planning
 requirements reviewer Prometheus invokes at its S1 gate (`skills/prometheus/review-pipeline.md` §
-Metis Invocation Template). They exist to prove — before anyone edits `agents/metis.md` — that a
-specific real defect (an `OUT of Scope` exclusion with no `| decider:` clause) currently slips past
-metis undetected, and later, after a follow-up task extends metis's B3 axis to catch it, that the
-extension actually works without over-blocking a correctly-formed payload.
+Metis Invocation Template). They exist to prove that a specific real defect (an `OUT of Scope`
+exclusion with no `| decider:` clause) — which slipped past metis undetected before the gate landed —
+is now caught by the gate extending metis's B3 axis (`agents/metis.md:104`), without that gate
+over-blocking a correctly-formed payload.
 
 These fixtures are pruned from every sync deploy target by `ALWAYS_PRUNE` in
 `tools/lib/sync-directory.ts` (any directory named `__fixtures__` is skipped by the source walk).
@@ -14,15 +14,14 @@ deployed, never read by `metis` itself at runtime.
 
 ## Why these fixtures exist
 
-`skills/prometheus/review-pipeline.md` § Metis Invocation Template already documents the gap this
-pair targets: "A future gate (`agents/metis.md`, added in a follow-up) rejects an undecidered
-exclusion with REQUEST_CHANGES; this template only fixes the format the gate will check." Editing
-`agents/metis.md` to add that gate is a **separate, later task** — not this one. Before that edit
-lands, the only way to know the gate is worth adding is to observe the current gap directly: dispatch
-a payload with the defect to the unmodified `metis` agent and confirm it does NOT block. That
-observation is this fixture set's entire purpose. `missing-decider.md` is the fixture engineered to
-carry exactly that one defect; `decider-present-clean.md` is its negative control, engineered to carry
-none of it, so that after the future gate lands, a false-positive gate (one that blocks regardless of
+`skills/prometheus/review-pipeline.md` § Metis Invocation Template documents the requirement this
+pair targets: "Each `OUT of Scope` item must carry a decider... An exclusion without a decider has no
+edge to any finding, so it does nothing. The gate at `agents/metis.md:104` (B3) rejects an undecidered
+exclusion with REQUEST_CHANGES." Before that gate landed, the only way to know it was worth adding was
+to observe the gap directly: dispatch a payload with the defect to the unmodified `metis` agent and
+confirm it did NOT block — that observation is recorded in § Measured results below. `missing-decider.md`
+is the fixture engineered to carry exactly that one defect; `decider-present-clean.md` is its negative
+control, engineered to carry none of it, so that a false-positive gate (one that blocks regardless of
 whether a decider is present) is equally catchable.
 
 ## Fixture authoring constraints (grounding — empirically observed, not theoretical)
@@ -52,7 +51,7 @@ material was wrong. Both fixtures were rewritten against `tools/validators/compo
 `tools/lib/validation.ts` — a real file, a real `main()` control-flow, a real exported type — each
 fact independently confirmed present in this repository before use.
 
-This is why these fixtures differ from `skills/craft-issue/__fixtures__/issue-reviewer/` (16
+This is why these fixtures differ from `skills/craft-issue/__fixtures__/issue-reviewer/` (18
 fixtures, `issue-reviewer` agent): that directory's fixtures may use fabricated material, because
 `issue-reviewer`'s dispatch contract does not ground a payload's factual assertions against the
 working tree the way `metis`'s does. Do not port a fabricated-material pattern from that directory
@@ -97,7 +96,7 @@ unconfirmed fact or a hand-written AC set is exactly the failure mode that force
 
 | File | Kind | Rule source |
 |---|---|---|
-| `missing-decider.md` | detect (RED at HEAD, GREEN after the future B3 extension) | `agents/metis.md` § Blocking Authority (B3) + `skills/prometheus/review-pipeline.md` § Metis Invocation Template |
+| `missing-decider.md` | detect (RED before the gate landed, GREEN at HEAD now that `agents/metis.md:104` exists) | `agents/metis.md` § Blocking Authority (B3) + `skills/prometheus/review-pipeline.md` § Metis Invocation Template |
 | `decider-present-clean.md` | negative control (never blocks, at HEAD or after) | same rule source — the detect/negative-control pair |
 
 Both fixtures describe the identical post-deploy `format` feature (OMT sync's `formatDeployedRoots`,
@@ -297,7 +296,7 @@ gate states and is not comparable; discard it and re-run cleanly on one side of 
 This repo has no mechanism that automatically verifies agent *behavior* — `tools/run-tests.sh` runs
 Shell tests (`*_test.sh`) and `bun test` (TypeScript) only, neither of which can dispatch an `Agent`
 call or judge free-form LLM prose. This is a known, accepted limitation, not an oversight specific to
-this fixture pair: `skills/craft-issue/__fixtures__/issue-reviewer/` (16 fixtures, the pattern this
+this fixture pair: `skills/craft-issue/__fixtures__/issue-reviewer/` (18 fixtures, the pattern this
 directory follows) and `skills/code-review/evals/evals.json` are both, identically, human-run
 documented procedures with no CI wiring. Adding an `Agent` dispatch or an LLM call to `make test` /
 `tools/run-tests.sh` is an explicit non-goal of this fixture set — see the fixture-authoring task's

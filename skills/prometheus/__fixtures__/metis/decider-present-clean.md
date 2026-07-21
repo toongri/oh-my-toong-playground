@@ -1,9 +1,9 @@
 # metis fixture — decider-present-clean (negative control)
 
-**Expected verdict:** not REQUEST_CHANGES (APPROVE or COMMENT) — both **before** and **after** the
-future B3 extension described in `missing-decider.md` lands. This fixture never flips.
+**Expected verdict:** not REQUEST_CHANGES (APPROVE or COMMENT) — the B3 gate at `agents/metis.md:104`
+does not fire against this payload. This fixture never flips.
 
-**Why this fixture exists:** if the future gate blocks on ANY undecidered `OUT of Scope` item without
+**Why this fixture exists:** if the gate blocks on ANY undecidered `OUT of Scope` item without
 distinguishing "decider absent" from "decider present," it over-blocks — it would reject a
 perfectly-formed exclusion just because the reviewer is scanning for the word "decider" too bluntly,
 or because some unrelated part of the payload trips a different rule. A gate that fires unconditionally
@@ -11,8 +11,7 @@ on any `OUT of Scope` section (decidered or not) is as useless as one that never
 teaches planners to ignore REQUEST_CHANGES. This fixture is the negative control that catches that
 false-positive failure mode: **same topic, same structure, same everything as `missing-decider.md`,
 except every `OUT of Scope` bullet carries its `| decider:` clause.** If this fixture ever gets
-REQUEST_CHANGES for a decider-related reason, the future gate is over-firing and needs to be narrowed
-before it ships.
+REQUEST_CHANGES for a decider-related reason, the gate is over-firing and needs to be narrowed.
 
 **Rule source:** `agents/metis.md` § Blocking Authority (B3) + `skills/prometheus/review-pipeline.md`
 § Metis Invocation Template — same rule source as `missing-decider.md`; the two fixtures form a
