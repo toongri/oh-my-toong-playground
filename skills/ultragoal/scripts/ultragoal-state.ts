@@ -25,7 +25,7 @@
  *
  * Subcommands:
  *   set --phase <planning|pursuing> [--outcome ..] [--verification-surface ..]
- *       [--constraints ..] [--boundaries ..] [--max-iterations <n>]
+ *       [--constraints ..] [--boundaries ..] [--non-goals ..] [--max-iterations <n>]
  *       [--blocked-stop ..] [--plan-path ..] [--resume-summary ..]
  *       [--completion-evidence p1,p2]
  *   set-budget-limited                       (system-only)
@@ -102,6 +102,7 @@ export interface GoalState {
 	verification_surface: string;
 	constraints: string;
 	boundaries: string;
+	non_goals: string;
 	// --- 2 loop-control slots ---
 	/** From the iteration-policy slot. Finite cap on pursuit blocks. */
 	max_iterations: number;
@@ -237,6 +238,7 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
 		verification_surface: next.verification_surface ?? prior.verification_surface ?? "",
 		constraints: next.constraints ?? prior.constraints ?? "",
 		boundaries: next.boundaries ?? prior.boundaries ?? "",
+		non_goals: next.non_goals ?? prior.non_goals ?? "",
 		max_iterations:
 			typeof maxItCandidate === "number" && Number.isInteger(maxItCandidate) && maxItCandidate >= 1
 				? maxItCandidate
@@ -352,6 +354,7 @@ export interface SetGoalOpts {
 	verification_surface?: string;
 	constraints?: string;
 	boundaries?: string;
+	non_goals?: string;
 	max_iterations?: number;
 	blocked_stop?: string;
 	plan_path?: string;
@@ -419,6 +422,7 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		verification_surface: opts.verification_surface,
 		constraints: opts.constraints,
 		boundaries: opts.boundaries,
+		non_goals: opts.non_goals,
 		max_iterations: opts.max_iterations,
 		blocked_stop: opts.blocked_stop,
 		plan_path: opts.plan_path,
@@ -1155,12 +1159,18 @@ export function serializeRequirements(sessionId: string): string {
 export const BACKFILL_MARKER = "(none provided)";
 
 /**
- * Builds the Shared Contract shape — the 4-field JSON the code-review lane's
+ * Builds the Shared Contract shape — the 5-field JSON the code-review lane's
  * finder step consumes (T6) — from this ultragoal's per-field sources. Mirrors
  * serializeRequirements' never-structurally-empty invariant per field: each
  * field falls back to BACKFILL_MARKER only when every one of its sources is
  * blank; a mixed-empty composite (`description`, `project_context`) keeps
  * whatever non-blank source it has instead of collapsing to the marker.
+ *
+ * `non_goals` is a standalone slot, exposed as its own key — it is deliberately
+ * NOT folded into `project_context` alongside constraints/boundaries. Those two
+ * mean "surface that may be touched" / "must not regress"; `non_goals` means
+ * "declared out of scope", a distinct judgment the finder step needs to keep
+ * separate to decide whether a finding falls outside the declared scope.
  *
  * Throws when no active ultragoal state exists for `sessionId` — the CLI
  * dispatch lets this propagate to a non-zero exit, the same failure protocol
@@ -1171,6 +1181,7 @@ export function serializeReviewContext(sessionId: string): {
 	description: string;
 	requirements: string;
 	project_context: string;
+	non_goals: string;
 } {
 	const state = readGoalState(sessionId);
 	if (state === null) {
@@ -1186,6 +1197,7 @@ export function serializeReviewContext(sessionId: string): {
 	const planPath = state.plan_path ?? "";
 	const constraints = state.constraints ?? "";
 	const boundaries = state.boundaries ?? "";
+	const nonGoals = state.non_goals ?? "";
 
 	const what_was_implemented = outcome.trim() !== "" ? outcome : BACKFILL_MARKER;
 
@@ -1203,7 +1215,9 @@ export function serializeReviewContext(sessionId: string): {
 	const project_context =
 		projectContextSources.length > 0 ? projectContextSources.join("\n\n") : BACKFILL_MARKER;
 
-	return { what_was_implemented, description, requirements, project_context };
+	const non_goals = nonGoals.trim() !== "" ? nonGoals : BACKFILL_MARKER;
+
+	return { what_was_implemented, description, requirements, project_context, non_goals };
 }
 
 // ---------------------------------------------------------------------------
@@ -1333,6 +1347,7 @@ function main(): void {
 				verification_surface: str(args["verification-surface"]),
 				constraints: str(args["constraints"]),
 				boundaries: str(args["boundaries"]),
+				non_goals: str(args["non-goals"]),
 				max_iterations: maxIter,
 				blocked_stop: str(args["blocked-stop"]),
 				plan_path: str(args["plan-path"]),
