@@ -45,7 +45,8 @@ Users cannot switch the app to a dark color scheme; the settings page has no tog
       to the dark palette's hex value within the same render
 
 ## Non-Goals
-- This issue does not add a system-preference auto-detect for dark mode.
+- This issue does not add a system-preference auto-detect for dark mode. | decider: any request to
+  add system-preference auto-detect for dark mode belongs here.
 
 ## Notes
 - N/A.

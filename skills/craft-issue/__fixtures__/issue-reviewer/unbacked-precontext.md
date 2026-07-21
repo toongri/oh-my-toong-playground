@@ -41,7 +41,8 @@ deploy reached a given host without shelling into it.
       `sha` field equals the output of `git rev-parse HEAD` for the deployed commit.
 
 ## Non-Goals
-- This issue does not add the build timestamp or branch name to the response.
+- This issue does not add the build timestamp or branch name to the response. | decider: any request
+  to add the build timestamp or branch name to the response belongs here.
 
 ## References
 - N/A — no prior art gathered for this endpoint.

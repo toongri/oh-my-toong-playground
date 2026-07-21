@@ -37,7 +37,8 @@ indefinitely.
       test session.
 
 ## Non-Goals
-- This issue does not add a user-facing "you were logged out due to inactivity" message.
+- This issue does not add a user-facing "you were logged out due to inactivity" message. | decider:
+  any request to add a user-facing inactivity-logout message belongs here.
 
 ## References
 - N/A — no prior art gathered for this change.
