@@ -20,11 +20,17 @@ import { fileURLToPath } from "node:url";
  * prompted this rewrite).
  *
  * Judgment order (first match wins):
- *   1. Is this command a verification attempt at all — a `pnpm`/`turbo`
- *      entrypoint-family script invocation, a direct `runners` call, or a
- *      `via`-executor call reaching a `runners` name? If not → passthrough,
- *      untouched, regardless of anything else about the command (this is
- *      what keeps `pnpm start`/`seed`/`build`/`install`/etc. unaffected).
+ *   1. Is this command a verification attempt at all — a `pnpm`/`npm`/`yarn`
+ *      entrypoint-family script invocation, a direct `runners` call, a
+ *      `via`-executor call reaching a `runners` name, or any of those hidden
+ *      behind a transparent wrapper (`command`/`env`, peeled off) or a nested
+ *      shell (`bash -c "..."`/`sh -c '...'`/`eval "..."`, whose inner command
+ *      is extracted and re-checked)? Token comparisons are quote/backslash-
+ *      normalized first (`p'n'pm`, `"pnpm"`, `\pnpm` all read as `pnpm`), so
+ *      obfuscating the token doesn't change the answer. If none of this
+ *      matches → passthrough, untouched, regardless of anything else about
+ *      the command (this is what keeps `pnpm start`/`seed`/`build`/`install`
+ *      /etc. unaffected).
  *   2. Is the verification attempt mixed into a compound command (`&&`,
  *      `||`, `|`, `;`, newline, backtick, `$(...)`)? → deny. Splitting is
  *      quote-aware (a delimiter inside a quoted span, e.g. the `|` in
@@ -43,10 +49,28 @@ import { fileURLToPath } from "node:url";
  *   5. Compute `entrypoints ∩ package.json.scripts` — this run's real
  *      whitelist.
  *   6. Does the command match the allowed shape exactly, using that
- *      whitelist? If not → deny.
+ *      whitelist? A wrapper (`command`/`env`/`bash -c`/`eval`/...) can make
+ *      step 1 detect an attempt without ever making step 6's shape match —
+ *      the wrapper tokens themselves occupy the position `pnpm` must be in —
+ *      so a wrapped verification attempt always denies here even when the
+ *      unwrapped inner command would itself have been allowed. That's
+ *      intended: the wrapper is a self-inflicted, trivially-dropped bypass
+ *      attempt, not an unrecoverable false deny (drop the wrapper, run the
+ *      inner command directly).
  *   7. The deny reason for step 6 lists step 5's intersection dynamically —
  *      never a hardcoded script name (a hardcoded name going stale is
  *      exactly what caused the incident this gate redesign responds to).
+ *
+ * Known unclosed gap, by design: shell variable/parameter expansion (e.g.
+ * `pnpm${IFS}test --all`, `$P npm test`) is invisible to this file — the
+ * gate only ever sees the literal argv text, never what the shell expands it
+ * to at runtime. No finite static rule closes this without a false-deny cost
+ * on ordinary commands: e.g. "deny when the first token contains `$`" also
+ * denies `$EDITOR notes.md`. And this gate has no escape hatch (no bypass
+ * token, no `ask` fallback) — a false deny here is unrecoverable for the
+ * user, which is the exact failure class the compound-detection fix in this
+ * same file was written to eliminate, not reintroduce. See
+ * `scripts/verify-entrypoint-gate/` in CLAUDE.md for the one-line summary.
  */
 
 // -----------------------------------------------------------------------------
@@ -128,28 +152,43 @@ function buildShapeMismatchReason(intersection: string[], allowedTurboOpts: stri
 }
 
 // -----------------------------------------------------------------------------
-// Step 1 — is this segment a verification attempt? Three independent checks,
-// any one match is enough:
+// Step 1 — is this segment a verification attempt? Before any of the checks
+// below, the segment is unwrapped: leading env assignments AND a leading
+// transparent wrapper (`command`/`env`, see stripLeadingTransparentWrappers)
+// are peeled off, and if what's left is a nested shell invocation
+// (`bash -c "..."`/`sh -c '...'`/`eval "..."`) the inner command string is
+// extracted and this function recurses on it. Five independent checks on the
+// unwrapped segment, any one match is enough:
 //   (a) direct runner call — segment's first token is literally a `runners`
 //       name (vitest, turbo, pytest, ...).
 //   (b) via-executor call — segment starts with a `via` prefix and the token
 //       right after it is a `runners` name (`npx vitest`, `pnpm exec jest`),
 //       or (node_modules/.bin special case) the first token's path basename
 //       is a `runners` name (`./node_modules/.bin/vitest`).
-//   (c) pnpm entrypoint-family script — segment's first token is `pnpm` and
-//       ANY later token (before a `--` end-of-options marker) exactly equals
-//       one of `entrypoints`. This is intentionally coarse (any position, not
-//       just immediately after `pnpm`) so that `pnpm -r test`, `pnpm --filter
-//       x test` etc. still register as verification attempts and reach the
-//       strict shape check in step 6 — which is where "flag before the
-//       script name" actually gets rejected. Being coarse here only affects
-//       which HALF of the pipeline (attempt-detection vs shape-match) catches
-//       a given bypass; a false positive here just means step 6 also has to
-//       reject it, which it already does for anything not exactly matching
-//       the allowed shape.
+//   (c) pnpm/npm/yarn entrypoint-family script — segment's first token is
+//       `pnpm`, `npm`, or `yarn`, and ANY later token (before a `--`
+//       end-of-options marker) exactly equals one of `entrypoints`. This is
+//       intentionally coarse (any position, not just immediately after the
+//       package-manager name) so that `pnpm -r test`, `pnpm --filter x test`
+//       etc. still register as verification attempts and reach the strict
+//       shape check in step 6 — which is where "flag before the script name"
+//       (and "not pnpm at all") actually gets rejected. Being coarse here
+//       only affects which HALF of the pipeline (attempt-detection vs
+//       shape-match) catches a given bypass; a false positive here just
+//       means step 6 also has to reject it, which it already does for
+//       anything not exactly matching the allowed shape.
+// All token comparisons above run against tokenize()'s output, which is
+// already quote/backslash-normalized — see normalizeToken.
 // -----------------------------------------------------------------------------
 function isVerificationAttemptSegment(segment: string, entrypoints: string[], runners: string[], via: string[]): boolean {
-	const normalized = stripAfterEndOfOptions(stripLeadingEnvAssignments(segment));
+	const unwrapped = stripLeadingTransparentWrappers(stripLeadingEnvAssignments(segment));
+
+	const nestedInner = nestedShellInnerCommand(unwrapped);
+	if (nestedInner !== null) {
+		return isVerificationAttemptSegment(nestedInner, entrypoints, runners, via);
+	}
+
+	const normalized = stripAfterEndOfOptions(unwrapped);
 	const tokens = tokenize(normalized);
 	if (tokens.length === 0) return false;
 
@@ -168,7 +207,7 @@ function isVerificationAttemptSegment(segment: string, entrypoints: string[], ru
 		if (isPrefixMatch && runners.includes(tokens[words.length] ?? "")) return true;
 	}
 
-	if (first === "pnpm") {
+	if (first === "pnpm" || first === "npm" || first === "yarn") {
 		for (const tok of tokens.slice(1)) {
 			if (entrypoints.includes(tok)) return true;
 		}
@@ -183,7 +222,13 @@ function isVerificationAttemptSegment(segment: string, entrypoints: string[], ru
 // - `pnpm` must be the first token and the entrypoint name must sit
 //   IMMEDIATELY after it — any token in between (a flag or otherwise) fails,
 //   which is what rejects `-r`, `--recursive`, `--filter`, `-F`, `-w`, ...:
-//   they all occupy the slot the entrypoint name must be in.
+//   they all occupy the slot the entrypoint name must be in. This is also
+//   what rejects `npm`/`yarn` and any transparent-wrapper/nested-shell prefix
+//   (`command`/`env`/`bash -c`/`eval`/...) that step 1 unwraps to detect the
+//   attempt in the first place — none of those first tokens is literally
+//   `pnpm`, and this function deliberately does NOT do the same unwrapping,
+//   so a wrapped attempt always fails the shape check (see the header
+//   comment's step 6 note).
 // - after the entrypoint name and before a `--` marker: `--all` fails
 //   outright; any other `-`-prefixed token must be in allowedTurboOpts; any
 //   non-flag token counts as a positional (app-name) argument, and there can
@@ -301,8 +346,80 @@ function stripLeadingEnvAssignments(segment: string): string {
 	return s;
 }
 
+// A leading `command` or `env` word is a transparent wrapper — the shell
+// still runs exactly the command that follows it (`command pnpm test --all`
+// runs `pnpm test --all`, bypassing aliases/functions; `env pnpm test --all`
+// does the same via the `env` utility with no assignment). Peeled off (raw
+// word, quote/backslash-normalized before comparison) so step 1's
+// attempt-detection sees through it. `env` may itself be followed by
+// `NAME=value` assignments (`env FOO=1 pnpm test`), so
+// stripLeadingEnvAssignments runs again after each strip — that's the
+// "맞물려 동작" the wrapper and the assignment-stripper are required to do
+// together. Looped in case wrappers stack. Deliberately NOT mirrored in
+// matchesAllowedShape — see that function's comment for why a wrapped
+// command must still fail the shape check even after this unwrap.
+function stripLeadingTransparentWrappers(text: string): string {
+	let s = text;
+	while (true) {
+		const match = /^\s*(\S+)(\s+|$)/.exec(s);
+		if (match === null) break;
+		const word = normalizeToken(match[1]);
+		if (word !== "command" && word !== "env") break;
+		s = stripLeadingEnvAssignments(s.slice(match[0].length));
+	}
+	return s;
+}
+
+// If `text` (already env/wrapper-stripped) is a nested-shell invocation —
+// `bash -c "..."`, `sh -c '...'`, `zsh -c "..."`, or `eval "..."` — extracts
+// the inner command string so the caller can recurse attempt-detection on
+// it; returns null for anything else. Only a single outer layer of matching
+// quotes is stripped off the extracted text (real shell quote-parsing is out
+// of scope — this is a best-effort re-check for step 1, not a full shell
+// parser); a malformed/unparseable extraction just means the inner recursive
+// check finds no attempt, which is a passthrough, not a crash.
+function nestedShellInnerCommand(text: string): string | null {
+	const trimmed = text.replace(/^\s+/, "");
+	const firstWordMatch = /^(\S+)\s+(.+)$/.exec(trimmed);
+	if (firstWordMatch === null) return null;
+	const first = normalizeToken(firstWordMatch[1]);
+	const rest = firstWordMatch[2];
+
+	if (first === "eval") return unwrapOuterQuotes(rest);
+
+	if (first === "bash" || first === "sh" || first === "zsh") {
+		const cMatch = /^-c\s+(.+)$/.exec(rest);
+		return cMatch === null ? null : unwrapOuterQuotes(cMatch[1]);
+	}
+
+	return null;
+}
+
+function unwrapOuterQuotes(text: string): string {
+	const t = text.trim();
+	const isQuoted = t.length >= 2 && ((t[0] === '"' && t[t.length - 1] === '"') || (t[0] === "'" && t[t.length - 1] === "'"));
+	return isQuoted ? t.slice(1, -1) : t;
+}
+
+// Strips `'`/`"`/`\` from a token before comparison — the obfuscation trick
+// this closes is spelling `pnpm` as `p'n'pm`, `"pnpm"`, or `\pnpm`, all of
+// which the shell reads as the literal word `pnpm`. Applied uniformly inside
+// tokenize() so every comparison site (attempt-detection AND shape-match)
+// normalizes identically — normalizing in only one of the two would create a
+// NEW mismatch between them (an obfuscated-but-otherwise-valid command would
+// register as an attempt without ever matching the allowed shape, a fresh
+// false deny of the kind this whole file exists to avoid).
+function normalizeToken(tok: string): string {
+	return tok.replace(/['"\\]/g, "");
+}
+
 function tokenize(text: string): string[] {
-	return text.trim().split(/\s+/).filter((tok) => tok.length > 0);
+	return text
+		.trim()
+		.split(/\s+/)
+		.filter((tok) => tok.length > 0)
+		.map(normalizeToken)
+		.filter((tok) => tok.length > 0);
 }
 
 // -----------------------------------------------------------------------------

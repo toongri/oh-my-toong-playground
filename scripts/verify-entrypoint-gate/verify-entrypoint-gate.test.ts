@@ -177,6 +177,30 @@ const TABLE: Row[] = [
 		expect: "deny",
 		note: "회귀 방지 — -- 뒤라도 따옴표 밖의 진짜 && 는 여전히 compound",
 	},
+	{ command: '"pnpm" test admin', expect: "passthrough", note: "회귀 방지 — 정규화 후 형태매칭도 통과해야 함(새 오차단 금지)" },
+
+	// --- 유한 우회 (b)-1: npm/yarn 계열 ---
+	{ command: "npm test", expect: "deny", note: "npm 계열 확장" },
+	{ command: "yarn test", expect: "deny", note: "yarn 계열 확장" },
+
+	// --- 유한 우회 (b)-2: 투명 래퍼(command/env) ---
+	{ command: "command pnpm test --all", expect: "deny", note: "투명 래퍼 command 벗기고 분석" },
+	{ command: "env pnpm test --all", expect: "deny", note: "투명 래퍼 env 벗기고 분석" },
+	{
+		command: "env FOO=1 pnpm test",
+		expect: "deny",
+		note: "env 뒤 할당이 stripLeadingEnvAssignments와 맞물려 동작 — 래퍼 형태라 shape 매칭은 항상 실패",
+	},
+
+	// --- 유한 우회 (b)-3: 따옴표/백슬래시 난독화 ---
+	{ command: "p'n'pm test --all", expect: "deny", note: "따옴표로 쪼갠 pnpm 토큰 정규화" },
+	{ command: '"pnpm" test --all', expect: "deny", note: "전체 따옴표로 감싼 pnpm 토큰 정규화" },
+	{ command: "\\pnpm test --all", expect: "deny", note: "백슬래시 이스케이프 pnpm 토큰 정규화" },
+
+	// --- 유한 우회 (b)-4: 중첩 셸 ---
+	{ command: 'bash -c "pnpm test --all"', expect: "deny", note: "bash -c 안쪽 재탐지" },
+	{ command: "sh -c 'pnpm test --all'", expect: "deny", note: "sh -c 안쪽 재탐지" },
+	{ command: 'eval "pnpm test --all"', expect: "deny", note: "eval 안쪽 재탐지" },
 ];
 
 describe("decide — command-to-judgment table", () => {
