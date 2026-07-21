@@ -21,7 +21,7 @@
 
 | 계층 | 무엇을 ignore하나 | 무슨 축인가 |
 |------|------------------|------------|
-| **계층 1 — OMT 소스 레포** | `**/*.local.yaml` (OMT `.gitignore`) → `claude.local.yaml`만 ignore, `claude.yaml`은 git 추적 | **"OMT 레포에 버전관리하느냐"** |
+| **계층 1 — OMT 소스 레포** | `/*.local.yaml` + `/projects/*/*.local.yaml` (OMT `.gitignore`) → `claude.local.yaml`만 ignore, `claude.yaml`은 git 추적 | **"OMT 레포에 버전관리하느냐"** |
 | **계층 2 — 대상 팀 레포** | `.claude/settings.local.json` (대상 레포 `.gitignore`, 예: algocare-home) → 배포 산출물 자체를 ignore | **"대상 팀 레포에 커밋되느냐"** |
 
 병합은 `tools/lib/parse-platform-yaml.ts`의 `parseAndMergePlatformYaml`이

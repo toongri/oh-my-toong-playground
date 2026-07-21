@@ -137,7 +137,7 @@ agents:
 
 ## 로컬 오버라이드
 
-기기마다 다른 설정(회사 Mac vs 개인 Mac)이 필요할 때를 위해, 모든 YAML 입력은 git에서 추적되는 `*.yaml`과 gitignore되는 `*.local.yaml`로 나뉩니다. Vite/Next.js의 `.env` + `.env.local` 패턴과 같으며, `make sync` 시 둘이 자동으로 deep merge됩니다. `config.local.yaml`의 `enabled-projects`로 기기별 프로젝트 화이트리스트도 지정할 수 있습니다.
+기기마다 다른 설정(회사 Mac vs 개인 Mac)이 필요할 때를 위해, 설정 루트(OMT 루트·각 프로젝트 루트)의 YAML 입력은 git에서 추적되는 `*.yaml`과 gitignore되는 `*.local.yaml`로 나뉩니다 — 컴포넌트 디렉터리 안에 중첩된 `*.local.yaml`(예: 프로젝트 정책 오버레이)은 배포되는 페이로드라 버전관리 대상입니다. Vite/Next.js의 `.env` + `.env.local` 패턴과 같으며, `make sync` 시 둘이 자동으로 deep merge됩니다. `config.local.yaml`의 `enabled-projects`로 기기별 프로젝트 화이트리스트도 지정할 수 있습니다.
 
 ## HUD
 
