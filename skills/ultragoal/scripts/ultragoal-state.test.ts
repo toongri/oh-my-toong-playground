@@ -143,6 +143,7 @@ describe("goal state", () => {
 		expect(s).toHaveProperty("verification_surface");
 		expect(s).toHaveProperty("constraints");
 		expect(s).toHaveProperty("boundaries");
+		expect(s).toHaveProperty("non_goals");
 		// loop-control slots
 		expect(s).toHaveProperty("max_iterations");
 		expect(s).toHaveProperty("blocked_stop");

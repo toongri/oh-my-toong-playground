@@ -833,8 +833,9 @@ describe("decider-gate: Scope Clarity scoring definition requires a decider on e
 	});
 
 	test("Scope Clarity region states an excluded item without a decider is not fully clear", () => {
-		expect(region).toMatch(/decider/i);
-		expect(region.toLowerCase()).toContain("keeps this dimension short of fully clear");
+		expect(region.toLowerCase()).toContain(
+			"with no decider yet keeps this dimension short of fully clear",
+		);
 	});
 
 	test("Constraint Clarity's own definition is untouched (the two dimensions stay distinct)", () => {
@@ -912,7 +913,14 @@ describe("decider-gate: spec template's Non-Goals section carries the decider fo
 	});
 
 	test("each Non-Goals bullet is formatted with a decider clause", () => {
-		expect(section).toContain("| decider:");
+		const bulletLines = section
+			.split("\n")
+			.filter((line) => line.trim().startsWith("- "))
+			.filter((line) => line.trim() !== "- ...");
+		expect(bulletLines.length).toBeGreaterThan(0);
+		for (const line of bulletLines) {
+			expect(line).toContain("| decider:");
+		}
 	});
 });
 
@@ -944,6 +952,6 @@ describe("decider-gate: Phase 4 self-review gains a 5th check for non-goal decid
 		const idx = skillMd.indexOf("**Inline self-review**");
 		expect(idx).toBeGreaterThan(-1);
 		const region = skillMd.slice(idx, idx + 400);
-		expect(region).toContain("decider");
+		expect(region).toContain("every Non-Goals bullet carries a decider");
 	});
 });
