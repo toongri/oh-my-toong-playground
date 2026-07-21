@@ -25,7 +25,7 @@
   `status.showUntrackedFiles=no` 설정이 untracked 파일을 숨기는 걸 막기 위해
   반드시 붙여야 하는 반면, `--ignored`는 여전히 붙이면 안 된다 — gitignored
   파일은 이 명령의 출력에 안 잡히므로 더티로 세지 않는다. 이 레포의
-  `sync.local.yaml`이 gitignored인데(`.gitignore:12`의 `**/*.local.yaml`) 이걸
+  `sync.local.yaml`이 gitignored인데(`.gitignore:16`의 `/*.local.yaml`) 이걸
   더티로 세면 `make sync`가 영구히 막힌다.
 - **`--dry-run`은 게이트 대상이 아니다** — `make sync-dry`는 더티 트리나
   비-default 브랜치에서도 그대로 동작한다. 쓰기가 없으므로 커밋 전 미리보기

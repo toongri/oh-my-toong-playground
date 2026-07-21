@@ -137,7 +137,7 @@ agents:
 
 ## Local Override
 
-For when a machine needs a different configuration (work Mac vs personal Mac), every YAML input splits into git-tracked `*.yaml` and gitignored `*.local.yaml`. It mirrors Vite/Next.js's `.env` + `.env.local` pattern, and the two are deep-merged automatically on `make sync`. You can also scope a per-machine project whitelist via `enabled-projects` in `config.local.yaml`.
+For when a machine needs a different configuration (work Mac vs personal Mac), YAML inputs at the config roots (the OMT root and each project root) split into git-tracked `*.yaml` and gitignored `*.local.yaml` — a `*.local.yaml` nested inside a component directory (e.g. a project's policy overlay) is deployed payload and stays version-controlled. It mirrors Vite/Next.js's `.env` + `.env.local` pattern, and the two are deep-merged automatically on `make sync`. You can also scope a per-machine project whitelist via `enabled-projects` in `config.local.yaml`.
 
 ## HUD
 
