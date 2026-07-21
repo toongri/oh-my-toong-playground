@@ -1,0 +1,21 @@
+# algocare-home 프로젝트 오버레이 — verify-entrypoint-gate의 entrypoints 축만 재선언한다.
+#
+# entrypoints가 레포 고유 축인 이유: 이 게이트를 새로 만들게 한 사고가 정확히 이
+# 축에서 났다(레포에서 제거된 pnpm verify:quick을 게이트가 계속 안내). 그래서
+# entrypoints는 OMT가 레포별로 버전관리하는 값으로 둔다.
+#
+# runners / via / allowed_turbo_opts는 여기 중복 선언하지 않는다 — 러너 화이트리스트나
+# 우회 경로 판정은 레포마다 달라질 이유가 없는 범용 축이라 base
+# (~/.claude/scripts/verify-entrypoint-gate/verify-entrypoint-gate.yaml)가 공급한다.
+#
+# 병합 규칙(index.ts:331-349 loadConfig/pickList): 이 파일이 선언한 키는 base의 그 키
+# 배열을 통째로 대체하고, 이 파일이 생략한 키는 base로 폴스루한다.
+#
+# 이 파일은 워크트리 안(.claude/scripts/verify-entrypoint-gate/)에 착지하므로
+# 워크트리를 새로 파도 make sync 한 번이면 복구된다.
+#
+# 주의: 이 값들은 대상 레포(algocare-home) root package.json scripts와 런타임
+# 교집합을 취한다(scripts/verify-entrypoint-gate/index.ts의 entrypoints 판정 로직) —
+# 여기 적힌 이름이 레포에서 사라지면 자동으로 탈락하므로, 복사본이 드리프트하던
+# 구 설계의 문제는 재발하지 않는다.
+entrypoints: [verify, test, check, lint]

@@ -41,11 +41,16 @@ skills:
 
 scripts:
   items:
-    # verify-caps-gate: 무필터 test/lint deny + 러너별 메모리 캡 주입 엔진.
-    # scripts로 배포(등록 없음)하여 $HOME/.claude/scripts/verify-caps-gate/에 단일본으로 두고,
+    # verify-entrypoint-gate: verify-caps-gate 후속. entrypoint 화이트리스트를
+    # package.json scripts와 실시간 교집합해 존재하지 않는 스크립트를 안내하지 않는다.
+    # scripts로 배포(등록 없음)하여 $HOME/.claude/scripts/verify-entrypoint-gate/에 단일본으로 두고,
     # 실제 hook 등록은 projects/algocare-home/claude.yaml이 raw command로 이 경로를 참조한다.
-    # 정책 파일 verify-caps.yaml은 index.ts가 import.meta.url 기준(자기 옆)으로 로드.
-    - component: verify-caps-gate
+    # base 정책 verify-entrypoint-gate.yaml은 index.ts가 import.meta.url 기준(자기 옆)으로
+    # 로드하지만, 프로젝트 오버레이 .local.yaml은 대상 워크스페이스 루트 기준으로 로드한다
+    # — 이 2층 분리가 구 게이트의 구조적 버그를 고친 지점. 구 loadConfig는 base·local을
+    # 둘 다 스크립트 자기 디렉터리에서 해석해서, 전역 단일본 배포 하에선 "프로젝트별
+    # 오버라이드"마저 전역 단일본이었다(어느 프로젝트에서 실행해도 같은 파일을 봤다).
+    - component: verify-entrypoint-gate
       platforms: [claude]
 
 rules:
