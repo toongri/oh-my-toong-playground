@@ -2557,7 +2557,7 @@ describe("serialize-review-context subcommand", () => {
 	});
 
 	// Fully-blank state: every source for every field is blank, so every one
-	// of the 4 slots reads as the exact BACKFILL_MARKER literal.
+	// of the 5 slots reads as the exact BACKFILL_MARKER literal.
 	test("fully-blank state backfills every slot to BACKFILL_MARKER", () => {
 		setGoalState(S, { phase: "planning" });
 
@@ -2568,11 +2568,12 @@ describe("serialize-review-context subcommand", () => {
 		expect(parsed.description).toBe(BACKFILL_MARKER);
 		expect(parsed.project_context).toBe(BACKFILL_MARKER);
 		expect(parsed.requirements).toBe(BACKFILL_MARKER);
+		expect(parsed.non_goals).toBe(BACKFILL_MARKER);
 	});
 
-	// ROUND-TRIP: stdout parses to exactly the 4 contract keys, each holding
+	// ROUND-TRIP: stdout parses to exactly the 5 contract keys, each holding
 	// its correctly-sourced value.
-	test("stdout round-trips through JSON.parse to exactly the 4 contract keys", () => {
+	test("stdout round-trips through JSON.parse to exactly the 5 contract keys", () => {
 		setGoalState(S, {
 			phase: "planning",
 			outcome: "ship it",
@@ -2585,11 +2586,30 @@ describe("serialize-review-context subcommand", () => {
 		const parsed = JSON.parse(out);
 
 		expect(Object.keys(parsed).sort()).toEqual(
-			["description", "project_context", "requirements", "what_was_implemented"].sort(),
+			["description", "non_goals", "project_context", "requirements", "what_was_implemented"].sort(),
 		);
 		expect(parsed.what_was_implemented).toBe("ship it");
 		expect(parsed.description).toBe("in progress");
 		expect(parsed.project_context).toBe("no new deps\n\nno billing changes");
+	});
+
+	// `non_goals` is a standalone slot: its value must round-trip verbatim into
+	// its own key, and must NOT get folded into project_context alongside
+	// constraints/boundaries — that composite stays a 2-source join.
+	test("`non_goals` round-trips verbatim into its own key without polluting project_context", () => {
+		setGoalState(S, {
+			phase: "planning",
+			constraints: "no new deps",
+			boundaries: "no billing changes",
+			non_goals: "SENTINEL_NON_GOALS: no i18n support",
+		});
+
+		const out = runCli("serialize-review-context");
+		const parsed = JSON.parse(out);
+
+		expect(parsed.non_goals).toBe("SENTINEL_NON_GOALS: no i18n support");
+		expect(parsed.project_context).toBe("no new deps\n\nno billing changes");
+		expect(parsed.project_context).not.toContain("SENTINEL_NON_GOALS");
 	});
 });
 
