@@ -108,6 +108,7 @@ describe("goal state", () => {
 			verification_surface: "all tests green",
 			constraints: "no new deps",
 			boundaries: "do not touch billing",
+			non_goals: "not doing a UI redesign",
 			max_iterations: 7,
 			blocked_stop: "when API key revoked",
 			plan_path: `${tmpDir}/plans/goal-x.md`,
@@ -126,6 +127,7 @@ describe("goal state", () => {
 		expect(second.verification_surface).toBe("all tests green");
 		expect(second.constraints).toBe("no new deps");
 		expect(second.boundaries).toBe("do not touch billing");
+		expect(second.non_goals).toBe("not doing a UI redesign");
 		expect(second.max_iterations).toBe(7);
 		expect(second.blocked_stop).toBe("when API key revoked");
 		expect(second.plan_path).toBe(`${tmpDir}/plans/goal-x.md`);
