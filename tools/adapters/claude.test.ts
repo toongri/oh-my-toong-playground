@@ -750,22 +750,22 @@ describe("syncHooksDirect", () => {
 
 	it("target에 직접 놓인 *.local.yaml 오버레이 파일을 orphan-delete로부터 보호한다", async () => {
 		// codex.ts:414의 config.local.yaml 보호와 동일 메커니즘(exclude 리스트)을
-		// claude.ts에도 미러: verify-caps.local.yaml처럼 소스에는 없고 타겟에만
+		// claude.ts에도 미러: sample.local.yaml처럼 소스에는 없고 타겟에만
 		// 직접 배치된 개인 오버레이 파일이 다음 sync의 orphan-delete에서 삭제되면 안 된다.
-		const srcDir = path.join(tmpDir, "verify-caps-gate");
-		await writeFile(path.join(srcDir, "verify-caps.yaml"), "base: true");
+		const srcDir = path.join(tmpDir, "sample-gate");
+		await writeFile(path.join(srcDir, "sample.yaml"), "base: true");
 
 		// 개인이 이전에 타겟에 직접 배치한 오버레이 파일 (소스에는 없음)
 		const targetOverlay = path.join(
 			targetPath,
 			".claude",
 			"hooks",
-			"verify-caps-gate",
-			"verify-caps.local.yaml",
+			"sample-gate",
+			"sample.local.yaml",
 		);
 		await writeFile(targetOverlay, "local: true");
 
-		await adapter.syncHooksDirect(targetPath, "verify-caps-gate", srcDir);
+		await adapter.syncHooksDirect(targetPath, "sample-gate", srcDir);
 
 		expect(await exists(targetOverlay)).toBe(true);
 	});
