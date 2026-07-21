@@ -860,7 +860,11 @@ describe("decider-gate: question-style table gains a Non-Goal Decider row, disti
 	});
 
 	test("Non-Goal Decider row's angle asks how to tell a finding belongs to an exclusion (membership), not what's in vs out (boundary)", () => {
-		expect(region).toContain("belongs to that exclusion");
+		// Anchored to include the verb phrase before the checked clause so a
+		// negator inserted right before "belongs" (preserving "belongs to that
+		// exclusion" verbatim) breaks the match instead of surviving inside it.
+		expect(region).toContain("tell a finding belongs to that exclusion");
+		expect(region).not.toMatch(/tell a finding not belongs to that exclusion/);
 	});
 
 	test("Non-Goal Decider row sits after the Scope Clarity row (both present, distinct rows)", () => {
@@ -894,7 +898,11 @@ describe("decider-gate: Closure Guard gains a non-goal decider precondition, loc
 	});
 
 	test("the precondition is unconditional relative to the ambiguity reading (categorical, not folded into the ambiguity arithmetic)", () => {
-		expect(section.toLowerCase()).toContain("regardless of what the ambiguity reading says");
+		// Anchored to include the verb phrase before "regardless" so a negator
+		// inserted right before it (which a bare toContain on the clause alone
+		// would not catch) breaks the match.
+		expect(section.toLowerCase()).toContain("ask for one, regardless of what the ambiguity reading says");
+		expect(section.toLowerCase()).not.toMatch(/ask for one, not regardless of what the ambiguity reading says/);
 	});
 
 	test('the "non-goal decider precondition" phrase does not leak outside the Step 2-exit section', () => {
@@ -952,6 +960,13 @@ describe("decider-gate: Phase 4 self-review gains a 5th check for non-goal decid
 		const idx = skillMd.indexOf("**Inline self-review**");
 		expect(idx).toBeGreaterThan(-1);
 		const region = skillMd.slice(idx, idx + 400);
-		expect(region).toContain("every Non-Goals bullet carries a decider");
+		// Anchored on both sides of the quantifier clause: a negator (e.g. "not")
+		// inserted immediately before "every" breaks this exact substring, unlike
+		// a bare `toContain("every Non-Goals bullet carries a decider")` which the
+		// negated form would still contain verbatim.
+		expect(region).toContain(
+			"full interview coverage, every Non-Goals bullet carries a decider, no ambiguous text remains",
+		);
+		expect(region).not.toMatch(/not every Non-Goals bullet carries a decider/);
 	});
 });
