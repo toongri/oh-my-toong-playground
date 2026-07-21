@@ -834,7 +834,7 @@ describe("decider-gate: Scope Clarity scoring definition requires a decider on e
 
 	test("Scope Clarity region states an excluded item without a decider is not fully clear", () => {
 		expect(region).toMatch(/decider/i);
-		expect(region.toLowerCase()).toContain("no decider");
+		expect(region.toLowerCase()).toContain("keeps this dimension short of fully clear");
 	});
 
 	test("Constraint Clarity's own definition is untouched (the two dimensions stay distinct)", () => {
@@ -899,6 +899,20 @@ describe("decider-gate: Closure Guard gains a non-goal decider precondition, loc
 	test('the "non-goal decider precondition" phrase does not leak outside the Step 2-exit section', () => {
 		const restOfDoc = step2headStart === -1 ? "" : skillMd.slice(step2headStart);
 		expect(restOfDoc).not.toContain("non-goal decider precondition");
+	});
+});
+
+describe("decider-gate: spec template's Non-Goals section carries the decider format the closure precondition checks for", () => {
+	const start = template.indexOf("## Non-Goals");
+	const end = template.indexOf("\n## ", start + 1);
+	const section = end === -1 ? template.slice(start) : template.slice(start, end);
+
+	test('"## Non-Goals" heading is present (sanity)', () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("each Non-Goals bullet is formatted with a decider clause", () => {
+		expect(section).toContain("| decider:");
 	});
 });
 

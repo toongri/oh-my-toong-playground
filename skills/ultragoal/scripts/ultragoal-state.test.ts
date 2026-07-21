@@ -2518,7 +2518,7 @@ describe("serialize-requirements subcommand", () => {
 });
 
 // ---------------------------------------------------------------------------
-// serialize-review-context subcommand — Shared Contract 4-field JSON emitted
+// serialize-review-context subcommand — Shared Contract 5-field JSON emitted
 // for the code-review lane's finder step.
 // ---------------------------------------------------------------------------
 
