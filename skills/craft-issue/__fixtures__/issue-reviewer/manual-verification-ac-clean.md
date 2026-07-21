@@ -37,7 +37,9 @@ tell by feel whether the long-press registered before the context menu appears.
       pulse occurs at the same moment the context menu appears
 
 ## Non-Goals
-- This issue does not add haptic feedback to any gesture besides the list-view long-press.
+- This issue does not add haptic feedback to any gesture besides the list-view long-press. |
+  decider: any request for haptic feedback on a gesture other than the list-view long-press
+  belongs here.
 
 ## References
 - N/A — no prior art gathered for this change.
