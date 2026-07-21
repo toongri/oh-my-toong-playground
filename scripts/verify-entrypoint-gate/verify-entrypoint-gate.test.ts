@@ -201,6 +201,47 @@ const TABLE: Row[] = [
 	{ command: 'bash -c "pnpm test --all"', expect: "deny", note: "bash -c 안쪽 재탐지" },
 	{ command: "sh -c 'pnpm test --all'", expect: "deny", note: "sh -c 안쪽 재탐지" },
 	{ command: 'eval "pnpm test --all"', expect: "deny", note: "eval 안쪽 재탐지" },
+
+	// --- 결함 (b) — via 접두사와 러너 사이에 실행기 플래그가 끼면 인덱스가 밀려
+	// isVerificationAttemptSegment가 시도 자체를 놓치던 우회. 플래그를 건너뛰고
+	// 처음 만나는 비-옵션 토큰을 러너로 봐야 한다 ---
+	{ command: "bunx --bun vitest run", expect: "deny", note: "REGRESSION FIX — via(bunx)와 러너 사이 --bun 플래그로 우회하던 것" },
+	{
+		command: "npx --package=vitest -- vitest run",
+		expect: "deny",
+		note: "REGRESSION FIX — 플래그+`--` 둘 다 건너뛰어야 vitest를 찾음(npx에게 `--` 뒤는 실행할 명령)",
+	},
+	{ command: "npx --yes vitest run", expect: "deny", note: "REGRESSION FIX — via(npx) 뒤 --yes 플래그로 우회하던 것" },
+	{ command: "npx -y vitest", expect: "deny", note: "REGRESSION FIX — via(npx) 뒤 단축 -y 플래그로 우회하던 것" },
+	{ command: "pnpm exec --silent vitest", expect: "deny", note: "REGRESSION FIX — via(pnpm exec) 뒤 --silent 플래그로 우회하던 것" },
+	{ command: "pnpm dlx --package=vitest vitest run", expect: "deny", note: "REGRESSION FIX — via(pnpm dlx) 뒤 --package= 플래그로 우회하던 것" },
+	{ command: "bunx --bun jest", expect: "deny", note: "REGRESSION FIX — via(bunx) 뒤 --bun 플래그, 러너는 jest" },
+	{ command: "npx --no-install turbo run test", expect: "deny", note: "REGRESSION FIX — via(npx) 뒤 --no-install 플래그로 우회하던 것" },
+
+	// --- 오차단 회귀 없음 — 실행기 플래그를 건너뛰되, `--`의 의미는 첫 토큰에
+	// 따라 반대이므로 pnpm 쪽 `--` 뒤 러너 셀렉터는 여전히 검사하지 않아야 함 ---
+	{
+		command: 'pnpm test admin -- -t "결제|환불"',
+		cwd: WORKSPACE_ROOT,
+		expect: "passthrough",
+		note: "최우선 회귀 가드 — (b) 수정이 pnpm의 `--` 뒤 러너 셀렉터까지 들여다보면 안 됨",
+	},
+	{ command: "npx --yes create-react-app myapp", expect: "passthrough", note: "플래그를 건너뛴 다음 토큰이 runners에 없으면 여전히 시도 아님" },
+	{
+		command: 'pnpm test admin -- --reporter=verbose',
+		expect: "passthrough",
+		note: "-- 뒤 러너 플래그도 셀렉터로 취급 — 검사하지 않음",
+	},
+	{
+		command: 'git commit -m "pnpm test --all 로 검증"',
+		expect: "passthrough",
+		note: "따옴표 안에 박힌 pnpm 문구는 첫 토큰이 git이라 시도로 오인되지 않음",
+	},
+	{
+		command: 'echo "run pnpm test --all"',
+		expect: "passthrough",
+		note: "따옴표 안에 박힌 pnpm 문구는 첫 토큰이 echo라 시도로 오인되지 않음",
+	},
 ];
 
 describe("decide — command-to-judgment table", () => {
