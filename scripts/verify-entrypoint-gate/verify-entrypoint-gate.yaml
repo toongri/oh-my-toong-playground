@@ -1,0 +1,51 @@
+# verify-entrypoint-gate shared base policy (committed). Read from this
+# module's own directory by index.ts's loadConfig, then merged with a
+# project's verify-entrypoint-gate.local.yaml — but unlike the old
+# verify-caps-gate, the local file is looked up at the TARGET WORKSPACE ROOT
+# (<workspaceRoot>/.claude/scripts/verify-entrypoint-gate/), not beside this
+# script. The script itself still deploys as a single global copy; only the
+# local-override lookup path moved, which is what makes per-project policy
+# divergence possible at all (the old configDir defaulted to the script's own
+# directory, so a "local" override was global too — no project could diverge).
+# Merge is list-level, one key at a time: merged[key] = local[key] ?? base[key]
+# (local declaring a key replaces that whole array; a key it omits falls
+# through to base). There is no deeper per-item merge — these are flat
+# whitelists, not per-runner records like the old schema.
+
+# Allowed verification entrypoints. The REAL whitelist is this list
+# INTERSECTED with the target workspace's root package.json `scripts` keys —
+# never this list alone. That intersection is the point of this redesign: if
+# the repo renames or removes an entrypoint script (e.g. the verify:quick /
+# verify:full removal that prompted this rewrite), the allowed set follows
+# automatically instead of the policy quietly naming a script that no longer
+# exists. Conversely, if the repo adds a new risky script matching one of
+# these names, it still isn't allowed until this list also names it — the
+# intersection is a two-way gate, not a one-way passthrough of package.json.
+entrypoints: [verify, test, check, lint]
+
+# Flags allowed between the entrypoint name and a `--` end-of-options marker
+# (or end of command). `infra/local/scripts/verify.sh` forwards these `-*`
+# args to turbo as-is (it's the repo's own documented CLI surface), so they
+# are not blanket-denied — only flags NOT on this list are. Keep this list to
+# flags that are safe regardless of scope (e.g. --continue: keep running after
+# a failure). Do NOT add cache-bypassing or scope-broadening flags here
+# (--force, --filter, etc.) — those stay deny-by-default.
+allowed_turbo_opts: ["--continue"]
+
+# Runner binaries whose DIRECT invocation is always denied — the only allowed
+# path to any of them is through `pnpm <entrypoint>` (verify.sh), never a bare
+# `vitest`, `turbo run test`, `uv run pytest`, etc. Note `turbo` is listed here
+# too: even a properly-scoped `turbo run test --filter=...` is denied, because
+# the allowed shape is `pnpm <entrypoint> ...` and nothing else — bypassing
+# pnpm's wrapper is itself the thing being blocked, independent of whether the
+# turbo invocation "looks" safe.
+runners: [vitest, jest, pytest, eslint, tsc, turbo, uv]
+
+# Executors that run a runner BY NAME as their next argument — `npx vitest`,
+# `pnpm exec vitest`, `./node_modules/.bin/vitest`, etc. These re-launch a
+# `runners` entry through a side door, so they're treated identically to a
+# direct runner call: is-verification-attempt if the token(s) here are
+# followed by a `runners` name. "node_modules/.bin" is a special case matched
+# against the path's last segment (e.g. `./node_modules/.bin/vitest`), not a
+# separate whitespace-delimited token like the others.
+via: [npx, bunx, "pnpm exec", "pnpm dlx", "node_modules/.bin"]
