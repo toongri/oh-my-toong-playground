@@ -99,7 +99,9 @@ The app has no Spanish UI; Spanish-speaking users see English chrome throughout.
       main navigation labels render in Spanish (e.g. the "Settings" item reads "Ajustes")
 
 ## Non-Goals
-- This issue does not translate user-generated content or transactional email into Spanish.
+- This issue does not translate user-generated content or transactional email into Spanish. |
+  decider: any request to translate user-generated content or transactional email into Spanish
+  belongs here.
 
 ## References
 - See the parent issue for the UI-chrome-only localization boundary this child relies on.
@@ -119,7 +121,9 @@ The app has no German UI; German-speaking users see English chrome throughout.
       main navigation labels render in German (e.g. the "Settings" item reads "Einstellungen")
 
 ## Non-Goals
-- This issue does not translate user-generated content or transactional email into German.
+- This issue does not translate user-generated content or transactional email into German. |
+  decider: any request to translate user-generated content or transactional email into German
+  belongs here.
 
 ## References
 - See the parent issue for the UI-chrome-only localization boundary this child relies on.

@@ -36,7 +36,8 @@ Users cannot upload a custom avatar image; the profile page only shows a generat
       the rendered avatar's `src` points to the uploaded image, not the initials icon
 
 ## Non-Goals
-- This issue does not add avatar cropping or resizing controls.
+- This issue does not add avatar cropping or resizing controls. | decider: any request to add avatar
+  cropping or resizing controls belongs here.
 
 ## References
 - N/A — no prior art gathered for this change.

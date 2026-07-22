@@ -15,6 +15,26 @@ import { join } from "path";
 //     removed from the template)
 //   - preserved render-pipeline + regression-guard assertions PASS
 //     (invariants that must never break)
+//
+// RED step (deep-interview-decider-gate — wires the non-goal decider
+// requirement into scoring + closure, upstream of metis/issue-reviewer):
+// the 13 "decider-gate:" assertions below all FAILED against the pre-edit
+// SKILL.md, for the expected reason (phrase absent, not a typo/crash):
+//   - Scope Clarity scoring definition (2 tests): "decider" and "no decider"
+//     were absent from the dimension-3 sentence.
+//   - question-style table (3 tests): no "| Non-Goal Decider |" row existed.
+//   - Closure Guard non-goal precondition (4 tests): the label "non-goal
+//     decider precondition", the word "decider", "existence-only", and
+//     "regardless of what the ambiguity reading says" were all absent from
+//     the Step 2-exit section.
+//   - Phase 4 self-review (4 tests): the stale "4 checks: placeholder /
+//     consistency / scope / ambiguity" phrasing was still present (both
+//     call sites), and the new "5 checks: ... / non-goal-decider / ..."
+//     phrasing did not exist yet at either the inline self-review line or
+//     the Final_Checklist line.
+// The ambiguity-formula/weight-map regression-guard describe block and the
+// "does not leak outside the section" negative-space test passed both
+// before and after by design (untouched invariants).
 // ---------------------------------------------------------------------------
 
 const skillMd = readFileSync(join(import.meta.dir, "SKILL.md"), "utf8");
@@ -785,5 +805,231 @@ describe("template: Clarity Breakdown's Context row is no longer brownfield-qual
 
 	test("transcript ambiguity breakdown no longer gates Context behind a brownfield-only clause", () => {
 		expect(template).not.toContain("{brownfield: , Context: {cx}}");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// deep-interview-decider-gate: wires the non-goal decider requirement (the
+// `{excluded item} | decider: {how to tell a finding belongs to this
+// exclusion}` shape the Phase 4 template's Non-Goals section already
+// requires) into the interview's scoring and closure machinery, so a spec
+// can no longer exit the interview with an undecidered non-goal. Checks
+// existence only, never precision -- grading precision would turn a
+// mechanical gate into an interpretation dispute.
+// (must FAIL before the corresponding SKILL.md edits -- RED)
+// ---------------------------------------------------------------------------
+
+describe("decider-gate: Scope Clarity scoring definition requires a decider on excluded items", () => {
+	const start = skillMd.indexOf("3. Scope Clarity (0.0-1.0):");
+	const end = skillMd.indexOf("4. Constraint Clarity", start === -1 ? 0 : start);
+	const region = start === -1 ? "" : skillMd.slice(start, end === -1 ? undefined : end);
+
+	test("Scope Clarity definition exists (sanity)", () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("Scope Clarity region names a decider requirement for excluded items", () => {
+		expect(region).toContain("decider");
+	});
+
+	test("Scope Clarity region states an excluded item without a decider is not fully clear", () => {
+		expect(region.toLowerCase()).toContain(
+			"with no decider yet keeps this dimension short of fully clear",
+		);
+	});
+
+	test("Constraint Clarity's own definition is untouched (the two dimensions stay distinct)", () => {
+		expect(skillMd).toContain(
+			"4. Constraint Clarity (0.0-1.0): Are the boundaries, limitations, and non-goals clear?",
+		);
+	});
+});
+
+describe("decider-gate: question-style table gains a Non-Goal Decider row, distinct from the Scope Clarity row", () => {
+	const tableStart = skillMd.indexOf("**Question styles by dimension:**");
+	const tableEnd = skillMd.indexOf("**Scope Over-Engineering Guard:**");
+	const region = tableStart === -1 ? "" : skillMd.slice(tableStart, tableEnd === -1 ? undefined : tableEnd);
+
+	test("table region exists (sanity)", () => {
+		expect(tableStart).toBeGreaterThan(-1);
+		expect(tableEnd).toBeGreaterThan(tableStart);
+	});
+
+	test('"Non-Goal Decider" row is present in the table', () => {
+		expect(region).toContain("| Non-Goal Decider |");
+	});
+
+	test("Non-Goal Decider row's angle asks how to tell a finding belongs to an exclusion (membership), not what's in vs out (boundary)", () => {
+		// Anchored to include the verb phrase before the checked clause so a
+		// negator inserted right before "belongs" (preserving "belongs to that
+		// exclusion" verbatim) breaks the match instead of surviving inside it.
+		expect(region).toContain("tell a finding belongs to that exclusion");
+		expect(region).not.toMatch(/tell a finding not belongs to that exclusion/);
+	});
+
+	test("Non-Goal Decider row sits after the Scope Clarity row (both present, distinct rows)", () => {
+		const scopeRowIdx = region.indexOf("| Scope Clarity |");
+		const nonGoalRowIdx = region.indexOf("| Non-Goal Decider |");
+		expect(scopeRowIdx).toBeGreaterThan(-1);
+		expect(nonGoalRowIdx).toBeGreaterThan(scopeRowIdx);
+	});
+});
+
+describe("decider-gate: Closure Guard gains a non-goal decider precondition, located inside Step 2-exit", () => {
+	const step2exitStart = skillMd.indexOf("### Step 2-exit: Residual-Ambiguity Seam");
+	const step2headStart = skillMd.indexOf("### Step 2-head: Dialectic Rhythm Guard");
+	const section = step2exitStart === -1 ? "" : skillMd.slice(step2exitStart, step2headStart === -1 ? undefined : step2headStart);
+
+	test("Step 2-exit section exists and precedes Step 2-head (sanity)", () => {
+		expect(step2exitStart).toBeGreaterThan(-1);
+		expect(step2headStart).toBeGreaterThan(step2exitStart);
+	});
+
+	test('"non-goal decider precondition" label is present inside the Step 2-exit / Closure Guard section', () => {
+		expect(section).toContain("non-goal decider precondition");
+	});
+
+	test("the precondition names the same decider shape the Phase 4 template's Non-Goals section requires", () => {
+		expect(section).toContain("decider");
+	});
+
+	test("the precondition is existence-only, not a precision judgment", () => {
+		expect(section).toContain("existence-only");
+	});
+
+	test("the precondition is unconditional relative to the ambiguity reading (categorical, not folded into the ambiguity arithmetic)", () => {
+		// Anchored to include the verb phrase before "regardless" so a negator
+		// inserted right before it (which a bare toContain on the clause alone
+		// would not catch) breaks the match.
+		expect(section.toLowerCase()).toContain("ask for one, regardless of what the ambiguity reading says");
+		expect(section.toLowerCase()).not.toMatch(/ask for one, not regardless of what the ambiguity reading says/);
+	});
+
+	test('the "non-goal decider precondition" phrase does not leak outside the Step 2-exit section', () => {
+		const restOfDoc = step2headStart === -1 ? "" : skillMd.slice(step2headStart);
+		expect(restOfDoc).not.toContain("non-goal decider precondition");
+	});
+});
+
+describe("decider-gate: spec template's Non-Goals section carries the decider format the closure precondition checks for", () => {
+	const start = template.indexOf("## Non-Goals");
+	const end = template.indexOf("\n## ", start + 1);
+	const section = end === -1 ? template.slice(start) : template.slice(start, end);
+
+	test('"## Non-Goals" heading is present (sanity)', () => {
+		expect(start).toBeGreaterThan(-1);
+	});
+
+	test("each Non-Goals bullet is formatted with a decider clause", () => {
+		const bulletLines = section
+			.split("\n")
+			.filter((line) => line.trim().startsWith("- "))
+			.filter((line) => line.trim() !== "- ...");
+		expect(bulletLines.length).toBeGreaterThan(0);
+		for (const line of bulletLines) {
+			expect(line).toContain("| decider:");
+		}
+	});
+});
+
+describe("decider-gate: ambiguity formula and 6-dim weight map stay untouched by the decider-gate wiring", () => {
+	test("the single formula still parses to exactly the canonical 6-dim weight map", () => {
+		expect(normalizeWeightMap(parseInlineFormula(skillMd))).toEqual(EXPECTED_WEIGHTS);
+	});
+
+	test("exactly one ambiguity weighted-sum formula still appears in the doc", () => {
+		const matches = skillMd.match(/ambiguity = 1 - \(/g) || [];
+		expect(matches.length).toBe(1);
+	});
+});
+
+describe("decider-gate: Phase 4 self-review gains a 5th check for non-goal deciders, kept distinct from the interview-coverage 'scope' check", () => {
+	test('stale "4 checks: placeholder / consistency / scope / ambiguity" phrasing is gone everywhere', () => {
+		expect(skillMd).not.toContain("4 checks: placeholder / consistency / scope / ambiguity");
+	});
+
+	test('inline self-review line names 5 checks including "non-goal-decider"', () => {
+		expect(skillMd).toContain("5 checks: placeholder / consistency / scope / non-goal-decider / ambiguity");
+	});
+
+	test("Final_Checklist line carries the identical 5-check list (no count/name drift between the two locations)", () => {
+		expect(skillMd).toContain("(5 checks: placeholder / consistency / scope / non-goal-decider / ambiguity)");
+	});
+
+	test("the inline self-review's non-goal-decider check requires every Non-Goals bullet to carry a decider", () => {
+		const idx = skillMd.indexOf("**Inline self-review**");
+		expect(idx).toBeGreaterThan(-1);
+		const region = skillMd.slice(idx, idx + 400);
+		// Anchored on both sides of the quantifier clause: a negator (e.g. "not")
+		// inserted immediately before "every" breaks this exact substring, unlike
+		// a bare `toContain("every Non-Goals bullet carries a decider")` which the
+		// negated form would still contain verbatim.
+		expect(region).toContain(
+			"full interview coverage, every Non-Goals bullet carries a decider, no ambiguous text remains",
+		);
+		expect(region).not.toMatch(/not every Non-Goals bullet carries a decider/);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// PR #194 Codex P1: the non-goal decider Closure Guard gains an "enforced in
+// code" sentence symmetric with the topology guard's (SKILL.md:144), plus a
+// set-nongoals CLI call instruction near where the interviewer secures a
+// non-goal decider -- so the interview records into state.non_goals what the
+// Stop-hook enforces downstream.
+// (must FAIL before the corresponding SKILL.md edits -- RED)
+// ---------------------------------------------------------------------------
+
+describe("non-goal decider Closure Guard gains a code-enforcement sentence, symmetric with the topology guard", () => {
+	const guardStart = skillMd.indexOf("**Closure Guard (non-goal decider precondition):**");
+	const guardEnd = skillMd.indexOf("1. Reflect the residual ambiguity", guardStart);
+	const section = guardStart === -1 ? "" : skillMd.slice(guardStart, guardEnd === -1 ? undefined : guardEnd);
+
+	test("non-goal decider Closure Guard section exists (sanity)", () => {
+		expect(guardStart).toBeGreaterThan(-1);
+		expect(guardEnd).toBeGreaterThan(guardStart);
+	});
+
+	test('the section states the precondition "is enforced in code", matching the topology guard\'s phrasing', () => {
+		expect(section).toContain("enforced in code");
+	});
+
+	test("the section names the Stop-hook refusing the done token while zero non-goals carry a non-empty decider", () => {
+		expect(section).toContain("Stop-hook refuses a `<deep-interview-done/>` token");
+		expect(section).toContain("state.non_goals");
+	});
+
+	test("the code-enforcement claim is independent of the ambiguity reading, like the topology guard's", () => {
+		expect(section).toContain("independent of the ambiguity reading");
+	});
+
+	test("emitting the token early loops the interview back, not ends it (matches topology guard's closing sentence)", () => {
+		expect(section).toContain("Emitting the token early does not end the interview — it loops you back.");
+	});
+
+	test("the topology guard's own enforced-in-code sentence is untouched", () => {
+		expect(skillMd).toContain(
+			"This precondition is enforced in code, not just here: the Stop-hook refuses a `<deep-interview-done/>` token while any active component still carries an unscored dimension, independent of the ambiguity reading and of whichever threshold this run resolved. Emitting the token early does not end the interview — it loops you back.",
+		);
+	});
+});
+
+describe("interviewer is instructed to call set-nongoals when a non-goal decider is secured", () => {
+	const guardStart = skillMd.indexOf("**Closure Guard (non-goal decider precondition):**");
+	const guardEnd = skillMd.indexOf("1. Reflect the residual ambiguity", guardStart);
+	const section = guardStart === -1 ? "" : skillMd.slice(guardStart, guardEnd === -1 ? undefined : guardEnd);
+
+	test("the set-nongoals CLI call is present near the Closure Guard", () => {
+		expect(section).toContain("set-nongoals");
+		expect(section).toContain("--json");
+	});
+
+	test("the call shape matches the CLI's documented item/decider JSON shape", () => {
+		expect(section).toContain('"item":');
+		expect(section).toContain('"decider":');
+	});
+
+	test("the instruction notes set-nongoals is a full-replace, so the complete accumulated list must be passed each call", () => {
+		expect(section.toLowerCase()).toContain("full-replace");
 	});
 });

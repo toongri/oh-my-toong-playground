@@ -35,7 +35,8 @@ package arrives.
       email arrives in the test inbox and the in-app notification appears in the test account
 
 ## Non-Goals
-- This issue does not add SMS notifications.
+- This issue does not add SMS notifications. | decider: any request to add SMS notifications
+  belongs here.
 
 ## References
 - N/A — no prior art gathered for this change.

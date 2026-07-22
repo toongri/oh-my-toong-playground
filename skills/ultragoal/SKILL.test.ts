@@ -44,7 +44,7 @@ describe("ported from goal: read-discipline (SKILL.md points at extracted refere
 	});
 });
 
-describe("ported from goal: Six Slots and Story Definition detail lives in references/planning.md", () => {
+describe("Seven Slots and Story Definition detail lives in references/planning.md", () => {
 	test("slot-definition detail is absent from SKILL.md body", () => {
 		expect(skillMd).not.toContain(
 			"**outcome** (`--outcome`) — what is true when the objective is reached",
@@ -79,6 +79,10 @@ describe("ported from goal: Six Slots and Story Definition detail lives in refer
 		expect(planningMd).toContain(
 			"**`add-story --json '<story>'`** — appends one new story with status `unconfirmed`",
 		);
+	});
+
+	test("planning.md documents the non-goals slot (slot 5, distinct from boundaries/constraints)", () => {
+		expect(planningMd).toContain("**non-goals** (`--non-goals`)");
 	});
 });
 
@@ -117,13 +121,14 @@ describe("ported from goal: Completion Gate detail lives in references/completio
 });
 
 describe("ported from goal (regression): required phrases survive somewhere in body+references", () => {
-	test("all six slot names are named somewhere in the union", () => {
+	test("all seven slot names are named somewhere in the union", () => {
 		expect(combined).toContain("**outcome** (`--outcome`)");
 		expect(combined).toContain(
 			"**verification-surface** (`--verification-surface`)",
 		);
 		expect(combined).toContain("**constraints** (`--constraints`)");
 		expect(combined).toContain("**boundaries** (`--boundaries`)");
+		expect(combined).toContain("**non-goals** (`--non-goals`)");
 		expect(combined).toContain(
 			"**iteration-policy** → `max_iterations` (`--max-iterations <n>`)",
 		);

@@ -34,7 +34,8 @@ plan, which risks unintended changes to production.
       planned actions and exits 0 without invoking the deploy pipeline.
 
 ## Non-Goals
-- This issue does not add a `--dry-run` flag to any CLI other than `deploy`.
+- This issue does not add a `--dry-run` flag to any CLI other than `deploy`. | decider: any request
+  to add a `--dry-run` flag to a CLI other than `deploy` belongs here.
 
 ## References
 - N/A — no prior art gathered for this flag.

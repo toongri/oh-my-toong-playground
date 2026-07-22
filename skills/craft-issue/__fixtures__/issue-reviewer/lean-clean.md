@@ -33,7 +33,8 @@ open the item and manually copy the browser URL.
       the clipboard contents equal the item's direct URL (`/lists/<id>/items/<itemId>`)
 
 ## Non-Goals
-- This issue does not add a "copy link" action to the list itself, only to individual items.
+- This issue does not add a "copy link" action to the list itself, only to individual items. |
+  decider: any request for a list-level (not single-item) copy-link action belongs here.
 
 ## References
 - N/A — no prior art gathered for this change.

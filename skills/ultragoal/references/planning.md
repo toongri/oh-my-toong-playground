@@ -1,18 +1,19 @@
-## Six Slots
+## Seven Slots
 
-The Entry Gate's falsifiable objective is captured as six slots. **Four are captured from the request (or the crystallized spec); two are minted by this orchestrator.** All six are written through `set --phase planning` at seed time.
+The Entry Gate's falsifiable objective is captured as seven slots. **Five are captured from the request (or the crystallized spec); two are minted by this orchestrator.** All seven are written through `set --phase planning` at seed time.
 
-Four content slots (from capture):
+Five content slots (from capture):
 
 1. **outcome** (`--outcome`) — what is true when the objective is reached (the desired end state).
 2. **verification-surface** (`--verification-surface`) — the concrete evidence that proves success (test, benchmark, artifact, observable behavior). This is the load-bearing slot: it is the only one that makes the objective machine-decidable.
 3. **constraints** (`--constraints`) — what must NOT regress while pursuing (correctness suites stay green, contracts preserved).
 4. **boundaries** (`--boundaries`) — the allowed files, tools, and resources the pursuit may touch.
+5. **non-goals** (`--non-goals`) — what this pursuit deliberately will NOT do, each declared with its own decider. This is not a restatement of `boundaries` or `constraints`: `boundaries` says which surface may be touched, `constraints` says what must not regress, and neither can carry a thing that is safe to touch, safe to leave alone, and still excluded by choice — touching it is not a boundaries violation, and leaving it alone is not a constraints violation; it is simply out of scope. Declare each non-goal as `- {what this pursuit will NOT do} | decider: {how to tell a finding belongs to this non-goal}` — a non-goal without a decider has no edge to any finding, so it does nothing. `set --non-goals` enforces this shape at write time (existence check only, not a quality check): a non-empty line that doesn't match `- ... | decider: ...` is refused before it reaches the state file, so a value can't silently forge a fake `## ...` section into the assembled reviewer prompt or ride through as a parser-swallowed stray string.
 
 Two minted slots (not in the request — this orchestrator supplies them):
 
-5. **iteration-policy** → `max_iterations` (`--max-iterations <n>`) — the finite cap on pursuit blocks. Default **10** when not overridden at invocation; invocation-overridable. This is the SOLE soft-stop bound: when pursuit hits `max_iterations` the loop soft-stops (state preserved), it does NOT hard-kill.
-6. **blocked-stop** (`--blocked-stop <text>`) — the objective-specific predicate that means "no valid path forward". A decidable, point-in-time condition (no cross-iteration memory); when met, pursuit stops and reports the blocker, non-complete.
+6. **iteration-policy** → `max_iterations` (`--max-iterations <n>`) — the finite cap on pursuit blocks. Default **10** when not overridden at invocation; invocation-overridable. This is the SOLE soft-stop bound: when pursuit hits `max_iterations` the loop soft-stops (state preserved), it does NOT hard-kill.
+7. **blocked-stop** (`--blocked-stop <text>`) — the objective-specific predicate that means "no valid path forward". A decidable, point-in-time condition (no cross-iteration memory); when met, pursuit stops and reports the blocker, non-complete.
 
 Seed example (run at the first `planning` transition):
 
@@ -22,6 +23,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase planning \
   --verification-surface "<concrete evidence that proves success>" \
   --constraints "<what must not regress>" \
   --boundaries "<allowed files/tools/resources>" \
+  --non-goals "<what this pursuit will NOT do, each with a decider>" \
   --max-iterations 10 \
   --blocked-stop "<objective-specific no-path-forward predicate>"
 ```
@@ -30,7 +32,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase planning \
 
 ## Story Definition (Planning Phase)
 
-After capturing the six slots and before dispatching to sisyphus, **auto-generate** the WHAT-slices of the objective from the `outcome` and `verification-surface` slots — not a task (HOW) but a stated outcome (WHAT) per slice. Story order is definition (insertion) order: place foundational/dependency-bearing stories first, since ultragoal dispatches stories to sisyphus sequentially in that order.
+After capturing the seven slots and before dispatching to sisyphus, **auto-generate** the WHAT-slices of the objective from the `outcome` and `verification-surface` slots — not a task (HOW) but a stated outcome (WHAT) per slice. Story order is definition (insertion) order: place foundational/dependency-bearing stories first, since ultragoal dispatches stories to sisyphus sequentially in that order.
 
 **When to auto-derive a single story vs. auto-generate a set.** If the objective is a single WHAT — one deliverable, one verification surface, no meaningful sub-goals — run:
 

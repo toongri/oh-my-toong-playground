@@ -63,7 +63,8 @@ an item to someone standing nearby by having them scan it.
 
 ## Non-Goals
 - This issue does not add QR codes anywhere outside the share sheet, and does not add branded or
-  color-styled QR rendering.
+  color-styled QR rendering. | decider: any request for a QR code outside the share sheet, or for
+  branded/color-styled QR rendering, belongs here.
 
 ## References
 - N/A — no prior art gathered for this change beyond the Decisions Needed research above.
