@@ -54,6 +54,16 @@ export interface DeepInterviewState {
 				clarity_scores?: Record<string, number | null>;
 			}[];
 		};
+		/**
+		 * Non-goal / decider pairs locked via `deep-interview-state.ts set-nongoals`
+		 * (SKILL.md "non-goal decider Closure Guard"). The Stop-hook counts entries
+		 * with a non-empty `decider` — see hasNoNonGoalDecider in decision.ts. Absent
+		 * on legacy/foreign interview states written before this field existed.
+		 */
+		non_goals?: {
+			item?: string;
+			decider?: string;
+		}[];
 	};
 }
 

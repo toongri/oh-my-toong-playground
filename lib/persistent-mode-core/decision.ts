@@ -532,8 +532,40 @@ export function makeDecision(context: DecisionContext): HookOutput {
 						}),
 				);
 
+			// Non-goal decider Closure Guard (SKILL.md:146, "non-goal decider Closure
+			// Guard"): CATEGORICAL precondition — "a done-token requires at least one
+			// recorded non-goal carrying a non-empty decider" — enforced directly rather
+			// than folded into the ambiguity-magnitude arithmetic, same reasoning as the
+			// Closure Guard completeness check above.
+			//
+			// Fail direction is the MIRROR of hasUnscoredActiveComponent above, and
+			// deliberately so. Topology fails OPEN on an absent field: Round 0 always
+			// locks `state.topology` before any scoring happens, so "topology absent"
+			// only ever means a legacy/foreign state that predates the field — never a
+			// live interview skipping Round 0 — and blocking on it would wedge nothing
+			// but corpses. Non-goal deciders fail CLOSED: "0 recorded non-goal deciders"
+			// is not a shape the writer omits by convention, it is precisely the state
+			// the categorical rule exists to block — a real, in-progress interview that
+			// never ran the Closure Guard. Treating an absent/empty `non_goals` as "0"
+			// (same as an empty array) is what makes fail-closed actually closed; folding
+			// it into "fails open like topology" would silently exempt every legacy state
+			// from the one check this task adds.
+			//
+			// This does NOT re-open a wedge on old interviews, for the same two reasons
+			// TTL-stale/pristine already don't wedge on the checks above: (1) `isStateLive`
+			// gates the whole `if` below — a TTL-stale interview falls through to cleanup
+			// regardless of this flag, exactly like magnitudeUnconverged/hasUnscoredActiveComponent
+			// today; (2) a pristine seed (no `state` key at all) never reaches this branch's
+			// arithmetic in the first place when it has no done-token — it is caught by the
+			// separate `!isPristine(...)` fall-through further down, unrelated to this flag.
+			const nonGoals = deepInterviewStateRaw.state?.non_goals;
+			const nonEmptyDeciderCount = Array.isArray(nonGoals)
+				? nonGoals.filter((ng) => typeof ng?.decider === "string" && ng.decider.trim() !== "").length
+				: 0;
+			const hasNoNonGoalDecider = nonEmptyDeciderCount === 0;
+
 			if (
-				(magnitudeUnconverged || hasUnscoredActiveComponent) &&
+				(magnitudeUnconverged || hasUnscoredActiveComponent || hasNoNonGoalDecider) &&
 				isStateLive(deepInterviewStateRaw, nowEpoch)
 			) {
 				return formatBlockOutput(buildDeepInterviewContinuationMessage());
