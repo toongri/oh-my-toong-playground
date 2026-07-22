@@ -491,4 +491,34 @@ case "$tool_name" in
         ;;
 esac
 
-printf '%s' "$candidates_text" | write_guard_core_run "$omt_dir" "$sid"
+# -----------------------------------------------------------------------------
+# Two independent guards run over the SAME candidates_text, mirroring the
+# Claude twin's wiring (hooks/pre-tool-enforcer.sh:260-288): an unconditional
+# deny (write_guard_core_run) and a SEPARATE identity-conditional allow
+# (codereview_guard_core_run) -- different rule kinds, so neither is nested
+# inside the other. The ledger guard's output is now captured instead of
+# streamed straight to stdout so a second judgment can run when it is empty;
+# printf '%s\n' on a non-empty capture reproduces the exact bytes
+# write_guard_core_run would have written directly (the trailing newline
+# $(...) strips is restored), so this refactor changes neither its output
+# bytes nor its exit behavior.
+#
+# Codex-specific reason this is a positive whitelist, not a subagent check:
+# unlike Claude's payload, the Codex PreToolUse payload carries no agent_id
+# (or any other subagent-identity field) -- only turn_id/agent_transcript_path,
+# which identify a turn/transcript, not a caller role. There is no field here
+# to ask "is this a subagent" directly, so agent_type=="code-reviewer" is the
+# only trustworthy signal at all, not a design choice among alternatives.
+# agent_type itself is read fail-closed: a failed/absent extraction becomes
+# "" via the `|| agent_type=""` idiom below (mirroring every other jq
+# extraction in this file), and codereview_guard_core_run denies on "" the
+# same as any other non-"code-reviewer" value -- extraction failure must
+# never fall through to allow.
+_cwg_ledger_out=$(printf '%s' "$candidates_text" | write_guard_core_run "$omt_dir" "$sid")
+if [ -n "$_cwg_ledger_out" ]; then
+    printf '%s\n' "$_cwg_ledger_out"
+    exit 0
+fi
+
+agent_type=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null) || agent_type=""
+printf '%s' "$candidates_text" | codereview_guard_core_run "$omt_dir" "$sid" "$agent_type"
