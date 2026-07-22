@@ -1390,6 +1390,241 @@ test_own_file_paths_key_non_ledger_allows() {
 }
 
 # =============================================================================
+# Code-review artifact identity guard (agent_type wiring task): covers the
+# codereview_guard_core_run wiring (hooks/write-guard-core.sh:173) added at
+# the tail of hooks/codex-write-guard.sh, mirroring the Claude twin's wiring
+# (hooks/pre-tool-enforcer.sh:260-288). Reproduces the same 3-case matrix
+# (agent_type absent -> deny, ="code-reviewer" -> allow, ="sisyphus-junior"
+# -> deny) across BOTH the apply_patch envelope route and the
+# exec_command/shell_command route.
+#
+# FIXTURE PROVENANCE (HAND-CRAFTED, not machine-captured): the eleven
+# top-level field names carried by codex_full_payload below (session_id
+# turn_id agent_type transcript_path hook_event_name model permission_mode
+# trigger tool_name tool_input tool_use_id) were fixed from a `strings` scan
+# of the codex binary itself -- but the actual SHAPE of agent_type's value
+# for a real dispatched subagent (e.g. whether a custom agent's agent_type is
+# its skill filename or its frontmatter `name`) is inferred only from
+# Claude's own subagent-dispatch documentation, not from an observed live
+# Codex payload. Treat this fixture as provisional pending cross-check
+# against the first real Codex code-reviewer dispatch.
+# =============================================================================
+
+# codex_full_payload <tool_name> <tool_input_json> <sid> <cwd> [<agent_type>]
+# Builds a payload carrying all eleven top-level fields observed in the real
+# Codex PreToolUse schema, plus cwd (not one of the eleven scanned fields,
+# but load-bearing for every hook invocation in this suite already -- every
+# prior test threads it through the same way for OMT_DIR git-derivation). A
+# 5th positional arg supplies agent_type's value; omitting it entirely
+# (4-arg call) reproduces the real main-thread payload shape -- the
+# agent_type KEY absent altogether, not present-with-empty-string, since a
+# main-thread tool call never carries the field at all.
+codex_full_payload() {
+    local tool_name="$1" tool_input="$2" sid="$3" cwd="$4"
+    if [ "$#" -ge 5 ]; then
+        local agent_type="$5"
+        jq -n --arg tool_name "$tool_name" --argjson tool_input "$tool_input" \
+            --arg sid "$sid" --arg cwd "$cwd" --arg agent_type "$agent_type" \
+            '{session_id:$sid, turn_id:"turn-1", agent_type:$agent_type,
+              transcript_path:"/tmp/codex-transcript.jsonl", hook_event_name:"PreToolUse",
+              model:"gpt-5-codex", permission_mode:"default", trigger:"tool_call",
+              tool_name:$tool_name, tool_input:$tool_input, tool_use_id:"tu-1", cwd:$cwd}'
+    else
+        jq -n --arg tool_name "$tool_name" --argjson tool_input "$tool_input" \
+            --arg sid "$sid" --arg cwd "$cwd" \
+            '{session_id:$sid, turn_id:"turn-1",
+              transcript_path:"/tmp/codex-transcript.jsonl", hook_event_name:"PreToolUse",
+              model:"gpt-5-codex", permission_mode:"default", trigger:"tool_call",
+              tool_name:$tool_name, tool_input:$tool_input, tool_use_id:"tu-1", cwd:$cwd}'
+    fi
+}
+
+# cr_paths: derives the two guarded code-review artifact paths (ultragoal +
+# goal, AC5 parity) plus two NON-guarded paths used by the negative-control
+# tests below, all for session "cx" under the current sandbox's $GITDIR/$SBX
+# -- parallel to new_sandbox's own $LED derivation. Must be called AFTER
+# new_sandbox.
+cr_paths() {
+    CR_ULTRAGOAL=$(env -u OMT_DIR -u OMT_SESSION_ID HOME="$SBX" bash -c \
+        "source '$ROOT_DIR/hooks/lib/omt-dir.sh'; printf '%s/ultragoal-codereview-cx.json' \"\$(resolve_omt_dir '$GITDIR')\"")
+    CR_GOAL=$(env -u OMT_DIR -u OMT_SESSION_ID HOME="$SBX" bash -c \
+        "source '$ROOT_DIR/hooks/lib/omt-dir.sh'; printf '%s/goal-codereview-cx.json' \"\$(resolve_omt_dir '$GITDIR')\"")
+    CR_ULTRAGOAL_VERDICT=$(env -u OMT_DIR -u OMT_SESSION_ID HOME="$SBX" bash -c \
+        "source '$ROOT_DIR/hooks/lib/omt-dir.sh'; printf '%s/ultragoal-verdict-cx.json' \"\$(resolve_omt_dir '$GITDIR')\"")
+    CR_CANDIDATES=$(env -u OMT_DIR -u OMT_SESSION_ID HOME="$SBX" bash -c \
+        "source '$ROOT_DIR/hooks/lib/omt-dir.sh'; printf '%s/code-review/cx/candidates.json' \"\$(resolve_omt_dir '$GITDIR')\"")
+}
+
+# --- apply_patch envelope route: 3-case matrix, ultragoal-codereview target ---
+
+test_codereview_apply_patch_agent_type_absent_denies() {
+    new_sandbox
+    cr_paths
+    local tool_input out result=0
+
+    tool_input=$(jq -n --arg cmd "$(printf '*** Begin Patch\n*** Add File: %s\n*** End Patch\n' "$CR_ULTRAGOAL")" '{command:$cmd}')
+    out=$(codex_full_payload "apply_patch" "$tool_input" "cx" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED codereview-apply-patch-absent: expected deny for agent_type-absent apply_patch targeting the ultragoal-codereview artifact, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_codereview_apply_patch_agent_type_code_reviewer_allows() {
+    new_sandbox
+    cr_paths
+    local tool_input out rc=0 result=0
+
+    tool_input=$(jq -n --arg cmd "$(printf '*** Begin Patch\n*** Add File: %s\n*** End Patch\n' "$CR_ULTRAGOAL")" '{command:$cmd}')
+    out=$(codex_full_payload "apply_patch" "$tool_input" "cx" "$GITDIR" "code-reviewer" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "codereview-apply-patch-code-reviewer"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_codereview_apply_patch_agent_type_sisyphus_junior_denies() {
+    new_sandbox
+    cr_paths
+    local tool_input out result=0
+
+    tool_input=$(jq -n --arg cmd "$(printf '*** Begin Patch\n*** Add File: %s\n*** End Patch\n' "$CR_ULTRAGOAL")" '{command:$cmd}')
+    out=$(codex_full_payload "apply_patch" "$tool_input" "cx" "$GITDIR" "sisyphus-junior" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED codereview-apply-patch-sisyphus-junior: expected deny for agent_type=sisyphus-junior apply_patch targeting the ultragoal-codereview artifact, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# --- exec_command/shell_command route: 3-case matrix, goal-codereview target
+# (AC5: goal-codereview path coverage) ---
+
+test_codereview_shell_command_agent_type_absent_denies() {
+    new_sandbox
+    cr_paths
+    local tool_input out result=0
+
+    tool_input=$(jq -n --arg cmd "echo x > $CR_GOAL" '{cmd:$cmd}')
+    out=$(codex_full_payload "shell_command" "$tool_input" "cx" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED codereview-shell-command-absent: expected deny for agent_type-absent shell_command targeting the goal-codereview artifact, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_codereview_shell_command_agent_type_code_reviewer_allows() {
+    new_sandbox
+    cr_paths
+    local tool_input out rc=0 result=0
+
+    tool_input=$(jq -n --arg cmd "echo x > $CR_GOAL" '{cmd:$cmd}')
+    out=$(codex_full_payload "shell_command" "$tool_input" "cx" "$GITDIR" "code-reviewer" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "codereview-shell-command-code-reviewer"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_codereview_shell_command_agent_type_sisyphus_junior_denies() {
+    new_sandbox
+    cr_paths
+    local tool_input out result=0
+
+    tool_input=$(jq -n --arg cmd "echo x > $CR_GOAL" '{cmd:$cmd}')
+    out=$(codex_full_payload "shell_command" "$tool_input" "cx" "$GITDIR" "sisyphus-junior" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED codereview-shell-command-sisyphus-junior: expected deny for agent_type=sisyphus-junior shell_command targeting the goal-codereview artifact, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# AC6 -- false-positive negative controls: agent_type absent targeting paths
+# the code-review identity guard does NOT cover at all (ultragoal-verdict-
+# <sid>.json, code-review/<sid>/candidates.json) must still ALLOW. If this
+# breaks, the normal write path for these unrelated artifacts is dead with
+# no bypass available -- codereview_guard_core_run's anchor-match is scoped
+# to exactly the two guarded paths (write-guard-core.sh:176-178), so a
+# regression here would mean the guard widened past its intended scope.
+# =============================================================================
+test_codereview_negative_control_ultragoal_verdict_allows() {
+    new_sandbox
+    cr_paths
+    local tool_input out rc=0 result=0
+
+    tool_input=$(jq -n --arg fp "$CR_ULTRAGOAL_VERDICT" '{file_path:$fp}')
+    out=$(codex_full_payload "write" "$tool_input" "cx" "$GITDIR" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "codereview-negative-control-ultragoal-verdict"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_codereview_negative_control_candidates_json_allows() {
+    new_sandbox
+    cr_paths
+    local tool_input out rc=0 result=0
+
+    tool_input=$(jq -n --arg fp "$CR_CANDIDATES" '{file_path:$fp}')
+    out=$(codex_full_payload "write" "$tool_input" "cx" "$GITDIR" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "codereview-negative-control-candidates-json"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# AC4 -- Claude/Codex byte-identical deny JSON: the wiring MUST forward to
+# the shared core (codereview_guard_core_run, hooks/write-guard-core.sh)
+# rather than a locally duplicated deny string, so both platform shims emit
+# the EXACT same bytes for the same verdict. Runs BOTH real hooks (not a
+# read of the core's constant, which would be tautological) against
+# equivalent payloads (agent_type absent, targeting the ultragoal-codereview
+# artifact) under the SAME sid/OMT_DIR so both resolve to the identical
+# guarded path, then string-compares stdout.
+# =============================================================================
+test_ac4_codex_claude_deny_json_byte_identical() {
+    new_sandbox
+    cr_paths
+    local codex_tool_input codex_out claude_out result=0
+
+    codex_tool_input=$(jq -n --arg fp "$CR_ULTRAGOAL" '{file_path:$fp}')
+    codex_out=$(codex_full_payload "write" "$codex_tool_input" "cx" "$GITDIR" | run_hook)
+
+    claude_out=$(jq -n --arg fp "$CR_ULTRAGOAL" --arg cwd "$GITDIR" \
+        '{tool_name:"Write", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' \
+        | env -u OMT_DIR -u CODEX_THREAD_ID OMT_SESSION_ID=cx HOME="$SBX" bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+
+    if [ "$codex_out" != "$claude_out" ]; then
+        echo "ASSERTION FAILED ac4-byte-identical: codex output '$codex_out' != claude output '$claude_out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1470,6 +1705,15 @@ main() {
     run_test test_own_file_paths_key_ledger_denies
     run_test test_own_file_paths_key_mid_array_ledger_denies
     run_test test_own_file_paths_key_non_ledger_allows
+    run_test test_codereview_apply_patch_agent_type_absent_denies
+    run_test test_codereview_apply_patch_agent_type_code_reviewer_allows
+    run_test test_codereview_apply_patch_agent_type_sisyphus_junior_denies
+    run_test test_codereview_shell_command_agent_type_absent_denies
+    run_test test_codereview_shell_command_agent_type_code_reviewer_allows
+    run_test test_codereview_shell_command_agent_type_sisyphus_junior_denies
+    run_test test_codereview_negative_control_ultragoal_verdict_allows
+    run_test test_codereview_negative_control_candidates_json_allows
+    run_test test_ac4_codex_claude_deny_json_byte_identical
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
