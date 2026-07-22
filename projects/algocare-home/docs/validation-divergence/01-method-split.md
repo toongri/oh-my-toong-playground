@@ -25,6 +25,75 @@
 
 ## 어떻게 — 예시
 
+층을 셋으로 나눈다. **도메인 모델**은 자기 상태의 판정·전이를 응집하고, **서비스**는 오케스트레이션(크로스도메인 호출 + 트랜잭션)만 하고, **라우터**는 이름만 부른다.
+
+### 도메인 모델 — 상태 판정·전이를 응집
+
+`Order`가 자기 상태를 스스로 안다. "이 상태에서 이 액터가 취소할 수 있나"(정책)와 "취소로의 상태 전이·멱등"(불변식)이 여기 모인다. 서비스에 `if (order.status !== ...)`가 흩어지지 않는다.
+
+```ts
+// order.ts — 필드는 리포지토리가 하이드레이트. 여기선 판정·전이 메서드만 보인다.
+class Order {
+  readonly id!: string
+  readonly userId!: string
+  private status!: OrderStatus
+
+  /** 정책: 고객은 결제완료(CONFIRMED) 상태에서만 */
+  assertCancellableByCustomer(): void {
+    if (this.status !== OrderStatus.CONFIRMED)
+      throw new OrderNotCancellableError(this.id, this.status)
+  }
+  /** 정책: admin은 배송 이후 상태도 허용(더 넓음) */
+  assertCancellableByAdmin(): void {
+    if (!ADMIN_CANCELLABLE_STATUSES.includes(this.status))
+      throw new OrderNotCancellableError(this.id, this.status)
+  }
+  /** 불변식: 이미 취소면 멱등 판정용 */
+  isCancelled(): boolean {
+    return this.status === OrderStatus.CANCELLED
+  }
+  /** 불변식: 상태 전이 */
+  markCancelled(): void {
+    this.status = OrderStatus.CANCELLED
+  }
+}
+```
+
+### 서비스 — 오케스트레이션(크로스도메인 + 트랜잭션)
+
+서비스는 **무엇이 허용되는지(정책)를 스스로 판정하지 않는다** — 도메인 모델에 위임한다. 서비스가 아는 건 "취소를 어떻게 집행하나"뿐이다: 결제 취소·포인트 환급이라는 **다른 도메인**을 순서대로 호출하고 한 트랜잭션으로 묶는 일. actor별 public 메서드는 얇고, 공유되는 집행부는 private `execute`로 격리한다.
+
+```ts
+export class OrderCancelService {
+  /** 고객 취소 */
+  static async cancelByCustomer(orderId: string, userId: string): Promise<void> {
+    const order = await OrderRepository.findByUserAndOrderId(userId, orderId)  // 불변식: 소유권 = 조회 제약
+    order.assertCancellableByCustomer()                                        // 정책: 도메인이 판정
+    await this.execute(order)                                                  // 오케스트레이션
+  }
+
+  /** admin 취소 — 사유 필수 */
+  static async cancelByAdmin(orderId: string, userId: string, reason: string): Promise<void> {
+    const order = await OrderRepository.findByUserAndOrderId(userId, orderId)  // admin도 소유권 우회 못 함
+    order.assertCancellableByAdmin()
+    await this.execute(order, reason)
+  }
+
+  /** 오케스트레이션 코어 — 정책은 모른다. 크로스도메인 집행만. private. */
+  private static async execute(order: Order, reason?: string): Promise<void> {
+    if (order.isCancelled()) return                                            // 불변식: 멱등(재-PG취소 방지)
+    const pgCancel = await PaymentCancelService.cancelByOrderId(order.id, reason ?? DEFAULT_REASON)
+    await db.transaction(async (tx) => {
+      order.markCancelled()                                                    // 도메인 상태 전이
+      await OrderRepository.save(order, tx)
+      await PointService.reverseForOrder(order.id, tx)                         // 다른 도메인
+    })
+  }
+}
+```
+
+### 진입점 — 라우터는 이름만 부른다
+
 ```ts
 // order.router.ts (고객 진입점)
 cancel: userProcedure
@@ -40,37 +109,7 @@ cancel: adminProcedure
     OrderCancelService.cancelByAdmin(input.orderId, input.userId, input.reason))
 ```
 
-```ts
-export class OrderCancelService {
-  /** 고객 취소 — 결제완료(CONFIRMED) 상태에서만 */
-  static async cancelByCustomer(orderId: string, userId: string): Promise<void> {
-    const order = await this.loadOwnedOrder(orderId, userId)          // 불변식: 소유권
-    if (order.orderStatus !== OrderStatus.CONFIRMED) {                // 정책: 고객용
-      throw new OrderNotCancellableError(orderId, order.orderStatus)
-    }
-    await this.execute(order, userId)
-  }
-
-  /** admin 취소 — 배송 이후 상태도 허용, 사유 필수 */
-  static async cancelByAdmin(orderId: string, userId: string, reason: string): Promise<void> {
-    const order = await this.loadOwnedOrder(orderId, userId)          // 불변식: 소유권(admin도 우회 못 함)
-    if (!ADMIN_CANCELLABLE_STATUSES.includes(order.orderStatus)) {    // 정책: admin용(더 넓음)
-      throw new OrderNotCancellableError(orderId, order.orderStatus)
-    }
-    await this.execute(order, userId, reason)
-  }
-
-  /** 공통 실행 코어 — 불변식만. private이라 밖에서 못 부른다. */
-  private static async execute(order: OrderRow, userId: string, reason?: string): Promise<void> {
-    if (order.orderStatus === OrderStatus.CANCELLED) return           // 불변식: 멱등
-    await PointService.assertReversibleForOrder({ /* ... */ })
-    const pgCancel = await PaymentCancelService.cancelByOrderId(order.id, order, reason ?? DEFAULT_REASON)
-    await this.reverseInTx({ orderId: order.id, userId, pgCancel })   // PG 취소 순서·이력
-  }
-}
-```
-
-**핵심은 `execute`가 `private`이라는 점이다.** 정책을 건너뛰고 실행 코어로 바로 들어가는 경로가 타입 시스템 차원에서 막힌다. 나중에 CS팀 취소가 붙어도 `cancelByCsAgent`라는 public 메서드를 하나 더 만들 뿐, `execute`는 안 건드린다.
+**두 겹이 우회를 타입 차원에서 막는다.** (1) `execute`가 `private`이라 정책을 건너뛰고 집행부로 바로 들어가는 경로가 없다. (2) 소유권이 `findByUserAndOrderId`의 조회 제약이라, 애초에 남의 주문을 로드하는 경로 자체가 없다. 나중에 CS팀 취소가 붙어도 `cancelByCsAgent` public 메서드를 하나 더 만들 뿐, `execute`도 도메인 모델도 안 건드린다.
 
 ## "공통 코어를 private로" vs "별도 객체로"
 
@@ -86,7 +125,8 @@ export class OrderCancelService {
 
 ## 주의
 
-- **admin도 불변식은 못 깬다.** 위 예시에서 `cancelByAdmin`도 `loadOwnedOrder`로 소유권을 검증한다. "admin이 남의 주문을 대리 취소"가 필요해지면 그건 별도 시그니처(`cancelByAdminOnBehalf`)로 명시적으로 분리하지, 기존 메서드에서 소유권 검사를 빼지 않는다.
+- **소유권은 로드-후-검사가 아니라 조회 제약으로.** 위 예시는 `OrderRepository.findByUserAndOrderId(userId, orderId)`로 **소유자의 주문만 애초에 로드**한다. `findById(orderId)`로 무조건 로드한 뒤 `order.hasOwner(userId)`로 사후 검사하는 방식도 가능하지만(대리 취소가 필요할 때는 오히려 이 형태가 맞다 — 아래), 기본은 조회 제약이 더 안전하다. "남의 주문을 로드한 상태"라는 위험한 중간 상태 자체가 생기지 않기 때문이다.
+- **admin도 불변식은 못 깬다.** `cancelByAdmin`도 소유자 스코프로 로드하므로 남의 주문에 손대지 못한다. "admin이 임의 주문을 대리 취소"가 필요해지면 그건 별도 시그니처(`cancelByAdminOnBehalf`)로 명시적으로 분리하고, 그 안에서만 `findById` + `order.assertOwnedByAny(...)` 식으로 완화하지, 기존 메서드에서 소유권 검사를 빼지 않는다.
 - **상태 집합은 상수로.** `ADMIN_CANCELLABLE_STATUSES`처럼 명명 상수로 뽑는다. `!== OrderStatus.CONFIRMED` 같은 리터럴이 여러 곳에 흩어지면 한쪽만 바뀌어도 드리프트를 못 잡는다.
 
 ## 이 레포 맥락

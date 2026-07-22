@@ -46,6 +46,8 @@ class Order {
 }
 ```
 
+위 `cancelByCustomer`는 **자기 상태 전이만** 한다. 결제 취소·포인트 환급 같은 크로스도메인 집행은 이 도메인 명령을 부른 뒤 **서비스 셸이 오케스트레이션**한다 — 패턴 1·2의 `execute`와 같은 자리다. 즉 "가드 + 전이"는 도메인, "집행"은 서비스로 갈리고, can/execute 분리(질의-명령 축)는 그 위에 직교로 얹힌다.
+
 ### 프런트가 질의를 소비 (드리프트 차단의 핵심)
 
 ```ts
@@ -53,7 +55,7 @@ class Order {
 cancelability: userProcedure
   .input(z.object({ orderId: z.string().uuid() }))
   .query(async ({ ctx, input }) => {
-    const order = await OrderRepo.getOwned(input.orderId, ctx.user.id)
+    const order = await OrderRepository.findByUserAndOrderId(ctx.user.id, input.orderId)
     const errors = order.canCancelByCustomer(new Date())
     return { cancellable: errors.length === 0, reasons: errors }
   })
