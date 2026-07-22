@@ -25,7 +25,7 @@
  *
  * Subcommands:
  *   set --phase <planning|pursuing> [--outcome ..] [--verification-surface ..]
- *       [--constraints ..] [--boundaries ..] [--max-iterations <n>]
+ *       [--constraints ..] [--boundaries ..] [--non-goals ..] [--max-iterations <n>]
  *       [--blocked-stop ..] [--plan-path ..] [--resume-summary ..]
  *       [--completion-evidence p1,p2]
  *   set-budget-limited                       (system-only)
@@ -97,11 +97,12 @@ export interface Story {
 const DEFAULT_MAX_ITERATIONS = 10;
 
 export interface GoalState {
-	// --- 4 content slots ---
+	// --- 5 content slots ---
 	outcome: string;
 	verification_surface: string;
 	constraints: string;
 	boundaries: string;
+	non_goals: string;
 	// --- 2 loop-control slots ---
 	/** From the iteration-policy slot. Finite cap on pursuit blocks. */
 	max_iterations: number;
@@ -237,6 +238,7 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
 		verification_surface: next.verification_surface ?? prior.verification_surface ?? "",
 		constraints: next.constraints ?? prior.constraints ?? "",
 		boundaries: next.boundaries ?? prior.boundaries ?? "",
+		non_goals: next.non_goals ?? prior.non_goals ?? "",
 		max_iterations:
 			typeof maxItCandidate === "number" && Number.isInteger(maxItCandidate) && maxItCandidate >= 1
 				? maxItCandidate
@@ -352,11 +354,50 @@ export interface SetGoalOpts {
 	verification_surface?: string;
 	constraints?: string;
 	boundaries?: string;
+	non_goals?: string;
 	max_iterations?: number;
 	blocked_stop?: string;
 	plan_path?: string;
 	resume_summary?: string;
 	completion_evidence_paths?: string[];
+}
+
+/**
+ * Declaration-shape existence check for `non_goals` — the one shape this feature
+ * enforces everywhere non-goals are read (metis, issue-reviewer, and deep-interview
+ * gates all expect it): `- {what this pursuit will NOT do} | decider: {how to tell a
+ * finding belongs here}`. This checks the SHAPE only — a `|` and a non-empty
+ * `decider:` clause — never whether the decider is actually a good discriminator;
+ * that judgment belongs to the prose-layer reviewers, and encoding it here would
+ * turn a syntax check into an interpretation dispute.
+ *
+ * `setGoalState` is the only writer of `non_goals` (untrusted here only in the
+ * accident sense — this is the orchestrator's own authored text, not external
+ * input), so this is the single choke point. It closes two accident-axis holes at
+ * once, because both are really the same hole (a value that skips the declared
+ * shape):
+ *   1. A line starting with "#" (e.g. a stray `## Evidence Results`) forges a fake
+ *      section into the assembled reviewer prompt once `serializeReviewContext`
+ *      concatenates it verbatim (no escaping) — the reviewer treats `## Evidence
+ *      Results` as an already-verified section, not to be re-evaluated.
+ *   2. A value beginning with `--` gets swallowed by parseArgs' shape-guessing
+ *      consumption and stored as the literal string `'true'` — non-blank, so the
+ *      backfill path never fires, and `'true'` rides the payload as a fake declaration.
+ *
+ * Blank-only values (the `(none provided)` backfill path) pass through untouched.
+ */
+const NON_GOAL_LINE_PATTERN = /^-\s+\S.*\|\s*decider:\s*\S.*$/;
+
+function validateNonGoals(value: string): void {
+	if (value.trim() === "") return;
+	for (const line of value.split("\n")) {
+		if (line.trim() === "") continue;
+		if (!NON_GOAL_LINE_PATTERN.test(line)) {
+			throw new Error(
+				`set: non-goals refused — line does not match "- {what this pursuit will NOT do} | decider: {...}" format: "${line}"`,
+			);
+		}
+	}
 }
 
 /**
@@ -382,6 +423,9 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 			`set: phase must be one of ${SETTABLE_PHASES.join("|")} (got "${opts.phase}"). ` +
 				`complete is request-complete-only; budget_limited/blocked are system-only.`,
 		);
+	}
+	if (opts.non_goals !== undefined) {
+		validateNonGoals(opts.non_goals);
 	}
 	// Pursuing gate (D-8 / AC-2a): refused while any story is unconfirmed.
 	// An empty stories[] does NOT block pursuing (story definition is mandated by prose).
@@ -419,6 +463,7 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		verification_surface: opts.verification_surface,
 		constraints: opts.constraints,
 		boundaries: opts.boundaries,
+		non_goals: opts.non_goals,
 		max_iterations: opts.max_iterations,
 		blocked_stop: opts.blocked_stop,
 		plan_path: opts.plan_path,
@@ -1155,12 +1200,18 @@ export function serializeRequirements(sessionId: string): string {
 export const BACKFILL_MARKER = "(none provided)";
 
 /**
- * Builds the Shared Contract shape — the 4-field JSON the code-review lane's
+ * Builds the Shared Contract shape — the 5-field JSON the code-review lane's
  * finder step consumes (T6) — from this ultragoal's per-field sources. Mirrors
  * serializeRequirements' never-structurally-empty invariant per field: each
  * field falls back to BACKFILL_MARKER only when every one of its sources is
  * blank; a mixed-empty composite (`description`, `project_context`) keeps
  * whatever non-blank source it has instead of collapsing to the marker.
+ *
+ * `non_goals` is a standalone slot, exposed as its own key — it is deliberately
+ * NOT folded into `project_context` alongside constraints/boundaries. Those two
+ * mean "surface that may be touched" / "must not regress"; `non_goals` means
+ * "declared out of scope", a distinct judgment the finder step needs to keep
+ * separate to decide whether a finding falls outside the declared scope.
  *
  * Throws when no active ultragoal state exists for `sessionId` — the CLI
  * dispatch lets this propagate to a non-zero exit, the same failure protocol
@@ -1171,6 +1222,7 @@ export function serializeReviewContext(sessionId: string): {
 	description: string;
 	requirements: string;
 	project_context: string;
+	non_goals: string;
 } {
 	const state = readGoalState(sessionId);
 	if (state === null) {
@@ -1186,6 +1238,7 @@ export function serializeReviewContext(sessionId: string): {
 	const planPath = state.plan_path ?? "";
 	const constraints = state.constraints ?? "";
 	const boundaries = state.boundaries ?? "";
+	const nonGoals = state.non_goals ?? "";
 
 	const what_was_implemented = outcome.trim() !== "" ? outcome : BACKFILL_MARKER;
 
@@ -1203,7 +1256,9 @@ export function serializeReviewContext(sessionId: string): {
 	const project_context =
 		projectContextSources.length > 0 ? projectContextSources.join("\n\n") : BACKFILL_MARKER;
 
-	return { what_was_implemented, description, requirements, project_context };
+	const non_goals = nonGoals.trim() !== "" ? nonGoals : BACKFILL_MARKER;
+
+	return { what_was_implemented, description, requirements, project_context, non_goals };
 }
 
 // ---------------------------------------------------------------------------
@@ -1333,6 +1388,7 @@ function main(): void {
 				verification_surface: str(args["verification-surface"]),
 				constraints: str(args["constraints"]),
 				boundaries: str(args["boundaries"]),
+				non_goals: str(args["non-goals"]),
 				max_iterations: maxIter,
 				blocked_stop: str(args["blocked-stop"]),
 				plan_path: str(args["plan-path"]),

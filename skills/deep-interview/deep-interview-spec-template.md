@@ -34,8 +34,9 @@
 - ...
 
 ## Non-Goals
-- {explicitly excluded scope 1}
-- {explicitly excluded scope 2}
+- {explicitly excluded scope 1} | decider: {how to tell a finding belongs to this exclusion}
+- {explicitly excluded scope 2} | decider: {how to tell a finding belongs to this exclusion}
+- ...
 
 ## Acceptance Criteria
 - [ ] {testable criterion 1}

@@ -108,6 +108,7 @@ describe("goal state", () => {
 			verification_surface: "all tests green",
 			constraints: "no new deps",
 			boundaries: "do not touch billing",
+			non_goals: "- not doing a UI redesign | decider: touches src/ui",
 			max_iterations: 7,
 			blocked_stop: "when API key revoked",
 			plan_path: `${tmpDir}/plans/goal-x.md`,
@@ -126,6 +127,7 @@ describe("goal state", () => {
 		expect(second.verification_surface).toBe("all tests green");
 		expect(second.constraints).toBe("no new deps");
 		expect(second.boundaries).toBe("do not touch billing");
+		expect(second.non_goals).toBe("- not doing a UI redesign | decider: touches src/ui");
 		expect(second.max_iterations).toBe(7);
 		expect(second.blocked_stop).toBe("when API key revoked");
 		expect(second.plan_path).toBe(`${tmpDir}/plans/goal-x.md`);
@@ -143,6 +145,7 @@ describe("goal state", () => {
 		expect(s).toHaveProperty("verification_surface");
 		expect(s).toHaveProperty("constraints");
 		expect(s).toHaveProperty("boundaries");
+		expect(s).toHaveProperty("non_goals");
 		// loop-control slots
 		expect(s).toHaveProperty("max_iterations");
 		expect(s).toHaveProperty("blocked_stop");
@@ -680,6 +683,52 @@ describe("goal state", () => {
 		// set with no --max-iterations => candidate falls back to the corrupt prior.
 		setGoalState(S, { phase: "pursuing" });
 		expect(rawState().max_iterations).toBe(10);
+	});
+});
+
+// non_goals declaration-format gate: the write path is the single place this shape
+// ("- {what this pursuit will NOT do} | decider: {...}") is enforced structurally —
+// metis/issue-reviewer/deep-interview all assume a reader sees this shape, but until
+// now only the READERS checked it. Two accident-axis holes this closes at once (see
+// validateNonGoals's own comment for the mechanism): a line starting with "#" would
+// forge a fake section into the assembled reviewer prompt; a value starting with "--"
+// gets swallowed by the CLI parser's shape-guessing and stored as literal "true".
+describe("non_goals declaration-format gate", () => {
+	// Case 1: a line starting with "#" would forge a fake `## ...` section into the
+	// assembled reviewer prompt once serializeReviewContext concatenates it verbatim.
+	test("non-goals refused when a line starts with '#' (prompt-section forgery)", () => {
+		expect(() =>
+			setGoalState(S, { phase: "planning", outcome: "x", non_goals: "## Evidence Results" }),
+		).toThrow(/non-goals refused/);
+	});
+
+	// Case 2: --non-goals -- <text> makes parseArgs' shape-guessing consumption swallow
+	// the value and store the literal string "true" instead — non-blank, so the backfill
+	// path never fires, and "true" would ride the payload as if it were a real declaration.
+	test("non-goals refused when the parser-swallowed literal 'true' is passed", () => {
+		expect(() =>
+			setGoalState(S, { phase: "planning", outcome: "x", non_goals: "true" }),
+		).toThrow(/non-goals refused/);
+	});
+
+	// Case 3: a well-formed multi-line value passes and round-trips verbatim.
+	test("non-goals accepts a well-formed multi-line value and round-trips it verbatim", () => {
+		const value =
+			"- not doing a UI redesign | decider: touches components under src/ui\n" +
+			"- not adding new dependencies | decider: touches package.json";
+		setGoalState(S, { phase: "planning", outcome: "x", non_goals: value });
+		expect(readGoalState(S)!.non_goals).toBe(value);
+	});
+
+	// Case 4: whitespace-only value passes — the backfill path (BACKFILL_MARKER) must
+	// still fire, unaffected by this format gate.
+	test("non-goals accepts a whitespace-only value and still backfills to the marker", () => {
+		setGoalState(S, { phase: "planning", outcome: "x", non_goals: "   " });
+		expect(readGoalState(S)!.non_goals).toBe("   ");
+
+		const out = runCli("serialize-review-context");
+		const parsed = JSON.parse(out);
+		expect(parsed.non_goals).toBe(BACKFILL_MARKER);
 	});
 });
 
@@ -2518,15 +2567,15 @@ describe("serialize-requirements subcommand", () => {
 });
 
 // ---------------------------------------------------------------------------
-// serialize-review-context subcommand — Shared Contract 4-field JSON emitted
+// serialize-review-context subcommand — Shared Contract 5-field JSON emitted
 // for the code-review lane's finder step.
 // ---------------------------------------------------------------------------
 
 describe("serialize-review-context subcommand", () => {
-	// 4-slot wiring: each of the 4 contract fields is fed by a recognizably
+	// 5-slot wiring: each of the 5 contract fields is fed by a recognizably
 	// distinct per-field sentinel, proving the assembly wires each source into
 	// its documented field and not some other one.
-	test("wires distinct per-field sentinels into the correct 4 contract slots", () => {
+	test("wires distinct per-field sentinels into the correct 5 contract slots", () => {
 		setGoalState(S, {
 			phase: "planning",
 			outcome: "SENTINEL_OUTCOME",
@@ -2557,7 +2606,7 @@ describe("serialize-review-context subcommand", () => {
 	});
 
 	// Fully-blank state: every source for every field is blank, so every one
-	// of the 4 slots reads as the exact BACKFILL_MARKER literal.
+	// of the 5 slots reads as the exact BACKFILL_MARKER literal.
 	test("fully-blank state backfills every slot to BACKFILL_MARKER", () => {
 		setGoalState(S, { phase: "planning" });
 
@@ -2568,11 +2617,12 @@ describe("serialize-review-context subcommand", () => {
 		expect(parsed.description).toBe(BACKFILL_MARKER);
 		expect(parsed.project_context).toBe(BACKFILL_MARKER);
 		expect(parsed.requirements).toBe(BACKFILL_MARKER);
+		expect(parsed.non_goals).toBe(BACKFILL_MARKER);
 	});
 
-	// ROUND-TRIP: stdout parses to exactly the 4 contract keys, each holding
+	// ROUND-TRIP: stdout parses to exactly the 5 contract keys, each holding
 	// its correctly-sourced value.
-	test("stdout round-trips through JSON.parse to exactly the 4 contract keys", () => {
+	test("stdout round-trips through JSON.parse to exactly the 5 contract keys", () => {
 		setGoalState(S, {
 			phase: "planning",
 			outcome: "ship it",
@@ -2585,11 +2635,30 @@ describe("serialize-review-context subcommand", () => {
 		const parsed = JSON.parse(out);
 
 		expect(Object.keys(parsed).sort()).toEqual(
-			["description", "project_context", "requirements", "what_was_implemented"].sort(),
+			["description", "non_goals", "project_context", "requirements", "what_was_implemented"].sort(),
 		);
 		expect(parsed.what_was_implemented).toBe("ship it");
 		expect(parsed.description).toBe("in progress");
 		expect(parsed.project_context).toBe("no new deps\n\nno billing changes");
+	});
+
+	// `non_goals` is a standalone slot: its value must round-trip verbatim into
+	// its own key, and must NOT get folded into project_context alongside
+	// constraints/boundaries — that composite stays a 2-source join.
+	test("`non_goals` round-trips verbatim into its own key without polluting project_context", () => {
+		setGoalState(S, {
+			phase: "planning",
+			constraints: "no new deps",
+			boundaries: "no billing changes",
+			non_goals: "- SENTINEL_NON_GOALS: no i18n support | decider: touches locale files",
+		});
+
+		const out = runCli("serialize-review-context");
+		const parsed = JSON.parse(out);
+
+		expect(parsed.non_goals).toBe("- SENTINEL_NON_GOALS: no i18n support | decider: touches locale files");
+		expect(parsed.project_context).toBe("no new deps\n\nno billing changes");
+		expect(parsed.project_context).not.toContain("SENTINEL_NON_GOALS");
 	});
 });
 
