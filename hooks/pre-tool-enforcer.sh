@@ -39,6 +39,13 @@ fi
 # the resolved current-session ledger, and the deny JSON, both live in
 # hooks/write-guard-core.sh (write_guard_core_run) so a candidate merely
 # containing "session-ledger-" as a substring is no longer enough to arm.
+#
+# The same extracted candidate set also feeds a second, independent guard
+# (code-review-artifact-guard-core plan): identity-conditional protection for
+# the code-review completion-gate artifacts ($OMT_DIR/ultragoal-codereview-
+# <sid>.json, $OMT_DIR/goal-codereview-<sid>.json), allowing the write only
+# when the payload's top-level agent_type is exactly "code-reviewer" --
+# see the wiring below and hooks/write-guard-core.sh (codereview_guard_core_run).
 # =============================================================================
 _wg_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hooks/write-guard-core.sh
@@ -254,6 +261,29 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
         _wg_out=$(printf '%s' "$_wg_candidates" | write_guard_core_run "$_wg_omt_dir" "$_wg_sid")
         if [[ -n "$_wg_out" ]]; then
             printf '%s\n' "$_wg_out"
+            exit 0
+        fi
+
+        # Code-review artifact identity guard (code-review-artifact-guard-core
+        # plan): a SEPARATE gate from the unconditional ledger guard just
+        # above, run on the SAME _wg_candidates -- the two are different
+        # rule kinds (unconditional deny vs identity-conditional allow) so
+        # they must fire independently rather than one being nested inside
+        # the other. agent_type is read from the payload's TOP-LEVEL field
+        # (never tool_input, which an agent fully controls) via the same
+        # extract_json_field idiom used for tool_name above; "${...:-}"-style
+        # defaulting to "" keeps this set -u safe when the field is absent.
+        # Absence is the ordinary main-thread shape -- a main-thread tool
+        # call never carries agent_type at all -- so empty must DENY here,
+        # not allow: allowing on absence would let the orchestrator forge
+        # the code-review artifact itself with zero extra cost. The verdict
+        # wording and path/identity comparison are single-sourced in
+        # hooks/write-guard-core.sh (codereview_guard_core_run); this shim
+        # only extracts agent_type and forwards the same candidate set.
+        _wg_agent_type="$(extract_json_field "agent_type" "")"
+        _wg_cr_out=$(printf '%s' "$_wg_candidates" | codereview_guard_core_run "$_wg_omt_dir" "$_wg_sid" "$_wg_agent_type")
+        if [[ -n "$_wg_cr_out" ]]; then
+            printf '%s\n' "$_wg_cr_out"
             exit 0
         fi
     fi
