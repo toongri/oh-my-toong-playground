@@ -47,9 +47,9 @@ type CancelAction =
   | { type: 'MARK_CANCELLED' }
 
 // 순수 판정 — I/O 0. "무엇을 할지"만 값으로 반환. throw 또는 액션 목록.
-function decideCancel(order: OrderRow, now: Date): CancelAction[] {
-  if (order.orderStatus !== OrderStatus.CONFIRMED)
-    throw new OrderNotCancellableError(order.id, order.orderStatus)
+function decideCancel(order: Order, now: Date): CancelAction[] {
+  if (order.status !== OrderStatus.CONFIRMED)
+    throw new OrderNotCancellableError(order.id, order.status)
   return [
     { type: 'REVERSE_POINTS', amount: order.usedPoints },
     { type: 'CANCEL_PG', paymentKey: order.paymentKey, amount: order.paidAmount },
@@ -60,20 +60,12 @@ function decideCancel(order: OrderRow, now: Date): CancelAction[] {
 // 셸 = 서비스. 액션을 받아 '실행'만 한다. 데이터는 미리 로드해서 넘긴다.
 class OrderCancelService {
   static async cancelByCustomer(orderId: string, userId: string): Promise<void> {
-    const order = await OrderRepo.getOwned(orderId, userId)   // 셸이 미리 로드
+    const order = await OrderRepository.findByUserAndOrderId(userId, orderId)   // 셸이 미리 로드
     const actions = decideCancel(order, new Date())           // 순수 판정 — mock 없이 테스트
     for (const action of actions) await this.apply(action)    // 셸이 실행
   }
 }
 ```
-
-## 실제로 많이 쓰나 — 온도차가 실재한다
-
-- **프런트엔드: 주류.** Redux reducer(순수) + 부수효과는 thunk/saga, Elm의 `update`가 `Cmd`(할 일을 값으로)를 반환하고 런타임이 실행 — 정확히 같은 패턴의 UI 버전. 이름만 안 붙였을 뿐(값에 `Cmd`/`Effect`라고 이름).
-- **이벤트소싱/함수형 DDD 백엔드: 표준.** Marten(.NET) 공식 문서가 옛 OO 방식을 "강력히 비추천"하고 Decider를 권장으로 지목, 8.0에서 API 용어(`evolve`)까지 Chassaing 논문에 맞춰 바꿨다. Emmett(TS)·Equinox(F#, Jet.com 프로덕션)·Axon 5(Java)가 `decide`/`evolve`를 1급 타입으로 노출.
-- **일반 CRUD 백엔드(Rails/Django/Spring MVC, 그리고 이 레포): 소수파.** 컨트롤러/서비스가 트랜잭션 안에서 직접 ORM을 부르는 스타일이 여전히 압도적.
-
-즉 "이벤트소싱이나 함수형 DDD를 이미 선택한 팀 안에서는 표준, 평범한 서비스 코드에서는 드묾"이 정직한 답이다.
 
 ## 장단점
 
@@ -139,18 +131,18 @@ type CancelVerdict =
   | { ok: true; pointsToReverse: number }
 
 // 순수 판정 — Event[]가 아니라 얇은 Verdict. (패턴 1의 메서드 분리와 결합)
-function decideCancel(order: OrderRow, actor: 'customer' | 'admin', now: Date): CancelVerdict {
+function decideCancel(order: Order, actor: 'customer' | 'admin', now: Date): CancelVerdict {
   const allowed = actor === 'admin' ? ADMIN_CANCELLABLE_STATUSES : [OrderStatus.CONFIRMED]
-  if (!allowed.includes(order.orderStatus)) return { ok: false, reason: 'NOT_CANCELLABLE' }
+  if (!allowed.includes(order.status)) return { ok: false, reason: 'NOT_CANCELLABLE' }
   return { ok: true, pointsToReverse: order.usedPoints }
 }
 
 // 셸 = 기존 서비스. context는 지금도 하던 대로 미리 로드해서 넘긴다.
 class OrderCancelService {
   static async cancelByCustomer(orderId: string, userId: string): Promise<void> {
-    const order = await OrderRepo.getOwned(orderId, userId)         // 이미 하던 일
+    const order = await OrderRepository.findByUserAndOrderId(userId, orderId)         // 이미 하던 일
     const verdict = decideCancel(order, 'customer', new Date())     // 순수, mock 없이 테스트
-    if (!verdict.ok) throw new OrderNotCancellableError(orderId, order.orderStatus)
+    if (!verdict.ok) throw new OrderNotCancellableError(orderId, order.status)
     await this.apply(order, verdict)                               // 기존 실행 그대로
   }
 }
