@@ -323,7 +323,10 @@ describe("makeDecision", () => {
 				sessionId: "test-session",
 				started_at: new Date().toISOString(),
 				last_touched_at: new Date().toISOString(),
-				state: { phase: "in_progress" },
+				state: {
+					phase: "in_progress",
+					non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+				},
 			};
 			await writeFile(
 				join(omtDir, "deep-interview-active-state-test-session.json"),
@@ -381,7 +384,12 @@ describe("makeDecision", () => {
 					active: true,
 					started_at: fresh,
 					last_touched_at: fresh,
-					state: { phase: "in_progress", current_ambiguity: 0.1, threshold: 0.15 },
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 0.1,
+						threshold: 0.15,
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
 				}),
 			);
 
@@ -504,6 +512,7 @@ describe("makeDecision", () => {
 								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
 							],
 						},
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
 			);
@@ -536,6 +545,7 @@ describe("makeDecision", () => {
 								{ id: "c2", name: "C2", status: "deferred", clarity_scores: UNSCORED_DIMS },
 							],
 						},
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
 				}),
 			);
@@ -558,7 +568,12 @@ describe("makeDecision", () => {
 					active: true,
 					started_at: fresh,
 					last_touched_at: fresh,
-					state: { phase: "in_progress", current_ambiguity: 0.05, threshold: 0.15 },
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 0.05,
+						threshold: 0.15,
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
 				}),
 			);
 
@@ -586,7 +601,12 @@ describe("makeDecision", () => {
 					active: true,
 					started_at: fresh,
 					last_touched_at: fresh,
-					state: { phase: "in_progress", current_ambiguity: 1, threshold: null },
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 1,
+						threshold: null,
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
 				}),
 			);
 
@@ -613,7 +633,12 @@ describe("makeDecision", () => {
 					active: true,
 					started_at: fresh,
 					last_touched_at: fresh,
-					state: { phase: "in_progress", current_ambiguity: null, threshold: 0.15 },
+					state: {
+						phase: "in_progress",
+						current_ambiguity: null,
+						threshold: 0.15,
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
 				}),
 			);
 
@@ -644,6 +669,202 @@ describe("makeDecision", () => {
 								{ id: "c1", name: "C1", status: "active", clarity_scores: UNSCORED_DIMS },
 							],
 						},
+					},
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ lastAssistantMessage: "Interview complete. <deep-interview-done/>" }),
+			);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(false);
+			expect(result.reason ?? "").not.toContain("<deep-interview-continuation>");
+		});
+
+		// -------------------------------------------------------------------------
+		// UC13 (non-goal decider Closure Guard, SKILL.md:146) — a done-token cannot be
+		// honored while zero non-goals carry a non-empty decider. Unlike the topology
+		// check above (fail-OPEN on an absent field — Round 0 always sets it), this gate
+		// is fail-CLOSED: an absent/empty `non_goals` counts as 0 deciders, the exact
+		// state the categorical rule exists to block.
+		// -------------------------------------------------------------------------
+
+		it("UC13: done-token blocks when non_goals is absent, even with magnitude/topology converged", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 0.05,
+						threshold: 0.15,
+						topology: {
+							components: [
+								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
+							],
+						},
+						// non_goals intentionally absent.
+					},
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ lastAssistantMessage: "Interview complete. <deep-interview-done/>" }),
+			);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(true);
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<deep-interview-continuation>");
+		});
+
+		it("UC13: done-token blocks when non_goals is an empty array", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 0.05,
+						threshold: 0.15,
+						topology: {
+							components: [
+								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
+							],
+						},
+						non_goals: [],
+					},
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ lastAssistantMessage: "Interview complete. <deep-interview-done/>" }),
+			);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(true);
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<deep-interview-continuation>");
+		});
+
+		it("UC13: done-token blocks when every non_goals entry has a blank decider (blank does not count)", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 0.05,
+						threshold: 0.15,
+						topology: {
+							components: [
+								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
+							],
+						},
+						non_goals: [
+							{ item: "out-of-scope thing", decider: "" },
+							{ item: "another thing", decider: "   " },
+						],
+					},
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ lastAssistantMessage: "Interview complete. <deep-interview-done/>" }),
+			);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(true);
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<deep-interview-continuation>");
+		});
+
+		it("UC13: done-token cleans up when at least one non_goals entry has a non-empty decider", async () => {
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 0.05,
+						threshold: 0.15,
+						topology: {
+							components: [
+								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
+							],
+						},
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope in round 2" }],
+					},
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ lastAssistantMessage: "Interview complete. <deep-interview-done/>" }),
+			);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(false);
+			expect(result.reason ?? "").not.toContain("<deep-interview-continuation>");
+		});
+
+		it("UC13: a pristine seed with no non_goals is unaffected — falls through before this gate (no wedge on seed-only state)", async () => {
+			// Pristine seed: no `state` at all. Must fall through via the isPristine branch,
+			// not get caught by the done-token cross-check block (which requires detectDeepInterviewDone
+			// AND a live state — this exercises the no-token branch's own pristine fall-through).
+			const fresh = new Date().toISOString();
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+				}),
+			);
+
+			const result = makeDecision(createContext({ lastAssistantMessage: "some message without done token" }));
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(markerPath)).toBe(true);
+			expect(result).toEqual({ continue: true });
+		});
+
+		it("UC13: a TTL-stale state with no non_goals still cleans up on done-token (no wedge on a corpse)", async () => {
+			const stale = "2020-01-01T00:00:00+00:00";
+			const markerPath = join(omtDir, "deep-interview-active-state-test-session.json");
+			await writeFile(
+				markerPath,
+				JSON.stringify({
+					active: true,
+					started_at: stale,
+					last_touched_at: stale,
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 0.05,
+						threshold: 0.15,
+						topology: {
+							components: [
+								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
+							],
+						},
+						// non_goals absent — but staleness must still fall through to cleanup.
 					},
 				}),
 			);
