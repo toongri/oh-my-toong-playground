@@ -1,19 +1,10 @@
+# 코어 훅 4종은 루트 claude.yaml이 전역 등록한다 -- 여기 다시 쓰면 이중
+# 발동한다. 이 아래는 이 프로젝트 전용 훅만 남긴다.
 hooks:
-  UserPromptSubmit:
-    - component: keyword-detector.sh
-      timeout: 10
   PreToolUse:
-    - component: pre-tool-enforcer.sh
-      timeout: 5
     - component: pre-commit-gate.sh
       matcher: "Bash"
       timeout: 120
-  SessionStart:
-    - component: session-start.sh
-      timeout: 10
-  Stop:
-    - component: persistent-mode
-      timeout: 15
 
 config:
   enableAllProjectMcpServers: true
