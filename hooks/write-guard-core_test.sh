@@ -376,6 +376,32 @@ test_glob_dotfile_basename_star_denies() {
 
 CRSID="$SID"
 
+# =============================================================================
+# AC1-codereview -- byte-identical deny: codereview_guard_core_run emits
+# EXACTLY the golden deny JSON. Pinned here as a literal, deliberately
+# duplicated from write-guard-core.sh's _wg_core_codereview_deny_json, for the
+# same reason test_ac1_byte_identical_deny above pins the ledger guard's deny
+# JSON as a literal rather than reading it from the SUT: the deny reason is
+# the ONLY recovery information a blocked user sees (no bypass, no `ask`
+# escape hatch), so a silent swap onto the wrong SSOT variable -- e.g. onto
+# _wg_core_deny_json, the ledger guard's unrelated "Use hooks/omt-ledger.sh
+# append/now instead." wording -- must fail this test even though every
+# existing assertion here only checks for `"permissionDecision":"deny"` and
+# would stay green. Reading the expected string from the SUT would make this
+# check a tautology that drift can never fail.
+# =============================================================================
+test_ac_codereview_byte_identical_deny() {
+    local expected out
+    expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: this code-review artifact (ultragoal-codereview-*.json / goal-codereview-*.json) may only be written by the code-reviewer subagent, not the orchestrator."}}'
+    out=$(printf '%s\n' "$OD/ultragoal-codereview-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID'")
+    if [ "$out" = "$expected" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-byte-identical-deny: expected='$expected' out='$out'"
+        return 1
+    fi
+}
+
 # -----------------------------------------------------------------------------
 # AC2 -- ultragoal-codereview artifact, agent_type absent/empty -> DENY. Both
 # forms of "no identity" must fail closed; if either allowed, the orchestrator
@@ -582,6 +608,7 @@ main() {
     run_test test_glob_dotfile_literal_project_star_denies
     run_test test_glob_dotfile_basename_partial_star_denies
     run_test test_glob_dotfile_basename_star_denies
+    run_test test_ac_codereview_byte_identical_deny
     run_test test_codereview_guard_ultragoal_empty_agent_type_denies
     run_test test_codereview_guard_ultragoal_missing_agent_type_denies
     run_test test_codereview_guard_ultragoal_code_reviewer_allows
