@@ -824,7 +824,10 @@ hg_is_deny() {
 }
 
 hg_is_allow() {
-    ! hg_is_deny "$1"
+    # Positive assertion: the hook's actual allow output is `{"continue": true}`.
+    # `! hg_is_deny` would also pass empty stdout (an early-abort crash),
+    # misreading a crash as an allow.
+    echo "$1" | jq -e '.continue == true' > /dev/null 2>&1
 }
 
 hg_bash_json() {
