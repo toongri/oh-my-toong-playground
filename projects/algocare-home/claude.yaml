@@ -8,6 +8,19 @@ config:
   env:
     # 워크트리 공유 turbo 캐시(해시키드 경로 지정, 캐시 무효화 아님).
     TURBO_CACHE_DIR: "/Users/toong/Library/Caches/algocare-home/turbo"
+  # algocare-home 레포에 직접 커밋된(OMT 미배포) 미사용 슬래시 커맨드 8개를
+  # 모델-facing 목록에서 완전히 숨긴다. permissions.deny로는 호출만 막히고
+  # 목록엔 그대로 노출됨을 실측 확인했으며, skillOverrides: "off"만 목록에서 제거된다.
+  # (따옴표 없는 off는 YAML boolean false로 파싱되므로 반드시 문자열로 쓴다.)
+  skillOverrides:
+    add-tracking: "off"
+    cli: "off"
+    commit: "off"
+    fix: "off"
+    init: "off"
+    pr: "off"
+    search-docs: "off"
+    seo-routes: "off"
 
 hooks:
   PreToolUse:
