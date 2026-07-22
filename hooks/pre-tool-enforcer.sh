@@ -274,12 +274,14 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
         # nested under tool_input, which an agent fully controls -- mirroring
         # the Codex twin's extraction (hooks/codex-write-guard.sh:523). A
         # failed/absent extraction becomes "" (fail-closed), same as every
-        # other jq extraction in this file. Absence is the ordinary
-        # main-thread shape -- a main-thread tool call never carries
-        # agent_type at all -- so empty must DENY here, not allow: allowing
-        # on absence would let the orchestrator forge the code-review
-        # artifact itself with zero extra cost. The verdict wording and
-        # path/identity comparison are single-sourced in
+        # other jq extraction in this file. Absence must DENY here, not
+        # allow -- NOT because a main-thread tool call never carries
+        # agent_type (it can, on the main thread of a session started with
+        # `--agent <name>`), but because allowing on absence would let an
+        # ordinary orchestrator forge the code-review artifact itself with
+        # zero extra cost (fail-closed; see CLAUDE.md's Code-review artifact
+        # identity guard entry for the full trust-channel rationale). The
+        # verdict wording and path/identity comparison are single-sourced in
         # hooks/write-guard-core.sh (codereview_guard_core_run); this shim
         # only extracts agent_type and forwards the same candidate set.
         _wg_agent_type=$(echo "$input" | jq -r '.agent_type // empty' 2>/dev/null) || _wg_agent_type=""
