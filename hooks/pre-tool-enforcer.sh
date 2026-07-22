@@ -269,18 +269,20 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
         # above, run on the SAME _wg_candidates -- the two are different
         # rule kinds (unconditional deny vs identity-conditional allow) so
         # they must fire independently rather than one being nested inside
-        # the other. agent_type is read from the payload's TOP-LEVEL field
-        # (never tool_input, which an agent fully controls) via the same
-        # extract_json_field idiom used for tool_name above; "${...:-}"-style
-        # defaulting to "" keeps this set -u safe when the field is absent.
-        # Absence is the ordinary main-thread shape -- a main-thread tool
-        # call never carries agent_type at all -- so empty must DENY here,
-        # not allow: allowing on absence would let the orchestrator forge
-        # the code-review artifact itself with zero extra cost. The verdict
-        # wording and path/identity comparison are single-sourced in
+        # the other. agent_type is read via jq's ".agent_type" path, which
+        # binds ONLY the payload's TOP-LEVEL field -- never a same-named key
+        # nested under tool_input, which an agent fully controls -- mirroring
+        # the Codex twin's extraction (hooks/codex-write-guard.sh:523). A
+        # failed/absent extraction becomes "" (fail-closed), same as every
+        # other jq extraction in this file. Absence is the ordinary
+        # main-thread shape -- a main-thread tool call never carries
+        # agent_type at all -- so empty must DENY here, not allow: allowing
+        # on absence would let the orchestrator forge the code-review
+        # artifact itself with zero extra cost. The verdict wording and
+        # path/identity comparison are single-sourced in
         # hooks/write-guard-core.sh (codereview_guard_core_run); this shim
         # only extracts agent_type and forwards the same candidate set.
-        _wg_agent_type="$(extract_json_field "agent_type" "")"
+        _wg_agent_type=$(echo "$input" | jq -r '.agent_type // empty' 2>/dev/null) || _wg_agent_type=""
         _wg_cr_out=$(printf '%s' "$_wg_candidates" | codereview_guard_core_run "$_wg_omt_dir" "$_wg_sid" "$_wg_agent_type")
         if [[ -n "$_wg_cr_out" ]]; then
             printf '%s\n' "$_wg_cr_out"

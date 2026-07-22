@@ -1625,6 +1625,30 @@ test_ac4_codex_claude_deny_json_byte_identical() {
 }
 
 # =============================================================================
+# Parity pin (pre-tool-enforcer.sh top-level-only extraction fix): agent_type
+# == "code-reviewer" nested inside tool_input (never at top level) must still
+# DENY here, same as the Claude twin. This adapter already reads agent_type
+# via top-level-only `jq -r '.agent_type // empty'` (hooks/codex-write-
+# guard.sh:523), so it never picked up a nested value -- this test just pins
+# that invariant so the two adapters can't silently drift apart again.
+# =============================================================================
+test_codereview_nested_agent_type_in_tool_input_denies() {
+    new_sandbox
+    cr_paths
+    local tool_input out result=0
+
+    tool_input=$(jq -n --arg fp "$CR_ULTRAGOAL" '{file_path:$fp, agent_type:"code-reviewer"}')
+    out=$(codex_full_payload "write" "$tool_input" "cx" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED codereview-nested-agent-type: nested tool_input.agent_type must not forge identity -- expected deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1714,6 +1738,7 @@ main() {
     run_test test_codereview_negative_control_ultragoal_verdict_allows
     run_test test_codereview_negative_control_candidates_json_allows
     run_test test_ac4_codex_claude_deny_json_byte_identical
+    run_test test_codereview_nested_agent_type_in_tool_input_denies
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
