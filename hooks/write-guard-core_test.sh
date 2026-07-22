@@ -370,8 +370,10 @@ test_glob_dotfile_basename_star_denies() {
 # (code-review-artifact-guard-core plan) -- identity-conditional guard: unlike
 # write_guard_core_run's unconditional deny, this one allows the SAME guarded
 # path when agent_type=="code-reviewer" and denies it otherwise (including
-# absent/empty agent_type, which is the fail-closed default for main-thread
-# calls that never carry agent_type at all).
+# absent/empty agent_type -- fail-closed not because a main-thread call never
+# carries agent_type (it can, per CLAUDE.md's trust-channel note), but
+# because treating absence as allow would let the orchestrator forge the
+# artifact for free).
 # =============================================================================
 
 CRSID="$SID"
@@ -405,8 +407,8 @@ test_ac_codereview_byte_identical_deny() {
 # -----------------------------------------------------------------------------
 # AC2 -- ultragoal-codereview artifact, agent_type absent/empty -> DENY. Both
 # forms of "no identity" must fail closed; if either allowed, the orchestrator
-# could self-author the artifact from the main thread (no agent_type ever
-# arrives there) and the completion gate would open on a forged review.
+# could self-author the artifact from an ordinary main thread (which doesn't
+# carry agent_type) and the completion gate would open on a forged review.
 # -----------------------------------------------------------------------------
 test_codereview_guard_ultragoal_empty_agent_type_denies() {
     local out

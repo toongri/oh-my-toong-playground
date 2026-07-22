@@ -1097,8 +1097,8 @@ test_wg_l3_env_var_braced_denied() {
 # (m) regression (defect B) -- tee/rm/truncate only inspected the LAST
 # operand (awk '{print $NF}'), so `rm <ledger> <other>` extracted only
 # "<other>" and the real ledger operand went unchecked. Mirrors the
-# already-correct Codex extractor (_cwg_extract_shell_targets, hooks/codex-
-# write-guard.sh:167-169), which emits every non-option operand. Each DENY
+# already-correct Codex extractor (_cwg_extract_shell_targets in
+# hooks/codex-write-guard.sh), which emits every non-option operand. Each DENY
 # case below places the ledger as a NON-final operand; the control proves a
 # genuinely non-ledger multi-target command still passes.
 # =============================================================================
@@ -1364,8 +1364,8 @@ hg_write_json_agent() {
 }
 
 hg_write_json_no_agent() {
-    # $1 = file_path -- agent_type field entirely ABSENT, mirroring the real
-    # main-thread payload shape (a main-thread tool call never carries
+    # $1 = file_path -- agent_type field entirely ABSENT, mirroring an
+    # ordinary main-thread tool call's payload shape (it doesn't carry
     # agent_type at all; it is not present-but-empty).
     jq -n --arg fp "$1" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}'
 }

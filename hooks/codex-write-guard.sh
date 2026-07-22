@@ -493,7 +493,8 @@ esac
 
 # -----------------------------------------------------------------------------
 # Two independent guards run over the SAME candidates_text, mirroring the
-# Claude twin's wiring (hooks/pre-tool-enforcer.sh:260-288): an unconditional
+# Claude twin's wiring in hooks/pre-tool-enforcer.sh (the same
+# write_guard_core_run / codereview_guard_core_run dispatch): an unconditional
 # deny (write_guard_core_run) and a SEPARATE identity-conditional allow
 # (codereview_guard_core_run) -- different rule kinds, so neither is nested
 # inside the other. The ledger guard's output is now captured instead of
@@ -505,10 +506,12 @@ esac
 #
 # Codex-specific reason this is a positive whitelist, not a subagent check:
 # unlike Claude's payload, the Codex PreToolUse payload carries no agent_id
-# (or any other subagent-identity field) -- only turn_id/agent_transcript_path,
-# which identify a turn/transcript, not a caller role. There is no field here
-# to ask "is this a subagent" directly, so agent_type=="code-reviewer" is the
-# only trustworthy signal at all, not a design choice among alternatives.
+# (or any other subagent-identity field) -- turn_id and transcript_path
+# identify a turn/transcript, not a caller role (see the fixture provenance
+# note in hooks/codex-write-guard_test.sh for the full field list). There is
+# no field here to ask "is this a subagent" directly, so
+# agent_type=="code-reviewer" is the only trustworthy signal at all, not a
+# design choice among alternatives.
 # agent_type itself is read fail-closed: a failed/absent extraction becomes
 # "" via the `|| agent_type=""` idiom below (mirroring every other jq
 # extraction in this file), and codereview_guard_core_run denies on "" the

@@ -87,7 +87,8 @@ _wg_strip_dquotes() {
 # envsubst, which would let an arbitrary $(...) or other variable reference
 # inside an untrusted Bash tool_input.command execute. OMT_DIR, OMT_SESSION_ID,
 # HOME, and a leading ~ are expanded: OMT_DIR/OMT_SESSION_ID compose the
-# ledger path directly (write-guard-core.sh:29), and $_wg_omt_dir is always
+# ledger path directly (write_guard_core_run's ledger_path in
+# hooks/write-guard-core.sh), and $_wg_omt_dir is always
 # $HOME/.omt/<proj> -- so a $HOME- or ~-relative spelling of that same path
 # composes the identical ledger file and must be matched too, or it silently
 # bypasses the guard. PWD/CLAUDE_PROJECT_DIR/etc are still NOT expanded: they
@@ -156,7 +157,7 @@ _wg_extract_bash_targets() {
             # <other>` used to extract only "<other>" ($NF), leaving the
             # ledger operand unchecked whenever it wasn't the final argument.
             # Mirrors the already-correct Codex extractor
-            # (_cwg_extract_shell_targets, hooks/codex-write-guard.sh:167-169).
+            # (_cwg_extract_shell_targets in hooks/codex-write-guard.sh).
             echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             ;;
         dd)
@@ -272,7 +273,8 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
         # the other. agent_type is read via jq's ".agent_type" path, which
         # binds ONLY the payload's TOP-LEVEL field -- never a same-named key
         # nested under tool_input, which an agent fully controls -- mirroring
-        # the Codex twin's extraction (hooks/codex-write-guard.sh:523). A
+        # the Codex twin's own top-level-only agent_type extraction in
+        # hooks/codex-write-guard.sh. A
         # failed/absent extraction becomes "" (fail-closed), same as every
         # other jq extraction in this file. Absence must DENY here, not
         # allow -- NOT because a main-thread tool call never carries

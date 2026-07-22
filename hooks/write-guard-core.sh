@@ -43,9 +43,10 @@ _wg_core_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permiss
 # _wg_core_deny_json on purpose: this is not "don't touch an append-only
 # ledger directly" -- it is "this artifact may only be authored by the
 # code-reviewer subagent". Kept as a single source of truth here so both
-# platform shims that eventually call codereview_guard_core_run emit
-# byte-identical deny text (their own AC, in a later story) rather than
-# duplicating the wording.
+# platform shims that call codereview_guard_core_run emit byte-identical deny
+# text -- pinned by hooks/codex-write-guard_test.sh's
+# test_ac4_codex_claude_deny_json_byte_identical -- rather than duplicating
+# the wording.
 _wg_core_codereview_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: this code-review artifact (ultragoal-codereview-*.json / goal-codereview-*.json) may only be written by the code-reviewer subagent, not the orchestrator."}}'
 
 # _wg_core_normpath <path>
@@ -181,7 +182,11 @@ write_guard_core_run() {
 # "$OMT_DIR/goal-codereview-<sid>.json" (never a broader "*-codereview-*"
 # pattern -- see the file banner for why the guarded set stays exactly these
 # two). agent_type is the third positional arg; "${3:-}" so a caller that
-# omits it entirely (the common main-thread case) does not trip `set -u`.
+# omits it entirely -- as hooks/write-guard-core_test.sh's direct 2-arg calls
+# into this function do -- does not trip `set -u`. Both production shims
+# always pass a third arg (empty string when unresolved, never omitted), so
+# this default guards the test suite's calling convention, not a production
+# payload shape.
 #
 # Verdict: agent_type=="code-reviewer" ALLOWS unconditionally (the loop below
 # never even runs) -- any other value, including empty/absent, falls through
