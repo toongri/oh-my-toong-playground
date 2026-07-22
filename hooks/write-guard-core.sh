@@ -20,8 +20,12 @@
 #    PreToolUse hook can trust, since it comes from the harness's own
 #    subagent-dispatch payload, never from agent-controlled tool_input) and
 #    denied for every other agent_type INCLUDING absent/empty (fail-closed --
-#    a main-thread call never carries agent_type at all, so treating absence
-#    as allow would let the orchestrator forge the artifact itself).
+#    NOT because a main-thread call never carries agent_type (it can, on the
+#    main thread of a session started with `--agent <name>`), but because
+#    treating absence as allow would let an ordinary orchestrator forge the
+#    artifact itself at zero extra cost. See CLAUDE.md's Code-review artifact
+#    identity guard entry for the trust-channel rationale and the residual
+#    `--agent code-reviewer` risk this leaves open).
 #
 # The per-platform shim owns extraction of candidate target paths from its
 # own tool-input shape (Claude tool_input.file_path/.command; Codex
