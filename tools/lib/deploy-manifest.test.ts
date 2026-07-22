@@ -13,6 +13,15 @@ import {
 	type ManifestData,
 } from "./deploy-manifest.ts";
 
+// The manifest lives under the target's `.omt/` working dir, not at the deploy root.
+const manifestFile = (root: string) => join(root, ".omt", "sync-manifest.json");
+// Raw pre-seed (bypassing writeManifest) must create `.omt/` itself, since only
+// writeManifest mkdirs it in production.
+async function seedRawManifest(root: string, content: string): Promise<void> {
+	await mkdir(join(root, ".omt"), { recursive: true });
+	await writeFile(manifestFile(root), content);
+}
+
 describe("deploy-manifest 모듈", () => {
 	let tmpDir: string;
 
@@ -35,7 +44,7 @@ describe("deploy-manifest 모듈", () => {
 		it("returns null (BOOTSTRAP sentinel) when the manifest file is not valid JSON", async () => {
 			const deployRoot = join(tmpDir, "read-invalid-json");
 			await mkdir(deployRoot, { recursive: true });
-			await writeFile(join(deployRoot, ".sync-manifest.json"), "{not valid json");
+			await seedRawManifest(deployRoot, "{not valid json");
 
 			expect(await readManifest(deployRoot)).toBeNull();
 		});
@@ -43,10 +52,7 @@ describe("deploy-manifest 모듈", () => {
 		it("returns null when the parsed JSON is not a pair-key -> string[] map", async () => {
 			const deployRoot = join(tmpDir, "read-structurally-invalid");
 			await mkdir(deployRoot, { recursive: true });
-			await writeFile(
-				join(deployRoot, ".sync-manifest.json"),
-				JSON.stringify(["claude/skills", "not-a-map"]),
-			);
+			await seedRawManifest(deployRoot, JSON.stringify(["claude/skills", "not-a-map"]));
 
 			expect(await readManifest(deployRoot)).toBeNull();
 		});
@@ -54,10 +60,7 @@ describe("deploy-manifest 모듈", () => {
 		it("returns null when a pair's value is not an array of strings", async () => {
 			const deployRoot = join(tmpDir, "read-bad-values");
 			await mkdir(deployRoot, { recursive: true });
-			await writeFile(
-				join(deployRoot, ".sync-manifest.json"),
-				JSON.stringify({ "claude/skills": [1, 2, 3] }),
-			);
+			await seedRawManifest(deployRoot, JSON.stringify({ "claude/skills": [1, 2, 3] }));
 
 			expect(await readManifest(deployRoot)).toBeNull();
 		});
@@ -66,20 +69,20 @@ describe("deploy-manifest 모듈", () => {
 			const deployRoot = join(tmpDir, "read-valid");
 			await mkdir(deployRoot, { recursive: true });
 			const data: ManifestData = { "claude/skills": ["a", "b"] };
-			await writeFile(join(deployRoot, ".sync-manifest.json"), JSON.stringify(data));
+			await seedRawManifest(deployRoot, JSON.stringify(data));
 
 			expect(await readManifest(deployRoot)).toEqual(data);
 		});
 	});
 
 	describe("writeManifest", () => {
-		it("writes to {deployRoot}/.sync-manifest.json", async () => {
+		it("writes to {deployRoot}/.omt/sync-manifest.json", async () => {
 			const deployRoot = join(tmpDir, "write-basic");
 			await mkdir(deployRoot, { recursive: true });
 
 			await writeManifest(deployRoot, { "claude/skills": ["a"] });
 
-			const raw = await readFile(join(deployRoot, ".sync-manifest.json"), "utf8");
+			const raw = await readFile(manifestFile(deployRoot), "utf8");
 			expect(JSON.parse(raw)).toEqual({ "claude/skills": ["a"] });
 		});
 
@@ -92,7 +95,7 @@ describe("deploy-manifest 모듈", () => {
 				"claude/agents": ["beta", "alpha"],
 			});
 
-			const raw = await readFile(join(deployRoot, ".sync-manifest.json"), "utf8");
+			const raw = await readFile(manifestFile(deployRoot), "utf8");
 			const parsed = JSON.parse(raw);
 			// Key order itself must be deterministic (sorted), not just structurally equal —
 			// the same data keyed in the opposite insertion order must serialize identically
@@ -201,7 +204,7 @@ describe("deploy-manifest 모듈", () => {
 				"utf8",
 			);
 
-			// No .sync-manifest.json exists yet -> BOOTSTRAP.
+			// No .omt/sync-manifest.json exists yet -> BOOTSTRAP.
 			await reconcilePairManifest(deployRoot, "claude", "skills", ["skill-a"]);
 
 			const foreignBytesAfter = await readFile(
@@ -224,7 +227,7 @@ describe("deploy-manifest 모듈", () => {
 			// correctly as BOOTSTRAP, it must survive because bootstrap deletes nothing.
 			await mkdir(join(categoryDir, "old-entry"), { recursive: true });
 			await mkdir(join(categoryDir, "plannotator-compound"), { recursive: true });
-			await writeFile(join(deployRoot, ".sync-manifest.json"), "{ this is not json");
+			await seedRawManifest(deployRoot, "{ this is not json");
 
 			await reconcilePairManifest(deployRoot, "claude", "skills", ["skill-a"]);
 
@@ -242,10 +245,7 @@ describe("deploy-manifest 모듈", () => {
 			await writeFile(join(categoryDir, "a", "SKILL.md"), "# a - must survive");
 			await mkdir(join(categoryDir, "b"), { recursive: true });
 			await mkdir(join(categoryDir, "plannotator-compound"), { recursive: true });
-			await writeFile(
-				join(deployRoot, ".sync-manifest.json"),
-				JSON.stringify({ "claude/skills": ["a", "b"] }),
-			);
+			await seedRawManifest(deployRoot, JSON.stringify({ "claude/skills": ["a", "b"] }));
 
 			await reconcilePairManifest(deployRoot, "claude", "skills", ["a"]);
 
@@ -261,8 +261,8 @@ describe("deploy-manifest 모듈", () => {
 		it("preserves other pairs' manifest entries untouched by this reconcile call", async () => {
 			const deployRoot = join(tmpDir, "reconcile-preserve-other-pairs");
 			await mkdir(join(deployRoot, ".claude", "skills", "x"), { recursive: true });
-			await writeFile(
-				join(deployRoot, ".sync-manifest.json"),
+			await seedRawManifest(
+				deployRoot,
 				JSON.stringify({ "claude/skills": ["x"], "codex/scripts": ["y"] }),
 			);
 
@@ -279,8 +279,8 @@ describe("deploy-manifest 모듈", () => {
 		it("removes only the named pair key, leaving sibling pairs intact", async () => {
 			const deployRoot = join(tmpDir, "remove-pair-basic");
 			await mkdir(deployRoot, { recursive: true });
-			await writeFile(
-				join(deployRoot, ".sync-manifest.json"),
+			await seedRawManifest(
+				deployRoot,
 				JSON.stringify({
 					"codex/skills": ["a", "b"],
 					"claude/skills": ["c"],
@@ -303,7 +303,7 @@ describe("deploy-manifest 모듈", () => {
 			await removeManifestPair(deployRoot, "codex", "skills");
 
 			expect(
-				stat(join(deployRoot, ".sync-manifest.json")).then(
+				stat(manifestFile(deployRoot)).then(
 					() => true,
 					() => false,
 				),
@@ -313,12 +313,12 @@ describe("deploy-manifest 모듈", () => {
 		it("is a no-op (no write, no throw) when the manifest file is corrupt (bootstrap contract)", async () => {
 			const deployRoot = join(tmpDir, "remove-pair-corrupt");
 			await mkdir(deployRoot, { recursive: true });
-			await writeFile(join(deployRoot, ".sync-manifest.json"), "{ not valid json");
+			await seedRawManifest(deployRoot, "{ not valid json");
 
 			await removeManifestPair(deployRoot, "codex", "skills");
 
 			// The corrupt bytes must survive untouched — never coerced/rewritten.
-			const raw = await readFile(join(deployRoot, ".sync-manifest.json"), "utf8");
+			const raw = await readFile(manifestFile(deployRoot), "utf8");
 			expect(raw).toBe("{ not valid json");
 		});
 	});
