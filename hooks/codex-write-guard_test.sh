@@ -1391,12 +1391,13 @@ test_own_file_paths_key_non_ledger_allows() {
 
 # =============================================================================
 # Code-review artifact identity guard (agent_type wiring task): covers the
-# codereview_guard_core_run wiring (hooks/write-guard-core.sh:173) added at
-# the tail of hooks/codex-write-guard.sh, mirroring the Claude twin's wiring
-# (hooks/pre-tool-enforcer.sh:260-288). Reproduces the same 3-case matrix
-# (agent_type absent -> deny, ="code-reviewer" -> allow, ="sisyphus-junior"
-# -> deny) across BOTH the apply_patch envelope route and the
-# exec_command/shell_command route.
+# codereview_guard_core_run wiring (see codereview_guard_core_run in
+# hooks/write-guard-core.sh) added at the tail of hooks/codex-write-guard.sh,
+# mirroring the Claude twin's wiring in hooks/pre-tool-enforcer.sh (the same
+# write_guard_core_run / codereview_guard_core_run dispatch). Reproduces the
+# same 3-case matrix (agent_type absent -> deny, ="code-reviewer" -> allow,
+# ="sisyphus-junior" -> deny) across BOTH the apply_patch envelope route and
+# the exec_command/shell_command route.
 #
 # FIXTURE PROVENANCE (HAND-CRAFTED, not machine-captured): the eleven
 # top-level field names carried by codex_full_payload below (session_id
@@ -1416,9 +1417,11 @@ test_own_file_paths_key_non_ledger_allows() {
 # but load-bearing for every hook invocation in this suite already -- every
 # prior test threads it through the same way for OMT_DIR git-derivation). A
 # 5th positional arg supplies agent_type's value; omitting it entirely
-# (4-arg call) reproduces the real main-thread payload shape -- the
-# agent_type KEY absent altogether, not present-with-empty-string, since a
-# main-thread tool call never carries the field at all.
+# (4-arg call) reproduces the common main-thread payload shape -- the
+# agent_type KEY absent altogether, not present-with-empty-string, since an
+# ordinary main-thread tool call doesn't carry the field (per CLAUDE.md's
+# trust-channel note, a `--agent <name>` main-thread session is the
+# exception).
 codex_full_payload() {
     local tool_name="$1" tool_input="$2" sid="$3" cwd="$4"
     if [ "$#" -ge 5 ]; then
@@ -1559,8 +1562,8 @@ test_codereview_shell_command_agent_type_sisyphus_junior_denies() {
 # the code-review identity guard does NOT cover at all (ultragoal-verdict-
 # <sid>.json, code-review/<sid>/candidates.json) must still ALLOW. If this
 # breaks, the normal write path for these unrelated artifacts is dead with
-# no bypass available -- codereview_guard_core_run's anchor-match is scoped
-# to exactly the two guarded paths (write-guard-core.sh:176-178), so a
+# no bypass available -- codereview_guard_core_run's anchor-match (in
+# hooks/write-guard-core.sh) is scoped to exactly the two guarded paths, so a
 # regression here would mean the guard widened past its intended scope.
 # =============================================================================
 test_codereview_negative_control_ultragoal_verdict_allows() {
@@ -1642,7 +1645,7 @@ test_ac4_codex_claude_deny_json_byte_identical() {
 # == "code-reviewer" nested inside tool_input (never at top level) must still
 # DENY here, same as the Claude twin. This adapter already reads agent_type
 # via top-level-only `jq -r '.agent_type // empty'` (hooks/codex-write-
-# guard.sh:523), so it never picked up a nested value -- this test just pins
+# guard.sh), so it never picked up a nested value -- this test just pins
 # that invariant so the two adapters can't silently drift apart again.
 # =============================================================================
 test_codereview_nested_agent_type_in_tool_input_denies() {
