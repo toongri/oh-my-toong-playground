@@ -970,3 +970,66 @@ describe("decider-gate: Phase 4 self-review gains a 5th check for non-goal decid
 		expect(region).not.toMatch(/not every Non-Goals bullet carries a decider/);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// PR #194 Codex P1: the non-goal decider Closure Guard gains an "enforced in
+// code" sentence symmetric with the topology guard's (SKILL.md:144), plus a
+// set-nongoals CLI call instruction near where the interviewer secures a
+// non-goal decider -- so the interview records into state.non_goals what the
+// Stop-hook enforces downstream.
+// (must FAIL before the corresponding SKILL.md edits -- RED)
+// ---------------------------------------------------------------------------
+
+describe("non-goal decider Closure Guard gains a code-enforcement sentence, symmetric with the topology guard", () => {
+	const guardStart = skillMd.indexOf("**Closure Guard (non-goal decider precondition):**");
+	const guardEnd = skillMd.indexOf("1. Reflect the residual ambiguity", guardStart);
+	const section = guardStart === -1 ? "" : skillMd.slice(guardStart, guardEnd === -1 ? undefined : guardEnd);
+
+	test("non-goal decider Closure Guard section exists (sanity)", () => {
+		expect(guardStart).toBeGreaterThan(-1);
+		expect(guardEnd).toBeGreaterThan(guardStart);
+	});
+
+	test('the section states the precondition "is enforced in code", matching the topology guard\'s phrasing', () => {
+		expect(section).toContain("enforced in code");
+	});
+
+	test("the section names the Stop-hook refusing the done token while zero non-goals carry a non-empty decider", () => {
+		expect(section).toContain("Stop-hook refuses a `<deep-interview-done/>` token");
+		expect(section).toContain("state.non_goals");
+	});
+
+	test("the code-enforcement claim is independent of the ambiguity reading, like the topology guard's", () => {
+		expect(section).toContain("independent of the ambiguity reading");
+	});
+
+	test("emitting the token early loops the interview back, not ends it (matches topology guard's closing sentence)", () => {
+		expect(section).toContain("Emitting the token early does not end the interview — it loops you back.");
+	});
+
+	test("the topology guard's own enforced-in-code sentence is untouched", () => {
+		expect(skillMd).toContain(
+			"This precondition is enforced in code, not just here: the Stop-hook refuses a `<deep-interview-done/>` token while any active component still carries an unscored dimension, independent of the ambiguity reading and of whichever threshold this run resolved. Emitting the token early does not end the interview — it loops you back.",
+		);
+	});
+});
+
+describe("interviewer is instructed to call set-nongoals when a non-goal decider is secured", () => {
+	const guardStart = skillMd.indexOf("**Closure Guard (non-goal decider precondition):**");
+	const guardEnd = skillMd.indexOf("1. Reflect the residual ambiguity", guardStart);
+	const section = guardStart === -1 ? "" : skillMd.slice(guardStart, guardEnd === -1 ? undefined : guardEnd);
+
+	test("the set-nongoals CLI call is present near the Closure Guard", () => {
+		expect(section).toContain("set-nongoals");
+		expect(section).toContain("--json");
+	});
+
+	test("the call shape matches the CLI's documented item/decider JSON shape", () => {
+		expect(section).toContain('"item":');
+		expect(section).toContain('"decider":');
+	});
+
+	test("the instruction notes set-nongoals is a full-replace, so the complete accumulated list must be passed each call", () => {
+		expect(section.toLowerCase()).toContain("full-replace");
+	});
+});
