@@ -1467,6 +1467,27 @@ test_cr10_write_code_review_candidates_no_agent_type_allowed() {
     hg_is_allow "$out" || { echo "ASSERTION FAILED CR10: code-review candidates write must stay allow (no agent_type). Got: $out"; return 1; }
 }
 
+hg_write_json_nested_agent() {
+    # $1 = file_path, $2 = agent_type value placed INSIDE tool_input (an
+    # agent-controlled field), with NO top-level agent_type at all --
+    # mirrors an orchestrator forging identity via the only field an
+    # ordinary tool call lets it set freely.
+    jq -n --arg fp "$1" --arg at "$2" \
+        '{tool_name: "Write", tool_input: {file_path: $fp, content: "x", agent_type: $at}}'
+}
+
+# CR-11 -- agent_type == "code-reviewer" nested inside tool_input (never at
+# top level) -> must still DENY. The guard's trust boundary is "top-level
+# agent_type only"; tool_input is agent-controlled, so a value planted there
+# must not forge identity. This is the regression case for the extraction
+# widening this task fixes.
+test_cr11_write_ultragoal_codereview_nested_agent_type_denied() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_write_json_nested_agent "$path" "code-reviewer")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED CR11: nested tool_input.agent_type must not forge identity -- expected deny. Got: $out"; return 1; }
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -1572,6 +1593,7 @@ main() {
     run_test test_cr8_write_goal_codereview_code_reviewer_allowed
     run_test test_cr9_write_ultragoal_verdict_no_agent_type_allowed
     run_test test_cr10_write_code_review_candidates_no_agent_type_allowed
+    run_test test_cr11_write_ultragoal_codereview_nested_agent_type_denied
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
