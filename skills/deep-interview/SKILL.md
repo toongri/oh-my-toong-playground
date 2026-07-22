@@ -145,6 +145,15 @@ This precondition is enforced in code, not just here: the Stop-hook refuses a `<
 
 **Closure Guard (non-goal decider precondition):** also check, before running steps 1-2 below, whether the interview has secured at least one non-goal carrying a decider — an excluded item paired with a way to tell whether a given finding falls inside it, the same `{excluded item} | decider: {...}` shape the Phase 4 template's Non-Goals section requires. If zero non-goal-with-decider pairs exist yet, convergence cannot be declared either — loop back into the interview loop and ask for one, regardless of what the ambiguity reading says: this is a categorical precondition, not a term folded into the ambiguity arithmetic. The check is existence-only — it asks whether a decider was stated, never how precise it is; grading precision here would turn a mechanical gate into an interpretation dispute.
 
+This precondition is enforced in code too, symmetric with the topology guard above: the Stop-hook refuses a `<deep-interview-done/>` token while `state.non_goals` holds zero entries with a non-empty decider, independent of the ambiguity reading. Emitting the token early does not end the interview — it loops you back. Record each confirmed non-goal/decider pair into state as soon as it is secured — during the Non-Goal Decider question (Step 2b) or here at the Closure Guard — so the hook can read it:
+
+```bash
+bun ${CLAUDE_SKILL_DIR}/scripts/deep-interview-state.ts set-nongoals \
+  --json '[{"item":"<excluded item>","decider":"<how to tell a finding belongs to it>"}]'
+```
+
+`set-nongoals` is a full-replace, same convention as `set-topology` — pass the complete accumulated list of non-goal/decider pairs on every call, not just the newest one.
+
 1. Reflect the residual ambiguity that remains — name any unresolved gap, weak dimension, or open design point, however small, instead of declaring the interview simply "done".
 2. Ask the user, via `AskUserQuestion`, whether to continue (keep clarifying requirements, or keep resolving design branches) or proceed to the next phase.
 
