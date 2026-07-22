@@ -1601,19 +1601,32 @@ test_codereview_negative_control_candidates_json_allows() {
 # read of the core's constant, which would be tautological) against
 # equivalent payloads (agent_type absent, targeting the ultragoal-codereview
 # artifact) under the SAME sid/OMT_DIR so both resolve to the identical
-# guarded path, then string-compares stdout.
+# guarded path, then string-compares stdout. The equality compare alone would
+# pass vacuously if both hooks failed to run (empty stdout on both sides), so
+# each leg is asserted to be an actual deny -- capturing its own exit code
+# per the assert_allow contract above -- before the two are compared.
 # =============================================================================
 test_ac4_codex_claude_deny_json_byte_identical() {
     new_sandbox
     cr_paths
     local codex_tool_input codex_out claude_out result=0
+    local codex_rc=0 claude_rc=0
 
     codex_tool_input=$(jq -n --arg fp "$CR_ULTRAGOAL" '{file_path:$fp}')
-    codex_out=$(codex_full_payload "write" "$codex_tool_input" "cx" "$GITDIR" | run_hook)
+    codex_out=$(codex_full_payload "write" "$codex_tool_input" "cx" "$GITDIR" | run_hook) || codex_rc=$?
 
     claude_out=$(jq -n --arg fp "$CR_ULTRAGOAL" --arg cwd "$GITDIR" \
         '{tool_name:"Write", tool_input:{file_path:$fp}, session_id:"cx", cwd:$cwd}' \
-        | env -u OMT_DIR -u CODEX_THREAD_ID OMT_SESSION_ID=cx HOME="$SBX" bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+        | env -u OMT_DIR -u CODEX_THREAD_ID OMT_SESSION_ID=cx HOME="$SBX" bash "$SCRIPT_DIR/pre-tool-enforcer.sh") || claude_rc=$?
+
+    if [ "$codex_rc" -ne 0 ] || ! printf '%s' "$codex_out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED ac4-byte-identical: codex leg did not deny (exit $codex_rc, output '$codex_out')"
+        result=1
+    fi
+    if [ "$claude_rc" -ne 0 ] || ! printf '%s' "$claude_out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED ac4-byte-identical: claude leg did not deny (exit $claude_rc, output '$claude_out')"
+        result=1
+    fi
 
     if [ "$codex_out" != "$claude_out" ]; then
         echo "ASSERTION FAILED ac4-byte-identical: codex output '$codex_out' != claude output '$claude_out'"
