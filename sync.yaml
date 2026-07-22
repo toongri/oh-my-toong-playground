@@ -23,7 +23,6 @@ skills:
       platforms: [claude]
     - component: pin-setup
       platforms: [claude]
-    - mock-interview
     - scan-pdf-to-notes
     - component: meeting-notes
       platforms: [claude]
