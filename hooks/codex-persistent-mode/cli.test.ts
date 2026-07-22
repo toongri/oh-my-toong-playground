@@ -263,7 +263,14 @@ describe("codex-persistent-mode cli", () => {
 					sessionId: sid,
 					started_at: new Date().toISOString(),
 					last_touched_at: new Date().toISOString(),
-					state: { phase: "in_progress" },
+					state: {
+						phase: "in_progress",
+						// non-goal decider Closure Guard (SKILL.md:146): a done-token is
+						// refused while zero non-goals carry a non-empty decider, so the
+						// allow-stop path requires at least one recorded decider — mirrors
+						// decision.test.ts UC13 "cleans up when … non-empty decider".
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope in round 2" }],
+					},
 				}),
 			);
 			const { exitCode, stdout } = await runCli(
