@@ -366,6 +366,196 @@ test_glob_dotfile_basename_star_denies() {
 }
 
 # =============================================================================
+# codereview_guard_core_run <OMT_DIR> <session_id> <agent_type> tests
+# (code-review-artifact-guard-core plan) -- identity-conditional guard: unlike
+# write_guard_core_run's unconditional deny, this one allows the SAME guarded
+# path when agent_type=="code-reviewer" and denies it otherwise (including
+# absent/empty agent_type, which is the fail-closed default for main-thread
+# calls that never carry agent_type at all).
+# =============================================================================
+
+CRSID="$SID"
+
+# -----------------------------------------------------------------------------
+# AC2 -- ultragoal-codereview artifact, agent_type absent/empty -> DENY. Both
+# forms of "no identity" must fail closed; if either allowed, the orchestrator
+# could self-author the artifact from the main thread (no agent_type ever
+# arrives there) and the completion gate would open on a forged review.
+# -----------------------------------------------------------------------------
+test_codereview_guard_ultragoal_empty_agent_type_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/ultragoal-codereview-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID' ''")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-ultragoal-empty-agent-type: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_codereview_guard_ultragoal_missing_agent_type_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/ultragoal-codereview-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-ultragoal-missing-agent-type: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# AC3 -- positive control: agent_type=code-reviewer -> ALLOW. If this breaks,
+# the guard has degenerated into an unconditional deny and the real
+# code-reviewer subagent can no longer write its own artifact.
+# -----------------------------------------------------------------------------
+test_codereview_guard_ultragoal_code_reviewer_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/ultragoal-codereview-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID' 'code-reviewer'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-ultragoal-code-reviewer-allows: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# AC4 -- a DIFFERENT subagent type (sisyphus-junior) -> DENY. Catches the
+# whitelist widening into "any subagent passes" instead of exactly
+# code-reviewer.
+# -----------------------------------------------------------------------------
+test_codereview_guard_ultragoal_sisyphus_junior_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/ultragoal-codereview-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID' 'sisyphus-junior'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-ultragoal-sisyphus-junior: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# AC5 -- goal-codereview parity: same three verdicts (deny/allow/deny) for the
+# goal-flavored artifact path.
+# -----------------------------------------------------------------------------
+test_codereview_guard_goal_missing_agent_type_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/goal-codereview-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-goal-missing-agent-type: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_codereview_guard_goal_code_reviewer_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/goal-codereview-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID' 'code-reviewer'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-goal-code-reviewer-allows: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+test_codereview_guard_goal_sisyphus_junior_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/goal-codereview-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID' 'sisyphus-junior'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-goal-sisyphus-junior: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# AC6 -- glob candidate (e.g. `rm "$OMT_DIR"/ultragoal-codereview-*.json`)
+# with agent_type absent -> DENY, reusing _wg_core_pathwise_glob_match. Not an
+# EXACT match but still destroys the current-session artifact if it runs.
+# -----------------------------------------------------------------------------
+test_codereview_guard_glob_candidate_missing_agent_type_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/ultragoal-codereview-*.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-glob-missing-agent-type: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# AC7 -- non-canonical spelling (./ segment) with agent_type absent -> DENY,
+# reusing _wg_core_normpath so a non-canonical candidate cannot bypass the
+# anchor match.
+# -----------------------------------------------------------------------------
+test_codereview_guard_dot_segment_missing_agent_type_denies() {
+    local out
+    out=$(printf '%s\n' "$OD/./ultragoal-codereview-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-dot-segment-missing-agent-type: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# AC8 -- false-positive negative control: ultragoal-verdict-<sid>.json is a
+# DIFFERENT, self-attested artifact the orchestrator itself is meant to write
+# from the main thread. Denying it with agent_type absent would break the
+# normal completion-gate path with no bypass or `ask` escape hatch available.
+# -----------------------------------------------------------------------------
+test_codereview_guard_verdict_artifact_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/ultragoal-verdict-$CRSID.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-verdict-artifact-allows: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# AC9 -- false-positive negative control: the code-review pipeline's own
+# durable-sink output (skills/code-review/scripts/durable-sink.ts) at
+# $OMT_DIR/code-review/<sid>/candidates.json is outside the guarded set.
+# Denying it with agent_type absent would break the review pipeline itself.
+# -----------------------------------------------------------------------------
+test_codereview_guard_durable_sink_candidates_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/code-review/$CRSID/candidates.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-durable-sink-candidates-allows: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# AC10 -- another session's ultragoal-codereview artifact, agent_type absent
+# -> ALLOW. The guard protects only the CURRENT session's artifact via exact
+# sid match.
+# -----------------------------------------------------------------------------
+test_codereview_guard_other_session_allows() {
+    local out
+    out=$(printf '%s\n' "$OD/ultragoal-codereview-other-sid.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED codereview-other-session-allows: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -392,6 +582,18 @@ main() {
     run_test test_glob_dotfile_literal_project_star_denies
     run_test test_glob_dotfile_basename_partial_star_denies
     run_test test_glob_dotfile_basename_star_denies
+    run_test test_codereview_guard_ultragoal_empty_agent_type_denies
+    run_test test_codereview_guard_ultragoal_missing_agent_type_denies
+    run_test test_codereview_guard_ultragoal_code_reviewer_allows
+    run_test test_codereview_guard_ultragoal_sisyphus_junior_denies
+    run_test test_codereview_guard_goal_missing_agent_type_denies
+    run_test test_codereview_guard_goal_code_reviewer_allows
+    run_test test_codereview_guard_goal_sisyphus_junior_denies
+    run_test test_codereview_guard_glob_candidate_missing_agent_type_denies
+    run_test test_codereview_guard_dot_segment_missing_agent_type_denies
+    run_test test_codereview_guard_verdict_artifact_allows
+    run_test test_codereview_guard_durable_sink_candidates_allows
+    run_test test_codereview_guard_other_session_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

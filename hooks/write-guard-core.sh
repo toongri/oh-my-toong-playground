@@ -1,18 +1,32 @@
 #!/bin/bash
 # =============================================================================
-# Write-Guard Core (codex-ledger-parity plan, TODO 2): the shared full-path
-# anchor-match + byte-identical deny core for the ledger write-guard, sourced
-# by both hooks/pre-tool-enforcer.sh (Claude) and the Codex PreToolUse hook.
-# Full-path EXACT match on the resolved current-session ledger, PLUS a glob
-# candidate (contains *, ?, or [) whose pattern matches that resolved ledger
-# path -- NEVER a bare "session-ledger-" substring (that loose match is
-# hooks/pre-tool-enforcer.sh's superseded _wg_ledger_target_in_segment
-# classifier, hooks/pre-tool-enforcer.sh:42-77).
+# Write-Guard Core: the shared full-path anchor-match write-guard logic,
+# sourced by both hooks/pre-tool-enforcer.sh (Claude) and the Codex
+# PreToolUse hook. Holds TWO guard kinds, both built on the same
+# _wg_core_normpath / _wg_core_pathwise_glob_match primitives below:
+#
+# 1. Unconditional deny (codex-ledger-parity plan, TODO 2) --
+#    write_guard_core_run. Full-path EXACT match on the resolved
+#    current-session ledger, PLUS a glob candidate (contains *, ?, or [)
+#    whose pattern matches that resolved ledger path -- NEVER a bare
+#    "session-ledger-" substring (that loose match is
+#    hooks/pre-tool-enforcer.sh's superseded _wg_ledger_target_in_segment
+#    classifier, hooks/pre-tool-enforcer.sh:42-77).
+#
+# 2. Identity-conditional allow (code-review-artifact-guard-core plan) --
+#    codereview_guard_core_run. Same anchor-match machinery, but the verdict
+#    also depends on a third argument, agent_type: the guarded path is
+#    allowed ONLY when agent_type=="code-reviewer" (the one value a
+#    PreToolUse hook can trust, since it comes from the harness's own
+#    subagent-dispatch payload, never from agent-controlled tool_input) and
+#    denied for every other agent_type INCLUDING absent/empty (fail-closed --
+#    a main-thread call never carries agent_type at all, so treating absence
+#    as allow would let the orchestrator forge the artifact itself).
 #
 # The per-platform shim owns extraction of candidate target paths from its
 # own tool-input shape (Claude tool_input.file_path/.command; Codex
-# apply_patch envelope) and OMT_DIR/session_id resolution -- this core only
-# does the exact-path comparison and emits the deny JSON.
+# apply_patch envelope) and OMT_DIR/session_id/agent_type resolution -- this
+# core only does the exact-path comparison and emits the deny JSON.
 # =============================================================================
 
 # Single source of truth for the deny JSON: both platform shims
@@ -20,6 +34,15 @@
 # Codex) source this core and call write_guard_core_run rather than building
 # their own deny text -- keep both platforms' deny output identical (AC5).
 _wg_core_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the durable session ledger (session-ledger-*.md). Use hooks/omt-ledger.sh append/now instead."}}'
+
+# Deny JSON for codereview_guard_core_run below. A DIFFERENT sentence from
+# _wg_core_deny_json on purpose: this is not "don't touch an append-only
+# ledger directly" -- it is "this artifact may only be authored by the
+# code-reviewer subagent". Kept as a single source of truth here so both
+# platform shims that eventually call codereview_guard_core_run emit
+# byte-identical deny text (their own AC, in a later story) rather than
+# duplicating the wording.
+_wg_core_codereview_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: this code-review artifact (ultragoal-codereview-*.json / goal-codereview-*.json) may only be written by the code-reviewer subagent, not the orchestrator."}}'
 
 # _wg_core_normpath <path>
 # Pure LEXICAL path normalization (os.path.normpath semantics): collapse
@@ -139,6 +162,50 @@ write_guard_core_run() {
             *[*?[]*)
                 if _wg_core_pathwise_glob_match "$norm_candidate" "$ledger_path"; then
                     printf '%s\n' "$_wg_core_deny_json"
+                    return 0
+                fi
+                ;;
+        esac
+    done
+    return 0
+}
+
+# codereview_guard_core_run <OMT_DIR> <session_id> <agent_type>
+# Reads newline-separated already-absolutized candidate target paths on
+# stdin, same input convention as write_guard_core_run above. Guards exactly
+# two current-session paths: "$OMT_DIR/ultragoal-codereview-<sid>.json" and
+# "$OMT_DIR/goal-codereview-<sid>.json" (never a broader "*-codereview-*"
+# pattern -- see the file banner for why the guarded set stays exactly these
+# two). agent_type is the third positional arg; "${3:-}" so a caller that
+# omits it entirely (the common main-thread case) does not trip `set -u`.
+#
+# Verdict: agent_type=="code-reviewer" ALLOWS unconditionally (the loop below
+# never even runs) -- any other value, including empty/absent, falls through
+# to the same anchor-match logic as write_guard_core_run (EXACT match after
+# _wg_core_normpath, OR a glob candidate that _wg_core_pathwise_glob_match
+# resolves onto either guarded path) and DENIES on a match.
+codereview_guard_core_run() {
+    local omt_dir="$1"
+    local session_id="$2"
+    local agent_type="${3:-}"
+    if [ "$agent_type" = "code-reviewer" ]; then
+        return 0
+    fi
+    local ultragoal_path goal_path
+    ultragoal_path="$(_wg_core_normpath "$omt_dir/ultragoal-codereview-$session_id.json")"
+    goal_path="$(_wg_core_normpath "$omt_dir/goal-codereview-$session_id.json")"
+    local candidate norm_candidate
+    while IFS= read -r candidate; do
+        norm_candidate="$(_wg_core_normpath "$candidate")"
+        if [ "$norm_candidate" = "$ultragoal_path" ] || [ "$norm_candidate" = "$goal_path" ]; then
+            printf '%s\n' "$_wg_core_codereview_deny_json"
+            return 0
+        fi
+        case "$norm_candidate" in
+            *[*?[]*)
+                if _wg_core_pathwise_glob_match "$norm_candidate" "$ultragoal_path" \
+                    || _wg_core_pathwise_glob_match "$norm_candidate" "$goal_path"; then
+                    printf '%s\n' "$_wg_core_codereview_deny_json"
                     return 0
                 fi
                 ;;
