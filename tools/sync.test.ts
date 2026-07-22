@@ -413,7 +413,7 @@ describe("syncCategory", () => {
 		);
 
 		// The manifest now records both entries under claude/agents.
-		const manifestPath = path.join(targetPath, ".sync-manifest.json");
+		const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
 		const manifestAfterFirst = JSON.parse(await readFile(manifestPath));
 		expect(manifestAfterFirst["claude/agents"].sort()).toEqual(["explore", "oracle"]);
 
@@ -883,7 +883,7 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 
 		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
 
-		const manifestPath = path.join(targetPath, ".sync-manifest.json");
+		const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
 		const manifest = JSON.parse(await readFile(manifestPath));
 		expect(manifest["agents/skills"]).toEqual(["new-skill"]);
 		expect(manifest["codex/skills"]).toBeUndefined();
@@ -957,7 +957,7 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 
 		await syncCategory(context, "skills", syncYaml, adapters, rootDir, targetPath);
 
-		const manifestPath = path.join(targetPath, ".sync-manifest.json");
+		const manifestPath = path.join(targetPath, ".omt", "sync-manifest.json");
 		const manifest = JSON.parse(await readFile(manifestPath));
 		expect(manifest["gemini/skills"]).toEqual(["some-skill"]);
 		expect(manifest["agents/skills"]).toBeUndefined();
@@ -975,9 +975,11 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		await writeFile(newFile, "# Old Skill\n");
 
 		// A stale codex/skills manifest key left over from before the .agents/skills
-		// routing change — must be pruned once cleanup succeeds.
+		// routing change — must be pruned once cleanup succeeds. Raw pre-seed must
+		// create `.omt/` itself (only writeManifest mkdirs it in production).
+		await fs.mkdir(path.join(targetPath, ".omt"), { recursive: true });
 		await writeFile(
-			path.join(targetPath, ".sync-manifest.json"),
+			path.join(targetPath, ".omt", "sync-manifest.json"),
 			JSON.stringify({ "codex/skills": ["old-skill"] }),
 		);
 
@@ -1010,7 +1012,7 @@ describe("syncCategory — codex skills manifest+backup routing", () => {
 		expect(await exists(backedUp)).toBe(true);
 
 		// Stale codex/skills manifest key pruned; agents/skills reflects this run.
-		const manifest = JSON.parse(await readFile(path.join(targetPath, ".sync-manifest.json")));
+		const manifest = JSON.parse(await readFile(path.join(targetPath, ".omt", "sync-manifest.json")));
 		expect(manifest["codex/skills"]).toBeUndefined();
 		expect(manifest["agents/skills"]).toEqual(["new-skill", "old-skill"]);
 	});

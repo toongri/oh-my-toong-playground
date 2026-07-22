@@ -1,13 +1,15 @@
 import fs from "fs/promises";
 import path from "path";
 
-const MANIFEST_FILENAME = ".sync-manifest.json";
+// Lives under the target's `.omt/` working dir (not littering the deploy root)
+// so the target repo can gitignore all OMT-generated bookkeeping with one entry.
+const MANIFEST_RELPATH = path.join(".omt", "sync-manifest.json");
 
 /** Manifest shape: `"<platform>/<category>"` -> the entry names OMT deployed there. */
 export type ManifestData = Record<string, string[]>;
 
 function manifestPath(deployRoot: string): string {
-	return path.join(deployRoot, MANIFEST_FILENAME);
+	return path.join(deployRoot, MANIFEST_RELPATH);
 }
 
 function pairKey(platform: string, category: string): string {
@@ -23,7 +25,7 @@ function isValidManifestShape(value: unknown): value is ManifestData {
 }
 
 /**
- * Read the deploy manifest at `{deployRoot}/.sync-manifest.json`.
+ * Read the deploy manifest at `{deployRoot}/.omt/sync-manifest.json`.
  *
  * Returns `null` — the BOOTSTRAP sentinel — when the file is absent, unreadable
  * for any reason, not valid JSON, or parses to something other than a pair-key
@@ -58,7 +60,10 @@ export async function writeManifest(deployRoot: string, data: ManifestData): Pro
 	for (const key of Object.keys(data).sort()) {
 		sorted[key] = [...data[key]].sort();
 	}
-	await fs.writeFile(manifestPath(deployRoot), JSON.stringify(sorted, null, 2) + "\n", "utf8");
+	const target = manifestPath(deployRoot);
+	// `.omt/` may not exist yet at this target — writeFile does not create parents.
+	await fs.mkdir(path.dirname(target), { recursive: true });
+	await fs.writeFile(target, JSON.stringify(sorted, null, 2) + "\n", "utf8");
 }
 
 /** Orphans = names OMT deployed previously that are not in this run's declared set. */
