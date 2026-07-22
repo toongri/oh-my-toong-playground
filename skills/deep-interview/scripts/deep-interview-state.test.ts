@@ -581,6 +581,60 @@ describe("deep-interview-state CLI main()", () => {
 	});
 
 	// ---------------------------------------------------------------------------
+	// non-goal decider Closure Guard — state layer (SKILL.md:146). Mirrors the
+	// topology/set-topology pattern immediately above: full-replace writer,
+	// backward-compatible absent-field read, existence-only validation.
+	// ---------------------------------------------------------------------------
+
+	test("set-nongoals round-trips item/decider pairs verbatim via get", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "non-goal round-trip test" });
+		const nonGoals = [
+			{ item: "multi-tenant support", decider: "PRD explicitly excludes it for v1" },
+			{ item: "mobile app", decider: "user confirmed web-only scope in Round 0" },
+		];
+		run(`set-nongoals --json '${JSON.stringify(nonGoals)}'`);
+		const state = rawState();
+		const nested = state["state"] as Record<string, unknown>;
+		expect(nested["non_goals"]).toEqual(nonGoals);
+	});
+
+	test("set-nongoals refuses an item with an empty item field; exits non-zero", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "refuse empty item" });
+		expect(() =>
+			run(`set-nongoals --json '${JSON.stringify([{ item: "", decider: "some decider" }])}'`),
+		).toThrow();
+	});
+
+	test("set-nongoals refuses an item with an empty decider field; exits non-zero", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "refuse empty decider" });
+		expect(() =>
+			run(`set-nongoals --json '${JSON.stringify([{ item: "some item", decider: "" }])}'`),
+		).toThrow();
+	});
+
+	test("set-nongoals allows storing an empty array — 0 recorded non-goals is a real state for the hook to judge, not an unmeasured one", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "empty non-goals" });
+		run(`set-nongoals --json '${JSON.stringify([])}'`);
+		const state = rawState();
+		const nested = state["state"] as Record<string, unknown>;
+		expect(nested["non_goals"]).toEqual([]);
+	});
+
+	test("non_goals absent on legacy state (never called set-nongoals) reads without throwing", () => {
+		writeSeed();
+		initDeepInterviewState(SID, { initial_idea: "legacy state, never called set-nongoals" });
+		expect(() => run("get")).not.toThrow();
+		const out = run("get");
+		const parsed = JSON.parse(out) as Record<string, unknown>;
+		const nested = parsed["state"] as Record<string, unknown>;
+		expect(nested["non_goals"]).toBeUndefined();
+	});
+
+	// ---------------------------------------------------------------------------
 	// topology-floor-evolution Stage 2: computeAmbiguityFloor + write clamp
 	// (UC2, UC3, UC7 — see topology-floor-evolution.md)
 	// ---------------------------------------------------------------------------

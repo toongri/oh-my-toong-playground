@@ -38,6 +38,12 @@
  *          reset to all 6 dimensions null (intent/outcome/scope/constraints/success/context)
  *          — no caller may seed a score through this path (per-component scoring lands
  *          in a later story). `status` defaults to "active" when omitted.
+ *   set-nongoals --json '[{"item":"<text>","decider":"<text>"}]'
+ *          Locks the non-goal decider Closure Guard's item/decider pairs into
+ *          state.non_goals (SKILL.md:146). Full-replace, same convention as
+ *          set-topology. Unlike set-topology, an empty array IS allowed — "0 recorded
+ *          non-goals" is itself the signal a downstream hook gates on. Refuses any
+ *          item with a blank `item` or `decider` (existence check only, not precision).
  *   get    Print the state JSON, plus a derived `migration_status` field
  *          ("legacy_missing" | "current") from computeTopologyMigrationStatus,
  *          so the resume path (get/adopt) can detect a pre-topology state.
@@ -145,6 +151,18 @@ export interface TopologyComponentInput {
 }
 
 /**
+ * A single non-goal declaration paired with the decider that puts it out of scope
+ * (deep-interview SKILL.md "non-goal decider Closure Guard"). Both fields are
+ * caller-supplied free text — setNonGoals checks only that each is non-empty
+ * (existence), never whether the decider is actually a good one (precision is a
+ * human/reviewer judgment call, not this validator's).
+ */
+export interface NonGoalDecider {
+	item: string;
+	decider: string;
+}
+
+/**
  * An established fact's disputed lifecycle (topology-floor-evolution Stage 3, Entity
  * lifecycle diagram). Every edge names the CLI flag that drives it — an edge with no
  * driver is an unreachable state, not a documented one:
@@ -229,6 +247,15 @@ export interface DeepInterviewStateContent {
 	 * entries where disputed=true and superseded_by is not yet set.
 	 */
 	established_facts?: EstablishedFact[];
+	/**
+	 * Non-goal / decider pairs (deep-interview SKILL.md "non-goal decider Closure
+	 * Guard"). Absent on states written before this field existed — backward-compatible:
+	 * a reader must treat a missing/undefined non_goals the same as "none recorded yet",
+	 * never throw. Written exclusively via setNonGoals (full-replace, never partial).
+	 * An empty array is a valid write, distinct from absent — it lets a downstream hook
+	 * judge "0 non-empty deciders recorded" as a real measured state, not an unmeasured one.
+	 */
+	non_goals?: NonGoalDecider[];
 }
 
 export interface DeepInterviewState {
@@ -762,6 +789,55 @@ export function setTopology(sessionId: string, components: TopologyComponentInpu
 }
 
 /**
+ * Locks the interview's non-goal / decider pairs into state.non_goals (deep-interview
+ * SKILL.md "non-goal decider Closure Guard"). Full-replace semantics — every call
+ * overwrites the whole list, same convention as setTopology above.
+ *
+ * Unlike setTopology, an EMPTY list is allowed, not refused: "0 recorded non-goals" is
+ * itself the fact a downstream hook needs to see to gate on, so rejecting an empty
+ * array here would hide that signal instead of exposing it.
+ *
+ * Validation is existence-only — each item's `item` and `decider` must be a non-empty
+ * string. It does NOT judge whether a decider is actually a good one; precision is a
+ * human/reviewer call, and encoding it here would turn this into an interpretation
+ * dispute the CLI can't resolve. Refuses a non-array input or any item missing a
+ * non-empty item/decider. Absent file → self-heals via ensureSeed (same idiom as
+ * init/update/setTopology above).
+ */
+export function setNonGoals(sessionId: string, items: NonGoalDecider[]): void {
+	if (!Array.isArray(items)) {
+		throw new Error("set-nongoals: refused — non_goals must be an array");
+	}
+	items.forEach((item, i) => {
+		if (typeof item.item !== "string" || item.item.trim() === "") {
+			throw new Error(`set-nongoals: refused — item ${i} is missing a non-empty item`);
+		}
+		if (typeof item.decider !== "string" || item.decider.trim() === "") {
+			throw new Error(`set-nongoals: refused — item ${i} is missing a non-empty decider`);
+		}
+	});
+
+	ensureSeed("deep-interview", sessionId);
+	const path = resolveStatePath(sessionId);
+	const prior = readRaw(path);
+	if (prior === null) {
+		throw new Error(
+			`deep-interview-state: no state file found at "${path}". ` +
+				"Either the seed is missing (re-invoke the deep-interview skill) " +
+				"or this session was adopted by another session.",
+		);
+	}
+	const priorState: DeepInterviewStateContent = isRecord(prior["state"])
+		? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- opaque JSON boundary: state file content is written exclusively by this module's own writers (never externally supplied); trusted structural pass-through
+			(prior["state"] as DeepInterviewStateContent)
+		: {};
+	const newState: DeepInterviewStateContent = { ...priorState, non_goals: items };
+
+	const next = mergeWithHeartbeat(prior, { state: newState });
+	writeFileNoCreate(path, JSON.stringify(next, null, 2));
+}
+
+/**
  * Reads the raw state. Returns null if absent or malformed.
  */
 export function readDeepInterviewState(sessionId: string): Record<string, unknown> | null {
@@ -1042,6 +1118,26 @@ function main(): void {
 			process.stderr.write(`deep-interview-state set-topology: ${String(e)}\n`);
 			process.exit(1);
 		}
+	} else if (subcommand === "set-nongoals") {
+		const jsonArg = str(args["json"]);
+		if (!jsonArg) {
+			process.stderr.write("set-nongoals: --json <array> is required\n");
+			process.exit(1);
+		}
+		let parsed: NonGoalDecider[];
+		try {
+			parsed = JSON.parse(jsonArg);
+			if (!Array.isArray(parsed)) throw new Error("expected JSON array");
+		} catch (e) {
+			process.stderr.write(`set-nongoals: invalid JSON — ${String(e)}\n`);
+			process.exit(1);
+		}
+		try {
+			setNonGoals(sessionId, parsed);
+		} catch (e) {
+			process.stderr.write(`deep-interview-state set-nongoals: ${String(e)}\n`);
+			process.exit(1);
+		}
 	} else if (subcommand === "get") {
 		const result = readDeepInterviewState(sessionId);
 		const output =
@@ -1079,7 +1175,7 @@ function main(): void {
 		}
 	} else {
 		process.stderr.write(
-			"Usage: deep-interview-state.ts <init|update|set-topology|get|list-others|adopt> [options]\n" +
+			"Usage: deep-interview-state.ts <init|update|set-topology|set-nongoals|get|list-others|adopt> [options]\n" +
 				"  init   --initial-idea <text> [--interview-id <id>] [--type greenfield|brownfield]\n" +
 				"         [--current-phase <phase>] [--threshold <n>] [--codebase-context <text>]\n" +
 				"  update [--current-phase <phase>] [--current-ambiguity <n>]\n" +
@@ -1095,6 +1191,8 @@ function main(): void {
 				"         [--dispute-fact <id>]  (marks an established_fact disputed; raises the ambiguity\n" +
 				"                                floor +0.10 on the next --current-ambiguity write)\n" +
 				'  set-topology --json \'[{"id":"<id>","name":"<name>","status":"active|deferred"}]\'\n' +
+				'  set-nongoals --json \'[{"item":"<text>","decider":"<text>"}]\'\n' +
+				"                                (non-goal decider Closure Guard; full-replace; empty array allowed)\n" +
 				"  get\n" +
 				"  list-others\n" +
 				"  adopt --src <sid>\n",
