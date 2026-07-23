@@ -187,12 +187,17 @@ export function buildAugmentedCommand(
 	const denySkills = Array.isArray(entity.deny) ? entity.deny.map((name) => String(name)) : [];
 	if (denySkills.length > 0) {
 		if (cliType === "codex") {
-			const entries = denySkills.map((name) => `{name="${name}",enabled=false}`).join(",");
+			// splitCommand (the only re-tokenizer between here and the spawned CLI — see
+			// spawnWorkers/worker.ts) treats an unescaped '"' as a quote-mode toggle and drops
+			// it from the token. Escape so the quote survives as a literal byte in the TOML value.
+			const entries = denySkills.map((name) => `{name=\\"${name}\\",enabled=false}`).join(",");
 			parts.push("-c", `skills.config=[${entries}]`);
 		} else if (cliType === "claude") {
 			const skillOverrides: Record<string, string> = {};
 			for (const name of denySkills) skillOverrides[name] = "off";
-			parts.push("--settings", JSON.stringify({ skillOverrides }));
+			// Same reason as codex above: escape every quote in the JSON so splitCommand's
+			// re-tokenization doesn't strip them and produce invalid JSON on the receiving end.
+			parts.push("--settings", JSON.stringify({ skillOverrides }).replace(/"/g, '\\"'));
 		} else if (cliType === "opencode") {
 			const skill: Record<string, string> = { "*": "allow" };
 			for (const name of denySkills) skill[name] = "deny";

@@ -7,6 +7,7 @@ import os from "os";
 
 import type { JobConfig, CmdResultsHooks, ResumeMemberOpts } from "./generic-job.ts";
 import type { RunOneTurnOpts } from "./worker-utils.ts";
+import { splitCommand } from "./worker-utils.ts";
 import {
 	detectCliType,
 	buildAugmentedCommand,
@@ -320,16 +321,80 @@ describe("buildAugmentedCommand", () => {
 		expect(resultEmpty.env.CLAUDECODE).toBe("");
 	});
 
-	test("codex: deny translates to -c skills.config with enabled=false entries", () => {
+	test("codex: deny translates to -c skills.config with enabled=false entries (quotes escaped for transport)", () => {
 		const result = buildAugmentedCommand({ command: "codex exec", deny: ["a", "b"] }, "codex");
 		expect(result.command).toContain(
-			'-c skills.config=[{name="a",enabled=false},{name="b",enabled=false}]',
+			'-c skills.config=[{name=\\"a\\",enabled=false},{name=\\"b\\",enabled=false}]',
 		);
 	});
 
-	test("claude: deny translates to --settings skillOverrides off", () => {
+	test("claude: deny translates to --settings skillOverrides off (quotes escaped for transport)", () => {
 		const result = buildAugmentedCommand({ command: "claude -p", deny: ["a"] }, "claude");
-		expect(result.command).toContain('--settings {"skillOverrides":{"a":"off"}}');
+		expect(result.command).toContain('--settings {\\"skillOverrides\\":{\\"a\\":\\"off\\"}}');
+	});
+
+	// ---------------------------------------------------------------------------
+	// Round-trip identity: buildAugmentedCommand's output must survive splitCommand
+	// re-tokenization unchanged, because spawnWorkers hands augmented.command to a
+	// worker as a --command argv, and the worker re-tokenizes it with splitCommand
+	// before spawning (no second shell parse exists anywhere in this pipeline).
+	// ---------------------------------------------------------------------------
+
+	test("round-trip: codex deny -c token survives splitCommand with quotes intact", () => {
+		const result = buildAugmentedCommand({ command: "codex exec", deny: ["a", "b"] }, "codex");
+		const tokens = splitCommand(result.command);
+		expect(tokens).not.toBeNull();
+		const cIndex = tokens!.indexOf("-c");
+		expect(cIndex).toBeGreaterThanOrEqual(0);
+		expect(tokens![cIndex + 1]).toBe(
+			'skills.config=[{name="a",enabled=false},{name="b",enabled=false}]',
+		);
+	});
+
+	test("round-trip: claude deny --settings token survives splitCommand as valid JSON", () => {
+		const result = buildAugmentedCommand({ command: "claude -p", deny: ["a"] }, "claude");
+		const tokens = splitCommand(result.command);
+		expect(tokens).not.toBeNull();
+		const settingsIndex = tokens!.indexOf("--settings");
+		expect(settingsIndex).toBeGreaterThanOrEqual(0);
+		const parsed = JSON.parse(tokens![settingsIndex + 1]);
+		expect(parsed.skillOverrides.a).toBe("off");
+	});
+
+	test("round-trip: codex deny with 2+ names has every quote pair escaped, not partial", () => {
+		const result = buildAugmentedCommand(
+			{ command: "codex exec", deny: ["alpha", "beta", "gamma"] },
+			"codex",
+		);
+		const tokens = splitCommand(result.command);
+		expect(tokens).not.toBeNull();
+		const cIndex = tokens!.indexOf("-c");
+		expect(tokens![cIndex + 1]).toBe(
+			'skills.config=[{name="alpha",enabled=false},{name="beta",enabled=false},{name="gamma",enabled=false}]',
+		);
+	});
+
+	test("round-trip: claude deny with 2+ names has every quote pair escaped, not partial", () => {
+		const result = buildAugmentedCommand({ command: "claude -p", deny: ["alpha", "beta"] }, "claude");
+		const tokens = splitCommand(result.command);
+		expect(tokens).not.toBeNull();
+		const settingsIndex = tokens!.indexOf("--settings");
+		const parsed = JSON.parse(tokens![settingsIndex + 1]);
+		expect(parsed.skillOverrides).toEqual({ alpha: "off", beta: "off" });
+	});
+
+	test("round-trip: opencode deny bypasses splitCommand entirely — env-only, no command trace", () => {
+		const result = buildAugmentedCommand({ command: "opencode run", deny: ["a"] }, "opencode");
+		expect(result.command).toBe("opencode run");
+		expect(result.command).not.toContain("a");
+		expect(result.env.OPENCODE_CONFIG_CONTENT).toBeTruthy();
+		const tokens = splitCommand(result.command);
+		expect(tokens).toEqual(["opencode", "run"]);
+	});
+
+	test("round-trip: no deny leaves splitCommand output unchanged from pre-escaping behavior", () => {
+		const result = buildAugmentedCommand({ command: "claude -p", model: "opus" }, "claude");
+		expect(splitCommand(result.command)).toEqual(["claude", "-p", "--model", "opus"]);
 	});
 
 	test("opencode: deny translates to OPENCODE_CONFIG_CONTENT env with permission.skill deny + wildcard allow", () => {
@@ -2079,6 +2144,34 @@ describe("cmdResumeMember", () => {
 			CLAUDE_CODE_EFFORT_LEVEL: "xhigh",
 			CUSTOM: "val",
 		});
+	});
+
+	test("round-trip: resume re-tokenizes a persisted deny command with quotes intact", async () => {
+		const entityDir = path.join(jobDir, "members", "codexmember");
+		const augmented = buildAugmentedCommand({ command: "codex exec", deny: ["a", "b"] }, "codex");
+		writeMemberStatus(entityDir, {
+			member: "codexmember",
+			state: "done",
+			sessionID: "ses_y",
+			resume_count: 0,
+			command: augmented.command,
+		});
+
+		let capturedOpts: RunOneTurnOpts | null = null;
+		const resumeOneTurnFn = async (_sid: string, opts: RunOneTurnOpts) => {
+			capturedOpts = opts;
+			return { state: "done" as const, sessionID: "ses_y", text: "", exitCode: 0 };
+		};
+
+		await cmdResumeMember(jobDir, "codexmember", "follow up", membersConfig, {
+			driverFactory: () => makeMockDriver(),
+			resumeOneTurnFn,
+		});
+
+		expect(capturedOpts).not.toBeNull();
+		expect(capturedOpts!.args).toContain(
+			'skills.config=[{name="a",enabled=false},{name="b",enabled=false}]',
+		);
 	});
 
 	test("cmdResumeMember restores workerEnv", async () => {
