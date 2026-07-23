@@ -40,6 +40,12 @@ config:
   env:
     CLAUDE_CODE_AUTO_COMPACT_WINDOW: "400000"
     CLAUDE_AFK_TIMEOUT_MS: "2147483647"
+    # 루트(main, depth 0) 아래 허용되는 서브에이전트 세대 수. 2.1.218 기본값
+    # 1은 "서브에이전트가 서브에이전트를 못 부름"이라, code-reviewer 안에서
+    # chunk-reviewer를 팬아웃하는 식의 2세대 디스패치가 통째로 막힌다.
+    # 2 = main -> sub -> sub 까지 허용, 3세대부터 차단.
+    # codex.yaml의 agents.max_depth와 같은 축이고 계산 기준도 같다(둘 다 루트=0).
+    CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: "2"
   attribution:
     commit: ""
     pr: ""
