@@ -319,6 +319,40 @@ describe("buildAugmentedCommand", () => {
 		const resultEmpty = buildAugmentedCommand({ command: "claude -p", env: {} }, "claude");
 		expect(resultEmpty.env.CLAUDECODE).toBe("");
 	});
+
+	test("codex: deny translates to -c skills.config with enabled=false entries", () => {
+		const result = buildAugmentedCommand({ command: "codex exec", deny: ["a", "b"] }, "codex");
+		expect(result.command).toContain(
+			'-c skills.config=[{name="a",enabled=false},{name="b",enabled=false}]',
+		);
+	});
+
+	test("claude: deny translates to --settings skillOverrides off", () => {
+		const result = buildAugmentedCommand({ command: "claude -p", deny: ["a"] }, "claude");
+		expect(result.command).toContain('--settings {"skillOverrides":{"a":"off"}}');
+	});
+
+	test("opencode: deny translates to OPENCODE_CONFIG_CONTENT env with permission.skill deny + wildcard allow", () => {
+		const result = buildAugmentedCommand({ command: "opencode run", deny: ["a"] }, "opencode");
+		expect(result.env.OPENCODE_CONFIG_CONTENT).toBeTruthy();
+		const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+		expect(parsed.permission.skill.a).toBe("deny");
+		expect(parsed.permission.skill["*"]).toBe("allow");
+	});
+
+	test("deny absent or empty is byte-identical to not passing deny at all (codex/claude/opencode)", () => {
+		for (const [command, cliType] of [
+			["codex exec", "codex"],
+			["claude -p", "claude"],
+			["opencode run", "opencode"],
+		] as const) {
+			const withoutDeny = buildAugmentedCommand({ command }, cliType);
+			const withUndefinedDeny = buildAugmentedCommand({ command, deny: undefined }, cliType);
+			const withEmptyDeny = buildAugmentedCommand({ command, deny: [] }, cliType);
+			expect(withUndefinedDeny).toEqual(withoutDeny);
+			expect(withEmptyDeny).toEqual(withoutDeny);
+		}
+	});
 });
 
 // ---------------------------------------------------------------------------
