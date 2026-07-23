@@ -65,3 +65,15 @@ chunk-review:
     # No-op with the angle members above (no `claude` member to exclude); kept
     # for compatibility if a claude-hosted angle is added later.
     exclude_chairman_from_members: false
+    deny:
+      # Self-recursion fan-out guard: each dispatched angle runs `codex exec`,
+      # so without this it could itself invoke a review/council skill and
+      # spawn another fan-out beneath this one. Blocks the 3 skills that can
+      # start a review/council job. `code-review` has no codex-side SKILL.md
+      # today (not deployed to codex in any of its 4 scopes) — declared
+      # anyway so this guard self-activates the day `code-review`'s
+      # `platforms` config adds codex, instead of silently staying a no-op.
+      skills:
+        - orchestrate-review
+        - code-review
+        - agent-council
