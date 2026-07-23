@@ -19,6 +19,7 @@ import {
 import {
 	type JobConfig,
 	assertMembersOrExit,
+	assertDenyEnforceable,
 	computeStatus as frameworkComputeStatus,
 	buildUiPayload as frameworkBuildUiPayload,
 	spawnWorkers as frameworkSpawnWorkers,
@@ -98,6 +99,43 @@ interface CouncilConfig {
 	};
 }
 
+// ---------------------------------------------------------------------------
+// deny.skills format validation — settings.deny.skills, if declared, must be an
+// array of non-empty (non-whitespace-only) strings. This validates FORMAT only;
+// skill-name reality is not checked here (see spec non-goal — a later stage's
+// enforceability test covers typos by reading the real YAML). No baseline deny
+// list is injected here: YAML remains the sole source.
+// ---------------------------------------------------------------------------
+
+function assertDenySkillsShape(settings: Record<string, unknown>, configPath: string): void {
+	const deny = settings.deny;
+	if (isNullish(deny)) return;
+	if (!isPlainObject(deny)) {
+		exitWithError(`Invalid config in ${configPath}: 'council.settings.deny' must be a mapping/object`);
+	}
+	const skills = deny.skills;
+	if (isNullish(skills)) return;
+	if (!Array.isArray(skills)) {
+		exitWithError(
+			`Invalid config in ${configPath}: 'council.settings.deny.skills' must be a list/array of non-empty strings`,
+		);
+	}
+	for (const skill of skills) {
+		if (typeof skill !== "string" || skill.trim() === "") {
+			exitWithError(
+				`Invalid config in ${configPath}: 'council.settings.deny.skills' must contain only non-empty strings, got: ${JSON.stringify(skill)}`,
+			);
+		}
+	}
+}
+
+/** Read settings.deny.skills, already format-validated by assertDenySkillsShape, as string[]. */
+function extractDenySkills(settings: Record<string, unknown>): string[] {
+	const deny = settings.deny;
+	if (!isPlainObject(deny) || !Array.isArray(deny.skills)) return [];
+	return deny.skills.map((skill) => String(skill));
+}
+
 async function parseCouncilConfig(configPath: string): Promise<CouncilConfig> {
 	const fallback: CouncilConfig = {
 		council: {
@@ -165,6 +203,8 @@ async function parseCouncilConfig(configPath: string): Promise<CouncilConfig> {
 		}
 		merged.council.settings = { ...merged.council.settings, ...council.settings };
 	}
+
+	assertDenySkillsShape(merged.council.settings, configPath);
 
 	return merged;
 }
@@ -387,6 +427,9 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	const members = requestedMembers.filter(filterMember);
 	assertMembersOrExit(members, COUNCIL_CONFIG, configPath);
 
+	const denySkills = extractDenySkills(config.council.settings);
+	assertDenyEnforceable(members, denySkills, COUNCIL_CONFIG, configPath);
+
 	const jobId = generateJobId();
 	const jobDir = path.join(jobsDir, `council-${jobId}`);
 	const membersDir = path.join(jobDir, "members");
@@ -403,6 +446,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 		settings: {
 			excludeChairmanFromMembers,
 			timeoutSec: timeoutSec || null,
+			denySkills,
 		},
 		members: members.map((m) => ({
 			name: String(m.name),
@@ -419,7 +463,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 
 	// Use framework spawnWorkers — it calls detectCliType + buildAugmentedCommand internally
 	frameworkSpawnWorkers({
-		entities: members,
+		entities: members.map((m) => ({ ...m, deny: denySkills })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: membersDir,
@@ -520,4 +564,4 @@ export {
 	generateJobId,
 } from "@lib/job-utils";
 
-export { buildUiPayload, parseCouncilConfig, computeStatus, COUNCIL_CONFIG };
+export { buildUiPayload, parseCouncilConfig, computeStatus, COUNCIL_CONFIG, cmdStart };
