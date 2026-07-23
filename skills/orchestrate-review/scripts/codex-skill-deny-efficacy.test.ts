@@ -189,6 +189,19 @@ function skillMdPath(name: string): string {
 	return path.join(REPO_ROOT, "skills", name, "SKILL.md");
 }
 
+/**
+ * Case-exact existence check. This repo lives on a case-insensitive filesystem
+ * (macOS default), so `fs.existsSync(skillMdPath("ORCHESTRATE-REVIEW"))` returns
+ * true even though the real directory on disk is spelled "orchestrate-review" —
+ * codex itself is case-sensitive, so a miscased deny name silently fails to
+ * suppress anything while this guard waves it through. readdirSync returns the
+ * actual on-disk spelling, so comparing against it (not just existsSync) catches
+ * a miscased name that existsSync alone would miss.
+ */
+function skillDirExists(name: string): boolean {
+	return fs.readdirSync(path.join(REPO_ROOT, "skills")).includes(name) && fs.existsSync(skillMdPath(name));
+}
+
 describe("오타 검출 — 선언된 이름이 실재하는 스킬인가", () => {
 	test("orchestrate-review.config.yaml과 council.config.yaml에 선언된 모든 deny.skills 이름은 skills/<name>/SKILL.md로 실재한다", () => {
 		const sources: Array<{ configPath: string; topLevelKey: string }> = [
@@ -200,7 +213,7 @@ describe("오타 검출 — 선언된 이름이 실재하는 스킬인가", () =
 		for (const { configPath, topLevelKey } of sources) {
 			const names = readDeclaredDenySkills(configPath, topLevelKey);
 			for (const name of names) {
-				if (!fs.existsSync(skillMdPath(name))) {
+				if (!skillDirExists(name)) {
 					missing.push(
 						`"${name}" (declared in ${configPath} at '${topLevelKey}.settings.deny.skills') ` +
 							`— ${skillMdPath(name)} not found. Possible typo?`,

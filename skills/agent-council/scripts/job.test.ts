@@ -17,6 +17,25 @@ function makeTmpDir() {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "council-job-test-"));
 }
 
+/**
+ * `start` spawns a detached worker (lib/generic-job.ts spawnWorkers) that inherits
+ * `env: process.env` and execs the member's real CLI command. A test whose config
+ * declares a real CLI name (claude/codex/gemini) so it can pass assertDenyEnforceable
+ * would otherwise spawn the actual billed CLI binary. This stub directory shadows all
+ * three CLI names on PATH with a no-op `exit 0` script — detectCliType still resolves
+ * the command's first token to "claude"/"codex"/"gemini" (so the enforceability gate
+ * still passes), but the process the worker execs is this harmless stub.
+ */
+function makeCliStubDir(): string {
+	const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), "deny-cli-stub-"));
+	for (const cli of ["claude", "codex", "gemini"]) {
+		const stubPath = path.join(stubDir, cli);
+		fs.writeFileSync(stubPath, "#!/bin/sh\nexit 0\n");
+		fs.chmodSync(stubPath, 0o755);
+	}
+	return stubDir;
+}
+
 // ---------------------------------------------------------------------------
 // buildUiPayload
 // ---------------------------------------------------------------------------
@@ -1309,13 +1328,16 @@ describe("parseCouncilConfig settings.deny.skills", () => {
 describe("start: settings.deny.skills recorded in job.json settings.denySkills", () => {
 	const SCRIPT = path.join(import.meta.dirname, "job.ts");
 	let tmpDir: string;
+	let stubDir: string;
 
 	beforeEach(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "council-job-test-"));
+		stubDir = makeCliStubDir();
 	});
 
 	afterEach(() => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
+		fs.rmSync(stubDir, { recursive: true, force: true });
 	});
 
 	test("job.json settings.denySkills matches the declared deny.skills array", () => {
@@ -1357,7 +1379,7 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 				"--json",
 				"test prompt",
 			],
-			{ stdio: "pipe" },
+			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
 		);
 		const output = JSON.parse(result.toString());
 		expect(output.settings.denySkills).toEqual(["orchestrate-review", "code-review", "agent-council"]);
@@ -1404,7 +1426,7 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 				"--json",
 				"test prompt",
 			],
-			{ stdio: "pipe" },
+			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
 		);
 		const output = JSON.parse(result.toString());
 		expect(output.settings.denySkills).toEqual([]);
@@ -1436,7 +1458,7 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 				"--json",
 				"test prompt",
 			],
-			{ stdio: "pipe" },
+			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
 		);
 		// stdout must be pure JSON — the informational "no skill deny declared"
 		// note (deny defaults to empty here) must not leak into the same stream.
