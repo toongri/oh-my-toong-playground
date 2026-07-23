@@ -23,6 +23,7 @@ import { getOmtDir } from "@lib/omt-dir";
 import {
 	type JobConfig,
 	assertMembersOrExit,
+	assertDenyEnforceable,
 	detectCliType,
 	buildAugmentedCommand,
 	gcStaleJobs as _gcStaleJobs,
@@ -230,6 +231,45 @@ interface ChunkReviewConfig {
 	"chunk-review": ChunkReviewSection;
 }
 
+// ---------------------------------------------------------------------------
+// deny.skills format validation — settings.deny.skills, if declared, must be an
+// array of non-empty (non-whitespace-only) strings. This validates FORMAT only;
+// skill-name reality is not checked here (see spec non-goal — a later stage's
+// enforceability test covers typos by reading the real YAML). No baseline deny
+// list is injected here: YAML remains the sole source.
+// ---------------------------------------------------------------------------
+
+function assertDenySkillsShape(settings: Record<string, unknown>, configPath: string): void {
+	const deny = settings.deny;
+	if (deny === null || deny === undefined) return;
+	if (!isRecord(deny)) {
+		exitWithError(
+			`Invalid config in ${configPath}: 'chunk-review.settings.deny' must be a mapping/object`,
+		);
+	}
+	const skills = deny.skills;
+	if (skills === null || skills === undefined) return;
+	if (!Array.isArray(skills)) {
+		exitWithError(
+			`Invalid config in ${configPath}: 'chunk-review.settings.deny.skills' must be a list/array of non-empty strings`,
+		);
+	}
+	for (const skill of skills) {
+		if (typeof skill !== "string" || skill.trim() === "") {
+			exitWithError(
+				`Invalid config in ${configPath}: 'chunk-review.settings.deny.skills' must contain only non-empty strings, got: ${JSON.stringify(skill)}`,
+			);
+		}
+	}
+}
+
+/** Read settings.deny.skills, already format-validated by assertDenySkillsShape, as string[]. */
+function extractDenySkills(settings: Record<string, unknown>): string[] {
+	const deny = settings.deny;
+	if (!isRecord(deny) || !Array.isArray(deny.skills)) return [];
+	return deny.skills.map((skill) => String(skill));
+}
+
 function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
 	const fallback: ChunkReviewConfig = {
 		"chunk-review": {
@@ -310,6 +350,8 @@ function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
 		};
 	}
 
+	assertDenySkillsShape(merged["chunk-review"].settings, configPath);
+
 	return merged;
 }
 
@@ -383,6 +425,9 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 
 	assertMembersOrExit(members, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
+	const denySkills = extractDenySkills(config["chunk-review"].settings);
+	assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath);
+
 	const jobId = generateJobId();
 	initLogger("chunk-review-job", getOmtDir(), jobId);
 	logStart();
@@ -404,6 +449,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 		settings: {
 			excludeChairmanFromMembers,
 			timeoutSec: timeoutSec || null,
+			denySkills,
 		},
 		members: members.map((r) => ({
 			name: String(r.name),
@@ -419,7 +465,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	_spawnWorkers({
-		entities: members,
+		entities: members.map((r) => ({ ...r, deny: denySkills })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: membersDir,
@@ -551,4 +597,5 @@ export {
 	detectCliType,
 	buildAugmentedCommand,
 	gcStaleJobs,
+	cmdStart,
 };

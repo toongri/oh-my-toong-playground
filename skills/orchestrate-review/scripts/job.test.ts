@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -15,6 +15,7 @@ import {
 	buildAugmentedCommand,
 	gcStaleJobs,
 } from "./job.ts";
+import * as GenericJob from "@lib/generic-job";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -2940,5 +2941,417 @@ describe('exclude_chairman_from_members: 문자열 "no" (YAML 1.2) 회귀', () =
 		try {
 			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
 		} catch {}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// parseChunkReviewConfig — settings.deny.skills parsing + format validation
+// ---------------------------------------------------------------------------
+
+describe("parseChunkReviewConfig settings.deny.skills", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function expectParseExitsWithError(configPath: string, expectedSubstring: string) {
+		const scriptContent = `
+      const { parseChunkReviewConfig } = await import('${path.resolve(import.meta.dirname, "./job.ts").replace(/'/g, "\\'")}');
+      await parseChunkReviewConfig('${configPath.replace(/'/g, "\\'")}');
+    `;
+		try {
+			execFileSync(process.execPath, ["-e", scriptContent], {
+				encoding: "utf8",
+				stdio: ["pipe", "pipe", "pipe"],
+			});
+			throw new Error("Expected parseChunkReviewConfig subprocess to exit non-zero");
+		} catch (err) {
+			expect((err as any).status).toBe(1);
+			expect((err as any).stderr.toString()).toContain(expectedSubstring);
+		}
+	}
+
+	test("parses settings.deny.skills as a string array from real YAML", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  settings:",
+				"    deny:",
+				"      skills:",
+				"        - orchestrate-review",
+				"        - code-review",
+			].join("\n"),
+		);
+		const result = await parseChunkReviewConfig(configPath);
+		expect(result["chunk-review"].settings.deny).toEqual({
+			skills: ["orchestrate-review", "code-review"],
+		});
+	});
+
+	test("fallback (missing config file) does not declare a deny key", async () => {
+		const result = await parseChunkReviewConfig(path.join(tmpDir, "missing.yaml"));
+		expect(result["chunk-review"].settings.deny).toBeUndefined();
+	});
+
+	test("real YAML with no deny key leaves settings.deny undefined", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(configPath, ["chunk-review:", "  settings:", "    timeout: 5"].join("\n"));
+		const result = await parseChunkReviewConfig(configPath);
+		expect(result["chunk-review"].settings.deny).toBeUndefined();
+	});
+
+	test("deny: key with no value (null) does not throw and carries no skills", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(configPath, ["chunk-review:", "  settings:", "    deny:"].join("\n"));
+		const result = await parseChunkReviewConfig(configPath);
+		expect(result["chunk-review"].settings.deny).toBeNull();
+	});
+
+	test("exits 1 when deny.skills is not an array", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["chunk-review:", "  settings:", "    deny:", '      skills: "not-an-array"'].join("\n"),
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+
+	test("exits 1 when deny.skills contains a non-string element", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["chunk-review:", "  settings:", "    deny:", "      skills:", "        - 123"].join("\n"),
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+
+	test("exits 1 when deny.skills contains an empty string", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["chunk-review:", "  settings:", "    deny:", "      skills:", '        - ""'].join("\n"),
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+
+	test("exits 1 when deny.skills contains a whitespace-only string", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["chunk-review:", "  settings:", "    deny:", "      skills:", '        - "   "'].join("\n"),
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// start: settings.deny.skills → job.json settings.denySkills
+// ---------------------------------------------------------------------------
+
+describe("start: settings.deny.skills recorded in job.json settings.denySkills", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("job.json settings.denySkills matches the declared deny.skills array", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: claude -p",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				"    deny:",
+				"      skills:",
+				"        - orchestrate-review",
+				"        - code-review",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		const result = execFileSync(
+			process.execPath,
+			[
+				SCRIPT,
+				"start",
+				"--config",
+				configPath,
+				"--jobs-dir",
+				jobsDir,
+				"--chairman",
+				"none",
+				"--json",
+				"test prompt",
+			],
+			{ stdio: "pipe" },
+		);
+		const output = JSON.parse(result.toString());
+		expect(output.settings.denySkills).toEqual(["orchestrate-review", "code-review"]);
+
+		try {
+			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
+		} catch {}
+		try {
+			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+		} catch {}
+	});
+
+	test("job.json settings.denySkills is an empty array when deny is not declared", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: claude -p",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		const result = execFileSync(
+			process.execPath,
+			[
+				SCRIPT,
+				"start",
+				"--config",
+				configPath,
+				"--jobs-dir",
+				jobsDir,
+				"--chairman",
+				"none",
+				"--json",
+				"test prompt",
+			],
+			{ stdio: "pipe" },
+		);
+		const output = JSON.parse(result.toString());
+		expect(output.settings.denySkills).toEqual([]);
+
+		try {
+			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
+		} catch {}
+		try {
+			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+		} catch {}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// start: assertDenyEnforceable gate wiring (cmdStart calls it right after
+// assertMembersOrExit, before spawning workers)
+// ---------------------------------------------------------------------------
+
+describe("start: assertDenyEnforceable gate wiring", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("deny declared + a gemini member present → exit 1 listing the violation and enforceable CLIs", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: claude -p",
+				"    - name: bob",
+				"      command: gemini",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				"    deny:",
+				"      skills:",
+				"        - orchestrate-review",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		let threw = false;
+		let err: any;
+		try {
+			execFileSync(
+				process.execPath,
+				[
+					SCRIPT,
+					"start",
+					"--config",
+					configPath,
+					"--jobs-dir",
+					jobsDir,
+					"--chairman",
+					"none",
+					"test prompt",
+				],
+				{ stdio: "pipe" },
+			);
+		} catch (e) {
+			threw = true;
+			err = e;
+		}
+
+		expect(threw).toBe(true);
+		expect(err.status).toBe(1);
+		const stderr = err.stderr.toString();
+		expect(stderr).toContain("Enforceable CLIs: codex, claude, opencode");
+		expect(stderr).toContain("bob (gemini)");
+
+		// No job.json should have been written — the gate must block before spawn.
+		const jobDirs = fs.existsSync(jobsDir) ? fs.readdirSync(jobsDir) : [];
+		const jobJsonFound = jobDirs.some((d) => fs.existsSync(path.join(jobsDir, d, "job.json")));
+		expect(jobJsonFound).toBe(false);
+	});
+
+	test("deny not declared + a gemini member present → gate does not block", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: gemini",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		const result = execFileSync(
+			process.execPath,
+			[
+				SCRIPT,
+				"start",
+				"--config",
+				configPath,
+				"--jobs-dir",
+				jobsDir,
+				"--chairman",
+				"none",
+				"--json",
+				"test prompt",
+			],
+			{ stdio: "pipe" },
+		);
+		// stdout must be pure JSON — the informational "no skill deny declared"
+		// note (deny is not declared here) must not leak into the same stream.
+		const stdout = result.toString();
+		expect(() => JSON.parse(stdout)).not.toThrow();
+		expect(stdout).not.toContain("no skill deny declared");
+
+		const output = JSON.parse(stdout);
+		expect(output.settings.denySkills).toEqual([]);
+		const memberNames = output.members.map((m: { name: string }) => m.name);
+		expect(memberNames).toContain("bob");
+
+		try {
+			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
+		} catch {}
+		try {
+			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
+		} catch {}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// start → spawnWorkers wiring: declared deny reaches each dispatched entity
+// (AC6 — verified by spying on the shared lib's spawnWorkers, per the spec's
+// allowed fallback method since detached workers are not easily inspectable).
+// ---------------------------------------------------------------------------
+
+describe("start: deny reaches spawnWorkers entities (AC6 wiring)", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+		mock.restore();
+	});
+
+	test("each dispatched member entity carries the declared deny array", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: claude -p",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				"    deny:",
+				"      skills:",
+				"        - orchestrate-review",
+				"        - code-review",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		let capturedEntities: Array<Record<string, unknown>> | undefined;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: ({ entities }: { entities: Array<Record<string, unknown>> }) => {
+				capturedEntities = entities;
+			},
+		}));
+
+		const mod = await import(`./job.ts?ac6-orchestrate-review=${Date.now()}-${Math.random()}`);
+		await mod.cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		expect(capturedEntities).toBeDefined();
+		expect(capturedEntities?.length).toBe(1);
+		expect(capturedEntities?.[0].deny).toEqual(["orchestrate-review", "code-review"]);
 	});
 });
