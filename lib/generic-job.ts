@@ -188,6 +188,58 @@ export function assertDenyEnforceable(
 	}
 }
 
+// ---------------------------------------------------------------------------
+// assertDenySkillsShape / extractDenySkills — settings.deny.skills format
+// validation + extraction, shared by every consumer's config parser. Deny is
+// FORMAT-validated only — skill-name reality is not checked here (a later
+// stage's assertDenyEnforceable covers reachability by reading the real
+// YAML). No baseline deny list is injected here: YAML remains the sole
+// source. Name characters are restricted to the class spawnWorkers already
+// enforces on entity names ([a-zA-Z0-9_-]) — the same set splitCommand's
+// re-tokenization can carry unmangled through the spawned CLI's argv.
+// ---------------------------------------------------------------------------
+
+/** Narrow to a plain object, excluding arrays (deny must be a mapping, not a list). */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function assertDenySkillsShape(
+	settings: Record<string, unknown>,
+	config: JobConfig,
+	configPath: string,
+): void {
+	const keyPrefix = config.configTopLevelKey;
+	const deny = settings.deny;
+	if (deny === null || deny === undefined) return;
+	if (!isPlainObject(deny)) {
+		exitWithError(
+			`Invalid config in ${configPath}: '${keyPrefix}.settings.deny' must be a mapping/object`,
+		);
+	}
+	const skills = deny.skills;
+	if (skills === null || skills === undefined) return;
+	if (!Array.isArray(skills)) {
+		exitWithError(
+			`Invalid config in ${configPath}: '${keyPrefix}.settings.deny.skills' must be a list/array of non-empty strings`,
+		);
+	}
+	for (const skill of skills) {
+		if (typeof skill !== "string" || !/^[a-zA-Z0-9_-]+$/.test(skill)) {
+			exitWithError(
+				`Invalid config in ${configPath}: '${keyPrefix}.settings.deny.skills' must contain only [a-zA-Z0-9_-] skill names, got: ${JSON.stringify(skill)}`,
+			);
+		}
+	}
+}
+
+/** Read settings.deny.skills, already format-validated by assertDenySkillsShape, as string[]. */
+export function extractDenySkills(settings: Record<string, unknown>): string[] {
+	const deny = settings.deny;
+	if (!isPlainObject(deny) || !Array.isArray(deny.skills)) return [];
+	return deny.skills.map((skill) => String(skill));
+}
+
 export function buildAugmentedCommand(
 	entity: {
 		command: unknown;

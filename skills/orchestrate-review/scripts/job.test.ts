@@ -3049,6 +3049,33 @@ describe("parseChunkReviewConfig settings.deny.skills", () => {
 		);
 		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
 	});
+
+	test("exits 1 when deny.skills contains a name with an embedded space", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["chunk-review:", "  settings:", "    deny:", "      skills:", "        - 'a b'"].join("\n"),
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+
+	test("exits 1 when deny.skills contains a name with a backslash", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["chunk-review:", "  settings:", "    deny:", "      skills:", "        - 'a\\b'"].join("\n"),
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+
+	test("exits 1 when deny.skills contains a name with an embedded quote", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["chunk-review:", "  settings:", "    deny:", "      skills:", '        - \'a"b\''].join("\n"),
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
 });
 
 // ---------------------------------------------------------------------------

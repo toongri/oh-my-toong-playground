@@ -1270,6 +1270,36 @@ describe("parseCouncilConfig settings.deny.skills", () => {
 		);
 		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
 	});
+
+	test("exits 1 when deny.skills contains a name with an embedded space", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["council:", "  settings:", "    deny:", "      skills:", "        - 'a b'"].join("\n"),
+			"utf8",
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+
+	test("exits 1 when deny.skills contains a name with a backslash", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["council:", "  settings:", "    deny:", "      skills:", "        - 'a\\b'"].join("\n"),
+			"utf8",
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+
+	test("exits 1 when deny.skills contains a name with an embedded quote", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["council:", "  settings:", "    deny:", "      skills:", '        - \'a"b\''].join("\n"),
+			"utf8",
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
 });
 
 // ---------------------------------------------------------------------------
