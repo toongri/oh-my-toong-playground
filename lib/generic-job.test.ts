@@ -23,6 +23,7 @@ import {
 	cmdCollect,
 	cmdResumeMember,
 	assertMembersOrExit,
+	assertDenyEnforceable,
 } from "./generic-job.ts";
 
 // ---------------------------------------------------------------------------
@@ -1901,6 +1902,163 @@ describe("assertMembersOrExit", () => {
 		expect(() =>
 			assertMembersOrExit([{ name: "x" }], councilConfig, "/path/to/config.yaml"),
 		).not.toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// assertDenyEnforceable
+// ---------------------------------------------------------------------------
+
+describe("assertDenyEnforceable", () => {
+	let originalExit: typeof process.exit;
+	let originalStderrWrite: typeof process.stderr.write;
+	let originalStdoutWrite: typeof process.stdout.write;
+	let stderrOutput: string;
+	let stdoutOutput: string;
+
+	beforeEach(() => {
+		originalExit = process.exit;
+		originalStderrWrite = process.stderr.write;
+		originalStdoutWrite = process.stdout.write;
+		stderrOutput = "";
+		stdoutOutput = "";
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+		(process.stderr.write as any) = (chunk: string) => {
+			stderrOutput += chunk;
+			return true;
+		};
+		(process.stdout.write as any) = (chunk: string) => {
+			stdoutOutput += chunk;
+			return true;
+		};
+	});
+
+	afterEach(() => {
+		process.exit = originalExit;
+		process.stderr.write = originalStderrWrite;
+		process.stdout.write = originalStdoutWrite;
+	});
+
+	test("deny 비어있음 + gemini member는 통과하고 stdout에 차단 미선언 한 줄을 남긴다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "gemini-member", command: "gemini -p" }],
+				[],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).not.toThrow();
+		expect(stdoutOutput).toContain("no skill deny declared");
+	});
+
+	test("deny 선언 + gemini member는 exit 1이고 4개 구성요소를 모두 포함한다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "gemini-member", command: "gemini -p" }],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+
+		// (a) configPath
+		expect(stderrOutput).toContain("/path/to/config.yaml");
+		// (b) 위반 member 이름과 감지된 cliType
+		expect(stderrOutput).toContain("gemini-member");
+		expect(stderrOutput).toContain("gemini");
+		// (c) 집행 가능 CLI 목록
+		expect(stderrOutput).toContain("Enforceable CLIs: codex, claude, opencode");
+		// (d) 고치는 방법 2가지 — 대체 / deny 제거
+		expect(stderrOutput).toContain("member");
+		expect(stderrOutput.toLowerCase()).toContain("deny");
+	});
+
+	test("deny 선언 + unknown cliType member는 exit 1이다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "mystery-member", command: "mycli run" }],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("mystery-member");
+		expect(stderrOutput).toContain("unknown");
+	});
+
+	test("위반 member가 2개 이상이면 에러 문자열에 둘 다 나열된다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[
+					{ name: "gemini-member", command: "gemini -p" },
+					{ name: "mystery-member", command: "mycli run" },
+					{ name: "codex-member", command: "codex exec" },
+				],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("gemini-member");
+		expect(stderrOutput).toContain("mystery-member");
+	});
+
+	test("위반 member가 배열 마지막에 있어도 앞쪽 member에 부수효과가 없다 (spawn 없음, 순수 판정)", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[
+					{ name: "codex-member", command: "codex exec" },
+					{ name: "claude-member", command: "claude -p" },
+					{ name: "gemini-member", command: "gemini -p" },
+				],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+		// 판정만 하고 spawn하지 않으므로 통과 member는 에러 문자열에 위반 원인으로 등장하지 않는다
+		expect(stderrOutput).toContain("gemini-member");
+	});
+
+	test("deny 선언 + 전 member가 집행 가능 CLI면 통과한다 (exit 없음)", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[
+					{ name: "codex-member", command: "codex exec" },
+					{ name: "claude-member", command: "claude -p" },
+					{ name: "opencode-member", command: "opencode run" },
+				],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).not.toThrow();
+	});
+
+	test("deny가 undefined면 [] 와 동일하게 통과하고 stdout에 차단 미선언 한 줄을 남긴다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "gemini-member", command: "gemini -p" }],
+				undefined,
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).not.toThrow();
+		expect(stdoutOutput).toContain("no skill deny declared");
+	});
+
+	test("deny가 null이면 [] 와 동일하게 통과하고 stdout에 차단 미선언 한 줄을 남긴다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "gemini-member", command: "gemini -p" }],
+				null as unknown as undefined,
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).not.toThrow();
+		expect(stdoutOutput).toContain("no skill deny declared");
 	});
 });
 
