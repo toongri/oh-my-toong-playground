@@ -1972,8 +1972,8 @@ describe("assertDenyEnforceable", () => {
 		// (c) 집행 가능 CLI 목록
 		expect(stderrOutput).toContain("Enforceable CLIs: codex, claude, opencode");
 		// (d) 고치는 방법 2가지 — 대체 / deny 제거
-		expect(stderrOutput).toContain("member");
-		expect(stderrOutput.toLowerCase()).toContain("deny");
+		expect(stderrOutput).toContain("(1) replacing these members with an enforceable CLI");
+		expect(stderrOutput).toContain("(2) removing this job's settings.deny.skills declaration");
 	});
 
 	test("deny 선언 + unknown cliType member는 exit 1이다", () => {
@@ -2006,7 +2006,7 @@ describe("assertDenyEnforceable", () => {
 		expect(stderrOutput).toContain("mystery-member");
 	});
 
-	test("위반 member가 배열 마지막에 있어도 앞쪽 member에 부수효과가 없다 (spawn 없음, 순수 판정)", () => {
+	test("위반 member가 배열 마지막에 있어도 빠짐없이 적발된다", () => {
 		expect(() =>
 			assertDenyEnforceable(
 				[
@@ -2019,7 +2019,7 @@ describe("assertDenyEnforceable", () => {
 				"/path/to/config.yaml",
 			),
 		).toThrow("process.exit(1)");
-		// 판정만 하고 spawn하지 않으므로 통과 member는 에러 문자열에 위반 원인으로 등장하지 않는다
+		// 배열 마지막 위치의 위반(gemini-member)도 검사를 빠져나가지 않는다
 		expect(stderrOutput).toContain("gemini-member");
 	});
 
