@@ -147,6 +147,47 @@ export function detectCliType(command: unknown): string {
 	return "unknown";
 }
 
+// ---------------------------------------------------------------------------
+// assertDenyEnforceable — job-start gate: declared deny × per-member cliType.
+// "선언가능 = 집행가능" invariant — a CLI with no invocation-scoped skill-deny
+// lever (gemini, unknown) must not be allowed to silently ignore a declared
+// deny. Reuses detectCliType's result; no new judgment logic.
+// ---------------------------------------------------------------------------
+
+const ENFORCEABLE_CLI_TYPES = ["codex", "claude", "opencode"];
+
+export function assertDenyEnforceable(
+	entities: unknown[],
+	denySkills: string[] | undefined,
+	config: JobConfig,
+	configPath: string,
+): void {
+	const deny = denySkills ?? [];
+	if (deny.length === 0) {
+		process.stdout.write(
+			`start: this job has no skill deny declared (settings.deny.skills is empty) — proceeding unguarded. config=${configPath}\n`,
+		);
+		return;
+	}
+
+	const violations: string[] = [];
+	for (const entity of entities) {
+		if (!isRecord(entity)) continue;
+		const cliType = detectCliType(entity.command);
+		if (!ENFORCEABLE_CLI_TYPES.includes(cliType)) {
+			violations.push(`${String(entity.name)} (${cliType})`);
+		}
+	}
+
+	if (violations.length > 0) {
+		exitWithError(
+			`start: settings.deny.skills is declared but the following ${config.entityPlural} use a CLI with no enforcement lever: ${violations.join(", ")}. ` +
+				`Enforceable CLIs: codex, claude, opencode. ` +
+				`Fix by either (1) replacing these ${config.entityPlural} with an enforceable CLI, or (2) removing this job's settings.deny.skills declaration. config=${configPath}`,
+		);
+	}
+}
+
 export function buildAugmentedCommand(
 	entity: {
 		command: unknown;
