@@ -1,5 +1,22 @@
+# 아래 훅들은 이 레포의 코어 전역 훅이다. 예전에는 gitignored
+# claude.local.yaml에만 있어 버전 관리 밖이었고 -- 추적되는 파일만 읽으면
+# 등록 여부를 알 수 없어, 새 머신에 클론하면 전역 훅이 통째로 없었다. 이
+# 4종(keyword-detector.sh / pre-tool-enforcer.sh / session-start.sh /
+# persistent-mode)에는 device-specific 요소가 없으므로 여기서 추적한다.
+# claude.local.yaml에는 실제로 머신마다 다른 것만 남긴다 -- Superset 훅
+# preserve 규칙, maestro JAVA_HOME 절대경로, env 의존 MCP.
+#
+# projects/*/claude.yaml에 같은 4종을 다시 쓰지 말 것: 전역 등록은
+# ~/.claude/settings.json에, 프로젝트 등록은 대상의
+# .claude/settings.local.json에 착지하고 Claude Code가 둘을 병합하므로
+# 이중 발동한다(session-start.sh는 stdout을 프리픽스에 두 번 주입한다).
 hooks:
+  UserPromptSubmit:
+    - component: keyword-detector.sh
+      timeout: 10
   PreToolUse:
+    - component: pre-tool-enforcer.sh
+      timeout: 5
     - component: label-commit-gate.sh
       matcher: "Bash"
       timeout: 5
@@ -7,6 +24,14 @@ hooks:
     - component: label-edit-warn.sh
       matcher: "Write|Edit|MultiEdit"
       timeout: 5
+  SessionStart:
+    - component: session-start.sh
+      timeout: 10
+    - component: pin-session-start
+      timeout: 10
+  Stop:
+    - component: persistent-mode
+      timeout: 15
 
 config:
   language: "한국어"
