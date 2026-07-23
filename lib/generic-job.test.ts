@@ -1957,7 +1957,7 @@ describe("assertDenyEnforceable", () => {
 	test("deny 선언 + gemini member는 exit 1이고 4개 구성요소를 모두 포함한다", () => {
 		expect(() =>
 			assertDenyEnforceable(
-				[{ name: "gemini-member", command: "gemini -p" }],
+				[{ name: "bob", command: "gemini -p" }],
 				["some-skill"],
 				councilConfig,
 				"/path/to/config.yaml",
@@ -1966,9 +1966,8 @@ describe("assertDenyEnforceable", () => {
 
 		// (a) configPath
 		expect(stderrOutput).toContain("/path/to/config.yaml");
-		// (b) 위반 member 이름과 감지된 cliType
-		expect(stderrOutput).toContain("gemini-member");
-		expect(stderrOutput).toContain("gemini");
+		// (b) 위반 member 이름과 감지된 cliType의 렌더 쌍
+		expect(stderrOutput).toContain("bob (gemini)");
 		// (c) 집행 가능 CLI 목록
 		expect(stderrOutput).toContain("Enforceable CLIs: codex, claude, opencode");
 		// (d) 고치는 방법 2가지 — 대체 / deny 제거

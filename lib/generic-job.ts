@@ -182,7 +182,7 @@ export function assertDenyEnforceable(
 	if (violations.length > 0) {
 		exitWithError(
 			`start: settings.deny.skills is declared but the following ${config.entityPlural} use a CLI with no enforcement lever: ${violations.join(", ")}. ` +
-				`Enforceable CLIs: codex, claude, opencode. ` +
+				`Enforceable CLIs: ${ENFORCEABLE_CLI_TYPES.join(", ")}. ` +
 				`Fix by either (1) replacing these ${config.entityPlural} with an enforceable CLI, or (2) removing this job's settings.deny.skills declaration. config=${configPath}`,
 		);
 	}
