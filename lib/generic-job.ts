@@ -164,7 +164,7 @@ export function assertDenyEnforceable(
 ): void {
 	const deny = denySkills ?? [];
 	if (deny.length === 0) {
-		process.stdout.write(
+		process.stderr.write(
 			`start: this job has no skill deny declared (settings.deny.skills is empty) — proceeding unguarded. config=${configPath}\n`,
 		);
 		return;
