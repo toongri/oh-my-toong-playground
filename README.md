@@ -65,6 +65,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 - Claude Code CLI 설치됨
 - Node.js v18+ (HUD 기능용)
+- `jq` (훅이 페이로드 파싱에 사용 — 없으면 가드가 조용히 열림)
 - macOS 또는 Linux
 
 ### 설정
