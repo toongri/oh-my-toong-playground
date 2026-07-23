@@ -60,7 +60,7 @@ describe("assertCodexVersionIfTargeted (sync.ts entry-point wiring)", () => {
 		expect(fetchCalled).toBe(false);
 	});
 
-	it("positive control: real installed codex (probe-verified 0.144.5) is in the real allowlist -> resolves", async () => {
+	it("positive control: real installed codex (probe-verified 0.145.0) is in the real allowlist -> resolves", async () => {
 		// No fetchVersion override: exercises the real installed `codex` binary on
 		// PATH and the real config.yaml codex-versions allowlist.
 		await expect(
@@ -71,7 +71,9 @@ describe("assertCodexVersionIfTargeted (sync.ts entry-point wiring)", () => {
 	it("negative control: a codex version outside the allowlist, stubbed on a temp PATH, throws naming both versions", async () => {
 		const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-version-test-"));
 		const stubPath = path.join(stubDir, "codex");
-		fs.writeFileSync(stubPath, "#!/bin/sh\necho 'codex-cli 0.145.0'\n");
+		// Must be a version genuinely outside config.yaml's codex-versions. Bump this
+		// whenever the stubbed version gets admitted, or the control stops discriminating.
+		fs.writeFileSync(stubPath, "#!/bin/sh\necho 'codex-cli 0.999.0'\n");
 		fs.chmodSync(stubPath, 0o755);
 
 		const originalPath = process.env.PATH;
@@ -85,7 +87,7 @@ describe("assertCodexVersionIfTargeted (sync.ts entry-point wiring)", () => {
 			}
 			expect(thrown).toBeInstanceOf(Error);
 			const message = (thrown as Error).message;
-			expect(message).toContain("0.145.0");
+			expect(message).toContain("0.999.0");
 			expect(message).toContain("0.144.1");
 		} finally {
 			process.env.PATH = originalPath;
