@@ -1648,6 +1648,58 @@ test_ac4_codex_claude_deny_json_byte_identical() {
 # guard.sh), so it never picked up a nested value -- this test just pins
 # that invariant so the two adapters can't silently drift apart again.
 # =============================================================================
+# `mv` SOURCE-operand coverage, Codex twin of the Claude suite's CR-12..15.
+# `mv` deletes its source, so `mv <guarded> /tmp/x` removes the guarded
+# artifact exactly like `rm <guarded>`; the extractor's old `cp | mv -> $NF`
+# arm saw only the DESTINATION. The cp test is the negative control pinning
+# the cp/mv SPLIT -- copying leaves the artifact intact, so denying it would
+# be a false deny, which this guard has no bypass to recover from.
+test_codereview_shell_command_mv_source_denies() {
+    new_sandbox
+    cr_paths
+    local tool_input out result=0
+
+    tool_input=$(jq -n --arg cmd "mv $CR_ULTRAGOAL /tmp/saved.json" '{cmd:$cmd}')
+    out=$(codex_full_payload "shell_command" "$tool_input" "cx" "$GITDIR" | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED codereview-mv-source: mv of the guarded artifact away is a delete -- expected deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_codereview_shell_command_cp_source_allows() {
+    new_sandbox
+    cr_paths
+    local tool_input out rc=0 result=0
+
+    tool_input=$(jq -n --arg cmd "cp $CR_ULTRAGOAL /tmp/backup.json" '{cmd:$cmd}')
+    out=$(codex_full_payload "shell_command" "$tool_input" "cx" "$GITDIR" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "codereview-cp-source-over-widening-control"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_ledger_shell_command_mv_source_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd "mv $LED /tmp/saved.md" --arg cwd "$GITDIR" \
+        '{tool_name:"shell_command", tool_input:{cmd:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED ledger-mv-source: mv of the session ledger away is a delete -- expected deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
 test_codereview_nested_agent_type_in_tool_input_denies() {
     new_sandbox
     cr_paths
@@ -1755,6 +1807,9 @@ main() {
     run_test test_codereview_negative_control_candidates_json_allows
     run_test test_ac4_codex_claude_deny_json_byte_identical
     run_test test_codereview_nested_agent_type_in_tool_input_denies
+    run_test test_codereview_shell_command_mv_source_denies
+    run_test test_codereview_shell_command_cp_source_allows
+    run_test test_ledger_shell_command_mv_source_denies
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

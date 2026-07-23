@@ -139,9 +139,11 @@ _wg_absolutize() {
 # paths (not yet absolutized) for one already quote-normalized `&&`/`||`/`;`/
 # `|` chain segment. Mirrors the write-vectors of the retired
 # _wg_ledger_target_in_segment classifier (redirect, tee/rm/truncate, dd of=,
-# sed -i, cp/mv last-arg) but EXTRACTS the target instead of testing it for a
-# "session-ledger-" substring -- write_guard_core_run does an EXACT full-path
-# comparison, so a harmless non-ledger candidate simply never matches.
+# sed -i, cp last-arg, mv every operand) but EXTRACTS the target instead of
+# testing it for a "session-ledger-" substring -- write_guard_core_run does an
+# EXACT full-path comparison, so a harmless non-ledger candidate simply never
+# matches. `cp` and `mv` are separate arms below and are NOT interchangeable:
+# only `mv` destroys its source, so only `mv` extracts source operands.
 _wg_extract_bash_targets() {
     local seg="$1"
     # `|| true`: grep -oE returns 1 when a segment has no redirect at all --
@@ -173,8 +175,20 @@ _wg_extract_bash_targets() {
                 echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             fi
             ;;
-        cp|mv)
+        cp)
+            # Destination only. `cp <guarded> /tmp/x` READS the guarded path
+            # and leaves it intact, so extracting the source operand here
+            # would false-deny a harmless copy.
             echo "$seg" | awk '{print $NF}'
+            ;;
+        mv)
+            # Every non-option operand, not just the last -- `mv` DELETES its
+            # source, so `mv <guarded> /tmp/x` removes the guarded path exactly
+            # like `rm <guarded>`, which the tee/rm/truncate arm above already
+            # catches. $NF alone saw only the destination, leaving the delete
+            # leg of the write/delete contract open through this one verb.
+            # Split from `cp` above because only `mv` is destructive.
+            echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             ;;
     esac
 }
