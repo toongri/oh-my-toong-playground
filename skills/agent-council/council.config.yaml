@@ -1,6 +1,9 @@
 # Agent Council Configuration
 # Add or remove council members as needed.
-# Note: Missing CLIs will report `missing_cli` at runtime.
+# Note: an unavailable CLI reports `missing_cli` at runtime; but while
+# settings.deny.skills is declared below, a member whose CLI has no
+# skill-deny lever (gemini / unrecognized) makes `start` exit 1 before any
+# job directory is created.
 
 council:
   # Council members configuration

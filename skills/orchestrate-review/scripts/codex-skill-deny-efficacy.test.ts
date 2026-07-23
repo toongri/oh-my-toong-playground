@@ -157,6 +157,21 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
 			expect(controlCount).toBe(baselineCount);
 		}
 	});
+
+	test("과차단 대조군: 선언되지 않은 스킬의 카운트는 deny 적용 후에도 그대로다", () => {
+		const declared = new Set(declaredNames);
+		const surviving = new Set(
+			[...baselineOutput.matchAll(/\/([a-zA-Z0-9_-]+)\/SKILL\.md/g)]
+				.map((m) => m[1])
+				.filter((n) => !declared.has(n)),
+		);
+		// 이 대조군 자체가 공허하지 않음을 먼저 보장한다 —
+		// surviving이 비면 아래 루프가 0회 돌며 조용히 통과해버린다.
+		expect(surviving.size).toBeGreaterThan(0);
+		for (const name of surviving) {
+			expect(countSkillListings(denyAllOutput, name)).toBe(countSkillListings(baselineOutput, name));
+		}
+	});
 });
 
 /**
