@@ -219,8 +219,21 @@ _cwg_extract_shell_targets() {
         tee | rm | truncate)
             printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
             ;;
-        cp | mv)
+        cp)
+            # Destination only. `cp <guarded> /tmp/x` READS the guarded path
+            # and leaves it intact, so extracting the source operand here
+            # would false-deny a harmless copy.
             printf '%s\n' "$seg" | awk '{print $NF}'
+            ;;
+        mv)
+            # Every non-option operand, not just the last -- `mv` DELETES its
+            # source, so `mv <guarded> /tmp/x` removes the guarded path exactly
+            # like `rm <guarded>`, which the tee/rm/truncate arm above already
+            # catches. $NF alone saw only the destination, leaving the delete
+            # leg of the write/delete contract open through this one verb.
+            # Split from `cp` above because only `mv` is destructive; mirrors
+            # the Claude twin's own cp/mv split in hooks/pre-tool-enforcer.sh.
+            printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
             ;;
         sed)
             if printf '%s\n' "$seg" | grep -q -- '-i'; then
@@ -491,4 +504,37 @@ case "$tool_name" in
         ;;
 esac
 
-printf '%s' "$candidates_text" | write_guard_core_run "$omt_dir" "$sid"
+# -----------------------------------------------------------------------------
+# Two independent guards run over the SAME candidates_text, mirroring the
+# Claude twin's wiring in hooks/pre-tool-enforcer.sh (the same
+# write_guard_core_run / codereview_guard_core_run dispatch): an unconditional
+# deny (write_guard_core_run) and a SEPARATE identity-conditional allow
+# (codereview_guard_core_run) -- different rule kinds, so neither is nested
+# inside the other. The ledger guard's output is now captured instead of
+# streamed straight to stdout so a second judgment can run when it is empty;
+# printf '%s\n' on a non-empty capture reproduces the exact bytes
+# write_guard_core_run would have written directly (the trailing newline
+# $(...) strips is restored), so this refactor changes neither its output
+# bytes nor its exit behavior.
+#
+# Codex-specific reason this is a positive whitelist, not a subagent check:
+# unlike Claude's payload, the Codex PreToolUse payload carries no agent_id
+# (or any other subagent-identity field) -- turn_id and transcript_path
+# identify a turn/transcript, not a caller role (see the fixture provenance
+# note in hooks/codex-write-guard_test.sh for the full field list). There is
+# no field here to ask "is this a subagent" directly, so
+# agent_type=="code-reviewer" is the only trustworthy signal at all, not a
+# design choice among alternatives.
+# agent_type itself is read fail-closed: a failed/absent extraction becomes
+# "" via the `|| agent_type=""` idiom below (mirroring every other jq
+# extraction in this file), and codereview_guard_core_run denies on "" the
+# same as any other non-"code-reviewer" value -- extraction failure must
+# never fall through to allow.
+_cwg_ledger_out=$(printf '%s' "$candidates_text" | write_guard_core_run "$omt_dir" "$sid")
+if [ -n "$_cwg_ledger_out" ]; then
+    printf '%s\n' "$_cwg_ledger_out"
+    exit 0
+fi
+
+agent_type=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null) || agent_type=""
+printf '%s' "$candidates_text" | codereview_guard_core_run "$omt_dir" "$sid" "$agent_type"

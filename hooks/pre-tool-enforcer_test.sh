@@ -824,7 +824,10 @@ hg_is_deny() {
 }
 
 hg_is_allow() {
-    ! hg_is_deny "$1"
+    # Positive assertion: the hook's actual allow output is `{"continue": true}`.
+    # `! hg_is_deny` would also pass empty stdout (an early-abort crash),
+    # misreading a crash as an allow.
+    echo "$1" | jq -e '.continue == true' > /dev/null 2>&1
 }
 
 hg_bash_json() {
@@ -1094,8 +1097,8 @@ test_wg_l3_env_var_braced_denied() {
 # (m) regression (defect B) -- tee/rm/truncate only inspected the LAST
 # operand (awk '{print $NF}'), so `rm <ledger> <other>` extracted only
 # "<other>" and the real ledger operand went unchecked. Mirrors the
-# already-correct Codex extractor (_cwg_extract_shell_targets, hooks/codex-
-# write-guard.sh:167-169), which emits every non-option operand. Each DENY
+# already-correct Codex extractor (_cwg_extract_shell_targets in
+# hooks/codex-write-guard.sh), which emits every non-option operand. Each DENY
 # case below places the ledger as a NON-final operand; the control proves a
 # genuinely non-ledger multi-target command still passes.
 # =============================================================================
@@ -1331,6 +1334,199 @@ test_wg_r1_unset_home_no_fail_open_denied() {
 }
 
 # =============================================================================
+# Code-review artifact identity guard (code-review-artifact-guard-core plan)
+# -- wires codereview_guard_core_run (hooks/write-guard-core.sh) into this
+# adapter. Distinct guard from the ledger write-guard above: the ledger guard
+# is an unconditional deny (nobody may touch that path directly); this guard
+# is identity-conditional (only the code-reviewer subagent may write these
+# two paths) -- the two guards fire independently on the SAME candidate set,
+# so this corpus exercises the codereview verdict specifically, not ledger
+# denial reasons.
+# =============================================================================
+
+cr_ultragoal_path() {
+    echo "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
+}
+
+cr_goal_path() {
+    echo "$OMT_DIR/goal-codereview-$OMT_SESSION_ID.json"
+}
+
+hg_bash_json_agent() {
+    # $1 = raw command string, $2 = agent_type value -- both literal via
+    # jq --arg, no shell expansion inside this helper.
+    jq -n --arg cmd "$1" --arg at "$2" '{tool_name: "Bash", tool_input: {command: $cmd}, agent_type: $at}'
+}
+
+hg_write_json_agent() {
+    # $1 = file_path, $2 = agent_type value
+    jq -n --arg fp "$1" --arg at "$2" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}, agent_type: $at}'
+}
+
+hg_write_json_no_agent() {
+    # $1 = file_path -- agent_type field entirely ABSENT, mirroring an
+    # ordinary main-thread tool call's payload shape (it doesn't carry
+    # agent_type at all; it is not present-but-empty).
+    jq -n --arg fp "$1" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}'
+}
+
+# CR-1 -- Write to ultragoal-codereview path with agent_type entirely absent
+# (the real main-thread payload shape) -> DENY. This is the core
+# forgery-prevention case: without it, the orchestrator could Write the
+# artifact directly and the ultragoal completion gate would treat it as an
+# independent code-reviewer's verdict.
+test_cr1_write_ultragoal_codereview_no_agent_type_denied() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_write_json_no_agent "$path")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED CR1: expected deny. Got: $out"; return 1; }
+}
+
+# CR-2 -- same Write, agent_type == "code-reviewer" -> ALLOW. This is the
+# real code-reviewer subagent's own write path; if this regresses to deny,
+# code-review can never author its own artifact and the completion gate can
+# never open.
+test_cr2_write_ultragoal_codereview_code_reviewer_allowed() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_write_json_agent "$path" "code-reviewer")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED CR2: expected allow for code-reviewer. Got: $out"; return 1; }
+}
+
+# CR-3 -- same Write, agent_type == some OTHER subagent name -> DENY. Proves
+# the guard checks the exact string "code-reviewer", not merely "some
+# subagent dispatched this", which would let any subagent forge the
+# artifact.
+test_cr3_write_ultragoal_codereview_other_agent_denied() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_write_json_agent "$path" "sisyphus-junior")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED CR3: expected deny for sisyphus-junior. Got: $out"; return 1; }
+}
+
+# CR-4/5/6 -- same 3-case matrix via the Bash redirect vector
+# (`> "$OMT_DIR/ultragoal-codereview-<sid>.json"`), proving the identity
+# guard reuses the SAME candidate extraction as the ledger guard rather than
+# a Write-only code path.
+test_cr4_bash_redirect_ultragoal_codereview_no_agent_type_denied() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_bash_json "echo x > \"$path\"")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED CR4: expected deny. Got: $out"; return 1; }
+}
+
+test_cr5_bash_redirect_ultragoal_codereview_code_reviewer_allowed() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_bash_json_agent "echo x > \"$path\"" "code-reviewer")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED CR5: expected allow for code-reviewer via Bash. Got: $out"; return 1; }
+}
+
+test_cr6_bash_redirect_ultragoal_codereview_other_agent_denied() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_bash_json_agent "echo x > \"$path\"" "sisyphus-junior")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED CR6: expected deny for sisyphus-junior via Bash. Got: $out"; return 1; }
+}
+
+# CR-7/8 -- goal-codereview parity: a no-agent deny plus a code-reviewer
+# allow, proving the goal-side artifact gets the SAME protection through
+# this adapter (not just ultragoal's own path).
+test_cr7_write_goal_codereview_no_agent_type_denied() {
+    local path out
+    path=$(cr_goal_path)
+    out=$(printf '%s' "$(hg_write_json_no_agent "$path")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED CR7: expected deny. Got: $out"; return 1; }
+}
+
+test_cr8_write_goal_codereview_code_reviewer_allowed() {
+    local path out
+    path=$(cr_goal_path)
+    out=$(printf '%s' "$(hg_write_json_agent "$path" "code-reviewer")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED CR8: expected allow for code-reviewer. Got: $out"; return 1; }
+}
+
+# CR-9/10 -- negative controls (AC5). ultragoal-verdict-<sid>.json is a
+# LEGITIMATE self-attested orchestrator artifact (the orchestrator is
+# SUPPOSED to write it), and code-review/<sid>/candidates.json is the review
+# pipeline's own normal output -- neither is a guarded path. This is a
+# PreToolUse deny with NO bypass and NO ask escape hatch: if the guarded path
+# set ever accidentally widens to catch either of these (e.g. a loosened
+# glob), the user is stuck with no way to unblock it themselves. This is the
+# safety boundary of the whole design, not a bonus check.
+test_cr9_write_ultragoal_verdict_no_agent_type_allowed() {
+    local path out
+    path="$OMT_DIR/ultragoal-verdict-$OMT_SESSION_ID.json"
+    out=$(printf '%s' "$(hg_write_json_no_agent "$path")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED CR9: ultragoal-verdict write must stay allow (no agent_type). Got: $out"; return 1; }
+}
+
+test_cr10_write_code_review_candidates_no_agent_type_allowed() {
+    local dir path out
+    dir="$OMT_DIR/code-review/$OMT_SESSION_ID"
+    mkdir -p "$dir"
+    path="$dir/candidates.json"
+    out=$(printf '%s' "$(hg_write_json_no_agent "$path")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED CR10: code-review candidates write must stay allow (no agent_type). Got: $out"; return 1; }
+}
+
+hg_write_json_nested_agent() {
+    # $1 = file_path, $2 = agent_type value placed INSIDE tool_input (an
+    # agent-controlled field), with NO top-level agent_type at all --
+    # mirrors an orchestrator forging identity via the only field an
+    # ordinary tool call lets it set freely.
+    jq -n --arg fp "$1" --arg at "$2" \
+        '{tool_name: "Write", tool_input: {file_path: $fp, content: "x", agent_type: $at}}'
+}
+
+# CR-11 -- agent_type == "code-reviewer" nested inside tool_input (never at
+# top level) -> must still DENY. The guard's trust boundary is "top-level
+# agent_type only"; tool_input is agent-controlled, so a value planted there
+# must not forge identity. This is the regression case for the extraction
+# widening this task fixes.
+test_cr11_write_ultragoal_codereview_nested_agent_type_denied() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_write_json_nested_agent "$path" "code-reviewer")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED CR11: nested tool_input.agent_type must not forge identity -- expected deny. Got: $out"; return 1; }
+}
+
+# CR-12..15 -- `mv` SOURCE-operand coverage. `mv` deletes its source, so
+# `mv <guarded> /tmp/x` removes the guarded artifact exactly like the
+# `rm <guarded>` the tee/rm/truncate arm already caught; the extractor's old
+# `cp|mv -> $NF` arm saw only the DESTINATION, leaving the delete leg of the
+# write/delete contract open through this one verb. CR-14 is the negative
+# control that pins the cp/mv SPLIT: `cp` must keep extracting the destination
+# only, because copying leaves the guarded artifact intact and denying it
+# would be a false deny -- the failure mode this guard can never recover from.
+# CR-15 pins the same fix on the ledger guard, which shares this extractor and
+# had the identical hole before this change.
+test_cr12_bash_mv_source_ultragoal_codereview_no_agent_type_denied() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_bash_json "mv \"$path\" /tmp/saved.json")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED CR12: mv of the guarded artifact away is a delete -- expected deny. Got: $out"; return 1; }
+}
+
+test_cr13_bash_mv_source_goal_codereview_code_reviewer_allowed() {
+    local path out
+    path=$(cr_goal_path)
+    out=$(printf '%s' "$(hg_bash_json_agent "mv \"$path\" /tmp/saved.json" "code-reviewer")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED CR13: expected allow for code-reviewer. Got: $out"; return 1; }
+}
+
+test_cr14_bash_cp_source_ultragoal_codereview_allowed() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_bash_json "cp \"$path\" /tmp/backup.json")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED CR14: cp leaves the guarded artifact intact -- expected allow (over-widening control). Got: $out"; return 1; }
+}
+
+test_cr15_bash_mv_source_ledger_denied() {
+    wg_assert_deny "mv \"$(wg_ledger_path)\" /tmp/saved.md" "CR15(mv ledger source)"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1423,6 +1619,23 @@ main() {
     run_test test_wg_q3_home_dquoted_var_nonledger_allows
     run_test test_wg_q4_home_toplevel_nonledger_allows
     run_test test_wg_r1_unset_home_no_fail_open_denied
+
+    # Code-review artifact identity guard (code-review-artifact-guard-core plan)
+    run_test test_cr1_write_ultragoal_codereview_no_agent_type_denied
+    run_test test_cr2_write_ultragoal_codereview_code_reviewer_allowed
+    run_test test_cr3_write_ultragoal_codereview_other_agent_denied
+    run_test test_cr4_bash_redirect_ultragoal_codereview_no_agent_type_denied
+    run_test test_cr5_bash_redirect_ultragoal_codereview_code_reviewer_allowed
+    run_test test_cr6_bash_redirect_ultragoal_codereview_other_agent_denied
+    run_test test_cr7_write_goal_codereview_no_agent_type_denied
+    run_test test_cr8_write_goal_codereview_code_reviewer_allowed
+    run_test test_cr9_write_ultragoal_verdict_no_agent_type_allowed
+    run_test test_cr10_write_code_review_candidates_no_agent_type_allowed
+    run_test test_cr11_write_ultragoal_codereview_nested_agent_type_denied
+    run_test test_cr12_bash_mv_source_ultragoal_codereview_no_agent_type_denied
+    run_test test_cr13_bash_mv_source_goal_codereview_code_reviewer_allowed
+    run_test test_cr14_bash_cp_source_ultragoal_codereview_allowed
+    run_test test_cr15_bash_mv_source_ledger_denied
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
