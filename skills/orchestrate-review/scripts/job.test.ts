@@ -25,6 +25,25 @@ function makeTmpDir() {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "chunk-job-test-"));
 }
 
+/**
+ * `start` spawns a detached worker (lib/generic-job.ts spawnWorkers) that inherits
+ * `env: process.env` and execs the member's real CLI command. A test whose config
+ * declares a real CLI name (claude/codex/gemini) so it can pass assertDenyEnforceable
+ * would otherwise spawn the actual billed CLI binary. This stub directory shadows all
+ * three CLI names on PATH with a no-op `exit 0` script — detectCliType still resolves
+ * the command's first token to "claude"/"codex"/"gemini" (so the enforceability gate
+ * still passes), but the process the worker execs is this harmless stub.
+ */
+function makeCliStubDir(): string {
+	const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), "deny-cli-stub-"));
+	for (const cli of ["claude", "codex", "gemini"]) {
+		const stubPath = path.join(stubDir, cli);
+		fs.writeFileSync(stubPath, "#!/bin/sh\nexit 0\n");
+		fs.chmodSync(stubPath, 0o755);
+	}
+	return stubDir;
+}
+
 // ---------------------------------------------------------------------------
 // parseChunkReviewConfig
 // ---------------------------------------------------------------------------
@@ -3085,13 +3104,16 @@ describe("parseChunkReviewConfig settings.deny.skills", () => {
 describe("start: settings.deny.skills recorded in job.json settings.denySkills", () => {
 	const SCRIPT = path.join(import.meta.dirname, "job.ts");
 	let tmpDir: string;
+	let stubDir: string;
 
 	beforeEach(() => {
 		tmpDir = makeTmpDir();
+		stubDir = makeCliStubDir();
 	});
 
 	afterEach(() => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
+		fs.rmSync(stubDir, { recursive: true, force: true });
 	});
 
 	test("job.json settings.denySkills matches the declared deny.skills array", () => {
@@ -3131,7 +3153,7 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 				"--json",
 				"test prompt",
 			],
-			{ stdio: "pipe" },
+			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
 		);
 		const output = JSON.parse(result.toString());
 		expect(output.settings.denySkills).toEqual(["orchestrate-review", "code-review"]);
@@ -3177,7 +3199,7 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 				"--json",
 				"test prompt",
 			],
-			{ stdio: "pipe" },
+			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
 		);
 		const output = JSON.parse(result.toString());
 		expect(output.settings.denySkills).toEqual([]);
@@ -3286,22 +3308,31 @@ describe("start: assertDenyEnforceable gate wiring", () => {
 		const jobsDir = path.join(tmpDir, "jobs");
 		fs.mkdirSync(jobsDir, { recursive: true });
 
-		const result = execFileSync(
-			process.execPath,
-			[
-				SCRIPT,
-				"start",
-				"--config",
-				configPath,
-				"--jobs-dir",
-				jobsDir,
-				"--chairman",
-				"none",
-				"--json",
-				"test prompt",
-			],
-			{ stdio: "pipe" },
-		);
+		// This member's command really is "gemini" and the gate passes (no deny
+		// declared), so start really spawns it — stub the CLI on PATH so the
+		// detached worker execs a harmless no-op instead of the real gemini binary.
+		const stubDir = makeCliStubDir();
+		let result: Buffer;
+		try {
+			result = execFileSync(
+				process.execPath,
+				[
+					SCRIPT,
+					"start",
+					"--config",
+					configPath,
+					"--jobs-dir",
+					jobsDir,
+					"--chairman",
+					"none",
+					"--json",
+					"test prompt",
+				],
+				{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+			);
+		} finally {
+			fs.rmSync(stubDir, { recursive: true, force: true });
+		}
 		// stdout must be pure JSON — the informational "no skill deny declared"
 		// note (deny is not declared here) must not leak into the same stream.
 		const stdout = result.toString();
