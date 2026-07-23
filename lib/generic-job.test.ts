@@ -1941,7 +1941,7 @@ describe("assertDenyEnforceable", () => {
 		process.stdout.write = originalStdoutWrite;
 	});
 
-	test("deny 비어있음 + gemini member는 통과하고 stdout에 차단 미선언 한 줄을 남긴다", () => {
+	test("deny 비어있음 + gemini member는 통과하고 stderr에 차단 미선언 한 줄을 남긴다 (stdout은 비어있다)", () => {
 		expect(() =>
 			assertDenyEnforceable(
 				[{ name: "gemini-member", command: "gemini -p" }],
@@ -1950,7 +1950,8 @@ describe("assertDenyEnforceable", () => {
 				"/path/to/config.yaml",
 			),
 		).not.toThrow();
-		expect(stdoutOutput).toContain("no skill deny declared");
+		expect(stderrOutput).toContain("no skill deny declared");
+		expect(stdoutOutput).toBe("");
 	});
 
 	test("deny 선언 + gemini member는 exit 1이고 4개 구성요소를 모두 포함한다", () => {
@@ -2037,7 +2038,7 @@ describe("assertDenyEnforceable", () => {
 		).not.toThrow();
 	});
 
-	test("deny가 undefined면 [] 와 동일하게 통과하고 stdout에 차단 미선언 한 줄을 남긴다", () => {
+	test("deny가 undefined면 [] 와 동일하게 통과하고 stderr에 차단 미선언 한 줄을 남긴다 (stdout은 비어있다)", () => {
 		expect(() =>
 			assertDenyEnforceable(
 				[{ name: "gemini-member", command: "gemini -p" }],
@@ -2046,10 +2047,11 @@ describe("assertDenyEnforceable", () => {
 				"/path/to/config.yaml",
 			),
 		).not.toThrow();
-		expect(stdoutOutput).toContain("no skill deny declared");
+		expect(stderrOutput).toContain("no skill deny declared");
+		expect(stdoutOutput).toBe("");
 	});
 
-	test("deny가 null이면 [] 와 동일하게 통과하고 stdout에 차단 미선언 한 줄을 남긴다", () => {
+	test("deny가 null이면 [] 와 동일하게 통과하고 stderr에 차단 미선언 한 줄을 남긴다 (stdout은 비어있다)", () => {
 		expect(() =>
 			assertDenyEnforceable(
 				[{ name: "gemini-member", command: "gemini -p" }],
@@ -2058,7 +2060,8 @@ describe("assertDenyEnforceable", () => {
 				"/path/to/config.yaml",
 			),
 		).not.toThrow();
-		expect(stdoutOutput).toContain("no skill deny declared");
+		expect(stderrOutput).toContain("no skill deny declared");
+		expect(stdoutOutput).toBe("");
 	});
 });
 
