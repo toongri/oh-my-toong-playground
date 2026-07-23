@@ -30,7 +30,12 @@ bun test                                   # All TypeScript tests
 
 ### Prerequisites
 
-`bun`, `bash` (macOS 3.2 compatible)
+`bun`, `bash` (macOS 3.2 compatible), `jq`
+
+`jq` is a runtime prerequisite, not just a dev tool: the shipped hooks parse their
+payloads with it and **fail open (no guard) when it is absent** — including the
+session-ledger write guard and the code-review artifact identity guard below. macOS
+15+ ships it in the base system at `/usr/bin/jq`; older macOS needs it installed.
 
 ## Architecture
 
