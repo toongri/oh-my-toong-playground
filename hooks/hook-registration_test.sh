@@ -22,6 +22,25 @@
 #     falsifying the earlier assumption that Codex lacked this event; the
 #     ledger write-guard is wired there just like Claude's, alongside the
 #     SessionStart recording instruction (rules-injector).
+#   - The four core Claude hooks (keyword-detector.sh, pre-tool-enforcer.sh,
+#     session-start.sh, persistent-mode) are registered in the TRACKED root
+#     claude.yaml, and in NO projects/*/claude.yaml. Two invariants the pairing
+#     check above cannot see:
+#       (a) TRACKED, not claude.local.yaml. These four carry nothing
+#           device-specific, and claude.local.yaml is gitignored -- parking
+#           them there put the whole global hook registration outside version
+#           control, so a fresh clone got no hooks and anyone reading only the
+#           tracked files saw an empty root claude.yaml and concluded the hooks
+#           were unregistered. That misreading is what this assertion prevents.
+#       (b) NOT re-declared per project. Global registration lands in
+#           ~/.claude/settings.json while project registration lands in the
+#           target's .claude/settings.local.json, and Claude Code merges both
+#           -- a hook left in both scopes fires twice (session-start.sh would
+#           inject its stdout into the conversation prefix twice).
+#     The pairing invariant passes just as happily when the pair sits in four
+#     project files as when it sits at root, which is exactly how these drifted
+#     while their Codex counterparts (codex-write-guard.sh,
+#     codex-persistent-mode, codex-ledger.sh, rules-injector) were all global.
 # =============================================================================
 set -euo pipefail
 
@@ -159,6 +178,56 @@ test_codex_yaml_has_pretooluse_guard() {
     return 0
 }
 
+# =============================================================================
+# The four core Claude hooks live in the TRACKED root claude.yaml, under the
+# right event -- never only in gitignored claude.local.yaml (invariant (a)).
+# =============================================================================
+_CORE_HOOK_PAIRS="UserPromptSubmit:keyword-detector.sh
+PreToolUse:pre-tool-enforcer.sh
+SessionStart:session-start.sh
+Stop:persistent-mode"
+
+test_core_claude_hooks_registered_in_tracked_root_yaml() {
+    local pair event component block failed=0
+    while IFS= read -r pair; do
+        event="${pair%%:*}"
+        component="${pair#*:}"
+        block=$(_extract_hook_event_block "$REPO_DIR/claude.yaml" "$event")
+        if ! echo "$block" | grep -qF "component: $component"; then
+            echo "ASSERTION FAILED: root claude.yaml must register $component under $event (tracked, not claude.local.yaml -- a gitignored registration is invisible to a fresh clone and to anyone reading the repo)"
+            failed=1
+        fi
+    done <<EOF
+$_CORE_HOOK_PAIRS
+EOF
+    [ "$failed" -eq 0 ]
+}
+
+# =============================================================================
+# No projects/*/claude.yaml re-declares a core hook (invariant (b)): global
+# registration lands in ~/.claude/settings.json and project registration in the
+# target's .claude/settings.local.json, and Claude Code merges both -- so a
+# hook in both scopes fires twice.
+# =============================================================================
+test_core_claude_hooks_not_duplicated_per_project() {
+    local file pair component failed=0
+    while IFS= read -r file; do
+        [ -f "$file" ] || continue
+        case "$file" in "$REPO_DIR/claude.yaml") continue ;; esac
+        while IFS= read -r pair; do
+            component="${pair#*:}"
+            if grep -qF "component: $component" "$file"; then
+                echo "ASSERTION FAILED: $file re-declares core hook $component already registered globally in root claude.yaml -- both scopes merge, so the hook would fire twice"
+                failed=1
+            fi
+        done <<EOF
+$_CORE_HOOK_PAIRS
+EOF
+    done < <(_all_claude_yaml_files)
+
+    [ "$failed" -eq 0 ]
+}
+
 main() {
     echo "=========================================="
     echo "Hook Registration Consistency Tests"
@@ -168,6 +237,8 @@ main() {
     run_test test_session_start_and_write_guard_pair_witnessed_at_least_once
     run_test test_precompact_removed_from_all_targets
     run_test test_codex_yaml_has_pretooluse_guard
+    run_test test_core_claude_hooks_registered_in_tracked_root_yaml
+    run_test test_core_claude_hooks_not_duplicated_per_project
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
