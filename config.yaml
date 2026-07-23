@@ -18,4 +18,4 @@ backup_retention_days: 3
 # Validated Codex CLI version allowlist. Codex auto-upgrades unpredictably, so
 # sync hard-fails against any version outside this probe-verified set instead
 # of pinning a single version (which would break every `make sync` on upgrade).
-codex-versions: ["0.144.1", "0.144.5"]
+codex-versions: ["0.144.1", "0.144.5", "0.145.0"]
