@@ -59,6 +59,15 @@ hooks:
     - component: codex-persistent-mode
       type: command
       command: "bun run .codex/hooks/codex-persistent-mode/cli.ts hook stop"
+config:
+  agents:
+    # claude.yaml의 CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH와 같은 축이자 같은
+    # 계산 기준 -- 루트 세션이 depth 0, 자식이 부모+1이고 child_depth >
+    # max_depth면 "Agent depth limit reached"로 차단된다. 2 = 루트 -> 서브 ->
+    # 서브까지 허용. multi-agent V1 전용 키라 multi_agent_v2 기능 플래그가
+    # 켜지면 무시된다(`codex features list`로 확인).
+    max_depth: 2
+
 mcps:
   context7:
     command: npx
