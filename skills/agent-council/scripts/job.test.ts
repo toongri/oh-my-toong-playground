@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll, mock } from "bun:test";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -35,6 +35,22 @@ function makeCliStubDir(): string {
 	}
 	return stubDir;
 }
+
+// `start` spawns its worker detached; `execFileSync("start", …)` returns long before
+// that worker execs the member's CLI command (observed ~283ms later). A per-test
+// stub dir torn down right after `start` returns — even after `stop`/`clean` — races
+// that exec: PATH resolution doesn't fail closed when the stub disappears, it falls
+// through to the next PATH entry (a real, billed CLI binary). Suite-scoped lifetime
+// keeps the stub alive for every test in this file, past any worker's real exec.
+let sharedStubDir: string;
+
+beforeAll(() => {
+	sharedStubDir = makeCliStubDir();
+});
+
+afterAll(() => {
+	fs.rmSync(sharedStubDir, { recursive: true, force: true });
+});
 
 // ---------------------------------------------------------------------------
 // buildUiPayload
@@ -1328,16 +1344,13 @@ describe("parseCouncilConfig settings.deny.skills", () => {
 describe("start: settings.deny.skills recorded in job.json settings.denySkills", () => {
 	const SCRIPT = path.join(import.meta.dirname, "job.ts");
 	let tmpDir: string;
-	let stubDir: string;
 
 	beforeEach(() => {
 		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "council-job-test-"));
-		stubDir = makeCliStubDir();
 	});
 
 	afterEach(() => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
-		fs.rmSync(stubDir, { recursive: true, force: true });
 	});
 
 	test("job.json settings.denySkills matches the declared deny.skills array", () => {
@@ -1379,7 +1392,7 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 				"--json",
 				"test prompt",
 			],
-			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+			{ stdio: "pipe", env: { ...process.env, PATH: `${sharedStubDir}:${process.env.PATH}` } },
 		);
 		const output = JSON.parse(result.toString());
 		expect(output.settings.denySkills).toEqual(["orchestrate-review", "code-review", "agent-council"]);
@@ -1426,7 +1439,7 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 				"--json",
 				"test prompt",
 			],
-			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+			{ stdio: "pipe", env: { ...process.env, PATH: `${sharedStubDir}:${process.env.PATH}` } },
 		);
 		const output = JSON.parse(result.toString());
 		expect(output.settings.denySkills).toEqual([]);
@@ -1458,7 +1471,7 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 				"--json",
 				"test prompt",
 			],
-			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+			{ stdio: "pipe", env: { ...process.env, PATH: `${sharedStubDir}:${process.env.PATH}` } },
 		);
 		// stdout must be pure JSON — the informational "no skill deny declared"
 		// note (deny defaults to empty here) must not leak into the same stream.
