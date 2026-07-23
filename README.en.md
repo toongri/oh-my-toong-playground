@@ -65,6 +65,7 @@ The details of the library's skills (42) and agents (13) live under `docs/`.
 
 - Claude Code CLI installed
 - Node.js v18+ (for HUD functionality)
+- `jq` (hooks parse payloads with it — guards silently fail open without it)
 - macOS or Linux
 
 ### Setup
