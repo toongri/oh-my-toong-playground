@@ -154,6 +154,7 @@ export function buildAugmentedCommand(
 		effort_level?: unknown;
 		output_format?: unknown;
 		env?: Record<string, string>;
+		deny?: unknown;
 	},
 	cliType: string,
 ): { command: string; env: Record<string, string> } {
@@ -179,6 +180,25 @@ export function buildAugmentedCommand(
 	// nested session guard
 	if (cliType === "claude") {
 		env.CLAUDECODE = "";
+	}
+
+	// deny — invocation-scoped skill block, translated per cliType. No-op when deny is
+	// absent/empty: skill names come solely from entity.deny, never hardcoded here.
+	const denySkills = Array.isArray(entity.deny) ? entity.deny.map((name) => String(name)) : [];
+	if (denySkills.length > 0) {
+		if (cliType === "codex") {
+			const entries = denySkills.map((name) => `{name="${name}",enabled=false}`).join(",");
+			parts.push("-c", `skills.config=[${entries}]`);
+		} else if (cliType === "claude") {
+			const skillOverrides: Record<string, string> = {};
+			for (const name of denySkills) skillOverrides[name] = "off";
+			parts.push("--settings", JSON.stringify({ skillOverrides }));
+		} else if (cliType === "opencode") {
+			const skill: Record<string, string> = { "*": "allow" };
+			for (const name of denySkills) skill[name] = "deny";
+			env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ permission: { skill } });
+		}
+		// gemini/unknown: no enforceable lever here — enforceability is a job-start gate's job, not this translator's.
 	}
 
 	// effort_level
