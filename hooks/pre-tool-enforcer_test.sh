@@ -1491,6 +1491,41 @@ test_cr11_write_ultragoal_codereview_nested_agent_type_denied() {
     hg_is_deny "$out" || { echo "ASSERTION FAILED CR11: nested tool_input.agent_type must not forge identity -- expected deny. Got: $out"; return 1; }
 }
 
+# CR-12..15 -- `mv` SOURCE-operand coverage. `mv` deletes its source, so
+# `mv <guarded> /tmp/x` removes the guarded artifact exactly like the
+# `rm <guarded>` the tee/rm/truncate arm already caught; the extractor's old
+# `cp|mv -> $NF` arm saw only the DESTINATION, leaving the delete leg of the
+# write/delete contract open through this one verb. CR-14 is the negative
+# control that pins the cp/mv SPLIT: `cp` must keep extracting the destination
+# only, because copying leaves the guarded artifact intact and denying it
+# would be a false deny -- the failure mode this guard can never recover from.
+# CR-15 pins the same fix on the ledger guard, which shares this extractor and
+# had the identical hole before this change.
+test_cr12_bash_mv_source_ultragoal_codereview_no_agent_type_denied() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_bash_json "mv \"$path\" /tmp/saved.json")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED CR12: mv of the guarded artifact away is a delete -- expected deny. Got: $out"; return 1; }
+}
+
+test_cr13_bash_mv_source_goal_codereview_code_reviewer_allowed() {
+    local path out
+    path=$(cr_goal_path)
+    out=$(printf '%s' "$(hg_bash_json_agent "mv \"$path\" /tmp/saved.json" "code-reviewer")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED CR13: expected allow for code-reviewer. Got: $out"; return 1; }
+}
+
+test_cr14_bash_cp_source_ultragoal_codereview_allowed() {
+    local path out
+    path=$(cr_ultragoal_path)
+    out=$(printf '%s' "$(hg_bash_json "cp \"$path\" /tmp/backup.json")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED CR14: cp leaves the guarded artifact intact -- expected allow (over-widening control). Got: $out"; return 1; }
+}
+
+test_cr15_bash_mv_source_ledger_denied() {
+    wg_assert_deny "mv \"$(wg_ledger_path)\" /tmp/saved.md" "CR15(mv ledger source)"
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -1597,6 +1632,10 @@ main() {
     run_test test_cr9_write_ultragoal_verdict_no_agent_type_allowed
     run_test test_cr10_write_code_review_candidates_no_agent_type_allowed
     run_test test_cr11_write_ultragoal_codereview_nested_agent_type_denied
+    run_test test_cr12_bash_mv_source_ultragoal_codereview_no_agent_type_denied
+    run_test test_cr13_bash_mv_source_goal_codereview_code_reviewer_allowed
+    run_test test_cr14_bash_cp_source_ultragoal_codereview_allowed
+    run_test test_cr15_bash_mv_source_ledger_denied
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

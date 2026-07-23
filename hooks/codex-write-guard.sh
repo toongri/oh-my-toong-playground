@@ -219,8 +219,21 @@ _cwg_extract_shell_targets() {
         tee | rm | truncate)
             printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
             ;;
-        cp | mv)
+        cp)
+            # Destination only. `cp <guarded> /tmp/x` READS the guarded path
+            # and leaves it intact, so extracting the source operand here
+            # would false-deny a harmless copy.
             printf '%s\n' "$seg" | awk '{print $NF}'
+            ;;
+        mv)
+            # Every non-option operand, not just the last -- `mv` DELETES its
+            # source, so `mv <guarded> /tmp/x` removes the guarded path exactly
+            # like `rm <guarded>`, which the tee/rm/truncate arm above already
+            # catches. $NF alone saw only the destination, leaving the delete
+            # leg of the write/delete contract open through this one verb.
+            # Split from `cp` above because only `mv` is destructive; mirrors
+            # the Claude twin's own cp/mv split in hooks/pre-tool-enforcer.sh.
+            printf '%s\n' "$seg" | awk '{for (i = 2; i <= NF; i++) if ($i !~ /^-/) print $i}'
             ;;
         sed)
             if printf '%s\n' "$seg" | grep -q -- '-i'; then
