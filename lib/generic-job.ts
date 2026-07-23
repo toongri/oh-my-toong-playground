@@ -286,13 +286,19 @@ export function buildAugmentedCommand(
 			const entries = denySkills.map((name) => `{name=\\"${name}\\",enabled=false}`).join(",");
 			parts.push("-c", `skills.config=[${entries}]`);
 		} else if (cliType === "claude") {
-			const skillOverrides: Record<string, string> = {};
+			// Object.create(null): a plain {} literal has Object.prototype as its
+			// prototype, so a deny name of "__proto__" assigns through the prototype
+			// setter instead of creating an own property — it silently vanishes from
+			// the JSON.stringify output below. A null-prototype object has no such setter.
+			const skillOverrides: Record<string, string> = Object.create(null);
 			for (const name of denySkills) skillOverrides[name] = "off";
 			// Same reason as codex above: escape every quote in the JSON so splitCommand's
 			// re-tokenization doesn't strip them and produce invalid JSON on the receiving end.
 			parts.push("--settings", JSON.stringify({ skillOverrides }).replace(/"/g, '\\"'));
 		} else if (cliType === "opencode") {
-			const skill: Record<string, string> = { "*": "allow" };
+			// Same null-prototype reasoning as claude's skillOverrides above.
+			const skill: Record<string, string> = Object.create(null);
+			skill["*"] = "allow";
 			for (const name of denySkills) skill[name] = "deny";
 			env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ permission: { skill } });
 		}

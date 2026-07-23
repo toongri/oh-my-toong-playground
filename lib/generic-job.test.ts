@@ -406,6 +406,39 @@ describe("buildAugmentedCommand", () => {
 		expect(parsed.permission.skill["*"]).toBe("allow");
 	});
 
+	// A plain object literal ({}) has Object.prototype as its prototype, so assigning
+	// a key literally named "__proto__" hits the inherited accessor instead of creating
+	// an own data property — the name silently vanishes from JSON.stringify. claude's
+	// skillOverrides and opencode's permission.skill must build on a null-prototype
+	// object (Object.create(null)) so a "__proto__"-named deny entry survives as a real key.
+	test("deny with a __proto__-named skill survives as an own key for claude and opencode", () => {
+		const claudeResult = buildAugmentedCommand(
+			{ command: "claude -p", deny: ["__proto__", "normal-skill"] },
+			"claude",
+		);
+		const claudeTokens = splitCommand(claudeResult.command);
+		expect(claudeTokens).not.toBeNull();
+		const settingsIndex = claudeTokens!.indexOf("--settings");
+		const claudeParsed = JSON.parse(claudeTokens![settingsIndex + 1]);
+		expect(Object.prototype.hasOwnProperty.call(claudeParsed.skillOverrides, "__proto__")).toBe(
+			true,
+		);
+		expect(claudeParsed.skillOverrides.__proto__).toBe("off");
+		expect(claudeParsed.skillOverrides["normal-skill"]).toBe("off");
+
+		const opencodeResult = buildAugmentedCommand(
+			{ command: "opencode run", deny: ["__proto__", "normal-skill"] },
+			"opencode",
+		);
+		const opencodeParsed = JSON.parse(opencodeResult.env.OPENCODE_CONFIG_CONTENT);
+		expect(
+			Object.prototype.hasOwnProperty.call(opencodeParsed.permission.skill, "__proto__"),
+		).toBe(true);
+		expect(opencodeParsed.permission.skill.__proto__).toBe("deny");
+		expect(opencodeParsed.permission.skill["normal-skill"]).toBe("deny");
+		expect(opencodeParsed.permission.skill["*"]).toBe("allow");
+	});
+
 	test("deny absent or empty is byte-identical to not passing deny at all (codex/claude/opencode)", () => {
 		for (const [command, cliType] of [
 			["codex exec", "codex"],
