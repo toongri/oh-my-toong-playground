@@ -39,6 +39,13 @@ fi
 # the resolved current-session ledger, and the deny JSON, both live in
 # hooks/write-guard-core.sh (write_guard_core_run) so a candidate merely
 # containing "session-ledger-" as a substring is no longer enough to arm.
+#
+# The same extracted candidate set also feeds a second, independent guard
+# (code-review-artifact-guard-core plan): identity-conditional protection for
+# the code-review completion-gate artifacts ($OMT_DIR/ultragoal-codereview-
+# <sid>.json, $OMT_DIR/goal-codereview-<sid>.json), allowing the write only
+# when the payload's top-level agent_type is exactly "code-reviewer" --
+# see the wiring below and hooks/write-guard-core.sh (codereview_guard_core_run).
 # =============================================================================
 _wg_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hooks/write-guard-core.sh
@@ -80,7 +87,8 @@ _wg_strip_dquotes() {
 # envsubst, which would let an arbitrary $(...) or other variable reference
 # inside an untrusted Bash tool_input.command execute. OMT_DIR, OMT_SESSION_ID,
 # HOME, and a leading ~ are expanded: OMT_DIR/OMT_SESSION_ID compose the
-# ledger path directly (write-guard-core.sh:29), and $_wg_omt_dir is always
+# ledger path directly (write_guard_core_run's ledger_path in
+# hooks/write-guard-core.sh), and $_wg_omt_dir is always
 # $HOME/.omt/<proj> -- so a $HOME- or ~-relative spelling of that same path
 # composes the identical ledger file and must be matched too, or it silently
 # bypasses the guard. PWD/CLAUDE_PROJECT_DIR/etc are still NOT expanded: they
@@ -131,9 +139,11 @@ _wg_absolutize() {
 # paths (not yet absolutized) for one already quote-normalized `&&`/`||`/`;`/
 # `|` chain segment. Mirrors the write-vectors of the retired
 # _wg_ledger_target_in_segment classifier (redirect, tee/rm/truncate, dd of=,
-# sed -i, cp/mv last-arg) but EXTRACTS the target instead of testing it for a
-# "session-ledger-" substring -- write_guard_core_run does an EXACT full-path
-# comparison, so a harmless non-ledger candidate simply never matches.
+# sed -i, cp last-arg, mv every operand) but EXTRACTS the target instead of
+# testing it for a "session-ledger-" substring -- write_guard_core_run does an
+# EXACT full-path comparison, so a harmless non-ledger candidate simply never
+# matches. `cp` and `mv` are separate arms below and are NOT interchangeable:
+# only `mv` destroys its source, so only `mv` extracts source operands.
 _wg_extract_bash_targets() {
     local seg="$1"
     # `|| true`: grep -oE returns 1 when a segment has no redirect at all --
@@ -149,7 +159,7 @@ _wg_extract_bash_targets() {
             # <other>` used to extract only "<other>" ($NF), leaving the
             # ledger operand unchecked whenever it wasn't the final argument.
             # Mirrors the already-correct Codex extractor
-            # (_cwg_extract_shell_targets, hooks/codex-write-guard.sh:167-169).
+            # (_cwg_extract_shell_targets in hooks/codex-write-guard.sh).
             echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             ;;
         dd)
@@ -165,8 +175,20 @@ _wg_extract_bash_targets() {
                 echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             fi
             ;;
-        cp|mv)
+        cp)
+            # Destination only. `cp <guarded> /tmp/x` READS the guarded path
+            # and leaves it intact, so extracting the source operand here
+            # would false-deny a harmless copy.
             echo "$seg" | awk '{print $NF}'
+            ;;
+        mv)
+            # Every non-option operand, not just the last -- `mv` DELETES its
+            # source, so `mv <guarded> /tmp/x` removes the guarded path exactly
+            # like `rm <guarded>`, which the tee/rm/truncate arm above already
+            # catches. $NF alone saw only the destination, leaving the delete
+            # leg of the write/delete contract open through this one verb.
+            # Split from `cp` above because only `mv` is destructive.
+            echo "$seg" | awk '{for(i=2;i<=NF;i++) if($i !~ /^-/) print $i}'
             ;;
     esac
 }
@@ -254,6 +276,34 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
         _wg_out=$(printf '%s' "$_wg_candidates" | write_guard_core_run "$_wg_omt_dir" "$_wg_sid")
         if [[ -n "$_wg_out" ]]; then
             printf '%s\n' "$_wg_out"
+            exit 0
+        fi
+
+        # Code-review artifact identity guard (code-review-artifact-guard-core
+        # plan): a SEPARATE gate from the unconditional ledger guard just
+        # above, run on the SAME _wg_candidates -- the two are different
+        # rule kinds (unconditional deny vs identity-conditional allow) so
+        # they must fire independently rather than one being nested inside
+        # the other. agent_type is read via jq's ".agent_type" path, which
+        # binds ONLY the payload's TOP-LEVEL field -- never a same-named key
+        # nested under tool_input, which an agent fully controls -- mirroring
+        # the Codex twin's own top-level-only agent_type extraction in
+        # hooks/codex-write-guard.sh. A
+        # failed/absent extraction becomes "" (fail-closed), same as every
+        # other jq extraction in this file. Absence must DENY here, not
+        # allow -- NOT because a main-thread tool call never carries
+        # agent_type (it can, on the main thread of a session started with
+        # `--agent <name>`), but because allowing on absence would let an
+        # ordinary orchestrator forge the code-review artifact itself with
+        # zero extra cost (fail-closed; see CLAUDE.md's Code-review artifact
+        # identity guard entry for the full trust-channel rationale). The
+        # verdict wording and path/identity comparison are single-sourced in
+        # hooks/write-guard-core.sh (codereview_guard_core_run); this shim
+        # only extracts agent_type and forwards the same candidate set.
+        _wg_agent_type=$(echo "$input" | jq -r '.agent_type // empty' 2>/dev/null) || _wg_agent_type=""
+        _wg_cr_out=$(printf '%s' "$_wg_candidates" | codereview_guard_core_run "$_wg_omt_dir" "$_wg_sid" "$_wg_agent_type")
+        if [[ -n "$_wg_cr_out" ]]; then
+            printf '%s\n' "$_wg_cr_out"
             exit 0
         fi
     fi
