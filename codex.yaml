@@ -64,8 +64,16 @@ config:
     # claude.yaml의 CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH와 같은 축이자 같은
     # 계산 기준 -- 루트 세션이 depth 0, 자식이 부모+1이고 child_depth >
     # max_depth면 "Agent depth limit reached"로 차단된다. 2 = 루트 -> 서브 ->
-    # 서브까지 허용. multi-agent V1 전용 키라 multi_agent_v2 기능 플래그가
-    # 켜지면 무시된다(`codex features list`로 확인).
+    # 서브까지 허용.
+    #
+    # 경고: codex 0.145.0에서 이 키는 실질적으로 무동작이다. 상류 정의가
+    # "Maximum nesting depth for V1 agent threads. Ignored by V2."이고
+    # multi_agents_v2/spawn.rs에는 depth 비교 게이트 자체가 없는데, 이 버전의
+    # 스폰은 V2 경로로 돈다 -- `codex features list`가 multi_agent_v2=false로
+    # 보고해도 그렇다. 격리 HOME 프로브에서 max_depth=1인 채로 depth 2 스폰이
+    # 통과했고 rollout의 thread_spawn 기록으로 확인했다. Codex 쪽에는 현재
+    # 중첩 깊이를 제한할 수 있는 대체 키가 없다. V1 경로를 타거나 V2에 캡이
+    # 생기면 그때부터 유효해진다.
     max_depth: 2
 
 mcps:
