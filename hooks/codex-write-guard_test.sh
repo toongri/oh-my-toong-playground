@@ -1390,6 +1390,690 @@ test_own_file_paths_key_non_ledger_allows() {
 }
 
 # =============================================================================
+# Claude<->Codex parity story 9/9, AC2/AC4 -- Codex has no native declarative
+# permission-deny primitive equivalent to claude.yaml's permissions.deny
+# (Bash(rm -rf *) / Bash(git push --force*) etc.), so codex-write-guard.sh
+# enforces the same verdict via a PreToolUse hook deny
+# (write_guard_core_check_dangerous_command, hooks/write-guard-core.sh).
+# new_sandbox/run_hook are reused purely for a valid cwd/session environment
+# (this guard itself needs neither ledger path nor session id). The negative
+# controls (plain rm, rm -r, non-force git push) are AC4: without them this
+# guard would be indistinguishable from "deny everything".
+# =============================================================================
+test_ac_dangerous_rm_rf_denies() {
+    new_sandbox
+    local out
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/x"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
+    rm -rf "$SBX"
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-rm-rf: expected deny for 'rm -rf /tmp/x', got '$out'"
+        return 1
+    fi
+}
+
+test_ac_dangerous_git_push_force_denies() {
+    new_sandbox
+    local out
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"git push --force"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
+    rm -rf "$SBX"
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-git-push-force: expected deny for 'git push --force', got '$out'"
+        return 1
+    fi
+}
+
+test_ac_dangerous_exec_command_rm_rf_denies() {
+    new_sandbox
+    local out
+    out=$(printf '{"tool_name":"exec_command","tool_input":{"cmd":"rm -rf /tmp/x"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook)
+    rm -rf "$SBX"
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-exec-command-rm-rf: expected deny for 'rm -rf /tmp/x' via .cmd, got '$out'"
+        return 1
+    fi
+}
+
+test_ac4_negative_plain_rm_allows() {
+    new_sandbox
+    local out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"rm /tmp/x"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    assert_allow "$out" "$rc" "AC4-negative-plain-rm"
+}
+
+test_ac4_negative_rm_r_allows() {
+    new_sandbox
+    local out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"rm -r /tmp/x"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    assert_allow "$out" "$rc" "AC4-negative-rm-r"
+}
+
+test_ac4_negative_git_push_no_force_allows() {
+    new_sandbox
+    local out rc=0
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"git push origin main"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook) || rc=$?
+    rm -rf "$SBX"
+    assert_allow "$out" "$rc" "AC4-negative-git-push-no-force"
+}
+
+# =============================================================================
+# Defect 1 (both-platform measurement) -- jq absence used to fail the WHOLE
+# hook open (exit 0, `command -v jq` check at file top ran BEFORE even the
+# dangerous-command guard), even though that guard exists to emulate
+# Claude's OWN native, jq-independent claude.yaml `permissions.deny`
+# enforcement -- so the same `rm -rf`/`git push --force` DENIED on Claude but
+# silently ALLOWED on Codex whenever jq happened to be missing from PATH.
+# Fix: a raw-text (no jq) best-effort extraction of tool_input.command/.cmd
+# still runs the dangerous-command guard when jq is absent.
+#
+# jq_less_bin mirrors hooks/codex-ledger_test.sh's own jq_less_bin pattern:
+# a PATH containing ONLY the externals this jq-absent path legitimately
+# needs (dirname/cat/sed/grep/head/awk/tr -- dirname/cat needed by
+# SCRIPT_DIR resolution and `input=$(cat)`, sed/grep/head/awk/tr by the
+# heredoc-strip/mask/split pipeline), deliberately excluding jq. Absolute
+# /bin/bash sidesteps a bare `bash` lookup failing against the restricted
+# PATH (same rationale as hooks/codex-ledger_test.sh:181-183).
+# =============================================================================
+new_jq_less_bin() {
+    JQLESS=$(mktemp -d)
+    ln -s /usr/bin/dirname "$JQLESS/dirname"
+    ln -s /bin/cat "$JQLESS/cat"
+    ln -s /usr/bin/sed "$JQLESS/sed"
+    ln -s /usr/bin/grep "$JQLESS/grep"
+    ln -s /usr/bin/head "$JQLESS/head"
+    ln -s /usr/bin/awk "$JQLESS/awk"
+    ln -s /usr/bin/tr "$JQLESS/tr"
+}
+
+run_hook_nojq() {
+    env -u OMT_DIR -u OMT_SESSION_ID HOME="$SBX" CODEX_THREAD_ID=cx PATH="$JQLESS" /bin/bash "$HOOK"
+}
+
+test_defect1_nojq_dangerous_rm_rf_denies() {
+    new_sandbox
+    new_jq_less_bin
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/x"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook_nojq)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect1-nojq-dangerous-rm-rf: expected deny for 'rm -rf /tmp/x' with jq absent from PATH (Claude denies this natively regardless of jq), got '$out'"
+        result=1
+    fi
+
+    rm -rf "$JQLESS" "$SBX"
+    return "$result"
+}
+
+test_defect1_nojq_dangerous_git_push_force_denies() {
+    new_sandbox
+    new_jq_less_bin
+    local out result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"git push --force"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook_nojq)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect1-nojq-dangerous-git-push-force: expected deny for 'git push --force' with jq absent from PATH, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$JQLESS" "$SBX"
+    return "$result"
+}
+
+test_defect1_nojq_cmd_key_dangerous_denies() {
+    new_sandbox
+    new_jq_less_bin
+    local out result=0
+
+    out=$(printf '{"tool_name":"exec_command","tool_input":{"cmd":"rm -rf /tmp/x"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook_nojq)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect1-nojq-cmd-key-dangerous: expected deny for exec_command tool_input.cmd 'rm -rf /tmp/x' with jq absent from PATH, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$JQLESS" "$SBX"
+    return "$result"
+}
+
+# Negative control (AC4-equivalent for the jq-absent path) -- a harmless
+# command must still ALLOW with jq absent, proving the raw-text fallback is
+# not "deny everything".
+test_defect1_nojq_negative_control_allows() {
+    new_sandbox
+    new_jq_less_bin
+    local out rc=0 result=0
+
+    out=$(printf '{"tool_name":"Bash","tool_input":{"command":"ls -la"},"session_id":"cx","cwd":"%s"}' "$GITDIR" | run_hook_nojq) || rc=$?
+    if ! assert_allow "$out" "$rc" "defect1-nojq-negative-control"; then
+        result=1
+    fi
+
+    rm -rf "$JQLESS" "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Defect 3 (both-platform measurement) -- the chain-separator set the
+# dangerous-command guard splits on (&&/||/;/|) did not include a lone `&`
+# (background operator): `echo safe & rm -rf /tmp/x` backgrounds the echo and
+# runs `rm -rf` as its own command at real execution time, but the whole
+# string was scanned as ONE segment that never matched any dangerous-command
+# pattern -- silently ALLOWING it, while Claude's own shell-aware parser
+# (which recognizes `&`) denies it natively. Fix: add a lone `&` to the
+# separator set, with `&&` ordered first so a real `&&` is not mis-split
+# into two `&` matches (already covered unchanged by
+# test_regression_dc_real_chain_and_rm_rf_denies above).
+# =============================================================================
+test_defect3_single_ampersand_background_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'echo safe & rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect3-single-ampersand: expected deny for 'echo safe & rm -rf /tmp/x' (real shell backgrounds echo, runs rm -rf as its own command), got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Negative control -- a harmless `&`-backgrounded chain must still ALLOW,
+# proving the new separator does not turn ordinary background usage into an
+# over-broad denier.
+test_defect3_ampersand_negative_control_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg cmd 'echo safe & echo also-safe' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "defect3-ampersand-negative-control"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Defect 4 (both-platform measurement) -- three false-positive shapes on the
+# dangerous-command guard, all denied before this fix even though the real
+# shell never executes `rm -rf` in any of them:
+#   1. backslash-escaped `\;` outside quotes is dead text (an escaped
+#      literal, not a chain separator) -- `echo safe \; rm -rf /tmp/x`
+#      prints the whole literal string; rm never runs.
+#   2. a word-leading `#` starts a comment that runs to end of line --
+#      `echo safe # note; rm -rf /tmp/x` only ever prints "safe".
+#   3. a heredoc BODY is literal stdin data, never parsed as shell code --
+#      `cat <<'EOF'` / `rm -rf /tmp/x` / `EOF` only ever prints text.
+# Each must ALLOW. No-bypass proofs (the guard must not have gone blind to a
+# REAL dangerous command sitting elsewhere in the same string) are grouped
+# immediately after.
+# =============================================================================
+test_defect4_escaped_semicolon_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg cmd 'echo safe \; rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "defect4-escaped-semicolon"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_defect4_escaped_pipe_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg cmd 'echo safe \| rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "defect4-escaped-pipe"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_defect4_comment_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg cmd 'echo safe # note; rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "defect4-comment"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_defect4_heredoc_body_allows() {
+    new_sandbox
+    local cmd out rc=0 result=0
+
+    cmd=$(printf "cat <<'EOF'\nrm -rf /tmp/x\nEOF\n")
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "defect4-heredoc-body"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# No-bypass proof 1 -- a REAL dangerous command sitting BEFORE a comment
+# marker on the same line must still be caught: comment truncation only
+# drops what comes AFTER the `#`, never what precedes it.
+test_defect4_real_command_before_comment_still_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'rm -rf /tmp/x # this text is just a comment' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect4-real-command-before-comment: expected deny for 'rm -rf /tmp/x # comment' (dangerous command precedes the comment marker), got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# No-bypass proof 2 -- a `#` that does NOT lead a shell word (no preceding
+# whitespace/start-of-line, e.g. glued mid-token as `foo#bar`) must NOT be
+# treated as a comment start, so a REAL chain separator later on the same
+# line stays live and the trailing dangerous command is still caught.
+test_defect4_midword_hash_not_comment_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'grep foo#bar file && rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect4-midword-hash-not-comment: expected deny for 'grep foo#bar file && rm -rf /tmp/x' (mid-word '#' must not swallow the real '&&' chain), got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# No-bypass proof 3 -- the heredoc START line (everything up to and
+# including the `<<DELIM` token) is KEPT, not stripped: a real dangerous
+# command chained BEFORE the heredoc marker on that same line must still be
+# caught, even though the heredoc BODY that follows is correctly ignored.
+test_defect4_heredoc_startline_chain_before_marker_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd=$(printf "rm -rf /tmp/x && cat <<'EOF'\nharmless body text\nEOF\n")
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect4-heredoc-startline-chain: expected deny for 'rm -rf /tmp/x && cat <<EOF ...' (real chain precedes the heredoc marker), got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Regression (CONFIRMED bypass, independent code review) -- the
+# dangerous-command guard split its command text on chain separators
+# (&&/||/;/|) WITHOUT the quote-aware masking (_cwg_mask_quoted) the sibling
+# shell-target route a few lines below it in the same file already applies
+# before splitting. A `;`/`|` INSIDE a single-quoted string was read the
+# same as a live chain separator, so the back half of the split (e.g.
+# `rm -rf /tmp/x'` out of `echo 'note; rm -rf /tmp/x'`) matched one of
+# write_guard_core_check_dangerous_command's 9 patterns and denied an
+# entirely harmless command -- with no bypass/ask escape hatch on this
+# deny-only gate, an unrecoverable false block for the user.
+#
+# Four arms, each proving a different thing:
+#   1. quoted-separator false positive: DENY before the fix, ALLOW after
+#      (`;` and `|`, the two live-inside-quotes forms this guard can mask).
+#   2. real chain hazard: DENY both before and after (masking must not
+#      blind the guard to a genuine unquoted `&&`/`;`/`|` chain).
+#   3. standalone dangerous command, no quoting involved: already covered
+#      unchanged by test_ac_dangerous_rm_rf_denies /
+#      test_ac_dangerous_git_push_force_denies above (masking is a no-op on
+#      unquoted text) -- not duplicated here.
+#   4. negative control: an ordinary safe chain (no quotes, no dangerous
+#      command) ALLOWs both before and after, proving the masking fix does
+#      not turn correct splitting into an over-broad denier.
+# =============================================================================
+test_regression_dc_quoted_semicolon_false_positive_allows() {
+    new_sandbox
+    local cmd out rc=0 result=0
+
+    cmd="echo 'note; rm -rf /tmp/x'"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "regression-dc-quoted-semicolon"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_regression_dc_quoted_pipe_false_positive_allows() {
+    new_sandbox
+    local cmd out rc=0 result=0
+
+    cmd="printf 'safe|rm -rf /tmp/x'"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "regression-dc-quoted-pipe"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_regression_dc_real_chain_and_rm_rf_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'echo hi && rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-dc-real-chain-and: expected deny for 'echo hi && rm -rf /tmp/x', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_regression_dc_real_chain_semicolon_rm_rf_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'git status ; rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-dc-real-chain-semicolon: expected deny for 'git status ; rm -rf /tmp/x', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_regression_dc_real_chain_pipe_rm_rf_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'ls | rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-dc-real-chain-pipe: expected deny for 'ls | rm -rf /tmp/x', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_regression_dc_negative_control_safe_chain_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg cmd 'echo safe && echo also-safe' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "regression-dc-negative-control-safe-chain"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Regression (CONFIRMED bypass, double-quote masking gap in _cwg_mask_quoted)
+# -- _cwg_mask_quoted used to mask shell-active metacharacters only inside
+# SINGLE-quoted spans; a `;`/`|` inside a DOUBLE-quoted string was still read
+# as a live chain separator, splitting the segment so its second half matched
+# a dangerous-command pattern and denied an entirely harmless command -- with
+# no bypass/ask escape hatch on this deny-only gate, an unrecoverable false
+# block for the user. Reproduces, verbatim, the 5-row discriminating-power
+# probe this fix was verified against: each row proves something DIFFERENT
+# (positive control, negative control, single-quote already-fixed, the
+# double-quote defect itself, and a real unquoted chain that must stay
+# denied). Rows 1/3/5 already have equivalent coverage elsewhere in this
+# suite (test_ac_dangerous_rm_rf_denies, test_regression_dc_quoted_
+# semicolon_false_positive_allows, test_regression_dc_real_chain_and_rm_rf_
+# denies) -- reproduced here anyway, as its own self-contained block, per the
+# "copy the whole sibling pattern, not half" principle: the two rows that
+# differ by exactly ONE quote character (single vs double) are meaningless
+# apart from each other.
+# =============================================================================
+test_probe_row1_positive_control_rm_rf_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED probe-row1-positive-control: expected deny for 'rm -rf /tmp/x' (probe discriminating-power positive control), got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_probe_row2_negative_control_echo_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg cmd 'echo hello' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "probe-row2-negative-control"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_probe_row3_single_quoted_semicolon_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg cmd "echo 'note; rm -rf /tmp/x'" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "probe-row3-single-quoted-semicolon"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Row 4 -- the defect itself, differing from row 3 by exactly ONE quote
+# character. Before the fix this DENIED (false positive); after, ALLOWS.
+test_probe_row4_double_quoted_semicolon_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg cmd 'echo "note; rm -rf /tmp/x"' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "probe-row4-double-quoted-semicolon-DEFECT-FIX"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_probe_row5_real_chain_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'echo hi && rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED probe-row5-real-chain: expected deny for 'echo hi && rm -rf /tmp/x', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Sibling of test_regression_dc_quoted_pipe_false_positive_allows (single
+# quote) -- same defect class via `|` instead of `;`, double-quoted.
+test_regression_dc_double_quoted_pipe_false_positive_allows() {
+    new_sandbox
+    local cmd out rc=0 result=0
+
+    cmd='printf "safe|rm -rf /tmp/x"'
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "regression-dc-double-quoted-pipe"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# No-bypass proof (this fix's most dangerous possible side effect): widening
+# _cwg_mask_quoted to also mask INSIDE double quotes must not blind the
+# ledger-guard or code-review-artifact-guard extraction routes to a REAL,
+# unquoted separator/redirect that sits next to (but outside) a double-quoted
+# span. Each case below targets a guarded path via an UNQUOTED redirect that
+# follows a double-quoted segment containing its own (now-masked) `;` -- the
+# masking of the quoted segment's internal separator must not swallow or
+# desync tracking for the later, genuinely live separator/redirect.
+# =============================================================================
+test_regression_doublequote_mask_does_not_hide_ledger_redirect_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd="echo \"hello; world\" ; echo x > $LED"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-doublequote-mask-ledger: a real unquoted ';' after a double-quoted span with its own masked ';' must still split and the trailing redirect must still deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_regression_doublequote_mask_does_not_hide_codereview_redirect_denies() {
+    new_sandbox
+    cr_paths
+    local cmd out result=0
+
+    cmd="echo \"hello; world\" ; echo x > $CR_GOAL"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-doublequote-mask-codereview: a real unquoted ';' after a double-quoted span with its own masked ';' must still split and the trailing redirect to the (agent_type-absent) code-review artifact must still deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Regression (CONFIRMED, this fix) -- the double-quote masking widening
+# (commit d59f35ed) fixed the double-quoted-prose false positive but went too
+# far: it also masks a `;`/`|`/etc that sits INSIDE a live `$( ... )` (or
+# `` ` ... ` ``) command substitution nested within a double-quoted string --
+# even though that substitution's body is REAL shell code the outer shell
+# executes, not dead text. `echo "$(true; rm -rf /tmp/x)"` actually runs
+# `rm -rf /tmp/x` at real execution time, but pre-fix the masker replaced the
+# `;` inside the substitution with a space (same as any other in-dq `;`), so
+# the chain-splitter never saw a second segment and the dangerous-command scan
+# never evaluated `rm -rf /tmp/x` -- a silent allow of a live destructive
+# command.
+#
+# Three arms, reproducing the exact regression table this fix was verified
+# against (each row proves something different; fixing only one would leave
+# the other two unverified):
+#   1. cmd-sub semicolon regression: DENY pre-fix would have been allow (the
+#      bug); must DENY after the fix -- the `;` inside `$( ... )` is live code.
+#   2. dq-prose semicolon (the ORIGINAL commit d59f35ed intended fix): must
+#      stay ALLOW -- a `;` in ordinary double-quoted prose (no `$( )`) is
+#      still dead text and must not trip the dangerous-command scan. Do not
+#      regress this by reverting double-quote masking wholesale.
+#   3. unquoted semicolon chain: must stay DENY both before and after -- a
+#      real top-level `;` chain separator was never masked in the first
+#      place and must keep splitting normally.
+# =============================================================================
+test_regression_cmdsub_semicolon_in_dq_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'echo "$(true; rm -rf /tmp/x)"' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-cmdsub-semicolon-in-dq: 'echo \"\$(true; rm -rf /tmp/x)\"' actually executes rm -rf at runtime via the live command substitution -- expected deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_regression_dq_prose_semicolon_no_cmdsub_allows() {
+    new_sandbox
+    local out rc=0 result=0
+
+    out=$(jq -n --arg cmd 'echo "note; rm -rf /tmp/x"' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "regression-dq-prose-semicolon-no-cmdsub"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_regression_unquoted_semicolon_chain_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'echo safe; rm -rf /tmp/x' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-unquoted-semicolon-chain: 'echo safe; rm -rf /tmp/x' is a real unquoted chain -- expected deny, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# Nested $($()) and backtick coverage (per the fix's own "consider nesting"
+# note): a nested command substitution inside a double-quoted string, and a
+# backtick-form substitution, must each keep their live `;` visible too.
+test_regression_nested_cmdsub_semicolon_in_dq_denies() {
+    new_sandbox
+    local out result=0
+
+    out=$(jq -n --arg cmd 'echo "$(echo $(true; rm -rf /tmp/x))"' --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-nested-cmdsub-semicolon: nested \$(\$()) inside dq must still deny on the live inner ';', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_regression_backtick_semicolon_in_dq_denies() {
+    new_sandbox
+    local cmd out result=0
+
+    cmd='echo "`true; rm -rf /tmp/x`"'
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED regression-backtick-semicolon-in-dq: backtick-form command substitution inside dq must still deny on the live inner ';', got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
 # Code-review artifact identity guard (agent_type wiring task): covers the
 # codereview_guard_core_run wiring (see codereview_guard_core_run in
 # hooks/write-guard-core.sh) added at the tail of hooks/codex-write-guard.sh,
@@ -1797,6 +2481,44 @@ main() {
     run_test test_own_file_paths_key_ledger_denies
     run_test test_own_file_paths_key_mid_array_ledger_denies
     run_test test_own_file_paths_key_non_ledger_allows
+    run_test test_ac_dangerous_rm_rf_denies
+    run_test test_ac_dangerous_git_push_force_denies
+    run_test test_ac_dangerous_exec_command_rm_rf_denies
+    run_test test_ac4_negative_plain_rm_allows
+    run_test test_ac4_negative_rm_r_allows
+    run_test test_ac4_negative_git_push_no_force_allows
+    run_test test_defect1_nojq_dangerous_rm_rf_denies
+    run_test test_defect1_nojq_dangerous_git_push_force_denies
+    run_test test_defect1_nojq_cmd_key_dangerous_denies
+    run_test test_defect1_nojq_negative_control_allows
+    run_test test_defect3_single_ampersand_background_denies
+    run_test test_defect3_ampersand_negative_control_allows
+    run_test test_defect4_escaped_semicolon_allows
+    run_test test_defect4_escaped_pipe_allows
+    run_test test_defect4_comment_allows
+    run_test test_defect4_heredoc_body_allows
+    run_test test_defect4_real_command_before_comment_still_denies
+    run_test test_defect4_midword_hash_not_comment_denies
+    run_test test_defect4_heredoc_startline_chain_before_marker_denies
+    run_test test_regression_dc_quoted_semicolon_false_positive_allows
+    run_test test_regression_dc_quoted_pipe_false_positive_allows
+    run_test test_regression_dc_real_chain_and_rm_rf_denies
+    run_test test_regression_dc_real_chain_semicolon_rm_rf_denies
+    run_test test_regression_dc_real_chain_pipe_rm_rf_denies
+    run_test test_regression_dc_negative_control_safe_chain_allows
+    run_test test_probe_row1_positive_control_rm_rf_denies
+    run_test test_probe_row2_negative_control_echo_allows
+    run_test test_probe_row3_single_quoted_semicolon_allows
+    run_test test_probe_row4_double_quoted_semicolon_allows
+    run_test test_probe_row5_real_chain_denies
+    run_test test_regression_dc_double_quoted_pipe_false_positive_allows
+    run_test test_regression_doublequote_mask_does_not_hide_ledger_redirect_denies
+    run_test test_regression_doublequote_mask_does_not_hide_codereview_redirect_denies
+    run_test test_regression_cmdsub_semicolon_in_dq_denies
+    run_test test_regression_dq_prose_semicolon_no_cmdsub_allows
+    run_test test_regression_unquoted_semicolon_chain_denies
+    run_test test_regression_nested_cmdsub_semicolon_in_dq_denies
+    run_test test_regression_backtick_semicolon_in_dq_denies
     run_test test_codereview_apply_patch_agent_type_absent_denies
     run_test test_codereview_apply_patch_agent_type_code_reviewer_allows
     run_test test_codereview_apply_patch_agent_type_sisyphus_junior_denies

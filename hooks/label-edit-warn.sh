@@ -12,10 +12,18 @@
 # missing-lib fail-open path. It only ever adds additionalContext; it never
 # emits a deny/block decision.
 #
+# Claude PostToolUse shim over the shared judgment core (hooks/label-edit-
+# warn-core.sh) -- the core owns the label check + defined-in-place
+# exemption + warning text (label_edit_warn_core_check), shared verbatim
+# with hooks/codex-label-edit-warn.sh (Codex). This file owns ONLY Claude's
+# tool_input shape (Write/Edit/MultiEdit) and the additionalContext envelope.
+#
 # NOTE: deliberately no `set -euo pipefail` here (mirrors label-commit-gate.sh)
 # — `source`/`.` is a POSIX special builtin, and bash treats its "file not
 # found" error as fatal to the whole shell even inside a `||` when errexit is
 # active, which would defeat the fail-open guard below.
+#
+# omt-hook-dep: label-edit-warn-core.sh
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,6 +32,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # deploy drift must never wedge a write/edit.
 source "$SCRIPT_DIR/lib/label-patterns.sh" 2>/dev/null || {
     echo "WARNING: label-patterns.sh missing — label-edit-warn disabled" >&2
+    exit 0
+}
+source "$SCRIPT_DIR/label-edit-warn-core.sh" 2>/dev/null || {
+    echo "WARNING: label-edit-warn-core.sh missing — label-edit-warn disabled" >&2
     exit 0
 }
 
@@ -47,26 +59,7 @@ case "$TOOL_NAME" in
         ;;
 esac
 
-if [ -z "$CONTENT" ]; then
-    exit 0
-fi
-
-if ! label_match_full "$CONTENT"; then
-    exit 0
-fi
-
-# defined-in-place exemption: drop lines that themselves DEFINE a label as a
-# markdown heading (e.g. "### D-1: Add flag"), then re-check what's left.
-# Reuses label-patterns.sh's own _LABEL_PATTERN_FULL (the single source of
-# truth for the label set) so heading recognition never drifts from bare
-# recognition.
-NON_DEFINE_TEXT="$(printf '%s\n' "$CONTENT" | LABEL_RE="$_LABEL_PATTERN_FULL" perl -ne 'print unless /^\s*#{1,6}\s+(?:$ENV{LABEL_RE}):/' 2>/dev/null)"
-
-if ! label_match_full "$NON_DEFINE_TEXT"; then
-    exit 0
-fi
-
-WARNING_TEXT='Detected a bare invented/opaque label (e.g. D-1, AC M1, Step 3, Phase 2) in the content just written. Per rules/communication-style.md: name the thing instead of coining a label. A label is fine when it defines itself in place (e.g. a heading like "### D-1: <name>") — but a bare reference elsewhere should spell out what it means. This is a soft reminder; nothing was blocked.'
+WARNING_TEXT=$(label_edit_warn_core_check "$CONTENT") || exit 0
 
 jq -n --arg ctx "$WARNING_TEXT" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'
 exit 0
