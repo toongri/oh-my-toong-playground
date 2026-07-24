@@ -201,6 +201,66 @@ test_dash_capital_f_scoped_to_segment_after_commit() {
 }
 
 # =============================================================================
+# Regression (attached short option) -- shell quote concatenation makes
+# `git commit -m'fix D-1'` a SINGLE word, and git reads it exactly like the
+# separated `-m 'fix D-1'` form. A separator group that demanded at least
+# one space or `=` never matched these, so the subject was never extracted
+# and the hard gate allowed a labelled commit -- for both the -m and -am
+# flags, and for either quote style. Measured against the pre-change gate,
+# which blocked all four, so this was a live regression, not a pre-existing
+# gap.
+# =============================================================================
+test_regression_attached_quoted_short_option_denies() {
+    local form cmd out rc
+    for form in "-m'fix D-1'" "-am'fix D-1'" '-m"fix D-1"' '-am"fix D-1"'; do
+        rc=0
+        cmd="git commit $form"
+        out=$(label_commit_gate_core_check "$cmd") || rc=$?
+        if [[ "$rc" -ne 0 || "$out" != "D-1" ]]; then
+            echo "ASSERTION FAILED attached-quoted-short-option ($form): expected rc=0 out='D-1', got rc=$rc out='$out'"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# Negative control for the arm above -- without it, "deny on the attached
+# form" would be satisfiable by a matcher that denies every attached form
+# regardless of content. A clean subject in the same attached shape must
+# still pass.
+test_attached_quoted_short_option_clean_subject_allows() {
+    local form cmd out rc
+    for form in "-m'fix retry timeout'" '-am"fix retry timeout"'; do
+        rc=0
+        cmd="git commit $form"
+        out=$(label_commit_gate_core_check "$cmd") || rc=$?
+        if [[ "$rc" -eq 0 ]]; then
+            echo "ASSERTION FAILED attached-clean-subject ($form): expected allow, got rc=$rc out='$out'"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# The property the separator requirement was protecting, pinned so the
+# attached branch cannot quietly undo it: the attached alternative accepts
+# QUOTED values only, so a bare token can never attach to the flag. If it
+# could, the tail text of an unrelated long flag would be swallowed as a
+# bogus subject and the search would stop before reaching the real -m
+# further down the command line.
+test_amend_does_not_shadow_the_real_dash_m_denies() {
+    local cmd out rc=0
+    cmd="git commit --amend --no-edit -m 'fix D-1'"
+    out=$(label_commit_gate_core_check "$cmd") || rc=$?
+    if [[ "$rc" -eq 0 && "$out" == "D-1" ]]; then
+        return 0
+    else
+        echo "ASSERTION FAILED amend-does-not-shadow: expected rc=0 out='D-1', got rc=$rc out='$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 main() {
@@ -216,6 +276,9 @@ main() {
     run_test test_empty_first_dash_m_promotes_second_to_subject_denies
     run_test test_nonempty_first_dash_m_label_only_in_second_still_allows
     run_test test_dash_capital_f_scoped_to_segment_after_commit
+    run_test test_regression_attached_quoted_short_option_denies
+    run_test test_attached_quoted_short_option_clean_subject_allows
+    run_test test_amend_does_not_shadow_the_real_dash_m_denies
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
