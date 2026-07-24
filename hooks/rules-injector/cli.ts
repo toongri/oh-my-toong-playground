@@ -46,7 +46,7 @@ async function runHookCli(eventName: HookCliEventName): Promise<void> {
 		const output = await runHook(eventName, parsed, options);
 		await writeStdout(output);
 	} catch (error) {
-		// Advisory L2: a hook-execution failure must never block the turn. Leave an
+		// Advisory: a hook-execution failure must never block the turn. Leave an
 		// operator breadcrumb, emit nothing, and keep the exit code at 0.
 		writeErrorBreadcrumb(`hook ${eventName}`, error);
 	}

@@ -77,7 +77,7 @@ function resolveErrorLogSink(): string {
 }
 
 /**
- * Always-on operator breadcrumb sink (advisory L2). Appends a timestamped line
+ * Always-on operator breadcrumb sink (advisory). Appends a timestamped line
  * to `~/.omt/rules-injector/error.log` so a swallowed hook-execution error stays
  * visible to the operator. Best-effort: never throws and never blocks the turn.
  */
@@ -96,7 +96,7 @@ export function writeErrorBreadcrumb(context: string, error: unknown): void {
 }
 
 /**
- * Best-effort rotation for the error.log breadcrumb sink (D-5). If the log has
+ * Best-effort rotation for the error.log breadcrumb sink. If the log has
  * grown past `maxBytes`, truncate it to empty — no generation kept, no
  * rename/backup. Never throws; a missing file or stat/write fault is a silent
  * no-op, mirroring `writeErrorBreadcrumb`'s never-throw discipline.

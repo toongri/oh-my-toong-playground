@@ -90,7 +90,7 @@ export async function runSessionStartHook(
 	}
 	const cachePath = sessionCachePath(input.session_id, options.pluginDataRoot);
 
-	// D-6: best-effort GC pre-step, run before any clear/recovery logic so it can
+	// Best-effort GC pre-step, run before any clear/recovery logic so it can
 	// never perturb recovery. Order matters: touch our own mtime FIRST — a
 	// concurrent-resume session must never look stale to the sibling sweep that
 	// follows in the same call. Days->ms conversion happens here at the call site;
@@ -211,7 +211,7 @@ export async function runPostToolUseHook(
 
 	const cachePath = sessionCachePath(input.session_id, options.pluginDataRoot);
 
-	// D-1/D-2 (Option C): one-shot static reclaim in the autonomous post-compaction
+	// One-shot static reclaim in the autonomous post-compaction
 	// window. Gated behind a lock-free pre-check (two unlocked reads: is STATIC
 	// specifically pending, or already mid-recovery) so the steady-state hot path (the
 	// overwhelming majority of tool calls — no compaction pending) never pays for
@@ -333,7 +333,7 @@ export async function runPostToolUseHook(
 			maxResultChars: engine.config.maxResultChars,
 		},
 	);
-	// P1: if budget-drop removed rules[0], the header may name the wrong target.
+	// If budget-drop removed rules[0], the header may name the wrong target.
 	// Recompute from emittedRules[0] (the actual first-emitted rule) and patch if needed.
 	const emittedTarget =
 		emittedRules.length > 0 ? matchedTargetOf(emittedRules[0]) : prebudgetTarget;
@@ -354,8 +354,8 @@ export async function runPostToolUseHook(
 		debugTimer.lap("persist", { reason: "all-dropped" });
 		return returnStaticOnly("all-dropped");
 	}
-	// P2 (dynamic analogue): mark only rules whose marker survives the 32K byte clamp
-	// applied to the ACTUAL emitted text. D-2 merge seam: the real output is
+	// Dynamic analogue of the static path: mark only rules whose marker survives the
+	// 32K byte clamp applied to the ACTUAL emitted text. Merge seam: the real output is
 	// staticReclaimText + block combined and clamped TOGETHER (formatAdditionalContextOutput
 	// below), not `block` clamped alone — clamping block alone under-counts the static
 	// prefix's bytes and can mark a rule "injected" whose marker the combined clamp
@@ -400,7 +400,7 @@ function matchedTargetOf(rule: LoadedRule): string {
 }
 
 /**
- * D-2 merge seam: runStaticInjection always returns a fully wrapped hook JSON
+ * Merge seam: runStaticInjection always returns a fully wrapped hook JSON
  * envelope (or ""), which is its correct contract for its other two callers
  * (SessionStart, UserPromptSubmit — untouched). The PostToolUse static reclaim
  * needs the raw additionalContext text so it can be combined with the dynamic
@@ -432,7 +432,7 @@ function extractAdditionalContext(wrappedOutput: string): string {
 const SHELL_COMMAND_TOOL_NAMES = new Set(["bash", "shell_command", "exec_command"]);
 
 /**
- * D-1 Option C: peel a `sh|bash|zsh -c "<inner>"` shell wrapper off the command
+ * Peel a `sh|bash|zsh -c "<inner>"` shell wrapper off the command
  * field BEFORE the pristine tool-paths extractor sees it, so the inner command's
  * paths are extracted rather than `/bin/zsh` / `-lc`. Returns a shallow-cloned
  * input with the unwrapped command; tool-paths.ts stays untouched and tokenizes

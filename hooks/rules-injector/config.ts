@@ -15,7 +15,7 @@ export function configFromEnvironment(
 		firstEnv(env, "CODEX_RULES_DISABLE_BUNDLED", "PI_RULES_DISABLE_BUNDLED"),
 	);
 	config.disabled = isTruthy(firstEnv(env, "CODEX_RULES_DISABLED", "PI_RULES_DISABLED"));
-	// D-22 file-based opt-out: OR in the sentinel-file check so all four handler
+	// File-based opt-out: OR in the sentinel-file check so all four handler
 	// gates honor it without per-handler duplication. Errors are silenced to
 	// preserve the engine's never-throw / always-exit-0 guarantee.
 	if (!config.disabled && cwd !== undefined) {

@@ -83,7 +83,7 @@ export function runStaticInjection(
 		maxRuleChars: effectiveConfig.maxRuleChars,
 		maxResultChars: effectiveConfig.maxResultChars,
 	});
-	// P2: mark only rules whose marker survives the 32K byte clamp.
+	// Mark only rules whose marker survives the 32K byte clamp.
 	// The formatter char-budget (up to 40000 chars) can admit rules that the downstream
 	// byte clamp then cuts. A rule whose marker is past the 32K cut must stay pending so
 	// a later turn re-injects it. Compute the limited context first, then filter.
@@ -140,7 +140,7 @@ function runPostCompactRecovery(input: PostCompactRecoveryInput): string {
 
 	const fullBodyRules = missingRules.filter((rule) => isNeverTruncatedRule(ruleDisplayPath(rule)));
 	const listedRules = missingRules.filter((rule) => !isNeverTruncatedRule(ruleDisplayPath(rule)));
-	// C1: use formatStaticBlock directly (not engine.formatStatic) to get emittedRules —
+	// Use formatStaticBlock directly (not engine.formatStatic) to get emittedRules —
 	// the formatter may budget-drop some fullBodyRules too; only emitted ones are marked.
 	const { text: bodyBlock, emittedRules: bodyEmittedRules } =
 		fullBodyRules.length === 0
