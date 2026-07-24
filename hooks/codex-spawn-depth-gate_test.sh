@@ -256,6 +256,22 @@ test_row8_depth_2_denies_with_numbers_in_reason() {
         result=1
     fi
 
+    # hookEventName must be "PreToolUse" -- the deny envelope's structural
+    # anchor, not just its permissionDecision/reason content. Unlike hooks/
+    # write-guard-core.sh's _wg_core_deny_json (a literal string constant
+    # pinned byte-for-byte by hooks/codex-write-guard_test.sh:2381), this
+    # hook assembles the envelope field-by-field via jq at hooks/codex-spawn-
+    # depth-gate.sh:136-149 -- every field is drift-capable code with no
+    # constant backing it. Dropping or misspelling hookEventName at :139
+    # would stop Codex from recognizing this response as a PreToolUse
+    # verdict at all (a depth-exceeding spawn would silently pass), yet the
+    # `grep -q '"permissionDecision":"deny"'` check above would still match
+    # -- this assertion is what actually pins :139.
+    if ! printf '%s' "$out" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse"' > /dev/null; then
+        echo "ASSERTION FAILED row8: expected hookSpecificOutput.hookEventName == \"PreToolUse\", got '$out'"
+        result=1
+    fi
+
     # Extract the reason field itself and assert the full sentence -- a bare
     # `grep -q '3'`/`grep -q '2'` over the whole JSON blob passes as long as
     # BOTH digits appear ANYWHERE, even if the reason-builder swapped $child
