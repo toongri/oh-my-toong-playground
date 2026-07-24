@@ -25,16 +25,38 @@ agents:
 skills:
   items:
     - component: deep-interview
+    # 아래 [claude, codex] 항목 전부에 적용되는 개방 근거 — 두 겹이 다 필요하다.
+    # (1) .md — rewrite 규칙 6a가 Skill() 호출을 $X mention sigil로 치환한다
+    #     (tools/lib/rewrite-rules.ts의 id "6a" 규칙). make validate의 codex-rewrite
+    #     스캐너가 uncovered 0건으로 실측했다. 단 그 스캐너는 .md만 본다
+    #     (tools/validators/components.ts:663-664) — 그래서 (2)가 따로 필요하다.
+    # (2) 프로그램 파일 — codex 타겟에도 그대로 복사되지만 절대 rewrite되지
+    #     않으므로(tools/sync.ts의 rewriteFilesUnder — collectMdFiles로 .md만
+    #     수집하며, 그 doc comment가 프로그램 파일은 "deliberately NEVER walked
+    #     here"라고 명시) (1)의 실측이 덮지 못한다. 각 스킬의
+    #     비-.md 파일을 전수 감사해 하네스 중립을 확인했다. prometheus는 이때
+    #     결함이 나와 고쳤다 — getOmtDir()를 로컬 재구현해 OMT_DIR env가 없으면
+    #     throw했는데, 그 env는 CLAUDE_ENV_FILE로만 전달되고 그 파일은 Codex에
+    #     없다(hooks/codex-ledger.sh:44-58). 형제 4개처럼 @lib/omt-dir의 공유
+    #     getOmtDir(env→git repo명→cwd 폴백)로 교체했다.
     - component: prometheus
-      platforms: [claude]
+      platforms: [claude, codex]
+    # sisyphus도 위 (2)에서 결함이 나와 고친 사례다. hooks/skill-catalog/의
+    # 프로그램 파일을 세 축에서 두 하네스 모두 동작하도록 바꿨다: 스킬 디렉터리
+    # 탐색이 .claude/skills와 .agents/skills(codex 착지점,
+    # tools/adapters/codex.ts:158) 양쪽을 보고, ~/.claude/settings.json의
+    # enabledPlugins는 CODEX_THREAD_ID가 감지되면 항상 빈 Set으로 단락하며
+    # (Codex는 플러그인 미지원 — tools/adapters/codex.ts:862), catalog.ts의
+    # discovered-only 안내 문구는 harness에 따라 Skill(skill: "X") 대 $X
+    # mention sigil을 런타임에 방출한다(rewrite 규칙 6a와 동일 문법).
     - component: sisyphus
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: goal
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: ultraresearch
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: insane-browsing
-      platforms: [claude]
+      platforms: [claude, codex]
     - agent-council
     - clarify
     - git-master
@@ -43,10 +65,11 @@ skills:
     - design-review
     - qa
     - component: code-review
-      platforms: [claude]
+      platforms: [claude, codex]
     - make-pr
+    # codex rewrite 규칙 6a로 $X mention sigil 치환이 검증됨 — codex 개방.
     - component: craft-issue
-      platforms: [claude]
+      platforms: [claude, codex]
     - technical-writing
     - technical-copywriting
     - humanizer
@@ -55,7 +78,10 @@ skills:
     - create-slides
     - slides-review
     - collect-jd
-    - hud
+    # hud는 Claude Code 전용 statusline 기능 — settings.local.json·claudeAiOauth를 읽고
+    # ${CLAUDE_SKILL_DIR}/../../ 경로로 리졸브하므로 Codex/Gemini/OpenCode엔 존재하지 않음.
+    - component: hud
+      platforms: [claude]
 
 rules:
   # 전역 rule(tool-usage-policy·work-principles·coding-discipline·least-code·

@@ -18,10 +18,25 @@ agents:
 skills:
   items:
     - component: deep-interview
+    # 아래 [claude, codex] 항목 전부에 적용되는 개방 근거 — 두 겹이 다 필요하다.
+    # (1) .md — rewrite 규칙 6a가 Skill() 호출을 $X mention sigil로 치환한다
+    #     (tools/lib/rewrite-rules.ts의 id "6a" 규칙). make validate의 codex-rewrite
+    #     스캐너가 uncovered 0건으로 실측했다. 단 그 스캐너는 .md만 본다
+    #     (tools/validators/components.ts:663-664) — 그래서 (2)가 따로 필요하다.
+    # (2) 프로그램 파일 — codex 타겟에도 그대로 복사되지만 절대 rewrite되지
+    #     않으므로(tools/sync.ts의 rewriteFilesUnder — collectMdFiles로 .md만
+    #     수집하며, 그 doc comment가 프로그램 파일은 "deliberately NEVER walked
+    #     here"라고 명시) (1)의 실측이 덮지 못한다. 각 스킬의
+    #     비-.md 파일을 전수 감사해 하네스 중립을 확인했고, 나온 결함은 고쳤다:
+    #     prometheus는 getOmtDir()를 로컬 재구현해 OMT_DIR env가 없으면
+    #     throw했는데 그 env는 Claude 전용 CLAUDE_ENV_FILE로만 전달되므로
+    #     (hooks/codex-ledger.sh:44-58) @lib/omt-dir의 공유 구현으로 교체했고,
+    #     sisyphus의 skill-catalog는 .claude/skills만 보던 탐색을
+    #     .agents/skills(codex 착지점)까지 보도록 넓혔다.
     - component: prometheus
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: sisyphus
-      platforms: [claude]
+      platforms: [claude, codex]
     - agent-council
     - clarify
     - git-master
@@ -30,7 +45,7 @@ skills:
     - design-review
     - qa
     - component: code-review
-      platforms: [claude]
+      platforms: [claude, codex]
     - make-pr
     - technical-writing
     - humanizer
@@ -41,7 +56,10 @@ skills:
     - collect-jd
     - orchestrate-review
     - review-report
-    - hud
+    # hud는 Claude Code 전용 statusline 기능 — settings.local.json·claudeAiOauth를 읽고
+    # ${CLAUDE_SKILL_DIR}/../../ 경로로 리졸브하므로 Codex/Gemini/OpenCode엔 존재하지 않음.
+    - component: hud
+      platforms: [claude]
     - mock-interview
     - scan-pdf-to-notes
 

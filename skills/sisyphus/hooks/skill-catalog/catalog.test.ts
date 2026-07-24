@@ -193,6 +193,29 @@ describe("formatCatalog", () => {
 		expect(output).toContain("my-skill");
 	});
 
+	it("harness 미지정(기본값) 시 discovered-only 스킬은 Claude Skill() 호출 문법으로 안내된다", () => {
+		const entries = buildCatalog(["my-skill"], new Set());
+		const output = formatCatalog(entries);
+		expect(output).toContain('Skill(skill: "my-skill")');
+	});
+
+	it("harness='claude' 명시 시 discovered-only 스킬은 Claude Skill() 호출 문법으로 안내된다 (무회귀)", () => {
+		const entries = buildCatalog(["my-skill"], new Set());
+		const output = formatCatalog(entries, "claude");
+		expect(output).toContain('Skill(skill: "my-skill")');
+		expect(output).not.toContain("$my-skill");
+	});
+
+	it("harness='codex' 시 discovered-only 스킬은 $name mention sigil로 안내된다 (rewrite-rules.ts 규칙 6a와 동일 문법)", () => {
+		// catalog.ts is a .ts program file, not .md — tools/sync.ts's rewrite
+		// pass never touches it (tools/sync.ts:1311-1321), so the correct
+		// Codex invocation syntax must be emitted here at runtime instead.
+		const entries = buildCatalog(["my-skill"], new Set());
+		const output = formatCatalog(entries, "codex");
+		expect(output).toContain("$my-skill");
+		expect(output).not.toContain("Skill(skill:");
+	});
+
 	it("available 스킬이 없고 discovered-only도 없으면 최소 출력을 반환한다", () => {
 		const entries = buildCatalog([], new Set());
 		const output = formatCatalog(entries);

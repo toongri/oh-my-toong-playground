@@ -269,6 +269,84 @@ describe("CodexAdapter", () => {
 			expect(parsed.developer_instructions).toContain("<native_subagent_leaf_guard>");
 		});
 
+		it("reflects the source frontmatter `tools` allowlist in the leaf guard text via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "chunk-reviewer.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: chunk-reviewer",
+					"description: Chunk reviewer",
+					"model: sonnet",
+					"tools: Bash, Read",
+					"---",
+					"",
+					"You are the chunk-reviewer agent.",
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(
+				targetBase,
+				"chunk-reviewer",
+				sourceFile,
+				[],
+				[],
+				false,
+				modelMap,
+			);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "chunk-reviewer.toml");
+			const parsed = parse(await fs.readFile(targetFile, "utf-8")) as Record<string, unknown>;
+
+			// The guard names the actual tools list from frontmatter (Bash, Read) —
+			// not a generic static string that ignores it.
+			expect(parsed.developer_instructions).toContain("Bash");
+			expect(parsed.developer_instructions).toContain("Read");
+			// AC5: the restriction must read as a soft prompt-level guard, not a
+			// hard runtime guarantee — Codex has no per-agent tool-withholding field.
+			expect(parsed.developer_instructions).toMatch(/soft/i);
+		});
+
+		it("does NOT claim a tool restriction when frontmatter has no `tools` allowlist (disallowedTools-only leaf) via `syncAgentsDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "explore-no-tools.md");
+			await fs.writeFile(
+				sourceFile,
+				[
+					"---",
+					"name: explore-no-tools",
+					"description: Fast codebase search",
+					"model: sonnet",
+					"disallowedTools: Agent",
+					"---",
+					"",
+					"You are Explorer.",
+					"",
+				].join("\n"),
+			);
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "gpt-5.6-sol", effort: "medium" } } };
+			const targetBase = path.join(tmpDir, "target");
+
+			await adapter.syncAgentsDirect(
+				targetBase,
+				"explore-no-tools",
+				sourceFile,
+				[],
+				[],
+				false,
+				modelMap,
+			);
+
+			const targetFile = path.join(targetBase, ".codex", "agents", "explore-no-tools.toml");
+			const parsed = parse(await fs.readFile(targetFile, "utf-8")) as Record<string, unknown>;
+
+			// Negative control: no `tools:` allowlist in source frontmatter means no
+			// tool-restriction claim should appear — the guard must not fabricate one.
+			expect(parsed.developer_instructions).not.toContain("Tool restriction");
+		});
+
 		it("omits the leaf guard for a delegation-allowed agent with no spawn restriction via `syncAgentsDirect`", async () => {
 			const sourceFile = path.join(tmpDir, "code-reviewer.md");
 			await fs.writeFile(
@@ -334,7 +412,7 @@ describe("CodexAdapter", () => {
 			const content = await fs.readFile(targetFile, "utf-8");
 
 			// Rewritten to Codex vocabulary.
-			expect(content).toContain("the prometheus skill");
+			expect(content).toContain("$prometheus");
 			expect(content).toContain("agent_type");
 
 			// grep -c 'Skill(' on the emitted file is 0.
@@ -345,7 +423,7 @@ describe("CodexAdapter", () => {
 			expect(parsed.name).toBe("sisyphus-junior");
 			expect(parsed.model).toBe("gpt-5.6-sol");
 			expect(parsed.model_reasoning_effort).toBe("medium");
-			expect(parsed.developer_instructions).toContain("the prometheus skill");
+			expect(parsed.developer_instructions).toContain("$prometheus");
 			expect(parsed.developer_instructions).toContain("agent_type");
 		});
 
@@ -420,12 +498,41 @@ describe("CodexAdapter", () => {
 	});
 
 	// ---------------------------------------------------------------------------
-	// syncRulesDirect — skip with warning
+	// syncRulesDirect — copies rule .md into .codex/rules/ (rules is now a
+	// supported codex category; the rewrite pass then de-Claude-ifies these
+	// bytes via rewritePlatformPaths, mirroring how syncSkillsDirect/
+	// syncScriptsDirect land plain copies for their own later rewrite).
 	// ---------------------------------------------------------------------------
 
 	describe("syncRulesDirect", () => {
-		it("skips with warning and creates no files via `syncRulesDirect`", async () => {
-			await adapter.syncRulesDirect(tmpDir, "my-rule.md", "/nonexistent/rule.md");
+		it("copies a rule file to .codex/rules/<name>.md via `syncRulesDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "communication-style.md");
+			await fs.writeFile(sourceFile, "# Communication Style\n\nSee .claude/rules/ for more.\n");
+
+			const targetBase = path.join(tmpDir, "target");
+			await adapter.syncRulesDirect(targetBase, "communication-style", sourceFile, false);
+
+			const targetFile = path.join(targetBase, ".codex", "rules", "communication-style.md");
+			const content = await fs.readFile(targetFile, "utf-8");
+			expect(content).toBe("# Communication Style\n\nSee .claude/rules/ for more.\n");
+		});
+
+		it("skips copy in dry-run mode via `syncRulesDirect`", async () => {
+			const sourceFile = path.join(tmpDir, "communication-style.md");
+			await fs.writeFile(sourceFile, "# Communication Style\n");
+
+			const targetBase = path.join(tmpDir, "target");
+			await adapter.syncRulesDirect(targetBase, "communication-style", sourceFile, true);
+
+			const exists = await fs
+				.stat(path.join(targetBase, ".codex", "rules", "communication-style.md"))
+				.then(() => true)
+				.catch(() => false);
+			expect(exists).toBe(false);
+		});
+
+		it("logs warning for missing source and creates no files via `syncRulesDirect`", async () => {
+			await adapter.syncRulesDirect(tmpDir, "my-rule", "/nonexistent/rule.md");
 			const exists = await fs
 				.stat(path.join(tmpDir, ".codex"))
 				.then(() => true)

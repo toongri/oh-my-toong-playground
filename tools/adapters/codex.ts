@@ -7,7 +7,7 @@
  * - commands: not supported (global ~/.codex/prompts/ only), skip with warning
  * - hooks: supported; command is a literal relative `bun run .codex/hooks/<name>/index.ts`
  * - skills, scripts: syncDirectory
- * - rules: not supported, skip with warning
+ * - rules: supported, copied verbatim to `.codex/rules/<name>.md` (syncRulesDirect)
  * - config: TOML managed block in .codex/config.toml
  * - mcps: accumulate all servers, flush as single managed block
  */
@@ -274,14 +274,31 @@ export async function cleanupCodexSkillsFossil(
 // text guard (mirrors oh-my-codex `NATIVE_SUBAGENT_LEAF_GUARD`). We inject it
 // whenever the source frontmatter denies the spawn tool — the SAME signal Claude
 // Code resolves — so a single source edit gates both platforms.
-const CODEX_LEAF_GUARD = [
-	"<native_subagent_leaf_guard>",
-	"",
-	"Leaf native subagent: do not call Task, Agent, spawn_agent, or native child agents.",
-	"Use local tools; report missing specialist coverage to your caller instead of spawning.",
-	"",
-	"</native_subagent_leaf_guard>",
-].join("\n");
+//
+// When the source frontmatter carries a positive `tools:` allowlist (e.g.
+// `tools: Bash, Read`), the guard names those tools explicitly instead of
+// staying silent about them — but this is PROMPT TEXT ONLY. Unlike Claude
+// Code, which withholds the tool at the runtime layer (the model literally
+// cannot invoke it), Codex TOML has no per-agent tool-restriction field to
+// bind to, so nothing enforces this beyond the model choosing to comply. The
+// clause below says so explicitly, so this can never be misread as a
+// guaranteed restriction.
+function buildCodexLeafGuard(tools: string[]): string {
+	const lines = [
+		"<native_subagent_leaf_guard>",
+		"",
+		"Leaf native subagent: do not call Task, Agent, spawn_agent, or native child agents.",
+		"Use local tools; report missing specialist coverage to your caller instead of spawning.",
+	];
+	if (tools.length > 0) {
+		lines.push(
+			"",
+			`Tool restriction (soft guard, not enforced by Codex): the source frontmatter limits this agent to ${tools.join(", ")}. Codex has no per-agent tool-withholding field, so nothing stops you from calling another tool if you choose to — treat this as an instruction to follow, not a runtime capability limit.`,
+		);
+	}
+	lines.push("", "</native_subagent_leaf_guard>");
+	return lines.join("\n");
+}
 
 // The tool names that let an agent spawn other agents. `Task` is the pre-2.1.63
 // alias of `Agent`; both must be recognized on either side of the gate.
@@ -400,7 +417,7 @@ export class CodexAdapter implements PlatformAdapter {
 		// appended AFTER rewrite to keep it verbatim. Delegation-allowed agents
 		// (e.g. code-reviewer) carry no spawn restriction and get no guard.
 		const gatedInstructions = isLeafAgent(frontmatter)
-			? `${rewrittenInstructions}\n\n${CODEX_LEAF_GUARD}`
+			? `${rewrittenInstructions}\n\n${buildCodexLeafGuard(toToolList(frontmatter.tools))}`
 			: rewrittenInstructions;
 
 		const tomlObj = {
@@ -556,16 +573,42 @@ export class CodexAdapter implements PlatformAdapter {
 	}
 
 	// ---------------------------------------------------------------------------
-	// syncRulesDirect — not supported
+	// syncRulesDirect — copy to .codex/rules/<name>.md
 	// ---------------------------------------------------------------------------
 
+	/**
+	 * Mirrors ClaudeAdapter.syncRulesDirect (a plain file copy, never a
+	 * directory): the source is always a single rule .md, copied verbatim to
+	 * `.codex/rules/<displayName>.md`. Claude-vocabulary de-Claude-ification
+	 * happens later, at the same deploy-time pass every other `.codex/` `.md`
+	 * file goes through (rewritePlatformPaths walks `.codex/` — excluding only
+	 * the skills fossil root — so `.codex/rules/**\/*.md` is covered with no
+	 * extra wiring needed here).
+	 */
 	async syncRulesDirect(
-		_targetPath: string,
+		targetPath: string,
 		displayName: string,
-		_sourcePath: string,
-		_dryRun = false,
+		sourcePath: string,
+		dryRun = false,
 	): Promise<void> {
-		logWarn(`Codex: rules는 지원되지 않습니다. Skip: ${displayName}`);
+		const targetDir = path.join(targetPath, this.configDir, "rules");
+		const targetFile = path.join(targetDir, `${displayName}.md`);
+
+		try {
+			await fs.stat(sourcePath);
+		} catch {
+			logWarn(`Rule file not found: ${sourcePath}`);
+			return;
+		}
+
+		if (dryRun) {
+			logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+			return;
+		}
+
+		await fs.mkdir(targetDir, { recursive: true });
+		await fs.copyFile(sourcePath, targetFile);
+		logInfo(`Copied: ${displayName}.md`);
 	}
 
 	// ---------------------------------------------------------------------------

@@ -1,3 +1,8 @@
+// Target harness the catalog is rendered for — determines the skill-invocation
+// syntax emitted for discovered-only entries (Claude's Skill() tool vs Codex's
+// $name mention sigil; rewrite-rules.ts rule 6a documents the sigil).
+export type Harness = "claude" | "codex";
+
 // Hook input from Claude Code (UserPromptSubmit)
 export interface HookInput {
 	sessionId?: string;
