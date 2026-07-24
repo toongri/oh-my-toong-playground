@@ -115,6 +115,39 @@ describe("makeDecision", () => {
 
 			expect(result).toEqual({ continue: true });
 		});
+
+		// Regression: the todo escape hatch (blockCount >= MAX_BLOCK_COUNT) returns a
+		// full stop-allow (continue), same as the no-blocking fallthrough that normally
+		// resets the skill-chain namespace — but the escape route bypassed that
+		// fallthrough entirely, leaking a leftover skill-chain block-count file past
+		// this return. The next skill-chain ratchet would then read that stale count
+		// and hit its own escape hatch earlier than a full MAX_BLOCK_COUNT budget.
+		it("cleans up a leaked skill-chain block-count file when the todo escape hatch triggers", async () => {
+			await writeFile(join(stateDir, "block-count-test-session"), "5");
+			await writeFile(join(stateDir, "block-count-skill-chain-test-session"), "3");
+
+			const context = createContext({ incompleteTodoCount: 3 });
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+			expect(fs.existsSync(join(stateDir, "block-count-skill-chain-test-session"))).toBe(false);
+		});
+
+		// Negative control: when the todo branch merely blocks (not escapes), the
+		// skill-chain namespace is untouched — the escape-path fix must not reach into
+		// the ordinary block path.
+		it("(control) leaves the skill-chain block-count file alone on an ordinary todo block", async () => {
+			await writeFile(join(stateDir, "block-count-skill-chain-test-session"), "3");
+
+			const context = createContext({ incompleteTodoCount: 3 });
+
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			expect(fs.existsSync(join(stateDir, "block-count-skill-chain-test-session"))).toBe(true);
+			expect(fs.readFileSync(join(stateDir, "block-count-skill-chain-test-session"), "utf-8")).toBe("3");
+		});
 	});
 
 	describe("priority ordering", () => {
@@ -2242,6 +2275,204 @@ describe("makeDecision", () => {
 			const reason = result.reason!;
 			assertSharedSkeleton(reason);
 			expect(reason).toContain("Prefer this");
+		});
+
+		it("skill-chain continuation includes the shared skeleton (preferred posture)", () => {
+			const context = createContext({ pendingSkillChainSkills: ["chain-bravo"] });
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			const reason = result.reason!;
+			assertSharedSkeleton(reason);
+			expect(reason).toContain("Prefer this");
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// runtime-leak fix: the continuation contract's ask-tool vocabulary is a
+	// platform-supplied parameter (DecisionContext.askToolName), not a hardcoded
+	// literal — the same "optional field, platform shim supplies it, undefined
+	// for Claude" pattern pendingSkillChainSkills already uses. Codex's Stop
+	// hook (hooks/codex-persistent-mode/cli.ts) passes askToolName:
+	// "request_user_input" (its real AskUserQuestion analog); Claude's Stop hook
+	// (hooks/persistent-mode/index.ts) never sets it, so it defaults to
+	// "AskUserQuestion" there — exactly like every test above.
+	// -------------------------------------------------------------------------
+	describe("continuation contract ask-tool vocabulary (askToolName)", () => {
+		it("defaults to AskUserQuestion when askToolName is omitted (Claude)", () => {
+			const context = createContext({ incompleteTodoCount: 5 });
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("AskUserQuestion");
+		});
+
+		it("uses the platform-supplied askToolName instead of AskUserQuestion when provided (Codex)", () => {
+			const context = createContext({ incompleteTodoCount: 5, askToolName: "request_user_input" });
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			const reason = result.reason!;
+			expect(reason).toContain("request_user_input");
+			expect(reason).not.toContain("AskUserQuestion");
+		});
+
+		it("applies the platform-supplied askToolName in the exceptional posture too (goal continuation)", async () => {
+			await writeFile(
+				join(omtDir, "goal-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					objective_verdict: "",
+					iteration: 1,
+					max_iterations: 10,
+					outcome: "goal objective text",
+				}),
+			);
+
+			const result = makeDecision(createContext({ askToolName: "request_user_input" }));
+
+			expect(result.decision).toBe("block");
+			const reason = result.reason!;
+			expect(reason).toContain("request_user_input");
+			expect(reason).not.toContain("AskUserQuestion");
+		});
+	});
+
+	// Codex-only chain ratchet: the codex-persistent-mode Stop reader derives
+	// pendingSkillChainSkills from opened-vs-expected SKILL.md loads (see
+	// hooks/codex-persistent-mode/cli.ts). Claude's hooks/persistent-mode/index.ts
+	// never populates this field, so it is undefined/empty for every Claude context
+	// built by createContext() above — these tests exercise the field explicitly
+	// without touching any other consumer's behavior.
+	describe("Priority 2.5: Codex-only skill-chain ratchet", () => {
+		it("blocks when a next-step skill has not been opened yet", () => {
+			const context = createContext({ pendingSkillChainSkills: ["chain-bravo"] });
+
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<skill-chain-continuation>");
+			expect(result.reason).toContain("chain-bravo");
+		});
+
+		it("allows stop when the pending list is empty (resolved chain)", () => {
+			const context = createContext({ pendingSkillChainSkills: [] });
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+		});
+
+		it("allows stop when the field is absent (no chain in play — negative control)", () => {
+			const context = createContext();
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+		});
+
+		it("awaiting-user token takes priority over a pending skill chain", () => {
+			const context = createContext({
+				pendingSkillChainSkills: ["chain-bravo"],
+				lastAssistantMessage: "wrapping up <awaiting-user/>",
+			});
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+		});
+
+		it("baseline todo-continuation takes priority over a pending skill chain", () => {
+			const context = createContext({
+				pendingSkillChainSkills: ["chain-bravo"],
+				incompleteTodoCount: 2,
+			});
+
+			const result = makeDecision(context);
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<todo-continuation>");
+			expect(result.reason).not.toContain("<skill-chain-continuation>");
+		});
+
+		it("allows stop after max continuation attempts (escape hatch) — the chain ratchet must not block forever", async () => {
+			// Mirrors the sibling goal/ultragoal/prometheus/todo escape-hatch tests:
+			// pre-seed the chain's OWN block-count file (namespaced under
+			// skill-chain-<attemptId>, distinct from the baseline attemptId file)
+			// at MAX_BLOCK_COUNT so the very next call must escape rather than block.
+			await writeFile(join(stateDir, "block-count-skill-chain-test-session"), "5");
+
+			const context = createContext({ pendingSkillChainSkills: ["chain-bravo"] });
+
+			const result = makeDecision(context);
+
+			expect(result).toEqual({ continue: true });
+		});
+
+		it("cleans up the chain's block-count file when the escape hatch triggers", async () => {
+			await writeFile(join(stateDir, "block-count-skill-chain-test-session"), "5");
+
+			const context = createContext({ pendingSkillChainSkills: ["chain-bravo"] });
+
+			makeDecision(context);
+
+			const { existsSync } = await import("fs");
+			expect(existsSync(join(stateDir, "block-count-skill-chain-test-session"))).toBe(false);
+		});
+
+		// Regression: the sibling goal/ultragoal lanes reset their own block-count on
+		// progress (cleanupBlockCountFiles at the iteration-advance branch), but the
+		// skill-chain lane's resolution path (pendingSkillChainSkills going empty) never
+		// got the same treatment — the counter it left behind leaked into whatever chain
+		// started next, silently shrinking that chain's budget below MAX_BLOCK_COUNT.
+		it("resolving a chain resets its block-count — a later, unrelated chain gets the FULL budget, not a leaked remainder", () => {
+			const chainCountFile = join(stateDir, "block-count-skill-chain-test-session");
+
+			// Chain A: blocked 3 times (never opened by the model).
+			for (let i = 0; i < 3; i++) {
+				const result = makeDecision(createContext({ pendingSkillChainSkills: ["chain-alpha"] }));
+				expect(result.decision).toBe("block");
+			}
+			expect(fs.readFileSync(chainCountFile, "utf-8")).toBe("3");
+
+			// Chain A resolves (the referenced skill got opened) — pendingSkillChainSkills
+			// goes empty on the next two turns, no other blocking condition fires.
+			expect(makeDecision(createContext({ pendingSkillChainSkills: [] }))).toEqual({ continue: true });
+			expect(makeDecision(createContext())).toEqual({ continue: true });
+
+			// The counter must be gone — NOT sitting at 3.
+			expect(fs.existsSync(chainCountFile)).toBe(false);
+
+			// Chain B starts fresh later in the same session. It must get the FULL
+			// MAX_BLOCK_COUNT (5) budget of blocks before the escape hatch fires — not
+			// 2 (5 - the leaked 3), which is what a leaked counter would produce.
+			for (let i = 0; i < 5; i++) {
+				const result = makeDecision(createContext({ pendingSkillChainSkills: ["chain-bravo"] }));
+				expect(result.decision).toBe("block");
+			}
+			// 5 blocks reach MAX_BLOCK_COUNT (count=5); the 6th call is the escape.
+			expect(makeDecision(createContext({ pendingSkillChainSkills: ["chain-bravo"] }))).toEqual({
+				continue: true,
+			});
+		});
+
+		it("<awaiting-user/> resets the skill-chain block-count alongside base and prometheus", () => {
+			const chainCountFile = join(stateDir, "block-count-skill-chain-test-session");
+
+			for (let i = 0; i < 3; i++) {
+				makeDecision(createContext({ pendingSkillChainSkills: ["chain-alpha"] }));
+			}
+			expect(fs.readFileSync(chainCountFile, "utf-8")).toBe("3");
+
+			const result = makeDecision(
+				createContext({
+					pendingSkillChainSkills: ["chain-alpha"],
+					lastAssistantMessage: "wrapping up <awaiting-user/>",
+				}),
+			);
+			expect(result).toEqual({ continue: true });
+			expect(fs.existsSync(chainCountFile)).toBe(false);
 		});
 	});
 });

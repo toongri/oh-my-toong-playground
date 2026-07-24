@@ -1,0 +1,1 @@
+<search-mode>\nMAXIMIZE SEARCH EFFORT. Launch multiple agents IN PARALLEL:\n- explore agents (codebase patterns, file structures)\n- librarian agents (remote repos, official docs, GitHub examples)\nPlus direct tools: Grep, Glob\nNEVER stop at first result - be exhaustive.\n</search-mode>\n\n---\n

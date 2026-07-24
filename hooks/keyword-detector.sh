@@ -1,6 +1,17 @@
 #!/bin/bash
 # Sisyphus Keyword Detector Hook
 # Detects ultrawork/ultrathink/search/analyze keywords and injects enhanced mode messages
+#
+# Claude UserPromptSubmit shim over the shared judgment core
+# (hooks/keyword-detector-core.sh) -- the core owns keyword classification
+# (kd_core_is_*) and the additionalContext message bodies (kd_core_message_*),
+# shared verbatim with hooks/codex-keyword-detector.sh (Codex). This file
+# owns ONLY Claude's stdin JSON shape, project-root/OMT_DIR bookkeeping, and
+# Claude's UserPromptSubmit envelope ({"continue": true, "hookSpecificOutput":
+# ...}) -- mirrors hooks/write-guard-core.sh's shim/core split (shim parses,
+# core judges).
+#
+# omt-hook-dep: keyword-detector-core.sh
 
 # Read stdin (JSON input from Claude Code)
 INPUT=$(cat)
@@ -51,6 +62,9 @@ SCRIPT_DIR_KD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR_KD/lib/omt-dir.sh"
 compute_omt_dir "$PROJECT_ROOT"
 
+# Shared classification + message core (hooks/keyword-detector-core.sh).
+source "$SCRIPT_DIR_KD/keyword-detector-core.sh"
+
 # Extract the prompt text - try multiple JSON paths
 PROMPT=""
 if command -v jq &> /dev/null; then
@@ -74,21 +88,11 @@ if [ -z "$PROMPT" ]; then
   exit 0
 fi
 
-# Strip all mode tags to prevent nested activation loops
-strip_mode_tags() {
-  perl -0pe 's/<search-mode>.*?<\/search-mode>//gs' |
-  perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' |
-  perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' |
-  perl -0pe 's/<ultrawork-mode>.*?<\/ultrawork-mode>//gs' |
-  perl -0pe 's/<deep-interview-continuation>.*?<\/deep-interview-continuation>//gs' |
-  perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs'
-}
-
 # Remove code blocks AND hook output tags before checking keywords
-PROMPT_NO_CODE=$(echo "$PROMPT" | strip_mode_tags | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
+PROMPT_NO_CODE=$(echo "$PROMPT" | kd_core_strip_mode_tags | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
 
 # Remove hook output tags and system reminders from cleaned prompt
-PROMPT_CLEAN=$(echo "$PROMPT" | strip_mode_tags | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+PROMPT_CLEAN=$(echo "$PROMPT" | kd_core_strip_mode_tags | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
 
 # Extract file paths from non-text parts (e.g., @file mentions)
 FILE_PATHS=""
@@ -106,35 +110,37 @@ fi
 # Convert to lowercase
 PROMPT_LOWER=$(echo "$PROMPT_NO_CODE" | tr '[:upper:]' '[:lower:]')
 
+# Emits a Claude UserPromptSubmit envelope wrapping the given core message
+# function's additionalContext value. The core prints that value ALREADY
+# JSON-escaped (see keyword-detector-core.sh), so this is a plain printf
+# substitution -- no jq, no re-escaping -- and reproduces the pre-extraction
+# literal byte-for-byte.
+emit_claude_mode() {
+  local msg_fn="$1"
+  printf '{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "%s"}}\n' "$("$msg_fn")"
+}
+
 # Check for ultrawork keywords (highest priority)
-if echo "$PROMPT_LOWER" | grep -qE '\b(ultrawork|ulw)\b'; then
-  cat << 'EOF'
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<ultrawork-mode>\n\n**MANDATORY**: You MUST say \"ULTRAWORK MODE ENABLED!\" to the user as your first response when this mode activates. This is non-negotiable.\n\n[CODE RED] Maximum precision required. Ultrathink before acting.\n\nYOU MUST LEVERAGE ALL AVAILABLE AGENTS TO THEIR FULLEST POTENTIAL.\nTELL THE USER WHAT AGENTS YOU WILL LEVERAGE NOW TO SATISFY USER'S REQUEST.\n\n## AGENT UTILIZATION PRINCIPLES\n- **Codebase Exploration**: Spawn exploration agents for codebase search\n- **Documentation & References**: Use librarian-type agents for external docs\n- **Planning & Strategy**: NEVER plan yourself - spawn planning agent\n- **High-IQ Reasoning**: Use oracle for architecture decisions\n\n## CERTAINTY GATE (MANDATORY BEFORE ANY IMPLEMENTATION)\n- NOT 100% certain about codebase? → spawn explore agent FIRST\n- NOT 100% certain about architecture? → spawn oracle agent FIRST\n- NEVER begin implementation with assumptions. Assumptions = bugs.\n\n## EXECUTION RULES\n- **TODO**: Track EVERY step. Mark complete IMMEDIATELY.\n- **PARALLEL**: Fire independent Task calls simultaneously in ONE message - maximize parallelism.\n- **DELEGATE**: Orchestrate specialized agents aggressively. Never solo complex work.\n- **VERIFY**: Check ALL requirements met before done.\n\n## ZERO TOLERANCE\n- NO Scope Reduction - deliver FULL implementation\n- NO Partial Completion - finish 100%\n- NO Premature Stopping - ALL TODOs must be complete\n- NO TEST DELETION - fix code, not tests\n\n## BLOCKED EXCUSES (catch yourself saying these → STOP and FIX)\n| Excuse Pattern | Required Action |\n|----------------|------------------|\n| \"I couldn't find/access...\" | Spawn explore agent, try harder |\n| \"Here's a simplified version...\" | Deliver the FULL version |\n| \"This should work but I can't verify...\" | Run the verification yourself: execute the checks and capture evidence |\n| \"I'll leave this for the user to...\" | YOU complete it |\n| \"Due to complexity, I only...\" | Continue until 100% done |\n\nTHE USER ASKED FOR X. DELIVER EXACTLY X.\n\n</ultrawork-mode>\n\n---\n"}}
-EOF
+if echo "$PROMPT_LOWER" | kd_core_is_ultrawork; then
+  emit_claude_mode kd_core_message_ultrawork
   exit 0
 fi
 
 # Check for ultrathink/think keywords
-if echo "$PROMPT_LOWER" | grep -qE '\b(ultrathink|think)\b'; then
-  cat << 'EOF'
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<think-mode>\n\n**ULTRATHINK MODE ENABLED** - Extended reasoning activated.\n\nYou are now in deep thinking mode. Take your time to:\n1. Thoroughly analyze the problem from multiple angles\n2. Consider edge cases and potential issues\n3. Think through the implications of each approach\n4. Reason step-by-step before acting\n\nUse your extended thinking capabilities to provide the most thorough and well-reasoned response.\n\n</think-mode>\n\n---\n"}}
-EOF
+if echo "$PROMPT_LOWER" | kd_core_is_think; then
+  emit_claude_mode kd_core_message_think
   exit 0
 fi
 
 # Check for search keywords
-if echo "$PROMPT_LOWER" | grep -qE '\b(search|find|locate|lookup|explore|discover|scan|grep|query|browse|detect|trace|seek|track|pinpoint|hunt)\b|where\s+is|show\s+me|list\s+all'; then
-  cat << 'EOF'
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<search-mode>\nMAXIMIZE SEARCH EFFORT. Launch multiple agents IN PARALLEL:\n- explore agents (codebase patterns, file structures)\n- librarian agents (remote repos, official docs, GitHub examples)\nPlus direct tools: Grep, Glob\nNEVER stop at first result - be exhaustive.\n</search-mode>\n\n---\n"}}
-EOF
+if echo "$PROMPT_LOWER" | kd_core_is_search; then
+  emit_claude_mode kd_core_message_search
   exit 0
 fi
 
 # Check for analyze keywords
-if echo "$PROMPT_LOWER" | grep -qE '\b(analyze|analyse|investigate|examine|research|study|deep.?dive|inspect|audit|evaluate|assess|review|diagnose|scrutinize|dissect|debug|comprehend|interpret|breakdown|understand)\b|why\s+is|how\s+does|how\s+to'; then
-  cat << 'EOF'
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<analyze-mode>\nANALYSIS MODE. Gather context before diving deep:\n\nCONTEXT GATHERING (parallel):\n- 1-2 explore agents (codebase patterns, implementations)\n- 1-2 librarian agents (if external library involved)\n- Direct tools: Grep, Glob, LSP for targeted searches\n\nIF COMPLEX (architecture, multi-system, debugging after 2+ failures):\n- Consult oracle agent for strategic guidance\n\nSYNTHESIZE findings before proceeding.\n</analyze-mode>\n\n---\n"}}
-EOF
+if echo "$PROMPT_LOWER" | kd_core_is_analyze; then
+  emit_claude_mode kd_core_message_analyze
   exit 0
 fi
 
