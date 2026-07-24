@@ -259,6 +259,8 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
                     insq = 0
                     indq = 0
                     dpdepth = 0
+                    subsq = 0
+                    subdq = 0
                     btactive = 0
                     out = ""
                     for (i = 1; i <= n; i++) {
@@ -270,9 +272,36 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
                             continue
                         }
 
+                        # Quote state INSIDE the substitution is tracked
+                        # separately (subsq/subdq): a QUOTED right-paren --
+                        # as in a printf whose sole argument is that
+                        # character -- is ordinary text to the shell and does
+                        # NOT close the substitution. Untracked, it dropped
+                        # dpdepth to 0, every separator behind it was then
+                        # read as inside the OUTER double quotes and masked
+                        # away, and a chained `rm <ledger>` went unseen. The
+                        # closing right-paren is emitted as a space because
+                        # it is a token boundary at execution time, not part
+                        # of the last word: glued on, it broke the whole-token
+                        # guarded-path comparison downstream.
                         if (dpdepth > 0) {
-                            if (c == lp) { dpdepth++ }
-                            else if (c == rp) { dpdepth-- }
+                            if (subsq) {
+                                if (c == sq) { subsq = 0 }
+                            } else if (subdq) {
+                                if (c == bs && i < n) { out = out c; i++; c = substr($0, i, 1) }
+                                else if (c == dq) { subdq = 0 }
+                            } else if (c == bs && i < n) {
+                                out = out c; i++; c = substr($0, i, 1)
+                            } else if (c == sq) {
+                                subsq = 1
+                            } else if (c == dq) {
+                                subdq = 1
+                            } else if (c == lp) {
+                                dpdepth++
+                            } else if (c == rp) {
+                                dpdepth--
+                                if (dpdepth == 0) { out = out " "; continue }
+                            }
                             out = out c
                             continue
                         }
@@ -284,6 +313,8 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
 
                         if (indq && c == dl && i < n && substr($0, i + 1, 1) == lp) {
                             dpdepth = 1
+                            subsq = 0
+                            subdq = 0
                             out = out c lp
                             i++
                             continue

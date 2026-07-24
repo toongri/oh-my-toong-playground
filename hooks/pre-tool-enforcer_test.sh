@@ -1333,6 +1333,43 @@ test_wg_r1_unset_home_no_fail_open_denied() {
         || { echo "ASSERTION FAILED WG-R1: \$OMT_DIR-spelled ledger delete must still DENY when HOME is unset. Got: $out"; return 1; }
 }
 
+# (s1) Regression -- a QUOTED right-paren inside a LIVE command substitution
+# does not close the substitution in a real shell, but _wg_scan counted it as
+# a closer. Depth fell to 0 early, the separator behind it was then read as
+# sitting inside the OUTER double quotes and masked away, and the chained
+# ledger delete stopped being its own segment -> false ALLOW. Measured
+# against the pre-change hook, which denied this, so it was a live
+# regression. Same defect and same fix as the Codex twin
+# (hooks/codex-write-guard_test.sh), independently pinned per this repo's
+# Claude/Codex parsing-independence convention.
+test_wg_s1_quoted_paren_in_substitution_ledger_rm_denied() {
+    local ledger sq
+    ledger=$(wg_ledger_path)
+    sq="'"
+    wg_assert_deny "echo \"\$(printf ${sq})${sq}; rm $ledger; true)\"" "WG-S1"
+}
+
+# (s2) The right-paren that CLOSES a substitution is a token boundary at
+# execution time, not part of the preceding word. Glued on, it turned the
+# guarded path into `<ledger>)`, which the whole-token comparison never
+# matched -> false ALLOW. Emitting that closer as a space fixes it.
+test_wg_s2_substitution_closing_paren_adjacent_ledger_rm_denied() {
+    local ledger
+    ledger=$(wg_ledger_path)
+    wg_assert_deny "echo \"\$(true; rm $ledger)\"" "WG-S2"
+}
+
+# (s3) Negative control for s1/s2 -- without it, both arms above would be
+# satisfiable by denying every command that contains a substitution. A
+# substitution carrying the same shapes but touching a NON-ledger path must
+# still pass.
+test_wg_s3_substitution_nonledger_allows() {
+    local out sq
+    sq="'"
+    out=$(printf '%s' "$(hg_bash_json "echo \"\$(printf ${sq})${sq}; rm /tmp/y)\"")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-S3: non-ledger path inside a substitution should pass. Got: $out"; return 1; }
+}
+
 # =============================================================================
 # Defect 5 (Claude<->Codex parity, both-platform measurement) -- this file's
 # quote-aware normalizer (_wg_scan) used to mask single-quoted spans only,
@@ -1688,6 +1725,9 @@ main() {
     run_test test_wg_q3_home_dquoted_var_nonledger_allows
     run_test test_wg_q4_home_toplevel_nonledger_allows
     run_test test_wg_r1_unset_home_no_fail_open_denied
+    run_test test_wg_s1_quoted_paren_in_substitution_ledger_rm_denied
+    run_test test_wg_s2_substitution_closing_paren_adjacent_ledger_rm_denied
+    run_test test_wg_s3_substitution_nonledger_allows
 
     # Defect 5 -- Claude<->Codex ledger-guard parity (double-quote masking)
     run_test test_defect5_row1_plain_redirect_denies

@@ -165,6 +165,8 @@ _cwg_mask_quoted() {
             insq = 0
             indq = 0
             dpdepth = 0
+            subsq = 0
+            subdq = 0
             btactive = 0
             out = ""
             for (i = 1; i <= n; i++) {
@@ -190,13 +192,45 @@ _cwg_mask_quoted() {
                 }
 
                 # Inside a live $( ... ) command-substitution span: pass
-                # every character through untouched (no masking, no quote
-                # toggling) while tracking paren depth so a nested $( ... )
-                # or a plain ( ) inside the substitution body is matched
-                # correctly.
+                # every character through untouched (no masking, no OUTER
+                # quote toggling) while tracking paren depth so a nested
+                # $( ... ) or a plain ( ) inside the substitution body is
+                # matched correctly.
+                #
+                # Quote state INSIDE the span is tracked separately (subsq/
+                # subdq) for one reason: a QUOTED right-paren -- as in a
+                # printf whose sole argument is that character -- is
+                # ordinary text to the shell and does NOT close the
+                # substitution. Without tracking it, such a right-paren
+                # dropped dpdepth to 0, every separator after it was then
+                # read as sitting inside the OUTER double quotes and masked
+                # away, and a command chained behind it became invisible to
+                # the scan. A backslash escapes the next character except
+                # inside single quotes, same asymmetry as the outer scan.
                 if (dpdepth > 0) {
-                    if (c == lp) { dpdepth++ }
-                    else if (c == rp) { dpdepth-- }
+                    if (subsq) {
+                        if (c == sq) { subsq = 0 }
+                    } else if (subdq) {
+                        if (c == bs && i < n) { out = out c; i++; c = substr($0, i, 1) }
+                        else if (c == dq) { subdq = 0 }
+                    } else if (c == bs && i < n) {
+                        out = out c; i++; c = substr($0, i, 1)
+                    } else if (c == sq) {
+                        subsq = 1
+                    } else if (c == dq) {
+                        subdq = 1
+                    } else if (c == lp) {
+                        dpdepth++
+                    } else if (c == rp) {
+                        dpdepth--
+                        # The right-paren that ENDS the span is a token
+                        # boundary at execution time, not part of the last
+                        # word inside it. Emit it as a space so a path
+                        # sitting immediately before it stays its own token
+                        # -- glued on, it made the guarded-path comparison,
+                        # which matches whole path tokens, miss.
+                        if (dpdepth == 0) { out = out " "; continue }
+                    }
                     out = out c
                     continue
                 }
@@ -215,6 +249,8 @@ _cwg_mask_quoted() {
                 # backticks are inert text and must stay masked as-is.
                 if (indq && c == dl && i < n && substr($0, i + 1, 1) == lp) {
                     dpdepth = 1
+                    subsq = 0
+                    subdq = 0
                     out = out c lp
                     i++
                     continue

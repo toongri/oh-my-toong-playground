@@ -1488,6 +1488,42 @@ EOF"
     return 0
 }
 
+# Regression -- a QUOTED right-paren inside a LIVE command substitution is
+# ordinary text to the shell and does not close the substitution, but
+# _cwg_mask_quoted counted it as a closer. Depth fell to 0 early, the
+# separator behind it was then treated as sitting inside the OUTER double
+# quotes and masked away, and the chained destructive command was never
+# seen as its own segment. Verified against a real shell first: the payload
+# below genuinely executes its second command.
+test_regression_quoted_paren_in_substitution_does_not_hide_rm_rf_denies() {
+    new_sandbox
+    local out cmd sq
+    sq="'"
+    cmd="echo \"\$(printf ${sq})${sq}; rm -rf /tmp/x)\""
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        rm -rf "$SBX"
+        echo "ASSERTION FAILED quoted-paren-substitution-bypass: expected deny, got '$out'"
+        return 1
+    fi
+    rm -rf "$SBX"
+    return 0
+}
+
+# Negative control for the arm above -- without it, "deny when a quoted
+# right-paren appears in a substitution" would be satisfiable by denying
+# every such command outright. A substitution carrying the same quoted
+# right-paren but no destructive command must still pass.
+test_regression_quoted_paren_without_danger_still_allows() {
+    new_sandbox
+    local out rc=0 cmd sq
+    sq="'"
+    cmd="echo \"\$(printf ${sq})${sq}; echo hello)\""
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+    rm -rf "$SBX"
+    assert_allow "$out" "$rc" "quoted-paren-substitution-false-deny"
+}
+
 test_ac4_negative_plain_rm_allows() {
     new_sandbox
     local out rc=0
@@ -2583,6 +2619,8 @@ main() {
     run_test test_ledger_shell_command_mv_source_denies
     run_test test_regression_quoted_heredoc_marker_does_not_hide_rm_rf_denies
     run_test test_regression_genuine_heredoc_body_still_stripped_allows
+    run_test test_regression_quoted_paren_in_substitution_does_not_hide_rm_rf_denies
+    run_test test_regression_quoted_paren_without_danger_still_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
