@@ -7,8 +7,26 @@ provision:
     commands:
       - "npm i -g @colbymchenry/codegraph"
 
+# goal/ultragoal의 실행 체인 중 에이전트 절반. 아래 skills의 sisyphus·
+# code-review와 짝이며, 넷이 다 있어야 체인이 닫힌다 — sisyphus가 실행을
+# sisyphus-junior에게, 완료 게이트가 리뷰를 code-reviewer에게 위임한다.
+# feature-platforms.agents가 [claude, codex]라 bare 선언으로 충분하다.
+agents:
+  items:
+    - code-reviewer
+    - sisyphus-junior
+
 skills:
   items:
+    # goal/ultragoal의 실행 체인 중 스킬 절반. goal은 실행을 재구현하지 않고
+    # 전부 위임하므로(skills/goal/SKILL.md의 "Goal does not reimplement
+    # execution ... dispatches execution to sisyphus"), 이 둘 없이 goal/
+    # ultragoal만 배포하면 첫 실행 디스패치에서 멈춘다. 아래에서 두 스킬을
+    # codex로 여는 이상 체인도 같은 플랫폼 집합으로 열려 있어야 한다.
+    - component: sisyphus
+      platforms: [claude, codex]
+    - component: code-review
+      platforms: [claude, codex]
     # hud는 Claude Code 전용 statusline 기능 — settings.local.json·claudeAiOauth를 읽고
     # ${CLAUDE_SKILL_DIR}/../../ 경로로 리졸브하므로 Codex/Gemini/OpenCode엔 존재하지 않음.
     - component: hud
