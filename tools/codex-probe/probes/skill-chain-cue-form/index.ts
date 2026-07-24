@@ -48,6 +48,8 @@ import path from "path";
 
 import { runProbe } from "../../probe.ts";
 import type { ProbeOptions, ProbeSpec } from "../../probe.ts";
+import { buildIsolatedCodexHome } from "../../isolated-codex-home.ts";
+import type { IsolatedCodexHome } from "../../isolated-codex-home.ts";
 import { materializeCodexSkills } from "../skill-chain-load/materialize.ts";
 import type { Arm } from "./fixture.ts";
 import { DECOY_NAMES, writeSyntheticFixture } from "./fixture.ts";
@@ -72,8 +74,21 @@ const OBJECTIVE =
  * beta stayed CLOSED; an open there means the control failed to discriminate
  * cue form at all (see this file's header comment on the four arms), which
  * must render exit 1, not exit 0.
+ *
+ * `isolated` is a caller-materialized HOME/CODEX_HOME pair (via
+ * buildIsolatedCodexHome), for the same reason skill-chain-load isolates —
+ * with one difference worth naming, since this probe's synthetic names
+ * (alpha/beta/decoys) make a NAME collision with an ambient home skill
+ * structurally impossible. The confound here is BEHAVIORAL, not nominal: an
+ * un-isolated session still loads this machine's home-scoped skills and
+ * rules, and `~/.agents/skills` already carries discovery-oriented skills
+ * (`find-skills`, `orchestration`) whose whole purpose is to make a model
+ * sweep available skill dirs. A sweep opens beta regardless of cue form,
+ * which is precisely the failure the "removed"/"oldprose" negative-control
+ * arms exist to detect — so ambient influence would destroy this probe's
+ * discriminating power rather than merely add noise.
  */
-export function buildProbeSpec(deployRoot: string, arm: Arm): ProbeSpec {
+export function buildProbeSpec(deployRoot: string, arm: Arm, isolated: IsolatedCodexHome): ProbeSpec {
 	return {
 		session: {
 			// `$alpha` MUST lead the user-input prompt — same mechanical-load
@@ -85,8 +100,12 @@ export function buildProbeSpec(deployRoot: string, arm: Arm): ProbeSpec {
 			// alpha is a one-hop synthetic dispatch, not goal's Six-Slot
 			// decomposition — a short but still generous timeout.
 			timeoutMs: 120_000,
+			env: { HOME: isolated.home, CODEX_HOME: isolated.codexHome },
+			// No extraArgs: no hooks are registered, so no hooks.json is written
+			// and there is no untrusted-hooks gate to bypass.
 		},
 		judgment: arm === "removed" || arm === "oldprose" ? invertedCueFormJudgment() : cueFormJudgment(),
+		codexHome: isolated.codexHome,
 	};
 }
 
@@ -105,12 +124,22 @@ export type MainOptions = ProbeOptions & {
 	 * fresh mkdtemp under os.tmpdir().
 	 */
 	scratchRoot?: string;
+	/**
+	 * Injectable `auth.json` source for buildIsolatedCodexHome — hermetic tests
+	 * only. @default `~/.codex/auth.json`. Tests MUST inject a fixture; reading
+	 * the developer's real credential would reintroduce the machine-dependence
+	 * this isolation removes.
+	 */
+	authSourcePath?: string;
 };
 
 export async function main(arm: Arm, opts: MainOptions = {}): Promise<number> {
-	const { scratchRoot: scratchRootOverride, ...probeOpts } = opts;
+	const { scratchRoot: scratchRootOverride, authSourcePath, ...probeOpts } = opts;
 	const scratchRoot = scratchRootOverride ?? (await fs.mkdtemp(path.join(os.tmpdir(), "codex-probe-skill-chain-cue-form-")));
 	const fixtureRoot = path.join(scratchRoot, "fixture");
+	// buildIsolatedCodexHome puts its HOME at `<scratchRoot>/home` — a SIBLING of
+	// deploy/, never inside it, so the isolated home never appears as project
+	// content in the session's cwd.
 	const deployRoot = path.join(scratchRoot, "deploy");
 	try {
 		await writeSyntheticFixture(fixtureRoot, arm);
@@ -121,8 +150,9 @@ export async function main(arm: Arm, opts: MainOptions = {}): Promise<number> {
 		// contains a live `Skill(...)` call for rule 6a to match.
 		const skipRewrite = arm === "sigil" ? undefined : new Set(["alpha"]);
 		await materializeCodexSkills(fixtureRoot, deployRoot, ["alpha", "beta", ...DECOY_NAMES], { skipRewrite });
+		const isolated = await buildIsolatedCodexHome(scratchRoot, {}, authSourcePath === undefined ? {} : { authSourcePath });
 
-		const outcome = await runProbe(buildProbeSpec(deployRoot, arm), probeOpts);
+		const outcome = await runProbe(buildProbeSpec(deployRoot, arm, isolated), probeOpts);
 
 		if (outcome.exitCode === 2) {
 			process.stdout.write(JSON.stringify({ arm, exitCode: 2, reason: outcome.reason, detail: outcome.detail }) + "\n");

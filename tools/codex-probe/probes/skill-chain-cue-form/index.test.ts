@@ -16,7 +16,7 @@
  * before runProbe is ever reached.
  */
 
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
@@ -57,14 +57,34 @@ function observation(finalMessage: string | null, toolCommands: string[] = []) {
 	};
 }
 
+/** Stand-in for a buildIsolatedCodexHome result — buildProbeSpec is pure, so no real dirs are needed. */
+const ISOLATED = { home: "/tmp/iso-home", codexHome: "/tmp/iso-home/.codex" };
+
 describe("buildProbeSpec", () => {
+	// Regression guard (code-review, same class as skill-chain-load's): the
+	// synthetic alpha/beta names make a NAME collision with an ambient home
+	// skill impossible, but an un-isolated session still loads this machine's
+	// home-scoped skills — including discovery-oriented ones that push a model
+	// to sweep every available skill dir. Such a sweep opens beta regardless of
+	// cue form, which would silently destroy the removed/oldprose arms' whole
+	// discriminating purpose. Isolation must hold on EVERY arm, not just the
+	// positive ones.
+	it("isolates HOME and CODEX_HOME on every arm", () => {
+		for (const arm of ["sigil", "prose", "removed", "oldprose"] as const) {
+			const spec = buildProbeSpec("/tmp/x", arm, ISOLATED);
+			expect(spec.session.env).toEqual({ HOME: ISOLATED.home, CODEX_HOME: ISOLATED.codexHome });
+			expect(spec.codexHome).toBe(ISOLATED.codexHome);
+			expect(spec.session.extraArgs).toBeUndefined();
+		}
+	});
+
 	it("puts `$alpha` at the very front of the prompt (user-input position, mechanically loaded)", () => {
-		const spec = buildProbeSpec("/tmp/some-deploy-root", "sigil");
+		const spec = buildProbeSpec("/tmp/some-deploy-root", "sigil", ISOLATED);
 		expect(spec.session.prompt.startsWith("$alpha ")).toBe(true);
 	});
 
 	it("targets the given deployRoot as cwd, with a read-only sandbox and a finite timeout", () => {
-		const spec = buildProbeSpec("/tmp/some-deploy-root", "sigil");
+		const spec = buildProbeSpec("/tmp/some-deploy-root", "sigil", ISOLATED);
 		expect(spec.session.cwd).toBe("/tmp/some-deploy-root");
 		expect(spec.session.sandbox).toBe("read-only");
 		expect(typeof spec.session.timeoutMs).toBe("number");
@@ -73,7 +93,7 @@ describe("buildProbeSpec", () => {
 	});
 
 	it("wires the cue-form predicate judgment", () => {
-		const spec = buildProbeSpec("/tmp/some-deploy-root", "sigil");
+		const spec = buildProbeSpec("/tmp/some-deploy-root", "sigil", ISOLATED);
 		expect(spec.judgment.kind).toBe("predicate");
 	});
 
@@ -92,28 +112,28 @@ describe("buildProbeSpec", () => {
 		const notOpened = observation("done, package.json exists: true.");
 
 		it("sigil arm keeps the positive predicate: opened+reflected passes, closed fails", () => {
-			const spec = buildProbeSpec("/tmp/x", "sigil");
+			const spec = buildProbeSpec("/tmp/x", "sigil", ISOLATED);
 			if (spec.judgment.kind !== "predicate") throw new Error("unreachable");
 			expect(spec.judgment.predicate(opened)).toBe(true);
 			expect(spec.judgment.predicate(notOpened)).toBe(false);
 		});
 
 		it("prose arm keeps the positive predicate: opened+reflected passes, closed fails", () => {
-			const spec = buildProbeSpec("/tmp/x", "prose");
+			const spec = buildProbeSpec("/tmp/x", "prose", ISOLATED);
 			if (spec.judgment.kind !== "predicate") throw new Error("unreachable");
 			expect(spec.judgment.predicate(opened)).toBe(true);
 			expect(spec.judgment.predicate(notOpened)).toBe(false);
 		});
 
 		it("removed arm inverts: staying closed passes, an open (control failed to discriminate) fails", () => {
-			const spec = buildProbeSpec("/tmp/x", "removed");
+			const spec = buildProbeSpec("/tmp/x", "removed", ISOLATED);
 			if (spec.judgment.kind !== "predicate") throw new Error("unreachable");
 			expect(spec.judgment.predicate(notOpened)).toBe(true);
 			expect(spec.judgment.predicate(opened)).toBe(false);
 		});
 
 		it("oldprose arm inverts the same way as removed", () => {
-			const spec = buildProbeSpec("/tmp/x", "oldprose");
+			const spec = buildProbeSpec("/tmp/x", "oldprose", ISOLATED);
 			if (spec.judgment.kind !== "predicate") throw new Error("unreachable");
 			expect(spec.judgment.predicate(notOpened)).toBe(true);
 			expect(spec.judgment.predicate(opened)).toBe(false);
@@ -139,6 +159,28 @@ describe("parseArm", () => {
 });
 
 describe("runEntry / exit-code contract (probe.ts's trichotomy: 0 pass, 1 measured fail, 2 unmeasurable)", () => {
+	/**
+	 * Throwaway `auth.json` for the isolated CODEX_HOME main() now builds. Every
+	 * case that reaches buildIsolatedCodexHome MUST pass this: defaulting to the
+	 * developer's real `~/.codex/auth.json` would make these tests read live
+	 * credentials and pass or fail by machine state — the exact dependence this
+	 * probe's isolation exists to remove.
+	 */
+	const FIXTURE_AUTH = path.join(os.tmpdir(), "skill-chain-cue-form-fixture-auth.json");
+	beforeAll(async () => {
+		await fs.writeFile(FIXTURE_AUTH, "{}");
+	});
+	afterAll(async () => {
+		await fs.rm(FIXTURE_AUTH, { force: true });
+	});
+
+	it("a missing auth.json (isolated CODEX_HOME cannot be built) maps to exit 2 — unmeasurable, never a measured negative", async () => {
+		const code = await runEntry(["node", "index.ts", "--arm=sigil"], {
+			authSourcePath: path.join(os.tmpdir(), "skill-chain-cue-form-no-such-auth.json"),
+		});
+		expect(code).toBe(2);
+	});
+
 	it("an invalid --arm= value maps to exit 2 — never bun's uncaught-throw exit 1", async () => {
 		const code = await runEntry(["node", "index.ts", "--arm=bogus"]);
 		expect(code).toBe(2);
@@ -165,7 +207,7 @@ describe("runEntry / exit-code contract (probe.ts's trichotomy: 0 pass, 1 measur
 
 	it("negative control: a real measured session that never opens+reflects the target skill stays exit 1, not exit 2 — proves the fix doesn't just collapse everything to 2", async () => {
 		const runSessionFn = async (): Promise<RunResult> => ({ ok: true, observation: observation("no dice") });
-		const code = await runEntry(["node", "index.ts", "--arm=sigil"], { runSessionFn });
+		const code = await runEntry(["node", "index.ts", "--arm=sigil"], { runSessionFn, authSourcePath: FIXTURE_AUTH });
 		expect(code).toBe(1);
 	});
 
@@ -174,7 +216,7 @@ describe("runEntry / exit-code contract (probe.ts's trichotomy: 0 pass, 1 measur
 			ok: true,
 			observation: observation(`done — ${BETA_SENTINEL}`, ["cat .agents/skills/beta/SKILL.md"]),
 		});
-		const code = await runEntry(["node", "index.ts", "--arm=sigil"], { runSessionFn });
+		const code = await runEntry(["node", "index.ts", "--arm=sigil"], { runSessionFn, authSourcePath: FIXTURE_AUTH });
 		expect(code).toBe(0);
 	});
 
@@ -186,13 +228,13 @@ describe("runEntry / exit-code contract (probe.ts's trichotomy: 0 pass, 1 measur
 			ok: true,
 			observation: observation(`done — ${BETA_SENTINEL}`, ["cat .agents/skills/beta/SKILL.md"]),
 		});
-		const code = await runEntry(["node", "index.ts", "--arm=removed"], { runSessionFn });
+		const code = await runEntry(["node", "index.ts", "--arm=removed"], { runSessionFn, authSourcePath: FIXTURE_AUTH });
 		expect(code).toBe(1);
 	});
 
 	it("removed arm: a session where beta stays closed (control discriminates correctly) maps to exit 0", async () => {
 		const runSessionFn = async (): Promise<RunResult> => ({ ok: true, observation: observation("done, package.json exists: true.") });
-		const code = await runEntry(["node", "index.ts", "--arm=removed"], { runSessionFn });
+		const code = await runEntry(["node", "index.ts", "--arm=removed"], { runSessionFn, authSourcePath: FIXTURE_AUTH });
 		expect(code).toBe(0);
 	});
 });
