@@ -57,7 +57,7 @@ oh-my-toong/
 ├── config.yaml      # Global defaults (use-platforms, feature-platforms, backup retention)
 ├── claude.yaml      # Per-platform config (config/hooks/mcps/plugins)
 ├── gemini.yaml      # Per-platform config (config/hooks/mcps)
-├── codex.yaml       # Per-platform config (config/mcps/model-map)
+├── codex.yaml       # Per-platform config (hooks/mcps/model-map)
 ├── opencode.yaml    # Per-platform config (config/mcps/model-map)
 └── sync.yaml        # Root sync definition (+ projects/*/sync.yaml per project)
 ```
