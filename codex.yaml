@@ -57,6 +57,22 @@ hooks:
     - component: codex-label-commit-gate.sh
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
+    # NOT a Claude<->Codex hook-parity mirror -- Claude enforces the same
+    # nested-spawn-depth policy natively via the CLAUDE_CODE_MAX_SUBAGENT_
+    # SPAWN_DEPTH env var, so it has no matching hook. This hook exists only
+    # because codex's own [agents] max_depth config key (see the `config:`
+    # block below) is a no-op on this version's V2 spawn path -- there is no
+    # native cap to fall back on, so a hook is the only enforcement point.
+    #
+    # matcher MUST be ".*spawn_agent", never "spawn_agent" or "^spawn_agent$":
+    # Codex's PreToolUse matcher is a full-string regex match, and the actual
+    # tool name observed at runtime is "collaborationspawn_agent" (not
+    # "spawn_agent"). A bare "spawn_agent" or anchored "^spawn_agent$" never
+    # matches that string, so the hook would silently never fire -- passing
+    # both deploy and this repo's own tests while doing nothing at runtime.
+    - component: codex-spawn-depth-gate.sh
+      type: command
+      matcher: ".*spawn_agent"
   PostToolUse:
     - component: rules-injector
       type: command
