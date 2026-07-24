@@ -23,6 +23,9 @@ import { getOmtDir } from "@lib/omt-dir";
 import {
 	type JobConfig,
 	assertMembersOrExit,
+	assertDenyEnforceable,
+	assertDenySkillsShape,
+	extractDenySkills,
 	detectCliType,
 	buildAugmentedCommand,
 	gcStaleJobs as _gcStaleJobs,
@@ -310,6 +313,8 @@ function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
 		};
 	}
 
+	assertDenySkillsShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
+
 	return merged;
 }
 
@@ -383,6 +388,9 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 
 	assertMembersOrExit(members, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
+	const denySkills = extractDenySkills(config["chunk-review"].settings);
+	assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath);
+
 	const jobId = generateJobId();
 	initLogger("chunk-review-job", getOmtDir(), jobId);
 	logStart();
@@ -404,6 +412,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 		settings: {
 			excludeChairmanFromMembers,
 			timeoutSec: timeoutSec || null,
+			denySkills,
 		},
 		members: members.map((r) => ({
 			name: String(r.name),
@@ -419,7 +428,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	_spawnWorkers({
-		entities: members,
+		entities: members.map((r) => ({ ...r, deny: denySkills })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: membersDir,
@@ -551,4 +560,5 @@ export {
 	detectCliType,
 	buildAugmentedCommand,
 	gcStaleJobs,
+	cmdStart,
 };
