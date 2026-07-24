@@ -29,6 +29,34 @@ export interface DecisionContext {
 	lastAssistantMessage: string | null;
 	incompleteTodoCount: number;
 	activeSubagentCount: number;
+	/**
+	 * Codex-only chain ratchet (see hooks/codex-persistent-mode/cli.ts's runStop):
+	 * skill names referenced (via a validated `$name` sigil) by an already-opened
+	 * SKILL.md that have not themselves been opened yet this session. Optional and
+	 * platform-gated by omission — Claude's hooks/persistent-mode/index.ts never
+	 * populates this field, so it stays undefined there and the branch below is
+	 * unreachable for Claude, exactly like the AskPosture split elsewhere in this
+	 * file gates behavior per platform without a runtime flag.
+	 */
+	pendingSkillChainSkills?: string[];
+	/**
+	 * Platform-supplied name of the "ask a structured question" tool, quoted in
+	 * the continuation contract's case-2 line (continuationContract). Optional
+	 * and platform-gated by omission, exactly like pendingSkillChainSkills above:
+	 * Claude's hooks/persistent-mode/index.ts never sets it, so it stays
+	 * undefined there and defaults to "AskUserQuestion" (a real Claude tool
+	 * name). Codex's hooks/codex-persistent-mode/cli.ts sets it to
+	 * "request_user_input" — Codex's real analog (see rewrite rule 14 in
+	 * tools/lib/rewrite-rules.ts) — so the Stop hook's own runtime OUTPUT never
+	 * hardcodes Claude vocabulary for a platform that doesn't have that tool.
+	 * This is dependency injection at the call site, not a deploy-time text
+	 * rewrite: unlike every other Claude-ism in this codebase, this literal
+	 * lives inside executed code (a message string built at runtime), not
+	 * instruction prose in a deployed .md — the deploy-time rewrite pipeline
+	 * (rewritePlatformPaths) deliberately never opens .ts files at all (see its
+	 * doc comment), so rewriting this file's bytes was never a viable fix.
+	 */
+	askToolName?: string;
 }
 
 // isPristine (lib/state-core) takes an untyped Record<string, unknown> since the
@@ -81,11 +109,14 @@ type AskPosture = "preferred" | "exceptional";
 // Mirrors the always-on rule rules/continuation-contract.md (the SSOT). Only the
 // case-2 ask posture varies per family: "preferred" (deep-interview/prometheus/todo)
 // vs "exceptional" (goal/ultragoal — autonomy is post-planning, asking is the rare case).
-function continuationContract(askPosture: AskPosture): string {
+// `askToolName` names the "ask a structured question" tool for THIS platform
+// (see DecisionContext.askToolName's doc comment) — threaded in by every
+// caller from context, never hardcoded here.
+function continuationContract(askPosture: AskPosture, askToolName: string): string {
 	const askLine =
 		askPosture === "preferred"
-			? "2. Need a user decision or fact only they hold? Ask via the AskUserQuestion tool — asking is NOT stopping (a tool call keeps the turn alive). Prefer this over ending the turn with a question in prose."
-			: "2. Asking is EXCEPTIONAL here — this loop is autonomous (autonomy is post-planning). Only when a decision is the user's alone (a human-only gate) or a boundary is unsafe, ask via the AskUserQuestion tool — asking is NOT stopping. Otherwise keep working.";
+			? `2. Need a user decision or fact only they hold? Ask via the ${askToolName} tool — asking is NOT stopping (a tool call keeps the turn alive). Prefer this over ending the turn with a question in prose.`
+			: `2. Asking is EXCEPTIONAL here — this loop is autonomous (autonomy is post-planning). Only when a decision is the user's alone (a human-only gate) or a boundary is unsafe, ask via the ${askToolName} tool — asking is NOT stopping. Otherwise keep working.`;
 	return `Continuation contract (see the always-on Continuation Contract rule) — at this turn boundary, exactly ONE applies:
 1. Work remains? Keep working — do not stop, do not ask.
 ${askLine}
@@ -93,7 +124,7 @@ ${askLine}
 Never end a turn with a softener ("should I continue?", "If you want, I can…", "If you'd like, I can…", "Would you like me to…") — each is case 1, 2, or 3 in disguise; pick the real one.`;
 }
 
-function buildDeepInterviewContinuationMessage(): string {
+function buildDeepInterviewContinuationMessage(askToolName: string): string {
 	return `<deep-interview-continuation>
 
 [DEEP INTERVIEW IN PROGRESS]
@@ -106,7 +137,7 @@ INSTRUCTIONS:
 3. When all questions have been fully answered, output: <deep-interview-done/>
 4. Do NOT stop until the interview is complete
 
-${continuationContract("preferred")}
+${continuationContract("preferred", askToolName)}
 
 </deep-interview-continuation>
 
@@ -114,7 +145,7 @@ ${continuationContract("preferred")}
 `;
 }
 
-function buildPrometheusContinuationMessage(): string {
+function buildPrometheusContinuationMessage(askToolName: string): string {
 	return `<prometheus-continuation>
 
 [PROMETHEUS SESSION IN PROGRESS]
@@ -127,7 +158,7 @@ INSTRUCTIONS:
 3. When the pipeline is fully complete or explicitly aborted, output: <prometheus-done/>
 4. Do NOT stop until <prometheus-done/> is emitted
 
-${continuationContract("preferred")}
+${continuationContract("preferred", askToolName)}
 
 </prometheus-continuation>
 
@@ -135,7 +166,29 @@ ${continuationContract("preferred")}
 `;
 }
 
-function buildTodoContinuationMessage(incompleteCount: number): string {
+function buildSkillChainContinuationMessage(pendingSkills: string[], askToolName: string): string {
+	return `<skill-chain-continuation>
+
+[NEXT-STEP SKILL NOT LOADED - ${pendingSkills.join(", ")}]
+
+A SKILL.md you opened references the next-step skill(s) above, but their SKILL.md has
+not been opened yet this session.
+
+INSTRUCTIONS:
+1. Open the referenced skill's SKILL.md before continuing (or stopping).
+2. Once loaded, proceed with its instructions.
+
+Do NOT stop until every referenced next-step skill has been loaded.
+
+${continuationContract("preferred", askToolName)}
+
+</skill-chain-continuation>
+
+---
+`;
+}
+
+function buildTodoContinuationMessage(incompleteCount: number, askToolName: string): string {
 	return `<todo-continuation>
 
 [INCOMPLETE TASKS DETECTED - ${incompleteCount} remaining]
@@ -149,7 +202,7 @@ INSTRUCTIONS:
 
 Do NOT stop until all tasks are completed.
 
-${continuationContract("preferred")}
+${continuationContract("preferred", askToolName)}
 
 </todo-continuation>
 
@@ -157,7 +210,7 @@ ${continuationContract("preferred")}
 `;
 }
 
-function buildGoalContinuationMessage(goal: GoalState, iteration: number): string {
+function buildGoalContinuationMessage(goal: GoalState, iteration: number, askToolName: string): string {
 	// S2: never yield on a missing objective — fall back to a generic placeholder.
 	const objective =
 		goal.outcome ||
@@ -186,7 +239,7 @@ B) You believe the objective is MET → do NOT stop here. Your 'done' is a claim
 
 Completion fires ONLY through request-complete. Stopping without it does NOT complete the objective. If you are truly blocked with no actionable next step, report the blocker and stop.
 
-${continuationContract("exceptional")}
+${continuationContract("exceptional", askToolName)}
 
 </goal-continuation>
 
@@ -221,7 +274,11 @@ INSTRUCTIONS:
 // self-attested verdict lane (one per story, gates advancing to the next story)
 // plus a final-only independent code-review lane over the accumulated diff
 // (run once, after every story's verdict is APPROVE).
-function buildUltragoalContinuationMessage(ultragoal: UltragoalState, iteration: number): string {
+function buildUltragoalContinuationMessage(
+	ultragoal: UltragoalState,
+	iteration: number,
+	askToolName: string,
+): string {
 	// S2: never yield on a missing objective — fall back to a generic placeholder.
 	const objective =
 		ultragoal.outcome ||
@@ -250,7 +307,7 @@ B) You believe the objective is MET → do NOT stop here. Your 'done' is a claim
 
 Completion fires ONLY through request-complete. Stopping without it does NOT complete the objective. If you are truly blocked with no actionable next step, report the blocker and stop.
 
-${continuationContract("exceptional")}
+${continuationContract("exceptional", askToolName)}
 
 </ultragoal-continuation>
 
@@ -281,8 +338,17 @@ INSTRUCTIONS:
 }
 
 export function makeDecision(context: DecisionContext): HookOutput {
-	const { projectRoot, sessionId, lastAssistantMessage, incompleteTodoCount, activeSubagentCount } =
-		context;
+	const {
+		projectRoot,
+		sessionId,
+		lastAssistantMessage,
+		incompleteTodoCount,
+		activeSubagentCount,
+		pendingSkillChainSkills,
+	} = context;
+	// See DecisionContext.askToolName's doc comment: undefined for every Claude
+	// caller, so this defaults to the real Claude tool name there.
+	const askToolName = context.askToolName ?? "AskUserQuestion";
 
 	// Guard 2: active subagent tasks are running (type=subagent, status=running|pending).
 	// Claude Code will re-invoke the Stop hook via task-notification when they finish, so blocking now is unnecessary.
@@ -303,13 +369,16 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	// branch below, which otherwise blocks unconditionally until <deep-interview-done/>)
 	// so it is reachable for EVERY family. Semantics distinct from done-tokens: KEEP all state
 	// (no cleanup, no completion — we return before any family branch reads/writes/deletes state)
-	// and reset the block-count — both the base counter (goal/ultragoal/baseline-todo) and the
-	// prometheus-namespaced counter (prometheus tracks its own under `prometheus-${attemptId}`).
-	// Distinct from the MAX_BLOCK_COUNT failure-escape: this is an intentional pause, allowed
-	// regardless of the current block-count value.
+	// and reset the block-count — the base counter (goal/ultragoal/baseline-todo), the
+	// prometheus-namespaced counter (prometheus tracks its own under `prometheus-${attemptId}`),
+	// and the skill-chain-namespaced counter (Codex-only, tracks its own under
+	// `skill-chain-${attemptId}` — see Priority 2.5 below). Distinct from the MAX_BLOCK_COUNT
+	// failure-escape: this is an intentional pause, allowed regardless of the current
+	// block-count value.
 	if (detectAwaitingUser(lastAssistantMessage)) {
 		cleanupBlockCountFiles(stateDir, attemptId);
 		cleanupBlockCountFiles(stateDir, `prometheus-${attemptId}`);
+		cleanupBlockCountFiles(stateDir, `skill-chain-${attemptId}`);
 		return formatContinueOutput();
 	}
 
@@ -344,7 +413,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// stop itself before request-complete's gate ever runs. The only legitimate allow-stop
 			// is the terminal active:false fold above, written exclusively by request-complete.
 			const newIteration = goal.iteration + 1;
-			const message = buildGoalContinuationMessage(goal, newIteration); // build FIRST (E1)
+			const message = buildGoalContinuationMessage(goal, newIteration, askToolName); // build FIRST (E1)
 			let writeOk = true;
 			// M1: swallow write failure — STILL block, never degrade to continue.
 			try {
@@ -426,7 +495,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// objective_verdict via set-verdict, so trusting it here would let the loop stop
 			// itself before request-complete's gate ever runs.
 			const newIteration = ultragoal.iteration + 1;
-			const message = buildUltragoalContinuationMessage(ultragoal, newIteration); // build FIRST (E1)
+			const message = buildUltragoalContinuationMessage(ultragoal, newIteration, askToolName); // build FIRST (E1)
 			let writeOk = true;
 			// M1: swallow write failure — STILL block, never degrade to continue.
 			try {
@@ -568,7 +637,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				(magnitudeUnconverged || hasUnscoredActiveComponent || hasNoNonGoalDecider) &&
 				isStateLive(deepInterviewStateRaw, nowEpoch)
 			) {
-				return formatBlockOutput(buildDeepInterviewContinuationMessage());
+				return formatBlockOutput(buildDeepInterviewContinuationMessage(askToolName));
 			}
 			cleanupDeepInterviewState(sessionId);
 		} else if (
@@ -584,7 +653,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			//     check (in the condition above) agrees by falling through instead of
 			//     blocking; the two consumers must stay in agreement.
 			// Either orphan ages toward TTL and is GC'd naturally; neither blocks session stop.
-			return formatBlockOutput(buildDeepInterviewContinuationMessage());
+			return formatBlockOutput(buildDeepInterviewContinuationMessage(askToolName));
 		}
 	}
 
@@ -606,7 +675,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				return formatContinueOutput();
 			}
 			incrementBlockCount(stateDir, prometheusAttemptId);
-			return formatBlockOutput(buildPrometheusContinuationMessage());
+			return formatBlockOutput(buildPrometheusContinuationMessage(askToolName));
 		}
 	}
 
@@ -616,15 +685,44 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		const blockCount = getBlockCount(stateDir, attemptId);
 		if (blockCount >= MAX_BLOCK_COUNT) {
 			cleanupBlockCountFiles(stateDir, attemptId);
+			// This escape returns a full stop-allow (continue), same as the no-blocking
+			// fallthrough below (line ~719) — reset the skill-chain namespace here too, or a
+			// chain-ratchet count left over from earlier in the session leaks past this
+			// return (the fallthrough that normally resets it is never reached) and the
+			// NEXT chain starts with a stale, partially-consumed budget instead of the full
+			// MAX_BLOCK_COUNT.
+			cleanupBlockCountFiles(stateDir, `skill-chain-${attemptId}`);
 			return formatContinueOutput();
 		}
 
 		// Increment block count and block
 		incrementBlockCount(stateDir, attemptId);
-		const message = buildTodoContinuationMessage(incompleteTodoCount);
+		const message = buildTodoContinuationMessage(incompleteTodoCount, askToolName);
 		return formatBlockOutput(message);
 	}
 
-	// No blocking needed
+	// Priority 2.5 (Codex-only): chain ratchet. pendingSkillChainSkills is undefined for
+	// every Claude context (hooks/persistent-mode/index.ts never sets it) and undefined/[]
+	// both fail this check, so this branch is inert there — see the field's doc comment.
+	// Mirrors the escape-hatch shape every sibling blocking lane above uses (goal,
+	// ultragoal, prometheus, baseline-todo): a namespaced block-count under its own
+	// attempt id, so a chain that never resolves (e.g. the referenced skill is never
+	// opened) cannot block Stop forever.
+	if (pendingSkillChainSkills && pendingSkillChainSkills.length > 0) {
+		const chainAttemptId = `skill-chain-${attemptId}`;
+		if (getBlockCount(stateDir, chainAttemptId) >= MAX_BLOCK_COUNT) {
+			cleanupBlockCountFiles(stateDir, chainAttemptId);
+			return formatContinueOutput();
+		}
+		incrementBlockCount(stateDir, chainAttemptId);
+		return formatBlockOutput(buildSkillChainContinuationMessage(pendingSkillChainSkills, askToolName));
+	}
+
+	// No blocking needed. Reset the skill-chain counter here (mirroring the goal/ultragoal
+	// progress-resets-its-own-counter pattern above): this line is reached whenever
+	// pendingSkillChainSkills is empty/undefined, i.e. the chain has resolved (or never
+	// started) — a normally-resolving chain must never leak block-count into the NEXT
+	// chain that starts later in the same session.
+	cleanupBlockCountFiles(stateDir, `skill-chain-${attemptId}`);
 	return formatContinueOutput();
 }
