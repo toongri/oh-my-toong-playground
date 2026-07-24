@@ -1,5 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
+import { isFailedToolResponse } from "@lib/tool-response";
 
 export interface CodexPostToolUseLike {
 	tool_name: string;
@@ -266,23 +267,4 @@ export function tokenizeShell(command: string): string[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isFailedToolResponse(value: unknown): boolean {
-	if (!isRecord(value)) return false;
-	if (
-		value["isError"] === true ||
-		value["is_error"] === true ||
-		value["error"] === true ||
-		value["status"] === "error"
-	) {
-		return true;
-	}
-	if (typeof value["error"] === "string" && value["error"].length > 0) {
-		return true;
-	}
-	if (typeof value["exit_code"] === "number" && value["exit_code"] !== 0) {
-		return true;
-	}
-	return false;
 }
