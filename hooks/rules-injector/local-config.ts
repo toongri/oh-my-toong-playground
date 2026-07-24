@@ -15,7 +15,8 @@ import { writeErrorBreadcrumb } from "./debug-log.js";
  * alias) always wins over yaml (12-factor); see the merge below.
  *
  * Never throws. Absent/unreadable file = NORMAL state (silent no-op, no
- * breadcrumb — mirrors isOffFilePresentSync in config.ts). A present-but-broken
+ * breadcrumb — same silent-absent convention as config.ts, preserving the
+ * engine's never-throw / always-exit-0 guarantee). A present-but-broken
  * file (malformed YAML / wrong-typed value) is diagnosable: non-fatal
  * breadcrumb. Either way degrades to returning env effectively unchanged — the
  * hook's exit-0 guarantee depends on it.
@@ -63,8 +64,10 @@ function resolveConfigDir(env: NodeJS.ProcessEnv): string {
 }
 
 // Reads + parses one yaml file into a plain object. Absent/unreadable = {}
-// silently (the normal state). Present-but-malformed = breadcrumb + {}. A valid
-// non-mapping document (scalar/array/null) = {} (nothing to hydrate).
+// silently (the normal state), and an empty file (null document) too. A valid
+// but non-mapping document (array/scalar) is almost certainly a mistake, so it
+// gets a breadcrumb + {} — consistent with the parse-error branch below.
+// Present-but-malformed (parse throws) = breadcrumb + {}.
 function readYamlObject(path: string): Record<string, unknown> {
 	let raw: string;
 	try {
@@ -77,6 +80,12 @@ function readYamlObject(path: string): Record<string, unknown> {
 		if (isRecord(parsed)) {
 			return parsed;
 		}
+		if (parsed !== null) {
+			writeErrorBreadcrumb(
+				"local-config",
+				new TypeError(`expected a YAML mapping, got ${Array.isArray(parsed) ? "array" : typeof parsed}`),
+			);
+		}
 		return {};
 	} catch (error) {
 		writeErrorBreadcrumb("local-config", error);
@@ -84,29 +93,27 @@ function readYamlObject(path: string): Record<string, unknown> {
 	}
 }
 
-// Generic transform: array -> comma-join; EXCEPT `exclude` -> newline-join (so
-// brace-comma globs like `**/*.{spec,test}.md` survive). `exclude` also
-// accepts a bare scalar string (a single glob, not a `- <glob>` list),
-// applied as-is. Any other type (number, boolean, object, ...) — including a
-// non-string element inside the array (e.g. `- 42`) — is a genuinely
-// wrong-typed `exclude`: throw so the caller's try/catch breadcrumbs it and
-// drops the value, rather than silently coercing it into a bogus glob.
+// Array knobs join to a single env string: `exclude` -> newline-join (so
+// brace-comma globs like `**/*.{spec,test}.md` survive), every other list ->
+// comma-join. In BOTH cases the elements must be strings — a non-string
+// element (e.g. `- 42`) is a wrong-typed value that we throw on, so the
+// caller's try/catch breadcrumbs it and drops the key rather than
+// String()-coercing it into a bogus glob/source.
 function serializeValue(key: string, value: unknown): string {
-	if (key === "exclude") {
-		if (typeof value === "string") {
-			return value;
-		}
-		if (Array.isArray(value)) {
-			const badTypes = value.filter((v) => typeof v !== "string").map((v) => typeof v);
-			if (badTypes.length > 0) {
-				throw new TypeError(`exclude array must contain only strings, got ${badTypes.join(", ")}`);
-			}
-			return value.join("\n");
-		}
-		throw new TypeError(`exclude must be a string or string[], got ${typeof value}`);
-	}
 	if (Array.isArray(value)) {
-		return value.join(",");
+		const badTypes = value.filter((v) => typeof v !== "string").map((v) => typeof v);
+		if (badTypes.length > 0) {
+			throw new TypeError(`${key} array must contain only strings, got ${badTypes.join(", ")}`);
+		}
+		return value.join(key === "exclude" ? "\n" : ",");
+	}
+	// `exclude` demands a string scalar (a single glob); a number/boolean/object
+	// scalar is a wrong-typed `exclude`. Other scalar knobs (disabled,
+	// maxRuleChars, ...) are legitimately String()-coerced.
+	if (key === "exclude" && typeof value !== "string") {
+		throw new TypeError(
+			`exclude must be a string or string[], got ${value === null ? "null" : typeof value}`,
+		);
 	}
 	return String(value);
 }
