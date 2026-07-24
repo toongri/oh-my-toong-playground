@@ -84,24 +84,33 @@ mk_rollout() {
 
 # =============================================================================
 # Row 1 -- jq absent -> allow (fail-open), no output. PATH is narrowed to a
-# jq-less directory (every /usr/bin, /bin entry symlinked in except jq),
-# mirroring hooks/codex-keyword-detector_test.sh's test_missing_jq_fails_open
-# technique. The fixture underneath is a depth=2 rollout (would DENY if jq
-# were present) so this test actually exercises the fail-open path rather
-# than trivially passing on an already-allow payload.
+# single symlink, /bin/cat -- the ONLY external command the hook's jq-absent
+# path actually calls. hooks/codex-spawn-depth-gate.sh:68 runs
+# `input=$(cat)` BEFORE the `command -v jq` check at :70 (a bash builtin,
+# needs no PATH entry); that check's failure exits the whole hook at :71, so
+# tr/head/jq further down are never reached. Follows the explicit
+# per-command whitelist posture of hooks/codex-write-guard_test.sh:1569-1577's
+# new_jq_less_bin (list only what the exercised path truly calls), not the
+# blanket "every /usr/bin, /bin entry except jq" copy this test used to
+# carry. That copy's own comment claimed to mirror hooks/codex-keyword-
+# detector_test.sh's test_missing_jq_fails_open technique -- which is itself
+# a brute ~961-entry copy, not the minimal single-symlink pattern its OWN
+# comment in turn claims to mirror from hooks/ledger-core_test.sh's
+# test_qa_jq_absent (that one links only sed). The chain of "mirrors X" was
+# broken; this row now matches what it actually needs, not what a prior
+# comment asserted. The fixture underneath is a depth=2 rollout (would DENY
+# if jq were present) so this test actually exercises the fail-open path
+# rather than trivially passing on an already-allow payload.
 # =============================================================================
 test_row1_jq_absent_allows() {
     new_sandbox
-    local rollout jq_less_bin entry payload out exit_code=0 result=0
+    local rollout jq_less_bin payload out exit_code=0 result=0
 
     rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
     jq_less_bin=$(mktemp -d)
-    for entry in /usr/bin/* /bin/*; do
-        [ "$(basename "$entry")" = "jq" ] && continue
-        ln -s "$entry" "$jq_less_bin/$(basename "$entry")" 2>/dev/null || true
-    done
+    ln -s /bin/cat "$jq_less_bin/cat"
 
     out=$(printf '%s' "$payload" | PATH="$jq_less_bin" /bin/bash "$HOOK" 2>/dev/null) || exit_code=$?
     rm -rf "$jq_less_bin"
