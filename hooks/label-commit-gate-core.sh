@@ -77,20 +77,43 @@ label_commit_gate_core_check() {
     # paragraph and promotes the next -m to the subject line (verified via
     # `git commit --allow-empty -m '' -m 'fix D-36'` -> subject `fix D-36`),
     # so a first -m with an empty value must be skipped over, not treated as
-    # a title-less commit. The separator group requires at least one space
-    # or a literal '=' (never both optional-empty) so the flag-alternation
-    # can't false-match a `m`-ending prefix sitting inside an unrelated long
-    # flag (e.g. "-am" inside "--amend") immediately followed by ordinary
-    # flag text -- with an empty-separator allowance the broadened unquoted
-    # branch below would swallow that text as a bogus "value" and stop
-    # searching before ever reaching a real -m further down the command.
+    # a title-less commit.
+    #
+    # The value is reached through TWO alternatives, because the separator
+    # and the value form are independent axes:
+    #
+    #   (a) SEPARATED -- at least one space or a literal '=', then any value
+    #       form (ANSI-C $'...', single/double quoted, or a bare unquoted
+    #       token). The separator is never optional-empty HERE so the
+    #       flag-alternation can't false-match a `m`-ending prefix sitting
+    #       inside an unrelated long flag (e.g. "-am" inside "--amend")
+    #       immediately followed by ordinary flag text -- with an
+    #       empty-separator allowance the bare-token branch would swallow
+    #       that text as a bogus "value" and stop searching before ever
+    #       reaching a real -m further down the command.
+    #   (b) ATTACHED -- no separator at all, QUOTED value only. Shell quote
+    #       concatenation makes `-m'fix <label>'` a single word, and git
+    #       reads it exactly like the separated form, so it must be
+    #       extracted too. Restricting this branch to quoted values is what
+    #       keeps (a)'s guarantee intact: a bare token can never attach, so
+    #       unrelated flag text is still unreachable as a value.
+    #
+    # Splitting the axes this way, rather than making the separator
+    # optional again, is deliberate -- an optional separator would let the
+    # bare-token branch attach and reintroduce the false-match above.
     local title=""
-    local _lcg_msg_re="(^|[[:space:]])(-[a-zA-Z]*m|--message)([[:space:]]+=?[[:space:]]*|=[[:space:]]*)(\\\$'[^']*'|'[^']*'|\"[^\"]*\"|[^[:space:]]+)"
+    local _lcg_quoted_val="\\\$'[^']*'|'[^']*'|\"[^\"]*\""
+    local _lcg_msg_re="(^|[[:space:]])(-[a-zA-Z]*m|--message)((([[:space:]]+=?[[:space:]]*|=[[:space:]]*)($_lcg_quoted_val|[^[:space:]]+))|($_lcg_quoted_val))"
     local _lcg_msg_found=0
     local _lcg_msg_search="$_lcg_seg"
     while [[ "$_lcg_msg_search" =~ $_lcg_msg_re ]]; do
         _lcg_msg_found=1
-        local _lcg_raw="${BASH_REMATCH[4]}"
+        # Separated form captures into group 6, attached form into group 7;
+        # exactly one of the two alternatives matched, so the other is empty.
+        local _lcg_raw="${BASH_REMATCH[6]}"
+        if [[ -z "$_lcg_raw" ]]; then
+            _lcg_raw="${BASH_REMATCH[7]}"
+        fi
         local _lcg_full_match="${BASH_REMATCH[0]}"
         # Unquote (single matching wrapper only) just to test for emptiness
         # -- title itself stays in its raw, still-quoted form below, same as
