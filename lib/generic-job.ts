@@ -296,11 +296,40 @@ export function buildAugmentedCommand(
 			// re-tokenization doesn't strip them and produce invalid JSON on the receiving end.
 			parts.push("--settings", JSON.stringify({ skillOverrides }).replace(/"/g, '\\"'));
 		} else if (cliType === "opencode") {
+			// This env var is not a deny-only channel — it carries opencode's ENTIRE inline
+			// config (provider, model, mcp, other permissions). It reaches the CLI from two
+			// inputs, so both must be preserved: the member's own `env:` (seeded above) and
+			// the ambient environment, since workerEnv is spread LAST over process.env at
+			// spawn time (lib/worker-utils.ts) and would therefore win over an inherited
+			// value. Merge into whichever is present rather than replacing it.
+			const inherited = env.OPENCODE_CONFIG_CONTENT ?? process.env.OPENCODE_CONFIG_CONTENT;
+			let base: Record<string, unknown> = {};
+			if (inherited) {
+				try {
+					const parsed: unknown = JSON.parse(inherited);
+					if (isRecord(parsed)) base = parsed;
+				} catch {
+					// Unparseable inherited config — opencode itself would reject it, so there is
+					// nothing worth preserving. Fall through to an empty base and still enforce deny.
+				}
+			}
+			const permission: Record<string, unknown> = isRecord(base.permission) ? base.permission : {};
 			// Same null-prototype reasoning as claude's skillOverrides above.
 			const skill: Record<string, string> = Object.create(null);
-			skill["*"] = "allow";
+			if (isRecord(permission.skill)) {
+				for (const [name, decision] of Object.entries(permission.skill)) {
+					skill[name] = String(decision);
+				}
+			}
+			// Default the wildcard only when the inherited config states no policy of its own:
+			// writing "allow" unconditionally would WIDEN an inherited '*: deny' default, turning
+			// a config-preserving merge into a permission grant.
+			if (skill["*"] === undefined) skill["*"] = "allow";
 			for (const name of denySkills) skill[name] = "deny";
-			env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ permission: { skill } });
+			env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+				...base,
+				permission: { ...permission, skill },
+			});
 		}
 		// gemini/unknown: no enforceable lever here — enforceability is a job-start gate's job, not this translator's.
 	}

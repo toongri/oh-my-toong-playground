@@ -406,6 +406,79 @@ describe("buildAugmentedCommand", () => {
 		expect(parsed.permission.skill["*"]).toBe("allow");
 	});
 
+	// OPENCODE_CONFIG_CONTENT carries opencode's whole inline config, not just permissions,
+	// and reaches the CLI from two independent inputs. A bare assignment silently drops the
+	// member's provider/model/mcp settings, so both inputs are covered here — checking only
+	// the `env:` axis would leave the ambient-environment axis unmeasured.
+	describe("opencode deny preserves an inherited OPENCODE_CONFIG_CONTENT", () => {
+		const originalInherited = process.env.OPENCODE_CONFIG_CONTENT;
+		afterEach(() => {
+			if (originalInherited === undefined) delete process.env.OPENCODE_CONFIG_CONTENT;
+			else process.env.OPENCODE_CONFIG_CONTENT = originalInherited;
+		});
+
+		test("member `env:` axis — provider/model and other permission keys survive", () => {
+			const result = buildAugmentedCommand(
+				{
+					command: "opencode run",
+					deny: ["orchestrate-review"],
+					env: {
+						OPENCODE_CONFIG_CONTENT: JSON.stringify({
+							provider: { anthropic: { apiKey: "x" } },
+							model: "opencode-go/glm-5.2",
+							permission: { bash: "ask", skill: { "existing-skill": "allow" } },
+						}),
+					},
+				},
+				"opencode",
+			);
+			const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+			expect(parsed.provider).toEqual({ anthropic: { apiKey: "x" } });
+			expect(parsed.model).toBe("opencode-go/glm-5.2");
+			expect(parsed.permission.bash).toBe("ask");
+			expect(parsed.permission.skill["existing-skill"]).toBe("allow");
+			expect(parsed.permission.skill["orchestrate-review"]).toBe("deny");
+		});
+
+		test("ambient process.env axis — workerEnv wins at spawn, so it must merge here too", () => {
+			process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ model: "ambient/model" });
+			const result = buildAugmentedCommand(
+				{ command: "opencode run", deny: ["agent-council"] },
+				"opencode",
+			);
+			const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+			expect(parsed.model).toBe("ambient/model");
+			expect(parsed.permission.skill["agent-council"]).toBe("deny");
+		});
+
+		test("an inherited '*: deny' default is not widened to allow", () => {
+			const result = buildAugmentedCommand(
+				{
+					command: "opencode run",
+					deny: ["orchestrate-review"],
+					env: {
+						OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: { skill: { "*": "deny" } } }),
+					},
+				},
+				"opencode",
+			);
+			const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+			expect(parsed.permission.skill["*"]).toBe("deny");
+			expect(parsed.permission.skill["orchestrate-review"]).toBe("deny");
+		});
+
+		test("unparseable inherited config still enforces deny", () => {
+			process.env.OPENCODE_CONFIG_CONTENT = "{not json";
+			const result = buildAugmentedCommand(
+				{ command: "opencode run", deny: ["agent-council"] },
+				"opencode",
+			);
+			const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+			expect(parsed.permission.skill["agent-council"]).toBe("deny");
+			expect(parsed.permission.skill["*"]).toBe("allow");
+		});
+	});
+
 	// A plain object literal ({}) has Object.prototype as its prototype, so assigning
 	// a key literally named "__proto__" hits the inherited accessor instead of creating
 	// an own data property — the name silently vanishes from JSON.stringify. claude's
