@@ -366,6 +366,180 @@ test_glob_dotfile_basename_star_denies() {
 }
 
 # =============================================================================
+# Claude<->Codex parity story 9/9, AC2/AC4 -- write_guard_core_check_dangerous_
+# command <command-segment> mirrors claude.yaml's declarative permissions.deny
+# glob set (rm -rf/-fr/-Rf/-r -f/-f -r, git push --force/-f in either
+# position) for the platform (Codex) that has no native declarative permission
+# engine. DENY cases below are the positive set; ALLOW cases (plain rm, rm -r,
+# non-force git push) are the negative control -- without them a deny guard
+# cannot be told apart from "deny everything".
+# =============================================================================
+test_dangerous_rm_rf_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'rm -rf /tmp/x'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-rm-rf: expected deny for 'rm -rf /tmp/x', got '$out'"
+        return 1
+    fi
+}
+
+test_dangerous_rm_fr_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'rm -fr /tmp/x'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-rm-fr: expected deny for 'rm -fr /tmp/x', got '$out'"
+        return 1
+    fi
+}
+
+test_dangerous_rm_r_dash_f_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'rm -r -f /tmp/x'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-rm-r-dash-f: expected deny for 'rm -r -f /tmp/x', got '$out'"
+        return 1
+    fi
+}
+
+test_dangerous_git_push_force_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'git push --force'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-git-push-force: expected deny for 'git push --force', got '$out'"
+        return 1
+    fi
+}
+
+test_dangerous_git_push_origin_force_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'git push origin --force'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-git-push-origin-force: expected deny for 'git push origin --force', got '$out'"
+        return 1
+    fi
+}
+
+test_dangerous_git_push_dash_f_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'git push origin -f'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-git-push-dash-f: expected deny for 'git push origin -f', got '$out'"
+        return 1
+    fi
+}
+
+# Negative control (AC4) -- a plain rm / rm -r / non-force git push must NOT
+# be denied. Without this, a deny guard is indistinguishable from "deny
+# everything".
+test_negative_plain_rm_allows() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'rm /tmp/x'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED negative-plain-rm: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+test_negative_rm_r_allows() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'rm -r /tmp/x'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED negative-rm-r: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+test_negative_git_push_no_force_allows() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'git push origin main'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED negative-git-push-no-force: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Regression (CONFIRMED bypass, both-platform measurement) -- the 9 dangerous-
+# command patterns are literal-token globs requiring EXACTLY one ASCII space
+# between words ("rm -rf "*), but a real shell treats any run of spaces/tabs
+# between tokens as an equivalent single separator: `rm  -rf x` (two spaces)
+# and `rm<TAB>-rf x` both run `rm -rf x` at real execution time, yet neither
+# literally matched the single-space pattern, silently ALLOWING a command
+# Claude denies natively (its own shell-aware parser is whitespace-run-
+# tolerant). Fix: collapse internal whitespace runs to a single space before
+# the case match. Each DENY case below reproduces one whitespace-run variant;
+# the ALLOW controls prove the collapse does not turn ordinary whitespace
+# into an over-broad denier.
+# =============================================================================
+test_dangerous_rm_rf_double_space_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'rm  -rf /tmp/x'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-rm-rf-double-space: expected deny for 'rm  -rf /tmp/x' (two spaces), got '$out'"
+        return 1
+    fi
+}
+
+test_dangerous_rm_rf_tab_denies() {
+    local out cmd
+    cmd=$(printf 'rm\t-rf /tmp/x')
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command \"\$1\"" _ "$cmd")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-rm-rf-tab: expected deny for 'rm<TAB>-rf /tmp/x', got '$out'"
+        return 1
+    fi
+}
+
+test_dangerous_git_push_force_multispace_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'git  push  --force'")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED dangerous-git-push-force-multispace: expected deny for 'git  push  --force', got '$out'"
+        return 1
+    fi
+}
+
+# Negative controls -- ordinary single-space commands must be unaffected by
+# the whitespace collapse (already covered by test_negative_plain_rm_allows /
+# test_negative_git_push_no_force_allows above); this control additionally
+# proves a harmless command that itself contains a double-space in a
+# non-leading position stays allowed (the collapse does not turn benign
+# multi-space text into a denier).
+test_negative_double_space_nondangerous_allows() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_dangerous_command 'echo  hello  world'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED negative-double-space-nondangerous: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
 # codereview_guard_core_run <OMT_DIR> <session_id> <agent_type> tests
 # (code-review-artifact-guard-core plan) -- identity-conditional guard: unlike
 # write_guard_core_run's unconditional deny, this one allows the SAME guarded
@@ -610,6 +784,19 @@ main() {
     run_test test_glob_dotfile_literal_project_star_denies
     run_test test_glob_dotfile_basename_partial_star_denies
     run_test test_glob_dotfile_basename_star_denies
+    run_test test_dangerous_rm_rf_denies
+    run_test test_dangerous_rm_fr_denies
+    run_test test_dangerous_rm_r_dash_f_denies
+    run_test test_dangerous_git_push_force_denies
+    run_test test_dangerous_git_push_origin_force_denies
+    run_test test_dangerous_git_push_dash_f_denies
+    run_test test_negative_plain_rm_allows
+    run_test test_negative_rm_r_allows
+    run_test test_negative_git_push_no_force_allows
+    run_test test_dangerous_rm_rf_double_space_denies
+    run_test test_dangerous_rm_rf_tab_denies
+    run_test test_dangerous_git_push_force_multispace_denies
+    run_test test_negative_double_space_nondangerous_allows
     run_test test_ac_codereview_byte_identical_deny
     run_test test_codereview_guard_ultragoal_empty_agent_type_denies
     run_test test_codereview_guard_ultragoal_missing_agent_type_denies

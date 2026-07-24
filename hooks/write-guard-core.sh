@@ -134,6 +134,64 @@ _wg_core_pathwise_glob_match() {
 # ledger path (e.g. `rm "$OMT_DIR"/session-ledger-*.md` never EXACT-matches
 # but would still destroy the current-session ledger); else emits nothing
 # (allow).
+# Claude<->Codex parity story 9/9: the second deny reason this core owns,
+# alongside the ledger deny above. Claude enforces this same policy natively
+# via claude.yaml's declarative `permissions.deny` glob list (own product-UI
+# deny text, not authored by OMT and not mechanically reproducible here) --
+# Codex has no equivalent declarative primitive, so hooks/codex-write-guard.sh
+# calls write_guard_core_check_dangerous_command below to emulate the same
+# verdict via a PreToolUse hook deny. hooks/pre-tool-enforcer.sh (Claude) does
+# NOT call this function: Claude already denies these commands natively, so
+# wiring a second hook-level deny on top would only add risk (ordering
+# against the native deny, a different message than users already see) for a
+# case that is not broken. The invariant this repo's parity is built on is
+# "same verdict for the same command", not "identical code path" (see
+# reference_parity_is_shared_invariant_not_symmetric_copy) -- Codex closes
+# the actual gap; Claude's existing behavior is left untouched.
+_wg_core_dangerous_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: destructive command (rm -rf/-fr/-Rf/-r -f/-f -r, or git push --force/-f in any position) is denied -- Codex-side enforcement of the same policy Claude applies natively via claude.yaml permissions.deny."}}'
+
+# write_guard_core_check_dangerous_command <command-segment>
+# Tests ONE already-split shell chain segment (caller owns splitting on
+# &&/||/;/| and any quote-masking -- same division of labor as
+# write_guard_core_run above) against claude.yaml's declarative
+# permissions.deny glob set for rm -rf and git push --force, mirrored 1:1:
+#   Bash(rm -rf *) / Bash(rm -fr *) / Bash(rm -Rf *) / Bash(rm -r -f *) / Bash(rm -f -r *)
+#   Bash(git push --force*) / Bash(git push * --force*) / Bash(git push -f*) / Bash(git push * -f*)
+# Emits the deny JSON iff the (leading-whitespace-trimmed) segment matches one
+# of those patterns; else emits nothing (allow). Plain `rm <path>` / `rm -r
+# <path>` / `git push <remote> <branch>` (no force flag) do NOT match any
+# pattern -- the negative control this guard needs to be distinguishable from
+# "deny everything" (AC4).
+write_guard_core_check_dangerous_command() {
+    local seg="$1"
+    # Trim leading whitespace only (a chain segment split off after `&&`/`;`
+    # carries the separator's trailing space) -- patterns below are anchored
+    # to the start of the command, so a stray leading space would silently
+    # miss every case.
+    seg="${seg#"${seg%%[![:space:]]*}"}"
+    # Collapse internal whitespace runs (spaces AND tabs) to a single space
+    # (CONFIRMED bypass, both-platform measurement): the patterns below are
+    # literal-token globs requiring EXACTLY one space between words
+    # ("rm -rf "*), but a real shell treats any run of spaces/tabs between
+    # tokens as an equivalent single word separator -- `rm  -rf x` (two
+    # spaces) or `rm<TAB>-rf x` still runs `rm -rf x` at real execution time,
+    # yet the literal-space pattern silently failed to match either variant,
+    # ALLOWing a destructive command that Claude denies natively (its own
+    # shell-aware parser is whitespace-run-tolerant). Collapsing here only
+    # normalizes the CLASSIFICATION input to this function, not any candidate
+    # path text elsewhere, so it carries no over-block risk beyond making the
+    # 9 literal patterns below whitespace-run-tolerant like a real shell.
+    seg="$(printf '%s' "$seg" | tr -s '[:space:]' ' ')"
+    case "$seg" in
+        "rm -rf "* | "rm -fr "* | "rm -Rf "* | "rm -r -f "* | "rm -f -r "* | \
+        "git push --force"* | "git push "*" --force"* | "git push -f"* | "git push "*" -f"*)
+            printf '%s\n' "$_wg_core_dangerous_deny_json"
+            return 0
+            ;;
+    esac
+    return 0
+}
+
 write_guard_core_run() {
     local omt_dir="$1"
     local session_id="$2"

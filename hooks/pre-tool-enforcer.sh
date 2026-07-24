@@ -229,22 +229,80 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
             # drop the quote CHARACTERS but keep the quoted CONTENT visible, while
             # masking shell-active metachars (`> < | ; &`) that appear INSIDE quotes
             # -- so an in-quote `>` never reads as a live redirect (grep below) and
-            # an in-quote `|`/`;`/`&` never spuriously splits a segment. Metachars
-            # OUTSIDE quotes (real redirects/splitters) and DOUBLE-quoted paths
-            # (`> "$f"`) pass through unchanged, exactly as before.
+            # an in-quote `|`/`;`/`&` never spuriously splits a segment.
+            #
+            # DOUBLE-quoted spans are masked too (CONFIRMED parity fix, both-
+            # platform measurement): this file used to mask single quotes only,
+            # so `echo "note; rm <ledger>"` was read as a live `;`-chain and
+            # DENIED here, while the Codex twin's _cwg_mask_quoted
+            # (hooks/codex-write-guard.sh) already masked double-quoted spans
+            # too and ALLOWED the identical command -- a same-command,
+            # different-verdict divergence against this repo's parity
+            # invariant ("same verdict for the same command", not "identical
+            # code path" -- see hooks/codex-write-guard.sh's own header). This
+            # block is widened to match: quote-toggle logic, the backslash
+            # pass-through that keeps an escaped `\"` from desyncing in-quote
+            # tracking, and the `$( ... )`/backtick-span suspension (a `;`/
+            # `rm` sitting inside a LIVE command substitution nested in double
+            # quotes -- e.g. `echo "$(true; rm <ledger>)"` -- is real shell
+            # code the outer shell actually executes, so masking must not hide
+            # it) are ported verbatim from _cwg_mask_quoted's pre-existing
+            # logic. Independently re-derived here, not sourced from that
+            # file, per this repo's own established Claude/Codex
+            # parsing-independence convention (hooks/codex-write-guard.sh's
+            # file header) -- the two guards can still diverge if one is
+            # edited without the other.
             _wg_scan=$(printf '%s' "$_wg_cmd" | awk '
-                BEGIN { sq = sprintf("%c", 39) }
+                BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); dl = sprintf("%c", 36); lp = sprintf("%c", 40); rp = sprintf("%c", 41); bt = sprintf("%c", 96) }
                 {
                     n = length($0)
-                    inq = 0
+                    insq = 0
+                    indq = 0
+                    dpdepth = 0
+                    btactive = 0
                     out = ""
                     for (i = 1; i <= n; i++) {
                         c = substr($0, i, 1)
-                        if (c == sq) {
-                            inq = 1 - inq
+
+                        if (c == bs && !insq && i < n) {
+                            out = out c substr($0, i + 1, 1)
+                            i++
                             continue
                         }
-                        if (inq && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
+
+                        if (dpdepth > 0) {
+                            if (c == lp) { dpdepth++ }
+                            else if (c == rp) { dpdepth-- }
+                            out = out c
+                            continue
+                        }
+                        if (btactive) {
+                            if (c == bt) { btactive = 0 }
+                            out = out c
+                            continue
+                        }
+
+                        if (indq && c == dl && i < n && substr($0, i + 1, 1) == lp) {
+                            dpdepth = 1
+                            out = out c lp
+                            i++
+                            continue
+                        }
+                        if (indq && c == bt) {
+                            btactive = 1
+                            out = out c
+                            continue
+                        }
+
+                        if (!indq && c == sq) {
+                            insq = 1 - insq
+                            continue
+                        }
+                        if (!insq && c == dq) {
+                            indq = 1 - indq
+                            continue
+                        }
+                        if ((insq || indq) && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
                             out = out " "
                             continue
                         }
