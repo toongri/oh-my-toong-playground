@@ -12,16 +12,10 @@ model-map:
     code-reviewer:
       model: gpt-5.6-sol
       effort: high
-    daedalus:
-      model: gpt-5.6-sol
-      effort: high
     metis:
       model: gpt-5.6-sol
       effort: high
     momus:
-      model: gpt-5.6-sol
-      effort: high
-    oracle:
       model: gpt-5.6-sol
       effort: high
     tech-claim-examiner:

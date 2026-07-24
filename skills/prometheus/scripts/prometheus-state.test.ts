@@ -1,7 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, unlinkSync } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
+import * as os from "os";
 import { join } from "path";
 import {
 	readPrometheusState,
@@ -146,6 +147,33 @@ describe("prometheus state", () => {
 		const sessionId = process.env.OMT_SESSION_ID || "default";
 		const path = resolveStatePath(sessionId);
 		expect(path).toBe(`${tmpDir}/prometheus-state-default.json`);
+	});
+
+	// Pins the fix: on Codex, OMT_DIR is unset by design (hooks/codex-write-guard.sh:272,
+	// hooks/pre-tool-enforcer.sh:339 both `unset OMT_DIR` and derive it from cwd
+	// instead). prometheus-state.ts now delegates to @lib/omt-dir's shared getOmtDir()
+	// (prometheus-state.ts:17,101), the same fallback every sibling skill state module
+	// (goal-state.ts, ultragoal-state.ts, qa-state.ts, deep-interview-state.ts) uses,
+	// which never throws — replacing prometheus-state.ts's former local getOmtDir()
+	// reimplementation, which used to throw in this condition. This test guards the
+	// regression: it must keep resolving to a path, not throw.
+	// Sandboxed: bun's os.homedir() ignores env HOME (must spyOn, per
+	// tools/lib/backup.test.ts), and the shared getOmtDir() creates the resolved
+	// directory — so homedir() is faked to a disposable tmp dir to avoid ever
+	// touching the real ~/.omt.
+	test("resolveStatePath resolves without throwing when OMT_DIR is unset (Codex condition)", () => {
+		delete process.env.OMT_DIR;
+		const fakeHome = mkdtempSync(join(tmpdir(), "prometheus-fakehome-"));
+		const homedirSpy = spyOn(os, "homedir").mockReturnValue(fakeHome);
+		try {
+			expect(() => resolveStatePath("codex-session")).not.toThrow();
+			const path = resolveStatePath("codex-session");
+			expect(path.startsWith(`${fakeHome}/.omt/`)).toBe(true);
+			expect(path.endsWith("/prometheus-state-codex-session.json")).toBe(true);
+		} finally {
+			homedirSpy.mockRestore();
+			rmSync(fakeHome, { recursive: true, force: true });
+		}
 	});
 
 	test("prometheus phase-only update preserves prior plan_path and resume_summary", () => {

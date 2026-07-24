@@ -684,12 +684,12 @@ describe("syncCategory", () => {
 			claude: ["agents", "commands", "skills", "scripts", "rules"],
 			opencode: ["agents", "commands", "skills", "scripts", "rules"],
 			gemini: ["commands", "skills", "scripts"],
-			codex: ["agents", "skills", "scripts"],
+			codex: ["agents", "skills", "scripts", "rules"],
 		};
 
 		const expectedUnsupported: Record<string, Category[]> = {
 			gemini: ["agents", "rules"],
-			codex: ["commands", "rules"],
+			codex: ["commands"],
 		};
 
 		for (const [platform, supported] of Object.entries(expectedSupported)) {
@@ -3217,7 +3217,7 @@ describe("rewritePlatformPaths — codex two-root rule-table rewrite (TODO 4)", 
 
 		const skillContent = await readFile(path.join(skillDir, "SKILL.md"));
 		expect(skillContent).toContain(".agents/skills/x");
-		expect(skillContent).toContain("the humanizer skill");
+		expect(skillContent).toContain("$humanizer");
 		expect(skillContent).toContain(path.join(skillDir, "scripts", "j.ts"));
 		expect(skillContent).not.toContain("${CLAUDE_SKILL_DIR}");
 		expect(skillContent).not.toContain("Skill(");
@@ -3314,7 +3314,7 @@ describe("rewritePlatformPaths — codex two-root rule-table rewrite (TODO 4)", 
 
 		const mdContent = await readFile(path.join(skillDir, "SKILL.md"));
 		expect(mdContent).toContain(".agents/skills");
-		expect(mdContent).toContain("the x skill");
+		expect(mdContent).toContain("$x");
 		expect(mdContent).not.toContain("Skill(");
 
 		expect(await readFile(scriptFile)).toBe(scriptContent);
@@ -3368,7 +3368,7 @@ describe("processYaml — codex skills rewrite gate (D4) and scoped name derivat
 		expect(await exists(path.join(targetPath, ".codex"))).toBe(false);
 
 		const deployed = await readFile(path.join(targetPath, ".agents", "skills", "myskill", "SKILL.md"));
-		expect(deployed).toContain("the x skill");
+		expect(deployed).toContain("$x");
 		expect(deployed).toContain(".codex/rules");
 		expect(deployed).not.toContain("Skill(");
 		expect(deployed).not.toContain(".claude/");
@@ -3403,7 +3403,248 @@ describe("processYaml — codex skills rewrite gate (D4) and scoped name derivat
 		const deployed = await readFile(path.join(agentsSkillsDir, "testing", "SKILL.md"));
 		expect(deployed).toContain(".codex/");
 		expect(deployed).not.toContain(".claude/");
-		expect(deployed).toContain("the x skill");
+		expect(deployed).toContain("$x");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: LibSourceRoots bucketed by deploy LOCATION, not Platform (regression)
+//
+// Bug: LibSourceRoots was keyed by Platform directly, so a codex SKILL's
+// @lib/ source root bucketed under "codex". But a codex skill physically
+// lands under `.agents/skills/` (codexSkillsDir), never `.codex/skills/` —
+// and codex's syncSkillsDirect (tools/adapters/codex.ts) copies via
+// syncDirectory with NO `platformRoot`, so it never rewrites @lib/ at copy
+// time either; the ENTIRE rewrite depends on syncLib's post-pass
+// `rewriteLibAliases(platformDir, …)`, which only walks the ONE `platformDir`
+// its bucket key names. With the old platform-keyed bucket, syncLib deployed
+// the shared lib to `.codex/lib` and walked `.codex/` for the post-pass —
+// never touching `.agents/skills/…/run.ts` at all, so its `@lib/` import
+// shipped raw → `Cannot find module '@lib/…'` at runtime. Fix: bucket by
+// `deployLocationForManifest(platform, category)` instead of `platform`.
+// ---------------------------------------------------------------------------
+
+describe("processYaml — codex skill @lib/ import resolves under .agents/lib (LibSourceRoots location bucketing)", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "process-yaml-codex-lib-bucket-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(path.join(rootDir, "skills"), { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("deploys shared lib to .agents/lib (not .codex/lib) and rewrites the skill script's @lib/ import, without regressing the .claude/ side", async () => {
+		await writeFile(path.join(rootDir, "lib", "omt-dir.ts"), "export const OMT_DIR = '/tmp/omt';\n");
+
+		const skillDir = path.join(rootDir, "skills", "mylib-skill");
+		await writeFile(path.join(skillDir, "SKILL.md"), "A skill that imports shared lib.\n");
+		await writeFile(
+			path.join(skillDir, "scripts", "run.ts"),
+			"import { OMT_DIR } from '@lib/omt-dir';\nexport const run = () => OMT_DIR;\n",
+		);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [claude, codex]\n  items:\n    - mylib-skill\n`,
+		);
+
+		// Real adapters (not mocks): the fix's observable effect is real bytes on
+		// disk under .agents/ vs .codex/, which only a real syncSkillsDirect write
+		// produces.
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		// The shared lib lands under .agents/lib — where a codex skill script
+		// (physically under .agents/skills/) can actually resolve a relative import.
+		expect(await exists(path.join(targetPath, ".agents", "lib", "omt-dir.ts"))).toBe(true);
+
+		// It must NOT also land under .codex/lib — the pre-fix bucket, unreachable
+		// from a script sitting under .agents/skills/.
+		expect(await exists(path.join(targetPath, ".codex", "lib"))).toBe(false);
+
+		// The deployed codex skill script's @lib/ import is rewritten to a relative
+		// path resolvable from .agents/skills/mylib-skill/scripts/run.ts (3 levels
+		// below .agents/).
+		const codexScript = path.join(
+			targetPath,
+			".agents",
+			"skills",
+			"mylib-skill",
+			"scripts",
+			"run.ts",
+		);
+		const codexContent = await readFile(codexScript);
+		expect(
+			codexContent,
+			"codex skill script must no longer carry a raw @lib/ specifier",
+		).not.toContain("@lib/");
+		expect(
+			codexContent,
+			"codex skill script's @lib/ import must resolve relative to .agents/",
+		).toContain("../../../lib/omt-dir");
+
+		// No regression: the .claude/ side deploys and rewrites exactly as before.
+		expect(await exists(path.join(targetPath, ".claude", "lib", "omt-dir.ts"))).toBe(true);
+		const claudeScript = path.join(
+			targetPath,
+			".claude",
+			"skills",
+			"mylib-skill",
+			"scripts",
+			"run.ts",
+		);
+		const claudeContent = await readFile(claudeScript);
+		expect(claudeContent).not.toContain("@lib/");
+		expect(claudeContent).toContain("../../../lib/omt-dir");
+	});
+});
+
+describe("processYaml — codex hook @lib/ import stays bucketed under .codex/lib (boundary: deployLocationForManifest only special-cases codex+skills)", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "process-yaml-codex-hook-lib-bucket-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("a codex hook's @lib/ import deploys the shared lib to .codex/lib, never .agents/lib", async () => {
+		await writeFile(path.join(rootDir, "lib", "omt-dir.ts"), "export const OMT_DIR = '/tmp/omt';\n");
+
+		const hookDir = path.join(rootDir, "hooks", "my-hook");
+		await writeFile(
+			path.join(hookDir, "index.ts"),
+			"import { OMT_DIR } from '@lib/omt-dir';\nexport const run = () => OMT_DIR;\n",
+		);
+
+		// Hook-only project (mirrors the "hook-only codex platform" fixture at
+		// sync.test.ts:1973 above): sync.yaml has no component-category items —
+		// codex is reached only via codex.yaml's `hooks:` section, which records
+		// the hook source in libSourceRoots keyed by raw `platform`
+		// (syncPlatformConfigs, tools/sync.ts:504) — a call site the fix does NOT
+		// touch, since a hook is never routed through deployLocationForManifest.
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(
+			path.join(rootDir, "codex.yaml"),
+			"hooks:\n  PreToolUse:\n    - component: my-hook\n",
+		);
+
+		const adapters = makeAdapterMap(["codex"]);
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		// deployLocationForManifest only special-cases codex+skills — a hook is
+		// neither, so its lib bucket must stay "codex" (.codex/lib) and must NOT
+		// migrate to "agents" (.agents/lib).
+		expect(await exists(path.join(targetPath, ".codex", "lib", "omt-dir.ts"))).toBe(true);
+		expect(await exists(path.join(targetPath, ".agents", "lib"))).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: rules category lands on codex with rewrite-applied bytes (runtime-leak
+// story: rules is now a supported codex category — SUPPORTED_CATEGORIES.codex —
+// so the SAME deploy-time rewrite pipeline every other codex `.md` goes through
+// (rewritePlatformPaths walks `.codex/`, excluding only the skills fossil root)
+// reaches `.codex/rules/**` with no extra wiring.
+// ---------------------------------------------------------------------------
+
+describe("processYaml — rules category deploys to codex with rewrite applied (runtime-leak)", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "process-yaml-codex-rules-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(path.join(rootDir, "rules"), { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("deploys a rule to .codex/rules/<name>.md with Claude vocabulary rewritten away", async () => {
+		await writeFile(
+			path.join(rootDir, "rules", "my-rule.md"),
+			"# My Rule\n\nAsk via AskUserQuestion. See .claude/rules/ for more.\n",
+		);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nrules:\n  platforms: [codex]\n  items:\n    - my-rule\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const deployed = await readFile(path.join(targetPath, ".codex", "rules", "my-rule.md"));
+		expect(deployed).toContain("request_user_input");
+		expect(deployed).not.toContain("AskUserQuestion");
+		expect(deployed).not.toContain(".claude/");
+		expect(deployed).toContain(".codex/rules/");
+	});
+
+	it("dry-run reports the rule copy and the codex rewrite without writing files", async () => {
+		await writeFile(path.join(rootDir, "rules", "my-rule.md"), "Ask via AskUserQuestion.\n");
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nrules:\n  platforms: [codex]\n  items:\n    - my-rule\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const context = makeContext({ dryRun: true });
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		const exists = await fs
+			.stat(path.join(targetPath, ".codex", "rules", "my-rule.md"))
+			.then(() => true)
+			.catch(() => false);
+		expect(exists).toBe(false);
 	});
 });
 
@@ -3462,7 +3703,7 @@ describe("dry-run", () => {
 // ---------------------------------------------------------------------------
 
 describe("config.yaml feature-platforms 정리", () => {
-	it("feature-platforms contains skills and agents", async () => {
+	it("feature-platforms contains skills, agents, and rules", async () => {
 		// Read the actual config.yaml from the repo
 		const configPath = path.join(import.meta.dir, "..", "config.yaml");
 
@@ -3471,11 +3712,20 @@ describe("config.yaml feature-platforms 정리", () => {
 		const featurePlatforms = config["feature-platforms"] as Record<string, unknown> | undefined;
 
 		expect(featurePlatforms).toBeDefined();
-		expect(Object.keys(featurePlatforms!)).toEqual(["skills", "agents"]);
+		expect(Object.keys(featurePlatforms!)).toEqual(["skills", "agents", "rules"]);
 		// config, mcps, plugins should be absent
 		expect(featurePlatforms!["config"]).toBeUndefined();
 		expect(featurePlatforms!["mcps"]).toBeUndefined();
 		expect(featurePlatforms!["plugins"]).toBeUndefined();
+	});
+
+	it("feature-platforms.rules includes codex (rules is now a supported codex category)", async () => {
+		const configPath = path.join(import.meta.dir, "..", "config.yaml");
+		const text = await fs.readFile(configPath, "utf8");
+		const config = parseYaml(text) as Record<string, unknown>;
+		const featurePlatforms = config["feature-platforms"] as Record<string, unknown> | undefined;
+
+		expect(featurePlatforms!["rules"]).toEqual(["claude", "codex"]);
 	});
 });
 

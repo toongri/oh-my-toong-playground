@@ -78,20 +78,30 @@ import {
 export type AdapterMap = Map<Platform, PlatformAdapter>;
 
 /**
- * Per-platform accumulator of resolved component SOURCE paths, populated as
- * categories and per-platform hooks are processed. syncLib scans these SOURCE
- * roots (not the deployed tree, which no longer carries raw `@lib/`) to decide
- * which lib modules to deploy. Keyed per platform so a component synced only to
- * one platform does not pull lib into another.
+ * Per-deploy-LOCATION accumulator of resolved component SOURCE paths,
+ * populated as categories and per-platform hooks are processed. syncLib scans
+ * these SOURCE roots (not the deployed tree, which no longer carries raw
+ * `@lib/`) to decide which lib modules to deploy, and where.
+ *
+ * Keyed by deploy LOCATION (deployLocationForManifest), not Platform directly
+ * — Codex skills land physically under `.agents/skills`, not `.codex/skills`
+ * (codexSkillsDir), so a codex-skills component's @lib/ source root must
+ * bucket under "agents": syncLib below turns each key `k` into a physical
+ * `.${k}/lib` destination and rewrite root, and only the "agents" bucket
+ * lands where a codex skill script can actually resolve it at runtime.
+ * Bucketing it under "codex" instead would deploy lib to `.codex/lib` while
+ * the skill script sits under `.agents/skills/...` — an unreachable relative
+ * path, and the raw `@lib/` specifier ships unrewritten (ERR module not found
+ * at runtime, since `rewriteLibAliases` only walks the location's own root).
  */
-export type LibSourceRoots = Map<Platform, Set<string>>;
+export type LibSourceRoots = Map<string, Set<string>>;
 
-/** Record a resolved source path under a platform in the lib-source accumulator. */
-function addLibSourceRoot(roots: LibSourceRoots, platform: Platform, sourcePath: string): void {
-	let set = roots.get(platform);
+/** Record a resolved source path under a deploy location in the lib-source accumulator. */
+function addLibSourceRoot(roots: LibSourceRoots, location: string, sourcePath: string): void {
+	let set = roots.get(location);
 	if (!set) {
 		set = new Set<string>();
-		roots.set(platform, set);
+		roots.set(location, set);
 	}
 	set.add(sourcePath);
 }
@@ -141,7 +151,7 @@ export function deploysToClaudeDotDir(
 export const SUPPORTED_CATEGORIES: Record<string, Set<Category>> = {
 	claude: new Set(["agents", "commands", "skills", "scripts", "rules"]),
 	gemini: new Set(["commands", "skills", "scripts"]),
-	codex: new Set(["agents", "skills", "scripts"]),
+	codex: new Set(["agents", "skills", "scripts", "rules"]),
 	opencode: new Set(["agents", "commands", "skills", "scripts", "rules"]),
 };
 
@@ -328,9 +338,14 @@ export async function syncCategory(
 
 			// Record SOURCE paths for lib-dependency collection (independent of dryRun:
 			// the lib scan reads source, never the deployed tree). The component itself
-			// plus any add-hooks bundles it deploys may carry @lib/ imports.
+			// plus any add-hooks bundles it deploys may carry @lib/ imports. Bucketed by
+			// deploy LOCATION (same formula as deployedNames above), not platform
+			// directly — a codex skill's source root must land in the "agents" bucket
+			// so syncLib deploys/rewrites lib under `.agents/`, matching where the
+			// skill physically lands (`.agents/skills/...`), not `.codex/`.
 			if (libSourceRoots) {
-				addLibSourceRoot(libSourceRoots, platform, sourcePath);
+				const libLocation = deployLocationForManifest(platform, category);
+				addLibSourceRoot(libSourceRoots, libLocation, sourcePath);
 				if (category === "agents" && Array.isArray(addHooks)) {
 					for (const hook of addHooks) {
 						if (
@@ -340,7 +355,7 @@ export async function syncCategory(
 							typeof hook.source_path === "string" &&
 							hook.source_path
 						) {
-							addLibSourceRoot(libSourceRoots, platform, hook.source_path);
+							addLibSourceRoot(libSourceRoots, libLocation, hook.source_path);
 						}
 					}
 				}
@@ -1105,7 +1120,13 @@ export async function syncLib(
 	// When components deploy only to claude (or nowhere), the union is exactly the
 	// resolved `platforms`, so stale-lib cleanup and the claude default are
 	// unchanged.
-	const effectivePlatforms = new Set<Platform>([...platforms, ...(libSourceRoots?.keys() ?? [])]);
+	//
+	// String, not Platform: libSourceRoots is keyed by deploy LOCATION
+	// (deployLocationForManifest), and a codex skill's location is "agents" —
+	// not a Platform value — so this loop variable must admit that key too. The
+	// resulting `.agents` bucket is exactly `.${"agents"}`, which lands lib
+	// beside `.agents/skills` where a codex skill script can actually resolve it.
+	const effectivePlatforms = new Set<string>([...platforms, ...(libSourceRoots?.keys() ?? [])]);
 
 	for (const platform of effectivePlatforms) {
 		const platformDir = path.join(targetPath, `.${platform}`);
@@ -1514,7 +1535,7 @@ async function rewriteFilesUnder(
  *     never a stable deploy target. lib/ does carry .md, so this still
  *     matters even restricted to that one extension.
  */
-async function collectMdFiles(dir: string, excludeDirs: string[] = []): Promise<string[]> {
+export async function collectMdFiles(dir: string, excludeDirs: string[] = []): Promise<string[]> {
 	const results: string[] = [];
 	let entries: import("fs").Dirent[];
 	try {
