@@ -128,6 +128,11 @@ test_row2_non_spawn_tool_name_allows() {
     out=$(printf '%s' "$payload" | run_hook) || rc=$?
     if ! assert_allow "$out" "$rc" "row2-Bash"; then result=1; fi
 
+    # rc must be reset between sub-assertions in the same test function --
+    # `|| rc=$?` only assigns on a non-zero exit, so a failing first call
+    # would otherwise leak its rc into the second assertion below (row 3
+    # already follows this discipline; this call was missing it).
+    rc=0
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"apply_patch", transcript_path:$tp}')
     out=$(printf '%s' "$payload" | run_hook) || rc=$?
     if ! assert_allow "$out" "$rc" "row2-apply_patch"; then result=1; fi
@@ -241,12 +246,187 @@ test_row8_depth_2_denies_with_numbers_in_reason() {
         echo "ASSERTION FAILED row8: expected deny for thread_spawn.depth=2, got '$out'"
         result=1
     fi
-    if ! printf '%s' "$out" | grep -q '3'; then
-        echo "ASSERTION FAILED row8: expected the child depth (3) to appear in the deny reason, got '$out'"
+
+    # Extract the reason field itself and assert the full sentence -- a bare
+    # `grep -q '3'`/`grep -q '2'` over the whole JSON blob passes as long as
+    # BOTH digits appear ANYWHERE, even if the reason-builder swapped $child
+    # and $cap into a self-contradictory sentence (e.g. "would reach depth 2,
+    # exceeding the cap of 3"). Pinning the digit to its own role (child depth
+    # vs cap) inside the extracted reason string closes that hole.
+    reason=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+    case "$reason" in
+        *"reach depth 3"*) ;;
+        *) echo "ASSERTION FAILED row8: expected child depth 3 in reason, got '$reason'"; result=1 ;;
+    esac
+    case "$reason" in
+        *"cap of 2"*) ;;
+        *) echo "ASSERTION FAILED row8: expected CAP 2 in reason, got '$reason'"; result=1 ;;
+    esac
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Row 9 -- numeric-guard pressure fixtures. hooks/codex-spawn-depth-gate.sh:
+# 119-121's case guard exists to protect the arithmetic below from a
+# non-numeric `cur` (schema drift, a corrupted line) without ever crashing
+# into a fail-CLOSED shape. Plain 0/1/2 fixtures elsewhere in this suite
+# never pressure that guard at all -- deleting it entirely still leaves the
+# suite green. Each fixture here asserts exit 0 + empty stdout (fail-open),
+# mirroring row1's explicit checks.
+# =============================================================================
+test_row9_leading_zero_depth_denies_without_crashing() {
+    new_sandbox
+    local rollout payload out exit_code=0 result=0
+
+    # "08" is a JSON string (bare 08 is not valid JSON) whose every character
+    # is a digit, so the old *[!0-9]* pattern let it through unchanged --
+    # bash then evaluated $((08 + 1)) as an octal literal and aborted the
+    # script (fail-CLOSED). This is the exact fixture finding 1 fixes.
+    #
+    # Unlike null/"abc"/-1 below (real schema drift that legitimately
+    # defaults to cur=0/allow), "08" is a well-formed all-digit value: once
+    # parsed correctly as decimal 8, child=9 genuinely exceeds CAP=2, so the
+    # correct post-fix outcome is a real DENY (exit 0, deny JSON), not a
+    # silent allow -- this fixture only proves the arithmetic no longer
+    # crashes, not that the guard treats "08" as malformed.
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":"08"}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | run_hook) || exit_code=$?
+
+    [ "$exit_code" -eq 0 ] || { echo "ASSERTION FAILED row9-leading-zero: expected exit 0 (no crash), got $exit_code"; result=1; }
+    echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null \
+        || { echo "ASSERTION FAILED row9-leading-zero: expected deny for depth=8 (child=9 > cap 2), got '$out'"; result=1; }
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_row9_null_depth_allows() {
+    new_sandbox
+    local rollout payload out exit_code=0 result=0
+
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":null}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | run_hook) || exit_code=$?
+
+    [ "$exit_code" -eq 0 ] || { echo "ASSERTION FAILED row9-null: expected exit 0, got $exit_code"; result=1; }
+    [ -z "$out" ] || { echo "ASSERTION FAILED row9-null: expected empty stdout, got '$out'"; result=1; }
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_row9_non_numeric_depth_allows() {
+    new_sandbox
+    local rollout payload out exit_code=0 result=0
+
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":"abc"}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | run_hook) || exit_code=$?
+
+    [ "$exit_code" -eq 0 ] || { echo "ASSERTION FAILED row9-non-numeric: expected exit 0, got $exit_code"; result=1; }
+    [ -z "$out" ] || { echo "ASSERTION FAILED row9-non-numeric: expected empty stdout, got '$out'"; result=1; }
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_row9_negative_depth_allows() {
+    new_sandbox
+    local rollout payload out exit_code=0 result=0
+
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":-1}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | run_hook) || exit_code=$?
+
+    [ "$exit_code" -eq 0 ] || { echo "ASSERTION FAILED row9-negative: expected exit 0, got $exit_code"; result=1; }
+    [ -z "$out" ] || { echo "ASSERTION FAILED row9-negative: expected empty stdout, got '$out'"; result=1; }
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Row 10 -- tool-name matcher mutation-pressure fixtures. hooks/codex-spawn-
+# depth-gate.sh:84's `tr '[:upper:]' '[:lower:]'` and :86's suffix pattern
+# (`*spawn_agent`, not `*spawn_agent*`) both carry a comment explaining why
+# they're there, but row 2 above only ever feeds names that don't match
+# either way -- it can't pin either refinement, since a name that fails to
+# match stays unmatched whether or not lowercasing or suffix-vs-substring
+# changes underneath it.
+# =============================================================================
+test_row10_mixed_case_spawn_agent_denies() {
+    new_sandbox
+    local rollout payload out rc=0 result=0
+
+    # Mixed-case tool name that only ends in "spawn_agent" AFTER lowercasing
+    # -- pins the `tr` call at :84. Removing that line would leave this
+    # fixture unmatched (allow) instead of the deny asserted here.
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"CollaborationSpawn_Agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "ASSERTION FAILED row10-mixed-case: expected exit 0, got $rc"
         result=1
     fi
-    if ! printf '%s' "$out" | grep -q '2'; then
-        echo "ASSERTION FAILED row8: expected the CAP (2) to appear in the deny reason, got '$out'"
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED row10-mixed-case: expected deny for mixed-case spawn tool name, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_row10_near_miss_tool_name_allows() {
+    new_sandbox
+    local rollout payload out rc=0 result=0
+
+    # "spawn_agent_helper" CONTAINS spawn_agent but does not END with it --
+    # pins the suffix anchor (`*spawn_agent`) at :86. Widening that pattern
+    # to a substring match (`*spawn_agent*`) would wrongly deny this
+    # unrelated tool name.
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"spawn_agent_helper", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "row10-near-miss"; then result=1; fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Row 11 -- rollout file's last line has NO trailing newline (codex mid-flush
+# of the rollout file). Pins the `|| [ -n "$line" ]` guard at hooks/codex-
+# spawn-depth-gate.sh:109: without it, `read` returns non-zero on the
+# newline-less line and the loop body never runs, so cur stays unset ->
+# defaults to 0 -> allow (fail-OPEN on a spawn that must DENY).
+# =============================================================================
+test_row11_no_trailing_newline_last_line_denies() {
+    new_sandbox
+    local rollout payload out result=0
+
+    # Cannot use mk_rollout here -- it always appends a trailing newline via
+    # `printf '%s\n'`, which would never exercise the `|| [ -n "$line" ]`
+    # guard this test exists to pin. Writes the fixture directly with
+    # `printf '%s'` (no trailing newline) instead.
+    rollout="$SBX/rollout-test.jsonl"
+    printf '%s' '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}' > "$rollout"
+
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | run_hook)
+
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED row11: expected deny for no-trailing-newline depth=2 rollout, got '$out'"
         result=1
     fi
 
@@ -267,6 +447,13 @@ main() {
     run_test test_row6_no_thread_spawn_root_allows
     run_test test_row7_depth_1_allows
     run_test test_row8_depth_2_denies_with_numbers_in_reason
+    run_test test_row9_leading_zero_depth_denies_without_crashing
+    run_test test_row9_null_depth_allows
+    run_test test_row9_non_numeric_depth_allows
+    run_test test_row9_negative_depth_allows
+    run_test test_row10_mixed_case_spawn_agent_denies
+    run_test test_row10_near_miss_tool_name_allows
+    run_test test_row11_no_trailing_newline_last_line_denies
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
