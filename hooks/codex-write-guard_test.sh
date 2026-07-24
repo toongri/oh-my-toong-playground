@@ -1439,6 +1439,55 @@ test_ac_dangerous_exec_command_rm_rf_denies() {
     fi
 }
 
+# CONFIRMED BYPASS regression: a `<<EOF` token sitting inside a quoted string
+# opens no heredoc at real execution time, but the heredoc stripper used to
+# read it as an opener and drop every following line through `EOF` -- which
+# swallowed the live destructive command on the next line and let it through.
+# Both quote flavors are covered: the masker treats them differently
+# (single-quoted spans never expand, double-quoted ones can host $( )).
+test_regression_quoted_heredoc_marker_does_not_hide_rm_rf_denies() {
+    new_sandbox
+    local out flavor cmd
+    for flavor in '"' "'"; do
+        cmd="echo ${flavor}<<EOF${flavor}
+rm -rf /tmp/x
+EOF"
+        out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+        if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+            rm -rf "$SBX"
+            echo "ASSERTION FAILED quoted-heredoc-marker-bypass (${flavor}): expected deny, got '$out'"
+            return 1
+        fi
+    done
+    rm -rf "$SBX"
+    return 0
+}
+
+# Negative control for the fix above -- without it, "deny on quoted marker"
+# would be satisfiable by simply never stripping heredoc bodies at all. A
+# GENUINE heredoc body is literal stdin data, never executed, so a
+# destructive-looking line inside one must still NOT deny. All three opener
+# forms the stripper recognizes are exercised: bare, quoted delimiter, and
+# the `<<-` tab-stripping variant.
+test_regression_genuine_heredoc_body_still_stripped_allows() {
+    new_sandbox
+    local out opener cmd rc
+    for opener in 'cat <<EOF' "cat <<'EOF'" 'cat <<-EOF'; do
+        cmd="${opener}
+rm -rf /tmp/x
+EOF"
+        rc=0
+        out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook) || rc=$?
+        if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+            rm -rf "$SBX"
+            echo "ASSERTION FAILED genuine-heredoc-false-deny (${opener}): expected no deny, got '$out'"
+            return 1
+        fi
+    done
+    rm -rf "$SBX"
+    return 0
+}
+
 test_ac4_negative_plain_rm_allows() {
     new_sandbox
     local out rc=0
@@ -2532,6 +2581,8 @@ main() {
     run_test test_codereview_shell_command_mv_source_denies
     run_test test_codereview_shell_command_cp_source_allows
     run_test test_ledger_shell_command_mv_source_denies
+    run_test test_regression_quoted_heredoc_marker_does_not_hide_rm_rf_denies
+    run_test test_regression_genuine_heredoc_body_still_stripped_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

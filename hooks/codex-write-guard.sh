@@ -275,12 +275,25 @@ _cwg_mask_quoted() {
 #
 # Best-effort, matching this file's "not a shell interpreter" posture: only
 # the FIRST heredoc marker on a given line is recognized (multiple heredocs
-# on one line, e.g. `cmd <<A <<B`, is a rare construct left unhandled), and
-# a `<<DELIM` token appearing inside an already-quoted string on the same
-# line is not specially excluded.
+# on one line, e.g. `cmd <<A <<B`, is a rare construct left unhandled).
+#
+# CONFIRMED BYPASS FIX (quoted heredoc marker): marker detection runs on a
+# QUOTE-MASKED copy of the line, never the raw line. `echo "<<EOF"` opens no
+# heredoc at real execution time -- the token is literal text inside a string
+# -- but a raw-text scan read it as an opener and then dropped every
+# following line through `EOF`, swallowing a live `rm -rf` on the next line
+# and bypassing the dangerous-command guard entirely. _cwg_mask_quoted is
+# exactly the right masker here because it neutralizes `<` INSIDE quoted
+# spans while PRESERVING a genuinely quoted delimiter as a bare word
+# (`cat <<'EOF'` -> `cat <<EOF`), so real quoted heredocs keep stripping.
+#
+# Residual, unclosed by design (same class as this file's other static-scan
+# limits): masking is per-line, so a quote opened on one line and closed on a
+# later one is not tracked across the boundary, and a `<<DELIM` inside a live
+# `$( )`/backtick span is passed through unmasked by _cwg_mask_quoted itself.
 _cwg_strip_heredoc_bodies() {
     local text="$1"
-    local out="" line delim="" striptabs=0 inhd=0 cmp marker
+    local out="" line delim="" striptabs=0 inhd=0 cmp marker masked
     while IFS= read -r line || [ -n "$line" ]; do
         if [ "$inhd" -eq 1 ]; then
             cmp="$line"
@@ -292,7 +305,8 @@ _cwg_strip_heredoc_bodies() {
             fi
             continue
         fi
-        marker=$(printf '%s\n' "$line" | grep -oE "<<-?[[:space:]]*['\"]?[A-Za-z_][A-Za-z0-9_]*['\"]?" | head -1) || marker=""
+        masked=$(_cwg_mask_quoted "$line")
+        marker=$(printf '%s\n' "$masked" | grep -oE "<<-?[[:space:]]*['\"]?[A-Za-z_][A-Za-z0-9_]*['\"]?" | head -1) || marker=""
         if [ -n "$marker" ]; then
             striptabs=0
             case "$marker" in "<<-"*) striptabs=1 ;; esac
