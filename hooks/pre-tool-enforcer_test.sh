@@ -1333,6 +1333,112 @@ test_wg_r1_unset_home_no_fail_open_denied() {
         || { echo "ASSERTION FAILED WG-R1: \$OMT_DIR-spelled ledger delete must still DENY when HOME is unset. Got: $out"; return 1; }
 }
 
+# (s1) Regression -- a QUOTED right-paren inside a LIVE command substitution
+# does not close the substitution in a real shell, but _wg_scan counted it as
+# a closer. Depth fell to 0 early, the separator behind it was then read as
+# sitting inside the OUTER double quotes and masked away, and the chained
+# ledger delete stopped being its own segment -> false ALLOW. Measured
+# against the pre-change hook, which denied this, so it was a live
+# regression. Same defect and same fix as the Codex twin
+# (hooks/codex-write-guard_test.sh), independently pinned per this repo's
+# Claude/Codex parsing-independence convention.
+test_wg_s1_quoted_paren_in_substitution_ledger_rm_denied() {
+    local ledger sq
+    ledger=$(wg_ledger_path)
+    sq="'"
+    wg_assert_deny "echo \"\$(printf ${sq})${sq}; rm $ledger; true)\"" "WG-S1"
+}
+
+# (s2) The right-paren that CLOSES a substitution is a token boundary at
+# execution time, not part of the preceding word. Glued on, it turned the
+# guarded path into `<ledger>)`, which the whole-token comparison never
+# matched -> false ALLOW. Emitting that closer as a space fixes it.
+test_wg_s2_substitution_closing_paren_adjacent_ledger_rm_denied() {
+    local ledger
+    ledger=$(wg_ledger_path)
+    wg_assert_deny "echo \"\$(true; rm $ledger)\"" "WG-S2"
+}
+
+# (s3) Negative control for s1/s2 -- without it, both arms above would be
+# satisfiable by denying every command that contains a substitution. A
+# substitution carrying the same shapes but touching a NON-ledger path must
+# still pass.
+test_wg_s3_substitution_nonledger_allows() {
+    local out sq
+    sq="'"
+    out=$(printf '%s' "$(hg_bash_json "echo \"\$(printf ${sq})${sq}; rm /tmp/y)\"")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED WG-S3: non-ledger path inside a substitution should pass. Got: $out"; return 1; }
+}
+
+# =============================================================================
+# Defect 5 (Claude<->Codex parity, both-platform measurement) -- this file's
+# quote-aware normalizer (_wg_scan) used to mask single-quoted spans only,
+# unlike the Codex twin's _cwg_mask_quoted (hooks/codex-write-guard.sh),
+# which already masked double-quoted spans too. Same command, different
+# verdict: `echo "note; rm <ledger>"` was read here as a live `;`-chain and
+# DENIED, while Codex's wider masker correctly read it as inert double-
+# quoted prose and ALLOWED -- a parity violation against this repo's own
+# invariant ("same verdict for the same command", not "identical code
+# path"). Fixed by widening _wg_scan to mask double-quoted spans too
+# (option (a) from the divergence report: restore equivalence by porting
+# Codex's wider masking here, rather than documenting the gap as accepted).
+# Four rows pin the exact table the fix was verified against; row 2 is the
+# actual defect (DENY before the fix, ALLOW after); rows 1/3/4 are controls
+# proving the fix does not touch what already agreed.
+# =============================================================================
+test_defect5_row1_plain_redirect_denies() {
+    local ledger out
+    ledger=$(wg_ledger_path)
+    out=$(printf '%s' "$(hg_bash_json "echo x > $ledger")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED defect5-row1(plain redirect): expected deny. Got: $out"; return 1; }
+}
+
+# Row 2 -- the defect itself. Before the fix this DENIED (parity violation
+# against Codex's allow); after, ALLOWS.
+test_defect5_row2_dquoted_semicolon_now_allows() {
+    local ledger out
+    ledger=$(wg_ledger_path)
+    out=$(printf '%s' "$(hg_bash_json "echo \"note; rm $ledger\"")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED defect5-row2(dquoted semicolon, THE FIX): expected allow (parity with Codex's _cwg_mask_quoted, which already masks double quotes). Got: $out"; return 1; }
+}
+
+test_defect5_row3_squoted_semicolon_still_allows() {
+    local ledger out
+    ledger=$(wg_ledger_path)
+    out=$(printf '%s' "$(hg_bash_json "echo 'note; rm $ledger'")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED defect5-row3(squoted semicolon control): expected allow (unchanged by the fix). Got: $out"; return 1; }
+}
+
+test_defect5_row4_real_chain_semicolon_still_denies() {
+    local ledger out
+    ledger=$(wg_ledger_path)
+    out=$(printf '%s' "$(hg_bash_json "echo hi; rm $ledger")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED defect5-row4(real chain control): expected deny (a real unquoted ';' must stay live). Got: $out"; return 1; }
+}
+
+# Cross-platform proof: runs BOTH real hooks (not a read of either file's own
+# masking logic, which would be tautological) against the row-2 command under
+# the SAME OMT_DIR/session, then compares verdicts -- the actual parity claim
+# this fix makes, not just "Claude alone now allows it".
+test_defect5_codex_claude_verdict_parity() {
+    local ledger claude_out codex_out result=0
+    ledger=$(wg_ledger_path)
+
+    claude_out=$(printf '%s' "$(hg_bash_json "echo \"note; rm $ledger\"")" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+
+    codex_out=$(jq -n --arg cmd "echo \"note; rm $ledger\"" --arg cwd "$OMT_DIR" \
+        '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"test-sid", cwd:$cwd}' \
+        | env -u CODEX_THREAD_ID OMT_DIR="$OMT_DIR" OMT_SESSION_ID="test-sid" bash "$SCRIPT_DIR/codex-write-guard.sh")
+
+    hg_is_allow "$claude_out" || { echo "ASSERTION FAILED defect5-parity: claude leg did not allow. Got: $claude_out"; result=1; }
+    if printf '%s' "$codex_out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED defect5-parity: codex leg unexpectedly denied. Got: $codex_out"
+        result=1
+    fi
+
+    return "$result"
+}
+
 # =============================================================================
 # Code-review artifact identity guard (code-review-artifact-guard-core plan)
 # -- wires codereview_guard_core_run (hooks/write-guard-core.sh) into this
@@ -1619,6 +1725,16 @@ main() {
     run_test test_wg_q3_home_dquoted_var_nonledger_allows
     run_test test_wg_q4_home_toplevel_nonledger_allows
     run_test test_wg_r1_unset_home_no_fail_open_denied
+    run_test test_wg_s1_quoted_paren_in_substitution_ledger_rm_denied
+    run_test test_wg_s2_substitution_closing_paren_adjacent_ledger_rm_denied
+    run_test test_wg_s3_substitution_nonledger_allows
+
+    # Defect 5 -- Claude<->Codex ledger-guard parity (double-quote masking)
+    run_test test_defect5_row1_plain_redirect_denies
+    run_test test_defect5_row2_dquoted_semicolon_now_allows
+    run_test test_defect5_row3_squoted_semicolon_still_allows
+    run_test test_defect5_row4_real_chain_semicolon_still_denies
+    run_test test_defect5_codex_claude_verdict_parity
 
     # Code-review artifact identity guard (code-review-artifact-guard-core plan)
     run_test test_cr1_write_ultragoal_codereview_no_agent_type_denied

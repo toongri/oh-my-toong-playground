@@ -51,6 +51,12 @@ hooks:
     - component: codex-write-guard.sh
       type: command
       matcher: "Bash|bash|apply_patch|exec_command|shell_command|Edit|Write|edit|write|multiedit|multi_edit"
+    # Claude<->Codex hook-parity: root claude.yaml registers label-commit-gate.sh
+    # globally (PreToolUse, matcher "Bash"), so its Codex analog is global too --
+    # see hooks/codex-label-commit-gate.sh + shared hooks/label-commit-gate-core.sh.
+    - component: codex-label-commit-gate.sh
+      type: command
+      matcher: "Bash|bash|exec_command|shell_command"
   PostToolUse:
     - component: rules-injector
       type: command
@@ -63,6 +69,13 @@ hooks:
       # are read via a shell command, not a dedicated file-read tool — see cli.ts's header).
       matcher: "^update_plan$|Bash|bash|exec_command|shell_command"
       command: "bun run .codex/hooks/codex-persistent-mode/cli.ts hook post-tool-use"
+    # Claude<->Codex hook-parity: root claude.yaml registers label-edit-warn.sh
+    # globally (PostToolUse, matcher "Write|Edit|MultiEdit"), so its Codex analog
+    # is global too -- see hooks/codex-label-edit-warn.sh + shared hooks/label-
+    # edit-warn-core.sh.
+    - component: codex-label-edit-warn.sh
+      type: command
+      matcher: "apply_patch|Edit|Write|edit|write|multiedit|multi_edit"
   PostCompact:
     - component: rules-injector
       type: command

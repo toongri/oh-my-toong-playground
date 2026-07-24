@@ -49,13 +49,354 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/write-guard-core.sh"
 
-# jq is required for JSON extraction; fail-open (allow, no guard) if absent --
-# this hook is best-effort, not a hard security boundary.
+# stdin is read unconditionally, BEFORE the jq-presence check below -- the
+# jq-absent fallback path (further down) still needs the raw payload text to
+# run a best-effort dangerous-command scan.
+input=$(cat)
+
+# _cwg_mask_quoted <shell_command_text>
+# Quote-aware normalizer, originally re-derived from the Claude twin's
+# _wg_scan (hooks/pre-tool-enforcer.sh:160-179) but now WIDER than it: masks
+# shell-active metacharacters (`> < | ; &`) that appear INSIDE a
+# single-quoted OR double-quoted span by replacing them with a space, and
+# drops the quote CHARACTERS themselves while preserving the quoted CONTENT
+# -- so prose like `printf 'see foo > <ledger> here' | omt-ledger.sh append`
+# is never misread by the redirect/segment-splitter logic below as a live
+# redirect or a live `|`/`;`/`&` chain separator. Without single-quote
+# masking, ANY `>`/`;`/etc in the raw shell text -- quoted or not -- was
+# read as live; without double-quote masking (CONFIRMED bypass, independent
+# code review + directly reproduced), a DOUBLE-quoted separator such as
+# `echo "note; rm -rf /tmp/x"` was split the same as a real `;` chain,
+# denying an entirely harmless command with no bypass/ask escape hatch on
+# this deny-only gate.
+#
+# Why double-quote masking belongs here, not just single: the dangerous-
+# command guard further below exists to emulate claude.yaml's own
+# `permissions.deny` glob evaluation (`Bash(rm -rf *)` etc.), which Claude
+# Code evaluates with its own shell-aware parser -- and that parser reads
+# `echo "note; rm -rf /tmp/x"` as ONE `echo` invocation with one argument,
+# never as a chain, so Claude ALLOWS it natively. A single-quote-only masker
+# here disagreed with that real Claude behavior and denied it -- the
+# widened masker below is what makes this shim's verdict match Claude's
+# actual behavior, not a departure from it. The Claude-side _wg_scan used by
+# the ledger-guard route now masks double-quoted spans too (hooks/pre-tool-
+# enforcer.sh) -- it was single-quote-only until the parity fix, which is why
+# `echo "note; rm <ledger>"` was DENIED there while ALLOWED here. Measured
+# after the fix: both sides allow it, and both still DENY the unquoted
+# `echo hi; rm <ledger>`.
+#
+# Nested-quote and escape handling (kept minimal, NOT a shell parser): a
+# single quote appearing literally inside a double-quoted span (and vice
+# versa) does not toggle the wrong quote state -- each toggle check is
+# gated on the OTHER quote type being inactive.
+#
+# CONFIRMED false-deny fix (both-platform measurement): an escaped `\;`/
+# `\|`/`\&`/`\>`/`\<` outside single-quote mode is DEAD text at real
+# execution time -- outside any quotes it is a literal escaped character,
+# never a chain separator or redirect; inside double quotes the backslash
+# has no escaping power over these characters at all (bash keeps both chars
+# literal there), but they are ALREADY dead text because they sit inside a
+# quoted span. Either way the metachar must never reach the chain-splitter
+# or redirect/rm extractor below as if it were live. The prior version
+# preserved the backslash-escaped pair completely untouched (`out = out c
+# substr($0, i+1, 1)`), leaving the raw metachar character sitting in `out`
+# -- so `echo safe \; rm -rf /tmp/x` (real shell: ECHO prints the whole
+# literal string, rm never runs) was misread as a real `;`-separated chain
+# by the sed-based splitter downstream, denying an entirely harmless
+# command with no bypass/ask escape hatch on this deny-only gate. Fix: when
+# the escaped character is one of the metachars this masker tracks, mask it
+# (two spaces, dropping both the backslash and the metachar) exactly like a
+# quoted occurrence; any OTHER escaped character is still preserved
+# literally as before (this masker's job is metachar liveness, not general
+# backslash removal).
+#
+# Comment truncation (CONFIRMED false-deny fix): outside any quote/
+# command-substitution/backtick span, a `#` that starts a shell WORD (the
+# very first character of the line, or immediately preceded by whitespace)
+# begins a comment that runs to end of line at real execution time -- text
+# after it is never parsed as shell code. `echo safe # note; rm -rf /tmp/x`
+# never runs `rm -rf`; only `safe` is printed. The prior version had no
+# comment awareness at all, so the dangerous-command pattern behind the `#`
+# was still visible to the chain-splitter and denied a harmless command.
+# Only a WORD-LEADING `#` is treated as a comment (mirroring real shell
+# tokenizing) -- `foo#bar` (no leading whitespace) is NOT a comment start
+# and is left untouched. A backslash-escaped `#` is consumed whole by the
+# escape branch above and never reaches this check, so `\#` is not
+# mistaken for a comment leader either. Scoped to the same "live" context as
+# every other check here (not inside single/double quotes, not inside a
+# live $()/backtick span) -- a `#` nested inside a live command
+# substitution is left for that substitution's own (unmodeled) grammar, per
+# this file's "not a shell interpreter" posture.
+#
+# Process substitution, ANSI-C `$'...'` quoting, and other exotic shell
+# grammar are still out of scope, per this file's header "not a shell
+# interpreter" list. This is independently re-derived bash+awk, not sourced
+# from the sibling file (Claude/Codex parsing intentionally never shares
+# code, see the file header) -- so the two guards can still diverge if one
+# is edited without the other.
+#
+# CONFIRMED REGRESSION FIX (double-quote masking widened too far): a
+# `$( ... )` or `` ` ... ` `` command substitution nested INSIDE a
+# double-quoted span is live shell code the outer shell actually executes --
+# `echo "$(true; rm -rf /tmp/x)"` really runs `rm -rf /tmp/x` -- unlike
+# ordinary dq prose, which is dead text. The masking above (correctly) drops
+# a `;`/`|`/etc that sits directly inside dq prose, but was ALSO dropping one
+# that sits inside a nested `$( ... )`/backtick span, hiding a real chain
+# separator from the dangerous-command scan and the redirect/rm extractor
+# below -- a silent allow of a live destructive command. Fix: while indq is
+# active, entering a literal `$(` or a backtick suspends masking (and quote
+# toggling) for that span -- metacharacters pass through untouched, exactly
+# as they would outside any quotes -- until the matching `)` (paren-depth
+# counted, so `$( $( ) )` nests correctly) or the closing backtick is seen,
+# at which point normal dq masking resumes. Single-quoted spans are NOT
+# given this treatment: `$( )`/backticks inside single quotes are inert
+# shell literals (never expand), so masking them stays correct as-is.
+#
+# Defined here (ahead of both the jq-presence check and the "Extraction
+# helpers" section further below, which also calls it) because the
+# dangerous-command guard -- reachable from BOTH the jq-present route below
+# AND the jq-absent fallback further up in file order -- is a caller and
+# must never see this function undefined.
+_cwg_mask_quoted() {
+    printf '%s' "$1" | awk '
+        BEGIN { sq = sprintf("%c", 39); dq = sprintf("%c", 34); bs = sprintf("%c", 92); dl = sprintf("%c", 36); lp = sprintf("%c", 40); rp = sprintf("%c", 41); bt = sprintf("%c", 96); hs = sprintf("%c", 35) }
+        {
+            n = length($0)
+            insq = 0
+            indq = 0
+            dpdepth = 0
+            subsq = 0
+            subdq = 0
+            btactive = 0
+            out = ""
+            for (i = 1; i <= n; i++) {
+                c = substr($0, i, 1)
+
+                # Backslash: special everywhere EXCEPT single-quote mode
+                # (real shells give backslash no escaping power there). If
+                # the escaped char is one of the metachars this masker
+                # tracks, mask the PAIR (it is dead text / never a live
+                # separator at real execution time, see docstring above);
+                # any other escaped char is preserved literally so it
+                # cannot toggle quote state or be read as a metachar -- an
+                # escaped `\"` must not desync in-quote tracking.
+                if (c == bs && !insq && i < n) {
+                    nc = substr($0, i + 1, 1)
+                    if (nc == ">" || nc == "<" || nc == "|" || nc == ";" || nc == "&") {
+                        out = out "  "
+                    } else {
+                        out = out c nc
+                    }
+                    i++
+                    continue
+                }
+
+                # Inside a live $( ... ) command-substitution span: pass
+                # every character through untouched (no masking, no OUTER
+                # quote toggling) while tracking paren depth so a nested
+                # $( ... ) or a plain ( ) inside the substitution body is
+                # matched correctly.
+                #
+                # Quote state INSIDE the span is tracked separately (subsq/
+                # subdq) for one reason: a QUOTED right-paren -- as in a
+                # printf whose sole argument is that character -- is
+                # ordinary text to the shell and does NOT close the
+                # substitution. Without tracking it, such a right-paren
+                # dropped dpdepth to 0, every separator after it was then
+                # read as sitting inside the OUTER double quotes and masked
+                # away, and a command chained behind it became invisible to
+                # the scan. A backslash escapes the next character except
+                # inside single quotes, same asymmetry as the outer scan.
+                if (dpdepth > 0) {
+                    if (subsq) {
+                        if (c == sq) { subsq = 0 }
+                    } else if (subdq) {
+                        if (c == bs && i < n) { out = out c; i++; c = substr($0, i, 1) }
+                        else if (c == dq) { subdq = 0 }
+                    } else if (c == bs && i < n) {
+                        out = out c; i++; c = substr($0, i, 1)
+                    } else if (c == sq) {
+                        subsq = 1
+                    } else if (c == dq) {
+                        subdq = 1
+                    } else if (c == lp) {
+                        dpdepth++
+                    } else if (c == rp) {
+                        dpdepth--
+                        # The right-paren that ENDS the span is a token
+                        # boundary at execution time, not part of the last
+                        # word inside it. Emit it as a space so a path
+                        # sitting immediately before it stays its own token
+                        # -- glued on, it made the guarded-path comparison,
+                        # which matches whole path tokens, miss.
+                        if (dpdepth == 0) { out = out " "; continue }
+                    }
+                    out = out c
+                    continue
+                }
+                # Inside a live backtick `...` span: pass through untouched
+                # until the closing backtick.
+                if (btactive) {
+                    if (c == bt) { btactive = 0 }
+                    out = out c
+                    continue
+                }
+
+                # Entering a live span only matters while indq is active --
+                # outside any quotes, metacharacters are already unmasked
+                # (the final condition below never fires), so no special
+                # handling is needed there. Inside single quotes, $( )/
+                # backticks are inert text and must stay masked as-is.
+                if (indq && c == dl && i < n && substr($0, i + 1, 1) == lp) {
+                    dpdepth = 1
+                    subsq = 0
+                    subdq = 0
+                    out = out c lp
+                    i++
+                    continue
+                }
+                if (indq && c == bt) {
+                    btactive = 1
+                    out = out c
+                    continue
+                }
+
+                if (!indq && c == sq) {
+                    insq = 1 - insq
+                    continue
+                }
+                if (!insq && c == dq) {
+                    indq = 1 - indq
+                    continue
+                }
+                if ((insq || indq) && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
+                    out = out " "
+                    continue
+                }
+                # Comment truncation: a live (unquoted, not inside a $()/
+                # backtick span) '#' that starts a shell WORD -- start of
+                # line, or immediately preceded by whitespace -- begins a
+                # comment that runs to end of line at real execution time.
+                # Everything from here on is dropped (not masked to spaces:
+                # comment text carries no position-preservation need).
+                if (!insq && !indq && dpdepth == 0 && !btactive && c == hs && (out == "" || substr(out, length(out), 1) ~ /[ \t]/)) {
+                    break
+                }
+                out = out c
+            }
+            print out
+        }'
+}
+
+# _cwg_strip_heredoc_bodies <shell_command_text>
+# Removes the BODY of every here-document embedded in the text (operator
+# `<<` or `<<-`, delimiter optionally single- or double-quoted) before the
+# dangerous-command guard scans it -- heredoc body lines are literal data
+# fed to the command's stdin, never parsed/executed as shell code, so a
+# destructive-looking string sitting inside one (e.g. `cat <<'EOF'` /
+# `rm -rf /tmp/x` / `EOF`) must not be read as a live command. The heredoc
+# START line itself (up to and including the `<<DELIM` token) is KEPT --
+# real shell/chain content can precede or follow the marker on that same
+# line (`cmd <<'EOF' && next`) -- only the BODY lines, up to and including
+# the terminator line, are dropped.
+#
+# Scope note: this is called ONLY from the dangerous-command guard's own
+# command text, NOT from the ledger/code-review-artifact candidate
+# extraction route (_cwg_process_shell_text further below) -- that route's
+# OWN apply_patch-heredoc handling (_cwg_extract_heredoc_body) depends on
+# reading INTO a heredoc body to find `*** Update File:` headers, which
+# this general stripper would blank out. The two heredoc handlers serve
+# opposite needs (one must see inside; one must not) and are intentionally
+# separate.
+#
+# Best-effort, matching this file's "not a shell interpreter" posture: only
+# the FIRST heredoc marker on a given line is recognized (multiple heredocs
+# on one line, e.g. `cmd <<A <<B`, is a rare construct left unhandled).
+#
+# CONFIRMED BYPASS FIX (quoted heredoc marker): marker detection runs on a
+# QUOTE-MASKED copy of the line, never the raw line. `echo "<<EOF"` opens no
+# heredoc at real execution time -- the token is literal text inside a string
+# -- but a raw-text scan read it as an opener and then dropped every
+# following line through `EOF`, swallowing a live `rm -rf` on the next line
+# and bypassing the dangerous-command guard entirely. _cwg_mask_quoted is
+# exactly the right masker here because it neutralizes `<` INSIDE quoted
+# spans while PRESERVING a genuinely quoted delimiter as a bare word
+# (`cat <<'EOF'` -> `cat <<EOF`), so real quoted heredocs keep stripping.
+#
+# Residual, unclosed by design (same class as this file's other static-scan
+# limits): masking is per-line, so a quote opened on one line and closed on a
+# later one is not tracked across the boundary, and a `<<DELIM` inside a live
+# `$( )`/backtick span is passed through unmasked by _cwg_mask_quoted itself.
+_cwg_strip_heredoc_bodies() {
+    local text="$1"
+    local out="" line delim="" striptabs=0 inhd=0 cmp marker masked
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$inhd" -eq 1 ]; then
+            cmp="$line"
+            if [ "$striptabs" -eq 1 ]; then
+                cmp="${cmp#"${cmp%%[!$'\t']*}"}"
+            fi
+            if [ "$cmp" = "$delim" ]; then
+                inhd=0
+            fi
+            continue
+        fi
+        masked=$(_cwg_mask_quoted "$line")
+        marker=$(printf '%s\n' "$masked" | grep -oE "<<-?[[:space:]]*['\"]?[A-Za-z_][A-Za-z0-9_]*['\"]?" | head -1) || marker=""
+        if [ -n "$marker" ]; then
+            striptabs=0
+            case "$marker" in "<<-"*) striptabs=1 ;; esac
+            delim=$(printf '%s' "$marker" | sed -E "s/^<<-?[[:space:]]*//; s/^['\"]//; s/['\"]\$//")
+            inhd=1
+        fi
+        out="${out}${line}"$'\n'
+    done <<< "$text"
+    printf '%s' "$out"
+}
+
+# jq is required for full JSON-shaped extraction (tool_name routing,
+# apply_patch multi-key payloads, Edit/Write path-key scanning, session-id/
+# OMT_DIR resolution, candidate absolutization). When jq is ABSENT, this
+# hook used to fail open UNCONDITIONALLY (exit 0) before even the
+# dangerous-command guard ran -- but that guard exists specifically to
+# emulate Claude's OWN native, jq-independent `permissions.deny` glob
+# enforcement (claude.yaml), so the two platforms' verdicts on the exact
+# same `rm -rf`/`git push --force` diverged whenever jq happened to be
+# missing from PATH, even though Claude's deny has nothing to do with jq.
+# Below: a raw-text (no JSON parsing) best-effort extraction of
+# tool_input.command/.cmd sufficient to still run the dangerous-command
+# guard, same best-effort grep class as pre-tool-enforcer.sh's
+# extract_json_field (stops at the first unescaped-looking '"', so an
+# embedded escaped quote in the value is not handled). Everything else this
+# hook does (ledger guard, code-review artifact guard, apply_patch/Edit/
+# Write routes) still requires jq and stays fail-open on this path,
+# unchanged -- this is a floor under the one deny Codex has no other
+# mechanism for, not a full jq-free reimplementation of the hook.
 if ! command -v jq > /dev/null 2>&1; then
+    _cwg_nojq_extract_str_field() {
+        printf '%s' "$input" \
+            | grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+            | head -1 \
+            | sed -E "s/^\"$1\"[[:space:]]*:[[:space:]]*\"//; s/\"\$//"
+    }
+    _cwg_nojq_cmd=$(_cwg_nojq_extract_str_field command) || _cwg_nojq_cmd=""
+    if [ -z "$_cwg_nojq_cmd" ]; then
+        _cwg_nojq_cmd=$(_cwg_nojq_extract_str_field cmd) || _cwg_nojq_cmd=""
+    fi
+    if [ -n "$_cwg_nojq_cmd" ]; then
+        _cwg_nojq_stripped=$(_cwg_strip_heredoc_bodies "$_cwg_nojq_cmd")
+        _cwg_nojq_masked=$(_cwg_mask_quoted "$_cwg_nojq_stripped")
+        while IFS= read -r _cwg_nojq_seg; do
+            [ -n "$_cwg_nojq_seg" ] || continue
+            _cwg_nojq_out=$(write_guard_core_check_dangerous_command "$_cwg_nojq_seg")
+            if [ -n "$_cwg_nojq_out" ]; then
+                printf '%s\n' "$_cwg_nojq_out"
+                exit 0
+            fi
+        done < <(printf '%s\n' "$_cwg_nojq_masked" | sed -E 's/(&&|\|\||;|\||&)/\n/g')
+    fi
     exit 0
 fi
-
-input=$(cat)
 
 # Normalize tool_name to lowercase before routing, mirroring the sibling
 # extractor hooks/rules-injector/tool-paths.ts:29 (toLowerCase()) -- Codex
@@ -69,6 +410,63 @@ tool_name=$(printf '%s' "$tool_name_raw" | tr '[:upper:]' '[:lower:]')
 case "$tool_name" in
     apply_patch | bash | exec_command | shell_command | edit | write | multiedit | multi_edit) ;;
     *) exit 0 ;;
+esac
+
+# Claude<->Codex parity story 9/9, AC2/AC4: dangerous-command guard (rm -rf,
+# git push --force) runs FIRST, independent of the ledger session-id/OMT_DIR
+# resolution below -- it needs neither. Deliberately placed before that
+# resolution block: a resolution failure there fail-OPENs via _cwg_halt
+# (exit 0, allow) because the LEDGER guard cannot do its job without a
+# resolved session id -- but this dangerous-command guard has no such
+# dependency, and must not silently inherit that unrelated fail-open.
+#
+# Heredoc-body stripping (_cwg_strip_heredoc_bodies) runs BEFORE quote-aware
+# masking (CONFIRMED false-deny fix, both-platform measurement): a
+# destructive-looking string sitting inside a heredoc BODY (e.g.
+# `cat <<'EOF'` / `rm -rf /tmp/x` / `EOF`) is literal stdin data, never
+# parsed as shell code, so it must never reach the chain-splitter below.
+#
+# Quote-aware masking (_cwg_mask_quoted, same function the shell-target route
+# below uses) is applied BEFORE chain-splitting, mirroring that sibling route
+# exactly (code-review CONFIRMED fix, both single- and double-quoted spans):
+# without it, a `;`/`|` inside a quoted string (e.g. `echo 'note; rm -rf
+# /tmp/x'` OR `echo "note; rm -rf /tmp/x"`) was read the same as a live
+# chain separator, splitting the segment so its second half
+# (`rm -rf /tmp/x'` / `rm -rf /tmp/x"`) matched the dangerous-command
+# pattern and denied an otherwise-harmless command -- with no bypass/ask
+# escape hatch on this deny-only gate, that false deny was unrecoverable for
+# the user. Masking finds correct split points; write_guard_core_check_
+# dangerous_command is then called per split segment exactly as before --
+# see _cwg_mask_quoted's own docstring for why double-quote coverage is
+# required for actual parity with Claude's native shell-aware permission-deny
+# evaluation, not an optional widening.
+#
+# Chain-separator set includes a single `&` (background operator) alongside
+# `&&`/`||`/`;`/`|` (CONFIRMED bypass, both-platform measurement):
+# `echo safe & rm -rf /tmp/x` backgrounds the echo and runs `rm -rf` as its
+# own command at real execution time, but the prior separator set did not
+# include a lone `&`, so the whole string was scanned as ONE segment that
+# never matched any dangerous-command pattern -- silently ALLOWING it, while
+# Claude's own shell-aware parser (which does recognize `&`) denies it
+# natively. `&&` is listed before the lone `&` in the alternation so a real
+# `&&` is not mis-split into two `&` matches.
+case "$tool_name" in
+    bash | exec_command | shell_command)
+        for _cwg_dc_key in command cmd; do
+            _cwg_dc_cmd=$(printf '%s' "$input" | jq -r --arg k "$_cwg_dc_key" '.tool_input[$k] // empty' 2>/dev/null) || _cwg_dc_cmd=""
+            [ -n "$_cwg_dc_cmd" ] || continue
+            _cwg_dc_stripped=$(_cwg_strip_heredoc_bodies "$_cwg_dc_cmd")
+            _cwg_dc_masked=$(_cwg_mask_quoted "$_cwg_dc_stripped")
+            while IFS= read -r _cwg_dc_seg; do
+                [ -n "$_cwg_dc_seg" ] || continue
+                _cwg_dc_out=$(write_guard_core_check_dangerous_command "$_cwg_dc_seg")
+                if [ -n "$_cwg_dc_out" ]; then
+                    printf '%s\n' "$_cwg_dc_out"
+                    exit 0
+                fi
+            done < <(printf '%s\n' "$_cwg_dc_masked" | sed -E 's/(&&|\|\||;|\||&)/\n/g')
+        done
+        ;;
 esac
 
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null) || cwd=""
@@ -249,46 +647,9 @@ _cwg_extract_shell_targets() {
     esac
 }
 
-# _cwg_mask_quoted <shell_command_text>
-# Quote-aware normalizer, re-derived from the same algorithm as the Claude
-# twin's _wg_scan (hooks/pre-tool-enforcer.sh:160-179): masks shell-active
-# metacharacters (`> < | ; &`) that appear INSIDE a single-quoted span by
-# replacing them with a space, and drops the quote CHARACTERS themselves
-# while preserving the quoted CONTENT -- so prose like
-# `printf 'see foo > <ledger> here' | omt-ledger.sh append` is never
-# misread by the redirect/segment-splitter logic below as a live redirect
-# or a live `|`/`;`/`&` chain separator. Without this, ANY `>` in the raw
-# shell text -- quoted or not -- was read as a live redirect, so a
-# legitimate ledger-append command whose prose happened to contain
-# `> <ledger>` inside quotes was denied (a false-positive over-block).
-# Double-quoted spans (`> "$f"`) and metacharacters OUTSIDE any quote (real
-# redirects/splitters) pass through unchanged -- same single-quote-only
-# scope as the Claude twin. This is independently re-derived bash+awk, not
-# sourced from the sibling file (Claude/Codex parsing intentionally never
-# shares code, see the file header) -- so the two guards can still diverge
-# if one is edited without the other.
-_cwg_mask_quoted() {
-    printf '%s' "$1" | awk '
-        BEGIN { sq = sprintf("%c", 39) }
-        {
-            n = length($0)
-            inq = 0
-            out = ""
-            for (i = 1; i <= n; i++) {
-                c = substr($0, i, 1)
-                if (c == sq) {
-                    inq = 1 - inq
-                    continue
-                }
-                if (inq && (c == ">" || c == "<" || c == "|" || c == ";" || c == "&")) {
-                    out = out " "
-                    continue
-                }
-                out = out c
-            }
-            print out
-        }'
-}
+# _cwg_mask_quoted is defined earlier in this file (before the
+# dangerous-command guard, its first use in file order) -- see there for the
+# full docstring. Reused here unmodified by _cwg_process_shell_text below.
 
 # _cwg_strip_quotes <token> -- removes EVERY double-quote and single-quote
 # character in the token (not just one outermost pair each way), mirroring
@@ -336,7 +697,7 @@ _cwg_strip_quotes() {
 # envsubst. FIVE variables/forms are expanded (three more than the Claude
 # twin): $OMT_DIR -> $omt_dir; BOTH $OMT_SESSION_ID and $CODEX_THREAD_ID ->
 # $sid, because Codex's resolved session id is OMT_SESSION_ID ?? CODEX_
-# THREAD_ID (resolved above at :74-89) -- either env-var spelling composes
+# THREAD_ID (the cli_sid resolution above) -- either env-var spelling composes
 # the same real ledger path; and $HOME/${HOME}/a leading `~` -> env $HOME,
 # because the resolved omt_dir is ALWAYS $HOME/.omt/<proj> (lib/omt-dir.sh),
 # so a home-relative spelling of the ledger (`rm "$HOME/.omt/<proj>/
