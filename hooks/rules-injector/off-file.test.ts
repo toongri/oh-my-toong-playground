@@ -41,7 +41,7 @@ afterEach(() => {
 function makeProject(): string {
 	const projectDir = mkdtempSync(join(tmpdir(), "ri-off-proj-"));
 	projectDirs.push(projectDir);
-	mkdirSync(join(projectDir, ".claude", "rules"), { recursive: true });
+	mkdirSync(join(projectDir, ".codex", "rules"), { recursive: true });
 	writeFileSync(join(projectDir, "package.json"), '{"name":"ri-fixture"}\n');
 	return projectDir;
 }
@@ -81,7 +81,7 @@ function runSessionStart(projectDir: string, extraEnv?: Record<string, string>):
 test("D-22 off-file absent: session-start injects alwaysApply rule", () => {
 	const projectDir = makeProject();
 	writeFileSync(
-		join(projectDir, ".claude", "rules", "always.md"),
+		join(projectDir, ".codex", "rules", "always.md"),
 		"---\nalwaysApply: true\n---\nALWAYS_APPLY_MARKER\n",
 	);
 	const output = runSessionStart(projectDir);
@@ -93,7 +93,7 @@ test("D-22 off-file absent: session-start injects alwaysApply rule", () => {
 test("D-22 off-file present at workspace root: session-start emits nothing", () => {
 	const projectDir = makeProject();
 	writeFileSync(
-		join(projectDir, ".claude", "rules", "always.md"),
+		join(projectDir, ".codex", "rules", "always.md"),
 		"---\nalwaysApply: true\n---\nALWAYS_APPLY_MARKER\n",
 	);
 	// Place the sentinel: <workspaceRoot>/.codex/rules-injector.local.off

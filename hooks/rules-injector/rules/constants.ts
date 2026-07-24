@@ -21,6 +21,7 @@ export const PROJECT_MARKERS: readonly string[] = [
 export const PROJECT_RULE_SUBDIRS: ReadonlyArray<readonly [string, string]> = [
 	[".omo", "rules"],
 	[".claude", "rules"],
+	[".codex", "rules"],
 	[".cursor", "rules"],
 	[".github", "instructions"],
 ];
@@ -40,6 +41,7 @@ export const USER_HOME_RULE_SUBDIRS: readonly string[] = [
 	".omo/rules",
 	".opencode/rules",
 	".claude/rules",
+	".codex/rules",
 ];
 
 /**
@@ -63,6 +65,7 @@ export const RULE_FILE_EXTENSIONS: readonly string[] = [".md", ".mdc"];
 export const SOURCE_PRIORITY: ReadonlyMap<RuleSource, number> = new Map([
 	[".omo/rules", 0],
 	[".claude/rules", 1],
+	[".codex/rules", 1],
 	[".cursor/rules", 2],
 	[".github/instructions", 3],
 	[".github/copilot-instructions.md", 4],
@@ -70,6 +73,7 @@ export const SOURCE_PRIORITY: ReadonlyMap<RuleSource, number> = new Map([
 	["~/.omo/rules", 100],
 	["~/.opencode/rules", 101],
 	["~/.claude/rules", 102],
+	["~/.codex/rules", 102],
 	["plugin-bundled", 200],
 ]);
 

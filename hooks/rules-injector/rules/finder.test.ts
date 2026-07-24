@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { filterExcludedCandidates, findRuleCandidates } from "./finder.js";
+import { DEFAULT_AUTO_DISABLED_SOURCES } from "./sources.js";
 import type { RuleCandidate } from "./types.js";
 
 describe("findRuleCandidates — static mode distance gradient (regression: #static-distance-flatten)", () => {
@@ -176,6 +177,294 @@ describe("findRuleCandidates — excludeGlobs filter", () => {
 			excludeGlobs: ["/**/.claude/rules/**"],
 		});
 		expect(droppedByPath.find((c) => c.source === ".claude/rules")).toBeUndefined();
+	});
+});
+
+describe("findRuleCandidates — .claude/rules conditional supersede by .codex/rules", () => {
+	// Previously DEFAULT_AUTO_DISABLED_SOURCES disabled .claude/rules /
+	// ~/.claude/rules UNCONDITIONALLY, so a project with only .claude/rules
+	// deployed (no .codex/rules counterpart) lost rules entirely — []. The fix
+	// makes the supersede conditional on the codex counterpart actually being
+	// present in the SAME scope (project pairs with project, home with home).
+	let tmp: string;
+
+	beforeEach(() => {
+		tmp = mkdtempSync(join(tmpdir(), "rules-supersede-test-"));
+	});
+
+	afterEach(() => {
+		rmSync(tmp, { recursive: true, force: true });
+	});
+
+	function plantClaudeRules(root: string): void {
+		const dir = join(root, ".claude", "rules");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "probe.md"), "Ask via the AskUserQuestion tool.\n");
+	}
+
+	function plantCodexRules(root: string): void {
+		const dir = join(root, ".codex", "rules");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "probe.md"), "Ask via the request_user_input tool.\n");
+	}
+
+	test("arm 1 — both .claude/rules and .codex/rules present: only .codex/rules is adopted (no duplicate)", () => {
+		const projectRoot = join(tmp, "repo");
+		plantClaudeRules(projectRoot);
+		plantCodexRules(projectRoot);
+
+		const candidates = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			skipUserHome: true,
+			pluginRoot: tmp,
+			disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+		});
+
+		expect(candidates.map((c) => c.source)).toEqual([".codex/rules"]);
+	});
+
+	test("arm 2 — only .claude/rules present (.codex/rules NOT deployed): .claude/rules is adopted, not dropped to []", () => {
+		const projectRoot = join(tmp, "repo");
+		plantClaudeRules(projectRoot);
+
+		const candidates = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			skipUserHome: true,
+			pluginRoot: tmp,
+			disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+		});
+
+		expect(candidates.map((c) => c.source)).toEqual([".claude/rules"]);
+	});
+
+	test("arm 3 — only .codex/rules present: .codex/rules is adopted", () => {
+		const projectRoot = join(tmp, "repo");
+		plantCodexRules(projectRoot);
+
+		const candidates = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			skipUserHome: true,
+			pluginRoot: tmp,
+			disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+		});
+
+		expect(candidates.map((c) => c.source)).toEqual([".codex/rules"]);
+	});
+
+	test("explicit config disable of .codex/rules still unconditionally drops it, even with .claude/rules present", () => {
+		const projectRoot = join(tmp, "repo");
+		plantClaudeRules(projectRoot);
+		plantCodexRules(projectRoot);
+
+		const candidates = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			skipUserHome: true,
+			pluginRoot: tmp,
+			disabledSources: new Set([".codex/rules"]),
+		});
+
+		expect(candidates.map((c) => c.source)).toEqual([".claude/rules"]);
+	});
+
+	test("mixed directory (project scope): a .claude/rules file WITHOUT a .codex/rules counterpart survives, while the paired file is superseded", () => {
+		// .claude/rules/{shared.md, team-conventions.md} + .codex/rules/shared.md only.
+		// Only shared.md has a codex counterpart — team-conventions.md has none and
+		// must NOT be dropped by the scope-wide all-or-nothing gate the bug used.
+		const projectRoot = join(tmp, "repo");
+		const claudeDir = join(projectRoot, ".claude", "rules");
+		mkdirSync(claudeDir, { recursive: true });
+		writeFileSync(join(claudeDir, "shared.md"), "Ask via the AskUserQuestion tool.\n");
+		writeFileSync(join(claudeDir, "team-conventions.md"), "# Team conventions\n");
+		plantCodexRules(projectRoot); // .codex/rules/probe.md — NOT shared.md, so add shared.md directly
+		writeFileSync(join(projectRoot, ".codex", "rules", "shared.md"), "Ask via the request_user_input tool.\n");
+
+		const candidates = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			skipUserHome: true,
+			pluginRoot: tmp,
+			disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+		});
+
+		const claudeCandidates = candidates.filter((c) => c.source === ".claude/rules");
+		const codexCandidates = candidates.filter((c) => c.source === ".codex/rules");
+
+		// team-conventions.md has no codex counterpart — it must survive.
+		expect(claudeCandidates.map((c) => c.relativePath)).toContain(".claude/rules/team-conventions.md");
+		// shared.md DOES have a codex counterpart — the .claude/rules copy is dropped.
+		expect(claudeCandidates.map((c) => c.relativePath)).not.toContain(".claude/rules/shared.md");
+		expect(codexCandidates.map((c) => c.relativePath)).toContain(".codex/rules/shared.md");
+	});
+
+	test("mixed directory (home scope): a ~/.claude/rules file WITHOUT a ~/.codex/rules counterpart survives", () => {
+		const projectRoot = join(tmp, "repo");
+		mkdirSync(projectRoot, { recursive: true });
+		const homeDir = join(tmp, "home");
+		const homeClaudeDir = join(homeDir, ".claude", "rules");
+		mkdirSync(homeClaudeDir, { recursive: true });
+		writeFileSync(join(homeClaudeDir, "shared.md"), "Ask via the AskUserQuestion tool.\n");
+		writeFileSync(join(homeClaudeDir, "team-conventions.md"), "# Team conventions\n");
+		const homeCodexDir = join(homeDir, ".codex", "rules");
+		mkdirSync(homeCodexDir, { recursive: true });
+		writeFileSync(join(homeCodexDir, "shared.md"), "Ask via the request_user_input tool.\n");
+
+		const candidates = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			homeDir,
+			pluginRoot: tmp,
+			disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+		});
+
+		const claudeCandidates = candidates.filter((c) => c.source === "~/.claude/rules");
+		const codexCandidates = candidates.filter((c) => c.source === "~/.codex/rules");
+
+		expect(claudeCandidates.map((c) => c.relativePath)).toContain(".claude/rules/team-conventions.md");
+		expect(claudeCandidates.map((c) => c.relativePath)).not.toContain(".claude/rules/shared.md");
+		expect(codexCandidates.map((c) => c.relativePath)).toContain(".codex/rules/shared.md");
+	});
+
+	test("mixed directory (nested package, non-root walk directory): a .claude/rules file WITH a .codex/rules counterpart is superseded even when the walk directory is not projectRoot", () => {
+		// Regression: ruleStem previously derived the stem by stripping a
+		// `${source}/` prefix off `relativePath` (which is always projectRoot-
+		// relative). For a walk directory nested under projectRoot (e.g.
+		// packages/app), relativePath is "packages/app/.claude/rules/foo.md" —
+		// it never starts with ".claude/rules/", so the whole path was returned
+		// unstemmed and claude/codex candidates could never pair up. The fix
+		// derives the stem from the file's own rules-directory-relative path.
+		const projectRoot = join(tmp, "nested");
+		const appDir = join(projectRoot, "packages", "app");
+		mkdirSync(join(appDir, "src"), { recursive: true });
+		writeFileSync(join(projectRoot, "package.json"), "{}");
+		const claudeDir = join(appDir, ".claude", "rules");
+		const codexDir = join(appDir, ".codex", "rules");
+		mkdirSync(claudeDir, { recursive: true });
+		mkdirSync(codexDir, { recursive: true });
+		writeFileSync(join(claudeDir, "foo.md"), "Ask via the AskUserQuestion tool.\n");
+		writeFileSync(join(codexDir, "foo.md"), "Ask via the request_user_input tool.\n");
+
+		const candidates = findRuleCandidates({
+			projectRoot,
+			targetFile: join(appDir, "src", "index.ts"),
+			skipUserHome: true,
+			pluginRoot: tmp,
+			disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+		});
+
+		const claudeCandidates = candidates.filter((c) => c.source === ".claude/rules");
+		const codexCandidates = candidates.filter((c) => c.source === ".codex/rules");
+
+		expect(claudeCandidates.map((c) => c.relativePath)).not.toContain(
+			"packages/app/.claude/rules/foo.md",
+		);
+		expect(codexCandidates.map((c) => c.relativePath)).toContain(
+			"packages/app/.codex/rules/foo.md",
+		);
+	});
+
+	test("scope pairing: a project-scope .codex/rules must not suppress ~/.claude/rules (home scope)", () => {
+		const projectRoot = join(tmp, "repo");
+		plantCodexRules(projectRoot);
+		const homeDir = join(tmp, "home");
+		mkdirSync(join(homeDir, ".claude", "rules"), { recursive: true });
+		writeFileSync(
+			join(homeDir, ".claude", "rules", "probe.md"),
+			"Ask via the AskUserQuestion tool.\n",
+		);
+
+		const candidates = findRuleCandidates({
+			projectRoot,
+			targetFile: null,
+			cwd: projectRoot,
+			homeDir,
+			pluginRoot: tmp,
+			disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+		});
+
+		const sources = candidates.map((c) => c.source);
+		expect(sources).toContain(".codex/rules");
+		expect(sources).toContain("~/.claude/rules");
+	});
+
+	// Regression: supersedeClaudeRulesWithCodex previously consumed the raw candidate
+	// list before excludeGlobs and the project-boundary check ran, so a `.codex/rules`
+	// file that was about to be dropped by either filter still "won" the supersede
+	// fight and suppressed its live `.claude/rules` sibling — losing both files. The
+	// fix runs both filters before supersede; the predicates themselves are unchanged.
+	describe("ordering: exclude-glob and project-boundary filters must run BEFORE supersede", () => {
+		test("arm (i) — an excluded .codex/rules file must not suppress its .claude/rules sibling", () => {
+			const projectRoot = join(tmp, "repo");
+			plantClaudeRules(projectRoot);
+			plantCodexRules(projectRoot);
+
+			const candidates = findRuleCandidates({
+				projectRoot,
+				targetFile: null,
+				cwd: projectRoot,
+				skipUserHome: true,
+				pluginRoot: tmp,
+				disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+				excludeGlobs: ["/**/.codex/rules/probe.md"],
+			});
+
+			// The codex file is gone (user excluded it) AND its claude sibling must
+			// survive — the old bug lost both files here.
+			expect(candidates.map((c) => c.source)).toEqual([".claude/rules"]);
+		});
+
+		test("arm (ii) — a .codex/rules candidate resolving outside the project boundary must not suppress its .claude/rules sibling", () => {
+			const projectRoot = join(tmp, "repo");
+			plantClaudeRules(projectRoot);
+
+			// .codex/rules/probe.md is a symlink to a file OUTSIDE projectRoot, so its
+			// realPath fails isCandidateWithinProjectCached — it should never have been
+			// eligible to supersede anything.
+			const outsideDir = join(tmp, "outside");
+			mkdirSync(outsideDir, { recursive: true });
+			writeFileSync(join(outsideDir, "probe.md"), "Ask via the request_user_input tool.\n");
+			const codexDir = join(projectRoot, ".codex", "rules");
+			mkdirSync(codexDir, { recursive: true });
+			symlinkSync(join(outsideDir, "probe.md"), join(codexDir, "probe.md"));
+
+			const candidates = findRuleCandidates({
+				projectRoot,
+				targetFile: null,
+				cwd: projectRoot,
+				skipUserHome: true,
+				pluginRoot: tmp,
+				disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+			});
+
+			const claudeCandidates = candidates.filter((c) => c.source === ".claude/rules");
+			expect(claudeCandidates.map((c) => c.relativePath)).toContain(".claude/rules/probe.md");
+		});
+
+		test("arm (iii) — control: with both siblings valid and in-boundary, .codex/rules still wins as before", () => {
+			const projectRoot = join(tmp, "repo");
+			plantClaudeRules(projectRoot);
+			plantCodexRules(projectRoot);
+
+			const candidates = findRuleCandidates({
+				projectRoot,
+				targetFile: null,
+				cwd: projectRoot,
+				skipUserHome: true,
+				pluginRoot: tmp,
+				disabledSources: new Set(DEFAULT_AUTO_DISABLED_SOURCES),
+			});
+
+			expect(candidates.map((c) => c.source)).toEqual([".codex/rules"]);
+		});
 	});
 });
 
