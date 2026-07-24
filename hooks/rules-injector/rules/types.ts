@@ -60,6 +60,16 @@ export interface RuleCandidate {
 	 * Empty string for user-home global rules.
 	 */
 	relativePath: string;
+	/**
+	 * Path relative to the specific rules directory this candidate was scanned
+	 * from (e.g. "foo/bar.md" for both ".claude/rules/foo/bar.md" and
+	 * "packages/app/.claude/rules/foo/bar.md"), used to pair a `.claude/rules`
+	 * candidate with its `.codex/rules` counterpart by stem. Set only for
+	 * rule-subdirectory-scanned candidates (see `ruleStem` in finder.ts);
+	 * undefined for single-file and plugin-bundled candidates, which never go
+	 * through stem pairing.
+	 */
+	ruleDirRelativePath?: string;
 }
 
 /**
@@ -78,6 +88,7 @@ export interface LoadedRule extends RuleCandidate {
 export type RuleSource =
 	| ".omo/rules"
 	| ".claude/rules"
+	| ".codex/rules"
 	| ".cursor/rules"
 	| ".github/instructions"
 	| ".github/copilot-instructions.md"
@@ -85,7 +96,8 @@ export type RuleSource =
 	| "plugin-bundled"
 	| "~/.omo/rules"
 	| "~/.opencode/rules"
-	| "~/.claude/rules";
+	| "~/.claude/rules"
+	| "~/.codex/rules";
 
 /**
  * Why a candidate matched the target file. Surfaced in the injection block so

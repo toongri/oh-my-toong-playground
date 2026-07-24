@@ -58,7 +58,7 @@ function makeProjectWithStaticRule(
 ): { projectRoot: string; rulePath: string; ruleBody: string } {
 	const projectRoot = makeScratchDir("rules-injector-proj-");
 	writeFileSync(join(projectRoot, "package.json"), "{}\n");
-	const rulesDir = join(projectRoot, ".claude", "rules");
+	const rulesDir = join(projectRoot, ".codex", "rules");
 	mkdirSync(rulesDir, { recursive: true });
 	const rulePath = join(rulesDir, ruleName);
 	writeFileSync(rulePath, `---\nalwaysApply: true\n---\n${ruleBody}\n`);
@@ -310,10 +310,19 @@ test("F2: DEFAULT_AUTO_DISABLED_SOURCES excludes AGENTS.md", () => {
 	expect(DEFAULT_AUTO_DISABLED_SOURCES).toContain("AGENTS.md");
 });
 
-test("F2: DEFAULT_AUTO_DISABLED_SOURCES does NOT exclude ~/.claude/rules (Patch A: Codex injector enables it)", () => {
-	// Patch A: Codex does not natively read ~/.claude/rules, so disabling it was
-	// over-conservative. Removed from the auto-disabled set so the source is discoverable.
+test("F2: DEFAULT_AUTO_DISABLED_SOURCES does NOT exclude ~/.claude/rules (the conditional supersede lives in finder.ts, not this static list)", () => {
+	// Codex has a native rules sync category, so a de-Claude-ified counterpart
+	// USUALLY lands at ~/.codex/rules — but not always: a project that never ran
+	// OMT's sync has no ~/.codex/rules at all. Unconditionally excluding
+	// ~/.claude/rules here would lose rules entirely on such a project, so this
+	// list no longer carries that decision. findRuleCandidates (finder.ts) drops
+	// ~/.claude/rules ONLY when ~/.codex/rules is ALSO present — see F11 below,
+	// which confirms that conditional behavior end-to-end.
 	expect(DEFAULT_AUTO_DISABLED_SOURCES).not.toContain("~/.claude/rules");
+});
+
+test("F2: DEFAULT_AUTO_DISABLED_SOURCES does NOT exclude ~/.codex/rules (the codex-native replacement)", () => {
+	expect(DEFAULT_AUTO_DISABLED_SOURCES).not.toContain("~/.codex/rules");
 });
 
 test("F2: DEFAULT_AUTO_DISABLED_SOURCES excludes ~/.claude/CLAUDE.md", () => {
@@ -448,7 +457,7 @@ test("F-8: PostToolUse emits nothing under CODEX_RULES_DISABLED=1 (dynamic lane 
 	const statePath = join(tempHome, ".omt", "rules-injector", `${sessionId}.json`);
 	const projectRoot = makeScratchDir("f8-proj-");
 	writeFileSync(join(projectRoot, "package.json"), "{}\n");
-	const rulesDir = join(projectRoot, ".claude", "rules");
+	const rulesDir = join(projectRoot, ".codex", "rules");
 	mkdirSync(rulesDir, { recursive: true });
 	// A glob rule that would fire on src/x.ts if the kill-switch were absent.
 	writeFileSync(
@@ -599,27 +608,39 @@ test("P9: spawn env pins PLUGIN_DATA to the hermetic data root so external env c
 });
 
 // ===========================================================================
-// F11 — ~/.claude/rules is NO LONGER excluded by DEFAULT_AUTO_DISABLED_SOURCES (Patch A)
+// F11 — ~/.claude/rules is superseded by ~/.codex/rules when both are present
+// (finder.ts's existence-conditional supersede, not a static disabled list)
 // ===========================================================================
 
-test("F11: a rule planted under ~/.claude/rules IS injected by session-start (Patch A: source enabled)", () => {
-	// Patch A removes "~/.claude/rules" from DEFAULT_AUTO_DISABLED_SOURCES.
-	// Codex does NOT natively read ~/.claude/rules, so there is no double-inject risk.
-	// After Patch A, an alwaysApply:true rule under ~/.claude/rules MUST appear in
-	// additionalContext. Restoring "~/.claude/rules" to DEFAULT_AUTO_DISABLED_SOURCES
-	// would make this test RED.
+test("F11: a rule planted under ~/.claude/rules is NOT injected, but the same rule under ~/.codex/rules IS", () => {
+	// rules is now a supported codex sync category: the de-Claude-ified
+	// counterpart of a global rule lands at ~/.codex/rules. When BOTH
+	// ~/.claude/rules and ~/.codex/rules exist, findRuleCandidates (finder.ts)
+	// drops the raw ~/.claude/rules candidate in favor of its codex-native
+	// counterpart — reading it directly would leak unrewritten Claude
+	// vocabulary into Codex sessions. Restoring ~/.claude/rules discovery
+	// (or dropping the codex counterpart below) would make the first
+	// assertion below RED.
 	const sessionId = "f11-session";
 	const { projectRoot } = makeProjectWithStaticRule(
 		"f11-proj-rule.md",
 		"F11 PROJ BOULDER: project rule must appear.",
 	);
 
-	// Plant a rule under the hermetic HOME's ~/.claude/rules directory.
+	// Plant a rule under the hermetic HOME's ~/.claude/rules directory — must NOT surface.
 	const claudeRulesDir = join(tempHome, ".claude", "rules");
 	mkdirSync(claudeRulesDir, { recursive: true });
 	writeFileSync(
 		join(claudeRulesDir, "f11-home-rule.md"),
-		"---\nalwaysApply: true\n---\nF11 HOME BOULDER: this MUST appear in additionalContext (Patch A).\n",
+		"---\nalwaysApply: true\n---\nF11 HOME BOULDER: raw Claude source must NOT appear.\n",
+	);
+
+	// Plant the de-Claude-ified counterpart under ~/.codex/rules — must surface.
+	const codexRulesDir = join(tempHome, ".codex", "rules");
+	mkdirSync(codexRulesDir, { recursive: true });
+	writeFileSync(
+		join(codexRulesDir, "f11-home-rule.md"),
+		"---\nalwaysApply: true\n---\nF11 HOME CODEX BOULDER: this MUST appear in additionalContext.\n",
 	);
 
 	const result = runHook("session-start", sessionStartPayload(sessionId, projectRoot));
@@ -628,8 +649,10 @@ test("F11: a rule planted under ~/.claude/rules IS injected by session-start (Pa
 
 	// Project rule IS injected (positive control — confirms injection works).
 	expect(context).toContain("F11 PROJ BOULDER");
-	// Home rule is now ENABLED (Patch A: ~/.claude/rules removed from auto-disabled set).
-	expect(context).toContain("F11 HOME BOULDER");
+	// Raw Claude home source is disabled by default — no longer injected.
+	expect(context).not.toContain("F11 HOME BOULDER");
+	// Codex-native home source replaces it.
+	expect(context).toContain("F11 HOME CODEX BOULDER");
 });
 
 // ===========================================================================
@@ -834,7 +857,7 @@ test("AC1-C5: a rule dropped by budget on SessionStart is re-injected on the sub
 
 	const projectRoot = makeScratchDir("r-"); // short prefix to minimize path variance
 	writeFileSync(join(projectRoot, "package.json"), "{}\n");
-	const rulesDir = join(projectRoot, ".claude", "rules");
+	const rulesDir = join(projectRoot, ".codex", "rules");
 	mkdirSync(rulesDir, { recursive: true });
 	const ruleBody = "AC1-C5-RULE-BODY: " + "Y".repeat(1000);
 	writeFileSync(join(rulesDir, "ac1rule.md"), `---\nalwaysApply: true\n---\n${ruleBody}\n`);
@@ -884,7 +907,7 @@ test("B-5: a dynamic rule dropped by budget on PostToolUse is re-injected on the
 
 	const projectRoot = makeScratchDir("b5-");
 	writeFileSync(join(projectRoot, "package.json"), "{}\n");
-	const rulesDir = join(projectRoot, ".claude", "rules");
+	const rulesDir = join(projectRoot, ".codex", "rules");
 	mkdirSync(rulesDir, { recursive: true });
 	const ruleBody = "B5-DYNAMIC-RULE-BODY: " + "Z".repeat(1000);
 	writeFileSync(join(rulesDir, "b5rule.md"), `---\nglobs: ["**/*.ts"]\n---\n${ruleBody}\n`);
@@ -955,7 +978,7 @@ test("B-6: a dynamic rule whose marker falls past the 32K byte clamp is not mark
 
 	const projectRoot = makeScratchDir("b6-");
 	writeFileSync(join(projectRoot, "package.json"), "{}\n");
-	const rulesDir = join(projectRoot, ".claude", "rules");
+	const rulesDir = join(projectRoot, ".codex", "rules");
 	mkdirSync(rulesDir, { recursive: true });
 	mkdirSync(join(projectRoot, "src"), { recursive: true });
 	writeFileSync(join(projectRoot, "src", "y.ts"), "export const y = 2;\n");
@@ -1051,7 +1074,7 @@ test("AC3-C4: post-compact body block + directive share the budget (no double-ch
 
 	const projectRoot = makeScratchDir("ac3c4-");
 	writeFileSync(join(projectRoot, "package.json"), "{}\n");
-	const rulesDir = join(projectRoot, ".claude", "rules");
+	const rulesDir = join(projectRoot, ".codex", "rules");
 	mkdirSync(rulesDir, { recursive: true });
 
 	// hephaestus.md: never-truncated, body consumes most of the budget.
@@ -1179,7 +1202,7 @@ test("AC11-C7: dynamic recovery re-injects a rule whose path is in transcript bu
 
 	const projectRoot = makeScratchDir("ac11c7-");
 	writeFileSync(join(projectRoot, "package.json"), "{}\n");
-	const rulesDir = join(projectRoot, ".claude", "rules");
+	const rulesDir = join(projectRoot, ".codex", "rules");
 	mkdirSync(rulesDir, { recursive: true });
 
 	// Static rule: needed so SessionStart has at least one rule, triggering recovery path.
@@ -1342,7 +1365,7 @@ test("A4: dynamic recovery does NOT re-inject a rule whose frontmatter-stripped 
 
 	const projectRoot = makeScratchDir("a4-");
 	writeFileSync(join(projectRoot, "package.json"), "{}\n");
-	const rulesDir = join(projectRoot, ".claude", "rules");
+	const rulesDir = join(projectRoot, ".codex", "rules");
 	mkdirSync(rulesDir, { recursive: true });
 
 	// Static rule so SessionStart has at least one rule and runs the recovery path.

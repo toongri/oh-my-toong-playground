@@ -54,7 +54,7 @@ afterEach(() => {
 function makeProject(): string {
 	const projectDir = mkdtempSync(join(tmpdir(), "ri-proj-"));
 	projectDirs.push(projectDir);
-	mkdirSync(join(projectDir, ".claude", "rules"), { recursive: true });
+	mkdirSync(join(projectDir, ".codex", "rules"), { recursive: true });
 	mkdirSync(join(projectDir, "src"), { recursive: true });
 	writeFileSync(join(projectDir, "package.json"), '{"name":"ri-fixture"}\n');
 	return projectDir;
@@ -62,7 +62,7 @@ function makeProject(): string {
 
 function writeRule(projectDir: string, fileName: string, frontmatter: string, body: string): void {
 	writeFileSync(
-		join(projectDir, ".claude", "rules", fileName),
+		join(projectDir, ".codex", "rules", fileName),
 		`---\n${frontmatter}\n---\n${body}\n`,
 	);
 }

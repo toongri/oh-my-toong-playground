@@ -152,6 +152,7 @@ function toRuleSource(value: string): RuleSource | null {
 	switch (value) {
 		case ".omo/rules":
 		case ".claude/rules":
+		case ".codex/rules":
 		case ".cursor/rules":
 		case ".github/instructions":
 		case ".github/copilot-instructions.md":
@@ -160,6 +161,7 @@ function toRuleSource(value: string): RuleSource | null {
 		case "~/.omo/rules":
 		case "~/.opencode/rules":
 		case "~/.claude/rules":
+		case "~/.codex/rules":
 			return value;
 		default:
 			return null;

@@ -1,9 +1,16 @@
 /**
  * Tests for DEFAULT_AUTO_DISABLED_SOURCES and disabledSourcesFromConfig() in sources.ts.
  *
- * Covers Patch A: ~/.claude/rules removed from DEFAULT_AUTO_DISABLED_SOURCES so that
- * in auto mode the user-home Claude rules source is discoverable (Codex does NOT read
- * ~/.claude/rules natively, so disabling it was over-conservative).
+ * `.claude/rules` / `~/.claude/rules` are deliberately NOT in this unconditional
+ * list. Codex has a native rules sync category (`SUPPORTED_CATEGORIES.codex`), so a
+ * de-Claude-ified counterpart of every rule USUALLY lands at `.codex/rules` /
+ * `~/.codex/rules` — but not always: a project that never ran OMT's sync has no
+ * `.codex/rules` at all. Unconditionally disabling `.claude/rules` here would trade
+ * the Claude-vocabulary leak for a worse outcome — losing rules entirely on every
+ * such project. Instead, `findRuleCandidates` (finder.ts) drops a `.claude/rules`
+ * (`~/.claude/rules`) candidate ONLY when a `.codex/rules` (`~/.codex/rules`)
+ * candidate is ALSO present in the same scope — see finder.test.ts's
+ * "conditional supersede by .codex/rules" suite for that behavior.
  */
 import { expect, test } from "bun:test";
 import { DEFAULT_AUTO_DISABLED_SOURCES, disabledSourcesFromConfig } from "./sources.js";
@@ -27,11 +34,23 @@ function autoConfig(): PiRulesConfig {
 	};
 }
 
-// ── Patch A: ~/.claude/rules NOT in auto-disabled set ───────────────────────
+// ── .claude/rules / ~/.claude/rules are NOT unconditionally disabled;
+// the conditional supersede is finder.ts's job, not this static list's ───────
 
-test("`DEFAULT_AUTO_DISABLED_SOURCES`: does NOT contain ~/.claude/rules (Patch A)", () => {
-	// Patch A removes this entry. Before the patch this assertion fails.
+test("`DEFAULT_AUTO_DISABLED_SOURCES`: does NOT contain .claude/rules (conditional supersede lives in finder.ts)", () => {
+	expect(DEFAULT_AUTO_DISABLED_SOURCES).not.toContain(".claude/rules");
+});
+
+test("`DEFAULT_AUTO_DISABLED_SOURCES`: does NOT contain ~/.claude/rules (conditional supersede lives in finder.ts)", () => {
 	expect(DEFAULT_AUTO_DISABLED_SOURCES).not.toContain("~/.claude/rules");
+});
+
+test("`DEFAULT_AUTO_DISABLED_SOURCES`: does NOT contain .codex/rules (the codex-native replacement stays enabled)", () => {
+	expect(DEFAULT_AUTO_DISABLED_SOURCES).not.toContain(".codex/rules");
+});
+
+test("`DEFAULT_AUTO_DISABLED_SOURCES`: does NOT contain ~/.codex/rules (the codex-native replacement stays enabled)", () => {
+	expect(DEFAULT_AUTO_DISABLED_SOURCES).not.toContain("~/.codex/rules");
 });
 
 test("`DEFAULT_AUTO_DISABLED_SOURCES`: still contains AGENTS.md (unchanged)", () => {
@@ -42,12 +61,20 @@ test("`DEFAULT_AUTO_DISABLED_SOURCES`: still contains ~/.claude/CLAUDE.md (uncha
 	expect(DEFAULT_AUTO_DISABLED_SOURCES).toContain("~/.claude/CLAUDE.md");
 });
 
-// ── 동작 검증: auto 모드에서 ~/.claude/rules가 disabled set에 없음 ────────────
+// ── 동작 검증: auto 모드에서 .claude/rules류는 static list로 disabled되지 않는다
+// (finder.ts의 존재-조건부 supersede가 대신 처리) ─────────────────────────────
 
-test("`disabledSourcesFromConfig`: auto mode does NOT disable ~/.claude/rules (Patch A)", () => {
+test("`disabledSourcesFromConfig`: auto mode does NOT disable .claude/rules or ~/.claude/rules (finder.ts supersedes conditionally instead)", () => {
 	const disabled = disabledSourcesFromConfig(autoConfig());
 	expect(disabled).toBeDefined();
+	expect(disabled!.has(".claude/rules")).toBe(false);
 	expect(disabled!.has("~/.claude/rules")).toBe(false);
+});
+
+test("`disabledSourcesFromConfig`: auto mode does NOT disable .codex/rules or ~/.codex/rules", () => {
+	const disabled = disabledSourcesFromConfig(autoConfig());
+	expect(disabled!.has(".codex/rules")).toBe(false);
+	expect(disabled!.has("~/.codex/rules")).toBe(false);
 });
 
 test("`disabledSourcesFromConfig`: auto mode still disables AGENTS.md", () => {
