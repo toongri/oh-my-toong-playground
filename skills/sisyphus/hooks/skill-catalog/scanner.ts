@@ -1,6 +1,7 @@
 import { readdir } from "fs/promises";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { Harness } from "./types.ts";
 
 // Scan a single directory for skill subdirectories
 // Returns directory names (skill names), empty array on any error
@@ -14,26 +15,32 @@ async function scanDirectory(dirPath: string): Promise<string[]> {
 	}
 }
 
-// Scan both skill directories and return deduplicated skill names
-export async function scanSkillDirectories(cwd: string): Promise<string[]> {
+// Scan skill directories for the given harness only — Claude reads
+// .claude/skills, Codex reads .agents/skills (tools/adapters/codex.ts:159
+// codexSkillsDir — Codex 0.144.1 deploys skills there, not .claude/skills),
+// each at project and home scope — and return deduplicated skill names.
+// Scanning is harness-scoped, not unconditional across both roots: a
+// platforms:[claude]-gated skill lands only under .claude/skills, and a
+// Codex session must not discover it (it would surface as an invokable
+// catalog entry that fails on call, since Codex has no landing copy).
+export async function scanSkillDirectories(cwd: string, harness: Harness): Promise<string[]> {
 	const homeDir = process.env.HOME || "/tmp";
+	const landingDirName = harness === "codex" ? ".agents" : ".claude";
 
-	const projectSkillsDir = join(cwd, ".claude", "skills");
-	const userSkillsDir = join(homeDir, ".claude", "skills");
+	const candidateDirs = [join(cwd, landingDirName, "skills"), join(homeDir, landingDirName, "skills")];
 
-	const [projectSkills, userSkills] = await Promise.all([
-		scanDirectory(projectSkillsDir),
-		scanDirectory(userSkillsDir),
-	]);
+	const scannedDirs = await Promise.all(candidateDirs.map(scanDirectory));
 
-	// Deduplicate: project skills take precedence (same name = one entry)
+	// Deduplicate: first-seen wins (project dirs listed before home dirs)
 	const seen = new Set<string>();
 	const result: string[] = [];
 
-	for (const name of [...projectSkills, ...userSkills]) {
-		if (!seen.has(name)) {
-			seen.add(name);
-			result.push(name);
+	for (const names of scannedDirs) {
+		for (const name of names) {
+			if (!seen.has(name)) {
+				seen.add(name);
+				result.push(name);
+			}
 		}
 	}
 
@@ -41,8 +48,24 @@ export async function scanSkillDirectories(cwd: string): Promise<string[]> {
 	return result.sort((l, r) => l.localeCompare(r));
 }
 
-// Read enabled plugin IDs from ~/.claude/settings.json
-export function readEnabledPlugins(): Set<string> {
+// Read enabled plugin IDs from ~/.claude/settings.json.
+// Codex has no plugin system (tools/adapters/codex.ts:862 — "Codex does not
+// support plugins. Skipping plugins section."), so under a Codex session a
+// plugin-gated catalog entry (e.g. frontend-design) can never actually be
+// reached even if a stray ~/.claude/settings.json exists on the same machine
+// (e.g. the user also runs Claude Code elsewhere). Short-circuit to an empty
+// Set rather than reading a file whose contents are meaningless to this
+// harness. `harness` is the caller's already-resolved detectHarness() value
+// (index.ts) — this function does not re-derive it from env itself, so there
+// is exactly one place in this package that decides Claude vs Codex (a
+// second, independent CODEX_THREAD_ID check here previously could disagree
+// with detectHarness()'s OMT_SESSION_ID-aware priority whenever both env
+// vars were present).
+export function readEnabledPlugins(harness: Harness): Set<string> {
+	if (harness === "codex") {
+		return new Set();
+	}
+
 	try {
 		const homeDir = process.env.HOME || "/tmp";
 		const settingsPath = join(homeDir, ".claude", "settings.json");

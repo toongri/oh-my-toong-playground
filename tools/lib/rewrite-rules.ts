@@ -10,11 +10,40 @@
 
 import type { Platform } from "./types.ts";
 
+// Matches String.prototype.replace's function-replacer parameter shape
+// (substring, then each capture group, narrowed to `string` since every
+// capture group PLATFORM_REWRITE_RULES ever declares is a plain text group —
+// no `d`-flag/named-group usage that would add non-string members).
+type RewriteRuleReplacer = (substring: string, ...args: string[]) => string;
+
 export type RewriteRule = {
 	id: string;
 	detect: RegExp;
-	replace: string;
+	// A function replacer is a deliberate escape hatch for rule 6a: JS regex
+	// alone cannot balance parens inside an args value (see 6a's comment
+	// below), so 6a's detect captures the raw call body and its replace
+	// function re-parses that body to decide the output. String.prototype
+	// .replace already accepts either shape natively — applyRewriteRules
+	// passes rule.replace straight through without switching on its type.
+	replace: string | RewriteRuleReplacer;
 	lossy: boolean;
+};
+
+/**
+ * Rule 6a's replace function (see the rule's own comment for the detect
+ * regex it pairs with). `body` is everything between `Skill(` and its
+ * balanced/quote-aware matching `)` — e.g. `skill: "testing", args: "auth
+ * only"`. Extracts the skill name (same shape the old string-replace form
+ * captured) and, if present, an `args: "..."` value, emitting `$name args`
+ * — the args text rides along as plain prose after the mention sigil rather
+ * than being dropped, matching how a body `$X` mention is documented above
+ * as a cue the model reads, not a machine-parsed call.
+ */
+const rewriteSkillCall: RewriteRuleReplacer = (_substring, body) => {
+	const nameMatch = body.match(/^\s*(?:skill:\s*)?["']?([^"',)]+?)["']?\s*(?:,|$)/);
+	const name = nameMatch ? nameMatch[1] : body.trim();
+	const argsMatch = body.match(/\bargs:\s*(["'])([\s\S]*?)\1\s*(?:,|$)/);
+	return argsMatch ? `$${name} ${argsMatch[2]}` : `$${name}`;
 };
 
 /**
@@ -35,8 +64,8 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 	opencode: [{ id: "4", detect: /\.claude\//g, replace: ".opencode/", lossy: false }],
 
 	codex: [
-		// Order: S -> 17 -> 17b -> 4 -> 5 -> 6a -> 6b -> 7 -> 8 -> 9 -> 10 -> 11 -> 12
-		//        -> 13 -> 14p -> 14 -> 1 -> 2 -> 3.
+		// Order: S -> 17 -> 17b -> 4 -> 5 -> 6a -> 6b -> 7 -> 8 -> 9 -> 10 -> 11 -> 11a
+		//        -> 11b -> 12 -> 13 -> 14p -> 14 -> 1 -> 2 -> 3.
 		// This array order IS the application order — ordering is semantic, not cosmetic.
 
 		// S MUST precede 17 and 4: Codex skills live in .agents/skills, NOT
@@ -63,16 +92,79 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		{ id: "17b", detect: /~\/\.claude\b/g, replace: "~/.codex", lossy: false },
 
 		{ id: "4", detect: /\.claude\//g, replace: ".codex/", lossy: false },
+
+		// 4b MUST run after 4 and 17/17b: it matches the `.codex` form those
+		// rows produce, not the `.claude` original. Without it, rows 4/17/17b
+		// finish the path rewrite but leave the FILENAME pointing at a file
+		// that does not exist on Codex — `tools/adapters/codex.ts`'s syncConfig
+		// and flushMcpBlock write only `config.toml` under `.codex/`; Codex has
+		// no `settings.json` at any scope. So a deployed sentence like
+		// `Read [$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` would survive as
+		// `Read [$CODEX_HOME|~/.codex]/config.toml`'s broken sibling
+		// `~/.codex]/settings.json` — directionally right, literally dead.
+		//
+		// The `(\]?)` group is what carries the bracket-notation carrier (the
+		// one rule 17b exists for) through this row: after 17b the text reads
+		// `~/.codex]/settings.json`, so the `]` sits between the directory and
+		// the slash and must be re-emitted, not eaten.
+		//
+		// `/settings\.json` is anchored on the leading slash, so the hud-only
+		// `settings.local.json` is untouched — `settings.json` is not a
+		// contiguous substring of it.
+		{
+			id: "4b",
+			detect: /((?:~\/)?\.codex)(\]?)\/settings\.json/g,
+			replace: "$1$2/config.toml",
+			lossy: false,
+		},
+
 		{ id: "5", detect: /\bCLAUDE\.md\b/g, replace: "AGENTS.md", lossy: false },
 
-		// 6a before 6b: 6a's non-greedy capture requires >=1 name char, so it
-		// cannot match bare `Skill()` — that falls through to 6b. Mutually
-		// exclusive (named vs empty parens), so relative order is safe either
-		// way, but 6a-first matches the authored table.
+		// 6a before 6b: 6a's body group requires >=1 char inside the parens, so
+		// it cannot match bare `Skill()` — that falls through to 6b. Mutually
+		// exclusive (non-empty vs empty parens), so relative order is safe
+		// either way, but 6a-first matches the authored table.
+		//
+		// Target is `$name`, Codex's real mention sigil, not prose. Codex has
+		// no skill-invocation tool (verified: `strings` on the codex binary
+		// finds zero use_skill/invoke_skill/run_skill hits) — skill loading is
+		// handled by a mention scanner whose trigger syntax is `$name`. A
+		// user's `$X` is machine-loaded; a body `$X` is not machine-loaded but
+		// is a strong enough cue that the model opens the referenced SKILL.md
+		// itself and follows it (observed: a probed model ran `sed -n
+		// '1,240p' .codex/skills/chain-bravo/SKILL.md` off a body
+		// `$chain-bravo` mention). Prose (`the X skill`) gives the model no
+		// such cue at all. Precedent: oh-my-codex's `autopilot/SKILL.md` ships
+		// a body chain `$deep-interview -> $ralplan -> $ultragoal`.
+		//
+		// Detect's capture group is NOT the skill name directly — it is the
+		// entire call body between `Skill(` and its matching `)`, captured by
+		// an alternation over "double-quoted string | single-quoted string |
+		// any char that isn't a paren or quote", repeated one-or-more times. A
+		// quoted-string alternative swallows everything between its own quotes
+		// whole, including parens (e.g. `args: "review (draft)"`), so an
+		// unmatched `(`/`)` inside a quoted value never confuses the scan for
+		// the call's TRUE closing `)` — the failure mode this replaced (plain
+		// `[^)]*` treats any `)` as the end, so `args: "review (draft)"` closed
+		// the match at the inner `)`, leaving the broken fragment `$testing")`
+		// behind in deployed bytes). The `+` (not `*`) requires at least 1 body
+		// char, preserving the bare-`Skill()`-falls-through-to-6b property
+		// noted above.
+		//
+		// `rewriteSkillCall` (top of file) re-parses that captured body: it
+		// extracts the skill name with the same shape the old regex capture
+		// used, and — new — an optional `args: "..."` value, which rides along
+		// after the sigil as plain prose (`$name args`) instead of being
+		// silently dropped (the prior bug: `args: "x"` matched and vanished
+		// with no trace). String.replace's function-replacer form receives the
+		// full match as arg 0 and each capture group after it — same contract
+		// as the string-template form it replaces; a function is what makes
+		// conditionally appending a second, quote-balanced capture possible at
+		// all, which a static `"$$$1"`-style template has no way to express.
 		{
 			id: "6a",
-			detect: /\bSkill\(\s*(?:skill:\s*)?["']?([^"')]+?)["']?\s*\)/g,
-			replace: "the $1 skill",
+			detect: /\bSkill\(((?:"[^"]*"|'[^']*'|[^()'"])+)\)/g,
+			replace: rewriteSkillCall,
 			lossy: true,
 		},
 		{ id: "6b", detect: /\bSkill\(\)/g, replace: "skill invocation", lossy: true },
@@ -82,6 +174,31 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		// forbidden"). Naming a real tool there risks an over-broad
 		// "<tool> forbidden" misreading.
 		{ id: "7", detect: /\bWebFetch\b/g, replace: "URL fetch", lossy: true },
+
+		// Capability noun for the same reason as rule 7, and for a second one.
+		//
+		// (a) Prohibition and prescription both appear on the deploy surface:
+		// `run_in_background` is PRESCRIBED in skills/qa ("MUST be launched
+		// with run_in_background") and skills/insane-browsing, and PROHIBITED
+		// in skills/agent-council and rules/tool-usage-policy ("`run_in_background`
+		// is prohibited"). No single real tool name can carry both senses
+		// without one of them reading as a lie about that tool.
+		//
+		// (b) No Codex parameter has this name. Measured against the real
+		// binary (codex 0.145.0): the shell tool's parameters are
+		// `command`/`timeout_ms`/`working_directory`/`env`/`user` — there is no
+		// background flag. Codex's actual equivalent is the separate
+		// `unified_exec` tool, whose `yield_time_ms` "asks exec to yield early
+		// if the script is still running", polled afterwards via `write_stdin`,
+		// and it sits behind the `features.unified_exec` flag. Substituting
+		// either name would tell a Codex session to pass a parameter that does
+		// not exist on the tool it is actually calling.
+		{
+			id: "7b",
+			detect: /\brun_in_background(?:=true)?\b/g,
+			replace: "background execution",
+			lossy: true,
+		},
 
 		{ id: "8", detect: /\bWebSearch\b/g, replace: "web_search", lossy: false },
 
@@ -101,6 +218,26 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		// subagent_type, run_in_background, model) vs Codex's
 		// spawn_agent(agent_type, model, ...) — call shape differs.
 		{ id: "11", detect: /\bAgent\s*\(/g, replace: "spawn_agent(", lossy: true },
+
+		// Real carrier: skills/clarify/SKILL.md:150 — `Task(subagent_type="explore",
+		// prompt="...")`, this project's older call-form for subagent dispatch (predates
+		// the `Agent(` naming used elsewhere). Same target and same lossiness rationale
+		// as rule 11: Codex's real primitive is spawn_agent(agent_type, model, ...) — the
+		// call shape differs, but the tool identity maps directly (Codex has no
+		// `Task`-named tool of its own, verified via `strings` on the codex binary).
+		//
+		// `(?:(?<=\\n)|\b)` boundary (not plain `\b`): mirrors the claude-tool BROAD_DETECTORS
+		// entry, which already detects "Task(" right after a literal `\n` DOT-label escape
+		// (same blind spot documented at rules 14/14p) — a plain `\b` here would leave that
+		// case uncovered even though the detector catches it.
+		{ id: "11a", detect: /(?:(?<=\\n)|\b)Task\s*\(/g, replace: "spawn_agent(", lossy: true },
+
+		// Real carriers: skills/code-review/SKILL.md:414,515, skills/review-report/SKILL.md:18,135
+		// — prose naming "the Task tool" as the dispatch mechanism (always paired with
+		// `subagent_type:`, itself covered by rule 12 below). Same target as 11/11a for
+		// the same reason: spawn_agent is Codex's native subagent-dispatch primitive.
+		// Same `(?:(?<=\\n)|\b)` boundary rationale as 11a above.
+		{ id: "11b", detect: /(?:(?<=\\n)|\b)Task tool\b/g, replace: "spawn_agent tool", lossy: true },
 
 		{ id: "12", detect: /\bsubagent_type\b/g, replace: "agent_type", lossy: false },
 
@@ -153,9 +290,12 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 
 		// Real carrier: skills/deep-interview/SKILL.md:67, skills/code-review/SKILL.md:418,433
 		// (`Read [$CLAUDE_CONFIG_DIR|~/.claude]/settings.json`). Lossy: Codex's real
-		// counterpart is the CODEX_HOME env var (config-home override), but Codex
-		// stores config in config.toml, not settings.json — the substitution keeps
-		// the sentence directionally right but not literally executable.
+		// counterpart is the CODEX_HOME env var (config-home override). Codex
+		// stores config in config.toml, not settings.json — rule 4b above
+		// finishes that half, so the pair (1 for the directory, 4b for the
+		// filename) leaves a sentence that is literally executable on Codex,
+		// not merely directionally right. Still lossy: CODEX_HOME overrides the
+		// whole config home, which is not exactly what CLAUDE_CONFIG_DIR names.
 		{
 			id: "1",
 			detect: /\$CLAUDE_CONFIG_DIR\b/g,
@@ -299,7 +439,7 @@ export const BROAD_DETECTORS: readonly { name: string; detect: RegExp }[] = [
 	{
 		name: "claude-tool",
 		detect:
-			/(?:(?<=\\n)|\b)(?:Skill|Agent)\s*\(|(?:(?<=\\n)|\b)(?:Task|Ask|Web|Multi)[A-Z]\w+\b|(?:(?<=\\n)|\b)subagent_type\b/g,
+			/(?:(?<=\\n)|\b)(?:Skill|Agent|Task)\s*\(|(?:(?<=\\n)|\b)(?:Task|Ask|Web|Multi)[A-Z]\w+\b|(?:(?<=\\n)|\b)subagent_type\b|(?:(?<=\\n)|\b)Task tool\b/g,
 	},
 	{ name: "claude-model", detect: /^model:\s*(?:opus|sonnet)\s*$/gm },
 ];
@@ -317,7 +457,13 @@ export function applyRewriteRules(content: string, rules: readonly RewriteRule[]
 	let result = content;
 	for (const rule of rules) {
 		const detect = new RegExp(rule.detect.source, rule.detect.flags);
-		result = result.replace(detect, rule.replace);
+		// Branched (not passed straight through) so TS can pick the matching
+		// String.replace overload per call — the union type on rule.replace
+		// itself isn't assignable to either overload's parameter type.
+		result =
+			typeof rule.replace === "function"
+				? result.replace(detect, rule.replace)
+				: result.replace(detect, rule.replace);
 	}
 	return result;
 }

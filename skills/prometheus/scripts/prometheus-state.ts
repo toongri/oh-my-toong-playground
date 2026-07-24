@@ -14,6 +14,7 @@
 
 import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
 import { execSync } from "child_process";
+import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
 	resolveSessionIdOrThrow,
@@ -93,14 +94,8 @@ function readStdinSync(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Path resolution
+// Path resolution — identical dir resolution as goal-state (@lib/omt-dir)
 // ---------------------------------------------------------------------------
-
-function getOmtDir(): string {
-	const dir = process.env.OMT_DIR;
-	if (!dir) throw new Error("OMT_DIR environment variable is not set");
-	return dir;
-}
 
 export function resolveStatePath(sessionId: string): string {
 	return `${getOmtDir()}/prometheus-state-${sessionId}.json`;

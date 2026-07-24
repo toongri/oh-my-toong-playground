@@ -1,0 +1,8 @@
+# keyword-detector.sh (UserPromptSubmit) and pin-session-start (SessionStart)
+# are global on the Claude side (root claude.yaml), so their Codex analogs
+# (codex-keyword-detector.sh, pin-session-start) are registered globally in
+# the root codex.yaml -- not here. Registering them again in this file would
+# double-fire, same as the Claude side's own warning against re-registering
+# its core hooks in projects/oh-my-toong/claude.yaml. This project has no
+# Codex-specific project-scoped hooks of its own.
+{}

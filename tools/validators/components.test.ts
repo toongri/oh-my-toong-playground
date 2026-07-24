@@ -11,9 +11,13 @@ import {
 	validatePlatformYamlHookComponents,
 	validateModelMapCoverage,
 	validateCodexRewriteCoverage,
+	validateCodexSkillFrontmatterFirstLine,
+	validateSupportedCategories,
 	validateAll,
 } from "./components.ts";
 import { getRootDir } from "../lib/config.ts";
+import { CATEGORIES, SUPPORTED_CATEGORIES } from "../sync.ts";
+import type { Category, Platform } from "../lib/types.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1794,12 +1798,22 @@ skills:
 		expect(result.errors).toHaveLength(0);
 	});
 
-	it("DEFAULT_EXCLUDE에 해당하는 *.test.ts 파일은 스캔 대상에서 제외된다 (배포되지 않으므로)", async () => {
+	// *.test.ts 단독으로는 판별력이 없다: .test.ts는 확장자 필터(.md만 스캔)만으로도
+	// 이미 제외되므로, 이 arm만 있으면 ALWAYS_PRUNE 자체가 전혀 행사되지 않고도
+	// 그린이 나온다. __pycache__/leak.md를 같은 테스트에 동거시켜 — 확장자는 .md라
+	// 확장자 필터를 통과하는데도 디렉터리 프루닝(ALWAYS_PRUNE)이 실제로 걸러냄을
+	// 함께 증명해, 이 테스트가 다시 판별력을 갖게 한다.
+	it("ALWAYS_PRUNE에 해당하는 *.test.ts와 __pycache__/*.md는 스캔 대상에서 제외된다 (배포되지 않으므로)", async () => {
 		touch(join(root, "skills", "excl-skill", "SKILL.md"));
 		writeYaml(
 			join(root, "skills", "excl-skill"),
 			"job.test.ts",
 			'const x = "$CLAUDE_UNKNOWN_ENV";\n',
+		);
+		writeYaml(
+			join(root, "skills", "excl-skill", "__pycache__"),
+			"leak.md",
+			"Read $CLAUDE_UNKNOWN_ENV before continuing.\n",
 		);
 		writeYaml(
 			root,
@@ -1814,6 +1828,117 @@ skills:
 		);
 		const result = await validateCodexRewriteCoverage(root, []);
 		expect(result.errors).toHaveLength(0);
+	});
+
+	// 회귀 방지 (8ea2c3f3): resolveCodexCandidateFiles가 __fixtures__ 프루닝 없이
+	// collectMdFiles(sourcePath)만 호출하던 시절엔, 배포되지 않는
+	// __fixtures__/*.md 안의 uncovered 토큰까지 스캐너가 잡아내 `make validate`를
+	// 오탐 RED로 만들었다. syncDirectory(tools/adapters/codex.ts 경유 배포 경로)는
+	// ALWAYS_PRUNE으로 __fixtures__를 복사 자체에서 건너뛰므로, 스캐너도 같은 집합만
+	// 봐야 한다.
+	it("__fixtures__ 디렉터리의 .md 파일에 심은 미커버 토큰은 배포 시 복사되지 않으므로 검출되지 않는다 (회귀 방지: 8ea2c3f3의 __fixtures__ 과잉스캔)", async () => {
+		writeYaml(
+			join(root, "skills", "fx-skill"),
+			"SKILL.md",
+			"---\nname: fx-skill\ndescription: test\n---\n\nfine.\n",
+		);
+		writeYaml(
+			join(root, "skills", "fx-skill", "__fixtures__", "reviewer"),
+			"case.md",
+			"Read $CLAUDE_UNKNOWN_ENV before continuing.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: fx-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("같은 스킬의 일반 .md(SKILL.md)에 심은 미커버 토큰은 __fixtures__ 프루닝과 무관하게 여전히 검출된다 (진짜 커버리지는 유지됨을 확인)", async () => {
+		writeYaml(
+			join(root, "skills", "fx-skill2"),
+			"SKILL.md",
+			"---\nname: fx-skill2\ndescription: test\n---\n\nRead $CLAUDE_UNKNOWN_ENV before continuing.\n",
+		);
+		writeYaml(
+			join(root, "skills", "fx-skill2", "__fixtures__", "reviewer"),
+			"case.md",
+			"fine, no uncovered tokens here.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: fx-skill2
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("CLAUDE_UNKNOWN_ENV") && e.includes("SKILL.md"))).toBe(
+			true,
+		);
+	});
+
+	// 결함 1 회귀 방지: 검사 모집단은 배포가 실제 rewrite하는 집합(.md)과 일치해야
+	// 한다. resolveCodexCandidateFiles가 디렉터리의 모든 파일(.ts 포함)을 훑던 시절엔
+	// 아래 두 arm이 뒤집혀 있었다 — .ts 주입이 오탐으로 잡히고, isCoveredMatch가
+	// applyRewriteRules 시뮬레이션으로 "커버됨" 판정해 실제 미탐(우회)이 통과했다.
+	it("스크립트 디렉터리의 .ts 파일에 심은 미커버 토큰은 배포 시 rewrite되지 않으므로 오탐 없음 (결함 1: 검사 모집단≠배포 모집단)", async () => {
+		writeYaml(
+			join(root, "scripts", "rogue-script"),
+			"index.ts",
+			'const x = "$CLAUDE_UNKNOWN_ENV";\n',
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+scripts:
+  items:
+    - component: rogue-script
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("같은 스크립트 디렉터리의 .md 파일에 심은 미커버 토큰은 배포 시 실제로 rewrite되므로 검출된다 (결함 1: 미탐 방지)", async () => {
+		writeYaml(join(root, "scripts", "rogue-script"), "index.ts", 'const x = 1;\n');
+		writeYaml(
+			join(root, "scripts", "rogue-script"),
+			"README.md",
+			"Read $CLAUDE_UNKNOWN_ENV before running this script.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+scripts:
+  items:
+    - component: rogue-script
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("CLAUDE_UNKNOWN_ENV") && e.includes("README.md"))).toBe(
+			true,
+		);
 	});
 
 	it("agents/*.md의 `model: opus|sonnet` frontmatter는 codex 배포 시 model-map 변환을 거치므로 커버된 것으로 취급한다", async () => {
@@ -1880,6 +2005,90 @@ skills:
 		expect(result.errors).toHaveLength(0);
 	});
 
+	it("음성 대조군: bare `Task(` 호출(skills/clarify/SKILL.md:150 형태)은 신설 규칙 11a가 `spawn_agent(`로 커버하므로 에러 없음", async () => {
+		writeYaml(
+			join(root, "skills", "bare-task-call-skill"),
+			"SKILL.md",
+			'---\nname: bare-task-call-skill\ndescription: test\n---\n\nTask(subagent_type="explore", prompt="find things")\n',
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: bare-task-call-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it('음성 대조군: "Task tool" 산문(skills/review-report/SKILL.md:18 형태)은 신설 규칙 11b가 커버하므로 에러 없음', async () => {
+		writeYaml(
+			join(root, "skills", "task-tool-prose-skill"),
+			"SKILL.md",
+			"---\nname: task-tool-prose-skill\ndescription: test\n---\n\nDispatch via the Task tool.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: task-tool-prose-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("음성 대조군: `TaskCreate`/`TaskOutput`(bareword, 괄호 없음)만 있는 스킬은 에러 없음 — 기존 규칙 9/10이 이미 커버", async () => {
+		writeYaml(
+			join(root, "skills", "bareword-task-skill"),
+			"SKILL.md",
+			"---\nname: bareword-task-skill\ndescription: test\n---\n\nUse TaskCreate for todos. Never use the TaskOutput tool.\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: bareword-task-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("음성 대조군: `spawn_agent(`로 이미 치환된 스킬 본문은 에러 없음", async () => {
+		writeYaml(
+			join(root, "skills", "clean-task-skill"),
+			"SKILL.md",
+			'---\nname: clean-task-skill\ndescription: test\n---\n\nDispatch via spawn_agent(agent_type="explore").\n',
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: clean-task-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexRewriteCoverage(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
 	it("OUT_OF_SCOPE_TOKENS에 등록된 토큰(WebSocket)이 있어도 에러 없음", async () => {
 		writeYaml(
 			join(root, "skills", "websocket-skill"),
@@ -1899,5 +2108,247 @@ skills:
 		);
 		const result = await validateCodexRewriteCoverage(root, []);
 		expect(result.errors).toHaveLength(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validateCodexSkillFrontmatterFirstLine
+// ---------------------------------------------------------------------------
+
+describe("validateCodexSkillFrontmatterFirstLine — 실제 코퍼스", () => {
+	it("실제 레포의 codex 배포 스킬은 모두 SKILL.md 1행이 '---'다 (zero findings)", async () => {
+		const rootDir = getRootDir();
+		expect(rootDir).not.toBeNull();
+		const result = await validateCodexSkillFrontmatterFirstLine(rootDir as string, []);
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
+describe("validateCodexSkillFrontmatterFirstLine — 양성/음성 대조", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = makeRoot();
+	});
+
+	afterEach(() => {
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("SKILL.md 1행이 HTML 주석이면 에러를 반환한다 (positive control — agent-browser의 실제 결함 형태)", async () => {
+		writeYaml(
+			join(root, "skills", "leading-comment-skill"),
+			"SKILL.md",
+			"<!-- Vendored from https://example.com on 2026-01-01. -->\n---\nname: leading-comment-skill\ndescription: test\n---\n\nbody\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: leading-comment-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexSkillFrontmatterFirstLine(root, []);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("leading-comment-skill"))).toBe(true);
+	});
+
+	it("SKILL.md 1행이 '---'면 에러 없음 (negative control — 가드가 항상 걸리는 무효 가드가 아님을 증명)", async () => {
+		writeYaml(
+			join(root, "skills", "clean-frontmatter-skill"),
+			"SKILL.md",
+			"---\nname: clean-frontmatter-skill\ndescription: test\n---\n\nbody\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: clean-frontmatter-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexSkillFrontmatterFirstLine(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("platforms: [claude]인 스킬은 스캔되지 않는다 — 1행이 깨져 있어도 에러 없음", async () => {
+		writeYaml(
+			join(root, "skills", "claude-only-broken-skill"),
+			"SKILL.md",
+			"<!-- not frontmatter -->\n---\nname: claude-only-broken-skill\ndescription: test\n---\n\nbody\n",
+		);
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: claude-only-broken-skill
+      platforms: [claude]
+`,
+		);
+		const result = await validateCodexSkillFrontmatterFirstLine(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("codex 대상 스킬에 SKILL.md 자체가 없으면 에러를 반환한다 — 배포는 되지만 등록 불가", async () => {
+		// The guard checks the FIRST LINE of a SKILL.md whose existence it never
+		// required, so a codex-bound skill directory with no SKILL.md at all used
+		// to pass silently: sync copies the directory to `.agents/skills/<name>/`
+		// and codex's loader finds no frontmatter to register, producing exactly
+		// the silent never-registers outcome this guard exists to prevent.
+		writeYaml(join(root, "skills", "no-skillmd-skill"), "README.md", "not a skill entry point\n");
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: no-skillmd-skill
+      platforms: [codex]
+`,
+		);
+		const result = await validateCodexSkillFrontmatterFirstLine(root, []);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.errors.some((e) => e.includes("no-skillmd-skill"))).toBe(true);
+	});
+
+	it("platforms: [claude]인 스킬은 SKILL.md가 없어도 에러 없음 — 이 가드는 codex 표면만 본다", async () => {
+		writeYaml(join(root, "skills", "claude-only-no-skillmd"), "README.md", "not a skill entry point\n");
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+skills:
+  items:
+    - component: claude-only-no-skillmd
+      platforms: [claude]
+`,
+		);
+		const result = await validateCodexSkillFrontmatterFirstLine(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validateSupportedCategories
+// ---------------------------------------------------------------------------
+
+describe("validateSupportedCategories — 실제 코퍼스", () => {
+	it("실제 레포는 미지원 platform×category 조합을 선언하지 않는다 (zero findings)", async () => {
+		const rootDir = getRootDir();
+		expect(rootDir).not.toBeNull();
+		const result = await validateSupportedCategories(rootDir as string, []);
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
+describe("validateSupportedCategories — 양성/음성 대조", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = makeRoot();
+	});
+
+	afterEach(() => {
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("commands 컴포넌트가 codex로 선언되면 에러를 반환한다 (positive control — codex는 commands 미지원)", async () => {
+		touch(join(root, "commands", "fixture-cmd.md"));
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+commands:
+  items:
+    - component: fixture-cmd
+      platforms: [codex]
+`,
+		);
+		const result = await validateSupportedCategories(root, []);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(
+			result.errors.some(
+				(e) => e.includes("fixture-cmd") && e.includes("platform=codex") && e.includes("category=commands"),
+			),
+		).toBe(true);
+	});
+
+	it("commands 컴포넌트가 claude로 선언되면 에러 없음 (negative control — claude는 commands 지원)", async () => {
+		touch(join(root, "commands", "fixture-cmd.md"));
+		writeYaml(
+			root,
+			"sync.yaml",
+			`
+path: ${root}
+commands:
+  items:
+    - component: fixture-cmd
+      platforms: [claude]
+`,
+		);
+		const result = await validateSupportedCategories(root, []);
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
+// 결함 2 회귀 방지: `validateSupportedCategories`가 손으로 재타이핑한
+// `allCategories` 리터럴 대신 `CATEGORIES`(tools/sync.ts SSOT)를 순회하도록 고쳤다.
+// 이 테스트는 CATEGORIES/SUPPORTED_CATEGORIES 두 SSOT 자체에서 기대값을 계산해
+// 실제 스캔 결과와 비교한다 — 하드코딩된 카테고리 목록과 비교하지 않으므로,
+// 미래에 카테고리가 추가/제거되거나 다시 손-복사 리터럴로 되돌아가 두 목록이
+// 벌어지면(누락된 카테고리는 스캔되지 않아 개수가 어긋남) 이 테스트가 실패한다.
+describe("validateSupportedCategories — CATEGORIES SSOT 드리프트 가드 (결함 2)", () => {
+	let root: string;
+
+	beforeEach(() => {
+		root = makeRoot();
+	});
+
+	afterEach(() => {
+		rmSync(root, { recursive: true, force: true });
+	});
+
+	it("CATEGORIES의 모든 카테고리가 스캔된다 — 미지원 조합 개수가 SUPPORTED_CATEGORIES로 계산한 기대값과 정확히 일치한다", async () => {
+		const platforms: Platform[] = ["claude", "gemini", "codex", "opencode"];
+		const expectedUnsupported: Array<{ category: Category; platform: Platform }> = [];
+		for (const category of CATEGORIES) {
+			for (const platform of platforms) {
+				if (!SUPPORTED_CATEGORIES[platform]?.has(category)) {
+					expectedUnsupported.push({ category, platform });
+				}
+			}
+		}
+		// Sanity: with today's table this must be non-empty, or the count
+		// assertion below would vacuously pass with zero findings both sides.
+		expect(expectedUnsupported.length).toBeGreaterThan(0);
+
+		const itemsBlock = CATEGORIES.map(
+			(category) =>
+				`${category}:\n  items:\n    - component: fixture-${category}\n      platforms: [${platforms.join(", ")}]\n`,
+		).join("\n");
+		writeYaml(root, "sync.yaml", `\npath: ${root}\n${itemsBlock}`);
+
+		const result = await validateSupportedCategories(root, []);
+		expect(result.errors).toHaveLength(expectedUnsupported.length);
+		for (const { category, platform } of expectedUnsupported) {
+			expect(
+				result.errors.some(
+					(e) => e.includes(`category=${category}`) && e.includes(`platform=${platform}`),
+				),
+			).toBe(true);
+		}
 	});
 });

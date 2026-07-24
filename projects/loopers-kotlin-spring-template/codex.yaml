@@ -1,0 +1,6 @@
+# keyword-detector.sh (UserPromptSubmit)는 Claude 쪽도 프로젝트 스코프가
+# 아니다 -- 이 프로젝트의 claude.yaml에는 keyword-detector 등록이 전혀
+# 없고, 루트 claude.yaml이 전역 등록한다. 그 Codex 대응인 codex-keyword-
+# detector.sh 역시 루트 codex.yaml이 전역 등록한다 -- 여기 다시 쓰면
+# 이중 발동한다. 이 프로젝트는 Codex 전용 프로젝트-스코프 훅이 없다.
+{}
