@@ -286,6 +286,37 @@ test_ultrawork_blocked_excuses_has_complexity_pattern() {
 }
 
 # =============================================================================
+# Tests: Claude wording non-regression (paired with codex-keyword-detector_test.sh's
+# leak-absence arm) -- the shared core's platform-vocabulary parameters
+# (keyword-detector-core.sh's kd_core_message_* task_name/tools_desc args)
+# default to Claude's own literal wording, and keyword-detector.sh (this
+# shim) calls them with no args -- exactly the askToolName pattern in
+# lib/persistent-mode-core/decision.ts:351, where every Claude caller omits
+# the platform parameter and gets the real Claude tool name back. Asserting
+# presence here (not just the golden-byte test in
+# keyword-detector-core_test.sh) guards this specific shim's call sites: a
+# stray arg added to keyword-detector.sh's emit_claude_mode calls would
+# silently override the Claude wording without failing the core's own test.
+# =============================================================================
+test_ultrawork_output_retains_task_literal() {
+    local output=$(run_keyword_detector "ultrawork implement the feature" "$TEST_TMP_DIR")
+    assert_output_contains "$output" "Task calls" \
+        "Claude ultrawork output should retain the 'Task' tool literal" || return 1
+}
+
+test_search_output_retains_grep_glob_literals() {
+    local output=$(run_keyword_detector "search for files" "$TEST_TMP_DIR")
+    assert_output_contains "$output" "Grep, Glob" \
+        "Claude search output should retain the 'Grep, Glob' tool literals" || return 1
+}
+
+test_analyze_output_retains_grep_glob_lsp_literals() {
+    local output=$(run_keyword_detector "analyze this code" "$TEST_TMP_DIR")
+    assert_output_contains "$output" "Grep, Glob, LSP" \
+        "Claude analyze output should retain the 'Grep, Glob, LSP' tool literals" || return 1
+}
+
+# =============================================================================
 # Tests: Ultrawork Keyword Filtering (ported from oh-my-opencode patterns)
 # =============================================================================
 
@@ -545,6 +576,11 @@ main() {
     run_test test_ultrawork_blocked_excuses_has_cant_verify_pattern
     run_test test_ultrawork_blocked_excuses_has_leave_for_user_pattern
     run_test test_ultrawork_blocked_excuses_has_complexity_pattern
+
+    # Claude wording non-regression
+    run_test test_ultrawork_output_retains_task_literal
+    run_test test_search_output_retains_grep_glob_literals
+    run_test test_analyze_output_retains_grep_glob_lsp_literals
 
     # Ultrawork Keyword Filtering
     run_test test_ultrawork_not_detected_in_code_block
