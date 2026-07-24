@@ -228,6 +228,48 @@ EOF
     [ "$failed" -eq 0 ]
 }
 
+# =============================================================================
+# codex.yaml registers codex-spawn-depth-gate.sh under PreToolUse with the
+# full-match matcher ".*spawn_agent" -- Codex's PreToolUse matcher is a
+# full-string regex match against the actual tool name
+# "collaborationspawn_agent", so a bare "spawn_agent" (or "^spawn_agent$")
+# never matches and the hook silently never fires.
+# =============================================================================
+test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher() {
+    local block matcher_line
+    block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+    if ! echo "$block" | grep -qF 'component: codex-spawn-depth-gate.sh'; then
+        echo "ASSERTION FAILED: codex.yaml PreToolUse must register codex-spawn-depth-gate.sh"
+        return 1
+    fi
+    matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
+    if ! echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"\.\*spawn_agent"'; then
+        echo "ASSERTION FAILED: codex-spawn-depth-gate.sh matcher must be exactly \".*spawn_agent\" (got: ${matcher_line:-<none>}) -- Codex's PreToolUse matcher is a full-string regex match against the actual tool name \"collaborationspawn_agent\", so anything without the \".*\" prefix (e.g. bare \"spawn_agent\") never matches and the hook silently never fires"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Regression guard: the matcher string must never regress to a bare
+# "spawn_agent" (no ".*" prefix) -- that value passed codex.yaml's own schema
+# validation and this test file's grep before, yet never actually fired,
+# because Codex's PreToolUse matcher is full-match, not substring/prefix
+# match. A simple `grep -c 'spawn_agent'` would NOT catch this regression,
+# since ".*spawn_agent" also contains the substring "spawn_agent" -- this
+# check isolates the matcher's line value specifically.
+# =============================================================================
+test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
+    local block matcher_line
+    block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+    matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
+    if echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"spawn_agent"'; then
+        echo "ASSERTION FAILED: codex-spawn-depth-gate.sh matcher regressed to bare \"spawn_agent\" (no \".*\" prefix) -- Codex's PreToolUse matcher is a full-string regex match, and the actual tool name is \"collaborationspawn_agent\", so a bare \"spawn_agent\" never matches and the hook silently never fires"
+        return 1
+    fi
+    return 0
+}
+
 main() {
     echo "=========================================="
     echo "Hook Registration Consistency Tests"
@@ -239,6 +281,8 @@ main() {
     run_test test_codex_yaml_has_pretooluse_guard
     run_test test_core_claude_hooks_registered_in_tracked_root_yaml
     run_test test_core_claude_hooks_not_duplicated_per_project
+    run_test test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher
+    run_test test_codex_yaml_spawn_depth_gate_matcher_never_bare
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
