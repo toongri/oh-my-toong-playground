@@ -51,7 +51,7 @@ export function transcriptHasContextPressureMarker(
 		const hasNewActivity = afterMarkerLine.split("\n").some((line) => line.trim().length > 0);
 		return !hasNewActivity;
 	} catch {
-		// Never-throw contract (advisory L2): a missing or unreadable transcript must
+		// Never-throw contract (advisory): a missing or unreadable transcript must
 		// not propagate — treat it as "no pressure marker" and let injection proceed.
 		return false;
 	}
