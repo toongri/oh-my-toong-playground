@@ -1,9 +1,13 @@
 /**
- * Builds a fully isolated `HOME`/`CODEX_HOME` pair for a probe session —
- * shared by probes/ultrawork-keyword-injection and
- * probes/rules-runtime-leak-absence, both of which need a real `codex exec`
- * run whose hook-injected content is NOT confounded by this developer
- * machine's own ambient state.
+ * Builds a fully isolated `HOME`/`CODEX_HOME` pair for a probe session — used
+ * by EVERY probe that spawns a real `codex exec`, since none of them can let
+ * this developer machine's own ambient state confound what they observe. The
+ * two hook probes (ultrawork-keyword-injection, rules-runtime-leak-absence)
+ * additionally register a self-authored `hooks.json`; the two skill-chain
+ * probes (skill-chain-load, skill-chain-cue-form) pass an EMPTY `hooks` and
+ * isolate for home-scope SKILL discovery alone (`~/.agents/skills`), which is
+ * the ambient source that could otherwise satisfy their predicates without
+ * the freshly materialized bytes ever being loaded.
  *
  * CONFIRMED defect this exists to avoid (measured on this machine
  * 2026-07-24): running a real codex session with the default HOME picks up
@@ -39,10 +43,10 @@
  * deployed copy under any `~/.codex/`) deliberately: hook scripts (`.sh`/
  * `.ts`) are never walked by `rewritePlatformPaths` (only `.md` is — see
  * that function's doc comment in tools/sync.ts), so their deployed bytes are
- * byte-identical to repo source, and pointing at the repo directly avoids a
- * confound this pattern would otherwise share with skill-chain-load's own
- * caveat: whether a given developer machine's `~/.codex/hooks/` happens to
- * be freshly synced. It also guarantees SessionStart/UserPromptSubmit
+ * byte-identical to repo source, and pointing at the repo directly avoids one
+ * more sync-staleness confound: whether a given developer machine's
+ * `~/.codex/hooks/` happens to be freshly synced. It also guarantees
+ * SessionStart/UserPromptSubmit
  * sibling sourcing (`source "$SCRIPT_DIR/keyword-detector-core.sh"`) still
  * resolves, since the sibling file sits next to the hook script in repo
  * layout exactly as it does in deployed layout.

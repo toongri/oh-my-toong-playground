@@ -37,6 +37,8 @@ import { fileURLToPath } from "url";
 
 import { runProbe } from "../../probe.ts";
 import type { ProbeOptions, ProbeSpec } from "../../probe.ts";
+import { buildIsolatedCodexHome } from "../../isolated-codex-home.ts";
+import type { IsolatedCodexHome } from "../../isolated-codex-home.ts";
 import { skillChainJudgment } from "./judgment.ts";
 import { materializeCodexSkills } from "./materialize.ts";
 
@@ -59,10 +61,24 @@ const OBJECTIVE =
 
 /**
  * Pure spec builder — no I/O. `deployRoot` is the temp root a caller already
- * materialized skills into (via materializeCodexSkills); this function only
- * shapes the ProbeSpec around it.
+ * materialized skills into (via materializeCodexSkills); `isolated` is a
+ * caller-materialized HOME/CODEX_HOME pair (via buildIsolatedCodexHome).
+ * This function only shapes the ProbeSpec around them.
+ *
+ * CONFIRMED defect this closes (code-review): without HOME isolation, codex
+ * ALSO loads home-scoped skills from the real `~/.agents/skills` alongside
+ * the temp project copy. The predicate accepts any successful
+ * `sisyphus/SKILL.md` read, so on a machine that already has sisyphus
+ * installed home-scope it could pass by reading the AMBIENT skill without the
+ * freshly materialized `deployRoot` bytes ever being loaded — a false green
+ * that makes this probe's primary deployment-behavior experiment
+ * machine-dependent. (Concrete trigger, not a hypothetical: this machine's
+ * `~/.agents/skills` already carries discovery-oriented skills, and root
+ * sync.yaml deploys goal/ultragoal there.) Isolating HOME/CODEX_HOME is the
+ * same measure probes/ultrawork-keyword-injection and
+ * probes/rules-runtime-leak-absence already take.
  */
-export function buildProbeSpec(deployRoot: string): ProbeSpec {
+export function buildProbeSpec(deployRoot: string, isolated: IsolatedCodexHome): ProbeSpec {
 	return {
 		session: {
 			// `$goal` MUST lead the user-input prompt: a user-position `$X` is
@@ -75,8 +91,14 @@ export function buildProbeSpec(deployRoot: string): ProbeSpec {
 			// generative multi-step task, not a one-shot reply — but probe.ts's
 			// timeout still guarantees exit 2 rather than hanging forever.
 			timeoutMs: 300_000,
+			env: { HOME: isolated.home, CODEX_HOME: isolated.codexHome },
+			// No extraArgs: this probe registers NO hooks, so buildIsolatedCodexHome
+			// writes no hooks.json and there is no untrusted-hooks gate to bypass.
+			// `--dangerously-bypass-hook-trust` stays confined to the probes that
+			// actually self-author hooks.
 		},
 		judgment: skillChainJudgment(TARGET_SKILL),
+		codexHome: isolated.codexHome,
 	};
 }
 
@@ -88,15 +110,28 @@ export type MainOptions = ProbeOptions & {
 	 * mkdtemp under os.tmpdir().
 	 */
 	deployRoot?: string;
+	/**
+	 * Injectable `auth.json` source for buildIsolatedCodexHome — hermetic tests
+	 * only. @default `~/.codex/auth.json` (the real credential this probe's
+	 * isolated CODEX_HOME needs to authenticate a session). Tests MUST inject a
+	 * fixture: reading the developer's real auth.json would reintroduce exactly
+	 * the machine-dependence this isolation exists to remove.
+	 */
+	authSourcePath?: string;
 };
 
 export async function main(opts: MainOptions = {}): Promise<number> {
-	const { deployRoot: deployRootOverride, ...probeOpts } = opts;
+	const { deployRoot: deployRootOverride, authSourcePath, ...probeOpts } = opts;
 	const deployRoot = deployRootOverride ?? (await fs.mkdtemp(path.join(os.tmpdir(), "codex-probe-skill-chain-load-")));
+	// Deliberately a SIBLING of deployRoot, never inside it: deployRoot is the
+	// session's cwd, and an isolated `home/` sitting in it would show up as
+	// project content to the very model under observation.
+	const homeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "codex-probe-skill-chain-load-home-"));
 	try {
 		await materializeCodexSkills(REPO_ROOT, deployRoot, [CHAIN_SKILL, TARGET_SKILL]);
+		const isolated = await buildIsolatedCodexHome(homeRoot, {}, authSourcePath === undefined ? {} : { authSourcePath });
 
-		const outcome = await runProbe(buildProbeSpec(deployRoot), probeOpts);
+		const outcome = await runProbe(buildProbeSpec(deployRoot, isolated), probeOpts);
 
 		if (outcome.exitCode === 2) {
 			process.stdout.write(JSON.stringify({ exitCode: 2, reason: outcome.reason, detail: outcome.detail }) + "\n");
@@ -113,6 +148,7 @@ export async function main(opts: MainOptions = {}): Promise<number> {
 		return outcome.exitCode;
 	} finally {
 		await fs.rm(deployRoot, { recursive: true, force: true });
+		await fs.rm(homeRoot, { recursive: true, force: true });
 	}
 }
 
