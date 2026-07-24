@@ -19,6 +19,9 @@ import {
 import {
 	type JobConfig,
 	assertMembersOrExit,
+	assertDenyEnforceable,
+	assertDenySkillsShape,
+	extractDenySkills,
 	computeStatus as frameworkComputeStatus,
 	buildUiPayload as frameworkBuildUiPayload,
 	spawnWorkers as frameworkSpawnWorkers,
@@ -165,6 +168,8 @@ async function parseCouncilConfig(configPath: string): Promise<CouncilConfig> {
 		}
 		merged.council.settings = { ...merged.council.settings, ...council.settings };
 	}
+
+	assertDenySkillsShape(merged.council.settings, COUNCIL_CONFIG, configPath);
 
 	return merged;
 }
@@ -387,6 +392,9 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	const members = requestedMembers.filter(filterMember);
 	assertMembersOrExit(members, COUNCIL_CONFIG, configPath);
 
+	const denySkills = extractDenySkills(config.council.settings);
+	assertDenyEnforceable(members, denySkills, COUNCIL_CONFIG, configPath);
+
 	const jobId = generateJobId();
 	const jobDir = path.join(jobsDir, `council-${jobId}`);
 	const membersDir = path.join(jobDir, "members");
@@ -403,6 +411,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 		settings: {
 			excludeChairmanFromMembers,
 			timeoutSec: timeoutSec || null,
+			denySkills,
 		},
 		members: members.map((m) => ({
 			name: String(m.name),
@@ -419,7 +428,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 
 	// Use framework spawnWorkers — it calls detectCliType + buildAugmentedCommand internally
 	frameworkSpawnWorkers({
-		entities: members,
+		entities: members.map((m) => ({ ...m, deny: denySkills })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: membersDir,
@@ -520,4 +529,4 @@ export {
 	generateJobId,
 } from "@lib/job-utils";
 
-export { buildUiPayload, parseCouncilConfig, computeStatus, COUNCIL_CONFIG };
+export { buildUiPayload, parseCouncilConfig, computeStatus, COUNCIL_CONFIG, cmdStart };

@@ -9,9 +9,10 @@ chunk-review:
     #
     # Per-angle model: each member carries its own command/model, so any angle
     # can run on a different CLI/model. Today every angle runs on codex at gpt-5.6-sol,
-    # high reasoning effort. `model` + `effort_level` + `output_format` resolve
-    # (via buildAugmentedCommand) to:
-    #   codex exec -m gpt-5.6-sol -c model_reasoning_effort=high --json --skip-git-repo-check
+    # high reasoning effort. `model` + `effort_level` + `output_format` (below) plus
+    # `settings.deny.skills` (below) resolve (via buildAugmentedCommand) to:
+    #   codex exec -m gpt-5.6-sol -c skills.config=[…from settings.deny.skills below…] \
+    #     -c model_reasoning_effort=high --json --skip-git-repo-check
     # Note: codex uses bare model ids (no `openai/` prefix). Git history attests
     # codex with gpt-5.4 / gpt-5.3-codex (gpt-5.5 itself only ran via opencode);
     # if codex rejects `gpt-5.6-sol`, fall back to `gpt-5.5`.
@@ -65,3 +66,15 @@ chunk-review:
     # No-op with the angle members above (no `claude` member to exclude); kept
     # for compatibility if a claude-hosted angle is added later.
     exclude_chairman_from_members: false
+    deny:
+      # Self-recursion fan-out guard: each dispatched angle runs `codex exec`,
+      # so without this it could itself invoke a review/council skill and
+      # spawn another fan-out beneath this one. Blocks the 3 skills that can
+      # start a review/council job. `code-review` has no codex-side SKILL.md
+      # today (not deployed to codex in any of its 4 scopes) — declared
+      # anyway so this guard self-activates the day `code-review`'s
+      # `platforms` config adds codex, instead of silently staying a no-op.
+      skills:
+        - orchestrate-review
+        - code-review
+        - agent-council

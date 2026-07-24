@@ -7,6 +7,7 @@ import os from "os";
 
 import type { JobConfig, CmdResultsHooks, ResumeMemberOpts } from "./generic-job.ts";
 import type { RunOneTurnOpts } from "./worker-utils.ts";
+import { splitCommand } from "./worker-utils.ts";
 import {
 	detectCliType,
 	buildAugmentedCommand,
@@ -22,6 +23,7 @@ import {
 	cmdCollect,
 	cmdResumeMember,
 	assertMembersOrExit,
+	assertDenyEnforceable,
 } from "./generic-job.ts";
 
 // ---------------------------------------------------------------------------
@@ -318,6 +320,210 @@ describe("buildAugmentedCommand", () => {
 
 		const resultEmpty = buildAugmentedCommand({ command: "claude -p", env: {} }, "claude");
 		expect(resultEmpty.env.CLAUDECODE).toBe("");
+	});
+
+	test("codex: deny translates to -c skills.config with enabled=false entries (quotes escaped for transport)", () => {
+		const result = buildAugmentedCommand({ command: "codex exec", deny: ["a", "b"] }, "codex");
+		expect(result.command).toContain(
+			'-c skills.config=[{name=\\"a\\",enabled=false},{name=\\"b\\",enabled=false}]',
+		);
+	});
+
+	test("claude: deny translates to --settings skillOverrides off (quotes escaped for transport)", () => {
+		const result = buildAugmentedCommand({ command: "claude -p", deny: ["a"] }, "claude");
+		expect(result.command).toContain('--settings {\\"skillOverrides\\":{\\"a\\":\\"off\\"}}');
+	});
+
+	// ---------------------------------------------------------------------------
+	// Round-trip identity: buildAugmentedCommand's output must survive splitCommand
+	// re-tokenization unchanged, because spawnWorkers hands augmented.command to a
+	// worker as a --command argv, and the worker re-tokenizes it with splitCommand
+	// before spawning (no second shell parse exists anywhere in this pipeline).
+	// ---------------------------------------------------------------------------
+
+	test("round-trip: codex deny -c token survives splitCommand with quotes intact", () => {
+		const result = buildAugmentedCommand({ command: "codex exec", deny: ["a", "b"] }, "codex");
+		const tokens = splitCommand(result.command);
+		expect(tokens).not.toBeNull();
+		const cIndex = tokens!.indexOf("-c");
+		expect(cIndex).toBeGreaterThanOrEqual(0);
+		expect(tokens![cIndex + 1]).toBe(
+			'skills.config=[{name="a",enabled=false},{name="b",enabled=false}]',
+		);
+	});
+
+	test("round-trip: claude deny --settings token survives splitCommand as valid JSON", () => {
+		const result = buildAugmentedCommand({ command: "claude -p", deny: ["a"] }, "claude");
+		const tokens = splitCommand(result.command);
+		expect(tokens).not.toBeNull();
+		const settingsIndex = tokens!.indexOf("--settings");
+		expect(settingsIndex).toBeGreaterThanOrEqual(0);
+		const parsed = JSON.parse(tokens![settingsIndex + 1]);
+		expect(parsed.skillOverrides.a).toBe("off");
+	});
+
+	test("round-trip: codex deny with 2+ names has every quote pair escaped, not partial", () => {
+		const result = buildAugmentedCommand(
+			{ command: "codex exec", deny: ["alpha", "beta", "gamma"] },
+			"codex",
+		);
+		const tokens = splitCommand(result.command);
+		expect(tokens).not.toBeNull();
+		const cIndex = tokens!.indexOf("-c");
+		expect(tokens![cIndex + 1]).toBe(
+			'skills.config=[{name="alpha",enabled=false},{name="beta",enabled=false},{name="gamma",enabled=false}]',
+		);
+	});
+
+	test("round-trip: claude deny with 2+ names has every quote pair escaped, not partial", () => {
+		const result = buildAugmentedCommand({ command: "claude -p", deny: ["alpha", "beta"] }, "claude");
+		const tokens = splitCommand(result.command);
+		expect(tokens).not.toBeNull();
+		const settingsIndex = tokens!.indexOf("--settings");
+		const parsed = JSON.parse(tokens![settingsIndex + 1]);
+		expect(parsed.skillOverrides).toEqual({ alpha: "off", beta: "off" });
+	});
+
+	test("round-trip: opencode deny bypasses splitCommand entirely — env-only, no command trace", () => {
+		const result = buildAugmentedCommand({ command: "opencode run", deny: ["a"] }, "opencode");
+		expect(result.command).toBe("opencode run");
+		expect(result.command).not.toContain("a");
+		expect(result.env.OPENCODE_CONFIG_CONTENT).toBeTruthy();
+		const tokens = splitCommand(result.command);
+		expect(tokens).toEqual(["opencode", "run"]);
+	});
+
+	test("round-trip: no deny leaves splitCommand output unchanged from pre-escaping behavior", () => {
+		const result = buildAugmentedCommand({ command: "claude -p", model: "opus" }, "claude");
+		expect(splitCommand(result.command)).toEqual(["claude", "-p", "--model", "opus"]);
+	});
+
+	test("opencode: deny translates to OPENCODE_CONFIG_CONTENT env with permission.skill deny + wildcard allow", () => {
+		const result = buildAugmentedCommand({ command: "opencode run", deny: ["a"] }, "opencode");
+		expect(result.env.OPENCODE_CONFIG_CONTENT).toBeTruthy();
+		const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+		expect(parsed.permission.skill.a).toBe("deny");
+		expect(parsed.permission.skill["*"]).toBe("allow");
+	});
+
+	// OPENCODE_CONFIG_CONTENT carries opencode's whole inline config, not just permissions,
+	// and reaches the CLI from two independent inputs. A bare assignment silently drops the
+	// member's provider/model/mcp settings, so both inputs are covered here — checking only
+	// the `env:` axis would leave the ambient-environment axis unmeasured.
+	describe("opencode deny preserves an inherited OPENCODE_CONFIG_CONTENT", () => {
+		const originalInherited = process.env.OPENCODE_CONFIG_CONTENT;
+		afterEach(() => {
+			if (originalInherited === undefined) delete process.env.OPENCODE_CONFIG_CONTENT;
+			else process.env.OPENCODE_CONFIG_CONTENT = originalInherited;
+		});
+
+		test("member `env:` axis — provider/model and other permission keys survive", () => {
+			const result = buildAugmentedCommand(
+				{
+					command: "opencode run",
+					deny: ["orchestrate-review"],
+					env: {
+						OPENCODE_CONFIG_CONTENT: JSON.stringify({
+							provider: { anthropic: { apiKey: "x" } },
+							model: "opencode-go/glm-5.2",
+							permission: { bash: "ask", skill: { "existing-skill": "allow" } },
+						}),
+					},
+				},
+				"opencode",
+			);
+			const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+			expect(parsed.provider).toEqual({ anthropic: { apiKey: "x" } });
+			expect(parsed.model).toBe("opencode-go/glm-5.2");
+			expect(parsed.permission.bash).toBe("ask");
+			expect(parsed.permission.skill["existing-skill"]).toBe("allow");
+			expect(parsed.permission.skill["orchestrate-review"]).toBe("deny");
+		});
+
+		test("ambient process.env axis — workerEnv wins at spawn, so it must merge here too", () => {
+			process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ model: "ambient/model" });
+			const result = buildAugmentedCommand(
+				{ command: "opencode run", deny: ["agent-council"] },
+				"opencode",
+			);
+			const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+			expect(parsed.model).toBe("ambient/model");
+			expect(parsed.permission.skill["agent-council"]).toBe("deny");
+		});
+
+		test("an inherited '*: deny' default is not widened to allow", () => {
+			const result = buildAugmentedCommand(
+				{
+					command: "opencode run",
+					deny: ["orchestrate-review"],
+					env: {
+						OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: { skill: { "*": "deny" } } }),
+					},
+				},
+				"opencode",
+			);
+			const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+			expect(parsed.permission.skill["*"]).toBe("deny");
+			expect(parsed.permission.skill["orchestrate-review"]).toBe("deny");
+		});
+
+		test("unparseable inherited config still enforces deny", () => {
+			process.env.OPENCODE_CONFIG_CONTENT = "{not json";
+			const result = buildAugmentedCommand(
+				{ command: "opencode run", deny: ["agent-council"] },
+				"opencode",
+			);
+			const parsed = JSON.parse(result.env.OPENCODE_CONFIG_CONTENT);
+			expect(parsed.permission.skill["agent-council"]).toBe("deny");
+			expect(parsed.permission.skill["*"]).toBe("allow");
+		});
+	});
+
+	// A plain object literal ({}) has Object.prototype as its prototype, so assigning
+	// a key literally named "__proto__" hits the inherited accessor instead of creating
+	// an own data property — the name silently vanishes from JSON.stringify. claude's
+	// skillOverrides and opencode's permission.skill must build on a null-prototype
+	// object (Object.create(null)) so a "__proto__"-named deny entry survives as a real key.
+	test("deny with a __proto__-named skill survives as an own key for claude and opencode", () => {
+		const claudeResult = buildAugmentedCommand(
+			{ command: "claude -p", deny: ["__proto__", "normal-skill"] },
+			"claude",
+		);
+		const claudeTokens = splitCommand(claudeResult.command);
+		expect(claudeTokens).not.toBeNull();
+		const settingsIndex = claudeTokens!.indexOf("--settings");
+		const claudeParsed = JSON.parse(claudeTokens![settingsIndex + 1]);
+		expect(Object.prototype.hasOwnProperty.call(claudeParsed.skillOverrides, "__proto__")).toBe(
+			true,
+		);
+		expect(claudeParsed.skillOverrides.__proto__).toBe("off");
+		expect(claudeParsed.skillOverrides["normal-skill"]).toBe("off");
+
+		const opencodeResult = buildAugmentedCommand(
+			{ command: "opencode run", deny: ["__proto__", "normal-skill"] },
+			"opencode",
+		);
+		const opencodeParsed = JSON.parse(opencodeResult.env.OPENCODE_CONFIG_CONTENT);
+		expect(
+			Object.prototype.hasOwnProperty.call(opencodeParsed.permission.skill, "__proto__"),
+		).toBe(true);
+		expect(opencodeParsed.permission.skill.__proto__).toBe("deny");
+		expect(opencodeParsed.permission.skill["normal-skill"]).toBe("deny");
+		expect(opencodeParsed.permission.skill["*"]).toBe("allow");
+	});
+
+	test("deny absent or empty is byte-identical to not passing deny at all (codex/claude/opencode)", () => {
+		for (const [command, cliType] of [
+			["codex exec", "codex"],
+			["claude -p", "claude"],
+			["opencode run", "opencode"],
+		] as const) {
+			const withoutDeny = buildAugmentedCommand({ command }, cliType);
+			const withUndefinedDeny = buildAugmentedCommand({ command, deny: undefined }, cliType);
+			const withEmptyDeny = buildAugmentedCommand({ command, deny: [] }, cliType);
+			expect(withUndefinedDeny).toEqual(withoutDeny);
+			expect(withEmptyDeny).toEqual(withoutDeny);
+		}
 	});
 });
 
@@ -1806,6 +2012,165 @@ describe("assertMembersOrExit", () => {
 });
 
 // ---------------------------------------------------------------------------
+// assertDenyEnforceable
+// ---------------------------------------------------------------------------
+
+describe("assertDenyEnforceable", () => {
+	let originalExit: typeof process.exit;
+	let originalStderrWrite: typeof process.stderr.write;
+	let originalStdoutWrite: typeof process.stdout.write;
+	let stderrOutput: string;
+	let stdoutOutput: string;
+
+	beforeEach(() => {
+		originalExit = process.exit;
+		originalStderrWrite = process.stderr.write;
+		originalStdoutWrite = process.stdout.write;
+		stderrOutput = "";
+		stdoutOutput = "";
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+		(process.stderr.write as any) = (chunk: string) => {
+			stderrOutput += chunk;
+			return true;
+		};
+		(process.stdout.write as any) = (chunk: string) => {
+			stdoutOutput += chunk;
+			return true;
+		};
+	});
+
+	afterEach(() => {
+		process.exit = originalExit;
+		process.stderr.write = originalStderrWrite;
+		process.stdout.write = originalStdoutWrite;
+	});
+
+	test("deny 비어있음 + gemini member는 통과하고 stderr에 차단 미선언 한 줄을 남긴다 (stdout은 비어있다)", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "gemini-member", command: "gemini -p" }],
+				[],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).not.toThrow();
+		expect(stderrOutput).toContain("no skill deny declared");
+		expect(stdoutOutput).toBe("");
+	});
+
+	test("deny 선언 + gemini member는 exit 1이고 4개 구성요소를 모두 포함한다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "bob", command: "gemini -p" }],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+
+		// (a) configPath
+		expect(stderrOutput).toContain("/path/to/config.yaml");
+		// (b) 위반 member 이름과 감지된 cliType의 렌더 쌍
+		expect(stderrOutput).toContain("bob (gemini)");
+		// (c) 집행 가능 CLI 목록
+		expect(stderrOutput).toContain("Enforceable CLIs: codex, claude, opencode");
+		// (d) 고치는 방법 2가지 — 대체 / deny 제거
+		expect(stderrOutput).toContain("(1) replacing these members with an enforceable CLI");
+		expect(stderrOutput).toContain("(2) removing this job's settings.deny.skills declaration");
+	});
+
+	test("deny 선언 + unknown cliType member는 exit 1이다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "mystery-member", command: "mycli run" }],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("mystery-member");
+		expect(stderrOutput).toContain("unknown");
+	});
+
+	test("위반 member가 2개 이상이면 에러 문자열에 둘 다 나열된다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[
+					{ name: "gemini-member", command: "gemini -p" },
+					{ name: "mystery-member", command: "mycli run" },
+					{ name: "codex-member", command: "codex exec" },
+				],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("gemini-member");
+		expect(stderrOutput).toContain("mystery-member");
+	});
+
+	test("위반 member가 배열 마지막에 있어도 빠짐없이 적발된다", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[
+					{ name: "codex-member", command: "codex exec" },
+					{ name: "claude-member", command: "claude -p" },
+					{ name: "gemini-member", command: "gemini -p" },
+				],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+		// 배열 마지막 위치의 위반(gemini-member)도 검사를 빠져나가지 않는다
+		expect(stderrOutput).toContain("gemini-member");
+	});
+
+	test("deny 선언 + 전 member가 집행 가능 CLI면 통과한다 (exit 없음)", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[
+					{ name: "codex-member", command: "codex exec" },
+					{ name: "claude-member", command: "claude -p" },
+					{ name: "opencode-member", command: "opencode run" },
+				],
+				["some-skill"],
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).not.toThrow();
+	});
+
+	test("deny가 undefined면 [] 와 동일하게 통과하고 stderr에 차단 미선언 한 줄을 남긴다 (stdout은 비어있다)", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "gemini-member", command: "gemini -p" }],
+				undefined,
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).not.toThrow();
+		expect(stderrOutput).toContain("no skill deny declared");
+		expect(stdoutOutput).toBe("");
+	});
+
+	test("deny가 null이면 [] 와 동일하게 통과하고 stderr에 차단 미선언 한 줄을 남긴다 (stdout은 비어있다)", () => {
+		expect(() =>
+			assertDenyEnforceable(
+				[{ name: "gemini-member", command: "gemini -p" }],
+				null as unknown as undefined,
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).not.toThrow();
+		expect(stderrOutput).toContain("no skill deny declared");
+		expect(stdoutOutput).toBe("");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // cmdResumeMember
 // ---------------------------------------------------------------------------
 
@@ -2045,6 +2410,34 @@ describe("cmdResumeMember", () => {
 			CLAUDE_CODE_EFFORT_LEVEL: "xhigh",
 			CUSTOM: "val",
 		});
+	});
+
+	test("round-trip: resume re-tokenizes a persisted deny command with quotes intact", async () => {
+		const entityDir = path.join(jobDir, "members", "codexmember");
+		const augmented = buildAugmentedCommand({ command: "codex exec", deny: ["a", "b"] }, "codex");
+		writeMemberStatus(entityDir, {
+			member: "codexmember",
+			state: "done",
+			sessionID: "ses_y",
+			resume_count: 0,
+			command: augmented.command,
+		});
+
+		let capturedOpts: RunOneTurnOpts | null = null;
+		const resumeOneTurnFn = async (_sid: string, opts: RunOneTurnOpts) => {
+			capturedOpts = opts;
+			return { state: "done" as const, sessionID: "ses_y", text: "", exitCode: 0 };
+		};
+
+		await cmdResumeMember(jobDir, "codexmember", "follow up", membersConfig, {
+			driverFactory: () => makeMockDriver(),
+			resumeOneTurnFn,
+		});
+
+		expect(capturedOpts).not.toBeNull();
+		expect(capturedOpts!.args).toContain(
+			'skills.config=[{name="a",enabled=false},{name="b",enabled=false}]',
+		);
 	});
 
 	test("cmdResumeMember restores workerEnv", async () => {

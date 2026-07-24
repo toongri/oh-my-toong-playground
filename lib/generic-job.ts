@@ -147,6 +147,99 @@ export function detectCliType(command: unknown): string {
 	return "unknown";
 }
 
+// ---------------------------------------------------------------------------
+// assertDenyEnforceable — job-start gate: declared deny × per-member cliType.
+// "선언가능 = 집행가능" invariant — a CLI with no invocation-scoped skill-deny
+// lever (gemini, unknown) must not be allowed to silently ignore a declared
+// deny. Reuses detectCliType's result; no new judgment logic.
+// ---------------------------------------------------------------------------
+
+const ENFORCEABLE_CLI_TYPES = ["codex", "claude", "opencode"];
+
+export function assertDenyEnforceable(
+	entities: unknown[],
+	denySkills: string[] | undefined,
+	config: JobConfig,
+	configPath: string,
+): void {
+	const deny = denySkills ?? [];
+	if (deny.length === 0) {
+		process.stderr.write(
+			`start: this job has no skill deny declared (settings.deny.skills is empty) — proceeding unguarded. config=${configPath}\n`,
+		);
+		return;
+	}
+
+	const violations: string[] = [];
+	for (const entity of entities) {
+		if (!isRecord(entity)) continue;
+		const cliType = detectCliType(entity.command);
+		if (!ENFORCEABLE_CLI_TYPES.includes(cliType)) {
+			violations.push(`${String(entity.name)} (${cliType})`);
+		}
+	}
+
+	if (violations.length > 0) {
+		exitWithError(
+			`start: settings.deny.skills is declared but the following ${config.entityPlural} use a CLI with no enforcement lever: ${violations.join(", ")}. ` +
+				`Enforceable CLIs: ${ENFORCEABLE_CLI_TYPES.join(", ")}. ` +
+				`Fix by either (1) replacing these ${config.entityPlural} with an enforceable CLI, or (2) removing this job's settings.deny.skills declaration. config=${configPath}`,
+		);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// assertDenySkillsShape / extractDenySkills — settings.deny.skills format
+// validation + extraction, shared by every consumer's config parser. Deny is
+// FORMAT-validated only — skill-name reality is not checked here (a later
+// stage's assertDenyEnforceable covers reachability by reading the real
+// YAML). No baseline deny list is injected here: YAML remains the sole
+// source. Name characters are restricted to the class spawnWorkers already
+// enforces on entity names ([a-zA-Z0-9_-]) — the same set splitCommand's
+// re-tokenization can carry unmangled through the spawned CLI's argv.
+// ---------------------------------------------------------------------------
+
+/** Narrow to a plain object, excluding arrays (deny must be a mapping, not a list). */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function assertDenySkillsShape(
+	settings: Record<string, unknown>,
+	config: JobConfig,
+	configPath: string,
+): void {
+	const keyPrefix = config.configTopLevelKey;
+	const deny = settings.deny;
+	if (deny === null || deny === undefined) return;
+	if (!isPlainObject(deny)) {
+		exitWithError(
+			`Invalid config in ${configPath}: '${keyPrefix}.settings.deny' must be a mapping/object`,
+		);
+	}
+	const skills = deny.skills;
+	if (skills === null || skills === undefined) return;
+	if (!Array.isArray(skills)) {
+		exitWithError(
+			`Invalid config in ${configPath}: '${keyPrefix}.settings.deny.skills' must be a list/array of non-empty strings`,
+		);
+	}
+	for (const skill of skills) {
+		if (typeof skill !== "string" || !/^[a-zA-Z0-9_-]+$/.test(skill)) {
+			exitWithError(
+				`Invalid config in ${configPath}: '${keyPrefix}.settings.deny.skills' must contain only [a-zA-Z0-9_-] skill names, got: ${JSON.stringify(skill)}`,
+			);
+		}
+	}
+}
+
+/** Read settings.deny.skills, already format-validated by assertDenySkillsShape, as string[]. */
+export function extractDenySkills(settings: Record<string, unknown>): string[] {
+	const deny = settings.deny;
+	if (!isPlainObject(deny) || !Array.isArray(deny.skills)) return [];
+	return deny.skills.map((skill) => String(skill));
+}
+
 export function buildAugmentedCommand(
 	entity: {
 		command: unknown;
@@ -154,6 +247,7 @@ export function buildAugmentedCommand(
 		effort_level?: unknown;
 		output_format?: unknown;
 		env?: Record<string, string>;
+		deny?: unknown;
 	},
 	cliType: string,
 ): { command: string; env: Record<string, string> } {
@@ -179,6 +273,65 @@ export function buildAugmentedCommand(
 	// nested session guard
 	if (cliType === "claude") {
 		env.CLAUDECODE = "";
+	}
+
+	// deny — invocation-scoped skill block, translated per cliType. No-op when deny is
+	// absent/empty: skill names come solely from entity.deny, never hardcoded here.
+	const denySkills = Array.isArray(entity.deny) ? entity.deny.map((name) => String(name)) : [];
+	if (denySkills.length > 0) {
+		if (cliType === "codex") {
+			// splitCommand (the only re-tokenizer between here and the spawned CLI — see
+			// spawnWorkers/worker.ts) treats an unescaped '"' as a quote-mode toggle and drops
+			// it from the token. Escape so the quote survives as a literal byte in the TOML value.
+			const entries = denySkills.map((name) => `{name=\\"${name}\\",enabled=false}`).join(",");
+			parts.push("-c", `skills.config=[${entries}]`);
+		} else if (cliType === "claude") {
+			// Object.create(null): a plain {} literal has Object.prototype as its
+			// prototype, so a deny name of "__proto__" assigns through the prototype
+			// setter instead of creating an own property — it silently vanishes from
+			// the JSON.stringify output below. A null-prototype object has no such setter.
+			const skillOverrides: Record<string, string> = Object.create(null);
+			for (const name of denySkills) skillOverrides[name] = "off";
+			// Same reason as codex above: escape every quote in the JSON so splitCommand's
+			// re-tokenization doesn't strip them and produce invalid JSON on the receiving end.
+			parts.push("--settings", JSON.stringify({ skillOverrides }).replace(/"/g, '\\"'));
+		} else if (cliType === "opencode") {
+			// This env var is not a deny-only channel — it carries opencode's ENTIRE inline
+			// config (provider, model, mcp, other permissions). It reaches the CLI from two
+			// inputs, so both must be preserved: the member's own `env:` (seeded above) and
+			// the ambient environment, since workerEnv is spread LAST over process.env at
+			// spawn time (lib/worker-utils.ts) and would therefore win over an inherited
+			// value. Merge into whichever is present rather than replacing it.
+			const inherited = env.OPENCODE_CONFIG_CONTENT ?? process.env.OPENCODE_CONFIG_CONTENT;
+			let base: Record<string, unknown> = {};
+			if (inherited) {
+				try {
+					const parsed: unknown = JSON.parse(inherited);
+					if (isRecord(parsed)) base = parsed;
+				} catch {
+					// Unparseable inherited config — opencode itself would reject it, so there is
+					// nothing worth preserving. Fall through to an empty base and still enforce deny.
+				}
+			}
+			const permission: Record<string, unknown> = isRecord(base.permission) ? base.permission : {};
+			// Same null-prototype reasoning as claude's skillOverrides above.
+			const skill: Record<string, string> = Object.create(null);
+			if (isRecord(permission.skill)) {
+				for (const [name, decision] of Object.entries(permission.skill)) {
+					skill[name] = String(decision);
+				}
+			}
+			// Default the wildcard only when the inherited config states no policy of its own:
+			// writing "allow" unconditionally would WIDEN an inherited '*: deny' default, turning
+			// a config-preserving merge into a permission grant.
+			if (skill["*"] === undefined) skill["*"] = "allow";
+			for (const name of denySkills) skill[name] = "deny";
+			env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+				...base,
+				permission: { ...permission, skill },
+			});
+		}
+		// gemini/unknown: no enforceable lever here — enforceability is a job-start gate's job, not this translator's.
 	}
 
 	// effort_level

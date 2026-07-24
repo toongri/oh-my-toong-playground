@@ -1,6 +1,9 @@
 # Agent Council Configuration
 # Add or remove council members as needed.
-# Note: Missing CLIs will report `missing_cli` at runtime.
+# Note: an unavailable CLI reports `missing_cli` at runtime; but while
+# settings.deny.skills is declared below, a member whose CLI has no
+# skill-deny lever (gemini / unrecognized) makes `start` exit 1 before any
+# job directory is created.
 
 council:
   # Council members configuration
@@ -41,3 +44,14 @@ council:
   settings:
     exclude_chairman_from_members: false  # Chairman also participates as a council member
     timeout: 1200                         # Timeout seconds per agent (0 to disable)
+    deny:
+      # Self-recursion fan-out guard: members run claude/codex/opencode CLIs
+      # that could themselves invoke a review/council skill, spawning another
+      # fan-out beneath this one. Blocks the 3 skills that can start one.
+      # `code-review` isn't deployed to codex today (no `platforms: [codex]`
+      # in its sync.yaml) — declared anyway so this self-activates the day
+      # that changes, instead of silently staying a no-op.
+      skills:
+        - orchestrate-review
+        - code-review
+        - agent-council
