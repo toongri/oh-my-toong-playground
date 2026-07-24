@@ -299,16 +299,31 @@ test_dash_dash_message_equals_denies() {
         || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
 }
 
-# Repeated -m (subject + body): git accepts multiple -m as paragraphs; the
-# label lives in the SECOND value, which the first-match-only extractor missed.
-test_repeated_dash_m_label_in_body_denies() {
-    local exit_code=0 stderr_out
+# Repeated -m (subject + body): git treats the FIRST -m as the commit
+# SUBJECT and any later -m as separate BODY paragraphs. The gate judges the
+# subject only -- a label that lives solely in a later (body) -m must
+# allow, matching rules/communication-style.md's own "### D-1: <name>"
+# carve-out for a body heading that defines itself in place.
+test_repeated_dash_m_label_only_in_body_allows() {
+    local exit_code=0
     local cmd="git commit -m 'clean subject' -m 'fix D-36'"
+    jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" >/dev/null 2>&1 || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] \
+        || { echo "ASSERTION FAILED: label only in 2nd (body) -m should allow (exit=$exit_code)"; return 1; }
+}
+
+# Guard-preserving positive: a label in the FIRST -m (the subject) must
+# still deny even when a later, clean -m (body) follows it.
+test_label_in_first_dash_m_subject_still_denies() {
+    local exit_code=0 stderr_out
+    local cmd="git commit -m 'fix D-36' -m 'clean body paragraph'"
     stderr_out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
         | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
 
     [[ "$exit_code" -eq 2 ]] \
-        || { echo "ASSERTION FAILED: repeated -m (label in 2nd) should deny (exit=$exit_code)"; return 1; }
+        || { echo "ASSERTION FAILED: label in 1st (subject) -m should deny (exit=$exit_code)"; return 1; }
     echo "$stderr_out" | grep -q "D-36" \
         || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
 }
@@ -340,6 +355,77 @@ test_repeated_dash_m_all_clean_passthrough() {
 
     [[ "$exit_code" -eq 0 ]] \
         || { echo "ASSERTION FAILED: repeated -m all-clean should passthrough (exit=$exit_code)"; return 1; }
+}
+
+# =============================================================================
+# `-m=<value>` equals form, UNQUOTED (a bare short-option-concatenated
+# value, e.g. `git commit -m=D-36` -> message "=D-36") -> exit 2. The old
+# quote-only value alternation never captured an unquoted value at all.
+# =============================================================================
+test_dash_m_equals_unquoted_denies() {
+    local exit_code=0 stderr_out
+    local cmd="git commit -m=D-36"
+    stderr_out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+
+    [[ "$exit_code" -eq 2 ]] \
+        || { echo "ASSERTION FAILED: -m=<unquoted value> should deny (exit=$exit_code)"; return 1; }
+    echo "$stderr_out" | grep -q "D-36" \
+        || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
+}
+
+# =============================================================================
+# ANSI-C quoted value (`-m $'...'`) -- a legitimate multi-word quoting form
+# the old regex's single/double-quote-only alternation never recognized as
+# a quote at all -> exit 2.
+# =============================================================================
+test_dash_m_ansi_c_quoted_denies() {
+    local exit_code=0 stderr_out
+    local cmd
+    cmd=$(printf "git commit -m \$'fix D-36 issue'")
+    stderr_out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+
+    [[ "$exit_code" -eq 2 ]] \
+        || { echo "ASSERTION FAILED: ANSI-C \$'...' quoted -m should deny (exit=$exit_code)"; return 1; }
+    echo "$stderr_out" | grep -q "D-36" \
+        || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
+}
+
+# =============================================================================
+# Heredoc body piped into `-F -`: unlike genuine interactive stdin (left
+# unread, see test_stdin_message_dash_f_dash_passthrough), a heredoc
+# attached to that same stdin IS fully known static text in the command
+# string -> its body's first line is the subject -> exit 2.
+# =============================================================================
+test_heredoc_into_dash_capital_f_dash_denies() {
+    local exit_code=0 stderr_out
+    local cmd
+    cmd=$(printf 'git commit -F - <<EOF\nfix D-36\nEOF')
+    stderr_out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+
+    [[ "$exit_code" -eq 2 ]] \
+        || { echo "ASSERTION FAILED: heredoc body into -F - should deny (exit=$exit_code)"; return 1; }
+    echo "$stderr_out" | grep -q "D-36" \
+        || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
+}
+
+# =============================================================================
+# Regression guard: the broadened unquoted-value branch must not let a
+# `m`-ending prefix inside an unrelated long flag (e.g. "-am" inside
+# "--amend") swallow the rest of the line and hide a REAL -m further on.
+# =============================================================================
+test_amend_then_real_dash_m_denies() {
+    local exit_code=0 stderr_out
+    local cmd="git commit --amend -m 'fix D-36'"
+    stderr_out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
+        | bash "$HOOK" 2>&1 >/dev/null) || exit_code=$?
+
+    [[ "$exit_code" -eq 2 ]] \
+        || { echo "ASSERTION FAILED: --amend followed by a real -m should still deny (exit=$exit_code)"; return 1; }
+    echo "$stderr_out" | grep -q "D-36" \
+        || { echo "ASSERTION FAILED: stderr should name 'D-36'. Got: '$stderr_out'"; return 1; }
 }
 
 # =============================================================================
@@ -383,9 +469,14 @@ main() {
     run_test test_dash_dash_file_equals_shape_denies
     run_test test_dash_dash_message_space_denies
     run_test test_dash_dash_message_equals_denies
-    run_test test_repeated_dash_m_label_in_body_denies
+    run_test test_repeated_dash_m_label_only_in_body_allows
+    run_test test_label_in_first_dash_m_subject_still_denies
     run_test test_dash_dash_file_space_denies
     run_test test_repeated_dash_m_all_clean_passthrough
+    run_test test_dash_m_equals_unquoted_denies
+    run_test test_dash_m_ansi_c_quoted_denies
+    run_test test_heredoc_into_dash_capital_f_dash_denies
+    run_test test_amend_then_real_dash_m_denies
     run_test test_combined_short_flag_am_denies
     run_test test_git_global_option_before_commit_denies
     run_test test_commit_graph_still_passthrough
