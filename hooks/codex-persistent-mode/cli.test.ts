@@ -12,7 +12,15 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import {
+	mkdtempSync,
+	mkdirSync,
+	rmSync,
+	writeFileSync,
+	readFileSync,
+	existsSync,
+	readdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -22,7 +30,13 @@ function mirrorPath(omtDir: string, sessionId: string): string {
 	return join(omtDir, `codex-todo-${sessionId}.json`);
 }
 
-function postToolUsePayload(sessionId: string, cwd: string, toolName: string, toolInput: unknown) {
+function postToolUsePayload(
+	sessionId: string,
+	cwd: string,
+	toolName: string,
+	toolInput: unknown,
+	toolResponse: unknown = null,
+) {
 	return {
 		session_id: sessionId,
 		turn_id: "t1",
@@ -33,7 +47,7 @@ function postToolUsePayload(sessionId: string, cwd: string, toolName: string, to
 		permission_mode: "auto",
 		tool_name: toolName,
 		tool_input: toolInput,
-		tool_response: null,
+		tool_response: toolResponse,
 		tool_use_id: "tu1",
 	};
 }
@@ -168,6 +182,472 @@ describe("codex-persistent-mode cli", () => {
 		});
 	});
 
+	describe("hook post-tool-use (writer): skill-chain ratchet observation", () => {
+		function writeSkill(name: string, body: string): void {
+			const dir = join(projectDir, "skills", name);
+			mkdirSync(dir, { recursive: true });
+			writeFileSync(join(dir, "SKILL.md"), body);
+		}
+
+		test("opening a SKILL.md that sigil-references a real sibling skill records both fields", async () => {
+			const sid = "sid-chain-open-1";
+			writeSkill("chain-alpha", "Body text. Next, load $chain-bravo to continue.");
+			writeSkill("chain-bravo", "chain-bravo body.");
+
+			const payload = postToolUsePayload(sid, projectDir, "exec_command", {
+				command: "sed -n '1,240p' skills/chain-alpha/SKILL.md",
+			});
+			const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+
+			const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+			expect(written.openedSkills).toEqual(["chain-alpha"]);
+			expect(written.expectedSkills).toEqual(["chain-bravo"]);
+		});
+
+		test("uppercase `Bash` tool_name (matcher's registered case) still records the skill chain", async () => {
+			const sid = "sid-chain-uppercase-bash";
+			writeSkill("chain-alpha", "Body text. Next, load $chain-bravo to continue.");
+			writeSkill("chain-bravo", "chain-bravo body.");
+
+			const payload = postToolUsePayload(sid, projectDir, "Bash", {
+				command: "sed -n '1,240p' skills/chain-alpha/SKILL.md",
+			});
+			const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+
+			const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+			expect(written.openedSkills).toEqual(["chain-alpha"]);
+			expect(written.expectedSkills).toEqual(["chain-bravo"]);
+		});
+
+		test("a sigil with no matching sibling skill directory is not recorded as expected", async () => {
+			const sid = "sid-chain-false-sigil";
+			writeSkill("chain-alpha", "Set $HOME then read the docs.");
+
+			const payload = postToolUsePayload(sid, projectDir, "exec_command", {
+				command: "cat skills/chain-alpha/SKILL.md",
+			});
+			await runCli("post-tool-use", payload, omtDir);
+
+			const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+			expect(written.openedSkills).toEqual(["chain-alpha"]);
+			expect(written.expectedSkills ?? []).toEqual([]);
+		});
+
+		test("a self-referencing sigil is not recorded as an expected next step", async () => {
+			const sid = "sid-chain-self-ref";
+			writeSkill("chain-alpha", "See $chain-alpha for background.");
+
+			const payload = postToolUsePayload(sid, projectDir, "exec_command", {
+				command: "cat skills/chain-alpha/SKILL.md",
+			});
+			await runCli("post-tool-use", payload, omtDir);
+
+			const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+			expect(written.openedSkills).toEqual(["chain-alpha"]);
+			expect(written.expectedSkills ?? []).toEqual([]);
+		});
+
+		test("a command with no SKILL.md reference writes nothing (preserves the update_plan-only regression test)", async () => {
+			const sid = "sid-chain-no-ref";
+			const payload = postToolUsePayload(sid, projectDir, "exec_command", {
+				command: "ls -la",
+			});
+			const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+			expect(existsSync(mirrorPath(omtDir, sid))).toBe(false);
+		});
+
+		test("a subsequent update_plan write merges with, rather than clobbers, prior skill-chain fields", async () => {
+			const sid = "sid-chain-merge";
+			writeSkill("chain-alpha", "Load $chain-bravo next.");
+			writeSkill("chain-bravo", "chain-bravo body.");
+
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-alpha/SKILL.md",
+				}),
+				omtDir,
+			);
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(sid, projectDir, "update_plan", {
+					plan: [{ status: "pending" }],
+				}),
+				omtDir,
+			);
+
+			const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+			expect(written).toEqual({
+				incomplete: 1,
+				openedSkills: ["chain-alpha"],
+				expectedSkills: ["chain-bravo"],
+			});
+		});
+
+		test("opening the expected skill later merges into openedSkills without clobbering", async () => {
+			const sid = "sid-chain-progress";
+			writeSkill("chain-alpha", "Load $chain-bravo next.");
+			writeSkill("chain-bravo", "chain-bravo body.");
+
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-alpha/SKILL.md",
+				}),
+				omtDir,
+			);
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-bravo/SKILL.md",
+				}),
+				omtDir,
+			);
+
+			const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+			expect(written.openedSkills.sort()).toEqual(["chain-alpha", "chain-bravo"]);
+			expect(written.expectedSkills).toEqual(["chain-bravo"]);
+		});
+
+		describe("relative SKILL.md path resolves against the command's own workdir, not the top-level cwd", () => {
+			test("arm 1: relative path + absolute workdir elsewhere than cwd still records the skill (the fix)", async () => {
+				const sid = "sid-chain-workdir-abs";
+				const workdirActual = join(projectDir, "workdir-actual");
+				mkdirSync(join(workdirActual, "skills", "chain-abs"), { recursive: true });
+				writeFileSync(join(workdirActual, "skills", "chain-abs", "SKILL.md"), "chain-abs body.");
+				const unrelatedCwd = join(projectDir, "unrelated-cwd");
+
+				const payload = postToolUsePayload(sid, unrelatedCwd, "exec_command", {
+					cmd: "cat skills/chain-abs/SKILL.md",
+					workdir: workdirActual,
+				});
+				const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
+				expect(exitCode).toBe(0);
+				expect(stdout).toBe("");
+
+				const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+				expect(written.openedSkills).toEqual(["chain-abs"]);
+			});
+
+			test("arm 2 (regression): relative path + no workdir still resolves against cwd", async () => {
+				const sid = "sid-chain-workdir-absent";
+				writeSkill("chain-noworkdir", "chain-noworkdir body.");
+
+				const payload = postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-noworkdir/SKILL.md",
+				});
+				const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
+				expect(exitCode).toBe(0);
+				expect(stdout).toBe("");
+
+				const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+				expect(written.openedSkills).toEqual(["chain-noworkdir"]);
+			});
+
+			test("arm 3: relative path + relative workdir resolves the workdir against cwd first", async () => {
+				const sid = "sid-chain-workdir-rel";
+				mkdirSync(join(projectDir, "sub", "dir", "skills", "chain-rel"), { recursive: true });
+				writeFileSync(
+					join(projectDir, "sub", "dir", "skills", "chain-rel", "SKILL.md"),
+					"chain-rel body.",
+				);
+
+				const payload = postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-rel/SKILL.md",
+					workdir: "sub/dir",
+				});
+				const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
+				expect(exitCode).toBe(0);
+				expect(stdout).toBe("");
+
+				const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+				expect(written.openedSkills).toEqual(["chain-rel"]);
+			});
+
+			test("tool_input.cwd is accepted as a workdir alias (sibling extractor's dual-key contract)", async () => {
+				const sid = "sid-chain-workdir-cwd-alias";
+				const workdirActual = join(projectDir, "workdir-cwd-alias");
+				mkdirSync(join(workdirActual, "skills", "chain-cwdalias"), { recursive: true });
+				writeFileSync(
+					join(workdirActual, "skills", "chain-cwdalias", "SKILL.md"),
+					"chain-cwdalias body.",
+				);
+				const unrelatedCwd = join(projectDir, "unrelated-cwd-2");
+
+				const payload = postToolUsePayload(sid, unrelatedCwd, "exec_command", {
+					command: "cat skills/chain-cwdalias/SKILL.md",
+					cwd: workdirActual,
+				});
+				const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
+				expect(exitCode).toBe(0);
+				expect(stdout).toBe("");
+
+				const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+				expect(written.openedSkills).toEqual(["chain-cwdalias"]);
+			});
+		});
+	});
+
+	describe("hook post-tool-use: failed tool_response gate (5th review round regression)", () => {
+		function writeSkill(name: string, body: string): void {
+			const dir = join(projectDir, "skills", name);
+			mkdirSync(dir, { recursive: true });
+			writeFileSync(join(dir, "SKILL.md"), body);
+		}
+
+		test("arm 1: update_plan + tool_response {exit_code:1} writes no mirror (false-complete guard)", async () => {
+			const sid = "sid-gate-update-plan-failed";
+			const payload = postToolUsePayload(
+				sid,
+				projectDir,
+				"update_plan",
+				{ plan: [{ status: "completed" }, { status: "completed" }] },
+				{ exit_code: 1, error: "plan update rejected" },
+			);
+			const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+			expect(existsSync(mirrorPath(omtDir, sid))).toBe(false);
+		});
+
+		test("arm 1b: update_plan + failed tool_response leaves a prior mirror value unchanged", async () => {
+			const sid = "sid-gate-update-plan-failed-preexisting";
+			const path = mirrorPath(omtDir, sid);
+			writeFileSync(path, JSON.stringify({ incomplete: 2 }));
+			const payload = postToolUsePayload(
+				sid,
+				projectDir,
+				"update_plan",
+				{ plan: [{ status: "completed" }, { status: "completed" }] },
+				{ exit_code: 1, error: "plan update rejected" },
+			);
+			const { exitCode } = await runCli("post-tool-use", payload, omtDir);
+			expect(exitCode).toBe(0);
+			expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ incomplete: 2 });
+		});
+
+		test("arm 2: exec_command referencing an existing SKILL.md + tool_response {exit_code:1} records nothing", async () => {
+			const sid = "sid-gate-exec-failed";
+			writeSkill("chain-alpha", "Body text. Next, load $chain-bravo to continue.");
+			writeSkill("chain-bravo", "chain-bravo body.");
+			const payload = postToolUsePayload(
+				sid,
+				projectDir,
+				"exec_command",
+				{ command: "grep -c zzz skills/chain-bravo/SKILL.md" },
+				{ exit_code: 1 },
+			);
+			const { exitCode, stdout } = await runCli("post-tool-use", payload, omtDir);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+			expect(existsSync(mirrorPath(omtDir, sid))).toBe(false);
+		});
+
+		test("arm 3 (ratchet-escape regression): a failed reference to the pending next-step skill still blocks stop", async () => {
+			const sid = "sid-gate-ratchet-escape";
+			writeSkill("chain-alpha", "Body text. Next, load $chain-bravo to continue.");
+			writeSkill("chain-bravo", "chain-bravo body.");
+
+			// Normal arm: opens chain-alpha, expects chain-bravo.
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-alpha/SKILL.md",
+				}),
+				omtDir,
+			);
+			const stopBeforeFailedRef = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			expect(JSON.parse(stopBeforeFailedRef.stdout).decision).toBe("block");
+
+			// Failed command referencing chain-bravo/SKILL.md must NOT record it as opened.
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(
+					sid,
+					projectDir,
+					"exec_command",
+					{ command: "grep -c zzz skills/chain-bravo/SKILL.md" },
+					{ exit_code: 1 },
+				),
+				omtDir,
+			);
+
+			const written = JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"));
+			expect(written.openedSkills).toEqual(["chain-alpha"]);
+			expect(written.expectedSkills).toEqual(["chain-bravo"]);
+
+			const stopResult = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			const parsed = JSON.parse(stopResult.stdout);
+			expect(parsed.decision).toBe("block");
+			expect(parsed.reason).toContain("chain-bravo");
+		});
+
+		test("arm 4 (false-complete regression): a rejected 'all-complete' update_plan still blocks stop", async () => {
+			const sid = "sid-gate-false-complete";
+			const path = mirrorPath(omtDir, sid);
+
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(sid, projectDir, "update_plan", {
+					plan: [{ status: "pending" }, { status: "pending" }],
+				}),
+				omtDir,
+			);
+			expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ incomplete: 2 });
+
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(
+					sid,
+					projectDir,
+					"update_plan",
+					{ plan: [{ status: "completed" }, { status: "completed" }] },
+					{ exit_code: 1, error: "plan update rejected" },
+				),
+				omtDir,
+			);
+			expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ incomplete: 2 });
+
+			const stopResult = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			const parsed = JSON.parse(stopResult.stdout);
+			expect(parsed.decision).toBe("block");
+			expect(parsed.reason).toContain("2");
+		});
+
+		test("arm 5 (success control group): successful/absent tool_response shapes all record normally", async () => {
+			const successShapes: Array<{ name: string; toolResponse: unknown }> = [
+				{ name: "exit_code-0", toolResponse: { exit_code: 0 } },
+				{ name: "null", toolResponse: null },
+				{ name: "empty-object", toolResponse: {} },
+			];
+			for (const shape of successShapes) {
+				const sid = `sid-gate-success-${shape.name}`;
+				const { exitCode } = await runCli(
+					"post-tool-use",
+					postToolUsePayload(
+						sid,
+						projectDir,
+						"update_plan",
+						{ plan: [{ status: "pending" }] },
+						shape.toolResponse,
+					),
+					omtDir,
+				);
+				expect(exitCode).toBe(0);
+				expect(JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"))).toEqual({ incomplete: 1 });
+			}
+
+			// tool_response field absent entirely (not merely null).
+			const sidAbsent = "sid-gate-success-field-absent";
+			const payloadAbsent = postToolUsePayload(sidAbsent, projectDir, "update_plan", {
+				plan: [{ status: "pending" }],
+			});
+			delete (payloadAbsent as Record<string, unknown>)["tool_response"];
+			const { exitCode: exitCodeAbsent } = await runCli("post-tool-use", payloadAbsent, omtDir);
+			expect(exitCodeAbsent).toBe(0);
+			expect(JSON.parse(readFileSync(mirrorPath(omtDir, sidAbsent), "utf8"))).toEqual({ incomplete: 1 });
+		});
+
+		test("arm 6 (failure-predicate axis): isError/error-string/status=error each block the write", async () => {
+			const failureShapes: Array<{ name: string; toolResponse: unknown }> = [
+				{ name: "isError-true", toolResponse: { isError: true } },
+				{ name: "error-string", toolResponse: { error: "permission denied" } },
+				{ name: "status-error", toolResponse: { status: "error" } },
+			];
+			for (const shape of failureShapes) {
+				const sid = `sid-gate-failure-${shape.name}`;
+				const { exitCode } = await runCli(
+					"post-tool-use",
+					postToolUsePayload(
+						sid,
+						projectDir,
+						"update_plan",
+						{ plan: [{ status: "pending" }] },
+						shape.toolResponse,
+					),
+					omtDir,
+				);
+				expect(exitCode).toBe(0);
+				expect(existsSync(mirrorPath(omtDir, sid))).toBe(false);
+			}
+		});
+	});
+
+	describe("hook stop (reader): skill-chain ratchet", () => {
+		function writeSkill(name: string, body: string): void {
+			const dir = join(projectDir, "skills", name);
+			mkdirSync(dir, { recursive: true });
+			writeFileSync(join(dir, "SKILL.md"), body);
+		}
+
+		test("unresolved chain blocks stop, naming the pending skill", async () => {
+			const sid = "sid-chain-stop-block";
+			writeFileSync(
+				mirrorPath(omtDir, sid),
+				JSON.stringify({ openedSkills: ["chain-alpha"], expectedSkills: ["chain-bravo"] }),
+			);
+			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			expect(exitCode).toBe(0);
+			const parsed = JSON.parse(stdout);
+			expect(parsed.decision).toBe("block");
+			expect(parsed.reason).toContain("<skill-chain-continuation>");
+			expect(parsed.reason).toContain("chain-bravo");
+		});
+
+		test("resolved chain (expected already opened) allows stop", async () => {
+			const sid = "sid-chain-stop-allow";
+			writeFileSync(
+				mirrorPath(omtDir, sid),
+				JSON.stringify({ openedSkills: ["chain-alpha", "chain-bravo"], expectedSkills: ["chain-bravo"] }),
+			);
+			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+		});
+
+		test("no chain in play (negative control) allows stop", async () => {
+			const sid = "sid-chain-stop-none";
+			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 0 }));
+			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			expect(exitCode).toBe(0);
+			expect(stdout).toBe("");
+		});
+
+		test("full round trip: open chain-alpha (unresolved) blocks, then open chain-bravo (resolved) allows", async () => {
+			const sid = "sid-chain-roundtrip";
+			writeSkill("chain-alpha", "Load $chain-bravo next.");
+			writeSkill("chain-bravo", "chain-bravo body.");
+
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-alpha/SKILL.md",
+				}),
+				omtDir,
+			);
+			const stopResult1 = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			const parsed1 = JSON.parse(stopResult1.stdout);
+			expect(parsed1.decision).toBe("block");
+			expect(parsed1.reason).toContain("chain-bravo");
+
+			await runCli(
+				"post-tool-use",
+				postToolUsePayload(sid, projectDir, "exec_command", {
+					command: "cat skills/chain-bravo/SKILL.md",
+				}),
+				omtDir,
+			);
+			const stopResult2 = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			expect(stopResult2.stdout).toBe("");
+		});
+	});
+
 	describe("hook stop (reader, G6-1 / G6-3)", () => {
 		test("G6-1: incomplete:2 blocks with a non-empty reason naming the count", async () => {
 			const sid = "sid-block-1";
@@ -299,6 +779,22 @@ describe("codex-persistent-mode cli", () => {
 			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
 			expect(exitCode).toBe(0);
 			expect(stdout).toBe("");
+		});
+
+		// runtime-leak fix: the Stop hook's own OUTPUT must never hardcode the
+		// Claude-only AskUserQuestion tool name — this reader passes
+		// askToolName: "request_user_input" (Codex's real analog) into the
+		// shared makeDecision core (lib/persistent-mode-core/decision.ts), which
+		// defaults to "AskUserQuestion" only when the field is omitted (Claude).
+		test("block reason names request_user_input, never AskUserQuestion (Codex ask-tool vocabulary)", async () => {
+			const sid = "sid-ask-tool-vocabulary";
+			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
+			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
+			expect(exitCode).toBe(0);
+			const parsed = JSON.parse(stdout);
+			expect(parsed.decision).toBe("block");
+			expect(parsed.reason).toContain("request_user_input");
+			expect(parsed.reason).not.toContain("AskUserQuestion");
 		});
 	});
 
