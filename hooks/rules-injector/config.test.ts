@@ -45,16 +45,22 @@ test("parsePositiveInteger: ' 12 ' (whitespace-padded) is accepted", () => {
 	expect(config.maxRuleChars).toBe(12);
 });
 
-// ── C6: DISABLE_BUNDLED=1 enables ~/.claude/rules (Patch A: no longer auto-disabled) ─
+// ── C6: DISABLE_BUNDLED=1 excludes plugin-bundled; ~/.claude/rules stays listed ──
 
-test("C6: DISABLE_BUNDLED=1 with auto mode INCLUDES ~/.claude/rules (Patch A: source enabled)", () => {
-	// Patch A removes "~/.claude/rules" from DEFAULT_AUTO_DISABLED_SOURCES.
-	// sourcesWithoutBundledRules() excludes plugin-bundled + DEFAULT_AUTO_DISABLED_SOURCES,
-	// but now ~/.claude/rules is NOT in that exclusion set, so it appears in the list.
+test("C6: DISABLE_BUNDLED=1 with auto mode lists BOTH ~/.claude/rules and ~/.codex/rules (the conditional supersede is finder.ts's job, not this static list's)", () => {
+	// ~/.claude/rules is deliberately NOT in DEFAULT_AUTO_DISABLED_SOURCES anymore:
+	// unconditionally excluding it here would lose rules entirely on a project
+	// that never ran OMT's sync and so has no ~/.codex/rules at all.
+	// sourcesWithoutBundledRules() only strips plugin-bundled + the (now-shorter)
+	// DEFAULT_AUTO_DISABLED_SOURCES, so ~/.claude/rules stays in this explicit
+	// enabledSources list — the actual leak protection happens later, in
+	// findRuleCandidates (finder.ts), which drops ~/.claude/rules only when
+	// ~/.codex/rules is ALSO present in the same scope.
 	const config = configFromEnvironment({ CODEX_RULES_DISABLE_BUNDLED: "1" });
 	expect(config.enabledSources).not.toBe("auto");
 	const list = config.enabledSources as string[];
 	expect(list).toContain("~/.claude/rules");
+	expect(list).toContain("~/.codex/rules");
 });
 
 test("C6: DISABLE_BUNDLED=1 with auto mode does not include plugin-bundled", () => {

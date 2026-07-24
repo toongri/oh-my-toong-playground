@@ -54,14 +54,14 @@ afterEach(() => {
 function makeProject(): string {
 	const projectDir = mkdtempSync(join(tmpdir(), "ri-exclude-proj-"));
 	projectDirs.push(projectDir);
-	mkdirSync(join(projectDir, ".claude", "rules"), { recursive: true });
+	mkdirSync(join(projectDir, ".codex", "rules"), { recursive: true });
 	writeFileSync(join(projectDir, "package.json"), '{"name":"ri-fixture"}\n');
 	return projectDir;
 }
 
 function writeRule(projectDir: string, fileName: string, frontmatter: string, body: string): void {
 	writeFileSync(
-		join(projectDir, ".claude", "rules", fileName),
+		join(projectDir, ".codex", "rules", fileName),
 		`---\n${frontmatter}\n---\n${body}\n`,
 	);
 }
@@ -151,24 +151,26 @@ test("AC1 yaml exclude removes rule end to end via absolute-anchored glob; non-m
 	expect(control).toContain("AC1_TARGET_MARKER");
 });
 
-// --- AC2: user-home ~/.claude/rules exclusion, including the .claude dot segment ---
+// --- AC2: user-home ~/.codex/rules exclusion, including the .codex dot segment ---
 
-test("AC2 yaml exclude drops a user-home ~/.claude/rules rule including the .claude dot segment", () => {
+test("AC2 yaml exclude drops a user-home ~/.codex/rules rule including the .codex dot segment", () => {
 	const projectDir = makeProject();
 	const configDir = makeConfigDir();
-	mkdirSync(join(tempHome, ".claude", "rules"), { recursive: true });
+	mkdirSync(join(tempHome, ".codex", "rules"), { recursive: true });
 	writeFileSync(
-		join(tempHome, ".claude", "rules", "personal.md"),
+		join(tempHome, ".codex", "rules", "personal.md"),
 		"---\nalwaysApply: true\n---\nAC2_USER_HOME_MARKER\n",
 	);
 
 	// Baseline: without exclude config, the user-home rule injects (auto mode
-	// does not disable ~/.claude/rules — see sources.ts DEFAULT_AUTO_DISABLED_SOURCES).
+	// does not disable ~/.codex/rules — see sources.ts DEFAULT_AUTO_DISABLED_SOURCES;
+	// the raw ~/.claude/rules counterpart IS disabled by default, superseded by this
+	// de-Claude-ified codex-native source).
 	const baseline = runSessionStart(projectDir, configDir);
 	expect(baseline).toContain("AC2_USER_HOME_MARKER");
 
-	// dot:true is required for "**/x" to match the ".claude" dot-segment path.
-	writeConfigYaml(configDir, 'exclude:\n  - "**/.claude/rules/**"\n');
+	// dot:true is required for "**/x" to match the ".codex" dot-segment path.
+	writeConfigYaml(configDir, 'exclude:\n  - "**/.codex/rules/**"\n');
 	const excluded = runSessionStart(projectDir, configDir);
 	expect(excluded).not.toContain("AC2_USER_HOME_MARKER");
 });

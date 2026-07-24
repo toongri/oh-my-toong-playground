@@ -215,10 +215,10 @@ test("SessionStart hook runs sweep and rotate", () => {
 
 	const projectDir = mkdtempSync(join(tmpdir(), "rules-injector-gc-proj-"));
 	try {
-		mkdirSync(join(projectDir, ".claude", "rules"), { recursive: true });
+		mkdirSync(join(projectDir, ".codex", "rules"), { recursive: true });
 		writeFileSync(join(projectDir, "package.json"), '{"name":"ri-gc-fixture"}\n');
 		writeFileSync(
-			join(projectDir, ".claude", "rules", "always.md"),
+			join(projectDir, ".codex", "rules", "always.md"),
 			"---\nalwaysApply: true\n---\nGC_SESSION_START_MARKER\n",
 		);
 
@@ -271,7 +271,7 @@ test("SessionStart compact-source recovery is unchanged by GC pre-step", () => {
 
 	const projectDir = mkdtempSync(join(tmpdir(), "rules-injector-gc-recovery-proj-"));
 	try {
-		const rulesDir = join(projectDir, ".claude", "rules");
+		const rulesDir = join(projectDir, ".codex", "rules");
 		mkdirSync(rulesDir, { recursive: true });
 		const rulePath = join(rulesDir, "recovery.md");
 		writeFileSync(join(projectDir, "package.json"), '{"name":"ri-gc-recovery-fixture"}\n');

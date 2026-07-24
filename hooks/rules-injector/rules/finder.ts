@@ -16,7 +16,7 @@ import {
 	scanRuleFilesCached,
 	singleFileInfoCached,
 } from "./finder-cache.js";
-import { toPosixPath } from "./engine-paths.js";
+import { isCandidateWithinProjectCached, toPosixPath } from "./engine-paths.js";
 import { getWalkDirectories, toRelativePath } from "./finder-paths.js";
 import {
 	toProjectRuleSource,
@@ -74,6 +74,7 @@ export function findRuleCandidates(options: FinderOptions): RuleCandidate[] {
 				disabledSources,
 				options.cache,
 				options.cwd,
+				options.excludeGlobs,
 			),
 		);
 	}
@@ -87,7 +88,9 @@ export function findRuleCandidates(options: FinderOptions): RuleCandidate[] {
 	candidates.push(...findPluginBundledCandidates(pluginBundledOptions));
 
 	if (!skipUserHome) {
-		candidates.push(...findUserHomeCandidates(homeDirectory, disabledSources, options.cache));
+		candidates.push(
+			...findUserHomeCandidates(homeDirectory, disabledSources, options.cache, options.excludeGlobs),
+		);
 	}
 
 	return filterExcludedCandidates(candidates, options.excludeGlobs);
@@ -148,18 +151,65 @@ function isPluginBundledCandidateEnabled(
 	return candidate.relativePath !== WINDOWS_GIT_BASH_BUNDLED_RULE_PATH || platform === "win32";
 }
 
+/**
+ * A candidate's path within its rules directory (e.g. "foo/bar.md" for both
+ * ".claude/rules/foo/bar.md" and ".codex/rules/foo/bar.md"), used to PAIR a
+ * `.claude/rules` file with its `.codex/rules` counterpart by stem rather
+ * than by scope alone. Read directly from `ruleDirRelativePath`, which each
+ * rule-subdirectory candidate carries from creation time (computed relative
+ * to the exact rules directory it was scanned from) — NOT re-derived from
+ * `relativePath`, which is projectRoot- or homeDir-relative and therefore
+ * still carries the walk-directory prefix for a nested package (e.g.
+ * "packages/app/.claude/rules/foo.md"), where a `${source}/` prefix strip
+ * would never match.
+ */
+function ruleStem(candidate: RuleCandidate): string {
+	return candidate.ruleDirRelativePath ?? candidate.relativePath;
+}
+
+/**
+ * Drops a `.claude/rules` (project scope) / `~/.claude/rules` (home scope)
+ * candidate from `candidates` only when a `.codex/rules` / `~/.codex/rules`
+ * candidate with the SAME stem (path within the rules dir) is ALSO present
+ * in that same list — the de-Claude-ified counterpart supersedes the raw
+ * Claude source file-for-file so unrewritten Claude vocabulary
+ * (AskUserQuestion, TaskOutput, ...) is never injected into a Codex session.
+ * A `.claude/rules` file with NO codex counterpart is kept — losing a
+ * hand-written project rule that happens to sit next to OMT-deployed rules
+ * would be worse than the vocabulary leak this closes. Callers pass one
+ * scope's list at a time (a project walkDirectory, or the home-dir list) so
+ * a project-scope codex replacement can never suppress a home-scope claude
+ * source, and vice versa.
+ */
+function supersedeClaudeRulesWithCodex(candidates: RuleCandidate[]): RuleCandidate[] {
+	const codexStems = new Set(
+		candidates
+			.filter((candidate) => candidate.source === ".codex/rules" || candidate.source === "~/.codex/rules")
+			.map(ruleStem),
+	);
+	if (codexStems.size === 0) {
+		return candidates;
+	}
+	return candidates.filter((candidate) => {
+		const isClaudeRules = candidate.source === ".claude/rules" || candidate.source === "~/.claude/rules";
+		return !isClaudeRules || !codexStems.has(ruleStem(candidate));
+	});
+}
+
 function findProjectCandidates(
 	projectRoot: string,
 	targetFile: string | null,
 	disabledSources: ReadonlySet<string>,
 	cache: RuleDiscoveryCache | undefined,
 	cwd?: string,
+	excludeGlobs?: string[],
 ): RuleCandidate[] {
 	const rootDirectory = resolve(projectRoot);
 	const walkDirectories = getWalkDirectories(rootDirectory, targetFile, cwd);
 	const candidates: RuleCandidate[] = [];
 
 	for (const walkDirectory of walkDirectories) {
+		const ruleSubdirCandidates: RuleCandidate[] = [];
 		for (const [parentDirectory, subDirectory] of PROJECT_RULE_SUBDIRS) {
 			const source = toProjectRuleSource(parentDirectory, subDirectory);
 			if (disabledSources.has(source)) {
@@ -168,7 +218,7 @@ function findProjectCandidates(
 
 			const ruleDirectory = join(walkDirectory.directory, parentDirectory, subDirectory);
 			for (const scannedFile of scanRuleFilesCached(ruleDirectory, cache)) {
-				candidates.push({
+				ruleSubdirCandidates.push({
 					path: scannedFile.path,
 					realPath: scannedFile.realPath,
 					source,
@@ -176,9 +226,19 @@ function findProjectCandidates(
 					isGlobal: false,
 					isSingleFile: false,
 					relativePath: toRelativePath(rootDirectory, scannedFile.path),
+					ruleDirRelativePath: toRelativePath(ruleDirectory, scannedFile.path),
 				});
 			}
 		}
+		// exclude-glob and project-boundary filters MUST run before supersede consumes
+		// the list (see supersedeClaudeRulesWithCodex's doc comment for the predicate
+		// itself, unchanged here): an excluded or out-of-boundary `.codex/rules` file
+		// must never count as a "counterpart present" that suppresses its live
+		// `.claude/rules` sibling — it is not going to survive to be adopted itself.
+		const eligibleCandidates = filterExcludedCandidates(ruleSubdirCandidates, excludeGlobs).filter(
+			(candidate) => isCandidateWithinProjectCached(candidate, rootDirectory, undefined),
+		);
+		candidates.push(...supersedeClaudeRulesWithCodex(eligibleCandidates));
 	}
 
 	for (const walkDirectory of walkDirectories) {
@@ -213,8 +273,9 @@ function findUserHomeCandidates(
 	homeDirectory: string,
 	disabledSources: ReadonlySet<string>,
 	cache: RuleDiscoveryCache | undefined,
+	excludeGlobs?: string[],
 ): RuleCandidate[] {
-	const candidates: RuleCandidate[] = [];
+	const ruleSubdirCandidates: RuleCandidate[] = [];
 
 	for (const ruleSubdir of USER_HOME_RULE_SUBDIRS) {
 		const source = toUserHomeRuleSource(ruleSubdir);
@@ -224,7 +285,7 @@ function findUserHomeCandidates(
 
 		const ruleDirectory = join(homeDirectory, ruleSubdir);
 		for (const scannedFile of scanRuleFilesCached(ruleDirectory, cache)) {
-			candidates.push({
+			ruleSubdirCandidates.push({
 				path: scannedFile.path,
 				realPath: scannedFile.realPath,
 				source,
@@ -232,9 +293,16 @@ function findUserHomeCandidates(
 				isGlobal: true,
 				isSingleFile: false,
 				relativePath: toRelativePath(homeDirectory, scannedFile.path),
+				ruleDirRelativePath: toRelativePath(ruleDirectory, scannedFile.path),
 			});
 		}
 	}
+
+	// Exclude-glob filter before supersede — same reasoning as findProjectCandidates.
+	// No project-boundary filter here: every home-scope candidate is isGlobal, which
+	// isCandidateWithinProjectCached always accepts, so applying it would be a no-op.
+	const eligibleCandidates = filterExcludedCandidates(ruleSubdirCandidates, excludeGlobs);
+	const candidates: RuleCandidate[] = supersedeClaudeRulesWithCodex(eligibleCandidates);
 
 	for (const ruleFile of USER_HOME_SINGLE_FILES) {
 		const source = toUserHomeSingleFileSource(ruleFile);

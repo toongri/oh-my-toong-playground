@@ -38,7 +38,7 @@ beforeEach(() => {
 	scratchDir = mkdtempSync(join(tmpdir(), "pt-reclaim-"));
 	pluginDataRoot = join(scratchDir, "data");
 	projectDir = join(scratchDir, "project");
-	mkdirSync(join(projectDir, ".claude", "rules"), { recursive: true });
+	mkdirSync(join(projectDir, ".codex", "rules"), { recursive: true });
 	mkdirSync(join(projectDir, "src"), { recursive: true });
 	writeFileSync(join(projectDir, "package.json"), '{"name":"pt-reclaim"}\n');
 });
@@ -52,7 +52,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 function writeRule(fileName: string, frontmatter: string, body: string): string {
-	const rulePath = join(projectDir, ".claude", "rules", fileName);
+	const rulePath = join(projectDir, ".codex", "rules", fileName);
 	writeFileSync(rulePath, `---\n${frontmatter}\n---\n${body}\n`);
 	return rulePath;
 }
@@ -424,11 +424,11 @@ test("no reclaim when disabled", async () => {
 // ---------------------------------------------------------------------------
 
 test("dynamic rule dropped by the combined static+dynamic clamp is not marked injected", async () => {
-	// Scope rule discovery to just this project's .claude/rules so the byte math below
-	// is not perturbed by whatever global (~/.claude/rules) rules happen to exist on the
+	// Scope rule discovery to just this project's .codex/rules so the byte math below
+	// is not perturbed by whatever global (~/.codex/rules) rules happen to exist on the
 	// machine running this test.
 	const scopedEnv = {
-		CODEX_RULES_ENABLED_SOURCES: ".claude/rules",
+		CODEX_RULES_ENABLED_SOURCES: ".codex/rules",
 		CODEX_RULES_MAX_RULE_CHARS: "100000",
 		CODEX_RULES_MAX_RESULT_CHARS: "100000",
 		CODEX_RULES_DYNAMIC_MAX_RULE_CHARS: "100000",
@@ -442,7 +442,7 @@ test("dynamic rule dropped by the combined static+dynamic clamp is not marked in
 	};
 	writeRule("clamp-static.md", "alwaysApply: true", "CLAMP_STATIC_BODY_MARKER");
 	const tailPath = writeRule("z-tail.md", 'globs: ["**/*.ts"]', "TAIL_BODY_MARKER");
-	const fillerPath = join(projectDir, ".claude", "rules", "a-filler.md");
+	const fillerPath = join(projectDir, ".codex", "rules", "a-filler.md");
 	writeTarget();
 
 	// Measure the exact static-reclaim directive byte length for THIS run's absolute
