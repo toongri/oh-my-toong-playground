@@ -103,7 +103,10 @@ transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/de
 # silent fail-open (cur stays unset -> defaults to 0 below) rather than a
 # script crash.
 cur=""
-while IFS= read -r line; do
+# `|| [ -n "$line" ]` keeps the loop body running on a final line with no
+# trailing newline (`read` returns non-zero there and would otherwise drop
+# it) -- same guarded idiom as hooks/codex-write-guard.sh:333.
+while IFS= read -r line || [ -n "$line" ]; do
     [ -n "$line" ] || continue
     depth=$(printf '%s' "$line" | jq -r '.payload.source.subagent.thread_spawn.depth // empty' 2>/dev/null) || depth=""
     if [ -n "$depth" ]; then
@@ -116,8 +119,15 @@ done < <(head -3 "$transcript_path" 2>/dev/null || true)
 # non-empty jq output) must not reach the arithmetic below -- bash arithmetic
 # on a non-integer aborts the script, which is a fail-CLOSED shape this hook
 # must never take. Falls back to the same safe default (0) as "not found".
+#
+# *[!0-9]* alone is not enough: "08"/"09"/"010" are ALL-digit strings that
+# pass that pattern unchanged, yet bash arithmetic reads a leading-0 operand
+# as octal and $((08 + 1)) aborts the script -- the exact fail-CLOSED shape
+# this guard exists to prevent. The `10#` prefix forces base-10 interpretation
+# so a well-formed all-digit value never gets octal-misread.
 case "$cur" in
     '' | *[!0-9]*) cur=0 ;;
+    *) cur=$((10#$cur)) ;;
 esac
 
 child=$((cur + 1))
