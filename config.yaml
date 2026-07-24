@@ -11,6 +11,7 @@ use-platforms: [claude]
 feature-platforms:
   skills: [claude, gemini, codex, opencode]
   agents: [claude, codex]
+  rules: [claude, codex]
 
 # Backup retention settings
 backup_retention_days: 3

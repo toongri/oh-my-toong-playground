@@ -1,4 +1,4 @@
-import { HashmapSkillEntry, CatalogEntry, Situation } from "./types.ts";
+import { HashmapSkillEntry, CatalogEntry, Situation, Harness } from "./types.ts";
 
 // Situations — atomic task-level activities delegated to sisyphus-junior.
 // NOT orchestration-level concepts like "new feature" (that's sisyphus's job to decompose).
@@ -93,7 +93,7 @@ export function buildCatalog(
 	// 1. Add hashmap skills whose plugin is enabled (regardless of scan)
 	// Design intent: Skills without a pluginId (e.g. testing, implement) are
 	// intentionally excluded here. They must be physically installed in the project
-	// (.claude/skills/ or ~/.claude/skills/) to appear in the catalog — discovered via scan
+	// (.claude/skills/, .agents/skills/, or the ~/ equivalents) to appear in the catalog — discovered via scan
 	// in Phase 2, where SKILL_HASHMAP metadata (description, situationIds) is applied as
 	// enrichment. Only skills with a pluginId are auto-registered based on plugin activation.
 	for (const [name, entry] of SKILL_HASHMAP) {
@@ -140,8 +140,13 @@ export function buildCatalog(
 	return entries;
 }
 
-// Format catalog entries into the additionalContext string
-export function formatCatalog(entries: CatalogEntry[]): string {
+// Format catalog entries into the additionalContext string.
+// `harness` picks the skill-invocation syntax shown for discovered-only
+// entries: Claude's Skill() tool, or Codex's $name mention sigil (rewrite
+// rule 6a in tools/lib/rewrite-rules.ts documents the sigil — but that rule
+// only rewrites .md at deploy time, and this file is a .ts program file that
+// is copied verbatim, so the correct syntax must be emitted at runtime here).
+export function formatCatalog(entries: CatalogEntry[], harness: Harness = "claude"): string {
 	const discoveredOnlyEntries = entries.filter((e) => e.discoveredOnly);
 
 	// Collect situation rows: for each situation, find entries with that situationId
@@ -197,8 +202,10 @@ export function formatCatalog(entries: CatalogEntry[]): string {
 		lines.push("### Additional discovered skills");
 		lines.push("");
 		for (const entry of discoveredOnlyEntries) {
+			const invocation =
+				harness === "codex" ? `$${entry.name}` : `Skill(skill: "${entry.name}")`;
 			lines.push(
-				`- ${entry.name}: Available (invoke Skill(skill: "${entry.name}") to load — no selection criteria defined, evaluate by name)`,
+				`- ${entry.name}: Available (invoke ${invocation} to load — no selection criteria defined, evaluate by name)`,
 			);
 		}
 		lines.push("");

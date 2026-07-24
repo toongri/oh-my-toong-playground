@@ -29,9 +29,9 @@ import type { SyncItem, SyncYaml } from "../lib/types.ts";
 import { readAndExpandSyncYaml } from "../lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "../lib/parse-platform-yaml.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
-import { deploysToClaudeDotDir, SUPPORTED_CATEGORIES } from "../sync.ts";
+import { CATEGORIES, deploysToClaudeDotDir, SUPPORTED_CATEGORIES } from "../sync.ts";
+import { ALWAYS_PRUNE, collectFiles } from "../lib/sync-directory.ts";
 import { resolveDeployTargets } from "../lib/resolve-deploy-targets.ts";
-import { collectFiles, DEFAULT_EXCLUDE } from "../lib/sync-directory.ts";
 import {
 	applyRewriteRules,
 	BROAD_DETECTORS,
@@ -632,10 +632,17 @@ const SKILL_DIR_TOKEN_INNER = SKILL_DIR_TOKEN.slice(2, -1);
  * deploys, mirroring `resolveAgentSourcePath`'s flat-path-first precedence for
  * `agents` and `resolveComponentPath`'s directory conventions (SKILL.md,
  * plain directory) for every other category. A directory result (skills,
- * scripts) is walked with `collectFiles`/`DEFAULT_EXCLUDE` — the SAME
- * exclusion policy `syncDirectory` applies at deploy time
- * (tools/lib/sync-directory.ts) — so a `*.test.ts` fixture that never reaches
- * the deploy tree is never scanned here either.
+ * scripts) is walked with `collectFiles(sourcePath, "", ALWAYS_PRUNE)` — the
+ * SAME prune list `syncDirectory` (tools/lib/sync-directory.ts) always
+ * prepends at copy time, regardless of any caller-supplied exclude — then
+ * filtered to `.md` files, the only content type codex rewrite ever touches
+ * (never the program files `.ts`/`.sh`/`.js` deploy copies verbatim and never
+ * rewrites). `rewritePlatformPaths`'s own `collectMdFiles` walk runs AFTER
+ * deploy, over a tree from which `syncDirectory` has already pruned
+ * `__fixtures__` et al. — so pruning before the `.md` filter here, not after,
+ * is what makes the coverage-check population match the deploy-rewrite
+ * population exactly, instead of scanning source files the deploy never
+ * copies.
  */
 async function resolveCodexCandidateFiles(
 	category: string,
@@ -653,8 +660,8 @@ async function resolveCodexCandidateFiles(
 	if (sourcePath === null || !existsSync(sourcePath)) return []; // missing-component already reported elsewhere
 
 	if (statSync(sourcePath).isDirectory()) {
-		const relFiles = await collectFiles(sourcePath, "", DEFAULT_EXCLUDE);
-		return relFiles.map((rel) => join(sourcePath, rel));
+		const relFiles = await collectFiles(sourcePath, "", ALWAYS_PRUNE);
+		return relFiles.filter((relPath) => relPath.endsWith(".md")).map((relPath) => join(sourcePath, relPath));
 	}
 	return [sourcePath];
 }
@@ -800,6 +807,165 @@ export async function validateCodexRewriteCoverage(
 }
 
 // ---------------------------------------------------------------------------
+// Codex skill frontmatter lead-byte guard
+// ---------------------------------------------------------------------------
+
+/**
+ * Codex's skill loader treats a SKILL.md whose FIRST LINE is not exactly
+ * `---` as having no frontmatter at all — it fails closed with "missing YAML
+ * frontmatter delimited by ---" and the skill silently never registers. This
+ * repo's own `parseFrontmatter` (tools/lib/frontmatter.ts) fails the same way
+ * (hasFrontmatter: false) rather than throwing, so nothing upstream of this
+ * check ever surfaced the defect — a leading HTML comment (e.g. a vendoring
+ * provenance note) above the frontmatter block was a real, previously-silent
+ * failure mode (skills/agent-browser/SKILL.md).
+ *
+ * Scans the SOURCE-resolved codex-bound skill set, mirroring
+ * `validateCodexRewriteCoverage`'s resolution (sync.yaml corpus × resolved
+ * platforms), not the deployed tree — `make validate` must not require a
+ * prior `make sync`.
+ */
+export async function validateCodexSkillFrontmatterFirstLine(
+	rootDir: string,
+	enabledProjects?: string[],
+): Promise<ValidationResult> {
+	const result = makeResult();
+
+	const effective = enabledProjects ?? (await getEnabledProjects());
+	const enabledSet = effective && effective.length > 0 ? new Set(effective) : undefined;
+	const projectsDir = join(rootDir, "projects");
+
+	const scanned = new Set<string>(); // dedupe: same skill resolved via multiple sync.yaml refs
+
+	for (const syncYamlPath of discoverSyncYamls(rootDir)) {
+		if (enabledSet) {
+			const parentDir = dirname(syncYamlPath);
+			if (dirname(parentDir) === projectsDir && !enabledSet.has(basename(parentDir))) {
+				continue;
+			}
+		}
+
+		let syncYaml: SyncYaml | null;
+		try {
+			syncYaml = await readAndExpandSyncYaml(syncYamlPath);
+		} catch {
+			continue; // parse error already reported by validateSyncYamlComponents
+		}
+		if (!syncYaml) continue;
+
+		const ctx = setProjectContext(syncYaml, syncYamlPath, rootDir);
+		const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
+		const syncYamlPlatforms = syncYaml.platforms;
+
+		const sectionData = syncYaml.skills;
+		if (!sectionData || !Array.isArray(sectionData.items)) continue;
+		const sectionPlatforms = sectionData.platforms;
+
+		for (const item of sectionData.items) {
+			const component = getItemComponent(item);
+			if (!component) continue;
+
+			const platforms = await resolvePlatforms(item, sectionPlatforms, syncYamlPlatforms, "skills");
+			if (!platforms.includes("codex")) continue;
+
+			const resolved = resolveComponentPath(component, "skills", rootDir, projectDirName);
+			if ("error" in resolved) continue; // missing-component already reported elsewhere
+
+			const skillMdPath = join(resolved.path, "SKILL.md");
+			if (scanned.has(skillMdPath)) continue;
+			scanned.add(skillMdPath);
+			// Absence is the same failure this guard exists to catch, one step
+			// earlier: sync still copies the directory to `.agents/skills/<name>/`,
+			// but with no SKILL.md there is no frontmatter for codex's loader to
+			// read, so the skill silently never registers — "deployed but
+			// unregisterable". Skipping absence would leave the guard checking the
+			// first line of a file whose existence it never required.
+			if (!existsSync(skillMdPath)) {
+				result.errors.push(
+					`codex-skill-frontmatter: '${resolved.displayName}' 스킬 디렉터리에 SKILL.md가 없습니다 — codex 타겟에 배포되지만 스킬로 등록되지 않습니다: ${skillMdPath}`,
+				);
+				continue;
+			}
+
+			const firstLine = readFileSync(skillMdPath, "utf-8").split("\n")[0];
+			if (firstLine !== "---") {
+				result.errors.push(
+					`codex-skill-frontmatter: '${resolved.displayName}' SKILL.md 1행이 '---'가 아닙니다 — codex 스킬 로더가 프론트매터 인식에 실패합니다 (missing YAML frontmatter delimited by ---): ${skillMdPath}`,
+				);
+			}
+		}
+	}
+
+	return result;
+}
+
+// ---------------------------------------------------------------------------
+// Unsupported platform × category guard
+// ---------------------------------------------------------------------------
+
+/**
+ * `syncCategory` (tools/sync.ts) silently skips any platform×category
+ * combination absent from `SUPPORTED_CATEGORIES` — a `logWarn` fires, but
+ * only during `make sync`, never during `make validate`. A component
+ * declared for an unsupported combo (e.g. a `commands` item resolved to
+ * `codex`, which has no per-project prompt directory) is deployed nowhere
+ * and nothing ever reports it as a defect. Reports it as a `make validate`
+ * error instead — one entry per unsupported item×platform pair.
+ */
+export async function validateSupportedCategories(
+	rootDir: string,
+	enabledProjects?: string[],
+): Promise<ValidationResult> {
+	const result = makeResult();
+
+	const effective = enabledProjects ?? (await getEnabledProjects());
+	const enabledSet = effective && effective.length > 0 ? new Set(effective) : undefined;
+	const projectsDir = join(rootDir, "projects");
+
+	for (const syncYamlPath of discoverSyncYamls(rootDir)) {
+		if (enabledSet) {
+			const parentDir = dirname(syncYamlPath);
+			if (dirname(parentDir) === projectsDir && !enabledSet.has(basename(parentDir))) {
+				continue;
+			}
+		}
+
+		let syncYaml: SyncYaml | null;
+		try {
+			syncYaml = await readAndExpandSyncYaml(syncYamlPath);
+		} catch {
+			continue; // parse error already reported by validateSyncYamlComponents
+		}
+		if (!syncYaml) continue;
+
+		const syncYamlPlatforms = syncYaml.platforms;
+
+		for (const category of CATEGORIES) {
+			const sectionData = syncYaml[category];
+			if (!sectionData || !Array.isArray(sectionData.items)) continue;
+			const sectionPlatforms = sectionData.platforms;
+
+			for (let i = 0; i < sectionData.items.length; i++) {
+				const item = sectionData.items[i];
+				const component = getItemComponent(item);
+				if (!component) continue;
+
+				const platforms = await resolvePlatforms(item, sectionPlatforms, syncYamlPlatforms, category);
+				for (const platform of platforms) {
+					if (!SUPPORTED_CATEGORIES[platform]?.has(category)) {
+						result.errors.push(
+							`${category}.items[${i}] ('${component}'): 미지원 platform×category 조합 — platform=${platform} category=${category} (${syncYamlPath})`,
+						);
+					}
+				}
+			}
+		}
+	}
+
+	return result;
+}
+
+// ---------------------------------------------------------------------------
 // Discovery and orchestration
 // ---------------------------------------------------------------------------
 
@@ -869,6 +1035,8 @@ export async function validateAll(
 
 	mergeResult(result, await validateModelMapCoverage(rootDir, enabledProjects));
 	mergeResult(result, await validateCodexRewriteCoverage(rootDir, enabledProjects));
+	mergeResult(result, await validateCodexSkillFrontmatterFirstLine(rootDir, enabledProjects));
+	mergeResult(result, await validateSupportedCategories(rootDir, enabledProjects));
 
 	return result;
 }
