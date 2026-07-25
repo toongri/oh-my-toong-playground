@@ -547,19 +547,51 @@ test_row9_negative_depth_allows() {
 # =============================================================================
 test_row10_mixed_case_spawn_agent_denies() {
     new_sandbox
-    local rollout payload out rc=0 result=0
+    local rollout payload out rc=0 result=0 lowered payload_tool_name
+    # Hoisted into a named local, the same shape rows 7, 9 and 12 use for their
+    # own discriminating values -- the self-check below then reads the LIVE
+    # value rather than a description of it, and hook-registration_test.sh's
+    # matcher check reads this one declaration rather than parsing whatever
+    # shape the payload happens to take. Keep exactly one such declaration in
+    # this function; that extractor hard-fails on zero or two.
+    local tool_name_value="CollaborationSpawn_Agent"
 
     # Mixed-case tool name that only ends in "spawn_agent" AFTER lowercasing
     # -- pins the `tr` call at :84. Removing that line would leave this
-    # fixture unmatched (allow) instead of the deny asserted here.
-    #
-    # This literal is also read from OUTSIDE, by hook-registration_test.sh's
-    # _extract_row10_spawn_tool_name, which checks that codex.yaml's matcher
-    # actually reaches this fixture. Keep it on a single `payload=` line:
-    # that extractor requires exactly one tool_name match here and hard-fails
-    # on two, so splitting this assignment in half breaks it loudly.
+    # fixture unmatched (allow) instead of the deny asserted here. Both halves
+    # must hold: the ORIGINAL must NOT match the hook's own suffix case
+    # `*spawn_agent)` at :86 (or `tr` is a no-op for it), and the LOWERCASED
+    # form MUST match (or lowercasing would not help either). Stated in the
+    # same `case` syntax the hook uses, against the same value the hook gets.
+    case "$tool_name_value" in
+        *spawn_agent)
+            echo "ASSERTION FAILED row10-mixed-case: tool name \"$tool_name_value\" already matches the hook's suffix case \`*spawn_agent)\` (hooks/codex-spawn-depth-gate.sh:86) BEFORE lowercasing -- the \`tr\` call at :84 is a no-op for it, so this row does not pressure that defense"
+            result=1
+            ;;
+    esac
+    lowered=$(printf '%s' "$tool_name_value" | tr '[:upper:]' '[:lower:]')
+    case "$lowered" in
+        *spawn_agent) ;;
+        *)
+            echo "ASSERTION FAILED row10-mixed-case: tool name \"$tool_name_value\" still does not match \`*spawn_agent)\` AFTER lowercasing -- lowercasing alone would not make this fixture deny, so it does not pressure the \`tr\` defense either"
+            result=1
+            ;;
+    esac
+
     rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
-    payload=$(jq -n --arg tp "$rollout" '{tool_name:"CollaborationSpawn_Agent", transcript_path:$tp}')
+    payload=$(jq -n --arg tp "$rollout" --arg tn "$tool_name_value" '{tool_name:$tn, transcript_path:$tp}')
+
+    # Everything that judges this fixture -- the case checks above and
+    # hook-registration_test.sh's matcher check -- reads tool_name_value.
+    # Nothing so far forces the payload actually piped to run_hook to CARRY
+    # that value, and a payload that hardcodes its own string instead would
+    # leave all of them grading a name the hook never sees. Read it back off
+    # the built payload rather than trusting the assembly above.
+    payload_tool_name=$(printf '%s' "$payload" | jq -r '.tool_name // empty')
+    if [ "$payload_tool_name" != "$tool_name_value" ]; then
+        echo "ASSERTION FAILED row10-mixed-case: the payload piped to the hook carries tool_name \"$payload_tool_name\", not the declared tool_name_value \"$tool_name_value\" -- every check of this fixture reads the declaration, so a payload carrying anything else silently stops being the thing they verified"
+        result=1
+    fi
 
     out=$(printf '%s' "$payload" | run_hook) || rc=$?
     assert_deny "$out" "$rc" "row10-mixed-case" 3 2 || result=1
