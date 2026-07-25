@@ -316,8 +316,8 @@ test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
 # to a hardcoded guess here would recreate the exact "two halves drift
 # independently" defect this test exists to close.
 _extract_row10_spawn_tool_name() {
-    local file="$REPO_DIR/hooks/codex-spawn-depth-gate_test.sh"
-    local decls count
+    local file="${1:-$REPO_DIR/hooks/codex-spawn-depth-gate_test.sh}"
+    local decls count value
     decls=$(awk '
         /^test_row10_mixed_case_spawn_agent_denies\(\)/ { infunc=1 }
         infunc && /^\}/ { exit }
@@ -325,7 +325,18 @@ _extract_row10_spawn_tool_name() {
     ' "$file")
     count=$(printf '%s\n' "$decls" | grep -c 'tool_name_value=' || true)
     [ "$count" -eq 1 ] || return 0
-    printf '%s\n' "$decls" | sed -E 's/^[[:space:]]*local[[:space:]]+tool_name_value="([^"]*)".*$/\1/'
+    # The count above matches ANY assignment shape on purpose -- a second
+    # declaration must be loud whatever it looks like. Extraction is narrower:
+    # it needs the double-quoted form. A sed substitution that does not match
+    # passes its input through UNCHANGED, so without the guard below an
+    # unquoted declaration returns the whole source line as if it were the tool
+    # name -- non-empty, so the caller's hard-fail never fires, and a matcher
+    # starting with `.*` full-matches the leading junk and scores whatever
+    # happens to end the line. That is the "found one, but it is the wrong
+    # string" state this function's contract says must be silent-free.
+    value=$(printf '%s\n' "$decls" | sed -E 's/^[[:space:]]*local[[:space:]]+tool_name_value="([^"]*)".*$/\1/')
+    [ "$value" != "$decls" ] || return 0
+    printf '%s\n' "$value"
 }
 
 test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names() {
@@ -365,6 +376,41 @@ test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names() {
     [ "$failed" -eq 0 ]
 }
 
+# Pins _extract_row10_spawn_tool_name's own contract: exactly one
+# double-quoted declaration yields the bare value, every other shape yields
+# NOTHING so the caller's hard-fail fires. Fixture-driven because the real file
+# only ever holds the one shape that works -- narrowing or widening the
+# extractor there changes nothing observable, so the test above would stay green
+# while the extractor silently started scoring the wrong string.
+test_row10_tool_name_extractor_rejects_unextractable_declarations() {
+    local tmp label want fixture got failed=0
+    tmp=$(mktemp -d)
+
+    # label|expected output|declaration line(s), "\n"-separated
+    while IFS='|' read -r label want fixture; do
+        [ -n "$label" ] || continue
+        {
+            echo 'test_row10_mixed_case_spawn_agent_denies() {'
+            printf '%b\n' "$fixture"
+            echo '}'
+        } > "$tmp/fixture.sh"
+        got=$(_extract_row10_spawn_tool_name "$tmp/fixture.sh")
+        if [ "$got" != "$want" ]; then
+            echo "ASSERTION FAILED extractor/$label: expected '$want', got '$got' -- a declaration shape this function cannot extract a value from must print nothing, so the caller treats it as a hard failure instead of scoring the source line itself"
+            failed=1
+        fi
+    done <<'CASES'
+double-quoted|CollaborationSpawn_Agent|    local tool_name_value="CollaborationSpawn_Agent"
+unquoted||    local tool_name_value=CollaborationSpawn_Agent # collaborationspawn_agent
+single-quoted||    local tool_name_value='CollaborationSpawn_Agent'
+two-declarations||    local tool_name_value="A"\n    local tool_name_value="B"
+no-declaration||    local unrelated_value="CollaborationSpawn_Agent"
+CASES
+
+    rm -rf "$tmp"
+    return "$failed"
+}
+
 main() {
     echo "=========================================="
     echo "Hook Registration Consistency Tests"
@@ -379,6 +425,7 @@ main() {
     run_test test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher
     run_test test_codex_yaml_spawn_depth_gate_matcher_never_bare
     run_test test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names
+    run_test test_row10_tool_name_extractor_rejects_unextractable_declarations
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
