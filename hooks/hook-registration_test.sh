@@ -303,12 +303,22 @@ test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
 # not a skip -- silently falling back to a hardcoded guess here would
 # recreate the exact "two halves drift independently" defect this test
 # exists to close.
+#
+# Reads ONLY the `payload=` assignment line, not the whole function body.
+# The body's comments quote code literals freely (this whole file does), and
+# a body-wide scan scores whatever text merely LOOKS like a tool_name --
+# so one ordinary comment quoting a stale literal is enough to make every
+# check downstream of this function grade that dead string instead of the
+# one the hook actually receives. Anchoring on `payload=` binds the
+# extraction to the value that is genuinely piped to run_hook. If row10 ever
+# builds its payload some other way this yields nothing, which the caller
+# already treats as a hard failure.
 _extract_row10_spawn_tool_name() {
     local file="$REPO_DIR/hooks/codex-spawn-depth-gate_test.sh"
     awk '
         /^test_row10_mixed_case_spawn_agent_denies\(\)/ { infunc=1 }
         infunc && /^\}/ { exit }
-        infunc { print }
+        infunc && /^[[:space:]]*payload=/ { print }
     ' "$file" | grep -oE 'tool_name:"[^"]+"' | head -1 | sed -E 's/tool_name:"([^"]+)"/\1/'
 }
 
