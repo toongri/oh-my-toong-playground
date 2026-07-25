@@ -113,7 +113,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         cur="$depth"
         break
     fi
-done < <(head -3 "$transcript_path" 2>/dev/null || true)
+done < <(head -3 -- "$transcript_path" 2>/dev/null || true)
 
 # A non-numeric cur (schema drift, a corrupted line that still yielded some
 # non-empty jq output) must not reach the arithmetic below -- bash arithmetic
