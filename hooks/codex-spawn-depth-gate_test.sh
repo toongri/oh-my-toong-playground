@@ -166,6 +166,24 @@ mk_rollout() {
     printf '%s' "$f"
 }
 
+# The depth the hook actually saw: follow the captured stdin's transcript_path
+# to the rollout it names, and read the value out of that file.
+#
+# A fixture asserting something about its own discriminating value must assert
+# it against THIS, never against the variable the fixture was assembled from.
+# The variable only describes what was meant to be sent; a bare reassignment
+# between the assertion and the payload build splits the two apart, and nothing
+# notices. That is not hypothetical -- sweeping a one-line reassignment through
+# every body position, rows 7 and 9 each had positions where a deleted defense
+# passed both suites, and row 7's window covers a false-DENY regression this
+# hook offers no bypass to recover from.
+hook_saw_depth() {
+    local stdin_file="$1" tp
+    tp=$(jq -r '.transcript_path // empty' "$stdin_file" 2>/dev/null) || tp=""
+    [ -n "$tp" ] || return 0
+    jq -r '.payload.source.subagent.thread_spawn.depth // empty' "$tp" 2>/dev/null || true
+}
+
 # =============================================================================
 # Row 1 -- jq absent -> allow (fail-open), no output. PATH is narrowed to a
 # single symlink, /bin/cat -- the ONLY external command the hook's jq-absent
@@ -341,24 +359,35 @@ test_row6_no_thread_spawn_root_allows() {
 # =============================================================================
 test_row7_depth_1_allows() {
     new_sandbox
-    local rollout payload out rc=0 result=0 stderr_file stdout_file
+    local rollout payload out rc=0 result=0 stderr_file stdout_file hook_depth
     local depth_value=1
+
+    stderr_file="$SBX/stderr.txt"
+    stdout_file="$SBX/stdout.txt"
+    rollout=$(mk_rollout "$(printf '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":%s}}}}}' "$depth_value")")
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
+    out=$(cat "$stdout_file")
+    hook_depth=$(hook_saw_depth "$SBX/hook-stdin.json")
 
     # Self-check: this row is the ONLY fixture in this suite that pins
     # hooks/codex-spawn-depth-gate.sh:135's `-gt` comparator specifically
     # (row8 denies under both `-gt` and a mutated `-ge`, so it cannot tell
-    # them apart). That power rests entirely on depth_value's own child
-    # (depth_value + 1) landing EXACTLY on CAP -- only at that exact boundary
-    # do `-gt` (child > CAP is false -> allow) and `-ge` (child >= CAP is
-    # true -> deny) actually disagree; anywhere else both comparators agree
-    # and this row cannot discriminate between them.
+    # them apart). That power rests entirely on the child of the depth the
+    # hook was actually handed landing EXACTLY on CAP -- only at that exact
+    # boundary do `-gt` (child > CAP is false -> allow) and `-ge` (child >= CAP
+    # is true -> deny) actually disagree; anywhere else both comparators agree
+    # and this row cannot discriminate between them. Graded against the value
+    # read back out of the rollout the hook read, never against depth_value:
+    # see hook_saw_depth for why the variable is not a safe stand-in.
     #
     # CAP is READ FROM THE HOOK, not hardcoded. The other cap literals here
     # (row8's `assert_deny ... 3 2`, row9's `... 9 2`) drift LOUDLY -- bump
     # the hook's CAP and they go red, and red is a repair instruction. A
     # hardcoded 2 in THIS check would drift silently instead: it keeps passing
     # through the CAP change AND through the repair that follows, which moves
-    # depth_value's child off the boundary and quietly ends this row's ability
+    # the fixture's child off the boundary and quietly ends this row's ability
     # to pin `-gt`. The `-gt` -> `-ge` regression that then goes undetected
     # points at false DENY, which this hook offers no bypass to recover from.
     local expected_cap cap_lines
@@ -369,18 +398,19 @@ test_row7_depth_1_allows() {
         result=1
         expected_cap=-1
     fi
-    if [ "$((depth_value + 1))" -ne "$expected_cap" ]; then
-        echo "ASSERTION FAILED row7-depth-1: depth_value+1 ($((depth_value + 1))) must equal CAP ($expected_cap) exactly -- only at that boundary does hooks/codex-spawn-depth-gate.sh:135's \`-gt\` (allow) and a mutated \`-ge\` (deny) actually disagree; this row cannot pin \`-gt\` specifically otherwise"
-        result=1
-    fi
+    case "$hook_depth" in
+        '' | *[!0-9]*)
+            echo "ASSERTION FAILED row7-depth-1: read no usable depth (\"$hook_depth\") out of the rollout named by the payload the hook was handed -- the boundary check has nothing to grade, so this row cannot claim to pin \`-gt\`"
+            result=1
+            ;;
+        *)
+            if [ "$((hook_depth + 1))" -ne "$expected_cap" ]; then
+                echo "ASSERTION FAILED row7-depth-1: the depth the hook read ($hook_depth) has child $((hook_depth + 1)), which must equal CAP ($expected_cap) exactly -- only at that boundary do hooks/codex-spawn-depth-gate.sh:135's \`-gt\` (allow) and a mutated \`-ge\` (deny) actually disagree; this row cannot pin \`-gt\` specifically otherwise"
+                result=1
+            fi
+            ;;
+    esac
 
-    stderr_file="$SBX/stderr.txt"
-    stdout_file="$SBX/stdout.txt"
-    rollout=$(mk_rollout "$(printf '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":%s}}}}}' "$depth_value")")
-    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
-
-    printf '%s' "$payload" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
-    out=$(cat "$stdout_file")
     if ! assert_allow "$out" "$rc" "row7-depth-1" "$stderr_file" "$stdout_file"; then result=1; fi
 
     rm -rf "$SBX"
@@ -418,7 +448,7 @@ test_row8_depth_2_denies_with_numbers_in_reason() {
 # =============================================================================
 test_row9_leading_zero_depth_denies_without_crashing() {
     new_sandbox
-    local rollout payload out rc=0 result=0
+    local rollout payload out rc=0 result=0 hook_depth
     local depth_value="08"
 
     # "08" is a JSON string (bare 08 is not valid JSON) whose every character
@@ -432,41 +462,45 @@ test_row9_leading_zero_depth_denies_without_crashing() {
     # DENY. This fixture proves the arithmetic no longer crashes, not that the
     # guard treats "08" as malformed.
 
-    # Two self-checks below. The first pins all-digit, which is what tells
-    # this row apart from row9-non-numeric (a different code path that
+    rollout=$(mk_rollout "$(printf '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":"%s"}}}}}' "$depth_value")")
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook) || rc=$?
+    hook_depth=$(hook_saw_depth "$SBX/hook-stdin.json")
+
+    # Two self-checks below, both graded against the depth the hook was
+    # actually handed rather than depth_value -- see hook_saw_depth for why the
+    # variable is not a safe stand-in. The first pins all-digit, which is what
+    # tells this row apart from row9-non-numeric (a different code path that
     # legitimately falls through to cur=0/allow).
-    case "$depth_value" in
-        '' | *[!0-9]*) echo "ASSERTION FAILED row9-leading-zero: depth_value \"$depth_value\" must be all-digit -- this row exists to prove well-formed all-digit input no longer crashes on octal misread, not that malformed input is rejected"; result=1 ;;
+    case "$hook_depth" in
+        '' | *[!0-9]*) echo "ASSERTION FAILED row9-leading-zero: the depth the hook read (\"$hook_depth\") must be all-digit -- this row exists to prove well-formed all-digit input no longer crashes on octal misread, not that malformed input is rejected"; result=1 ;;
         *) ;;
     esac
 
-    # The second self-check pins what all-digit does not: that depth_value
-    # actually pressures hooks/codex-spawn-depth-gate.sh:130's `10#` prefix.
-    # It executes the property rather than describing it -- does unprefixed
-    # arithmetic on this value either (a) ABORT, as 08/09 do when an octal
-    # digit overflows base-8, or (b) SUCCEED but disagree with the
+    # The second self-check pins what all-digit does not: that the value the
+    # hook read actually pressures hooks/codex-spawn-depth-gate.sh:130's `10#`
+    # prefix. It executes the property rather than describing it -- does
+    # unprefixed arithmetic on this value either (a) ABORT, as 08/09 do when an
+    # octal digit overflows base-8, or (b) SUCCEED but disagree with the
     # 10#-prefixed result, as 010 does? If neither, `10#` is a no-op here.
     # A surface pattern like "has a leading zero" is not equivalent: "07"
     # has one, yet parses to 7 either way.
     #
     # Each probe runs as a SEPARATE `bash -c` subshell, never inline: an
-    # inline $((depth_value+1)) on "08" aborts the CURRENT shell under
+    # inline $((hook_depth+1)) on "08" aborts the CURRENT shell under
     # `set -e`, killing this function instead of letting it report a clean
     # FAIL. The value passes as `$1`, not interpolated into the single-quoted
     # script text, so it is never re-parsed as shell syntax.
     local octal_probe_out="" octal_probe_rc=0 decimal_probe_out="" decimal_probe_rc=0
-    octal_probe_out=$(/bin/bash -c 'set -euo pipefail; v="$1"; printf "%s" $((v + 1))' _ "$depth_value" 2>/dev/null) || octal_probe_rc=$?
-    decimal_probe_out=$(/bin/bash -c 'set -euo pipefail; v="$1"; printf "%s" $((10#$v + 1))' _ "$depth_value" 2>/dev/null) || decimal_probe_rc=$?
+    octal_probe_out=$(/bin/bash -c 'set -euo pipefail; v="$1"; printf "%s" $((v + 1))' _ "$hook_depth" 2>/dev/null) || octal_probe_rc=$?
+    decimal_probe_out=$(/bin/bash -c 'set -euo pipefail; v="$1"; printf "%s" $((10#$v + 1))' _ "$hook_depth" 2>/dev/null) || decimal_probe_rc=$?
 
     if [ "$octal_probe_rc" -eq 0 ] && [ "$octal_probe_out" = "$decimal_probe_out" ]; then
-        echo "ASSERTION FAILED row9-leading-zero: depth_value \"$depth_value\" does not pressure hooks/codex-spawn-depth-gate.sh:130's \`10#\` prefix -- unprefixed arithmetic succeeds (\"$octal_probe_out\") and agrees with the 10#-prefixed decimal result (\"$decimal_probe_out\"); removing the \`10#\` prefix would produce an identical outcome for this fixture"
+        echo "ASSERTION FAILED row9-leading-zero: the depth the hook read (\"$hook_depth\") does not pressure hooks/codex-spawn-depth-gate.sh:130's \`10#\` prefix -- unprefixed arithmetic succeeds (\"$octal_probe_out\") and agrees with the 10#-prefixed decimal result (\"$decimal_probe_out\"); removing the \`10#\` prefix would produce an identical outcome for this fixture"
         result=1
     fi
 
-    rollout=$(mk_rollout "$(printf '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":"%s"}}}}}' "$depth_value")")
-    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
-
-    out=$(printf '%s' "$payload" | run_hook) || rc=$?
     assert_deny "$out" "$rc" "row9-leading-zero" 9 2 || result=1
 
     rm -rf "$SBX"
@@ -547,13 +581,11 @@ test_row9_negative_depth_allows() {
 # =============================================================================
 test_row10_mixed_case_spawn_agent_denies() {
     new_sandbox
-    local rollout payload out rc=0 result=0 lowered payload_tool_name
+    local rollout payload out rc=0 result=0 lowered payload_tool_name matcher
     # Hoisted into a named local, the same shape rows 7, 9 and 12 use for their
-    # own discriminating values. hook-registration_test.sh's matcher check reads
-    # this one declaration rather than parsing whatever shape the payload
-    # happens to take -- the identity assertion further down is what keeps that
-    # reader and the actual payload from drifting apart. Keep exactly one such
-    # declaration in this function; that extractor hard-fails on zero or two.
+    # own discriminating values. Nothing outside this function reads it: every
+    # check below grades the bytes the hook received, so the name is free to
+    # change here without any sibling file needing to agree.
     local tool_name_value="CollaborationSpawn_Agent"
 
     rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
@@ -591,12 +623,20 @@ test_row10_mixed_case_spawn_agent_denies() {
             ;;
     esac
 
-    # The checks above now stand on their own. This one is for the reader that
-    # cannot see the payload at all: hook-registration_test.sh scores the
-    # DECLARATION against codex.yaml's dispatch matcher, so if the two drift
-    # apart it verifies a name this fixture never sends.
-    if [ "$payload_tool_name" != "$tool_name_value" ]; then
-        echo "ASSERTION FAILED row10-mixed-case: the payload the hook actually read carries tool_name \"$payload_tool_name\", not the declared tool_name_value \"$tool_name_value\" -- hook-registration_test.sh checks codex.yaml's matcher against that declaration, so a payload carrying anything else leaves it grading a name this row never sends"
+    # The hook body's `tr` defense only ever runs on calls codex.yaml's
+    # dispatch matcher already admitted -- it is a full-string regex applied
+    # before the hook starts. So a deny asserted here is unreachable at runtime
+    # unless that matcher full-matches the name this row sends. Evaluated HERE,
+    # against the bytes actually sent: a sibling file scoring the matcher
+    # against a declaration parsed out of this one grades a string the payload
+    # need not carry, which was measured green on both suites while row10 sent
+    # an ALL-CAPS name the matcher rejects.
+    matcher=$(grep -A2 'component: codex-spawn-depth-gate.sh' "$SCRIPT_DIR/../codex.yaml" | grep 'matcher:' | sed -E 's/^[[:space:]]*matcher:[[:space:]]*"(.*)"[[:space:]]*$/\1/')
+    if [ -z "$matcher" ]; then
+        echo "ASSERTION FAILED row10-mixed-case: could not read the codex-spawn-depth-gate.sh matcher out of codex.yaml's PreToolUse block -- cannot verify the dispatch gate ever reaches the name this row sends"
+        result=1
+    elif ! printf '%s\n' "$payload_tool_name" | grep -qE "^${matcher}\$"; then
+        echo "ASSERTION FAILED row10-mixed-case: codex.yaml's matcher \"$matcher\" does not full-match \"$payload_tool_name\", the tool name this row actually sent -- the dispatch gate would reject the call before the hook's \`tr\` lowercasing (hooks/codex-spawn-depth-gate.sh:84) is ever reached, so the deny asserted below could not happen at runtime"
         result=1
     fi
 
