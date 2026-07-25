@@ -459,6 +459,50 @@ test_row11_no_trailing_newline_last_line_denies() {
     return "$result"
 }
 
+# =============================================================================
+# Row 12 -- transcript_path is a RELATIVE filename that happens to start with
+# a dash ("-n1"). Pre-fix, hooks/codex-spawn-depth-gate.sh:116's `head -3
+# "$transcript_path"` hands "-n1" to `head` as a bare positional argument,
+# and `head` parses a leading-dash argument as an OPTION (here, "-n1" reads
+# as "show 1 line") rather than as a filename -- so head never opens the
+# real rollout file, reads instead from its own (already-exhausted) stdin,
+# `cur` stays unset, and a depth=2 rollout that must DENY falls through to
+# fail-open ALLOW. The fix is `head -3 -- "$transcript_path"`, where `--`
+# ends option parsing so everything after it is a filename regardless of
+# what it starts with.
+#
+# MUST be a RELATIVE path: an absolute path always starts with "/" and can
+# never be misread as an option, so this defect is invisible unless the
+# hook's cwd is the sandbox and the fixture is referenced by its bare
+# relative name -- do not "simplify" this to an absolute path later, that
+# would silently stop exercising the bug this test exists to catch.
+#
+# Cannot use mk_rollout here -- it always writes to the fixed path
+# "$SBX/rollout-test.jsonl", which can never start with a dash. Writes the
+# fixture directly with `printf` under the dash-prefixed name instead.
+# =============================================================================
+test_row12_dash_prefixed_relative_transcript_path_denies() {
+    new_sandbox
+    local payload out result=0
+
+    printf '%s\n' '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}' > "$SBX/-n1"
+    payload=$(jq -n --arg tp "-n1" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    # cwd must be $SBX while the hook runs -- transcript_path="-n1" is
+    # relative, and the hook's `-f` existence check (hooks/codex-spawn-
+    # depth-gate.sh:92) resolves it against the caller's cwd, so "-n1" only
+    # resolves to the fixture above when invoked from inside $SBX.
+    out=$(cd "$SBX" && printf '%s' "$payload" | run_hook)
+
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED row12: expected deny for dash-prefixed relative transcript_path '-n1' with depth=2 rollout, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
 main() {
     echo "=========================================="
     echo "Codex Spawn-Depth-Gate Hook Tests"
@@ -479,6 +523,7 @@ main() {
     run_test test_row10_mixed_case_spawn_agent_denies
     run_test test_row10_near_miss_tool_name_allows
     run_test test_row11_no_trailing_newline_last_line_denies
+    run_test test_row12_dash_prefixed_relative_transcript_path_denies
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
