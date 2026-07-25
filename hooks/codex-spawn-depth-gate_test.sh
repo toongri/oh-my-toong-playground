@@ -70,15 +70,84 @@ assert_allow() {
     return 0
 }
 
+# assert_deny <out> <rc> <label> <expected_child> <expected_cap>: pins the
+# FULL deny envelope emitted by hooks/codex-spawn-depth-gate.sh:135-149 in
+# one place, instead of every deny row asserting a different bespoke subset
+# of it with its own grep/jq. Checks four properties together:
+#   1. exit 0 -- deny is NOT a nonzero-exit shape for this hook. The hook's
+#      own header (hooks/codex-spawn-depth-gate.sh:37-44) documents that it
+#      always answers via stdout JSON + exit 0, even on deny; a nonzero exit
+#      here would be a DIFFERENT (and wrong) deny shape -- this hook has no
+#      fail-CLOSED path.
+#   2. .hookSpecificOutput.permissionDecision == "deny", read via a NESTED
+#      jq path, not a top-level `grep -q '"permissionDecision":"deny"'` --
+#      the nested path pins that the field actually lives inside the
+#      hookSpecificOutput wrapper, not merely that the substring appears
+#      somewhere in the output.
+#   3. .hookSpecificOutput.hookEventName == "PreToolUse" -- the envelope's
+#      structural anchor. Unlike hooks/write-guard-core.sh's
+#      _wg_core_deny_json (a literal string constant pinned byte-for-byte by
+#      hooks/codex-write-guard_test.sh), this hook assembles the envelope
+#      field-by-field via jq -- every field, including hookEventName, is
+#      drift-capable code with no constant backing it. Dropping or
+#      misspelling hookEventName at :139 would stop Codex from recognizing
+#      this response as a PreToolUse verdict at all (a depth-exceeding spawn
+#      would silently pass), yet a bare permissionDecision grep would still
+#      match.
+#   4. The reason string carries $expected_child and $expected_cap PINNED TO
+#      THEIR OWN ROLE, not "both digits appear somewhere in the JSON blob".
+#      A bare `grep -q '3'` + `grep -q '2'` passes even if the reason-builder
+#      swapped $child and $cap into a self-contradictory sentence ("would
+#      reach depth 2, exceeding the cap of 3"). Matching "reach depth
+#      <child>" and "cap of <cap>" against the EXTRACTED reason string, each
+#      independently, closes that hole.
+assert_deny() {
+    local out="$1" rc="$2" label="$3" expected_child="$4" expected_cap="$5"
+    local result=0 reason
+
+    if [ "$rc" -ne 0 ]; then
+        echo "ASSERTION FAILED $label: expected deny (exit 0), got exit $rc, output '$out'"
+        result=1
+    fi
+
+    if ! printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null 2>&1; then
+        echo "ASSERTION FAILED $label: expected hookSpecificOutput.permissionDecision == \"deny\", got '$out'"
+        result=1
+    fi
+
+    if ! printf '%s' "$out" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse"' > /dev/null 2>&1; then
+        echo "ASSERTION FAILED $label: expected hookSpecificOutput.hookEventName == \"PreToolUse\", got '$out'"
+        result=1
+    fi
+
+    reason=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason // empty' 2>/dev/null) || reason=""
+    case "$reason" in
+        *"reach depth $expected_child"*) ;;
+        *) echo "ASSERTION FAILED $label: expected child depth $expected_child in reason, got '$reason'"; result=1 ;;
+    esac
+    case "$reason" in
+        *"cap of $expected_cap"*) ;;
+        *) echo "ASSERTION FAILED $label: expected CAP $expected_cap in reason, got '$reason'"; result=1 ;;
+    esac
+
+    return "$result"
+}
+
 new_sandbox() {
     SBX=$(mktemp -d)
 }
 
-# mk_rollout <content>: writes a one-line fixture rollout file under $SBX,
-# returns its path via echo.
+# mk_rollout <line>... : writes a fixture rollout file under $SBX, one line
+# per argument (in argument order), returns its path via echo. `printf
+# '%s\n' "$@"` cycles the format string once per positional argument, so a
+# single-argument call writes exactly one line -- verified byte-identical to
+# the prior single-arg `printf '%s\n' "$1"` body (diffed the raw bytes of
+# both forms against the same input; empty diff). All pre-existing
+# single-arg call sites are unaffected by this widening; only the new
+# multi-line fixtures below (rows 13-14) pass more than one argument.
 mk_rollout() {
     local f="$SBX/rollout-test.jsonl"
-    printf '%s\n' "$1" > "$f"
+    printf '%s\n' "$@" > "$f"
     printf '%s' "$f"
 }
 
@@ -101,10 +170,20 @@ mk_rollout() {
 # comment asserted. The fixture underneath is a depth=2 rollout (would DENY
 # if jq were present) so this test actually exercises the fail-open path
 # rather than trivially passing on an already-allow payload.
+#
+# stderr is also captured (into a file under $SBX, not discarded) and
+# asserted empty: the hook's core contract is that EVERY read failure --
+# jq absent included -- fails open SILENTLY (hooks/codex-spawn-depth-
+# gate.sh:29-36's own "Known unclosed residual risks" note: "there is no
+# diagnostic emitted anywhere on that path"). With PATH narrowed to a single
+# `cat` symlink, any call the jq-absent branch makes to a command other than
+# that whitelisted one surfaces as a "command not found" on stderr -- a
+# `2>/dev/null` here would silently swallow exactly the kind of drift this
+# row exists to catch.
 # =============================================================================
 test_row1_jq_absent_allows() {
     new_sandbox
-    local rollout jq_less_bin payload out exit_code=0 result=0
+    local rollout jq_less_bin payload out exit_code=0 result=0 stderr_file stderr_content
 
     rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
@@ -112,11 +191,15 @@ test_row1_jq_absent_allows() {
     jq_less_bin=$(mktemp -d)
     ln -s /bin/cat "$jq_less_bin/cat"
 
-    out=$(printf '%s' "$payload" | PATH="$jq_less_bin" /bin/bash "$HOOK" 2>/dev/null) || exit_code=$?
+    stderr_file="$SBX/stderr.txt"
+    out=$(printf '%s' "$payload" | PATH="$jq_less_bin" /bin/bash "$HOOK" 2>"$stderr_file") || exit_code=$?
     rm -rf "$jq_less_bin"
 
     [ "$exit_code" -eq 0 ] || { echo "ASSERTION FAILED row1: expected exit 0 when jq is absent, got $exit_code"; result=1; }
     [ -z "$out" ] || { echo "ASSERTION FAILED row1: expected empty stdout when jq is absent, got '$out'"; result=1; }
+
+    stderr_content=$(cat "$stderr_file")
+    [ -z "$stderr_content" ] || { echo "ASSERTION FAILED row1: expected empty stderr when jq is absent (fail-open contract forbids diagnostics), got '$stderr_content'"; result=1; }
 
     rm -rf "$SBX"
     return "$result"
@@ -244,49 +327,15 @@ test_row7_depth_1_allows() {
 # =============================================================================
 test_row8_depth_2_denies_with_numbers_in_reason() {
     new_sandbox
-    local rollout payload out result=0
+    local rollout payload out rc=0 result=0
 
     rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
-    out=$(printf '%s' "$payload" | run_hook)
-
-    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        echo "ASSERTION FAILED row8: expected deny for thread_spawn.depth=2, got '$out'"
-        result=1
-    fi
-
-    # hookEventName must be "PreToolUse" -- the deny envelope's structural
-    # anchor, not just its permissionDecision/reason content. Unlike hooks/
-    # write-guard-core.sh's _wg_core_deny_json (a literal string constant
-    # pinned byte-for-byte by hooks/codex-write-guard_test.sh:2381), this
-    # hook assembles the envelope field-by-field via jq at hooks/codex-spawn-
-    # depth-gate.sh:136-149 -- every field is drift-capable code with no
-    # constant backing it. Dropping or misspelling hookEventName at :139
-    # would stop Codex from recognizing this response as a PreToolUse
-    # verdict at all (a depth-exceeding spawn would silently pass), yet the
-    # `grep -q '"permissionDecision":"deny"'` check above would still match
-    # -- this assertion is what actually pins :139.
-    if ! printf '%s' "$out" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse"' > /dev/null; then
-        echo "ASSERTION FAILED row8: expected hookSpecificOutput.hookEventName == \"PreToolUse\", got '$out'"
-        result=1
-    fi
-
-    # Extract the reason field itself and assert the full sentence -- a bare
-    # `grep -q '3'`/`grep -q '2'` over the whole JSON blob passes as long as
-    # BOTH digits appear ANYWHERE, even if the reason-builder swapped $child
-    # and $cap into a self-contradictory sentence (e.g. "would reach depth 2,
-    # exceeding the cap of 3"). Pinning the digit to its own role (child depth
-    # vs cap) inside the extracted reason string closes that hole.
-    reason=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason')
-    case "$reason" in
-        *"reach depth 3"*) ;;
-        *) echo "ASSERTION FAILED row8: expected child depth 3 in reason, got '$reason'"; result=1 ;;
-    esac
-    case "$reason" in
-        *"cap of 2"*) ;;
-        *) echo "ASSERTION FAILED row8: expected CAP 2 in reason, got '$reason'"; result=1 ;;
-    esac
+    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    # See assert_deny's own docstring for what each of its four checks pins
+    # and why a bare grep over the whole JSON blob would not be enough.
+    assert_deny "$out" "$rc" "row8-depth-2" 3 2 || result=1
 
     rm -rf "$SBX"
     return "$result"
@@ -303,7 +352,7 @@ test_row8_depth_2_denies_with_numbers_in_reason() {
 # =============================================================================
 test_row9_leading_zero_depth_denies_without_crashing() {
     new_sandbox
-    local rollout payload out exit_code=0 result=0
+    local rollout payload out rc=0 result=0
 
     # "08" is a JSON string (bare 08 is not valid JSON) whose every character
     # is a digit, so the old *[!0-9]* pattern let it through unchanged --
@@ -319,11 +368,8 @@ test_row9_leading_zero_depth_denies_without_crashing() {
     rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":"08"}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
-    out=$(printf '%s' "$payload" | run_hook) || exit_code=$?
-
-    [ "$exit_code" -eq 0 ] || { echo "ASSERTION FAILED row9-leading-zero: expected exit 0 (no crash), got $exit_code"; result=1; }
-    echo "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null \
-        || { echo "ASSERTION FAILED row9-leading-zero: expected deny for depth=8 (child=9 > cap 2), got '$out'"; result=1; }
+    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    assert_deny "$out" "$rc" "row9-leading-zero" 9 2 || result=1
 
     rm -rf "$SBX"
     return "$result"
@@ -397,14 +443,7 @@ test_row10_mixed_case_spawn_agent_denies() {
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"CollaborationSpawn_Agent", transcript_path:$tp}')
 
     out=$(printf '%s' "$payload" | run_hook) || rc=$?
-    if [ "$rc" -ne 0 ]; then
-        echo "ASSERTION FAILED row10-mixed-case: expected exit 0, got $rc"
-        result=1
-    fi
-    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        echo "ASSERTION FAILED row10-mixed-case: expected deny for mixed-case spawn tool name, got '$out'"
-        result=1
-    fi
+    assert_deny "$out" "$rc" "row10-mixed-case" 3 2 || result=1
 
     rm -rf "$SBX"
     return "$result"
@@ -437,7 +476,7 @@ test_row10_near_miss_tool_name_allows() {
 # =============================================================================
 test_row11_no_trailing_newline_last_line_denies() {
     new_sandbox
-    local rollout payload out result=0
+    local rollout payload out rc=0 result=0
 
     # Cannot use mk_rollout here -- it always appends a trailing newline via
     # `printf '%s\n'`, which would never exercise the `|| [ -n "$line" ]`
@@ -448,12 +487,8 @@ test_row11_no_trailing_newline_last_line_denies() {
 
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
-    out=$(printf '%s' "$payload" | run_hook)
-
-    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        echo "ASSERTION FAILED row11: expected deny for no-trailing-newline depth=2 rollout, got '$out'"
-        result=1
-    fi
+    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    assert_deny "$out" "$rc" "row11-no-trailing-newline" 3 2 || result=1
 
     rm -rf "$SBX"
     return "$result"
@@ -483,7 +518,7 @@ test_row11_no_trailing_newline_last_line_denies() {
 # =============================================================================
 test_row12_dash_prefixed_relative_transcript_path_denies() {
     new_sandbox
-    local payload out result=0
+    local payload out rc=0 result=0
 
     printf '%s\n' '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}' > "$SBX/-n1"
     payload=$(jq -n --arg tp "-n1" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
@@ -492,12 +527,68 @@ test_row12_dash_prefixed_relative_transcript_path_denies() {
     # relative, and the hook's `-f` existence check (hooks/codex-spawn-
     # depth-gate.sh:92) resolves it against the caller's cwd, so "-n1" only
     # resolves to the fixture above when invoked from inside $SBX.
-    out=$(cd "$SBX" && printf '%s' "$payload" | run_hook)
+    out=$(cd "$SBX" && printf '%s' "$payload" | run_hook) || rc=$?
+    assert_deny "$out" "$rc" "row12-dash-prefixed" 3 2 || result=1
 
-    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
-        echo "ASSERTION FAILED row12: expected deny for dash-prefixed relative transcript_path '-n1' with depth=2 rollout, got '$out'"
-        result=1
-    fi
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Row 13 -- depth on the rollout file's 2ND line, preceded by a non-empty,
+# valid-JSON filler line that carries no thread_spawn key. Every rollout
+# fixture elsewhere in this suite is single-line, so the multi-line scan
+# loop at hooks/codex-spawn-depth-gate.sh:109-116 (`head -3` feeding a
+# `while read` that keeps scanning past a line with no depth) has never
+# actually been pressured -- every prior fixture finds (or fails to find)
+# depth on the very first line it reads. This fixture proves the loop keeps
+# scanning past line 1: reducing the hook's `head -3` to `head -1` must make
+# this fixture regress from DENY to ALLOW (the filler line has depth=null,
+# no match, and head -1 would never reach line 2 to find the real depth).
+# The filler line must be non-empty valid JSON, not blank -- hooks/codex-
+# spawn-depth-gate.sh:110's `[ -n "$line" ] || continue` skips blank lines
+# without pressuring the loop's `read` iteration at all.
+# =============================================================================
+test_row13_depth_on_second_line_denies() {
+    new_sandbox
+    local rollout payload out rc=0 result=0
+
+    rollout=$(mk_rollout \
+        '{"payload":{"source":{}}}' \
+        '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    assert_deny "$out" "$rc" "row13-depth-on-line2" 3 2 || result=1
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Row 14 -- depth on the rollout file's 4TH line, one line past the
+# `head -3` window at hooks/codex-spawn-depth-gate.sh:116. This is a
+# DESIGNED miss, not a bug: the hook's own comment at :94-98 documents that a
+# 20-rollout manual scan found thread_spawn only ever on line 1 (8/8), with
+# 3 lines kept only as margin against an ordering variation that sample was
+# too small to surface. A depth value that only appears on line 4 sits
+# outside that margin, so the scan never reaches it -- cur stays unset,
+# defaults to 0, child=1, 1 > CAP(2) is false -> ALLOW. This is not a defect
+# to fix here; it documents the known boundary of the 3-line scan window.
+# =============================================================================
+test_row14_depth_on_fourth_line_beyond_scan_window_allows() {
+    new_sandbox
+    local rollout payload out rc=0 result=0
+
+    rollout=$(mk_rollout \
+        '{"payload":{"source":{}}}' \
+        '{"payload":{"source":{}}}' \
+        '{"payload":{"source":{}}}' \
+        '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "row14-depth-on-line4-beyond-window"; then result=1; fi
 
     rm -rf "$SBX"
     return "$result"
@@ -524,6 +615,8 @@ main() {
     run_test test_row10_near_miss_tool_name_allows
     run_test test_row11_no_trailing_newline_last_line_denies
     run_test test_row12_dash_prefixed_relative_transcript_path_denies
+    run_test test_row13_depth_on_second_line_denies
+    run_test test_row14_depth_on_fourth_line_beyond_scan_window_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
