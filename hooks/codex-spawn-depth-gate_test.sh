@@ -53,41 +53,21 @@ run_hook() {
     bash "$HOOK"
 }
 
-# assert_allow: exit 0 AND empty stdout AND empty stderr -- exit-0-only would
-# let a CRASHED hook (non-zero exit swallowed by a caller, or an empty stdout
-# for an unrelated reason) masquerade as an allow, mirrors hooks/codex-write-
-# guard_test.sh's own assert_allow rationale. The stdout check pins the
-# hook's SILENT-allow contract directly (hooks/codex-spawn-depth-
-# gate.sh:29-36: every allow path is a bare `exit 0`, no stdout at all) --
-# not merely "not a deny": a bare `grep -q '"permissionDecision":"deny"'`
-# rejects only the deny string and would wave an explicit, hand-rolled
-# `permissionDecision: "allow"` envelope straight through, even though this
-# hook has never emitted one and Codex has therefore never been handed a
-# verdict on this path before. The empty-stdout check subsumes that grep
-# strictly (a deny envelope is never empty), so the grep is gone, not kept
-# alongside it. The stderr check pins the hook's OWN plural-form contract
-# (hooks/codex-spawn-depth-gate.sh:29-36): "EVERY read failure ... there is
-# no diagnostic emitted anywhere on that path" -- not just the jq-absent case
-# row1 already checks inline, but every allow-expecting row that reaches this
-# helper. $4 is the PATH to the stderr file the caller already captured from
-# its own run_hook invocation (this helper does not redirect anything itself,
-# so callers stay in control of where their fixture files live -- $SBX vs a
-# bare mktemp for the rows that have no sandbox) -- a FILE, not a
-# command-substituted string: `$(cat file)` strips ALL trailing newlines, so
-# a stderr that is nothing but a single stray newline (still a real
-# diagnostic byte the fail-open contract forbids) collapses to an empty
-# string and would slip past a `[ -n "$stderr_content" ]` check undetected.
-# `[ -s FILE ]` checks the file's actual byte size instead, so that same
-# newline-only stderr is correctly caught. $5 is the matching PATH for
-# stdout, checked the exact same way and for the exact same reason: $1
-# ("out") is itself a command-substituted string (`out=$(cat "$stdout_file")`
-# at each call site, kept only so failure messages can still show its
-# content), so a stdout that is nothing but stray newline bytes -- still real
-# bytes the SILENT-allow contract at hooks/codex-spawn-depth-gate.sh:29-36
-# forbids -- would collapse to "" through $1 and slip past `[ -n "$out" ]`
-# undetected. `[ -s "$stdout_file" ]` checks the file's actual byte size
-# instead of the newline-stripped string, so a stdout that is nothing but a
-# stray newline is correctly caught rather than waved through as empty.
+# assert_allow: exit 0 AND empty stdout AND empty stderr. All three pin the
+# fail-open contract at hooks/codex-spawn-depth-gate.sh:29-36 -- every allow
+# path is a bare `exit 0` with no stdout, and no read failure emits a
+# diagnostic anywhere on that path. Checking exit 0 alone would let a crashed
+# hook masquerade as an allow.
+#
+# $4 and $5 are PATHS to the stderr/stdout files the caller captured, not
+# their contents: `$(cat file)` strips ALL trailing newlines, so a stream
+# holding nothing but a stray newline -- still a real byte the contract
+# forbids -- collapses to "" and slips past a `[ -n "$s" ]` check. `[ -s
+# FILE ]` reads the file's actual byte size instead and catches it. Callers
+# pass paths rather than having this helper redirect, so each row keeps its
+# fixture files where it wants them. $1 is the already-substituted stdout
+# string, kept only so failure messages can show content -- never the thing
+# judged.
 assert_allow() {
     local out="$1" rc="$2" label="$3" stderr_file="$4" stdout_file="$5"
     if [ "$rc" -ne 0 ]; then
@@ -109,45 +89,27 @@ assert_allow() {
 # FULL deny envelope emitted by hooks/codex-spawn-depth-gate.sh:135-149 in
 # one place, instead of every deny row asserting a different bespoke subset
 # of it with its own grep/jq. Checks five properties together:
-#   1. exit 0 -- deny is NOT a nonzero-exit shape for this hook. The hook's
-#      own header (hooks/codex-spawn-depth-gate.sh:37-44) documents that it
-#      always answers via stdout JSON + exit 0, even on deny; a nonzero exit
-#      here would be a DIFFERENT (and wrong) deny shape -- this hook has no
-#      fail-CLOSED path.
-#   2. .hookSpecificOutput.permissionDecision == "deny", read via a NESTED
-#      jq path, not a top-level `grep -q '"permissionDecision":"deny"'` --
-#      the nested path pins that the field actually lives inside the
-#      hookSpecificOutput wrapper, not merely that the substring appears
-#      somewhere in the output.
-#   3. .hookSpecificOutput.hookEventName == "PreToolUse" -- the envelope's
-#      structural anchor. Unlike hooks/write-guard-core.sh's
-#      _wg_core_deny_json (a literal string constant pinned byte-for-byte by
-#      hooks/codex-write-guard_test.sh), this hook assembles the envelope
-#      field-by-field via jq -- every field, including hookEventName, is
-#      drift-capable code with no constant backing it. Dropping or
-#      misspelling hookEventName at :139 would stop Codex from recognizing
-#      this response as a PreToolUse verdict at all (a depth-exceeding spawn
-#      would silently pass), yet a bare permissionDecision grep would still
-#      match.
+#   1. exit 0 -- this hook always answers via stdout JSON, even on deny, and
+#      has no fail-CLOSED path, so a nonzero exit is a different and wrong
+#      deny shape.
+#   2. .hookSpecificOutput.permissionDecision == "deny" via the NESTED jq
+#      path -- pins that the field lives inside the wrapper, not merely that
+#      the substring appears somewhere in the output.
+#   3. .hookSpecificOutput.hookEventName == "PreToolUse" -- the envelope is
+#      assembled field-by-field by jq with no string constant backing it, so
+#      every field is drift-capable. Dropping or misspelling this one stops
+#      Codex recognizing the response as a verdict at all (the spawn silently
+#      passes), yet a permissionDecision grep still matches.
 #   4. The reason string carries $expected_child and $expected_cap PINNED TO
-#      THEIR OWN ROLE, not "both digits appear somewhere in the JSON blob".
-#      A bare `grep -q '3'` + `grep -q '2'` passes even if the reason-builder
-#      swapped $child and $cap into a self-contradictory sentence ("would
-#      reach depth 2, exceeding the cap of 3"). Matching "reach depth
-#      <child>" and "cap of <cap>" against the EXTRACTED reason string, each
-#      independently, closes that hole. Both patterns also close on the
-#      RIGHT using a literal delimiter that already follows the number in
-#      the hook's real reason string ("...reach depth <child>, exceeding..."
-#      and "...cap of <cap> (root session..."): an open-ended `*"reach depth
-#      $expected_child"*` would still match if the hook appended an extra
-#      digit (e.g. "depth 30" while $expected_child is "3") -- the trailing
-#      "," and " " delimiters below rule that out.
-#   5. stdout is EXACTLY one JSON object, not a stream with something else
-#      mixed in. `jq -e` over a multi-object stream reports the status of
-#      only the LAST value, so noise emitted before the real deny envelope
-#      (e.g. a stray `echo '{"noise":true}'` ahead of the hook's own jq -nc
-#      call) is invisible to checks 1-4 even though Codex, which parses this
-#      stdout as a single PreToolUse verdict, would fail to parse it at all.
+#      THEIR OWN ROLE, not "both digits appear somewhere in the blob" -- two
+#      bare digit greps pass even on a self-contradictory sentence with the
+#      two swapped. Each pattern also closes on the right with the delimiter
+#      that follows it in the real string ("," and " "), so "depth 30" cannot
+#      satisfy an expected child of 3.
+#   5. stdout is EXACTLY one JSON object. `jq -e` over a multi-object stream
+#      reports only the LAST value's status, so noise emitted ahead of the
+#      real envelope is invisible to checks 1-4 while Codex, which parses
+#      this stdout as a single verdict, fails outright.
 assert_deny() {
     local out="$1" rc="$2" label="$3" expected_child="$4" expected_cap="$5"
     local result=0 reason obj_count
@@ -210,19 +172,12 @@ mk_rollout() {
 # path actually calls. hooks/codex-spawn-depth-gate.sh:68 runs
 # `input=$(cat)` BEFORE the `command -v jq` check at :70 (a bash builtin,
 # needs no PATH entry); that check's failure exits the whole hook at :71, so
-# tr/head/jq further down are never reached. Follows the explicit
-# per-command whitelist posture of hooks/codex-write-guard_test.sh:1569-1577's
-# new_jq_less_bin (list only what the exercised path truly calls), not the
-# blanket "every /usr/bin, /bin entry except jq" copy this test used to
-# carry. That copy's own comment claimed to mirror hooks/codex-keyword-
-# detector_test.sh's test_missing_jq_fails_open technique -- which is itself
-# a brute ~961-entry copy, not the minimal single-symlink pattern its OWN
-# comment in turn claims to mirror from hooks/ledger-core_test.sh's
-# test_qa_jq_absent (that one links only sed). The chain of "mirrors X" was
-# broken; this row now matches what it actually needs, not what a prior
-# comment asserted. The fixture underneath is a depth=2 rollout (would DENY
-# if jq were present) so this test actually exercises the fail-open path
-# rather than trivially passing on an already-allow payload.
+# tr/head/jq further down are never reached. The whitelist lists only what
+# the exercised path truly calls -- do not widen it back to a blanket copy of
+# /usr/bin and /bin, which would hide a new external call this path acquires.
+# The fixture underneath is a depth=2 rollout (would DENY if jq were present)
+# so this test exercises the fail-open path rather than trivially passing on
+# an already-allow payload.
 #
 # stderr is also captured (into a file under $SBX, not discarded) and
 # asserted empty: the hook's core contract is that EVERY read failure --
@@ -398,19 +353,14 @@ test_row7_depth_1_allows() {
     # true -> deny) actually disagree; anywhere else both comparators agree
     # and this row cannot discriminate between them.
     #
-    # CAP is READ FROM THE HOOK, not hardcoded. The other cap literals in this
-    # file (row8's `assert_deny ... 3 2`, row9's `... 9 2`) do carry their own
-    # drift risk, but a LOUD one: change the hook's CAP and those rows go red,
-    # and red is a repair instruction. This check's risk runs the other way.
-    # A hardcoded 2 stays green through the drift AND through the repair that
-    # follows it -- bumping the hook to CAP=3 turns 7 deny rows red while this
-    # row keeps passing (1 + 1 is still 2), and repairing those 7 the obvious
-    # way leaves depth_value's child at 2 against a cap of 3, off the boundary,
-    # so this row silently stops pinning `-gt` and nothing anywhere says so.
-    # A `-gt` -> `-ge` regression is then invisible to both suites, and its
-    # direction is false DENY: the hook answers a legitimate depth-2 caller
-    # with "would reach depth 3, exceeding the cap of 3", a self-contradicting
-    # message the caller has no bypass or `ask` escape hatch to recover from.
+    # CAP is READ FROM THE HOOK, not hardcoded. The other cap literals here
+    # (row8's `assert_deny ... 3 2`, row9's `... 9 2`) drift LOUDLY -- bump
+    # the hook's CAP and they go red, and red is a repair instruction. A
+    # hardcoded 2 in THIS check would drift silently instead: it keeps passing
+    # through the CAP change AND through the repair that follows, which moves
+    # depth_value's child off the boundary and quietly ends this row's ability
+    # to pin `-gt`. The `-gt` -> `-ge` regression that then goes undetected
+    # points at false DENY, which this hook offers no bypass to recover from.
     local expected_cap cap_lines
     cap_lines=$(grep -cE '^CAP=[0-9]+$' "$HOOK" || true)
     expected_cap=$(grep -E '^CAP=[0-9]+$' "$HOOK" | head -1 | cut -d= -f2 || true)
@@ -472,56 +422,38 @@ test_row9_leading_zero_depth_denies_without_crashing() {
     local depth_value="08"
 
     # "08" is a JSON string (bare 08 is not valid JSON) whose every character
-    # is a digit, so the old *[!0-9]* pattern let it through unchanged --
-    # bash then evaluated $((08 + 1)) as an octal literal and aborted the
-    # script (fail-CLOSED). This is the exact fixture finding 1 fixes.
+    # is a digit, so an all-digit guard alone lets it through and bash then
+    # reads $((08 + 1)) as an octal literal and aborts the script -- a
+    # fail-CLOSED shape this hook must never take.
     #
     # Unlike null/"abc"/-1 below (real schema drift that legitimately
-    # defaults to cur=0/allow), "08" is a well-formed all-digit value: once
-    # parsed correctly as decimal 8, child=9 genuinely exceeds CAP=2, so the
-    # correct post-fix outcome is a real DENY (exit 0, deny JSON), not a
-    # silent allow -- this fixture only proves the arithmetic no longer
-    # crashes, not that the guard treats "08" as malformed.
+    # defaults to cur=0/allow), "08" is well-formed: parsed correctly as
+    # decimal 8, child=9 genuinely exceeds CAP, so the right outcome is a real
+    # DENY. This fixture proves the arithmetic no longer crashes, not that the
+    # guard treats "08" as malformed.
 
-    # Self-check: this row's entire discriminating power rests on
-    # depth_value being BOTH all-digit AND leading-zero. All-digit is what
-    # tells it apart from row9-non-numeric below (real schema drift that
-    # legitimately falls through to cur=0/allow -- a different, unrelated
-    # code path). Leading-zero is what actually pressures hooks/codex-spawn-
-    # depth-gate.sh:130's `10#` prefix: a same-digit-count value WITHOUT a
-    # leading zero (e.g. "8") parses identically whether bash's arithmetic
-    # reads it as octal or decimal, so `cur=$((cur))` and `cur=$((10#$cur))`
-    # produce the same result and the test would stay green even with the
-    # octal-misread fix reverted. If depth_value ever drifted off either
-    # property, assert_deny below would still pass (a normally-resolved
-    # rollout denies for its own, unrelated reason) while this row silently
-    # stopped exercising the crash-avoidance defense it exists to catch.
+    # Two self-checks below. The first pins all-digit, which is what tells
+    # this row apart from row9-non-numeric (a different code path that
+    # legitimately falls through to cur=0/allow).
     case "$depth_value" in
         '' | *[!0-9]*) echo "ASSERTION FAILED row9-leading-zero: depth_value \"$depth_value\" must be all-digit -- this row exists to prove well-formed all-digit input no longer crashes on octal misread, not that malformed input is rejected"; result=1 ;;
         *) ;;
     esac
 
-    # The check above (all-digit) tells this row apart from row9-non-numeric
-    # below. It does NOT, by itself, prove depth_value pressures the `10#`
-    # prefix -- "leading zero" was tried as that second check and is a proxy
-    # BROADER than the real property: "07" has a leading zero yet its octal
-    # parse (7) and decimal parse (7) AGREE, so `10#` is a no-op for it -- a
-    # leading-zero-only check waves "07" through as if it pressured the
-    # defense. The real property is executable directly: does unprefixed
-    # arithmetic on depth_value either (a) ABORT (08/09-style, an octal digit
-    # of 8 or 9 overflows base-8), or (b) SUCCEED but disagree with the
-    # 10#-prefixed decimal result (010-style, where both parses succeed but
-    # land on different numbers)? If neither, `10#` changes nothing for
-    # depth_value and this row silently stops exercising hooks/codex-spawn-
-    # depth-gate.sh:130's defense.
+    # The second self-check pins what all-digit does not: that depth_value
+    # actually pressures hooks/codex-spawn-depth-gate.sh:130's `10#` prefix.
+    # It executes the property rather than describing it -- does unprefixed
+    # arithmetic on this value either (a) ABORT, as 08/09 do when an octal
+    # digit overflows base-8, or (b) SUCCEED but disagree with the
+    # 10#-prefixed result, as 010 does? If neither, `10#` is a no-op here.
+    # A surface pattern like "has a leading zero" is not equivalent: "07"
+    # has one, yet parses to 7 either way.
     #
-    # Each probe runs as a SEPARATE `bash -c` subshell, not inline in this
-    # function's own `set -e` shell: an inline $((depth_value+1)) on a value
-    # like "08" aborts the CURRENT shell outright under `set -e` (measured:
-    # the whole test script exits before any following line runs), which
-    # would kill this test function itself instead of letting it report a
-    # clean FAIL. The value is passed as `$1`, not interpolated into the
-    # single-quoted script text, so it is never re-parsed as shell syntax.
+    # Each probe runs as a SEPARATE `bash -c` subshell, never inline: an
+    # inline $((depth_value+1)) on "08" aborts the CURRENT shell under
+    # `set -e`, killing this function instead of letting it report a clean
+    # FAIL. The value passes as `$1`, not interpolated into the single-quoted
+    # script text, so it is never re-parsed as shell syntax.
     local octal_probe_out="" octal_probe_rc=0 decimal_probe_out="" decimal_probe_rc=0
     octal_probe_out=$(/bin/bash -c 'set -euo pipefail; v="$1"; printf "%s" $((v + 1))' _ "$depth_value" 2>/dev/null) || octal_probe_rc=$?
     decimal_probe_out=$(/bin/bash -c 'set -euo pipefail; v="$1"; printf "%s" $((10#$v + 1))' _ "$depth_value" 2>/dev/null) || decimal_probe_rc=$?
@@ -685,40 +617,29 @@ test_row11_no_trailing_newline_last_line_denies() {
 }
 
 # =============================================================================
-# Row 12 -- transcript_path is a RELATIVE filename that happens to start with
-# a dash ("-n1"). Pre-fix, hooks/codex-spawn-depth-gate.sh:116's `head -3
-# "$transcript_path"` hands "-n1" to `head` as a bare positional argument,
-# and `head` parses a leading-dash argument as an OPTION (here, "-n1" reads
-# as "show 1 line") rather than as a filename -- so head never opens the
-# real rollout file, reads instead from its own (already-exhausted) stdin,
-# `cur` stays unset, and a depth=2 rollout that must DENY falls through to
-# fail-open ALLOW. The fix is `head -3 -- "$transcript_path"`, where `--`
-# ends option parsing so everything after it is a filename regardless of
-# what it starts with.
+# Row 12 -- transcript_path is a RELATIVE filename starting with a dash
+# ("-n1"). Without the `--` separator, `head` parses a leading-dash argument
+# as an OPTION ("-n1" reads as "show 1 line") rather than a filename, so it
+# never opens the rollout, reads its own already-exhausted stdin instead,
+# `cur` stays unset, and a depth=2 spawn that must DENY falls through to
+# fail-open ALLOW. `head -3 -- "$transcript_path"` ends option parsing and
+# closes it.
 #
-# MUST be a RELATIVE path: an absolute path always starts with "/" and can
-# never be misread as an option, so this defect is invisible unless the
-# hook's cwd is the sandbox and the fixture is referenced by its bare
-# relative name -- do not "simplify" this to an absolute path later, that
-# would silently stop exercising the bug this test exists to catch.
+# Both properties this fixture needs -- dash-prefixed AND relative -- are
+# asserted in the body below, so drifting off either fails loudly instead of
+# quietly ceasing to exercise the bug.
 #
-# Cannot use mk_rollout here -- it always writes to the fixed path
-# "$SBX/rollout-test.jsonl", which can never start with a dash. Writes the
-# fixture directly with `printf` under the dash-prefixed name instead.
+# Cannot use mk_rollout here: it writes to the fixed path
+# "$SBX/rollout-test.jsonl", which can never start with a dash.
 # =============================================================================
 test_row12_dash_prefixed_relative_transcript_path_denies() {
     new_sandbox
     local payload out rc=0 result=0
     local transcript_path_value="-n1"
 
-    # Self-check: this row's entire discriminating power rests on
-    # transcript_path_value being BOTH dash-prefixed AND relative (see the
-    # header comment above) -- an absolute path always starts with "/" and
-    # can never be misread as a head(1) option, so if this value ever
-    # drifted off either property, assert_deny below would still pass (a
-    # normally-resolved depth=2 rollout denies for its own, unrelated
-    # reason) while this row silently stopped exercising the `head -3 --`
-    # defense at all.
+    # An absolute path can never be misread as a head(1) option, and a name
+    # with no leading dash never triggers the misread at all -- either drift
+    # leaves assert_deny passing for its own unrelated reason.
     case "$transcript_path_value" in
         -*) ;;
         *) echo "ASSERTION FAILED row12: transcript_path_value \"$transcript_path_value\" must start with a dash to pressure head(1)'s option-parsing misread"; result=1 ;;
@@ -780,9 +701,8 @@ test_row13_depth_on_second_line_denies() {
 # land ON it -- reducing the hook's `head -3` to `head -2` leaves row 13
 # (still inside a 2-line window) and row 14 (already outside a 3-line window)
 # both unaffected, so that one-character mutation passes the suite green
-# while silently losing the scan's actual boundary line. This is exactly the
-# failure shape hooks/codex-spawn-depth-gate_test.sh's own header warns about
-# (":22-29", "the tests pass while the actual depth cap is silently gone").
+# while silently losing the scan's actual boundary line -- the same
+# tests-pass-while-the-cap-is-gone shape this file's header warns about.
 # Two non-empty, valid-JSON filler lines (matching row 13's own filler
 # requirement -- a blank filler would skip the loop's `read` iteration
 # entirely via the `[ -n "$line" ] || continue` guard at :110, without
