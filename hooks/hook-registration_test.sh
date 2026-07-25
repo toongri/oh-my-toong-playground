@@ -294,32 +294,34 @@ test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
 # =============================================================================
 
 # Extracts the tool_name literal codex-spawn-depth-gate_test.sh's
-# test_row10_mixed_case_spawn_agent_denies feeds the hook. Delimits the
-# function body by its own header line and the next bare closing brace at
-# column 0 -- this file's test_row* functions never nest braces inside a
-# body, so that first closing brace after the header is the function's own
-# close. Prints nothing if the function or a tool_name:"..." literal inside
-# it cannot be found; the caller MUST treat empty output as a hard failure,
-# not a skip -- silently falling back to a hardcoded guess here would
+# test_row10_mixed_case_spawn_agent_denies feeds the hook, taking it from
+# that function's `payload=` assignment -- the line whose value is genuinely
+# piped to run_hook. The function body is delimited by its header line and
+# the next bare closing brace at column 0; this file's test_row* functions
+# never nest braces in a body.
+#
+# Requires EXACTLY ONE match and prints nothing otherwise. The failure being
+# guarded is grading the WRONG string, not finding no string, so zero and
+# two-or-more are equally unusable and both must be loud. A `head -1` here
+# resolves ambiguity silently instead, and two shapes reach it: a second
+# `payload=` in the same function (rows 2 and 3 already carry two each, so
+# this is an in-file habit, not a hypothetical), and a widened scan that
+# also sees a comment quoting a stale literal. Either way it picks one and
+# says nothing. The caller MUST keep treating empty output as a hard
+# failure, never a skip -- falling back to a hardcoded guess here would
 # recreate the exact "two halves drift independently" defect this test
 # exists to close.
-#
-# Reads ONLY the `payload=` assignment line, not the whole function body.
-# The body's comments quote code literals freely (this whole file does), and
-# a body-wide scan scores whatever text merely LOOKS like a tool_name --
-# so one ordinary comment quoting a stale literal is enough to make every
-# check downstream of this function grade that dead string instead of the
-# one the hook actually receives. Anchoring on `payload=` binds the
-# extraction to the value that is genuinely piped to run_hook. If row10 ever
-# builds its payload some other way this yields nothing, which the caller
-# already treats as a hard failure.
 _extract_row10_spawn_tool_name() {
     local file="$REPO_DIR/hooks/codex-spawn-depth-gate_test.sh"
-    awk '
+    local matches count
+    matches=$(awk '
         /^test_row10_mixed_case_spawn_agent_denies\(\)/ { infunc=1 }
         infunc && /^\}/ { exit }
         infunc && /^[[:space:]]*payload=/ { print }
-    ' "$file" | grep -oE 'tool_name:"[^"]+"' | head -1 | sed -E 's/tool_name:"([^"]+)"/\1/'
+    ' "$file" | grep -oE 'tool_name:"[^"]+"' || true)
+    count=$(printf '%s\n' "$matches" | grep -c 'tool_name:' || true)
+    [ "$count" -eq 1 ] || return 0
+    printf '%s\n' "$matches" | sed -E 's/tool_name:"([^"]+)"/\1/'
 }
 
 test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names() {
