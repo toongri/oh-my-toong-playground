@@ -411,10 +411,11 @@ test_row7_depth_1_allows() {
     # direction is false DENY: the hook answers a legitimate depth-2 caller
     # with "would reach depth 3, exceeding the cap of 3", a self-contradicting
     # message the caller has no bypass or `ask` escape hatch to recover from.
-    local expected_cap
-    expected_cap=$(grep -E '^CAP=[0-9]+$' "$HOOK" | cut -d= -f2)
-    if [ -z "$expected_cap" ]; then
-        echo "ASSERTION FAILED row7-depth-1: could not read the hook's cap literal (a bare ^CAP=<digits>\$ line) from $HOOK -- the boundary self-check below cannot be evaluated without it"
+    local expected_cap cap_lines
+    cap_lines=$(grep -cE '^CAP=[0-9]+$' "$HOOK" || true)
+    expected_cap=$(grep -E '^CAP=[0-9]+$' "$HOOK" | head -1 | cut -d= -f2 || true)
+    if [ "$cap_lines" -ne 1 ]; then
+        echo "ASSERTION FAILED row7-depth-1: expected exactly one cap literal (a bare ^CAP=<digits>\$ line) in $HOOK, found $cap_lines -- with none there is no value to compare against, and with several \$expected_cap holds multiple lines, which makes the boundary comparison below abort with 'integer expression expected' and skip its own body, leaving this row green with its self-check inert"
         result=1
         expected_cap=-1
     fi
@@ -621,16 +622,10 @@ test_row10_mixed_case_spawn_agent_denies() {
     # fixture unmatched (allow) instead of the deny asserted here.
     #
     # This literal is also read from OUTSIDE, by hook-registration_test.sh's
-    # _extract_row10_spawn_tool_name, which must take it from the `payload=`
-    # line below and nowhere else. The next sentence is that rule's tripwire,
-    # and is the only reason it is worded this way: it quotes
-    # tool_name:"collaborationspawn_agent" -- an all-lowercase decoy that
-    # already ends in "spawn_agent" with no lowercasing needed. Should that
-    # extractor ever widen back to scanning this whole body, it reads the
-    # decoy instead of the real fixture and its own self-check goes red,
-    # since a name that already matches the hook's `*spawn_agent)` case
-    # cannot be pressuring the `tr` defense at all. Do not "tidy" the decoy
-    # away; it is load-bearing.
+    # _extract_row10_spawn_tool_name, which checks that codex.yaml's matcher
+    # actually reaches this fixture. Keep it on a single `payload=` line:
+    # that extractor requires exactly one tool_name match here and hard-fails
+    # on two, so splitting this assignment in half breaks it loudly.
     rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"CollaborationSpawn_Agent", transcript_path:$tp}')
 
