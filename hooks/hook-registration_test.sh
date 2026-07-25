@@ -330,6 +330,20 @@ test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names() {
         return 1
     fi
 
+    # row10's own discriminating power rests on its tool_name literal being
+    # MIXED case -- if it drifted to all-lowercase, the matcher-reach checks
+    # below would still pass (a lowercase name still full-matches the
+    # matcher), silently stopping this row from pressuring the hook body's
+    # tr-based lowercasing defense (codex-spawn-depth-gate.sh:84) or the
+    # matcher's own [sS]/[aA] case classes. Neither existing check below can
+    # see that drift, since both only ever test whether the matcher reaches
+    # the fixture, never what property of the fixture makes that reach worth
+    # anything.
+    if [ "$row10_tool_name" = "$(printf '%s' "$row10_tool_name" | tr '[:upper:]' '[:lower:]')" ]; then
+        echo "ASSERTION FAILED: row10's tool name \"$row10_tool_name\" is already all-lowercase -- it no longer pressures the hook body's tr-based lowercasing defense (codex-spawn-depth-gate.sh:84) nor the matcher's [sS]/[aA] case classes"
+        failed=1
+    fi
+
     if ! printf '%s\n' "$row10_tool_name" | grep -qE "^${matcher}\$"; then
         echo "ASSERTION FAILED: codex.yaml matcher \"$matcher\" does NOT full-match row10's own tool name \"$row10_tool_name\" (codex-spawn-depth-gate_test.sh:test_row10_mixed_case_spawn_agent_denies) -- the dispatch gate would reject this call before the hook body's tr-based lowercasing defense (codex-spawn-depth-gate.sh:84) is ever reached"
         failed=1
