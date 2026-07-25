@@ -279,6 +279,70 @@ test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
     return 0
 }
 
+# =============================================================================
+# Combined dispatch-gate reachability. The matcher audits above and codex-
+# spawn-depth-gate_test.sh's own row10 (test_row10_mixed_case_spawn_agent_
+# denies, which pins the hook body's tr-based lowercasing defense) are each
+# fixed in isolation -- neither ever evaluates the matcher against an actual
+# tool-name string. So a matcher that silently stops covering row10's own
+# fixture, or row10 drifting to a fixture the matcher no longer covers, both
+# pass every existing suite green. This assertion extracts the EXACT tool
+# name row10 feeds the hook and evaluates the codex.yaml matcher against it
+# as a Codex-semantics full-match regex (anchored ^...$), plus against the
+# measured runtime tool name "collaborationspawn_agent" (codex 0.145.0) --
+# closing the gap the comment above (lines 236-241) only asserted in prose.
+# =============================================================================
+
+# Extracts the tool_name literal codex-spawn-depth-gate_test.sh's
+# test_row10_mixed_case_spawn_agent_denies feeds the hook. Delimits the
+# function body by its own header line and the next bare closing brace at
+# column 0 -- this file's test_row* functions never nest braces inside a
+# body, so that first closing brace after the header is the function's own
+# close. Prints nothing if the function or a tool_name:"..." literal inside
+# it cannot be found; the caller MUST treat empty output as a hard failure,
+# not a skip -- silently falling back to a hardcoded guess here would
+# recreate the exact "two halves drift independently" defect this test
+# exists to close.
+_extract_row10_spawn_tool_name() {
+    local file="$REPO_DIR/hooks/codex-spawn-depth-gate_test.sh"
+    awk '
+        /^test_row10_mixed_case_spawn_agent_denies\(\)/ { infunc=1 }
+        infunc && /^\}/ { exit }
+        infunc { print }
+    ' "$file" | grep -oE 'tool_name:"[^"]+"' | head -1 | sed -E 's/tool_name:"([^"]+)"/\1/'
+}
+
+test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names() {
+    local block matcher_line matcher row10_tool_name failed=0
+
+    block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+    matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
+    matcher=$(echo "$matcher_line" | sed -E 's/^[[:space:]]*matcher:[[:space:]]*"(.*)"[[:space:]]*$/\1/')
+
+    if [ -z "$matcher" ]; then
+        echo "ASSERTION FAILED: could not extract the codex-spawn-depth-gate.sh matcher value from codex.yaml's PreToolUse block (matcher line: '${matcher_line:-<none>}')"
+        return 1
+    fi
+
+    row10_tool_name=$(_extract_row10_spawn_tool_name)
+    if [ -z "$row10_tool_name" ]; then
+        echo "ASSERTION FAILED: could not extract the tool_name literal from codex-spawn-depth-gate_test.sh's test_row10_mixed_case_spawn_agent_denies -- cannot verify the matcher actually reaches row10's own fixture"
+        return 1
+    fi
+
+    if ! printf '%s\n' "$row10_tool_name" | grep -qE "^${matcher}\$"; then
+        echo "ASSERTION FAILED: codex.yaml matcher \"$matcher\" does NOT full-match row10's own tool name \"$row10_tool_name\" (codex-spawn-depth-gate_test.sh:test_row10_mixed_case_spawn_agent_denies) -- the dispatch gate would reject this call before the hook body's tr-based lowercasing defense (codex-spawn-depth-gate.sh:84) is ever reached"
+        failed=1
+    fi
+
+    if ! printf '%s\n' "collaborationspawn_agent" | grep -qE "^${matcher}\$"; then
+        echo "ASSERTION FAILED: codex.yaml matcher \"$matcher\" does NOT full-match the measured runtime tool name \"collaborationspawn_agent\" (codex 0.145.0) -- the spawn-depth gate would never fire at all"
+        failed=1
+    fi
+
+    [ "$failed" -eq 0 ]
+}
+
 main() {
     echo "=========================================="
     echo "Hook Registration Consistency Tests"
@@ -292,6 +356,7 @@ main() {
     run_test test_core_claude_hooks_not_duplicated_per_project
     run_test test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher
     run_test test_codex_yaml_spawn_depth_gate_matcher_never_bare
+    run_test test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
