@@ -166,22 +166,71 @@ mk_rollout() {
     printf '%s' "$f"
 }
 
+# The hook's rollout scan window, READ FROM THE HOOK's own `head -N` call
+# rather than hardcoded. Every helper and row below that reasons about where a
+# depth sits relative to that window gets it from here, so a window change
+# moves them all together instead of leaving each one quietly measuring against
+# a stale 3. Prints nothing unless the hook carries exactly one such call --
+# zero and two-or-more are equally unusable, and every caller treats empty as a
+# hard failure.
+hook_scan_window() {
+    local windows count
+    # Matched WITHOUT the `--` separator on purpose: row12 pins that separator,
+    # and a window read that also depended on it would turn row12's own
+    # mutation into a suite-wide failure and stop identifying anything.
+    windows=$(grep -oE 'head -[0-9]+' "$HOOK" | sed -E 's/head -([0-9]+)/\1/')
+    count=$(printf '%s\n' "$windows" | grep -c . || true)
+    [ "$count" -eq 1 ] || return 0
+    printf '%s' "$windows"
+}
+
 # The depth the hook actually saw: follow the captured stdin's transcript_path
-# to the rollout it names, and read the value out of that file.
+# to the rollout it names, and read the value the hook's own scan would have
+# stopped on -- inside the same window, first match wins.
+#
+# The window is not optional. Reading the whole file instead returns a depth
+# sitting PAST the window, which the hook never reaches (it defaults to cur=0
+# there). On a DENY-expecting row assert_deny catches the divergence, but on an
+# ALLOW-expecting row the hook's default IS the expected outcome, so the row
+# stays green while its self-check grades a value the hook never read --
+# measured on row7, whose self-check is the only thing pinning `-gt`, and whose
+# missed regression is a false DENY this hook offers no bypass to recover from.
 #
 # A fixture asserting something about its own discriminating value must assert
 # it against THIS, never against the variable the fixture was assembled from.
 # The variable only describes what was meant to be sent; a bare reassignment
 # between the assertion and the payload build splits the two apart, and nothing
-# notices. That is not hypothetical -- sweeping a one-line reassignment through
-# every body position, rows 7 and 9 each had positions where a deleted defense
-# passed both suites, and row 7's window covers a false-DENY regression this
-# hook offers no bypass to recover from.
+# notices.
 hook_saw_depth() {
-    local stdin_file="$1" tp
+    local stdin_file="$1" tp window
     tp=$(jq -r '.transcript_path // empty' "$stdin_file" 2>/dev/null) || tp=""
     [ -n "$tp" ] || return 0
-    jq -r '.payload.source.subagent.thread_spawn.depth // empty' "$tp" 2>/dev/null || true
+    window=$(hook_scan_window)
+    [ -n "$window" ] || return 0
+    head -"$window" -- "$tp" 2>/dev/null \
+        | jq -r '.payload.source.subagent.thread_spawn.depth // empty' 2>/dev/null \
+        | head -1 || true
+}
+
+# 1-based index of the first rollout line carrying a depth, read from the file
+# the hook was actually handed. Rows 13, 13b and 14 differ ONLY in where their
+# depth sits relative to the scan window, and that placement is the whole of
+# their discriminating power -- so each asserts it here rather than trusting
+# the argument list it passed to mk_rollout. Scans the whole file on purpose:
+# row14's property is that its depth sits one line PAST the window.
+rollout_depth_line() {
+    local stdin_file="$1" tp n=0 line depth
+    tp=$(jq -r '.transcript_path // empty' "$stdin_file" 2>/dev/null) || tp=""
+    [ -n "$tp" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        n=$((n + 1))
+        [ -n "$line" ] || continue
+        depth=$(printf '%s' "$line" | jq -r '.payload.source.subagent.thread_spawn.depth // empty' 2>/dev/null) || depth=""
+        if [ -n "$depth" ]; then
+            printf '%s' "$n"
+            return 0
+        fi
+    done < "$tp"
 }
 
 # =============================================================================
@@ -767,14 +816,29 @@ test_row12_dash_prefixed_relative_transcript_path_denies() {
 # =============================================================================
 test_row13_depth_on_second_line_denies() {
     new_sandbox
-    local rollout payload out rc=0 result=0
+    local rollout payload out rc=0 result=0 depth_line window
 
     rollout=$(mk_rollout \
         '{"payload":{"source":{}}}' \
         '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
-    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    out=$(printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook) || rc=$?
+
+    # This row pins the scan loop's ability to look past line 1, and that rests
+    # entirely on its depth NOT being on line 1 -- there it would survive every
+    # narrowing and pin nothing. Read back off the rollout the hook was handed
+    # rather than off the argument list above. Only the lower bound is asserted:
+    # row13b and row14 own the window edges, and adding an upper bound here
+    # would make every window change fail three rows instead of the two whose
+    # placement actually broke.
+    depth_line=$(rollout_depth_line "$SBX/hook-stdin.json")
+    window=$(hook_scan_window)
+    if [ -z "$depth_line" ] || [ -z "$window" ] || [ "$depth_line" -le 1 ]; then
+        echo "ASSERTION FAILED row13-depth-on-line2: the depth in the rollout the hook read sits on line \"$depth_line\" (hook scan window \"$window\") -- on line 1 this row survives any narrowing of that window and stops pinning the multi-line scan at all"
+        result=1
+    fi
+
     assert_deny "$out" "$rc" "row13-depth-on-line2" 3 2 || result=1
 
     rm -rf "$SBX"
@@ -797,7 +861,7 @@ test_row13_depth_on_second_line_denies() {
 # =============================================================================
 test_row13b_depth_on_third_line_scan_boundary_denies() {
     new_sandbox
-    local rollout payload out rc=0 result=0
+    local rollout payload out rc=0 result=0 depth_line window
 
     rollout=$(mk_rollout \
         '{"payload":{"source":{}}}' \
@@ -805,7 +869,22 @@ test_row13b_depth_on_third_line_scan_boundary_denies() {
         '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
-    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    out=$(printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook) || rc=$?
+
+    # This row is the only one whose allow/deny VERDICT flips on a narrowing to
+    # `head -2` -- row13 still sits inside a 2-line window and row14 is already
+    # outside one. That power lasts exactly as long as its depth sits on the
+    # LAST line the window still reaches, so the placement is asserted rather
+    # than assumed, against the rollout the hook was handed and the hook's own
+    # window. (A widening leaves this row's verdict green; the check below is
+    # what reports it, naming both numbers.)
+    depth_line=$(rollout_depth_line "$SBX/hook-stdin.json")
+    window=$(hook_scan_window)
+    if [ -z "$depth_line" ] || [ -z "$window" ] || [ "$depth_line" -ne "$window" ]; then
+        echo "ASSERTION FAILED row13b-depth-on-line3-boundary: the depth in the rollout the hook read sits on line \"$depth_line\" but the hook's scan window is \"$window\" -- this row only pins that window's lower edge while the two are equal, and it is the only row that pins it at all"
+        result=1
+    fi
+
     assert_deny "$out" "$rc" "row13b-depth-on-line3-boundary" 3 2 || result=1
 
     rm -rf "$SBX"
@@ -833,7 +912,7 @@ test_row13b_depth_on_third_line_scan_boundary_denies() {
 # =============================================================================
 test_row14_depth_on_fourth_line_beyond_scan_window_allows() {
     new_sandbox
-    local rollout payload out rc=0 result=0 stderr_file stdout_file
+    local rollout payload out rc=0 result=0 stderr_file stdout_file depth_line window
 
     stderr_file="$SBX/stderr.txt"
     stdout_file="$SBX/stdout.txt"
@@ -844,8 +923,22 @@ test_row14_depth_on_fourth_line_beyond_scan_window_allows() {
         '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
-    printf '%s' "$payload" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
+    printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
     out=$(cat "$stdout_file")
+
+    # This row is the only one whose allow/deny VERDICT flips on a WIDENING of
+    # the scan window -- every other multi-line fixture keeps denying when the
+    # window grows. That power lasts exactly as long as its depth sits one line
+    # PAST the window: further out and a widening by one would no longer reach
+    # it either. (A narrowing leaves this row's verdict green; the check below
+    # is what reports it, naming both numbers.)
+    depth_line=$(rollout_depth_line "$SBX/hook-stdin.json")
+    window=$(hook_scan_window)
+    if [ -z "$depth_line" ] || [ -z "$window" ] || [ "$depth_line" -ne "$((window + 1))" ]; then
+        echo "ASSERTION FAILED row14-depth-on-line4-beyond-window: the depth in the rollout the hook read sits on line \"$depth_line\" but the hook's scan window is \"$window\", so it must sit on line $((window + 1)) -- this row only pins that window's upper edge from exactly one line past it, and it is the only row that pins it at all"
+        result=1
+    fi
+
     if ! assert_allow "$out" "$rc" "row14-depth-on-line4-beyond-window" "$stderr_file" "$stdout_file"; then result=1; fi
 
     rm -rf "$SBX"
