@@ -64,15 +64,29 @@ hooks:
     # spawn path -- see the codex-spawn-depth-gate.sh entry in CLAUDE.md's
     # Hooks section for why, so a hook is the only enforcement point.
     #
-    # matcher MUST be ".*spawn_agent", never "spawn_agent" or "^spawn_agent$":
-    # Codex's PreToolUse matcher is a full-string regex match, and the actual
-    # tool name observed at runtime is "collaborationspawn_agent" (not
-    # "spawn_agent"). A bare "spawn_agent" or anchored "^spawn_agent$" never
-    # matches that string, so the hook would silently never fire -- passing
-    # both deploy and this repo's own tests while doing nothing at runtime.
+    # matcher MUST be ".*[sS]pawn_[aA]gent", never "spawn_agent" or
+    # "^spawn_agent$": Codex's PreToolUse matcher is a full-string regex
+    # match, and the actual tool name observed at runtime is
+    # "collaborationspawn_agent" (not "spawn_agent"). A bare "spawn_agent" or
+    # anchored "^spawn_agent$" never matches that string, so the hook would
+    # silently never fire -- passing both deploy and this repo's own tests
+    # while doing nothing at runtime.
+    #
+    # The [sS]/[aA] case classes exist so the hook body's own defense
+    # against a mixed-case variant (codex-spawn-depth-gate.sh:84's
+    # `tr '[:upper:]' '[:lower:]'` lowercasing before the `*spawn_agent`
+    # case match) is actually reachable -- that lowercasing only runs after
+    # this matcher has already let the call through, so a matcher that
+    # can't match a mixed-case form leaves the hook's own defense as dead
+    # code below it. Limitation: an ALL-CAPS variant
+    # ("COLLABORATIONSPAWN_AGENT") is still uncovered by this matcher --
+    # "[sS]pawn" doesn't match "PAWN" and "[aA]gent" doesn't match "GENT",
+    # since each class only covers the word's first letter. The hook
+    # body's `tr` lowercases the whole string and would cover this case if
+    # reached, but this matcher gate never lets it through.
     - component: codex-spawn-depth-gate.sh
       type: command
-      matcher: ".*spawn_agent"
+      matcher: ".*[sS]pawn_[aA]gent"
   PostToolUse:
     - component: rules-injector
       type: command

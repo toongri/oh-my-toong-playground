@@ -230,10 +230,14 @@ EOF
 
 # =============================================================================
 # codex.yaml registers codex-spawn-depth-gate.sh under PreToolUse with the
-# full-match matcher ".*spawn_agent" -- Codex's PreToolUse matcher is a
+# full-match matcher ".*[sS]pawn_[aA]gent" -- Codex's PreToolUse matcher is a
 # full-string regex match against the actual tool name
 # "collaborationspawn_agent", so a bare "spawn_agent" (or "^spawn_agent$")
-# never matches and the hook silently never fires.
+# never matches and the hook silently never fires. The case classes let the
+# matcher through for a mixed-case variant (e.g. "CollaborationSpawn_Agent"),
+# so the hook body's own tr-based lowercasing defense (codex-spawn-depth-
+# gate.sh:84) becomes reachable instead of dead code below an unreachable
+# gate.
 # =============================================================================
 test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher() {
     local block matcher_line
@@ -243,28 +247,33 @@ test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher() {
         return 1
     fi
     matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
-    if ! echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"\.\*spawn_agent"'; then
-        echo "ASSERTION FAILED: codex-spawn-depth-gate.sh matcher must be exactly \".*spawn_agent\" (got: ${matcher_line:-<none>}) -- Codex's PreToolUse matcher is a full-string regex match against the actual tool name \"collaborationspawn_agent\", so anything without the \".*\" prefix (e.g. bare \"spawn_agent\") never matches and the hook silently never fires"
+    if ! echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"\.\*\[sS\]pawn_\[aA\]gent"'; then
+        echo "ASSERTION FAILED: codex-spawn-depth-gate.sh matcher must be exactly \".*[sS]pawn_[aA]gent\" (got: ${matcher_line:-<none>}) -- Codex's PreToolUse matcher is a full-string regex match against the actual tool name \"collaborationspawn_agent\", so anything without the \".*\" prefix (e.g. bare \"spawn_agent\") never matches and the hook silently never fires"
         return 1
     fi
     return 0
 }
 
 # =============================================================================
-# Regression guard: the matcher string must never regress to a bare
-# "spawn_agent" (no ".*" prefix) -- that value passed codex.yaml's own schema
-# validation and this test file's grep before, yet never actually fired,
-# because Codex's PreToolUse matcher is full-match, not substring/prefix
-# match. A simple `grep -c 'spawn_agent'` would NOT catch this regression,
-# since ".*spawn_agent" also contains the substring "spawn_agent" -- this
+# Regression guard: the matcher string must never regress to a value lacking
+# the ".*" prefix -- Codex's PreToolUse matcher is full-match, not substring/
+# prefix match, so any matcher missing the prefix (a bare "spawn_agent", or a
+# case-class form like "[sS]pawn_[aA]gent" with no prefix) never matches the
+# actual runtime tool name "collaborationspawn_agent" and the hook silently
+# never fires. This is a categorical check on the ".*" prefix itself, not an
+# enumeration of specific literal strings -- an enumeration that only listed
+# bare "spawn_agent" would miss any other same-category instance (like the
+# case-class form above) that also drops the prefix. A simple `grep -c
+# 'spawn_agent'` would NOT catch this regression either, since
+# ".*[sS]pawn_[aA]gent" also contains the substring "spawn_agent" -- this
 # check isolates the matcher's line value specifically.
 # =============================================================================
 test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
     local block matcher_line
     block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
     matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
-    if echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"spawn_agent"'; then
-        echo "ASSERTION FAILED: codex-spawn-depth-gate.sh matcher regressed to bare \"spawn_agent\" (no \".*\" prefix) -- Codex's PreToolUse matcher is a full-string regex match, and the actual tool name is \"collaborationspawn_agent\", so a bare \"spawn_agent\" never matches and the hook silently never fires"
+    if ! echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"\.\*'; then
+        echo "ASSERTION FAILED: codex-spawn-depth-gate.sh matcher regressed to a value without the \".*\" prefix (got: ${matcher_line:-<none>}) -- Codex's PreToolUse matcher is a full-string regex match, and the actual tool name is \"collaborationspawn_agent\", so any matcher not starting with \".*\" (e.g. bare \"spawn_agent\" or a case-class form like \"[sS]pawn_[aA]gent\" without the prefix) never matches and the hook silently never fires"
         return 1
     fi
     return 0
