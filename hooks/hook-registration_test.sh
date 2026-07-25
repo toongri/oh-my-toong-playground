@@ -314,6 +314,7 @@ _extract_row10_spawn_tool_name() {
 
 test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names() {
     local block matcher_line matcher row10_tool_name failed=0
+    local original_matches lowered_matches lowered
 
     block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
     matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
@@ -330,17 +331,35 @@ test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names() {
         return 1
     fi
 
-    # row10's own discriminating power rests on its tool_name literal being
-    # MIXED case -- if it drifted to all-lowercase, the matcher-reach checks
-    # below would still pass (a lowercase name still full-matches the
-    # matcher), silently stopping this row from pressuring the hook body's
-    # tr-based lowercasing defense (codex-spawn-depth-gate.sh:84) or the
-    # matcher's own [sS]/[aA] case classes. Neither existing check below can
-    # see that drift, since both only ever test whether the matcher reaches
-    # the fixture, never what property of the fixture makes that reach worth
-    # anything.
-    if [ "$row10_tool_name" = "$(printf '%s' "$row10_tool_name" | tr '[:upper:]' '[:lower:]')" ]; then
-        echo "ASSERTION FAILED: row10's tool name \"$row10_tool_name\" is already all-lowercase -- it no longer pressures the hook body's tr-based lowercasing defense (codex-spawn-depth-gate.sh:84) nor the matcher's [sS]/[aA] case classes"
+    # row10's own discriminating power rests on its tool_name literal
+    # actually needing the hook body's tr-based lowercasing defense
+    # (codex-spawn-depth-gate.sh:84) -- not on the proxy "not already
+    # all-lowercase". That proxy is BROADER than the real property:
+    # "Collaborationspawn_agent" is not all-lowercase (its leading "C" is
+    # capital) yet already ends in "spawn_agent" case-sensitively, so `tr`
+    # changes nothing for it -- a not-all-lowercase check alone would wave
+    # that name through as if it pressured the defense. The real property
+    # needs BOTH halves to hold: the ORIGINAL name must NOT match the hook's
+    # own suffix case `*spawn_agent)` at codex-spawn-depth-gate.sh:86 (or
+    # `tr` is a no-op), AND the LOWERCASED name MUST match it (or lowercasing
+    # would not help either). Uses the same `case ... in *spawn_agent)` form
+    # as the hook body itself, so the test and the hook state the same
+    # property in the same syntax.
+    case "$row10_tool_name" in
+        *spawn_agent) original_matches=1 ;;
+        *) original_matches=0 ;;
+    esac
+    lowered=$(printf '%s' "$row10_tool_name" | tr '[:upper:]' '[:lower:]')
+    case "$lowered" in
+        *spawn_agent) lowered_matches=1 ;;
+        *) lowered_matches=0 ;;
+    esac
+    if [ "$original_matches" -eq 1 ]; then
+        echo "ASSERTION FAILED: row10's tool name \"$row10_tool_name\" already matches the hook's suffix case \`*spawn_agent)\` (codex-spawn-depth-gate.sh:86) BEFORE lowercasing -- the \`tr\` call at :84 is a no-op for this fixture, it does not pressure that defense"
+        failed=1
+    fi
+    if [ "$lowered_matches" -eq 0 ]; then
+        echo "ASSERTION FAILED: row10's tool name \"$row10_tool_name\" still does not match the hook's suffix case \`*spawn_agent)\` (codex-spawn-depth-gate.sh:86) AFTER lowercasing -- lowercasing alone would not make this fixture deny, so it does not pressure the \`tr\` defense at :84 either"
         failed=1
     fi
 

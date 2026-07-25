@@ -387,10 +387,34 @@ test_row6_no_thread_spawn_root_allows() {
 test_row7_depth_1_allows() {
     new_sandbox
     local rollout payload out rc=0 result=0 stderr_file stdout_file
+    local depth_value=1
+
+    # Self-check: this row is the ONLY fixture in this suite that pins
+    # hooks/codex-spawn-depth-gate.sh:135's `-gt` comparator specifically
+    # (row8 denies under both `-gt` and a mutated `-ge`, so it cannot tell
+    # them apart). That power rests entirely on depth_value's own child
+    # (depth_value + 1) landing EXACTLY on CAP -- only at that exact boundary
+    # do `-gt` (child > CAP is false -> allow) and `-ge` (child >= CAP is
+    # true -> deny) actually disagree; anywhere else both comparators agree
+    # and this row cannot discriminate between them.
+    #
+    # CAP is hardcoded here (2), matching the pre-existing convention already
+    # used by every assert_deny call throughout this file (e.g. row8's
+    # `assert_deny ... 3 2`, row9's `... 9 2`) -- reading CAP from the hook
+    # for just this one check would not close the drift risk those existing
+    # literals already carry (hooks/codex-spawn-depth-gate.sh:54-61's own
+    # comment documents CAP has no read mechanism, and every other row in
+    # this file would still silently drift if CAP ever changed), so it adds
+    # a one-off coupling without fixing the actual duplication.
+    local expected_cap=2
+    if [ "$((depth_value + 1))" -ne "$expected_cap" ]; then
+        echo "ASSERTION FAILED row7-depth-1: depth_value+1 ($((depth_value + 1))) must equal CAP ($expected_cap) exactly -- only at that boundary does hooks/codex-spawn-depth-gate.sh:135's \`-gt\` (allow) and a mutated \`-ge\` (deny) actually disagree; this row cannot pin \`-gt\` specifically otherwise"
+        result=1
+    fi
 
     stderr_file="$SBX/stderr.txt"
     stdout_file="$SBX/stdout.txt"
-    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":1}}}}}')
+    rollout=$(mk_rollout "$(printf '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":%s}}}}}' "$depth_value")")
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
     printf '%s' "$payload" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
@@ -464,10 +488,36 @@ test_row9_leading_zero_depth_denies_without_crashing() {
         '' | *[!0-9]*) echo "ASSERTION FAILED row9-leading-zero: depth_value \"$depth_value\" must be all-digit -- this row exists to prove well-formed all-digit input no longer crashes on octal misread, not that malformed input is rejected"; result=1 ;;
         *) ;;
     esac
-    case "$depth_value" in
-        0?*) ;;
-        *) echo "ASSERTION FAILED row9-leading-zero: depth_value \"$depth_value\" must have a leading zero -- without one, octal and decimal parses of the same digits agree, so hooks/codex-spawn-depth-gate.sh:130's \$((10#\$cur)) fix becomes a no-op and this row would silently stop exercising the defense it exists to catch"; result=1 ;;
-    esac
+
+    # The check above (all-digit) tells this row apart from row9-non-numeric
+    # below. It does NOT, by itself, prove depth_value pressures the `10#`
+    # prefix -- "leading zero" was tried as that second check and is a proxy
+    # BROADER than the real property: "07" has a leading zero yet its octal
+    # parse (7) and decimal parse (7) AGREE, so `10#` is a no-op for it -- a
+    # leading-zero-only check waves "07" through as if it pressured the
+    # defense. The real property is executable directly: does unprefixed
+    # arithmetic on depth_value either (a) ABORT (08/09-style, an octal digit
+    # of 8 or 9 overflows base-8), or (b) SUCCEED but disagree with the
+    # 10#-prefixed decimal result (010-style, where both parses succeed but
+    # land on different numbers)? If neither, `10#` changes nothing for
+    # depth_value and this row silently stops exercising hooks/codex-spawn-
+    # depth-gate.sh:130's defense.
+    #
+    # Each probe runs as a SEPARATE `bash -c` subshell, not inline in this
+    # function's own `set -e` shell: an inline $((depth_value+1)) on a value
+    # like "08" aborts the CURRENT shell outright under `set -e` (measured:
+    # the whole test script exits before any following line runs), which
+    # would kill this test function itself instead of letting it report a
+    # clean FAIL. The value is passed as `$1`, not interpolated into the
+    # single-quoted script text, so it is never re-parsed as shell syntax.
+    local octal_probe_out="" octal_probe_rc=0 decimal_probe_out="" decimal_probe_rc=0
+    octal_probe_out=$(/bin/bash -c 'set -euo pipefail; v="$1"; printf "%s" $((v + 1))' _ "$depth_value" 2>/dev/null) || octal_probe_rc=$?
+    decimal_probe_out=$(/bin/bash -c 'set -euo pipefail; v="$1"; printf "%s" $((10#$v + 1))' _ "$depth_value" 2>/dev/null) || decimal_probe_rc=$?
+
+    if [ "$octal_probe_rc" -eq 0 ] && [ "$octal_probe_out" = "$decimal_probe_out" ]; then
+        echo "ASSERTION FAILED row9-leading-zero: depth_value \"$depth_value\" does not pressure hooks/codex-spawn-depth-gate.sh:130's \`10#\` prefix -- unprefixed arithmetic succeeds (\"$octal_probe_out\") and agrees with the 10#-prefixed decimal result (\"$decimal_probe_out\"); removing the \`10#\` prefix would produce an identical outcome for this fixture"
+        result=1
+    fi
 
     rollout=$(mk_rollout "$(printf '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":"%s"}}}}}' "$depth_value")")
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
