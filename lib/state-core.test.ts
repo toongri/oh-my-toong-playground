@@ -27,6 +27,7 @@ import {
 	isPristine,
 	restampAfterAdopt,
 	ensureSeed,
+	touchSessionStates,
 } from "./state-core.ts";
 
 // ---------------------------------------------------------------------------
@@ -1094,4 +1095,200 @@ describe("ensureSeed ↔ bash seed parity (ES-parity)", () => {
 			expect(normalizeTs(actual)).toEqual(normalizeTs(expected));
 		});
 	}
+});
+
+// ---------------------------------------------------------------------------
+// touchSessionStates (family-agnostic Stop-hook session-state heartbeat)
+// ---------------------------------------------------------------------------
+
+describe("touchSessionStates", () => {
+	let omtDir: string;
+	const origOmtDir = process.env.OMT_DIR;
+
+	beforeEach(() => {
+		omtDir = mkdtempSync(join(tmpdir(), "state-core-touch-"));
+		process.env.OMT_DIR = omtDir;
+	});
+
+	afterEach(() => {
+		if (origOmtDir === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = origOmtDir;
+		rmSync(omtDir, { recursive: true, force: true });
+	});
+
+	// Extracts touchSessionStates' own source, from its `export function` line to
+	// its matching closing brace (depth-counted — a plain regex would stop at the
+	// first nested `}`), so the literal-free assertion below inspects only this
+	// function's body and not the STATE_PREFIX map defined elsewhere in the file.
+	function extractFunctionSource(src: string, name: string): string {
+		const startIdx = src.indexOf(`export function ${name}`);
+		if (startIdx === -1) throw new Error(`function ${name} not found in source`);
+		const braceStart = src.indexOf("{", startIdx);
+		let depth = 0;
+		let i = braceStart;
+		for (; i < src.length; i++) {
+			if (src[i] === "{") depth++;
+			else if (src[i] === "}") {
+				depth--;
+				if (depth === 0) break;
+			}
+		}
+		return src.slice(startIdx, i + 1);
+	}
+
+	test("updates last_touched_at across all five families in one call, with zero family literals in its own source", () => {
+		const sid = "touch-sid";
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `goal-state-${sid}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 2,
+			outcome: "ship X",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `ultragoal-state-${sid}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 2,
+			outcome: "ship Y",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `prometheus-state-${sid}.json`, {
+			active: true,
+			phase: "S2",
+			plan_path: "some/plan.md",
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			state: { initial_idea: "diving skills" },
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `qa-state-${sid}.json`, {
+			active: true,
+			phase: "IN-PROGRESS",
+			cycle: 1,
+			target: "some target",
+			started_at: old,
+			last_touched_at: old,
+		});
+
+		touchSessionStates(sid);
+
+		const nowMs = Date.now();
+		for (const filename of [
+			`goal-state-${sid}.json`,
+			`ultragoal-state-${sid}.json`,
+			`prometheus-state-${sid}.json`,
+			`deep-interview-active-state-${sid}.json`,
+			`qa-state-${sid}.json`,
+		]) {
+			const parsed = readState(omtDir, filename) as Record<string, unknown>;
+			const touchedMs = Date.parse(parsed["last_touched_at"] as string);
+			expect(Math.abs(nowMs - touchedMs)).toBeLessThan(5000);
+		}
+
+		const src = readFileSync(join(import.meta.dir, "state-core.ts"), "utf8");
+		const fnSrc = extractFunctionSource(src, "touchSessionStates");
+		expect(fnSrc).not.toContain("qa-state-");
+		expect(fnSrc).not.toContain("prometheus-state-");
+		expect(fnSrc).not.toContain("deep-interview-active-state-");
+	});
+
+	test("does NOT update a pristine state file", () => {
+		const sid = "touch-pristine";
+		const seedTs = isoSecondsAgo(60);
+		writeState(omtDir, `goal-state-${sid}.json`, {
+			active: true,
+			phase: "planning",
+			iteration: 0,
+			outcome: "",
+			max_iterations: 10,
+			started_at: seedTs,
+			last_touched_at: seedTs,
+		});
+
+		touchSessionStates(sid);
+
+		const parsed = readState(omtDir, `goal-state-${sid}.json`) as Record<string, unknown>;
+		expect(parsed["last_touched_at"]).toBe(seedTs);
+	});
+
+	test("is a no-op when no state files exist for the session — no write, no throw", () => {
+		const sid = "touch-absent";
+		expect(() => touchSessionStates(sid)).not.toThrow();
+		expect(readdirSync(omtDir).length).toBe(0);
+	});
+
+	test("a corrupted state file does not abort the sweep — sibling well-formed file is still updated", () => {
+		const sid = "touch-corrupt";
+		writeFileSync(join(omtDir, `goal-state-${sid}.json`), "{not valid json");
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `ultragoal-state-${sid}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 1,
+			outcome: "ship Z",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+
+		expect(() => touchSessionStates(sid)).not.toThrow();
+
+		const parsed = readState(omtDir, `ultragoal-state-${sid}.json`) as Record<string, unknown>;
+		const touchedMs = Date.parse(parsed["last_touched_at"] as string);
+		expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+	});
+
+	// QA 1 — no-create updater count must stay at 2 (pre-existing updateGoalState +
+	// updateUltragoalState). 3+ means a per-family updater was added, abandoning the
+	// family-agnostic property this task establishes.
+	test("QA1: lib/persistent-mode-core/state.ts still exports exactly 2 no-create updaters", () => {
+		const src = readFileSync(
+			join(import.meta.dir, "persistent-mode-core/state.ts"),
+			"utf8",
+		);
+		const callSites = src.match(/writeFileNoCreate\(/g) ?? [];
+		expect(callSites.length).toBe(2);
+	});
+
+	// QA 2 — the suffix scan must not reach another session's state files. If it did,
+	// every dead session would be kept alive forever.
+	test("QA2: only the target session's state file is touched, another session's is untouched", () => {
+		const sid = "touch-target";
+		const other = "touch-other";
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `goal-state-${sid}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 1,
+			outcome: "mine",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `goal-state-${other}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 1,
+			outcome: "theirs",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+
+		touchSessionStates(sid);
+
+		const mine = readState(omtDir, `goal-state-${sid}.json`) as Record<string, unknown>;
+		const theirs = readState(omtDir, `goal-state-${other}.json`) as Record<string, unknown>;
+		expect(Math.abs(Date.now() - Date.parse(mine["last_touched_at"] as string))).toBeLessThan(5000);
+		expect(theirs["last_touched_at"]).toBe(old);
+	});
 });

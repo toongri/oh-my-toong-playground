@@ -15,6 +15,8 @@
  *   restampAfterAdopt(path)       — post-rename heartbeat re-stamp via writeFileNoCreate
  *   writeFileNoCreate(path, s)    — single-syscall no-create write (ENOENT if absent)
  *   isPristine(type, parsed)      — true iff state is freshly seeded, safe for adoption overwrite
+ *   touchSessionStates(sid)       — family-agnostic heartbeat: refreshes last_touched_at on
+ *                                    every existing, non-pristine state file for sid
  *
  * Sid is derived from FILENAME ONLY — never read a session-id field from file content.
  * This module does NOT create state files; adoption may only rename existing ones.
@@ -35,7 +37,7 @@ import { join } from "path";
 // lib-internal imports must be relative — deployed copies under .claude/lib/ have no @lib alias
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
-import { getOmtDir } from "./omt-dir";
+import { getOmtDir, resolveOmtDir } from "./omt-dir";
 
 // ---------------------------------------------------------------------------
 // Timestamp
@@ -679,5 +681,66 @@ export function ensureSeed(type: StateType, sessionId: string): void {
 		throw err;
 	} finally {
 		if (fd !== undefined) closeSync(fd);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// touchSessionStates — family-agnostic Stop-hook session-state heartbeat
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the StateType whose STATE_PREFIX prefixes `filename`, or null if none match.
+ * Kept out of touchSessionStates' own body so that function's source stays free of
+ * any family-name literal — this helper is the one place that reads STATE_PREFIX.
+ */
+function typeFromStateFilename(filename: string): StateType | null {
+	for (const type of Object.keys(STATE_PREFIX) as StateType[]) {
+		if (filename.startsWith(STATE_PREFIX[type])) return type;
+	}
+	return null;
+}
+
+/**
+ * Refreshes `last_touched_at` on every existing state file belonging to `sessionId`,
+ * across every state family, without this function's own source containing any
+ * family name. Every STATE_PREFIX entry ends in `-state-`, so matching directory
+ * entries by the suffix `-state-${sessionId}.json` alone covers all of them; the
+ * `.json` anchor also excludes a `...-{sid}.json.closed.bak` backup, which must not
+ * be heartbeated.
+ *
+ * Never creates a file or directory: resolves the directory via resolveOmtDir (not
+ * getOmtDir, which mkdirs) and writes only through writeFileNoCreate. If the
+ * directory does not exist, does nothing. A pristine state is skipped — a freshly
+ * seeded state must not be kept alive by a heartbeat it never really used. Every
+ * per-file error (ENOENT from a read/write race, a parse failure, a malformed file)
+ * is swallowed and the sweep continues — this runs above the Stop hook's subagent
+ * early-return, so a throw here would corrupt the hook's own decision.
+ */
+export function touchSessionStates(sessionId: string): void {
+	const omtDir = resolveOmtDir();
+	const suffix = `-state-${sessionId}.json`;
+
+	let entries: string[];
+	try {
+		entries = readdirSync(omtDir);
+	} catch {
+		return; // directory absent — nothing to touch, and nothing to create
+	}
+
+	for (const entry of entries) {
+		if (!entry.endsWith(suffix)) continue;
+		const type = typeFromStateFilename(entry);
+		if (type === null) continue;
+		const path = join(omtDir, entry);
+		try {
+			const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+			if (!isPlainObject(parsed)) continue;
+			if (isPristine(type, parsed)) continue;
+			const stamped = { ...parsed, last_touched_at: nowStamp() };
+			writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
+		} catch (err) {
+			if (isErrnoException(err) && err.code === "ENOENT") continue; // vanished between readdir and write — harmless race
+			continue; // any other per-file error must not abort the sweep
+		}
 	}
 }
