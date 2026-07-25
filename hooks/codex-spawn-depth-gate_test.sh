@@ -433,6 +433,7 @@ test_row8_depth_2_denies_with_numbers_in_reason() {
 test_row9_leading_zero_depth_denies_without_crashing() {
     new_sandbox
     local rollout payload out rc=0 result=0
+    local depth_value="08"
 
     # "08" is a JSON string (bare 08 is not valid JSON) whose every character
     # is a digit, so the old *[!0-9]* pattern let it through unchanged --
@@ -445,7 +446,30 @@ test_row9_leading_zero_depth_denies_without_crashing() {
     # correct post-fix outcome is a real DENY (exit 0, deny JSON), not a
     # silent allow -- this fixture only proves the arithmetic no longer
     # crashes, not that the guard treats "08" as malformed.
-    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":"08"}}}}}')
+
+    # Self-check: this row's entire discriminating power rests on
+    # depth_value being BOTH all-digit AND leading-zero. All-digit is what
+    # tells it apart from row9-non-numeric below (real schema drift that
+    # legitimately falls through to cur=0/allow -- a different, unrelated
+    # code path). Leading-zero is what actually pressures hooks/codex-spawn-
+    # depth-gate.sh:130's `10#` prefix: a same-digit-count value WITHOUT a
+    # leading zero (e.g. "8") parses identically whether bash's arithmetic
+    # reads it as octal or decimal, so `cur=$((cur))` and `cur=$((10#$cur))`
+    # produce the same result and the test would stay green even with the
+    # octal-misread fix reverted. If depth_value ever drifted off either
+    # property, assert_deny below would still pass (a normally-resolved
+    # rollout denies for its own, unrelated reason) while this row silently
+    # stopped exercising the crash-avoidance defense it exists to catch.
+    case "$depth_value" in
+        '' | *[!0-9]*) echo "ASSERTION FAILED row9-leading-zero: depth_value \"$depth_value\" must be all-digit -- this row exists to prove well-formed all-digit input no longer crashes on octal misread, not that malformed input is rejected"; result=1 ;;
+        *) ;;
+    esac
+    case "$depth_value" in
+        0?*) ;;
+        *) echo "ASSERTION FAILED row9-leading-zero: depth_value \"$depth_value\" must have a leading zero -- without one, octal and decimal parses of the same digits agree, so hooks/codex-spawn-depth-gate.sh:130's \$((10#\$cur)) fix becomes a no-op and this row would silently stop exercising the defense it exists to catch"; result=1 ;;
+    esac
+
+    rollout=$(mk_rollout "$(printf '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":"%s"}}}}}' "$depth_value")")
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
     out=$(printf '%s' "$payload" | run_hook) || rc=$?
@@ -617,9 +641,27 @@ test_row11_no_trailing_newline_last_line_denies() {
 test_row12_dash_prefixed_relative_transcript_path_denies() {
     new_sandbox
     local payload out rc=0 result=0
+    local transcript_path_value="-n1"
+
+    # Self-check: this row's entire discriminating power rests on
+    # transcript_path_value being BOTH dash-prefixed AND relative (see the
+    # header comment above) -- an absolute path always starts with "/" and
+    # can never be misread as a head(1) option, so if this value ever
+    # drifted off either property, assert_deny below would still pass (a
+    # normally-resolved depth=2 rollout denies for its own, unrelated
+    # reason) while this row silently stopped exercising the `head -3 --`
+    # defense at all.
+    case "$transcript_path_value" in
+        -*) ;;
+        *) echo "ASSERTION FAILED row12: transcript_path_value \"$transcript_path_value\" must start with a dash to pressure head(1)'s option-parsing misread"; result=1 ;;
+    esac
+    case "$transcript_path_value" in
+        /*) echo "ASSERTION FAILED row12: transcript_path_value \"$transcript_path_value\" must be a RELATIVE path -- an absolute path can never be misread as a head(1) option, so it stops exercising the bug this row exists to catch"; result=1 ;;
+        *) ;;
+    esac
 
     printf '%s\n' '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}' > "$SBX/-n1"
-    payload=$(jq -n --arg tp "-n1" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+    payload=$(jq -n --arg tp "$transcript_path_value" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
     # cwd must be $SBX while the hook runs -- transcript_path="-n1" is
     # relative, and the hook's `-f` existence check (hooks/codex-spawn-
