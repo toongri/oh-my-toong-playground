@@ -549,12 +549,25 @@ test_row10_mixed_case_spawn_agent_denies() {
     new_sandbox
     local rollout payload out rc=0 result=0 lowered payload_tool_name
     # Hoisted into a named local, the same shape rows 7, 9 and 12 use for their
-    # own discriminating values -- the self-check below then reads the LIVE
-    # value rather than a description of it, and hook-registration_test.sh's
-    # matcher check reads this one declaration rather than parsing whatever
-    # shape the payload happens to take. Keep exactly one such declaration in
-    # this function; that extractor hard-fails on zero or two.
+    # own discriminating values. hook-registration_test.sh's matcher check reads
+    # this one declaration rather than parsing whatever shape the payload
+    # happens to take -- the identity assertion further down is what keeps that
+    # reader and the actual payload from drifting apart. Keep exactly one such
+    # declaration in this function; that extractor hard-fails on zero or two.
     local tool_name_value="CollaborationSpawn_Agent"
+
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
+    payload=$(jq -n --arg tp "$rollout" --arg tn "$tool_name_value" '{tool_name:$tn, transcript_path:$tp}')
+
+    # `tee` sits inside the same pipeline, so this file holds the exact bytes
+    # run_hook consumed -- not a variable that describes what is about to be
+    # sent. Everything below judges THAT. Reading $tool_name_value here instead
+    # would only prove the declaration has the right shape, and the declaration
+    # is not what the hook sees: a bare reassignment anywhere above (an idiom
+    # this file already uses -- see row2's own payload) hands the hook a
+    # different name while every check keeps grading the old one.
+    out=$(printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook) || rc=$?
+    payload_tool_name=$(jq -r '.tool_name // empty' "$SBX/hook-stdin.json")
 
     # Mixed-case tool name that only ends in "spawn_agent" AFTER lowercasing
     # -- pins the `tr` call at :84. Removing that line would leave this
@@ -562,39 +575,28 @@ test_row10_mixed_case_spawn_agent_denies() {
     # must hold: the ORIGINAL must NOT match the hook's own suffix case
     # `*spawn_agent)` at :86 (or `tr` is a no-op for it), and the LOWERCASED
     # form MUST match (or lowercasing would not help either). Stated in the
-    # same `case` syntax the hook uses, against the same value the hook gets.
-    case "$tool_name_value" in
+    # same `case` syntax the hook uses, against the same bytes the hook read.
+    case "$payload_tool_name" in
         *spawn_agent)
-            echo "ASSERTION FAILED row10-mixed-case: tool name \"$tool_name_value\" already matches the hook's suffix case \`*spawn_agent)\` (hooks/codex-spawn-depth-gate.sh:86) BEFORE lowercasing -- the \`tr\` call at :84 is a no-op for it, so this row does not pressure that defense"
+            echo "ASSERTION FAILED row10-mixed-case: tool name \"$payload_tool_name\" already matches the hook's suffix case \`*spawn_agent)\` (hooks/codex-spawn-depth-gate.sh:86) BEFORE lowercasing -- the \`tr\` call at :84 is a no-op for it, so this row does not pressure that defense"
             result=1
             ;;
     esac
-    lowered=$(printf '%s' "$tool_name_value" | tr '[:upper:]' '[:lower:]')
+    lowered=$(printf '%s' "$payload_tool_name" | tr '[:upper:]' '[:lower:]')
     case "$lowered" in
         *spawn_agent) ;;
         *)
-            echo "ASSERTION FAILED row10-mixed-case: tool name \"$tool_name_value\" still does not match \`*spawn_agent)\` AFTER lowercasing -- lowercasing alone would not make this fixture deny, so it does not pressure the \`tr\` defense either"
+            echo "ASSERTION FAILED row10-mixed-case: tool name \"$payload_tool_name\" still does not match \`*spawn_agent)\` AFTER lowercasing -- lowercasing alone would not make this fixture deny, so it does not pressure the \`tr\` defense either"
             result=1
             ;;
     esac
 
-    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
-    payload=$(jq -n --arg tp "$rollout" --arg tn "$tool_name_value" '{tool_name:$tn, transcript_path:$tp}')
-
-    # Everything that judges this fixture -- the case checks above and
-    # hook-registration_test.sh's matcher check -- reads tool_name_value.
-    # Nothing forces the bytes the hook actually reads to CARRY that value, and
-    # a payload holding anything else leaves all of them grading a name the hook
-    # never sees. Capture what goes through the pipe and read the name back off
-    # THAT, not off $payload: re-reading the variable only describes what is
-    # about to be sent, so any reassignment between the re-read and the pipe
-    # splits the two apart again -- measured green on both suites with the
-    # hook's own `tr` deleted. `tee` sits inside the same pipeline, so this file
-    # holds the exact bytes run_hook consumed and there is no gap left to widen.
-    out=$(printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook) || rc=$?
-    payload_tool_name=$(jq -r '.tool_name // empty' "$SBX/hook-stdin.json")
+    # The checks above now stand on their own. This one is for the reader that
+    # cannot see the payload at all: hook-registration_test.sh scores the
+    # DECLARATION against codex.yaml's dispatch matcher, so if the two drift
+    # apart it verifies a name this fixture never sends.
     if [ "$payload_tool_name" != "$tool_name_value" ]; then
-        echo "ASSERTION FAILED row10-mixed-case: the payload the hook actually read carries tool_name \"$payload_tool_name\", not the declared tool_name_value \"$tool_name_value\" -- every check of this fixture reads the declaration, so a payload carrying anything else silently stops being the thing they verified"
+        echo "ASSERTION FAILED row10-mixed-case: the payload the hook actually read carries tool_name \"$payload_tool_name\", not the declared tool_name_value \"$tool_name_value\" -- hook-registration_test.sh checks codex.yaml's matcher against that declaration, so a payload carrying anything else leaves it grading a name this row never sends"
         result=1
     fi
 
@@ -670,20 +672,8 @@ test_row11_no_trailing_newline_last_line_denies() {
 # =============================================================================
 test_row12_dash_prefixed_relative_transcript_path_denies() {
     new_sandbox
-    local payload out rc=0 result=0
+    local payload out rc=0 result=0 payload_transcript_path
     local transcript_path_value="-n1"
-
-    # An absolute path can never be misread as a head(1) option, and a name
-    # with no leading dash never triggers the misread at all -- either drift
-    # leaves assert_deny passing for its own unrelated reason.
-    case "$transcript_path_value" in
-        -*) ;;
-        *) echo "ASSERTION FAILED row12: transcript_path_value \"$transcript_path_value\" must start with a dash to pressure head(1)'s option-parsing misread"; result=1 ;;
-    esac
-    case "$transcript_path_value" in
-        /*) echo "ASSERTION FAILED row12: transcript_path_value \"$transcript_path_value\" must be a RELATIVE path -- an absolute path can never be misread as a head(1) option, so it stops exercising the bug this row exists to catch"; result=1 ;;
-        *) ;;
-    esac
 
     printf '%s\n' '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}' > "$SBX/-n1"
     payload=$(jq -n --arg tp "$transcript_path_value" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
@@ -692,7 +682,28 @@ test_row12_dash_prefixed_relative_transcript_path_denies() {
     # relative, and the hook's `-f` existence check (hooks/codex-spawn-
     # depth-gate.sh:92) resolves it against the caller's cwd, so "-n1" only
     # resolves to the fixture above when invoked from inside $SBX.
-    out=$(cd "$SBX" && printf '%s' "$payload" | run_hook) || rc=$?
+    #
+    # `tee` shares the pipeline, so this file holds the exact bytes the hook
+    # read. The checks below judge that path rather than the variable it was
+    # assembled from: a bare reassignment between the two -- to an absolute
+    # path, say -- would leave them approving a fixture that no longer
+    # pressures anything, which is measurably how they behaved when they read
+    # the variable.
+    out=$(cd "$SBX" && printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook) || rc=$?
+    payload_transcript_path=$(jq -r '.transcript_path // empty' "$SBX/hook-stdin.json")
+
+    # An absolute path can never be misread as a head(1) option, and a name
+    # with no leading dash never triggers the misread at all -- either drift
+    # leaves assert_deny passing for its own unrelated reason.
+    case "$payload_transcript_path" in
+        -*) ;;
+        *) echo "ASSERTION FAILED row12: transcript_path \"$payload_transcript_path\" in the payload the hook read must start with a dash to pressure head(1)'s option-parsing misread"; result=1 ;;
+    esac
+    case "$payload_transcript_path" in
+        /*) echo "ASSERTION FAILED row12: transcript_path \"$payload_transcript_path\" in the payload the hook read must be a RELATIVE path -- an absolute path can never be misread as a head(1) option, so it stops exercising the bug this row exists to catch"; result=1 ;;
+        *) ;;
+    esac
+
     assert_deny "$out" "$rc" "row12-dash-prefixed" 3 2 || result=1
 
     rm -rf "$SBX"
