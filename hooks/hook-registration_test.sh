@@ -293,40 +293,43 @@ test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
 # closing the gap the comment above (lines 236-241) only asserted in prose.
 # =============================================================================
 
-# Extracts the tool_name literal codex-spawn-depth-gate_test.sh's
-# test_row10_mixed_case_spawn_agent_denies feeds the hook, taking it from
-# that function's `payload=` assignment -- the line whose value is genuinely
-# piped to run_hook. The function body is delimited by its header line and
-# the next bare closing brace at column 0; this file's test_row* functions
-# never nest braces in a body.
+# Extracts the tool name codex-spawn-depth-gate_test.sh's
+# test_row10_mixed_case_spawn_agent_denies feeds the hook, from that
+# function's `local tool_name_value=` declaration. The function body is
+# delimited by its header line and the next bare closing brace at column 0;
+# this file's test_row* functions never nest braces in a body.
 #
-# Requires EXACTLY ONE match and prints nothing otherwise. The failure being
-# guarded is grading the WRONG string, not finding no string, so zero and
-# two-or-more are equally unusable and both must be loud. A `head -1` here
-# resolves ambiguity silently instead, and two shapes reach it: a second
-# `payload=` in the same function (rows 2 and 3 already carry two each, so
-# this is an in-file habit, not a hypothetical), and a widened scan that
-# also sees a comment quoting a stale literal. Either way it picks one and
-# says nothing. The caller MUST keep treating empty output as a hard
-# failure, never a skip -- falling back to a hardcoded guess here would
-# recreate the exact "two halves drift independently" defect this test
-# exists to close.
+# Anchored on the DECLARATION, not on the `payload=` line that consumes it.
+# A payload can be assembled any number of ways -- an inline literal, a jq
+# `--arg`, a here-doc -- and a reader keyed to one of those shapes silently
+# scores nothing on the others. That is not hypothetical: a dead
+# inline-literal payload sitting above a live `--arg` payload was measured
+# green on both suites while the hook's mixed-case defense was deleted,
+# because the reader saw one literal and called it unambiguous. A single
+# declaration has one shape, and the value it holds is the value row10
+# hands the hook.
+#
+# Requires EXACTLY ONE declaration and prints nothing otherwise. The failure
+# guarded against is grading the WRONG string, not finding no string, so zero
+# and two-or-more are equally unusable and both must be loud. The caller MUST
+# keep treating empty output as a hard failure, never a skip -- falling back
+# to a hardcoded guess here would recreate the exact "two halves drift
+# independently" defect this test exists to close.
 _extract_row10_spawn_tool_name() {
     local file="$REPO_DIR/hooks/codex-spawn-depth-gate_test.sh"
-    local matches count
-    matches=$(awk '
+    local decls count
+    decls=$(awk '
         /^test_row10_mixed_case_spawn_agent_denies\(\)/ { infunc=1 }
         infunc && /^\}/ { exit }
-        infunc && /^[[:space:]]*payload=/ { print }
-    ' "$file" | grep -oE 'tool_name:"[^"]+"' || true)
-    count=$(printf '%s\n' "$matches" | grep -c 'tool_name:' || true)
+        infunc && /^[[:space:]]*local[[:space:]]+tool_name_value=/ { print }
+    ' "$file")
+    count=$(printf '%s\n' "$decls" | grep -c 'tool_name_value=' || true)
     [ "$count" -eq 1 ] || return 0
-    printf '%s\n' "$matches" | sed -E 's/tool_name:"([^"]+)"/\1/'
+    printf '%s\n' "$decls" | sed -E 's/^[[:space:]]*local[[:space:]]+tool_name_value="([^"]*)".*$/\1/'
 }
 
 test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names() {
     local block matcher_line matcher row10_tool_name failed=0
-    local original_matches lowered_matches lowered
 
     block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
     matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
@@ -339,42 +342,16 @@ test_codex_spawn_depth_gate_matcher_reaches_row10_and_runtime_tool_names() {
 
     row10_tool_name=$(_extract_row10_spawn_tool_name)
     if [ -z "$row10_tool_name" ]; then
-        echo "ASSERTION FAILED: could not extract the tool_name literal from codex-spawn-depth-gate_test.sh's test_row10_mixed_case_spawn_agent_denies -- cannot verify the matcher actually reaches row10's own fixture"
+        echo "ASSERTION FAILED: could not read exactly one \`local tool_name_value=\` declaration from codex-spawn-depth-gate_test.sh's test_row10_mixed_case_spawn_agent_denies -- cannot verify the matcher actually reaches row10's own fixture"
         return 1
     fi
 
-    # row10's own discriminating power rests on its tool_name literal
-    # actually needing the hook body's tr-based lowercasing defense
-    # (codex-spawn-depth-gate.sh:84) -- not on the proxy "not already
-    # all-lowercase". That proxy is BROADER than the real property:
-    # "Collaborationspawn_agent" is not all-lowercase (its leading "C" is
-    # capital) yet already ends in "spawn_agent" case-sensitively, so `tr`
-    # changes nothing for it -- a not-all-lowercase check alone would wave
-    # that name through as if it pressured the defense. The real property
-    # needs BOTH halves to hold: the ORIGINAL name must NOT match the hook's
-    # own suffix case `*spawn_agent)` at codex-spawn-depth-gate.sh:86 (or
-    # `tr` is a no-op), AND the LOWERCASED name MUST match it (or lowercasing
-    # would not help either). Uses the same `case ... in *spawn_agent)` form
-    # as the hook body itself, so the test and the hook state the same
-    # property in the same syntax.
-    case "$row10_tool_name" in
-        *spawn_agent) original_matches=1 ;;
-        *) original_matches=0 ;;
-    esac
-    lowered=$(printf '%s' "$row10_tool_name" | tr '[:upper:]' '[:lower:]')
-    case "$lowered" in
-        *spawn_agent) lowered_matches=1 ;;
-        *) lowered_matches=0 ;;
-    esac
-    if [ "$original_matches" -eq 1 ]; then
-        echo "ASSERTION FAILED: row10's tool name \"$row10_tool_name\" already matches the hook's suffix case \`*spawn_agent)\` (codex-spawn-depth-gate.sh:86) BEFORE lowercasing -- the \`tr\` call at :84 is a no-op for this fixture, it does not pressure that defense"
-        failed=1
-    fi
-    if [ "$lowered_matches" -eq 0 ]; then
-        echo "ASSERTION FAILED: row10's tool name \"$row10_tool_name\" still does not match the hook's suffix case \`*spawn_agent)\` (codex-spawn-depth-gate.sh:86) AFTER lowercasing -- lowercasing alone would not make this fixture deny, so it does not pressure the \`tr\` defense at :84 either"
-        failed=1
-    fi
-
+    # Whether that name genuinely pressures the hook's tr-based lowercasing
+    # defense is asserted in row10 itself, against the live variable rather
+    # than a value parsed back out of source. What can only be checked HERE is
+    # the other gate: codex.yaml's matcher is a full-string regex, so a name
+    # the hook body would handle correctly still never reaches it if the
+    # dispatch matcher rejects the call first.
     if ! printf '%s\n' "$row10_tool_name" | grep -qE "^${matcher}\$"; then
         echo "ASSERTION FAILED: codex.yaml matcher \"$matcher\" does NOT full-match row10's own tool name \"$row10_tool_name\" (codex-spawn-depth-gate_test.sh:test_row10_mixed_case_spawn_agent_denies) -- the dispatch gate would reject this call before the hook body's tr-based lowercasing defense (codex-spawn-depth-gate.sh:84) is ever reached"
         failed=1
