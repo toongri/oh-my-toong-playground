@@ -398,15 +398,26 @@ test_row7_depth_1_allows() {
     # true -> deny) actually disagree; anywhere else both comparators agree
     # and this row cannot discriminate between them.
     #
-    # CAP is hardcoded here (2), matching the pre-existing convention already
-    # used by every assert_deny call throughout this file (e.g. row8's
-    # `assert_deny ... 3 2`, row9's `... 9 2`) -- reading CAP from the hook
-    # for just this one check would not close the drift risk those existing
-    # literals already carry (hooks/codex-spawn-depth-gate.sh:54-61's own
-    # comment documents CAP has no read mechanism, and every other row in
-    # this file would still silently drift if CAP ever changed), so it adds
-    # a one-off coupling without fixing the actual duplication.
-    local expected_cap=2
+    # CAP is READ FROM THE HOOK, not hardcoded. The other cap literals in this
+    # file (row8's `assert_deny ... 3 2`, row9's `... 9 2`) do carry their own
+    # drift risk, but a LOUD one: change the hook's CAP and those rows go red,
+    # and red is a repair instruction. This check's risk runs the other way.
+    # A hardcoded 2 stays green through the drift AND through the repair that
+    # follows it -- bumping the hook to CAP=3 turns 7 deny rows red while this
+    # row keeps passing (1 + 1 is still 2), and repairing those 7 the obvious
+    # way leaves depth_value's child at 2 against a cap of 3, off the boundary,
+    # so this row silently stops pinning `-gt` and nothing anywhere says so.
+    # A `-gt` -> `-ge` regression is then invisible to both suites, and its
+    # direction is false DENY: the hook answers a legitimate depth-2 caller
+    # with "would reach depth 3, exceeding the cap of 3", a self-contradicting
+    # message the caller has no bypass or `ask` escape hatch to recover from.
+    local expected_cap
+    expected_cap=$(grep -E '^CAP=[0-9]+$' "$HOOK" | cut -d= -f2)
+    if [ -z "$expected_cap" ]; then
+        echo "ASSERTION FAILED row7-depth-1: could not read the hook's cap literal (a bare ^CAP=<digits>\$ line) from $HOOK -- the boundary self-check below cannot be evaluated without it"
+        result=1
+        expected_cap=-1
+    fi
     if [ "$((depth_value + 1))" -ne "$expected_cap" ]; then
         echo "ASSERTION FAILED row7-depth-1: depth_value+1 ($((depth_value + 1))) must equal CAP ($expected_cap) exactly -- only at that boundary does hooks/codex-spawn-depth-gate.sh:135's \`-gt\` (allow) and a mutated \`-ge\` (deny) actually disagree; this row cannot pin \`-gt\` specifically otherwise"
         result=1
@@ -608,6 +619,18 @@ test_row10_mixed_case_spawn_agent_denies() {
     # Mixed-case tool name that only ends in "spawn_agent" AFTER lowercasing
     # -- pins the `tr` call at :84. Removing that line would leave this
     # fixture unmatched (allow) instead of the deny asserted here.
+    #
+    # This literal is also read from OUTSIDE, by hook-registration_test.sh's
+    # _extract_row10_spawn_tool_name, which must take it from the `payload=`
+    # line below and nowhere else. The next sentence is that rule's tripwire,
+    # and is the only reason it is worded this way: it quotes
+    # tool_name:"collaborationspawn_agent" -- an all-lowercase decoy that
+    # already ends in "spawn_agent" with no lowercasing needed. Should that
+    # extractor ever widen back to scanning this whole body, it reads the
+    # decoy instead of the real fixture and its own self-check goes red,
+    # since a name that already matches the hook's `*spawn_agent)` case
+    # cannot be pressuring the `tr` defense at all. Do not "tidy" the decoy
+    # away; it is load-bearing.
     rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"CollaborationSpawn_Agent", transcript_path:$tp}')
 
