@@ -280,17 +280,17 @@ test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
 }
 
 # =============================================================================
-# Combined dispatch-gate reachability. The matcher audits above and codex-
-# spawn-depth-gate_test.sh's own row10 (test_row10_mixed_case_spawn_agent_
-# denies, which pins the hook body's tr-based lowercasing defense) are each
-# fixed in isolation -- neither ever evaluates the matcher against an actual
-# tool-name string. So a matcher that silently stops covering row10's own
-# fixture, or row10 drifting to a fixture the matcher no longer covers, both
-# pass every existing suite green. This assertion extracts the EXACT tool
-# name row10 feeds the hook and evaluates the codex.yaml matcher against it
-# as a Codex-semantics full-match regex (anchored ^...$), plus against the
-# measured runtime tool name "collaborationspawn_agent" (codex 0.145.0) --
-# closing the gap the comment above (lines 236-241) only asserted in prose.
+# Dispatch-gate reachability against the MEASURED runtime tool name. The
+# audit above (test_codex_yaml_spawn_depth_gate_registered_with_full_match_
+# matcher) pins the matcher's literal VALUE; this one pins its SEMANTICS --
+# that whatever value is there full-matches "collaborationspawn_agent"
+# (codex 0.145.0) under Codex's anchored-regex rule, so the gate is not
+# silently unreachable at runtime.
+#
+# The complementary half -- that the matcher also reaches the fixture
+# codex-spawn-depth-gate_test.sh's row10 sends -- is asserted in row10
+# itself, against the bytes row10 actually piped to the hook. It
+# deliberately does NOT live here; see the in-body comment below for why.
 # =============================================================================
 
 test_codex_spawn_depth_gate_matcher_reaches_runtime_tool_name() {
