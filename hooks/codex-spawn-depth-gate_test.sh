@@ -583,17 +583,21 @@ test_row10_mixed_case_spawn_agent_denies() {
 
     # Everything that judges this fixture -- the case checks above and
     # hook-registration_test.sh's matcher check -- reads tool_name_value.
-    # Nothing so far forces the payload actually piped to run_hook to CARRY
-    # that value, and a payload that hardcodes its own string instead would
-    # leave all of them grading a name the hook never sees. Read it back off
-    # the built payload rather than trusting the assembly above.
-    payload_tool_name=$(printf '%s' "$payload" | jq -r '.tool_name // empty')
+    # Nothing forces the bytes the hook actually reads to CARRY that value, and
+    # a payload holding anything else leaves all of them grading a name the hook
+    # never sees. Capture what goes through the pipe and read the name back off
+    # THAT, not off $payload: re-reading the variable only describes what is
+    # about to be sent, so any reassignment between the re-read and the pipe
+    # splits the two apart again -- measured green on both suites with the
+    # hook's own `tr` deleted. `tee` sits inside the same pipeline, so this file
+    # holds the exact bytes run_hook consumed and there is no gap left to widen.
+    out=$(printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook) || rc=$?
+    payload_tool_name=$(jq -r '.tool_name // empty' "$SBX/hook-stdin.json")
     if [ "$payload_tool_name" != "$tool_name_value" ]; then
-        echo "ASSERTION FAILED row10-mixed-case: the payload piped to the hook carries tool_name \"$payload_tool_name\", not the declared tool_name_value \"$tool_name_value\" -- every check of this fixture reads the declaration, so a payload carrying anything else silently stops being the thing they verified"
+        echo "ASSERTION FAILED row10-mixed-case: the payload the hook actually read carries tool_name \"$payload_tool_name\", not the declared tool_name_value \"$tool_name_value\" -- every check of this fixture reads the declaration, so a payload carrying anything else silently stops being the thing they verified"
         result=1
     fi
 
-    out=$(printf '%s' "$payload" | run_hook) || rc=$?
     assert_deny "$out" "$rc" "row10-mixed-case" 3 2 || result=1
 
     rm -rf "$SBX"
