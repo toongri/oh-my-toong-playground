@@ -21,7 +21,7 @@ import {
 import { generateAttemptId, ensureDir } from "./utils.ts";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { isPristine, isStateLive } from "@lib/state-core";
+import { isPristine, isStateLive, touchSessionStates } from "@lib/state-core";
 
 export interface DecisionContext {
 	projectRoot: string;
@@ -355,6 +355,29 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	// Non-subagent background tasks (shell/monitor/etc.) do NOT suppress enforcement — only subagents wake the main
 	// via task-notification, so only they make a deferred Stop hook re-invocation safe.
 	if (activeSubagentCount > 0) {
+		// Heartbeat goes HERE — inside this guard, right before the return — and must
+		// never be hoisted above the `if`. Two facts pin it to this exact spot:
+		//
+		// 1. Why not above the guard: an unconditional call would re-stamp this
+		//    session's own deep-interview/prometheus state `last_touched_at` on every
+		//    Stop call, and the corpse-staleness checks further down (:547 / :661,
+		//    judged via isStateLive at :638 / :645 / :667) read that same field back
+		//    from disk later in this SAME makeDecision call — self-blinding every
+		//    TTL-stale corpse into looking live. Scoping to activeSubagentCount > 0 is
+		//    behaviorally identical for the starving window below: that window is only
+		//    reachable while this guard actually fires (makeDecision never reaches the
+		//    corpse checks on this path), so nothing outside this branch is affected.
+		//
+		// 2. Window this closes: a session with many running subagents measured 6h 38m
+		//    between consecutive artifact writes, against a 6h TTL — long enough for
+		//    session-start GC to reap a still-in-use state file. Do not "tidy" this
+		//    call back above the guard to match an older diagram; that regresses the
+		//    self-blinding bug in point 1.
+		try {
+			touchSessionStates(sessionId);
+		} catch {
+			/* never let a heartbeat write failure suppress the return below */
+		}
 		return formatContinueOutput();
 	}
 

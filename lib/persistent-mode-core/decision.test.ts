@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from "bun:test";
 import * as fs from "fs";
 import { makeDecision, DecisionContext } from "./decision.ts";
-import { mkdir, writeFile, rm, readFile } from "fs/promises";
+import { mkdir, mkdtemp, writeFile, rm, readFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { execFileSync } from "child_process";
 
 describe("makeDecision", () => {
 	const testDir = join(tmpdir(), "persistent-mode-decision-test-" + Date.now());
@@ -2165,6 +2166,200 @@ describe("makeDecision", () => {
 			);
 			expect(result.decision).toBe("block");
 			expect(result.reason).toContain("<todo-continuation>");
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// TODO 4 (D-5): the Stop-hook heartbeat (touchSessionStates) is hoisted
+	// above Guard 2's activeSubagentCount > 0 early-return, so even a Stop call
+	// that short-circuits there still proves this session is alive and
+	// refreshes its state files. Without this, a session with many running
+	// subagents never touches state below the guard, and its state ages past
+	// ACTIVE_IDLE_TTL while still in use.
+	// -------------------------------------------------------------------------
+	describe("D-5: heartbeat hoisted above the subagent early-return", () => {
+		const isoAgo = (seconds: number): string => new Date(Date.now() - seconds * 1000).toISOString();
+		const ageFile = (path: string, seconds: number): void => {
+			const old = new Date(Date.now() - seconds * 1000);
+			fs.utimesSync(path, old, old);
+		};
+
+		it("touches this session's state while a subagent is active, and still returns continue", async () => {
+			const sid = "heartbeat-active-sub";
+			const statePath = join(omtDir, `ultragoal-state-${sid}.json`);
+			const old = isoAgo(7 * 3600);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					iteration: 1,
+					outcome: "ship it",
+					max_iterations: 10,
+					started_at: old,
+					last_touched_at: old,
+				}),
+			);
+			ageFile(statePath, 7 * 3600);
+
+			const result = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 1 }));
+
+			expect(result).toEqual({ continue: true });
+			const parsed = JSON.parse(await readFile(statePath, "utf8"));
+			const touchedMs = Date.parse(parsed.last_touched_at);
+			expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+		});
+
+		it("touches state without the guard ever reaching stateDir/ensureDir below it", async () => {
+			// A dedicated OMT_DIR with no `state/` subdirectory pre-created — unlike
+			// the shared beforeEach fixture above, which always mkdir's stateDir up
+			// front. If the heartbeat sat below Guard 2 (the bug this task fixes),
+			// makeDecision would never reach it while a subagent is active. If the
+			// guard itself were moved below :361/:365 instead, `$OMT_DIR/state/`
+			// would exist afterward. Only the intended edit — heartbeat above,
+			// guard's short-circuit unchanged — satisfies both conditions at once.
+			const freshOmtDir = await mkdtemp(join(tmpdir(), "decision-hoist-test-"));
+			const prevOmtDir = process.env.OMT_DIR;
+			process.env.OMT_DIR = freshOmtDir;
+			try {
+				const sid = "heartbeat-no-statedir";
+				const statePath = join(freshOmtDir, `goal-state-${sid}.json`);
+				const old = isoAgo(7 * 3600);
+				await writeFile(
+					statePath,
+					JSON.stringify({
+						active: true,
+						phase: "pursuing",
+						iteration: 1,
+						outcome: "ship it",
+						max_iterations: 10,
+						started_at: old,
+						last_touched_at: old,
+					}),
+				);
+
+				const result = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 1 }));
+
+				expect(result).toEqual({ continue: true });
+				expect(fs.existsSync(join(freshOmtDir, "state"))).toBe(false);
+				const parsed = JSON.parse(await readFile(statePath, "utf8"));
+				const touchedMs = Date.parse(parsed.last_touched_at);
+				expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+			} finally {
+				if (prevOmtDir === undefined) delete process.env.OMT_DIR;
+				else process.env.OMT_DIR = prevOmtDir;
+				await rm(freshOmtDir, { recursive: true, force: true });
+			}
+		});
+
+		it("preserves walk-away collectability: hooks/session-start.sh still reaps an abandoned session's state and releases its block", async () => {
+			const walkedAwaySid = "heartbeat-walked-away";
+			const controlSid = "heartbeat-walked-away-control";
+			const currentSid = "heartbeat-fresh-caller";
+			const walkedAwayPath = join(omtDir, `goal-state-${walkedAwaySid}.json`);
+			const controlPath = join(omtDir, `goal-state-${controlSid}.json`);
+			const old = isoAgo(7 * 3600);
+			const pursuingState = {
+				active: true,
+				phase: "pursuing",
+				iteration: 1,
+				outcome: "abandoned work",
+				max_iterations: 10,
+				started_at: old,
+				last_touched_at: old,
+			};
+			await writeFile(walkedAwayPath, JSON.stringify(pursuingState));
+			ageFile(walkedAwayPath, 7 * 3600);
+			// Control: an identical pursuing state, fresh, for a different sid —
+			// demonstrates this shape blocks its own Stop call, without touching
+			// (or aging) the walked-away fixture the GC step below depends on.
+			await writeFile(controlPath, JSON.stringify(pursuingState));
+			const controlDecision = makeDecision(
+				createContext({ sessionId: controlSid, activeSubagentCount: 0 }),
+			);
+			expect(controlDecision.decision).toBe("block");
+			expect(controlDecision.reason).toContain("<goal-continuation>");
+
+			const repoRoot = join(import.meta.dir, "..", "..");
+			const hookPath = join(repoRoot, "hooks", "session-start.sh");
+			execFileSync("bash", [hookPath], {
+				input: JSON.stringify({ sessionId: currentSid, cwd: repoRoot }),
+				env: { ...process.env, OMT_DIR: omtDir },
+				encoding: "utf8",
+			});
+
+			expect(fs.existsSync(walkedAwayPath)).toBe(false);
+			const afterGc = makeDecision(createContext({ sessionId: walkedAwaySid, activeSubagentCount: 0 }));
+			expect(afterGc).toEqual({ continue: true });
+		});
+
+		it("does not revive a 7-hour-old pristine state — the heartbeat skips it, and it is still collected afterward", async () => {
+			const sid = "heartbeat-pristine-seed";
+			const statePath = join(omtDir, `ultragoal-state-${sid}.json`);
+			const old = isoAgo(7 * 3600);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					phase: "planning",
+					iteration: 0,
+					outcome: "",
+					max_iterations: 10,
+					started_at: old,
+					last_touched_at: old,
+				}),
+			);
+			ageFile(statePath, 7 * 3600);
+
+			makeDecision(createContext({ sessionId: sid, activeSubagentCount: 1 }));
+
+			const parsedAfter = JSON.parse(await readFile(statePath, "utf8"));
+			expect(parsedAfter.last_touched_at).toBe(old);
+
+			const repoRoot = join(import.meta.dir, "..", "..");
+			const livenessLib = join(repoRoot, "hooks", "lib", "state-liveness.sh");
+			execFileSync(
+				"bash",
+				[
+					"-c",
+					'source "$1" && reap_dead_state_files "$2" "$3" "$(date +%s)" 0',
+					"_",
+					livenessLib,
+					omtDir,
+					"heartbeat-pristine-collector",
+				],
+				{ encoding: "utf8" },
+			);
+
+			expect(fs.existsSync(statePath)).toBe(false);
+		});
+
+		it("activeSubagentCount === 0 does not fire the heartbeat (regression guard against hoisting above the guard)", async () => {
+			// qa is the one state family this file never reads or writes anywhere else
+			// in makeDecision — the ONLY thing that can move its last_touched_at is
+			// touchSessionStates. If that call were ever hoisted back above the
+			// activeSubagentCount > 0 guard (the literal placement this task
+			// supersedes), it would fire unconditionally regardless of subagent
+			// activity and this assertion would fail.
+			const sid = "heartbeat-no-fire-when-idle";
+			const statePath = join(omtDir, `qa-state-${sid}.json`);
+			const old = isoAgo(7 * 3600);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					phase: "IN-PROGRESS",
+					cycle: 1,
+					target: "some target",
+					last_touched_at: old,
+				}),
+			);
+			ageFile(statePath, 7 * 3600);
+
+			const result = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+
+			expect(result).toEqual({ continue: true });
+			const parsed = JSON.parse(await readFile(statePath, "utf8"));
+			expect(parsed.last_touched_at).toBe(old);
 		});
 	});
 
