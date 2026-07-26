@@ -131,20 +131,9 @@ fi
 # The current session's state is always kept regardless of age.
 source "$SCRIPT_DIR_SS/lib/state-liveness.sh"
 GC_NOW=$(date +%s)
-for state_file in \
-    "$OMT_DIR"/goal-state-*.json \
-    "$OMT_DIR"/ultragoal-state-*.json \
-    "$OMT_DIR"/prometheus-state-*.json \
-    "$OMT_DIR"/deep-interview-active-state-*.json \
-    "$OMT_DIR"/qa-state-*.json; do
-  [ -f "$state_file" ] || continue
-  if is_current_session "$state_file" "$SESSION_ID"; then
-    continue
-  fi
-  if ! is_state_live "$state_file" "$GC_NOW"; then
-    rm -f "$state_file"
-  fi
-done
+# reap_dead_state_files echoes affected paths on both modes (plan TODO 3) --
+# this hook's own stdout must stay session-invariant, so discard it here.
+reap_dead_state_files "$OMT_DIR" "$SESSION_ID" "$GC_NOW" 0 > /dev/null
 
 # Ledger GC (plan TODO 5): session-ledger-*.md is durable-append prose, not
 # JSON, so is_state_live's .active parsing does not apply -- liveness here is
@@ -166,6 +155,21 @@ for ledger_file in "$OMT_DIR"/session-ledger-*.md; do
     rm -f "$ledger_file"
   fi
 done
+
+# GC: reap dead session-scoped artifacts (plan TODO 3: SessionStart artifact
+# GC + drift report), via the same shared liveness helper sourced above.
+# Must run after the ledger GC lane above, not before -- both consume $OMT_DIR
+# state, and this is the artifact lane's assigned position. Discard stdout for
+# the same reason as reap_dead_state_files above.
+reap_session_artifacts "$OMT_DIR" "$SESSION_ID" "$GC_NOW" 0 > /dev/null
+
+# Drift report: unclassified session-keyed files are never reaped, only
+# surfaced -- one line per file, prefixed to identify it as an unclassified
+# session file. Routed to stderr, not stdout: this hook's stdout is injected
+# into the conversation prefix and must stay session-invariant (cache-safe
+# context injection contract) -- a per-session file list is the definition of
+# prefix-variable content.
+list_unclassified_session_files "$OMT_DIR" | sed 's/^/session-start.sh: unclassified session file: /' >&2
 
 # Check for active prometheus state (session-specific)
 if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
@@ -329,13 +333,23 @@ fi
 # therefore mirrors the per-skill restore pattern in a restrained form: an
 # active-session re-read instruction only, with no "Phase:" line, since di
 # has no phase field to source one from.
-if [ -f "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" ]; then
-  DI_STATE=$(cat "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" 2>/dev/null)
+#
+# DI_PREFIX is looked up from the shared STATE_PREFIXES list (sourced above
+# from hooks/lib/state-liveness.sh) instead of being hardcoded here a second
+# time -- state-liveness.sh is now the only definition site for this prefix.
+DI_PREFIX=""
+for state_prefix in $STATE_PREFIXES; do
+  case "$state_prefix" in
+    deep-interview-*) DI_PREFIX="$state_prefix" ;;
+  esac
+done
+if [ -f "$OMT_DIR/${DI_PREFIX}${SESSION_ID}.json" ]; then
+  DI_STATE=$(cat "$OMT_DIR/${DI_PREFIX}${SESSION_ID}.json" 2>/dev/null)
 
   if command -v jq &> /dev/null; then
     DI_ACTIVE=$(echo "$DI_STATE" | jq -r '.active // false' 2>/dev/null)
     if [ "$DI_ACTIVE" = "true" ]; then
-      MESSAGES="$MESSAGES<session-restore>\n\n[DEEP-INTERVIEW RESTORED]\n\nYou have an active deep-interview session.\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/deep-interview-active-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\nRe-read the state to determine where you left off, then continue the deep-interview session.\n\n</session-restore>\n\n---\n\n"
+      MESSAGES="$MESSAGES<session-restore>\n\n[DEEP-INTERVIEW RESTORED]\n\nYou have an active deep-interview session.\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/${DI_PREFIX}\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\nRe-read the state to determine where you left off, then continue the deep-interview session.\n\n</session-restore>\n\n---\n\n"
     fi
   fi
 fi

@@ -794,52 +794,6 @@ EOF
     return 0
 }
 
-# glob: the GC for-loop glob must include exactly the 5 managed prefixes
-# (goal/ultragoal/prometheus/deep-interview/qa — ultragoal added alongside goal
-# as part of the state-lifecycle parity fix; ultragoal shares GoalState's shape).
-test_gc_glob_only_managed_prefixes() {
-    # Extract lines between "# GC:" marker and the first "# Check for active" block.
-    # Then pull the glob prefix names from lines matching the OMT_DIR pattern.
-    local gc_section glob_lines glob_count
-    gc_section=$(awk '/^# GC:/{found=1} found && /^# Check for active (prometheus|goal)/{found=0} found{print}' "$SCRIPT_DIR/session-start.sh")
-
-    # Extract lines that reference "$OMT_DIR"/<prefix>-*.json
-    glob_lines=$(echo "$gc_section" | grep -oE '"?\$\{?OMT_DIR\}?"?/[a-z-]+-\*\.json')
-    glob_count=$(echo "$glob_lines" | grep -c '.' 2>/dev/null || true)
-
-    # Exact-set assertion: must be exactly 5 globs
-    if [ "$glob_count" -ne 5 ]; then
-        echo "ASSERTION FAILED: GC glob must have exactly 5 entries, found $glob_count"
-        echo "  Glob lines:"
-        echo "$glob_lines"
-        echo "  Full GC section:"
-        echo "$gc_section" | head -20
-        return 1
-    fi
-
-    # Each expected prefix must appear exactly once. Anchor on the preceding '/' so
-    # "goal-state" does not also match as a substring of "ultragoal-state".
-    local prefix
-    for prefix in goal-state ultragoal-state prometheus-state deep-interview-active-state qa-state; do
-        local count
-        count=$(echo "$glob_lines" | grep -c "/$prefix" 2>/dev/null || true)
-        if [ "$count" -ne 1 ]; then
-            echo "ASSERTION FAILED: GC glob must contain '$prefix' exactly once, found $count"
-            echo "  Glob lines: $glob_lines"
-            return 1
-        fi
-    done
-
-    # Deny-list: the historically removed ralph-state prefix (git af4dff6) must be absent
-    if echo "$gc_section" | grep -q 'ralph-state'; then
-        echo "ASSERTION FAILED: session-start.sh GC glob must NOT include ralph-state (retired)"
-        grep -n 'ralph-state' "$SCRIPT_DIR/session-start.sh" | head -5
-        return 1
-    fi
-
-    return 0
-}
-
 # C3a-ultragoal: other-session ultragoal-state with 7h-old heartbeat is REAPED
 # (mirrors test_gc_other_session_active_7h_idle_reaped for the goal-state prefix)
 test_gc_other_session_ultragoal_7h_idle_reaped() {
@@ -2119,6 +2073,213 @@ test_gc_ledger_namespace_separation_untouched() {
 }
 
 # =============================================================================
+# Tests: SessionStart session-artifact GC + drift report (plan TODO 3)
+# reap_session_artifacts and list_unclassified_session_files are both defined
+# in hooks/lib/state-liveness.sh (plan TODO 1, shared helper); these tests
+# exercise this hook's wiring of the two calls, not the shared helper's own
+# liveness judgment (covered by hooks/lib/state-liveness_test.sh).
+# =============================================================================
+
+_write_artifact_gc_fixture() {
+    local omt_dir="$1"
+    local other_sid="$2"
+
+    printf '{}' > "$omt_dir/codex-todo-${other_sid}.json"
+    printf '{}' > "$omt_dir/goal-verdict-${other_sid}.json"
+    printf '{}' > "$omt_dir/ultragoal-codereview-${other_sid}.json"
+    printf '{"note":"unclassified"}' > "$omt_dir/mystery-file-123e4567-e89b-12d3-a456-426614174000.json"
+    printf 'not a session file\n' > "$omt_dir/notes.txt"
+
+    local old_mtime
+    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" \
+        "$omt_dir/codex-todo-${other_sid}.json" \
+        "$omt_dir/goal-verdict-${other_sid}.json" \
+        "$omt_dir/ultragoal-codereview-${other_sid}.json" \
+        2>/dev/null \
+        || touch -d "7 hours ago" \
+        "$omt_dir/codex-todo-${other_sid}.json" \
+        "$omt_dir/goal-verdict-${other_sid}.json" \
+        "$omt_dir/ultragoal-codereview-${other_sid}.json" \
+        2>/dev/null \
+        || true
+}
+
+# QA Scenario 1 (plan TODO 3): stale other-session artifacts across 3
+# families are reaped, the unclassified file and the non-session file both
+# survive, stderr names the unclassified file exactly once, and stdout is
+# byte-for-byte identical to the pre-change (HEAD, commit 819ff3b7) hook's
+# stdout for the same fixture.
+test_gc_session_artifacts_reaped_and_drift_reported() {
+    local other_sid="artifact-gc-other-sess"
+    local input='{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "artifact-gc-fresh-session"}'
+
+    _write_artifact_gc_fixture "$TEST_OMT_DIR" "$other_sid"
+
+    # Independent baseline environment carrying the identical starting
+    # fixture, run through the pre-change (HEAD) hook -- isolated from the
+    # real run below so neither run's side effects (e.g. ledger appends) can
+    # leak into the other's stdout.
+    local baseline_project_dir baseline_home baseline_project_name baseline_omt_dir baseline_hooks_dir
+    baseline_project_dir=$(mktemp -d)
+    mkdir -p "$baseline_project_dir/.git"
+    baseline_home=$(mktemp -d)
+    mkdir -p "$baseline_home/.claude"
+    baseline_project_name=$(basename "$baseline_project_dir")
+    baseline_omt_dir="$baseline_home/.omt/$baseline_project_name"
+    mkdir -p "$baseline_omt_dir"
+    _write_artifact_gc_fixture "$baseline_omt_dir" "$other_sid"
+
+    baseline_hooks_dir=$(mktemp -d)
+    cp -R "$SCRIPT_DIR/." "$baseline_hooks_dir/"
+    cp "/Users/toong/.omt/oh-my-toong-playground/evidence/omt-session-artifact-gc-and-heartbeat/wave2-consumers/head-session-start.sh.snapshot" "$baseline_hooks_dir/session-start.sh"
+    chmod +x "$baseline_hooks_dir/session-start.sh"
+
+    local baseline_input='{"cwd": "'"$baseline_project_dir"'", "sessionId": "artifact-gc-fresh-session"}'
+    local out_before
+    out_before=$(echo "$baseline_input" | HOME="$baseline_home" "$baseline_hooks_dir/session-start.sh" 2>/dev/null) || true
+
+    rm -rf "$baseline_project_dir" "$baseline_home" "$baseline_hooks_dir"
+
+    # Real run: the modified hook under test.
+    local err_file out_after err_after
+    err_file=$(mktemp)
+    out_after=$(echo "$input" | "$SCRIPT_DIR/session-start.sh" 2>"$err_file") || true
+    err_after=$(cat "$err_file")
+    rm -f "$err_file"
+
+    if [ "$out_before" != "$out_after" ]; then
+        echo "ASSERTION FAILED: stdout must be byte-for-byte identical to the pre-change baseline"
+        echo "  before: ${out_before:0:500}"
+        echo "  after:  ${out_after:0:500}"
+        return 1
+    fi
+
+    if [ -f "$TEST_OMT_DIR/codex-todo-${other_sid}.json" ] \
+        || [ -f "$TEST_OMT_DIR/goal-verdict-${other_sid}.json" ] \
+        || [ -f "$TEST_OMT_DIR/ultragoal-codereview-${other_sid}.json" ]; then
+        echo "ASSERTION FAILED: stale other-session artifacts across the 3 seeded families should be reaped"
+        return 1
+    fi
+
+    if [ ! -f "$TEST_OMT_DIR/mystery-file-123e4567-e89b-12d3-a456-426614174000.json" ]; then
+        echo "ASSERTION FAILED: unclassified session-keyed file must survive (reported, never reaped)"
+        return 1
+    fi
+
+    if [ ! -f "$TEST_OMT_DIR/notes.txt" ]; then
+        echo "ASSERTION FAILED: non-session file must survive untouched"
+        return 1
+    fi
+
+    local mention_count
+    mention_count=$(printf '%s\n' "$err_after" | grep -cF "mystery-file-123e4567-e89b-12d3-a456-426614174000.json")
+    if [ "$mention_count" -ne 1 ]; then
+        echo "ASSERTION FAILED: stderr must name the unclassified file exactly once, found $mention_count"
+        echo "  stderr: $err_after"
+        return 1
+    fi
+
+    if ! printf '%s\n' "$err_after" | grep -q "unclassified session file"; then
+        echo "ASSERTION FAILED: stderr must carry a prefix identifying the file as an unclassified session file"
+        echo "  stderr: $err_after"
+        return 1
+    fi
+
+    return 0
+}
+
+# QA Scenario 2 (plan TODO 3): jq absence must not turn artifact GC into a
+# destructive unguarded pass. Without jq, session-start.sh's own sid
+# resolution (:11-14) fails, so it falls back to the literal "default"
+# (:21-23) -- the artifact representing "mine" must therefore be named
+# codex-todo-default.json to survive by filename match. A dead session's
+# artifact is still reaped; a live session's artifact survives via the
+# live-id set, since is_state_live's active-field grep fallback (no jq
+# needed) still reports its backing state file live. Dead and live sids are
+# deliberately distinct, else the scenario would be self-contradicting.
+test_gc_session_artifacts_survive_without_jq() {
+    local dead_sid="artifact-gc-dead-sess"
+    local live_sid="artifact-gc-live-sess"
+
+    # Live session's own state file, fresh mtime. Without jq, is_state_live's
+    # timestamp parsing (jq-only) silently yields no timestamp and falls back
+    # to file mtime -- so freshness here must come from mtime, not content.
+    cat > "$TEST_OMT_DIR/goal-state-${live_sid}.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "outcome": "live goal without jq"
+}
+EOF
+
+    # "Mine" -- session-start.sh resolves SESSION_ID to "default" without jq,
+    # so this is the file that must survive via current-session filename
+    # match. Aged 7h so survival cannot be explained by freshness alone.
+    printf '{}' > "$TEST_OMT_DIR/codex-todo-default.json"
+
+    # Dead session's artifact -- no live state file backs this sid.
+    printf '{}' > "$TEST_OMT_DIR/codex-todo-${dead_sid}.json"
+
+    # Live session's own artifact, aged 7h -- must survive via live-id
+    # membership (current sid is "default", not live_sid, so the
+    # current-session check does not protect it; its own mtime is stale, so
+    # is_artifact_live does not protect it either).
+    printf '{}' > "$TEST_OMT_DIR/goal-verdict-${live_sid}.json"
+
+    local old_mtime
+    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" \
+        "$TEST_OMT_DIR/codex-todo-default.json" \
+        "$TEST_OMT_DIR/codex-todo-${dead_sid}.json" \
+        "$TEST_OMT_DIR/goal-verdict-${live_sid}.json" \
+        2>/dev/null \
+        || touch -d "7 hours ago" \
+        "$TEST_OMT_DIR/codex-todo-default.json" \
+        "$TEST_OMT_DIR/codex-todo-${dead_sid}.json" \
+        "$TEST_OMT_DIR/goal-verdict-${live_sid}.json" \
+        2>/dev/null \
+        || true
+
+    # Build a PATH lacking jq -- symlink every other /usr/bin tool
+    # (basename/dirname/awk/sed/stat/grep/touch/...) that session-start.sh
+    # needs, since jq happens to share /usr/bin with them on this host.
+    local jq_less_bin f bn
+    jq_less_bin=$(mktemp -d)
+    for f in /usr/bin/*; do
+        bn=$(basename "$f")
+        [ "$bn" = "jq" ] && continue
+        ln -s "$f" "$jq_less_bin/$bn" 2>/dev/null
+    done
+
+    # sessionId AND cwd in the input are both irrelevant here: without jq,
+    # session-start.sh cannot parse stdin at all (:11-14), so SESSION_ID
+    # always falls back to the literal "default" (:21-23) and DIRECTORY
+    # falls back to `pwd` (:16-18) regardless of what this JSON claims --
+    # cd into TEST_TMP_DIR first so that pwd-fallback still resolves to the
+    # fixture project root (and thus TEST_OMT_DIR), not this test script's
+    # own invocation directory.
+    (cd "$TEST_TMP_DIR" && echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "whatever"}' \
+        | PATH="$jq_less_bin:/bin" "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1) || true
+
+    rm -rf "$jq_less_bin"
+
+    if [ ! -f "$TEST_OMT_DIR/codex-todo-default.json" ]; then
+        echo "ASSERTION FAILED: current session's own artifact (codex-todo-default.json) must survive without jq"
+        return 1
+    fi
+    if [ -f "$TEST_OMT_DIR/codex-todo-${dead_sid}.json" ]; then
+        echo "ASSERTION FAILED: dead session's artifact should be reaped even without jq"
+        return 1
+    fi
+    if [ ! -f "$TEST_OMT_DIR/goal-verdict-${live_sid}.json" ]; then
+        echo "ASSERTION FAILED: live session's artifact should survive via live-id membership even without jq"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # Tests: deep-interview restore block (plan TODO 6)
 # di's seed schema (hooks/pre-tool-enforcer.sh) is minimal -- {active,
 # started_at, last_touched_at} only, unlike prometheus/goal/qa which also
@@ -2265,7 +2426,6 @@ main() {
     run_test test_gc_terminal_state_1h_old_reaped
     run_test test_gc_terminal_state_10m_old_kept
     run_test test_gc_terminal_goal_fresh_heartbeat_survives_no_carveout
-    run_test test_gc_glob_only_managed_prefixes
     run_test test_gc_other_session_ultragoal_7h_idle_reaped
     run_test test_gc_current_session_ultragoal_active_7h_idle_survives
     run_test test_gc_old_threshold_constants_removed
@@ -2309,6 +2469,10 @@ main() {
     run_test test_gc_ledger_current_session_stale_survives
     run_test test_gc_ledger_other_session_fresh_survives
     run_test test_gc_ledger_namespace_separation_untouched
+
+    # SessionStart session-artifact GC + drift report (plan TODO 3)
+    run_test test_gc_session_artifacts_reaped_and_drift_reported
+    run_test test_gc_session_artifacts_survive_without_jq
 
     # deep-interview restore block (TODO 6)
     run_test test_session_start_deep_interview_active_emits_reread_instruction
