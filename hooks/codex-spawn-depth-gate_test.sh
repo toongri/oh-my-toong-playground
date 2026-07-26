@@ -218,6 +218,31 @@ hook_saw_depth() {
 # their discriminating power -- so each asserts it here rather than trusting
 # the argument list it passed to mk_rollout. Scans the whole file on purpose:
 # row14's property is that its depth sits one line PAST the window.
+# Reports whether the hook's per-line jq actually FAILED on a line its scan
+# loop reached -- the only condition under which the `|| depth=""` recovery
+# beside it runs at all. Mirrors that loop exactly (same window, one line at a
+# time, stop at the first depth) because every coarser predicate disagrees
+# with it somewhere: `jq -e .` measures truthiness, so a bare `null` line is
+# valid JSON that still exits non-zero, and a garbage line sitting after the
+# one the loop breaks on is never processed. Exit 0 = the recovery was
+# pressured.
+hook_recovery_pressured() {
+    local stdin_file="$1" tp window line depth pressured=1
+    tp=$(jq -r '.transcript_path // empty' "$stdin_file" 2>/dev/null) || tp=""
+    [ -n "$tp" ] || return 1
+    window=$(hook_scan_window)
+    [ -n "$window" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        [ -n "$line" ] || continue
+        if depth=$(printf '%s' "$line" | jq -r '.payload.source.subagent.thread_spawn.depth // empty' 2>/dev/null); then
+            if [ -n "$depth" ]; then break; fi
+        else
+            pressured=0
+        fi
+    done < <(head -"$window" -- "$tp" 2>/dev/null || true)
+    return "$pressured"
+}
+
 rollout_depth_line() {
     local stdin_file="$1" tp n=0 line depth
     tp=$(jq -r '.transcript_path // empty' "$stdin_file" 2>/dev/null) || tp=""
@@ -388,15 +413,13 @@ test_row5_rollout_invalid_json_allows() {
     printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
     out=$(cat "$stdout_file")
 
-    # The `|| depth=""` recovery at hooks/codex-spawn-depth-gate.sh:112 only
-    # runs when jq FAILS, so this row pins it only while the rollout does not
-    # parse. Read back off the file the hook was handed: a fixture quietly
-    # switched to valid JSON carrying no depth allows for an entirely
-    # different reason, and this row stops pinning the recovery at all.
-    local tp
-    tp=$(jq -r '.transcript_path // empty' "$SBX/hook-stdin.json" 2>/dev/null)
-    if [ -z "$tp" ] || jq -e . "$tp" >/dev/null 2>&1; then
-        echo "ASSERTION FAILED row5-invalid-json: the rollout the hook read (\"$tp\") parses as valid JSON -- this row only pins the per-line recovery while it does NOT"
+    # The `|| depth=""` recovery beside the hook's per-line jq only runs when
+    # that jq FAILS, so this row pins it only while the rollout the hook read
+    # actually makes it fail -- inside the hook's own scan window, on a line
+    # the loop reaches. Graded with the hook's own predicate rather than a
+    # coarser stand-in; hook_recovery_pressured names the ones that disagree.
+    if ! hook_recovery_pressured "$SBX/hook-stdin.json"; then
+        echo "ASSERTION FAILED row5-invalid-json: the rollout the hook read never made its per-line jq fail on a line inside the scan window -- this row only pins that recovery while it does"
         result=1
     fi
 
@@ -774,6 +797,16 @@ test_row10_near_miss_tool_name_allows() {
 
     if ! assert_allow "$out" "$rc" "row10-near-miss" "$stderr_file" "$stdout_file"; then result=1; fi
 
+    # Same control row2 carries: a near miss tells the suffix anchor apart from
+    # a substring widening only while the rollout it sends would DENY once a
+    # qualifying name reaches the depth logic. Graded through the real hook on
+    # that same rollout, not claimed about the fixture text.
+    rc=0
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+    printf '%s' "$payload" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
+    out=$(cat "$stdout_file")
+    assert_deny "$out" "$rc" "row10-near-miss-control" 3 2 || result=1
+
     rm -rf "$SBX"
     return "$result"
 }
@@ -806,11 +839,21 @@ test_row11_no_trailing_newline_last_line_denies() {
     # the printf above: with a trailing newline `read` succeeds unaided, the
     # guard becomes dead code, and this row stays green while a mid-flush
     # rollout carrying depth 2 is silently allowed past the cap.
-    local tp last_byte
+    # The file's last byte alone is NOT the property: the loop breaks at the
+    # first depth it finds, so a newline-terminated depth on line 1 followed
+    # by an unterminated depth-less line 2 keeps the byte check green while
+    # the guard is never reached. The depth must sit on that unterminated last
+    # line. Both halves read back off the file the hook was handed.
+    local tp last_byte depth_line total_lines
     tp=$(jq -r '.transcript_path // empty' "$SBX/hook-stdin.json" 2>/dev/null)
     last_byte=$(tail -c1 "$tp" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+    depth_line=$(rollout_depth_line "$SBX/hook-stdin.json")
+    total_lines=$(awk 'END{print NR}' "$tp" 2>/dev/null) || total_lines=""
     if [ -z "$tp" ] || [ "$last_byte" = "0a" ]; then
         echo "ASSERTION FAILED row11-no-trailing-newline: the rollout the hook read (\"$tp\") ends with byte \"$last_byte\" -- it must NOT be 0a, or \`read\` succeeds unaided and this row stops pinning the guard entirely"
+        result=1
+    elif [ -z "$depth_line" ] || [ -z "$total_lines" ] || [ "$depth_line" -ne "$total_lines" ]; then
+        echo "ASSERTION FAILED row11-no-trailing-newline: the depth sits on line \"$depth_line\" of \"$total_lines\" -- it must be on the unterminated LAST line, or the scan loop breaks before ever reaching the guard"
         result=1
     fi
 
@@ -1022,6 +1065,35 @@ test_row14_depth_on_fourth_line_beyond_scan_window_allows() {
     return "$result"
 }
 
+# =============================================================================
+# Row 15 -- stdin the hook's own jq cannot index. Its `|| tool_name_raw=""`
+# recovery absorbs that and falls through to the tool-name short-circuit;
+# delete it and the failing substitution aborts the hook under `set -e` for
+# exit 5, which codex reads as a DENY. That is the fail-CLOSED direction the
+# contract rules out -- no path may produce a non-zero exit or stderr output.
+#
+# Every other fixture in this file corrupts the ROLLOUT axis and builds its
+# stdin with `jq -n`, so nothing pinned the PAYLOAD axis at all. Two shapes,
+# because the exposure is not only a truncated write: any valid-JSON
+# NON-object payload takes the identical path.
+# =============================================================================
+test_row15_unindexable_stdin_payload_allows() {
+    new_sandbox
+    local out rc result=0 stderr_file stdout_file shape
+
+    stderr_file="$SBX/stderr.txt"
+    stdout_file="$SBX/stdout.txt"
+    for shape in '{"tool_name":' '[1,2]'; do
+        rc=0
+        printf '%s' "$shape" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
+        out=$(cat "$stdout_file")
+        if ! assert_allow "$out" "$rc" "row15-unindexable-stdin ($shape)" "$stderr_file" "$stdout_file"; then result=1; fi
+    done
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
 main() {
     echo "=========================================="
     echo "Codex Spawn-Depth-Gate Hook Tests"
@@ -1046,6 +1118,7 @@ main() {
     run_test test_row13_depth_on_second_line_denies
     run_test test_row13b_depth_on_third_line_scan_boundary_denies
     run_test test_row14_depth_on_fourth_line_beyond_scan_window_allows
+    run_test test_row15_unindexable_stdin_payload_allows
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
