@@ -473,8 +473,8 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# (A) DEAD_STATE_FILES word-split regression — HOME path with spaces
-# If DEAD_STATE_FILES is consumed unquoted, paths like
+# DEAD_STATE_OUT word-split regression — HOME path with spaces
+# If DEAD_STATE_OUT is consumed unquoted, paths like
 #   /tmp/John Doe/.omt/proj/goal-state-x.json
 # split into three tokens and rm -f is called on fragments.
 # ---------------------------------------------------------------------------

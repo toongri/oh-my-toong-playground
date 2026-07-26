@@ -713,8 +713,9 @@ function typeFromStateFilename(filename: string): StateType | null {
  * directory does not exist, does nothing. A pristine state is skipped — a freshly
  * seeded state must not be kept alive by a heartbeat it never really used. Every
  * per-file error (ENOENT from a read/write race, a parse failure, a malformed file)
- * is swallowed and the sweep continues — this runs above the Stop hook's subagent
- * early-return, so a throw here would corrupt the hook's own decision.
+ * is swallowed and the sweep continues — this runs inside the Stop hook's subagent
+ * guard, immediately before that guard's own return, so a throw here would corrupt
+ * the hook's own decision.
  */
 export function touchSessionStates(sessionId: string): void {
 	const omtDir = resolveOmtDir();
