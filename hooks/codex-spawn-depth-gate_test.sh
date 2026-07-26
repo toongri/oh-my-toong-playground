@@ -309,6 +309,17 @@ test_row2_non_spawn_tool_name_allows() {
     out=$(cat "$stdout_file")
     if ! assert_allow "$out" "$rc" "row2-apply_patch" "$stderr_file" "$stdout_file"; then result=1; fi
 
+    # Both names above are short-circuited before the depth is ever read, so
+    # this row pins that short-circuit only while the rollout it carries would
+    # otherwise DENY. Positive control through the real hook rather than a
+    # claim about the fixture text: drop that rollout's depth by one and both
+    # names still allow, for a reason that has nothing to do with the gate.
+    rc=0
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+    printf '%s' "$payload" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
+    out=$(cat "$stdout_file")
+    assert_deny "$out" "$rc" "row2-control-spawning-name" 3 2 || result=1
+
     rm -rf "$SBX"
     return "$result"
 }
@@ -374,8 +385,21 @@ test_row5_rollout_invalid_json_allows() {
     rollout=$(mk_rollout 'this is not json at all {{{')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
-    printf '%s' "$payload" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
+    printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
     out=$(cat "$stdout_file")
+
+    # The `|| depth=""` recovery at hooks/codex-spawn-depth-gate.sh:112 only
+    # runs when jq FAILS, so this row pins it only while the rollout does not
+    # parse. Read back off the file the hook was handed: a fixture quietly
+    # switched to valid JSON carrying no depth allows for an entirely
+    # different reason, and this row stops pinning the recovery at all.
+    local tp
+    tp=$(jq -r '.transcript_path // empty' "$SBX/hook-stdin.json" 2>/dev/null)
+    if [ -z "$tp" ] || jq -e . "$tp" >/dev/null 2>&1; then
+        echo "ASSERTION FAILED row5-invalid-json: the rollout the hook read (\"$tp\") parses as valid JSON -- this row only pins the per-line recovery while it does NOT"
+        result=1
+    fi
+
     if ! assert_allow "$out" "$rc" "row5-invalid-json" "$stderr_file" "$stdout_file"; then result=1; fi
 
     rm -rf "$SBX"
@@ -586,8 +610,27 @@ test_row9_non_numeric_depth_allows() {
 
     stderr_file="$SBX/stderr.txt"
     stdout_file="$SBX/stdout.txt"
-    printf '%s' "$payload" | run_hook >"$stdout_file" 2>"$stderr_file" || exit_code=$?
+    printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook >"$stdout_file" 2>"$stderr_file" || exit_code=$?
     out=$(cat "$stdout_file")
+
+    # This row pins the non-numeric branch of the guard at :126, and only
+    # while the depth the hook read is a non-digit form that a dash-only
+    # guard (`-*`) would miss. Graded against the value read back out of the
+    # rollout the hook read: a fixture quietly changed to "-1" still allows,
+    # under the narrowed guard just as under the full one.
+    local hook_depth
+    hook_depth=$(hook_saw_depth "$SBX/hook-stdin.json")
+    case "$hook_depth" in
+        '' | -*)
+            echo "ASSERTION FAILED row9-non-numeric: the depth the hook read (\"$hook_depth\") is empty or dash-prefixed -- this row only discriminates while it is a non-digit form a dash-only guard would let through"
+            result=1
+            ;;
+        *[!0-9]*) ;;
+        *)
+            echo "ASSERTION FAILED row9-non-numeric: the depth the hook read (\"$hook_depth\") is all digits -- this row pins the non-numeric branch and cannot do so with a numeric fixture"
+            result=1
+            ;;
+    esac
 
     [ "$exit_code" -eq 0 ] || { echo "ASSERTION FAILED row9-non-numeric: expected exit 0, got $exit_code"; result=1; }
     [ ! -s "$stdout_file" ] || { echo "ASSERTION FAILED row9-non-numeric: expected empty stdout, got '$out'"; result=1; }
@@ -708,8 +751,27 @@ test_row10_near_miss_tool_name_allows() {
     rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"spawn_agent_helper", transcript_path:$tp}')
 
-    printf '%s' "$payload" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
+    printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
     out=$(cat "$stdout_file")
+
+    # The suffix anchor is pinned only while the name the hook RECEIVED
+    # contains spawn_agent without ending in it. Read back off the captured
+    # stdin: a fixture drifted to an unrelated name allows under `*spawn_agent`
+    # and `*spawn_agent*` alike, and this row stops telling the two apart.
+    local payload_tool_name
+    payload_tool_name=$(jq -r '.tool_name // empty' "$SBX/hook-stdin.json" 2>/dev/null)
+    case "$payload_tool_name" in
+        *spawn_agent)
+            echo "ASSERTION FAILED row10-near-miss: the tool name the hook received (\"$payload_tool_name\") ENDS with spawn_agent -- a near miss must not, or it exercises the anchor's match side instead of its boundary"
+            result=1
+            ;;
+        *spawn_agent*) ;;
+        *)
+            echo "ASSERTION FAILED row10-near-miss: the tool name the hook received (\"$payload_tool_name\") does not contain spawn_agent at all -- it is then allowed by the suffix anchor and a substring widening alike, so this row pins neither"
+            result=1
+            ;;
+    esac
+
     if ! assert_allow "$out" "$rc" "row10-near-miss" "$stderr_file" "$stdout_file"; then result=1; fi
 
     rm -rf "$SBX"
@@ -736,7 +798,22 @@ test_row11_no_trailing_newline_last_line_denies() {
 
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
-    out=$(printf '%s' "$payload" | run_hook) || rc=$?
+    out=$(printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook) || rc=$?
+
+    # This row is the ONLY one pinning the `|| [ -n "$line" ]` guard at :109,
+    # and that rests entirely on the rollout's last line having no terminating
+    # newline. Read the byte back off the file the hook was handed, never off
+    # the printf above: with a trailing newline `read` succeeds unaided, the
+    # guard becomes dead code, and this row stays green while a mid-flush
+    # rollout carrying depth 2 is silently allowed past the cap.
+    local tp last_byte
+    tp=$(jq -r '.transcript_path // empty' "$SBX/hook-stdin.json" 2>/dev/null)
+    last_byte=$(tail -c1 "$tp" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+    if [ -z "$tp" ] || [ "$last_byte" = "0a" ]; then
+        echo "ASSERTION FAILED row11-no-trailing-newline: the rollout the hook read (\"$tp\") ends with byte \"$last_byte\" -- it must NOT be 0a, or \`read\` succeeds unaided and this row stops pinning the guard entirely"
+        result=1
+    fi
+
     assert_deny "$out" "$rc" "row11-no-trailing-newline" 3 2 || result=1
 
     rm -rf "$SBX"
