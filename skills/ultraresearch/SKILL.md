@@ -53,7 +53,7 @@ The engine has five phases:
 
 ## Substrate: synchronous batched waves (NO async swarm)
 
-The substrate is fixed-member: `lib/generic-job.ts`'s detached-worker path locks the member set at job-start and waits on a collect barrier, so a wave cannot grow new members mid-flight. Therefore the source engine's async swarm is translated into **synchronous batched waves**:
+The substrate is fixed-member: a wave's entire membership is dispatched in one response, and the barrier collect waits for every one of those workers to return — there is no mechanism to add a worker to a wave already in flight. Therefore the source engine's async swarm is translated into **synchronous batched waves**:
 
 - A **wave** is N foreground Agent workers dispatched in ONE response (multiple Agent calls in a single turn run in parallel within that wave).
 - A **barrier collect** follows: you wait for every worker in the wave to return, then digest all returns together.
