@@ -10,6 +10,25 @@
 ACTIVE_IDLE_TTL=21600   # 6 hours — active session idle window
 TERMINAL_TTL=1800       # 30 minutes — terminal (active:false) grace period
 
+# STATE_PREFIXES — the 5 managed state-file prefixes. This is the single
+# definition site for bash; the out-of-scope *seeding* point is
+# hooks/pre-tool-enforcer.sh. No GC caller keeps its own copy of this list.
+# Every prefix expansion below is anchored to `*.json`, never bare `*` — that
+# anchor is what keeps `list_live_session_ids` and `reap_dead_state_files`
+# from treating a `...-<sid>.json.closed.bak` backup as a state file (it does
+# not end in `.json`, so it is invisible to `<prefix>*.json`).
+STATE_PREFIXES="goal-state- ultragoal-state- prometheus-state- deep-interview-active-state- qa-state-"
+
+# SESSION_ARTIFACT_PREFIXES — the 6 whitelisted session-artifact families
+# reap_session_artifacts is allowed to reap. An enumerated whitelist (over a
+# session-id-shaped pattern sweep) trades "a missed future family goes
+# unreaped" against a pattern sweep's power to delete any session-id-shaped
+# file, including forms nobody has classified yet — a miss here is
+# non-destructive, so it is the safer failure direction for an irreversible
+# delete path. reap_session_artifacts is deliberately NOT `.json`-anchored:
+# state/block-count-* files carry no extension at all.
+SESSION_ARTIFACT_PREFIXES="codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview-"
+
 # is_state_live <file> <now_epoch>
 #
 # Returns:
@@ -122,52 +141,284 @@ is_state_live() {
 # is_current_session <file> <current_sid>
 #
 # Returns:
-#   exit 0 — the filename's embedded session id equals <current_sid>
+#   exit 0 — <file>'s basename belongs to <current_sid>
 #   exit 1 — it does not
 #
-# The session id is encoded in the filename, e.g.:
-#   goal-state-<sid>.json
-#   ultragoal-state-<sid>.json
-#   prometheus-state-<sid>.json
-#   deep-interview-active-state-<sid>.json
-#   qa-state-<sid>.json
-# We extract it as the portion after the last '-' separator group before '.json'.
+# Generalized sid-suffix match (replaces the old 5-prefix `case`, which only
+# recognized state files and silently misclassified every session-artifact
+# form — e.g. goal-codereview-<sid>.json — as belonging to "another session").
+# A basename belongs to <current_sid> iff it is exactly "<anything>-<sid>" or
+# starts with "<anything>-<sid>.". Two case patterns cover every form on disk:
+#   *-"$current_sid")    the extensionless form, e.g. state/block-count-<sid>
+#   *-"$current_sid".*)  the .json and double-extension forms, e.g.
+#                        goal-state-<sid>.json,
+#                        deep-interview-active-state-<sid>.json.closed.bak
+# This is deliberately NOT "strip the extension, then compare": stripping one
+# extension from a double-extension name leaves "...-<sid>.json.closed", which
+# no longer ends in the sid and would misclassify the running session's own
+# backup as belonging to another session.
 is_current_session() {
   local file="$1"
   local current_sid="$2"
 
+  # Preserve the old `*)` branch's accidental fail-safe: an empty current_sid
+  # used to make file_sid="" equal current_sid="", so everything was kept.
+  # Keep that explicitly rather than let the case patterns re-derive it.
+  if [ -z "$current_sid" ]; then
+    return 0
+  fi
+
   local basename_val
-  basename_val=$(basename "$file" .json)
+  basename_val=$(basename "$file")
 
-  # Strip the known prefix to extract the session id.
-  # Known prefixes (basename without .json):
-  #   goal-state-<sid>                         prefix = "goal-state-"
-  #   ultragoal-state-<sid>                    prefix = "ultragoal-state-"
-  #   prometheus-state-<sid>                   prefix = "prometheus-state-"
-  #   deep-interview-active-state-<sid>        prefix = "deep-interview-active-state-"
-  #   qa-state-<sid>                           prefix = "qa-state-"
-  # Session IDs may themselves contain '-' (e.g. UUIDs), so we MUST strip only
-  # the fixed prefix, not everything up to the last '-'.
-  local file_sid
   case "$basename_val" in
-    goal-state-*)
-      file_sid="${basename_val#goal-state-}" ;;
-    ultragoal-state-*)
-      file_sid="${basename_val#ultragoal-state-}" ;;
-    prometheus-state-*)
-      file_sid="${basename_val#prometheus-state-}" ;;
-    deep-interview-active-state-*)
-      file_sid="${basename_val#deep-interview-active-state-}" ;;
-    qa-state-*)
-      file_sid="${basename_val#qa-state-}" ;;
+    *-"$current_sid")
+      return 0 ;;
+    *-"$current_sid".*)
+      return 0 ;;
     *)
-      # Unknown prefix — cannot determine sid; treat as different session
-      file_sid="" ;;
+      return 1 ;;
   esac
+}
 
-  if [ "$file_sid" = "$current_sid" ]; then
+# is_artifact_live <file> <now_epoch>
+#
+# Returns:
+#   exit 0 — artifact is live (keep)
+#   exit 1 — artifact is dead (reap)
+#
+# Session artifacts (codex-todo, goal-verdict, goal-codereview, ...) carry no
+# `active` field, so is_state_live's two-branch rule cannot apply to them.
+# Liveness here is mtime-only against ACTIVE_IDLE_TTL — the same rule and the
+# same reason as the session-ledger mtime loop in hooks/session-start.sh.
+is_artifact_live() {
+  local file="$1"
+  local now_epoch="$2"
+
+  # GNU form (-c %Y) first: GNU `stat -f` means --file-system and prints a
+  # non-numeric block to stdout for the file operand, which would defeat the
+  # fail-safe below by leaving touched_epoch as non-empty garbage; BSD `stat -c`
+  # fails cleanly with no stdout. GNU-first is portable; BSD-first breaks on Linux.
+  local touched_epoch
+  touched_epoch=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null || true)
+
+  if [ -z "$touched_epoch" ]; then
+    # Cannot determine mtime (missing file, unreadable, race) — treat as live
+    # (fail-safe), matching is_state_live's fail-open direction (:90-93 above).
+    # This -z check is load-bearing: `$(( now_epoch - touched_epoch ))` with an
+    # empty (but set) touched_epoch evaluates to `now_epoch` in bash, not an
+    # error — silently flipping the fail direction to "delete" without this guard.
+    return 0
+  fi
+
+  local age=$(( now_epoch - touched_epoch ))
+  if [ "$age" -lt 0 ]; then
+    age=0
+  fi
+
+  if [ "$age" -lt "$ACTIVE_IDLE_TTL" ]; then
     return 0
   else
     return 1
   fi
+}
+
+# list_live_session_ids <dir>
+#
+# Echoes the bare session id of every currently-live state file in <dir>, one
+# per line, deduplicated. This is what lets reap_session_artifacts protect a
+# live session's artifacts without knowing its session id — a caller that
+# never had a session id to begin with (omt-cleanup) can still ask "is any
+# state file for this id live right now?".
+list_live_session_ids() {
+  local dir="$1"
+  local now_epoch
+  now_epoch=$(date +%s)
+
+  local prefix f sid seen
+  seen=""
+  for prefix in $STATE_PREFIXES; do
+    for f in "$dir"/${prefix}*.json; do
+      [ -f "$f" ] || continue
+      if is_state_live "$f" "$now_epoch"; then
+        sid="${f#$dir/$prefix}"
+        sid="${sid%.json}"
+        case " $seen " in
+          *" $sid "*) continue ;;
+        esac
+        seen="$seen $sid"
+        echo "$sid"
+      fi
+    done
+  done
+  return 0
+}
+
+# reap_dead_state_files <dir> <current_sid> <now_epoch> <dry_run>
+#
+# Relocation of the inline 5-glob state-GC loop (formerly duplicated in both
+# hooks/session-start.sh and scripts/omt-cleanup/omt-cleanup.sh): for each
+# STATE_PREFIXES entry, walk <dir>/<prefix>*.json, skip the current session's
+# own file, and reap (or, under dry_run=1, only report) every file is_state_live
+# reports dead. This reproduces the pre-relocation deletion decisions exactly —
+# see hooks/lib/state-liveness_test.sh's relocation-equivalence test.
+#
+# <dry_run>: 1 = report only, 0 = delete. Both modes echo the affected path,
+# one per line — dry_run=1 echoes what WOULD be deleted, dry_run=0 echoes what
+# WAS deleted. A caller whose own stdout must stay byte-static (session-start.sh)
+# redirects this call; the report lane is stderr instead.
+reap_dead_state_files() {
+  local dir="$1"
+  local current_sid="$2"
+  local now_epoch="$3"
+  local dry_run="$4"
+
+  local prefix f
+  for prefix in $STATE_PREFIXES; do
+    for f in "$dir"/${prefix}*.json; do
+      [ -f "$f" ] || continue
+      if is_current_session "$f" "$current_sid"; then
+        continue
+      fi
+      if ! is_state_live "$f" "$now_epoch"; then
+        echo "$f"
+        if [ "$dry_run" != "1" ]; then
+          rm -f "$f"
+        fi
+      fi
+    done
+  done
+  return 0
+}
+
+# reap_session_artifacts <dir> <current_sid> <now_epoch> <dry_run>
+#
+# For each SESSION_ARTIFACT_PREFIXES entry, walk <dir>/<prefix>*, and reap (or
+# report) each candidate unless one of three independent protections applies:
+#   1. it belongs to the current session (is_current_session)
+#   2. its own mtime is still within ACTIVE_IDLE_TTL (is_artifact_live)
+#   3. its embedded session id is live right now, per list_live_session_ids —
+#      this is what protects a live session's artifacts from a caller that
+#      supplies no session id at all (omt-cleanup passes the __none__ sentinel)
+#
+# Live-id membership rule: strip the candidate's whitelist prefix, then its
+# extension (everything from the first '.'). Accept if what remains equals a
+# live id, OR ends with "-<live id>". Both clauses carry weight: extension
+# stripping is what makes the check work at all for the 5 .json-suffixed
+# families (list_live_session_ids emits bare ids, so an un-stripped
+# "<sid>.json" tail matches nothing); the "-<live id>" suffix anchor is what
+# lets a bare live id cover a namespaced counter (state/block-count-prometheus-<sid>,
+# state/block-count-skill-chain-<sid> — see lib/persistent-mode-core/decision.ts's
+# per-family block-count keys) without this file knowing those namespace names,
+# while anchoring on the preceding '-' (not an arbitrary substring) keeps a
+# short live id like "abc" from falsely preserving an unrelated
+# "codex-todo-xyzabc.json".
+#
+# list_live_session_ids is computed once per directory, not once per
+# candidate — a per-candidate recompute would mean ~3000 extra liveness checks
+# on the measured 581-file baseline directory.
+#
+# <dry_run>: same polarity as reap_dead_state_files (1 = report only, 0 =
+# delete); both modes echo the affected path.
+reap_session_artifacts() {
+  local dir="$1"
+  local current_sid="$2"
+  local now_epoch="$3"
+  local dry_run="$4"
+
+  local live_ids
+  live_ids=$(list_live_session_ids "$dir")
+
+  local prefix f tail live_id keep
+  for prefix in $SESSION_ARTIFACT_PREFIXES; do
+    for f in "$dir"/${prefix}*; do
+      [ -f "$f" ] || continue
+      if is_current_session "$f" "$current_sid"; then
+        continue
+      fi
+      if is_artifact_live "$f" "$now_epoch"; then
+        continue
+      fi
+
+      tail="${f#$dir/$prefix}"
+      tail="${tail%%.*}"
+
+      keep=0
+      if [ -n "$live_ids" ]; then
+        while IFS= read -r live_id; do
+          [ -n "$live_id" ] || continue
+          if [ "$tail" = "$live_id" ]; then
+            keep=1
+            break
+          fi
+          case "$tail" in
+            *-"$live_id")
+              keep=1
+              break
+              ;;
+          esac
+        done <<LIVE_IDS
+$live_ids
+LIVE_IDS
+      fi
+
+      if [ "$keep" = "1" ]; then
+        continue
+      fi
+
+      echo "$f"
+      if [ "$dry_run" != "1" ]; then
+        rm -f "$f"
+      fi
+    done
+  done
+  return 0
+}
+
+# list_unclassified_session_files <dir>
+#
+# Echoes every file in <dir> whose basename carries a UUID-shaped session id
+# but matches neither STATE_PREFIXES nor SESSION_ARTIFACT_PREFIXES — the drift
+# signal this harness otherwise has none of. Read-only: never deletes, never
+# judges whether a listed file should eventually be whitelisted.
+list_unclassified_session_files() {
+  local dir="$1"
+  local f base prefix classified
+
+  for f in "$dir"/*; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f")
+
+    classified=0
+    for prefix in $STATE_PREFIXES; do
+      case "$base" in
+        ${prefix}*.json) classified=1; break ;;
+      esac
+    done
+
+    if [ "$classified" = "0" ]; then
+      for prefix in $SESSION_ARTIFACT_PREFIXES; do
+        case "$prefix" in
+          */*) continue ;;  # subdirectory-based prefixes (state/block-count-)
+                             # never appear as a top-level entry of <dir>
+        esac
+        case "$base" in
+          ${prefix}*) classified=1; break ;;
+        esac
+      done
+    fi
+
+    if [ "$classified" = "1" ]; then
+      continue
+    fi
+
+    # UUID-shaped session id, Bash 3.2 case-glob (no grep -P — the deploy
+    # target's BSD grep has no PCRE support).
+    case "$base" in
+      *-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]*)
+        echo "$f"
+        ;;
+    esac
+  done
+  return 0
 }
