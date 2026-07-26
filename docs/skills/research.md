@@ -30,7 +30,7 @@ oh-my-toong의 리서치 스킬은 판단을 내리기 전에 사실을 포화 �
 4. **Phase 3 (분리 검증 패스)** — 수집한 주장 중 다툼이 있는 것만 별도 패스에서 검증합니다.
 5. **Phase 4 (종합)** — 수렴 후 단일 스냅샷에서 산출물을 씁니다.
 
-워커는 explore·librarian·hermes(브라우징이 필요하면 `insane-browsing` 스킬을 로드) 중 하나로, **foreground Agent로 한 응답에 전수 디스패치**되고 배리어에서 함께 수집됩니다. OMT는 Agent 태스크의 background 디스패치를 금지하므로(`rules/tool-usage-policy.md`), 이 엔진은 비동기 스웜 대신 **동기 배치 웨이브**로 동작합니다. 워커는 읽기 전용 수집자입니다 — 저널이나 세션 파일을 직접 쓰지 않고, 자기 발견 내용(코드베이스 좌표라면 `file:line` 좌표뿐 아니라 그 자리의 인용 내용까지)과 `## EXPAND` 리드, (주장·관찰 후보가 있으면) `## CLAIMS` 채널을 전부 텍스트로 반환합니다. 저널·claim-graph를 비롯한 모든 아티팩트는 전부 오케스트레이터 혼자 씁니다.
+워커는 explore·librarian·hermes(브라우징이 필요하면 `insane-browsing` 스킬을 로드) 중 하나로, **foreground Agent로 한 응답에 전수 디스패치**되고 배리어에서 함께 수집됩니다. 이 기질은 fixed-member입니다 — `lib/generic-job.ts`가 job-start 시점에 멤버 집합을 고정하고 collect barrier에서 대기하므로, 웨이브가 중간에 멤버를 늘릴 수 없습니다. 그래서 이 엔진은 비동기 스웜 대신 **동기 배치 웨이브**로 동작합니다. 워커는 읽기 전용 수집자입니다 — 저널이나 세션 파일을 직접 쓰지 않고, 자기 발견 내용(코드베이스 좌표라면 `file:line` 좌표뿐 아니라 그 자리의 인용 내용까지)과 `## EXPAND` 리드, (주장·관찰 후보가 있으면) `## CLAIMS` 채널을 전부 텍스트로 반환합니다. 저널·claim-graph를 비롯한 모든 아티팩트는 전부 오케스트레이터 혼자 씁니다.
 
 **출력 계약** (explicit research posture 기준 — pre-work CLEAR는 REPORT를 쓰지 않고 grounded facts를 호출자에게 바로 반환합니다): `REPORT.md`가 최종 산출물(SSOT, source of truth)이고, `REPORT.html`은 그것을 외부 CSS·JS·폰트·이미지 없이 통째로 담은 단일 자기완결 렌더 사본입니다. PDF 등 별도 렌더는 만들지 않으며, 이를 위한 신규 외부 의존성도 추가하지 않습니다. `REPORT`의 목차는 고정된 섹션 목록이 아니라 **Phase 0에서 분해한 축 그 자체**에서 유도됩니다 — 축이 곧 목차이므로 REPORT는 사용자가 실제로 물은 것에 대응합니다.
 
