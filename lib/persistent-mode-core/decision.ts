@@ -361,8 +361,8 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		// 1. Why not above the guard: an unconditional call would re-stamp this
 		//    session's own deep-interview/prometheus state `last_touched_at` on every
 		//    Stop call, and the corpse-staleness checks further down — the deep-interview
-		//    check (readDeepInterviewStateRaw, judged via isStateLive at :661 and :668)
-		//    and its prometheus twin (readPrometheusState, judged via isStateLive at :690)
+		//    check (readDeepInterviewStateRaw, judged via isStateLive)
+		//    and its prometheus twin (readPrometheusState, judged via isStateLive)
 		//    — read that same field back from disk later in this SAME makeDecision call —
 		//    self-blinding every TTL-stale corpse into looking live. Scoping to
 		//    activeSubagentCount > 0 is behaviorally identical for the starving window
