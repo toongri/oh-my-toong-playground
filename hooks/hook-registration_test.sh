@@ -228,6 +228,115 @@ EOF
     [ "$failed" -eq 0 ]
 }
 
+# =============================================================================
+# codex.yaml registers codex-spawn-depth-gate.sh under PreToolUse with the
+# full-match matcher ".*[sS]pawn_[aA]gent" -- Codex's PreToolUse matcher is a
+# full-string regex match against the actual tool name
+# "collaborationspawn_agent", so a bare "spawn_agent" (or "^spawn_agent$")
+# never matches and the hook silently never fires. The case classes let the
+# matcher through for a mixed-case variant (e.g. "CollaborationSpawn_Agent"),
+# so the hook body's own tr-based lowercasing defense (codex-spawn-depth-
+# gate.sh:84) becomes reachable instead of dead code below an unreachable
+# gate.
+# =============================================================================
+test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher() {
+    local block matcher_line
+    block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+    if ! echo "$block" | grep -qF 'component: codex-spawn-depth-gate.sh'; then
+        echo "ASSERTION FAILED: codex.yaml PreToolUse must register codex-spawn-depth-gate.sh"
+        return 1
+    fi
+    matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
+    if ! echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"\.\*\[sS\]pawn_\[aA\]gent"'; then
+        echo "ASSERTION FAILED: codex-spawn-depth-gate.sh matcher must be exactly \".*[sS]pawn_[aA]gent\" (got: ${matcher_line:-<none>}) -- Codex's PreToolUse matcher is a full-string regex match against the actual tool name \"collaborationspawn_agent\", so anything without the \".*\" prefix (e.g. bare \"spawn_agent\") never matches and the hook silently never fires"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Regression guard: the matcher string must never regress to a value lacking
+# the ".*" prefix -- Codex's PreToolUse matcher is full-match, not substring/
+# prefix match, so any matcher missing the prefix (a bare "spawn_agent", or a
+# case-class form like "[sS]pawn_[aA]gent" with no prefix) never matches the
+# actual runtime tool name "collaborationspawn_agent" and the hook silently
+# never fires. This is a categorical check on the ".*" prefix itself, not an
+# enumeration of specific literal strings -- an enumeration that only listed
+# bare "spawn_agent" would miss any other same-category instance (like the
+# case-class form above) that also drops the prefix. A simple `grep -c
+# 'spawn_agent'` would NOT catch this regression either, since
+# ".*[sS]pawn_[aA]gent" also contains the substring "spawn_agent" -- this
+# check isolates the matcher's line value specifically.
+# =============================================================================
+test_codex_yaml_spawn_depth_gate_matcher_never_bare() {
+    local block matcher_line
+    block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+    matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
+    if ! echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"\.\*'; then
+        echo "ASSERTION FAILED: codex-spawn-depth-gate.sh matcher regressed to a value without the \".*\" prefix (got: ${matcher_line:-<none>}) -- Codex's PreToolUse matcher is a full-string regex match, and the actual tool name is \"collaborationspawn_agent\", so any matcher not starting with \".*\" (e.g. bare \"spawn_agent\" or a case-class form like \"[sS]pawn_[aA]gent\" without the prefix) never matches and the hook silently never fires"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Dispatch-gate reachability against the MEASURED runtime tool name. The
+# audit above (test_codex_yaml_spawn_depth_gate_registered_with_full_match_
+# matcher) pins the matcher's literal VALUE; this one pins its SEMANTICS --
+# that whatever value is there full-matches "collaborationspawn_agent"
+# (codex 0.145.0) under Codex's anchored-regex rule, so the gate is not
+# silently unreachable at runtime.
+#
+# The complementary half -- that the matcher also reaches the fixture
+# codex-spawn-depth-gate_test.sh's row10 sends -- is asserted in row10
+# itself, against the bytes row10 actually piped to the hook. It
+# deliberately does NOT live here; see the in-body comment below for why.
+# =============================================================================
+
+test_codex_spawn_depth_gate_matcher_reaches_runtime_tool_name() {
+    local block matcher_line matcher
+
+    block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+    matcher_line=$(echo "$block" | grep -A2 'component: codex-spawn-depth-gate.sh' | grep 'matcher:')
+    matcher=$(echo "$matcher_line" | sed -E 's/^[[:space:]]*matcher:[[:space:]]*"(.*)"[[:space:]]*$/\1/')
+
+    if [ -z "$matcher" ]; then
+        echo "ASSERTION FAILED: could not extract the codex-spawn-depth-gate.sh matcher value from codex.yaml's PreToolUse block (matcher line: '${matcher_line:-<none>}')"
+        return 1
+    fi
+
+    # codex.yaml's matcher is a full-string regex applied by the dispatcher
+    # before the hook body runs, so one that does not match the measured
+    # runtime tool name leaves the gate silently never firing.
+    #
+    # Whether it also reaches the fixture codex-spawn-depth-gate_test.sh's
+    # row10 sends is asserted in that row, against the bytes row10 actually
+    # sent. Checking it here would mean parsing a declaration back out of that
+    # file, and a declaration is not what the hook receives -- measured green
+    # on both suites with row10 sending an ALL-CAPS name this matcher rejects
+    # while the parsed declaration still said otherwise.
+    if ! printf '%s\n' "collaborationspawn_agent" | grep -qE "^${matcher}\$"; then
+        echo "ASSERTION FAILED: codex.yaml matcher \"$matcher\" does NOT full-match the measured runtime tool name \"collaborationspawn_agent\" (codex 0.145.0) -- the spawn-depth gate would never fire at all"
+        return 1
+    fi
+}
+
+test_codex_yaml_keeps_config_section_declared_so_stale_keys_can_be_cleared() {
+    if ! grep -qE '^config:' "$REPO_DIR/codex.yaml"; then
+        echo "ASSERTION FAILED: codex.yaml declares no top-level 'config:' key."
+        echo "  Deleting that key is NOT the same as emptying it. syncPlatformYaml calls"
+        echo "  syncConfig only when yaml.config is present (tools/adapters/codex.ts:715),"
+        echo "  so with the key absent the deployed .codex/config.toml keeps whatever its"
+        echo "  '# --- omt:config ---' block last received, on every subsequent sync."
+        echo "  Measured: after agents.max_depth was deleted from codex.yaml, this machine's"
+        echo "  ~/.codex/config.toml still held '[agents] max_depth = 2' -- so the key was"
+        echo "  gone only on installs that had never synced it. Keep 'config: {}' declared;"
+        echo "  insertManagedBlock replaces the block wholesale, so an empty mapping is what"
+        echo "  actually clears it."
+        return 1
+    fi
+}
+
 main() {
     echo "=========================================="
     echo "Hook Registration Consistency Tests"
@@ -239,6 +348,10 @@ main() {
     run_test test_codex_yaml_has_pretooluse_guard
     run_test test_core_claude_hooks_registered_in_tracked_root_yaml
     run_test test_core_claude_hooks_not_duplicated_per_project
+    run_test test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher
+    run_test test_codex_yaml_spawn_depth_gate_matcher_never_bare
+    run_test test_codex_spawn_depth_gate_matcher_reaches_runtime_tool_name
+    run_test test_codex_yaml_keeps_config_section_declared_so_stale_keys_can_be_cleared
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
