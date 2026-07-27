@@ -103,6 +103,10 @@ transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/de
 # silent fail-open (cur stays unset -> defaults to 0 below) rather than a
 # script crash.
 cur=""
+# `-r` disables read's backslash processing. A real rollout line carries the
+# system prompt beside thread_spawn, so it is dense with `\"`; without -r those
+# collapse to `"`, the JSON string breaks, jq fails, and the recovery below
+# defaults cur to 0 -- a fail-OPEN that removes the cap on EVERY real rollout.
 # `|| [ -n "$line" ]` keeps the loop body running on a final line with no
 # trailing newline (`read` returns non-zero there and would otherwise drop
 # it) -- same guarded idiom as hooks/codex-write-guard.sh:333.
