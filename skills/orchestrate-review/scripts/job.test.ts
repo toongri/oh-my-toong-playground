@@ -4,7 +4,7 @@ import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll, moc
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { execFileSync } from "child_process";
+import { execFileSync, spawn, spawnSync } from "child_process";
 
 import {
 	buildUiPayload,
@@ -43,6 +43,57 @@ function makeCliStubDir(): string {
 		fs.chmodSync(stubPath, 0o755);
 	}
 	return stubDir;
+}
+
+/**
+ * Builds an orphan job fixture directly on disk: a real detached process group
+ * (a `sleep 30`, so it stays alive for the duration of a test) recorded as a
+ * job's only member's `workerPgid`, with that member's status already terminal
+ * ("done"). This is exactly lib/generic-job.ts's `findOrphanJobs` predicate —
+ * alive PGID + zero live progress (`findActiveMembers` returns none) — so the
+ * fixture is judged orphaned without needing to fake or bypass that judgment.
+ */
+function makeOrphanJobFixture(jobsDir: string, name: string): { jobDir: string; pgid: number } {
+	const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+	child.unref();
+	// A detached child is the leader of its own process group, so PGID === PID
+	// (same platform contract lib/generic-job.ts's spawnWorkers relies on).
+	const pgid = child.pid as number;
+
+	const jobDir = path.join(jobsDir, `chunk-review-${name}`);
+	const memberDir = path.join(jobDir, "members", "alice");
+	fs.mkdirSync(memberDir, { recursive: true });
+	fs.writeFileSync(
+		path.join(jobDir, "job.json"),
+		JSON.stringify({
+			id: `chunk-review-${name}`,
+			createdAt: new Date().toISOString(),
+			members: [{ name: "alice", workerPgid: pgid }],
+		}),
+	);
+	fs.writeFileSync(
+		path.join(memberDir, "status.json"),
+		JSON.stringify({ member: "alice", state: "done", exitCode: 0 }),
+	);
+	return { jobDir, pgid };
+}
+
+/** `kill(pgid, 0)` sends no signal — it only probes whether the group still exists. */
+function isPgidAlive(pgid: number): boolean {
+	try {
+		process.kill(-pgid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function killPgidIfAlive(pgid: number): void {
+	try {
+		process.kill(-pgid, "SIGKILL");
+	} catch {
+		// already reaped/exited — nothing to clean up
+	}
 }
 
 // `start` spawns its worker detached; `execFileSync("start", …)` returns long before
@@ -1070,6 +1121,203 @@ describe("gcStaleJobs", () => {
 		expect(fs.existsSync(outsideDir)).toBe(true);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// job.ts reap — kills orphan process groups, stdout MUST stay empty (cache-safe
+// SessionStart contract; see the reap docstring in job.ts).
+//
+// Placed before any mock.module(...) usage in this file: bun test runs every
+// test file in one process, and mock.module leaks across file boundaries —
+// tests that need the real @lib/generic-job engine must run before the first
+// mock.module call anywhere in this file (see job.ts's MUST DO notes).
+// ---------------------------------------------------------------------------
+
+describe("job.ts reap", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+	let jobsDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("stdout는 완전히 비어 있고, 회수할 고아가 있을 때 진단은 stderr로만 나간다", () => {
+		const { jobDir, pgid } = makeOrphanJobFixture(jobsDir, "cache-safe");
+
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "0"],
+			{ stdio: "pipe" },
+		);
+
+		// The real substance of this test: stdout carries zero bytes even though
+		// there WAS something to reap — an empty stdout with nothing to do would
+		// prove nothing about the cache-safety requirement.
+		expect(result.toString()).toBe("");
+
+		// stderr — not stdout — carries the diagnostic.
+		expect(fs.existsSync(jobDir)).toBe(true); // reap never deletes the directory
+
+		killPgidIfAlive(pgid);
+	});
+
+	test("stderr에 회수 진단이 기록되고, 회수된 고아 프로세스 그룹은 더 이상 살아있지 않다", () => {
+		const { jobDir, pgid } = makeOrphanJobFixture(jobsDir, "reaped-effect");
+
+		const proc = spawnSync(
+			process.execPath,
+			[SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "0"],
+			{ encoding: "utf8" },
+		);
+
+		expect(proc.status).toBe(0);
+		expect(proc.stdout).toBe("");
+		expect(proc.stderr.length).toBeGreaterThan(0);
+		expect(proc.stderr).toContain(jobDir);
+		expect(isPgidAlive(pgid)).toBe(false);
+	});
+
+	test("--grace-ms 옵션이 reapOrphanJobs로 전달된다 (유예 시간 실측)", () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "grace-passthrough");
+
+		const start = Date.now();
+		execFileSync(process.execPath, [SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "300"], {
+			stdio: "pipe",
+		});
+		const elapsed = Date.now() - start;
+
+		// Default grace is REAP_GRACE_MS_DEFAULT (5000ms) — an elapsed time well
+		// under that but still >= most of the requested 300ms proves --grace-ms
+		// reached reapOrphanJobs rather than being ignored (which would either
+		// return near-instantly or take the full 5s default).
+		expect(elapsed).toBeGreaterThanOrEqual(250);
+		expect(elapsed).toBeLessThan(4000);
+
+		killPgidIfAlive(pgid);
+	});
+
+	test("회수할 고아가 없으면 stdout은 비고 정상 종료한다", () => {
+		// --grace-ms 0: reapOrphanJobs awaits the grace period unconditionally,
+		// even with zero orphans (lib/generic-job.ts) — omitting this would wait
+		// out the full REAP_GRACE_MS_DEFAULT (5000ms) for nothing.
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "0"],
+			{ stdio: "pipe" },
+		);
+		expect(result.toString()).toBe("");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// job.ts doctor — reports orphan counts on stdout, never kills.
+// ---------------------------------------------------------------------------
+
+describe("job.ts doctor", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+	let jobsDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("kill 없이 고아 카운트를 stdout에 보고하고, 그룹은 doctor 실행 후에도 살아있다", () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "doctor-no-kill");
+
+		const result = execFileSync(process.execPath, [SCRIPT, "doctor", "--jobs-dir", jobsDir, "--json"], {
+			stdio: "pipe",
+		});
+		const output = JSON.parse(result.toString());
+		expect(output.orphanJobCount).toBe(1);
+		expect(output.orphanPgidCount).toBe(1);
+
+		// kill 없음의 증거: doctor 호출 이후에도 프로세스 그룹이 여전히 살아있다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		killPgidIfAlive(pgid);
+	});
+
+	test("고아가 없으면 카운트 0을 보고한다", () => {
+		const result = execFileSync(process.execPath, [SCRIPT, "doctor", "--jobs-dir", jobsDir, "--json"], {
+			stdio: "pipe",
+		});
+		const output = JSON.parse(result.toString());
+		expect(output.orphanJobCount).toBe(0);
+		expect(output.orphanPgidCount).toBe(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cmdStart also reaps orphans at job-start time (in-process, real engine —
+// cmdStart is directly exported and imported at the top of this file).
+// ---------------------------------------------------------------------------
+
+describe("cmdStart reaps orphan jobs on start", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("job 시작 시 기존 고아 job의 프로세스 그룹을 회수한다", async () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "start-reap");
+
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		expect(isPgidAlive(pgid)).toBe(false);
+
+		// cleanup: kill this test's own newly-spawned worker(s), best-effort.
+		for (const entry of fs.readdirSync(jobsDir)) {
+			const jobJsonPath = path.join(jobsDir, entry, "job.json");
+			if (!fs.existsSync(jobJsonPath)) continue;
+			const meta = JSON.parse(fs.readFileSync(jobJsonPath, "utf8"));
+			for (const member of meta.members ?? []) {
+				if (typeof member.workerPgid === "number") killPgidIfAlive(member.workerPgid);
+			}
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
 // cmdClean — path traversal guard (Fix A)
 // ---------------------------------------------------------------------------
 
