@@ -144,6 +144,58 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 			"that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed",
 		);
 	});
+
+	// Placement, not just presence: the four toContain/not.toContain assertions
+	// above only pin WHICH file the contract paragraph lives in, not WHERE in
+	// that file. The requirement names a placement (after the last residual-
+	// risk bullet, before the artifact schema block) and the prose itself is
+	// position-dependent — line 43's "the first-dispatch contract above" and
+	// line 93's "the dispatch-prompt contract above" both point backward at
+	// this same paragraph. A later edit that moves the paragraph below the
+	// schema block, or below line 93's pointer, would leave all four
+	// assertions above green (both strings still exist somewhere in the same
+	// file) while turning both backward references into dangling forward
+	// references. indexOf existence is asserted first (`-1` compared against
+	// `-1` or a positive position would let a deleted anchor pass silently),
+	// mirroring the sibling idiom at :347-353 and :371-374 above.
+	test("the dispatch-prompt contract paragraph sits after the last residual-risk bullet and before the artifact schema block", () => {
+		const lastResidualRiskBullet =
+			"A `--agent code-reviewer` main-thread session bypasses the guard.";
+		const contractParagraphLead = "carries exactly two things —";
+		const artifactSchemaHeader =
+			"The artifact schema the code-reviewer must emit:";
+
+		expect(
+			completionGateMd.indexOf(lastResidualRiskBullet),
+		).toBeGreaterThan(-1);
+		expect(
+			completionGateMd.indexOf(contractParagraphLead),
+		).toBeGreaterThan(-1);
+		expect(
+			completionGateMd.indexOf(artifactSchemaHeader),
+		).toBeGreaterThan(-1);
+
+		expect(completionGateMd.indexOf(lastResidualRiskBullet)).toBeLessThan(
+			completionGateMd.indexOf(contractParagraphLead),
+		);
+		expect(completionGateMd.indexOf(contractParagraphLead)).toBeLessThan(
+			completionGateMd.indexOf(artifactSchemaHeader),
+		);
+	});
+
+	test("the 'dispatch-prompt contract above' pointer at the concrete-progress bullet sits after the contract paragraph it points back at", () => {
+		const contractParagraphLead = "carries exactly two things —";
+		const pointerPhrase = "dispatch-prompt contract above";
+
+		expect(
+			completionGateMd.indexOf(contractParagraphLead),
+		).toBeGreaterThan(-1);
+		expect(completionGateMd.indexOf(pointerPhrase)).toBeGreaterThan(-1);
+
+		expect(completionGateMd.indexOf(contractParagraphLead)).toBeLessThan(
+			completionGateMd.indexOf(pointerPhrase),
+		);
+	});
 });
 
 describe("ported from goal (regression): required phrases survive somewhere in body+references", () => {
