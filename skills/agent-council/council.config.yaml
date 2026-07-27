@@ -55,3 +55,14 @@ council:
         - orchestrate-review
         - code-review
         - agent-council
+        # Role-boundary guard (different reason from the three above — not
+        # recursion). Reasoned on the review side, not here: a finder must
+        # surface un-judged candidates, and `diagnose` (a READ-ONLY root-cause
+        # consultant) invites it into verifying them instead — work that belongs
+        # to the upstream code-review skill. Council members fan out through the
+        # same `lib/generic-job.ts` spawn path with the same free skill loading,
+        # so the shape carries over even though no council run has shown it.
+        # Kept in lockstep with `orchestrate-review.config.yaml` —
+        # `codex-skill-deny-efficacy.test.ts` asserts the two files declare the
+        # same set.
+        - diagnose
