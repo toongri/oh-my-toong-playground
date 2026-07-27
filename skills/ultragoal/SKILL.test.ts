@@ -120,6 +120,32 @@ describe("ported from goal: Completion Gate detail lives in references/completio
 	});
 });
 
+describe("code-review dispatch payload contract: exactly two items, first dispatch and re-dispatch alike", () => {
+	test("dispatch payload contract detail is absent from SKILL.md body", () => {
+		expect(skillMd).not.toContain(
+			"carries exactly two things — the `serialize-review-context` 5-slot JSON verbatim, and the artifact path — and nothing else, on the first dispatch and on every re-dispatch alike",
+		);
+	});
+
+	test("dispatch payload contract detail is present in references/completion-gate.md", () => {
+		expect(completionGateMd).toContain(
+			"carries exactly two things — the `serialize-review-context` 5-slot JSON verbatim, and the artifact path — and nothing else, on the first dispatch and on every re-dispatch alike",
+		);
+	});
+
+	test("re-dispatch payload-fixity pointer is absent from SKILL.md body", () => {
+		expect(skillMd).not.toContain(
+			"that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed",
+		);
+	});
+
+	test("re-dispatch payload-fixity pointer is present in references/completion-gate.md", () => {
+		expect(completionGateMd).toContain(
+			"that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed",
+		);
+	});
+});
+
 describe("ported from goal (regression): required phrases survive somewhere in body+references", () => {
 	test("all seven slot names are named somewhere in the union", () => {
 		expect(combined).toContain("**outcome** (`--outcome`)");
