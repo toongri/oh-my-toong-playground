@@ -72,20 +72,31 @@ function toRecord(value: object): Record<string, unknown> {
  * family so a subagent-busy session's state survives SessionStart GC — but this
  * branch decides whether to BLOCK, and a revived corpse must not wedge the
  * session. Genuine producer writes stamp `progress_touched_at`
- * (mergeWithHeartbeat); the heartbeat never touches it.
+ * (mergeWithHeartbeat); a GC-only writer (touchSessionStates, restampAfterAdopt)
+ * never stamps it directly — it only backfills it once, from the pre-overwrite
+ * `last_touched_at`, the first time it touches a file that lacks it (see
+ * `backfillProgressTouchedAt` in lib/state-core.ts).
  *
- * `last_touched_at` is unconditionally overwritten with `progress_touched_at`
- * (string or undefined) before delegating to `isStateLive`. A file written
- * before `progress_touched_at` existed has it as `undefined`, which erases
- * `last_touched_at` from the object passed down — `isStateLive`'s own
- * `last_touched_at → started_at → dead` chain (lib/state-core.ts) then falls
- * to `started_at`, a field `touchSessionStates` never writes either. That is
- * what makes a legacy file wedge-safe: unlike falling back to `last_touched_at`
- * directly, `started_at` cannot be kept artificially fresh by the heartbeat, so
- * an abandoned legacy corpse ages out on schedule instead of being revived
- * forever. A recently-started legacy interview still blocks (its `started_at`
- * is genuinely fresh), and the very next genuine write stamps
- * `progress_touched_at`, after which this fallback is no longer exercised.
+ * `last_touched_at` is overwritten with `progress_touched_at` when present,
+ * falling back to the (untouched-by-any-GC-writer) `last_touched_at` itself
+ * when absent — never to `started_at`. An earlier version of this fallback used
+ * `started_at` instead, reasoning that `last_touched_at` could not be trusted
+ * because the heartbeat revives it. That broke the opposite case: a long-running
+ * session (`started_at` hours old) that was genuinely active moments ago
+ * (`last_touched_at` fresh) read as dead, because session AGE — not idle time —
+ * decided liveness. `started_at` is also never refreshed by anything, so it
+ * cannot even distinguish idle from active; it is not a liveness signal at all.
+ *
+ * Falling back to `last_touched_at` directly is now safe because of the
+ * invariant `backfillProgressTouchedAt` establishes: `progress_touched_at`
+ * absent ⟹ no GC-only writer has ever touched this file ⟹ `last_touched_at` is
+ * still that file's last genuine-activity timestamp — not a value the heartbeat
+ * could have kept artificially fresh. The very next GC-only touch (heartbeat or
+ * adopt) backfills `progress_touched_at` from that pre-overwrite value BEFORE
+ * bumping `last_touched_at`, so the fallback here is only ever exercised on a
+ * value no GC write has polluted, and the very next genuine producer write
+ * stamps `progress_touched_at` directly, after which this fallback no longer
+ * applies to that file at all.
  */
 function isProgressLive(
 	state: {
@@ -96,7 +107,10 @@ function isProgressLive(
 	},
 	nowEpoch: number,
 ): boolean {
-	return isStateLive({ ...state, last_touched_at: state.progress_touched_at }, nowEpoch);
+	return isStateLive(
+		{ ...state, last_touched_at: state.progress_touched_at ?? state.last_touched_at },
+		nowEpoch,
+	);
 }
 
 function formatBlockOutput(reason: string): HookOutput {
@@ -382,36 +396,51 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	// caller, so this defaults to the real Claude tool name there.
 	const askToolName = context.askToolName ?? "AskUserQuestion";
 
+	// The heartbeat (touchSessionStates) fires HERE — on entry to makeDecision,
+	// unconditionally, before Guard 2 below is even evaluated. It used to live
+	// inside that guard's activeSubagentCount > 0 branch, right before the
+	// branch's own return; that placement is now wrong for two measured reasons.
+	//
+	// 1. A session with many running subagents was measured at 6h 38m between
+	//    consecutive artifact writes — longer than the 6h ACTIVE_IDLE_TTL that
+	//    session-start GC reaps on. Guard 2 below returns before makeDecision
+	//    ever reaches stateDir/ensureDir further down, so while many subagents
+	//    are running, nothing past the guard touched state on the old placement
+	//    either — moving the heartbeat here does not change that part, it only
+	//    moves the touch itself ahead of the guard so it still fires on that path.
+	// 2. Independently of subagent activity: goal and ultragoal self-refresh
+	//    their own last_touched_at on every "pursuing" Stop call
+	//    (updateGoalState/updateUltragoalState), but prometheus, deep-interview,
+	//    and qa have no per-family idle-Stop updater of their own — nothing else
+	//    in makeDecision ever wrote their last_touched_at when activeSubagentCount
+	//    was 0. A long-running session with zero active subagents let those three
+	//    families' state age toward the 6h TTL on every ordinary Stop call — the
+	//    same defect this file exists to close, in a different window.
+	//
+	// Why this does NOT self-blind the corpse checks further down (deep-interview
+	// and prometheus, both via isProgressLive): both read progress_touched_at
+	// first, falling back to last_touched_at only when progress_touched_at is
+	// absent (see isProgressLive's doc comment above). touchSessionStates never
+	// stamps progress_touched_at directly — it only BACKFILLS it, once, from the
+	// file's pre-overwrite last_touched_at, before bumping last_touched_at itself
+	// (backfillProgressTouchedAt in lib/state-core.ts). So a corpse's genuinely-
+	// stale timestamp survives into progress_touched_at even after this same call's
+	// heartbeat has already revived last_touched_at to now. This safety holds only
+	// as long as BOTH devices stay in place: if the corpse checks below ever stop
+	// reading progress_touched_at (revert to last_touched_at alone), or if
+	// touchSessionStates ever stamps progress_touched_at itself instead of only
+	// backfilling it, this placement reopens the self-blinding failure mode.
+	try {
+		touchSessionStates(sessionId);
+	} catch {
+		/* never let a heartbeat write failure suppress the guard below */
+	}
+
 	// Guard 2: active subagent tasks are running (type=subagent, status=running|pending).
 	// Claude Code will re-invoke the Stop hook via task-notification when they finish, so blocking now is unnecessary.
 	// Non-subagent background tasks (shell/monitor/etc.) do NOT suppress enforcement — only subagents wake the main
 	// via task-notification, so only they make a deferred Stop hook re-invocation safe.
 	if (activeSubagentCount > 0) {
-		// Heartbeat goes HERE — inside this guard, right before the return — and must
-		// never be hoisted above the `if`. Two facts pin it to this exact spot:
-		//
-		// 1. Why not above the guard: an unconditional call would re-stamp this
-		//    session's own deep-interview/prometheus state `last_touched_at` on every
-		//    Stop call, and the corpse-staleness checks further down — the deep-interview
-		//    check (readDeepInterviewStateRaw, judged via isStateLive)
-		//    and its prometheus twin (readPrometheusState, judged via isStateLive)
-		//    — read that same field back from disk later in this SAME makeDecision call —
-		//    self-blinding every TTL-stale corpse into looking live. Scoping to
-		//    activeSubagentCount > 0 is behaviorally identical for the starving window
-		//    below: that window is only reachable while this guard actually fires
-		//    (makeDecision never reaches the corpse checks on this path), so nothing
-		//    outside this branch is affected.
-		//
-		// 2. Window this closes: a session with many running subagents measured 6h 38m
-		//    between consecutive artifact writes, against a 6h TTL — long enough for
-		//    session-start GC to reap a still-in-use state file. Do not "tidy" this
-		//    call back above the guard to match an older diagram; that regresses the
-		//    self-blinding bug in point 1.
-		try {
-			touchSessionStates(sessionId);
-		} catch {
-			/* never let a heartbeat write failure suppress the return below */
-		}
 		return formatContinueOutput();
 	}
 

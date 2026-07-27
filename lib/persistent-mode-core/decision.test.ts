@@ -2170,14 +2170,19 @@ describe("makeDecision", () => {
 	});
 
 	// -------------------------------------------------------------------------
-	// TODO 4: the Stop-hook heartbeat (touchSessionStates) sits inside Guard 2's
-	// activeSubagentCount > 0 block, right before that block's own early return —
-	// not above it — so even a Stop call that short-circuits there still proves
-	// this session is alive and refreshes its state files. Without this, a
-	// session with many running subagents never touches state below the guard,
-	// and its state ages past ACTIVE_IDLE_TTL while still in use.
+	// TODO 4: the Stop-hook heartbeat (touchSessionStates) fires unconditionally
+	// on entry to makeDecision, BEFORE Guard 2's activeSubagentCount > 0 check —
+	// not scoped inside it — so every Stop call proves this session is alive and
+	// refreshes its state files, whether or not a subagent is currently running.
+	// Two windows this closes: (1) a session with many running subagents never
+	// touched state below the guard while it fired, and its state aged past
+	// ACTIVE_IDLE_TTL while still in use; (2) prometheus/deep-interview/qa have
+	// no per-family idle-Stop updater of their own (unlike goal/ultragoal, which
+	// self-refresh on every pursuing Stop call), so with the heartbeat scoped to
+	// activeSubagentCount > 0, those three families' state also aged toward the
+	// TTL on every ordinary (zero-subagent) Stop call.
 	// -------------------------------------------------------------------------
-	describe("session-state heartbeat inside the subagent-guard early-return", () => {
+	describe("session-state heartbeat fires before the subagent guard", () => {
 		const isoAgo = (seconds: number): string => new Date(Date.now() - seconds * 1000).toISOString();
 		const ageFile = (path: string, seconds: number): void => {
 			const old = new Date(Date.now() - seconds * 1000);
@@ -2213,13 +2218,13 @@ describe("makeDecision", () => {
 		it("touches state without the guard ever reaching stateDir/ensureDir below it", async () => {
 			// A dedicated OMT_DIR with no `state/` subdirectory pre-created — unlike
 			// the shared beforeEach fixture above, which always mkdir's stateDir up
-			// front. The heartbeat sits inside Guard 2's activeSubagentCount > 0 block,
-			// right before that block's own return, so it touches this session's state
-			// AND the guard's early return fires before makeDecision ever reaches the
-			// stateDir/ensureDir call further down. If the heartbeat were moved below
-			// the guard's return instead, makeDecision would never reach it while a
-			// subagent is active; only the current placement satisfies both conditions
-			// this test checks: state touched AND `$OMT_DIR/state/` never created.
+			// front. The heartbeat fires unconditionally on entry to makeDecision,
+			// before Guard 2's activeSubagentCount > 0 check, so it touches this
+			// session's state regardless of subagent activity. With a subagent active,
+			// Guard 2's own early return still fires right after, before makeDecision
+			// ever reaches the stateDir/ensureDir call further down — this test checks
+			// both conditions hold together: state touched AND `$OMT_DIR/state/` never
+			// created.
 			const freshOmtDir = await mkdtemp(join(tmpdir(), "decision-hoist-test-"));
 			const prevOmtDir = process.env.OMT_DIR;
 			process.env.OMT_DIR = freshOmtDir;
@@ -2336,18 +2341,29 @@ describe("makeDecision", () => {
 			expect(fs.existsSync(statePath)).toBe(false);
 		});
 
-		it("activeSubagentCount === 0 does not fire the heartbeat (regression guard against firing unconditionally outside the subagent guard)", async () => {
-			// qa is the one state family this file never reads or writes anywhere else
-			// in makeDecision — the ONLY thing that can move its last_touched_at is
-			// touchSessionStates. The heartbeat lives inside Guard 2's
-			// activeSubagentCount > 0 block; if it were ever hoisted above that guard,
-			// it would fire unconditionally regardless of subagent activity and this
-			// assertion would fail.
-			const sid = "heartbeat-no-fire-when-idle";
-			const statePath = join(omtDir, `qa-state-${sid}.json`);
+		// This assertion fails if the heartbeat call is ever moved back inside Guard
+		// 2's activeSubagentCount > 0 block — that is the point of the test. qa and
+		// prometheus are the two state families with no per-family idle-Stop updater
+		// of their own anywhere else in makeDecision (unlike goal/ultragoal, which
+		// self-refresh last_touched_at on every pursuing Stop call): the ONLY thing
+		// that can move either family's last_touched_at at activeSubagentCount === 0
+		// is touchSessionStates firing unconditionally on entry, ahead of the guard.
+		it("activeSubagentCount === 0 still fires the heartbeat for families with no per-family idle updater (prometheus, qa)", async () => {
+			const sid = "heartbeat-fires-when-idle";
 			const old = isoAgo(7 * 3600);
+			const prometheusPath = join(omtDir, `prometheus-state-${sid}.json`);
+			const qaPath = join(omtDir, `qa-state-${sid}.json`);
 			await writeFile(
-				statePath,
+				prometheusPath,
+				JSON.stringify({
+					active: true,
+					sessionId: sid,
+					started_at: old,
+					last_touched_at: old,
+				}),
+			);
+			await writeFile(
+				qaPath,
 				JSON.stringify({
 					phase: "IN-PROGRESS",
 					cycle: 1,
@@ -2355,13 +2371,17 @@ describe("makeDecision", () => {
 					last_touched_at: old,
 				}),
 			);
-			ageFile(statePath, 7 * 3600);
+			ageFile(prometheusPath, 7 * 3600);
+			ageFile(qaPath, 7 * 3600);
 
-			const result = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+			makeDecision(
+				createContext({ sessionId: sid, activeSubagentCount: 0, lastAssistantMessage: "still working" }),
+			);
 
-			expect(result).toEqual({ continue: true });
-			const parsed = JSON.parse(await readFile(statePath, "utf8"));
-			expect(parsed.last_touched_at).toBe(old);
+			const prometheusAfter = JSON.parse(await readFile(prometheusPath, "utf8"));
+			const qaAfter = JSON.parse(await readFile(qaPath, "utf8"));
+			expect(Math.abs(Date.now() - Date.parse(prometheusAfter.last_touched_at))).toBeLessThan(5000);
+			expect(Math.abs(Date.now() - Date.parse(qaAfter.last_touched_at))).toBeLessThan(5000);
 		});
 	});
 
@@ -2371,9 +2391,20 @@ describe("makeDecision", () => {
 	// SessionStart GC. But deep-interview and prometheus decide whether to BLOCK
 	// using that same field (isStateLive) — so a heartbeat-revived TTL-stale
 	// corpse used to wedge the session forever. decision.ts now judges blocking
-	// via progress_touched_at (a wedge-axis signal the heartbeat never touches),
-	// falling back to last_touched_at only when progress_touched_at is absent
-	// (pre-existing on-disk files written before this field existed).
+	// via progress_touched_at (a wedge-axis signal a genuine producer write
+	// stamps — mergeWithHeartbeat), falling back to last_touched_at only when
+	// progress_touched_at is absent.
+	//
+	// That fallback is now SAFE — unlike an earlier attempt that fell back to
+	// started_at instead (which broke a long-running-but-recently-active legacy
+	// interview: session age, not idle time, decided liveness) — because
+	// touchSessionStates and restampAfterAdopt (the only writers that overwrite
+	// last_touched_at without also stamping progress_touched_at) now BACKFILL
+	// progress_touched_at from the pre-overwrite last_touched_at value the first
+	// time they touch a legacy file. The resulting invariant: progress_touched_at
+	// absent ⟹ no GC-only writer has ever touched this file ⟹ last_touched_at is
+	// still the file's last genuine-activity timestamp — so falling back to it
+	// directly is safe.
 	// -------------------------------------------------------------------------
 	describe("wedge-axis liveness: progress_touched_at vs last_touched_at (heartbeat revival guard)", () => {
 		const staleIso = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
@@ -2487,14 +2518,15 @@ describe("makeDecision", () => {
 		});
 
 		// Regression: the legacy fallback above ("today's behavior preserved") reads
-		// AS-IS from `last_touched_at` — but that is exactly the field the heartbeat
-		// (touchSessionStates) revives on every Stop call while a subagent is active.
-		// A legacy on-disk file (written before `progress_touched_at` existed) has no
-		// wedge-safe axis to fall back to, so the corpse never dies: the heartbeat
-		// keeps `last_touched_at` fresh forever, and the fallback keeps reading it as
-		// live. Unlike the corpse tests above (which start with `progress_touched_at`
-		// already present and never touched by the heartbeat), these three simulate a
-		// state file that never had the field at all.
+		// AS-IS from `last_touched_at`. Before the backfill fix, this field was
+		// exactly what the heartbeat (touchSessionStates) revives on every Stop call
+		// while a subagent is active, so a legacy corpse could never die. The fix:
+		// touchSessionStates now backfills `progress_touched_at` from the
+		// pre-overwrite `last_touched_at` value the FIRST time it touches a legacy
+		// file (see the invariant note above the describe block). So after the
+		// heartbeat crossing below, `progress_touched_at` is no longer absent — it
+		// now holds the corpse's genuinely-stale timestamp — and THAT is what
+		// isProgressLive reads, so the corpse still does not wedge.
 		it("legacy corpse (no progress_touched_at at all) revived by the heartbeat does not wedge the session", async () => {
 			const sid = "wedge-di-legacy-corpse-heartbeat";
 			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
@@ -2512,16 +2544,16 @@ describe("makeDecision", () => {
 				}),
 			);
 
-			// Heartbeat crossing: revives last_touched_at (GC axis) but started_at
-			// (the legacy fallback's own wedge-safe axis) stays stale — touchSessionStates
-			// never touches started_at.
+			// Heartbeat crossing: revives last_touched_at (GC axis) to now, but
+			// backfills progress_touched_at from the PRE-overwrite (stale) value —
+			// that backfilled value is what must keep this corpse from reviving.
 			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
 			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
 			expect(revived.started_at).toBe(staleIso);
-			expect(revived.progress_touched_at).toBeUndefined();
+			expect(revived.progress_touched_at).toBe(staleIso);
 
 			// Now Stop with no subagents active — must NOT wedge on the revived corpse.
 			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
@@ -2547,19 +2579,22 @@ describe("makeDecision", () => {
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
 			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
 			expect(revived.started_at).toBe(staleIso);
-			expect(revived.progress_touched_at).toBeUndefined();
+			expect(revived.progress_touched_at).toBe(staleIso);
 
 			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
 			expect(stopResult).toEqual({ continue: true });
 		});
 
-		it("legacy positive control: no progress_touched_at, but a fresh started_at still blocks even when last_touched_at looks stale", async () => {
-			// A legacy file should not lose blocking altogether — only the heartbeat-
-			// polluted axis (last_touched_at) must stop being trusted. started_at is
-			// deliberately made to look staler than last_touched_at here so the
-			// assertion can only pass if the fallback genuinely reads started_at,
-			// not last_touched_at.
-			const sid = "wedge-di-legacy-started-at-only";
+		// Corrected invariant (replaces a prior "legacy positive control" test that
+		// asserted the OPPOSITE of what is correct here — it encoded a since-reverted
+		// attempt that fell back to `started_at`). A legacy file that no GC-only
+		// writer has ever touched (progress_touched_at absent, and no heartbeat
+		// crossing happens in this test — activeSubagentCount defaults to 0) must be
+		// judged by `last_touched_at` alone: it is still the file's last genuine-
+		// activity timestamp. A fresh `started_at` on an old, idle session must NOT
+		// resurrect it — session AGE is not the liveness signal, IDLE TIME is.
+		it("legacy file with no heartbeat crossing: a fresh started_at does NOT block a genuinely idle last_touched_at", async () => {
+			const sid = "wedge-di-legacy-idle-last-touched";
 			const fresh = new Date().toISOString();
 			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
 			await writeFile(
@@ -2568,7 +2603,7 @@ describe("makeDecision", () => {
 					active: true,
 					started_at: fresh,
 					last_touched_at: staleIso,
-					// no progress_touched_at — legacy shape
+					// no progress_touched_at — legacy shape, never touched by any GC-only writer
 					state: {
 						phase: "in_progress",
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
@@ -2580,8 +2615,126 @@ describe("makeDecision", () => {
 				createContext({ sessionId: sid, lastAssistantMessage: "still working, no done token" }),
 			);
 
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<deep-interview-continuation>");
+			expect(result).toEqual({ continue: true });
+		});
+
+		// The exact case the started_at-fallback attempt broke: a long-running
+		// session (started_at 7h ago) that was genuinely active 2 minutes ago
+		// (last_touched_at), with no progress_touched_at yet (legacy shape) and an
+		// unconverged topology. A heartbeat crossing (subagent active) must backfill
+		// progress_touched_at from that genuinely-fresh last_touched_at — not from
+		// started_at — so the very next Stop call (no subagents) still blocks.
+		it("active legacy interview (fresh last_touched_at, old started_at) still blocks after a heartbeat crossing", async () => {
+			const sid = "wedge-di-legacy-active-recent";
+			const oldStartedAt = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+			const recentTouch = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: oldStartedAt,
+					last_touched_at: recentTouch,
+					// no progress_touched_at — legacy shape
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 0.9,
+						threshold: 0.15,
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
+				}),
+			);
+
+			// Heartbeat crossing: backfills progress_touched_at from the genuinely
+			// recent last_touched_at (2 minutes ago) before bumping last_touched_at
+			// itself to now.
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			expect(heartbeatResult).toEqual({ continue: true });
+
+			const revived = JSON.parse(await readFile(statePath, "utf8"));
+			expect(revived.progress_touched_at).toBe(recentTouch);
+
+			// Next Stop call with no subagents active — must still block: the backfilled
+			// progress_touched_at is fresh (2 minutes old), well under the 6h TTL.
+			const stopResult = makeDecision(
+				createContext({ sessionId: sid, activeSubagentCount: 0, lastAssistantMessage: "still working" }),
+			);
+			expect(stopResult.decision).toBe("block");
+			expect(stopResult.reason).toContain("<deep-interview-continuation>");
+		});
+
+		// Mirrors the test above for the prometheus family — isProgressLive is
+		// shared code between the deep-interview and prometheus branches, so the
+		// same started_at-fallback regression applied there too.
+		it("active legacy prometheus session (fresh last_touched_at, old started_at) still blocks after a heartbeat crossing", async () => {
+			const sid = "wedge-prometheus-legacy-active-recent";
+			const oldStartedAt = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+			const recentTouch = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+			const statePath = join(omtDir, `prometheus-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: oldStartedAt,
+					last_touched_at: recentTouch,
+					// no progress_touched_at — legacy shape
+				}),
+			);
+
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			expect(heartbeatResult).toEqual({ continue: true });
+
+			const revived = JSON.parse(await readFile(statePath, "utf8"));
+			expect(revived.progress_touched_at).toBe(recentTouch);
+
+			const stopResult = makeDecision(
+				createContext({ sessionId: sid, activeSubagentCount: 0, lastAssistantMessage: "still working" }),
+			);
+			expect(stopResult.decision).toBe("block");
+			expect(stopResult.reason).toContain("<prometheus-continuation>");
+		});
+
+		// Mirrors the active-legacy-interview test above, but with a done-token in
+		// the last assistant message: the state must NOT be deleted, since the
+		// Closure Guard cross-check (magnitudeUnconverged) still requires the
+		// interview to stay live before honoring the token, and it is (via the
+		// backfilled progress_touched_at).
+		it("active legacy interview + done-token: unconverged state is NOT deleted after a heartbeat crossing", async () => {
+			const sid = "wedge-di-legacy-done-token-not-deleted";
+			const oldStartedAt = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+			const recentTouch = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: oldStartedAt,
+					last_touched_at: recentTouch,
+					// no progress_touched_at — legacy shape
+					state: {
+						phase: "in_progress",
+						current_ambiguity: 0.9,
+						threshold: 0.15,
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
+				}),
+			);
+
+			// Heartbeat crossing backfills progress_touched_at from recentTouch.
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			expect(heartbeatResult).toEqual({ continue: true });
+
+			const stopResult = makeDecision(
+				createContext({
+					sessionId: sid,
+					activeSubagentCount: 0,
+					lastAssistantMessage: "Interview complete. <deep-interview-done/>",
+				}),
+			);
+
+			expect(stopResult.decision).toBe("block");
+			expect(stopResult.reason).toContain("<deep-interview-continuation>");
+			expect(fs.existsSync(statePath)).toBe(true);
 		});
 	});
 
