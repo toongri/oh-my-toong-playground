@@ -1295,6 +1295,52 @@ test_row17_self_check_devices_report_hook_state() {
     return "$result"
 }
 
+# =============================================================================
+# Row 18 -- a depth line carrying a backslash escape. Pins the `-r` on the scan
+# loop's `read`, which the line's own comment does not mention and no other
+# fixture exercises: every rollout fixture above is escape-free, so `read` and
+# `read -r` agree on all of them.
+#
+# Without `-r`, `read` performs backslash processing and `\"` collapses to `"`,
+# which breaks the JSON string it sits in. jq then fails, the recovery beside
+# it sets depth="", `cur` defaults to 0, child becomes 1, and `1 > 2` is false
+# -- a fail-OPEN that silently removes the cap.
+#
+# This is not a hypothetical input shape. Measured against this host's own
+# ~/.codex/sessions: of 3641 rollouts, 277 carry thread_spawn on line 1, and
+# 277/277 of those lines contain `\"` (the system prompt shares the line).
+# Losing `-r` therefore makes the hook read ZERO real rollouts -- and this hook
+# is the only enforcement point on the V2 spawn path. The fixture below is
+# hand-written minimal JSON; no captured rollout content is committed here.
+# =============================================================================
+test_row18_escaped_quote_on_depth_line_denies() {
+    new_sandbox
+    local rollout payload out rc=0 result=0 stderr_file handed_line
+
+    stderr_file="$SBX/stderr.txt"
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}},"t":"say \"hi\""}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+
+    out=$(printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook 2>"$stderr_file") || rc=$?
+
+    # Read the escape back off the file the hook was handed. Without it the row
+    # is an ordinary depth-2 deny that any escape-free fixture already covers,
+    # and `-r` loses its only watcher.
+    handed_line=$(head -1 -- "$(jq -r '.transcript_path // empty' "$SBX/hook-stdin.json" 2>/dev/null)" 2>/dev/null) || handed_line=""
+    case "$handed_line" in
+        *'\"'*) ;;
+        *)
+            echo "ASSERTION FAILED row18-escaped-quote: the depth line the hook read carries no backslash escape -- this row only pins \`read -r\` while it does, and every real rollout measured on this host carries one"
+            result=1
+            ;;
+    esac
+
+    assert_deny "$out" "$rc" "row18-escaped-quote" 3 2 "$stderr_file" || result=1
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
 main() {
     echo "=========================================="
     echo "Codex Spawn-Depth-Gate Hook Tests"
@@ -1322,6 +1368,7 @@ main() {
     run_test test_row15_unindexable_stdin_payload_allows
     run_test test_row16_unreadable_rollout_file_allows
     run_test test_row17_self_check_devices_report_hook_state
+    run_test test_row18_escaped_quote_on_depth_line_denies
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
