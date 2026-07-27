@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 import {
@@ -26,7 +27,10 @@ import {
 	assertMembersOrExit,
 	assertDenyEnforceable,
 	assertDenySkillsShape,
+	assertMcpAllowShape,
 	extractDenySkills,
+	enumerateConfiguredMcpServers,
+	computeMcpBlockList,
 	detectCliType,
 	buildAugmentedCommand,
 	gcStaleJobs as _gcStaleJobs,
@@ -323,6 +327,7 @@ function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
 	}
 
 	assertDenySkillsShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
+	assertMcpAllowShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
 	return merged;
 }
@@ -465,6 +470,11 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	const denySkills = extractDenySkills(config["chunk-review"].settings);
 	assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
+	const configuredMcpServers = enumerateConfiguredMcpServers(
+		process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
+	);
+	const mcpBlock = computeMcpBlockList(config["chunk-review"].settings, configuredMcpServers);
+
 	const jobId = generateJobId();
 	initLogger("chunk-review-job", getOmtDir(), jobId);
 	logStart();
@@ -497,6 +507,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			excludeChairmanFromMembers,
 			timeoutSec: timeoutSec || null,
 			denySkills,
+			mcpBlock,
 		},
 		members: members.map((r) => ({
 			name: String(r.name),
@@ -513,7 +524,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	const spawned: SpawnedWorker[] = _spawnWorkers({
-		entities: members.map((r) => ({ ...r, deny: denySkills })),
+		entities: members.map((r) => ({ ...r, deny: denySkills, mcpBlock })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: membersDir,
