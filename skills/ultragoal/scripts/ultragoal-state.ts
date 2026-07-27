@@ -1533,6 +1533,29 @@ function main(): void {
 				process.stderr.write("set: --completion-evidence requires a value\n");
 				process.exit(1);
 			}
+			// Same class, one direction worse: an empty --codex-goal-objective does not
+			// merely record a bogus value, it DISARMS Gate 9 — and a disarmed gate lets
+			// completion through with no cross-check at all (fail-open), while also
+			// wiping an arming a previous story already recorded. No caller ever arms
+			// with nothing: clearing is internal (`--phase planning`, `adopt`), never a
+			// flag. So an explicitly-supplied empty value is always a transport failure.
+			// The concrete one measured: a quoted heredoc whose payload contains a line
+			// equal to its delimiter ends the body there — first-line collision yields a
+			// 0-byte body — and the remaining lines run as shell commands. Refuse before
+			// any state mutation so the failure is loud and the prior arming survives.
+			// Whitespace-only is refused on the same footing: Gate 9 arms on
+			// `trim() !== ""`, so storing it would leave the appearance of an arming
+			// without the gate.
+			let codexGoalObjective: string | undefined;
+			if (args["codex-goal-objective"] !== undefined) {
+				codexGoalObjective = resolveStdinValue(str(args["codex-goal-objective"]));
+				if (codexGoalObjective === undefined || codexGoalObjective.trim() === "") {
+					process.stderr.write(
+						"set: --codex-goal-objective was supplied but resolved to an empty value — refusing rather than disarming the completion cross-check (a quoted heredoc whose payload contains a line equal to its delimiter produces exactly this)\n",
+					);
+					process.exit(1);
+				}
+			}
 			let maxIter: number | undefined;
 			if (args["max-iterations"] !== undefined) {
 				const n = Number(args["max-iterations"]);
@@ -1568,7 +1591,8 @@ function main(): void {
 				plan_path: str(args["plan-path"]),
 				resume_summary: str(args["resume-summary"]),
 				completion_evidence_paths: completionEvidence,
-				codex_goal_objective: resolveStdinValue(str(args["codex-goal-objective"])),
+				// Already resolved (and empty-checked) above — stdin can only be read once.
+				codex_goal_objective: codexGoalObjective,
 			});
 		} else if (subcommand === "set-verdict") {
 			const v = String(args["verdict"] ?? "absent");
