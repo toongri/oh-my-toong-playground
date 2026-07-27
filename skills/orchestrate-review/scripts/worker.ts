@@ -12,6 +12,49 @@ import type { CliType } from "@lib/agent-drivers/types";
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, "prompts");
 
+/**
+ * Per-angle allowlist of the conditional sections in chunk-reviewer-prompt.md
+ * (spec: orchestrate-review-4angle-redesign.md §2.3). The 4 common sections — Review
+ * Premises, Review Scope, What Was Implemented, Diff Command — carry no marker at all
+ * and always pass through, since "no marker on the common sections" is the simpler shape:
+ * the filter only ever has to act on marked sections absent from this list.
+ * `project_context` is never listed for any angle — it is dropped for all four.
+ */
+const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
+	correctness: [],
+	regression: ["commit_history"],
+	cleanup: ["non_goal"],
+	requirement: ["requirements", "non_goal", "evidence_results", "commit_history"],
+};
+
+const SECTION_MARKER_RE = /<!-- section:([a-z_]+) -->\n?([\s\S]*?)<!-- \/section:\1 -->\n?/g;
+
+/**
+ * Strip the conditional sections a given angle's allowlist doesn't cover, then remove every
+ * section marker from what remains — a marker left in the final prompt is noise the finder
+ * could misread as an instruction, so markers never survive regardless of member.
+ *
+ * Unknown member (an angle name absent from ANGLE_SECTION_ALLOWLIST, e.g.
+ * orchestrate-review.config.yaml grows a 5th angle before this map is updated): fail OPEN,
+ * not closed. Passing every section through only costs extra tokens; failing closed would
+ * kill that angle's job outright the moment the config changes, with no bypass/ask path in
+ * this worker to recover from a false deny. Logged via logError (not silent) so the drift is
+ * visible in this job's own worker log — this pursuit has already seen a silent fallback here
+ * hide a broken measurement window behind an otherwise-green test suite.
+ */
+export function filterPromptSections(promptContent: string, member: string): string {
+	const allowlist = ANGLE_SECTION_ALLOWLIST[member];
+	if (!allowlist) {
+		logError(
+			`filterPromptSections: unknown member "${member}" — passing all sections through unfiltered`,
+		);
+		return promptContent.replace(SECTION_MARKER_RE, (_match, _name: string, body: string) => body);
+	}
+	return promptContent.replace(SECTION_MARKER_RE, (_match, name: string, body: string) =>
+		allowlist.includes(name) ? body : "",
+	);
+}
+
 /** Type-predicate over CliType's members — narrows detectCliType's `string` return without an `as` assertion. */
 function isCliType(value: string): value is CliType {
 	return (
@@ -68,7 +111,8 @@ function main() {
 	const memberDir = path.join(membersRoot, member);
 
 	const promptPath = path.join(jobDir, "prompt.txt");
-	const promptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, "utf8") : "";
+	const rawPromptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, "utf8") : "";
+	const promptContent = filterPromptSections(rawPromptContent, member);
 
 	const EXECUTION_INSTRUCTION =
 		"Execute the diff command from REVIEW CONTENT. Review ONLY the files listed in Review Scope. Produce your full analysis following system instructions.";

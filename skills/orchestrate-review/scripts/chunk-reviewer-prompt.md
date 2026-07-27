@@ -22,27 +22,35 @@ Findings must be limited to files in the list above. Cross-references and explor
 
 {DESCRIPTION}
 
+<!-- section:requirements -->
 ## Requirements/Plan
 
 {REQUIREMENTS}
+<!-- /section:requirements -->
 
+<!-- section:project_context -->
 ## Project Context
 
 {PROJECT_CONTEXT}
 
 This describes what kind of software is being reviewed. Finders must factor this into whether a candidate's failure scenario is actually reachable in this kind of system.
+<!-- /section:project_context -->
 
+<!-- section:non_goal -->
 ## Non-Goals
 
 {NON_GOAL}
 
 Each declared non-goal has the form `- {what this change deliberately does not do} | decider: {how to recognize a candidate finding that falls inside this non-goal}`. Finders must not generate a candidate finding whose failure scenario is fully explained by a declared non-goal — this is suppression at generation time, not a filter applied after generating the candidate.
+<!-- /section:non_goal -->
 
+<!-- section:evidence_results -->
 ## Evidence Results
 
 {EVIDENCE_RESULTS}
 
 If evidence results are provided above, they are from automated build/test/lint execution — treat them as verified facts. Do NOT re-evaluate pass/fail status. Use this information to assess test quality and coverage, not test correctness. If evidence is unavailable, skip evidence-based checks.
+<!-- /section:evidence_results -->
 
 ## Diff Command
 
@@ -54,9 +62,11 @@ Execute the following command to obtain the diff for review. You MUST run this c
 {DIFF_COMMAND}
 ```
 
+<!-- section:commit_history -->
 ## Commit History
 
 {COMMIT_HISTORY}
+<!-- /section:commit_history -->
 
 ---
 
