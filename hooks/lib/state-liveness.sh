@@ -232,10 +232,12 @@ is_current_session() {
 # literal newline), and `read -r line` inherently cannot distinguish an
 # embedded newline from a line boundary, so this helper does not attempt to
 # parse such a record correctly — it relies on every caller to reject the
-# resulting forged record instead (see the caller-guard obligation below).
-# That guard cannot move into this helper: rejecting a forged record needs
-# the caller's own <dir> and <prefix> to anchor the path against, and
-# neither is available here.
+# resulting record's tail half instead (see the caller-guard obligation
+# below); the record's other, still-anchored head half passes that guard
+# too and is left to each caller's own witness/no-op handling. That guard
+# cannot move into this helper: rejecting the tail half needs the caller's
+# own <dir> and <prefix> to anchor the path against, and neither is
+# available here.
 if stat -c %Y "${BASH_SOURCE[0]}" >/dev/null 2>&1; then
   _state_liveness_stat_mtime() { stat -c %Y "$1" 2>/dev/null; }
   _state_liveness_stat_batch() { stat -c '%Y %n' "$@" 2>/dev/null; }
@@ -278,11 +280,16 @@ _STATE_LIVENESS_STAT_CHUNK=500
 #
 # Every caller must ALSO guard the lines it does get, immediately after
 # splitting mtime/path: reject a non-numeric mtime, and reject a path not
-# anchored to that caller's own "$dir/$prefix" — a newline embedded in a
+# anchored to that caller's own "$dir/$prefix". A newline embedded in a
 # filename (out of scope for this helper's own parsing, per the doc comment
-# above) forges exactly such a record by splitting one batched-stat line
-# into two. Both call sites below apply this pair of guards right after the
-# split, before the value reaches any arithmetic or `rm`.
+# above) splits one batched-stat line into two — this pair of guards
+# reliably rejects the SECOND (tail) half, a bare filename fragment that
+# can never contain '/'. The FIRST (head) half is a truncated-but-still-
+# anchored path and passes both guards; it is kept harmless by each call
+# site's own downstream logic (the live-id witness pass / a no-op `rm -f`
+# on a path that turns out not to exist), not by this guard pair — see each
+# call site's own comment below. Both call sites apply this pair of guards
+# right after the split, before the value reaches any arithmetic or `rm`.
 _state_liveness_stat_batch_lines() {
   local -a chunk
   local p
@@ -472,19 +479,27 @@ list_live_session_ids() {
       mtime="${line%% *}"
       f="${line#* }"
       # A filename containing a literal newline splits one batched-stat
-      # record into two lines, and the forged second line's first token
-      # lands in $mtime. The forged $f is always a suffix of a filename,
-      # and a filename cannot contain '/' — so it can never match the
-      # anchor pattern below, whose "$dir/$prefix" always contains a
-      # literal '/'. That anchor alone rejects every such forged record
-      # structurally; this numeric check is SUBSUMED by it, and kept as a
+      # record into two lines, and the forged second (tail) line's first
+      # token lands in $mtime. The tail line's $f is always a suffix of a
+      # filename, and a filename cannot contain '/' — so it can never match
+      # the anchor pattern below, whose "$dir/$prefix" always contains a
+      # literal '/'. That anchor alone rejects the tail line structurally;
+      # this numeric check is SUBSUMED by it for that half, and kept as a
       # second guard directly on the path to _artifact_age_live's
-      # arithmetic context — no producer in this repo can construct a
-      # forged $mtime that also clears the anchor.
+      # arithmetic context.
+      #
+      # The FIRST (head) line of the same split is not caught by either
+      # guard: its $f is the real filename truncated AT the embedded
+      # newline, which is still a "$dir/$prefix"-anchored path (the case
+      # pattern below matches on a prefix, not full equality), so the head
+      # line passes both this numeric check and the anchor. It is harmless
+      # in THIS loop only because the loop's job is to ADD live ids, never
+      # remove one: a stale head line simply fails _artifact_age_live and
+      # echoes nothing here, while the real file at that same path (if one
+      # exists) contributes its own genuine, correctly-formed line
+      # elsewhere in this same batch output.
       case "$mtime" in ''|*[!0-9]*) continue ;; esac
-      # The guard that actually stops the forgery: a forged $f is a
-      # filename's tail and so can never contain '/', while this pattern's
-      # "$dir/$prefix" always does — anchor it before use.
+      # Rejects the tail line (see above); the head line passes this too.
       case "$f" in "$dir/$prefix"*) ;; *) continue ;; esac
       if _artifact_age_live "$mtime" "$now_epoch"; then
         # Same SC2295 hazard as the STATE_PREFIXES pass above — quote the
@@ -630,19 +645,28 @@ reap_session_artifacts() {
       mtime="${line%% *}"
       f="${line#* }"
       # A filename containing a literal newline splits one batched-stat
-      # record into two lines, and the forged second line's first token
-      # lands in $mtime. The forged $f is always a suffix of a filename,
-      # and a filename cannot contain '/' — so it can never match the
-      # anchor pattern below, whose "$dir/$prefix" always contains a
-      # literal '/'. That anchor alone rejects every such forged record
-      # structurally; this numeric check is SUBSUMED by it, and kept as a
-      # second guard on the path to `rm -f` below — no producer in this
-      # repo can construct a forged $mtime that also clears the anchor.
+      # record into two lines, and the forged second (tail) line's first
+      # token lands in $mtime. The tail line's $f is always a suffix of a
+      # filename, and a filename cannot contain '/' — so it can never match
+      # the anchor pattern below, whose "$dir/$prefix" always contains a
+      # literal '/'. That anchor alone rejects the tail line structurally;
+      # this numeric check is SUBSUMED by it for that half, and kept as a
+      # second guard on the path to `rm -f` below.
+      #
+      # The FIRST (head) line of the same split is not caught by either
+      # guard: its $f is the real filename truncated AT the embedded
+      # newline, which is still a "$dir/$prefix"-anchored path (the case
+      # pattern below matches on a prefix, not full equality), so the head
+      # line passes both this numeric check and the anchor, reaching
+      # `rm -f` below same as any ordinary candidate. What actually keeps it
+      # harmless is NOT this guard pair: if a real file sits at that
+      # (possibly stale-mtime-mislabeled) path, list_live_session_ids's own
+      # witness pass sees that file's own genuine line and reports the sid
+      # live, so the keep-check below preserves it; if no real file sits
+      # there, `rm -f` on the nonexistent path is a no-op.
       case "$mtime" in ''|*[!0-9]*) continue ;; esac
-      # The guard that actually stops the forgery: a forged $f is a
-      # filename's tail and so can never contain '/', while this pattern's
-      # "$dir/$prefix" always does — anchor it before use, since it is
-      # what reaches `rm -f` below.
+      # Rejects the tail line (see above); the head line passes this too,
+      # since it is what reaches `rm -f` below.
       case "$f" in "$dir/$prefix"*) ;; *) continue ;; esac
 
       if is_current_session "$f" "$current_sid"; then
