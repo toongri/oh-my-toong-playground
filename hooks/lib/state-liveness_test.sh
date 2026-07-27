@@ -1475,6 +1475,107 @@ test_reap_session_artifacts_stale_codex_todo_reaped_without_witness() {
 }
 
 # =============================================================================
+# Batched-stat restructure (per-file stat fork elimination): fail-open on a
+# silently-omitted batch line, and correct mtime/path splitting for a
+# space-bearing path — both exercised against reap_session_artifacts, one of
+# the two loops the restructure rewrote to iterate directly over
+# _state_liveness_stat_batch_lines output instead of one is_artifact_live
+# fork per candidate.
+# =============================================================================
+
+# _state_liveness_stat_batch is overridden here, scoped to a subshell only
+# (never leaking back into this test file's own shell), to simulate the
+# documented "stat could not resolve this path" omission — e.g. a real race
+# between glob expansion and the batched stat call, which cannot be made to
+# reproduce deterministically on demand. The override recomputes stat inline
+# (GNU-then-BSD, matching the production "unknown flavor" fallback branch)
+# rather than calling through to the real cached function, so the test has no
+# dependency on that function's internal naming.
+test_reap_session_artifacts_batched_stat_omission_fails_open() {
+  local d="$TEST_TMP_DIR"
+  local dropped="$d/codex-todo-omit-sid-30.json"
+  local control="$d/codex-todo-control-sid-31.json"
+  write_state "$dropped" "{}"
+  write_state "$control" "{}"
+  touch_ago "$dropped" 25200   # 7h — past ACTIVE_IDLE_TTL, no witness: a
+                                # genuine reap candidate if its line is seen
+  touch_ago "$control" 25200   # same age, NOT omitted — must still be reaped
+
+  (
+    _state_liveness_stat_batch() {
+      { stat -c '%Y %n' "$@" 2>/dev/null || stat -f '%m %N' "$@" 2>/dev/null || true; } \
+        | grep -vF -- "$dropped"
+    }
+    reap_session_artifacts "$d" "unrelated-sid" "$NOW" 0 > /dev/null
+  )
+
+  if [ ! -f "$dropped" ]; then
+    echo "  ASSERTION FAILED: a candidate whose batched-stat line is silently omitted must fail open (survive), never become a reap candidate"
+    return 1
+  fi
+  # Negative control: proves the guard above has teeth rather than reaping
+  # being disabled wholesale inside the subshell.
+  if [ -f "$control" ]; then
+    echo "  ASSERTION FAILED (negative control): a stale artifact NOT omitted from batched stat output must still be reaped"
+    return 1
+  fi
+  return 0
+}
+
+# Space-bearing directory path: stat's batched line format puts mtime FIRST
+# ("<mtime> <path>"), so ${line%% *} / ${line#* } split correctly even when
+# the path itself contains spaces (a Unix mtime never does). This drives the
+# split against a REAL space-bearing directory rather than asserting the
+# splitting rule in the abstract, covering both the age judgment (mtime half)
+# and the actual rm target (path half, spaces and all).
+test_reap_session_artifacts_space_bearing_dir_path_judged_correctly() {
+  local d="$TEST_TMP_DIR/my project dir"
+  mkdir -p "$d"
+
+  local stale="$d/codex-todo-space-stale-32.json"
+  local fresh="$d/codex-todo-space-fresh-33.json"
+  write_state "$stale" "{}"
+  write_state "$fresh" "{}"
+  touch_ago "$stale" 25200   # 7h — past ACTIVE_IDLE_TTL, no witness — reaped
+  # $fresh: no touch_ago — mtime is "just now", within ACTIVE_IDLE_TTL — survives
+
+  reap_session_artifacts "$d" "unrelated-sid" "$NOW" 0 > /dev/null
+
+  if [ -f "$stale" ]; then
+    echo "  ASSERTION FAILED: a stale artifact in a space-bearing directory must still be reaped (mtime half of the batched-line split must resolve correctly)"
+    return 1
+  fi
+  if [ ! -f "$fresh" ]; then
+    echo "  ASSERTION FAILED: a fresh artifact in a space-bearing directory must survive (path half of the batched-line split must resolve correctly, or rm would target the wrong/no file)"
+    return 1
+  fi
+  return 0
+}
+
+# Same space-bearing-path concern, but against list_live_session_ids's own
+# batched SESSION_ARTIFACT_PREFIXES witness pass (the other loop the
+# restructure rewrote) — a sid witnessed ONLY through a session-artifact
+# family (no STATE_PREFIXES file at all) living under a space-bearing
+# directory must still be reported live.
+test_list_live_session_ids_space_bearing_dir_witness_pass() {
+  local d="$TEST_TMP_DIR/my project dir"
+  mkdir -p "$d/state"
+  local sid="space-witness-sid-34"
+  write_state "$d/state/block-count-$sid" "1"
+  # fresh mtime — within ACTIVE_IDLE_TTL
+
+  local out
+  out=$(list_live_session_ids "$d" "$NOW")
+
+  if ! printf '%s\n' "$out" | grep -qx "$sid"; then
+    echo "  ASSERTION FAILED: a sid witnessed only via a session artifact under a space-bearing directory must still be reported live"
+    echo "  got: $out"
+    return 1
+  fi
+  return 0
+}
+
+# =============================================================================
 # Defect: rm -f failures were silently reported as successful deletions —
 # the affected path was echoed BEFORE rm ran, and rm's own exit status was
 # never inspected. A failed delete must not be echoed as deleted, must be
@@ -1775,6 +1876,9 @@ run_test test_reap_session_artifacts_dry_run_preserves_candidate_bytes
 run_test test_reap_session_artifacts_namespaced_block_count_survives_none_lane
 run_test test_reap_session_artifacts_stale_codex_todo_survives_via_fresh_block_count_witness
 run_test test_reap_session_artifacts_stale_codex_todo_reaped_without_witness
+run_test test_reap_session_artifacts_batched_stat_omission_fails_open
+run_test test_reap_session_artifacts_space_bearing_dir_path_judged_correctly
+run_test test_list_live_session_ids_space_bearing_dir_witness_pass
 run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported
 run_test test_reap_session_artifacts_rm_failure_not_echoed_and_reported
 run_test test_harmless_conditions_do_not_trip_set_e
