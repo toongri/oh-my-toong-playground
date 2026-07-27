@@ -203,10 +203,58 @@ function cmdResults(options: Record<string, unknown>, jobDir: string): void {
 	_cmdResults(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
 }
 
+/**
+ * Per-member wall-clock, emitted after each collect returns.
+ *
+ * Members run in parallel, so a chunk costs max(member), not the sum — without
+ * this line nothing records which angle set that max, and the per-member
+ * artifacts are gone once the job is cleaned.
+ *
+ * Elapsed is measured from the job's own `createdAt`, not from a per-member
+ * start: a terminal status.json carries `finishedAt` but no `startedAt` (the
+ * running-state write that sets it is replaced wholesale when the member
+ * finishes). `createdAt` is an accurate common origin because every member is
+ * spawned in the same pass — measured at 3ms spread across 6 members.
+ */
+function logMemberDurations(jobDir: string): void {
+	const resolved = path.resolve(jobDir);
+	const membersDir = path.join(resolved, CHUNK_REVIEW_JOB_CONFIG.entityDirName);
+
+	let names: string[];
+	let origin: number;
+	try {
+		names = fs.readdirSync(membersDir).sort();
+		const jobMeta = JSON.parse(fs.readFileSync(path.join(resolved, "job.json"), "utf8"));
+		origin = Date.parse(String(jobMeta.createdAt));
+	} catch {
+		return;
+	}
+	if (!Number.isFinite(origin)) return;
+
+	const parts = names.map((name) => {
+		try {
+			const status = JSON.parse(
+				fs.readFileSync(path.join(membersDir, name, "status.json"), "utf8"),
+			);
+			const finished = Date.parse(String(status.finishedAt));
+			return Number.isFinite(finished)
+				? `${name}=${Math.round((finished - origin) / 1000)}s`
+				: `${name}=${status.state || "unknown"}`;
+		} catch {
+			return `${name}=unreadable`;
+		}
+	});
+
+	if (parts.length > 0) {
+		logInfo(`member durations: ${parts.join(" ")}`);
+	}
+}
+
 async function cmdCollect(options: Record<string, unknown>, jobDir: string): Promise<void> {
 	initLoggerFromJobDir(jobDir);
 	logInfo(`collect: ${path.resolve(jobDir)}`);
 	await _cmdCollect(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
+	logMemberDurations(jobDir);
 }
 
 function cmdStop(options: Record<string, unknown>, jobDir: string): void {
