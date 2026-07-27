@@ -20,6 +20,7 @@ import {
 	ACTIVE_IDLE_TTL_SECONDS,
 	TERMINAL_TTL_SECONDS,
 	isStateLive,
+	isProgressLive,
 	STATE_PREFIX,
 	listOthers,
 	adopt,
@@ -310,6 +311,49 @@ describe("isStateLive — started_at fallback", () => {
 		const now = nowEpoch();
 		const parsed = { active: true, last_touched_at: "not-a-date", started_at: isoSecondsAgo(60) };
 		expect(isStateLive(parsed, now)).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// isProgressLive — legacy last_touched_at fallback (ca82a246: "fix: isProgressLive
+// last_touched_at 폴백 복원"). `progress_touched_at` absent on a legacy file must
+// fall back to `last_touched_at` — NOT fall through isStateLive's own chain to
+// started_at. Each fixture below makes last_touched_at and started_at disagree
+// so only the `?? parsed.last_touched_at` fallback (not the started_at fallback
+// underneath it) can produce the asserted answer.
+// ---------------------------------------------------------------------------
+
+describe("isProgressLive — legacy last_touched_at fallback", () => {
+	test("no progress_touched_at, fresh last_touched_at, STALE started_at → live via the last_touched_at fallback", () => {
+		const now = nowEpoch();
+		const staleStartedAt = isoSecondsAgo(7 * 3600); // stale for an active state (TTL 6h)
+		const parsed = {
+			active: true,
+			last_touched_at: isoSecondsAgo(60),
+			started_at: staleStartedAt,
+			// no progress_touched_at
+		};
+		// Sanity: started_at alone is NOT live — so the `true` below can only come
+		// from reading last_touched_at via the fallback, not from falling through
+		// to started_at.
+		expect(isStateLive({ active: true, last_touched_at: staleStartedAt }, now)).toBe(false);
+		expect(isProgressLive(parsed, now)).toBe(true);
+	});
+
+	test("no progress_touched_at, STALE last_touched_at, fresh started_at → dead via the last_touched_at fallback", () => {
+		const now = nowEpoch();
+		const freshStartedAt = isoSecondsAgo(60);
+		const parsed = {
+			active: true,
+			last_touched_at: isoSecondsAgo(7 * 3600), // stale for an active state (TTL 6h)
+			started_at: freshStartedAt,
+			// no progress_touched_at
+		};
+		// Sanity: started_at alone IS live — so the `false` below can only come
+		// from reading last_touched_at via the fallback, not from falling through
+		// to started_at.
+		expect(isStateLive({ active: true, last_touched_at: freshStartedAt }, now)).toBe(true);
+		expect(isProgressLive(parsed, now)).toBe(false);
 	});
 });
 

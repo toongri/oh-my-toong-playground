@@ -622,9 +622,13 @@ EOF
     # Clean up our extra temp dir
     rm -rf "$space_home"
 
-    # The full path (with spaces) must appear verbatim in DELETE output
-    if ! echo "$out" | grep "DELETE " | grep -q "goal-state-space-sess.json"; then
-        echo "ASSERTION FAILED: dry-run must list full state file path (spaces in HOME)"
+    # The full path (with spaces) must appear verbatim in DELETE output — fixed-string
+    # match (-F) against the constructed path so a shell-glob/regex metachar in the
+    # temp path (e.g. mktemp's own brackets on some platforms) cannot make this match
+    # accidentally succeed or fail.
+    if ! echo "$out" | grep "DELETE " | grep -qF -- "$state_file"; then
+        echo "ASSERTION FAILED: dry-run must list full state file path verbatim (spaces in HOME)"
+        echo "  Expected path: ${state_file}"
         echo "  Output: ${out}"
         return 1
     fi
