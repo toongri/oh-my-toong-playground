@@ -11,7 +11,7 @@
 
 import fs from "fs";
 import path from "path";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 
 import {
 	exitWithError,
@@ -512,6 +512,35 @@ export const HEARTBEAT_STALE_THRESHOLD_MS = 60_000;
 /** Grace period for running entity with no heartbeat yet (startedAt/mtime fallback). */
 export const HEARTBEAT_GRACE_PERIOD_MS = 120_000;
 
+/**
+ * Synchronous stale-heartbeat predicate for a `running` status record.
+ * Extracted from computeStatus's own running-staleness block so `cmdClean`'s
+ * active-member guard can share the exact same judgment instead of a second,
+ * potentially drifting copy of the threshold logic. `cmdClean` needs a sync
+ * predicate — it must stay a sync function itself (5 skill call-sites import
+ * it; see cmdClean's own comment for why) — which computeStatus's async CAS
+ * re-check flow does not provide directly.
+ */
+export function isRunningStatusStale(status: Record<string, unknown>, statusPath: string): boolean {
+	if (status.lastHeartbeat) {
+		// heartbeat present: stale if older than HEARTBEAT_STALE_THRESHOLD_MS
+		const heartbeatAge = Date.now() - toEpochMs(status.lastHeartbeat);
+		return heartbeatAge > HEARTBEAT_STALE_THRESHOLD_MS;
+	}
+	// no heartbeat yet: grace period based on startedAt or file mtime
+	let startTs: number;
+	if (status.startedAt) {
+		startTs = toEpochMs(status.startedAt);
+	} else {
+		try {
+			startTs = fs.statSync(statusPath).mtimeMs;
+		} catch {
+			startTs = Date.now();
+		}
+	}
+	return Date.now() - startTs > HEARTBEAT_GRACE_PERIOD_MS;
+}
+
 export async function computeStatus(
 	jobDir: string,
 	config: JobConfig,
@@ -585,26 +614,19 @@ export async function computeStatus(
 
 		// Staleness check for running entities (heartbeat-based)
 		if (status.state === "running") {
-			let isStale: boolean;
 			let startTs: number;
 			if (status.lastHeartbeat) {
-				// heartbeat present: stale if older than HEARTBEAT_STALE_THRESHOLD_MS
-				const heartbeatAge = Date.now() - toEpochMs(status.lastHeartbeat);
-				isStale = heartbeatAge > HEARTBEAT_STALE_THRESHOLD_MS;
 				startTs = toEpochMs(status.lastHeartbeat);
+			} else if (status.startedAt) {
+				startTs = toEpochMs(status.startedAt);
 			} else {
-				// no heartbeat yet: grace period based on startedAt or file mtime
-				if (status.startedAt) {
-					startTs = toEpochMs(status.startedAt);
-				} else {
-					try {
-						startTs = fs.statSync(statusPath).mtimeMs;
-					} catch {
-						startTs = Date.now();
-					}
+				try {
+					startTs = fs.statSync(statusPath).mtimeMs;
+				} catch {
+					startTs = Date.now();
 				}
-				isStale = Date.now() - startTs > HEARTBEAT_GRACE_PERIOD_MS;
 			}
+			const isStale = isRunningStatusStale(status, statusPath);
 
 			if (isStale) {
 				// CAS pattern: sleep then re-read to avoid race with legitimate completion
@@ -1152,7 +1174,15 @@ export function cmdClean(
 					const status = readJsonIfExists(statusPath);
 					if (!isRecord(status)) return false;
 					const state = typeof status.state === "string" ? status.state : "";
-					return activeMemberStates.has(state);
+					if (!activeMemberStates.has(state)) return false;
+					// A `running` member whose heartbeat is stale (same judgment
+					// computeStatus uses) is not actually active — an external
+					// SIGKILL can leave a member stuck at state:"running" forever,
+					// which would otherwise block clean permanently. Staleness
+					// relief applies only to `running`; queued/awaiting_resume/
+					// retrying stay active as before.
+					if (state === "running" && isRunningStatusStale(status, statusPath)) return false;
+					return true;
 				});
 			} catch {
 				// If we can't read the entities dir, proceed; the path-traversal guard already validated.
@@ -1162,6 +1192,69 @@ export function cmdClean(
 					`clean: refusing to delete job dir with active ${config.entityPlural}: ${activeEntries.join(", ")} — use force option to override`,
 				);
 			}
+		}
+	}
+
+	// Reap each member's process group before deleting the directory. Anchor
+	// is job.json's members[].workerPgid (written by cmdStart's spawnWorkers,
+	// e.g. skills/orchestrate-review/scripts/job.ts) — never status.json's
+	// `pid`, which is the codex-exec child's pid, not the worker's own PGID.
+	// Absent/null workerPgid (or an unreadable job.json) means "don't know
+	// what to kill" — skip the kill entirely rather than guess. Under-reaping
+	// (a process leaks) is the safe failure here; over-reaping (killing a
+	// process this job never owned) is not, and this function only ever has
+	// this one jobDir's own job.json to go on.
+	const jobMetaForKill = readJsonIfExists(path.join(resolvedJobDir, "job.json"));
+	const membersForKill =
+		isRecord(jobMetaForKill) && Array.isArray(jobMetaForKill.members) ? jobMetaForKill.members : [];
+	const pgidsToKill = membersForKill
+		.map((m) => (isRecord(m) ? m.workerPgid : null))
+		.filter(
+			(pgid): pgid is number => typeof pgid === "number" && Number.isInteger(pgid) && pgid > 0,
+		);
+
+	for (const pgid of pgidsToKill) {
+		// No grace period between SIGTERM and SIGKILL, unlike
+		// reapOwnProcessGroup's self-reap: that 5s grace period exists to let
+		// a live worker exit cleanly on its own normal path, but a member
+		// that reaches this guard is already terminal or heartbeat-stale (the
+		// active-member guard above only lets those through), so there is no
+		// still-working process here to give a grace period to.
+		try {
+			process.kill(-pgid, "SIGTERM");
+		} catch {
+			/* ESRCH: group already empty — nothing to reap */
+		}
+		try {
+			process.kill(-pgid, "SIGKILL");
+		} catch {
+			/* ESRCH: group already empty — nothing to reap */
+		}
+	}
+
+	// Report-only pass: cmdClean is not the leader of any of these groups
+	// (unlike reapOwnProcessGroup, which signals its own group), so it has no
+	// basis for deciding what a surviving process actually is or whether
+	// escalating further is safe. Report to stderr and stop — a human or the
+	// layer-3 orphan reaper decides from here.
+	if (pgidsToKill.length > 0) {
+		try {
+			const psOutput = execSync("ps -o pgid=,pid= -A", { encoding: "utf8" });
+			const pgidSet = new Set(pgidsToKill);
+			const survivingPids: string[] = [];
+			for (const line of psOutput.split("\n")) {
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+				const [pgidStr, pidStr] = trimmed.split(/\s+/);
+				if (pgidSet.has(Number(pgidStr))) survivingPids.push(pidStr);
+			}
+			if (survivingPids.length > 0) {
+				process.stderr.write(
+					`clean: ${survivingPids.length} process(es) survived group kill for ${resolvedJobDir}: pid ${survivingPids.join(", ")}\n`,
+				);
+			}
+		} catch {
+			// ps unavailable or failed — best-effort reporting only, never block clean
 		}
 	}
 
