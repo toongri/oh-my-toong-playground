@@ -78,3 +78,24 @@ chunk-review:
         - orchestrate-review
         - code-review
         - agent-council
+        # Role-boundary guard (different reason from the three above — this one
+        # is not about recursion). A finder's contract is to surface un-judged
+        # candidates; assigning CONFIRMED/PLAUSIBLE/REFUTED belongs to the
+        # upstream code-review skill's candidate-verification stage, where each
+        # candidate is re-checked against HEAD before it earns a verdict. That
+        # split is stated in every angle prompt's
+        # CRITICAL block ("Do NOT assign severity, priority, P-levels, verdicts").
+        # `diagnose` is a READ-ONLY root-cause consultant — loading it invites a
+        # finder across exactly that line, into verifying its own candidates.
+        # Effect measured 2026-07-27 via `codex debug prompt-input`:
+        # `/diagnose/SKILL.md` occurrences 2 → 0 with this entry present.
+        # NOT justified by a runtime measurement: a 26-minute `regression` run
+        # was once cited here, but that job ran a hand-written prompt that
+        # explicitly ordered mutation experiments, so it evidences
+        # instruction-following, not skill-induced blowup. No standard-path
+        # measurement shows `diagnose` costing time — this entry claims a
+        # boundary, not a speedup.
+        # Deny-listed rather than allow-listed: one identified offender, and a
+        # blanket allowlist would also kill project-local skills a finder may
+        # legitimately need. Revisit if another skill shows the same shape.
+        - diagnose
