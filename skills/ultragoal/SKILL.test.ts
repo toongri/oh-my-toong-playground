@@ -447,11 +447,32 @@ describe("Codex native goal tool gate: capability-conditional create_goal/update
 		);
 	});
 
-	test("update_goal is mentioned after the sisyphus dispatch instruction", () => {
-		expect(executionDispatch.indexOf("update_goal")).toBeGreaterThan(-1);
-		expect(executionDispatch.indexOf("update_goal")).toBeGreaterThan(
-			executionDispatch.indexOf("Dispatch ONLY that one story"),
+	// Two legitimate `update_goal` call sites now exist: the advance-on-APPROVE
+	// close (step 5, after dispatch) and the reconciliation close that recovers an
+	// already-APPROVE story's interrupted goal (step 3, before dispatch). So the
+	// position invariant is anchored on step 5's firing condition rather than on
+	// the first occurrence of the token — and every earlier occurrence must sit
+	// inside the reconciliation branch, so an unconditional pre-dispatch close
+	// cannot slip in under cover of that second call site.
+	test("the advance-on-APPROVE update_goal comes after dispatch, and any earlier call site is the reconciliation branch", () => {
+		const dispatchAt = executionDispatch.indexOf("Dispatch ONLY that one story");
+		const step5At = executionDispatch.indexOf(
+			"If the `update_goal` tool is available",
 		);
+		expect(dispatchAt).toBeGreaterThan(-1);
+		expect(step5At).toBeGreaterThan(dispatchAt);
+
+		const reconciliationAt = executionDispatch.indexOf(
+			"**If `create_goal` is refused**",
+		);
+		expect(reconciliationAt).toBeGreaterThan(-1);
+		for (
+			let i = executionDispatch.indexOf("update_goal");
+			i > -1 && i < dispatchAt;
+			i = executionDispatch.indexOf("update_goal", i + 1)
+		) {
+			expect(i).toBeGreaterThan(reconciliationAt);
+		}
 	});
 
 	test("the registered objective is recorded via set --codex-goal-objective", () => {
@@ -515,6 +536,8 @@ describe("Codex native goal tool gate: capability-conditional create_goal/update
 	//
 	// 무엇이 훼손되면 빨개지는가: 거부된 create_goal에 대한 get_goal 조정 분기가
 	// step 3에서 사라지면.
+	//
+	// 주의: 이 분기만으로는 부족하다 — 바로 아래 already-APPROVE 케이스 참조.
 	test("a rejected create_goal reconciles through get_goal instead of leaving the gate disarmed", () => {
 		const step3 = executionDispatch.slice(
 			executionDispatch.indexOf("If the `create_goal` tool is available"),
@@ -526,6 +549,54 @@ describe("Codex native goal tool gate: capability-conditional create_goal/update
 		expect(step3).toMatch(/objective/i);
 		// The rejection is never resolved by closing the open goal.
 		expect(step3).toMatch(/never|forbid/i);
+	});
+
+	// The SECOND crash window, on the other side of the APPROVE write. If the
+	// process stops after a story's APPROVE lands in the verdict artifact but
+	// before that story's `update_goal`, resumption re-derives the NEXT story as
+	// current (step 2 keys on the artifact), so nothing ever revisits the approved
+	// story — while its native goal stays open and `codex_goal_objective` still
+	// names it (no planning transition ran, so nothing cleared the field). Every
+	// later `create_goal` is refused, step 5 skips because the recorded objective
+	// is not the current story's, and `request-complete` is left cross-checking a
+	// still-`active` goal it can never satisfy: a permanent completion deadlock.
+	//
+	// Closing that goal is NOT laundering — its APPROVE is already recorded in the
+	// verdict artifact, which is exactly the property the no-laundering rule
+	// protects. So the discriminator is the verdict artifact, not the objective
+	// text alone.
+	//
+	// 무엇이 훼손되면 빨개지는가: step 3의 조정 분기가 "이미 APPROVE인 story의 열린
+	// goal" 케이스를 잃고 두 갈래(같음/다름)로 되돌아가면 — 이 회귀는 무조건
+	// update_goal을 좁히면서 실제로 한 번 발생했다.
+	test("an open goal belonging to an already-APPROVE story is closed, not left to deadlock", () => {
+		const step3 = executionDispatch.slice(
+			executionDispatch.indexOf("If the `create_goal` tool is available"),
+			executionDispatch.indexOf("Dispatch ONLY that one story"),
+		);
+		// The verdict artifact — not objective equality with the current story —
+		// is what authorizes closing someone else's open goal.
+		expect(step3).toMatch(/APPROVE/);
+		// And the branch must actually close it and retry, not merely observe it.
+		expect(step3).toContain("update_goal");
+		expect(step3).toMatch(/retry|再|다시|again/i);
+	});
+
+	// Step 5's firing condition reads local state (`codex_goal_objective`), which
+	// can have gone stale against the live thread: clearing or replacing the
+	// native goal mid-run is a user action this skill explicitly documents
+	// (`/goal clear`). Since `update_goal` has no goal selector, a local-only
+	// check would close whatever unrelated goal now occupies the thread. The live
+	// snapshot must agree immediately before the call.
+	//
+	// 무엇이 훼손되면 빨개지는가: step 5가 로컬 필드만 보고 get_goal 재확인 없이
+	// update_goal을 호출하도록 되돌아가면.
+	test("update_goal re-reads the live get_goal snapshot before firing", () => {
+		const step5 = executionDispatch.slice(
+			executionDispatch.indexOf("If the `update_goal` tool is available"),
+			executionDispatch.indexOf("**So a re-plan cannot register"),
+		);
+		expect(step5).toContain("get_goal");
 	});
 });
 
