@@ -223,17 +223,27 @@ is_artifact_live() {
   fi
 }
 
-# list_live_session_ids <dir>
+# list_live_session_ids <dir> [now_epoch]
 #
 # Echoes the bare session id of every currently-live state file in <dir>, one
 # per line, deduplicated. This is what lets reap_session_artifacts protect a
 # live session's artifacts without knowing its session id — a caller that
 # never had a session id to begin with (omt-cleanup) can still ask "is any
 # state file for this id live right now?".
+#
+# <now_epoch> is optional and falls back to `date +%s` when omitted — no
+# caller outside this file passes one today (grep confirms), so this stays
+# back-compatible. reap_session_artifacts always supplies its own <now_epoch>
+# explicitly (see that function below): a single GC pass must judge state
+# liveness and artifact liveness against one shared clock reading, not two
+# independently-fetched wall-clock values that can drift a session across
+# the TTL boundary between the two calls.
 list_live_session_ids() {
   local dir="$1"
-  local now_epoch
-  now_epoch=$(date +%s)
+  local now_epoch="${2:-}"
+  if [ -z "$now_epoch" ]; then
+    now_epoch=$(date +%s)
+  fi
 
   local prefix f sid seen
   seen=""
@@ -241,7 +251,13 @@ list_live_session_ids() {
     for f in "$dir"/${prefix}*.json; do
       [ -f "$f" ] || continue
       if is_state_live "$f" "$now_epoch"; then
-        sid="${f#$dir/$prefix}"
+        # $dir/$prefix MUST be quoted here: unquoted, the right-hand side of
+        # `#` is a glob pattern, not a literal string (SC2295). A directory
+        # name containing a glob metacharacter (e.g. "proj[1]") then fails to
+        # match as a prefix at all, so the strip is a no-op and "sid" becomes
+        # the entire file path — corrupting every downstream live-id
+        # comparison in reap_session_artifacts.
+        sid="${f#"$dir/$prefix"}"
         sid="${sid%.json}"
         case " $seen " in
           *" $sid "*) continue ;;
@@ -264,16 +280,26 @@ list_live_session_ids() {
 # see hooks/lib/state-liveness_test.sh's relocation-equivalence test.
 #
 # <dry_run>: 1 = report only, 0 = delete. Both modes echo the affected path,
-# one per line — dry_run=1 echoes what WOULD be deleted, dry_run=0 echoes what
-# WAS deleted. A caller whose own stdout must stay byte-static (session-start.sh)
-# redirects this call; the report lane is stderr instead.
+# one per line — dry_run=1 echoes what WOULD be deleted; dry_run=0 echoes a
+# path only once rm -f has actually succeeded on it, so stdout never claims a
+# deletion that didn't happen. A caller whose own stdout must stay
+# byte-static (session-start.sh) redirects this call; the report lane is
+# stderr instead.
+#
+# Returns 0 unless a real rm failure occurred (e.g. an unwritable directory)
+# — an empty dir, no candidates, or an unreadable dir are all harmless and
+# still return 0, since this file is sourced by both a `set -e` caller
+# (omt-cleanup.sh) and a non-`set -e` caller (session-start.sh). A failed
+# delete is reported on stderr ("reap: failed to delete <path>") and is never
+# echoed to stdout as a completed deletion.
 reap_dead_state_files() {
   local dir="$1"
   local current_sid="$2"
   local now_epoch="$3"
   local dry_run="$4"
 
-  local prefix f
+  local prefix f had_failure
+  had_failure=0
   for prefix in $STATE_PREFIXES; do
     for f in "$dir"/${prefix}*.json; do
       [ -f "$f" ] || continue
@@ -281,14 +307,18 @@ reap_dead_state_files() {
         continue
       fi
       if ! is_state_live "$f" "$now_epoch"; then
-        echo "$f"
-        if [ "$dry_run" != "1" ]; then
-          rm -f "$f"
+        if [ "$dry_run" = "1" ]; then
+          echo "$f"
+        elif rm -f "$f" 2>/dev/null; then
+          echo "$f"
+        else
+          echo "reap: failed to delete $f" >&2
+          had_failure=1
         fi
       fi
     done
   done
-  return 0
+  [ "$had_failure" = "0" ]
 }
 
 # reap_session_artifacts <dir> <current_sid> <now_epoch> <dry_run>
@@ -319,7 +349,12 @@ reap_dead_state_files() {
 # on the measured 581-file baseline directory.
 #
 # <dry_run>: same polarity as reap_dead_state_files (1 = report only, 0 =
-# delete); both modes echo the affected path.
+# delete); both modes echo the affected path, and (as of the rm-failure fix
+# below) dry_run=0 only once rm -f has actually succeeded.
+#
+# Return-value contract identical to reap_dead_state_files: 0 unless a real
+# rm failure occurred; harmless conditions (empty dir, no candidates) always
+# return 0. A failed delete is reported on stderr and never echoed to stdout.
 reap_session_artifacts() {
   local dir="$1"
   local current_sid="$2"
@@ -327,9 +362,10 @@ reap_session_artifacts() {
   local dry_run="$4"
 
   local live_ids
-  live_ids=$(list_live_session_ids "$dir")
+  live_ids=$(list_live_session_ids "$dir" "$now_epoch")
 
-  local prefix f tail live_id keep
+  local prefix f tail live_id keep had_failure
+  had_failure=0
   for prefix in $SESSION_ARTIFACT_PREFIXES; do
     for f in "$dir"/${prefix}*; do
       [ -f "$f" ] || continue
@@ -340,7 +376,10 @@ reap_session_artifacts() {
         continue
       fi
 
-      tail="${f#$dir/$prefix}"
+      # $dir/$prefix MUST be quoted here — see list_live_session_ids above
+      # for why an unquoted glob-pattern strip corrupts the sid on a
+      # directory name containing a glob metacharacter (SC2295).
+      tail="${f#"$dir/$prefix"}"
       tail="${tail%%.*}"
 
       keep=0
@@ -366,43 +405,59 @@ LIVE_IDS
         continue
       fi
 
-      echo "$f"
-      if [ "$dry_run" != "1" ]; then
-        rm -f "$f"
+      if [ "$dry_run" = "1" ]; then
+        echo "$f"
+      elif rm -f "$f" 2>/dev/null; then
+        echo "$f"
+      else
+        echo "reap: failed to delete $f" >&2
+        had_failure=1
       fi
     done
   done
-  return 0
+  [ "$had_failure" = "0" ]
 }
 
 # list_unclassified_session_files <dir>
 #
-# Echoes every file in <dir> whose basename carries a UUID-shaped session id
-# but matches neither STATE_PREFIXES nor SESSION_ARTIFACT_PREFIXES — the drift
-# signal this harness otherwise has none of. Read-only: never deletes, never
-# judges whether a listed file should eventually be whitelisted.
+# Echoes every file in <dir> (including its state/ subdirectory) whose
+# basename carries a UUID-shaped session id but matches neither
+# STATE_PREFIXES nor SESSION_ARTIFACT_PREFIXES — the drift signal this
+# harness otherwise has none of. Read-only: never deletes, never judges
+# whether a listed file should eventually be whitelisted.
+#
+# state/ is swept alongside the top level (not just the top level) because
+# SESSION_ARTIFACT_PREFIXES itself has a subdirectory-based entry
+# (state/block-count-) — an unclassified file living under state/ would
+# otherwise go unreported forever.
 list_unclassified_session_files() {
   local dir="$1"
-  local f base prefix classified
+  local f base relpath prefix classified
 
-  for f in "$dir"/*; do
+  for f in "$dir"/* "$dir"/state/*; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
 
+    # relpath is what STATE_PREFIXES/SESSION_ARTIFACT_PREFIXES entries are
+    # compared against: "state/<base>" for a file under the state/
+    # subdirectory (matching the literal "state/block-count-" whitelist
+    # entry verbatim), or plain <base> for a top-level file. One whitelist
+    # classifies both namespaces this way, with no second copy of it.
+    case "$f" in
+      "$dir"/state/*) relpath="state/$base" ;;
+      *) relpath="$base" ;;
+    esac
+
     classified=0
     for prefix in $STATE_PREFIXES; do
-      case "$base" in
+      case "$relpath" in
         ${prefix}*.json) classified=1; break ;;
       esac
     done
 
     if [ "$classified" = "0" ]; then
       for prefix in $SESSION_ARTIFACT_PREFIXES; do
-        case "$prefix" in
-          */*) continue ;;  # subdirectory-based prefixes (state/block-count-)
-                             # never appear as a top-level entry of <dir>
-        esac
-        case "$base" in
+        case "$relpath" in
           ${prefix}*) classified=1; break ;;
         esac
       done

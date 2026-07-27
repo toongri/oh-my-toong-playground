@@ -493,6 +493,102 @@ test_list_live_session_ids_dedupes_across_prefixes() {
 }
 
 # =============================================================================
+# Defect: unquoted glob-pattern prefix stripping (SC2295). `${f#$dir/$prefix}`
+# treats the right-hand side of `#` as a glob pattern, not a literal string.
+# A directory name containing a glob metacharacter (e.g. "proj[1]") then
+# fails to match as a prefix at all, so the "sid" becomes the entire file
+# path — corrupting every downstream live-id comparison and, in
+# reap_session_artifacts, destructively reaping a live session's own
+# artifacts because its sid is never recognized as live.
+# =============================================================================
+
+test_list_live_session_ids_strips_prefix_in_glob_metachar_dir() {
+  local d="$TEST_TMP_DIR/proj[1]"
+  mkdir -p "$d"
+  local sid="glob-sid-15"
+  write_state "$d/goal-state-$sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 600)\"}"
+
+  local out
+  out=$(list_live_session_ids "$d" "$NOW")
+
+  if ! printf '%s\n' "$out" | grep -qx "$sid"; then
+    echo "  ASSERTION FAILED: expected bare sid '$sid' from a glob-metachar directory, got: $out"
+    return 1
+  fi
+  return 0
+}
+
+test_reap_session_artifacts_survives_live_session_in_glob_metachar_dir() {
+  local d="$TEST_TMP_DIR/proj[1]"
+  mkdir -p "$d"
+  local sid="glob-sid-16"
+  write_state "$d/goal-state-$sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 600)\"}"
+  local artifact="$d/goal-verdict-$sid.json"
+  write_state "$artifact" "{}"
+  touch_ago "$artifact" 25200
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 > /dev/null
+
+  if [ ! -f "$artifact" ]; then
+    echo "  ASSERTION FAILED: a live session's artifact must survive even when its directory contains a glob metacharacter like '['"
+    return 1
+  fi
+  return 0
+}
+
+# =============================================================================
+# Defect: two independently-read clocks in one GC pass. list_live_session_ids
+# used to call `date +%s` internally instead of accepting the caller's
+# now_epoch, so reap_session_artifacts's own now_epoch and the live-id
+# computation it depends on could read wall-clock time at two different
+# instants — letting a session flip sides of a TTL boundary between the two
+# reads within a single pass.
+# =============================================================================
+
+test_list_live_session_ids_respects_provided_now_epoch_not_wall_clock() {
+  local d="$TEST_TMP_DIR"
+  local sid="clock-sid-17"
+  # Fresh under the real wall clock (10 minutes old).
+  write_state "$d/goal-state-$sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 600)\"}"
+
+  # An explicit now_epoch far beyond ACTIVE_IDLE_TTL relative to the file's
+  # real touched time. If the function honors this parameter instead of
+  # calling `date +%s` internally, the session must be judged dead.
+  local far_future=$((NOW + ACTIVE_IDLE_TTL + 3600))
+  local out
+  out=$(list_live_session_ids "$d" "$far_future")
+
+  if printf '%s\n' "$out" | grep -qx "$sid"; then
+    echo "  ASSERTION FAILED: list_live_session_ids must use the provided now_epoch, not its own internal date +%s wall clock"
+    return 1
+  fi
+  return 0
+}
+
+test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock() {
+  local d="$TEST_TMP_DIR"
+  local sid="clock-sid-18"
+  # Fresh under the real wall clock (500 seconds old).
+  write_state "$d/goal-state-$sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 500)\"}"
+  local artifact="$d/goal-verdict-$sid.json"
+  write_state "$artifact" "{}"
+  # Fresh real mtime too, so is_artifact_live's OWN now_epoch argument (which
+  # was never the buggy part) independently judges it dead only because we
+  # pass a far-future now_epoch below — isolating this assertion to whether
+  # that same now_epoch also reaches list_live_session_ids.
+  touch_ago "$artifact" 0
+
+  local far_future=$((NOW + ACTIVE_IDLE_TTL + 3600))
+  reap_session_artifacts "$d" "__none__" "$far_future" 0 > /dev/null
+
+  if [ -f "$artifact" ]; then
+    echo "  ASSERTION FAILED: reap_session_artifacts must feed its OWN now_epoch into list_live_session_ids instead of a separately-fetched wall clock; one now_epoch must judge state and artifact liveness consistently within a single GC pass"
+    return 1
+  fi
+  return 0
+}
+
+# =============================================================================
 # list_unclassified_session_files — reports the 4 producerless forms, silent
 # on files that match either whitelist
 # =============================================================================
@@ -543,14 +639,97 @@ test_list_unclassified_reports_four_producerless_forms_only() {
   return 0
 }
 
+# Defect: the drift sweep never looked inside state/, even though
+# SESSION_ARTIFACT_PREFIXES itself has a subdirectory-based entry
+# (state/block-count-) — an unclassified file under state/ went unreported
+# forever. Fixture covers both namespaces in one call: a top-level
+# unclassified file, an unclassified file under state/, and a classified
+# state/block-count- file that must stay silent even now that state/ is swept.
+test_list_unclassified_reports_files_under_state_subdir_too() {
+  local d="$TEST_TMP_DIR"
+  local uuid="6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+  mkdir -p "$d/state"
+
+  touch_ago "$d/state/mystery-$uuid" 25200
+  write_state "$d/state/block-count-$uuid" "1"
+  touch_ago "$d/handoff-consumed-$uuid" 25200
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  local n
+  n=$(printf '%s\n' "$out" | grep -c '.' || true)
+
+  if [ "$n" -ne 2 ]; then
+    echo "  ASSERTION FAILED: expected 2 unclassified files (one top-level, one under state/), got $n"
+    echo "  got: $out"
+    return 1
+  fi
+
+  if ! printf '%s' "$out" | grep -q 'state/mystery-'; then
+    echo "  ASSERTION FAILED: unclassified report missing the state/ subdirectory file"
+    echo "  got: $out"
+    return 1
+  fi
+
+  if printf '%s' "$out" | grep -q 'block-count-'; then
+    echo "  ASSERTION FAILED: state/block-count- must stay classified (silent) even though state/ is now swept"
+    echo "  got: $out"
+    return 1
+  fi
+
+  return 0
+}
+
 # =============================================================================
 # reap_dead_state_files — relocation equivalence with the pre-change inline
 # 5-glob loop (verbatim copy of hooks/session-start.sh:134-147 at HEAD)
 # =============================================================================
 
+# old_is_current_session_base <file> <current_sid>
+# Verbatim reproduction of is_current_session as it existed at commit
+# d215e9ce (`git show d215e9ce:hooks/lib/state-liveness.sh`) — exact match
+# per known prefix, not the current file's suffix match. Kept independent of
+# (never calls) the current is_current_session, so old_inline_state_gc below
+# is a genuinely independent reference implementation: if it called the
+# current function instead, the relocation-equivalence test below would only
+# prove loop-structure equivalence, not verdict equivalence, and could not
+# detect is_current_session's own exact-match -> suffix-match behavior change.
+old_is_current_session_base() {
+  local file="$1"
+  local current_sid="$2"
+
+  local basename_val
+  basename_val=$(basename "$file" .json)
+
+  local file_sid
+  case "$basename_val" in
+    goal-state-*)
+      file_sid="${basename_val#goal-state-}" ;;
+    ultragoal-state-*)
+      file_sid="${basename_val#ultragoal-state-}" ;;
+    prometheus-state-*)
+      file_sid="${basename_val#prometheus-state-}" ;;
+    deep-interview-active-state-*)
+      file_sid="${basename_val#deep-interview-active-state-}" ;;
+    qa-state-*)
+      file_sid="${basename_val#qa-state-}" ;;
+    *)
+      file_sid="" ;;
+  esac
+
+  if [ "$file_sid" = "$current_sid" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 # old_inline_state_gc <dir> <sid> <now_epoch>
 # Byte-for-byte reproduction of the loop this TODO relocates, so the two
-# survivor sets can be diffed against the same fixture.
+# survivor sets can be diffed against the same fixture. Uses
+# old_is_current_session_base (above), NOT the current is_current_session, so
+# the comparison below is a real independent-implementation diff rather than
+# two copies of the same predicate.
 old_inline_state_gc() {
   local dir="$1"
   local sid="$2"
@@ -563,13 +742,46 @@ old_inline_state_gc() {
       "$dir"/deep-interview-active-state-*.json \
       "$dir"/qa-state-*.json; do
     [ -f "$state_file" ] || continue
-    if is_current_session "$state_file" "$sid"; then
+    if old_is_current_session_base "$state_file" "$sid"; then
       continue
     fi
     if ! is_state_live "$state_file" "$now_epoch"; then
       rm -f "$state_file"
     fi
   done
+}
+
+# Documented divergence: is_current_session moved from an exact per-prefix
+# match (base, commit d215e9ce) to a suffix match, to also cover the
+# extensionless state/block-count-<sid> form. This deliberately widens what
+# counts as "belongs to the current session" — a state file for an UNRELATED
+# session whose id happens to end with the current sid as a suffix
+# (goal-state-team-abc.json vs current sid "abc") is now treated as the
+# current session's own file and preserved, where the base implementation
+# would have reaped it if dead. This is the safer failure direction for an
+# irreversible delete path (over-preservation, not destruction) — see
+# is_current_session's doc comment. Locked here as an explicit, intentional
+# case rather than left as an untested edge.
+test_is_current_session_suffix_match_diverges_from_base_exact_match_over_preserves() {
+  local sid="abc"
+  local file="$TEST_TMP_DIR/goal-state-team-$sid.json"
+  write_state "$file" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"
+
+  # Base (exact match): file_sid="team-abc" != current_sid="abc" -> NOT the
+  # current session -> a dead file here would be reaped by the old loop.
+  if old_is_current_session_base "$file" "$sid"; then
+    echo "  ASSERTION FAILED: base exact-match reference must NOT treat 'team-$sid' as sid '$sid'"
+    return 1
+  fi
+
+  # Current (suffix match): basename ends with "-abc.json" -> matches ->
+  # treated as the current session -> preserved even though it's stale.
+  if ! is_current_session "$file" "$sid"; then
+    echo "  ASSERTION FAILED: current suffix-match must treat 'goal-state-team-$sid.json' as belonging to sid '$sid' (documented over-preservation widening)"
+    return 1
+  fi
+
+  return 0
 }
 
 seed_state_gc_fixture() {
@@ -622,6 +834,37 @@ test_reap_dead_state_files_execute_mode_echoes_affected_paths() {
   if [ "$n" -ne 2 ]; then
     echo "  ASSERTION FAILED: expected 2 echoed deletions in execute mode, got $n"
     echo "  got: $out"
+    return 1
+  fi
+  return 0
+}
+
+# =============================================================================
+# Defect coverage: dry_run=1 contract — the two callers only ever exercise
+# dry_run=1 through zero-candidate fixtures (the set -e trap test above uses
+# now_epoch=0, which yields no reap candidates at all), so a helper that
+# ignored dry_run and always deleted would still pass this whole suite. Each
+# test below seeds a genuine reap candidate and asserts BOTH halves of the
+# contract: the candidate is emitted on stdout (dry-run's whole purpose is to
+# report what WOULD be deleted), and the file is still on disk afterward.
+# =============================================================================
+
+test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete() {
+  local sid="dryrun-sid-21"
+  local d="$TEST_TMP_DIR"
+  local f="$d/goal-state-other-$sid.json"
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"   # 7h — past ACTIVE_IDLE_TTL, a genuine candidate
+
+  local out
+  out=$(reap_dead_state_files "$d" "current-$sid" "$NOW" 1)
+
+  if ! printf '%s\n' "$out" | grep -qx "$f"; then
+    echo "  ASSERTION FAILED: dry_run=1 must emit the reap candidate on stdout"
+    echo "  got: $out"
+    return 1
+  fi
+  if [ ! -f "$f" ]; then
+    echo "  ASSERTION FAILED: dry_run=1 must NOT delete the candidate file"
     return 1
   fi
   return 0
@@ -738,6 +981,27 @@ test_reap_session_artifacts_short_live_id_does_not_falsely_preserve() {
   return 0
 }
 
+test_reap_session_artifacts_dry_run_emits_candidate_but_does_not_delete() {
+  local d="$TEST_TMP_DIR"
+  local f="$d/codex-todo-dryrun-sid-22.json"
+  write_state "$f" "{}"
+  touch_ago "$f" 25200   # 7h — past ACTIVE_IDLE_TTL, no live goal-state for this id, a genuine candidate
+
+  local out
+  out=$(reap_session_artifacts "$d" "__none__" "$NOW" 1)
+
+  if ! printf '%s\n' "$out" | grep -qx "$f"; then
+    echo "  ASSERTION FAILED: dry_run=1 must emit the reap candidate artifact on stdout"
+    echo "  got: $out"
+    return 1
+  fi
+  if [ ! -f "$f" ]; then
+    echo "  ASSERTION FAILED: dry_run=1 must NOT delete the candidate artifact"
+    return 1
+  fi
+  return 0
+}
+
 test_reap_session_artifacts_namespaced_block_count_survives_none_lane() {
   local live="ns-sid-13"
   local d="$TEST_TMP_DIR"
@@ -754,6 +1018,79 @@ test_reap_session_artifacts_namespaced_block_count_survives_none_lane() {
 
   if [ ! -f "$base_bc" ] || [ ! -f "$ns_bc" ]; then
     echo "  ASSERTION FAILED: namespaced block-count files of a live session must survive the __none__ lane"
+    return 1
+  fi
+  return 0
+}
+
+# =============================================================================
+# Defect: rm -f failures were silently reported as successful deletions —
+# the affected path was echoed BEFORE rm ran, and rm's own exit status was
+# never inspected. A failed delete must not be echoed as deleted, must be
+# reported on stderr, and must make the function return non-zero.
+# =============================================================================
+
+test_reap_dead_state_files_rm_failure_not_echoed_and_reported() {
+  local d="$TEST_TMP_DIR/ro_state"
+  mkdir -p "$d"
+  local sid="rmfail-sid-19"
+  local f="$d/goal-state-other-$sid.json"
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"
+  chmod 555 "$d"   # no write permission on the directory: rm inside must fail
+
+  local out err_file rc
+  err_file="$TEST_TMP_DIR/stderr_capture_state"
+  out=$(reap_dead_state_files "$d" "current-$sid" "$NOW" 0 2>"$err_file")
+  rc=$?
+  chmod 755 "$d"   # restore before any assertion so teardown's rm -rf works
+
+  if [ ! -f "$f" ]; then
+    echo "  ASSERTION FAILED: rm failure means the file must still exist on disk"
+    return 1
+  fi
+  if printf '%s\n' "$out" | grep -qx "$f"; then
+    echo "  ASSERTION FAILED: a failed delete must NOT be echoed as a deleted path"
+    return 1
+  fi
+  if ! grep -q "failed to delete" "$err_file"; then
+    echo "  ASSERTION FAILED: a failed delete must be reported on stderr"
+    return 1
+  fi
+  if [ "$rc" -eq 0 ]; then
+    echo "  ASSERTION FAILED: reap_dead_state_files must return non-zero when a real rm failure occurred"
+    return 1
+  fi
+  return 0
+}
+
+test_reap_session_artifacts_rm_failure_not_echoed_and_reported() {
+  local d="$TEST_TMP_DIR/ro_artifacts"
+  mkdir -p "$d"
+  local f="$d/codex-todo-rmfail-sid-20.json"
+  write_state "$f" "{}"
+  touch_ago "$f" 25200
+  chmod 555 "$d"
+
+  local out err_file rc
+  err_file="$TEST_TMP_DIR/stderr_capture_artifacts"
+  out=$(reap_session_artifacts "$d" "__none__" "$NOW" 0 2>"$err_file")
+  rc=$?
+  chmod 755 "$d"
+
+  if [ ! -f "$f" ]; then
+    echo "  ASSERTION FAILED: rm failure means the artifact must still exist on disk"
+    return 1
+  fi
+  if printf '%s\n' "$out" | grep -qx "$f"; then
+    echo "  ASSERTION FAILED: a failed delete must NOT be echoed as a deleted path"
+    return 1
+  fi
+  if ! grep -q "failed to delete" "$err_file"; then
+    echo "  ASSERTION FAILED: a failed delete must be reported on stderr"
+    return 1
+  fi
+  if [ "$rc" -eq 0 ]; then
+    echo "  ASSERTION FAILED: reap_session_artifacts must return non-zero when a real rm failure occurred"
     return 1
   fi
   return 0
@@ -818,6 +1155,36 @@ test_state_prefixes_exactly_five_managed() {
     echo "  ASSERTION FAILED: STATE_PREFIXES must NOT include the retired ralph-state prefix"
     return 1
   fi
+
+  return 0
+}
+
+# =============================================================================
+# SESSION_ARTIFACT_PREFIXES structural assertion — symmetric with
+# test_state_prefixes_exactly_five_managed above. SESSION_ARTIFACT_PREFIXES
+# is the whitelist that actually drives reap_session_artifacts's deletions,
+# yet had no pinning test at all: a family silently dropped from it would go
+# unnoticed by every other test in this file.
+# =============================================================================
+
+test_session_artifact_prefixes_exactly_six_managed() {
+  local count
+  count=$(printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -c '.' 2>/dev/null || true)
+  if [ "$count" -ne 6 ]; then
+    echo "  ASSERTION FAILED: SESSION_ARTIFACT_PREFIXES must have exactly 6 entries, found $count"
+    echo "  SESSION_ARTIFACT_PREFIXES=$SESSION_ARTIFACT_PREFIXES"
+    return 1
+  fi
+
+  local prefix
+  for prefix in codex-todo- state/block-count- goal-verdict- goal-codereview- ultragoal-verdict- ultragoal-codereview-; do
+    local n
+    n=$(printf '%s\n' $SESSION_ARTIFACT_PREFIXES | grep -c "^${prefix}\$" 2>/dev/null || true)
+    if [ "$n" -ne 1 ]; then
+      echo "  ASSERTION FAILED: SESSION_ARTIFACT_PREFIXES must contain '$prefix' exactly once, found $n"
+      return 1
+    fi
+  done
 
   return 0
 }
@@ -924,18 +1291,29 @@ run_test test_is_artifact_live_mtime_only_ignores_active_field
 run_test test_is_artifact_live_unreadable_mtime_fails_open
 run_test test_list_live_session_ids_reports_live_omits_dead
 run_test test_list_live_session_ids_dedupes_across_prefixes
+run_test test_list_live_session_ids_strips_prefix_in_glob_metachar_dir
+run_test test_reap_session_artifacts_survives_live_session_in_glob_metachar_dir
+run_test test_list_live_session_ids_respects_provided_now_epoch_not_wall_clock
+run_test test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock
 run_test test_list_unclassified_reports_four_producerless_forms_only
+run_test test_list_unclassified_reports_files_under_state_subdir_too
 run_test test_reap_dead_state_files_relocation_equivalence
 run_test test_reap_dead_state_files_execute_mode_echoes_affected_paths
+run_test test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete
 run_test test_reap_dead_state_files_old_closed_bak_survives_json_anchor
+run_test test_is_current_session_suffix_match_diverges_from_base_exact_match_over_preserves
 run_test test_reap_session_artifacts_current_session_self_artifact_survives
 run_test test_reap_session_artifacts_other_live_session_survives_without_sid
 run_test test_reap_session_artifacts_execute_mode_echoes_affected_paths
+run_test test_reap_session_artifacts_dry_run_emits_candidate_but_does_not_delete
 run_test test_reap_session_artifacts_json_extension_stripped_for_live_id_match
 run_test test_reap_session_artifacts_short_live_id_does_not_falsely_preserve
 run_test test_reap_session_artifacts_namespaced_block_count_survives_none_lane
+run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported
+run_test test_reap_session_artifacts_rm_failure_not_echoed_and_reported
 run_test test_harmless_conditions_do_not_trip_set_e
 run_test test_state_prefixes_exactly_five_managed
+run_test test_session_artifact_prefixes_exactly_six_managed
 run_test test_ttl_parity_with_state_core_ts
 run_test test_ttl_allowlist_no_stray_literals
 
