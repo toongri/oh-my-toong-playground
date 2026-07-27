@@ -2569,6 +2569,24 @@ describe("cmdCollect", () => {
 		expect(parsed.members[0].errorMessage).toBeNull();
 	});
 
+	test("로그는 job의 jobs 디렉터리 옆에 떨어진다 (실제 OMT_DIR 비오염)", () => {
+		// Production layout: <omtDir>/jobs/<jobId>. The logger derives its root two
+		// levels up from jobDir, so a run pointed at a temp jobs-dir logs there —
+		// this is what keeps the suite from writing into ~/.omt/<project>/logs/.
+		const jobDir = path.join(tmpDir, "jobs", "chunk-review-logroot01");
+		setupCollectFixture(jobDir, {
+			"claude-0": { member: "claude", state: "done", exitCode: 0, output: "x" },
+		});
+
+		execFileSync(process.execPath, [SCRIPT, "collect", "--timeout-ms", "5000", jobDir], {
+			stdio: "pipe",
+		});
+
+		const logPath = path.join(tmpDir, "logs", "chunk-review-job-logroot01.log");
+		expect(fs.existsSync(logPath)).toBe(true);
+		expect(fs.readFileSync(logPath, "utf8")).toContain("collect:");
+	});
+
 	test("timeout: not-done JSON 반환 (overallState, id, counts)", () => {
 		const jobDir = path.join(tmpDir, "job-collect-timeout");
 		setupCollectFixture(jobDir, {

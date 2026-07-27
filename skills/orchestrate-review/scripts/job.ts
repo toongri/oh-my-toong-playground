@@ -128,9 +128,20 @@ function buildManifest(jobDir: string) {
 // Logging helper for non-start commands (extract jobId from jobDir path)
 // ---------------------------------------------------------------------------
 
+/**
+ * Log root for a run: logs live beside the `jobs/` directory holding the job,
+ * never at an independently-resolved OMT dir. A run pointed at a custom
+ * `--jobs-dir` / `$CHUNK_REVIEW_JOBS_DIR` — which is what the test suite does —
+ * then writes its log there too, instead of into the real per-project OMT dir.
+ */
+function logRootForJobsDir(jobsDir: string): string {
+	return path.dirname(path.resolve(jobsDir));
+}
+
 function initLoggerFromJobDir(jobDir: string): void {
-	const jobId = path.basename(jobDir).replace(/^chunk-review-/, "");
-	initLogger("chunk-review-job", getOmtDir(), jobId);
+	const resolved = path.resolve(jobDir);
+	const jobId = path.basename(resolved).replace(/^chunk-review-/, "");
+	initLogger("chunk-review-job", logRootForJobsDir(path.dirname(resolved)), jobId);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,7 +403,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
 	const jobId = generateJobId();
-	initLogger("chunk-review-job", getOmtDir(), jobId);
+	initLogger("chunk-review-job", logRootForJobsDir(jobsDir), jobId);
 	logStart();
 	logInfo(`GC: stale jobs cleaned`);
 	logInfo(`config: ${configPath}, chairman: ${chairmanRole}, members: ${members.length}`);
