@@ -11,8 +11,18 @@
   deep-merge**된다. **전역 sync만 `.claude/settings.json`**을 쓴다 —
   `tools/adapters/claude.ts`의 `isGlobalSync(targetPath) ? "settings.json" :
   "settings.local.json"` 분기.
-- deep-merge라 기존 settings를 통째로 덮지 않고 **additive**하게 얹는다(같은 키만
-  갱신). `mcps`도 같은 파일의 해당 섹션으로 병합된다.
+- deep-merge라 기존 settings를 통째로 덮지 않고 기본적으로 **additive**하게
+  얹는다(같은 키만 갱신). `mcps`도 같은 파일의 해당 섹션으로 병합된다.
+- 단 **키 레벨의 예외가 있다**: 값이 `null`인 키는 대상 파일에서 그 키를
+  **삭제**한다(RFC 7386 JSON Merge Patch 의미론, `tools/lib/deep-merge.ts`).
+  소스 yaml에서 키를 그냥 지우기만 하면 additive 병합이 옛 값을 그대로 통과시켜
+  배포본에서 사라지지 않는다 — 삭제하려면 그 키 값을 명시적으로 `null`로 써야
+  한다. 이건 **절(section) 레벨 `null`과는 다른 메커니즘**이다: `config: null` /
+  `hooks: null`처럼 섹션 전체를 `null`로 두면 `deepMerge` 호출 전에
+  `tools/adapters/claude.ts`의 가드(`syncPlatformYaml`의 `yaml.config !== null` /
+  `yaml.hooks !== null` 체크)가 그 섹션 자체를 배포 대상에서 제외한다. 키 레벨
+  `null`은 섹션 안의 개별 키를 지우고, 절 레벨 `null`은 섹션 전체를 배포에서
+  건너뛴다 — 둘을 혼동하면 안 된다.
 
 ## 두 개의 gitignore 계층 (핵심)
 

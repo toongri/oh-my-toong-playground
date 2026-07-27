@@ -180,9 +180,9 @@ export const PLATFORM_REWRITE_RULES: Record<Platform, readonly RewriteRule[]> = 
 		// (a) Prohibition and prescription both appear on the deploy surface:
 		// `run_in_background` is PRESCRIBED in skills/qa ("MUST be launched
 		// with run_in_background") and skills/insane-browsing, and PROHIBITED
-		// in skills/agent-council and rules/tool-usage-policy ("`run_in_background`
-		// is prohibited"). No single real tool name can carry both senses
-		// without one of them reading as a lie about that tool.
+		// in skills/agent-council ("No background execution. No
+		// `run_in_background`."). No single real tool name can carry both
+		// senses without one of them reading as a lie about that tool.
 		//
 		// (b) No Codex parameter has this name. Measured against the real
 		// binary (codex 0.145.0): the shell tool's parameters are
