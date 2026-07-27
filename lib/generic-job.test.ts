@@ -25,6 +25,9 @@ import {
 	cmdResumeMember,
 	assertMembersOrExit,
 	assertDenyEnforceable,
+	assertMcpAllowShape,
+	enumerateConfiguredMcpServers,
+	computeMcpBlockList,
 	findOrphanJobs,
 	reapOrphanJobs,
 	doctorOrphanJobs,
@@ -530,6 +533,256 @@ describe("buildAugmentedCommand", () => {
 			const withEmptyDeny = buildAugmentedCommand({ command, deny: [] }, cliType);
 			expect(withUndefinedDeny).toEqual(withoutDeny);
 			expect(withEmptyDeny).toEqual(withoutDeny);
+		}
+	});
+
+	test("codex: mcpBlock translates to -c mcp_servers.<name>.enabled=false per blocked name", () => {
+		const result = buildAugmentedCommand(
+			{ command: "codex exec", mcpBlock: ["linear", "slack"] },
+			"codex",
+		);
+		expect(result.command).toBe(
+			"codex exec -c mcp_servers.linear.enabled=false -c mcp_servers.slack.enabled=false",
+		);
+	});
+
+	test("claude: mcpBlock is ignored (negative control — codex-only lever)", () => {
+		const result = buildAugmentedCommand(
+			{ command: "claude -p", mcpBlock: ["linear", "slack"] },
+			"claude",
+		);
+		expect(result.command).toBe("claude -p");
+		expect(result.command).not.toContain("mcp_servers");
+	});
+
+	test("codex: mcpBlock absent or empty leaves command unchanged", () => {
+		const withoutMcpBlock = buildAugmentedCommand({ command: "codex exec" }, "codex");
+		const withEmptyMcpBlock = buildAugmentedCommand(
+			{ command: "codex exec", mcpBlock: [] },
+			"codex",
+		);
+		expect(withoutMcpBlock.command).toBe("codex exec");
+		expect(withEmptyMcpBlock.command).toBe("codex exec");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// assertMcpAllowShape — settings.mcps.allow format validation
+// ---------------------------------------------------------------------------
+
+describe("assertMcpAllowShape", () => {
+	let originalExit: typeof process.exit;
+	let originalStderrWrite: typeof process.stderr.write;
+	let stderrOutput: string;
+
+	beforeEach(() => {
+		originalExit = process.exit;
+		originalStderrWrite = process.stderr.write;
+		stderrOutput = "";
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+		(process.stderr.write as any) = (chunk: string) => {
+			stderrOutput += chunk;
+			return true;
+		};
+	});
+
+	afterEach(() => {
+		process.exit = originalExit;
+		process.stderr.write = originalStderrWrite;
+	});
+
+	test("mcps 미지정(undefined)이면 통과한다", () => {
+		expect(() => assertMcpAllowShape({}, councilConfig, "/path/to/config.yaml")).not.toThrow();
+	});
+
+	test("mcps가 null이면 통과한다", () => {
+		expect(() =>
+			assertMcpAllowShape({ mcps: null }, councilConfig, "/path/to/config.yaml"),
+		).not.toThrow();
+	});
+
+	test("mcps가 배열이면 exit 1이다", () => {
+		expect(() =>
+			assertMcpAllowShape({ mcps: ["codegraph"] }, councilConfig, "/path/to/config.yaml"),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("council.settings.mcps");
+		expect(stderrOutput).toContain("must be a mapping/object");
+	});
+
+	test("mcps.allow 미지정(undefined)이면 통과한다", () => {
+		expect(() =>
+			assertMcpAllowShape({ mcps: {} }, councilConfig, "/path/to/config.yaml"),
+		).not.toThrow();
+	});
+
+	test("mcps.allow가 null이면 통과한다", () => {
+		expect(() =>
+			assertMcpAllowShape({ mcps: { allow: null } }, councilConfig, "/path/to/config.yaml"),
+		).not.toThrow();
+	});
+
+	test("mcps.allow가 문자열이면 exit 1이다", () => {
+		expect(() =>
+			assertMcpAllowShape(
+				{ mcps: { allow: "codegraph" } },
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("council.settings.mcps.allow");
+		expect(stderrOutput).toContain("must be a list/array of non-empty strings");
+	});
+
+	test("mcps.allow 원소에 '.'이 섞이면 exit 1이다", () => {
+		expect(() =>
+			assertMcpAllowShape(
+				{ mcps: { allow: ["mcp_servers.maestro"] } },
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+		expect(stderrOutput).toContain("must contain only [a-zA-Z0-9_-] MCP server names");
+	});
+
+	test("mcps.allow 원소에 '/'가 섞이면 exit 1이다", () => {
+		expect(() =>
+			assertMcpAllowShape(
+				{ mcps: { allow: ["codegraph/evil"] } },
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).toThrow("process.exit(1)");
+	});
+
+	test("유효한 mcps.allow 배열은 통과한다", () => {
+		expect(() =>
+			assertMcpAllowShape(
+				{ mcps: { allow: ["codegraph", "linear-mcp", "slack_bot"] } },
+				councilConfig,
+				"/path/to/config.yaml",
+			),
+		).not.toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// enumerateConfiguredMcpServers — parse [mcp_servers.<name>] headers from
+// codexHome/config.toml
+// ---------------------------------------------------------------------------
+
+describe("enumerateConfiguredMcpServers", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	// Regression test for the sub-table trap: this host's real config.toml has
+	// [mcp_servers.maestro] followed by [mcp_servers.maestro.env] — the .env
+	// suffix is a nested table (env vars for the maestro server), not a second
+	// server named "maestro.env". A looser `^\[mcp_servers\.(.+)\]$` regex
+	// would capture "maestro.env" as its own server name.
+	test("하위 테이블([mcp_servers.maestro.env])을 서버로 오인하지 않는다", () => {
+		fs.writeFileSync(
+			path.join(tmpDir, "config.toml"),
+			[
+				"[mcp_servers.maestro]",
+				'command = "npx"',
+				"",
+				"[mcp_servers.maestro.env]",
+				'FOO = "bar"',
+				"",
+			].join("\n"),
+		);
+
+		const result = enumerateConfiguredMcpServers(tmpDir);
+
+		expect(result).toEqual(["maestro"]);
+		expect(result).not.toContain("maestro.env");
+	});
+
+	test("여러 서버를 정렬된 중복없는 배열로 열거한다", () => {
+		fs.writeFileSync(
+			path.join(tmpDir, "config.toml"),
+			[
+				"[mcp_servers.slack]",
+				'command = "npx"',
+				"",
+				"[mcp_servers.codegraph]",
+				'command = "npx"',
+				"",
+				"[mcp_servers.linear]",
+				'command = "npx"',
+				"",
+			].join("\n"),
+		);
+
+		expect(enumerateConfiguredMcpServers(tmpDir)).toEqual(["codegraph", "linear", "slack"]);
+	});
+
+	test("따옴표 붙은 헤더는 열거하지 않는다", () => {
+		fs.writeFileSync(
+			path.join(tmpDir, "config.toml"),
+			['[mcp_servers."weird name"]', 'command = "npx"', "", "[mcp_servers.codegraph]", ""].join(
+				"\n",
+			),
+		);
+
+		expect(enumerateConfiguredMcpServers(tmpDir)).toEqual(["codegraph"]);
+	});
+
+	test("config.toml이 없으면 빈 배열을 반환한다 (fail-open)", () => {
+		expect(enumerateConfiguredMcpServers(path.join(tmpDir, "does-not-exist"))).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// computeMcpBlockList — configuredNames minus settings.mcps.allow
+// ---------------------------------------------------------------------------
+
+describe("computeMcpBlockList", () => {
+	test("fail-closed: settings.mcps가 없으면 configuredNames 전부가 차단목록이다", () => {
+		expect(computeMcpBlockList({}, ["codegraph", "linear", "slack"])).toEqual([
+			"codegraph",
+			"linear",
+			"slack",
+		]);
+	});
+
+	test("fail-closed: mcps.allow가 빈 배열이어도 전부 차단된다", () => {
+		expect(computeMcpBlockList({ mcps: { allow: [] } }, ["codegraph", "linear"])).toEqual([
+			"codegraph",
+			"linear",
+		]);
+	});
+
+	test("화이트리스트 동작: allow에 없는 이름만 차단된다", () => {
+		expect(
+			computeMcpBlockList({ mcps: { allow: ["codegraph"] } }, ["codegraph", "linear", "slack"]),
+		).toEqual(["linear", "slack"]);
+	});
+
+	// Regression test for the subset invariant: an allow entry with no matching
+	// configured server ("ghost") must never leak into the block list. Passing
+	// `-c mcp_servers.ghost.enabled=false` for a server codex never declared in
+	// config.toml makes codex fail to boot with "Error loading config.toml:
+	// invalid transport" — the block list must always be built by filtering
+	// configuredNames, never by iterating `allow`.
+	test("차단목록은 항상 configuredNames의 부분집합이다 (allow의 ghost 항목이 새어나오지 않는다)", () => {
+		const result = computeMcpBlockList(
+			{ mcps: { allow: ["codegraph", "ghost"] } },
+			["codegraph", "linear"],
+		);
+		expect(result).toEqual(["linear"]);
+		expect(result).not.toContain("ghost");
+		for (const name of result) {
+			expect(["codegraph", "linear"]).toContain(name);
 		}
 	});
 });

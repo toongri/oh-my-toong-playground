@@ -240,6 +240,116 @@ export function extractDenySkills(settings: Record<string, unknown>): string[] {
 	return deny.skills.map((skill) => String(skill));
 }
 
+// ---------------------------------------------------------------------------
+// MCP whitelist engine — settings.mcps.allow validation, config.toml server
+// enumeration, and block-list computation. A review worker's codex process
+// inherits every MCP server declared in ~/.codex/config.toml regardless of
+// whether the review workflow uses it (measured: 13 servers configured on
+// this host, 1 — codegraph — actually used by review workers), and each is a
+// process the worker spawns. This engine computes the complement so
+// buildAugmentedCommand can pass `-c mcp_servers.<name>.enabled=false` for
+// every non-allow-listed configured server, shrinking the process count a
+// worker creates in the first place (orthogonal to the reaping layers
+// elsewhere in this file — this reduces what gets created, not what gets
+// cleaned up after).
+// ---------------------------------------------------------------------------
+
+export function assertMcpAllowShape(
+	settings: Record<string, unknown>,
+	config: JobConfig,
+	configPath: string,
+): void {
+	const keyPrefix = config.configTopLevelKey;
+	const mcps = settings.mcps;
+	if (mcps === null || mcps === undefined) return;
+	if (!isPlainObject(mcps)) {
+		exitWithError(
+			`Invalid config in ${configPath}: '${keyPrefix}.settings.mcps' must be a mapping/object`,
+		);
+	}
+	const allow = mcps.allow;
+	if (allow === null || allow === undefined) return;
+	if (!Array.isArray(allow)) {
+		exitWithError(
+			`Invalid config in ${configPath}: '${keyPrefix}.settings.mcps.allow' must be a list/array of non-empty strings`,
+		);
+	}
+	for (const name of allow) {
+		if (typeof name !== "string" || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+			exitWithError(
+				`Invalid config in ${configPath}: '${keyPrefix}.settings.mcps.allow' must contain only [a-zA-Z0-9_-] MCP server names, got: ${JSON.stringify(name)}`,
+			);
+		}
+	}
+}
+
+/**
+ * Enumerate MCP server names declared in `<codexHome>/config.toml` via
+ * `[mcp_servers.<name>]` headers, sorted and de-duplicated.
+ *
+ * Deliberately reads config.toml directly rather than shelling out to
+ * `codex mcp list --json` — calling that CLI would itself spawn a process,
+ * defeating the point of this engine (fewer processes per job).
+ */
+export function enumerateConfiguredMcpServers(codexHome: string): string[] {
+	let content: string;
+	try {
+		content = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
+	} catch {
+		// Fail-open: no config.toml (or unreadable) means nothing to enumerate,
+		// and therefore nothing to block against — an empty allowlist target,
+		// not an error.
+		return [];
+	}
+	// Single segment only: matches [mcp_servers.<name>] where <name> contains
+	// no further dot. This host's real config.toml has both
+	// [mcp_servers.maestro] and [mcp_servers.maestro.env] — the latter is a
+	// nested table (env vars for the maestro server), not a second server
+	// named "maestro.env". A looser `^\[mcp_servers\.(.+)\]$` would wrongly
+	// capture "maestro.env" as its own server name.
+	//
+	// Quoted headers ([mcp_servers."weird name"]) are deliberately NOT
+	// matched: such a name cannot be carried safely through a
+	// `-c mcp_servers.<name>.enabled=false` CLI argument, so it is left
+	// unenumerated and stays on (under-recall over over-recall — an
+	// unenumerated server is simply not blocked, never wrongly blocked).
+	const headerRe = /^\s*\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/;
+	const names = new Set<string>();
+	for (const line of content.split("\n")) {
+		const match = headerRe.exec(line);
+		if (match) names.add(match[1]);
+	}
+	return [...names].sort();
+}
+
+/**
+ * Compute the MCP servers to disable: every `configuredNames` entry not
+ * present in `settings.mcps.allow`.
+ *
+ * Fail-closed by design — the OPPOSITE default direction from
+ * `settings.deny.skills` (unspecified deny = nothing blocked, a no-op).
+ * `mcps.allow` is opt-in: an unspecified `mcps` or `mcps.allow` blocks EVERY
+ * configured server, so a job config that never declares an allowlist does
+ * not silently inherit the ambient config.toml's full MCP surface.
+ */
+export function computeMcpBlockList(
+	settings: Record<string, unknown>,
+	configuredNames: string[],
+): string[] {
+	const mcps = settings.mcps;
+	if (!isPlainObject(mcps) || !Array.isArray(mcps.allow)) {
+		return [...configuredNames].sort();
+	}
+	const allow = new Set(mcps.allow.map((name) => String(name)));
+	// Filter configuredNames — never build the result by iterating `allow` —
+	// so the block list is always a SUBSET of configuredNames. An allow entry
+	// with no matching configured server (e.g. "ghost") must never leak into
+	// the block list: `-c mcp_servers.ghost.enabled=false` for a server codex
+	// never declared makes codex fail to boot ("Error loading config.toml:
+	// invalid transport").
+	return configuredNames.filter((name) => !allow.has(name)).sort();
+}
+
 export function buildAugmentedCommand(
 	entity: {
 		command: unknown;
@@ -248,6 +358,7 @@ export function buildAugmentedCommand(
 		output_format?: unknown;
 		env?: Record<string, string>;
 		deny?: unknown;
+		mcpBlock?: unknown;
 	},
 	cliType: string,
 ): { command: string; env: Record<string, string> } {
@@ -332,6 +443,17 @@ export function buildAugmentedCommand(
 			});
 		}
 		// gemini/unknown: no enforceable lever here — enforceability is a job-start gate's job, not this translator's.
+	}
+
+	// mcpBlock — MCP server whitelist enforcement (see computeMcpBlockList), codex only.
+	// No quote escaping needed here, unlike deny's skills.config value above: names are
+	// pre-validated to [a-zA-Z0-9_-] by assertMcpAllowShape, so the value can never contain
+	// a space or quote for splitCommand's re-tokenization to mangle.
+	const mcpBlock = Array.isArray(entity.mcpBlock) ? entity.mcpBlock.map((name) => String(name)) : [];
+	if (mcpBlock.length > 0 && cliType === "codex") {
+		for (const name of mcpBlock) {
+			parts.push("-c", `mcp_servers.${name}.enabled=false`);
+		}
 	}
 
 	// effort_level
