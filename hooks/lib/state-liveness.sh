@@ -168,8 +168,15 @@ is_current_session() {
     return 0
   fi
 
+  # ${file##*/} (pure Bash expansion, no fork) instead of `basename "$file"`:
+  # identical output for every shape this file handles (goal-state-<sid>.json,
+  # the .closed.bak double-extension form, the extensionless
+  # state/block-count-<sid> form) — the only case where the two diverge is a
+  # path with a trailing slash (basename "foo/" -> "foo", ${file##*/} ->
+  # ""), which never occurs here since every $file is a glob match against
+  # an actual file, never a directory path.
   local basename_val
-  basename_val=$(basename "$file")
+  basename_val="${file##*/}"
 
   case "$basename_val" in
     *-"$current_sid")
@@ -179,6 +186,126 @@ is_current_session() {
     *)
       return 1 ;;
   esac
+}
+
+# _state_liveness_stat_mtime <file> — echoes mtime epoch, or nothing on failure
+# _state_liveness_stat_batch <path...> — echoes "<mtime> <path>" per resolved
+#   path, one stat invocation covering every argument (never re-probed per call)
+#
+# One-time (source-time, not per-call) detection of which stat flavor this
+# host has, cached as directly-callable functions — the single-file form so
+# is_artifact_live's per-file callers pay exactly one fork per call instead of
+# two, and the batched form so a whole directory's mtimes can be fetched in
+# ONE fork regardless of file count (see is_artifact_live's doc comment and
+# list_live_session_ids / reap_session_artifacts below for why the per-file
+# form is still not enough on its own).
+#
+# is_state_live's own probe (:106 above, byte-identical to base d215e9ce and
+# NOT touched by this change) is GNU-first, BSD-fallback:
+#   stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null || true
+# macOS — this file's deploy target — always fails the GNU form (`stat -c`:
+# "illegal option -- c"), so that probe pays a guaranteed-failing fork on
+# every single is_state_live call on macOS. is_artifact_live is the call site
+# free to fix this (is_state_live's body must stay byte-identical to base).
+#
+# Detecting the working form once against this very file (BASH_SOURCE[0],
+# guaranteed to exist — it is the file currently being sourced) and caching
+# direct single-form calls removes the wasted fork for every later
+# is_artifact_live call, AND supplies the batched form from the exact same
+# single detection — there is deliberately no second probe here: both forms
+# are defined together, branch-for-branch, off the one gnu/bsd/unknown
+# decision below, per the plan's "reuse detection, do not add a second
+# mechanism" constraint. Detection order deliberately still tries GNU first:
+# on a GNU/Linux host, `stat -f <file>` runs in --file-system mode and prints
+# a non-numeric block to stdout instead of failing, so probing BSD-first here
+# would misdetect "BSD works" on a GNU host. GNU-first has no equivalent trap
+# in the other direction — BSD `stat -c` fails cleanly with no stdout.
+#
+# Batched format strings put mtime FIRST on every line ("%Y %n" / "%m %N"),
+# deliberately — a filename may itself contain spaces, but a Unix mtime never
+# does, so `${line%% *}` (longest match from the end of a " *" pattern, i.e.
+# up to the FIRST space) reliably isolates the mtime and `${line#* }`
+# (shortest match from the start) reliably isolates everything after that
+# first space — the full path, spaces and all. Newline-bearing filenames are
+# explicitly out of scope: no producer in this codebase emits one (session
+# ids and the fixed prefixes above never contain a literal newline), and
+# `read -r line` inherently cannot distinguish an embedded newline from a
+# line boundary, so this is not attempted.
+if stat -c %Y "${BASH_SOURCE[0]}" >/dev/null 2>&1; then
+  _state_liveness_stat_mtime() { stat -c %Y "$1" 2>/dev/null; }
+  _state_liveness_stat_batch() { stat -c '%Y %n' "$@" 2>/dev/null; }
+elif stat -f %m "${BASH_SOURCE[0]}" >/dev/null 2>&1; then
+  _state_liveness_stat_mtime() { stat -f %m "$1" 2>/dev/null; }
+  _state_liveness_stat_batch() { stat -f '%m %N' "$@" 2>/dev/null; }
+else
+  # Neither form works against a file known to exist — an unrecognized stat
+  # flavor. Fall back to the original two-attempt probe rather than silently
+  # returning nothing on every call; batched form mirrors the same fallback.
+  _state_liveness_stat_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || true; }
+  _state_liveness_stat_batch() { stat -c '%Y %n' "$@" 2>/dev/null || stat -f '%m %N' "$@" 2>/dev/null || true; }
+fi
+
+# _STATE_LIVENESS_STAT_CHUNK — max paths passed to one underlying
+# _state_liveness_stat_batch call. ARG_MAX on this file's macOS deploy target
+# measures 1048576 bytes (`getconf ARG_MAX`); POSIX guarantees at least 4096
+# as the argument-COUNT floor via {ARG_MAX} on older/other hosts. 500 paths at
+# a generous ~200 bytes/path (long absolute $OMT_DIR paths included) is ~100KB
+# — far under either bound — while still cutting a 10,000-file directory to
+# 20 stat calls instead of one per file. This is the directory-growth
+# headroom the plan calls for, without hardcoding today's ~465-file size as a
+# ceiling.
+_STATE_LIVENESS_STAT_CHUNK=500
+
+# _state_liveness_stat_batch_lines <path...>
+#
+# Runs the batched stat form over <path...>, split into
+# _STATE_LIVENESS_STAT_CHUNK-sized groups so one call never risks ARG_MAX (see
+# above). Echoes "<mtime> <path>" one line per input path stat could resolve.
+#
+# Silent omission is the explicit contract, not an oversight: a path stat
+# could not resolve (deleted/unreadable in the race between glob expansion
+# and this call) simply produces no line. Every caller below must therefore
+# treat "this path never appeared in the output" as "cannot determine,
+# preserve" — the same fail-open direction as is_artifact_live's own -z guard
+# — never as "reap it". Both call sites achieve this for free: a candidate
+# with no output line gets no loop iteration at all, so nothing happens to it
+# (the file survives untouched), which is exactly the fail-open outcome.
+_state_liveness_stat_batch_lines() {
+  local -a chunk
+  local p
+  chunk=()
+  for p in "$@"; do
+    chunk+=("$p")
+    if [ "${#chunk[@]}" -ge "$_STATE_LIVENESS_STAT_CHUNK" ]; then
+      _state_liveness_stat_batch "${chunk[@]}"
+      chunk=()
+    fi
+  done
+  if [ "${#chunk[@]}" -gt 0 ]; then
+    _state_liveness_stat_batch "${chunk[@]}"
+  fi
+  return 0
+}
+
+# _artifact_age_live <mtime_epoch> <now_epoch>
+#
+# Pure age judgment, split out of the mtime FETCH (is_artifact_live below,
+# and the batched loops in list_live_session_ids / reap_session_artifacts)
+# specifically so a caller that already knows a file's mtime — from a single
+# _state_liveness_stat_mtime call OR from one line of a batched
+# _state_liveness_stat_batch_lines pass — can judge liveness without paying a
+# second per-file stat fork. Same rule and boundary as is_artifact_live's
+# original inline check: age < ACTIVE_IDLE_TTL -> live.
+_artifact_age_live() {
+  local mtime_epoch="$1"
+  local now_epoch="$2"
+
+  local age=$(( now_epoch - mtime_epoch ))
+  if [ "$age" -lt 0 ]; then
+    age=0
+  fi
+
+  [ "$age" -lt "$ACTIVE_IDLE_TTL" ]
 }
 
 # is_artifact_live <file> <now_epoch>
@@ -191,16 +318,22 @@ is_current_session() {
 # `active` field, so is_state_live's two-branch rule cannot apply to them.
 # Liveness here is mtime-only against ACTIVE_IDLE_TTL — the same rule and the
 # same reason as the session-ledger mtime loop in hooks/session-start.sh.
+#
+# Thin wrapper: fetch (this function's own job) then judge (_artifact_age_live
+# above). Existing callers and tests are untouched by this split — the
+# signature and behavior here are byte-for-byte what they were before.
 is_artifact_live() {
   local file="$1"
   local now_epoch="$2"
 
-  # GNU form (-c %Y) first: GNU `stat -f` means --file-system and prints a
-  # non-numeric block to stdout for the file operand, which would defeat the
-  # fail-safe below by leaving touched_epoch as non-empty garbage; BSD `stat -c`
-  # fails cleanly with no stdout. GNU-first is portable; BSD-first breaks on Linux.
+  # Single fork via the cached, detected-once form above (was a GNU-first,
+  # BSD-fallback double stat call — see _state_liveness_stat_mtime's own doc
+  # comment for why that cost two forks per call on this file's macOS deploy
+  # target). `|| true` preserves the original's fail-safe: a nonexistent or
+  # unreadable file leaves touched_epoch empty without tripping a `set -e`
+  # caller (omt-cleanup.sh sources this file under `set -e`).
   local touched_epoch
-  touched_epoch=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null || true)
+  touched_epoch=$(_state_liveness_stat_mtime "$file") || true
 
   if [ -z "$touched_epoch" ]; then
     # Cannot determine mtime (missing file, unreadable, race) — treat as live
@@ -212,16 +345,7 @@ is_artifact_live() {
     return 0
   fi
 
-  local age=$(( now_epoch - touched_epoch ))
-  if [ "$age" -lt 0 ]; then
-    age=0
-  fi
-
-  if [ "$age" -lt "$ACTIVE_IDLE_TTL" ]; then
-    return 0
-  else
-    return 1
-  fi
+  _artifact_age_live "$touched_epoch" "$now_epoch"
 }
 
 # list_live_session_ids <dir> <now_epoch>
@@ -278,6 +402,8 @@ list_live_session_ids() {
   local now_epoch="$2"
 
   local prefix f sid seen
+  local -a candidates
+  local line mtime
   seen=""
   for prefix in $STATE_PREFIXES; do
     for f in "$dir"/${prefix}*.json; do
@@ -299,10 +425,31 @@ list_live_session_ids() {
       fi
     done
   done
+  # SESSION_ARTIFACT_PREFIXES witness pass: batched over one stat call per
+  # prefix (chunked, see _state_liveness_stat_batch_lines) instead of one
+  # is_artifact_live fork per candidate file — this is the loop the plan
+  # names as one of the two hot loops to restructure. Each output line
+  # already carries both the mtime and the path, so liveness is judged
+  # directly off that line; no path->mtime lookup table is ever built (the
+  # O(n^2) trap a Bash-3.2 associative-array-free lookup would fall into).
+  # A candidate whose line is silently omitted (see
+  # _state_liveness_stat_batch_lines's doc comment) simply never enters the
+  # while-loop body below, so it contributes no witness this pass — the same
+  # "under-witness, never destroy" residual already documented above for a
+  # session with no witness at all (this function's own doc comment).
   for prefix in $SESSION_ARTIFACT_PREFIXES; do
+    candidates=()
     for f in "$dir"/${prefix}*; do
       [ -f "$f" ] || continue
-      if is_artifact_live "$f" "$now_epoch"; then
+      candidates+=("$f")
+    done
+    [ "${#candidates[@]}" -gt 0 ] || continue
+
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      mtime="${line%% *}"
+      f="${line#* }"
+      if _artifact_age_live "$mtime" "$now_epoch"; then
         # Same SC2295 hazard as the STATE_PREFIXES pass above — quote the
         # prefix strip. Extension stripping mirrors reap_session_artifacts's
         # own tail derivation (everything from the first '.'), since this
@@ -315,7 +462,9 @@ list_live_session_ids() {
         seen="$seen $sid"
         echo "$sid"
       fi
-    done
+    done <<STAT_LINES
+$(_state_liveness_stat_batch_lines "${candidates[@]}")
+STAT_LINES
   done
   return 0
 }
@@ -421,20 +570,39 @@ reap_session_artifacts() {
   live_ids=$(list_live_session_ids "$dir" "$now_epoch")
 
   local prefix f tail live_id keep had_failure
+  local -a candidates
+  local line mtime
   had_failure=0
+  # Restructured (per the plan) to batch the mtime fetch: one stat call per
+  # prefix (chunked, see _state_liveness_stat_batch_lines) instead of one
+  # is_artifact_live fork per candidate file, this loop's own hot fork. The
+  # loop iterates directly over the batched output's "<mtime> <path>" lines —
+  # each line already carries both pieces this loop needs, so no
+  # path->mtime lookup table is ever built (the O(n^2) trap a Bash-3.2
+  # associative-array-free lookup would fall into).
   for prefix in $SESSION_ARTIFACT_PREFIXES; do
+    candidates=()
     for f in "$dir"/${prefix}*; do
       [ -f "$f" ] || continue
+      candidates+=("$f")
+    done
+    [ "${#candidates[@]}" -gt 0 ] || continue
+
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      mtime="${line%% *}"
+      f="${line#* }"
+
       if is_current_session "$f" "$current_sid"; then
         continue
       fi
       # This per-candidate mtime check is now SUBSUMED by the live-id witness
       # pass above (list_live_session_ids's second loop walks this same
-      # directory, these same prefixes, this same is_artifact_live predicate,
-      # and derives the tail the same way) for every ORDINARY candidate: a
-      # fresh candidate necessarily witnesses its own sid into live_ids and is
-      # then preserved by the exact-match arm below. It stays load-bearing
-      # for exactly one residual shape: a candidate whose derived tail is the
+      # directory, these same prefixes, this same mtime-age predicate, and
+      # derives the tail the same way) for every ORDINARY candidate: a fresh
+      # candidate necessarily witnesses its own sid into live_ids and is then
+      # preserved by the exact-match arm below. It stays load-bearing for
+      # exactly one residual shape: a candidate whose derived tail is the
       # EMPTY STRING (e.g. a file named exactly "codex-todo-.json"). The
       # witness pass would push an empty sid for such a file too, but the
       # live-id membership loop below explicitly skips empty ids
@@ -452,7 +620,13 @@ reap_session_artifacts() {
       # alone now covers it: a fresh foreign/hand-placed file of this shape
       # would otherwise be deleted, which is still the data-destruction
       # direction regardless of who wrote it.
-      if is_artifact_live "$f" "$now_epoch"; then
+      #
+      # This is also the empty-tail fail-safe's per-file path the plan
+      # requires be kept: the age judgment below runs against THIS
+      # candidate's own batched-mtime line, not a shared/looked-up value, so
+      # it still decides each file on its own mtime exactly as the pre-batch
+      # per-file is_artifact_live call did.
+      if _artifact_age_live "$mtime" "$now_epoch"; then
         continue
       fi
 
@@ -493,7 +667,9 @@ LIVE_IDS
         echo "reap: failed to delete $f" >&2
         had_failure=1
       fi
-    done
+    done <<STAT_LINES
+$(_state_liveness_stat_batch_lines "${candidates[@]}")
+STAT_LINES
   done
   [ "$had_failure" = "0" ]
 }
@@ -539,7 +715,11 @@ list_unclassified_session_files() {
 
   for f in "$dir"/* "$dir"/state/*; do
     [ -f "$f" ] || continue
-    base=$(basename "$f")
+    # ${f##*/} (pure Bash expansion, no fork) instead of `basename "$f"` — see
+    # is_current_session's identical substitution above for the equivalence
+    # argument (matches every shape this walk sees; diverges only on a
+    # trailing-slash path, which a glob match against an actual file never is).
+    base="${f##*/}"
 
     # relpath is what STATE_PREFIXES/SESSION_ARTIFACT_PREFIXES entries are
     # compared against: "state/<base>" for a file under the state/
