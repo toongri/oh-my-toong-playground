@@ -157,7 +157,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	// file) while turning both backward references into dangling forward
 	// references. indexOf existence is asserted first (`-1` compared against
 	// `-1` or a positive position would let a deleted anchor pass silently),
-	// mirroring the sibling idiom at :347-353 and :371-374 above.
+	// mirroring the sibling idiom used by the "pursuing transition" test below.
 	test("the dispatch-prompt contract paragraph sits after the last residual-risk bullet and before the artifact schema block", () => {
 		const lastResidualRiskBullet =
 			"A `--agent code-reviewer` main-thread session bypasses the guard.";
