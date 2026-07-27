@@ -3431,4 +3431,21 @@ describe("story layer: Codex native-goal snapshot cross-check gate (Gate 9)", ()
 		setGoalState(S, { phase: "pursuing" });
 		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature Z");
 	});
+
+	// 거부 사유의 정확성. 스냅샷 대조로 막혔을 때 CLI가 열거하는 조건에 이 게이트가 없으면,
+	// verdict도 APPROVE이고 evidence도 있는 상태에서 "verdict와 evidence가 필요하다"는
+	// 문안이 나와 사유를 적극적으로 오기술한다 — 오케스트레이터가 엉뚱한 곳을 고치게 된다.
+	// 무엇이 훼손되면 빨개지는가: 일반 거부 문안에서 codex 스냅샷 조건 열거가 빠지면 실패한다.
+	test("CLI: 스냅샷 대조 거부 문안이 codex 스냅샷 조건을 열거한다", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "armed" });
+
+		// 무장된 상태에서 스냅샷을 아예 안 넘긴다 — verdict/evidence는 이미 충족돼 있으므로
+		// 남은 유일한 거부 원인이 Gate 9다.
+		const r = runCliCaptured("request-complete");
+		expect(r.status).not.toBe(0);
+		expect(r.stderr).toMatch(/codex-goal-json/);
+		expect(rawState().phase).not.toBe("complete");
+	});
 });

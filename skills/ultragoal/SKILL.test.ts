@@ -512,15 +512,20 @@ describe("Gate 9 wiring: completion sequence carries get_goal -> --codex-goal-js
 		);
 	});
 
-	test("the instruction documents that omitting --codex-goal-json causes request-complete to refuse once codex_goal_objective is armed", () => {
-		expect(completionSequenceSection).toContain("codex_goal_objective");
-		expect(completionSequenceSection).toMatch(/request-complete` refuse/);
+	test("the instruction documents that omitting --codex-goal-json is a refusal once the cross-check is armed", () => {
+		expect(completionSequenceSection).toContain("--codex-goal-objective");
+		expect(completionSequenceSection).toMatch(/refusal, not a silent pass/);
+		expect(completionSequenceSection).toMatch(/leaves `phase` at `pursuing`/);
 	});
 
-	test("the instruction warns that an unrecognized refusal risks an unproductive retry loop", () => {
-		expect(completionSequenceSection).toContain(
-			"loop without making progress",
+	// The diagnosis itself belongs in request-complete's own refusal message (pinned by
+	// the CLI test in ultragoal-state.test.ts), so this doc's remaining job is to route
+	// the reader to that message instead of prescribing a blind retry.
+	test("the instruction routes an unexplained refusal to request-complete's own message", () => {
+		expect(completionSequenceSection).toMatch(
+			/refusal message names this condition/,
 		);
+		expect(completionSequenceSection).toMatch(/rather than retrying the same call/);
 	});
 
 	test("the instruction notes the snapshot may be passed as inline JSON or a file path", () => {
