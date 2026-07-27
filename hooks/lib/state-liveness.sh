@@ -227,10 +227,15 @@ is_current_session() {
 # up to the FIRST space) reliably isolates the mtime and `${line#* }`
 # (shortest match from the start) reliably isolates everything after that
 # first space — the full path, spaces and all. Newline-bearing filenames are
-# explicitly out of scope: no producer in this codebase emits one (session
-# ids and the fixed prefixes above never contain a literal newline), and
-# `read -r line` inherently cannot distinguish an embedded newline from a
-# line boundary, so this is not attempted.
+# explicitly out of scope for CORRECT parsing: no producer in this codebase
+# emits one (session ids and the fixed prefixes above never contain a
+# literal newline), and `read -r line` inherently cannot distinguish an
+# embedded newline from a line boundary, so this helper does not attempt to
+# parse such a record correctly — it relies on every caller to reject the
+# resulting forged record instead (see the caller-guard obligation below).
+# That guard cannot move into this helper: rejecting a forged record needs
+# the caller's own <dir> and <prefix> to anchor the path against, and
+# neither is available here.
 if stat -c %Y "${BASH_SOURCE[0]}" >/dev/null 2>&1; then
   _state_liveness_stat_mtime() { stat -c %Y "$1" 2>/dev/null; }
   _state_liveness_stat_batch() { stat -c '%Y %n' "$@" 2>/dev/null; }
@@ -270,6 +275,14 @@ _STATE_LIVENESS_STAT_CHUNK=500
 # — never as "reap it". Both call sites achieve this for free: a candidate
 # with no output line gets no loop iteration at all, so nothing happens to it
 # (the file survives untouched), which is exactly the fail-open outcome.
+#
+# Every caller must ALSO guard the lines it does get, immediately after
+# splitting mtime/path: reject a non-numeric mtime, and reject a path not
+# anchored to that caller's own "$dir/$prefix" — a newline embedded in a
+# filename (out of scope for this helper's own parsing, per the doc comment
+# above) forges exactly such a record by splitting one batched-stat line
+# into two. Both call sites below apply this pair of guards right after the
+# split, before the value reaches any arithmetic or `rm`.
 _state_liveness_stat_batch_lines() {
   local -a chunk
   local p
@@ -326,8 +339,8 @@ _artifact_age_live() {
 # Test-only now, not a production judgment: the two hot loops that used to
 # call this (list_live_session_ids below and reap_session_artifacts) were
 # rewritten to call _artifact_age_live directly against a batch-fetched mtime,
-# so this wrapper has zero production callers — only the 24 call sites in
-# this file's colocated test exercise it. Adding a preservation condition
+# so this wrapper has zero production callers — only this file's colocated
+# test exercises it. Adding a preservation condition
 # here changes nothing about what the reaper actually keeps or deletes; that
 # behavior is governed by _artifact_age_live, which the hot loops call
 # directly.
