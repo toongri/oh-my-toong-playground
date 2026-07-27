@@ -891,11 +891,12 @@ describe("restampAfterAdopt — writeFileNoCreate 의미론", () => {
 		expect(existsSync(p)).toBe(false);
 	});
 
-	// restampAfterAdopt is the other GC-only writer (adopt's r5 post-rename
-	// heartbeat) that overwrites last_touched_at without a genuine producer write.
-	// It must apply the same backfill as touchSessionStates, or the adopt path
-	// reopens the exact corpse-revival bug the heartbeat path closes.
-	test("progress_touched_at 부재 시 원래 last_touched_at 값을 backfill한다 (now가 아님)", () => {
+	// restampAfterAdopt is NOT a GC-only writer: adoption is a genuine progress
+	// event (an explicit user act declaring "I am resuming this work"), so it
+	// must stamp progress_touched_at fresh — never backfill/preserve a prior
+	// value — or a state adopted just inside the TTL loses all continuation
+	// protection (isProgressLive reads the stale preserved value forever after).
+	test("progress_touched_at 부재(레거시) 시에도 backfill이 아니라 신선한 값으로 stamp된다", () => {
 		const p = join(omtDir, "deep-interview-active-state-X.json");
 		const old = "2020-01-01T00:00:00+00:00";
 		writeFileSync(
@@ -905,10 +906,12 @@ describe("restampAfterAdopt — writeFileNoCreate 의미론", () => {
 		restampAfterAdopt(p);
 		const updated = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
 		expect((updated["last_touched_at"] as string) > old).toBe(true);
-		expect(updated["progress_touched_at"]).toBe(old);
+		expect(updated["progress_touched_at"]).not.toBe(old);
+		expect(updated["progress_touched_at"]).not.toBe("1970-01-01T00:00:00+00:00");
+		expect(updated["progress_touched_at"]).toBe(updated["last_touched_at"]);
 	});
 
-	test("progress_touched_at 이미 존재하면 backfill하지 않고 그대로 둔다", () => {
+	test("progress_touched_at이 이미 존재해도 보존하지 않고 신선한 값으로 갱신한다", () => {
 		const p = join(omtDir, "deep-interview-active-state-Y.json");
 		const old = "2020-01-01T00:00:00+00:00";
 		const existingProgress = "2021-06-15T00:00:00+00:00";
@@ -922,7 +925,40 @@ describe("restampAfterAdopt — writeFileNoCreate 의미론", () => {
 		);
 		restampAfterAdopt(p);
 		const updated = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
-		expect(updated["progress_touched_at"]).toBe(existingProgress);
+		expect(updated["progress_touched_at"]).not.toBe(existingProgress);
+		expect(updated["progress_touched_at"]).toBe(updated["last_touched_at"]);
+	});
+
+	// Regression guard for the false-completion path: an adopted state stamped
+	// just inside the 6h ACTIVE_IDLE_TTL must keep FULL continuation protection,
+	// not lose it the instant the original stamp's TTL window would have
+	// elapsed. Evaluated at a nowEpoch PAST that original expiry point — at
+	// "now" both the broken (backfill) and fixed (fresh-stamp) behavior return
+	// true, which would make this test vacuous.
+	test("adopt 직후에는 progress axis도 신선해, 원래 stamp의 만료 시점을 넘겨도 isProgressLive가 true다", () => {
+		const p = join(omtDir, "prometheus-state-ADOPTED.json");
+		const nearExpiry = ACTIVE_IDLE_TTL_SECONDS - 60; // 5h59m ago — just inside the TTL
+		const old = isoSecondsAgo(nearExpiry);
+		writeFileSync(p, JSON.stringify({ active: true, last_touched_at: old, phase: "S1" }, null, 2));
+
+		restampAfterAdopt(p);
+
+		const updated = JSON.parse(readFileSync(p, "utf8")) as {
+			last_touched_at: string;
+			progress_touched_at: string;
+		};
+		// 2 minutes past the point the ORIGINAL stamp (`old`) would have expired.
+		const nowPastOriginalExpiry = nowEpoch() + 120;
+		expect(
+			isProgressLive(
+				{
+					active: true,
+					last_touched_at: updated.last_touched_at,
+					progress_touched_at: updated.progress_touched_at,
+				},
+				nowPastOriginalExpiry,
+			),
+		).toBe(true);
 	});
 });
 
