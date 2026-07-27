@@ -2491,7 +2491,17 @@ describe("makeDecision", () => {
 			expect(result.reason).toContain("<deep-interview-continuation>");
 		});
 
-		it("legacy fallback: a state with no progress_touched_at field at all still blocks on a fresh last_touched_at (today's behavior preserved)", async () => {
+		// NOTE: despite the name below, this does NOT exercise isProgressLive's own
+		// `?? parsed.last_touched_at` fallback branch (state-core.ts). makeDecision
+		// calls touchSessionStates at its very top (decision.ts:394), which backfills
+		// progress_touched_at from last_touched_at (decision.ts:684/691) BEFORE any
+		// isProgressLive call is reached — so by the time isProgressLive runs here,
+		// progress_touched_at is already present, and the fallback expression is
+		// never evaluated. This test only verifies the post-backfill behavior
+		// through makeDecision's full pipeline. The fallback expression itself is
+		// covered directly in lib/state-core.test.ts, describe("isProgressLive —
+		// legacy last_touched_at fallback").
+		it("post-backfill: a state with no progress_touched_at field at all still blocks after touchSessionStates backfills it from a fresh last_touched_at", async () => {
 			const sid = "wedge-di-legacy-fallback";
 			const fresh = new Date().toISOString();
 			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
