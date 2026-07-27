@@ -153,7 +153,7 @@ class StockDeductionOutboxListener(
 
 ## 5. AFTER_COMMIT 리스너 (비동기)
 
-`AFTER_COMMIT` 리스너는 커밋이 끝난 뒤 별도 스레드에서 실행된다. 실패가 원본 트랜잭션에 영향을 주지 않는 대신, 리스너 스스로 실패를 잡고 로깅해야 한다 — 잡지 않은 예외는 그냥 사라진다.
+`AFTER_COMMIT` 리스너는 커밋이 끝난 뒤 실행되며, 기본은 이벤트를 발행한 스레드에서 동기적으로 실행된다 — 별도 스레드가 필요하면 `@Async`를 함께 붙여야 한다. 커밋은 이미 끝났으므로 리스너 실패가 원본 트랜잭션을 롤백시키지는 않지만, 동기 실행이라면 예외가 호출자에게 그대로 전파된다. `@Async`를 붙였을 때는 리스너가 별도 스레드에서 실행되므로 예외가 호출 흐름으로 돌아오지 않는다 — 리스너 스스로 잡고 로깅해야 한다.
 
 ```kotlin
 // ✅ CORRECT: Async listener (after commit, with error handling)
@@ -299,7 +299,7 @@ fun onOrderCreated(event: OrderCreatedEventV1)
 
 ## 9. 이런 생각이 들면 멈춰라 — Critical Rules 발췌
 
-아래 세 행은 `SKILL.md`의 Critical Rules에 실린 전체 Red Flags 목록 중, 도메인 이벤트와 EventListener에 관한 것만 발췌한 것이다. 위 8절의 자체 Red Flags보다 더 짧고 압축된 요약이며, 이 문서에서 다루지 않는 나머지 항목(레이어 경계·에러 처리·엔티티·캐싱 등)은 각 관심사의 형제 문서가 갖고 있다.
+아래 세 행은 이 프로젝트의 Critical Rules Red Flags 중, 도메인 이벤트와 EventListener에 관한 것만 발췌한 것이다. 위 8절의 자체 Red Flags보다 더 짧고 압축된 요약이며, 이 문서에서 다루지 않는 나머지 항목(레이어 경계·에러 처리·엔티티·캐싱 등)은 각 관심사의 형제 문서가 갖고 있다.
 
 | Thought | Reality |
 |---|---|
