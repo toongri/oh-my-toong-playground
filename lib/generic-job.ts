@@ -413,6 +413,8 @@ export function gcStaleJobs(jobsDir: string, config: JobConfig): void {
 // Worker spawning
 // ---------------------------------------------------------------------------
 
+export type SpawnedWorker = { name: string; workerPgid: number | null };
+
 export function spawnWorkers({
 	entities,
 	workerPath,
@@ -428,7 +430,7 @@ export function spawnWorkers({
 	entitiesDir: string;
 	timeoutSec: number;
 	config: JobConfig;
-}): void {
+}): SpawnedWorker[] {
 	// Validate names and detect case-insensitive collisions before spawning
 	const seenLower = new Map<string, string>();
 	for (const entity of entities) {
@@ -446,6 +448,8 @@ export function spawnWorkers({
 		}
 		seenLower.set(lower, name);
 	}
+
+	const spawned: SpawnedWorker[] = [];
 
 	for (const entity of entities) {
 		const name = String(entity.name);
@@ -484,7 +488,14 @@ export function spawnWorkers({
 			env: process.env,
 		});
 		child.unref();
+
+		// A detached child is the leader of its own process group, so its PGID
+		// equals its PID — no `ps` lookup needed (see spawnWorkers tests for the
+		// measured proof of this platform contract).
+		spawned.push({ name, workerPgid: child.pid ?? null });
 	}
+
+	return spawned;
 }
 
 // ---------------------------------------------------------------------------
