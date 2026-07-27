@@ -78,8 +78,7 @@ import { fileURLToPath } from "node:url";
  * denies `$EDITOR notes.md`. And this gate has no escape hatch (no bypass
  * token, no `ask` fallback) — a false deny here is unrecoverable for the
  * user, which is the exact failure class the compound-detection fix in this
- * same file was written to eliminate, not reintroduce. See
- * `scripts/verify-entrypoint-gate/` in CLAUDE.md for the one-line summary.
+ * same file was written to eliminate, not reintroduce.
  *
  * Known unclosed gap, by design (second axis): a command-execution wrapper —
  * `nice`/`time`/`nohup`/`timeout`/`stdbuf`/`setsid`/`xargs`/`sudo`, or any
