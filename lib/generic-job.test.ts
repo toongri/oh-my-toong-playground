@@ -6,7 +6,13 @@ import path from "path";
 import os from "os";
 import { spawn, execSync } from "child_process";
 
-import type { JobConfig, CmdResultsHooks, ResumeMemberOpts, OrphanJob } from "./generic-job.ts";
+import type {
+	JobConfig,
+	CmdResultsHooks,
+	ResumeMemberOpts,
+	OrphanJob,
+	PgidSnapshot,
+} from "./generic-job.ts";
 import type { RunOneTurnOpts } from "./worker-utils.ts";
 import { splitCommand } from "./worker-utils.ts";
 import {
@@ -3190,6 +3196,45 @@ describe("cmdClean — 삭제 전 프로세스 그룹 회수", () => {
 		// 오살 방지 음성 대조군: 이 job과 무관한 프로세스는 살아남아야 한다.
 		expect(isPgidAlive(bystanderPgid)).toBe(true);
 	});
+
+	// 결함 C: cmdClean의 판정 루프가 과거엔 "mismatch"만 stderr로 보고했다.
+	// "no-witness"(spawn 시점 ps 실패로 증인이 null)는 조용히 지나가고, 실행은
+	// fs.rmSync에 도달해 앵커(job.json)를 지운다 — 살아있는 프로세스 그룹이
+	// 이제 어떤 계층으로도 추적 불가인데 stderr엔 단서가 없었다.
+	test("증인이 없는(null) pgid는 clean이 stderr에 보고하고, 신호를 보내지 않으며, 디렉터리는 지운다 (결함 C)", () => {
+		const bystander = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const bystanderPgid = bystander.pid;
+		if (bystanderPgid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(bystanderPgid);
+		// 선행 단언: 회수 전에 대상이 실제로 살아있음을 먼저 확인한다.
+		expect(isPgidAlive(bystanderPgid)).toBe(true);
+
+		const jobDir = path.join(tmpDir, "job-pgid-nowitness");
+		// pgid는 유효하지만(=회수 로직에 진입) 증인은 null — 옛 코드가 조용히
+		// 넘어가던 정확한 경로.
+		setupCleanJobWithPgid(jobDir, bystanderPgid, null);
+
+		const stderrChunks: string[] = [];
+		const originalStderrWrite = process.stderr.write;
+		(process.stderr as unknown as { write: unknown }).write = (chunk: unknown) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		};
+
+		try {
+			cmdClean({}, jobDir, chunkReviewConfig, tmpDir);
+		} finally {
+			process.stderr.write = originalStderrWrite;
+		}
+
+		expect(fs.existsSync(jobDir)).toBe(false);
+		// 오살 방지: 증인이 없으므로 신호가 가지 않고, 프로세스는 살아남는다.
+		expect(isPgidAlive(bystanderPgid)).toBe(true);
+		// 핵심 단언 — 결함 C: no-witness 스킵이 stderr에 실제로 보고된다.
+		expect(
+			stderrChunks.some((c) => c.includes(String(bystanderPgid)) && c.includes("no-witness")),
+		).toBe(true);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -3259,6 +3304,86 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 	 *  to build a matching or deliberately-mismatched fixture value. */
 	function getLstart(pid: number): string {
 		return execSync(`ps -o lstart= -p ${pid}`, { encoding: "utf8" }).trim();
+	}
+
+	function isPidAlive(pid: number): boolean {
+		try {
+			process.kill(pid, 0);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	/** True iff a live process currently has pid === pgid for the given pgid
+	 *  — i.e. a group LEADER is alive under that number right now. Used to
+	 *  assert the fixture is actually in the "leader dead, descendant alive"
+	 *  shape a defect-A test needs before trusting any post-condition. */
+	function hasLiveLeaderRow(pgid: number): boolean {
+		try {
+			const out = execSync("ps -o pgid=,pid= -A", { encoding: "utf8" });
+			return out
+				.split("\n")
+				.map((l) => l.trim())
+				.filter((l) => l.length > 0)
+				.some((l) => {
+					const [pgidStr, pidStr] = l.split(/\s+/);
+					return Number(pgidStr) === pgid && Number(pidStr) === pgid;
+				});
+		} catch {
+			return false;
+		}
+	}
+
+	/** Spawns a detached "leader" that itself spawns a plain (non-detached)
+	 *  `sleep 30` descendant sharing the leader's own pgid, then blocks on a
+	 *  go-file signal before exiting. This produces, on demand and without a
+	 *  timing race, the exact SIGKILL/panic/OOM shape layer 3 exists for:
+	 *  once triggered, the leader is gone but the descendant it started
+	 *  under the same pgid is not — no live row has pid === pgid anymore.
+	 *  The go-file gate exists so the caller can capture the leader's own
+	 *  `ps -o lstart=` witness (spawnWorkers' real production step) BEFORE
+	 *  triggering the exit, instead of racing the leader's own teardown. */
+	function spawnLeaderWithDescendant(dir: string): {
+		pgid: number;
+		markerPath: string;
+		goPath: string;
+		harness: ReturnType<typeof spawn>;
+	} {
+		const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+		const scriptPath = path.join(dir, `leader-${unique}.ts`);
+		const markerPath = path.join(dir, `leader-${unique}.marker`);
+		const goPath = path.join(dir, `leader-${unique}.go`);
+		fs.writeFileSync(
+			scriptPath,
+			[
+				`import { spawn } from "child_process";`,
+				`import fs from "fs";`,
+				``,
+				`const markerPath = process.argv[2];`,
+				`const goPath = process.argv[3];`,
+				`const sleepChild = spawn("sleep", ["30"], { stdio: "ignore" });`,
+				`fs.writeFileSync(markerPath, String(sleepChild.pid));`,
+				``,
+				`function waitGoThenExit() {`,
+				`	if (!fs.existsSync(goPath)) {`,
+				`		setTimeout(waitGoThenExit, 10);`,
+				`		return;`,
+				`	}`,
+				`	process.exit(0);`,
+				`}`,
+				`waitGoThenExit();`,
+				``,
+			].join("\n"),
+			"utf8",
+		);
+		const harness = spawn(process.execPath, [scriptPath, markerPath, goPath], {
+			detached: true,
+			stdio: "ignore",
+		});
+		const pgid = harness.pid;
+		if (pgid === undefined) throw new Error("spawn failed to produce a pid");
+		return { pgid, markerPath, goPath, harness };
 	}
 
 	beforeEach(() => {
@@ -3457,6 +3582,24 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 		expect(src).toMatch(/REAP_GRACE_MS_DEFAULT\s*=\s*5000/);
 	});
 
+	// 결함 D: `ps -o lstart=`는 LC_TIME에 따라 렌더링이 달라진다. 증인은
+	// cmdStart(컨덕터 환경)에서 기록되고, SessionStart 훅의 detached 프로세스
+	// (새 세션 환경)에서 대조된다 — 두 환경의 LC_TIME이 다르면 같은 프로세스가
+	// 다르게 렌더돼 영구 mismatch가 되어 이 계층이 조용히 무력화된다. lstart를
+	// 읽는 두 ps 호출(getProcessStartedAt·getPgidSnapshot) 모두 LC_ALL=C로
+	// 로케일을 고정해야 한다.
+	test("lstart를 읽는 두 ps 호출 모두 LC_ALL=C로 로케일이 고정된다 (결함 D)", () => {
+		const src = fs.readFileSync(path.join(__dirname, "generic-job.ts"), "utf8");
+		const execLstartLines = src
+			.split("\n")
+			.filter((l) => l.includes("execSync(") && l.includes("lstart"));
+		// getProcessStartedAt(단일 pid 조회)과 getPgidSnapshot(전체 스냅샷) 두 곳.
+		expect(execLstartLines.length).toBe(2);
+		for (const line of execLstartLines) {
+			expect(line).toContain("LC_ALL=C");
+		}
+	});
+
 	test("고아가 0개면 유예를 기다리지 않고 즉시 반환한다", async () => {
 		// jobsDir은 비어 있다 — findOrphanJobs가 0개를 판정하는 경로. 죽일 것이
 		// 없는데도 SIGTERM/SIGKILL 사이의 유예를 기다리는 것은 세션 시작마다 백그
@@ -3489,5 +3632,161 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 
 		expect(reaped.length).toBe(1);
 		expect(elapsed).toBeGreaterThanOrEqual(250);
+	});
+
+	// -------------------------------------------------------------------------
+	// 결함 A (회귀, acaf689c): getPgidLeaderStartTimes/judgePgidSignal이 리더
+	// 행(pid === pgid)만 "살아있다"로 쳤다. 리더가 SIGKILL/패닉/OOM으로 죽고
+	// 자손(codex exec, MCP 서버)만 같은 PGID에 남으면 리더 행이 없어
+	// "leader-dead"로 오판되고, 그룹은 실제로 살아있는데도 회수기 양쪽
+	// (findOrphanJobs/cmdClean)이 건너뛴다. 정확히 계층 3의 존재 이유인
+	// 비정상 종료 케이스를 통째로 놓치는 회귀.
+	// -------------------------------------------------------------------------
+
+	test(
+		"리더는 죽고 자손만 살아있는 그룹도 reapOrphanJobs가 회수한다 (결함 A 회귀)",
+		async () => {
+			const { pgid, markerPath, goPath, harness } = spawnLeaderWithDescendant(tmpDir);
+			spawnedPgids.push(pgid);
+
+			expect(await waitUntil(() => fs.existsSync(markerPath))).toBe(true);
+			const sleepPid = Number(fs.readFileSync(markerPath, "utf8").trim());
+			expect(Number.isInteger(sleepPid)).toBe(true);
+
+			// 리더가 아직 go 신호를 기다리며 살아있는 지금, 실제 spawnWorkers가
+			// 하는 것과 똑같이 spawn-time 증인을 뜬다.
+			const leaderStartedAt = getLstart(pgid);
+
+			fs.writeFileSync(goPath, "go");
+			await new Promise<void>((resolve) => harness.on("exit", () => resolve()));
+			// 그룹 리더가 좀비에서 완전히 회수될 여유 시간.
+			await new Promise((resolve) => setTimeout(resolve, 300));
+
+			// 선행 단언 — 픽스처가 실제로 의도한 상태인지 먼저 확인한다: 이 pgid에
+			// 살아있는 행(자손)이 있고, pid === pgid인 리더 행은 없다. 이 확인 없이는
+			// 아래 회수 단언이 공허해진다.
+			expect(isPidAlive(sleepPid)).toBe(true);
+			expect(hasLiveLeaderRow(pgid)).toBe(false);
+
+			setupOrphanJob(
+				"chunk-review-leaderdead-001",
+				[{ workerPgid: pgid, workerPgidStartedAt: leaderStartedAt }],
+				{ member: "alice", state: "done" },
+			);
+
+			const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, { graceMs: 100 });
+
+			expect(reaped.find((o) => o.jobDir.includes("leaderdead-001"))).toBeDefined();
+			expect(await waitUntil(() => !isPidAlive(sleepPid))).toBe(true);
+		},
+		10000,
+	);
+
+	// 결함 A의 안전 방향 (음성 대조군): 리더가 죽었어도, 살아있는 멤버 중
+	// 하나라도 기록된 리더 시작 시각(T)보다 먼저 시작했다면 그 그룹은 우리가
+	// spawn하기 전부터 존재했던 남의 그룹이다 — 회수하면 안 된다. 실제 PID
+	// 재사용을 기다리지 않고, 기존 mismatch 테스트와 같은 결로 기록된 증인을
+	// 미래로 조작해 이 조건을 결정론적으로 모형화한다.
+	test(
+		"리더가 죽었어도 살아있는 멤버가 기록된 리더 시각보다 먼저 시작했으면 회수하지 않는다 (결함 A 안전 방향)",
+		async () => {
+			const { pgid, markerPath, goPath, harness } = spawnLeaderWithDescendant(tmpDir);
+			spawnedPgids.push(pgid);
+
+			expect(await waitUntil(() => fs.existsSync(markerPath))).toBe(true);
+			const sleepPid = Number(fs.readFileSync(markerPath, "utf8").trim());
+			expect(Number.isInteger(sleepPid)).toBe(true);
+
+			fs.writeFileSync(goPath, "go");
+			await new Promise<void>((resolve) => harness.on("exit", () => resolve()));
+			await new Promise((resolve) => setTimeout(resolve, 300));
+
+			// 선행 단언: 픽스처가 의도한 상태(리더 없음, 자손 살아있음)인지 확인.
+			expect(isPidAlive(sleepPid)).toBe(true);
+			expect(hasLiveLeaderRow(pgid)).toBe(false);
+
+			// 기록된 리더 시각을 미래로 조작한다 — "이 그룹은 우리가 spawn하기
+			// 전부터 존재했다"를 실제 PID 재사용 없이 결정론적으로 모형화.
+			const fabricatedFutureLeaderStartedAt = "Tue Jan  1 00:00:00 2030";
+
+			setupOrphanJob(
+				"chunk-review-foreign-001",
+				[{ workerPgid: pgid, workerPgidStartedAt: fabricatedFutureLeaderStartedAt }],
+				{ member: "alice", state: "done" },
+			);
+
+			const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, { graceMs: 100 });
+
+			expect(reaped.find((o) => o.jobDir.includes("foreign-001"))).toBeUndefined();
+			// 핵심 단언 — 오살 방지: 우리 것이 아니라고 판단된 살아있는 자손은 살아남아야 한다.
+			expect(isPidAlive(sleepPid)).toBe(true);
+		},
+		10000,
+	);
+
+	// -------------------------------------------------------------------------
+	// 결함 B: findOrphanJobs가 판정한 시점과 실제 SIGKILL 발사 시점 사이에 유예
+	// (graceMs, 기본 5000ms)가 있다. SIGTERM이 그룹을 정상 종료시키면 그 PGID
+	// 번호는 유예 도중 OS로 반납되고, 재발급될 수 있다 — SIGKILL이 그 재검증
+	// 없이 나가면 무관한 새 프로세스를 오살한다. 실제 PID 재사용은 결정론적으로
+	// 기다릴 수 없으므로, reapOrphanJobs의 유예-후 재스냅샷 지점만 테스트용
+	// getSnapshotFn으로 갈아끼워 "번호가 재사용됐다"를 모형화한다 — 이 파일의
+	// 기존 테스트가 process.kill을 no-op으로 갈아끼워 결정론을 만드는 것과 같은 결.
+	// -------------------------------------------------------------------------
+
+	test("유예 도중 PGID가 재사용된 것처럼 스냅샷을 조작하면, 재사용된 무관한 프로세스로 SIGKILL이 가지 않는다 (결함 B 회귀)", async () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const pgid = child.pid;
+		if (pgid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(pgid);
+
+		// 선행 단언: 회수 전에 그룹이 실제로 살아있음을 먼저 확인한다.
+		expect(isPgidAlive(pgid)).toBe(true);
+		const realStartedAt = getLstart(pgid);
+
+		setupOrphanJob(
+			"chunk-review-regrab-001",
+			[{ workerPgid: pgid, workerPgidStartedAt: realStartedAt }],
+			{ member: "alice", state: "done" },
+		);
+
+		// process.kill을 no-op으로 갈아끼운다 — 실제로 SIGTERM이 나가 이 pgid
+		// 번호가 진짜로 해방돼 버리면 "재사용을 모형화했다"와 "진짜로 신호가
+		// 갔다"를 구분할 수 없어진다. 이 기법은 이 파일의 "잔여 프로세스는
+		// stderr로 보고되고 추가 kill 시도는 없다" 테스트와 동일하다.
+		const killCalls: Array<[number, string | undefined]> = [];
+		const originalKill = process.kill;
+		(process as unknown as { kill: unknown }).kill = (pid: number, signal?: string) => {
+			killCalls.push([pid, signal]);
+			return true;
+		};
+
+		// 유예 후 재검증(결함 B가 추가하는 지점)에서만 쓰이는 스냅샷을 조작한다:
+		// 같은 pgid가 이제는 전혀 다른(무관한) 시작 시각을 가진 것처럼 응답하게
+		// 만들어, 실제 PID 재사용 없이 "번호가 재사용됐다"를 결정론적으로
+		// 모형화한다. findOrphanJobs 자신의 최초 판정(진짜 ps 스냅샷)은 건드리지
+		// 않으므로, SIGTERM은 여전히 나간다 — 재검증 후 SIGKILL만 막혀야 한다.
+		const fakeSnapshot: PgidSnapshot = {
+			leaderStartTimes: new Map([[pgid, "Wed Jan  1 00:00:00 2020"]]),
+			memberStartTimes: new Map([[pgid, ["Wed Jan  1 00:00:00 2020"]]]),
+		};
+
+		try {
+			const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, {
+				graceMs: 10,
+				getSnapshotFn: () => fakeSnapshot,
+			});
+
+			// findOrphanJobs 자신의 최초 판정은 여전히 유효했다 — 이 job은 오르판으로
+			// 판정되고 SIGTERM은 나간다.
+			expect(reaped.find((o) => o.jobDir.includes("regrab-001"))).toBeDefined();
+
+			const killsForGroup = killCalls.filter(([p]) => p === -pgid);
+			// 핵심 단언 — 오살 방지: SIGTERM은 나갔지만, 유예 후 재검증이 불일치를
+			// 감지했으므로 SIGKILL은 나가면 안 된다.
+			expect(killsForGroup.map(([, sig]) => sig)).toEqual(["SIGTERM"]);
+		} finally {
+			process.kill = originalKill;
+		}
 	});
 });

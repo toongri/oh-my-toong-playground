@@ -24,6 +24,7 @@ import { getOmtDir } from "@lib/omt-dir";
 import {
 	type JobConfig,
 	type SpawnedWorker,
+	type OrphanJob,
 	assertMembersOrExit,
 	assertDenyEnforceable,
 	assertDenySkillsShape,
@@ -375,8 +376,8 @@ Notes:
 }
 
 /** Probe only — never signals. `kill(-pgid, 0)` sends no signal; ESRCH means
- *  the group has no member left alive. Used solely to decide cmdReap's own
- *  log wording (reaped vs signalled) per orphan, since reapOrphanJobs' return
+ *  the group has no member left alive. Used solely to decide the reap log
+ *  wording (reaped vs signalled) per orphan, since reapOrphanJobs' return
  *  value gives a flat survivingPids list with no per-job attribution. */
 function isPgidGroupAlive(pgid: number): boolean {
 	try {
@@ -385,6 +386,24 @@ function isPgidGroupAlive(pgid: number): boolean {
 	} catch {
 		return false;
 	}
+}
+
+/** Judges, per orphan job reapOrphanJobs already signalled, whether its
+ *  process group actually died — the shared judgment both reap-triggering
+ *  callers (cmdReap, and cmdStart's own reap-on-start step) need so neither
+ *  claims "reaped" for a group that in fact survived the kill. Returns
+ *  structured verdicts only; each caller decides its own phrasing and output
+ *  channel (cmdReap: one stderr line per job; cmdStart: one aggregate
+ *  logInfo line) — the same split this repo's hooks/ core/adapter files use
+ *  (judgment shared, output envelope per caller). */
+function classifyReapedOrphans(
+	reaped: OrphanJob[],
+): Array<{ jobDir: string; pgids: number[]; survived: boolean }> {
+	return reaped.map((orphan) => ({
+		jobDir: orphan.jobDir,
+		pgids: orphan.pgids,
+		survived: orphan.pgids.some((pgid) => isPgidGroupAlive(pgid)),
+	}));
 }
 
 async function cmdReap(options: Record<string, unknown>): Promise<void> {
@@ -399,19 +418,18 @@ async function cmdReap(options: Record<string, unknown>): Promise<void> {
 	// cache-safe context-injection rule (CLAUDE.md) this exists to satisfy.
 	// Every diagnostic, including reapOrphanJobs' own surviving-PID report,
 	// goes to stderr only.
-	for (const orphan of reaped) {
+	for (const verdict of classifyReapedOrphans(reaped)) {
 		// reapOrphanJobs already wrote its own "N process(es) survived group
 		// kill" line above for whatever didn't die — if this orphan's own pgid
 		// is one of them, don't also claim "reaped" here, or the same stderr
 		// stream carries two contradictory lines for the same process group.
-		const stillAlive = orphan.pgids.some((pgid) => isPgidGroupAlive(pgid));
-		if (stillAlive) {
+		if (verdict.survived) {
 			process.stderr.write(
-				`reap: signalled orphan job ${orphan.jobDir} (pgids: ${orphan.pgids.join(", ")}) — some process(es) survived the group kill, see above\n`,
+				`reap: signalled orphan job ${verdict.jobDir} (pgids: ${verdict.pgids.join(", ")}) — some process(es) survived the group kill, see above\n`,
 			);
 		} else {
 			process.stderr.write(
-				`reap: reaped orphan job ${orphan.jobDir} (pgids: ${orphan.pgids.join(", ")})\n`,
+				`reap: reaped orphan job ${verdict.jobDir} (pgids: ${verdict.pgids.join(", ")})\n`,
 			);
 		}
 	}
@@ -509,7 +527,17 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	initLogger("chunk-review-job", getOmtDir(), jobId);
 	logStart();
 	logInfo(`GC: stale jobs cleaned`);
-	logInfo(`reap: ${reapedOrphans.length} orphan job(s) reaped`);
+	// Mirrors cmdReap's own reaped-vs-survived distinction (classifyReapedOrphans)
+	// — this trigger runs on every review start, so an unconditional "reaped"
+	// claim here would go stale far more often than cmdReap's own SessionStart
+	// trigger. Never claim "reaped" for a group that in fact survived the kill.
+	const reapedOrphanVerdicts = classifyReapedOrphans(reapedOrphans);
+	const survivedOrphanCount = reapedOrphanVerdicts.filter((v) => v.survived).length;
+	logInfo(
+		survivedOrphanCount > 0
+			? `reap: ${reapedOrphanVerdicts.length} orphan job(s) signalled — ${survivedOrphanCount} process(es) survived the group kill`
+			: `reap: ${reapedOrphans.length} orphan job(s) reaped`,
+	);
 	logInfo(`config: ${configPath}, chairman: ${chairmanRole}, members: ${members.length}`);
 
 	const jobDir = path.join(jobsDir, `chunk-review-${jobId}`);
@@ -715,4 +743,5 @@ export {
 	cmdReap,
 	cmdDoctor,
 	resolveJobsDir,
+	classifyReapedOrphans,
 };

@@ -555,7 +555,10 @@ export type SpawnedWorker = {
  *  rather than guessing. */
 function getProcessStartedAt(pid: number): string | null {
 	try {
-		const output = execSync(`ps -o lstart= -p ${pid}`, { encoding: "utf8" }).trim();
+		// LC_ALL=C: see getPgidSnapshot's own comment below for why this witness
+		// must render in a fixed locale — this call and that one are the two
+		// sides of the same later comparison, running in different processes.
+		const output = execSync(`LC_ALL=C ps -o lstart= -p ${pid}`, { encoding: "utf8" }).trim();
 		return output || null;
 	} catch {
 		return null;
@@ -1342,20 +1345,47 @@ export function cmdStop(
 // ---------------------------------------------------------------------------
 
 /**
- * One-shot snapshot of every live process-group leader's start time, keyed
- * by PGID. A worker's PGID always equals its own leader PID (spawnWorkers'
- * detached-spawn contract above), so "the leader currently under PGID X" is
- * simply the process row where pid === pgid. A single `ps -A` snapshot is
- * reused for every candidate in one sweep — same reasoning as the existing
- * single-call `ps -A` pattern below (findOrphanJobs' comment (ii)) rather
- * than one subprocess per candidate PGID. Throws on `ps` failure so callers
- * can distinguish "no live leaders" from "couldn't ask at all" (the latter
- * has no basis to judge anything, matching the existing `ps -A` call sites'
- * try/catch-at-the-call-site style in this file).
+ * One-shot snapshot of every live process's pgid/pid/start-time, from a
+ * single `ps -A` call — reused for every candidate in one sweep, same
+ * reasoning as the existing single-call `ps -A` pattern below
+ * (findOrphanJobs' comment (ii)) rather than one subprocess per candidate
+ * PGID.
+ *
+ * Two views over the same rows:
+ * - `leaderStartTimes`: the start time of the live process-group LEADER
+ *   (the row where pid === pgid — a worker's PGID always equals its own
+ *   leader PID, spawnWorkers' detached-spawn contract above) for a given
+ *   PGID, if a leader is currently alive under that number at all.
+ * - `memberStartTimes`: the start times of EVERY live row currently under a
+ *   given PGID (the leader row too, when alive). This is what lets
+ *   judgePgidSignal recover a group whose LEADER died (SIGKILL, panic, OOM)
+ *   while its descendants (a spawned `codex exec`, an MCP server) are still
+ *   alive under the same PGID — no leader row exists to compare a start
+ *   time against, but the surviving descendants' own start times are still
+ *   usable for a partial identity check (see judgePgidSignal below).
+ *
+ * `LC_ALL=C` pins the `lstart` rendering to a fixed format regardless of the
+ * calling process's own locale. The witness this produces is recorded once,
+ * in one process's environment (cmdStart, via getProcessStartedAt above),
+ * and re-checked later from a different process's environment (the
+ * SessionStart hook's detached `bun`) — without a fixed locale on both
+ * sides, the same real process can render as two different strings and
+ * every re-check becomes a permanent, silent "mismatch".
+ *
+ * Throws on `ps` failure so callers can distinguish "no live processes"
+ * from "couldn't ask at all" (the latter has no basis to judge anything,
+ * matching the existing `ps -A` call sites' try/catch-at-the-call-site
+ * style in this file).
  */
-export function getPgidLeaderStartTimes(): Map<number, string> {
-	const startTimes = new Map<number, string>();
-	const psOutput = execSync("ps -o pgid=,pid=,lstart= -A", { encoding: "utf8" });
+export interface PgidSnapshot {
+	leaderStartTimes: Map<number, string>;
+	memberStartTimes: Map<number, string[]>;
+}
+
+export function getPgidSnapshot(): PgidSnapshot {
+	const leaderStartTimes = new Map<number, string>();
+	const memberStartTimes = new Map<number, string[]>();
+	const psOutput = execSync("LC_ALL=C ps -o pgid=,pid=,lstart= -A", { encoding: "utf8" });
 	for (const line of psOutput.split("\n")) {
 		const trimmed = line.trim();
 		if (!trimmed) continue;
@@ -1363,42 +1393,97 @@ export function getPgidLeaderStartTimes(): Map<number, string> {
 		if (!match) continue;
 		const pgid = Number(match[1]);
 		const pid = Number(match[2]);
-		if (pid !== pgid) continue; // not a group leader — never what workerPgid records
-		startTimes.set(pgid, match[3].trim());
+		const startedAt = match[3].trim();
+		const existing = memberStartTimes.get(pgid);
+		if (existing) existing.push(startedAt);
+		else memberStartTimes.set(pgid, [startedAt]);
+		if (pid === pgid) leaderStartTimes.set(pgid, startedAt);
 	}
-	return startTimes;
+	return { leaderStartTimes, memberStartTimes };
 }
 
 export type PgidSignalVerdict = "signal" | "no-witness" | "leader-dead" | "mismatch";
 
+/** Short reason string for every non-"signal" verdict — shared by cmdClean,
+ *  findOrphanJobs, and reapOrphanJobs's post-grace re-check so a skipped
+ *  candidate is always reported with the same wording regardless of which
+ *  layer skipped it (defect: a skip used to be silent outside "mismatch"). */
+export function pgidVerdictReason(verdict: PgidSignalVerdict): string {
+	switch (verdict) {
+		case "no-witness":
+			return "no spawn-time witness recorded (old-format job.json, or the spawn-time ps lookup failed)";
+		case "leader-dead":
+			return "no live process verified as this job's own PGID group (either the group is gone entirely, or its surviving descendants predate this job's own recorded spawn time)";
+		case "mismatch":
+			return "recorded witness does not match the current process's start time (PID/PGID reused by an unrelated process)";
+		case "signal":
+			return "verified";
+	}
+}
+
 /**
  * Judge whether it is safe to send a signal to `pgid`, given the spawn-time
  * witness recorded in job.json (workerPgidStartedAt) and a snapshot of every
- * currently-live group leader's start time (getPgidLeaderStartTimes above).
- * cmdClean and findOrphanJobs both call this exact function so the two
- * layers can never disagree about what is safe to reap — same reasoning as
+ * currently-live process's pgid/start-time (getPgidSnapshot above). cmdClean
+ * and findOrphanJobs both call this exact function so the two layers can
+ * never disagree about what is safe to reap — same reasoning as
  * isRunningStatusStale/findActiveMembers's shared-predicate extraction.
  *
  * - "no-witness": recordedStartedAt is null (old-format job, or the spawn-
  *   time `ps` lookup failed) — nothing to verify against, so don't signal.
- * - "leader-dead": no live leader currently owns this PGID number at all —
- *   the group is already gone; there is no target to signal.
  * - "mismatch": a live leader owns this PGID number, but its start time
  *   differs from the recorded witness — the number was reused by an
  *   unrelated process. Signaling here would be exactly the mis-kill this
  *   witness exists to prevent.
- * - "signal": the live leader's start time matches the recorded witness —
- *   verified to still be our own worker.
+ * - "signal": either (a) the live leader's start time matches the recorded
+ *   witness, or (b) no leader is alive under this PGID at all, but every
+ *   live descendant under it started AFTER the recorded leader spawn time —
+ *   a partial identity check for the leader-died-but-group-lives case (see
+ *   below).
+ * - "leader-dead": no live process at all is verified as ours under this
+ *   PGID — either nothing is alive under the number, or something is alive
+ *   but at least one live descendant started BEFORE the recorded leader
+ *   spawn time (this PGID predates our own spawn, so it cannot be our
+ *   group).
+ *
+ * Why the leader-died-but-group-lives fallback exists: a worker's PGID
+ * equals its own leader PID, so a dead leader used to mean "no row in the
+ * snapshot has pid === pgid" → treated as "leader-dead" unconditionally,
+ * even when the group's own descendants (a spawned `codex exec`, an MCP
+ * server) are still alive under that same PGID. That is exactly the SIGKILL
+ * / panic / OOM case layer 3 exists for — under the old rule those groups
+ * were never reaped at all. The fallback recovers them without a full
+ * identity re-verification (there is no live leader row left to compare a
+ * start time against): if NO live descendant predates the recorded leader
+ * spawn time, nothing here contradicts "this is still our group with its
+ * leader gone", so it's treated the same as "signal".
+ *
+ * Residual risk, recorded rather than closed (오살보다 미회수 — under-
+ * reaping over mis-killing is the accepted direction): if this exact PGID
+ * number is reused by an entirely unrelated NEW group after our worker's
+ * true leader died, and THAT new group's own leader also dies while its
+ * descendants (all started after our recordedStartedAt) remain, this
+ * fallback cannot tell the two groups apart and would reap the wrong one.
+ * This only narrows one specific, previously-total blind spot (leader-dead
+ * orphans were never reaped at all); it does not weaken the mismatch check
+ * above, which still catches the far more common case of a live replacement
+ * leader with a different start time.
  */
 export function judgePgidSignal(
 	pgid: number,
 	recordedStartedAt: string | null,
-	currentStartTimes: Map<number, string>,
+	snapshot: PgidSnapshot,
 ): PgidSignalVerdict {
 	if (recordedStartedAt === null) return "no-witness";
-	const currentStartedAt = currentStartTimes.get(pgid);
-	if (currentStartedAt === undefined) return "leader-dead";
-	return currentStartedAt === recordedStartedAt ? "signal" : "mismatch";
+	const leaderStartedAt = snapshot.leaderStartTimes.get(pgid);
+	if (leaderStartedAt !== undefined) {
+		return leaderStartedAt === recordedStartedAt ? "signal" : "mismatch";
+	}
+	const memberStarts = snapshot.memberStartTimes.get(pgid);
+	if (!memberStarts || memberStarts.length === 0) return "leader-dead";
+	const recordedMs = toEpochMs(recordedStartedAt);
+	const anyMemberPredatesRecorded = memberStarts.some((startedAt) => toEpochMs(startedAt) < recordedMs);
+	return anyMemberPredatesRecorded ? "leader-dead" : "signal";
 }
 
 // ---------------------------------------------------------------------------
@@ -1469,25 +1554,30 @@ export function cmdClean(
 
 	// The witness check itself needs a `ps` snapshot — if that fails, there is
 	// no basis to verify anything, so every candidate below resolves to
-	// "leader-dead" (undefined lookup) and nothing gets signaled. Fail closed,
-	// same as the rest of this witness system.
-	let currentStartTimesForKill: Map<number, string>;
+	// "leader-dead" (empty maps) and nothing gets signaled. Fail closed, same
+	// as the rest of this witness system.
+	let snapshotForKill: PgidSnapshot;
 	try {
-		currentStartTimesForKill = getPgidLeaderStartTimes();
+		snapshotForKill = getPgidSnapshot();
 	} catch {
-		currentStartTimesForKill = new Map();
+		snapshotForKill = { leaderStartTimes: new Map(), memberStartTimes: new Map() };
 	}
 
 	const pgidsToKill: number[] = [];
 	for (const { pgid, startedAt } of memberWitnessesForKill) {
-		const verdict = judgePgidSignal(pgid, startedAt, currentStartTimesForKill);
-		if (verdict === "mismatch") {
+		const verdict = judgePgidSignal(pgid, startedAt, snapshotForKill);
+		if (verdict !== "signal") {
+			// Report every skip, not just "mismatch" — cmdClean is about to
+			// destroy this job's own job.json, the only ownership anchor every
+			// reap layer (including this one) depends on. Once that happens, a
+			// still-alive process group under this pgid becomes unrecoverable
+			// by any layer, so a silent skip here is the worst place for one.
 			process.stderr.write(
-				`clean: skipping pgid ${pgid} for ${resolvedJobDir} — recorded witness does not match the current process's start time (PID/PGID reused by an unrelated process); not signaling\n`,
+				`clean: skipping pgid ${pgid} for ${resolvedJobDir} (verdict: ${verdict}) — ${pgidVerdictReason(verdict)}; not signaling. This job's directory is about to be deleted, so this process group becomes unrecoverable by any reap layer after this.\n`,
 			);
 			continue;
 		}
-		if (verdict === "signal") pgidsToKill.push(pgid);
+		pgidsToKill.push(pgid);
 	}
 
 	for (const pgid of pgidsToKill) {
@@ -1569,6 +1659,19 @@ export function cmdClean(
 export interface OrphanJob {
 	jobDir: string;
 	pgids: number[];
+	/** Recorded workerPgidStartedAt witness for each entry in `pgids`, same
+	 *  index alignment. Carried through (rather than re-derived) so
+	 *  reapOrphanJobs can re-verify PGID identity again after the SIGTERM→
+	 *  SIGKILL grace wait, not just once at judgment time here — the wait is
+	 *  exactly the window in which a freed PGID number can be handed to an
+	 *  unrelated new process (see reapOrphanJobs below). Optional (not just
+	 *  index-safe when absent) so a consumer constructing an OrphanJob-shaped
+	 *  literal without this field — e.g. a test exercising a narrower
+	 *  {jobDir, pgids} view — still type-checks; findOrphanJobs itself always
+	 *  populates it. Always non-null per entry when present: every pgid
+	 *  landing in `pgids` already passed judgePgidSignal with a non-null
+	 *  recordedStartedAt (verdict "signal" requires it). */
+	witnesses?: string[];
 }
 
 /** Production default grace period between SIGTERM and SIGKILL — matches the
@@ -1599,15 +1702,15 @@ export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] 
 	// (ii) One `ps` call for the whole sweep, not one per job. jobsDir can hold
 	// many stale job directories at once — this is exactly the runaway
 	// scenario this layer exists for (1,073 processes across many jobs in 9
-	// minutes) — so spawning `ps -A` once and reusing the parsed leader-start-
-	// time map for every candidate job avoids an O(job count) subprocess-spawn
-	// fan-out for what is fundamentally one snapshot-in-time liveness+identity
-	// question. This snapshot also carries the current leader's start time,
-	// not just liveness — see judgePgidSignal above for why liveness alone is
-	// not enough to prove ownership.
-	let currentStartTimes: Map<number, string>;
+	// minutes) — so spawning `ps -A` once and reusing the parsed snapshot for
+	// every candidate job avoids an O(job count) subprocess-spawn fan-out for
+	// what is fundamentally one snapshot-in-time liveness+identity question.
+	// This snapshot also carries start times, not just liveness — see
+	// judgePgidSignal above for why liveness alone is not enough to prove
+	// ownership.
+	let snapshot: PgidSnapshot;
 	try {
-		currentStartTimes = getPgidLeaderStartTimes();
+		snapshot = getPgidSnapshot();
 	} catch {
 		// ps unavailable — no basis to judge liveness, so no basis to reap.
 		return orphans;
@@ -1651,15 +1754,21 @@ export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] 
 		if (memberWitnesses.length === 0) continue;
 
 		const signalablePgids: number[] = [];
+		const signalableWitnesses: string[] = [];
 		for (const { pgid, startedAt } of memberWitnesses) {
-			const verdict = judgePgidSignal(pgid, startedAt, currentStartTimes);
-			if (verdict === "mismatch") {
+			const verdict = judgePgidSignal(pgid, startedAt, snapshot);
+			if (verdict !== "signal") {
 				process.stderr.write(
-					`orphan-reaper: skipping pgid ${pgid} in ${candidatePath} — recorded witness does not match the current process's start time (PID/PGID reused by an unrelated process); not signaling\n`,
+					`orphan-reaper: skipping pgid ${pgid} in ${candidatePath} (verdict: ${verdict}) — ${pgidVerdictReason(verdict)}; not signaling\n`,
 				);
 				continue;
 			}
-			if (verdict === "signal") signalablePgids.push(pgid);
+			// startedAt is guaranteed non-null here — judgePgidSignal only
+			// returns "signal" when recordedStartedAt !== null.
+			if (startedAt !== null) {
+				signalablePgids.push(pgid);
+				signalableWitnesses.push(startedAt);
+			}
 		}
 		// Recorded group isn't actually alive under a verified identity —
 		// nothing to reap here.
@@ -1669,7 +1778,7 @@ export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] 
 		const entitiesDir = path.join(candidatePath, config.entityDirName);
 		if (findActiveMembers(entitiesDir).length > 0) continue;
 
-		orphans.push({ jobDir: candidatePath, pgids: signalablePgids });
+		orphans.push({ jobDir: candidatePath, pgids: signalablePgids, witnesses: signalableWitnesses });
 	}
 
 	return orphans;
@@ -1685,14 +1794,28 @@ export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] 
  * report-only pass above — it has no basis to judge what a surviving process
  * actually is or whether killing it again would be safe. Escalating past
  * SIGKILL is a decision for a human or a future layer, not this one.
+ *
+ * (iv) Re-verifies identity again after the grace wait, before ever sending
+ * SIGKILL — findOrphanJobs already verified identity once, but that
+ * judgment is only as fresh as the snapshot it was taken from. The SIGTERM
+ * above can itself end the group during the wait (its whole point, on the
+ * normal path), freeing its PGID number back to the OS — and the wait is
+ * long enough (REAP_GRACE_MS_DEFAULT is 5s; this host's own measured PID
+ * churn is ~862/s) for that number to be handed to an unrelated new
+ * process before SIGKILL fires. SIGKILL-ing on the pre-wait judgment alone
+ * would be exactly the mis-kill this whole witness system exists to
+ * prevent, just moved one signal later. `opts.getSnapshotFn` exists purely
+ * so a test can fabricate that post-wait world deterministically instead of
+ * waiting on real, non-deterministic PID reuse.
  */
 export async function reapOrphanJobs(
 	jobsDir: string,
 	config: JobConfig,
-	opts: { graceMs?: number } = {},
+	opts: { graceMs?: number; getSnapshotFn?: () => PgidSnapshot } = {},
 ): Promise<{ reaped: OrphanJob[]; survivingPids: number[] }> {
 	const orphans = findOrphanJobs(jobsDir, config);
 	const graceMs = opts.graceMs ?? REAP_GRACE_MS_DEFAULT;
+	const getSnapshot = opts.getSnapshotFn ?? getPgidSnapshot;
 
 	for (const orphan of orphans) {
 		for (const pgid of orphan.pgids) {
@@ -1710,12 +1833,35 @@ export async function reapOrphanJobs(
 	// the exact process-accumulation problem this reaper exists to fix.
 	if (orphans.length > 0 && graceMs > 0) await sleepMs(graceMs);
 
-	for (const orphan of orphans) {
-		for (const pgid of orphan.pgids) {
-			try {
-				process.kill(-pgid, "SIGKILL");
-			} catch {
-				/* ESRCH: group already empty */
+	if (orphans.length > 0) {
+		// See (iv) above: re-snapshot and re-judge every candidate against its
+		// own carried witness before escalating to SIGKILL. Snapshot failure
+		// degrades to empty maps — same fail-closed posture as every other `ps`
+		// call in this witness system — so every candidate resolves to
+		// "leader-dead"/"no-witness" and nothing gets SIGKILLed on a failed ask.
+		let postGraceSnapshot: PgidSnapshot;
+		try {
+			postGraceSnapshot = getSnapshot();
+		} catch {
+			postGraceSnapshot = { leaderStartTimes: new Map(), memberStartTimes: new Map() };
+		}
+
+		for (const orphan of orphans) {
+			for (let i = 0; i < orphan.pgids.length; i++) {
+				const pgid = orphan.pgids[i];
+				const startedAt = orphan.witnesses?.[i] ?? null;
+				const verdict = judgePgidSignal(pgid, startedAt, postGraceSnapshot);
+				if (verdict !== "signal") {
+					process.stderr.write(
+						`reap: skipping SIGKILL for pgid ${pgid} in ${orphan.jobDir} after grace period (verdict: ${verdict}) — ${pgidVerdictReason(verdict)}; not signaling\n`,
+					);
+					continue;
+				}
+				try {
+					process.kill(-pgid, "SIGKILL");
+				} catch {
+					/* ESRCH: group already empty */
+				}
 			}
 		}
 	}
