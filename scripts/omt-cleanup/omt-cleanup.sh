@@ -7,6 +7,10 @@
 #   omt-cleanup.sh --dry-run    # same as default
 #   omt-cleanup.sh --execute    # reap dead state files and dead session artifacts (file-level only — directories are never removed)
 #
+# --dry-run and --execute are mutually exclusive: passing both, or any
+# unrecognized argument, is rejected on stderr with a non-zero exit before
+# anything is deleted.
+#
 # Parameterized on $HOME. Tests redirect HOME to a temp fixture.
 # macOS Bash 3.2 compatible.
 # =============================================================================
@@ -27,8 +31,41 @@ CLEANUP_NOW=$(date +%s)
 # Main
 # ---------------------------------------------------------------------------
 
+print_usage() {
+    cat >&2 << 'EOF'
+Usage:
+  omt-cleanup.sh              # dry-run (default): report reap candidates; delete nothing
+  omt-cleanup.sh --dry-run    # same as default
+  omt-cleanup.sh --execute    # reap dead state files and dead session artifacts (file-level only — directories are never removed)
+EOF
+}
+
 DRY_RUN=1
-if [[ "${1:-}" == "--execute" ]]; then
+SAW_DRY_RUN=0
+SAW_EXECUTE=0
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run)
+            SAW_DRY_RUN=1
+            ;;
+        --execute)
+            SAW_EXECUTE=1
+            ;;
+        *)
+            echo "omt-cleanup: unrecognized argument: $arg" >&2
+            print_usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ $SAW_DRY_RUN -eq 1 && $SAW_EXECUTE -eq 1 ]]; then
+    echo "omt-cleanup: --dry-run and --execute are mutually exclusive" >&2
+    print_usage
+    exit 1
+fi
+
+if [[ $SAW_EXECUTE -eq 1 ]]; then
     DRY_RUN=0
 fi
 
