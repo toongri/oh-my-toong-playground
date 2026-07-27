@@ -2145,23 +2145,71 @@ EOF
 # byte-for-byte identical to the pre-change hook's stdout for the same
 # fixture.
 #
-# The pre-change baseline is retrieved from this repo's own git history
-# (commit 2e1302d6 is the commit that rewired the state/artifact GC loops
-# into reap_dead_state_files/reap_session_artifacts here; its parent is the
-# last pre-change revision) rather than a machine-local snapshot path -- a
-# personal absolute path would not exist on any other machine, new clone, or
-# CI, and would make this test error out (or worse, silently no-op) anywhere
-# but its author's own filesystem.
+# Baseline: EXPECTED_GC_FIXTURE_STDOUT below is a frozen golden capture of
+# hooks/session-start.sh's stdout for THIS exact fixture, taken at commit
+# d215e9ce -- the base revision this suite's invariant is declared against
+# -- embedded literally rather than fetched from git history at test-run
+# time. This replaces a `git show <rev>:hooks/session-start.sh` design that
+# had two distinct bugs, not one:
 #
-# Baseline acquisition failure must FAIL this test, not fall through with the
-# already-copied current hook left in place as a stand-in "baseline" -- that
-# silent fallthrough is exactly what made the old snapshot-path version of
-# this test a tautology (out_before and out_after both coming from the same
-# code, everywhere the snapshot path didn't resolve). Both the retrieval
-# outcome and its content are checked before any comparison is trusted:
-# retrieval must succeed and be non-empty, and it must actually differ from
-# the current hook (else the byte-identity comparison below is vacuous by
-# construction, not because the code is unchanged).
+#   1. Non-hermetic: a tree exported without git history (`git archive HEAD
+#      | tar -x`, exactly how this suite reaches a deployed target project)
+#      has no commit to retrieve, so the git-show call failed and this test
+#      errored out on every such copy, not just an unusual environment.
+#   2. Wrong revision, and wrong even on its own terms: it retrieved a
+#      single file (hooks/session-start.sh) from 2e1302d6~1 while overlaying
+#      it onto the CURRENT hooks/lib/ (via `cp -R "$SCRIPT_DIR/."` first) --
+#      hooks/lib/state-liveness.sh differs substantially between d215e9ce
+#      and HEAD, so that mixed old-file/current-lib combination was never
+#      actually "the pre-change hook" for any single real revision. It also
+#      targeted 2e1302d6~1, not the base d215e9ce this suite's invariant is
+#      declared against.
+#
+# A golden captured from d215e9ce's own full tree (`git archive d215e9ce |
+# tar -x`, hook + lib together, run once to produce this literal) closes
+# both: no git call at test time, and the captured bytes are provably that
+# one revision's own code, lib included -- not a file/lib mismatch.
+#
+# Verified jq-invariant for this exact fixture: captured with jq on PATH and
+# with it stripped, against d215e9ce's tree, 2e1302d6~1's tree (the
+# previously-used, now-abandoned target), and HEAD's tree -- all
+# combinations, with and without the stale-state fixture, produced the
+# identical 1197-byte / md5 020fc284cc194f830ce02a03687df2fa stdout. Neither
+# state file this fixture seeds backs the CURRENT session's own id, so no
+# <session-restore> block ever fires here regardless of jq -- only the
+# ever-present <session-recording> (ledger) block appears. If a future
+# change makes this fixture jq-dependent, the golden below simply stops
+# matching for whichever jq condition diverges; nothing here special-cases
+# that away.
+#
+# No silent pass on a missing/unusable baseline: unlike the git-retrieval
+# design, an embedded literal cannot fail to be *retrieved* -- but it can be
+# accidentally left empty by a bad edit, so that failure mode is still
+# checked explicitly below (mirroring the old design's own "is it empty"
+# guard) rather than trusted implicitly. There is no anti-tautology check
+# here as there was for the git-retrieval design: that guard existed because
+# a failed `git show` could silently fall back to comparing the current hook
+# to itself. A hardcoded literal is never derived from the hook under test at
+# run time, so that failure mode cannot occur by construction.
+#
+# Regenerating this golden (only when hooks/session-start.sh legitimately
+# changes behavior for this fixture -- never to make a real regression
+# pass):
+#   1. Pick the new base commit and update every "d215e9ce" mention in this
+#      comment and the line below it to that commit.
+#   2. mkdir -p /tmp/gc-golden-base && git archive <new-base> | tar -x -C /tmp/gc-golden-base
+#   3. Reproduce this fixture (_write_artifact_gc_fixture +
+#      _write_stale_state_fixture into a scratch OMT dir under a scratch
+#      HOME, same input JSON shape as below) and run it through
+#      /tmp/gc-golden-base/hooks/session-start.sh via
+#      `env -u OMT_DIR -u OMT_SESSION_ID HOME=<scratch-home> ...`, capturing
+#      stdout to a file.
+#   4. Replace the heredoc body below with that file's exact bytes verbatim
+#      (the delimiter is quoted -- 'EXPECTED_GC_FIXTURE_STDOUT_EOF' -- so
+#      none of its literal $OMT_DIR/$HOME/backtick text gets shell-expanded
+#      while pasting).
+#   5. Re-run this suite.
+# Base commit for the golden below: d215e9ce.
 test_gc_session_artifacts_reaped_and_drift_reported() {
     local other_sid="artifact-gc-other-sess"
     local input='{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "artifact-gc-fresh-session"}'
@@ -2169,54 +2217,17 @@ test_gc_session_artifacts_reaped_and_drift_reported() {
     _write_artifact_gc_fixture "$TEST_OMT_DIR" "$other_sid"
     _write_stale_state_fixture "$TEST_OMT_DIR" "$other_sid"
 
-    # Independent baseline environment carrying the identical starting
-    # fixture, run through the pre-change hook -- isolated from the real run
-    # below so neither run's side effects (e.g. ledger appends) can leak into
-    # the other's stdout.
-    local baseline_project_dir baseline_home baseline_project_name baseline_omt_dir baseline_hooks_dir
-    baseline_project_dir=$(mktemp -d)
-    mkdir -p "$baseline_project_dir/.git"
-    baseline_home=$(mktemp -d)
-    mkdir -p "$baseline_home/.claude"
-    baseline_project_name=$(basename "$baseline_project_dir")
-    baseline_omt_dir="$baseline_home/.omt/$baseline_project_name"
-    mkdir -p "$baseline_omt_dir"
-    _write_artifact_gc_fixture "$baseline_omt_dir" "$other_sid"
-    _write_stale_state_fixture "$baseline_omt_dir" "$other_sid"
-
-    baseline_hooks_dir=$(mktemp -d)
-    cp -R "$SCRIPT_DIR/." "$baseline_hooks_dir/"
-
-    local baseline_session_start="$baseline_hooks_dir/session-start.sh"
-    if ! git -C "$SCRIPT_DIR/.." show 2e1302d6~1:hooks/session-start.sh > "$baseline_session_start" 2>/dev/null; then
-        echo "ASSERTION FAILED: could not retrieve the pre-change hooks/session-start.sh baseline from git history (2e1302d6~1) -- refusing to fall back to the current hook as a stand-in baseline"
-        rm -rf "$baseline_project_dir" "$baseline_home" "$baseline_hooks_dir"
-        return 1
-    fi
-    if [ ! -s "$baseline_session_start" ]; then
-        echo "ASSERTION FAILED: baseline hooks/session-start.sh retrieved from git history (2e1302d6~1) is empty"
-        rm -rf "$baseline_project_dir" "$baseline_home" "$baseline_hooks_dir"
-        return 1
-    fi
-    chmod +x "$baseline_session_start"
-
-    # Anti-tautology guard: the retrieved baseline must actually differ from
-    # the hook under test, or the stdout comparison below trivially passes by
-    # comparing the current hook to itself.
-    if cmp -s "$baseline_session_start" "$SCRIPT_DIR/session-start.sh"; then
-        echo "ASSERTION FAILED: baseline session-start.sh is byte-identical to the current hook -- the stdout comparison below would be tautological"
-        rm -rf "$baseline_project_dir" "$baseline_home" "$baseline_hooks_dir"
-        return 1
-    fi
-
-    local baseline_input='{"cwd": "'"$baseline_project_dir"'", "sessionId": "artifact-gc-fresh-session"}'
     local out_before_file
     out_before_file=$(mktemp)
-    echo "$baseline_input" \
-        | env -u OMT_DIR -u OMT_SESSION_ID HOME="$baseline_home" "$baseline_session_start" \
-        > "$out_before_file" 2>/dev/null || true
+    cat > "$out_before_file" << 'EXPECTED_GC_FIXTURE_STDOUT_EOF'
+{"continue": true, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "<session-recording>\n\n[LEDGER RECORDING]\n\nRecord decisions, user corrections, and next-steps to the durable session ledger AS YOU WORK -- do not wait until the end of the session. Ledger sections are append-only, except Now, which the now subcommand replaces with the latest current-state summary.\n\nAppend content (piped via stdin) to a section:\n  <content> | \"${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh\" append Decisions\n  <content> | \"${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh\" append Pending\n\nReplace the current-state summary:\n  <content> | \"${CLAUDE_PROJECT_DIR:-$HOME}/.claude/hooks/omt-ledger.sh\" now\n\nCRITICAL: record a user correction VERBATIM -- the user's exact original words, never a paraphrase or summary. Paraphrasing a correction silently loses the precise wording that made it a correction. Append verbatim corrections to the User Corrections (verbatim) section.\n\n($OMT_DIR and $OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook; omt-ledger.sh computes the ledger path internally.)\n\n</session-recording>\n\n---\n\n"}}
+EXPECTED_GC_FIXTURE_STDOUT_EOF
 
-    rm -rf "$baseline_project_dir" "$baseline_home" "$baseline_hooks_dir"
+    if [ ! -s "$out_before_file" ]; then
+        echo "ASSERTION FAILED: embedded golden baseline stdout is empty -- refusing to compare stdout against a blank baseline (this would silently pass regardless of what the hook under test prints)"
+        rm -f "$out_before_file"
+        return 1
+    fi
 
     # Real run: the modified hook under test. Captured to files (not command
     # substitution) so a trailing-newline difference cannot be silently
