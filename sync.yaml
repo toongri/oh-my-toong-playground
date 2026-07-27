@@ -86,6 +86,7 @@ scripts:
 
 rules:
   items:
+    - answer-grounding
     - communication-style
     - continuation-contract
     - convention-grounding
