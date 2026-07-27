@@ -475,6 +475,58 @@ describe("Codex native goal tool gate: capability-conditional create_goal/update
 			"If the `update_goal` tool is available",
 		);
 	});
+
+	// `update_goal` carries no goal selector — it always targets whatever goal the
+	// thread currently holds (measured on codex-cli 0.145.0: the tool description
+	// reads "Update the existing goal", and the failure string is "cannot update
+	// goal because this thread has no goal"). So tool availability alone is the
+	// WRONG firing condition: after a re-plan leaves a failed story's goal open and
+	// step 3's registration is rejected, an unconditional call here closes THAT
+	// story's goal as `complete` — laundering a failure, which is the single
+	// property this cross-check exists to catch, and which the re-plan paragraph
+	// two sentences later explicitly forbids doing by hand.
+	//
+	// 무엇이 훼손되면 빨개지는가: step 5의 발동 조건에서 "이 story가 실제로 무장했는가"
+	// 축이 빠지고 툴 존재 여부만 남으면 (즉 SKILL.md가 리뷰 이전 문안으로 되돌아가면).
+	test("update_goal fires only when THIS story armed the gate, not on tool availability alone", () => {
+		// Bounded to the firing-condition sentence itself — the re-plan paragraph
+		// below it already names codex_goal_objective, so an unbounded slice would
+		// pass on that mention alone and assert nothing about step 5's condition.
+		const step5 = executionDispatch.slice(
+			executionDispatch.indexOf("If the `update_goal` tool is available"),
+			executionDispatch.indexOf("**So a re-plan cannot register"),
+		);
+		// The arming state — not the platform, not the tool — is the discriminator.
+		expect(step5).toContain("codex_goal_objective");
+		// And the reason is stated in place: the tool has no goal selector.
+		expect(step5).toMatch(/no goal selector|carries no goal selector/i);
+	});
+
+	// The dispatch loop's `create_goal` and its arming `set` are two separate calls
+	// with no atomicity between them. A crash or a failed `set` in that window
+	// leaves an unfinished native goal registered for THIS story while
+	// codex_goal_objective stays empty; every later `create_goal` in the thread is
+	// then refused ("cannot create a new goal because this thread has an unfinished
+	// goal"), so without a reconciliation path the gate stays disarmed for the rest
+	// of the pursuit. `get_goal`'s objective is the discriminator: equal to this
+	// story's WHAT means the open goal is this story's own interrupted
+	// registration (re-arm from it); not equal means it belongs to another story
+	// (leave it alone, stay disarmed).
+	//
+	// 무엇이 훼손되면 빨개지는가: 거부된 create_goal에 대한 get_goal 조정 분기가
+	// step 3에서 사라지면.
+	test("a rejected create_goal reconciles through get_goal instead of leaving the gate disarmed", () => {
+		const step3 = executionDispatch.slice(
+			executionDispatch.indexOf("If the `create_goal` tool is available"),
+			executionDispatch.indexOf("Dispatch ONLY that one story"),
+		);
+		expect(step3).toContain("get_goal");
+		// Objective equality is what separates this story's own interrupted
+		// registration from another story's still-open goal.
+		expect(step3).toMatch(/objective/i);
+		// The rejection is never resolved by closing the open goal.
+		expect(step3).toMatch(/never|forbid/i);
+	});
 });
 
 // ---------------------------------------------------------------------------
