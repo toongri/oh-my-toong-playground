@@ -360,13 +360,15 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		//
 		// 1. Why not above the guard: an unconditional call would re-stamp this
 		//    session's own deep-interview/prometheus state `last_touched_at` on every
-		//    Stop call, and the corpse-staleness checks further down (:547 / :661,
-		//    judged via isStateLive at :638 / :645 / :667) read that same field back
-		//    from disk later in this SAME makeDecision call — self-blinding every
-		//    TTL-stale corpse into looking live. Scoping to activeSubagentCount > 0 is
-		//    behaviorally identical for the starving window below: that window is only
-		//    reachable while this guard actually fires (makeDecision never reaches the
-		//    corpse checks on this path), so nothing outside this branch is affected.
+		//    Stop call, and the corpse-staleness checks further down — the deep-interview
+		//    check (readDeepInterviewStateRaw, judged via isStateLive at :661 and :668)
+		//    and its prometheus twin (readPrometheusState, judged via isStateLive at :690)
+		//    — read that same field back from disk later in this SAME makeDecision call —
+		//    self-blinding every TTL-stale corpse into looking live. Scoping to
+		//    activeSubagentCount > 0 is behaviorally identical for the starving window
+		//    below: that window is only reachable while this guard actually fires
+		//    (makeDecision never reaches the corpse checks on this path), so nothing
+		//    outside this branch is affected.
 		//
 		// 2. Window this closes: a session with many running subagents measured 6h 38m
 		//    between consecutive artifact writes, against a 6h TTL — long enough for
