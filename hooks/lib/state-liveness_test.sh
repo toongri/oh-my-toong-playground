@@ -677,18 +677,20 @@ test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock() {
 }
 
 # =============================================================================
-# list_unclassified_session_files — reports only genuine drift. Two
-# classification-only exceptions — the backup-tail exception and the
-# session-ledger exception — must stay silent even though neither is
-# literally covered by STATE_PREFIXES or SESSION_ARTIFACT_PREFIXES as
-# written: a `.closed.bak` backup of a STATE_PREFIXES family (the backup
-# form STATE_PREFIXES's own `*.json` anchor, :16-19, is written to preserve
-# from deletion), and session-ledger-*.md (reaped by its own dedicated,
+# list_unclassified_session_files — reports genuine drift, which now
+# includes `.closed.bak` backups of a STATE_PREFIXES family
+# (deep-interview-active-state-*.json.closed.bak,
+# prometheus-state-*.json.closed.bak): neither reap function ever touches
+# this form (the backup form STATE_PREFIXES's own `*.json` anchor, :16-19,
+# is what preserves it from deletion), so the reporter is the only place its
+# growth becomes visible — see the plan's decision record naming it
+# reporter-only. session-ledger-*.md is the one remaining classification-only
+# exception that DOES stay silent: it is reaped by its own dedicated,
 # `.md`-only lane in hooks/session-start.sh, not by this file's reap
 # functions, so it is deliberately absent from the deletion whitelist — a
 # non-`.md` session-ledger-* form is NOT exempted and must still surface as
-# drift). Neither exception changes what gets deleted — only what gets
-# reported as drift.
+# drift. This exception changes what gets deleted — only what gets reported
+# as drift.
 # =============================================================================
 
 test_list_unclassified_reports_genuine_drift_only() {
@@ -697,22 +699,25 @@ test_list_unclassified_reports_genuine_drift_only() {
   mkdir -p "$d/state"
 
   # Genuinely unclassified/producerless forms (no writer anywhere in the
-  # repo, so they stay off both reap whitelists and are only ever reported):
-  # must be reported. list_unclassified_session_files has no age logic at
-  # all, so these use write_state (existence only), not touch_ago.
+  # repo, so they stay off both reap whitelists and are only ever reported),
+  # plus the two `.closed.bak` backup families (reaped by no lane, reporter-
+  # only per the plan): must be reported. list_unclassified_session_files
+  # has no age logic at all, so these use write_state (existence only), not
+  # touch_ago.
   write_state "$d/goal-review-context-$uuid.json" "{}"
   write_state "$d/handoff-consumed-$uuid" ""
   write_state "$d/handoff-$uuid" ""
+  write_state "$d/deep-interview-active-state-$uuid.json.closed.bak" "{}"
+  write_state "$d/prometheus-state-$uuid.json.closed.bak" "{}"
 
   # Classified via the reap whitelists directly: must stay silent.
   write_state "$d/goal-state-$uuid.json" "{\"active\":true}"
   write_state "$d/codex-todo-$uuid.json" "{}"
   write_state "$d/state/block-count-$uuid" "1"
 
-  # Classification-only exceptions (not in either reap whitelist, but a known
-  # family per the doc comment above): must also stay silent.
-  write_state "$d/deep-interview-active-state-$uuid.json.closed.bak" "{}"
-  write_state "$d/prometheus-state-$uuid.json.closed.bak" "{}"
+  # Classification-only exception (not in either reap whitelist, but a known
+  # family reaped by its own dedicated lane per the doc comment above): must
+  # stay silent.
   write_state "$d/session-ledger-$uuid.md" ""
 
   local out
@@ -720,14 +725,15 @@ test_list_unclassified_reports_genuine_drift_only() {
   local n
   n=$(printf '%s\n' "$out" | grep -c '.' || true)
 
-  if [ "$n" -ne 3 ]; then
-    echo "  ASSERTION FAILED: expected exactly 3 unclassified files, got $n"
+  if [ "$n" -ne 5 ]; then
+    echo "  ASSERTION FAILED: expected exactly 5 unclassified files, got $n"
     echo "  got: $out"
     return 1
   fi
 
   local pat
-  for pat in 'goal-review-context-' 'handoff-consumed-' 'handoff-'; do
+  for pat in 'goal-review-context-' 'handoff-consumed-' 'handoff-' \
+             'deep-interview-active-state-.*closed.bak' 'prometheus-state-.*closed.bak'; do
     if ! printf '%s' "$out" | grep -q "$pat"; then
       echo "  ASSERTION FAILED: unclassified report missing pattern '$pat'"
       echo "  got: $out"
@@ -735,8 +741,8 @@ test_list_unclassified_reports_genuine_drift_only() {
     fi
   done
 
-  if printf '%s' "$out" | grep -q 'goal-state-\|codex-todo-\|block-count-\|closed.bak\|session-ledger-'; then
-    echo "  ASSERTION FAILED: unclassified report must stay silent on classified files, including the backup-tail and session-ledger classification-only exceptions"
+  if printf '%s' "$out" | grep -q 'goal-state-\|codex-todo-\|block-count-\|session-ledger-'; then
+    echo "  ASSERTION FAILED: unclassified report must stay silent on classified files, including the session-ledger classification-only exception"
     echo "  got: $out"
     return 1
   fi
@@ -812,6 +818,50 @@ test_list_unclassified_reports_files_under_state_subdir_too() {
     echo "  got: $out"
     return 1
   fi
+
+  return 0
+}
+
+# =============================================================================
+# Plan AC (RED probe): list_unclassified_session_files must report all FOUR
+# producerless/never-reaped forms named in the plan's decision record
+# (~/.omt/oh-my-toong-playground/plans/presentation/omt-session-artifact-gc-and-heartbeat.md:832-838)
+# — goal-review-context-, handoff-consumed-, and BOTH .closed.bak backup
+# families (deep-interview-active-state-*.json.closed.bak,
+# prometheus-state-*.json.closed.bak). At HEAD the .closed.bak tail-strip
+# misclassifies the latter two as belonging to their STATE_PREFIXES family
+# and silently drops them from the report — this test reproduces the plan's
+# own acceptance-criteria command verbatim against a 4-file fixture and must
+# see exactly 4 lines, one per pattern.
+# =============================================================================
+
+test_list_unclassified_reports_all_four_plan_ac_forms() {
+  local d="$TEST_TMP_DIR"
+  local uuid="b7c1a2d4-5e6f-4a1b-9c3d-2f8e7a6b5c4d"
+
+  write_state "$d/goal-review-context-$uuid.json" "{}"
+  write_state "$d/handoff-consumed-$uuid" ""
+  write_state "$d/deep-interview-active-state-$uuid.json.closed.bak" "{}"
+  write_state "$d/prometheus-state-$uuid.json.closed.bak" "{}"
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+
+  if [ "$(printf '%s\n' "$out" | grep -c .)" -ne 4 ]; then
+    echo "  ASSERTION FAILED: expected exactly 4 unclassified files per plan AC, got $(printf '%s\n' "$out" | grep -c .)"
+    echo "  got: $out"
+    return 1
+  fi
+
+  local pat
+  for pat in goal-review-context- handoff-consumed- \
+             'deep-interview-active-state-.*closed.bak' 'prometheus-state-.*closed.bak'; do
+    if ! printf '%s' "$out" | grep -q "$pat"; then
+      echo "  ASSERTION FAILED: plan AC pattern '$pat' missing from report"
+      echo "  got: $out"
+      return 1
+    fi
+  done
 
   return 0
 }
@@ -1567,6 +1617,7 @@ run_test test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock
 run_test test_list_unclassified_reports_genuine_drift_only
 run_test test_list_unclassified_reports_non_md_session_ledger_as_drift
 run_test test_list_unclassified_reports_files_under_state_subdir_too
+run_test test_list_unclassified_reports_all_four_plan_ac_forms
 run_test test_reap_dead_state_files_relocation_equivalence
 run_test test_reap_dead_state_files_execute_mode_echoes_affected_paths
 run_test test_reap_dead_state_files_execute_mode_echoes_real_path_not_constant

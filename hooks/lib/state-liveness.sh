@@ -431,11 +431,15 @@ LIVE_IDS
 # it consults — recognizing a file is a different question from being
 # allowed to delete it (nothing below touches STATE_PREFIXES or
 # SESSION_ARTIFACT_PREFIXES, so no reap decision changes):
-#   - a `.closed.bak` backup tail is stripped before the STATE_PREFIXES
-#     match, so `<prefix>*.json.closed.bak` (the backup form STATE_PREFIXES's
-#     own `*.json` anchor above is written to preserve from deletion, :16-19)
-#     is recognized as belonging to its state family instead of reported as
-#     drift.
+#   - a `.closed.bak` backup (e.g. `<prefix>*.json.closed.bak`, the backup
+#     form STATE_PREFIXES's own `*.json` anchor above, :16-19, exists to
+#     preserve from deletion) is never matched against STATE_PREFIXES here —
+#     it falls through to the UUID-shaped-session-id check below and
+#     SURFACES as drift. Neither reap function ever touches this family, so
+#     the reporter is the only place its growth becomes visible; silently
+#     recognizing it here as "belonging to its state family" (the pre-fix
+#     behavior) would defeat that — see the plan's decision record naming
+#     these four forms as reporter-only, never reap-whitelisted.
 #   - `session-ledger-*.md` is recognized as a known-managed family even
 #     though it is intentionally absent from SESSION_ARTIFACT_PREFIXES:
 #     hooks/session-start.sh reaps it through its own dedicated ledger lane
@@ -447,7 +451,7 @@ LIVE_IDS
 #     drift, not go silently unclassified.
 list_unclassified_session_files() {
   local dir="$1"
-  local f base relpath prefix classified classify_base
+  local f base relpath prefix classified
 
   for f in "$dir"/* "$dir"/state/*; do
     [ -f "$f" ] || continue
@@ -463,24 +467,16 @@ list_unclassified_session_files() {
       *) relpath="$base" ;;
     esac
 
-    # classify_base strips a backup tail for the STATE_PREFIXES comparison
-    # only (relpath itself is left untouched for every other comparison
-    # below) — see the classification-only backup handling documented above.
-    # .closed.bak is reaped by no lane — that is intentional retention (the
-    # *.json anchor above, :16-19, exists to preserve it), so it is
-    # deliberately excluded from drift reporting too, and adding it to a
-    # reap whitelist remains a non-goal. Only the `.closed.bak` tail is
-    # stripped: no plain-`.bak` producer exists anywhere in this repo, so a
-    # speculative `.bak` branch was removed — a genuine plain-`.bak` file
-    # would correctly surface as drift, which is what the reporter is for.
-    classify_base="$relpath"
-    case "$classify_base" in
-      *.closed.bak) classify_base="${classify_base%.closed.bak}" ;;
-    esac
-
+    # STATE_PREFIXES comparison is against relpath directly, with no backup-
+    # tail stripping — a `.closed.bak` file never ends in `.json`, so it
+    # never satisfies `${prefix}*.json` and falls through to the
+    # UUID-shaped-session-id check below, surfacing as drift. See the doc
+    # comment above for why: it is reaped by no lane (the *.json anchor at
+    # :16-19 exists to preserve it from deletion), so the reporter is the
+    # only place this family's growth becomes visible.
     classified=0
     for prefix in $STATE_PREFIXES; do
-      case "$classify_base" in
+      case "$relpath" in
         ${prefix}*.json) classified=1; break ;;
       esac
     done
