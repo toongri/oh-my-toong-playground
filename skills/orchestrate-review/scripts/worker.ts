@@ -6,7 +6,7 @@ import path from "path";
 import { initLogger, logInfo, logError, logStart, logEnd } from "@lib/logging";
 import { exitWithError, parseArgs } from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
-import { splitCommand, atomicWriteJson, runOneTurn } from "@lib/worker-utils";
+import { splitCommand, atomicWriteJson, runOneTurn, reapOwnProcessGroup } from "@lib/worker-utils";
 import { detectCliType } from "@lib/generic-job";
 import type { CliType } from "@lib/agent-drivers/types";
 
@@ -106,9 +106,13 @@ function main() {
 		workerEnv,
 		cliType,
 		promptsDir: PROMPTS_DIR,
-	}).then((result) => {
+	}).then(async (result) => {
 		logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
 		logEnd();
+		// Must run AFTER logging: the group SIGKILL this sends also terminates this
+		// worker itself (it is the group leader), so nothing after this call is
+		// guaranteed to run — see reapOwnProcessGroup's own doc comment.
+		await reapOwnProcessGroup();
 		process.exit(result.state === "done" ? 0 : 1);
 	});
 }
