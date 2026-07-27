@@ -379,3 +379,96 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 		);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Codex native goal tool gate: create_goal/update_goal are wired into the
+// Execution Dispatch loop as capability conditionals ("if the tool is
+// available"), never as a platform-name branch — Claude exposes no
+// model-callable goal tool, so the condition evaluates false there and the
+// clause is inert rather than dead prose. create_goal registers the story's
+// objective immediately before the sisyphus dispatch; update_goal closes it
+// to `complete` immediately after (and only after) the story's per-story
+// verdict reads APPROVE — never on a non-APPROVE verdict or a retry, since
+// native goal DB registration only accepts a fresh objective from
+// `status: "complete"` (`active`/`blocked` reject it identically).
+// ---------------------------------------------------------------------------
+
+describe("Codex native goal tool gate: capability-conditional create_goal/update_goal wiring", () => {
+	const executionDispatch = skillMd.slice(
+		skillMd.indexOf("## Execution Dispatch"),
+		skillMd.indexOf("### Phase transitions"),
+	);
+
+	test("create_goal is mentioned before the sisyphus dispatch instruction", () => {
+		expect(executionDispatch.indexOf("create_goal")).toBeGreaterThan(-1);
+		expect(
+			executionDispatch.indexOf("Dispatch ONLY that one story"),
+		).toBeGreaterThan(-1);
+		expect(executionDispatch.indexOf("create_goal")).toBeLessThan(
+			executionDispatch.indexOf("Dispatch ONLY that one story"),
+		);
+	});
+
+	test("update_goal is mentioned after the sisyphus dispatch instruction", () => {
+		expect(executionDispatch.indexOf("update_goal")).toBeGreaterThan(-1);
+		expect(executionDispatch.indexOf("update_goal")).toBeGreaterThan(
+			executionDispatch.indexOf("Dispatch ONLY that one story"),
+		);
+	});
+
+	test("the registered objective is recorded via set --codex-goal-objective", () => {
+		expect(executionDispatch).toContain("--codex-goal-objective");
+	});
+
+	test("update_goal is never called on a non-APPROVE verdict or a retry dispatch", () => {
+		expect(executionDispatch).toContain(
+			"never call it on a non-APPROVE verdict or a re-dispatch retry",
+		);
+	});
+
+	test("the gate is a tool-existence conditional, not a platform-name branch", () => {
+		expect(executionDispatch).not.toMatch(
+			/on Codex|Codex에서는|플랫폼이 codex라면/i,
+		);
+		expect(executionDispatch).toContain(
+			"If the `create_goal` tool is available",
+		);
+		expect(executionDispatch).toContain(
+			"If the `update_goal` tool is available",
+		);
+	});
+});
+
+describe("stale duplicate sentence removed from Execution Dispatch closing (line 88, ported from :10)", () => {
+	test("the duplicate 'ultragoal never swaps sisyphus for goal' sentence no longer appears", () => {
+		expect(skillMd).not.toContain(
+			"sisyphus stays the sole executor throughout this loop — ultragoal never swaps sisyphus for goal and never invokes the goal skill at runtime.",
+		);
+	});
+});
+
+describe("disambiguation clause: OMT goal skill vs Codex native goal tools", () => {
+	test("the sealed substring is preserved byte-exact", () => {
+		expect(skillMd).toContain(
+			"ultragoal never invokes the goal skill at runtime",
+		);
+	});
+
+	test("a clarifying clause distinguishes the goal skill from Codex's native goal tools", () => {
+		expect(skillMd).toContain(
+			"OMT's `goal` **skill** (invoked via `Skill(...)`) and Codex's native goal tools (`create_goal`/`update_goal`/`get_goal`) are different things, and calling the latter is not a violation of this invariant",
+		);
+	});
+
+	test("the clarifying clause follows the sealed substring", () => {
+		const sealedIdx = skillMd.indexOf(
+			"ultragoal never invokes the goal skill at runtime",
+		);
+		const clauseIdx = skillMd.indexOf(
+			"OMT's `goal` **skill** (invoked via `Skill(...)`) and Codex's native goal tools",
+		);
+		expect(sealedIdx).toBeGreaterThan(-1);
+		expect(clauseIdx).toBeGreaterThan(-1);
+		expect(clauseIdx).toBeGreaterThan(sealedIdx);
+	});
+});
