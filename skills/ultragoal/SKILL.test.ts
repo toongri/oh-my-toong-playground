@@ -120,6 +120,114 @@ describe("ported from goal: Completion Gate detail lives in references/completio
 	});
 });
 
+describe("code-review dispatch payload contract: exactly two items, first dispatch and re-dispatch alike", () => {
+	test("dispatch payload contract detail is absent from SKILL.md body", () => {
+		expect(skillMd).not.toContain(
+			"carries exactly two things — the `serialize-review-context` 5-slot JSON verbatim, and the artifact path — and nothing else, on the first dispatch and on every re-dispatch alike",
+		);
+	});
+
+	test("dispatch payload contract detail is present in references/completion-gate.md", () => {
+		expect(completionGateMd).toContain(
+			"carries exactly two things — the `serialize-review-context` 5-slot JSON verbatim, and the artifact path — and nothing else, on the first dispatch and on every re-dispatch alike",
+		);
+	});
+
+	test("re-dispatch payload-fixity pointer is absent from SKILL.md body", () => {
+		expect(skillMd).not.toContain(
+			"that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed",
+		);
+	});
+
+	test("re-dispatch payload-fixity pointer is present in references/completion-gate.md", () => {
+		expect(completionGateMd).toContain(
+			"that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed",
+		);
+	});
+
+	// Placement, not just presence: the four toContain/not.toContain assertions
+	// above only pin WHICH file the contract paragraph lives in, not WHERE in
+	// that file. The requirement names a placement (after the last residual-
+	// risk bullet, before the artifact schema block), and the prose itself is
+	// position-dependent — but the two "above" pointers name two different
+	// targets, not the same paragraph. Inside the contract paragraph itself,
+	// "the first-dispatch contract above" points at the "Code-review lane
+	// (runs once, at the final story — not per story)" paragraph, not at the
+	// contract paragraph — a paragraph cannot cite itself as "above". That
+	// reference travels with the contract paragraph, so it is the residual-
+	// risk bullet ordering assertion below (which keeps the contract
+	// paragraph after that paragraph and its residual-risk bullets) that keeps
+	// it valid. Separately, the "Code-review lane: any CONFIRMED finding"
+	// bullet's "the dispatch-prompt contract above" points at the contract
+	// paragraph — and it is this one pointer that goes dangling if the
+	// contract paragraph moves below it; the sibling test below guards
+	// exactly that ordering. Both ordering tests below scope their comparison
+	// to the containing section via slice()-then-indexOf, the same idiom the
+	// "pursuing transition" test further down uses and explains: a bare
+	// whole-file indexOf comparison would have passed spuriously. indexOf
+	// existence is asserted first (`-1` compared against `-1` or a positive
+	// position would let a deleted anchor pass silently).
+	test("the dispatch-prompt contract paragraph sits after the last residual-risk bullet and before the artifact schema block", () => {
+		const residualRisksIntro = "these residual risks stay open";
+		const contractParagraphLead = "carries exactly two things —";
+		const artifactSchemaHeader =
+			"The artifact schema the code-reviewer must emit:";
+
+		expect(completionGateMd.indexOf(residualRisksIntro)).toBeGreaterThan(
+			-1,
+		);
+		expect(completionGateMd.indexOf(artifactSchemaHeader)).toBeGreaterThan(
+			-1,
+		);
+
+		const residualRisksThroughSchema = completionGateMd.slice(
+			completionGateMd.indexOf(residualRisksIntro),
+			completionGateMd.indexOf(artifactSchemaHeader),
+		);
+
+		expect(
+			residualRisksThroughSchema.indexOf(contractParagraphLead),
+		).toBeGreaterThan(-1);
+
+		const lastResidualRiskBulletStart =
+			residualRisksThroughSchema.lastIndexOf("\n- **");
+		expect(lastResidualRiskBulletStart).toBeGreaterThan(-1);
+		expect(lastResidualRiskBulletStart).toBeLessThan(
+			residualRisksThroughSchema.indexOf(contractParagraphLead),
+		);
+	});
+
+	test("the 'dispatch-prompt contract above' pointer at the concrete-progress bullet sits after the contract paragraph it points back at", () => {
+		const contractParagraphLead = "carries exactly two things —";
+		const confirmedFindingBullet =
+			"- **Code-review lane: any CONFIRMED finding**";
+		const inconclusiveBullet =
+			'- **Code-review lane: `status: "INCONCLUSIVE"`**';
+		const pointerPhrase = "dispatch-prompt contract above";
+
+		expect(
+			completionGateMd.indexOf(contractParagraphLead),
+		).toBeGreaterThan(-1);
+		expect(
+			completionGateMd.indexOf(confirmedFindingBullet),
+		).toBeGreaterThan(-1);
+		expect(completionGateMd.indexOf(inconclusiveBullet)).toBeGreaterThan(
+			-1,
+		);
+
+		const confirmedFindingBulletText = completionGateMd.slice(
+			completionGateMd.indexOf(confirmedFindingBullet),
+			completionGateMd.indexOf(inconclusiveBullet),
+		);
+
+		expect(confirmedFindingBulletText).toContain(pointerPhrase);
+
+		expect(completionGateMd.indexOf(contractParagraphLead)).toBeLessThan(
+			completionGateMd.indexOf(confirmedFindingBullet),
+		);
+	});
+});
+
 describe("ported from goal (regression): required phrases survive somewhere in body+references", () => {
 	test("all seven slot names are named somewhere in the union", () => {
 		expect(combined).toContain("**outcome** (`--outcome`)");
