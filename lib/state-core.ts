@@ -690,7 +690,7 @@ export function ensureSeed(type: StateType, sessionId: string): void {
 
 /** Type predicate: is `key` one of STATE_PREFIX's own keys (i.e. a StateType)? */
 function isStateType(key: string): key is StateType {
-	return key in STATE_PREFIX;
+	return Object.prototype.hasOwnProperty.call(STATE_PREFIX, key);
 }
 
 /**
