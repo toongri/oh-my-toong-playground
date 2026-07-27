@@ -15,13 +15,16 @@
  *   STATE_PREFIX                  — type → filename prefix map
  *   listOthers(type)              — ACTIVE + progress-live non-pristine other-session candidates
  *   adopt(type, srcSid)           — atomic rename re-key, rules r1-r8
- *   restampAfterAdopt(path)       — post-rename heartbeat re-stamp via writeFileNoCreate
+ *   restampAfterAdopt(path)       — post-rename re-stamp of BOTH last_touched_at and
+ *                                    progress_touched_at via writeFileNoCreate — adoption is a
+ *                                    genuine progress event (explicit user resume), not a
+ *                                    GC-only write
  *   writeFileNoCreate(path, s)    — single-syscall no-create write (ENOENT if absent)
  *   isPristine(type, parsed)      — true iff state is freshly seeded, safe for adoption overwrite
  *   touchSessionStates(sid)       — family-agnostic heartbeat: refreshes last_touched_at on
  *                                    every existing, non-pristine state file for sid
  *   backfillProgressTouchedAt(p)  — the progress_touched_at patch every GC-only writer (this
- *                                    module's touchSessionStates/restampAfterAdopt, and
+ *                                    module's touchSessionStates, and
  *                                    lib/persistent-mode-core/state.ts's updateGoalState/
  *                                    updateUltragoalState heartbeat-only calls) must apply
  *                                    before overwriting last_touched_at
@@ -208,9 +211,11 @@ export function isStateLive(
  * a TTL-stale corpse that stopped making real progress long ago. Any consumer
  * that must not be fooled by that revival reads this predicate instead:
  * `progress_touched_at` is stamped fresh only by a genuine producer write
- * (mergeWithHeartbeat above), and is only ever MIGRATED — never stamped fresh —
- * by a GC-only writer (touchSessionStates, restampAfterAdopt below; see
- * backfillProgressTouchedAt's doc comment). Two independent consumer classes
+ * (mergeWithHeartbeat above) or a genuine progress event (restampAfterAdopt
+ * below — adoption is an explicit user resume, not a GC-only write), and is
+ * only ever MIGRATED — never stamped fresh — by the one GC-only writer
+ * (touchSessionStates; see backfillProgressTouchedAt's doc comment). Two
+ * independent consumer classes
  * rely on this: lib/persistent-mode-core/decision.ts's deep-interview/prometheus
  * corpse-block checks (deciding whether to BLOCK), and listOthers/adopt below
  * (deciding whether a source is a genuine, in-progress adoption candidate) — a
@@ -287,13 +292,15 @@ const NEVER_TOUCHED_SENTINEL = "1970-01-01T00:00:00+00:00";
 /**
  * Returns the `progress_touched_at` patch every GC-only writer must apply
  * BEFORE it overwrites `last_touched_at`. Callers: this module's
- * touchSessionStates and restampAfterAdopt below, and
- * lib/persistent-mode-core/state.ts's updateGoalState/updateUltragoalState on
- * their heartbeat-only (empty-partial) path — all five state families funnel
- * their GC-only writes through this one patch, which is what makes the
- * invariant below actually hold across all five, not just the three (deep-
- * interview, prometheus, qa) that only ever go through this module's own
- * writers.
+ * touchSessionStates, and lib/persistent-mode-core/state.ts's
+ * updateGoalState/updateUltragoalState on their heartbeat-only (empty-partial)
+ * path — all five state families funnel their GC-only writes through this one
+ * patch, which is what makes the invariant below actually hold across all
+ * five, not just the three (deep-interview, prometheus, qa) that only ever go
+ * through this module's own writers. restampAfterAdopt below is NOT a caller:
+ * adoption is a genuine progress event, so it stamps `progress_touched_at`
+ * fresh directly (like mergeWithHeartbeat) rather than migrating a prior
+ * value through this patch.
  *
  * Every GC-only writer refreshes `last_touched_at` (the GC-liveness axis)
  * without a genuine producer write ever having happened — unlike
@@ -483,9 +490,9 @@ export interface AdoptionCandidate {
  * - Skips malformed files (parse-fail) without throwing
  * - Filters to ACTIVE + progress-live only (active===true && isProgressLive) —
  *   NOT isStateLive: a source revived only by a GC-only heartbeat
- *   (touchSessionStates/restampAfterAdopt keep its GC-axis last_touched_at
- *   fresh with no real work having happened) must not be offered as an
- *   in-progress candidate merely because that axis looks alive.
+ *   (touchSessionStates keeps its GC-axis last_touched_at fresh with no real
+ *   work having happened) must not be offered as an in-progress candidate
+ *   merely because that axis looks alive.
  * - Sid derived from filename only — never reads session-id from file content
  * - `idleSeconds` is likewise measured on the progress axis
  *   (progress_touched_at ?? last_touched_at), so it reports genuine idle time,
@@ -542,17 +549,22 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Reads the file at `path`, updates `last_touched_at`, and writes it back using
- * writeFileNoCreate — so it will throw ENOENT if the file has disappeared between
- * the rename and this call, preventing accidental file creation.
+ * Reads the file at `path`, updates BOTH `last_touched_at` and
+ * `progress_touched_at`, and writes it back using writeFileNoCreate — so it
+ * will throw ENOENT if the file has disappeared between the rename and this
+ * call, preventing accidental file creation.
  *
- * This is a GC-only writer (see backfillProgressTouchedAt's doc comment): before
- * overwriting `last_touched_at`, it backfills `progress_touched_at` from the
- * pre-overwrite value when absent, so adopting a legacy state does not erase its
- * last genuine-activity timestamp.
+ * Unlike touchSessionStates/updateGoalState/updateUltragoalState's
+ * heartbeat-only path, this is NOT a GC-only writer: adoption is a genuine
+ * progress event — an explicit user act declaring "I am resuming this work" —
+ * so it advances the progress axis exactly like mergeWithHeartbeat's real
+ * producer write, rather than merely backfilling/preserving a prior value via
+ * backfillProgressTouchedAt. This also means a legacy file (no
+ * `progress_touched_at` on disk) comes out with a fresh stamp, not an absent
+ * field or the NEVER_TOUCHED_SENTINEL.
  *
- * Called by adopt's r5 best-effort heartbeat re-stamp block; also exported for
- * direct unit testing of the no-create invariant.
+ * Called by adopt's r5 best-effort re-stamp block; also exported for direct
+ * unit testing of the no-create invariant.
  */
 export function restampAfterAdopt(path: string): void {
 	const content = readFileSync(path, "utf8");
@@ -560,10 +572,11 @@ export function restampAfterAdopt(path: string): void {
 	if (!isPlainObject(parsed)) {
 		throw new Error(`restampAfterAdopt: "${path}" does not contain a JSON object`);
 	}
+	const ts = nowStamp();
 	const stamped = {
 		...parsed,
-		...backfillProgressTouchedAt(parsed),
-		last_touched_at: nowStamp(),
+		last_touched_at: ts,
+		progress_touched_at: ts,
 	};
 	writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
 }
@@ -580,7 +593,7 @@ export function restampAfterAdopt(path: string): void {
  *   r2: both sids safe-id validated
  *   r3: refused iff current exists AND (ACTIVE non-pristine OR malformed)
  *   r4: atomic fs.renameSync; ENOENT → throw, no mutation
- *   r5: post-rename best-effort heartbeat re-stamp via restampAfterAdopt (failure → stderr warn)
+ *   r5: post-rename best-effort re-stamp of both liveness axes via restampAfterAdopt (failure → stderr warn)
  *   r6: LIVE source adoptable (checked via isProgressLive — progress axis, not GC axis)
  *   r7: source must be ACTIVE + progress-live (TERMINAL/progress-stale/malformed refused;
  *       a source revived only by a GC-only heartbeat does not qualify)
@@ -614,10 +627,10 @@ export function adopt(type: StateType, srcSid: string): void {
 	const now = Math.floor(Date.now() / 1000);
 
 	// r7: source must be ACTIVE + progress-live. Progress axis, not GC axis: a
-	// source kept "alive" only by a GC-only heartbeat (touchSessionStates/
-	// restampAfterAdopt) with no real work since must be refused, exactly like a
-	// source with no heartbeat at all — otherwise the heartbeat alone would be
-	// enough to resurrect a stale corpse as an adoptable candidate.
+	// source kept "alive" only by a GC-only heartbeat (touchSessionStates) with
+	// no real work since must be refused, exactly like a source with no
+	// heartbeat at all — otherwise the heartbeat alone would be enough to
+	// resurrect a stale corpse as an adoptable candidate.
 	const srcParsed = readParsed(srcPath);
 	if (srcParsed === null) {
 		throw new Error(
@@ -675,7 +688,7 @@ export function adopt(type: StateType, srcSid: string): void {
 		throw err;
 	}
 
-	// r5: post-rename heartbeat re-stamp of the renamed-to file (best-effort)
+	// r5: post-rename re-stamp of both liveness axes on the renamed-to file (best-effort)
 	try {
 		restampAfterAdopt(dstPath);
 	} catch (e) {

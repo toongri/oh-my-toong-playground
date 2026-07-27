@@ -2398,13 +2398,15 @@ describe("makeDecision", () => {
 	// That fallback is now SAFE — unlike an earlier attempt that fell back to
 	// started_at instead (which broke a long-running-but-recently-active legacy
 	// interview: session age, not idle time, decided liveness) — because
-	// touchSessionStates and restampAfterAdopt (the only writers that overwrite
-	// last_touched_at without also stamping progress_touched_at) now BACKFILL
-	// progress_touched_at from the pre-overwrite last_touched_at value the first
-	// time they touch a legacy file. The resulting invariant: progress_touched_at
-	// absent ⟹ no GC-only writer has ever touched this file ⟹ last_touched_at is
-	// still the file's last genuine-activity timestamp — so falling back to it
-	// directly is safe.
+	// touchSessionStates (the only GC-only writer that overwrites last_touched_at
+	// without also stamping progress_touched_at) now BACKFILLS progress_touched_at
+	// from the pre-overwrite last_touched_at value the first time it touches a
+	// legacy file. The resulting invariant: progress_touched_at absent ⟹ no
+	// GC-only writer has ever touched this file ⟹ last_touched_at is still the
+	// file's last genuine-activity timestamp — so falling back to it directly is
+	// safe. (restampAfterAdopt is a separate, non-GC-only writer: adoption is a
+	// genuine progress event, so it stamps progress_touched_at fresh rather than
+	// backfilling it.)
 	// -------------------------------------------------------------------------
 	describe("wedge-axis liveness: progress_touched_at vs last_touched_at (heartbeat revival guard)", () => {
 		const staleIso = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
@@ -3063,7 +3065,7 @@ describe("makeDecision", () => {
 
 	// Hole 1 (companion to the wedge-axis describe above): updateGoalState and
 	// updateUltragoalState (lib/persistent-mode-core/state.ts) are GC-only writers
-	// in the same sense as touchSessionStates/restampAfterAdopt whenever they are
+	// in the same sense as touchSessionStates whenever they are
 	// called with an EMPTY partial — the non-pursuing-active suppression path
 	// refreshes the heartbeat with no real work having happened (ADR-8: "every
 	// suppression read IS a use"). Measured findings (two distinct, independently
