@@ -161,50 +161,69 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	// bullet's "the dispatch-prompt contract above" points at the contract
 	// paragraph — and it is this one pointer that goes dangling if the
 	// contract paragraph moves below it; the sibling test below guards
-	// exactly that ordering. So a later edit that moves the contract
-	// paragraph below the schema block, or below that bullet, would leave all
-	// four assertions above green (both strings still exist somewhere in the
-	// same file) while turning only that one reference into a dangling
-	// forward reference. indexOf existence is asserted first (`-1` compared
-	// against `-1` or a positive position would let a deleted anchor pass
-	// silently), mirroring the sibling idiom used by the "pursuing
-	// transition" test below.
+	// exactly that ordering. Both ordering tests below scope their comparison
+	// to the containing section via slice()-then-indexOf, the same idiom the
+	// "pursuing transition" test further down uses and explains: a bare
+	// whole-file indexOf comparison would have passed spuriously. indexOf
+	// existence is asserted first (`-1` compared against `-1` or a positive
+	// position would let a deleted anchor pass silently).
 	test("the dispatch-prompt contract paragraph sits after the last residual-risk bullet and before the artifact schema block", () => {
-		const lastResidualRiskBullet =
-			"A `--agent code-reviewer` main-thread session bypasses the guard.";
+		const residualRisksIntro = "these residual risks stay open";
 		const contractParagraphLead = "carries exactly two things —";
 		const artifactSchemaHeader =
 			"The artifact schema the code-reviewer must emit:";
 
-		expect(
-			completionGateMd.indexOf(lastResidualRiskBullet),
-		).toBeGreaterThan(-1);
-		expect(
-			completionGateMd.indexOf(contractParagraphLead),
-		).toBeGreaterThan(-1);
-		expect(
+		expect(completionGateMd.indexOf(residualRisksIntro)).toBeGreaterThan(
+			-1,
+		);
+		expect(completionGateMd.indexOf(artifactSchemaHeader)).toBeGreaterThan(
+			-1,
+		);
+
+		const residualRisksThroughSchema = completionGateMd.slice(
+			completionGateMd.indexOf(residualRisksIntro),
 			completionGateMd.indexOf(artifactSchemaHeader),
+		);
+
+		expect(
+			residualRisksThroughSchema.indexOf(contractParagraphLead),
 		).toBeGreaterThan(-1);
 
-		expect(completionGateMd.indexOf(lastResidualRiskBullet)).toBeLessThan(
-			completionGateMd.indexOf(contractParagraphLead),
-		);
-		expect(completionGateMd.indexOf(contractParagraphLead)).toBeLessThan(
-			completionGateMd.indexOf(artifactSchemaHeader),
+		const lastResidualRiskBulletStart =
+			residualRisksThroughSchema.lastIndexOf("\n- **");
+		expect(lastResidualRiskBulletStart).toBeGreaterThan(-1);
+		expect(lastResidualRiskBulletStart).toBeLessThan(
+			residualRisksThroughSchema.indexOf(contractParagraphLead),
 		);
 	});
 
 	test("the 'dispatch-prompt contract above' pointer at the concrete-progress bullet sits after the contract paragraph it points back at", () => {
 		const contractParagraphLead = "carries exactly two things —";
+		const confirmedFindingBullet =
+			"- **Code-review lane: any CONFIRMED finding**";
+		const inconclusiveBullet =
+			'- **Code-review lane: `status: "INCONCLUSIVE"`**';
 		const pointerPhrase = "dispatch-prompt contract above";
 
 		expect(
 			completionGateMd.indexOf(contractParagraphLead),
 		).toBeGreaterThan(-1);
-		expect(completionGateMd.indexOf(pointerPhrase)).toBeGreaterThan(-1);
+		expect(
+			completionGateMd.indexOf(confirmedFindingBullet),
+		).toBeGreaterThan(-1);
+		expect(completionGateMd.indexOf(inconclusiveBullet)).toBeGreaterThan(
+			-1,
+		);
+
+		const confirmedFindingBulletText = completionGateMd.slice(
+			completionGateMd.indexOf(confirmedFindingBullet),
+			completionGateMd.indexOf(inconclusiveBullet),
+		);
+
+		expect(confirmedFindingBulletText).toContain(pointerPhrase);
 
 		expect(completionGateMd.indexOf(contractParagraphLead)).toBeLessThan(
-			completionGateMd.indexOf(pointerPhrase),
+			completionGateMd.indexOf(confirmedFindingBullet),
 		);
 	});
 });
