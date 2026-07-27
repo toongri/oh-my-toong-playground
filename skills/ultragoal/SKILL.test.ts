@@ -393,34 +393,41 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 // `status: "complete"` (`active`/`blocked` reject it identically).
 // ---------------------------------------------------------------------------
 
-describe("codex-goal-objective quoting: single-quoted, not a double-quoted shell arg", () => {
-	// This value is later diffed byte-for-byte against the `get_goal` snapshot
-	// by the completion gate. Double quotes let `$`, backticks, and backslashes
-	// in the story WHAT statement expand before reaching the state CLI, so the
-	// recorded string silently drifts from what create_goal actually
-	// registered — permanently arming an unrecoverable completion-gate
-	// mismatch. Single quotes suppress all such shell expansion.
+describe("codex-goal-objective channel: stdin heredoc, not a quoted shell arg", () => {
+	// This value is later diffed byte-for-byte against the `get_goal` snapshot by the
+	// completion gate, so it must reach the CLI unmodified. NO shell quoting form can
+	// carry an arbitrary WHAT statement: double quotes expand `$`/backticks/backslashes,
+	// and single quotes cannot express an apostrophe — one apostrophe kills the command
+	// and leaves the gate UNARMED (completion then passes with no cross-check at all),
+	// two truncate the value at the first unquoted space. A quoted heredoc on stdin is
+	// literal by construction, which is the only form that holds for every input.
 	const executionDispatch = skillMd.slice(
 		skillMd.indexOf("## Execution Dispatch"),
 		skillMd.indexOf("### Phase transitions"),
 	);
 
-	test("the --codex-goal-objective value is single-quoted", () => {
-		expect(executionDispatch).toContain(
-			"--codex-goal-objective '<the objective string just registered>'",
-		);
+	test("the objective is passed on stdin via `-`", () => {
+		expect(executionDispatch).toContain("--codex-goal-objective - <<'OBJECTIVE'");
 	});
 
-	test("the --codex-goal-objective value is not double-quoted", () => {
+	test("the heredoc delimiter is quoted (unquoted would re-enable expansion)", () => {
+		expect(executionDispatch).not.toMatch(/--codex-goal-objective - <<OBJECTIVE/);
+	});
+
+	test("the objective is not passed as a quoted inline argument in either quote style", () => {
+		expect(executionDispatch).not.toContain(
+			"--codex-goal-objective '<the objective string just registered>'",
+		);
 		expect(executionDispatch).not.toContain(
 			'--codex-goal-objective "<the objective string just registered>"',
 		);
 	});
 
-	test("a rationale sentence explains why single quotes are required for this command", () => {
+	test("a rationale sentence names the apostrophe failure and its fail-open direction", () => {
 		expect(executionDispatch).toContain(
-			"inside double quotes, `$`, backticks, and backslashes in the WHAT statement would expand before reaching the state CLI",
+			"single quotes cannot express an apostrophe at all",
 		);
+		expect(executionDispatch).toMatch(/leaving the gate UNARMED/);
 	});
 });
 
@@ -500,9 +507,15 @@ describe("Gate 9 wiring: completion sequence carries get_goal -> --codex-goal-js
 		);
 	});
 
-	test("the conditional request-complete call passes the snapshot via --codex-goal-json using the literal skill-dir path", () => {
+	// The snapshot echoes the registered objective back, so an apostrophe in the WHAT
+	// statement breaks any single-quoted inline form here exactly as it does at the
+	// arming site — the same stdin heredoc channel is required on both ends.
+	test("the conditional request-complete call passes the snapshot on stdin using the literal skill-dir path", () => {
 		expect(completionSequenceSection).toContain(
-			"bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts request-complete --codex-goal-json '<the get_goal snapshot JSON>'",
+			"bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts request-complete --codex-goal-json - <<'SNAPSHOT'",
+		);
+		expect(completionSequenceSection).not.toContain(
+			"--codex-goal-json '<the get_goal snapshot JSON>'",
 		);
 	});
 
@@ -530,7 +543,7 @@ describe("Gate 9 wiring: completion sequence carries get_goal -> --codex-goal-js
 
 	test("the instruction notes the snapshot may be passed as inline JSON or a file path", () => {
 		expect(completionSequenceSection).toMatch(
-			/inline JSON string or a path to a file/,
+			/inline JSON or a file path/,
 		);
 	});
 });

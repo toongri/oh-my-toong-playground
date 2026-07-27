@@ -82,15 +82,19 @@ Ultragoal does not reimplement execution. It decomposes the objective into the S
 2. Derive the **current story** — the first `confirmed` story (in stored order) that does not yet carry an `APPROVE` per-story verdict in `ultragoal-verdict-{sid}.json`. No separate "current story" state field exists; it is always re-derived from the verdict artifact, never stored.
 3. **If the `create_goal` tool is available**, register that story's WHAT statement as the objective by calling `create_goal` with it, then record the identical string via:
    ```
-   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase pursuing --codex-goal-objective '<the objective string just registered>'
+   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase pursuing --codex-goal-objective - <<'OBJECTIVE'
+   <the objective string just registered>
+   OBJECTIVE
    ```
-   Quote the value with single quotes, not double quotes: this string must land byte-identical to what `create_goal` just registered — inside double quotes, `$`, backticks, and backslashes in the WHAT statement would expand before reaching the state CLI, silently breaking that identity and permanently arming a completion-gate mismatch the honest `get_goal` snapshot cannot recover from.
+   Use stdin (`-`) with a **quoted** heredoc (`<<'OBJECTIVE'`, never `<<OBJECTIVE`), never an inline quoted argument. This string must land byte-identical to what `create_goal` registered, and no quoting form survives an arbitrary WHAT statement: double quotes expand `$`/backticks/backslashes, and single quotes cannot express an apostrophe at all — one apostrophe kills the command, leaving the gate UNARMED so completion passes with no cross-check; two truncate the value at the first unquoted space. A quoted heredoc is literal by construction, and the CLI strips the newline the heredoc appends.
 
    This is a tool-existence conditional, not a platform branch: no model-callable goal tool is exposed where `create_goal` is absent, so the condition evaluates false there and the clause is inert rather than dead prose — the exact same instruction governs both runtimes, only the tool's presence decides whether it fires.
 
    Dispatch ONLY that one story to sisyphus: `Skill(skill: "sisyphus")` with that story's WHAT statement, acceptance criteria, and verification surface, **plus the pursuit's `non_goals` slot value** — never the whole Story set at once. A Story carries no non-goal field of its own (`non-goals` is a state-level slot by design, not a per-story one), so the pursuit's `non_goals` value never reaches the executor unless it rides along with this dispatch.
 4. After sisyphus returns, run the per-story completion audit (see `references/completion-gate.md`) and re-derive that story's verdict.
 5. **Advance only on APPROVE.** A non-APPROVE per-story verdict re-dispatches `Skill(skill: "sisyphus")` at the SAME story — the loop does not proceed to the next story until this one reads APPROVE. **If the `update_goal` tool is available**, call `update_goal({status:"complete"})` exactly once, immediately after — and only after — this story's verdict reads APPROVE: never call it on a non-APPROVE verdict or a re-dispatch retry. Native goal DB registration accepts a fresh objective only from `status: "complete"` — `active` and `blocked` both reject it identically — so leaving a failed story's native goal un-closed keeps `complete` meaning strictly a genuine pass.
+
+   **So a re-plan cannot register a new native goal while a failed story's goal is still open — leave it rejected.** `set --phase planning` already cleared `codex_goal_objective`, so the gate is simply disarmed and the remaining gates carry the pursuit. Never close a non-APPROVE story's goal to unblock `create_goal`: that launders a failure into `complete`, which is the one thing this cross-check exists to catch. Clearing an open goal is the user's action (`/goal clear` is an app-server RPC, not automatable here).
 6. Once the current story is APPROVE, repeat from step 2 for the next confirmed story. When every confirmed story carries an APPROVE verdict, proceed to the final code-review lane (see Completion Gate).
 
 ### Phase transitions

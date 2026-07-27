@@ -3432,6 +3432,53 @@ describe("story layer: Codex native-goal snapshot cross-check gate (Gate 9)", ()
 		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature Z");
 	});
 
+	// 아포스트로피 안전 채널. 문서가 처방한 홑따옴표 인용은 WHAT 문장에 아포스트로피가
+	// 하나 있으면 명령 자체가 죽어 필드가 비고, 게이트가 무장되지 않은 채 완료가 통과한다
+	// (fail-open — 이 게이트의 존재 이유가 무효화된다). 둘 있으면 값이 첫 무인용 공백에서
+	// 잘려 임의로 다른 문자열이 저장된다. `-`를 stdin으로 읽으면 인용 문법을 거치지 않으므로
+	// 어떤 문자도 원문 그대로 도달한다.
+	// 무엇이 훼손되면 빨개지는가: `-` → stdin 해석이 빠지면 리터럴 "-"가 저장돼 실패한다.
+	test("CLI: --codex-goal-objective - 는 stdin을 읽어 아포스트로피를 원문 보존한다", () => {
+		const objective = "Fix user's and admin's profile";
+		const out = execSync(`bun ${script} set --phase pursuing --codex-goal-objective -`, {
+			encoding: "utf8",
+			input: objective,
+			env: { ...process.env, OMT_SESSION_ID: S },
+		});
+		expect(out).toBeDefined();
+		expect(readGoalState(S)!.codex_goal_objective).toBe(objective);
+	});
+
+	// 스냅샷 쪽도 같은 채널이 필요하다: objective에 아포스트로피가 있으면 그 문자열이
+	// get_goal JSON에 실려 돌아오므로, 완료 명령의 홑따옴표 인용도 같은 이유로 깨진다.
+	// 무엇이 훼손되면 빨개지는가: request-complete 쪽 `-` 해석이 빠지면 리터럴 "-"를
+	// 파싱/파일읽기 양쪽에서 실패해 거부되고 phase가 complete에 도달하지 못한다.
+	test("CLI: --codex-goal-json - 은 stdin 스냅샷으로 대조를 통과한다", () => {
+		const objective = "Fix user's profile";
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: objective });
+
+		execSync(`bun ${script} request-complete --codex-goal-json -`, {
+			encoding: "utf8",
+			input: JSON.stringify({ goal: { objective, status: "complete" } }),
+			env: { ...process.env, OMT_SESSION_ID: S },
+		});
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// 재계획 잔류. verdict 3종은 무효화되는데 codex_goal_objective만 남으면, 폐기·수정된
+	// story의 objective로 게이트가 무장된 채 남는다 — 그 낡은 native goal이 언젠가
+	// complete로 닫히면 현재 story 세트와 무관하게 게이트가 열린다.
+	// 무엇이 훼손되면 빨개지는가: planning 분기의 codex_goal_objective 초기화가 빠지면 실패한다.
+	test("set --phase planning은 codex_goal_objective를 초기화한다", () => {
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "STORY-A objective" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("STORY-A objective");
+
+		setGoalState(S, { phase: "planning" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("");
+	});
+
 	// 거부 사유의 정확성. 스냅샷 대조로 막혔을 때 CLI가 열거하는 조건에 이 게이트가 없으면,
 	// verdict도 APPROVE이고 evidence도 있는 상태에서 "verdict와 evidence가 필요하다"는
 	// 문안이 나와 사유를 적극적으로 오기술한다 — 오케스트레이터가 엉뚱한 곳을 고치게 된다.

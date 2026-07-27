@@ -504,6 +504,15 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		// `pursuing` phase right before completing. A new objective must never complete on a
 		// prior objective's evidence.
 		next.completion_evidence_paths = [];
+		// A recorded codex_goal_objective is a FOURTH carrier of the same staleness, and it
+		// arms Gate 9. It names the native goal registered for the story that was being
+		// pursued — the very story a re-plan revises or retires. Left behind, the gate stays
+		// armed against a story that no longer exists, and if that orphaned native goal is
+		// ever closed as `complete` the objective matches and status matches, so the gate
+		// opens for a story set it was never registered against. Re-arming is the dispatch
+		// loop's job (step 3 calls create_goal again for the new current story), so clearing
+		// here degrades to the existing 8 gates rather than deadlocking.
+		next.codex_goal_objective = "";
 		// Delete the on-disk verdict artifact. ENOENT is ignored (no artifact = already clean).
 		// Fail-open: if deletion fails for any other reason, the re-plan still proceeds;
 		// the subsequent requestComplete will find an artifact with mismatched state and refuse.
@@ -1464,6 +1473,33 @@ function str(v: string | boolean | undefined): string | undefined {
 	return v !== undefined ? String(v) : undefined;
 }
 
+/**
+ * Resolves the conventional `-` flag value to the full stdin content, so a value
+ * carrying shell-hostile characters never has to survive a quoting round-trip.
+ *
+ * The documented arming/completion commands wrap their value in single quotes,
+ * which cannot express an apostrophe: one apostrophe in a story's WHAT statement
+ * terminates the quoted string early and kills the command (leaving the gate
+ * UNARMED — the fail-open direction that voids this gate entirely), while two
+ * silently truncate the value at the first unquoted space and leak the remainder
+ * as stray argv. Reading from stdin sidesteps shell quoting altogether: paired
+ * with a quoted heredoc at the call site, every byte arrives verbatim.
+ *
+ * Only reached when the caller explicitly passed `-`, which implies a piped
+ * stdin; a literal single dash is not otherwise a meaningful value for either
+ * flag that uses this.
+ *
+ * ONE trailing newline is stripped — the one a heredoc appends. Without this the
+ * recorded objective differs from the registered one by that byte, and the
+ * "byte-identical to what create_goal registered" invariant would hold only
+ * because the comparison normalizes whitespace. Depending on the comparison to
+ * absorb a difference the writer introduced is weaker than not introducing it.
+ */
+function resolveStdinValue(v: string | undefined): string | undefined {
+	if (v !== "-") return v;
+	return readFileSync(0, "utf8").replace(/\n$/, "");
+}
+
 /** Like `str`, but a missing flag or a valueless boolean flag both read as "" —
  * the shape `requireSteeringReason`'s blank check expects, so CLI omission and
  * CLI whitespace collapse to the same rejection path. */
@@ -1532,7 +1568,7 @@ function main(): void {
 				plan_path: str(args["plan-path"]),
 				resume_summary: str(args["resume-summary"]),
 				completion_evidence_paths: completionEvidence,
-				codex_goal_objective: str(args["codex-goal-objective"]),
+				codex_goal_objective: resolveStdinValue(str(args["codex-goal-objective"])),
 			});
 		} else if (subcommand === "set-verdict") {
 			const v = String(args["verdict"] ?? "absent");
@@ -1613,7 +1649,7 @@ function main(): void {
 		} else if (subcommand === "set-blocked") {
 			setBlocked(sessionId, String(args["reason"] ?? ""));
 		} else if (subcommand === "request-complete") {
-			const codexGoalArg = str(args["codex-goal-json"]);
+			const codexGoalArg = resolveStdinValue(str(args["codex-goal-json"]));
 			const ok = requestComplete(sessionId, codexGoalArg);
 			if (!ok) {
 				// Distinguish a --codex-goal-json parse failure (neither valid inline JSON nor
