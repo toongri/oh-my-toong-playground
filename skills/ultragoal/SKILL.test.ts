@@ -439,6 +439,66 @@ describe("Codex native goal tool gate: capability-conditional create_goal/update
 	});
 });
 
+// ---------------------------------------------------------------------------
+// Completion-time Gate 9 wiring: request-complete's Codex native-goal
+// snapshot cross-check (Gate 9, landed in ultragoal-state.ts) arms whenever
+// codex_goal_objective is non-empty — which SKILL.md's Execution Dispatch
+// loop now always sets when create_goal is available. The completion
+// sequence must therefore instruct fetching a get_goal snapshot and passing
+// it via --codex-goal-json, gated on the SAME tool-existence conditional
+// form SKILL.md uses for create_goal/update_goal — never a platform-name
+// branch — and must document that omitting the flag causes request-complete
+// to refuse (safe-direction, but silently retryable without diagnosis).
+// ---------------------------------------------------------------------------
+
+describe("Gate 9 wiring: completion sequence carries get_goal -> --codex-goal-json instruction", () => {
+	const completionSequenceSection = completionGateMd.slice(
+		completionGateMd.indexOf("record the Evidence Audit artifact paths FIRST"),
+		completionGateMd.indexOf(
+			"APPROVE alone does NOT leave the ultragoal pursuit pursuing/active",
+		),
+	);
+
+	test("the section is non-empty (anchors exist)", () => {
+		expect(completionSequenceSection.length).toBeGreaterThan(0);
+	});
+
+	test("the completion sequence documents a get_goal tool-existence conditional", () => {
+		expect(completionSequenceSection).toContain(
+			"If the `get_goal` tool is available",
+		);
+	});
+
+	test("the conditional request-complete call passes the snapshot via --codex-goal-json using the literal skill-dir path", () => {
+		expect(completionSequenceSection).toContain(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts request-complete --codex-goal-json '<the get_goal snapshot JSON>'",
+		);
+	});
+
+	test("the gate is a tool-existence conditional, not a platform-name branch", () => {
+		expect(completionSequenceSection).not.toMatch(
+			/on Codex|Codex에서는|플랫폼이 codex라면|if the platform is codex/i,
+		);
+	});
+
+	test("the instruction documents that omitting --codex-goal-json causes request-complete to refuse once codex_goal_objective is armed", () => {
+		expect(completionSequenceSection).toContain("codex_goal_objective");
+		expect(completionSequenceSection).toMatch(/request-complete` refuse/);
+	});
+
+	test("the instruction warns that an unrecognized refusal risks an unproductive retry loop", () => {
+		expect(completionSequenceSection).toContain(
+			"loop without making progress",
+		);
+	});
+
+	test("the instruction notes the snapshot may be passed as inline JSON or a file path", () => {
+		expect(completionSequenceSection).toMatch(
+			/inline JSON string or a path to a file/,
+		);
+	});
+});
+
 describe("stale duplicate sentence removed from Execution Dispatch closing (line 88, ported from :10)", () => {
 	test("the duplicate 'ultragoal never swaps sisyphus for goal' sentence no longer appears", () => {
 		expect(skillMd).not.toContain(
