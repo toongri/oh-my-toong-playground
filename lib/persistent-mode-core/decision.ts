@@ -72,9 +72,20 @@ function toRecord(value: object): Record<string, unknown> {
  * family so a subagent-busy session's state survives SessionStart GC — but this
  * branch decides whether to BLOCK, and a revived corpse must not wedge the
  * session. Genuine producer writes stamp `progress_touched_at`
- * (mergeWithHeartbeat); the heartbeat never touches it. Files written before
- * that field existed fall back to `last_touched_at` — self-healing on the next
- * genuine write.
+ * (mergeWithHeartbeat); the heartbeat never touches it.
+ *
+ * `last_touched_at` is unconditionally overwritten with `progress_touched_at`
+ * (string or undefined) before delegating to `isStateLive`. A file written
+ * before `progress_touched_at` existed has it as `undefined`, which erases
+ * `last_touched_at` from the object passed down — `isStateLive`'s own
+ * `last_touched_at → started_at → dead` chain (lib/state-core.ts) then falls
+ * to `started_at`, a field `touchSessionStates` never writes either. That is
+ * what makes a legacy file wedge-safe: unlike falling back to `last_touched_at`
+ * directly, `started_at` cannot be kept artificially fresh by the heartbeat, so
+ * an abandoned legacy corpse ages out on schedule instead of being revived
+ * forever. A recently-started legacy interview still blocks (its `started_at`
+ * is genuinely fresh), and the very next genuine write stamps
+ * `progress_touched_at`, after which this fallback is no longer exercised.
  */
 function isProgressLive(
 	state: {
@@ -85,10 +96,7 @@ function isProgressLive(
 	},
 	nowEpoch: number,
 ): boolean {
-	if (typeof state.progress_touched_at === "string") {
-		return isStateLive({ ...state, last_touched_at: state.progress_touched_at }, nowEpoch);
-	}
-	return isStateLive(state, nowEpoch);
+	return isStateLive({ ...state, last_touched_at: state.progress_touched_at }, nowEpoch);
 }
 
 function formatBlockOutput(reason: string): HookOutput {

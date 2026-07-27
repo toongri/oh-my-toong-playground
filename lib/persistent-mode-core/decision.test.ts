@@ -2485,6 +2485,104 @@ describe("makeDecision", () => {
 			expect(result.decision).toBe("block");
 			expect(result.reason).toContain("<deep-interview-continuation>");
 		});
+
+		// Regression: the legacy fallback above ("today's behavior preserved") reads
+		// AS-IS from `last_touched_at` — but that is exactly the field the heartbeat
+		// (touchSessionStates) revives on every Stop call while a subagent is active.
+		// A legacy on-disk file (written before `progress_touched_at` existed) has no
+		// wedge-safe axis to fall back to, so the corpse never dies: the heartbeat
+		// keeps `last_touched_at` fresh forever, and the fallback keeps reading it as
+		// live. Unlike the corpse tests above (which start with `progress_touched_at`
+		// already present and never touched by the heartbeat), these three simulate a
+		// state file that never had the field at all.
+		it("legacy corpse (no progress_touched_at at all) revived by the heartbeat does not wedge the session", async () => {
+			const sid = "wedge-di-legacy-corpse-heartbeat";
+			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: staleIso,
+					last_touched_at: staleIso,
+					// no progress_touched_at — a state file written before this field existed
+					state: {
+						phase: "in_progress",
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
+				}),
+			);
+
+			// Heartbeat crossing: revives last_touched_at (GC axis) but started_at
+			// (the legacy fallback's own wedge-safe axis) stays stale — touchSessionStates
+			// never touches started_at.
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			expect(heartbeatResult).toEqual({ continue: true });
+
+			const revived = JSON.parse(await readFile(statePath, "utf8"));
+			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
+			expect(revived.started_at).toBe(staleIso);
+			expect(revived.progress_touched_at).toBeUndefined();
+
+			// Now Stop with no subagents active — must NOT wedge on the revived corpse.
+			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+			expect(stopResult).toEqual({ continue: true });
+		});
+
+		it("prometheus legacy corpse (no progress_touched_at at all) revived by the heartbeat does not wedge the session", async () => {
+			const sid = "wedge-prometheus-legacy-corpse-heartbeat";
+			const statePath = join(omtDir, `prometheus-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: staleIso,
+					last_touched_at: staleIso,
+					// no progress_touched_at — a state file written before this field existed
+				}),
+			);
+
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			expect(heartbeatResult).toEqual({ continue: true });
+
+			const revived = JSON.parse(await readFile(statePath, "utf8"));
+			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
+			expect(revived.started_at).toBe(staleIso);
+			expect(revived.progress_touched_at).toBeUndefined();
+
+			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+			expect(stopResult).toEqual({ continue: true });
+		});
+
+		it("legacy positive control: no progress_touched_at, but a fresh started_at still blocks even when last_touched_at looks stale", async () => {
+			// A legacy file should not lose blocking altogether — only the heartbeat-
+			// polluted axis (last_touched_at) must stop being trusted. started_at is
+			// deliberately made to look staler than last_touched_at here so the
+			// assertion can only pass if the fallback genuinely reads started_at,
+			// not last_touched_at.
+			const sid = "wedge-di-legacy-started-at-only";
+			const fresh = new Date().toISOString();
+			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: staleIso,
+					// no progress_touched_at — legacy shape
+					state: {
+						phase: "in_progress",
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ sessionId: sid, lastAssistantMessage: "still working, no done token" }),
+			);
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<deep-interview-continuation>");
+		});
 	});
 
 	// -------------------------------------------------------------------------
