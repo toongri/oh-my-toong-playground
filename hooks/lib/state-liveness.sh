@@ -449,6 +449,21 @@ list_live_session_ids() {
       [ -n "$line" ] || continue
       mtime="${line%% *}"
       f="${line#* }"
+      # A filename containing a literal newline splits one batched-stat
+      # record into two lines, and the forged second line's first token
+      # lands in $mtime. The forged $f is always a suffix of a filename,
+      # and a filename cannot contain '/' — so it can never match the
+      # anchor pattern below, whose "$dir/$prefix" always contains a
+      # literal '/'. That anchor alone rejects every such forged record
+      # structurally; this numeric check is SUBSUMED by it, and kept as a
+      # second guard directly on the path to _artifact_age_live's
+      # arithmetic context — no producer in this repo can construct a
+      # forged $mtime that also clears the anchor.
+      case "$mtime" in ''|*[!0-9]*) continue ;; esac
+      # The guard that actually stops the forgery: a forged $f is a
+      # filename's tail and so can never contain '/', while this pattern's
+      # "$dir/$prefix" always does — anchor it before use.
+      case "$f" in "$dir/$prefix"*) ;; *) continue ;; esac
       if _artifact_age_live "$mtime" "$now_epoch"; then
         # Same SC2295 hazard as the STATE_PREFIXES pass above — quote the
         # prefix strip. Extension stripping mirrors reap_session_artifacts's
@@ -592,6 +607,21 @@ reap_session_artifacts() {
       [ -n "$line" ] || continue
       mtime="${line%% *}"
       f="${line#* }"
+      # A filename containing a literal newline splits one batched-stat
+      # record into two lines, and the forged second line's first token
+      # lands in $mtime. The forged $f is always a suffix of a filename,
+      # and a filename cannot contain '/' — so it can never match the
+      # anchor pattern below, whose "$dir/$prefix" always contains a
+      # literal '/'. That anchor alone rejects every such forged record
+      # structurally; this numeric check is SUBSUMED by it, and kept as a
+      # second guard on the path to `rm -f` below — no producer in this
+      # repo can construct a forged $mtime that also clears the anchor.
+      case "$mtime" in ''|*[!0-9]*) continue ;; esac
+      # The guard that actually stops the forgery: a forged $f is a
+      # filename's tail and so can never contain '/', while this pattern's
+      # "$dir/$prefix" always does — anchor it before use, since it is
+      # what reaches `rm -f` below.
+      case "$f" in "$dir/$prefix"*) ;; *) continue ;; esac
 
       if is_current_session "$f" "$current_sid"; then
         continue
