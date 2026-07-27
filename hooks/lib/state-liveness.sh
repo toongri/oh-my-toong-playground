@@ -469,7 +469,6 @@ list_unclassified_session_files() {
     classify_base="$relpath"
     case "$classify_base" in
       *.closed.bak) classify_base="${classify_base%.closed.bak}" ;;
-      *.bak) classify_base="${classify_base%.bak}" ;;
     esac
 
     classified=0
