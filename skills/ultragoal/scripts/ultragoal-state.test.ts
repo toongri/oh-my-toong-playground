@@ -953,10 +953,14 @@ function runCli(args: string, env?: Record<string, string>): string {
 function runCliCaptured(
 	args: string,
 	env?: Record<string, string>,
+	input?: string,
 ): { stdout: string; stderr: string; status: number | null } {
 	const result = spawnSync("bun", [script, ...args.split(" ")], {
 		encoding: "utf8",
 		env: { ...process.env, ...env },
+		// Only supplied by the `-`/stdin callers. Omitted elsewhere so stdin keeps
+		// inheriting from the runner exactly as before.
+		...(input === undefined ? {} : { input }),
 	});
 	return { stdout: result.stdout, stderr: result.stderr, status: result.status };
 }
@@ -1031,6 +1035,61 @@ describe("adoption: list-others + adopt (goal CLI)", () => {
 		expect(() => runCli("set --phase pursuing", { OMT_SESSION_ID: "A" })).toThrow();
 		// File must still be absent
 		expect(existsSync(`${tmpDir}/ultragoal-state-A.json`)).toBe(false);
+	});
+
+	// (F-adopt-codex-goal-clear) A registered codex_goal_objective is thread-scoped
+	// state (Codex's native goal row is keyed by thread_id) — the adopting session has
+	// no way to reach that row, so a carried-over value would arm Gate 9 forever with
+	// no snapshot ever able to satisfy it. adopt must clear the field while leaving
+	// everything else (phase, stories, ...) intact.
+	test("F-adopt-codex-goal-clear: adopt clears codex_goal_objective, preserves stories and phase", () => {
+		const now = nowIso();
+		writeFileSync(
+			`${tmpDir}/ultragoal-state-A.json`,
+			JSON.stringify({
+				active: true,
+				phase: "pursuing",
+				iteration: 2,
+				max_iterations: 10,
+				outcome: "ship story 3",
+				verification_surface: "tests pass",
+				constraints: "",
+				boundaries: "",
+				blocked_stop: "",
+				plan_path: "",
+				resume_summary: "",
+				budget_limit_notified: false,
+				blocked_reason: "",
+				completion_evidence_paths: [],
+				objective_verdict: "absent",
+				schema_version: 1,
+				started_at: now,
+				last_touched_at: now,
+				codex_goal_objective: "ship story 3",
+				stories: [
+					{
+						id: "S1",
+						story: "ship story 3",
+						acceptance_criteria: ["works"],
+						verification_surface: "tests pass",
+						status: "confirmed",
+					},
+				],
+			}),
+			"utf8",
+		);
+		writePristineGoalState("B");
+
+		runCli("adopt --src A", { OMT_SESSION_ID: "B" });
+
+		const adopted = JSON.parse(readFileSync(`${tmpDir}/ultragoal-state-B.json`, "utf8"));
+		// (a) codex_goal_objective must be cleared — thread-scoped state the adopting
+		// session cannot reach.
+		expect(adopted.codex_goal_objective).toBe("");
+		// (b) everything else adopted must survive the clear.
+		expect(adopted.phase).toBe("pursuing");
+		expect(adopted.stories).toHaveLength(1);
+		expect(adopted.stories[0].id).toBe("S1");
 	});
 });
 
@@ -3155,5 +3214,339 @@ describe("set-verdict phase auto-advance (recovery)", () => {
 		runCli("set-verdict --verdict absent");
 		expect(readGoalState(S)!.phase).toBe("pursuing");
 		expect(readGoalState(S)!.objective_verdict).toBe("absent");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Codex native-goal snapshot cross-check gate (Gate 9)
+//
+// Codex's create_goal/update_goal tools carry no verification of their own —
+// handle_update only checks the status enum before writing straight to its DB
+// (pure self-grading). So on the Codex path, request-complete must
+// independently cross-check the model's own native-goal claim against a
+// snapshot of what it actually registered. Capability-as-state, not
+// platform-detection: the gate is armed ONLY when codex_goal_objective is
+// non-empty (i.e. `set --codex-goal-objective` was actually called). On the
+// Claude path codex_goal_objective stays "" and every AC9 case below proves
+// the existing 8-gate behavior is untouched.
+// ---------------------------------------------------------------------------
+
+describe("story layer: Codex native-goal snapshot cross-check gate (Gate 9)", () => {
+	// AC #1: `set --phase pursuing --codex-goal-objective "<text>"` records the value,
+	// and a later `set` OVERWRITES it as a single value — never accumulates a history.
+	test("AC1: set --codex-goal-objective records and overwrites a single value", () => {
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship feature X" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature X");
+
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship feature Y" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature Y");
+	});
+
+	// AC #9 (regression, not a RED target — this must already pass at HEAD): an empty
+	// codex_goal_objective (the default / the Claude path) leaves the existing 8-gate
+	// requestComplete behavior byte-for-byte unchanged — Gate 9 is never even reached.
+	test("AC9: empty codex_goal_objective leaves existing 8-gate behavior unchanged", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		expect(readGoalState(S)!.codex_goal_objective).toBe("");
+		expect(requestComplete(S)).toBe(true);
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// AC #3: codex_goal_objective is filled in, but --codex-goal-json is NOT supplied.
+	// Missing arg is a REFUSAL, not a pass-through — the core safety property of this gate.
+	test("AC3: filled codex_goal_objective without --codex-goal-json is refused", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		expect(requestComplete(S)).toBe(false);
+		expect(rawState().phase).not.toBe("complete");
+	});
+
+	// AC #4: snapshot objective mismatches codex_goal_objective -> refused.
+	test("AC4: snapshot objective mismatch is refused", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({
+			goal: { objective: "ship something else", status: "complete" },
+		});
+		expect(requestComplete(S, snapshot)).toBe(false);
+		expect(rawState().phase).not.toBe("complete");
+	});
+
+	// AC #5: snapshot status is not "complete" -> refused, even with a matching objective.
+	test("AC5: snapshot status not complete is refused", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ goal: { objective: "ship it", status: "active" } });
+		expect(requestComplete(S, snapshot)).toBe(false);
+		expect(rawState().phase).not.toBe("complete");
+	});
+
+	// AC #6: whitespace-only differences (newline / repeated spaces / leading-trailing)
+	// still pass — both sides are normalized (\s+ -> single space, trimmed) before compare.
+	test("AC6: whitespace-only objective differences still pass", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, {
+			phase: "pursuing",
+			codex_goal_objective: "  ship   it\nfor   real  ",
+		});
+		const snapshot = JSON.stringify({
+			goal: { objective: "ship it for real", status: "complete" },
+		});
+		expect(requestComplete(S, snapshot)).toBe(true);
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// AC #7: objective key fallback — goal.goal only (goal.objective absent).
+	test("AC7: objective key fallback extracts from goal.goal", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ goal: { goal: "ship it", status: "complete" } });
+		expect(requestComplete(S, snapshot)).toBe(true);
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// AC #7: objective key fallback — goal.description only.
+	test("AC7: objective key fallback extracts from goal.description", () => {
+		const S2 = "codex-goal-fallback-description";
+		seedGoalFile(S2);
+		const artifact = buildSatisfiedFixture(S2);
+		writeVerdictArtifact(S2, artifact);
+		setGoalState(S2, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ goal: { description: "ship it", status: "complete" } });
+		expect(requestComplete(S2, snapshot)).toBe(true);
+		expect(rawStateOf(S2).phase).toBe("complete");
+	});
+
+	// AC #7: objective key fallback — root-level objective when no goal.* keys exist at all.
+	test("AC7: objective key fallback extracts from root-level objective", () => {
+		const S2 = "codex-goal-fallback-root";
+		seedGoalFile(S2);
+		const artifact = buildSatisfiedFixture(S2);
+		writeVerdictArtifact(S2, artifact);
+		setGoalState(S2, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ objective: "ship it", status: "complete" });
+		expect(requestComplete(S2, snapshot)).toBe(true);
+		expect(rawStateOf(S2).phase).toBe("complete");
+	});
+
+	// AC #8: --codex-goal-json is parsed as JSON first.
+	test("AC8: --codex-goal-json argument parsed as inline JSON", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ goal: { objective: "ship it", status: "complete" } });
+		expect(requestComplete(S, snapshot)).toBe(true);
+	});
+
+	// AC #8: falls back to reading the argument as a file path when it isn't valid JSON.
+	test("AC8: --codex-goal-json argument falls back to a file path when not valid JSON", () => {
+		const S2 = "codex-goal-file-path";
+		seedGoalFile(S2);
+		const artifact = buildSatisfiedFixture(S2);
+		writeVerdictArtifact(S2, artifact);
+		setGoalState(S2, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshotPath = `${tmpDir}/codex-goal-snapshot.json`;
+		writeFileSync(
+			snapshotPath,
+			JSON.stringify({ goal: { objective: "ship it", status: "complete" } }),
+			"utf8",
+		);
+		expect(requestComplete(S2, snapshotPath)).toBe(true);
+		expect(rawStateOf(S2).phase).toBe("complete");
+	});
+
+	// AC #8: neither valid JSON nor a readable file -> refused (never completes).
+	test("AC8: garbage that is neither JSON nor a readable file path is refused", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		expect(requestComplete(S, "not json { and not a real file /nope")).toBe(false);
+		expect(rawState().phase).not.toBe("complete");
+	});
+
+	// AC #8 (CLI level): garbage --codex-goal-json exits non-zero with an identifiable
+	// parse-failure message on stderr, distinct from the generic gate-refusal message.
+	test("CLI: garbage --codex-goal-json exits non-zero with a parse-failure stderr message", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const result = runCliCaptured("request-complete --codex-goal-json garbage-not-json-or-file");
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain("--codex-goal-json");
+		expect(rawState().phase).not.toBe("complete");
+	});
+
+	// (결함 A-a, CLI 계층 회귀 가드) 기존 AC1은 setGoalState를 직접 호출해 CLI의
+	// `str(args["codex-goal-objective"])` 매핑 자체는 미검증이었다 — 이 줄이 지워져도 스위트는
+	// green이었다. `runCli`로 실제 CLI 인자 파싱까지 거쳐야 그 매핑이 깨지면 이 테스트가 빨개진다.
+	// 무엇이 훼손되면 빨개지는가: `set` 분기의 `codex_goal_objective: str(args["codex-goal-objective"])`
+	// 줄이 제거되면 저장이 조용히 멈춰 두 단언 모두 실패한다.
+	test("CLI: `set --phase pursuing --codex-goal-objective`가 실제로 저장하고 재호출 시 덮어쓴다", () => {
+		runCli('set --phase pursuing --codex-goal-objective "ship feature via cli"');
+		expect(rawState().codex_goal_objective).toBe("ship feature via cli");
+
+		runCli('set --phase pursuing --codex-goal-objective "ship feature via cli v2"');
+		expect(rawState().codex_goal_objective).toBe("ship feature via cli v2");
+	});
+
+	// 명시적으로 넘어온 빈 --codex-goal-objective는 무장이 아니라 무장 해제다 — 그리고
+	// 그 방향은 fail-OPEN이다: 게이트가 꺼진 채 완료가 대조 없이 통과한다. 이 값이 빈
+	// 채로 도착하는 구체적 경로는 인용 heredoc의 payload 안에 구분자와 똑같은 줄이
+	// 들어간 경우로, 실측하면 body가 0바이트로 나오고 나머지 줄은 셸 명령으로 실행된다.
+	// 값을 비우는 정당한 호출자는 없다 — 초기화는 `--phase planning`과 `adopt`가 내부에서
+	// 한다 — 이므로 명시적 빈 값은 언제나 전송 실패이며, 조용히 받아들이는 대신 거부해
+	// 직전 무장이 살아남게 해야 한다.
+	//
+	// 무엇이 훼손되면 빨개지는가: `set` 분기의 빈 값 거부 가드가 사라지면 (1) 종료코드가
+	// 0이 되고 (2) 이미 무장돼 있던 값이 ""로 덮여 게이트가 꺼진다.
+	test("CLI: 빈 stdin으로 온 --codex-goal-objective는 거부되고 직전 무장이 보존된다", () => {
+		runCli('set --phase pursuing --codex-goal-objective "story A objective"');
+		expect(rawState().codex_goal_objective).toBe("story A objective");
+
+		const r = runCliCaptured(
+			"set --phase pursuing --codex-goal-objective -",
+			{ OMT_SESSION_ID: S },
+			"",
+		);
+		expect(r.status).not.toBe(0);
+		expect(rawState().codex_goal_objective).toBe("story A objective");
+	});
+
+	// 공백만 든 값도 같은 판정을 받아야 한다: Gate 9의 무장 검사 자체가 `trim() !== ""`라
+	// 공백-only는 애초에 게이트를 켜지 못한다. 저장해두면 "무장했다"는 착각만 남는다.
+	// 무엇이 훼손되면 빨개지는가: 거부 조건이 `=== ""`로 좁혀져 공백-only가 통과하면.
+	test("CLI: 공백만 든 --codex-goal-objective도 거부된다", () => {
+		runCli('set --phase pursuing --codex-goal-objective "story A objective"');
+		const r = runCliCaptured(
+			"set --phase pursuing --codex-goal-objective -",
+			{ OMT_SESSION_ID: S },
+			"   \n  \t \n",
+		);
+		expect(r.status).not.toBe(0);
+		expect(rawState().codex_goal_objective).toBe("story A objective");
+	});
+
+	// 회귀 경계: 정상 stdin 값은 종전대로 저장돼야 한다 — 위 가드가 stdin 경로 전체를
+	// 막아버리지 않았음을 고정한다.
+	// 무엇이 훼손되면 빨개지는가: 가드가 비어있음 판정을 넘어 stdin 경로 자체를 거부하면.
+	test("CLI: 정상 stdin 값은 종전대로 저장된다", () => {
+		const r = runCliCaptured(
+			"set --phase pursuing --codex-goal-objective -",
+			{ OMT_SESSION_ID: S },
+			"ship it via stdin\n",
+		);
+		expect(r.status).toBe(0);
+		expect(rawState().codex_goal_objective).toBe("ship it via stdin");
+	});
+
+	// (결함 A-b, CLI 계층 회귀 가드) 기존 게이트 테스트는 전부 requestComplete를 직접 호출해
+	// `requestComplete(sessionId, codexGoalArg)`로의 인자 배관 자체는 미검증이었다. Gate 9를
+	// 무장(codex_goal_objective 비공백)시킨 뒤 `--codex-goal-json`을 CLI로 넘겨야만, 그 배관이
+	// 끊겼을 때만 이 테스트가 감지한다 — 무장하지 않으면 Gate 9 분기 자체가 스킵되어 배관이
+	// 끊겨도 통과해버린다.
+	// 무엇이 훼손되면 빨개지는가: `request-complete` 분기에서 `requestComplete(sessionId, codexGoalArg)`가
+	// `requestComplete(sessionId)`로 바뀌면, 무장된 Gate 9가 codexGoalArg===undefined를 보고
+	// 거부하여 CLI가 비정상 종료하고 이 테스트가 실패한다.
+	test("CLI: `request-complete --codex-goal-json`이 phase=complete에 도달한다", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it via cli" });
+
+		const snapshotPath = `${tmpDir}/gate9-cli-request-complete-snapshot.json`;
+		writeFileSync(
+			snapshotPath,
+			JSON.stringify({ goal: { objective: "ship it via cli", status: "complete" } }),
+			"utf8",
+		);
+
+		runCli(`request-complete --codex-goal-json ${snapshotPath}`);
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// (결함 B) mergeWrite의 codex_goal_objective 보존 해저드: 저자 주석이 명시한 대로, 이 필드가
+	// mergeWrite의 next/prior 병합 목록에서 빠지면 플래그 없는 평범한 `set --phase pursuing` 한
+	// 번만으로 이미 등록된 codex_goal_objective가 조용히 지워진다 — 게이트 영구 무장 해제. 기존
+	// AC1은 두 호출 모두 codex-goal-objective 플래그를 실어서 호출했으므로 덮어쓰기만 고정했고
+	// 보존은 전혀 고정하지 않았다.
+	// 무엇이 훼손되면 빨개지는가: `mergeWrite`의
+	// `codex_goal_objective: next.codex_goal_objective ?? prior.codex_goal_objective ?? ""` 줄이
+	// 제거되면, 플래그 없는 두 번째 set 이후 값이 사라져 마지막 단언이 실패한다.
+	test("mergeWrite: 플래그 없는 `set --phase pursuing` 한 번은 기존 codex_goal_objective를 보존한다", () => {
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship feature Z" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature Z");
+
+		// codex 플래그 없는 평범한 set — 값이 지워지면 안 된다.
+		setGoalState(S, { phase: "pursuing" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature Z");
+	});
+
+	// 아포스트로피 안전 채널. 문서가 처방한 홑따옴표 인용은 WHAT 문장에 아포스트로피가
+	// 하나 있으면 명령 자체가 죽어 필드가 비고, 게이트가 무장되지 않은 채 완료가 통과한다
+	// (fail-open — 이 게이트의 존재 이유가 무효화된다). 둘 있으면 값이 첫 무인용 공백에서
+	// 잘려 임의로 다른 문자열이 저장된다. `-`를 stdin으로 읽으면 인용 문법을 거치지 않으므로
+	// 어떤 문자도 원문 그대로 도달한다.
+	// 무엇이 훼손되면 빨개지는가: `-` → stdin 해석이 빠지면 리터럴 "-"가 저장돼 실패한다.
+	test("CLI: --codex-goal-objective - 는 stdin을 읽어 아포스트로피를 원문 보존한다", () => {
+		const objective = "Fix user's and admin's profile";
+		const out = execSync(`bun ${script} set --phase pursuing --codex-goal-objective -`, {
+			encoding: "utf8",
+			input: objective,
+			env: { ...process.env, OMT_SESSION_ID: S },
+		});
+		expect(out).toBeDefined();
+		expect(readGoalState(S)!.codex_goal_objective).toBe(objective);
+	});
+
+	// 스냅샷 쪽도 같은 채널이 필요하다: objective에 아포스트로피가 있으면 그 문자열이
+	// get_goal JSON에 실려 돌아오므로, 완료 명령의 홑따옴표 인용도 같은 이유로 깨진다.
+	// 무엇이 훼손되면 빨개지는가: request-complete 쪽 `-` 해석이 빠지면 리터럴 "-"를
+	// 파싱/파일읽기 양쪽에서 실패해 거부되고 phase가 complete에 도달하지 못한다.
+	test("CLI: --codex-goal-json - 은 stdin 스냅샷으로 대조를 통과한다", () => {
+		const objective = "Fix user's profile";
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: objective });
+
+		execSync(`bun ${script} request-complete --codex-goal-json -`, {
+			encoding: "utf8",
+			input: JSON.stringify({ goal: { objective, status: "complete" } }),
+			env: { ...process.env, OMT_SESSION_ID: S },
+		});
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// 재계획 잔류. verdict 3종은 무효화되는데 codex_goal_objective만 남으면, 폐기·수정된
+	// story의 objective로 게이트가 무장된 채 남는다 — 그 낡은 native goal이 언젠가
+	// complete로 닫히면 현재 story 세트와 무관하게 게이트가 열린다.
+	// 무엇이 훼손되면 빨개지는가: planning 분기의 codex_goal_objective 초기화가 빠지면 실패한다.
+	test("set --phase planning은 codex_goal_objective를 초기화한다", () => {
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "STORY-A objective" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("STORY-A objective");
+
+		setGoalState(S, { phase: "planning" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("");
+	});
+
+	// 거부 사유의 정확성. 스냅샷 대조로 막혔을 때 CLI가 열거하는 조건에 이 게이트가 없으면,
+	// verdict도 APPROVE이고 evidence도 있는 상태에서 "verdict와 evidence가 필요하다"는
+	// 문안이 나와 사유를 적극적으로 오기술한다 — 오케스트레이터가 엉뚱한 곳을 고치게 된다.
+	// 무엇이 훼손되면 빨개지는가: 일반 거부 문안에서 codex 스냅샷 조건 열거가 빠지면 실패한다.
+	test("CLI: 스냅샷 대조 거부 문안이 codex 스냅샷 조건을 열거한다", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "armed" });
+
+		// 무장된 상태에서 스냅샷을 아예 안 넘긴다 — verdict/evidence는 이미 충족돼 있으므로
+		// 남은 유일한 거부 원인이 Gate 9다.
+		const r = runCliCaptured("request-complete");
+		expect(r.status).not.toBe(0);
+		expect(r.stderr).toMatch(/codex-goal-json/);
+		expect(rawState().phase).not.toBe("complete");
 	});
 });
