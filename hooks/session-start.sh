@@ -334,22 +334,21 @@ fi
 # active-session re-read instruction only, with no "Phase:" line, since di
 # has no phase field to source one from.
 #
-# DI_PREFIX is looked up from the shared STATE_PREFIXES list (sourced above
-# from hooks/lib/state-liveness.sh) instead of being hardcoded here a second
-# time -- state-liveness.sh is now the only definition site for this prefix.
-DI_PREFIX=""
-for state_prefix in $STATE_PREFIXES; do
-  case "$state_prefix" in
-    deep-interview-*) DI_PREFIX="$state_prefix" ;;
-  esac
-done
-if [ -f "$OMT_DIR/${DI_PREFIX}${SESSION_ID}.json" ]; then
-  DI_STATE=$(cat "$OMT_DIR/${DI_PREFIX}${SESSION_ID}.json" 2>/dev/null)
+# The prefix is hardcoded here rather than looked up from state-liveness.sh's
+# STATE_PREFIXES: that list is scoped to the GC callers (reap_dead_state_files,
+# list_live_session_ids), not to this restore path. Deriving this restore
+# path's file name from a list built for a different purpose meant an edit to
+# STATE_PREFIXES that dropped or renamed the deep-interview entry silently
+# broke deep-interview session restore here -- no error, no stderr, the
+# restore block would just never fire. Restore reads and GC writes are
+# different concerns; each keeps its own literal.
+if [ -f "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" ]; then
+  DI_STATE=$(cat "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" 2>/dev/null)
 
   if command -v jq &> /dev/null; then
     DI_ACTIVE=$(echo "$DI_STATE" | jq -r '.active // false' 2>/dev/null)
     if [ "$DI_ACTIVE" = "true" ]; then
-      MESSAGES="$MESSAGES<session-restore>\n\n[DEEP-INTERVIEW RESTORED]\n\nYou have an active deep-interview session.\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/${DI_PREFIX}\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\nRe-read the state to determine where you left off, then continue the deep-interview session.\n\n</session-restore>\n\n---\n\n"
+      MESSAGES="$MESSAGES<session-restore>\n\n[DEEP-INTERVIEW RESTORED]\n\nYou have an active deep-interview session.\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/deep-interview-active-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\nRe-read the state to determine where you left off, then continue the deep-interview session.\n\n</session-restore>\n\n---\n\n"
     fi
   fi
 fi

@@ -2105,21 +2105,74 @@ _write_artifact_gc_fixture() {
         || true
 }
 
+# _write_stale_state_fixture: seeds one dead STATE file (not artifact) for
+# <other_sid> so that hooks/session-start.sh's reap_dead_state_files call
+# actually has something to delete and echo. Without this, the fixture used
+# by test_gc_session_artifacts_reaped_and_drift_reported seeds only the 3
+# artifact families, so the `reap_dead_state_files ... > /dev/null` redirect
+# at hooks/session-start.sh:136 is exercised against zero matches -- a
+# stdout-suppression path that is never actually asked to suppress anything
+# is not really tested.
+#
+# last_touched_at is written as local time + numeric UTC offset (colon form,
+# e.g. +09:00), never a bare "Z"/UTC marker: hooks/lib/state-liveness.sh
+# strips a trailing `Z` or colon-form offset and parses what remains as LOCAL
+# time (see its :90-98 comment "Mirrors session-start.sh:80-101"). Writing
+# `Z` here while generating the wall-clock string on a KST host would produce
+# a timestamp that parses 9 hours older than intended.
+_write_stale_state_fixture() {
+    local omt_dir="$1"
+    local other_sid="$2"
+
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S%z" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S%z" 2>/dev/null || echo "2000-01-01T00:00:00+0000")
+    stale_ts=$(printf '%s' "$stale_ts" | sed -E 's/([+-][0-9]{2})([0-9]{2})$/\1:\2/')
+
+    cat > "$omt_dir/goal-state-${other_sid}.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale other-session goal",
+  "iteration": 1
+}
+EOF
+}
+
 # QA Scenario 1 (plan TODO 3): stale other-session artifacts across 3
 # families are reaped, the unclassified file and the non-session file both
 # survive, stderr names the unclassified file exactly once, and stdout is
-# byte-for-byte identical to the pre-change (HEAD, commit 819ff3b7) hook's
-# stdout for the same fixture.
+# byte-for-byte identical to the pre-change hook's stdout for the same
+# fixture.
+#
+# The pre-change baseline is retrieved from this repo's own git history
+# (commit 2e1302d6 is the commit that rewired the state/artifact GC loops
+# into reap_dead_state_files/reap_session_artifacts here; its parent is the
+# last pre-change revision) rather than a machine-local snapshot path -- a
+# personal absolute path would not exist on any other machine, new clone, or
+# CI, and would make this test error out (or worse, silently no-op) anywhere
+# but its author's own filesystem.
+#
+# Baseline acquisition failure must FAIL this test, not fall through with the
+# already-copied current hook left in place as a stand-in "baseline" -- that
+# silent fallthrough is exactly what made the old snapshot-path version of
+# this test a tautology (out_before and out_after both coming from the same
+# code, everywhere the snapshot path didn't resolve). Both the retrieval
+# outcome and its content are checked before any comparison is trusted:
+# retrieval must succeed and be non-empty, and it must actually differ from
+# the current hook (else the byte-identity comparison below is vacuous by
+# construction, not because the code is unchanged).
 test_gc_session_artifacts_reaped_and_drift_reported() {
     local other_sid="artifact-gc-other-sess"
     local input='{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "artifact-gc-fresh-session"}'
 
     _write_artifact_gc_fixture "$TEST_OMT_DIR" "$other_sid"
+    _write_stale_state_fixture "$TEST_OMT_DIR" "$other_sid"
 
     # Independent baseline environment carrying the identical starting
-    # fixture, run through the pre-change (HEAD) hook -- isolated from the
-    # real run below so neither run's side effects (e.g. ledger appends) can
-    # leak into the other's stdout.
+    # fixture, run through the pre-change hook -- isolated from the real run
+    # below so neither run's side effects (e.g. ledger appends) can leak into
+    # the other's stdout.
     local baseline_project_dir baseline_home baseline_project_name baseline_omt_dir baseline_hooks_dir
     baseline_project_dir=$(mktemp -d)
     mkdir -p "$baseline_project_dir/.git"
@@ -2129,29 +2182,65 @@ test_gc_session_artifacts_reaped_and_drift_reported() {
     baseline_omt_dir="$baseline_home/.omt/$baseline_project_name"
     mkdir -p "$baseline_omt_dir"
     _write_artifact_gc_fixture "$baseline_omt_dir" "$other_sid"
+    _write_stale_state_fixture "$baseline_omt_dir" "$other_sid"
 
     baseline_hooks_dir=$(mktemp -d)
     cp -R "$SCRIPT_DIR/." "$baseline_hooks_dir/"
-    cp "/Users/toong/.omt/oh-my-toong-playground/evidence/omt-session-artifact-gc-and-heartbeat/wave2-consumers/head-session-start.sh.snapshot" "$baseline_hooks_dir/session-start.sh"
-    chmod +x "$baseline_hooks_dir/session-start.sh"
+
+    local baseline_session_start="$baseline_hooks_dir/session-start.sh"
+    if ! git -C "$SCRIPT_DIR/.." show 2e1302d6~1:hooks/session-start.sh > "$baseline_session_start" 2>/dev/null; then
+        echo "ASSERTION FAILED: could not retrieve the pre-change hooks/session-start.sh baseline from git history (2e1302d6~1) -- refusing to fall back to the current hook as a stand-in baseline"
+        rm -rf "$baseline_project_dir" "$baseline_home" "$baseline_hooks_dir"
+        return 1
+    fi
+    if [ ! -s "$baseline_session_start" ]; then
+        echo "ASSERTION FAILED: baseline hooks/session-start.sh retrieved from git history (2e1302d6~1) is empty"
+        rm -rf "$baseline_project_dir" "$baseline_home" "$baseline_hooks_dir"
+        return 1
+    fi
+    chmod +x "$baseline_session_start"
+
+    # Anti-tautology guard: the retrieved baseline must actually differ from
+    # the hook under test, or the stdout comparison below trivially passes by
+    # comparing the current hook to itself.
+    if cmp -s "$baseline_session_start" "$SCRIPT_DIR/session-start.sh"; then
+        echo "ASSERTION FAILED: baseline session-start.sh is byte-identical to the current hook -- the stdout comparison below would be tautological"
+        rm -rf "$baseline_project_dir" "$baseline_home" "$baseline_hooks_dir"
+        return 1
+    fi
 
     local baseline_input='{"cwd": "'"$baseline_project_dir"'", "sessionId": "artifact-gc-fresh-session"}'
-    local out_before
-    out_before=$(echo "$baseline_input" | HOME="$baseline_home" "$baseline_hooks_dir/session-start.sh" 2>/dev/null) || true
+    local out_before_file
+    out_before_file=$(mktemp)
+    echo "$baseline_input" \
+        | env -u OMT_DIR -u OMT_SESSION_ID HOME="$baseline_home" "$baseline_session_start" \
+        > "$out_before_file" 2>/dev/null || true
 
     rm -rf "$baseline_project_dir" "$baseline_home" "$baseline_hooks_dir"
 
-    # Real run: the modified hook under test.
-    local err_file out_after err_after
+    # Real run: the modified hook under test. Captured to files (not command
+    # substitution) so a trailing-newline difference cannot be silently
+    # trimmed away by both sides before cmp ever sees it.
+    local err_file out_after_file err_after
     err_file=$(mktemp)
-    out_after=$(echo "$input" | "$SCRIPT_DIR/session-start.sh" 2>"$err_file") || true
+    out_after_file=$(mktemp)
+    echo "$input" \
+        | env -u OMT_DIR -u OMT_SESSION_ID "$SCRIPT_DIR/session-start.sh" \
+        > "$out_after_file" 2>"$err_file" || true
     err_after=$(cat "$err_file")
     rm -f "$err_file"
 
-    if [ "$out_before" != "$out_after" ]; then
+    if ! cmp -s "$out_before_file" "$out_after_file"; then
         echo "ASSERTION FAILED: stdout must be byte-for-byte identical to the pre-change baseline"
-        echo "  before: ${out_before:0:500}"
-        echo "  after:  ${out_after:0:500}"
+        echo "  before: $(head -c 500 "$out_before_file")"
+        echo "  after:  $(head -c 500 "$out_after_file")"
+        rm -f "$out_before_file" "$out_after_file"
+        return 1
+    fi
+    rm -f "$out_before_file" "$out_after_file"
+
+    if [ -f "$TEST_OMT_DIR/goal-state-${other_sid}.json" ]; then
+        echo "ASSERTION FAILED: the stale other-session state file should be reaped by reap_dead_state_files"
         return 1
     fi
 
@@ -2351,6 +2440,54 @@ EOF
     return 0
 }
 
+# AC (defect fix): di restore must not go quietly dead if hooks/lib/state-
+# liveness.sh's STATE_PREFIXES ever drops or renames the deep-interview
+# entry. STATE_PREFIXES is scoped to the GC callers (reap_dead_state_files,
+# list_live_session_ids) -- it is not a contract this restore path should
+# depend on. Reproduced here via an isolated copy of the hooks tree whose
+# lib/state-liveness.sh has the deep-interview entry stripped from
+# STATE_PREFIXES, standing in for "someone edited the shared GC list and
+# didn't know a restore path was silently deriving its own prefix from it."
+test_session_start_deep_interview_restore_independent_of_state_prefixes() {
+    local sid="di-restore-prefixes-gap"
+
+    cat > "$TEST_OMT_DIR/deep-interview-active-state-${sid}.json" << EOF
+{
+  "active": true,
+  "started_at": "$(date "+%Y-%m-%dT%H:%M:%S")",
+  "last_touched_at": "$(date "+%Y-%m-%dT%H:%M:%S")"
+}
+EOF
+
+    local gapped_hooks_dir
+    gapped_hooks_dir=$(mktemp -d)
+    cp -R "$SCRIPT_DIR/." "$gapped_hooks_dir/"
+    sed -i.bak 's/deep-interview-active-state- //' "$gapped_hooks_dir/lib/state-liveness.sh"
+    rm -f "$gapped_hooks_dir/lib/state-liveness.sh.bak"
+
+    # Scoped to the STATE_PREFIXES assignment line itself, not the whole
+    # file -- state-liveness.sh's :155 comment also names this prefix in an
+    # unrelated .closed.bak example, so a whole-file grep would false-positive
+    # on that comment even when the STATE_PREFIXES edit above succeeded.
+    if grep -q '^STATE_PREFIXES=.*deep-interview-active-state-' "$gapped_hooks_dir/lib/state-liveness.sh"; then
+        echo "ASSERTION FAILED: test setup could not strip the deep-interview entry from the gapped STATE_PREFIXES copy"
+        rm -rf "$gapped_hooks_dir"
+        return 1
+    fi
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' \
+        | env -u OMT_DIR -u OMT_SESSION_ID "$gapped_hooks_dir/session-start.sh" 2>/dev/null) || true
+
+    rm -rf "$gapped_hooks_dir"
+
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    assert_output_contains "$ctx" "DEEP-INTERVIEW RESTORED" "di restore must not silently break when STATE_PREFIXES lacks the deep-interview entry" || return 1
+    return 0
+}
+
 # grep-0 (TODO 8): session-start.sh must contain zero handoff references — the
 # handoff reader block, the two orphan-GC arms, and the HANDOFF variable are
 # all removed; ledger recovery option D (above) supersedes them.
@@ -2477,6 +2614,7 @@ main() {
     # deep-interview restore block (TODO 6)
     run_test test_session_start_deep_interview_active_emits_reread_instruction
     run_test test_session_start_deep_interview_no_blank_phase_line
+    run_test test_session_start_deep_interview_restore_independent_of_state_prefixes
 
     # Dead handoff plumbing removed (TODO 8)
     run_test test_session_start_no_handoff_remnants
