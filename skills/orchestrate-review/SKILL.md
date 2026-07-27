@@ -19,7 +19,7 @@ When finders cannot deliver — none configured/available after filtering, or al
 
 1. Write the interpolated prompt to a temp file.
 2. Start job: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
-3. Collect: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
+3. Collect: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 600000 "$JOB_DIR"` — repeat until `overallState` is `"done"`.
 4. Read each finder's output file via the Read tool.
 5. Merge candidates using the Aggregation rules.
 6. Run `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text. This step **MUST** run before `clean` — the job dir is deleted in the next teardown step and the per-member token data is gone.
@@ -34,12 +34,12 @@ These constraints govern the orchestration path — while dispatched finders are
 
 You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — start a review job
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 600000 "$JOB_DIR"` — collect results (polls internally every 5s, up to the 600000ms timeout passed above). No external sleep needed.
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete finder to a complete answer (see Member Resume Policy; cap 3 attempts)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` — harvest per-member token usage; **run BEFORE `clean`** (job dir is deleted by clean)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir; teardown step, run only after usage-summary and everything else is complete
 
-**CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
+**CRITICAL**: Always set `timeout: 180000` on every Bash tool call, except `collect` — see Step 2, which blocks up to 600000ms and needs a matching Bash `timeout:`.
 
 ### Allowed Read Usage
 
@@ -68,16 +68,16 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"
 ```
 Output: JOB_DIR path (one line on stdout). Each configured angle is dispatched as one finder; the angle's role prompt (`scripts/prompts/<angle>.md`) is injected automatically by member name.
 
-### Step 2 — Collect (Bash, timeout: 180000)
+### Step 2 — Collect (Bash, timeout: 600000)
 
-`collect` polls internally every 5 seconds until all finders complete or its internal timeout (default 150s) expires. No external sleep needed.
+`collect` polls internally every 5 seconds until all finders complete or its internal timeout (600000ms, passed explicitly below) expires. No external sleep needed.
 
 ```bash
-bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 600000 "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
-- Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 180000).
+- Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total.** Each call blocks up to 600000ms, so 6 calls is up to ~60 minutes — this covers the measured chunk wall-clock p99 of 55 minutes. If the 6th call still does not report `"done"`, stop polling and apply the Degradation Policy's partial-merge path, treating every finder that has not yet completed as not-responded (denominator stays N = total dispatched).
 
 Response JSON (done):
 ```json
@@ -154,7 +154,7 @@ Each finder returns candidates shaped as `file` / `line` / `summary` / `failure_
 
 **NEVER re-start the job regardless of results.** Accept whatever output the manifest reports. Apply degradation rules to the result as-is.
 
-Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quorum logic — this is infrastructure failure handling.
+Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quorum logic — this is infrastructure failure handling. Reaching the 6-call collect poll cap without `"done"` (Step 2 — Collect) also routes here: still-incomplete finders count as not-responded against this same table.
 
 | Responses | Action | Output Modification |
 |-----------|--------|---------------------|

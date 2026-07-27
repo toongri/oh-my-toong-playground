@@ -2673,7 +2673,7 @@ describe("cmdCollect", () => {
 		expect(parsed).not.toHaveProperty("members");
 	});
 
-	test("hardcap: timeout-ms=999999 → 300000 이하로 클램프", () => {
+	test("hardcap: timeout-ms=999999 → 600000 이하로 클램프", () => {
 		// We can't easily verify the internal clamp value directly, but we can verify
 		// the command completes within a reasonable time (not 999 seconds).
 		// With all reviewers done, it should return immediately regardless of timeout.

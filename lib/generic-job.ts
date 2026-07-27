@@ -1163,7 +1163,7 @@ export function cmdClean(
 // ---------------------------------------------------------------------------
 
 const COLLECT_POLL_INTERVAL_MS = 5000;
-const COLLECT_TIMEOUT_HARDCAP_MS = 300000;
+const COLLECT_TIMEOUT_HARDCAP_MS = 600000;
 
 export async function cmdCollect(
 	options: Record<string, unknown>,
