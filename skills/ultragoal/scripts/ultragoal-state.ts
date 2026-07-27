@@ -1625,8 +1625,12 @@ function main(): void {
 						`request-complete: refused — --codex-goal-json could not be parsed as JSON or read as a file path: "${codexGoalArg}"\n`,
 					);
 				} else {
+					// The enumeration must name every condition that can refuse, Gate 9
+					// included. Listing only the verdict and evidence made a snapshot
+					// mismatch report a cause that was already satisfied, sending the
+					// caller to fix the wrong thing.
 					process.stderr.write(
-						"request-complete: refused — requires objective_verdict=APPROVE and completion evidence present\n",
+						"request-complete: refused — requires objective_verdict=APPROVE, completion evidence present, and (when codex_goal_objective is recorded) a --codex-goal-json snapshot whose objective matches it with status=complete\n",
 					);
 				}
 				process.exit(1);
