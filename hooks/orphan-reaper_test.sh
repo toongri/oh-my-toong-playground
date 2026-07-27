@@ -141,14 +141,25 @@ test_returns_within_budget() {
 # Test 5: reap diagnostics survive to a log file instead of /dev/null.
 #
 # Fixture: a "chunk-review-*" job dir whose job.json records a workerPgid
-# that is genuinely alive, with an empty members/ dir (no status.json ->
-# findActiveMembers sees no live progress) -- exactly findOrphanJobs' orphan
-# predicate (lib/generic-job.ts). The live PGID is a detached `sleep`
-# backgrounded under bash job-control monitor mode (`set -m`): verified by
-# hand that this makes the child its own process-group leader (pgid == its
-# own pid, distinct from this test's pgid), so the SIGTERM/SIGKILL -pgid
-# reapOrphanJobs sends can only ever reach that one sleep, never this test's
-# own shell.
+# that is genuinely alive AND carries a matching workerPgidStartedAt witness
+# (captured live via `ps -o lstart=` on that same PGID, right before writing
+# job.json -- never hardcoded, or judgePgidSignal would return "mismatch" and
+# skip the reap; see lib/generic-job.ts's judgePgidSignal/getPgidLeaderStartTimes),
+# with an empty members/ dir (no status.json -> findActiveMembers sees no live
+# progress) -- exactly findOrphanJobs' orphan predicate (lib/generic-job.ts).
+# The live PGID is a detached `sleep` started
+# from a `set -m` subshell with its own stdout/stderr redirected to
+# /dev/null *before* backgrounding: verified by hand with `ps -o
+# pid,pgid,ppid` on this host that (a) this makes the child its own
+# process-group leader (pgid == its own pid, distinct from this test
+# script's own pgid), so the SIGTERM/SIGKILL -pgid reapOrphanJobs sends can
+# only ever reach that one sleep, never this test's own shell, and (b) the
+# command substitution below returns immediately instead of blocking for the
+# fixture's full lifetime. The latter is not cosmetic: a naive `bash -c
+# 'set -m; sleep 30 & echo $!'` backgrounds sleep while it still inherits the
+# command substitution's own stdout pipe, so `$( )` blocks until sleep exits
+# 30s later -- by the time the assignment returns, the fixture is already
+# dead, and every assertion below would pass vacuously against nothing.
 #
 # No --grace-ms is passed to the hook's reap invocation (matches production),
 # so reapOrphanJobs' default 5s SIGTERM->grace->SIGKILL cycle runs before the
@@ -162,10 +173,33 @@ test_reap_diagnostics_preserved_in_log() {
     mkdir -p "$job_dir/members"
 
     local fixture_pgid
-    fixture_pgid=$(bash -c 'set -m; sleep 30 & echo $!')
+    fixture_pgid=$(
+        set -m
+        sleep 30 >/dev/null 2>&1 &
+        echo "$!"
+    )
+
+    # The fixture must be genuinely alive before the hook ever runs -- without
+    # this, a dead-on-arrival fixture is indistinguishable from "there was
+    # never anything to reap", and every assertion below would be vacuous.
+    if ! kill -0 "$fixture_pgid" 2>/dev/null; then
+        echo "ASSERTION FAILED: fixture pid $fixture_pgid was not alive right after being started"
+        return 1
+    fi
+
+    # PGID identity witness (lib/generic-job.ts's judgePgidSignal): a live PGID
+    # number alone is not enough signal to reap -- it must also carry the
+    # leader process's own spawn-time start time, matching what spawnWorkers
+    # records in production (getProcessStartedAt: `ps -o lstart=`, trimmed).
+    # Captured here from the fixture's OWN live process, same as
+    # lib/generic-job.test.ts's setupOrphanJob/getLstart helper does -- never
+    # a hardcoded string, or judgePgidSignal would return "mismatch" and skip
+    # the reap.
+    local fixture_started_at
+    fixture_started_at=$(ps -o lstart= -p "$fixture_pgid" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
     cat > "$job_dir/job.json" <<EOF
-{"id": "chunk-review-orphan-test", "members": [{"name": "w0", "workerPgid": $fixture_pgid}]}
+{"id": "chunk-review-orphan-test", "members": [{"name": "w0", "workerPgid": $fixture_pgid, "workerPgidStartedAt": "$fixture_started_at"}]}
 EOF
 
     local output
@@ -184,15 +218,27 @@ EOF
         waited=$((waited + 1))
     done
 
+    # Log content must be asserted BEFORE cleanup kills the fixture below --
+    # otherwise a failure here would be masked by cleanup succeeding.
+    local log_failure=0
+    if [[ ! -s "$log_file" ]]; then
+        echo "ASSERTION FAILED: '$log_file' has no content after waiting ${waited}s (reap diagnostics were not preserved)"
+        log_failure=1
+    elif ! grep -qF "reaped orphan job" "$log_file"; then
+        # job.ts reap's other message on this path ("no orphan jobs found",
+        # skills/orchestrate-review/scripts/job.ts) also leaves the log
+        # non-empty while meaning the opposite of what this test claims, so a
+        # bare non-empty check is not enough.
+        echo "ASSERTION FAILED: '$log_file' does not contain 'reaped orphan job' -- got:"
+        cat "$log_file"
+        log_failure=1
+    fi
+
     # Safety net: reapOrphanJobs should already have SIGKILLed this fixture's
     # process group -- a no-op unless reap failed for an unrelated reason.
     kill -9 -"$fixture_pgid" 2>/dev/null || true
 
-    if [[ ! -s "$log_file" ]]; then
-        echo "ASSERTION FAILED: '$log_file' has no content after waiting ${waited}s (reap diagnostics were not preserved)"
-        return 1
-    fi
-    return 0
+    [[ "$log_failure" -eq 0 ]]
 }
 
 main() {

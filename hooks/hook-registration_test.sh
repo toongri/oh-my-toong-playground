@@ -185,6 +185,7 @@ test_codex_yaml_has_pretooluse_guard() {
 _CORE_HOOK_PAIRS="UserPromptSubmit:keyword-detector.sh
 PreToolUse:pre-tool-enforcer.sh
 SessionStart:session-start.sh
+SessionStart:orphan-reaper.sh
 Stop:persistent-mode"
 
 test_core_claude_hooks_registered_in_tracked_root_yaml() {
@@ -212,10 +213,22 @@ EOF
 # (invariant (a) above) exactly like the four core hooks.
 # =============================================================================
 test_orphan_reaper_registered_in_tracked_root_yaml() {
-    local block
+    local block active_block timeout_line
     block=$(_extract_hook_event_block "$REPO_DIR/claude.yaml" "SessionStart")
-    if ! echo "$block" | grep -qF 'component: orphan-reaper.sh'; then
+    # Strip full-line comments before matching -- otherwise a commented-out
+    # registration (e.g. "# - component: orphan-reaper.sh") would also satisfy
+    # a plain grep -qF and pass vacuously.
+    active_block=$(echo "$block" | grep -v '^[[:space:]]*#')
+    if ! echo "$active_block" | grep -qF 'component: orphan-reaper.sh'; then
         echo "ASSERTION FAILED: root claude.yaml must register orphan-reaper.sh under SessionStart -- the second orphan-recovery trigger (the first is cmdStart at job-start time) would otherwise never fire"
+        return 1
+    fi
+
+    # Pin the sibling "timeout:" key too, not just the component line -- a
+    # missing or drifted timeout would still pass a component-only check.
+    timeout_line=$(echo "$active_block" | grep -A1 'component: orphan-reaper.sh' | grep 'timeout:')
+    if ! echo "$timeout_line" | grep -qE 'timeout:[[:space:]]*10$'; then
+        echo "ASSERTION FAILED: orphan-reaper.sh's sibling 'timeout:' must be 10 (got: ${timeout_line:-<none>})"
         return 1
     fi
     return 0

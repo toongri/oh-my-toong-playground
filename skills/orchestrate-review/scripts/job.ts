@@ -374,6 +374,19 @@ Notes:
 `);
 }
 
+/** Probe only — never signals. `kill(-pgid, 0)` sends no signal; ESRCH means
+ *  the group has no member left alive. Used solely to decide cmdReap's own
+ *  log wording (reaped vs signalled) per orphan, since reapOrphanJobs' return
+ *  value gives a flat survivingPids list with no per-job attribution. */
+function isPgidGroupAlive(pgid: number): boolean {
+	try {
+		process.kill(-pgid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 async function cmdReap(options: Record<string, unknown>): Promise<void> {
 	const jobsDir = resolveJobsDir(options);
 	const graceMs = optionalNumber(options["grace-ms"]);
@@ -387,9 +400,20 @@ async function cmdReap(options: Record<string, unknown>): Promise<void> {
 	// Every diagnostic, including reapOrphanJobs' own surviving-PID report,
 	// goes to stderr only.
 	for (const orphan of reaped) {
-		process.stderr.write(
-			`reap: reaped orphan job ${orphan.jobDir} (pgids: ${orphan.pgids.join(", ")})\n`,
-		);
+		// reapOrphanJobs already wrote its own "N process(es) survived group
+		// kill" line above for whatever didn't die — if this orphan's own pgid
+		// is one of them, don't also claim "reaped" here, or the same stderr
+		// stream carries two contradictory lines for the same process group.
+		const stillAlive = orphan.pgids.some((pgid) => isPgidGroupAlive(pgid));
+		if (stillAlive) {
+			process.stderr.write(
+				`reap: signalled orphan job ${orphan.jobDir} (pgids: ${orphan.pgids.join(", ")}) — some process(es) survived the group kill, see above\n`,
+			);
+		} else {
+			process.stderr.write(
+				`reap: reaped orphan job ${orphan.jobDir} (pgids: ${orphan.pgids.join(", ")})\n`,
+			);
+		}
 	}
 	if (reaped.length === 0) {
 		process.stderr.write("reap: no orphan jobs found\n");
@@ -418,17 +442,23 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	const jobsDir = resolveJobsDir(options);
 
 	ensureDir(jobsDir);
-	gcStaleJobs(jobsDir);
-	// Reap orphaned job process groups before starting a new one (layer 3 defense,
-	// lib/generic-job.ts) — the other trigger besides the SessionStart hook (next
-	// task), so an orphan gets swept up whether the user re-runs a review or opens
-	// a new session. graceMs: 0 — job start must never be delayed by the normal
-	// SIGTERM→SIGKILL grace wait (REAP_GRACE_MS_DEFAULT is 5s): a group
-	// findOrphanJobs already judged orphaned (alive PGID, zero live progress) has
-	// nothing left worth waiting on before SIGKILL.
+	// Reap orphaned job process groups BEFORE gcStaleJobs, not after — the other
+	// trigger besides the SessionStart hook (next task), so an orphan gets swept
+	// up whether the user re-runs a review or opens a new session. gcStaleJobs
+	// deletes any job.json older than GC_MAX_AGE_MS with no liveness check at
+	// all (lib/generic-job.ts), and job.json is the only ownership anchor every
+	// reap layer depends on — running gc first would delete that anchor out from
+	// under a still-alive orphan (a dead conductor's job.json ages past the
+	// 1-hour mark while its codex-exec descendants are still running), making
+	// the orphan unreachable by every layer until the next reboot. graceMs: 0 —
+	// job start must never be delayed by the normal SIGTERM→SIGKILL grace wait
+	// (REAP_GRACE_MS_DEFAULT is 5s): a group findOrphanJobs already judged
+	// orphaned (alive PGID, zero live progress) has nothing left worth waiting
+	// on before SIGKILL.
 	const { reaped: reapedOrphans } = await reapOrphanJobs(jobsDir, CHUNK_REVIEW_JOB_CONFIG, {
 		graceMs: 0,
 	});
+	gcStaleJobs(jobsDir);
 
 	const hostRole = detectHostRole(SKILL_DIR);
 	const config = parseChunkReviewConfig(configPath);
@@ -497,6 +527,13 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	function unsetWorkerPgid(): number | null {
 		return null;
 	}
+	// Same widening trick as unsetWorkerPgid above, for the spawn-time witness
+	// (`ps -o lstart=`) recorded alongside workerPgid — see lib/generic-job.ts's
+	// judgePgidSignal for why the reaper needs this to tell "still our worker"
+	// apart from "this PGID number is merely alive" (PID/PGID reuse).
+	function unsetWorkerPgidStartedAt(): string | null {
+		return null;
+	}
 	const jobMeta = {
 		id: `chunk-review-${jobId}`,
 		createdAt: new Date().toISOString(),
@@ -519,6 +556,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			output_format: r.output_format || null,
 			env: r.env ?? {},
 			workerPgid: unsetWorkerPgid(),
+			workerPgidStartedAt: unsetWorkerPgidStartedAt(),
 		})),
 	};
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
@@ -534,9 +572,11 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	logInfo(`workers spawned: ${members.map((r) => String(r.name)).join(", ")}`);
 
 	const workerPgidByName = new Map(spawned.map((w) => [w.name, w.workerPgid]));
+	const workerPgidStartedAtByName = new Map(spawned.map((w) => [w.name, w.workerPgidStartedAt]));
 	jobMeta.members = jobMeta.members.map((m) => ({
 		...m,
 		workerPgid: workerPgidByName.get(m.name) ?? null,
+		workerPgidStartedAt: workerPgidStartedAtByName.get(m.name) ?? null,
 	}));
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
