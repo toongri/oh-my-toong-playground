@@ -73,6 +73,16 @@ bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts request-complete
 
 `<audit-artifact-paths>` is a comma-separated list of the artifacts the Evidence Audit read (the evidence that demonstrates the verification surface was met). `set --phase pursuing --completion-evidence` keeps the phase `pursuing` and only records the evidence — it can never write `complete`.
 
+**If the `get_goal` tool is available**, call it immediately before the third command to obtain the current native-goal snapshot, then pass that snapshot on the `request-complete` call itself via `--codex-goal-json`, replacing the bare `request-complete` line above:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts request-complete --codex-goal-json '<the get_goal snapshot JSON>'
+```
+
+This is the same tool-existence conditional `SKILL.md`'s Execution Dispatch loop uses for `create_goal`/`update_goal` — the condition is whether the `get_goal` tool is available, never a platform-name branch. `--codex-goal-json` accepts the snapshot either as an inline JSON string or a path to a file containing it — the gate tries to parse the argument as JSON first and falls back to reading it as a file path on parse failure.
+
+**Omitting `--codex-goal-json` when it is required is a refusal, not a silent pass.** `SKILL.md`'s Execution Dispatch loop records `codex_goal_objective` via `set --codex-goal-objective` whenever `create_goal` is available, which arms this cross-check inside `request-complete` for the rest of the pursuit. Once armed, calling `request-complete` without `--codex-goal-json` — or with a value that cannot be parsed as JSON or read as a file, or whose objective or status does not match the native goal — makes `request-complete` refuse and leave `phase` at `pursuing`: the safe, never-false-complete failure direction. But a refusal with no diagnosis is not automatically actionable — an orchestrator that does not recognize why `request-complete` keeps refusing will re-run the same bare call and loop without making progress. Treat a completion refusal on a pursuit where `codex_goal_objective` was recorded as a signal to check whether `--codex-goal-json` was supplied and matches the current `get_goal` snapshot before retrying.
+
 **Why evidence is recorded BEFORE the verdict flips:** so that whenever `objective_verdict=APPROVE` is observed, the completion evidence is already present. `request-complete` is the ONLY path to `phase=complete` — the hook layer never writes `complete` under any condition (cap reached → `budget_limited` block, not complete). Recording evidence first ensures the full `request-complete` gate (verdict + evidence + per-story artifact checks) is satisfiable the moment the verdict flips. When the cap is reached before the gate is met, the hook writes `budget_limited` and blocks for that turn; calling `request-complete` in the same turn is still possible and succeeds if the gate is met — ADR-7 complete-wins means `request-complete` prevails over a prior `budget_limited` state. If `request-complete` is refused, report the blocker honestly and stop.
 
 APPROVE alone does NOT leave the ultragoal pursuit pursuing/active — the `request-complete` handoff is what transitions to terminal `complete` (and it is structurally gated on completion-evidence, so a write that never reached the gate cannot false-complete).
