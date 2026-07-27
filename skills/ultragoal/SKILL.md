@@ -82,8 +82,10 @@ Ultragoal does not reimplement execution. It decomposes the objective into the S
 2. Derive the **current story** — the first `confirmed` story (in stored order) that does not yet carry an `APPROVE` per-story verdict in `ultragoal-verdict-{sid}.json`. No separate "current story" state field exists; it is always re-derived from the verdict artifact, never stored.
 3. **If the `create_goal` tool is available**, register that story's WHAT statement as the objective by calling `create_goal` with it, then record the identical string via:
    ```
-   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase pursuing --codex-goal-objective "<the objective string just registered>"
+   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase pursuing --codex-goal-objective '<the objective string just registered>'
    ```
+   Quote the value with single quotes, not double quotes: this string must land byte-identical to what `create_goal` just registered — inside double quotes, `$`, backticks, and backslashes in the WHAT statement would expand before reaching the state CLI, silently breaking that identity and permanently arming a completion-gate mismatch the honest `get_goal` snapshot cannot recover from.
+
    This is a tool-existence conditional, not a platform branch: no model-callable goal tool is exposed where `create_goal` is absent, so the condition evaluates false there and the clause is inert rather than dead prose — the exact same instruction governs both runtimes, only the tool's presence decides whether it fires.
 
    Dispatch ONLY that one story to sisyphus: `Skill(skill: "sisyphus")` with that story's WHAT statement, acceptance criteria, and verification surface, **plus the pursuit's `non_goals` slot value** — never the whole Story set at once. A Story carries no non-goal field of its own (`non-goals` is a state-level slot by design, not a per-story one), so the pursuit's `non_goals` value never reaches the executor unless it rides along with this dispatch.

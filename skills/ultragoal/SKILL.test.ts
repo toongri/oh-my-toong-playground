@@ -393,6 +393,37 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 // `status: "complete"` (`active`/`blocked` reject it identically).
 // ---------------------------------------------------------------------------
 
+describe("codex-goal-objective quoting: single-quoted, not a double-quoted shell arg", () => {
+	// This value is later diffed byte-for-byte against the `get_goal` snapshot
+	// by the completion gate. Double quotes let `$`, backticks, and backslashes
+	// in the story WHAT statement expand before reaching the state CLI, so the
+	// recorded string silently drifts from what create_goal actually
+	// registered — permanently arming an unrecoverable completion-gate
+	// mismatch. Single quotes suppress all such shell expansion.
+	const executionDispatch = skillMd.slice(
+		skillMd.indexOf("## Execution Dispatch"),
+		skillMd.indexOf("### Phase transitions"),
+	);
+
+	test("the --codex-goal-objective value is single-quoted", () => {
+		expect(executionDispatch).toContain(
+			"--codex-goal-objective '<the objective string just registered>'",
+		);
+	});
+
+	test("the --codex-goal-objective value is not double-quoted", () => {
+		expect(executionDispatch).not.toContain(
+			'--codex-goal-objective "<the objective string just registered>"',
+		);
+	});
+
+	test("a rationale sentence explains why single quotes are required for this command", () => {
+		expect(executionDispatch).toContain(
+			"inside double quotes, `$`, backticks, and backslashes in the WHAT statement would expand before reaching the state CLI",
+		);
+	});
+});
+
 describe("Codex native goal tool gate: capability-conditional create_goal/update_goal wiring", () => {
 	const executionDispatch = skillMd.slice(
 		skillMd.indexOf("## Execution Dispatch"),
