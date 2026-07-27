@@ -92,8 +92,16 @@ run_test() {
 }
 
 fingerprint() {
-    # Stable fingerprint of a directory tree
-    find "$1" -print | sort | shasum
+    # Stable fingerprint of a directory tree: path listing (catches added/
+    # removed entries) plus per-file content hashes (catches a regression
+    # that overwrites content while leaving paths/existence untouched).
+    # `find -exec shasum {} +` (a find primary, not xargs) runs the command
+    # zero times when no file matches, so an all-directories/empty tree never
+    # blocks waiting on stdin — sidesteps BSD xargs lacking -r/--no-run-if-empty.
+    {
+        find "$1" -print | sort
+        find "$1" -type f -exec shasum {} + 2>/dev/null | sort
+    } | shasum
 }
 
 # ---------------------------------------------------------------------------
