@@ -8,11 +8,33 @@
  * --command로 넘긴 문자열을 워커가 재토큰화하는 것과 동일한 경로)를 통과한 실제 argv로
  * `codex debug prompt-input`을 돌려 baseline(deny 미적용) / deny(적용) 쌍 비교로 검증한다.
  *
- * 측정 단위: 스킬은 프롬프트에 `- <name>: <설명> (file: <경로>/<name>/SKILL.md)` 형태로
- * 열거된다. 원시 이름 문자열을 세면 무관한 본문의 우연한 일치가 섞여 들어간다 — 실측상
- * "code-review"라는 문자열은 이 레포의 CLAUDE.md 본문에만도 12건 등장하고, 그 원시 카운트로는
- * deny 적용 후에도 그대로 12건이라 오탐(빨간불)이 뜨지만 실제로는 억제가 정상 동작한 것이다.
- * 그래서 반드시 `/<name>/SKILL.md`의 등장 횟수만 센다.
+ * 측정 창: 스킬은 프롬프트의 `<skills_instructions>...</skills_instructions>` 블록 안에서만
+ * `- <name>: <설명> (file: <root-alias>/<name>/SKILL.md)` 형태로 열거된다. codex의 developer
+ * 메시지는 <skills_instructions> → <permissions instructions> → <recommended_plugins> →
+ * <INSTRUCTIONS>(AGENTS.md/CLAUDE.md echo) → <environment_context> 순 content 블록으로
+ * 구성되고, 스킬 나열이 실릴 수 있는 자리는 구조적으로 <skills_instructions> 블록 하나뿐이다 —
+ * <INSTRUCTIONS>는 스킬 로딩 메커니즘이 아니라 순수 문서 텍스트 echo다.
+ *
+ * 창을 블록으로 좁힌 이유(실측 근거): deny 목록을 4개→28개로 늘렸을 때 "prometheus" 하나에서
+ * 단언이 깨졌다. 원인은 억제 실패가 아니라 측정 오탐이었다 — 이 레포의 AGENTS.md는 CLAUDE.md로의
+ * 심링크이고 codex가 이를 project instructions로 실어 <INSTRUCTIONS> 블록으로 echo하는데,
+ * CLAUDE.md:200에 `Read("skills/prometheus/SKILL.md")  // Wrong`이라는 문서 예시가 있다. 이
+ * 예시 1건이 전체 출력 기준 카운트에 항상 섞여, deny가 <skills_instructions> 블록의 나열 항목을
+ * 실제로는 지웠는데도 전체 카운트는 2→1로만 줄어 0을 기대하는 단언이 깨졌다(실측: 전체 baseline
+ * 2 / 블록 1, deny 후 전체 1 / 블록 0 — 블록 안 나열 항목은 정상적으로 사라졌다). 억제는
+ * 정상이었고 측정 단위가 오탐을 낸 것이다.
+ *
+ * `(file: ...)` 괄호 형태만 세는 대안은 고르지 않았다: 실측 baseline의 나열은
+ * `- imagegen: ... (file: r3/imagegen/SKILL.md)`처럼 root alias 축약(r0~r7)을 쓰는데, 이는
+ * 위 문단이 기술한 형식과도 달라진다 — 포맷을 더 고정하는 정규식은 렌더링 변형에 더 취약하고,
+ * 블록 스코핑 + `/<name>/SKILL.md` suffix 매칭은 root alias/prefix가 무엇이든 살아남는다.
+ *
+ * 새 실패 모드와 가드: 창을 블록으로 좁히면 codex가 상류에서 블록 태그 이름을 바꿨을 때 추출이
+ * 아무것도 못 찾고 baseline이 전부 0이 되어, 핵심 deny 단언이 전부 "측정 불가"로 스킵되며
+ * 테스트는 초록인데 가드는 사라진 상태가 될 수 있다. 이를 막기 위해 (1) 블록 추출은
+ * `<skills_instructions>` 여는/닫는 태그가 정확히 1쌍이 아니면 즉시 하드 실패하고(빈 문자열로
+ * 계속 진행하는 fallback 금지), (2) "최소 1개 측정 가능" 단언을 "선언 이름의 과반이 측정
+ * 가능"으로 강화했다 — 우연히 1개만 살아남아도 통과하던 약한 하한을 없앴다.
  *
  * job.test.ts와 별도 파일로 둔 이유: job.test.ts는 tmp 설정 + mock 기반의 빠른 단위 테스트만
  * 담는 반면, 이 테스트는 실제 codex 프로세스를 3회 spawn하는(초 단위) 외부-바이너리 의존
@@ -95,17 +117,42 @@ function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** 측정 단위: 원시 이름 문자열이 아니라 `/<name>/SKILL.md` 등장 횟수. */
-function countSkillListings(promptJson: string, skillName: string): number {
+const SKILLS_BLOCK_OPEN = "<skills_instructions>";
+const SKILLS_BLOCK_CLOSE = "</skills_instructions>";
+
+/**
+ * 측정 창을 `<skills_instructions>...</skills_instructions>` 블록 내부로 좁힌다.
+ *
+ * 태그가 정확히 1쌍이 아니면(0개 = 못 찾음, 2개 이상 = 모호) 빈 문자열로 조용히 계속
+ * 진행하는 대신 즉시 하드 실패한다 — codex가 이 블록 태그 이름을 바꿨을 수 있으니, 이
+ * 실패를 만난 사람은 이 파일의 추출 로직(SKILLS_BLOCK_OPEN/CLOSE)을 갱신해야 한다.
+ */
+function extractSkillsInstructionsBlock(promptJson: string): string {
+	const openCount = promptJson.split(SKILLS_BLOCK_OPEN).length - 1;
+	const closeCount = promptJson.split(SKILLS_BLOCK_CLOSE).length - 1;
+	if (openCount !== 1 || closeCount !== 1) {
+		throw new Error(
+			`expected exactly one ${SKILLS_BLOCK_OPEN}...${SKILLS_BLOCK_CLOSE} block, found ` +
+				`${openCount} open tag(s) and ${closeCount} close tag(s) — codex may have renamed ` +
+				"this block; update SKILLS_BLOCK_OPEN/SKILLS_BLOCK_CLOSE in this file to match.",
+		);
+	}
+	const start = promptJson.indexOf(SKILLS_BLOCK_OPEN) + SKILLS_BLOCK_OPEN.length;
+	const end = promptJson.indexOf(SKILLS_BLOCK_CLOSE);
+	return promptJson.slice(start, end);
+}
+
+/** 측정 단위: 원시 이름 문자열이 아니라, 블록 내부 `/<name>/SKILL.md` 등장 횟수. */
+function countSkillListings(skillsBlock: string, skillName: string): number {
 	const pattern = new RegExp(`/${escapeRegExp(skillName)}/SKILL\\.md`, "g");
-	return (promptJson.match(pattern) || []).length;
+	return (skillsBlock.match(pattern) || []).length;
 }
 
 describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에서 스킬을 억제하는가", () => {
 	let declaredNames: string[];
-	let baselineOutput: string;
-	let denyAllOutput: string;
-	let controlOutput: string;
+	let baselineBlock: string;
+	let denyAllBlock: string;
+	let controlBlock: string;
 
 	beforeAll(async () => {
 		requireCodex();
@@ -115,11 +162,17 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
 		// baseline 1회 + declaredNames 전체를 한 번에 deny 적용 1회 + 대조군 1회 — 프로덕션에서도
 		// settings.deny.skills는 job 하나당 한 번에 전체가 적용되므로, 이 구성이 실제 사용 방식과
 		// 동일한 전송 단위다.
-		baselineOutput = await probePromptInput(buildExtraArgs([]));
-		denyAllOutput = await probePromptInput(buildExtraArgs(declaredNames));
-		controlOutput = await probePromptInput(buildExtraArgs(["__no_such_skill__"]));
+		const baselineOutput = await probePromptInput(buildExtraArgs([]));
+		const denyAllOutput = await probePromptInput(buildExtraArgs(declaredNames));
+		const controlOutput = await probePromptInput(buildExtraArgs(["__no_such_skill__"]));
 		// 3회 실 codex 프로세스 spawn(각 ~2-3초) 합산이 bun:test 기본 hook 타임아웃(5s)을
 		// 넘는다 — BEFORE_ALL_TIMEOUT_MS로 넉넉히 확장.
+
+		// 측정 창을 <skills_instructions> 블록 내부로 좁힌다 — 세 출력 각각 한 번씩만 추출해
+		// 아래 모든 테스트가 재사용한다. 추출 실패(태그 0개/2개 이상)는 여기서 즉시 하드 실패한다.
+		baselineBlock = extractSkillsInstructionsBlock(baselineOutput);
+		denyAllBlock = extractSkillsInstructionsBlock(denyAllOutput);
+		controlBlock = extractSkillsInstructionsBlock(controlOutput);
 	}, BEFORE_ALL_TIMEOUT_MS);
 
 	test("council.config.yaml은 orchestrate-review.config.yaml과 동일한 선언 집합을 갖는다 (각자 파일에서 읽음)", () => {
@@ -127,41 +180,46 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
 		expect([...councilNames].sort()).toEqual([...declaredNames].sort());
 	});
 
-	test("최소 1개 선언 이름은 baseline > 0이다 — 전부 측정 불가면 이 테스트는 아무것도 증명하지 못한다", () => {
-		const measurable = declaredNames.filter((name) => countSkillListings(baselineOutput, name) > 0);
-		expect(measurable.length).toBeGreaterThan(0);
+	test("선언 이름의 과반은 baseline > 0이다(블록 내부) — 과반에 못 미치면 블록 추출이 깨졌다는 신호다", () => {
+		const measurable = declaredNames.filter((name) => countSkillListings(baselineBlock, name) > 0);
+		expect(
+			measurable.length,
+			`측정 가능 ${measurable.length}/${declaredNames.length}개(선언: ${declaredNames.join(", ")}) — ` +
+				"과반에 못 미치면 단순 배포 스코프 차이가 아니라 <skills_instructions> 블록 추출 자체가 " +
+				"깨졌을 가능성을 의심하라.",
+		).toBeGreaterThan(declaredNames.length / 2);
 	});
 
-	test("baseline > 0인 선언 이름은 deny 적용 시 반드시 0이다 (baseline === 0인 이름은 측정 불가로 보고하고 단언에서 제외한다)", () => {
+	test("baseline > 0인 선언 이름은 deny 적용 시 반드시 0이다 (블록 내부, baseline === 0인 이름은 측정 불가로 보고하고 단언에서 제외한다)", () => {
 		for (const name of declaredNames) {
-			const baselineCount = countSkillListings(baselineOutput, name);
+			const baselineCount = countSkillListings(baselineBlock, name);
 			if (baselineCount === 0) {
 				// AC5: 측정 불가는 테스트 실패가 아니라 정보 출력이다. 이 이름의 통과는
 				// 억제의 증거로 쓰이지 않는다 — 배포 스코프가 바뀌어도 조용히 통과하지 않도록
 				// 사유를 남긴다.
 				console.warn(
-					`[측정 불가] "${name}": baseline count 0 — codex 배포 스코프에 이 스킬 파일이 없어 ` +
-						"억제 여부를 판정할 수 없다.",
+					`[측정 불가] "${name}": baseline count 0 (블록 내부) — codex 배포 스코프에 이 스킬 ` +
+						"파일이 없어 억제 여부를 판정할 수 없다.",
 				);
 				continue;
 			}
-			const denyCount = countSkillListings(denyAllOutput, name);
+			const denyCount = countSkillListings(denyAllBlock, name);
 			expect(denyCount).toBe(0);
 		}
 	});
 
-	test("대조군: 존재하지 않는 스킬명으로 억제를 시도하면 baseline과 동일하게 유지된다 (억제가 일어나지 않음)", () => {
+	test("대조군: 존재하지 않는 스킬명으로 억제를 시도하면 baseline과 동일하게 유지된다 (블록 내부, 억제가 일어나지 않음)", () => {
 		for (const name of declaredNames) {
-			const baselineCount = countSkillListings(baselineOutput, name);
-			const controlCount = countSkillListings(controlOutput, name);
+			const baselineCount = countSkillListings(baselineBlock, name);
+			const controlCount = countSkillListings(controlBlock, name);
 			expect(controlCount).toBe(baselineCount);
 		}
 	});
 
-	test("과차단 대조군: 선언되지 않은 스킬의 카운트는 deny 적용 후에도 그대로다", () => {
+	test("과차단 대조군: 선언되지 않은 스킬의 카운트는 deny 적용 후에도 그대로다(블록 내부)", () => {
 		const declared = new Set(declaredNames);
 		const surviving = new Set(
-			[...baselineOutput.matchAll(/\/([a-zA-Z0-9_-]+)\/SKILL\.md/g)]
+			[...baselineBlock.matchAll(/\/([a-zA-Z0-9_-]+)\/SKILL\.md/g)]
 				.map((m) => m[1])
 				.filter((n) => !declared.has(n)),
 		);
@@ -169,7 +227,7 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
 		// surviving이 비면 아래 루프가 0회 돌며 조용히 통과해버린다.
 		expect(surviving.size).toBeGreaterThan(0);
 		for (const name of surviving) {
-			expect(countSkillListings(denyAllOutput, name)).toBe(countSkillListings(baselineOutput, name));
+			expect(countSkillListings(denyAllBlock, name)).toBe(countSkillListings(baselineBlock, name));
 		}
 	});
 });
