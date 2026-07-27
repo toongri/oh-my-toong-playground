@@ -6,7 +6,7 @@
 
 1. **왜 버전과 스냅샷이 필요한가** — 버전 없는 이벤트, Entity 직접 참조가 낳는 문제
 2. **도메인 이벤트 정의 규칙** — 네이밍·인터페이스·필드·팩토리·자식 스냅샷
-3. **EventListener — 동기/비동기 트랜잭션 단계** — BEFORE_COMMIT vs AFTER_COMMIT, 로깅 포맷
+3. **EventListener — 트랜잭션 단계 선택** — BEFORE_COMMIT vs AFTER_COMMIT, 로깅 포맷
 4. **BEFORE_COMMIT 리스너 (동기)** — 코드 예시
 5. **AFTER_COMMIT 리스너 (기본 동기)** — 코드 예시
 6. **크로스도메인 통신 — Facade 대신 이벤트** — Facade→Facade 금지, 외부 호출은 커밋 이후로
@@ -99,30 +99,23 @@ data class OrderItemSnapshot(
 }
 ```
 
-## 3. EventListener — 동기/비동기 트랜잭션 단계
+## 3. EventListener — 트랜잭션 단계 선택
 
 리스너를 등록할 때 가장 먼저 결정할 것은 트랜잭션 단계다. 같은 트랜잭션 안에서 실패가 전체를 롤백해야 하면 `BEFORE_COMMIT`, 커밋이 끝난 뒤 별도로 처리해도 되면 `AFTER_COMMIT`이다.
 
-| Type | Phase | Error Handling |
-|------|-------|---------------|
-| Sync | BEFORE_COMMIT | Failure rolls back tx |
-| Async | AFTER_COMMIT | try-catch required, log errors |
+| Phase | Transaction | Thread | Failure Behavior |
+|-------|-------------|--------|-------------------|
+| `BEFORE_COMMIT` | 원본 트랜잭션 안 | 발행 스레드 | 실패 시 전체 롤백 |
+| `AFTER_COMMIT` | 커밋 완료 후 — 트랜잭션 밖 | 기본은 발행 스레드, `@Async`로 별도 스레드 가능 | 원본 트랜잭션에 영향 없음 — 예외는 Spring이 삼킴, `try-catch`로 직접 로깅 필수 |
 
 **Always**: `@TransactionalEventListener(phase = TransactionPhase.XXX)` — 절대 `@EventListener`만 쓰지 않는다.
 
 **Logging format**: `logger.info("[Event] {Action} start/complete - eventType: ${event::class.simpleName}, id: $id")`
 
-같은 구분을 더 자세한 열로 다시 보면 다음과 같다.
-
-| Type | Phase | Transaction | Failure Behavior |
-|------|-------|-------------|------------------|
-| **Sync** | `BEFORE_COMMIT` | Same transaction | Failure rolls back everything |
-| **Sync (Async with `@Async`)** | `AFTER_COMMIT` | Same thread by default — separate thread only with `@Async` | Failure doesn't affect transaction |
-
 **필수 패턴 세 가지**:
 
 1. **로깅 포맷**: `logger.info("[Event] {Action} start/complete - eventType: ${event::class.simpleName}, id: $id")`
-2. **비동기 에러 처리**: `try-catch`와 `logger.error` (비동기 실패는 상위로 전파하면 안 된다)
+2. **AFTER_COMMIT 에러 처리**: `try-catch`와 `logger.error`로 리스너 스스로 예외를 잡고 로깅한다 — `@Async` 여부와 무관한 무조건적 요구다. Spring이 `afterCompletion()` 경로에서 예외를 삼켜 호출자에게 전파하지 않으므로, 잡지 않으면 실패가 조용히 사라진다.
 3. **Phase 명시**: `TransactionPhase`를 항상 명시적으로 지정한다
 
 > ⚠️ 주의: 이벤트 리스너를 **어느 레이어/패키지에 두는가**는 이 문서의 범위가 아니다 — [./layer-boundaries.md](./layer-boundaries.md)의 Event Listener Location을 참고한다. 여기서는 리스너가 받는 **트랜잭션 단계와 에러 처리**만 다룬다.

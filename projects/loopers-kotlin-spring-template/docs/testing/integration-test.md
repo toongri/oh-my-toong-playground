@@ -315,7 +315,7 @@ fun `PaymentFailedEventV1 triggers order cancellation`() {
 }
 ```
 
-`@Async`가 붙은 AFTER_COMMIT 리스너는 별도 스레드에서 처리되므로 Awaitility로 기다려야 하고, `@Async` 없는 AFTER_COMMIT 리스너는 커밋 직후 같은 스레드에서 끝나므로 BEFORE_COMMIT과 마찬가지로 즉시 확인할 수 있다. 이 구분과 Awaitility 패턴은 9절 Kafka Consumer 테스트에서도 그대로 쓰인다.
+`@Async`가 붙은 AFTER_COMMIT 리스너는 별도 스레드에서 처리되므로 Awaitility로 기다려야 하고, `@Async` 없는 AFTER_COMMIT 리스너는 커밋 직후 같은 스레드에서 끝나므로 BEFORE_COMMIT과 마찬가지로 즉시 확인할 수 있다. 다만 9절 Kafka Consumer 테스트는 언제나 별도의 컨슈머 스레드에서 메시지를 처리하므로 `@Async` 유무 구분은 적용되지 않고, Awaitility로 기다리는 패턴만 그대로 쓰인다.
 
 ## 9. Kafka Consumer 테스트
 

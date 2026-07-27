@@ -40,7 +40,7 @@
 | Command | `{Domain}Command.{Action}` | `ProductCommand.Create` |
 | Info | `{Domain}Info.{Action}` | `ProductInfo.Detail` |
 
-앞의 여섯 행(Controller, ApiSpec, Facade, Service, Event, PageQuery)이 가장 자주 쓰는 핵심 패턴이다. 나머지(Repository, Request/Response/Criteria/Command/Info)는 각각 `./layer-boundaries.md`(Repository 경계)와 `./dto-patterns.md`(Request→Criteria→Command→Info→Response 흐름)에서 실제 쓰임을 다룬다.
+Controller, ApiSpec, Facade, Service, Event, PageQuery 여섯 개가 가장 자주 쓰는 핵심 패턴이다. 나머지(Repository, Request/Response/Criteria/Command/Info)는 각각 `./layer-boundaries.md`(Repository 경계)와 `./dto-patterns.md`(Request→Criteria→Command→Info→Response 흐름)에서 실제 쓰임을 다룬다.
 
 ```kotlin
 // Correct
