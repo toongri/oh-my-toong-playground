@@ -204,6 +204,24 @@ EOF
 }
 
 # =============================================================================
+# orphan-reaper.sh -- the second recovery trigger for the orchestrate-review
+# 3-layer defense's layer 3 (job.ts reap, lib/generic-job.ts reapOrphanJobs).
+# The first trigger is cmdStart (job start time); without this SessionStart
+# registration, an orphaned job.json group is never swept unless someone
+# re-runs a review, so this must land in the TRACKED root claude.yaml
+# (invariant (a) above) exactly like the four core hooks.
+# =============================================================================
+test_orphan_reaper_registered_in_tracked_root_yaml() {
+    local block
+    block=$(_extract_hook_event_block "$REPO_DIR/claude.yaml" "SessionStart")
+    if ! echo "$block" | grep -qF 'component: orphan-reaper.sh'; then
+        echo "ASSERTION FAILED: root claude.yaml must register orphan-reaper.sh under SessionStart -- the second orphan-recovery trigger (the first is cmdStart at job-start time) would otherwise never fire"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # No projects/*/claude.yaml re-declares a core hook (invariant (b)): global
 # registration lands in ~/.claude/settings.json and project registration in the
 # target's .claude/settings.local.json, and Claude Code merges both -- so a
@@ -347,6 +365,7 @@ main() {
     run_test test_precompact_removed_from_all_targets
     run_test test_codex_yaml_has_pretooluse_guard
     run_test test_core_claude_hooks_registered_in_tracked_root_yaml
+    run_test test_orphan_reaper_registered_in_tracked_root_yaml
     run_test test_core_claude_hooks_not_duplicated_per_project
     run_test test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher
     run_test test_codex_yaml_spawn_depth_gate_matcher_never_bare
