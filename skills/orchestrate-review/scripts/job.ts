@@ -39,6 +39,8 @@ import {
 	cmdCollect as _cmdCollect,
 	buildManifest as _buildManifest,
 	cmdResumeMember as _cmdResumeMember,
+	reapOrphanJobs,
+	doctorOrphanJobs,
 } from "@lib/generic-job";
 
 export { cmdResumeMember } from "@lib/generic-job";
@@ -99,6 +101,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function optionalString(value: unknown): string | undefined {
 	return typeof value === "string" ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+	if (typeof value !== "string" && typeof value !== "number") return undefined;
+	const n = Number(value);
+	return Number.isFinite(n) ? n : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +328,21 @@ function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
 }
 
 // ---------------------------------------------------------------------------
+// jobsDir resolution — shared by start/reap/doctor so the 3-tier fallback
+// (--jobs-dir option → CHUNK_REVIEW_JOBS_DIR env var → default under
+// getOmtDir()) can never drift into disagreement between the command that
+// writes job.json's workerPgid anchor and the commands that read it back.
+// ---------------------------------------------------------------------------
+
+function resolveJobsDir(options: Record<string, unknown>): string {
+	return (
+		optionalString(options["jobs-dir"]) ||
+		process.env.CHUNK_REVIEW_JOBS_DIR ||
+		path.join(getOmtDir(), "jobs")
+	);
+}
+
+// ---------------------------------------------------------------------------
 // Chunk-review-specific start command
 // ---------------------------------------------------------------------------
 
@@ -334,23 +357,73 @@ Usage:
   job.ts results [--json|--manifest] <jobDir>
   job.ts stop <jobDir>
   job.ts clean <jobDir>
+  job.ts reap [--jobs-dir path] [--grace-ms N]
+  job.ts doctor [--jobs-dir path] [--json]
 
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
   - poll status with repeated short calls to update TODO/plan UIs in host agents
+  - reap kills orphaned job process groups (SIGTERM then SIGKILL); all its output goes to
+    stderr — stdout is always empty, since a SessionStart hook calls it and must not vary
+  - doctor reports orphan counts on stdout without killing anything (diagnostic only)
 `);
+}
+
+async function cmdReap(options: Record<string, unknown>): Promise<void> {
+	const jobsDir = resolveJobsDir(options);
+	const graceMs = optionalNumber(options["grace-ms"]);
+	const { reaped } = await reapOrphanJobs(
+		jobsDir,
+		CHUNK_REVIEW_JOB_CONFIG,
+		graceMs !== undefined ? { graceMs } : {},
+	);
+	// stdout MUST stay empty — see the Usage note above and the file-level
+	// cache-safe context-injection rule (CLAUDE.md) this exists to satisfy.
+	// Every diagnostic, including reapOrphanJobs' own surviving-PID report,
+	// goes to stderr only.
+	for (const orphan of reaped) {
+		process.stderr.write(
+			`reap: reaped orphan job ${orphan.jobDir} (pgids: ${orphan.pgids.join(", ")})\n`,
+		);
+	}
+	if (reaped.length === 0) {
+		process.stderr.write("reap: no orphan jobs found\n");
+	}
+}
+
+function cmdDoctor(options: Record<string, unknown>): void {
+	const jobsDir = resolveJobsDir(options);
+	const { orphanJobCount, orphanPgidCount, orphans } = doctorOrphanJobs(
+		jobsDir,
+		CHUNK_REVIEW_JOB_CONFIG,
+	);
+	if (options.json) {
+		process.stdout.write(`${JSON.stringify({ orphanJobCount, orphanPgidCount, orphans }, null, 2)}\n`);
+		return;
+	}
+	process.stdout.write(`orphan jobs: ${orphanJobCount}, orphan process groups: ${orphanPgidCount}\n`);
+	for (const orphan of orphans) {
+		process.stdout.write(`  ${orphan.jobDir} (pgids: ${orphan.pgids.join(", ")})\n`);
+	}
 }
 
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
 	const configPath =
 		optionalString(options.config) || process.env.CHUNK_REVIEW_CONFIG || resolveDefaultConfigFile();
-	const jobsDir =
-		optionalString(options["jobs-dir"]) ||
-		process.env.CHUNK_REVIEW_JOBS_DIR ||
-		path.join(getOmtDir(), "jobs");
+	const jobsDir = resolveJobsDir(options);
 
 	ensureDir(jobsDir);
 	gcStaleJobs(jobsDir);
+	// Reap orphaned job process groups before starting a new one (layer 3 defense,
+	// lib/generic-job.ts) — the other trigger besides the SessionStart hook (next
+	// task), so an orphan gets swept up whether the user re-runs a review or opens
+	// a new session. graceMs: 0 — job start must never be delayed by the normal
+	// SIGTERM→SIGKILL grace wait (REAP_GRACE_MS_DEFAULT is 5s): a group
+	// findOrphanJobs already judged orphaned (alive PGID, zero live progress) has
+	// nothing left worth waiting on before SIGKILL.
+	const { reaped: reapedOrphans } = await reapOrphanJobs(jobsDir, CHUNK_REVIEW_JOB_CONFIG, {
+		graceMs: 0,
+	});
 
 	const hostRole = detectHostRole(SKILL_DIR);
 	const config = parseChunkReviewConfig(configPath);
@@ -396,6 +469,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	initLogger("chunk-review-job", getOmtDir(), jobId);
 	logStart();
 	logInfo(`GC: stale jobs cleaned`);
+	logInfo(`reap: ${reapedOrphans.length} orphan job(s) reaped`);
 	logInfo(`config: ${configPath}, chairman: ${chairmanRole}, members: ${members.length}`);
 
 	const jobDir = path.join(jobsDir, `chunk-review-${jobId}`);
@@ -520,6 +594,14 @@ async function main(): Promise<void> {
 		cmdClean(options, jobDir);
 		return;
 	}
+	if (command === "reap") {
+		await cmdReap(options);
+		return;
+	}
+	if (command === "doctor") {
+		cmdDoctor(options);
+		return;
+	}
 	if (command === "resume-member") {
 		const jobDirArg = optionalString(options.job);
 		if (!jobDirArg) exitWithError("--job required");
@@ -570,4 +652,7 @@ export {
 	buildAugmentedCommand,
 	gcStaleJobs,
 	cmdStart,
+	cmdReap,
+	cmdDoctor,
+	resolveJobsDir,
 };
