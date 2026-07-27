@@ -397,6 +397,46 @@ test_is_current_session_recognizes_all_fifteen_forms() {
   return 0
 }
 
+# Defect coverage: `${current_sid}` MUST stay quoted inside the case
+# patterns (:174-181 above) — quoting a variable's expansion inside a case
+# pattern is what forces its characters to be matched literally rather than
+# reinterpreted as glob metacharacters. Two separate fixtures isolate the two
+# quoted occurrences independently: the extensionless pattern
+# (`*-"$current_sid")`) and the extension-form pattern
+# (`*-"$current_sid".*)`) — removing either quote alone still leaves the
+# other quoted occurrence to (incorrectly) pass its own fixture, so a single
+# combined fixture could miss a single-line-quote-removal mutation.
+#
+# The sid "x?y" embeds a glob metachar ('?' = match-any-single-char). Neither
+# fixture's basename literally contains "x?y" (both use "xzy" instead) — with
+# correct quoting the comparison is literal and must NOT match. With the
+# quote removed, "?" is reinterpreted as a wildcard and "xzy" wrongly
+# satisfies it, flipping the verdict to a false match.
+
+test_is_current_session_sid_quoting_prevents_glob_metachar_false_match_extensionless() {
+  local sid='x?y'
+  # Extensionless form -> exercises the `*-"$current_sid")` pattern (:175).
+  local file="$TEST_TMP_DIR/state/block-count-xzy"
+
+  if is_current_session "$file" "$sid"; then
+    echo "  ASSERTION FAILED: sid '$sid' (glob metachar '?') must be matched literally against the extensionless form — 'block-count-xzy' does not end with the literal string 'x?y' and must NOT match"
+    return 1
+  fi
+  return 0
+}
+
+test_is_current_session_sid_quoting_prevents_glob_metachar_false_match_extension_form() {
+  local sid='x?y'
+  # .json extension form -> exercises the `*-"$current_sid".*)` pattern (:177).
+  local file="$TEST_TMP_DIR/goal-state-xzy.json"
+
+  if is_current_session "$file" "$sid"; then
+    echo "  ASSERTION FAILED: sid '$sid' (glob metachar '?') must be matched literally against the extension form — 'goal-state-xzy.json' does not end with the literal string 'x?y' before its extension and must NOT match"
+    return 1
+  fi
+  return 0
+}
+
 test_is_current_session_empty_sid_preserves() {
   local file="$TEST_TMP_DIR/codex-todo-abc.json"
   write_state "$file" "{}"
@@ -446,6 +486,25 @@ test_is_artifact_live_unreadable_mtime_fails_open() {
     echo "  ASSERTION FAILED: unreadable mtime must fail open (return 0 / live)"
     return 1
   fi
+}
+
+# Defect coverage: TTL-boundary direction. is_artifact_live's rule is
+# `age < ACTIVE_IDLE_TTL` -> live; at age == ACTIVE_IDLE_TTL exactly, that is
+# NOT "less than", so the boundary itself must be dead. A `<` -> `<=` mutation
+# would flip this exact boundary row (and only this row) to live, which no
+# other test in this file exercises — every other is_artifact_live fixture
+# uses an age comfortably inside or outside the TTL, never exactly on it.
+# Uses the sourced $ACTIVE_IDLE_TTL constant, never the literal 21600.
+test_is_artifact_live_ttl_boundary_is_dead() {
+  local file="$TEST_TMP_DIR/codex-todo-boundary-sid.json"
+  write_state "$file" "{}"
+  touch_ago "$file" "$ACTIVE_IDLE_TTL"   # age == ACTIVE_IDLE_TTL exactly
+
+  if is_artifact_live "$file" "$NOW"; then
+    echo "  ASSERTION FAILED: an artifact exactly ACTIVE_IDLE_TTL seconds old must be dead (age < TTL is the live condition; age == TTL is not < TTL)"
+    return 1
+  fi
+  return 0
 }
 
 # =============================================================================
@@ -887,6 +946,31 @@ test_reap_dead_state_files_execute_mode_echoes_affected_paths() {
   return 0
 }
 
+# Defect coverage: same reasoning as
+# test_reap_session_artifacts_execute_mode_echoes_real_path_not_constant
+# above, applied to reap_dead_state_files. A single-candidate fixture pins
+# exact content equality, which a line-count assertion cannot: replacing the
+# execute-mode echo with a fixed literal still produces exactly 1 line.
+test_reap_dead_state_files_execute_mode_echoes_real_path_not_constant() {
+  local sid="realpath-sid-25"
+  local d="$TEST_TMP_DIR"
+  local f="$d/goal-state-other-$sid.json"
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"
+
+  local out
+  out=$(reap_dead_state_files "$d" "current-$sid" "$NOW" 0)
+
+  if [ "$out" != "$f" ]; then
+    echo "  ASSERTION FAILED: execute-mode echo must equal the actual deleted path '$f', got '$out'"
+    return 1
+  fi
+  if [ -f "$f" ]; then
+    echo "  ASSERTION FAILED: execute mode must have actually deleted the state file"
+    return 1
+  fi
+  return 0
+}
+
 # =============================================================================
 # Defect coverage: dry_run=1 contract — the two callers only ever exercise
 # dry_run=1 through zero-candidate fixtures (the set -e trap test above uses
@@ -987,6 +1071,59 @@ test_reap_session_artifacts_execute_mode_echoes_affected_paths() {
   if [ "$n" -ne 1 ]; then
     echo "  ASSERTION FAILED: expected 1 echoed deletion in execute mode, got $n"
     echo "  got: $out"
+    return 1
+  fi
+  return 0
+}
+
+# Defect coverage: the execute-mode echo must be the ACTUAL deleted path, not
+# a constant string. The count-only assertion above ("got 1 line") would
+# still pass if the echo were replaced with a fixed literal (e.g. "REAPED"),
+# since a constant echoed once is still exactly 1 line. This asserts exact
+# content equality against the real candidate path, and that the file is
+# actually gone from disk — the two facts a constant-echo mutation would
+# decouple from each other.
+test_reap_session_artifacts_execute_mode_echoes_real_path_not_constant() {
+  local d="$TEST_TMP_DIR"
+  local f="$d/codex-todo-realpath-sid-23.json"
+  write_state "$f" "{}"
+  touch_ago "$f" 25200
+
+  local out
+  out=$(reap_session_artifacts "$d" "__none__" "$NOW" 0)
+
+  if [ "$out" != "$f" ]; then
+    echo "  ASSERTION FAILED: execute-mode echo must equal the actual deleted path '$f', got '$out'"
+    return 1
+  fi
+  if [ -f "$f" ]; then
+    echo "  ASSERTION FAILED: execute mode must have actually deleted the artifact"
+    return 1
+  fi
+  return 0
+}
+
+# Defect coverage: mtime-preservation guard (protection #2 of the three
+# independent protections documented above reap_session_artifacts). This
+# fixture deliberately withholds the other two protections — the sid does
+# not match current_sid (no identity protection), and no corresponding
+# goal-state-<sid>.json exists at all (no live-session-id protection) — so
+# only is_artifact_live's mtime check can keep a just-written session
+# artifact from being reaped the instant it's created. Deleting that guard
+# entirely (as opposed to merely relaxing its boundary) reaps this file with
+# no other test in this suite going red.
+test_reap_session_artifacts_fresh_mtime_survives_without_live_state_or_identity() {
+  local d="$TEST_TMP_DIR"
+  local sid="fresh-mtime-sid-24"
+  local f="$d/codex-todo-$sid.json"
+  write_state "$f" "{}"
+  # No touch_ago call: mtime is "just now" — no live goal-state-$sid.json
+  # exists, and current_sid below deliberately does not match $sid.
+
+  reap_session_artifacts "$d" "unrelated-sid" "$NOW" 0 > /dev/null
+
+  if [ ! -f "$f" ]; then
+    echo "  ASSERTION FAILED: a freshly-written session artifact with no live state file and no session-identity match must still survive under ACTIVE_IDLE_TTL (the mtime-preservation guard)"
     return 1
   fi
   return 0
@@ -1332,11 +1469,14 @@ run_test test_fallback_to_mtime_when_no_timestamps_stale
 run_test test_is_current_session_matches_filename_sid
 run_test test_is_current_session_no_match_different_sid
 run_test test_is_current_session_matches_ultragoal_filename_sid
+run_test test_is_current_session_sid_quoting_prevents_glob_metachar_false_match_extensionless
+run_test test_is_current_session_sid_quoting_prevents_glob_metachar_false_match_extension_form
 run_test test_head_red_probe_artifact_prefix_matches_current_session
 run_test test_is_current_session_recognizes_all_fifteen_forms
 run_test test_is_current_session_empty_sid_preserves
 run_test test_is_artifact_live_mtime_only_ignores_active_field
 run_test test_is_artifact_live_unreadable_mtime_fails_open
+run_test test_is_artifact_live_ttl_boundary_is_dead
 run_test test_list_live_session_ids_reports_live_omits_dead
 run_test test_list_live_session_ids_dedupes_across_prefixes
 run_test test_list_live_session_ids_strips_prefix_in_glob_metachar_dir
@@ -1348,12 +1488,15 @@ run_test test_list_unclassified_reports_non_md_session_ledger_as_drift
 run_test test_list_unclassified_reports_files_under_state_subdir_too
 run_test test_reap_dead_state_files_relocation_equivalence
 run_test test_reap_dead_state_files_execute_mode_echoes_affected_paths
+run_test test_reap_dead_state_files_execute_mode_echoes_real_path_not_constant
 run_test test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete
 run_test test_reap_dead_state_files_old_closed_bak_survives_json_anchor
 run_test test_is_current_session_suffix_match_diverges_from_base_exact_match_over_preserves
 run_test test_reap_session_artifacts_current_session_self_artifact_survives
 run_test test_reap_session_artifacts_other_live_session_survives_without_sid
 run_test test_reap_session_artifacts_execute_mode_echoes_affected_paths
+run_test test_reap_session_artifacts_execute_mode_echoes_real_path_not_constant
+run_test test_reap_session_artifacts_fresh_mtime_survives_without_live_state_or_identity
 run_test test_reap_session_artifacts_dry_run_emits_candidate_but_does_not_delete
 run_test test_reap_session_artifacts_json_extension_stripped_for_live_id_match
 run_test test_reap_session_artifacts_short_live_id_does_not_falsely_preserve
