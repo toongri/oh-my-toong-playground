@@ -4,6 +4,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { spawn, execSync } from "child_process";
 
 import type { JobConfig, CmdResultsHooks, ResumeMemberOpts } from "./generic-job.ts";
 import type { RunOneTurnOpts } from "./worker-utils.ts";
@@ -1705,6 +1706,69 @@ describe("spawnWorkers 이름 유효성 검사", () => {
 		fs.mkdirSync(path.join(tmpDir, "members"), { recursive: true });
 		const err = trySpawn("validName123");
 		expect(err).toBeNull();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// `spawnWorkers` — worker PGID 반환 (회수 앵커의 생산 측)
+// ---------------------------------------------------------------------------
+
+describe("`spawnWorkers`", () => {
+	let tmpDir: string;
+	let spawnedPgids: number[];
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		spawnedPgids = [];
+	});
+
+	afterEach(() => {
+		for (const pgid of spawnedPgids) {
+			try {
+				process.kill(-pgid, "SIGKILL");
+			} catch {
+				// already exited — nothing to clean up
+			}
+		}
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("detached spawn된 자식은 자기 PGID의 리더다 (`ps`로 실측)", () => {
+		const child = spawn("sleep", ["5"], { detached: true, stdio: "ignore" });
+		const pid = child.pid;
+		if (pid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(pid);
+
+		const pgidOutput = execSync(`ps -o pgid= -p ${pid}`, { encoding: "utf-8" });
+		expect(Number(pgidOutput.trim())).toBe(pid);
+	});
+
+	test("entities 순서대로 각 워커의 `name`과 `workerPgid`를 반환한다", () => {
+		const fakeWorkerPath = path.join(tmpDir, "fake-worker.js");
+		fs.writeFileSync(fakeWorkerPath, "process.exit(0);\n");
+		const entitiesDir = path.join(tmpDir, "members");
+		fs.mkdirSync(entitiesDir, { recursive: true });
+
+		const result = spawnWorkers({
+			entities: [
+				{ name: "alice", command: "echo hi" },
+				{ name: "bob", command: "echo hi" },
+			],
+			workerPath: fakeWorkerPath,
+			jobDir: tmpDir,
+			entitiesDir,
+			timeoutSec: 30,
+			config: councilConfig,
+		});
+
+		expect(result.length).toBe(2);
+		expect(result[0].name).toBe("alice");
+		expect(result[1].name).toBe("bob");
+		for (const worker of result) {
+			expect(typeof worker.workerPgid).toBe("number");
+			expect(worker.workerPgid as number).toBeGreaterThan(0);
+			spawnedPgids.push(worker.workerPgid as number);
+		}
 	});
 });
 
