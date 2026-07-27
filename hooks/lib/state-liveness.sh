@@ -430,9 +430,24 @@ LIVE_IDS
 # SESSION_ARTIFACT_PREFIXES itself has a subdirectory-based entry
 # (state/block-count-) — an unclassified file living under state/ would
 # otherwise go unreported forever.
+#
+# Classification here is deliberately broader than the two reap whitelists
+# it consults — recognizing a file is a different question from being
+# allowed to delete it (nothing below touches STATE_PREFIXES or
+# SESSION_ARTIFACT_PREFIXES, so no reap decision changes):
+#   - a `.bak` / `.closed.bak` backup tail is stripped before the
+#     STATE_PREFIXES match, so `<prefix>*.json.closed.bak` (the backup form
+#     STATE_PREFIXES's own `*.json` anchor above is written to preserve from
+#     deletion, :16-19) is recognized as belonging to its state family
+#     instead of reported as drift.
+#   - `session-ledger-` is recognized as a known-managed family even though
+#     it is intentionally absent from SESSION_ARTIFACT_PREFIXES:
+#     hooks/session-start.sh reaps it through its own dedicated ledger lane,
+#     not through reap_session_artifacts, so adding it to that whitelist
+#     would make this file's own reap function delete it too.
 list_unclassified_session_files() {
   local dir="$1"
-  local f base relpath prefix classified
+  local f base relpath prefix classified classify_base
 
   for f in "$dir"/* "$dir"/state/*; do
     [ -f "$f" ] || continue
@@ -448,9 +463,18 @@ list_unclassified_session_files() {
       *) relpath="$base" ;;
     esac
 
+    # classify_base strips a backup tail for the STATE_PREFIXES comparison
+    # only (relpath itself is left untouched for every other comparison
+    # below) — see the classification-only backup handling documented above.
+    classify_base="$relpath"
+    case "$classify_base" in
+      *.closed.bak) classify_base="${classify_base%.closed.bak}" ;;
+      *.bak) classify_base="${classify_base%.bak}" ;;
+    esac
+
     classified=0
     for prefix in $STATE_PREFIXES; do
-      case "$relpath" in
+      case "$classify_base" in
         ${prefix}*.json) classified=1; break ;;
       esac
     done
@@ -461,6 +485,12 @@ list_unclassified_session_files() {
           ${prefix}*) classified=1; break ;;
         esac
       done
+    fi
+
+    if [ "$classified" = "0" ]; then
+      case "$relpath" in
+        session-ledger-*) classified=1 ;;
+      esac
     fi
 
     if [ "$classified" = "1" ]; then
