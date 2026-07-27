@@ -2372,8 +2372,8 @@ EOF
 # Tests: SessionStart hook process exit code.
 #
 # Every other test in this file invokes the hook as `... | session-start.sh
-# ... || true` and never inspects its exit status -- none of the ~68 existing
-# assertions look past stdout/stderr/on-disk side effects. hooks/session-start.sh
+# ... || true` and never inspects its exit status -- none of the other
+# assertions in this file look past stdout/stderr/on-disk side effects. hooks/session-start.sh
 # has no `set -e` and its GC lane (:129-174) calls reap_dead_state_files and
 # reap_session_artifacts (hooks/lib/state-liveness.sh) without checking their
 # return value, so today a real `rm -f` failure inside either reaper cannot
@@ -2393,13 +2393,23 @@ test_session_start_hook_exits_zero_on_normal_gc_pass() {
     _write_stale_state_fixture "$TEST_OMT_DIR" "$other_sid"
 
     local input='{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "exitcode-gc-fresh-session"}'
-    local rc=0
-    echo "$input" | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>/dev/null || rc=$?
+    local output rc=0
+    output=$(echo "$input" | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || rc=$?
 
     if [ "$rc" -ne 0 ]; then
         echo "ASSERTION FAILED: session-start.sh must exit 0 on a normal invocation that reaps stale state/artifacts, got exit $rc"
         return 1
     fi
+
+    # Anti-vacuity guard: exit 0 alone does not mean the hook actually
+    # produced its session context -- confirm stdout is the expected JSON
+    # envelope, not empty output from an early exit.
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: session-start.sh stdout must be valid JSON on a normal GC pass, got empty/invalid output"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
     return 0
 }
 
@@ -2419,16 +2429,15 @@ test_session_start_hook_exits_zero_when_reaper_rm_fails() {
     chmod 555 "$TEST_OMT_DIR"   # no write permission: rm -f inside the reapers must fail
 
     local input='{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "exitcode-rmfail-fresh-session"}'
-    local err_file rc
-    err_file=$(mktemp)
+    local err_file output rc
+    err_file="$TEST_TMP_DIR/reaper-rmfail-stderr.txt"   # under TEST_TMP_DIR so teardown_test_env's rm -rf reaps it
     rc=0
-    echo "$input" | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>"$err_file" || rc=$?
+    output=$(echo "$input" | "$SCRIPT_DIR/session-start.sh" 2>"$err_file") || rc=$?
 
     chmod 755 "$TEST_OMT_DIR"   # restore before any assertion so teardown's rm -rf works
 
     local err_after
     err_after=$(cat "$err_file")
-    rm -f "$err_file"
 
     # Anti-vacuity guard: confirm the fixture actually drove a real rm
     # failure inside the reapers (not e.g. everything already reaped by a
@@ -2441,6 +2450,15 @@ test_session_start_hook_exits_zero_when_reaper_rm_fails() {
 
     if [ "$rc" -ne 0 ]; then
         echo "ASSERTION FAILED: session-start.sh must still exit 0 even when a reaper's rm -f genuinely fails, got exit $rc"
+        return 1
+    fi
+
+    # Anti-vacuity guard: exit 0 alone does not mean the hook actually
+    # produced its session context -- confirm stdout is the expected JSON
+    # envelope, not empty output from an early exit right after the reapers.
+    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: session-start.sh stdout must be valid JSON even when a reaper's rm -f genuinely fails, got empty/invalid output"
+        echo "  Output: ${output:0:500}"
         return 1
     fi
 
