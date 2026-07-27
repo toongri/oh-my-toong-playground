@@ -1032,6 +1032,61 @@ describe("adoption: list-others + adopt (goal CLI)", () => {
 		// File must still be absent
 		expect(existsSync(`${tmpDir}/ultragoal-state-A.json`)).toBe(false);
 	});
+
+	// (F-adopt-codex-goal-clear) A registered codex_goal_objective is thread-scoped
+	// state (Codex's native goal row is keyed by thread_id) — the adopting session has
+	// no way to reach that row, so a carried-over value would arm Gate 9 forever with
+	// no snapshot ever able to satisfy it. adopt must clear the field while leaving
+	// everything else (phase, stories, ...) intact.
+	test("F-adopt-codex-goal-clear: adopt clears codex_goal_objective, preserves stories and phase", () => {
+		const now = nowIso();
+		writeFileSync(
+			`${tmpDir}/ultragoal-state-A.json`,
+			JSON.stringify({
+				active: true,
+				phase: "pursuing",
+				iteration: 2,
+				max_iterations: 10,
+				outcome: "ship story 3",
+				verification_surface: "tests pass",
+				constraints: "",
+				boundaries: "",
+				blocked_stop: "",
+				plan_path: "",
+				resume_summary: "",
+				budget_limit_notified: false,
+				blocked_reason: "",
+				completion_evidence_paths: [],
+				objective_verdict: "absent",
+				schema_version: 1,
+				started_at: now,
+				last_touched_at: now,
+				codex_goal_objective: "ship story 3",
+				stories: [
+					{
+						id: "S1",
+						story: "ship story 3",
+						acceptance_criteria: ["works"],
+						verification_surface: "tests pass",
+						status: "confirmed",
+					},
+				],
+			}),
+			"utf8",
+		);
+		writePristineGoalState("B");
+
+		runCli("adopt --src A", { OMT_SESSION_ID: "B" });
+
+		const adopted = JSON.parse(readFileSync(`${tmpDir}/ultragoal-state-B.json`, "utf8"));
+		// (a) codex_goal_objective must be cleared — thread-scoped state the adopting
+		// session cannot reach.
+		expect(adopted.codex_goal_objective).toBe("");
+		// (b) everything else adopted must survive the clear.
+		expect(adopted.phase).toBe("pursuing");
+		expect(adopted.stories).toHaveLength(1);
+		expect(adopted.stories[0].id).toBe("S1");
+	});
 });
 
 // ---------------------------------------------------------------------------
