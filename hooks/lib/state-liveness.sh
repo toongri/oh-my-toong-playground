@@ -466,6 +466,13 @@ list_unclassified_session_files() {
     # classify_base strips a backup tail for the STATE_PREFIXES comparison
     # only (relpath itself is left untouched for every other comparison
     # below) — see the classification-only backup handling documented above.
+    # .closed.bak is reaped by no lane — that is intentional retention (the
+    # *.json anchor above, :16-19, exists to preserve it), so it is
+    # deliberately excluded from drift reporting too, and adding it to a
+    # reap whitelist remains a non-goal. Only the `.closed.bak` tail is
+    # stripped: no plain-`.bak` producer exists anywhere in this repo, so a
+    # speculative `.bak` branch was removed — a genuine plain-`.bak` file
+    # would correctly surface as drift, which is what the reporter is for.
     classify_base="$relpath"
     case "$classify_base" in
       *.closed.bak) classify_base="${classify_base%.closed.bak}" ;;

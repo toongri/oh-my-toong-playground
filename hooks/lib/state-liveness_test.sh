@@ -610,10 +610,11 @@ test_list_unclassified_reports_genuine_drift_only() {
 
   # Genuinely unclassified/producerless forms (no writer anywhere in the
   # repo, so they stay off both reap whitelists and are only ever reported):
-  # must be reported.
-  touch_ago "$d/goal-review-context-$uuid.json" 25200
-  touch_ago "$d/handoff-consumed-$uuid" 25200
-  touch_ago "$d/handoff-$uuid" 25200
+  # must be reported. list_unclassified_session_files has no age logic at
+  # all, so these use write_state (existence only), not touch_ago.
+  write_state "$d/goal-review-context-$uuid.json" "{}"
+  write_state "$d/handoff-consumed-$uuid" ""
+  write_state "$d/handoff-$uuid" ""
 
   # Classified via the reap whitelists directly: must stay silent.
   write_state "$d/goal-state-$uuid.json" "{\"active\":true}"
@@ -622,9 +623,9 @@ test_list_unclassified_reports_genuine_drift_only() {
 
   # Classification-only exceptions (not in either reap whitelist, but a known
   # family per the doc comment above): must also stay silent.
-  touch_ago "$d/deep-interview-active-state-$uuid.json.closed.bak" 25200
-  touch_ago "$d/prometheus-state-$uuid.json.closed.bak" 25200
-  touch_ago "$d/session-ledger-$uuid.md" 25200
+  write_state "$d/deep-interview-active-state-$uuid.json.closed.bak" "{}"
+  write_state "$d/prometheus-state-$uuid.json.closed.bak" "{}"
+  write_state "$d/session-ledger-$uuid.md" ""
 
   local out
   out=$(list_unclassified_session_files "$d")
