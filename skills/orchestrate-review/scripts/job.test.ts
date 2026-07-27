@@ -213,6 +213,12 @@ describe("parseChunkReviewConfig", () => {
 		expect(names.includes("security")).toBeTruthy();
 		expect(names.includes("coverage")).toBeTruthy();
 	});
+
+	test('real config declares settings.mcps.allow as exactly ["codegraph"]', async () => {
+		const realPath = path.join(import.meta.dirname, "..", "orchestrate-review.config.yaml");
+		const result = await parseChunkReviewConfig(realPath);
+		expect(result["chunk-review"].settings.mcps).toEqual({ allow: ["codegraph"] });
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -3472,6 +3478,123 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 		try {
 			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir], { stdio: "pipe" });
 		} catch {}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// parseChunkReviewConfig settings.mcps.allow — shape guard (assertMcpAllowShape)
+// ---------------------------------------------------------------------------
+
+describe("parseChunkReviewConfig settings.mcps.allow", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function expectParseExitsWithError(configPath: string, expectedSubstring: string) {
+		const scriptContent = `
+      const { parseChunkReviewConfig } = await import('${path.resolve(import.meta.dirname, "./job.ts").replace(/'/g, "\\'")}');
+      await parseChunkReviewConfig('${configPath.replace(/'/g, "\\'")}');
+    `;
+		try {
+			execFileSync(process.execPath, ["-e", scriptContent], {
+				encoding: "utf8",
+				stdio: ["pipe", "pipe", "pipe"],
+			});
+			throw new Error("Expected parseChunkReviewConfig subprocess to exit non-zero");
+		} catch (err) {
+			expect((err as any).status).toBe(1);
+			expect((err as any).stderr.toString()).toContain(expectedSubstring);
+		}
+	}
+
+	test("exits 1 when mcps.allow is not an array (a string)", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["chunk-review:", "  settings:", "    mcps:", '      allow: "codegraph"'].join("\n"),
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// start: settings.mcps.allow → job.json settings.mcpBlock (computeMcpBlockList
+// wiring). Uses cmdStart directly (not via subprocess) so CODEX_HOME can be
+// pointed at a hermetic config.toml fixture instead of the real host's.
+// ---------------------------------------------------------------------------
+
+describe("start: settings.mcps.allow recorded in job.json settings.mcpBlock", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+	let codexHomeDir: string;
+	let prevCodexHome: string | undefined;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		codexHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-test-"));
+		fs.writeFileSync(
+			path.join(codexHomeDir, "config.toml"),
+			[
+				"[mcp_servers.codegraph]",
+				'command = "stub"',
+				"",
+				"[mcp_servers.figma]",
+				'command = "stub"',
+				"",
+				"[mcp_servers.notion]",
+				'command = "stub"',
+			].join("\n"),
+		);
+		prevCodexHome = process.env.CODEX_HOME;
+		process.env.CODEX_HOME = codexHomeDir;
+	});
+
+	afterEach(() => {
+		if (prevCodexHome === undefined) delete process.env.CODEX_HOME;
+		else process.env.CODEX_HOME = prevCodexHome;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+		fs.rmSync(codexHomeDir, { recursive: true, force: true });
+	});
+
+	test("job.json settings.mcpBlock is the complement of settings.mcps.allow against configured servers", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				"    mcps:",
+				"      allow:",
+				"        - codegraph",
+			].join("\n"),
+		);
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		const entry = fs.readdirSync(jobsDir).find((e) => e.startsWith("chunk-review-"));
+		expect(entry).toBeDefined();
+		const jobMeta = JSON.parse(
+			fs.readFileSync(path.join(jobsDir, entry as string, "job.json"), "utf8"),
+		);
+		expect(jobMeta.settings.mcpBlock).toEqual(["figma", "notion"]);
 	});
 });
 
