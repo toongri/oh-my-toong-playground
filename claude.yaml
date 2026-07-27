@@ -29,6 +29,8 @@ hooks:
       timeout: 10
     - component: pin-session-start
       timeout: 10
+    - component: orphan-reaper.sh
+      timeout: 10
   Stop:
     - component: persistent-mode
       timeout: 15
