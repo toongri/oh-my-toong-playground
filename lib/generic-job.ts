@@ -541,6 +541,41 @@ export function isRunningStatusStale(status: Record<string, unknown>, statusPath
 	return Date.now() - startTs > HEARTBEAT_GRACE_PERIOD_MS;
 }
 
+/**
+ * Names of members in entitiesDir that currently have live progress: a
+ * non-terminal/resumable state (`awaiting_resume`, `running`, `queued`,
+ * `retrying`) — except a `running` member whose heartbeat is stale (same
+ * judgment isRunningStatusStale/computeStatus already use), which is treated
+ * as not-active since an external SIGKILL can leave a member stuck at
+ * state:"running" forever otherwise.
+ *
+ * Extracted from cmdClean's own active-member guard so findOrphanJobs (layer
+ * 3, below) can reuse the EXACT same predicate cmdClean's guard (layer 2)
+ * uses — the two layers must agree on what "live progress" means, or one
+ * layer treats a job as active while the other treats it as orphaned.
+ * cmdClean's observable behavior is unchanged by this extraction: same
+ * states, same staleness relief, same fs.existsSync/try-catch fallback to [].
+ */
+export function findActiveMembers(entitiesDir: string): string[] {
+	const activeMemberStates = new Set(["awaiting_resume", "running", "queued", "retrying"]);
+	if (!fs.existsSync(entitiesDir)) return [];
+	try {
+		return fs.readdirSync(entitiesDir).filter((e) => {
+			const statusPath = path.join(entitiesDir, e, "status.json");
+			const status = readJsonIfExists(statusPath);
+			if (!isRecord(status)) return false;
+			const state = typeof status.state === "string" ? status.state : "";
+			if (!activeMemberStates.has(state)) return false;
+			if (state === "running" && isRunningStatusStale(status, statusPath)) return false;
+			return true;
+		});
+	} catch {
+		// If we can't read the entities dir, treat as no active members; callers
+		// already validated the path via their own guards.
+		return [];
+	}
+}
+
 export async function computeStatus(
 	jobDir: string,
 	config: JobConfig,
@@ -1163,35 +1198,15 @@ export function cmdClean(
 
 	// Active-member guard: refuse to delete if any member is in a non-terminal/resumable state.
 	// Override with force: true (e.g. options.force = true) to skip this check.
+	// Judgment lives in findActiveMembers, shared with findOrphanJobs (layer 3)
+	// below — see that function's own predicate for why the two layers must agree.
 	if (!options["force"]) {
-		const activeMemberStates = new Set(["awaiting_resume", "running", "queued", "retrying"]);
 		const entitiesDir = path.join(resolvedJobDir, config.entityDirName);
-		if (fs.existsSync(entitiesDir)) {
-			let activeEntries: string[] = [];
-			try {
-				activeEntries = fs.readdirSync(entitiesDir).filter((e) => {
-					const statusPath = path.join(entitiesDir, e, "status.json");
-					const status = readJsonIfExists(statusPath);
-					if (!isRecord(status)) return false;
-					const state = typeof status.state === "string" ? status.state : "";
-					if (!activeMemberStates.has(state)) return false;
-					// A `running` member whose heartbeat is stale (same judgment
-					// computeStatus uses) is not actually active — an external
-					// SIGKILL can leave a member stuck at state:"running" forever,
-					// which would otherwise block clean permanently. Staleness
-					// relief applies only to `running`; queued/awaiting_resume/
-					// retrying stay active as before.
-					if (state === "running" && isRunningStatusStale(status, statusPath)) return false;
-					return true;
-				});
-			} catch {
-				// If we can't read the entities dir, proceed; the path-traversal guard already validated.
-			}
-			if (activeEntries.length > 0) {
-				exitWithError(
-					`clean: refusing to delete job dir with active ${config.entityPlural}: ${activeEntries.join(", ")} — use force option to override`,
-				);
-			}
+		const activeEntries = findActiveMembers(entitiesDir);
+		if (activeEntries.length > 0) {
+			exitWithError(
+				`clean: refusing to delete job dir with active ${config.entityPlural}: ${activeEntries.join(", ")} — use force option to override`,
+			);
 		}
 	}
 
@@ -1260,6 +1275,211 @@ export function cmdClean(
 
 	fs.rmSync(resolvedJobDir, { recursive: true, force: true });
 	process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
+}
+
+// ---------------------------------------------------------------------------
+// Orphan process-group reaper — layer 3 of the 3-layer defense.
+//
+// Layer 1 (reapOwnProcessGroup, lib/worker-utils.ts) only runs if a worker
+// reaches its own normal teardown path. Layer 2 (cmdClean's group-kill above)
+// only runs if the conductor (the LLM session driving the job) reaches ITS
+// teardown and calls clean. When a worker dies by SIGKILL, panic, or OOM,
+// neither layer runs and the worker's process group is orphaned — this layer
+// sweeps those up independently of any conductor ever running again.
+//
+// (i) Why this is NOT a PPID-based orphan check. The obvious-looking rule
+// "PGID is alive but has no parent (PPID=1)" was tried and falsified by
+// direct measurement on this host: workers are spawned with `detached: true`
+// + `child.unref()`, and the CLI that spawns them (job.ts start) returns
+// immediately and exits, so the worker's own parent disappears within
+// seconds — reparenting EVERY healthy worker to PPID=1, not just orphaned
+// ones. Measured: spawn a detached child, kill the parent immediately, then
+// `ps -o pid=,ppid=,pgid=` on the child → `28309  1  28309` — PPID=1,
+// PGID=self. That is the normal steady state of a healthy running worker,
+// not an orphan signal; a PPID=1 rule would kill every healthy review
+// worker within seconds of dispatch. The actual anchor is job.json's
+// members[].workerPgid (the same anchor cmdClean already uses above)
+// combined with the job's own progress state: a PGID group that is alive
+// while its job has NO live progress (findActiveMembers, shared with
+// cmdClean) is the orphan signal — not process ancestry.
+// ---------------------------------------------------------------------------
+
+export interface OrphanJob {
+	jobDir: string;
+	pgids: number[];
+}
+
+/** Production default grace period between SIGTERM and SIGKILL — matches the
+ *  value layer 1 (reapOwnProcessGroup) and the timeout-escalation path
+ *  already use; not a newly-invented number. */
+export const REAP_GRACE_MS_DEFAULT = 5000;
+
+/**
+ * Judge which jobs under jobsDir are orphaned: their recorded process group
+ * is alive, but the job itself has no live progress left (findActiveMembers
+ * returns none — every member is terminal, `running` with a stale heartbeat,
+ * or has no status.json at all). Pure judgment — no kill, no delete.
+ * reapOrphanJobs and doctorOrphanJobs both call this exact function so the
+ * two engines can never disagree about what counts as orphaned.
+ */
+export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] {
+	const orphans: OrphanJob[] = [];
+
+	let resolvedJobsDir: string;
+	let entries: string[];
+	try {
+		resolvedJobsDir = fs.realpathSync(jobsDir);
+		entries = fs.readdirSync(jobsDir);
+	} catch {
+		return orphans;
+	}
+
+	// (ii) One `ps` call for the whole sweep, not one per job. jobsDir can hold
+	// many stale job directories at once — this is exactly the runaway
+	// scenario this layer exists for (1,073 processes across many jobs in 9
+	// minutes) — so spawning `ps -A` once and reusing the parsed PGID set for
+	// every candidate job avoids an O(job count) subprocess-spawn fan-out for
+	// what is fundamentally one snapshot-in-time liveness question.
+	let livePgids: Set<number>;
+	try {
+		const psOutput = execSync("ps -o pgid=,pid= -A", { encoding: "utf8" });
+		livePgids = new Set<number>();
+		for (const line of psOutput.split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+			const pgid = Number(trimmed.split(/\s+/)[0]);
+			if (Number.isInteger(pgid)) livePgids.add(pgid);
+		}
+	} catch {
+		// ps unavailable — no basis to judge liveness, so no basis to reap.
+		return orphans;
+	}
+
+	for (const entry of entries) {
+		if (!entry.startsWith(config.jobPrefix)) continue;
+
+		const candidatePath = path.join(jobsDir, entry);
+
+		// Path traversal guard — same pattern as gcStaleJobs above.
+		let realCandidatePath: string;
+		try {
+			realCandidatePath = fs.realpathSync(candidatePath);
+		} catch {
+			continue;
+		}
+		const relative = path.relative(resolvedJobsDir, realCandidatePath);
+		const isUnder = !relative.startsWith("..") && !path.isAbsolute(relative);
+		if (!isUnder) continue;
+
+		let jobMeta: unknown;
+		try {
+			jobMeta = readJsonIfExists(path.join(candidatePath, "job.json"));
+		} catch {
+			continue;
+		}
+		if (!isRecord(jobMeta)) continue;
+
+		const members = Array.isArray(jobMeta.members) ? jobMeta.members : [];
+		const recordedPgids = members
+			.map((m) => (isRecord(m) ? m.workerPgid : null))
+			.filter(
+				(pgid): pgid is number => typeof pgid === "number" && Number.isInteger(pgid) && pgid > 0,
+			);
+		// No workerPgid recorded at all — no basis to judge this job, skip it.
+		if (recordedPgids.length === 0) continue;
+
+		const alivePgids = recordedPgids.filter((pgid) => livePgids.has(pgid));
+		// Recorded group isn't actually alive — nothing to reap here.
+		if (alivePgids.length === 0) continue;
+
+		// The job still has live progress — it's working normally, not orphaned.
+		const entitiesDir = path.join(candidatePath, config.entityDirName);
+		if (findActiveMembers(entitiesDir).length > 0) continue;
+
+		orphans.push({ jobDir: candidatePath, pgids: alivePgids });
+	}
+
+	return orphans;
+}
+
+/**
+ * Reap every orphan job's process group: SIGTERM, wait opts.graceMs (default
+ * REAP_GRACE_MS_DEFAULT), then SIGKILL. Does NOT delete job directories —
+ * that remains cmdClean's job on its own next run. (iii) A final `ps` pass
+ * collects whatever survives both signals and reports it to stderr only —
+ * this function is not the leader of any of these groups (unlike
+ * reapOwnProcessGroup, which signals its own group), so — like cmdClean's own
+ * report-only pass above — it has no basis to judge what a surviving process
+ * actually is or whether killing it again would be safe. Escalating past
+ * SIGKILL is a decision for a human or a future layer, not this one.
+ */
+export async function reapOrphanJobs(
+	jobsDir: string,
+	config: JobConfig,
+	opts: { graceMs?: number } = {},
+): Promise<{ reaped: OrphanJob[]; survivingPids: number[] }> {
+	const orphans = findOrphanJobs(jobsDir, config);
+	const graceMs = opts.graceMs ?? REAP_GRACE_MS_DEFAULT;
+
+	for (const orphan of orphans) {
+		for (const pgid of orphan.pgids) {
+			try {
+				process.kill(-pgid, "SIGTERM");
+			} catch {
+				/* ESRCH: group already empty */
+			}
+		}
+	}
+
+	if (graceMs > 0) await sleepMs(graceMs);
+
+	for (const orphan of orphans) {
+		for (const pgid of orphan.pgids) {
+			try {
+				process.kill(-pgid, "SIGKILL");
+			} catch {
+				/* ESRCH: group already empty */
+			}
+		}
+	}
+
+	const survivingPids: number[] = [];
+	const allPgids = orphans.flatMap((o) => o.pgids);
+	if (allPgids.length > 0) {
+		try {
+			const psOutput = execSync("ps -o pgid=,pid= -A", { encoding: "utf8" });
+			const pgidSet = new Set(allPgids);
+			for (const line of psOutput.split("\n")) {
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+				const [pgidStr, pidStr] = trimmed.split(/\s+/);
+				if (pgidSet.has(Number(pgidStr))) survivingPids.push(Number(pidStr));
+			}
+		} catch {
+			// ps unavailable or failed — best-effort reporting only, never throw.
+		}
+	}
+	if (survivingPids.length > 0) {
+		process.stderr.write(
+			`reap: ${survivingPids.length} process(es) survived group kill: pid ${survivingPids.join(", ")}\n`,
+		);
+	}
+
+	return { reaped: orphans, survivingPids };
+}
+
+/**
+ * Count-only view of findOrphanJobs — never kills, never deletes. Calls the
+ * exact same findOrphanJobs reapOrphanJobs calls, so `doctor` and `reap`
+ * can never disagree about what counts as orphaned.
+ */
+export function doctorOrphanJobs(
+	jobsDir: string,
+	config: JobConfig,
+): { orphanJobCount: number; orphanPgidCount: number; orphans: OrphanJob[] } {
+	const orphans = findOrphanJobs(jobsDir, config);
+	const orphanPgidCount = orphans.reduce((sum, o) => sum + o.pgids.length, 0);
+	return { orphanJobCount: orphans.length, orphanPgidCount, orphans };
 }
 
 // ---------------------------------------------------------------------------
