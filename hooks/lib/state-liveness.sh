@@ -223,7 +223,7 @@ is_artifact_live() {
   fi
 }
 
-# list_live_session_ids <dir> [now_epoch]
+# list_live_session_ids <dir> <now_epoch>
 #
 # Echoes the bare session id of every currently-live state file in <dir>, one
 # per line, deduplicated. This is what lets reap_session_artifacts protect a
@@ -231,19 +231,15 @@ is_artifact_live() {
 # never had a session id to begin with (omt-cleanup) can still ask "is any
 # state file for this id live right now?".
 #
-# <now_epoch> is optional and falls back to `date +%s` when omitted — no
-# caller outside this file passes one today (grep confirms), so this stays
-# back-compatible. reap_session_artifacts always supplies its own <now_epoch>
-# explicitly (see that function below): a single GC pass must judge state
-# liveness and artifact liveness against one shared clock reading, not two
-# independently-fetched wall-clock values that can drift a session across
-# the TTL boundary between the two calls.
+# <now_epoch> is required — the caller's own clock reading, not a value this
+# function fetches for itself. reap_session_artifacts always supplies its own
+# <now_epoch> explicitly (see that function below): a single GC pass must
+# judge state liveness and artifact liveness against one shared clock
+# reading, not two independently-fetched wall-clock values that can drift a
+# session across the TTL boundary between the two calls.
 list_live_session_ids() {
   local dir="$1"
-  local now_epoch="${2:-}"
-  if [ -z "$now_epoch" ]; then
-    now_epoch=$(date +%s)
-  fi
+  local now_epoch="$2"
 
   local prefix f sid seen
   seen=""

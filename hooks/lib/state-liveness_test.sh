@@ -460,7 +460,7 @@ test_list_live_session_ids_reports_live_omits_dead() {
   write_state "$d/goal-state-$dead.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"
 
   local out
-  out=$(list_live_session_ids "$d")
+  out=$(list_live_session_ids "$d" "$NOW")
 
   if ! printf '%s\n' "$out" | grep -qx "$live"; then
     echo "  ASSERTION FAILED: live sid '$live' must be reported"
@@ -481,7 +481,7 @@ test_list_live_session_ids_dedupes_across_prefixes() {
   write_state "$d/ultragoal-state-$sid.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 600)\"}"
 
   local out
-  out=$(list_live_session_ids "$d")
+  out=$(list_live_session_ids "$d" "$NOW")
   local count
   count=$(printf '%s\n' "$out" | grep -c -x "$sid" || true)
 
@@ -1127,7 +1127,7 @@ test_harmless_conditions_do_not_trip_set_e() {
     reap_dead_state_files "'"$d"'" "'"$sid"'" 0 1
     reap_session_artifacts "'"$d"'" "'"$sid"'" 0 1
     list_unclassified_session_files "'"$d"'"
-    list_live_session_ids "'"$d"'"
+    list_live_session_ids "'"$d"'" 0
     echo SURVIVED
   ')
 
