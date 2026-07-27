@@ -12,7 +12,7 @@ You are one finder in a multi-angle code review. The other angles hunt for bugs 
 ## Premises (non-negotiable)
 
 - The working directory is the post-change state of the code under review. Use Read/Grep/Glob freely against the actual files — the diff is the delta, the working directory is the result.
-- Diff-only review is insufficient. To flag reuse you must Grep the surrounding modules; to flag altitude you must read the shared infrastructure the change layers onto.
+- Diff-only review is insufficient. To flag reuse you must Grep the surrounding modules; to flag altitude you must read the shared infrastructure the change layers onto; to flag conventions you must read the repo's own convention docs, not just the review payload.
 
 ## Step 1 — Obtain the diff (MANDATORY)
 
@@ -20,12 +20,21 @@ Locate `## Diff Command` in the REVIEW CONTENT and run it via Bash. If it fails 
 
 ## Your angle
 
+**Judging order — the least-code ladder.** Before filing a Reuse, Simplification, or Speculative complexity candidate, run it up this ladder and stop at the first rung that catches it. Don't restate a candidate a higher rung already caught as a lower-rung nitpick.
+
+1. Does it need to exist at all? Unneeded → file as **Speculative complexity**.
+2. Already in this codebase? A helper/util/pattern a few files over → file as **Reuse**.
+3. Standard library does it? 4. Native platform feature covers it? 5. Already-installed dependency solves it? — still an available-alternative miss → file as **Reuse**.
+6. Could it be one line? 7. Otherwise, is this the minimum code that solves the problem? Short of that → file as **Simplification**.
+
 - **Reuse**: new code re-implementing something the codebase already has. Grep shared/utility modules and files adjacent to the change, and name the existing helper to call instead.
 - **Simplification**: unnecessary complexity the change adds — redundant or derivable state, copy-paste with slight variation, deep nesting, dead code left behind. Name the simpler form that does the same job.
 - **Efficiency**: wasted work the change introduces — redundant computation or repeated I/O, independent operations run sequentially, blocking work added to startup or hot paths; and work that is correct but fails at scale — an N+1 query, a query or expensive call inside a loop, O(n²) over realistic input sizes, or unbounded memory/allocation growth — name the cheaper algorithm or the batched/single-query form. Name the cheaper alternative.
 - **Altitude**: fragile bandaids — special cases layered on shared infrastructure are a sign the fix is not deep enough. Prefer generalizing the underlying mechanism over adding special cases.
-- **Conventions**: code that deviates from patterns or guidelines visible in the review context (`{REQUIREMENTS}`, `{PROJECT_CONTEXT}`) or the surrounding codebase — name the prevailing pattern the change diverges from.
+- **Conventions**: code that violates a convention the repo has written down. Before judging, find and read the convention docs that govern the changed paths — the root `CLAUDE.md`, `.claude/rules/*.md`, `docs/`, and any module-level `CLAUDE.md`/`docs/` you encounter walking up from the changed files. Limit this reading to the docs that govern the paths in `## Review Scope` — do not sweep the entire docs tree. A candidate quotes the violated clause with its source path (`docs/x.md:12`) and names the code that diverges from it. A preference with no doc backing is not this lens — if you cannot cite a written rule or a clearly dominant pattern in the surrounding code, drop it.
 - **Speculative complexity** (this project values minimum code that solves the problem, nothing speculative): a feature/abstraction/config/option not asked for; an abstraction introduced for a path with exactly one caller; flexibility or configurability added for a hypothetical future; error handling for a state that cannot occur given the surrounding contract; a backwards-compatibility shim for an old format/API with no documented removal date.
+- **Self-evident comments**: a comment the change adds that only restates what the code already says — read the line, and the comment tells you nothing more. Name the comment and the line it repeats. A comment explaining *why* (a non-obvious reason, a tradeoff, a constraint) is not this lens — that comment earns its place.
+- **Overbroad exception capture**: exception handling wider than the failure it needs to handle — catching a top-level/generic exception where a specific one would do, a catch block that does nothing with what it caught, or a wide `catch` that swallows an error that should have propagated and erases the diagnostic. Distinct from Speculative complexity's "error handling for a state that cannot occur" — that lens is about handling an impossible state, this one is about a real error caught too broadly.
 
 ## Scope
 
