@@ -768,6 +768,40 @@ describe("restampAfterAdopt — writeFileNoCreate 의미론", () => {
 		expect(() => restampAfterAdopt(p)).toThrow();
 		expect(existsSync(p)).toBe(false);
 	});
+
+	// restampAfterAdopt is the other GC-only writer (adopt's r5 post-rename
+	// heartbeat) that overwrites last_touched_at without a genuine producer write.
+	// It must apply the same backfill as touchSessionStates, or the adopt path
+	// reopens the exact corpse-revival bug the heartbeat path closes.
+	test("progress_touched_at 부재 시 원래 last_touched_at 값을 backfill한다 (now가 아님)", () => {
+		const p = join(omtDir, "deep-interview-active-state-X.json");
+		const old = "2020-01-01T00:00:00+00:00";
+		writeFileSync(
+			p,
+			JSON.stringify({ active: true, last_touched_at: old, state: { initial_idea: "x" } }, null, 2),
+		);
+		restampAfterAdopt(p);
+		const updated = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
+		expect((updated["last_touched_at"] as string) > old).toBe(true);
+		expect(updated["progress_touched_at"]).toBe(old);
+	});
+
+	test("progress_touched_at 이미 존재하면 backfill하지 않고 그대로 둔다", () => {
+		const p = join(omtDir, "deep-interview-active-state-Y.json");
+		const old = "2020-01-01T00:00:00+00:00";
+		const existingProgress = "2021-06-15T00:00:00+00:00";
+		writeFileSync(
+			p,
+			JSON.stringify(
+				{ active: true, last_touched_at: old, progress_touched_at: existingProgress },
+				null,
+				2,
+			),
+		);
+		restampAfterAdopt(p);
+		const updated = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
+		expect(updated["progress_touched_at"]).toBe(existingProgress);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -1370,5 +1404,66 @@ describe("touchSessionStates", () => {
 		const touchedMs = Date.parse(parsed["last_touched_at"] as string);
 		expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
 		expect(parsed["progress_touched_at"]).toBe(old);
+	});
+
+	// The backfill fix: touchSessionStates is a GC-only writer — it must not
+	// silently destroy the last genuine-activity timestamp of a legacy file (one
+	// written before progress_touched_at existed) by overwriting last_touched_at
+	// with `now`. Before overwriting, it backfills progress_touched_at from the
+	// PRE-overwrite last_touched_at value — the file's last real activity — not
+	// from the freshly-stamped `now`. This is the load-bearing assertion: a
+	// regression that backfilled with `nowStamp()` instead of the original value
+	// would still leave progress_touched_at "present", but with the wrong (fresh)
+	// value, silently reintroducing the corpse-revival bug this backfill exists
+	// to close.
+	test("backfills progress_touched_at from the ORIGINAL (pre-overwrite) last_touched_at, not from the freshly-stamped now", () => {
+		const sid = "touch-backfill-progress";
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			state: { initial_idea: "backfill target" },
+			started_at: old,
+			last_touched_at: old,
+			// no progress_touched_at — legacy shape
+		});
+
+		touchSessionStates(sid);
+
+		const parsed = readState(omtDir, `deep-interview-active-state-${sid}.json`) as Record<
+			string,
+			unknown
+		>;
+		// last_touched_at (GC axis) is bumped to now.
+		expect(Math.abs(Date.now() - Date.parse(parsed["last_touched_at"] as string))).toBeLessThan(5000);
+		// progress_touched_at is backfilled from the ORIGINAL last_touched_at value —
+		// not from `now`, and not left absent.
+		expect(parsed["progress_touched_at"]).toBe(old);
+	});
+
+	// Distinct-value variant of "leaves progress_touched_at untouched" above: that
+	// test's fixture happens to set progress_touched_at === last_touched_at, so an
+	// unconditional (presence-check-free) backfill would coincidentally reproduce
+	// the same value and slip through undetected. Using two DIFFERENT values here
+	// makes an unconditional backfill observably wrong: it would overwrite
+	// existingProgress with the (different) old last_touched_at value.
+	test("does not overwrite an existing progress_touched_at even when it differs from last_touched_at", () => {
+		const sid = "touch-preexisting-progress-distinct";
+		const old = isoSecondsAgo(7 * 3600);
+		const existingProgress = isoSecondsAgo(3600);
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			state: { initial_idea: "x" },
+			started_at: old,
+			last_touched_at: old,
+			progress_touched_at: existingProgress,
+		});
+
+		touchSessionStates(sid);
+
+		const parsed = readState(omtDir, `deep-interview-active-state-${sid}.json`) as Record<
+			string,
+			unknown
+		>;
+		expect(parsed["progress_touched_at"]).toBe(existingProgress);
 	});
 });

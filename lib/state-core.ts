@@ -220,6 +220,31 @@ function parseEpoch(iso: string): number | null {
 	}
 }
 
+/**
+ * Returns the `progress_touched_at` patch a GC-only writer (touchSessionStates,
+ * restampAfterAdopt) must apply BEFORE it overwrites `last_touched_at`.
+ *
+ * Both of those writers refresh `last_touched_at` (the GC-liveness axis) without
+ * a genuine producer write ever having happened — unlike mergeWithHeartbeat,
+ * which stamps `progress_touched_at` (the wedge-liveness axis lib/persistent-mode-core/
+ * decision.ts's isProgressLive reads) only at real work. Left alone, a GC-only
+ * writer touching a legacy file (one written before `progress_touched_at`
+ * existed) would permanently erase that file's last genuine-activity timestamp
+ * the moment it stamps `last_touched_at` — the fresh GC stamp becomes the ONLY
+ * record left of when the file was last real. This patch closes that: when
+ * `progress_touched_at` is already present, a real producer write owns it, so
+ * return {} and leave it untouched. When absent, migrate the current (soon to
+ * be overwritten) `last_touched_at` into it FIRST, preserving the last genuine-
+ * activity timestamp instead of losing it. This establishes the invariant
+ * isProgressLive's fallback (decision.ts) depends on: progress_touched_at
+ * absent ⟹ no GC-only writer has ever touched this file ⟹ last_touched_at is
+ * still that file's last genuine-activity timestamp.
+ */
+function backfillProgressTouchedAt(parsed: Record<string, unknown>): Record<string, unknown> {
+	if (typeof parsed["progress_touched_at"] === "string") return {};
+	return { progress_touched_at: parsed["last_touched_at"] };
+}
+
 /** Extracts the sid from a state filename given the prefix. */
 function sidFromFilename(filename: string, prefix: string): string {
 	// filename: `<prefix><sid>.json`
@@ -431,6 +456,11 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
  * writeFileNoCreate — so it will throw ENOENT if the file has disappeared between
  * the rename and this call, preventing accidental file creation.
  *
+ * This is a GC-only writer (see backfillProgressTouchedAt's doc comment): before
+ * overwriting `last_touched_at`, it backfills `progress_touched_at` from the
+ * pre-overwrite value when absent, so adopting a legacy state does not erase its
+ * last genuine-activity timestamp.
+ *
  * Called by adopt's r5 best-effort heartbeat re-stamp block; also exported for
  * direct unit testing of the no-create invariant.
  */
@@ -440,7 +470,11 @@ export function restampAfterAdopt(path: string): void {
 	if (!isPlainObject(parsed)) {
 		throw new Error(`restampAfterAdopt: "${path}" does not contain a JSON object`);
 	}
-	const stamped = { ...parsed, last_touched_at: nowStamp() };
+	const stamped = {
+		...parsed,
+		...backfillProgressTouchedAt(parsed),
+		last_touched_at: nowStamp(),
+	};
 	writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
 }
 
@@ -734,6 +768,11 @@ function typeFromStateFilename(filename: string): StateType | null {
  * is swallowed and the sweep continues — this runs inside the Stop hook's subagent
  * guard, immediately before that guard's own return, so a throw here would corrupt
  * the hook's own decision.
+ *
+ * GC-only writer (see backfillProgressTouchedAt's doc comment): before this
+ * refreshes `last_touched_at`, it backfills `progress_touched_at` from the
+ * pre-overwrite value when absent, so a heartbeat on a legacy file does not erase
+ * that file's last genuine-activity timestamp.
  */
 export function touchSessionStates(sessionId: string): void {
 	const omtDir = resolveOmtDir();
@@ -755,7 +794,11 @@ export function touchSessionStates(sessionId: string): void {
 			const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
 			if (!isPlainObject(parsed)) continue;
 			if (isPristine(type, parsed)) continue;
-			const stamped = { ...parsed, last_touched_at: nowStamp() };
+			const stamped = {
+				...parsed,
+				...backfillProgressTouchedAt(parsed),
+				last_touched_at: nowStamp(),
+			};
 			writeFileNoCreate(path, JSON.stringify(stamped, null, 2));
 		} catch (err) {
 			if (isErrnoException(err) && err.code === "ENOENT") continue; // vanished between readdir and write — harmless race
