@@ -80,6 +80,7 @@ echo ""
 DEAD_STATE_OUT=""
 DEAD_ARTIFACTS_OUT=""
 UNCLASSIFIED_OUT=""
+SYMLINK_OUT=""
 HAD_REAP_FAILURE=0
 
 # Fan out to every top-level directory. Every classification and liveness
@@ -93,8 +94,31 @@ HAD_REAP_FAILURE=0
 # suffix-match a real filename, so it protects nothing by identity alone —
 # safety instead comes from the artifact reaper independently preserving
 # any candidate whose own session id is still live.
+#
+# A symlinked entry is skipped before either reaper ever sees it, not
+# filtered by them: the glob's trailing slash makes `"$OMT_DIR"/*/` follow a
+# directory symlink and yield the TARGET's path, so reap_dead_state_files /
+# reap_session_artifacts would otherwise run `rm -f` against files outside
+# $OMT_DIR entirely (the symlink target can live anywhere on disk). Skipped
+# entries are still surfaced in the SYMLINKS report section below — never
+# silently dropped — following this script's existing UNCLASSIFIED
+# reported-not-acted-on convention.
 for entry_path in "$OMT_DIR"/*/; do
     entry_path="${entry_path%/}"
+
+    # The -L check MUST run after the trailing slash is stripped above, not
+    # against the raw glob match: `[ -L "path/" ]` follows the symlink (the
+    # trailing slash forces path resolution) and reports false even for a
+    # symlinked directory, silently defeating this guard.
+    if [ -L "$entry_path" ]; then
+        if [[ -n "$SYMLINK_OUT" ]]; then
+            SYMLINK_OUT="${SYMLINK_OUT}
+${entry_path}"
+        else
+            SYMLINK_OUT="$entry_path"
+        fi
+        continue
+    fi
 
     # `if ! var=$(cmd); then` (not a bare `var=$(cmd)` statement) is load-bearing
     # under `set -e`: a bare assignment whose command substitution fails would
@@ -178,6 +202,21 @@ else
     while IFS= read -r f; do
         echo "  REPORT  ${f}"
     done <<< "$UNCLASSIFIED_OUT"
+fi
+
+echo ""
+
+# Symlinked entries are never followed and never reaped by this script — the
+# same "report, don't act" contract as UNCLASSIFIED above, so a symlinked
+# project directory doesn't vanish from the operator's view just because the
+# fan-out declines to enter it.
+echo "--- SYMLINKS (skipped — not followed) ---"
+if [[ -z "$SYMLINK_OUT" ]]; then
+    echo "  (none)"
+else
+    while IFS= read -r f; do
+        echo "  SYMLINK ${f}"
+    done <<< "$SYMLINK_OUT"
 fi
 
 echo ""
