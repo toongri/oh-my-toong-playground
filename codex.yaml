@@ -1,5 +1,20 @@
 # MCP definitions for Codex.
 # Note: Figma uses Codex remote MCP config; gemini still uses mcp-remote.
+
+# Deliberately empty, and it MUST stay declared rather than be deleted.
+# This section previously held `agents.max_depth`, removed once that key was
+# measured inert on the V2 spawn path (codex-spawn-depth-gate.sh now enforces
+# that cap instead). Deleting the whole `config:` key is not equivalent to
+# emptying it: syncPlatformYaml only calls syncConfig when `yaml.config` is
+# present (tools/adapters/codex.ts:715), so with the key absent the deployed
+# `.codex/config.toml` keeps whatever its `# --- omt:config ---` block last
+# received -- forever, on every subsequent sync. Installs synced before the
+# removal would silently retain `[agents] max_depth = 2` while fresh installs
+# get nothing, so "the key is gone" would be true only for new machines.
+# An empty mapping keeps syncConfig reachable; insertManagedBlock replaces the
+# block wholesale, so it lands empty and the stale key is actually cleared.
+config: {}
+
 model-map:
   tiers:
     opus:
