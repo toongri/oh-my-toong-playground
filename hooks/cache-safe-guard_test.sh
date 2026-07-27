@@ -23,6 +23,10 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TESTS_PASSED=0
 TESTS_FAILED=0
+# Must be set before the first setup_test_env call: otherwise its re-entrant
+# check below sees a value inherited from the ambient environment (not one
+# this suite created) and tears down/rm -rf's a directory it never made.
+TEST_TMP_DIR=""
 
 # =============================================================================
 # Test harness — mirrors session-start_test.sh / resume-forge-start_test.sh
