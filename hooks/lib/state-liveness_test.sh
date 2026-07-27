@@ -1339,6 +1339,56 @@ test_reap_session_artifacts_namespaced_block_count_survives_none_lane() {
 }
 
 # =============================================================================
+# Finding 1 fix: list_live_session_ids's second witness source
+# (SESSION_ARTIFACT_PREFIXES via is_artifact_live). A Codex Stop that blocks
+# on incomplete todos writes a fresh state/block-count-<sid> on every single
+# blocking Stop — that witnesses the bare sid as live even once the sibling
+# codex-todo-<sid>.json mirror has gone stale from 6h of no `update_plan`
+# call, closing the false-completion path where the mirror's absence used to
+# read as "no incomplete todos" (fail-open in hooks/codex-persistent-mode/).
+# The negative control seeds the SAME stale mirror with no witness of any
+# kind and asserts it is still reaped — without it, the positive assertion
+# below could pass merely because artifact reaping was disabled wholesale.
+# =============================================================================
+
+test_reap_session_artifacts_stale_codex_todo_survives_via_fresh_block_count_witness() {
+  local sid="witness-sid-28"
+  local d="$TEST_TMP_DIR"
+  mkdir -p "$d/state"
+  local mirror="$d/codex-todo-$sid.json"
+  local bc="$d/state/block-count-$sid"
+  write_state "$mirror" "{\"incomplete\":3}"
+  touch_ago "$mirror" 25200   # 7h — past ACTIVE_IDLE_TTL, stale on its own
+  write_state "$bc" "1"
+  touch_ago "$bc" 0           # fresh — within ACTIVE_IDLE_TTL, the witness
+
+  reap_session_artifacts "$d" "other-session-sid" "$NOW" 0 > /dev/null
+
+  if [ ! -f "$mirror" ]; then
+    echo "  ASSERTION FAILED: a stale codex-todo-<sid>.json must survive when a fresh sibling state/block-count-<sid> witnesses the same sid as live"
+    return 1
+  fi
+  return 0
+}
+
+test_reap_session_artifacts_stale_codex_todo_reaped_without_witness() {
+  local sid="nowitness-sid-29"
+  local d="$TEST_TMP_DIR"
+  local mirror="$d/codex-todo-$sid.json"
+  write_state "$mirror" "{\"incomplete\":3}"
+  touch_ago "$mirror" 25200   # 7h — past ACTIVE_IDLE_TTL; no live state file
+                              # and no block-count witness for this sid at all
+
+  reap_session_artifacts "$d" "other-session-sid" "$NOW" 0 > /dev/null
+
+  if [ -f "$mirror" ]; then
+    echo "  ASSERTION FAILED (negative control): a stale codex-todo-<sid>.json with no live witness of any kind must still be reaped"
+    return 1
+  fi
+  return 0
+}
+
+# =============================================================================
 # Defect: rm -f failures were silently reported as successful deletions —
 # the affected path was echoed BEFORE rm ran, and rm's own exit status was
 # never inspected. A failed delete must not be echoed as deleted, must be
@@ -1635,6 +1685,8 @@ run_test test_reap_session_artifacts_json_extension_stripped_for_live_id_match
 run_test test_reap_session_artifacts_short_live_id_does_not_falsely_preserve
 run_test test_reap_session_artifacts_dry_run_preserves_candidate_bytes
 run_test test_reap_session_artifacts_namespaced_block_count_survives_none_lane
+run_test test_reap_session_artifacts_stale_codex_todo_survives_via_fresh_block_count_witness
+run_test test_reap_session_artifacts_stale_codex_todo_reaped_without_witness
 run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported
 run_test test_reap_session_artifacts_rm_failure_not_echoed_and_reported
 run_test test_harmless_conditions_do_not_trip_set_e

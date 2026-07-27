@@ -225,11 +225,46 @@ is_artifact_live() {
 
 # list_live_session_ids <dir> <now_epoch>
 #
-# Echoes the bare session id of every currently-live state file in <dir>, one
-# per line, deduplicated. This is what lets reap_session_artifacts protect a
-# live session's artifacts without knowing its session id — a caller that
-# never had a session id to begin with (omt-cleanup) can still ask "is any
-# state file for this id live right now?".
+# Echoes the bare session id of every currently-live session witness in
+# <dir>, one per line, deduplicated. This is what lets reap_session_artifacts
+# protect a live session's artifacts without knowing its session id — a
+# caller that never had a session id to begin with (omt-cleanup) can still
+# ask "is any witness for this id live right now?".
+#
+# Two independent witness sources are walked, not one:
+#   1. STATE_PREFIXES entries, judged by is_state_live (the `.active` +
+#      last_touched_at/started_at rule) — the original source.
+#   2. SESSION_ARTIFACT_PREFIXES entries, judged by is_artifact_live
+#      (mtime-only against ACTIVE_IDLE_TTL) — added so a plain session with
+#      no STATE_PREFIXES file of its own (e.g. a Codex session that has
+#      called `update_plan` but owns no goal/ultragoal/prometheus/
+#      deep-interview/qa state) still gets a liveness witness whenever ANY
+#      whitelisted artifact carrying its sid is being refreshed. Concretely:
+#      a Codex Stop that blocks on incomplete todos writes
+#      `state/block-count-<sid>` on every single blocking Stop, so that file
+#      now witnesses the sid as live even after its sibling
+#      `codex-todo-<sid>.json` mirror goes stale from 6h of no `update_plan`
+#      call (see reap_session_artifacts's own doc comment for the mechanism
+#      this closes).
+# Adding this second source can only ever ADD preserved sids, never remove
+# one the first source already reported — it is a pure union of two
+# independently-computed live-id sets.
+#
+# Limitation, left open: a namespaced counter (e.g.
+# state/block-count-prometheus-<sid>) strips down to the tail
+# "prometheus-<sid>", not the bare sid, so it witnesses only that namespaced
+# tail, never the bare sid — reap_session_artifacts's own suffix-anchor
+# matching is what lets a bare live id also cover a namespaced counter, not
+# this function de-namespacing anything. There is no de-namespacing logic
+# here and none should be added for this reason alone.
+#
+# Residual left open: a session that calls neither `update_plan` (which
+# refreshes codex-todo-<sid>.json) nor triggers a blocking Stop (which
+# refreshes state/block-count-<sid>) for a full ACTIVE_IDLE_TTL window still
+# has no live witness at all and loses its mirror to reap_session_artifacts.
+# Closing that requires the reader or writer side (out of scope here — see
+# the plan's Must-NOT on touching hooks/codex-persistent-mode/ and on
+# reducing codex-todo write frequency).
 #
 # <now_epoch> is required — the caller's own clock reading, not a value this
 # function fetches for itself. reap_session_artifacts always supplies its own
@@ -255,6 +290,24 @@ list_live_session_ids() {
         # comparison in reap_session_artifacts.
         sid="${f#"$dir/$prefix"}"
         sid="${sid%.json}"
+        case " $seen " in
+          *" $sid "*) continue ;;
+        esac
+        seen="$seen $sid"
+        echo "$sid"
+      fi
+    done
+  done
+  for prefix in $SESSION_ARTIFACT_PREFIXES; do
+    for f in "$dir"/${prefix}*; do
+      [ -f "$f" ] || continue
+      if is_artifact_live "$f" "$now_epoch"; then
+        # Same SC2295 hazard as the STATE_PREFIXES pass above — quote the
+        # prefix strip. Extension stripping mirrors reap_session_artifacts's
+        # own tail derivation (everything from the first '.'), since this
+        # glob is not `.json`-anchored (state/block-count-* has none).
+        sid="${f#"$dir/$prefix"}"
+        sid="${sid%%.*}"
         case " $seen " in
           *" $sid "*) continue ;;
         esac
@@ -325,7 +378,13 @@ reap_dead_state_files() {
 #   2. its own mtime is still within ACTIVE_IDLE_TTL (is_artifact_live)
 #   3. its embedded session id is live right now, per list_live_session_ids —
 #      this is what protects a live session's artifacts from a caller that
-#      supplies no session id at all (omt-cleanup passes the __none__ sentinel)
+#      supplies no session id at all (omt-cleanup passes the __none__ sentinel).
+#      list_live_session_ids itself now unions two independent witness
+#      sources (STATE_PREFIXES via is_state_live, AND SESSION_ARTIFACT_PREFIXES
+#      via is_artifact_live) — not STATE_PREFIXES alone — so a session with no
+#      state file of its own can still be witnessed live by one of its own
+#      whitelisted artifacts. See that function's doc comment for the
+#      mechanism and its residual limitation.
 #
 # Live-id membership rule: strip the candidate's whitelist prefix, then its
 # extension (everything from the first '.'). Accept if what remains equals a
