@@ -287,6 +287,35 @@ test_fallback_to_mtime_when_no_timestamps_stale() {
 }
 
 # =============================================================================
+# Defect coverage: is_state_live's OWN ACTIVE_IDLE_TTL boundary (:126,
+# `[ "$age" -lt "$ACTIVE_IDLE_TTL" ]` inside the active:true branch), pinned
+# independently of is_artifact_live's identically-worded boundary check at
+# :219 (test_is_artifact_live_ttl_boundary_is_dead below). Both functions
+# read the same $ACTIVE_IDLE_TTL constant but on separate lines with separate
+# `-lt` operators — a `-lt` -> `-le` mutation on one line does not touch the
+# other, so each boundary needs its own dedicated fixture calling its own
+# function; a test that exercises only one function proves nothing about the
+# other's boundary. No other fixture in this file drives is_state_live with
+# age exactly equal to ACTIVE_IDLE_TTL — every other active-branch row here
+# (e.g. test_c3_active_stale_is_dead) uses an age comfortably past the TTL,
+# never exactly on it. Uses the sourced $ACTIVE_IDLE_TTL constant, never the
+# literal 21600.
+# =============================================================================
+
+test_is_state_live_active_ttl_boundary_is_dead() {
+  local file="$TEST_TMP_DIR/state.json"
+  local touched_ago
+  touched_ago=$(iso_ago "$ACTIVE_IDLE_TTL")   # age == ACTIVE_IDLE_TTL exactly
+  write_state "$file" "{\"active\":true,\"last_touched_at\":\"$touched_ago\"}"
+
+  if is_state_live "$file" "$NOW"; then
+    echo "  ASSERTION FAILED: an active state file exactly ACTIVE_IDLE_TTL seconds old must be dead (age < TTL is the live condition; age == TTL is not < TTL)"
+    return 1
+  fi
+  return 0
+}
+
+# =============================================================================
 # is_current_session — generalized sid-suffix matching
 # =============================================================================
 
@@ -1002,6 +1031,33 @@ test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete() {
   return 0
 }
 
+# Defect coverage: dry_run=1's no-write contract, checked at the byte level
+# rather than path-existence. The path-existence check above
+# (test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete)
+# only proves the candidate file still EXISTS afterward — a dry_run branch
+# that truncated the candidate in place (e.g. `: > "$f"`) before echoing it
+# would still leave the path present and pass that test, while destroying
+# its content. reap_dead_state_files owns this destructive primitive, so its
+# own suite — not just a downstream CLI wrapper's suite — must hold this
+# contract. cmp -s against a pre-call copy catches any byte change, not only
+# a specific corruption shape.
+test_reap_dead_state_files_dry_run_preserves_candidate_bytes() {
+  local sid="drynowrite-sid-26"
+  local d="$TEST_TMP_DIR"
+  local f="$d/goal-state-other-$sid.json"
+  write_state "$f" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 25200)\"}"   # 7h — past ACTIVE_IDLE_TTL, a genuine candidate
+  local ref="$TEST_TMP_DIR/ref-state.json"
+  cp "$f" "$ref"
+
+  reap_dead_state_files "$d" "current-$sid" "$NOW" 1 > /dev/null
+
+  if ! cmp -s "$f" "$ref"; then
+    echo "  ASSERTION FAILED: dry_run=1 must not modify the candidate state file's bytes"
+    return 1
+  fi
+  return 0
+}
+
 test_reap_dead_state_files_old_closed_bak_survives_json_anchor() {
   local sid="bak-sid-8"
   local d="$TEST_TMP_DIR"
@@ -1182,6 +1238,30 @@ test_reap_session_artifacts_dry_run_emits_candidate_but_does_not_delete() {
   fi
   if [ ! -f "$f" ]; then
     echo "  ASSERTION FAILED: dry_run=1 must NOT delete the candidate artifact"
+    return 1
+  fi
+  return 0
+}
+
+# Defect coverage: same reasoning as
+# test_reap_dead_state_files_dry_run_preserves_candidate_bytes above, applied
+# to reap_session_artifacts — the sibling reaper this file also owns. The
+# existing path-existence dry-run test for this function
+# (test_reap_session_artifacts_dry_run_emits_candidate_but_does_not_delete)
+# would likewise still pass if the dry_run branch truncated the artifact in
+# place before echoing it.
+test_reap_session_artifacts_dry_run_preserves_candidate_bytes() {
+  local d="$TEST_TMP_DIR"
+  local f="$d/codex-todo-drynowrite-sid-27.json"
+  write_state "$f" "{\"marker\":\"artifact-bytes\"}"
+  touch_ago "$f" 25200   # 7h — past ACTIVE_IDLE_TTL, no live goal-state for this id, a genuine candidate
+  local ref="$TEST_TMP_DIR/ref-artifact.json"
+  cp "$f" "$ref"
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 1 > /dev/null
+
+  if ! cmp -s "$f" "$ref"; then
+    echo "  ASSERTION FAILED: dry_run=1 must not modify the candidate artifact's bytes"
     return 1
   fi
   return 0
@@ -1466,6 +1546,7 @@ run_test test_fallback_to_started_at_when_no_heartbeat_fresh
 run_test test_fallback_to_started_at_when_no_heartbeat_stale
 run_test test_fallback_to_mtime_when_no_timestamps_fresh
 run_test test_fallback_to_mtime_when_no_timestamps_stale
+run_test test_is_state_live_active_ttl_boundary_is_dead
 run_test test_is_current_session_matches_filename_sid
 run_test test_is_current_session_no_match_different_sid
 run_test test_is_current_session_matches_ultragoal_filename_sid
@@ -1490,6 +1571,7 @@ run_test test_reap_dead_state_files_relocation_equivalence
 run_test test_reap_dead_state_files_execute_mode_echoes_affected_paths
 run_test test_reap_dead_state_files_execute_mode_echoes_real_path_not_constant
 run_test test_reap_dead_state_files_dry_run_emits_candidate_but_does_not_delete
+run_test test_reap_dead_state_files_dry_run_preserves_candidate_bytes
 run_test test_reap_dead_state_files_old_closed_bak_survives_json_anchor
 run_test test_is_current_session_suffix_match_diverges_from_base_exact_match_over_preserves
 run_test test_reap_session_artifacts_current_session_self_artifact_survives
@@ -1500,6 +1582,7 @@ run_test test_reap_session_artifacts_fresh_mtime_survives_without_live_state_or_
 run_test test_reap_session_artifacts_dry_run_emits_candidate_but_does_not_delete
 run_test test_reap_session_artifacts_json_extension_stripped_for_live_id_match
 run_test test_reap_session_artifacts_short_live_id_does_not_falsely_preserve
+run_test test_reap_session_artifacts_dry_run_preserves_candidate_bytes
 run_test test_reap_session_artifacts_namespaced_block_count_survives_none_lane
 run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported
 run_test test_reap_session_artifacts_rm_failure_not_echoed_and_reported
