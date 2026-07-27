@@ -1194,6 +1194,44 @@ describe("touchSessionStates", () => {
 			expect(Math.abs(nowMs - touchedMs)).toBeLessThan(5000);
 		}
 
+		// The heartbeat must preserve every pre-existing payload field, not just
+		// last_touched_at — a `{ last_touched_at: nowStamp() }` regression (dropping
+		// the `...parsed` spread) would still pass the last_touched_at-only checks
+		// above while silently wiping phase/iteration/outcome/plan_path/state on
+		// every live session. Check actual values, not mere key presence, since a
+		// regression that spreads `{ ...parsed, phase: undefined }`-shaped output
+		// would still pass a presence-only check.
+		const goalAfter = readState(omtDir, `goal-state-${sid}.json`) as Record<string, unknown>;
+		expect(goalAfter["phase"]).toBe("pursuing");
+		expect(goalAfter["iteration"]).toBe(2);
+		expect(goalAfter["outcome"]).toBe("ship X");
+
+		const ultragoalAfter = readState(
+			omtDir,
+			`ultragoal-state-${sid}.json`,
+		) as Record<string, unknown>;
+		expect(ultragoalAfter["phase"]).toBe("pursuing");
+		expect(ultragoalAfter["iteration"]).toBe(2);
+		expect(ultragoalAfter["outcome"]).toBe("ship Y");
+
+		const prometheusAfter = readState(
+			omtDir,
+			`prometheus-state-${sid}.json`,
+		) as Record<string, unknown>;
+		expect(prometheusAfter["phase"]).toBe("S2");
+		expect(prometheusAfter["plan_path"]).toBe("some/plan.md");
+
+		const deepInterviewAfter = readState(
+			omtDir,
+			`deep-interview-active-state-${sid}.json`,
+		) as Record<string, unknown>;
+		expect(deepInterviewAfter["state"]).toEqual({ initial_idea: "diving skills" });
+
+		const qaAfter = readState(omtDir, `qa-state-${sid}.json`) as Record<string, unknown>;
+		expect(qaAfter["phase"]).toBe("IN-PROGRESS");
+		expect(qaAfter["cycle"]).toBe(1);
+		expect(qaAfter["target"]).toBe("some target");
+
 		const src = readFileSync(join(import.meta.dir, "state-core.ts"), "utf8");
 		const fnSrc = extractFunctionSource(src, "touchSessionStates");
 		expect(fnSrc).not.toContain("goal-state-");
