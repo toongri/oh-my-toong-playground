@@ -76,10 +76,14 @@ bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts request-complete
 **If the `get_goal` tool is available**, call it immediately before the third command to obtain the current native-goal snapshot, then pass that snapshot on the `request-complete` call itself via `--codex-goal-json`, replacing the bare `request-complete` line above:
 
 ```
-bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts request-complete --codex-goal-json '<the get_goal snapshot JSON>'
+bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts request-complete --codex-goal-json - <<'SNAPSHOT'
+<the get_goal snapshot JSON>
+SNAPSHOT
 ```
 
-This is the same tool-existence conditional `SKILL.md`'s Execution Dispatch loop uses for `create_goal`/`update_goal` — the condition is whether the `get_goal` tool is available, never a platform-name branch. `--codex-goal-json` accepts the snapshot either as an inline JSON string or a path to a file containing it — the gate tries to parse the argument as JSON first and falls back to reading it as a file path on parse failure.
+This is the same tool-existence conditional `SKILL.md`'s Execution Dispatch loop uses for `create_goal`/`update_goal` — the condition is whether the `get_goal` tool is available, never a platform-name branch.
+
+Use stdin (`-`) with a **quoted** heredoc here too: the snapshot echoes the registered objective back, so an apostrophe in it kills any single-quoted inline form. `--codex-goal-json` also accepts inline JSON or a file path (parsed as JSON first, then read as a path), but only stdin is safe for an arbitrary objective.
 
 **Omitting `--codex-goal-json` when it is required is a refusal, not a silent pass.** Once `set --codex-goal-objective` has armed the cross-check, a missing, unparseable, or non-matching snapshot leaves `phase` at `pursuing` — the safe, never-false-complete direction — and `request-complete`'s own refusal message names this condition, so read that message rather than retrying the same call.
 
