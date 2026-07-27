@@ -15,6 +15,7 @@ import {
 	buildAugmentedCommand,
 	gcStaleJobs,
 	cmdStart,
+	cmdReap,
 } from "./job.ts";
 import * as GenericJob from "@lib/generic-job";
 
@@ -53,12 +54,22 @@ function makeCliStubDir(): string {
  * alive PGID + zero live progress (`findActiveMembers` returns none) — so the
  * fixture is judged orphaned without needing to fake or bypass that judgment.
  */
-function makeOrphanJobFixture(jobsDir: string, name: string): { jobDir: string; pgid: number } {
+function makeOrphanJobFixture(
+	jobsDir: string,
+	name: string,
+	opts: { createdAt?: string } = {},
+): { jobDir: string; pgid: number } {
 	const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
 	child.unref();
 	// A detached child is the leader of its own process group, so PGID === PID
 	// (same platform contract lib/generic-job.ts's spawnWorkers relies on).
 	const pgid = child.pid as number;
+	// Spawn-time witness (same `ps -o lstart=` value spawnWorkers itself records)
+	// — required since the orphan reaper only signals a PGID whose current
+	// leader's start time matches this recorded value (PID/PGID reuse guard).
+	const workerPgidStartedAt = execFileSync("ps", ["-o", "lstart=", "-p", String(pgid)], {
+		encoding: "utf8",
+	}).trim();
 
 	const jobDir = path.join(jobsDir, `chunk-review-${name}`);
 	const memberDir = path.join(jobDir, "members", "alice");
@@ -67,8 +78,8 @@ function makeOrphanJobFixture(jobsDir: string, name: string): { jobDir: string; 
 		path.join(jobDir, "job.json"),
 		JSON.stringify({
 			id: `chunk-review-${name}`,
-			createdAt: new Date().toISOString(),
-			members: [{ name: "alice", workerPgid: pgid }],
+			createdAt: opts.createdAt ?? new Date().toISOString(),
+			members: [{ name: "alice", workerPgid: pgid, workerPgidStartedAt }],
 		}),
 	);
 	fs.writeFileSync(
@@ -1209,15 +1220,94 @@ describe("job.ts reap", () => {
 	});
 
 	test("회수할 고아가 없으면 stdout은 비고 정상 종료한다", () => {
-		// --grace-ms 0: reapOrphanJobs awaits the grace period unconditionally,
-		// even with zero orphans (lib/generic-job.ts) — omitting this would wait
-		// out the full REAP_GRACE_MS_DEFAULT (5000ms) for nothing.
+		// --grace-ms 0으로 명시했으니 유예가 없다는 것은 자명하다 — 여기서 확인하는
+		// 것은 그 값과 무관하게 정상 종료(빈 stdout)한다는 점.
 		const result = execFileSync(
 			process.execPath,
 			[SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "0"],
 			{ stdio: "pipe" },
 		);
 		expect(result.toString()).toBe("");
+	});
+
+	test("이 job과 무관한 프로세스는 reap 회수 전후 모두 살아있다 (오살 방지 방관자)", () => {
+		// 방관자 — 어떤 job.json에도 workerPgid로 기록되지 않은 무관한 프로세스.
+		// reap이 잘못된 그룹에 신호를 보내면 이 프로세스가 사라진다.
+		const bystander = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		bystander.unref();
+		const bystanderPgid = bystander.pid;
+		if (bystanderPgid === undefined) throw new Error("spawn failed to produce a pid");
+
+		try {
+			expect(isPgidAlive(bystanderPgid)).toBe(true);
+
+			const { pgid } = makeOrphanJobFixture(jobsDir, "bystander-reap");
+			execFileSync(process.execPath, [SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "0"], {
+				stdio: "pipe",
+			});
+
+			expect(isPgidAlive(pgid)).toBe(false);
+			// 핵심 단언 — 오살 방지: 무관한 프로세스는 여전히 살아있어야 한다.
+			expect(isPgidAlive(bystanderPgid)).toBe(true);
+		} finally {
+			killPgidIfAlive(bystanderPgid);
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// job.ts cmdReap — 로그는 그룹킬 후 생존한 프로세스를 "reaped"라고 주장하면
+// 안 된다 (결함 B). reapOrphanJobs 자신도 별도로 "survived group kill" 줄을
+// stderr에 남기므로, cmdReap이 매 orphan마다 무조건 "reaped"를 쓰면 같은
+// stderr 스트림에 서로 모순되는 두 줄이 남는다.
+// ---------------------------------------------------------------------------
+
+describe("job.ts cmdReap — 생존 프로세스를 회수됐다고 보고하지 않는다", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("group kill 후에도 프로세스가 살아남으면 stderr에 'reaped' 성공 주장이 없다", async () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "survivor");
+
+		// 선행 단언: 회수 전에 그룹이 실제로 살아있음을 먼저 확인한다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		const stderrChunks: string[] = [];
+		const originalStderrWrite = process.stderr.write;
+		(process.stderr as unknown as { write: unknown }).write = (chunk: unknown) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		};
+
+		const originalKill = process.kill;
+		// kill을 no-op으로 바꿔 실제로는 신호를 보내지 않는다 — 그러면 프로세스는
+		// 반드시 살아남으므로 "생존" 분기가 타이밍에 의존하지 않고 결정적으로
+		// 재현된다 (lib/generic-job.test.ts의 동일 기법).
+		(process as unknown as { kill: unknown }).kill = () => true;
+
+		try {
+			await cmdReap({ "jobs-dir": jobsDir, "grace-ms": 0 });
+		} finally {
+			process.kill = originalKill;
+			process.stderr.write = originalStderrWrite;
+		}
+
+		const combined = stderrChunks.join("");
+		expect(combined).not.toContain("reaped orphan job");
+		// 오살 방지: kill이 no-op이었으므로 프로세스는 실제로 살아있어야 한다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		killPgidIfAlive(pgid);
 	});
 });
 
@@ -1319,6 +1409,100 @@ describe("cmdStart reaps orphan jobs on start", () => {
 			for (const member of meta.members ?? []) {
 				if (typeof member.workerPgid === "number") killPgidIfAlive(member.workerPgid);
 			}
+		}
+	});
+
+	test("createdAt이 GC 임계(1시간)보다 오래된 고아 job도 회수한다 (GC가 앵커를 지우기 전에 회수해야 한다)", async () => {
+		// gcStaleJobs(GC_MAX_AGE_MS=1시간)가 reapOrphanJobs보다 먼저 돌면 이 job의
+		// job.json(모든 회수 계층의 유일한 소유권 앵커)이 생존 여부 확인 없이
+		// 지워진다 — 그러면 reapOrphanJobs가 뒤이어 돌아도 지울 앵커가 이미 없어
+		// 이 프로세스 그룹은 회수되지 않는다. 순서를 바꾸지 않으면 RED.
+		const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
+		const { pgid } = makeOrphanJobFixture(jobsDir, "gc-race", { createdAt: twoHoursAgo });
+
+		// 선행 단언: 회수 전에 그룹이 실제로 살아있음을 먼저 확인한다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		expect(isPgidAlive(pgid)).toBe(false);
+
+		// cleanup: kill this test's own newly-spawned worker(s), best-effort.
+		for (const entry of fs.readdirSync(jobsDir)) {
+			const jobJsonPath = path.join(jobsDir, entry, "job.json");
+			if (!fs.existsSync(jobJsonPath)) continue;
+			const meta = JSON.parse(fs.readFileSync(jobJsonPath, "utf8"));
+			for (const member of meta.members ?? []) {
+				if (typeof member.workerPgid === "number") killPgidIfAlive(member.workerPgid);
+			}
+		}
+	});
+
+	test("이 job과 무관한 프로세스는 cmdStart의 회수 전후 모두 살아있다 (오살 방지 방관자)", async () => {
+		const bystander = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		bystander.unref();
+		const bystanderPgid = bystander.pid;
+		if (bystanderPgid === undefined) throw new Error("spawn failed to produce a pid");
+
+		try {
+			expect(isPgidAlive(bystanderPgid)).toBe(true);
+
+			const { pgid } = makeOrphanJobFixture(jobsDir, "bystander-start");
+
+			const configPath = path.join(tmpDir, "config.yaml");
+			fs.writeFileSync(
+				configPath,
+				[
+					"chunk-review:",
+					"  chairman:",
+					"    role: none",
+					"  members:",
+					"    - name: bob",
+					"      command: echo bob",
+					"  settings:",
+					"    exclude_chairman_from_members: false",
+					"    timeout: 10",
+				].join("\n"),
+			);
+
+			await cmdStart(
+				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				"test prompt",
+			);
+
+			expect(isPgidAlive(pgid)).toBe(false);
+			// 핵심 단언 — 오살 방지: 무관한 프로세스는 여전히 살아있어야 한다.
+			expect(isPgidAlive(bystanderPgid)).toBe(true);
+
+			for (const entry of fs.readdirSync(jobsDir)) {
+				const jobJsonPath = path.join(jobsDir, entry, "job.json");
+				if (!fs.existsSync(jobJsonPath)) continue;
+				const meta = JSON.parse(fs.readFileSync(jobJsonPath, "utf8"));
+				for (const member of meta.members ?? []) {
+					if (typeof member.workerPgid === "number") killPgidIfAlive(member.workerPgid);
+				}
+			}
+		} finally {
+			killPgidIfAlive(bystanderPgid);
 		}
 	});
 });
@@ -3783,6 +3967,56 @@ describe("cmdStart writes workerPgid to job.json", () => {
 			expect("workerPgid" in member).toBeTruthy();
 			expect(Number.isInteger(member.workerPgid)).toBe(true);
 			expect(member.workerPgid).toBeGreaterThan(0);
+		}
+
+		// cleanup spawned worker process groups (may have already exited — best-effort)
+		for (const member of jobMeta.members) {
+			try {
+				process.kill(-member.workerPgid, "SIGKILL");
+			} catch {
+				// already exited — nothing to clean up
+			}
+		}
+	});
+
+	test("job.json의 모든 members가 spawn 시각 증인(`workerPgidStartedAt`)을 가진다", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		const jobDirName = fs.readdirSync(jobsDir)[0];
+		const jobDir = path.join(jobsDir, jobDirName);
+		const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+
+		expect(jobMeta.members.length).toBe(2);
+		for (const member of jobMeta.members) {
+			// 오살 회귀 결함의 수정 검증: 회수기가 "이 PGID 번호가 우리 것"을
+			// 확인할 유일한 근거가 이 증인이다 — 부재하면 findOrphanJobs/cmdClean
+			// 어느 쪽도 이 워커를 회수하지 않는다.
+			expect("workerPgidStartedAt" in member).toBeTruthy();
+			expect(typeof member.workerPgidStartedAt).toBe("string");
+			expect((member.workerPgidStartedAt as string).length).toBeGreaterThan(0);
 		}
 
 		// cleanup spawned worker process groups (may have already exited — best-effort)
