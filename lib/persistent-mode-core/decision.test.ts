@@ -2170,14 +2170,14 @@ describe("makeDecision", () => {
 	});
 
 	// -------------------------------------------------------------------------
-	// TODO 4 (D-5): the Stop-hook heartbeat (touchSessionStates) is hoisted
-	// above Guard 2's activeSubagentCount > 0 early-return, so even a Stop call
-	// that short-circuits there still proves this session is alive and
-	// refreshes its state files. Without this, a session with many running
-	// subagents never touches state below the guard, and its state ages past
-	// ACTIVE_IDLE_TTL while still in use.
+	// TODO 4: the Stop-hook heartbeat (touchSessionStates) sits inside Guard 2's
+	// activeSubagentCount > 0 block, right before that block's own early return —
+	// not above it — so even a Stop call that short-circuits there still proves
+	// this session is alive and refreshes its state files. Without this, a
+	// session with many running subagents never touches state below the guard,
+	// and its state ages past ACTIVE_IDLE_TTL while still in use.
 	// -------------------------------------------------------------------------
-	describe("D-5: heartbeat hoisted above the subagent early-return", () => {
+	describe("session-state heartbeat inside the subagent-guard early-return", () => {
 		const isoAgo = (seconds: number): string => new Date(Date.now() - seconds * 1000).toISOString();
 		const ageFile = (path: string, seconds: number): void => {
 			const old = new Date(Date.now() - seconds * 1000);
@@ -2213,11 +2213,13 @@ describe("makeDecision", () => {
 		it("touches state without the guard ever reaching stateDir/ensureDir below it", async () => {
 			// A dedicated OMT_DIR with no `state/` subdirectory pre-created — unlike
 			// the shared beforeEach fixture above, which always mkdir's stateDir up
-			// front. If the heartbeat sat below Guard 2 (the bug this task fixes),
-			// makeDecision would never reach it while a subagent is active. If the
-			// guard itself were moved below :361/:365 instead, `$OMT_DIR/state/`
-			// would exist afterward. Only the intended edit — heartbeat above,
-			// guard's short-circuit unchanged — satisfies both conditions at once.
+			// front. The heartbeat sits inside Guard 2's activeSubagentCount > 0 block,
+			// right before that block's own return, so it touches this session's state
+			// AND the guard's early return fires before makeDecision ever reaches the
+			// stateDir/ensureDir call further down. If the heartbeat were moved below
+			// the guard's return instead, makeDecision would never reach it while a
+			// subagent is active; only the current placement satisfies both conditions
+			// this test checks: state touched AND `$OMT_DIR/state/` never created.
 			const freshOmtDir = await mkdtemp(join(tmpdir(), "decision-hoist-test-"));
 			const prevOmtDir = process.env.OMT_DIR;
 			process.env.OMT_DIR = freshOmtDir;
@@ -2334,13 +2336,13 @@ describe("makeDecision", () => {
 			expect(fs.existsSync(statePath)).toBe(false);
 		});
 
-		it("activeSubagentCount === 0 does not fire the heartbeat (regression guard against hoisting above the guard)", async () => {
+		it("activeSubagentCount === 0 does not fire the heartbeat (regression guard against firing unconditionally outside the subagent guard)", async () => {
 			// qa is the one state family this file never reads or writes anywhere else
 			// in makeDecision — the ONLY thing that can move its last_touched_at is
-			// touchSessionStates. If that call were ever hoisted back above the
-			// activeSubagentCount > 0 guard (the literal placement this task
-			// supersedes), it would fire unconditionally regardless of subagent
-			// activity and this assertion would fail.
+			// touchSessionStates. The heartbeat lives inside Guard 2's
+			// activeSubagentCount > 0 block; if it were ever hoisted above that guard,
+			// it would fire unconditionally regardless of subagent activity and this
+			// assertion would fail.
 			const sid = "heartbeat-no-fire-when-idle";
 			const statePath = join(omtDir, `qa-state-${sid}.json`);
 			const old = isoAgo(7 * 3600);
