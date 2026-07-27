@@ -2289,9 +2289,17 @@ describe("makeDecision", () => {
 
 			const repoRoot = join(import.meta.dir, "..", "..");
 			const hookPath = join(repoRoot, "hooks", "session-start.sh");
+			// session-start.sh:57 guards its exports with `[ -n "$CLAUDE_ENV_FILE" ]` —
+			// only a genuinely ABSENT (not merely blank/empty-string) env var takes
+			// that skip branch, so CLAUDE_ENV_FILE must be deleted from the child env
+			// entirely, not set to "" or undefined. Left as `...process.env`, this
+			// spawn would inherit the real ambient CLAUDE_ENV_FILE and the hook would
+			// unconditionally overwrite the developer's live session env file with
+			// this test's temp fixture path and sid.
+			const { CLAUDE_ENV_FILE: _omittedClaudeEnvFile, ...envWithoutClaudeEnvFile } = process.env;
 			execFileSync("bash", [hookPath], {
 				input: JSON.stringify({ sessionId: currentSid, cwd: repoRoot }),
-				env: { ...process.env, OMT_DIR: omtDir },
+				env: { ...envWithoutClaudeEnvFile, OMT_DIR: omtDir },
 				encoding: "utf8",
 			});
 
