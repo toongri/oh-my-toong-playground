@@ -33,8 +33,7 @@ bun test                                   # All TypeScript tests
 `bun`, `bash` (macOS 3.2 compatible), `jq`
 
 `jq` is a runtime prerequisite, not just a dev tool: the shipped hooks parse their
-payloads with it and **fail open (no guard) when it is absent** — including the
-session-ledger write guard and the code-review artifact identity guard below. macOS
+payloads with it and **fail open (no guard) when it is absent**. macOS
 15+ ships it in the base system at `/usr/bin/jq`; older macOS needs it installed.
 
 ## Architecture
@@ -90,7 +89,7 @@ skills:
 - Root `sync.yaml`: global paths only (`skills/`, `agents/`, etc.)
 - Project `sync.yaml`: own project first (`projects/<name>/skills/`), then global fallback. Cross-project references are blocked.
 
-**Post-deploy format** (top-level `format: "<command>"` or `format: ["<arg>", …]`): Optional. Accepts either a string (whitespace-tokenized — the simple case, no shell quoting) or an argument array used verbatim as argv (for arguments that contain spaces, e.g. a config path). When declared, each worktree's deploy runs the command once at the target cwd (`deployRoot`) after all components land, so deployed `.md` (notably CJK tables) arrives already in the target's own formatter normal form — eliminating the ping-pong churn (fake diff) that otherwise appears every sync when the target's prettier reformats OMT-raw bytes on commit/CI. Only OMT-managed roots are passed to the formatter (existing platform dirs + per-name codex skill dirs under `.agents/skills/` + deployed docs leaf files) — never `.`/the whole repo; the target's own `.prettierignore`/`.prettierrc` decides the actual targets within those roots. A format failure (non-zero exit or missing binary/ENOENT) routes that worktree to `failedTargets` for a non-zero exit (same best-effort fan-out as a deploy failure); `--dry-run` skips the format pass. See `docs/sync-deploy-targets.md`.
+**Post-deploy format** (top-level `format: "<command>"` or `format: ["<arg>", …]`): Optional. When declared, the sync tool runs this command once at each target after deploy, so deployed files land already in the target's own formatter normal form. See `docs/sync-deploy-targets.md`.
 
 **Per-platform YAML** (`{platform}.yaml`): Colocated with `sync.yaml`, inheriting its `path`. Manages config/hooks/mcps/plugins per platform — separate from `sync.yaml` which handles component deployment only (agents, commands, skills, scripts, rules). Config/hooks/mcps deep-merge into the target's gitignored `.claude/settings.local.json` (global sync uses `settings.json`); see `docs/platform-yaml-config-deployment.md` for the deployment target and the two-layer gitignore mechanism (why a personal absolute path is safe in `claude.yaml`, not just `claude.local.yaml`).
 
@@ -102,23 +101,8 @@ skills:
 |----------|-----------|---------------------|-------|
 | claude | `.claude/` | agents, commands, skills, scripts, rules | Full native support |
 | gemini | `.gemini/` | commands, skills, scripts | Hooks/config via syncPlatformYaml |
-| codex | `.codex/` + `.agents/` | agents, skills, scripts, rules, hooks | TWO disjoint deploy roots: skills land in `.agents/skills/<name>`, everything else in `.codex/`. `deployLocationForManifest(platform, category)` (`tools/sync.ts`) is the single formula for that split, so a skill's shared `@lib/*` deploys to `.agents/lib` — beside the skill that imports it, not under `.codex/lib` where the relative import could not reach it. Agents: md→toml translate (leaf-guard injected, naming the source `tools:` allowlist when present — a soft prompt-level guard only, since Codex TOML has no per-agent tool-withholding field like Claude's `tools:` restriction, so nothing enforces it beyond the model choosing to comply); Hooks/config via syncPlatformYaml |
+| codex | `.codex/` + `.agents/` | agents, skills, scripts, rules, hooks | TWO disjoint deploy roots: skills land in `.agents/skills/<name>`, everything else in `.codex/`. `deployLocationForManifest(platform, category)` (`tools/sync.ts`) is the single formula for that split. Agents: md→toml translate; Hooks/config via syncPlatformYaml |
 | opencode | `.opencode/` | agents, commands, skills, scripts, rules | Hooks not supported |
-
-**Known unclosed residual risk — `.agents/` is a shared root, and the two
-deploy paths under it disagree about foreign files.** `.agents/` is not an
-OMT-owned directory the way `.claude/` and `.codex/` are: Codex itself creates
-and populates `~/.agents/skills`. The skills path accounts for that —
-`cleanupCodexSkillsFossil` preserves a "foreign resident" it did not deploy.
-The sibling `lib/` path does not: it replaces the whole `.agents/lib` directory
-(rename-then-remove), so anything a non-OMT writer left there would be
-destroyed rather than kept. There is no trigger today — `~/.agents` currently
-holds only `skills`, and the wholesale-replace shape predates this split (the
-other four `lib/` deploy locations have always used it, so it is not something
-the two-root layout introduced). Recorded rather than pre-emptively guarded:
-a preserve-foreign-files branch with no reachable caller is speculative
-defensiveness, and the asymmetry is only a defect once something else writes
-to `.agents/lib`.
 
 ### Core Skills
 
@@ -136,41 +120,14 @@ to `.agents/lib`.
 
 ### Hooks
 
-- **session-start.sh**: Restores persistent mode states (goal, incomplete todos) and runs three garbage-collection lanes over `$OMT_DIR` on every session start: dead state files (`reap_dead_state_files`, a liveness predicate sourced from `hooks/lib/state-liveness.sh` below), stale session ledgers (mtime-based, inline — borrows only that file's `ACTIVE_IDLE_TTL` constant, not a predicate), and dead session artifacts (`reap_session_artifacts`, likewise sourced from that file) — the last of these three is skipped, fail-open, whenever `SESSION_ID` cannot be resolved (no `jq`, or a payload with no `sessionId`), so only two lanes run in that case. It also reports unclassified session-keyed files (a drift signal; never reaped) to stderr rather than stdout, because this hook's stdout is injected into the conversation prefix and must stay session-invariant (see Cache-Safe Context Injection below).
-- **hooks/lib/state-liveness.sh**: Single bash definition point for state-file and session-artifact garbage collection — the TTL constants, the liveness predicate (`is_state_live`), current-session matching (`is_current_session`), and the session-artifact whitelist (`SESSION_ARTIFACT_PREFIXES`) all live here, not in any caller. Consumers: `session-start.sh` above, `scripts/omt-cleanup/` below, its own colocated test, and `lib/persistent-mode-core/decision.test.ts`, which sources this file directly to invoke `reap_dead_state_files` in a heartbeat-GC regression test.
-- **scripts/omt-cleanup/**: Dry-run-gated `~/.omt` cleanup CLI, fanned out across every project directory under `~/.omt`. Reaps at file granularity only — no `rm -rf`/`rmdir` path exists, so a project directory itself is never removed regardless of what it holds. It names no directory or family literal of its own: every classification and liveness judgment (`STATE_PREFIXES`, `SESSION_ARTIFACT_PREFIXES`, `is_state_live`, `_artifact_age_live`) comes from `hooks/lib/state-liveness.sh` above. Dry-run by default — reports reap candidates, deletes nothing; `--execute` is required to actually delete.
-- **keyword-detector.sh**: Claude UserPromptSubmit hook — detects keywords (ultrawork/uw, think, search, analyze) and injects mode context. Judgment logic lives in `keyword-detector-core.sh`, shared with the Codex adapter below.
-- **codex-keyword-detector.sh**: Codex UserPromptSubmit twin of `keyword-detector.sh` — same classification and message bodies via the shared core, emitted through Codex's `additionalContext` envelope (no `continue` key, a Codex-only contract). Wired via root `codex.yaml`'s `UserPromptSubmit` (already global; no registration work needed).
-- **keyword-detector-core.sh**: Shared judgment core both keyword-detector adapters source — mode classification (`kd_core_is_<mode>`) and the `additionalContext` message bodies (`kd_core_message_<mode>`), byte-exact with the pre-extraction Claude literals. Platform-vocabulary parameters (mirroring `lib/persistent-mode-core/decision.ts`'s `askToolName` pattern) let each shim substitute its own tool names into the shared message text.
-- **label-commit-gate.sh** / **codex-label-commit-gate.sh**: PreToolUse gate that hard-blocks a `git commit` whose message SUBJECT contains an invented/opaque label (communication-style rule). The Codex shim shares `label-commit-gate-core.sh`'s subject-extraction and label check; deny envelopes deliberately differ per platform (Claude: stderr + exit 2; Codex: `hookSpecificOutput` + `permissionDecision:"deny"`) since Claude's pre-existing contract must not change.
-- **label-commit-gate-core.sh**: Shared judgment core for the commit-subject label gate — git-commit-shape detection across every documented `-m`/`-am`/`--message`/`-F`/`--file` form, subject-only extraction (never body), and the label match/offending-token logic.
-- **label-edit-warn.sh** / **codex-label-edit-warn.sh**: PostToolUse nudge (never blocks) that soft-warns when just-written content contains a bare invented/opaque label not defined in place. The Codex shim covers `write`/`edit`/`multiedit`/`multi_edit`/`apply_patch` (added-content lines only, mirroring `codex-write-guard.sh`'s patch-header extraction) via the shared `label-edit-warn-core.sh`.
-- **label-edit-warn-core.sh**: Shared judgment core for the label nudge — the full-tier label check plus the defined-in-place exemption (a label that itself defines a heading, e.g. `### D-1: <name>`, is exempt). Both platforms emit the identical `PostToolUse`/`additionalContext` envelope shape, so unlike the commit gate there is no deny-envelope divergence to manage.
-- **persistent-mode/**: Claude Stop-hook adapter — prevents stopping when work remains incomplete. Decision logic (`makeDecision`) lives in `lib/persistent-mode-core/`, shared with the Codex adapter below.
-- **codex-persistent-mode/**: Codex Stop/PostToolUse adapter over the same shared `makeDecision` core.
-- **pre-tool-enforcer.sh**: Claude PreToolUse gate — TaskOutput blocking, the session-ledger write guard, skill-state single-creation-point seeding, and (new) the code-review artifact identity guard below. Wired via root `claude.yaml`'s `PreToolUse` (already global; no registration work needed).
-- **codex-write-guard.sh**: Codex PreToolUse twin of `pre-tool-enforcer.sh` over the Codex tool-call payload shape. Shares the ledger write guard and code-review artifact identity guard with the Claude twin (below), and additionally denies a dangerous-command shape (`rm -rf`/`git push --force`, via `write_guard_core_check_dangerous_command` below) — this last piece is intentionally **Codex-only, not a mirror**: Claude enforces the identical policy natively and declaratively through `claude.yaml`'s `permissions.deny` (`Bash(rm -rf *)`, `Bash(git push --force*)`, etc.), so `pre-tool-enforcer.sh` carries no matching bash-level check — the two platforms reach the same verdict through structurally different mechanisms (Codex has no declarative deny-glob primitive of its own to hook into). Wired via root `codex.yaml`'s `PreToolUse` (already global; no registration work needed).
-- **write-guard-core.sh**: Shared judgment core both write-guard adapters call into — `write_guard_core_run` (session-ledger write guard), `codereview_guard_core_run` (code-review artifact identity guard, below), and `write_guard_core_check_dangerous_command` (the Codex-only dangerous-command deny described above, mirroring `claude.yaml`'s `permissions.deny` glob set 1:1 in bash `case` form). Single source of the deny-reason wording for both platforms; the adapters extract payload fields and forward, they never re-derive a verdict.
-
-**Code-review artifact identity guard** (`codereview_guard_core_run` in `write-guard-core.sh`, wired into both adapters above): ultragoal's and goal's completion gates read a code-review artifact (`$OMT_DIR/ultragoal-codereview-{sid}.json`, `$OMT_DIR/goal-codereview-{sid}.json`) and let it unblock completion, but never verified who wrote it — the orchestrator could write that JSON directly with a Write tool call instead of actually dispatching an independent `code-reviewer` subagent, at the cost of one forged tool call. The guard closes this with a positive whitelist:
-
-```
-guarded-path write/delete attempt AND agent_type == "code-reviewer"  → allow (no intervention)
-guarded-path write/delete attempt AND anything else (absent or "")   → deny
-not a guarded path                                                   → no intervention
-```
-
-**Guarded set and negative controls.** The guarded set is exactly two paths: `$OMT_DIR/ultragoal-codereview-{sid}.json` and `$OMT_DIR/goal-codereview-{sid}.json`. Two other paths are deliberately NOT guarded, as fixed negative controls: `$OMT_DIR/ultragoal-verdict-{sid}.json` (the per-story verdict artifact, self-attested by the orchestrator by design — guarding it would block its own normal write path) and `$OMT_DIR/code-review/{sid}/candidates.json` (the review pipeline's own normal output). Both adapters were already globally registered via root `claude.yaml` / `codex.yaml` `PreToolUse` before this change, so no new registration was needed.
-
-**Codex reachability.** Both `goal` and `ultragoal` now deploy `platforms: [claude, codex]` in root `sync.yaml` (`sync.yaml:41-44`), so the Codex arm of this guard is reachable: a Codex `code-reviewer` subagent dispatch can reach the guarded-path write. Whether the actual Codex subagent-dispatch payload carries an `agent_type` field (and under that name) is **unmeasured on this branch** — the guard is fail-closed, so if the field is absent or differently named, a legitimate post-review artifact write is denied and `request-complete` fails permanently on Codex. Measuring the real Codex payload shape is out of scope here; this paragraph only records that the risk is now live, not resolved.
-
-**Why `agent_type`, and what carries it.** `agent_type` is the harness's own subagent-dispatch payload field — never agent-controlled `tool_input` — but it is not a subagent-only signal: Claude Code's hook input schema carries it in two shapes, (a) from inside a subagent, alongside `agent_id`, and (b) from the main thread of a session started with `--agent <name>`, without `agent_id`. `agent_id` is the field the schema itself says to use to tell subagent calls from main-thread calls apart — it is present only inside a subagent and absent even on a `--agent` main thread. This guard keys on `agent_type`, not `agent_id`, because Codex's payload carries no subagent-identity field at all: `agent_type` is the only field name both platforms can share for one identical judgment formula. Absence still denies — not because a main-thread call "never carries `agent_type`" (per above, it can), but because treating absence as allow would let an ordinary orchestrator forge the artifact directly at zero extra cost (fail-closed).
-
-**Known unclosed residual risks, by design:**
-- **Prompt content is not checked.** The guard verifies *who* wrote the artifact, not *on what basis* — an orchestrator that dispatches a real `code-reviewer` subagent with a prompt telling it to skip the review and just write the artifact still passes `agent_type` and is allowed through, with no structural check on prompt content.
-- **The candidate extractor is a fixed whitelist.** The Claude adapter recognizes only the file tools' `file_path` and a fixed whitelist of shell write-vectors in a Bash command (redirect targets, `tee`/`rm`/`truncate`, `dd of=`, `sed -i`, `cp`/`mv`); the Codex adapter's extractor covers a broader set of its own command shapes but is likewise a fixed, finite whitelist, not an open-ended parser. Either way, any command shape neither recognizes is invisible to it even when the guarded path appears as a literal argv string. Bash variable indirection (e.g. `p=goal-codereview; ... > "$OMT_DIR/$p-$SID.json"`) is one instance, where the guarded path never appears as a literal string at all; routing that same literal path through an interpreter the whitelist doesn't recognize (`bun -e '...'`, `python3 -c '...'`) is a more direct instance — the path is present verbatim in argv, but the extractor still yields zero candidates. Command substitution (e.g. `$(echo "$OMT_DIR/goal-codereview-$SID.json")` as a redirect target) is a third instance for the same reason — measured to already `allow` on `main`, so it is a pre-existing gap, not a regression introduced on this branch. No finite static rule closes this without false-denying ordinary commands, like `verify-entrypoint-gate` below.
-- **A `--agent code-reviewer` main-thread session bypasses the guard.** Per the trust-channel paragraph above, such a session's orchestrator carries `agent_type: "code-reviewer"` on its own main-thread tool calls too, with no `agent_id` present to tell the two apart — so it passes the guard on every guarded-path write without ever dispatching an independent reviewer. Tightening the check to also require `agent_id` was considered and rejected: this guard has no bypass or `ask` escape hatch, so a false deny would be unrecoverable for the user, and that risk was not taken without observing a real code-reviewer dispatch's own payload.
-- **scripts/verify-entrypoint-gate/**: PreToolUse Bash gate engine — deny-or-no-intervention only; no path ever issues `permissionDecision: "allow"` (memory-cap injection was removed entirely as dead code — the target repo's own inline caps already overrode anything injected). Allowed entrypoints are the runtime intersection of the policy YAML and the target repo's root `package.json` scripts, so a dead policy name auto-drops and a new risky repo script stays blocked until whitelisted. Only one command shape passes: `pnpm <entrypoint> [<app>] [<allowed_turbo_opts>] [-- <runner selector>]` — pre-script flags (`-r`, `--filter`, `-F`) are rejected since pnpm would intercept them and bypass the repo's `verify.sh`, while post-`--` flags pass only through the `allowed_turbo_opts` whitelist. Fail-closed on workspace-root resolution (walks up from `cwd` for `pnpm-workspace.yaml`; denies if not found or `cwd` isn't the root) and denies any compound command (`&&`/`||`/`|`/`;`/newline/backtick/`$()`). Policy is two-layer: base loads next to the script itself (`import.meta.url`), project overlay loads from the **target workspace root**'s `.claude/scripts/verify-entrypoint-gate/verify-entrypoint-gate.local.yaml`. Lives under `scripts/` (not `hooks/`): deployed globally as a single script package (`$HOME/.claude/scripts/verify-entrypoint-gate/`, no registration) via the root `sync.yaml` scripts section, then registered as a hook **only in acme-home** through a raw `command:` in `projects/acme-home/claude.yaml` that references that global path. Known unclosed residual risk, by design: shell variable/parameter expansion (e.g. `pnpm${IFS}test --all`) is invisible to this file since it only ever sees literal argv text, and no finite static rule can close it without false-denying ordinary commands (e.g. `$EDITOR notes.md`) — with no bypass/`ask` escape hatch in this gate, such a false deny would be unrecoverable for the user.
+- **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start
+- **hooks/lib/state-liveness.sh**: Shared TTL/liveness definitions for state-file and session-artifact garbage collection
+- **scripts/omt-cleanup/**: `~/.omt` cleanup CLI, dry-run by default, `--execute` required to delete
+- **keyword-detector.sh** / **codex-keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context (shared core)
+- **label-commit-gate.sh** / **codex-label-commit-gate.sh**: Hard-blocks a commit whose message subject contains an invented/opaque label
+- **label-edit-warn.sh** / **codex-label-edit-warn.sh**: Soft-warns (never blocks) when just-written content contains a bare invented/opaque label
+- **persistent-mode/** / **codex-persistent-mode/**: Prevents stopping when work remains incomplete (shared `makeDecision`)
+- **pre-tool-enforcer.sh** / **codex-write-guard.sh**: PreToolUse gates — TaskOutput blocking, session-ledger write guard, code-review artifact identity guard; Codex twin additionally denies dangerous commands (`rm -rf`, `git push --force`)
 
 ### Key Workflows
 
@@ -225,22 +182,6 @@ Hook and skill authors who emit injected context (SessionStart stdout, keyword-d
 - **SessionStart stdout = static; route dynamic/volatile data to stderr or on-demand reads.** The SessionStart hook's stdout is injected directly into the conversation prefix. Keep it fully static. Emit diagnostic or session-varying information to stderr (logged, not injected) or defer it to an on-demand read instruction executed later in the conversation body.
 
 - **Skill-body `` !`command` `` macro output must be deterministic + session-invariant.** Command substitutions embedded in SKILL.md via the `` !`...` `` macro are evaluated at skill-load time and injected into the prefix. Their output must be bit-for-bit identical across sessions; any path, timestamp, or environment-specific value disqualifies a command from macro use.
-
-#### Accepted unavoidable
-
-These items deviate from the constraints above but are retained because fixing them would break correctness or routing:
-
-- **(i) Small-handoff payload** — Compaction already cold-starts the prefix, so marginal cache loss at the handoff boundary is zero. The size threshold governing this payload is a capacity axis (the `additionalContext` field cap), not a cache axis. Accepted as-is.
-
-- **(ii) rules-injector `targetRelativePath` / post-compact paths** — Codex resolves tool paths per-tool and per-compact; the path values are data-driven and must reflect the actual runtime location. Static-izing them would break routing. Accepted as session-specific by necessity.
-
-- **(iii) Pin count/location** — Pin data is determined by actual filesystem state at session start. The values are data-driven and deterministic given identical pin state, not per-request volatile. Accepted as data-driven deterministic.
-
-- **(iv) `decision.ts` Stop-reason numbers** — These values appear in TAIL-position (the Stop hook output), not in the conversation prefix. Tail-position content has zero cache impact. Retained for behavioral signal.
-
-#### Harness assumption
-
-`CLAUDE_ENV_FILE` exports (`OMT_DIR`, `OMT_SESSION_ID`) reach the agent's Bash-tool environment at runtime. Hook round-trip acceptance criteria verify hook write/emit consistency only — the "Claude Code sources the env file so agent Bash tools see these variables" leg is a documented assumption, not something the OMT test suite verifies.
 
 ## Language Conventions
 
