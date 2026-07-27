@@ -428,6 +428,30 @@ reap_session_artifacts() {
       if is_current_session "$f" "$current_sid"; then
         continue
       fi
+      # This per-candidate mtime check is now SUBSUMED by the live-id witness
+      # pass above (list_live_session_ids's second loop walks this same
+      # directory, these same prefixes, this same is_artifact_live predicate,
+      # and derives the tail the same way) for every ORDINARY candidate: a
+      # fresh candidate necessarily witnesses its own sid into live_ids and is
+      # then preserved by the exact-match arm below. It stays load-bearing
+      # for exactly one residual shape: a candidate whose derived tail is the
+      # EMPTY STRING (e.g. a file named exactly "codex-todo-.json"). The
+      # witness pass would push an empty sid for such a file too, but the
+      # live-id membership loop below explicitly skips empty ids
+      # (`[ -n "$live_id" ] || continue`), so the live-id path can never save
+      # an empty-tail candidate — only this mtime check can.
+      #
+      # This shape is NOT producer-emitted: isSafeSessionId (lib/state-core.ts:90)
+      # requires id.length >= 1, and every writer that could name one of these
+      # artifacts checks it first — hooks/codex-persistent-mode/cli.ts:88 and
+      # :217 (the codex-todo mirror), lib/state-core.ts:824 (touchSessionStates),
+      # :612/:615 (adopt). No OMT code path can produce an empty-sid artifact,
+      # so this guard is not covering any live production path. Its residual
+      # value is against a manually-placed file or a foreign writer sharing
+      # this directory. Do not remove this guard believing the witness pass
+      # alone now covers it: a fresh foreign/hand-placed file of this shape
+      # would otherwise be deleted, which is still the data-destruction
+      # direction regardless of who wrote it.
       if is_artifact_live "$f" "$now_epoch"; then
         continue
       fi

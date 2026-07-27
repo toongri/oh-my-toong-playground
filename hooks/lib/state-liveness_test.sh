@@ -835,6 +835,58 @@ test_list_unclassified_reports_files_under_state_subdir_too() {
 # see exactly 4 lines, one per pattern.
 # =============================================================================
 
+# Defect coverage: the UUID-shape filter (the final `case "$base" in
+# *-[hex]...*)` guard) had no negative control — no test asserted that an
+# ordinary, non-session file a user might park in $OMT_DIR (a stray
+# "notes.txt", "README", "plan.md") is NEVER reported as drift. Since this
+# reporter's stdout is surfaced on every session start
+# (hooks/session-start.sh), a regression that widened the filter (e.g. to a
+# bare `*)` catch-all) would flood every session with false-positive drift
+# reports for ordinary files, yet every other test in this suite only ever
+# seeds genuinely UUID-shaped names — so such a regression left the whole
+# suite green. This fixture combines the negative control with a positive
+# control in one assertion, so the test cannot pass by simply disabling
+# reporting outright.
+test_list_unclassified_ignores_non_uuid_shaped_files() {
+  local d="$TEST_TMP_DIR"
+  local uuid="a1b2c3d4-e5f6-4a1b-9c3d-2f8e7a6b5c4d"
+
+  # Negative control: no UUID-shaped id anywhere in these names — must never
+  # be reported as session drift.
+  write_state "$d/notes.txt" "just some notes"
+  write_state "$d/README" ""
+  write_state "$d/plan.md" ""
+
+  # Positive control, seeded alongside: a genuinely unclassified UUID-shaped
+  # file must still be reported.
+  write_state "$d/handoff-consumed-$uuid" ""
+
+  local out
+  out=$(list_unclassified_session_files "$d")
+  local n
+  n=$(printf '%s\n' "$out" | grep -c '.' || true)
+
+  if [ "$n" -ne 1 ]; then
+    echo "  ASSERTION FAILED: expected exactly 1 unclassified file (the UUID-shaped one), got $n"
+    echo "  got: $out"
+    return 1
+  fi
+
+  if ! printf '%s' "$out" | grep -q "handoff-consumed-$uuid"; then
+    echo "  ASSERTION FAILED: genuinely unclassified UUID-shaped file must still be reported"
+    echo "  got: $out"
+    return 1
+  fi
+
+  if printf '%s' "$out" | grep -qE 'notes\.txt|README|plan\.md'; then
+    echo "  ASSERTION FAILED: non-UUID-shaped ordinary files must never be reported as session drift"
+    echo "  got: $out"
+    return 1
+  fi
+
+  return 0
+}
+
 test_list_unclassified_reports_all_four_plan_ac_forms() {
   local d="$TEST_TMP_DIR"
   local uuid="b7c1a2d4-5e6f-4a1b-9c3d-2f8e7a6b5c4d"
@@ -1210,26 +1262,60 @@ test_reap_session_artifacts_execute_mode_echoes_real_path_not_constant() {
 }
 
 # Defect coverage: mtime-preservation guard (protection #2 of the three
-# independent protections documented above reap_session_artifacts). This
-# fixture deliberately withholds the other two protections — the sid does
-# not match current_sid (no identity protection), and no corresponding
-# goal-state-<sid>.json exists at all (no live-session-id protection) — so
-# only is_artifact_live's mtime check can keep a just-written session
-# artifact from being reaped the instant it's created. Deleting that guard
-# entirely (as opposed to merely relaxing its boundary) reaps this file with
-# no other test in this suite going red.
-test_reap_session_artifacts_fresh_mtime_survives_without_live_state_or_identity() {
+# independent protections documented above reap_session_artifacts).
+#
+# A fixture with a NON-empty sid tail (e.g. "codex-todo-fresh-mtime-sid-24.json")
+# does NOT discriminate here: list_live_session_ids's second witness pass
+# walks this same directory/prefix/predicate and would witness this exact
+# file's own sid into live_ids, so the live-id membership check (protection
+# #3) already preserves it independently of protection #2 — neutralizing
+# protection #2 alone would still leave this fixture surviving, so it was a
+# vacuous test (see the code-review finding this comment addresses).
+#
+# The EMPTY-TAIL shape is what actually isolates protection #2: a file named
+# exactly "codex-todo-.json" (prefix + empty sid) strips to tail="" after
+# `${tail%%.*}`. The witness pass would push an empty sid for this file too,
+# but the live-id membership loop explicitly skips empty ids
+# (`[ -n "$live_id" ] || continue`), so protection #3 can never match an
+# empty tail — is_artifact_live (protection #2) is the ONLY thing that can
+# keep this file alive. This fixture deliberately also withholds identity
+# protection (current_sid below does not match anything derivable from the
+# file), so is_artifact_live is truly the sole guard under test.
+#
+# No OMT writer can actually emit this shape (isSafeSessionId in
+# lib/state-core.ts requires a non-empty id, and every writer checks it
+# first) — this fixture stands in for a manually-placed or foreign file
+# sharing the directory, matching the production-side comment above
+# reap_session_artifacts's is_artifact_live guard.
+test_reap_session_artifacts_empty_tail_fresh_survives_mtime_guard_only() {
   local d="$TEST_TMP_DIR"
-  local sid="fresh-mtime-sid-24"
-  local f="$d/codex-todo-$sid.json"
+  local f="$d/codex-todo-.json"
   write_state "$f" "{}"
-  # No touch_ago call: mtime is "just now" — no live goal-state-$sid.json
-  # exists, and current_sid below deliberately does not match $sid.
+  # No touch_ago call: mtime is "just now".
 
   reap_session_artifacts "$d" "unrelated-sid" "$NOW" 0 > /dev/null
 
   if [ ! -f "$f" ]; then
-    echo "  ASSERTION FAILED: a freshly-written session artifact with no live state file and no session-identity match must still survive under ACTIVE_IDLE_TTL (the mtime-preservation guard)"
+    echo "  ASSERTION FAILED: a fresh empty-tail artifact (codex-todo-.json) must survive via the per-candidate mtime guard — no live-id witness can ever match an empty tail, so this guard is the only protection"
+    return 1
+  fi
+  return 0
+}
+
+# Negative control for the test above: a STALE empty-tail artifact must still
+# be reaped. Without this, a mutation that disables reaping outright (e.g.
+# short-circuiting the whole function) would make the positive test above
+# pass trivially — this asserts the guard is a boundary, not a blanket keep.
+test_reap_session_artifacts_empty_tail_stale_is_reaped() {
+  local d="$TEST_TMP_DIR"
+  local f="$d/codex-todo-.json"
+  write_state "$f" "{}"
+  touch_ago "$f" 25200   # 7h — past ACTIVE_IDLE_TTL
+
+  reap_session_artifacts "$d" "unrelated-sid" "$NOW" 0 > /dev/null
+
+  if [ -f "$f" ]; then
+    echo "  ASSERTION FAILED: a stale empty-tail artifact (codex-todo-.json) must still be reaped — no live-id witness can ever match an empty tail, and mtime is past ACTIVE_IDLE_TTL"
     return 1
   fi
   return 0
@@ -1667,6 +1753,7 @@ run_test test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock
 run_test test_list_unclassified_reports_genuine_drift_only
 run_test test_list_unclassified_reports_non_md_session_ledger_as_drift
 run_test test_list_unclassified_reports_files_under_state_subdir_too
+run_test test_list_unclassified_ignores_non_uuid_shaped_files
 run_test test_list_unclassified_reports_all_four_plan_ac_forms
 run_test test_reap_dead_state_files_relocation_equivalence
 run_test test_reap_dead_state_files_execute_mode_echoes_affected_paths
@@ -1679,7 +1766,8 @@ run_test test_reap_session_artifacts_current_session_self_artifact_survives
 run_test test_reap_session_artifacts_other_live_session_survives_without_sid
 run_test test_reap_session_artifacts_execute_mode_echoes_affected_paths
 run_test test_reap_session_artifacts_execute_mode_echoes_real_path_not_constant
-run_test test_reap_session_artifacts_fresh_mtime_survives_without_live_state_or_identity
+run_test test_reap_session_artifacts_empty_tail_fresh_survives_mtime_guard_only
+run_test test_reap_session_artifacts_empty_tail_stale_is_reaped
 run_test test_reap_session_artifacts_dry_run_emits_candidate_but_does_not_delete
 run_test test_reap_session_artifacts_json_extension_stripped_for_live_id_match
 run_test test_reap_session_artifacts_short_live_id_does_not_falsely_preserve

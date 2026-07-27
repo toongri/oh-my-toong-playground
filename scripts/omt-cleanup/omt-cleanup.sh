@@ -151,10 +151,14 @@ else
     echo "=== done ==="
 fi
 
-# A DELETED label only means the reap helper reported the path — it does not
-# prove the underlying rm succeeded. Surface that gap in the exit code: if any
-# reap call failed, this script fails too, even though the report above always
-# prints in full first.
+# A DELETED label does mean the underlying rm succeeded — reap_dead_state_files
+# and reap_session_artifacts (hooks/lib/state-liveness.sh) only echo a path to
+# stdout after rm -f has actually succeeded; an rm failure is reported on
+# stderr as "reap: failed to delete <path>" and never reaches stdout. The exit
+# code exists because that stderr-only failure is otherwise invisible to a
+# caller that isn't reading stderr: if any reap call failed, this script fails
+# too, even though the report above (built from stdout alone) always prints in
+# full first.
 if [[ $HAD_REAP_FAILURE -eq 1 ]]; then
     exit 1
 fi
