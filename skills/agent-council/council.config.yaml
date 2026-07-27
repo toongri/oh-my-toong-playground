@@ -51,18 +51,68 @@ council:
       # `code-review` isn't deployed to codex today (no `platforms: [codex]`
       # in its sync.yaml) — declared anyway so this self-activates the day
       # that changes, instead of silently staying a no-op.
+      #
+      # Role-boundary guard (different reason from the three above — not
+      # recursion). Reasoned on the review side, not here: a finder must
+      # surface un-judged candidates, and `diagnose` (a READ-ONLY root-cause
+      # consultant) invites it into verifying them instead — work that belongs
+      # to the upstream code-review skill. Council members fan out through the
+      # same `lib/generic-job.ts` spawn path with the same free skill loading,
+      # so the shape carries over even though no council run has shown it.
+      #
+      # Remaining 24 entries below: prompt-budget guard, distinct from both
+      # reasons above. A council member's job is to argue its assigned
+      # perspective on the question put to it — no skill in this repo is
+      # relevant to that, so each one is dead prompt weight for every member.
+      # Measured 2026-07-27 via `codex debug prompt-input` (codex 0.145.0,
+      # same transport `gpt`'s `codex exec` member uses): with all 28 entries
+      # declared, the `<skills_instructions>` block shrinks 21,250 chars →
+      # 9,890 chars, and the full rendered prompt shrinks 69,924 chars →
+      # 58,564 chars (−11,360 chars).
+      #
+      # Why the list stops at 28: `codex debug prompt-input` also lists ~20
+      # further items, but every one of them is an OpenAI-bundled plugin
+      # skill outside this repo (`pdf`, `spreadsheets`, `presentations`,
+      # `sites-building`, `excel-live-control`, etc.) — a council member has
+      # no occasion to touch those, and their names take the `plugin:skill`
+      # colon form, which `lib/generic-job.ts`'s `assertDenySkillsShape`
+      # (`/^[a-zA-Z0-9_-]+$/`) rejects outright. Loosening that regex is a
+      # shared-file change and out of scope here.
+      #
+      # Staleness: a skill added to this repo after 2026-07-27 won't appear
+      # here and will stay loadable by a member — identical to today's
+      # behavior before this list existed. Failing open (unlisted = visible)
+      # is the safe direction; it costs prompt budget, not correctness.
+      #
+      # Kept in lockstep with `orchestrate-review.config.yaml` —
+      # `codex-skill-deny-efficacy.test.ts` asserts the two files declare the
+      # same set.
       skills:
-        - orchestrate-review
-        - code-review
+        - agent-browser
         - agent-council
-        # Role-boundary guard (different reason from the three above — not
-        # recursion). Reasoned on the review side, not here: a finder must
-        # surface un-judged candidates, and `diagnose` (a READ-ONLY root-cause
-        # consultant) invites it into verifying them instead — work that belongs
-        # to the upstream code-review skill. Council members fan out through the
-        # same `lib/generic-job.ts` spawn path with the same free skill loading,
-        # so the shape carries over even though no council run has shown it.
-        # Kept in lockstep with `orchestrate-review.config.yaml` —
-        # `codex-skill-deny-efficacy.test.ts` asserts the two files declare the
-        # same set.
+        - clarify
+        - code-review
+        - collect-jd
+        - craft-issue
+        - create-slides
+        - deep-interview
+        - design-review
         - diagnose
+        - git-master
+        - goal
+        - hud
+        - humanizer
+        - insane-browsing
+        - make-pr
+        - momus
+        - orchestrate-review
+        - prometheus
+        - qa
+        - review-report
+        - scan-pdf-to-notes
+        - sisyphus
+        - slides-review
+        - technical-copywriting
+        - technical-writing
+        - ultragoal
+        - ultraresearch

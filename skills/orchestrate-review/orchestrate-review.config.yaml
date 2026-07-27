@@ -64,28 +64,76 @@ chunk-review:
       # today (not deployed to codex in any of its 4 scopes) — declared
       # anyway so this guard self-activates the day `code-review`'s
       # `platforms` config adds codex, instead of silently staying a no-op.
+      #
+      # Role-boundary guard (different reason from the three above — this one
+      # is not about recursion). A finder's contract is to surface un-judged
+      # candidates; assigning CONFIRMED/PLAUSIBLE/REFUTED belongs to the
+      # upstream code-review skill's candidate-verification stage, where each
+      # candidate is re-checked against HEAD before it earns a verdict. That
+      # split is stated in every angle prompt's
+      # CRITICAL block ("Do NOT assign severity, priority, P-levels, verdicts").
+      # `diagnose` is a READ-ONLY root-cause consultant — loading it invites a
+      # finder across exactly that line, into verifying its own candidates.
+      # Effect measured 2026-07-27 via `codex debug prompt-input`:
+      # `/diagnose/SKILL.md` occurrences 2 → 0 with this entry present.
+      # NOT justified by a runtime measurement: a 26-minute `regression` run
+      # was once cited here, but that job ran a hand-written prompt that
+      # explicitly ordered mutation experiments, so it evidences
+      # instruction-following, not skill-induced blowup. No standard-path
+      # measurement shows `diagnose` costing time — this entry claims a
+      # boundary, not a speedup.
+      # Deny-listed rather than allow-listed: one identified offender, and a
+      # blanket allowlist would also kill project-local skills a finder may
+      # legitimately need. Revisit if another skill shows the same shape.
+      #
+      # Remaining 24 entries below: prompt-budget guard, distinct from both
+      # reasons above. A finder's whole job is to read code and surface raw
+      # candidates — no skill in this repo helps with that, so every one of
+      # them is dead prompt weight for a finder specifically. Measured
+      # 2026-07-27 via `codex debug prompt-input` (codex 0.145.0): with all 28
+      # entries declared, the `<skills_instructions>` block shrinks
+      # 21,250 chars → 9,890 chars, and the full rendered prompt shrinks
+      # 69,924 chars → 58,564 chars (−11,360 chars).
+      #
+      # Why the list stops at 28: `codex debug prompt-input` also lists ~20
+      # further items, but every one of them is an OpenAI-bundled plugin
+      # skill outside this repo (`pdf`, `spreadsheets`, `presentations`,
+      # `sites-building`, `excel-live-control`, etc.) — a finder has no
+      # occasion to touch those, and their names take the `plugin:skill`
+      # colon form, which `lib/generic-job.ts`'s `assertDenySkillsShape`
+      # (`/^[a-zA-Z0-9_-]+$/`) rejects outright. Loosening that regex is a
+      # shared-file change and out of scope here.
+      #
+      # Staleness: a skill added to this repo after 2026-07-27 won't appear
+      # here and will stay loadable by a finder — identical to today's
+      # behavior before this list existed. Failing open (unlisted = visible)
+      # is the safe direction; it costs prompt budget, not correctness.
       skills:
-        - orchestrate-review
-        - code-review
+        - agent-browser
         - agent-council
-        # Role-boundary guard (different reason from the three above — this one
-        # is not about recursion). A finder's contract is to surface un-judged
-        # candidates; assigning CONFIRMED/PLAUSIBLE/REFUTED belongs to the
-        # upstream code-review skill's candidate-verification stage, where each
-        # candidate is re-checked against HEAD before it earns a verdict. That
-        # split is stated in every angle prompt's
-        # CRITICAL block ("Do NOT assign severity, priority, P-levels, verdicts").
-        # `diagnose` is a READ-ONLY root-cause consultant — loading it invites a
-        # finder across exactly that line, into verifying its own candidates.
-        # Effect measured 2026-07-27 via `codex debug prompt-input`:
-        # `/diagnose/SKILL.md` occurrences 2 → 0 with this entry present.
-        # NOT justified by a runtime measurement: a 26-minute `regression` run
-        # was once cited here, but that job ran a hand-written prompt that
-        # explicitly ordered mutation experiments, so it evidences
-        # instruction-following, not skill-induced blowup. No standard-path
-        # measurement shows `diagnose` costing time — this entry claims a
-        # boundary, not a speedup.
-        # Deny-listed rather than allow-listed: one identified offender, and a
-        # blanket allowlist would also kill project-local skills a finder may
-        # legitimately need. Revisit if another skill shows the same shape.
+        - clarify
+        - code-review
+        - collect-jd
+        - craft-issue
+        - create-slides
+        - deep-interview
+        - design-review
         - diagnose
+        - git-master
+        - goal
+        - hud
+        - humanizer
+        - insane-browsing
+        - make-pr
+        - momus
+        - orchestrate-review
+        - prometheus
+        - qa
+        - review-report
+        - scan-pdf-to-notes
+        - sisyphus
+        - slides-review
+        - technical-copywriting
+        - technical-writing
+        - ultragoal
+        - ultraresearch
