@@ -478,6 +478,15 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 
 	fs.writeFileSync(path.join(jobDir, "prompt.txt"), String(prompt), "utf8");
 
+	// workerPgid는 스폰 전이라 아직 없다(null) — 스폰 후 members가 채워진다(하단
+	// 참고). 함수 반환 타입 애노테이션을 거치는 이유: 리터럴 null을 그냥 쓰거나
+	// `const x: number | null = null`으로 변수에 담아 써도 TS는 그 지점의 값을
+	// 여전히 리터럴 null로 좁혀 추론해, 아래 재할당(workerPgidByName.get(...)
+	// ?? null)과 타입이 맞지 않는다 — 함수 호출식의 타입은 선언된 반환 타입
+	// 그대로 쓰이므로 좁혀지지 않는다. 타입 단언(as) 없이 타입을 넓히는 방법.
+	function unsetWorkerPgid(): number | null {
+		return null;
+	}
 	const jobMeta = {
 		id: `chunk-review-${jobId}`,
 		createdAt: new Date().toISOString(),
@@ -498,7 +507,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			effort_level: r.effort_level || null,
 			output_format: r.output_format || null,
 			env: r.env ?? {},
-			workerPgid: null as number | null,
+			workerPgid: unsetWorkerPgid(),
 		})),
 	};
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
