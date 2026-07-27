@@ -2587,6 +2587,54 @@ describe("cmdCollect", () => {
 		expect(fs.readFileSync(logPath, "utf8")).toContain("collect:");
 	});
 
+	test("collect 후 멤버별 소요를 job createdAt 기준으로 기록", () => {
+		const jobDir = path.join(tmpDir, "jobs", "chunk-review-durations1");
+		setupCollectFixture(jobDir, {
+			"alpha-0": { member: "alpha", state: "done", exitCode: 0, output: "a" },
+			"beta-0": { member: "beta", state: "done", exitCode: 0, output: "b" },
+		});
+
+		// Mirrors the real terminal status.json: `finishedAt` only, no `startedAt`
+		// — the running-state write that sets `startedAt` is replaced wholesale
+		// when the member finishes, so elapsed must anchor on job.json createdAt.
+		// Do not add `startedAt` here; that would test a field the worker never
+		// leaves behind.
+		const base = Date.parse("2026-01-01T00:00:00.000Z");
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: "collect-test",
+				createdAt: new Date(base).toISOString(),
+				settings: { timeoutSec: 60 },
+			}),
+		);
+		const membersDir = path.join(jobDir, "members");
+		for (const [dir, member, elapsedSec] of [
+			["alpha-0", "alpha", 90],
+			["beta-0", "beta", 30],
+		] as const) {
+			fs.writeFileSync(
+				path.join(membersDir, dir, "status.json"),
+				JSON.stringify({
+					member,
+					state: "done",
+					exitCode: 0,
+					finishedAt: new Date(base + elapsedSec * 1000).toISOString(),
+				}),
+			);
+		}
+
+		execFileSync(process.execPath, [SCRIPT, "collect", "--timeout-ms", "5000", jobDir], {
+			stdio: "pipe",
+		});
+
+		const log = fs.readFileSync(
+			path.join(tmpDir, "logs", "chunk-review-job-durations1.log"),
+			"utf8",
+		);
+		expect(log).toContain("member durations: alpha-0=90s beta-0=30s");
+	});
+
 	test("timeout: not-done JSON 반환 (overallState, id, counts)", () => {
 		const jobDir = path.join(tmpDir, "job-collect-timeout");
 		setupCollectFixture(jobDir, {
