@@ -377,7 +377,10 @@ describe("buildAugmentedCommand", () => {
 	});
 
 	test("round-trip: claude deny with 2+ names has every quote pair escaped, not partial", () => {
-		const result = buildAugmentedCommand({ command: "claude -p", deny: ["alpha", "beta"] }, "claude");
+		const result = buildAugmentedCommand(
+			{ command: "claude -p", deny: ["alpha", "beta"] },
+			"claude",
+		);
 		const tokens = splitCommand(result.command);
 		expect(tokens).not.toBeNull();
 		const settingsIndex = tokens!.indexOf("--settings");
@@ -505,9 +508,9 @@ describe("buildAugmentedCommand", () => {
 			"opencode",
 		);
 		const opencodeParsed = JSON.parse(opencodeResult.env.OPENCODE_CONFIG_CONTENT);
-		expect(
-			Object.prototype.hasOwnProperty.call(opencodeParsed.permission.skill, "__proto__"),
-		).toBe(true);
+		expect(Object.prototype.hasOwnProperty.call(opencodeParsed.permission.skill, "__proto__")).toBe(
+			true,
+		);
 		expect(opencodeParsed.permission.skill.__proto__).toBe("deny");
 		expect(opencodeParsed.permission.skill["normal-skill"]).toBe("deny");
 		expect(opencodeParsed.permission.skill["*"]).toBe("allow");
@@ -2700,4 +2703,173 @@ describe("cmdClean 활성 멤버 삭제 거부", () => {
 			expect(fs.existsSync(jobDir)).toBe(true);
 		},
 	);
+});
+
+// ---------------------------------------------------------------------------
+// cmdClean — active-member guard shares computeStatus's heartbeat-stale
+// judgment: a `running` member whose heartbeat is stale (e.g. left behind by
+// an external SIGKILL that bypassed the normal exit path) must not block
+// clean the way a genuinely active `running` member does.
+// ---------------------------------------------------------------------------
+
+describe("cmdClean 활성 멤버 guard — heartbeat stale 판정 공유", () => {
+	let tmpDir: string;
+	let originalExit: typeof process.exit;
+
+	function setupCleanJobWithStatus(
+		jobDir: string,
+		entities: Record<string, Record<string, unknown>>,
+	) {
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "clean-hb-test" }));
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		for (const [name, status] of Object.entries(entities)) {
+			const dir = path.join(entitiesDir, name);
+			fs.mkdirSync(dir, { recursive: true });
+			fs.writeFileSync(path.join(dir, "status.json"), JSON.stringify(status));
+		}
+	}
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		originalExit = process.exit;
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+	});
+
+	afterEach(() => {
+		process.exit = originalExit;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("`running` 멤버의 lastHeartbeat가 90초 과거면 force 없이도 clean이 성공한다", () => {
+		const jobDir = path.join(tmpDir, "job-stale-running");
+		const staleHeartbeat = new Date(Date.now() - 90_000).toISOString();
+		setupCleanJobWithStatus(jobDir, {
+			alice: { member: "alice", state: "running", lastHeartbeat: staleHeartbeat },
+		});
+		expect(() => cmdClean({}, jobDir, chunkReviewConfig, tmpDir)).not.toThrow();
+		expect(fs.existsSync(jobDir)).toBe(false);
+	});
+
+	test("`running` 멤버의 lastHeartbeat가 방금이면 clean을 여전히 거부한다 (음성 대조군)", () => {
+		const jobDir = path.join(tmpDir, "job-fresh-running");
+		const freshHeartbeat = new Date().toISOString();
+		setupCleanJobWithStatus(jobDir, {
+			alice: { member: "alice", state: "running", lastHeartbeat: freshHeartbeat },
+		});
+		expect(() => cmdClean({}, jobDir, chunkReviewConfig, tmpDir)).toThrow("process.exit(1)");
+		expect(fs.existsSync(jobDir)).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cmdClean — 디렉터리 삭제 전 job.json의 workerPgid로 프로세스 그룹을 회수한다.
+// ---------------------------------------------------------------------------
+
+describe("cmdClean — 삭제 전 프로세스 그룹 회수", () => {
+	let tmpDir: string;
+	let originalExit: typeof process.exit;
+	let spawnedPgids: number[];
+
+	function setupCleanJobWithPgid(jobDir: string, workerPgid: number | null) {
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "clean-pgid-test", members: [{ name: "alice", workerPgid }] }),
+		);
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		const dir = path.join(entitiesDir, "alice");
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(
+			path.join(dir, "status.json"),
+			JSON.stringify({ member: "alice", state: "done" }),
+		);
+	}
+
+	function isPgidAlive(pgid: number): boolean {
+		try {
+			const out = execSync("ps -o pgid= -A", { encoding: "utf8" });
+			return out
+				.split("\n")
+				.map((l) => Number(l.trim()))
+				.some((n) => n === pgid);
+		} catch {
+			return false;
+		}
+	}
+
+	// Bounded async poll — cmdClean itself sends the signal synchronously,
+	// but the killed child stays a zombie (`ps` still lists it as `Z`) until
+	// this process's event loop runs its SIGCHLD reap callback. A busy-wait
+	// spin loop would starve that same event loop and never observe the
+	// reap, so this poll must yield via a real `setTimeout`, not spin.
+	async function waitUntil(predicate: () => boolean, timeoutMs = 2000): Promise<boolean> {
+		const deadline = Date.now() + timeoutMs;
+		while (Date.now() < deadline) {
+			if (predicate()) return true;
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+		return predicate();
+	}
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		spawnedPgids = [];
+		originalExit = process.exit;
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+	});
+
+	afterEach(() => {
+		process.exit = originalExit;
+		for (const pgid of spawnedPgids) {
+			try {
+				process.kill(-pgid, "SIGKILL");
+			} catch {
+				// already gone — nothing to clean up
+			}
+		}
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("job.json의 workerPgid로 기록된 살아있는 프로세스 그룹을 clean이 회수한다", async () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const pgid = child.pid;
+		if (pgid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(pgid);
+
+		// 선행 단언: 회수 전에 그룹이 실제로 살아있음을 먼저 확인한다 — 없으면
+		// 사후 0개 단언이 "애초에 아무것도 없었다"와 구분되지 않는다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		const jobDir = path.join(tmpDir, "job-pgid-alive");
+		setupCleanJobWithPgid(jobDir, pgid);
+
+		cmdClean({}, jobDir, chunkReviewConfig, tmpDir);
+
+		expect(await waitUntil(() => !isPgidAlive(pgid))).toBe(true);
+		expect(fs.existsSync(jobDir)).toBe(false);
+	});
+
+	test("workerPgid가 전부 null이면 kill을 시도하지 않고 무관한 프로세스는 살아남는다", () => {
+		const bystander = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const bystanderPgid = bystander.pid;
+		if (bystanderPgid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(bystanderPgid);
+		expect(isPgidAlive(bystanderPgid)).toBe(true);
+
+		const jobDir = path.join(tmpDir, "job-pgid-null");
+		setupCleanJobWithPgid(jobDir, null);
+
+		cmdClean({}, jobDir, chunkReviewConfig, tmpDir);
+
+		expect(fs.existsSync(jobDir)).toBe(false);
+		// 오살 방지 음성 대조군: 이 job과 무관한 프로세스는 살아남아야 한다.
+		expect(isPgidAlive(bystanderPgid)).toBe(true);
+	});
 });
