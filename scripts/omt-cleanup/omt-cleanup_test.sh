@@ -236,6 +236,21 @@ EOF
     printf '{"todos":[]}' > "$artifact_file"
     touch -t "$stale_touch" "$artifact_file"
 
+    # Byte-level baseline, taken AFTER both real candidates exist — not just
+    # their paths, but their content. `fingerprint` (defined above) already
+    # hashes path listing + per-file content; it is reused here deliberately,
+    # over the ONE fixture in this file that actually holds a live reap
+    # candidate. test_dryrun_mutates_nothing and
+    # test_default_no_execute_leaves_fixture_identical also call fingerprint,
+    # but only against setup_fixture's baseline, which (per the comment above
+    # this test) seeds ZERO real reap candidates — so a mutation that
+    # truncates a candidate's bytes in place while still reporting its path
+    # unchanged has nothing to truncate there and passes silently. This is
+    # the only place in the suite where fingerprint runs over a fixture that
+    # can actually expose that class of bug.
+    local pre_fp
+    pre_fp=$(fingerprint "$proj_dir")
+
     bash "$CLEANUP_SCRIPT" --dry-run > /dev/null
 
     if [[ ! -f "$state_file" ]]; then
@@ -244,6 +259,13 @@ EOF
     fi
     if [[ ! -f "$artifact_file" ]]; then
         echo "ASSERTION FAILED (--dry-run): dry-run must not delete a real dead session artifact"
+        return 1
+    fi
+
+    local post_fp_dryrun
+    post_fp_dryrun=$(fingerprint "$proj_dir")
+    if [[ "$pre_fp" != "$post_fp_dryrun" ]]; then
+        echo "ASSERTION FAILED (--dry-run): candidate file BYTES changed even though the path survived (e.g. truncated in place)"
         return 1
     fi
 
@@ -263,6 +285,13 @@ EOF
     fi
     if [[ ! -f "$artifact_file" ]]; then
         echo "ASSERTION FAILED (no-args default): default invocation must not delete a real dead session artifact"
+        return 1
+    fi
+
+    local post_fp_default
+    post_fp_default=$(fingerprint "$proj_dir")
+    if [[ "$pre_fp" != "$post_fp_default" ]]; then
+        echo "ASSERTION FAILED (no-args default): candidate file BYTES changed even though the path survived (e.g. truncated in place)"
         return 1
     fi
     return 0
