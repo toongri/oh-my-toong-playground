@@ -315,7 +315,7 @@ fun `PaymentFailedEventV1 triggers order cancellation`() {
 }
 ```
 
-AFTER_COMMIT은 비동기로 처리되므로 Awaitility로 기다려야 하고, BEFORE_COMMIT은 동기로 처리되므로 즉시 확인할 수 있다. 이 구분과 Awaitility 패턴은 9절 Kafka Consumer 테스트에서도 그대로 쓰인다.
+`@Async`가 붙은 AFTER_COMMIT 리스너는 별도 스레드에서 처리되므로 Awaitility로 기다려야 하고, `@Async` 없는 AFTER_COMMIT 리스너는 커밋 직후 같은 스레드에서 끝나므로 BEFORE_COMMIT과 마찬가지로 즉시 확인할 수 있다. 이 구분과 Awaitility 패턴은 9절 Kafka Consumer 테스트에서도 그대로 쓰인다.
 
 ## 9. Kafka Consumer 테스트
 

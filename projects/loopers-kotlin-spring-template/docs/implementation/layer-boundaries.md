@@ -372,6 +372,8 @@ import org.springframework.data.jpa.repository.JpaRepository  // ❌
 
 **도메인은 다른 레이어에서 아무것도 import하지 않는다.**
 
+이 절의 규칙은 Entity·Value Object 같은 순수 도메인 모델을 대상으로 한다. Service는 3절의 패키지 구조상 `domain/`에 위치하지만 Spring 빈으로 등록되어 오케스트레이션을 수행하는 컴포넌트이므로 `@Component`/`@Service` 스테레오타입 어노테이션이 붙는다 — 5절의 `CouponService`가 그 예다.
+
 | Domain에서 허용 | Domain에서 금지 |
 |------------------|---------------------|
 | JPA: `@Entity`, `@Table`, `@Column` 등 | `@Transactional` |
