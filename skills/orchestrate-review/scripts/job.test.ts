@@ -4374,3 +4374,92 @@ describe("start: deny reaches spawnWorkers entities (AC6 wiring)", () => {
 	});
 });
 
+// ---------------------------------------------------------------------------
+// start → spawnWorkers wiring: the computed mcpBlock reaches each dispatched
+// entity (closes the untested seam between computeMcpBlockList's calculation
+// and buildAugmentedCommand's translation — the transmission point itself was
+// unasserted: job.ts:593 could drop or misspell mcpBlock in the entities map
+// and every existing test would still pass green).
+// ---------------------------------------------------------------------------
+
+describe("start: mcpBlock reaches spawnWorkers entities", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+	let codexHomeDir: string;
+	let prevCodexHome: string | undefined;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		codexHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-test-"));
+		fs.writeFileSync(
+			path.join(codexHomeDir, "config.toml"),
+			[
+				"[mcp_servers.codegraph]",
+				'command = "stub"',
+				"",
+				"[mcp_servers.figma]",
+				'command = "stub"',
+				"",
+				"[mcp_servers.notion]",
+				'command = "stub"',
+			].join("\n"),
+		);
+		prevCodexHome = process.env.CODEX_HOME;
+		process.env.CODEX_HOME = codexHomeDir;
+	});
+
+	afterEach(() => {
+		if (prevCodexHome === undefined) delete process.env.CODEX_HOME;
+		else process.env.CODEX_HOME = prevCodexHome;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+		fs.rmSync(codexHomeDir, { recursive: true, force: true });
+		mock.restore();
+	});
+
+	test("every dispatched entity carries the computed mcpBlock", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				"    mcps:",
+				"      allow:",
+				"        - codegraph",
+			].join("\n"),
+		);
+
+		let capturedEntities: Array<Record<string, unknown>> | undefined;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: ({ entities }: { entities: Array<Record<string, unknown>> }) => {
+				capturedEntities = entities;
+				return [];
+			},
+		}));
+
+		const mod = await import(`./job.ts?mcpblock-transmission=${Date.now()}-${Math.random()}`);
+		await mod.cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		expect(capturedEntities).toBeDefined();
+		expect(capturedEntities?.length).toBe(2);
+		for (const entity of capturedEntities ?? []) {
+			expect(entity.mcpBlock).toEqual(["figma", "notion"]);
+		}
+	});
+});
+
