@@ -12,6 +12,15 @@ TESTS_FAILED=0
 CURRENT_TEST=""
 
 setup_test_env() {
+    # Re-entrant: a caller that has already set up a TEST_TMP_DIR/TEST_HOME
+    # (e.g. the CLAUDE_ENV_FILE scrub regression test below, which calls
+    # setup_test_env a second time after run_test's own call) must have its
+    # first pair torn down before a second pair is created, or the first
+    # pair is orphaned without cleanup.
+    if [ -n "${TEST_TMP_DIR:-}" ]; then
+        teardown_test_env
+    fi
+
     TEST_TMP_DIR=$(mktemp -d)
     mkdir -p "$TEST_TMP_DIR/.omt"
     mkdir -p "$TEST_TMP_DIR/.git"
