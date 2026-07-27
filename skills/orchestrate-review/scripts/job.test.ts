@@ -14,6 +14,7 @@ import {
 	detectCliType,
 	buildAugmentedCommand,
 	gcStaleJobs,
+	cmdStart,
 } from "./job.ts";
 import * as GenericJob from "@lib/generic-job";
 
@@ -3362,6 +3363,117 @@ describe("start: assertDenyEnforceable gate wiring", () => {
 });
 
 // ---------------------------------------------------------------------------
+// cmdStart — job.json members[].workerPgid 앵커 기록
+// ---------------------------------------------------------------------------
+
+describe("cmdStart writes workerPgid to job.json", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("job.json의 모든 members가 양의 정수 `workerPgid`를 가진다", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		const jobDirName = fs.readdirSync(jobsDir)[0];
+		const jobDir = path.join(jobsDir, jobDirName);
+		const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+
+		expect(jobMeta.members.length).toBe(2);
+		for (const member of jobMeta.members) {
+			expect("workerPgid" in member).toBeTruthy();
+			expect(Number.isInteger(member.workerPgid)).toBe(true);
+			expect(member.workerPgid).toBeGreaterThan(0);
+		}
+
+		// cleanup spawned worker process groups (may have already exited — best-effort)
+		for (const member of jobMeta.members) {
+			try {
+				process.kill(-member.workerPgid, "SIGKILL");
+			} catch {
+				// already exited — nothing to clean up
+			}
+		}
+	});
+
+	test("반환 배열에 이름이 없는 멤버는 workerPgid: null로 병합된다", async () => {
+		let capturedJobDir = "";
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: ({ jobDir }: { jobDir: string }) => {
+				capturedJobDir = jobDir;
+				// Only "alice" is reported back — "bob" is absent from the returned array,
+				// simulating a spawn that didn't report every entity by name.
+				return [{ name: "alice", workerPgid: 4242 }];
+			},
+		}));
+
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		const mod = await import(`./job.ts?workerpgid-merge=${Date.now()}-${Math.random()}`);
+		await mod.cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		expect(capturedJobDir).not.toBe("");
+		const jobMeta = JSON.parse(fs.readFileSync(path.join(capturedJobDir, "job.json"), "utf8"));
+		const alice = jobMeta.members.find((m: { name: string }) => m.name === "alice");
+		const bob = jobMeta.members.find((m: { name: string }) => m.name === "bob");
+		expect(alice.workerPgid).toBe(4242);
+		expect(bob.workerPgid).toBe(null);
+
+		mock.restore();
+	});
+});
+
+// ---------------------------------------------------------------------------
 // start → spawnWorkers wiring: declared deny reaches each dispatched entity
 // (AC6 — verified by spying on the shared lib's spawnWorkers, per the spec's
 // allowed fallback method since detached workers are not easily inspectable).
@@ -3407,6 +3519,7 @@ describe("start: deny reaches spawnWorkers entities (AC6 wiring)", () => {
 			...GenericJob,
 			spawnWorkers: ({ entities }: { entities: Array<Record<string, unknown>> }) => {
 				capturedEntities = entities;
+				return [];
 			},
 		}));
 
@@ -3421,3 +3534,4 @@ describe("start: deny reaches spawnWorkers entities (AC6 wiring)", () => {
 		expect(capturedEntities?.[0].deny).toEqual(["orchestrate-review", "code-review"]);
 	});
 });
+

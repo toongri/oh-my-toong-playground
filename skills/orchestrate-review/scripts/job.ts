@@ -22,6 +22,7 @@ import { getOmtDir } from "@lib/omt-dir";
 
 import {
 	type JobConfig,
+	type SpawnedWorker,
 	assertMembersOrExit,
 	assertDenyEnforceable,
 	assertDenySkillsShape,
@@ -423,11 +424,12 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			effort_level: r.effort_level || null,
 			output_format: r.output_format || null,
 			env: r.env ?? {},
+			workerPgid: null as number | null,
 		})),
 	};
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
-	_spawnWorkers({
+	const spawned: SpawnedWorker[] = _spawnWorkers({
 		entities: members.map((r) => ({ ...r, deny: denySkills })),
 		workerPath: WORKER_PATH,
 		jobDir,
@@ -436,6 +438,13 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 		config: CHUNK_REVIEW_JOB_CONFIG,
 	});
 	logInfo(`workers spawned: ${members.map((r) => String(r.name)).join(", ")}`);
+
+	const workerPgidByName = new Map(spawned.map((w) => [w.name, w.workerPgid]));
+	jobMeta.members = jobMeta.members.map((m) => ({
+		...m,
+		workerPgid: workerPgidByName.get(m.name) ?? null,
+	}));
+	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	if (options.json) {
 		process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);
