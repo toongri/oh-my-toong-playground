@@ -135,9 +135,16 @@ describe("ported from goal (regression): required phrases survive somewhere in b
 		expect(combined).toContain("**blocked-stop** (`--blocked-stop <text>`)");
 	});
 
+	// Anchored on the behavioral claim, not on the sentence that used to justify it.
+	// The old assertion quoted a full rationale clause ("the never-false-complete
+	// invariant in `request-complete` structurally requires …"), so trimming the
+	// justification prose broke a test whose subject is the invariant, not the
+	// wording. Two independent anchors now: the named invariant survives somewhere,
+	// and the mechanism it names is stated as a requirement.
 	test("the never-false-complete invariant survives in the union", () => {
+		expect(combined).toContain("never-false-complete");
 		expect(combined).toContain(
-			"the never-false-complete invariant in `request-complete` structurally requires `objective_verdict=APPROVE`",
+			"`request-complete` requires `objective_verdict=APPROVE`",
 		);
 	});
 
@@ -423,11 +430,20 @@ describe("codex-goal-objective channel: stdin heredoc, not a quoted shell arg", 
 		);
 	});
 
-	test("a rationale sentence names the apostrophe failure and its fail-open direction", () => {
-		expect(executionDispatch).toContain(
-			"single quotes cannot express an apostrophe at all",
-		);
-		expect(executionDispatch).toMatch(/leaving the gate UNARMED/);
+	// This used to assert the rationale sentence that explained WHY inline quoting
+	// fails (double quotes expand `$`, one apostrophe kills a single-quoted command
+	// and leaves the gate unarmed, two truncate at the first unquoted space). That
+	// explanation is now carried by this comment and by the CLI's own empty-value
+	// refusal, not by the prompt: the two sibling tests above already lock the
+	// BEHAVIOR from both sides — stdin heredoc required, neither inline quote style
+	// permitted — so re-asserting the reason in the skill body bought nothing the
+	// prompt has to pay for on every dispatch. What is NOT covered by those two is
+	// the byte-identity requirement, so that is what this test now pins.
+	//
+	// 무엇이 훼손되면 빨개지는가: 등록된 objective와 저장값이 바이트 동일해야 한다는
+	// 요구가 문서에서 사라지면 (그 요구가 없으면 정규화에 기대는 느슨한 저장이 열린다).
+	test("the byte-identity requirement between create_goal and the recorded value is stated", () => {
+		expect(executionDispatch).toMatch(/byte-identical/);
 	});
 
 	// A quoted heredoc is literal for every byte EXCEPT one: a payload line equal
