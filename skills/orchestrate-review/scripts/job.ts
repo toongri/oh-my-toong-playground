@@ -473,7 +473,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	// (REAP_GRACE_MS_DEFAULT is 5s): a group findOrphanJobs already judged
 	// orphaned (alive PGID, zero live progress) has nothing left worth waiting
 	// on before SIGKILL.
-	const { reaped: reapedOrphans } = await reapOrphanJobs(jobsDir, CHUNK_REVIEW_JOB_CONFIG, {
+	const { reaped: reapedOrphans, survivingPids } = await reapOrphanJobs(jobsDir, CHUNK_REVIEW_JOB_CONFIG, {
 		graceMs: 0,
 	});
 	gcStaleJobs(jobsDir);
@@ -532,10 +532,10 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	// claim here would go stale far more often than cmdReap's own SessionStart
 	// trigger. Never claim "reaped" for a group that in fact survived the kill.
 	const reapedOrphanVerdicts = classifyReapedOrphans(reapedOrphans);
-	const survivedOrphanCount = reapedOrphanVerdicts.filter((v) => v.survived).length;
+	const anyOrphanSurvived = reapedOrphanVerdicts.some((v) => v.survived);
 	logInfo(
-		survivedOrphanCount > 0
-			? `reap: ${reapedOrphanVerdicts.length} orphan job(s) signalled — ${survivedOrphanCount} process(es) survived the group kill`
+		anyOrphanSurvived
+			? `reap: ${reapedOrphanVerdicts.length} orphan job(s) signalled — ${survivingPids.length} process(es) survived the group kill`
 			: `reap: ${reapedOrphans.length} orphan job(s) reaped`,
 	);
 	logInfo(`config: ${configPath}, chairman: ${chairmanRole}, members: ${members.length}`);

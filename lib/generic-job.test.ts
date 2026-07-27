@@ -37,6 +37,8 @@ import {
 	findOrphanJobs,
 	reapOrphanJobs,
 	doctorOrphanJobs,
+	judgePgidSignal,
+	pgidVerdictReason,
 } from "./generic-job.ts";
 
 // ---------------------------------------------------------------------------
@@ -3788,5 +3790,183 @@ describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
 		} finally {
 			process.kill = originalKill;
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// judgePgidSignal — 파싱 불가한 증인이 신원 필터를 무력화하는 fail-open
+// (3차 독립 code-review 결함 A). recordedStartedAt/멤버 시작 시각 모두
+// `new Date(value).getTime()`(toEpochMs)으로 파싱되는데, 파싱 실패는 NaN이고
+// NaN과의 모든 비교는 false다 — 그래서 recordedMs가 NaN이면 "이 멤버는 기록
+// 시각보다 먼저 시작하지 않았다"로 판정돼 배제해야 할 경우를 "signal"로
+// 새어나가게 한다. 이 스위트는 judgePgidSignal을 직접 단위 테스트한다 — 실제
+// 프로세스를 띄우지 않고 스냅샷을 손으로 구성해 결정론적으로 검증한다.
+// ---------------------------------------------------------------------------
+
+describe("judgePgidSignal — 파싱 불가 증인 fail-open (3차 리뷰 결함 A)", () => {
+	// 실제 프로세스가 필요 없는 순수 판정 단위 테스트이므로 존재하지 않는 임의의
+	// pgid를 키로 쓴다 — judgePgidSignal은 snapshot 인자만 보고, `ps`를 다시
+	// 호출하지 않는다.
+	const pgid = 424242;
+	// 기록된(가짜) spawn 시각 — 파싱 가능한 정상 문자열.
+	const recordedStartedAt = "Wed Jan  4 00:00:00 2023";
+	// 살아있는 멤버의 시작 시각 — recordedStartedAt보다 이틀 먼저(리뷰어가 실측한
+	// 스냅샷과 같은 모양: fallback이 정확히 배제하려는 케이스).
+	const memberBeforeRecorded = "Mon Jan  2 00:00:00 2023";
+	// recordedStartedAt보다 나중 — fallback이 "signal"을 내야 하는 정상 케이스.
+	const memberAfterRecorded = "Fri Jan  6 00:00:00 2023";
+
+	function leaderDeadSnapshot(memberStartedAt: string): PgidSnapshot {
+		return {
+			leaderStartTimes: new Map(), // 리더 행 없음 — judgePgidSignal이 fallback 분기로 들어간다.
+			memberStartTimes: new Map([[pgid, [memberStartedAt]]]),
+		};
+	}
+
+	test("정상 경로 음성 대조군: 살아있는 멤버가 기록 시각보다 먼저 시작하면 leader-dead (배제)", () => {
+		const snapshot = leaderDeadSnapshot(memberBeforeRecorded);
+		expect(judgePgidSignal(pgid, recordedStartedAt, snapshot)).toBe("leader-dead");
+	});
+
+	test("정상 경로 음성 대조군: 살아있는 멤버가 기록 시각보다 나중 시작하면 signal (fallback 정상 동작)", () => {
+		const snapshot = leaderDeadSnapshot(memberAfterRecorded);
+		expect(judgePgidSignal(pgid, recordedStartedAt, snapshot)).toBe("signal");
+	});
+
+	test("리더가 살아있고 증인이 일치하면 signal (리더 경로는 건드리지 않았음을 확인)", () => {
+		const snapshot: PgidSnapshot = {
+			leaderStartTimes: new Map([[pgid, recordedStartedAt]]),
+			memberStartTimes: new Map(),
+		};
+		expect(judgePgidSignal(pgid, recordedStartedAt, snapshot)).toBe("signal");
+	});
+
+	test("리더가 살아있고 증인이 불일치하면 mismatch (리더 경로는 건드리지 않았음을 확인)", () => {
+		const snapshot: PgidSnapshot = {
+			leaderStartTimes: new Map([[pgid, "Sat Jan  1 00:00:00 2000"]]),
+			memberStartTimes: new Map(),
+		};
+		expect(judgePgidSignal(pgid, recordedStartedAt, snapshot)).toBe("mismatch");
+	});
+
+	// 결함 A 본체 — 리뷰어가 같은 스냅샷에 대해 실측한 그대로: 살아있는 멤버는
+	// 기록 시각보다 이틀 먼저 시작했다(=배제해야 함). 증인이 파싱 가능하면
+	// leader-dead로 배제되지만, 증인이 파싱 불가(빈 문자열/쓰레기 문자열)면
+	// recordedMs가 NaN이 되어 모든 비교가 false — "signal"로 샌다.
+	test("증인이 빈 문자열이면 signal로 새지 않는다 (결함 A)", () => {
+		const snapshot = leaderDeadSnapshot(memberBeforeRecorded);
+		expect(judgePgidSignal(pgid, "", snapshot)).toBe("no-witness");
+	});
+
+	test("증인이 파싱 불가한 쓰레기 문자열이면 signal로 새지 않는다 (결함 A)", () => {
+		const snapshot = leaderDeadSnapshot(memberBeforeRecorded);
+		expect(judgePgidSignal(pgid, "not-a-date", snapshot)).toBe("no-witness");
+	});
+
+	// 결함 A, 멤버측: recordedStartedAt은 파싱 가능하지만 살아있는 멤버 쪽 시작
+	// 시각이 파싱 불가한 경우도 같은 비대칭이 적용돼 그 멤버가 조용히 "먼저
+	// 시작 안 함"으로 계산된다 — 배제 쪽(먼저 시작함으로 취급)으로 뒤집어야 한다.
+	test("멤버 시작 시각이 파싱 불가하면 그 멤버는 '먼저 시작함'으로 취급돼 signal로 새지 않는다 (결함 A, 멤버측)", () => {
+		const snapshot = leaderDeadSnapshot("garbage-timestamp");
+		expect(judgePgidSignal(pgid, recordedStartedAt, snapshot)).toBe("leader-dead");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cmdClean / findOrphanJobs — workerPgid가 아예 없는(키 자체가 없는) 멤버가
+// 보고 루프보다 앞에서 걸러져 완전히 침묵하는 결함 (3차 독립 code-review
+// 결함 B). agent-council/diagnose/slides-review/design-review는 job.json의
+// members[]에 workerPgid 필드 자체를 쓰지 않는다 — null이 아니라 키가 없다.
+// ---------------------------------------------------------------------------
+
+describe("cmdClean / findOrphanJobs — workerPgid 부재 멤버 보고 (3차 리뷰 결함 B)", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+	let originalExit: typeof process.exit;
+
+	function setupJobWithRawMembers(jobDir: string, rawMembers: any[], memberName = "alice"): void {
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: path.basename(jobDir), members: rawMembers }),
+		);
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		const dir = path.join(entitiesDir, memberName);
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(
+			path.join(dir, "status.json"),
+			JSON.stringify({ member: memberName, state: "done" }),
+		);
+	}
+
+	function captureStderr(): { chunks: string[]; restore: () => void } {
+		const chunks: string[] = [];
+		const original = process.stderr.write;
+		(process.stderr as unknown as { write: unknown }).write = (chunk: unknown) => {
+			chunks.push(String(chunk));
+			return true;
+		};
+		return {
+			chunks,
+			restore: () => {
+				process.stderr.write = original;
+			},
+		};
+	}
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		originalExit = process.exit;
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+	});
+
+	afterEach(() => {
+		process.exit = originalExit;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("cmdClean은 workerPgid가 아예 없는 멤버를 삭제 전에 stderr로 보고하고, 디렉터리는 지운다 (결함 B)", () => {
+		const jobDir = path.join(jobsDir, "chunk-review-nopgidkey-001");
+		setupJobWithRawMembers(jobDir, [{ name: "alice" }]);
+
+		const { chunks, restore } = captureStderr();
+		try {
+			cmdClean({}, jobDir, chunkReviewConfig, jobsDir);
+		} finally {
+			restore();
+		}
+
+		expect(fs.existsSync(jobDir)).toBe(false);
+		expect(
+			chunks.some(
+				(c) => c.includes("alice") && c.includes("workerPgid") && c.includes(pgidVerdictReason("no-witness")),
+			),
+		).toBe(true);
+	});
+
+	test("findOrphanJobs는 workerPgid가 아예 없는 멤버를 stderr로 보고한다 (결함 B)", () => {
+		const jobDir = path.join(jobsDir, "chunk-review-nopgidkey-002");
+		setupJobWithRawMembers(jobDir, [{ name: "bob" }]);
+
+		const { chunks, restore } = captureStderr();
+		let orphans: OrphanJob[];
+		try {
+			orphans = findOrphanJobs(jobsDir, chunkReviewConfig);
+		} finally {
+			restore();
+		}
+
+		// 정책은 안 바뀐다 — workerPgid가 없으면 여전히 회수 후보에 오르지 않는다.
+		expect(orphans.find((o) => o.jobDir.includes("nopgidkey-002"))).toBeUndefined();
+		expect(
+			chunks.some(
+				(c) => c.includes("bob") && c.includes("workerPgid") && c.includes(pgidVerdictReason("no-witness")),
+			),
+		).toBe(true);
 	});
 });
