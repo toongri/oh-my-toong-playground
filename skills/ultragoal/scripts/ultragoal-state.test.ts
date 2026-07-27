@@ -953,10 +953,14 @@ function runCli(args: string, env?: Record<string, string>): string {
 function runCliCaptured(
 	args: string,
 	env?: Record<string, string>,
+	input?: string,
 ): { stdout: string; stderr: string; status: number | null } {
 	const result = spawnSync("bun", [script, ...args.split(" ")], {
 		encoding: "utf8",
 		env: { ...process.env, ...env },
+		// Only supplied by the `-`/stdin callers. Omitted elsewhere so stdin keeps
+		// inheriting from the runner exactly as before.
+		...(input === undefined ? {} : { input }),
 	});
 	return { stdout: result.stdout, stderr: result.stderr, status: result.status };
 }
@@ -3389,6 +3393,56 @@ describe("story layer: Codex native-goal snapshot cross-check gate (Gate 9)", ()
 
 		runCli('set --phase pursuing --codex-goal-objective "ship feature via cli v2"');
 		expect(rawState().codex_goal_objective).toBe("ship feature via cli v2");
+	});
+
+	// 명시적으로 넘어온 빈 --codex-goal-objective는 무장이 아니라 무장 해제다 — 그리고
+	// 그 방향은 fail-OPEN이다: 게이트가 꺼진 채 완료가 대조 없이 통과한다. 이 값이 빈
+	// 채로 도착하는 구체적 경로는 인용 heredoc의 payload 안에 구분자와 똑같은 줄이
+	// 들어간 경우로, 실측하면 body가 0바이트로 나오고 나머지 줄은 셸 명령으로 실행된다.
+	// 값을 비우는 정당한 호출자는 없다 — 초기화는 `--phase planning`과 `adopt`가 내부에서
+	// 한다 — 이므로 명시적 빈 값은 언제나 전송 실패이며, 조용히 받아들이는 대신 거부해
+	// 직전 무장이 살아남게 해야 한다.
+	//
+	// 무엇이 훼손되면 빨개지는가: `set` 분기의 빈 값 거부 가드가 사라지면 (1) 종료코드가
+	// 0이 되고 (2) 이미 무장돼 있던 값이 ""로 덮여 게이트가 꺼진다.
+	test("CLI: 빈 stdin으로 온 --codex-goal-objective는 거부되고 직전 무장이 보존된다", () => {
+		runCli('set --phase pursuing --codex-goal-objective "story A objective"');
+		expect(rawState().codex_goal_objective).toBe("story A objective");
+
+		const r = runCliCaptured(
+			"set --phase pursuing --codex-goal-objective -",
+			{ OMT_SESSION_ID: S },
+			"",
+		);
+		expect(r.status).not.toBe(0);
+		expect(rawState().codex_goal_objective).toBe("story A objective");
+	});
+
+	// 공백만 든 값도 같은 판정을 받아야 한다: Gate 9의 무장 검사 자체가 `trim() !== ""`라
+	// 공백-only는 애초에 게이트를 켜지 못한다. 저장해두면 "무장했다"는 착각만 남는다.
+	// 무엇이 훼손되면 빨개지는가: 거부 조건이 `=== ""`로 좁혀져 공백-only가 통과하면.
+	test("CLI: 공백만 든 --codex-goal-objective도 거부된다", () => {
+		runCli('set --phase pursuing --codex-goal-objective "story A objective"');
+		const r = runCliCaptured(
+			"set --phase pursuing --codex-goal-objective -",
+			{ OMT_SESSION_ID: S },
+			"   \n  \t \n",
+		);
+		expect(r.status).not.toBe(0);
+		expect(rawState().codex_goal_objective).toBe("story A objective");
+	});
+
+	// 회귀 경계: 정상 stdin 값은 종전대로 저장돼야 한다 — 위 가드가 stdin 경로 전체를
+	// 막아버리지 않았음을 고정한다.
+	// 무엇이 훼손되면 빨개지는가: 가드가 비어있음 판정을 넘어 stdin 경로 자체를 거부하면.
+	test("CLI: 정상 stdin 값은 종전대로 저장된다", () => {
+		const r = runCliCaptured(
+			"set --phase pursuing --codex-goal-objective -",
+			{ OMT_SESSION_ID: S },
+			"ship it via stdin\n",
+		);
+		expect(r.status).toBe(0);
+		expect(rawState().codex_goal_objective).toBe("ship it via stdin");
 	});
 
 	// (결함 A-b, CLI 계층 회귀 가드) 기존 게이트 테스트는 전부 requestComplete를 직접 호출해

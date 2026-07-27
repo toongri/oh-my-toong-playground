@@ -429,6 +429,26 @@ describe("codex-goal-objective channel: stdin heredoc, not a quoted shell arg", 
 		);
 		expect(executionDispatch).toMatch(/leaving the gate UNARMED/);
 	});
+
+	// A quoted heredoc is literal for every byte EXCEPT one: a payload line equal
+	// to the delimiter ends the body there. Measured — the remaining lines then run
+	// as shell commands, and a collision on the FIRST line yields a 0-byte body,
+	// which is the fail-OPEN direction (the arming command succeeds, the field is
+	// written empty, Gate 9 is disarmed, completion passes with no cross-check).
+	// So "literal by construction" is not the whole contract: the delimiter has to
+	// be verified absent from the payload, and the CLI-side empty-value refusal is
+	// what makes a missed check loud instead of silent.
+	//
+	// 무엇이 훼손되면 빨개지는가: 구분자 충돌 지시가 사라져 heredoc이 무조건 안전한
+	// 것처럼 서술로 되돌아가면.
+	test("the heredoc instruction requires a delimiter verified absent from the payload", () => {
+		expect(executionDispatch).toMatch(/delimiter/i);
+		expect(executionDispatch).toMatch(
+			/absent from|does not appear|no line equal/i,
+		);
+		// And the fail-open direction of a collision is named, not left implicit.
+		expect(executionDispatch).toMatch(/refus/i);
+	});
 });
 
 describe("Codex native goal tool gate: capability-conditional create_goal/update_goal wiring", () => {
