@@ -16,6 +16,7 @@ import {
 	gcStaleJobs,
 	cmdStart,
 	cmdReap,
+	classifyReapedOrphans,
 } from "./job.ts";
 import * as GenericJob from "@lib/generic-job";
 
@@ -1504,6 +1505,162 @@ describe("cmdStart reaps orphan jobs on start", () => {
 		} finally {
 			killPgidIfAlive(bystanderPgid);
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// classifyReapedOrphans — shared judgment core cmdReap and cmdStart's reap
+// log both call into: per-orphan verdict of whether the group actually died
+// after being signalled, using the same isPgidGroupAlive probe cmdReap used
+// before this extraction. Tested directly (not through either caller) so the
+// judgment is verified independent of either caller's own phrasing/channel.
+// ---------------------------------------------------------------------------
+
+describe("classifyReapedOrphans", () => {
+	test("프로세스 그룹이 살아있으면 survived: true를 반환한다", () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		child.unref();
+		const pgid = child.pid as number;
+		try {
+			expect(isPgidAlive(pgid)).toBe(true);
+
+			const verdicts = classifyReapedOrphans([{ jobDir: "/tmp/whatever", pgids: [pgid] }]);
+
+			expect(verdicts).toEqual([{ jobDir: "/tmp/whatever", pgids: [pgid], survived: true }]);
+		} finally {
+			killPgidIfAlive(pgid);
+		}
+	});
+
+	test("프로세스 그룹이 죽었으면 survived: false를 반환한다", async () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		child.unref();
+		const pgid = child.pid as number;
+		process.kill(-pgid, "SIGKILL");
+		// SIGKILL is asynchronous — poll until the group is actually gone before
+		// asserting, or this test would flake on a slow host.
+		for (let i = 0; i < 50 && isPgidAlive(pgid); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		expect(isPgidAlive(pgid)).toBe(false);
+
+		const verdicts = classifyReapedOrphans([{ jobDir: "/tmp/whatever", pgids: [pgid] }]);
+
+		expect(verdicts).toEqual([{ jobDir: "/tmp/whatever", pgids: [pgid], survived: false }]);
+	});
+
+	test("reaped가 빈 배열이면 빈 배열을 반환한다", () => {
+		expect(classifyReapedOrphans([])).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cmdStart의 reap 로그 — 독립 code review 2차가 CONFIRMED로 확정한 결함: cmdReap
+// 은 group kill 후 생존 프로세스를 확인해 "reaped"라고 무조건 주장하지 않도록
+// 고쳐졌지만, 같은 reapOrphanJobs를 호출하는 형제 cmdStart는 안 고쳐진 채
+// survivingPids를 버리고 항상 "N orphan job(s) reaped"라고 logInfo했다.
+// ---------------------------------------------------------------------------
+
+describe("cmdStart reap 로그 — 생존 프로세스를 회수됐다고 보고하지 않는다", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+	let originalOmtDir: string | undefined;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		originalOmtDir = process.env.OMT_DIR;
+		process.env.OMT_DIR = tmpDir;
+	});
+
+	afterEach(() => {
+		if (originalOmtDir === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = originalOmtDir;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function writeStartConfig(): string {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		return configPath;
+	}
+
+	function readStartLog(): string {
+		const logsDir = path.join(tmpDir, "logs");
+		const files = fs.readdirSync(logsDir).filter((f) => f.startsWith("chunk-review-job-"));
+		expect(files.length).toBe(1);
+		return fs.readFileSync(path.join(logsDir, files[0]), "utf8");
+	}
+
+	function killSpawnedWorkers(): void {
+		for (const entry of fs.readdirSync(jobsDir)) {
+			const jobJsonPath = path.join(jobsDir, entry, "job.json");
+			if (!fs.existsSync(jobJsonPath)) continue;
+			const meta = JSON.parse(fs.readFileSync(jobJsonPath, "utf8"));
+			for (const member of meta.members ?? []) {
+				if (typeof member.workerPgid === "number") killPgidIfAlive(member.workerPgid);
+			}
+		}
+	}
+
+	test("group kill 후에도 프로세스가 살아남으면 로그에 'orphan job(s) reaped' 무조건 성공 주장이 없다", async () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "start-survivor");
+		expect(isPgidAlive(pgid)).toBe(true);
+		const configPath = writeStartConfig();
+
+		const originalKill = process.kill;
+		// kill을 no-op으로 바꿔 실제로는 신호를 보내지 않는다 — 그러면 프로세스는
+		// 반드시 살아남으므로 "생존" 분기가 타이밍에 의존하지 않고 결정적으로
+		// 재현된다 (job.ts cmdReap 테스트와 동일 기법).
+		(process as unknown as { kill: unknown }).kill = () => true;
+
+		try {
+			await cmdStart(
+				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				"test prompt",
+			);
+		} finally {
+			process.kill = originalKill;
+		}
+
+		const logContent = readStartLog();
+		expect(logContent).not.toContain("orphan job(s) reaped");
+		// 오살 방지: kill이 no-op이었으므로 프로세스는 실제로 살아있어야 한다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		killPgidIfAlive(pgid);
+		killSpawnedWorkers();
+	});
+
+	test("실제로 전부 회수된 경우엔 여전히 회수 성공을 로그에 남긴다 (음성 대조군)", async () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "start-reaped-ok");
+		expect(isPgidAlive(pgid)).toBe(true);
+		const configPath = writeStartConfig();
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		const logContent = readStartLog();
+		expect(logContent).toContain("1 orphan job(s) reaped");
+		expect(isPgidAlive(pgid)).toBe(false);
+
+		killSpawnedWorkers();
 	});
 });
 
