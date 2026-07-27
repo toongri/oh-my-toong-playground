@@ -243,9 +243,16 @@ describe("ported from goal (regression): required phrases survive somewhere in b
 		expect(combined).toContain("**blocked-stop** (`--blocked-stop <text>`)");
 	});
 
+	// Anchored on the behavioral claim, not on the sentence that used to justify it.
+	// The old assertion quoted a full rationale clause ("the never-false-complete
+	// invariant in `request-complete` structurally requires …"), so trimming the
+	// justification prose broke a test whose subject is the invariant, not the
+	// wording. Two independent anchors now: the named invariant survives somewhere,
+	// and the mechanism it names is stated as a requirement.
 	test("the never-false-complete invariant survives in the union", () => {
+		expect(combined).toContain("never-false-complete");
 		expect(combined).toContain(
-			"the never-false-complete invariant in `request-complete` structurally requires `objective_verdict=APPROVE`",
+			"`request-complete` requires `objective_verdict=APPROVE`",
 		);
 	});
 
@@ -485,5 +492,359 @@ describe("Stop-hook arming gap: pursuing transition precedes first dispatch", ()
 		expect(replanLoopBack.indexOf("set --phase pursuing")).toBeLessThan(
 			replanLoopBack.indexOf("dispatch the fresh sisyphus call"),
 		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Codex native goal tool gate: create_goal/update_goal are wired into the
+// Execution Dispatch loop as capability conditionals ("if the tool is
+// available"), never as a platform-name branch — Claude exposes no
+// model-callable goal tool, so the condition evaluates false there and the
+// clause is inert rather than dead prose. create_goal registers the story's
+// objective immediately before the sisyphus dispatch; update_goal closes it
+// to `complete` immediately after (and only after) the story's per-story
+// verdict reads APPROVE — never on a non-APPROVE verdict or a retry, since
+// native goal DB registration only accepts a fresh objective from
+// `status: "complete"` (`active`/`blocked` reject it identically).
+// ---------------------------------------------------------------------------
+
+describe("codex-goal-objective channel: stdin heredoc, not a quoted shell arg", () => {
+	// This value is later diffed byte-for-byte against the `get_goal` snapshot by the
+	// completion gate, so it must reach the CLI unmodified. NO shell quoting form can
+	// carry an arbitrary WHAT statement: double quotes expand `$`/backticks/backslashes,
+	// and single quotes cannot express an apostrophe — one apostrophe kills the command
+	// and leaves the gate UNARMED (completion then passes with no cross-check at all),
+	// two truncate the value at the first unquoted space. A quoted heredoc on stdin is
+	// literal by construction, which is the only form that holds for every input.
+	const executionDispatch = skillMd.slice(
+		skillMd.indexOf("## Execution Dispatch"),
+		skillMd.indexOf("### Phase transitions"),
+	);
+
+	test("the objective is passed on stdin via `-`", () => {
+		expect(executionDispatch).toContain("--codex-goal-objective - <<'OBJECTIVE'");
+	});
+
+	test("the heredoc delimiter is quoted (unquoted would re-enable expansion)", () => {
+		expect(executionDispatch).not.toMatch(/--codex-goal-objective - <<OBJECTIVE/);
+	});
+
+	test("the objective is not passed as a quoted inline argument in either quote style", () => {
+		expect(executionDispatch).not.toContain(
+			"--codex-goal-objective '<the objective string just registered>'",
+		);
+		expect(executionDispatch).not.toContain(
+			'--codex-goal-objective "<the objective string just registered>"',
+		);
+	});
+
+	// This used to assert the rationale sentence that explained WHY inline quoting
+	// fails (double quotes expand `$`, one apostrophe kills a single-quoted command
+	// and leaves the gate unarmed, two truncate at the first unquoted space). That
+	// explanation is now carried by this comment and by the CLI's own empty-value
+	// refusal, not by the prompt: the two sibling tests above already lock the
+	// BEHAVIOR from both sides — stdin heredoc required, neither inline quote style
+	// permitted — so re-asserting the reason in the skill body bought nothing the
+	// prompt has to pay for on every dispatch. What is NOT covered by those two is
+	// the byte-identity requirement, so that is what this test now pins.
+	//
+	// 무엇이 훼손되면 빨개지는가: 등록된 objective와 저장값이 바이트 동일해야 한다는
+	// 요구가 문서에서 사라지면 (그 요구가 없으면 정규화에 기대는 느슨한 저장이 열린다).
+	test("the byte-identity requirement between create_goal and the recorded value is stated", () => {
+		expect(executionDispatch).toMatch(/byte-identical/);
+	});
+
+	// A quoted heredoc is literal for every byte EXCEPT one: a payload line equal
+	// to the delimiter ends the body there. Measured — the remaining lines then run
+	// as shell commands, and a collision on the FIRST line yields a 0-byte body,
+	// which is the fail-OPEN direction (the arming command succeeds, the field is
+	// written empty, Gate 9 is disarmed, completion passes with no cross-check).
+	// So "literal by construction" is not the whole contract: the delimiter has to
+	// be verified absent from the payload, and the CLI-side empty-value refusal is
+	// what makes a missed check loud instead of silent.
+	//
+	// 무엇이 훼손되면 빨개지는가: 구분자 충돌 지시가 사라져 heredoc이 무조건 안전한
+	// 것처럼 서술로 되돌아가면.
+	test("the heredoc instruction requires a delimiter verified absent from the payload", () => {
+		expect(executionDispatch).toMatch(/delimiter/i);
+		expect(executionDispatch).toMatch(
+			/absent from|does not appear|no line equal/i,
+		);
+		// And the fail-open direction of a collision is named, not left implicit.
+		expect(executionDispatch).toMatch(/refus/i);
+	});
+});
+
+describe("Codex native goal tool gate: capability-conditional create_goal/update_goal wiring", () => {
+	const executionDispatch = skillMd.slice(
+		skillMd.indexOf("## Execution Dispatch"),
+		skillMd.indexOf("### Phase transitions"),
+	);
+
+	test("create_goal is mentioned before the sisyphus dispatch instruction", () => {
+		expect(executionDispatch.indexOf("create_goal")).toBeGreaterThan(-1);
+		expect(
+			executionDispatch.indexOf("Dispatch ONLY that one story"),
+		).toBeGreaterThan(-1);
+		expect(executionDispatch.indexOf("create_goal")).toBeLessThan(
+			executionDispatch.indexOf("Dispatch ONLY that one story"),
+		);
+	});
+
+	// Two legitimate `update_goal` call sites now exist: the advance-on-APPROVE
+	// close (step 5, after dispatch) and the reconciliation close that recovers an
+	// already-APPROVE story's interrupted goal (step 3, before dispatch). So the
+	// position invariant is anchored on step 5's firing condition rather than on
+	// the first occurrence of the token — and every earlier occurrence must sit
+	// inside the reconciliation branch, so an unconditional pre-dispatch close
+	// cannot slip in under cover of that second call site.
+	test("the advance-on-APPROVE update_goal comes after dispatch, and any earlier call site is the reconciliation branch", () => {
+		const dispatchAt = executionDispatch.indexOf("Dispatch ONLY that one story");
+		const step5At = executionDispatch.indexOf(
+			"If the `update_goal` tool is available",
+		);
+		expect(dispatchAt).toBeGreaterThan(-1);
+		expect(step5At).toBeGreaterThan(dispatchAt);
+
+		const reconciliationAt = executionDispatch.indexOf(
+			"**If `create_goal` is refused**",
+		);
+		expect(reconciliationAt).toBeGreaterThan(-1);
+		for (
+			let i = executionDispatch.indexOf("update_goal");
+			i > -1 && i < dispatchAt;
+			i = executionDispatch.indexOf("update_goal", i + 1)
+		) {
+			expect(i).toBeGreaterThan(reconciliationAt);
+		}
+	});
+
+	test("the registered objective is recorded via set --codex-goal-objective", () => {
+		expect(executionDispatch).toContain("--codex-goal-objective");
+	});
+
+	test("update_goal is never called on a non-APPROVE verdict or a retry dispatch", () => {
+		expect(executionDispatch).toContain(
+			"never call it on a non-APPROVE verdict or a re-dispatch retry",
+		);
+	});
+
+	test("the gate is a tool-existence conditional, not a platform-name branch", () => {
+		expect(executionDispatch).not.toMatch(
+			/on Codex|Codex에서는|플랫폼이 codex라면/i,
+		);
+		expect(executionDispatch).toContain(
+			"If the `create_goal` tool is available",
+		);
+		expect(executionDispatch).toContain(
+			"If the `update_goal` tool is available",
+		);
+	});
+
+	// `update_goal` carries no goal selector — it always targets whatever goal the
+	// thread currently holds (measured on codex-cli 0.145.0: the tool description
+	// reads "Update the existing goal", and the failure string is "cannot update
+	// goal because this thread has no goal"). So tool availability alone is the
+	// WRONG firing condition: after a re-plan leaves a failed story's goal open and
+	// step 3's registration is rejected, an unconditional call here closes THAT
+	// story's goal as `complete` — laundering a failure, which is the single
+	// property this cross-check exists to catch, and which the re-plan paragraph
+	// two sentences later explicitly forbids doing by hand.
+	//
+	// 무엇이 훼손되면 빨개지는가: step 5의 발동 조건에서 "이 story가 실제로 무장했는가"
+	// 축이 빠지고 툴 존재 여부만 남으면 (즉 SKILL.md가 리뷰 이전 문안으로 되돌아가면).
+	test("update_goal fires only when THIS story armed the gate, not on tool availability alone", () => {
+		// Bounded to the firing-condition sentence itself — the re-plan paragraph
+		// below it already names codex_goal_objective, so an unbounded slice would
+		// pass on that mention alone and assert nothing about step 5's condition.
+		const step5 = executionDispatch.slice(
+			executionDispatch.indexOf("If the `update_goal` tool is available"),
+			executionDispatch.indexOf("**So a re-plan cannot register"),
+		);
+		// The arming state — not the platform, not the tool — is the discriminator.
+		expect(step5).toContain("codex_goal_objective");
+		// And the reason is stated in place: the tool has no goal selector.
+		expect(step5).toMatch(/no goal selector|carries no goal selector/i);
+	});
+
+	// The dispatch loop's `create_goal` and its arming `set` are two separate calls
+	// with no atomicity between them. A crash or a failed `set` in that window
+	// leaves an unfinished native goal registered for THIS story while
+	// codex_goal_objective stays empty; every later `create_goal` in the thread is
+	// then refused ("cannot create a new goal because this thread has an unfinished
+	// goal"), so without a reconciliation path the gate stays disarmed for the rest
+	// of the pursuit. `get_goal`'s objective is the discriminator: equal to this
+	// story's WHAT means the open goal is this story's own interrupted
+	// registration (re-arm from it); not equal means it belongs to another story
+	// (leave it alone, stay disarmed).
+	//
+	// 무엇이 훼손되면 빨개지는가: 거부된 create_goal에 대한 get_goal 조정 분기가
+	// step 3에서 사라지면.
+	//
+	// 주의: 이 분기만으로는 부족하다 — 바로 아래 already-APPROVE 케이스 참조.
+	test("a rejected create_goal reconciles through get_goal instead of leaving the gate disarmed", () => {
+		const step3 = executionDispatch.slice(
+			executionDispatch.indexOf("If the `create_goal` tool is available"),
+			executionDispatch.indexOf("Dispatch ONLY that one story"),
+		);
+		expect(step3).toContain("get_goal");
+		// Objective equality is what separates this story's own interrupted
+		// registration from another story's still-open goal.
+		expect(step3).toMatch(/objective/i);
+		// The rejection is never resolved by closing the open goal.
+		expect(step3).toMatch(/never|forbid/i);
+	});
+
+	// The SECOND crash window, on the other side of the APPROVE write. If the
+	// process stops after a story's APPROVE lands in the verdict artifact but
+	// before that story's `update_goal`, resumption re-derives the NEXT story as
+	// current (step 2 keys on the artifact), so nothing ever revisits the approved
+	// story — while its native goal stays open and `codex_goal_objective` still
+	// names it (no planning transition ran, so nothing cleared the field). Every
+	// later `create_goal` is refused, step 5 skips because the recorded objective
+	// is not the current story's, and `request-complete` is left cross-checking a
+	// still-`active` goal it can never satisfy: a permanent completion deadlock.
+	//
+	// Closing that goal is NOT laundering — its APPROVE is already recorded in the
+	// verdict artifact, which is exactly the property the no-laundering rule
+	// protects. So the discriminator is the verdict artifact, not the objective
+	// text alone.
+	//
+	// 무엇이 훼손되면 빨개지는가: step 3의 조정 분기가 "이미 APPROVE인 story의 열린
+	// goal" 케이스를 잃고 두 갈래(같음/다름)로 되돌아가면 — 이 회귀는 무조건
+	// update_goal을 좁히면서 실제로 한 번 발생했다.
+	test("an open goal belonging to an already-APPROVE story is closed, not left to deadlock", () => {
+		const step3 = executionDispatch.slice(
+			executionDispatch.indexOf("If the `create_goal` tool is available"),
+			executionDispatch.indexOf("Dispatch ONLY that one story"),
+		);
+		// The verdict artifact — not objective equality with the current story —
+		// is what authorizes closing someone else's open goal.
+		expect(step3).toMatch(/APPROVE/);
+		// And the branch must actually close it and retry, not merely observe it.
+		expect(step3).toContain("update_goal");
+		expect(step3).toMatch(/retry|再|다시|again/i);
+	});
+
+	// Step 5's firing condition reads local state (`codex_goal_objective`), which
+	// can have gone stale against the live thread: clearing or replacing the
+	// native goal mid-run is a user action this skill explicitly documents
+	// (`/goal clear`). Since `update_goal` has no goal selector, a local-only
+	// check would close whatever unrelated goal now occupies the thread. The live
+	// snapshot must agree immediately before the call.
+	//
+	// 무엇이 훼손되면 빨개지는가: step 5가 로컬 필드만 보고 get_goal 재확인 없이
+	// update_goal을 호출하도록 되돌아가면.
+	test("update_goal re-reads the live get_goal snapshot before firing", () => {
+		const step5 = executionDispatch.slice(
+			executionDispatch.indexOf("If the `update_goal` tool is available"),
+			executionDispatch.indexOf("**So a re-plan cannot register"),
+		);
+		expect(step5).toContain("get_goal");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Completion-time Gate 9 wiring: request-complete's Codex native-goal
+// snapshot cross-check (Gate 9, landed in ultragoal-state.ts) arms whenever
+// codex_goal_objective is non-empty — which SKILL.md's Execution Dispatch
+// loop now always sets when create_goal is available. The completion
+// sequence must therefore instruct fetching a get_goal snapshot and passing
+// it via --codex-goal-json, gated on the SAME tool-existence conditional
+// form SKILL.md uses for create_goal/update_goal — never a platform-name
+// branch — and must document that omitting the flag causes request-complete
+// to refuse (safe-direction, but silently retryable without diagnosis).
+// ---------------------------------------------------------------------------
+
+describe("Gate 9 wiring: completion sequence carries get_goal -> --codex-goal-json instruction", () => {
+	const completionSequenceSection = completionGateMd.slice(
+		completionGateMd.indexOf("record the Evidence Audit artifact paths FIRST"),
+		completionGateMd.indexOf(
+			"APPROVE alone does NOT leave the ultragoal pursuit pursuing/active",
+		),
+	);
+
+	test("the section is non-empty (anchors exist)", () => {
+		expect(completionSequenceSection.length).toBeGreaterThan(0);
+	});
+
+	test("the completion sequence documents a get_goal tool-existence conditional", () => {
+		expect(completionSequenceSection).toContain(
+			"If the `get_goal` tool is available",
+		);
+	});
+
+	// The snapshot echoes the registered objective back, so an apostrophe in the WHAT
+	// statement breaks any single-quoted inline form here exactly as it does at the
+	// arming site — the same stdin heredoc channel is required on both ends.
+	test("the conditional request-complete call passes the snapshot on stdin using the literal skill-dir path", () => {
+		expect(completionSequenceSection).toContain(
+			"bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts request-complete --codex-goal-json - <<'SNAPSHOT'",
+		);
+		expect(completionSequenceSection).not.toContain(
+			"--codex-goal-json '<the get_goal snapshot JSON>'",
+		);
+	});
+
+	test("the gate is a tool-existence conditional, not a platform-name branch", () => {
+		expect(completionSequenceSection).not.toMatch(
+			/on Codex|Codex에서는|플랫폼이 codex라면|if the platform is codex/i,
+		);
+	});
+
+	test("the instruction documents that omitting --codex-goal-json is a refusal once the cross-check is armed", () => {
+		expect(completionSequenceSection).toContain("--codex-goal-objective");
+		expect(completionSequenceSection).toMatch(/refusal, not a silent pass/);
+		expect(completionSequenceSection).toMatch(/leaves `phase` at `pursuing`/);
+	});
+
+	// The diagnosis itself belongs in request-complete's own refusal message (pinned by
+	// the CLI test in ultragoal-state.test.ts), so this doc's remaining job is to route
+	// the reader to that message instead of prescribing a blind retry.
+	test("the instruction routes an unexplained refusal to request-complete's own message", () => {
+		expect(completionSequenceSection).toMatch(
+			/refusal message names this condition/,
+		);
+		expect(completionSequenceSection).toMatch(/rather than retrying the same call/);
+	});
+
+	test("the instruction notes the snapshot may be passed as inline JSON or a file path", () => {
+		expect(completionSequenceSection).toMatch(
+			/inline JSON or a file path/,
+		);
+	});
+});
+
+describe("stale duplicate sentence removed from Execution Dispatch closing (line 88, ported from :10)", () => {
+	test("the duplicate 'ultragoal never swaps sisyphus for goal' sentence no longer appears", () => {
+		expect(skillMd).not.toContain(
+			"sisyphus stays the sole executor throughout this loop — ultragoal never swaps sisyphus for goal and never invokes the goal skill at runtime.",
+		);
+	});
+});
+
+describe("disambiguation clause: OMT goal skill vs Codex native goal tools", () => {
+	test("the sealed substring is preserved byte-exact", () => {
+		expect(skillMd).toContain(
+			"ultragoal never invokes the goal skill at runtime",
+		);
+	});
+
+	test("a clarifying clause distinguishes the goal skill from Codex's native goal tools", () => {
+		expect(skillMd).toContain(
+			"OMT's `goal` **skill** (invoked via `Skill(...)`) and Codex's native goal tools (`create_goal`/`update_goal`/`get_goal`) are different things, and calling the latter is not a violation of this invariant",
+		);
+	});
+
+	test("the clarifying clause follows the sealed substring", () => {
+		const sealedIdx = skillMd.indexOf(
+			"ultragoal never invokes the goal skill at runtime",
+		);
+		const clauseIdx = skillMd.indexOf(
+			"OMT's `goal` **skill** (invoked via `Skill(...)`) and Codex's native goal tools",
+		);
+		expect(sealedIdx).toBeGreaterThan(-1);
+		expect(clauseIdx).toBeGreaterThan(-1);
+		expect(clauseIdx).toBeGreaterThan(sealedIdx);
 	});
 });
