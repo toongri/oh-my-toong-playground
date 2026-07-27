@@ -143,7 +143,8 @@ export interface GoalState {
 	 * call (e.g. the next story's `create_goal`). Empty string (the default,
 	 * and the entire Claude path) means no native Codex goal has been
 	 * registered for this session — Gate 9 in requestComplete is armed ONLY
-	 * when this field is non-empty.
+	 * when this field is non-empty. Reset to "" by `adopt` — see the adopt
+	 * CLI branch below for why.
 	 */
 	codex_goal_objective: string;
 }
@@ -1650,6 +1651,16 @@ function main(): void {
 				process.exit(1);
 			}
 			adopt("ultragoal", srcSid);
+			// codex_goal_objective is thread-scoped state: Codex's native create_goal/
+			// update_goal tools write to a DB row keyed by thread_id (PRIMARY KEY), and
+			// the adopting session runs in a different runtime/thread that has no way
+			// to reach that row (no get_goal call can retrieve it here). If the
+			// adopted-over string survived, Gate 9 in requestComplete would stay
+			// armed forever with no --codex-goal-json snapshot ever able to satisfy
+			// it — the pursuit could never complete. Clear it here; every other
+			// adopted field (stories, phase, iteration, resume_summary, ...) is left
+			// untouched by mergeWrite's `next.x ?? prior.x` merge.
+			mergeWrite(sessionId, { codex_goal_objective: "" });
 		} else if (subcommand === "confirm-story") {
 			// confirm-story takes no other value-bearing flags, so a raw argv scan for the
 			// first non-"--" token past the subcommand is still safe here (unlike
