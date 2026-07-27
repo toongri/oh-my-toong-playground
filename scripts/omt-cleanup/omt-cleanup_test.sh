@@ -239,11 +239,30 @@ EOF
     bash "$CLEANUP_SCRIPT" --dry-run > /dev/null
 
     if [[ ! -f "$state_file" ]]; then
-        echo "ASSERTION FAILED: dry-run must not delete a real dead state file"
+        echo "ASSERTION FAILED (--dry-run): dry-run must not delete a real dead state file"
         return 1
     fi
     if [[ ! -f "$artifact_file" ]]; then
-        echo "ASSERTION FAILED: dry-run must not delete a real dead session artifact"
+        echo "ASSERTION FAILED (--dry-run): dry-run must not delete a real dead session artifact"
+        return 1
+    fi
+
+    # No-args is the documented default entry form (usage block: "omt-cleanup.sh
+    # # dry-run (default)"). Right now it falls into the same code path as the
+    # explicit --dry-run flag above, since --dry-run is not a recognized flag
+    # (usage block :7: "--dry-run    # same as default") and any unmatched
+    # argument just falls through to the default. Asserting the no-args form
+    # directly, on this same real-candidate fixture, means an argument-parsing
+    # refactor that splits the two forms apart can no longer make the default
+    # path silently destructive without this assertion catching it.
+    bash "$CLEANUP_SCRIPT" > /dev/null
+
+    if [[ ! -f "$state_file" ]]; then
+        echo "ASSERTION FAILED (no-args default): default invocation must not delete a real dead state file"
+        return 1
+    fi
+    if [[ ! -f "$artifact_file" ]]; then
+        echo "ASSERTION FAILED (no-args default): default invocation must not delete a real dead session artifact"
         return 1
     fi
     return 0
