@@ -3157,3 +3157,169 @@ describe("set-verdict phase auto-advance (recovery)", () => {
 		expect(readGoalState(S)!.objective_verdict).toBe("absent");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Codex native-goal snapshot cross-check gate (Gate 9)
+//
+// Codex's create_goal/update_goal tools carry no verification of their own —
+// handle_update only checks the status enum before writing straight to its DB
+// (pure self-grading). So on the Codex path, request-complete must
+// independently cross-check the model's own native-goal claim against a
+// snapshot of what it actually registered. Capability-as-state, not
+// platform-detection: the gate is armed ONLY when codex_goal_objective is
+// non-empty (i.e. `set --codex-goal-objective` was actually called). On the
+// Claude path codex_goal_objective stays "" and every AC9 case below proves
+// the existing 8-gate behavior is untouched.
+// ---------------------------------------------------------------------------
+
+describe("story layer: Codex native-goal snapshot cross-check gate (Gate 9)", () => {
+	// AC #1: `set --phase pursuing --codex-goal-objective "<text>"` records the value,
+	// and a later `set` OVERWRITES it as a single value — never accumulates a history.
+	test("AC1: set --codex-goal-objective records and overwrites a single value", () => {
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship feature X" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature X");
+
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship feature Y" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature Y");
+	});
+
+	// AC #9 (regression, not a RED target — this must already pass at HEAD): an empty
+	// codex_goal_objective (the default / the Claude path) leaves the existing 8-gate
+	// requestComplete behavior byte-for-byte unchanged — Gate 9 is never even reached.
+	test("AC9: empty codex_goal_objective leaves existing 8-gate behavior unchanged", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		expect(readGoalState(S)!.codex_goal_objective).toBe("");
+		expect(requestComplete(S)).toBe(true);
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// AC #3: codex_goal_objective is filled in, but --codex-goal-json is NOT supplied.
+	// Missing arg is a REFUSAL, not a pass-through — the core safety property of this gate.
+	test("AC3: filled codex_goal_objective without --codex-goal-json is refused", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		expect(requestComplete(S)).toBe(false);
+		expect(rawState().phase).not.toBe("complete");
+	});
+
+	// AC #4: snapshot objective mismatches codex_goal_objective -> refused.
+	test("AC4: snapshot objective mismatch is refused", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({
+			goal: { objective: "ship something else", status: "complete" },
+		});
+		expect(requestComplete(S, snapshot)).toBe(false);
+		expect(rawState().phase).not.toBe("complete");
+	});
+
+	// AC #5: snapshot status is not "complete" -> refused, even with a matching objective.
+	test("AC5: snapshot status not complete is refused", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ goal: { objective: "ship it", status: "active" } });
+		expect(requestComplete(S, snapshot)).toBe(false);
+		expect(rawState().phase).not.toBe("complete");
+	});
+
+	// AC #6: whitespace-only differences (newline / repeated spaces / leading-trailing)
+	// still pass — both sides are normalized (\s+ -> single space, trimmed) before compare.
+	test("AC6: whitespace-only objective differences still pass", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, {
+			phase: "pursuing",
+			codex_goal_objective: "  ship   it\nfor   real  ",
+		});
+		const snapshot = JSON.stringify({
+			goal: { objective: "ship it for real", status: "complete" },
+		});
+		expect(requestComplete(S, snapshot)).toBe(true);
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// AC #7: objective key fallback — goal.goal only (goal.objective absent).
+	test("AC7: objective key fallback extracts from goal.goal", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ goal: { goal: "ship it", status: "complete" } });
+		expect(requestComplete(S, snapshot)).toBe(true);
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// AC #7: objective key fallback — goal.description only.
+	test("AC7: objective key fallback extracts from goal.description", () => {
+		const S2 = "codex-goal-fallback-description";
+		seedGoalFile(S2);
+		const artifact = buildSatisfiedFixture(S2);
+		writeVerdictArtifact(S2, artifact);
+		setGoalState(S2, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ goal: { description: "ship it", status: "complete" } });
+		expect(requestComplete(S2, snapshot)).toBe(true);
+		expect(rawStateOf(S2).phase).toBe("complete");
+	});
+
+	// AC #7: objective key fallback — root-level objective when no goal.* keys exist at all.
+	test("AC7: objective key fallback extracts from root-level objective", () => {
+		const S2 = "codex-goal-fallback-root";
+		seedGoalFile(S2);
+		const artifact = buildSatisfiedFixture(S2);
+		writeVerdictArtifact(S2, artifact);
+		setGoalState(S2, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ objective: "ship it", status: "complete" });
+		expect(requestComplete(S2, snapshot)).toBe(true);
+		expect(rawStateOf(S2).phase).toBe("complete");
+	});
+
+	// AC #8: --codex-goal-json is parsed as JSON first.
+	test("AC8: --codex-goal-json argument parsed as inline JSON", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshot = JSON.stringify({ goal: { objective: "ship it", status: "complete" } });
+		expect(requestComplete(S, snapshot)).toBe(true);
+	});
+
+	// AC #8: falls back to reading the argument as a file path when it isn't valid JSON.
+	test("AC8: --codex-goal-json argument falls back to a file path when not valid JSON", () => {
+		const S2 = "codex-goal-file-path";
+		seedGoalFile(S2);
+		const artifact = buildSatisfiedFixture(S2);
+		writeVerdictArtifact(S2, artifact);
+		setGoalState(S2, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const snapshotPath = `${tmpDir}/codex-goal-snapshot.json`;
+		writeFileSync(
+			snapshotPath,
+			JSON.stringify({ goal: { objective: "ship it", status: "complete" } }),
+			"utf8",
+		);
+		expect(requestComplete(S2, snapshotPath)).toBe(true);
+		expect(rawStateOf(S2).phase).toBe("complete");
+	});
+
+	// AC #8: neither valid JSON nor a readable file -> refused (never completes).
+	test("AC8: garbage that is neither JSON nor a readable file path is refused", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		expect(requestComplete(S, "not json { and not a real file /nope")).toBe(false);
+		expect(rawState().phase).not.toBe("complete");
+	});
+
+	// AC #8 (CLI level): garbage --codex-goal-json exits non-zero with an identifiable
+	// parse-failure message on stderr, distinct from the generic gate-refusal message.
+	test("CLI: garbage --codex-goal-json exits non-zero with a parse-failure stderr message", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it" });
+		const result = runCliCaptured("request-complete --codex-goal-json garbage-not-json-or-file");
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain("--codex-goal-json");
+		expect(rawState().phase).not.toBe("complete");
+	});
+});
