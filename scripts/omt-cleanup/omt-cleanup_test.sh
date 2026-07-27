@@ -1288,6 +1288,75 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Symlink fan-out guard — a symlinked top-level $OMT_DIR entry must never be
+# followed into for reaping. The glob `"$OMT_DIR"/*/` (trailing slash)
+# resolves a directory symlink to its TARGET path, so without a guard the
+# reap helpers run `rm -f` against files OUTSIDE $OMT_DIR entirely — the
+# symlink target here ($FIXTURE_HOME/outside/victim) sits next to, not
+# inside, $FIXTURE_HOME/.omt.
+# ---------------------------------------------------------------------------
+
+# Positive control (proves the guard, not merely "the script did nothing"):
+# an ordinary (non-symlinked) sibling project directory in the SAME run must
+# still have its own dead artifact reaped by --execute.
+test_symlinked_project_target_artifact_survives_execute() {
+    local stale_touch
+    stale_touch=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+
+    local victim_dir="$FIXTURE_HOME/outside/victim"
+    mkdir -p "$victim_dir"
+    local victim_artifact="$victim_dir/codex-todo-dead.json"
+    printf '{"todos":[]}' > "$victim_artifact"
+    touch -t "$stale_touch" "$victim_artifact"
+
+    ln -s "$victim_dir" "$FIXTURE_HOME/.omt/linkproj"
+
+    # Positive control: an ordinary directory with its own genuinely dead
+    # artifact, reaped in the SAME --execute pass — distinguishes "the guard
+    # correctly skipped the symlink" from "the script silently reaped
+    # nothing at all this run".
+    local normal_dir="$FIXTURE_HOME/.omt/normalproj"
+    mkdir -p "$normal_dir"
+    local normal_artifact="$normal_dir/codex-todo-dead.json"
+    printf '{"todos":[]}' > "$normal_artifact"
+    touch -t "$stale_touch" "$normal_artifact"
+
+    bash "$CLEANUP_SCRIPT" --execute > /dev/null
+
+    if [[ ! -f "$victim_artifact" ]]; then
+        echo "ASSERTION FAILED: dead artifact inside a symlink TARGET (outside \$OMT_DIR) must survive --execute — the symlink must not be followed"
+        return 1
+    fi
+    if [[ ! -d "$victim_dir" ]]; then
+        echo "ASSERTION FAILED: the symlink target directory itself must survive --execute"
+        return 1
+    fi
+    if [[ -f "$normal_artifact" ]]; then
+        echo "ASSERTION FAILED (positive control): an ordinary sibling directory's own dead artifact must still be reaped in the same run — otherwise this test cannot distinguish a working guard from a script that reaped nothing at all"
+        return 1
+    fi
+    return 0
+}
+
+# The symlink entry itself must be reported (never silently skipped),
+# following this script's existing UNCLASSIFIED report-not-act convention.
+test_symlinked_project_reported_in_symlinks_section() {
+    local victim_dir="$FIXTURE_HOME/outside/victim"
+    mkdir -p "$victim_dir"
+    ln -s "$victim_dir" "$FIXTURE_HOME/.omt/linkproj"
+
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
+
+    if ! echo "$out" | grep -A5 "SYMLINKS" | grep -q "linkproj"; then
+        echo "ASSERTION FAILED: symlinked entry must be reported in the SYMLINKS section"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1368,6 +1437,10 @@ main() {
     run_test test_unrecognized_argument_rejected_not_silently_dryrun
     run_test test_negative_control_execute_alone_still_deletes
     run_test test_negative_control_no_args_still_preserves
+
+    # Symlink fan-out guard
+    run_test test_symlinked_project_target_artifact_survives_execute
+    run_test test_symlinked_project_reported_in_symlinks_section
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
