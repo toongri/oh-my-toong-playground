@@ -8,7 +8,7 @@
 2. **도메인 이벤트 정의 규칙** — 네이밍·인터페이스·필드·팩토리·자식 스냅샷
 3. **EventListener — 동기/비동기 트랜잭션 단계** — BEFORE_COMMIT vs AFTER_COMMIT, 로깅 포맷
 4. **BEFORE_COMMIT 리스너 (동기)** — 코드 예시
-5. **AFTER_COMMIT 리스너 (비동기)** — 코드 예시
+5. **AFTER_COMMIT 리스너 (기본 동기)** — 코드 예시
 6. **크로스도메인 통신 — Facade 대신 이벤트** — Facade→Facade 금지, 외부 호출은 커밋 이후로
 7. **안티패턴 — 이벤트 구조와 리스너**
 8. **이 문서의 Red Flags**
@@ -117,7 +117,7 @@ data class OrderItemSnapshot(
 | Type | Phase | Transaction | Failure Behavior |
 |------|-------|-------------|------------------|
 | **Sync** | `BEFORE_COMMIT` | Same transaction | Failure rolls back everything |
-| **Async** | `AFTER_COMMIT` | Separate thread | Failure doesn't affect transaction |
+| **Sync (Async with `@Async`)** | `AFTER_COMMIT` | Same thread by default — separate thread only with `@Async` | Failure doesn't affect transaction |
 
 **필수 패턴 세 가지**:
 
@@ -151,9 +151,9 @@ class StockDeductionOutboxListener(
 }
 ```
 
-## 5. AFTER_COMMIT 리스너 (비동기)
+## 5. AFTER_COMMIT 리스너 (기본 동기)
 
-`AFTER_COMMIT` 리스너는 커밋이 끝난 뒤 실행되며, 기본은 이벤트를 발행한 스레드에서 동기적으로 실행된다 — 별도 스레드가 필요하면 `@Async`를 함께 붙여야 한다. 커밋은 이미 끝났으므로 리스너 실패가 원본 트랜잭션을 롤백시키지는 않지만, 동기 실행이라면 예외가 호출자에게 그대로 전파된다. `@Async`를 붙였을 때는 리스너가 별도 스레드에서 실행되므로 예외가 호출 흐름으로 돌아오지 않는다 — 리스너 스스로 잡고 로깅해야 한다.
+`AFTER_COMMIT` 리스너는 커밋이 끝난 뒤 실행되며, 기본은 이벤트를 발행한 스레드에서 동기적으로 실행된다 — 별도 스레드가 필요하면 `@Async`를 함께 붙여야 한다. 커밋은 이미 끝났으므로 리스너 실패가 원본 트랜잭션을 롤백시키지는 않는다. Spring은 `AFTER_COMMIT`을 `afterCompletion()` 경로로 라우팅하는데, 이 경로는 각 콜백을 예외로부터 감싸 로깅만 하고 삼킨다 — 그래서 동기 실행이든 `@Async`를 붙인 비동기 실행이든, 예외는 호출자에게 전파되지 않는다. 커밋은 이미 끝났고 컨트롤러는 정상 응답을 반환한다. 리스너 스스로 예외를 잡고 로깅해야 하는 건 `@Async` 여부와 무관한 무조건적 요구다.
 
 ```kotlin
 // ✅ CORRECT: Async listener (after commit, with error handling)
