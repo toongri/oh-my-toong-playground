@@ -431,16 +431,20 @@ LIVE_IDS
 # it consults — recognizing a file is a different question from being
 # allowed to delete it (nothing below touches STATE_PREFIXES or
 # SESSION_ARTIFACT_PREFIXES, so no reap decision changes):
-#   - a `.bak` / `.closed.bak` backup tail is stripped before the
-#     STATE_PREFIXES match, so `<prefix>*.json.closed.bak` (the backup form
-#     STATE_PREFIXES's own `*.json` anchor above is written to preserve from
-#     deletion, :16-19) is recognized as belonging to its state family
-#     instead of reported as drift.
-#   - `session-ledger-` is recognized as a known-managed family even though
-#     it is intentionally absent from SESSION_ARTIFACT_PREFIXES:
-#     hooks/session-start.sh reaps it through its own dedicated ledger lane,
-#     not through reap_session_artifacts, so adding it to that whitelist
-#     would make this file's own reap function delete it too.
+#   - a `.closed.bak` backup tail is stripped before the STATE_PREFIXES
+#     match, so `<prefix>*.json.closed.bak` (the backup form STATE_PREFIXES's
+#     own `*.json` anchor above is written to preserve from deletion, :16-19)
+#     is recognized as belonging to its state family instead of reported as
+#     drift.
+#   - `session-ledger-*.md` is recognized as a known-managed family even
+#     though it is intentionally absent from SESSION_ARTIFACT_PREFIXES:
+#     hooks/session-start.sh reaps it through its own dedicated ledger lane
+#     (a `.md`-only glob, see that file), not through reap_session_artifacts,
+#     so adding it to that whitelist would make this file's own reap
+#     function delete it too. The exception is anchored to `.md` to match
+#     that lane exactly — a non-`.md` session-ledger-* form (e.g. an
+#     interrupted append's `.tmp`) is reaped by no lane and must surface as
+#     drift, not go silently unclassified.
 list_unclassified_session_files() {
   local dir="$1"
   local f base relpath prefix classified classify_base
@@ -485,7 +489,7 @@ list_unclassified_session_files() {
 
     if [ "$classified" = "0" ]; then
       case "$relpath" in
-        session-ledger-*) classified=1 ;;
+        session-ledger-*.md) classified=1 ;;
       esac
     fi
 
