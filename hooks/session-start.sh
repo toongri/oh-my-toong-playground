@@ -161,7 +161,28 @@ done
 # Must run after the ledger GC lane above, not before -- both consume $OMT_DIR
 # state, and this is the artifact lane's assigned position. Discard stdout for
 # the same reason as reap_dead_state_files above.
-reap_session_artifacts "$OMT_DIR" "$SESSION_ID" "$GC_NOW" 0 > /dev/null
+#
+# Fail-open when identity could not be resolved: SESSION_ID falls back to the
+# literal "default" sentinel above (:21-23) whenever jq is absent or the
+# payload carried no sessionId. In that case this hook cannot tell its OWN
+# running session's artifacts apart from any other session's -- reap_session_
+# artifacts' is_current_session protection silently stops protecting the real
+# running session once its filename no longer matches "default". Running the
+# reaper anyway would destroy that session's own artifacts under the wrong
+# identity the moment their live-state backing (a STATE_PREFIXES file) has
+# aged out -- and the destroyed artifact can be exactly what a completion
+# gate reads (e.g. {goal,ultragoal}-codereview-{sid}.json). Skip instead:
+# jq-less accumulation is recoverable later via scripts/omt-cleanup/, while a
+# destructive reap under a wrong identity is not. This mirrors CLAUDE.md's
+# documented jq-absence contract ("fail open (no guard) when it is absent").
+# reap_dead_state_files above is NOT similarly guarded: it predates this
+# artifact lane, is not a regression, and each state file also carries its
+# own is_state_live liveness check independent of session identity.
+if [ "$SESSION_ID" = "default" ]; then
+  echo "session-start.sh: skipping session-artifact GC -- SESSION_ID could not be resolved (jq absent or no sessionId in payload); reaping without a real identity risks deleting this session's own artifacts" >&2
+else
+  reap_session_artifacts "$OMT_DIR" "$SESSION_ID" "$GC_NOW" 0 > /dev/null
+fi
 
 # Drift report: unclassified session-keyed files are never reaped, only
 # surfaced -- one line per file, prefixed to identify it as an unclassified

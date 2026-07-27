@@ -2278,15 +2278,25 @@ test_gc_session_artifacts_reaped_and_drift_reported() {
     return 0
 }
 
-# QA Scenario 2 (plan TODO 3): jq absence must not turn artifact GC into a
-# destructive unguarded pass. Without jq, session-start.sh's own sid
-# resolution (:11-14) fails, so it falls back to the literal "default"
-# (:21-23) -- the artifact representing "mine" must therefore be named
-# codex-todo-default.json to survive by filename match. A dead session's
-# artifact is still reaped; a live session's artifact survives via the
-# live-id set, since is_state_live's active-field grep fallback (no jq
-# needed) still reports its backing state file live. Dead and live sids are
-# deliberately distinct, else the scenario would be self-contradicting.
+# QA Scenario 2 (plan TODO 3, amended by the identity-unresolved fail-open
+# fix below): jq absence must not turn artifact GC into a destructive
+# unguarded pass. Without jq, session-start.sh's own sid resolution (:11-14)
+# fails, so it falls back to the literal "default" (:21-23) sentinel.
+#
+# Originally this test only protected "mine" (by exploiting the coincidence
+# that it happened to be named codex-todo-default.json) and the live-id sid,
+# while still expecting a dead session's artifact to be reaped -- but that
+# same "default" fallback is exactly the identity a REAL running session's
+# artifacts do NOT carry, so a real session's own artifact (a non-"default"
+# name) was silently exposed to that same "dead artifact reap" path (see
+# test_gc_session_artifact_survives_when_identity_unresolved_without_jq
+# above, which pins that regression down directly). The fix makes
+# reap_session_artifacts a no-op entirely whenever SESSION_ID could not be
+# resolved, so ALL THREE fixtures below now survive, including the
+# once-reaped "dead" one -- this is fail-open by design, not a relaxation:
+# jq-less accumulation is recoverable via scripts/omt-cleanup/, an identity-
+# blind reap is not. Dead and live sids stay distinct in the fixture purely
+# to keep this test's provenance traceable to its original scenario.
 test_gc_session_artifacts_survive_without_jq() {
     local dead_sid="artifact-gc-dead-sess"
     local live_sid="artifact-gc-live-sess"
@@ -2357,12 +2367,149 @@ EOF
         echo "ASSERTION FAILED: current session's own artifact (codex-todo-default.json) must survive without jq"
         return 1
     fi
-    if [ -f "$TEST_OMT_DIR/codex-todo-${dead_sid}.json" ]; then
-        echo "ASSERTION FAILED: dead session's artifact should be reaped even without jq"
+    if [ ! -f "$TEST_OMT_DIR/codex-todo-${dead_sid}.json" ]; then
+        echo "ASSERTION FAILED: dead session's artifact must also survive without jq -- the whole reap_session_artifacts lane is now skipped on an unresolved identity (fail-open), so nothing is reaped, not even a genuinely dead one"
         return 1
     fi
     if [ ! -f "$TEST_OMT_DIR/goal-verdict-${live_sid}.json" ]; then
         echo "ASSERTION FAILED: live session's artifact should survive via live-id membership even without jq"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Regression: identity-unresolved (jq absent) must fail OPEN on the
+# session-artifact reap lane, not silently reap under the wrong identity.
+#
+# test_gc_session_artifacts_survive_without_jq above protects an artifact
+# that happens to be NAMED "...-default.json" -- it does not prove the
+# RUNNING session's own real-id artifact survives. The tests below close that
+# gap with a fixture where survival can ONLY come from is_current_session
+# correctly matching the real running session's id: the artifact carries a
+# real (non-"default") session id, is aged past ACTIVE_IDLE_TTL (rules out
+# is_artifact_live's own-mtime protection), and has no backing
+# STATE_PREFIXES file for that id (rules out live-id membership). The only
+# remaining protection is is_current_session(file, SESSION_ID) -- exactly
+# what jq absence breaks, since SESSION_ID falls back to the literal
+# "default" sentinel (:21-23) instead of the real id.
+# =============================================================================
+
+# Builds a PATH containing symlinks to every /usr/bin and /bin entry except
+# jq, with NO fallback directory appended -- unlike the fixture above
+# (PATH="$jq_less_bin:/bin"), which silently stops excluding jq on any host
+# where /bin (not just /usr/bin) also carries a real jq binary. Self-contained
+# by construction: nothing outside $bin_dir is ever consulted for jq.
+_build_jq_less_bin_dir() {
+    local bin_dir="$1"
+    local src_dir f bn
+    for src_dir in /usr/bin /bin; do
+        for f in "$src_dir"/*; do
+            [ -e "$f" ] || continue
+            bn=$(basename "$f")
+            [ "$bn" = "jq" ] && continue
+            [ -e "$bin_dir/$bn" ] && continue
+            ln -s "$f" "$bin_dir/$bn" 2>/dev/null
+        done
+    done
+}
+
+# Fixture self-check (mandatory, not optional): a jq-absence fixture that
+# silently fails to exclude jq is a no-teeth test that would pass vacuously
+# forever. Asserts jq is actually unreachable under the constructed PATH and
+# FAILS LOUDLY if it is not, instead of proceeding to run a test that proves
+# nothing.
+_assert_jq_unreachable() {
+    local path_val="$1"
+    if PATH="$path_val" command -v jq > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: jq-less PATH fixture is invalid -- jq is still reachable via PATH=$path_val"
+        return 1
+    fi
+    return 0
+}
+
+# Core negative case: without jq, the running session's own artifact
+# (real id, no live backing state, aged past ACTIVE_IDLE_TTL) must survive.
+# Before the fix: SESSION_ID resolves to "default", is_current_session fails
+# to match the real id in the filename, and reap_session_artifacts deletes
+# it. After the fix: the identity-unresolved lane is skipped entirely.
+test_gc_session_artifact_survives_when_identity_unresolved_without_jq() {
+    local real_sid="unresolved-identity-real-sid"
+    local artifact_file="$TEST_OMT_DIR/goal-codereview-${real_sid}.json"
+    printf '{"verdict":"APPROVE"}' > "$artifact_file"
+
+    local old_mtime
+    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" "$artifact_file" 2>/dev/null || touch -d "7 hours ago" "$artifact_file" 2>/dev/null || true
+
+    # Deliberately no goal-state-${real_sid}.json fixture -- live-id
+    # membership must not be able to explain survival either.
+
+    local jq_less_bin
+    jq_less_bin=$(mktemp -d)
+    _build_jq_less_bin_dir "$jq_less_bin"
+    if ! _assert_jq_unreachable "$jq_less_bin"; then
+        rm -rf "$jq_less_bin"
+        return 1
+    fi
+
+    # cd into TEST_TMP_DIR: without jq, DIRECTORY also falls back to `pwd`
+    # (:16-18), regardless of the "cwd" claimed in stdin.
+    (cd "$TEST_TMP_DIR" && echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$real_sid"'"}' \
+        | PATH="$jq_less_bin" "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1) || true
+
+    rm -rf "$jq_less_bin"
+
+    if [ ! -f "$artifact_file" ]; then
+        echo "ASSERTION FAILED: the running session's own artifact must survive when jq is absent and its identity could not be resolved (reap_session_artifacts must not run under an unresolved 'default' identity)"
+        return 1
+    fi
+    return 0
+}
+
+# Positive control: same fixture shape, jq present (default PATH).
+# SESSION_ID resolves to the real id, so is_current_session protects the
+# current session's own artifact while the other session's identically-aged,
+# identically-unbacked artifact is still reaped as before. Must pass both
+# before and after the fix -- jq presence never takes the skip path.
+test_gc_session_artifact_survives_current_reaps_other_with_jq() {
+    local real_sid="with-jq-current-sid"
+    local other_sid="with-jq-other-sid"
+    local current_artifact="$TEST_OMT_DIR/goal-codereview-${real_sid}.json"
+    local other_artifact="$TEST_OMT_DIR/goal-codereview-${other_sid}.json"
+    printf '{"verdict":"APPROVE"}' > "$current_artifact"
+    printf '{"verdict":"APPROVE"}' > "$other_artifact"
+
+    local old_mtime
+    old_mtime=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+    touch -t "$old_mtime" "$current_artifact" "$other_artifact" 2>/dev/null \
+        || touch -d "7 hours ago" "$current_artifact" "$other_artifact" 2>/dev/null \
+        || true
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$real_sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if [ ! -f "$current_artifact" ]; then
+        echo "ASSERTION FAILED: with jq present, the current session's own artifact must survive"
+        return 1
+    fi
+    if [ -f "$other_artifact" ]; then
+        echo "ASSERTION FAILED: with jq present, the other session's stale unbacked artifact must still be reaped (the regression guard must not over-protect)"
+        return 1
+    fi
+    return 0
+}
+
+# Wiring assertion: the reap_session_artifacts call must thread the real
+# $SESSION_ID variable, never a hardcoded literal. Neither test above can
+# fully pin this down on its own: hardcoding the call's identity argument to
+# the literal "default" would reintroduce the exact destructive regression
+# for every real (non-"default") session -- with jq present or absent -- but
+# a plain grep is the direct, deterministic way to assert the call site
+# itself still passes the live variable.
+test_session_start_reap_session_artifacts_wires_real_session_id() {
+    if ! grep -qF 'reap_session_artifacts "$OMT_DIR" "$SESSION_ID" "$GC_NOW"' "$SCRIPT_DIR/session-start.sh"; then
+        echo "ASSERTION FAILED: reap_session_artifacts call must thread the real \$SESSION_ID variable (not a hardcoded literal)"
+        grep -n 'reap_session_artifacts' "$SCRIPT_DIR/session-start.sh"
         return 1
     fi
     return 0
@@ -2712,6 +2859,12 @@ main() {
     # SessionStart session-artifact GC + drift report (plan TODO 3)
     run_test test_gc_session_artifacts_reaped_and_drift_reported
     run_test test_gc_session_artifacts_survive_without_jq
+
+    # Regression: identity-unresolved (jq absent) must fail open on the
+    # session-artifact reap lane
+    run_test test_gc_session_artifact_survives_when_identity_unresolved_without_jq
+    run_test test_gc_session_artifact_survives_current_reaps_other_with_jq
+    run_test test_session_start_reap_session_artifacts_wires_real_session_id
 
     # SessionStart hook process exit code
     run_test test_session_start_hook_exits_zero_on_normal_gc_pass
