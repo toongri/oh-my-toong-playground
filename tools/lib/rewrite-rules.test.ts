@@ -271,10 +271,10 @@ describe("codex 규칙 7b — `run_in_background`는 능력 명사로 치환된�
 		).toBe("it MUST be launched with `background execution`, OR with a trailing `&`");
 	});
 
-	it("금지 문장에서도 의미가 보존된다 — 실제 도구명을 넣으면 과잉 해석될 자리 (rules/tool-usage-policy 실제 캐리어)", () => {
-		expect(applyRewriteRules("`run_in_background` is prohibited.", PLATFORM_REWRITE_RULES.codex)).toBe(
-			"`background execution` is prohibited.",
-		);
+	it("금지 문장에서도 의미가 보존된다 — 실제 도구명을 넣으면 과잉 해석될 자리 (skills/agent-council 실제 캐리어)", () => {
+		expect(
+			applyRewriteRules("No background execution. No `run_in_background`.", PLATFORM_REWRITE_RULES.codex),
+		).toBe("No background execution. No `background execution`.");
 	});
 
 	it("재적용해도 값이 변하지 않는다 (고정점)", () => {

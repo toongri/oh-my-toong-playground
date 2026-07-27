@@ -543,6 +543,8 @@ This is a **report**. You surface verified findings, ranked by what matters most
 
 This is a **report**. It does not gate. There is no Assessment / "Ready to merge" section, and there is no HTML — the deliverable is the Phase 3 findings as terminal text.
 
+**Exception — completion-gate dispatch.** When the dispatch prompt carried a `{gate}-codereview-{sid}.json` artifact path (the same non-interactive discriminator Step 1 uses), the deliverable is that artifact, not terminal text: write the ranked findings there as `{"status": "COMPLETE", "reviewer": …, "at": …, "findings": [{"class", "verdict", "ref"}]}` — the schema `skills/{gate}/references/completion-gate.md` defines, and the same one the build-failure `INCONCLUSIVE` write above uses. The caller reads only that file; it never transcribes returned text, so ending a completion-gate dispatch with terminal text alone deadlocks it on an absent artifact.
+
 Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup / requirement-gap), `file:line`, and enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the 9-field shape from `references/verifier-prompt.md`, produced inline for non-escalated findings or by the escalated verifier for superseded ones). Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by `review-report` when it dispatches a code-reviewer agent that runs this skill — do not invent a different format.
 
 ## Reference Files (on-demand)

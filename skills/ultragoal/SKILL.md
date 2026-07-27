@@ -7,7 +7,7 @@ description: Autonomous multi-story objective-pursuit executor — restructures 
 
 # Ultragoal — Sequential Multi-Story Objective-Pursuit Executor
 
-Ultragoal is goal restructured on exactly three axes: **execution loop**, **decomposition ownership**, and **slot schema — non-goal capture**. Everything else — the Entry Gate, the completion-gate cost model, the never-false-complete invariant — is goal's, reused as-is. `skills/goal/` stays on six slots; ultragoal adds a seventh (`non-goals`) and from here on the two skills are deliberately not kept in lockstep — until now they were byte-identical twins, and a future edit to either must not assume that still holds. Ultragoal decomposes a single OBJECTIVE into the Seven Slots and an auto-generated Story set, has the user review and bulk-approve that set in one pass, then dispatches the confirmed stories to sisyphus **one story at a time, in sequence**: the next story is never dispatched until the current story's per-story verdict is `APPROVE`. Only after every confirmed story is APPROVE does a single independent code-review run over the accumulated diff. sisyphus remains the sole executor throughout — ultragoal never invokes the goal skill at runtime; it is goal's structural copy, not goal's caller.
+Ultragoal decomposes a single OBJECTIVE into the Seven Slots and an auto-generated Story set, has the user review and bulk-approve that set in one pass, then dispatches the confirmed stories to sisyphus **one story at a time, in sequence**: the next story is never dispatched until the current story's per-story verdict is `APPROVE`. Only after every confirmed story is APPROVE does a single independent code-review run over the accumulated diff. sisyphus remains the sole executor throughout — ultragoal never invokes the goal skill at runtime. OMT's `goal` **skill** (invoked via `Skill(...)`) and Codex's native goal tools (`create_goal`/`update_goal`/`get_goal`) are different things, and calling the latter is not a violation of this invariant.
 
 **Design philosophy: autonomy is post-planning.** Planning carries a single human gate — bulk approval of the auto-generated Story set; that gate runs UN-wrapped. The autonomy begins after planning, during the per-story pursuit loop. The single load-bearing invariant of the whole design: **the loop never false-completes.** Every state-write or verdict-write failure degrades toward continued pursuit of the current story or block — never toward a claimed completion.
 
@@ -80,12 +80,31 @@ Ultragoal does not reimplement execution. It decomposes the objective into the S
    ```
    This must run BEFORE the first `Skill(skill: "sisyphus")` call below — the persistent-mode Stop hook only refuses to stop while `phase=pursuing`, so dispatching first leaves that story's entire execution window unguarded.
 2. Derive the **current story** — the first `confirmed` story (in stored order) that does not yet carry an `APPROVE` per-story verdict in `ultragoal-verdict-{sid}.json`. No separate "current story" state field exists; it is always re-derived from the verdict artifact, never stored.
-3. Dispatch ONLY that one story to sisyphus: `Skill(skill: "sisyphus")` with that story's WHAT statement, acceptance criteria, and verification surface, **plus the pursuit's `non_goals` slot value** — never the whole Story set at once. A Story carries no non-goal field of its own (`non-goals` is a state-level slot by design, not a per-story one), so the pursuit's `non_goals` value never reaches the executor unless it rides along with this dispatch.
+3. **If the `create_goal` tool is available**, register that story's WHAT statement as the objective by calling `create_goal` with it, then record the identical string via:
+   ```
+   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase pursuing --codex-goal-objective - <<'OBJECTIVE'
+   <the objective string just registered>
+   OBJECTIVE
+   ```
+   Rules for that command:
+   - Always stdin (`-`) with a **quoted** heredoc (`<<'OBJECTIVE'`, never `<<OBJECTIVE`); never an inline quoted argument, in either quote style. The value must land byte-identical to what `create_goal` registered; the CLI strips the one newline the heredoc appends.
+   - **Check the delimiter against the payload before writing the command.** A payload line equal to `OBJECTIVE` ends the body there and the rest reaches the shell as commands. If any line collides, use a delimiter you have verified is absent from the payload (`OBJECTIVE_2`, a longer token). `set` **refuses** an explicitly-supplied `--codex-goal-objective` that resolves to empty or whitespace, so a first-line collision exits non-zero instead of disarming the cross-check; a mid-payload collision truncates and the completion cross-check catches it as a mismatch.
+   - The condition is the tool's presence, never a platform name. Where `create_goal` is absent the clause simply does not fire.
+
+   **If `create_goal` is refused** because the thread already holds an unfinished goal, call `get_goal` and compare the objective it returns against this story's WHAT before doing anything else:
+
+   - **Equal to this story's WHAT** → this story's own registration survived an interrupted arming (`create_goal` and the `set` above are not atomic). Re-run the arming command with the objective `get_goal` returned; register nothing new.
+   - **Not equal, and that objective belongs to a story that already carries an APPROVE verdict** → that story's closing call was interrupted. Call `update_goal({status:"complete"})`, then retry `create_goal` for this story and arm normally. Not laundering — the APPROVE is already in the verdict artifact. Leaving it open is a **permanent completion deadlock**: every later `create_goal` stays refused and the cross-check can never be satisfied.
+   - **Not equal, anything else** (a non-APPROVE story's goal — the re-plan case) → leave it alone and do not arm. `set --phase planning` has already cleared `codex_goal_objective`, so the gate is disarmed and the remaining gates carry this story. Never close such a goal to unblock `create_goal`.
+
+   Dispatch ONLY that one story to sisyphus: `Skill(skill: "sisyphus")` with that story's WHAT statement, acceptance criteria, and verification surface, **plus the pursuit's `non_goals` slot value** — never the whole Story set at once. A Story carries no non-goal field of its own, so `non_goals` reaches the executor only if it rides along here.
 4. After sisyphus returns, run the per-story completion audit (see `references/completion-gate.md`) and re-derive that story's verdict.
 5. **Advance only on APPROVE.** A non-APPROVE per-story verdict re-dispatches `Skill(skill: "sisyphus")` at the SAME story — the loop does not proceed to the next story until this one reads APPROVE.
-6. Once the current story is APPROVE, repeat from step 2 for the next confirmed story. When every confirmed story carries an APPROVE verdict, proceed to the final code-review lane (see Completion Gate).
 
-sisyphus stays the sole executor throughout this loop — ultragoal never swaps sisyphus for goal and never invokes the goal skill at runtime.
+   **If the `update_goal` tool is available AND step 3 armed the gate for THIS story** — `get` reports a `codex_goal_objective` equal to this story's WHAT, AND a fresh `get_goal` taken immediately beforehand reports that same objective live — call `update_goal({status:"complete"})` exactly once, immediately after this story's verdict reads APPROVE: never call it on a non-APPROVE verdict or a re-dispatch retry, and a disarmed story skips it entirely. `update_goal` **carries no goal selector** — it closes whatever goal the thread currently holds — so both the recorded value and the live snapshot must name this story.
+
+   **So a re-plan cannot register a new native goal while a failed story's goal is still open — leave it rejected.** Registration accepts a fresh objective only from `status: "complete"`; `active` and `blocked` reject it identically. Never close a non-APPROVE story's goal to unblock `create_goal`. Clearing an open goal is the user's action (`/goal clear` is an app-server RPC, not automatable here).
+6. Once the current story is APPROVE, repeat from step 2 for the next confirmed story. When every confirmed story carries an APPROVE verdict, proceed to the final code-review lane (see Completion Gate).
 
 ### Phase transitions
 
@@ -115,4 +134,4 @@ Middle stories get a **lightweight, self-attested per-story verdict** — the sa
 
 ## Benign-failure note
 
-A verdict-write or state-write failure must degrade toward continued pursuit of the current story, **never** toward a claimed completion. If `set-verdict` fails to record APPROVE, the verdict reads `absent`; `request-complete` is refused because `objective_verdict !== 'APPROVE'` (the verdict gate), so the system continues pursuing rather than false-completing. Absent verdict = block-and-continue. There is no path where a failed write produces a completion.
+A verdict-write or state-write failure must degrade toward continued pursuit of the current story, **never** toward a claimed completion. If `set-verdict` fails to record APPROVE the verdict reads `absent`, and `request-complete` refuses on the verdict gate — absent verdict = block-and-continue. There is no path where a failed write produces a completion.
