@@ -1116,11 +1116,7 @@ function parseCodexGoalSnapshot(arg: string): Record<string, unknown> | null {
  */
 function extractCodexGoalObjective(snapshot: Record<string, unknown>): string | undefined {
 	const goal = isRecord(snapshot["goal"]) ? snapshot["goal"] : {};
-	const objective =
-		(goal["objective"] as string | undefined) ??
-		(goal["goal"] as string | undefined) ??
-		(goal["description"] as string | undefined) ??
-		(snapshot["objective"] as string | undefined);
+	const objective = goal["objective"] ?? goal["goal"] ?? goal["description"] ?? snapshot["objective"];
 	return typeof objective === "string" ? objective : undefined;
 }
 
@@ -1133,7 +1129,7 @@ function extractCodexGoalObjective(snapshot: Record<string, unknown>): string | 
  */
 function extractCodexGoalStatus(snapshot: Record<string, unknown>): string | undefined {
 	const goal = isRecord(snapshot["goal"]) ? snapshot["goal"] : {};
-	const status = (goal["status"] as string | undefined) ?? (snapshot["status"] as string | undefined);
+	const status = goal["status"] ?? snapshot["status"];
 	return typeof status === "string" ? status : undefined;
 }
 
