@@ -320,8 +320,17 @@ _artifact_age_live() {
 # same reason as the session-ledger mtime loop in hooks/session-start.sh.
 #
 # Thin wrapper: fetch (this function's own job) then judge (_artifact_age_live
-# above). Existing callers and tests are untouched by this split — the
-# signature and behavior here are byte-for-byte what they were before.
+# above). Signature and behavior here are byte-for-byte what they were before
+# the split.
+#
+# Test-only now, not a production judgment: the two hot loops that used to
+# call this (list_live_session_ids below and reap_session_artifacts) were
+# rewritten to call _artifact_age_live directly against a batch-fetched mtime,
+# so this wrapper has zero production callers — only the 24 call sites in
+# this file's colocated test exercise it. Adding a preservation condition
+# here changes nothing about what the reaper actually keeps or deletes; that
+# behavior is governed by _artifact_age_live, which the hot loops call
+# directly.
 is_artifact_live() {
   local file="$1"
   local now_epoch="$2"
