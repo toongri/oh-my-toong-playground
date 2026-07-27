@@ -97,7 +97,7 @@ fingerprint() {
 }
 
 # ---------------------------------------------------------------------------
-# AC 6.1 — dry-run names each of the 14 residue entries individually
+# AC 6.1 — a no-candidate residue directory survives --execute untouched
 # Output is captured to a variable first to avoid SIGPIPE with set -euo pipefail.
 # ---------------------------------------------------------------------------
 
@@ -107,72 +107,72 @@ fingerprint() {
 # one standing. That directory survival is the direct regression coverage
 # for "no more name-literal directory deletion" (asserting under --dry-run
 # would be vacuous: dry-run never deletes regardless of this change).
-test_dryrun_names_capricious_watcher() {
+test_execute_preserves_no_candidate_dir_capricious_watcher() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/capricious-watcher" ]]
 }
 
-test_dryrun_names_dented_gold() {
+test_execute_preserves_no_candidate_dir_dented_gold() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/dented-gold" ]]
 }
 
-test_dryrun_names_radical_water() {
+test_execute_preserves_no_candidate_dir_radical_water() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/radical-water" ]]
 }
 
-test_dryrun_names_scrawny_peak() {
+test_execute_preserves_no_candidate_dir_scrawny_peak() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/scrawny-peak" ]]
 }
 
-test_dryrun_names_medieval_cadmium() {
+test_execute_preserves_no_candidate_dir_medieval_cadmium() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/medieval-cadmium" ]]
 }
 
-test_dryrun_names_frosted_anglerfish() {
+test_execute_preserves_no_candidate_dir_frosted_anglerfish() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/frosted-anglerfish" ]]
 }
 
-test_dryrun_names_fire_cockroach() {
+test_execute_preserves_no_candidate_dir_fire_cockroach() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/fire-cockroach" ]]
 }
 
-test_dryrun_names_oh_my_toong() {
+test_execute_preserves_no_candidate_dir_oh_my_toong() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/oh-my-toong" ]]
 }
 
-test_dryrun_names_stage() {
+test_execute_preserves_no_candidate_dir_stage() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/stage" ]]
 }
 
-test_dryrun_names_acme_home_stage() {
+test_execute_preserves_no_candidate_dir_acme_home_stage() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/acme-home-stage" ]]
 }
 
-test_dryrun_names_omt_test() {
+test_execute_preserves_no_candidate_dir_omt_test() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/omt-test" ]]
 }
 
-test_dryrun_names_tmp() {
+test_execute_preserves_no_candidate_dir_tmp() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/tmp" ]]
 }
 
-test_dryrun_names_evidence() {
+test_execute_preserves_no_candidate_dir_evidence() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/evidence" ]]
 }
 
-test_dryrun_names_toong() {
+test_execute_preserves_no_candidate_dir_toong() {
     bash "$CLEANUP_SCRIPT" --execute > /dev/null
     [[ -d "$FIXTURE_HOME/.omt/toong" ]]
 }
@@ -184,6 +184,61 @@ test_dryrun_mutates_nothing() {
     bash "$CLEANUP_SCRIPT" --dry-run > /dev/null
     post=$(fingerprint "$FIXTURE_HOME/.omt")
     [[ "$pre" == "$post" ]]
+}
+
+# ---------------------------------------------------------------------------
+# Dry-run safety-net regression — the shared fixture built by setup_fixture
+# has ZERO live reap candidates: every state file it writes is fresh
+# (printf'd moments before the test runs, no last_touched_at field, so the
+# mtime fallback marks it live) and no dead session artifact exists at all.
+# That means test_dryrun_mutates_nothing and
+# test_default_no_execute_leaves_fixture_identical hold identically whether
+# or not the dry-run flag actually reaches the reap helpers — a flag-polarity
+# inversion (dry-run silently deleting) is invisible to them. This test seeds
+# an actual dead state file and an actual dead session artifact ITSELF, not
+# via setup_fixture (a shared dead candidate would break
+# test_dryrun_preserved_not_in_delete_list and the no-candidate-dir survival
+# tests above), then asserts both are still on disk after a dry-run pass.
+# ---------------------------------------------------------------------------
+test_dryrun_preserves_real_reap_candidates() {
+    local stale_iso stale_touch
+    stale_iso=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_touch=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
+
+    local proj_dir="$FIXTURE_HOME/.omt/dryrun-real-candidate-project"
+    mkdir -p "$proj_dir"
+
+    # A dead state file: active but 7h idle (> ACTIVE_IDLE_TTL 6h) — a genuine
+    # reap candidate for reap_dead_state_files, not merely an absent one.
+    local state_file="$proj_dir/goal-state-dryrun-real-sess.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_iso}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+
+    # A dead session artifact: codex-todo carries no "active" field, so its
+    # own backdated mtime (> ACTIVE_IDLE_TTL) is what makes it a genuine
+    # reap candidate for reap_session_artifacts.
+    local artifact_file="$proj_dir/codex-todo-dryrun-real-artifact.json"
+    printf '{"todos":[]}' > "$artifact_file"
+    touch -t "$stale_touch" "$artifact_file"
+
+    bash "$CLEANUP_SCRIPT" --dry-run > /dev/null
+
+    if [[ ! -f "$state_file" ]]; then
+        echo "ASSERTION FAILED: dry-run must not delete a real dead state file"
+        return 1
+    fi
+    if [[ ! -f "$artifact_file" ]]; then
+        echo "ASSERTION FAILED: dry-run must not delete a real dead session artifact"
+        return 1
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -230,15 +285,15 @@ test_dryrun_preserved_names_cache() {
 test_dryrun_preserved_not_in_delete_list() {
     local output
     output=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
-    if echo "$output" | grep "DELETE" | grep -q "oh-my-toong-playground"; then
+    if echo "$output" | grep "DELETE " | grep -q "oh-my-toong-playground"; then
         echo "oh-my-toong-playground appeared in DELETE section"
         return 1
     fi
-    if echo "$output" | grep "DELETE" | grep -q "acme-backend"; then
+    if echo "$output" | grep "DELETE " | grep -q "acme-backend"; then
         echo "acme-backend appeared in DELETE section"
         return 1
     fi
-    if echo "$output" | grep "DELETE" | grep -q "cache"; then
+    if echo "$output" | grep "DELETE " | grep -q "cache"; then
         echo "cache appeared in DELETE section"
         return 1
     fi
@@ -464,7 +519,7 @@ EOF
     local out
     out=$(bash "$CLEANUP_SCRIPT" --dry-run 2>&1)
     # Must list the state file path
-    if ! echo "$out" | grep "DELETE" | grep -q "goal-state-dry-sess.json"; then
+    if ! echo "$out" | grep "DELETE " | grep -q "goal-state-dry-sess.json"; then
         echo "ASSERTION FAILED: dry-run must list state file path, not just dir name"
         echo "  Output: ${out}"
         return 1
@@ -512,7 +567,7 @@ EOF
     rm -rf "$space_home"
 
     # The full path (with spaces) must appear verbatim in DELETE output
-    if ! echo "$out" | grep "DELETE" | grep -q "goal-state-space-sess.json"; then
+    if ! echo "$out" | grep "DELETE " | grep -q "goal-state-space-sess.json"; then
         echo "ASSERTION FAILED: dry-run must list full state file path (spaces in HOME)"
         echo "  Output: ${out}"
         return 1
@@ -784,6 +839,124 @@ test_unclassified_only_file_reported_not_reaped() {
 }
 
 # ---------------------------------------------------------------------------
+# Defect 2 — --execute must fail loudly when a reap helper cannot actually
+# delete what it reports. hooks/lib/state-liveness.sh is a concurrently
+# developed dependency this file must not edit; its documented future
+# contract is that reap_dead_state_files/reap_session_artifacts return
+# non-zero when any of their internal `rm -f` calls fail. These tests fake
+# that dependency — never the real file — in a throwaway copy of the
+# production script plus a stand-in hooks/lib/state-liveness.sh, so
+# omt-cleanup.sh's own exit-code-consuming logic can be exercised against
+# that contract regardless of whether the real dependency has landed it yet.
+# ---------------------------------------------------------------------------
+
+# run_with_fake_reap_hooks <dead_state_rc> <artifacts_rc>
+# Copies the real CLEANUP_SCRIPT into an isolated scripts/omt-cleanup/ tree
+# next to a fake hooks/lib/state-liveness.sh whose reap_* functions return
+# the given exit codes, runs it --execute against a throwaway HOME with TWO
+# top-level project dirs, and leaves the result in the globals FAKE_RUN_RC /
+# FAKE_RUN_OUTPUT. Two dirs (not one) is load-bearing: a naive fix that lets
+# a failing reap call's `set -e` abort the whole fan-out early would still
+# report a non-zero exit, but only the first dir's candidates would appear in
+# the output — the report must finish scanning every directory and print its
+# trailer before exiting non-zero, exactly like a normal run does.
+run_with_fake_reap_hooks() {
+    local dead_state_rc="$1"
+    local artifacts_rc="$2"
+
+    local fake_root
+    fake_root=$(mktemp -d)
+    mkdir -p "$fake_root/scripts/omt-cleanup" "$fake_root/hooks/lib" \
+        "$fake_root/home/.omt/dummy-project-a" "$fake_root/home/.omt/dummy-project-b"
+    cp "$CLEANUP_SCRIPT" "$fake_root/scripts/omt-cleanup/omt-cleanup.sh"
+
+    cat > "$fake_root/hooks/lib/state-liveness.sh" << EOF
+reap_dead_state_files() {
+    echo "\$1/fake-dead-state.json"
+    return ${dead_state_rc}
+}
+reap_session_artifacts() {
+    echo "\$1/fake-dead-artifact.json"
+    return ${artifacts_rc}
+}
+list_unclassified_session_files() {
+    return 0
+}
+EOF
+
+    FAKE_RUN_OUTPUT=$(env -u OMT_DIR -u OMT_SESSION_ID HOME="$fake_root/home" \
+        bash "$fake_root/scripts/omt-cleanup/omt-cleanup.sh" --execute 2>&1)
+    FAKE_RUN_RC=$?
+
+    rm -rf "$fake_root"
+}
+
+test_execute_fails_when_dead_state_reap_reports_failure() {
+    run_with_fake_reap_hooks 1 0
+    if [[ $FAKE_RUN_RC -eq 0 ]]; then
+        echo "ASSERTION FAILED: script must exit non-zero when reap_dead_state_files reports a failure"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "dummy-project-a/fake-dead-state.json"; then
+        echo "ASSERTION FAILED: dummy-project-a's candidate must still be reported"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "dummy-project-b/fake-dead-state.json"; then
+        echo "ASSERTION FAILED: a failure on the first directory must not abort the fan-out — dummy-project-b must still be scanned"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "=== done ==="; then
+        echo "ASSERTION FAILED: the report must still print its completion trailer before exiting non-zero"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    return 0
+}
+
+test_execute_fails_when_session_artifact_reap_reports_failure() {
+    run_with_fake_reap_hooks 0 1
+    if [[ $FAKE_RUN_RC -eq 0 ]]; then
+        echo "ASSERTION FAILED: script must exit non-zero when reap_session_artifacts reports a failure"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "dummy-project-a/fake-dead-artifact.json"; then
+        echo "ASSERTION FAILED: dummy-project-a's candidate must still be reported"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "dummy-project-b/fake-dead-artifact.json"; then
+        echo "ASSERTION FAILED: a failure on the first directory must not abort the fan-out — dummy-project-b must still be scanned"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "=== done ==="; then
+        echo "ASSERTION FAILED: the report must still print its completion trailer before exiting non-zero"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    return 0
+}
+
+test_execute_succeeds_when_reap_helpers_report_no_failure() {
+    run_with_fake_reap_hooks 0 0
+    if [[ $FAKE_RUN_RC -ne 0 ]]; then
+        echo "ASSERTION FAILED: script must exit zero when neither reap helper reports a failure"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    if ! echo "$FAKE_RUN_OUTPUT" | grep -q "=== done ==="; then
+        echo "ASSERTION FAILED: a clean run must still print its completion trailer"
+        echo "  Output: ${FAKE_RUN_OUTPUT}"
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -792,22 +965,23 @@ main() {
     echo "omt-cleanup.sh Tests"
     echo "=========================================="
 
-    # AC 6.1 — dry-run names each residue individually
-    run_test test_dryrun_names_capricious_watcher
-    run_test test_dryrun_names_dented_gold
-    run_test test_dryrun_names_radical_water
-    run_test test_dryrun_names_scrawny_peak
-    run_test test_dryrun_names_medieval_cadmium
-    run_test test_dryrun_names_frosted_anglerfish
-    run_test test_dryrun_names_fire_cockroach
-    run_test test_dryrun_names_oh_my_toong
-    run_test test_dryrun_names_stage
-    run_test test_dryrun_names_acme_home_stage
-    run_test test_dryrun_names_omt_test
-    run_test test_dryrun_names_tmp
-    run_test test_dryrun_names_evidence
-    run_test test_dryrun_names_toong
+    # AC 6.1 — a no-candidate residue directory survives --execute untouched
+    run_test test_execute_preserves_no_candidate_dir_capricious_watcher
+    run_test test_execute_preserves_no_candidate_dir_dented_gold
+    run_test test_execute_preserves_no_candidate_dir_radical_water
+    run_test test_execute_preserves_no_candidate_dir_scrawny_peak
+    run_test test_execute_preserves_no_candidate_dir_medieval_cadmium
+    run_test test_execute_preserves_no_candidate_dir_frosted_anglerfish
+    run_test test_execute_preserves_no_candidate_dir_fire_cockroach
+    run_test test_execute_preserves_no_candidate_dir_oh_my_toong
+    run_test test_execute_preserves_no_candidate_dir_stage
+    run_test test_execute_preserves_no_candidate_dir_acme_home_stage
+    run_test test_execute_preserves_no_candidate_dir_omt_test
+    run_test test_execute_preserves_no_candidate_dir_tmp
+    run_test test_execute_preserves_no_candidate_dir_evidence
+    run_test test_execute_preserves_no_candidate_dir_toong
     run_test test_dryrun_mutates_nothing
+    run_test test_dryrun_preserves_real_reap_candidates
 
     # AC 6.2 — entries with no reap candidate survive --execute intact
     run_test test_dryrun_preserved_names_oh_my_toong_playground
@@ -851,6 +1025,11 @@ main() {
     # Fan-out QA scenarios
     run_test test_fanout_reaps_dead_files_across_all_project_dirs
     run_test test_unclassified_only_file_reported_not_reaped
+
+    # Defect 2 — reap-failure exit code propagation
+    run_test test_execute_fails_when_dead_state_reap_reports_failure
+    run_test test_execute_fails_when_session_artifact_reap_reports_failure
+    run_test test_execute_succeeds_when_reap_helpers_report_no_failure
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

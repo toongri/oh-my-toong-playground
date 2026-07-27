@@ -43,6 +43,7 @@ echo ""
 DEAD_STATE_OUT=""
 DEAD_ARTIFACTS_OUT=""
 UNCLASSIFIED_OUT=""
+HAD_REAP_FAILURE=0
 
 # Fan out to every top-level directory. Every classification and liveness
 # judgment comes from hooks/lib/state-liveness.sh — this script names no
@@ -58,7 +59,15 @@ UNCLASSIFIED_OUT=""
 for entry_path in "$OMT_DIR"/*/; do
     entry_path="${entry_path%/}"
 
-    dead_state="$(reap_dead_state_files "$entry_path" __none__ "$CLEANUP_NOW" "$DRY_RUN")"
+    # `if ! var=$(cmd); then` (not a bare `var=$(cmd)` statement) is load-bearing
+    # under `set -e`: a bare assignment whose command substitution fails would
+    # abort the whole fan-out right here, mid-scan, before later directories or
+    # the report trailer ever print. Wrapping it in an if-condition is what lets
+    # a real reap failure be recorded and the scan still run to completion — the
+    # non-zero exit happens once, at the very end, after the full report prints.
+    if ! dead_state="$(reap_dead_state_files "$entry_path" __none__ "$CLEANUP_NOW" "$DRY_RUN")"; then
+        HAD_REAP_FAILURE=1
+    fi
     if [[ -n "$dead_state" ]]; then
         if [[ -n "$DEAD_STATE_OUT" ]]; then
             DEAD_STATE_OUT="${DEAD_STATE_OUT}
@@ -68,7 +77,9 @@ ${dead_state}"
         fi
     fi
 
-    dead_artifacts="$(reap_session_artifacts "$entry_path" __none__ "$CLEANUP_NOW" "$DRY_RUN")"
+    if ! dead_artifacts="$(reap_session_artifacts "$entry_path" __none__ "$CLEANUP_NOW" "$DRY_RUN")"; then
+        HAD_REAP_FAILURE=1
+    fi
     if [[ -n "$dead_artifacts" ]]; then
         if [[ -n "$DEAD_ARTIFACTS_OUT" ]]; then
             DEAD_ARTIFACTS_OUT="${DEAD_ARTIFACTS_OUT}
@@ -138,4 +149,12 @@ if [[ $DRY_RUN -eq 1 ]]; then
     echo "=== dry-run complete — nothing deleted. Pass --execute to reap dead state files and artifacts. ==="
 else
     echo "=== done ==="
+fi
+
+# A DELETED label only means the reap helper reported the path — it does not
+# prove the underlying rm succeeded. Surface that gap in the exit code: if any
+# reap call failed, this script fails too, even though the report above always
+# prints in full first.
+if [[ $HAD_REAP_FAILURE -eq 1 ]]; then
+    exit 1
 fi
