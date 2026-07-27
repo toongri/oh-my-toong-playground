@@ -589,40 +589,53 @@ test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock() {
 }
 
 # =============================================================================
-# list_unclassified_session_files — reports the 4 producerless forms, silent
-# on files that match either whitelist
+# list_unclassified_session_files — reports only genuine drift. Two
+# classification-only exceptions (Defect A fix) must stay silent even though
+# neither is literally covered by STATE_PREFIXES or SESSION_ARTIFACT_PREFIXES
+# as written: a `.closed.bak` backup of a STATE_PREFIXES family (the backup
+# form STATE_PREFIXES's own `*.json` anchor, :16-19, is written to preserve
+# from deletion), and session-ledger- (reaped by its own dedicated lane in
+# hooks/session-start.sh, not by this file's reap functions, so it is
+# deliberately absent from the deletion whitelist). Neither exception changes
+# what gets deleted — only what gets reported as drift.
 # =============================================================================
 
-test_list_unclassified_reports_four_producerless_forms_only() {
+test_list_unclassified_reports_genuine_drift_only() {
   local d="$TEST_TMP_DIR"
   local uuid="550e8400-e29b-41d4-a716-446655440000"
   mkdir -p "$d/state"
 
-  # 4 unclassified/producerless forms (no writer anywhere in the repo, so they
-  # stay off the deletion whitelist and are only ever reported): must be reported.
+  # Genuinely unclassified/producerless forms (no writer anywhere in the
+  # repo, so they stay off both reap whitelists and are only ever reported):
+  # must be reported.
   touch_ago "$d/goal-review-context-$uuid.json" 25200
   touch_ago "$d/handoff-consumed-$uuid" 25200
-  touch_ago "$d/deep-interview-active-state-$uuid.json.closed.bak" 25200
-  touch_ago "$d/prometheus-state-$uuid.json.closed.bak" 25200
+  touch_ago "$d/handoff-$uuid" 25200
 
-  # Classified files: must stay silent.
+  # Classified via the reap whitelists directly: must stay silent.
   write_state "$d/goal-state-$uuid.json" "{\"active\":true}"
   write_state "$d/codex-todo-$uuid.json" "{}"
   write_state "$d/state/block-count-$uuid" "1"
+
+  # Classification-only exceptions (not in either reap whitelist, but a known
+  # family per the doc comment above): must also stay silent.
+  touch_ago "$d/deep-interview-active-state-$uuid.json.closed.bak" 25200
+  touch_ago "$d/prometheus-state-$uuid.json.closed.bak" 25200
+  touch_ago "$d/session-ledger-$uuid.md" 25200
 
   local out
   out=$(list_unclassified_session_files "$d")
   local n
   n=$(printf '%s\n' "$out" | grep -c '.' || true)
 
-  if [ "$n" -ne 4 ]; then
-    echo "  ASSERTION FAILED: expected exactly 4 unclassified files, got $n"
+  if [ "$n" -ne 3 ]; then
+    echo "  ASSERTION FAILED: expected exactly 3 unclassified files, got $n"
     echo "  got: $out"
     return 1
   fi
 
   local pat
-  for pat in 'goal-review-context-' 'handoff-consumed-' 'deep-interview-active-state-.*closed.bak' 'prometheus-state-.*closed.bak'; do
+  for pat in 'goal-review-context-' 'handoff-consumed-' 'handoff-'; do
     if ! printf '%s' "$out" | grep -q "$pat"; then
       echo "  ASSERTION FAILED: unclassified report missing pattern '$pat'"
       echo "  got: $out"
@@ -630,8 +643,8 @@ test_list_unclassified_reports_four_producerless_forms_only() {
     fi
   done
 
-  if printf '%s' "$out" | grep -q 'goal-state-\|codex-todo-\|block-count-'; then
-    echo "  ASSERTION FAILED: unclassified report must stay silent on classified files"
+  if printf '%s' "$out" | grep -q 'goal-state-\|codex-todo-\|block-count-\|closed.bak\|session-ledger-'; then
+    echo "  ASSERTION FAILED: unclassified report must stay silent on classified files, including the backup-tail and session-ledger classification-only exceptions"
     echo "  got: $out"
     return 1
   fi
@@ -1295,7 +1308,7 @@ run_test test_list_live_session_ids_strips_prefix_in_glob_metachar_dir
 run_test test_reap_session_artifacts_survives_live_session_in_glob_metachar_dir
 run_test test_list_live_session_ids_respects_provided_now_epoch_not_wall_clock
 run_test test_reap_session_artifacts_uses_own_now_epoch_not_internal_wall_clock
-run_test test_list_unclassified_reports_four_producerless_forms_only
+run_test test_list_unclassified_reports_genuine_drift_only
 run_test test_list_unclassified_reports_files_under_state_subdir_too
 run_test test_reap_dead_state_files_relocation_equivalence
 run_test test_reap_dead_state_files_execute_mode_echoes_affected_paths
