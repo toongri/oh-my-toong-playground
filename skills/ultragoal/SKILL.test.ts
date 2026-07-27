@@ -148,16 +148,27 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	// Placement, not just presence: the four toContain/not.toContain assertions
 	// above only pin WHICH file the contract paragraph lives in, not WHERE in
 	// that file. The requirement names a placement (after the last residual-
-	// risk bullet, before the artifact schema block) and the prose itself is
-	// position-dependent — line 43's "the first-dispatch contract above" and
-	// line 93's "the dispatch-prompt contract above" both point backward at
-	// this same paragraph. A later edit that moves the paragraph below the
-	// schema block, or below line 93's pointer, would leave all four
-	// assertions above green (both strings still exist somewhere in the same
-	// file) while turning both backward references into dangling forward
-	// references. indexOf existence is asserted first (`-1` compared against
-	// `-1` or a positive position would let a deleted anchor pass silently),
-	// mirroring the sibling idiom used by the "pursuing transition" test below.
+	// risk bullet, before the artifact schema block), and the prose itself is
+	// position-dependent — but the two "above" pointers name two different
+	// targets, not the same paragraph. Inside the contract paragraph itself,
+	// "the first-dispatch contract above" points at the "Code-review lane
+	// (runs once, at the final story — not per story)" paragraph, not at the
+	// contract paragraph — a paragraph cannot cite itself as "above". That
+	// reference travels with the contract paragraph, so it is the residual-
+	// risk bullet ordering assertion below (which keeps the contract
+	// paragraph after that paragraph and its residual-risk bullets) that keeps
+	// it valid. Separately, the "Code-review lane: any CONFIRMED finding"
+	// bullet's "the dispatch-prompt contract above" points at the contract
+	// paragraph — and it is this one pointer that goes dangling if the
+	// contract paragraph moves below it; the sibling test below guards
+	// exactly that ordering. So a later edit that moves the contract
+	// paragraph below the schema block, or below that bullet, would leave all
+	// four assertions above green (both strings still exist somewhere in the
+	// same file) while turning only that one reference into a dangling
+	// forward reference. indexOf existence is asserted first (`-1` compared
+	// against `-1` or a positive position would let a deleted anchor pass
+	// silently), mirroring the sibling idiom used by the "pursuing
+	// transition" test below.
 	test("the dispatch-prompt contract paragraph sits after the last residual-risk bullet and before the artifact schema block", () => {
 		const lastResidualRiskBullet =
 			"A `--agent code-reviewer` main-thread session bypasses the guard.";
