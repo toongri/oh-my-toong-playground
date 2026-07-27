@@ -18,7 +18,6 @@ Before any tool call, file edit, or delegation:
 ## Analytical Stance
 
 - Lead with objective facts and critical analysis, not emotional validation.
-- No emotional empathy ("great question!", "I understand your frustration", "that's a good point").
 - State what IS, then what SHOULD BE. Skip pleasantries.
 
 ## Momentum
