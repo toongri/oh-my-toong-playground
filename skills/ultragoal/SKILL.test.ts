@@ -147,16 +147,16 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 
 	// Placement, not just presence: the four toContain/not.toContain assertions
 	// above only pin WHICH file the contract paragraph lives in, not WHERE in
-	// that file. The requirement names a placement (after the last residual-
-	// risk bullet, before the artifact schema block), and the prose itself is
-	// position-dependent — but the two "above" pointers name two different
-	// targets, not the same paragraph. Inside the contract paragraph itself,
-	// "the first-dispatch contract above" points at the "Code-review lane
-	// (runs once, at the final story — not per story)" paragraph, not at the
-	// contract paragraph — a paragraph cannot cite itself as "above". That
-	// reference travels with the contract paragraph, so it is the residual-
-	// risk bullet ordering assertion below (which keeps the contract
-	// paragraph after that paragraph and its residual-risk bullets) that keeps
+	// that file. The requirement names a placement (after the last
+	// code-review-lane bullet, before the artifact schema block), and the prose
+	// itself is position-dependent — but the two "above" pointers name two
+	// different targets, not the same paragraph. Inside the contract paragraph
+	// itself, "the first-dispatch contract above" points at the "Code-review
+	// lane (runs once, at the final story — not per story)" paragraph, not at
+	// the contract paragraph — a paragraph cannot cite itself as "above". That
+	// reference travels with the contract paragraph, so it is the
+	// code-review-lane bullet ordering assertion below (which keeps the
+	// contract paragraph after that paragraph and its bullets) that keeps
 	// it valid. Separately, the "Code-review lane: any CONFIRMED finding"
 	// bullet's "the dispatch-prompt contract above" points at the contract
 	// paragraph — and it is this one pointer that goes dangling if the
@@ -167,33 +167,33 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	// whole-file indexOf comparison would have passed spuriously. indexOf
 	// existence is asserted first (`-1` compared against `-1` or a positive
 	// position would let a deleted anchor pass silently).
-	test("the dispatch-prompt contract paragraph sits after the last residual-risk bullet and before the artifact schema block", () => {
-		const residualRisksIntro = "these residual risks stay open";
+	test("the dispatch-prompt contract paragraph sits after the last code-review-lane bullet and before the artifact schema block", () => {
+		const codeReviewLaneIntro =
+			"**Code-review lane (runs once, at the final story";
 		const contractParagraphLead = "carries exactly two things —";
 		const artifactSchemaHeader =
 			"The artifact schema the code-reviewer must emit:";
 
-		expect(completionGateMd.indexOf(residualRisksIntro)).toBeGreaterThan(
+		expect(completionGateMd.indexOf(codeReviewLaneIntro)).toBeGreaterThan(
 			-1,
 		);
 		expect(completionGateMd.indexOf(artifactSchemaHeader)).toBeGreaterThan(
 			-1,
 		);
 
-		const residualRisksThroughSchema = completionGateMd.slice(
-			completionGateMd.indexOf(residualRisksIntro),
+		const laneThroughSchema = completionGateMd.slice(
+			completionGateMd.indexOf(codeReviewLaneIntro),
 			completionGateMd.indexOf(artifactSchemaHeader),
 		);
 
-		expect(
-			residualRisksThroughSchema.indexOf(contractParagraphLead),
-		).toBeGreaterThan(-1);
+		expect(laneThroughSchema.indexOf(contractParagraphLead)).toBeGreaterThan(
+			-1,
+		);
 
-		const lastResidualRiskBulletStart =
-			residualRisksThroughSchema.lastIndexOf("\n- **");
-		expect(lastResidualRiskBulletStart).toBeGreaterThan(-1);
-		expect(lastResidualRiskBulletStart).toBeLessThan(
-			residualRisksThroughSchema.indexOf(contractParagraphLead),
+		const lastLaneBulletStart = laneThroughSchema.lastIndexOf("\n- **");
+		expect(lastLaneBulletStart).toBeGreaterThan(-1);
+		expect(lastLaneBulletStart).toBeLessThan(
+			laneThroughSchema.indexOf(contractParagraphLead),
 		);
 	});
 
