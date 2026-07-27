@@ -269,14 +269,15 @@ EOF
         return 1
     fi
 
-    # No-args is the documented default entry form (usage block: "omt-cleanup.sh
-    # # dry-run (default)"). Right now it falls into the same code path as the
-    # explicit --dry-run flag above, since --dry-run is not a recognized flag
-    # (usage block :7: "--dry-run    # same as default") and any unmatched
-    # argument just falls through to the default. Asserting the no-args form
-    # directly, on this same real-candidate fixture, means an argument-parsing
-    # refactor that splits the two forms apart can no longer make the default
-    # path silently destructive without this assertion catching it.
+    # No-args and explicit --dry-run are two separate inputs that the
+    # arg-parsing loop recognizes on their own terms, and both resolve to the
+    # same outcome: DRY_RUN stays at its default of 1. No-args never enters the
+    # loop body; --dry-run enters it and matches the `--dry-run)` case, which
+    # only sets SAW_DRY_RUN and leaves DRY_RUN untouched (usage block:
+    # "--dry-run    # same as default"). Asserting the no-args form directly,
+    # on this same real-candidate fixture, means an argument-parsing refactor
+    # that splits the two forms apart can no longer make the default path
+    # silently destructive without this assertion catching it.
     bash "$CLEANUP_SCRIPT" > /dev/null
 
     if [[ ! -f "$state_file" ]]; then
