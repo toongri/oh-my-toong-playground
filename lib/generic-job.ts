@@ -706,31 +706,59 @@ export function isRunningStatusStale(status: Record<string, unknown>, statusPath
  * as not-active since an external SIGKILL can leave a member stuck at
  * state:"running" forever otherwise.
  *
+ * Returns `null` — not `[]` — when activity can't be determined: readdirSync
+ * on entitiesDir throws (permission error, EMFILE, I/O error), or a member's
+ * status.json exists on disk but doesn't read back as a record (read/parse
+ * failure). `[]` stays reserved for "read fine, found nothing active" —
+ * entitiesDir itself missing, or a member with no status.json yet, both
+ * still collapse to inactive exactly as before. Conflating "couldn't read"
+ * with "read and found nothing" is the bug this return type exists to close:
+ * an EMFILE during a process blowup (the runaway scenario findOrphanJobs's
+ * own comment below cites — 1,073 processes in 9 minutes) would otherwise
+ * read as "no active members" and hand a live job straight to the reaper.
+ *
  * Extracted from cmdClean's own active-member guard so findOrphanJobs (layer
  * 3, below) can reuse the EXACT same predicate cmdClean's guard (layer 2)
  * uses — the two layers must agree on what "live progress" means, or one
- * layer treats a job as active while the other treats it as orphaned.
- * cmdClean's observable behavior is unchanged by this extraction: same
- * states, same staleness relief, same fs.existsSync/try-catch fallback to [].
+ * layer treats a job as active while the other treats it as orphaned. They
+ * share the predicate but not the indeterminate handling: layer 3
+ * (findOrphanJobs) skips the job and reports to stderr rather than guessing;
+ * layer 2 (cmdClean) refuses the operation via its existing active-member
+ * guard, recoverable with --force. Both point the same direction — never
+ * destroy on a null verdict — because a false "not orphaned"/false "refused"
+ * is recoverable, and a false "orphaned"/false "deleted" is not.
  */
-export function findActiveMembers(entitiesDir: string): string[] {
+export function findActiveMembers(entitiesDir: string): string[] | null {
 	const activeMemberStates = new Set(["awaiting_resume", "running", "queued", "retrying"]);
 	if (!fs.existsSync(entitiesDir)) return [];
+	let members: string[];
 	try {
-		return fs.readdirSync(entitiesDir).filter((e) => {
-			const statusPath = path.join(entitiesDir, e, "status.json");
-			const status = readJsonIfExists(statusPath);
-			if (!isRecord(status)) return false;
-			const state = typeof status.state === "string" ? status.state : "";
-			if (!activeMemberStates.has(state)) return false;
-			if (state === "running" && isRunningStatusStale(status, statusPath)) return false;
-			return true;
-		});
+		members = fs.readdirSync(entitiesDir);
 	} catch {
-		// If we can't read the entities dir, treat as no active members; callers
-		// already validated the path via their own guards.
-		return [];
+		// Can't read the entities dir at all — indeterminate, not "no active
+		// members". Callers already validated the path via their own guards;
+		// this is a runtime read failure (permission/EMFILE/I-O), not a bad path.
+		return null;
 	}
+	const active: string[] = [];
+	for (const e of members) {
+		const statusPath = path.join(entitiesDir, e, "status.json");
+		const status = readJsonIfExists(statusPath);
+		if (!isRecord(status)) {
+			// readJsonIfExists collapses "absent" and "exists but unreadable/
+			// unparseable" into the same null — distinguish here. A status.json
+			// that exists but doesn't come back as a record is indeterminate,
+			// not inactive; a genuinely absent status.json (member hasn't
+			// written one yet) stays inactive, same as before.
+			if (fs.existsSync(statusPath)) return null;
+			continue;
+		}
+		const state = typeof status.state === "string" ? status.state : "";
+		if (!activeMemberStates.has(state)) continue;
+		if (state === "running" && isRunningStatusStale(status, statusPath)) continue;
+		active.push(e);
+	}
+	return active;
 }
 
 export async function computeStatus(
@@ -1533,6 +1561,11 @@ export function cmdClean(
 	if (!options["force"]) {
 		const entitiesDir = path.join(resolvedJobDir, config.entityDirName);
 		const activeEntries = findActiveMembers(entitiesDir);
+		if (activeEntries === null) {
+			exitWithError(
+				`clean: could not determine whether ${config.entityPlural} in ${entitiesDir} are active (entities dir or a member's status.json could not be read) — refusing to delete on an indeterminate activity read; use force option to override`,
+			);
+		}
 		if (activeEntries.length > 0) {
 			exitWithError(
 				`clean: refusing to delete job dir with active ${config.entityPlural}: ${activeEntries.join(", ")} — use force option to override`,
@@ -1815,7 +1848,19 @@ export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] 
 
 		// The job still has live progress — it's working normally, not orphaned.
 		const entitiesDir = path.join(candidatePath, config.entityDirName);
-		if (findActiveMembers(entitiesDir).length > 0) continue;
+		const activeMembers = findActiveMembers(entitiesDir);
+		if (activeMembers === null) {
+			// Couldn't determine activity (entities dir or a member's
+			// status.json could not be read) — this is NOT evidence of "no
+			// activity". A live, identity-verified process group would
+			// otherwise be handed to the reaper on an unreadable directory
+			// alone; report it and skip instead of guessing.
+			process.stderr.write(
+				`orphan-reaper: could not determine active members for ${candidatePath} — entities dir or a member's status.json could not be read; treating as not orphaned, not signaling\n`,
+			);
+			continue;
+		}
+		if (activeMembers.length > 0) continue;
 
 		orphans.push({ jobDir: candidatePath, pgids: signalablePgids, witnesses: signalableWitnesses });
 	}

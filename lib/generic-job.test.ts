@@ -39,6 +39,7 @@ import {
 	doctorOrphanJobs,
 	judgePgidSignal,
 	pgidVerdictReason,
+	findActiveMembers,
 } from "./generic-job.ts";
 
 // ---------------------------------------------------------------------------
@@ -3968,5 +3969,156 @@ describe("cmdClean / findOrphanJobs — workerPgid 부재 멤버 보고 (3차 �
 				(c) => c.includes("bob") && c.includes("workerPgid") && c.includes(pgidVerdictReason("no-witness")),
 			),
 		).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// findActiveMembers / findOrphanJobs / cmdClean — entitiesDir을 못 읽으면
+// indeterminate(null)로 취급해야 한다 (외부 코드리뷰 P2). entitiesDir 부재는
+// 여전히 "활동 없음"([])이지만, 존재하는데 못 읽는 것(readdirSync throw)은
+// "활동 없음"의 증거가 아니다 — 세 계층 모두 그 방향(안 지운다/안 죽인다)으로
+// 닫혀야 한다.
+// ---------------------------------------------------------------------------
+
+describe("findActiveMembers / findOrphanJobs / cmdClean — entitiesDir 읽기 실패 시 indeterminate", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+	let originalExit: typeof process.exit;
+	let spawnedPgids: number[];
+
+	/** entitiesDir 경로에 디렉터리 대신 평범한 파일을 만든다 — existsSync는
+	 *  통과하고 readdirSync가 ENOTDIR로 throw한다. chmod 000보다 이식성이
+	 *  좋다(루트로 도는 CI에서는 권한이 무의미해질 수 있음). */
+	function setupJobWithUnreadableEntitiesDir(
+		jobDir: string,
+		members: Array<{ workerPgid: number | null; workerPgidStartedAt?: string | null }> = [],
+	): string {
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			jobDir + "/job.json",
+			JSON.stringify({
+				id: path.basename(jobDir),
+				members: members.map((m, i) => ({
+					name: `w${i}`,
+					workerPgid: m.workerPgid,
+					workerPgidStartedAt: m.workerPgidStartedAt ?? null,
+				})),
+			}),
+		);
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		// 디렉터리가 아니라 파일 — readdirSync(entitiesDir)가 ENOTDIR로 throw.
+		fs.writeFileSync(entitiesDir, "not a directory");
+		return entitiesDir;
+	}
+
+	function isPgidAlive(pgid: number): boolean {
+		try {
+			const out = execSync("ps -o pgid= -A", { encoding: "utf8" });
+			return out
+				.split("\n")
+				.map((l) => Number(l.trim()))
+				.some((n) => n === pgid);
+		} catch {
+			return false;
+		}
+	}
+
+	/** spawnWorkers의 실제 프로덕션 단계가 기록하는 것과 같은 `ps -o lstart=`
+	 *  증인 — 신원 검사(judgePgidSignal)를 통과시키기 위한 값. */
+	function getLstart(pid: number): string {
+		return execSync(`ps -o lstart= -p ${pid}`, { encoding: "utf8" }).trim();
+	}
+
+	function captureStderr(): { chunks: string[]; restore: () => void } {
+		const chunks: string[] = [];
+		const original = process.stderr.write;
+		(process.stderr as unknown as { write: unknown }).write = (chunk: unknown) => {
+			chunks.push(String(chunk));
+			return true;
+		};
+		return {
+			chunks,
+			restore: () => {
+				process.stderr.write = original;
+			},
+		};
+	}
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		originalExit = process.exit;
+		(process as any).exit = (code?: number) => {
+			throw new Error(`process.exit(${code})`);
+		};
+		spawnedPgids = [];
+	});
+
+	afterEach(() => {
+		process.exit = originalExit;
+		for (const pgid of spawnedPgids) {
+			try {
+				process.kill(-pgid, "SIGKILL");
+			} catch {
+				// already gone — nothing to clean up
+			}
+		}
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("readdirSync가 throw하는 entitiesDir에 대해 findActiveMembers는 null을 낸다", () => {
+		const jobDir = path.join(jobsDir, "chunk-review-unreadable-001");
+		const entitiesDir = setupJobWithUnreadableEntitiesDir(jobDir);
+
+		expect(findActiveMembers(entitiesDir)).toBeNull();
+	});
+
+	test("entitiesDir을 못 읽는 job을 findOrphanJobs는 고아로 반환하지 않는다 — 살아있는 실제 프로세스 그룹으로 신원 검사를 통과시킨다", () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const pgid = child.pid;
+		if (pgid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(pgid);
+
+		// 선행 단언 — 회수 판정 전에 그룹이 실제로 살아있음을 확인한다. 이게
+		// 없으면 사후 "고아 아님" 단언이 "애초에 아무것도 없었다"와 구분되지
+		// 않는다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		const jobDir = path.join(jobsDir, "chunk-review-unreadable-002");
+		setupJobWithUnreadableEntitiesDir(jobDir, [
+			{ workerPgid: pgid, workerPgidStartedAt: getLstart(pgid) },
+		]);
+
+		const { chunks, restore } = captureStderr();
+		let orphans: OrphanJob[];
+		try {
+			orphans = findOrphanJobs(jobsDir, chunkReviewConfig);
+		} finally {
+			restore();
+		}
+
+		// 핵심 단언 — entitiesDir을 못 읽었다는 사실이 "활동 없음"으로 둔갑해
+		// 살아있는 워커 그룹을 고아로 잘못 판정하면 안 된다.
+		expect(orphans.find((o) => o.jobDir.includes("unreadable-002"))).toBeUndefined();
+		// 조용히 건너뛰지 않는다 — 회수기가 안 도는 상태를 알아챌 수 있어야 한다.
+		expect(chunks.some((c) => c.includes("unreadable-002"))).toBe(true);
+		// 살아있는 그룹은 그대로 살아있어야 한다 — 오살 방지의 증거.
+		expect(isPgidAlive(pgid)).toBe(true);
+	});
+
+	test("entitiesDir을 못 읽는 job에 대해 cmdClean은 force 없이는 거부하고, force를 주면 진행한다", () => {
+		const jobDirReject = path.join(jobsDir, "chunk-review-unreadable-003");
+		setupJobWithUnreadableEntitiesDir(jobDirReject);
+
+		expect(() => cmdClean({}, jobDirReject, chunkReviewConfig, jobsDir)).toThrow("process.exit(1)");
+		// 거부됐으니 디렉터리는 그대로 남아있어야 한다.
+		expect(fs.existsSync(jobDirReject)).toBe(true);
+
+		const jobDirForce = path.join(jobsDir, "chunk-review-unreadable-004");
+		setupJobWithUnreadableEntitiesDir(jobDirForce);
+
+		expect(() => cmdClean({ force: true }, jobDirForce, chunkReviewConfig, jobsDir)).not.toThrow();
+		expect(fs.existsSync(jobDirForce)).toBe(false);
 	});
 });
