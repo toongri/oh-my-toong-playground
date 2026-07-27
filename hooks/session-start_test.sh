@@ -2369,6 +2369,90 @@ EOF
 }
 
 # =============================================================================
+# Tests: SessionStart hook process exit code.
+#
+# Every other test in this file invokes the hook as `... | session-start.sh
+# ... || true` and never inspects its exit status -- none of the ~68 existing
+# assertions look past stdout/stderr/on-disk side effects. hooks/session-start.sh
+# has no `set -e` and its GC lane (:129-174) calls reap_dead_state_files and
+# reap_session_artifacts (hooks/lib/state-liveness.sh) without checking their
+# return value, so today a real `rm -f` failure inside either reaper cannot
+# leak a non-zero status out to Claude Code, which treats a non-zero
+# SessionStart exit as a hook failure. These two tests pin that contract down
+# at the process level: one on the ordinary GC-pass path, one under an actual
+# induced rm failure (chmod 555 on the containing directory, mirroring
+# hooks/lib/state-liveness_test.sh's test_reap_dead_state_files_rm_failure_not_echoed_and_reported
+# and test_reap_session_artifacts_rm_failure_not_echoed_and_reported).
+# =============================================================================
+
+# AC: a normal invocation that actually reaps stale other-session state and
+# artifacts (both GC lanes exercised, both against a writable OMT_DIR) exits 0.
+test_session_start_hook_exits_zero_on_normal_gc_pass() {
+    local other_sid="exitcode-gc-other-sess"
+    _write_artifact_gc_fixture "$TEST_OMT_DIR" "$other_sid"
+    _write_stale_state_fixture "$TEST_OMT_DIR" "$other_sid"
+
+    local input='{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "exitcode-gc-fresh-session"}'
+    local rc=0
+    echo "$input" | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>/dev/null || rc=$?
+
+    if [ "$rc" -ne 0 ]; then
+        echo "ASSERTION FAILED: session-start.sh must exit 0 on a normal invocation that reaps stale state/artifacts, got exit $rc"
+        return 1
+    fi
+    return 0
+}
+
+# AC (regression guard): with $OMT_DIR made read-only so the reapers' own
+# `rm -f` genuinely fails (reap_dead_state_files/reap_session_artifacts each
+# return non-zero per their documented contract -- state-liveness.sh:291-318,
+# 354+), the hook must still exit 0. This is the actual contract at risk: a
+# future edit that starts checking the reap calls' exit status (e.g.
+# `reap_dead_state_files ... > /dev/null || exit 1`, or adding `set -e` to
+# this script) would turn a harmless permission hiccup during GC into a hard
+# SessionStart hook failure.
+test_session_start_hook_exits_zero_when_reaper_rm_fails() {
+    local other_sid="exitcode-rmfail-sid"
+    _write_artifact_gc_fixture "$TEST_OMT_DIR" "$other_sid"
+    _write_stale_state_fixture "$TEST_OMT_DIR" "$other_sid"
+
+    chmod 555 "$TEST_OMT_DIR"   # no write permission: rm -f inside the reapers must fail
+
+    local input='{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "exitcode-rmfail-fresh-session"}'
+    local err_file rc
+    err_file=$(mktemp)
+    rc=0
+    echo "$input" | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>"$err_file" || rc=$?
+
+    chmod 755 "$TEST_OMT_DIR"   # restore before any assertion so teardown's rm -rf works
+
+    local err_after
+    err_after=$(cat "$err_file")
+    rm -f "$err_file"
+
+    # Anti-vacuity guard: confirm the fixture actually drove a real rm
+    # failure inside the reapers (not e.g. everything already reaped by a
+    # different lane, leaving zero rm attempts to fail).
+    if ! printf '%s\n' "$err_after" | grep -q "failed to delete"; then
+        echo "ASSERTION FAILED: fixture did not trigger a real rm failure in the reapers -- stderr had no 'failed to delete', so this test would pass vacuously"
+        echo "  stderr: $err_after"
+        return 1
+    fi
+
+    if [ "$rc" -ne 0 ]; then
+        echo "ASSERTION FAILED: session-start.sh must still exit 0 even when a reaper's rm -f genuinely fails, got exit $rc"
+        return 1
+    fi
+
+    if [ ! -f "$TEST_OMT_DIR/goal-state-${other_sid}.json" ]; then
+        echo "ASSERTION FAILED: with the containing directory read-only, rm -f could not have succeeded -- the stale state file must still be on disk"
+        return 1
+    fi
+
+    return 0
+}
+
+# =============================================================================
 # Tests: deep-interview restore block (plan TODO 6)
 # di's seed schema (hooks/pre-tool-enforcer.sh) is minimal -- {active,
 # started_at, last_touched_at} only, unlike prometheus/goal/qa which also
@@ -2610,6 +2694,10 @@ main() {
     # SessionStart session-artifact GC + drift report (plan TODO 3)
     run_test test_gc_session_artifacts_reaped_and_drift_reported
     run_test test_gc_session_artifacts_survive_without_jq
+
+    # SessionStart hook process exit code
+    run_test test_session_start_hook_exits_zero_on_normal_gc_pass
+    run_test test_session_start_hook_exits_zero_when_reaper_rm_fails
 
     # deep-interview restore block (TODO 6)
     run_test test_session_start_deep_interview_active_emits_reread_instruction
