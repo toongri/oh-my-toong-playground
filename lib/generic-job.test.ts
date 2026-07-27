@@ -6,7 +6,7 @@ import path from "path";
 import os from "os";
 import { spawn, execSync } from "child_process";
 
-import type { JobConfig, CmdResultsHooks, ResumeMemberOpts } from "./generic-job.ts";
+import type { JobConfig, CmdResultsHooks, ResumeMemberOpts, OrphanJob } from "./generic-job.ts";
 import type { RunOneTurnOpts } from "./worker-utils.ts";
 import { splitCommand } from "./worker-utils.ts";
 import {
@@ -25,6 +25,9 @@ import {
 	cmdResumeMember,
 	assertMembersOrExit,
 	assertDenyEnforceable,
+	findOrphanJobs,
+	reapOrphanJobs,
+	doctorOrphanJobs,
 } from "./generic-job.ts";
 
 // ---------------------------------------------------------------------------
@@ -2871,5 +2874,196 @@ describe("cmdClean — 삭제 전 프로세스 그룹 회수", () => {
 		expect(fs.existsSync(jobDir)).toBe(false);
 		// 오살 방지 음성 대조군: 이 job과 무관한 프로세스는 살아남아야 한다.
 		expect(isPgidAlive(bystanderPgid)).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// findOrphanJobs / reapOrphanJobs / doctorOrphanJobs — 계층 3: 고아 프로세스
+// 그룹 판별식 + reap(회수)/doctor(카운트) 엔진. workerPgid는 살아있는데 그
+// job에는 살아있는 진행이 없는 경우만 고아로 판정한다 (PPID=1 규칙은 정상
+// 워커도 몇 초 안에 도달하는 상태라 판별식으로 쓸 수 없음이 실측으로
+// 반증됨 — generic-job.ts의 findOrphanJobs 주석 참조).
+// ---------------------------------------------------------------------------
+
+describe("findOrphanJobs / reapOrphanJobs / doctorOrphanJobs", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+	let spawnedPgids: number[];
+
+	function isPgidAlive(pgid: number): boolean {
+		try {
+			const out = execSync("ps -o pgid= -A", { encoding: "utf8" });
+			return out
+				.split("\n")
+				.map((l) => Number(l.trim()))
+				.some((n) => n === pgid);
+		} catch {
+			return false;
+		}
+	}
+
+	// Bounded async poll — same reasoning as cmdClean's waitUntil above: a
+	// killed child stays a zombie in `ps` until this process's event loop
+	// runs its SIGCHLD reap callback, so this must yield via setTimeout.
+	async function waitUntil(predicate: () => boolean, timeoutMs = 2000): Promise<boolean> {
+		const deadline = Date.now() + timeoutMs;
+		while (Date.now() < deadline) {
+			if (predicate()) return true;
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+		return predicate();
+	}
+
+	function setupOrphanJob(
+		name: string,
+		workerPgids: (number | null)[],
+		memberStatus: Record<string, unknown>,
+	): string {
+		const jobDir = path.join(jobsDir, name);
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({
+				id: name,
+				members: workerPgids.map((workerPgid, i) => ({ name: `w${i}`, workerPgid })),
+			}),
+		);
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		const dir = path.join(entitiesDir, "alice");
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(path.join(dir, "status.json"), JSON.stringify(memberStatus));
+		return jobDir;
+	}
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		spawnedPgids = [];
+	});
+
+	afterEach(() => {
+		for (const pgid of spawnedPgids) {
+			try {
+				process.kill(-pgid, "SIGKILL");
+			} catch {
+				// already gone — nothing to clean up
+			}
+		}
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("고아 job의 살아있는 프로세스 그룹을 reapOrphanJobs가 회수한다", async () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const pgid = child.pid;
+		if (pgid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(pgid);
+
+		// 선행 단언: 회수 전에 그룹이 실제로 살아있음을 먼저 확인한다 — 없으면
+		// 사후 0개 단언이 "애초에 아무것도 없었다"와 구분되지 않는다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		setupOrphanJob("chunk-review-orphan-001", [pgid], { member: "alice", state: "done" });
+
+		const { reaped, survivingPids } = await reapOrphanJobs(jobsDir, chunkReviewConfig, {
+			graceMs: 100,
+		});
+
+		expect(reaped.length).toBe(1);
+		expect(reaped[0].pgids).toContain(pgid);
+		expect(await waitUntil(() => !isPgidAlive(pgid))).toBe(true);
+		expect(survivingPids).toEqual([]);
+	});
+
+	test("정상 작동 중인 job(방금 heartbeat)은 건너뛴다 — 음성 대조군, PPID 규칙이면 실패했을 케이스", async () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const pgid = child.pid;
+		if (pgid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(pgid);
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		setupOrphanJob("chunk-review-healthy-001", [pgid], {
+			member: "alice",
+			state: "running",
+			lastHeartbeat: new Date().toISOString(),
+		});
+
+		const { reaped } = await reapOrphanJobs(jobsDir, chunkReviewConfig, { graceMs: 100 });
+
+		expect(reaped.length).toBe(0);
+		// 정상 워커는 죽지 않고 살아남아야 한다 — 오살 방지의 증거.
+		expect(isPgidAlive(pgid)).toBe(true);
+	});
+
+	test("workerPgid가 전부 null인 job은 findOrphanJobs 결과에 없다", () => {
+		setupOrphanJob("chunk-review-nopgid-001", [null, null], { member: "alice", state: "done" });
+
+		const orphans = findOrphanJobs(jobsDir, chunkReviewConfig);
+
+		expect(orphans.find((o: OrphanJob) => o.jobDir.includes("nopgid-001"))).toBeUndefined();
+	});
+
+	test("doctorOrphanJobs는 죽이지 않고 findOrphanJobs와 동일한 카운트만 센다", () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const pgid = child.pid;
+		if (pgid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(pgid);
+
+		setupOrphanJob("chunk-review-doctor-001", [pgid], { member: "alice", state: "done" });
+
+		const found = findOrphanJobs(jobsDir, chunkReviewConfig);
+		const doctorResult = doctorOrphanJobs(jobsDir, chunkReviewConfig);
+
+		expect(doctorResult.orphanJobCount).toBe(found.length);
+		expect(doctorResult.orphanPgidCount).toBe(
+			found.reduce((sum: number, o: OrphanJob) => sum + o.pgids.length, 0),
+		);
+		// doctor는 죽이지 않는다 — 그룹은 여전히 살아있다.
+		expect(isPgidAlive(pgid)).toBe(true);
+	});
+
+	test("잔여 프로세스는 stderr로 보고되고 추가 kill 시도는 없다", async () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		const pgid = child.pid;
+		if (pgid === undefined) throw new Error("spawn failed to produce a pid");
+		spawnedPgids.push(pgid);
+
+		setupOrphanJob("chunk-review-report-001", [pgid], { member: "alice", state: "done" });
+
+		const stderrChunks: string[] = [];
+		const originalStderrWrite = process.stderr.write;
+		(process.stderr as unknown as { write: unknown }).write = (chunk: unknown) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		};
+
+		const killCalls: Array<[number, string | undefined]> = [];
+		const originalKill = process.kill;
+		// kill을 no-op으로 바꿔 실제로는 신호를 보내지 않는다 — 그러면 프로세스는
+		// 반드시 살아남으므로 survivingPids가 타이밍에 의존하지 않고 결정적으로
+		// 채워진다.
+		(process as unknown as { kill: unknown }).kill = (pid: number, signal?: string) => {
+			killCalls.push([pid, signal]);
+			return true;
+		};
+
+		try {
+			const { survivingPids } = await reapOrphanJobs(jobsDir, chunkReviewConfig, { graceMs: 10 });
+			expect(survivingPids).toContain(pgid);
+			expect(stderrChunks.some((c) => c.includes(String(pgid)))).toBe(true);
+			// SIGTERM 한 번, SIGKILL 한 번 — 생존을 관측한 뒤에도 추가 kill은 없다.
+			const killsForGroup = killCalls.filter(([p]) => p === -pgid);
+			expect(killsForGroup.length).toBe(2);
+			expect(killsForGroup.map(([, sig]) => sig)).toEqual(["SIGTERM", "SIGKILL"]);
+		} finally {
+			process.kill = originalKill;
+			process.stderr.write = originalStderrWrite;
+		}
+	});
+
+	test("reapOrphanJobs의 프로덕션 기본 유예는 5000ms다", () => {
+		const src = fs.readFileSync(path.join(__dirname, "generic-job.ts"), "utf8");
+		expect(src).toMatch(/REAP_GRACE_MS_DEFAULT\s*=\s*5000/);
 	});
 });
