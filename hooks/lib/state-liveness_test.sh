@@ -1576,6 +1576,141 @@ test_list_live_session_ids_space_bearing_dir_witness_pass() {
 }
 
 # =============================================================================
+# Defect: an embedded literal newline in a whitelisted-prefix filename splits
+# one batched-stat "<mtime> <path>" record into two lines. The forged second
+# line's first token then lands in the loop's own $mtime, and its remainder
+# in $f — both consumed by list_live_session_ids's and reap_session_artifacts's
+# SESSION_ARTIFACT_PREFIXES loops with no validation before this fix. An
+# attacker-controlled $mtime reaches `_artifact_age_live`'s
+# `$(( now_epoch - mtime_epoch ))` arithmetic context, where bash re-evaluates
+# a `[$(...)]`-shaped value as an array subscript and executes the embedded
+# command substitution (Defect A) — regardless of dry-run, since that
+# arithmetic runs before either loop's dry_run branch. An attacker-controlled
+# $f can likewise fall outside $dir entirely and still reach `rm -f "$f"`
+# (Defect B). Both loops now reject a non-numeric $mtime and a $f not
+# anchored to "$dir/$prefix" immediately after the split, before either value
+# is used for anything else.
+# =============================================================================
+
+# Isolates list_live_session_ids's own SESSION_ARTIFACT_PREFIXES witness loop
+# (called directly, not through reap_session_artifacts) against Defect A.
+test_list_live_session_ids_newline_filename_no_arbitrary_exec() {
+  local d="$TEST_TMP_DIR/artifacts"
+  mkdir -p "$d"
+  local fname
+  fname=$'codex-todo-a\ncandidates[$(touch${IFS}pwnedY)] z'
+  : >"$d/$fname"
+
+  local cwd_dir="$TEST_TMP_DIR/cwd"
+  mkdir -p "$cwd_dir"
+  (cd "$cwd_dir" && list_live_session_ids "$d" "$NOW" >/dev/null)
+
+  if [ -f "$cwd_dir/pwnedY" ]; then
+    echo "  ASSERTION FAILED: list_live_session_ids's own witness loop must reject a non-numeric forged mtime before arithmetic evaluation — found pwnedY created via command substitution"
+    return 1
+  fi
+  return 0
+}
+
+# Defect A through the full reap_session_artifacts call (which itself calls
+# list_live_session_ids first, then runs its own identically-shaped loop) —
+# dry_run=1, since the arithmetic injection happens before the dry_run branch
+# in either loop.
+test_reap_session_artifacts_newline_filename_defect_a_no_arbitrary_exec_dry_run() {
+  local d="$TEST_TMP_DIR/artifacts"
+  mkdir -p "$d"
+  local fname
+  fname=$'codex-todo-a\ncandidates[$(touch${IFS}pwnedX)] z'
+  : >"$d/$fname"
+
+  local cwd_dir="$TEST_TMP_DIR/cwd"
+  mkdir -p "$cwd_dir"
+  (cd "$cwd_dir" && reap_session_artifacts "$d" "__none__" "$NOW" 1 >/dev/null)
+
+  if [ -f "$cwd_dir/pwnedX" ]; then
+    echo "  ASSERTION FAILED: a newline-embedded filename forged a record whose mtime slot reached arithmetic evaluation and executed an embedded command substitution, even in dry-run mode"
+    return 1
+  fi
+  return 0
+}
+
+# Defect B: a forged record whose path field falls outside $dir (the current
+# session's own CWD), reaching `rm -f "$f"` in execute mode unless anchored.
+test_reap_session_artifacts_newline_filename_defect_b_no_out_of_dir_deletion_execute() {
+  local d="$TEST_TMP_DIR/artifacts"
+  mkdir -p "$d"
+  local fname
+  fname=$'codex-todo-x\n0 victim.txt'
+  : >"$d/$fname"
+
+  local cwd_dir="$TEST_TMP_DIR/cwd"
+  mkdir -p "$cwd_dir"
+  : >"$cwd_dir/victim.txt"
+
+  (cd "$cwd_dir" && reap_session_artifacts "$d" "__none__" "$NOW" 0 >/dev/null)
+
+  if [ ! -f "$cwd_dir/victim.txt" ]; then
+    echo "  ASSERTION FAILED: a newline-embedded filename forged a record whose path fell outside \$OMT_DIR (landing on the CWD's own victim.txt), and it was deleted instead of being rejected by the \$dir/\$prefix anchor"
+    return 1
+  fi
+  return 0
+}
+
+# Negative control: the two guards above must not degrade into a blanket
+# `continue` for every candidate — an ordinary live-witnessed artifact must
+# still survive and an ordinary unwitnessed stale artifact must still be
+# reaped, exactly as before the guards were added.
+test_reap_session_artifacts_ordinary_candidates_unaffected_by_newline_guard() {
+  local d="$TEST_TMP_DIR"
+  local live="ordinary-live-sid-40"
+  local dead="ordinary-dead-sid-41"
+  write_state "$d/goal-state-$live.json" "{\"active\":true,\"last_touched_at\":\"$(iso_ago 600)\"}"
+  local live_artifact="$d/goal-verdict-$live.json"
+  local dead_artifact="$d/codex-todo-$dead.json"
+  write_state "$live_artifact" "{}"
+  write_state "$dead_artifact" "{}"
+  touch_ago "$live_artifact" 25200
+  touch_ago "$dead_artifact" 25200
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 >/dev/null
+
+  if [ ! -f "$live_artifact" ]; then
+    echo "  ASSERTION FAILED: the newline/path guards must not affect an ordinary live-witnessed artifact — it must survive"
+    return 1
+  fi
+  if [ -f "$dead_artifact" ]; then
+    echo "  ASSERTION FAILED: the newline/path guards must not affect an ordinary unwitnessed stale artifact — it must still be reaped"
+    return 1
+  fi
+  return 0
+}
+
+# A normal (non-forged) filename containing an ordinary space — not in its
+# directory but in the filename itself — must still be judged correctly:
+# the guards must not reject well-formed candidates.
+test_reap_session_artifacts_space_in_filename_still_correctly_judged() {
+  local d="$TEST_TMP_DIR"
+  local stale="$d/codex-todo-space in name-stale-42.json"
+  local fresh="$d/codex-todo-space in name-fresh-43.json"
+  write_state "$stale" "{}"
+  write_state "$fresh" "{}"
+  touch_ago "$stale" 25200 # 7h — stale, no witness — must be reaped
+  # $fresh: no touch_ago — fresh mtime — must survive
+
+  reap_session_artifacts "$d" "unrelated-sid" "$NOW" 0 >/dev/null
+
+  if [ -f "$stale" ]; then
+    echo "  ASSERTION FAILED: a stale artifact with a space in its own filename (not just its directory) must still be reaped after the newline/path guards"
+    return 1
+  fi
+  if [ ! -f "$fresh" ]; then
+    echo "  ASSERTION FAILED: a fresh artifact with a space in its own filename must still survive after the newline/path guards"
+    return 1
+  fi
+  return 0
+}
+
+# =============================================================================
 # Defect: rm -f failures were silently reported as successful deletions —
 # the affected path was echoed BEFORE rm ran, and rm's own exit status was
 # never inspected. A failed delete must not be echoed as deleted, must be
@@ -1879,6 +2014,11 @@ run_test test_reap_session_artifacts_stale_codex_todo_reaped_without_witness
 run_test test_reap_session_artifacts_batched_stat_omission_fails_open
 run_test test_reap_session_artifacts_space_bearing_dir_path_judged_correctly
 run_test test_list_live_session_ids_space_bearing_dir_witness_pass
+run_test test_list_live_session_ids_newline_filename_no_arbitrary_exec
+run_test test_reap_session_artifacts_newline_filename_defect_a_no_arbitrary_exec_dry_run
+run_test test_reap_session_artifacts_newline_filename_defect_b_no_out_of_dir_deletion_execute
+run_test test_reap_session_artifacts_ordinary_candidates_unaffected_by_newline_guard
+run_test test_reap_session_artifacts_space_in_filename_still_correctly_judged
 run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported
 run_test test_reap_session_artifacts_rm_failure_not_echoed_and_reported
 run_test test_harmless_conditions_do_not_trip_set_e
