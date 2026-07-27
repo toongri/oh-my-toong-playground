@@ -81,7 +81,7 @@ class NoWorkFoundListenerTest {
 
 ## 2. 파일명과 네이밍
 
-이 절은 Batch Test 레벨을 골랐다는 전제 아래 파일명·클래스명·메서드명을 어떻게 쓰는지를 다룬다. 소스에 별도의 네이밍 절이 없어, 아래 5번 절(패턴별 예시)의 Step Integration Test·Job Integration Test 두 패턴에 흩어진 파일명·`@DisplayName`·메서드명 관례를 모아 구성했다.
+이 절은 Batch Test 레벨을 골랐다는 전제 아래 파일명·클래스명·메서드명을 어떻게 쓰는지를 다룬다. 이 절의 네이밍 관례는 아래 5번 절(패턴별 예시)의 Step Integration Test·Job Integration Test 두 패턴에서 쓰는 파일명·`@DisplayName`·메서드명 관례와 같다.
 
 > ⚠️ 주의: 이 절은 "이 레벨을 골랐다는 전제 아래" 이름을 어떻게 쓰는지만 다룬다. Step 테스트를 쓸지 Job 테스트를 쓸지 자체를 고르는 분류 기준은 `./test-levels.md`의 레벨 분류표를 따른다.
 
