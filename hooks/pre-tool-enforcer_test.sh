@@ -16,6 +16,11 @@ setup_test_env() {
     export OMT_DIR="$TEST_TMP_DIR/.omt"
     mkdir -p "$OMT_DIR"
     export OMT_SESSION_ID="test-sid"
+    # Scrub CLAUDE_ENV_FILE before every test's body runs -- otherwise the
+    # session-start.sh invocation below (AC9) inherits the ambient value
+    # (e.g. a live Claude Code session's real env file) and the hook
+    # silently overwrites it with this suite's throwaway test state.
+    unset CLAUDE_ENV_FILE || true
 }
 
 teardown_test_env() {
@@ -1632,6 +1637,36 @@ test_cr15_bash_mv_source_ledger_denied() {
     wg_assert_deny "mv \"$(wg_ledger_path)\" /tmp/saved.md" "CR15(mv ledger source)"
 }
 
+test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
+    # Regression guard for the ambient CLAUDE_ENV_FILE leak: AC9's session-
+    # start.sh invocation (test_ac9_started_at_parseable_by_stale_cleanup)
+    # used to inherit whatever CLAUDE_ENV_FILE was ambient in the runner's
+    # shell (e.g. a live Claude Code session's real env file) and the hook
+    # would unconditionally append export lines to it. setup_test_env() now
+    # scrubs CLAUDE_ENV_FILE before every test's body runs; this test
+    # re-invokes that real function (not a copy of it) after re-introducing
+    # an ambient value, so if the scrub is ever removed from setup_test_env,
+    # this goes red.
+    local fixture baseline
+    fixture=$(mktemp)
+    baseline=$(mktemp)
+    cp "$fixture" "$baseline"
+
+    export CLAUDE_ENV_FILE="$fixture"
+    setup_test_env
+    printf '{}' | bash "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    local result=0
+    if ! cmp -s "$baseline" "$fixture"; then
+        echo "ASSERTION FAILED: CLAUDE_ENV_FILE fixture must stay byte-unchanged when ambient -- setup_test_env's scrub regressed"
+        echo "  fixture contents: $(cat "$fixture")"
+        result=1
+    fi
+
+    rm -f "$fixture" "$baseline"
+    return $result
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -1752,6 +1787,7 @@ main() {
     run_test test_cr13_bash_mv_source_goal_codereview_code_reviewer_allowed
     run_test test_cr14_bash_cp_source_ultragoal_codereview_allowed
     run_test test_cr15_bash_mv_source_ledger_denied
+    run_test test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

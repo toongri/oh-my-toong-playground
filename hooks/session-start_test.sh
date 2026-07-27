@@ -25,6 +25,11 @@ setup_test_env() {
     export HOME="$TEST_HOME"
     unset OMT_DIR
     unset OMT_PROJECT
+    # Scrub CLAUDE_ENV_FILE before every test's body runs -- otherwise any
+    # test spawning session-start.sh without its own override inherits the
+    # ambient value (e.g. a live Claude Code session's real env file) and the
+    # hook silently overwrites it with this suite's throwaway fixture paths.
+    unset CLAUDE_ENV_FILE
 
     # Pre-compute TEST_OMT_DIR: mirrors session-start.sh OMT_DIR derivation.
     # Since TEST_TMP_DIR has no real git repo, PROJECT_NAME = basename(TEST_TMP_DIR).
@@ -210,6 +215,38 @@ test_session_start_creates_omt_dir() {
         echo "  Exists: $([ -d "$exported_omt_dir" ] && echo yes || echo no)"
         return 1
     fi
+}
+
+test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
+    # Regression guard for the ambient CLAUDE_ENV_FILE leak: this suite's own
+    # unscrubbed session-start.sh call sites (the plain
+    # `echo ... | "$SCRIPT_DIR/session-start.sh"` pattern used throughout this
+    # file, with no CLAUDE_ENV_FILE override of their own) used to inherit
+    # whatever CLAUDE_ENV_FILE was ambient in the runner's shell -- e.g. a
+    # live Claude Code session's real env file -- and the hook would
+    # unconditionally append export lines to it. setup_test_env() now scrubs
+    # CLAUDE_ENV_FILE before every test's body runs; this test re-invokes that
+    # real function (not a copy of it) after re-introducing an ambient value,
+    # so if the scrub is ever removed from setup_test_env, this goes red.
+    local fixture baseline
+    fixture=$(mktemp)
+    baseline=$(mktemp)
+    cp "$fixture" "$baseline"
+
+    export CLAUDE_ENV_FILE="$fixture"
+    setup_test_env
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "leak-guard-sid"}' \
+        | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    local result=0
+    if ! cmp -s "$baseline" "$fixture"; then
+        echo "ASSERTION FAILED: CLAUDE_ENV_FILE fixture must stay byte-unchanged when ambient -- setup_test_env's scrub regressed"
+        echo "  fixture contents: $(cat "$fixture")"
+        result=1
+    fi
+
+    rm -f "$fixture" "$baseline"
+    return $result
 }
 
 # =============================================================================
@@ -2780,6 +2817,7 @@ main() {
     run_test test_session_start_exports_omt_dir_via_claude_env_file
     run_test test_session_start_omt_dir_points_under_home_omt
     run_test test_session_start_creates_omt_dir
+    run_test test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call
 
     # Project root detection - session-start (from hooks/test/project_root_test.sh)
     run_test test_get_project_root_function_exists_in_session_start
