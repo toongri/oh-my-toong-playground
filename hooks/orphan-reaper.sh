@@ -20,12 +20,13 @@
 # echo하지 않는다.
 #
 # 10초 예산: job.ts reap의 기본 유예(grace)는 5초이고, 회수할 고아가
-# 0개여도 그 유예를 무조건 기다린다(lib/generic-job.ts reapOrphanJobs). 이
-# 훅에서 그것을 동기로 기다리면 SessionStart 예산(10초)의 절반 이상을 매
-# 세션 소모한다. --grace-ms를 줄여 동기 실행하는 대신(옵션 a), 전체 reap
-# 호출을 백그라운드로 detach한다(옵션 b, 채택) -- AC가 요구하는 "SIGTERM
-# 단계만 동기, SIGKILL 단계는 detach" 문구에 옵션 b가 더 가깝고, 무엇보다
-# 세션 시작 자체를 절대 지연시키지 않는다. 회수는 job.ts reap 프로세스
+# 1개 이상이면 그 유예를 기다린다(0개면 건너뛴다, lib/generic-job.ts
+# reapOrphanJobs). 고아가 있는 세션에서 이 훅이 그것을 동기로 기다리면
+# SessionStart 예산(10초)의 절반 이상을 소모한다. --grace-ms를 줄여 동기
+# 실행하는 대신(옵션 a), 전체 reap 호출을 백그라운드로 detach한다(옵션 b,
+# 채택) -- AC가 요구하는 "SIGTERM 단계만 동기, SIGKILL 단계는 detach"
+# 문구에 옵션 b가 더 가깝고, 무엇보다 세션 시작 자체를 절대 지연시키지
+# 않는다. 회수는 job.ts reap 프로세스
 # 안에서(SIGTERM -> grace -> SIGKILL) 백그라운드로 계속되며, 그 표준출력은
 # 여전히 /dev/null로 봉인하고(stdout 계약, 위 문단) 표준에러는
 # $OMT_DIR/logs/orphan-reaper.log 파일로 리다이렉트한다. 파일로 리다이렉트

@@ -1482,7 +1482,17 @@ export function judgePgidSignal(
 	const memberStarts = snapshot.memberStartTimes.get(pgid);
 	if (!memberStarts || memberStarts.length === 0) return "leader-dead";
 	const recordedMs = toEpochMs(recordedStartedAt);
-	const anyMemberPredatesRecorded = memberStarts.some((startedAt) => toEpochMs(startedAt) < recordedMs);
+	// Fail closed, same as the rest of this witness system: an unparseable
+	// recorded witness gives no basis to compare against, so it must not be
+	// treated as "no member predates it" (NaN comparisons are always false).
+	if (Number.isNaN(recordedMs)) return "no-witness";
+	const anyMemberPredatesRecorded = memberStarts.some((startedAt) => {
+		const memberMs = toEpochMs(startedAt);
+		// An unparseable member start time is treated as predating the
+		// recorded witness (the exclusion direction) rather than silently
+		// dropped by the same NaN-comparison asymmetry.
+		return Number.isNaN(memberMs) || memberMs < recordedMs;
+	});
 	return anyMemberPredatesRecorded ? "leader-dead" : "signal";
 }
 
@@ -1551,6 +1561,21 @@ export function cmdClean(
 			return { pgid, startedAt };
 		})
 		.filter((m): m is { pgid: number; startedAt: string | null } => m !== null);
+
+	// Members with no valid workerPgid recorded at all (some skills never
+	// wire up this anchor) never reach the witness loop below, so they used
+	// to vanish silently. Report each one here, before this job's directory
+	// (their only ownership anchor) is deleted — same reasoning as the
+	// per-verdict report inside the loop below.
+	for (const m of membersForKill) {
+		if (!isRecord(m)) continue;
+		const pgid = m.workerPgid;
+		if (typeof pgid === "number" && Number.isInteger(pgid) && pgid > 0) continue;
+		const name = typeof m.name === "string" ? m.name : "<unknown>";
+		process.stderr.write(
+			`clean: no workerPgid recorded for member "${name}" in ${resolvedJobDir} — ${pgidVerdictReason("no-witness")}; cannot verify or signal any process for it. This job's directory is about to be deleted, so this becomes unrecoverable by any reap layer after this.\n`,
+		);
+	}
 
 	// The witness check itself needs a `ps` snapshot — if that fails, there is
 	// no basis to verify anything, so every candidate below resolves to
@@ -1750,6 +1775,20 @@ export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] 
 				return { pgid, startedAt };
 			})
 			.filter((m): m is { pgid: number; startedAt: string | null } => m !== null);
+
+		// Members with no valid workerPgid recorded at all never reach the
+		// witness loop above and used to vanish silently — report each one,
+		// mirroring cmdClean's report, before falling through to the skip
+		// below.
+		for (const m of members) {
+			if (!isRecord(m)) continue;
+			const pgid = m.workerPgid;
+			if (typeof pgid === "number" && Number.isInteger(pgid) && pgid > 0) continue;
+			const name = typeof m.name === "string" ? m.name : "<unknown>";
+			process.stderr.write(
+				`orphan-reaper: no workerPgid recorded for member "${name}" in ${candidatePath} — ${pgidVerdictReason("no-witness")}; not signaling\n`,
+			);
+		}
 		// No workerPgid recorded at all — no basis to judge this job, skip it.
 		if (memberWitnesses.length === 0) continue;
 

@@ -90,6 +90,45 @@ function makeOrphanJobFixture(
 	return { jobDir, pgid };
 }
 
+/**
+ * Same fixture shape as makeOrphanJobFixture, but with N members — each its
+ * own detached `sleep 30` process group — under a single job. Exists to
+ * reproduce the job-count-vs-process-count mislabel: findOrphanJobs collapses
+ * this into ONE orphan entry with `pgids.length === memberNames.length`, so a
+ * caller that reports "N orphan job(s) ... M process(es)" using the same N
+ * for both is wrong whenever a job has more than one live member.
+ */
+function makeMultiMemberOrphanJobFixture(
+	jobsDir: string,
+	name: string,
+	memberNames: string[],
+): { jobDir: string; pgids: number[] } {
+	const jobDir = path.join(jobsDir, `chunk-review-${name}`);
+	const members: Array<{ name: string; workerPgid: number; workerPgidStartedAt: string }> = [];
+	const pgids: number[] = [];
+	for (const memberName of memberNames) {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		child.unref();
+		const pgid = child.pid as number;
+		const workerPgidStartedAt = execFileSync("ps", ["-o", "lstart=", "-p", String(pgid)], {
+			encoding: "utf8",
+		}).trim();
+		const memberDir = path.join(jobDir, "members", memberName);
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(memberDir, "status.json"),
+			JSON.stringify({ member: memberName, state: "done", exitCode: 0 }),
+		);
+		members.push({ name: memberName, workerPgid: pgid, workerPgidStartedAt });
+		pgids.push(pgid);
+	}
+	fs.writeFileSync(
+		path.join(jobDir, "job.json"),
+		JSON.stringify({ id: `chunk-review-${name}`, createdAt: new Date().toISOString(), members }),
+	);
+	return { jobDir, pgids };
+}
+
 /** `kill(pgid, 0)` sends no signal — it only probes whether the group still exists. */
 function isPgidAlive(pgid: number): boolean {
 	try {
@@ -1660,6 +1699,44 @@ describe("cmdStart reap 로그 — 생존 프로세스를 회수됐다고 보고
 		expect(logContent).toContain("1 orphan job(s) reaped");
 		expect(isPgidAlive(pgid)).toBe(false);
 
+		killSpawnedWorkers();
+	});
+
+	test("한 job에 살아있는 pgid가 2개 이상이면 로그의 process(es) 수는 job 수가 아니라 실제 생존 프로세스 수를 반영한다", async () => {
+		// 결함 재현: job은 1개뿐인데 그 job의 살아있는 멤버는 2개다.
+		// classifyReapedOrphans는 job 단위로 survived: boolean 하나만 반환하므로,
+		// 그 개수(1)를 그대로 "process(es) survived"로 찍으면 실제 생존 프로세스
+		// 수(2)와 어긋난다.
+		const { pgids } = makeMultiMemberOrphanJobFixture(jobsDir, "start-multi-survivor", [
+			"alice",
+			"bob",
+		]);
+		expect(pgids.every((pgid) => isPgidAlive(pgid))).toBe(true);
+		const configPath = writeStartConfig();
+
+		const originalKill = process.kill;
+		// kill을 no-op으로 바꿔 두 프로세스 모두 결정적으로 생존시킨다.
+		(process as unknown as { kill: unknown }).kill = () => true;
+
+		try {
+			await cmdStart(
+				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				"test prompt",
+			);
+		} finally {
+			process.kill = originalKill;
+		}
+
+		const logContent = readStartLog();
+		expect(logContent).toContain("1 orphan job(s) signalled");
+		// 핵심 단언: 실제 생존 프로세스 수(2)가 찍혀야 하고, job 수(1)를 그대로
+		// process 수로 잘못 라벨링한 "1 process(es) survived"가 찍히면 안 된다.
+		expect(logContent).toContain("2 process(es) survived the group kill");
+		expect(logContent).not.toContain("1 process(es) survived the group kill");
+		// 오살 방지: kill이 no-op이었으므로 두 프로세스 모두 실제로 살아있어야 한다.
+		expect(pgids.every((pgid) => isPgidAlive(pgid))).toBe(true);
+
+		for (const pgid of pgids) killPgidIfAlive(pgid);
 		killSpawnedWorkers();
 	});
 });
