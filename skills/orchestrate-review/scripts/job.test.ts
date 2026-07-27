@@ -154,12 +154,11 @@ describe("parseChunkReviewConfig", () => {
 		});
 	});
 
-	test("real config registers security and coverage members", async () => {
+	test("real config registers the 4 angle members", async () => {
 		const realPath = path.join(import.meta.dirname, "..", "orchestrate-review.config.yaml");
 		const result = await parseChunkReviewConfig(realPath);
 		const names = result["chunk-review"].members.map((r) => (r as { name: string }).name);
-		expect(names.includes("security")).toBeTruthy();
-		expect(names.includes("coverage")).toBeTruthy();
+		expect(names).toEqual(["correctness", "regression", "cleanup", "requirement"]);
 	});
 });
 

@@ -9,57 +9,47 @@ chunk-review:
     #
     # Per-angle model: each member carries its own command/model, so any angle
     # can run on a different CLI/model. Today every angle runs on codex at gpt-5.6-sol,
-    # high reasoning effort. `model` + `effort_level` + `output_format` (below) plus
+    # mid reasoning effort. `model` + `effort_level` + `output_format` (below) plus
     # `settings.deny.skills` (below) resolve (via buildAugmentedCommand) to:
     #   codex exec -m gpt-5.6-sol -c skills.config=[…from settings.deny.skills below…] \
-    #     -c model_reasoning_effort=high --json --skip-git-repo-check
+    #     -c model_reasoning_effort=mid --json --skip-git-repo-check
     # Note: codex uses bare model ids (no `openai/` prefix). Git history attests
     # codex with gpt-5.4 / gpt-5.3-codex (gpt-5.5 itself only ran via opencode);
     # if codex rejects `gpt-5.6-sol`, fall back to `gpt-5.5`.
     # Change one member's `model`/`command` to run that angle on a different model/CLI.
     #
-    # Angle set: 3 correctness lenses + 1 cleanup lens + 1 security lens + 1 coverage lens.
-    - name: line-scan
+    # Angle set: 4 angles, each asking a distinct question about the diff —
+    # `correctness` (does this code misbehave), `regression` (what did this
+    # change remove), `cleanup` (is this more than necessary), `requirement`
+    # (was what was asked for actually done, is it actually verified, can an
+    # attacker flip it).
+    - name: correctness
       command: codex exec
       model: gpt-5.6-sol
-      emoji: "\U0001F50D"
-      color: "BLUE"
-      effort_level: high
+      emoji: "\U0001F517"
+      color: "CYAN"
+      effort_level: mid
       output_format: json
     - name: regression
       command: codex exec
       model: gpt-5.6-sol
       emoji: "\U0001F5D1"
       color: "MAGENTA"
-      effort_level: high
-      output_format: json
-    - name: cross-file
-      command: codex exec
-      model: gpt-5.6-sol
-      emoji: "\U0001F517"
-      color: "CYAN"
-      effort_level: high
+      effort_level: mid
       output_format: json
     - name: cleanup
       command: codex exec
       model: gpt-5.6-sol
       emoji: "\U0001F9F9"
       color: "YELLOW"
-      effort_level: high
+      effort_level: mid
       output_format: json
-    - name: security
-      command: codex exec
-      model: gpt-5.6-sol
-      emoji: "\U0001F512"
-      color: "RED"
-      effort_level: high
-      output_format: json
-    - name: coverage
+    - name: requirement
       command: codex exec
       model: gpt-5.6-sol
       emoji: "\U0001F4CB"
       color: "GREEN"
-      effort_level: high
+      effort_level: mid
       output_format: json
   settings:
     timeout: 1800
