@@ -371,19 +371,19 @@ If any check fails:
 
 ## Step 4: Chunking Decision
 
-Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`):
+Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`) — only `X` (insertions) drives this decision:
 
 | Condition | Strategy |
 |-----------|----------|
-| Total changed lines (insertions + deletions) < 1500 AND changed files < 30 | Single review |
-| Total changed lines >= 1500 OR changed files >= 30 | Group into chunks by directory/module affinity |
+| Insertion lines < 2000 AND changed files < 30 | Single review |
+| Insertion lines >= 2000 OR changed files >= 30 | Group into chunks by directory/module affinity |
 
 Chunking heuristic: group files sharing a directory prefix or import relationships.
 
 **Per-chunk size guide:**
-- Target ~1500 lines per chunk (soft guide — files are the atomic unit)
-- If adding the next file exceeds ~1500 lines, start a new chunk
-- If a single file alone exceeds ~1500 lines, it becomes its own chunk
+- Target ~2000 insertion lines per chunk (soft guide — files are the atomic unit)
+- If adding the next file exceeds ~2000 insertion lines, start a new chunk
+- If a single file alone exceeds ~2000 insertion lines, it becomes its own chunk
 - If a directory group is oversized, split by subdirectory; if still oversized (flat structure), batch alphabetically (~10-15 files per chunk)
 
 ### Per-Chunk Diff Command Construction
