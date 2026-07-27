@@ -688,14 +688,19 @@ export function ensureSeed(type: StateType, sessionId: string): void {
 // touchSessionStates — family-agnostic Stop-hook session-state heartbeat
 // ---------------------------------------------------------------------------
 
+/** Type predicate: is `key` one of STATE_PREFIX's own keys (i.e. a StateType)? */
+function isStateType(key: string): key is StateType {
+	return key in STATE_PREFIX;
+}
+
 /**
  * Returns the StateType whose STATE_PREFIX prefixes `filename`, or null if none match.
  * Kept out of touchSessionStates' own body so that function's source stays free of
  * any family-name literal — this helper is the one place that reads STATE_PREFIX.
  */
 function typeFromStateFilename(filename: string): StateType | null {
-	for (const type of Object.keys(STATE_PREFIX) as StateType[]) {
-		if (filename.startsWith(STATE_PREFIX[type])) return type;
+	for (const [type, prefix] of Object.entries(STATE_PREFIX)) {
+		if (isStateType(type) && filename.startsWith(prefix)) return type;
 	}
 	return null;
 }

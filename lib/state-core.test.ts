@@ -1196,6 +1196,8 @@ describe("touchSessionStates", () => {
 
 		const src = readFileSync(join(import.meta.dir, "state-core.ts"), "utf8");
 		const fnSrc = extractFunctionSource(src, "touchSessionStates");
+		expect(fnSrc).not.toContain("goal-state-");
+		expect(fnSrc).not.toContain("ultragoal-state-");
 		expect(fnSrc).not.toContain("qa-state-");
 		expect(fnSrc).not.toContain("prometheus-state-");
 		expect(fnSrc).not.toContain("deep-interview-active-state-");
