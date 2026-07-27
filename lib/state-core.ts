@@ -5,7 +5,7 @@
  *   nowStamp()                    — ISO-seconds timestamp, round-trips BSD/GNU date parser
  *   isSafeSessionId(id)           — validates ^[A-Za-z0-9_-]+$, length 1..200
  *   resolveSessionIdOrThrow()     — reads OMT_SESSION_ID env (fallback: CODEX_THREAD_ID), throws if absent/unsafe
- *   mergeWithHeartbeat(p, q)      — {...p, ...q, last_touched_at: nowStamp()}
+ *   mergeWithHeartbeat(p, q)      — {...p, ...q, last_touched_at: nowStamp(), progress_touched_at: nowStamp()}
  *   ACTIVE_IDLE_TTL_SECONDS       — 21600 (6 hours) — TS definition site (parity-tested vs bash)
  *   TERMINAL_TTL_SECONDS          — 1800 (30 minutes) — TS definition site
  *   isStateLive(parsed, nowEpoch) — Single liveness rule; fallback: last_touched_at → started_at
@@ -114,14 +114,27 @@ export function resolveSessionIdOrThrow(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Merges `partial` over `prior` and sets `last_touched_at` to `nowStamp()`.
- * Every state writer calls this — heartbeat is always refreshed on any write.
+ * Merges `partial` over `prior` and stamps two timestamps, both `nowStamp()`,
+ * that answer two different questions:
+ *   - `last_touched_at`     — GC axis: "is this session alive?" Also refreshed
+ *     by touchSessionStates' Stop-hook heartbeat (see below), so a session with
+ *     long-running subagents survives SessionStart GC's TTL sweep.
+ *   - `progress_touched_at` — wedge axis: "is this family's work actually
+ *     progressing?" Stamped ONLY here, at a genuine producer write — the
+ *     heartbeat never touches it. lib/persistent-mode-core/decision.ts's
+ *     blocking checks (deep-interview, prometheus) key off this field instead
+ *     of last_touched_at, so a heartbeat-revived TTL-stale corpse cannot wedge
+ *     the session merely because the GC-axis timestamp was kept fresh.
+ * Every genuine state writer (goal-state.ts, ultragoal-state.ts,
+ * prometheus-state.ts, deep-interview-state.ts, qa-state.ts) calls this — both
+ * timestamps are always refreshed together on any real write.
  */
 export function mergeWithHeartbeat<T extends object>(
 	prior: T,
 	partial: Partial<T>,
-): T & { last_touched_at: string } {
-	return { ...prior, ...partial, last_touched_at: nowStamp() };
+): T & { last_touched_at: string; progress_touched_at: string } {
+	const ts = nowStamp();
+	return { ...prior, ...partial, last_touched_at: ts, progress_touched_at: ts };
 }
 
 // ---------------------------------------------------------------------------
