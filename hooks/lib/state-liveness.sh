@@ -204,7 +204,8 @@ is_artifact_live() {
 
   if [ -z "$touched_epoch" ]; then
     # Cannot determine mtime (missing file, unreadable, race) — treat as live
-    # (fail-safe), matching is_state_live's fail-open direction (:90-93 above).
+    # (fail-safe), matching is_state_live's own "cannot determine age; treat
+    # as live" fallback-mtime branch.
     # This -z check is load-bearing: `$(( now_epoch - touched_epoch ))` with an
     # empty (but set) touched_epoch evaluates to `now_epoch` in bash, not an
     # error — silently flipping the fail direction to "delete" without this guard.
