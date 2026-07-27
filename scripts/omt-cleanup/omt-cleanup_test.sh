@@ -1036,6 +1036,191 @@ test_execute_succeeds_when_reap_helpers_report_no_failure() {
 }
 
 # ---------------------------------------------------------------------------
+# Arg-parsing regression — the old parser only ever looked at $1, so a
+# contradictory combination (--execute --dry-run, or the reverse order) let
+# whichever flag happened to land in $1 silently win, and an unrecognized
+# argument (e.g. a typo'd --excute) fell through to the safe default without
+# telling the caller their flag was ignored. Each test below seeds a real
+# dead state file (7h-idle active goal-state, a genuine reap candidate) so
+# "rejected" is checked against actual survival on disk, not just an exit
+# code — a rejection that still deleted before erroring would pass an
+# exit-code-only assertion.
+# ---------------------------------------------------------------------------
+
+test_conflicting_flags_execute_then_dryrun_rejected() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local proj_dir="$FIXTURE_HOME/.omt/conflict-execute-then-dryrun-project"
+    mkdir -p "$proj_dir"
+    local state_file="$proj_dir/goal-state-conflict-exec-then-dry-sess.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+
+    local rc=0
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --execute --dry-run 2>&1) || rc=$?
+
+    if [[ $rc -eq 0 ]]; then
+        echo "ASSERTION FAILED: --execute --dry-run must exit non-zero"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    if ! echo "$out" | grep -q "Usage"; then
+        echo "ASSERTION FAILED: rejection must show usage"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    if [[ ! -f "$state_file" ]]; then
+        echo "ASSERTION FAILED: --execute --dry-run must not delete anything — the conflicting combination was rejected instead of one flag silently winning"
+        return 1
+    fi
+    return 0
+}
+
+test_conflicting_flags_dryrun_then_execute_rejected() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local proj_dir="$FIXTURE_HOME/.omt/conflict-dryrun-then-execute-project"
+    mkdir -p "$proj_dir"
+    local state_file="$proj_dir/goal-state-conflict-dry-then-exec-sess.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+
+    local rc=0
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --dry-run --execute 2>&1) || rc=$?
+
+    if [[ $rc -eq 0 ]]; then
+        echo "ASSERTION FAILED: --dry-run --execute must exit non-zero"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    if ! echo "$out" | grep -q "Usage"; then
+        echo "ASSERTION FAILED: rejection must show usage"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    if [[ ! -f "$state_file" ]]; then
+        echo "ASSERTION FAILED: --dry-run --execute must not delete anything — the conflicting combination was rejected instead of one flag silently winning, regardless of argument order"
+        return 1
+    fi
+    return 0
+}
+
+test_unrecognized_argument_rejected_not_silently_dryrun() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local proj_dir="$FIXTURE_HOME/.omt/unrecognized-arg-project"
+    mkdir -p "$proj_dir"
+    local state_file="$proj_dir/goal-state-unrecognized-arg-sess.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+
+    local rc=0
+    local out
+    out=$(bash "$CLEANUP_SCRIPT" --excute 2>&1) || rc=$?
+
+    if [[ $rc -eq 0 ]]; then
+        echo "ASSERTION FAILED: an unrecognized argument (typo'd --excute) must exit non-zero, not fall through to dry-run silently"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    if ! echo "$out" | grep -q "Usage"; then
+        echo "ASSERTION FAILED: rejection must show usage"
+        echo "  Output: ${out}"
+        return 1
+    fi
+    # State file surviving here is expected either way (rejection or a
+    # silent dry-run fallback would both preserve it) — the exit-code check
+    # above is what actually distinguishes the two; this just confirms
+    # rejection didn't also delete something as a side effect.
+    if [[ ! -f "$state_file" ]]; then
+        echo "ASSERTION FAILED: an unrecognized argument must not delete anything"
+        return 1
+    fi
+    return 0
+}
+
+# Negative controls for the three rejection tests above: without these, all
+# three could "pass" merely because the script now does nothing on any input
+# — these prove --execute alone still reaps and no-args still preserves.
+test_negative_control_execute_alone_still_deletes() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local proj_dir="$FIXTURE_HOME/.omt/negative-control-execute-project"
+    mkdir -p "$proj_dir"
+    local state_file="$proj_dir/goal-state-negctrl-exec-sess.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+
+    bash "$CLEANUP_SCRIPT" --execute > /dev/null
+
+    if [[ -f "$state_file" ]]; then
+        echo "ASSERTION FAILED: --execute alone must still delete a real dead state file"
+        return 1
+    fi
+    return 0
+}
+
+test_negative_control_no_args_still_preserves() {
+    local stale_ts
+    stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local proj_dir="$FIXTURE_HOME/.omt/negative-control-noargs-project"
+    mkdir -p "$proj_dir"
+    local state_file="$proj_dir/goal-state-negctrl-noargs-sess.json"
+    cat > "$state_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "last_touched_at": "${stale_ts}",
+  "outcome": "stale goal",
+  "iteration": 1
+}
+EOF
+
+    bash "$CLEANUP_SCRIPT" > /dev/null
+
+    if [[ ! -f "$state_file" ]]; then
+        echo "ASSERTION FAILED: no-args (default dry-run) must still preserve a real dead state file"
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1109,6 +1294,13 @@ main() {
     run_test test_execute_fails_when_dead_state_reap_reports_failure
     run_test test_execute_fails_when_session_artifact_reap_reports_failure
     run_test test_execute_succeeds_when_reap_helpers_report_no_failure
+
+    # Arg-parsing regression — contradictory/unrecognized flags rejected
+    run_test test_conflicting_flags_execute_then_dryrun_rejected
+    run_test test_conflicting_flags_dryrun_then_execute_rejected
+    run_test test_unrecognized_argument_rejected_not_silently_dryrun
+    run_test test_negative_control_execute_alone_still_deletes
+    run_test test_negative_control_no_args_still_preserves
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
