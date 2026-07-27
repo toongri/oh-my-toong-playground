@@ -74,6 +74,19 @@ assert_allow() {
         echo "ASSERTION FAILED $label: expected allow (exit 0), got exit $rc, output '$out'"
         return 1
     fi
+    # Both files must EXIST, not merely be empty. `[ -s ]` is false for a path
+    # nothing ever created, so a row that captures only one stream would have
+    # its other check pass silently -- exactly the slip assert_deny refuses.
+    # This helper has the larger call-site count, so the skip-when-absent
+    # default was the wider hole of the two.
+    if [ -z "$stdout_file" ] || [ ! -e "$stdout_file" ]; then
+        echo "ASSERTION FAILED $label: no captured stdout file was passed (\"$stdout_file\") -- the silence contract cannot be judged, so this call pins a weaker contract than every other allow site"
+        return 1
+    fi
+    if [ -z "$stderr_file" ] || [ ! -e "$stderr_file" ]; then
+        echo "ASSERTION FAILED $label: no captured stderr file was passed (\"$stderr_file\") -- the silence contract cannot be judged, so this call pins a weaker contract than every other allow site"
+        return 1
+    fi
     if [ -s "$stdout_file" ]; then
         echo "ASSERTION FAILED $label: expected empty stdout (allow contract is silent, hooks/codex-spawn-depth-gate.sh:29-36), got '$out'"
         return 1
@@ -1177,7 +1190,7 @@ test_row15_unindexable_stdin_payload_allows() {
 # =============================================================================
 test_row16_unreadable_rollout_file_allows() {
     new_sandbox
-    local rollout payload out rc=0 result=0 stderr_file stdout_file unreadable
+    local rollout payload out rc=0 result=0 stderr_file stdout_file unreadable handed_tp
 
     stderr_file="$SBX/stderr.txt"
     stdout_file="$SBX/stdout.txt"
@@ -1185,22 +1198,98 @@ test_row16_unreadable_rollout_file_allows() {
     chmod 000 "$rollout"
     payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
 
-    printf '%s' "$payload" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
+    printf '%s' "$payload" | tee "$SBX/hook-stdin.json" | run_hook >"$stdout_file" 2>"$stderr_file" || rc=$?
     out=$(cat "$stdout_file")
 
-    # Read the property back BEFORE restoring the mode. The depth-2 fixture
-    # means a readable file denies, so `assert_allow` alone would catch a lost
-    # chmod -- but not a lost chmod paired with a fixture drifted below the
-    # cap, which is the shape this row exists to survive.
+    # Graded against the payload the hook was handed, following the hook's own
+    # precondition chain: it only reaches the read for a name that clears the
+    # tool-name short-circuit, and only for the path named in that payload.
+    # `$rollout` is the fixture-side variable -- with the name or the path
+    # drifted, the hook exits before `head` ever runs while that variable still
+    # describes an unreadable file, and this row (the sole pin on the head
+    # stderr suppression) reports nothing. Read BEFORE restoring the mode.
     unreadable=0
-    [ -r "$rollout" ] || unreadable=1
+    handed_tp=$(jq -r '.transcript_path // empty' "$SBX/hook-stdin.json" 2>/dev/null) || handed_tp=""
+    if hook_reached_rollout "$SBX/hook-stdin.json" \
+        && [ -n "$handed_tp" ] && [ -f "$handed_tp" ] && [ ! -r "$handed_tp" ]; then
+        unreadable=1
+    fi
     chmod 644 "$rollout"
     if [ "$unreadable" -ne 1 ]; then
-        echo "ASSERTION FAILED row16-unreadable-rollout: the rollout the hook was handed is READABLE -- this row only pins the head stderr suppression while it is not"
+        echo "ASSERTION FAILED row16-unreadable-rollout: the hook was not handed a spawning tool name over an existing-but-unreadable rollout (name cleared=$(hook_reached_rollout "$SBX/hook-stdin.json" && echo yes || echo no), path=\"$handed_tp\") -- this row only pins the head stderr suppression while it is"
         result=1
     fi
 
     if ! assert_allow "$out" "$rc" "row16-unreadable-rollout" "$stderr_file" "$stdout_file"; then result=1; fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
+# Row 17 -- the self-check machinery's own alarm. Every other row pins a
+# defense inside the hook; this one pins the two devices the rows themselves
+# rest on, because both shipped invisible to this suite:
+#
+#   (a) hook_reached_rollout -- no fixture ever sent a non-spawn name to a row
+#       calling a gated helper, so the gate's own `return 1` branch was never
+#       taken and deleting the gate from all three helpers stayed green.
+#   (b) hook_saw_depth's per-line loop -- every rollout fixture holds one JSON
+#       value per physical line, so the loop and the stream-plus-`head -1` form
+#       it replaced agree on every input the suite supplies. Regressing the
+#       helper to that older form stayed green too.
+#
+# Both devices exist to stop the same failure: a self-check certifying a state
+# the hook is not in. An undefended device is one edit from gone, and the row
+# it feeds -- row7, the only pin on the `-gt` comparator -- then certifies a
+# boundary the hook never reached. That regression direction is a false DENY
+# on a gate with no bypass.
+# =============================================================================
+test_row17_self_check_devices_report_hook_state() {
+    new_sandbox
+    local rollout payload result=0 seen line_no depth
+
+    # (a) A name the hook short-circuits on. The rollout would yield depth 2,
+    # so a helper reading it regardless returns a value; one gated on the
+    # hook's own short-circuit returns nothing.
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"Bash", transcript_path:$tp}')
+    printf '%s' "$payload" > "$SBX/hook-stdin.json"
+
+    seen=$(hook_saw_depth "$SBX/hook-stdin.json")
+    if [ -n "$seen" ]; then
+        echo "ASSERTION FAILED row17-reachability-gate: hook_saw_depth reported \"$seen\" for a tool name the hook short-circuits on -- it must report nothing, or every row it feeds grades a code path the hook never entered"
+        result=1
+    fi
+    line_no=$(rollout_depth_line "$SBX/hook-stdin.json")
+    if [ -n "$line_no" ]; then
+        echo "ASSERTION FAILED row17-reachability-gate: rollout_depth_line reported \"$line_no\" for a tool name the hook short-circuits on -- it must report nothing"
+        result=1
+    fi
+    if hook_recovery_pressured "$SBX/hook-stdin.json"; then
+        echo "ASSERTION FAILED row17-reachability-gate: hook_recovery_pressured reported pressure for a tool name the hook short-circuits on -- it must not, the hook never opened the rollout"
+        result=1
+    fi
+
+    # (b) Two JSON values on ONE physical line. The hook runs its jq per line
+    # and keeps the WHOLE result, so it sees a two-line non-numeric value and
+    # falls back to 0. A helper that streams the window through one jq and
+    # takes `head -1` reports the first number instead -- the divergence that
+    # would let row7 certify a boundary the hook is not standing on.
+    rollout=$(mk_rollout '{"payload":{"source":{"subagent":{"thread_spawn":{"depth":1}}}}} {"payload":{"source":{"subagent":{"thread_spawn":{"depth":2}}}}}')
+    payload=$(jq -n --arg tp "$rollout" '{tool_name:"collaborationspawn_agent", transcript_path:$tp}')
+    printf '%s' "$payload" > "$SBX/hook-stdin.json"
+
+    depth=$(hook_saw_depth "$SBX/hook-stdin.json")
+    case "$depth" in
+        *[!0-9]*)
+            # What the hook itself computes: non-numeric -> cur=0.
+            ;;
+        *)
+            echo "ASSERTION FAILED row17-per-line-predicate: hook_saw_depth reported the all-digit value \"$depth\" for a line carrying two JSON values -- the hook keeps the whole per-line result there and reads it as non-numeric, so a digit means the helper is streaming the window instead of mirroring the hook"
+            result=1
+            ;;
+    esac
 
     rm -rf "$SBX"
     return "$result"
@@ -1232,6 +1321,7 @@ main() {
     run_test test_row14_depth_on_fourth_line_beyond_scan_window_allows
     run_test test_row15_unindexable_stdin_payload_allows
     run_test test_row16_unreadable_rollout_file_allows
+    run_test test_row17_self_check_devices_report_hook_state
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
