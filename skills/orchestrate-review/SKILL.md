@@ -81,7 +81,7 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"
 
 Response JSON (done):
 ```json
-{ "overallState": "done", "id": "...", "members": [{ "member": "line-scan", "outputFilePath": "/path/to/output.txt", "errorMessage": null }] }
+{ "overallState": "done", "id": "...", "members": [{ "member": "correctness", "outputFilePath": "/path/to/output.txt", "errorMessage": null }] }
 ```
 Response JSON (not done — re-run this step):
 ```json
@@ -178,15 +178,13 @@ Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quor
 
 - **{file}:{line}** — {summary}
   - failure_scenario: {concrete inputs/state → wrong output, crash, or lost effect; for cleanup, the concrete cost}
-  - found by: {angle(s), e.g. "line-scan" or "line-scan + cross-file"}
+  - found by: {angle(s), e.g. "correctness" or "correctness + regression"}
 
 ### Angle Coverage
-- line-scan: {K candidates | found nothing | Unavailable ([state])}
+- correctness: {K candidates | found nothing | Unavailable ([state])}
 - regression: {…}
-- cross-file: {…}
 - cleanup: {…}
-- security: {…}
-- coverage: {…}
+- requirement: {…}
 
 ### Find Token Usage
 ```json
