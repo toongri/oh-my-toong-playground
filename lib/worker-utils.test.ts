@@ -13,6 +13,10 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { EventEmitter } from "events";
 import { spawn as spawnChild, execSync } from "child_process";
+// reapOwnProcessGroup는 여기서 직접 import하지 않는다 — 자기 프로세스 그룹을
+// 대상으로 동작해 인프로세스 호출이 불가능하므로, 하단 "reapOwnProcessGroup"
+// describe 블록이 절대 경로(WORKER_UTILS_ABS_PATH)로 별도 스크립트에서 import해
+// 자식 프로세스 하니스로 검증한다.
 import {
 	splitCommand,
 	atomicWriteJson,
@@ -20,7 +24,6 @@ import {
 	runOnce,
 	runOneTurn,
 	resumeOneTurn,
-	reapOwnProcessGroup,
 	type RunOnceOpts,
 	type RunOneTurnOpts,
 } from "./worker-utils.ts";
