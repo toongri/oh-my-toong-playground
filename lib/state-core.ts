@@ -9,14 +9,22 @@
  *   ACTIVE_IDLE_TTL_SECONDS       — 21600 (6 hours) — TS definition site (parity-tested vs bash)
  *   TERMINAL_TTL_SECONDS          — 1800 (30 minutes) — TS definition site
  *   isStateLive(parsed, nowEpoch) — Single liveness rule; fallback: last_touched_at → started_at
+ *   isProgressLive(parsed, now)   — Wedge/progress-axis liveness: isStateLive keyed off
+ *                                    progress_touched_at (fallback: last_touched_at) instead of
+ *                                    last_touched_at directly — immune to GC-only heartbeat revival
  *   STATE_PREFIX                  — type → filename prefix map
- *   listOthers(type)              — ACTIVE-live non-pristine other-session candidates
+ *   listOthers(type)              — ACTIVE + progress-live non-pristine other-session candidates
  *   adopt(type, srcSid)           — atomic rename re-key, rules r1-r8
  *   restampAfterAdopt(path)       — post-rename heartbeat re-stamp via writeFileNoCreate
  *   writeFileNoCreate(path, s)    — single-syscall no-create write (ENOENT if absent)
  *   isPristine(type, parsed)      — true iff state is freshly seeded, safe for adoption overwrite
  *   touchSessionStates(sid)       — family-agnostic heartbeat: refreshes last_touched_at on
  *                                    every existing, non-pristine state file for sid
+ *   backfillProgressTouchedAt(p)  — the progress_touched_at patch every GC-only writer (this
+ *                                    module's touchSessionStates/restampAfterAdopt, and
+ *                                    lib/persistent-mode-core/state.ts's updateGoalState/
+ *                                    updateUltragoalState heartbeat-only calls) must apply
+ *                                    before overwriting last_touched_at
  *
  * Sid is derived from FILENAME ONLY — never read a session-id field from file content.
  * This module does NOT create state files; adoption may only rename existing ones.
@@ -190,6 +198,45 @@ export function isStateLive(
 	}
 }
 
+/**
+ * The wedge/progress-axis liveness predicate: the same isStateLive rule above,
+ * but keyed off `progress_touched_at` — falling back to `last_touched_at` only
+ * when `progress_touched_at` is absent — instead of `last_touched_at` directly.
+ *
+ * `last_touched_at` answers "is this session alive?" (the GC axis) and is
+ * revived on every Stop-hook heartbeat (touchSessionStates below) — including on
+ * a TTL-stale corpse that stopped making real progress long ago. Any consumer
+ * that must not be fooled by that revival reads this predicate instead:
+ * `progress_touched_at` is stamped fresh only by a genuine producer write
+ * (mergeWithHeartbeat above), and is only ever MIGRATED — never stamped fresh —
+ * by a GC-only writer (touchSessionStates, restampAfterAdopt below; see
+ * backfillProgressTouchedAt's doc comment). Two independent consumer classes
+ * rely on this: lib/persistent-mode-core/decision.ts's deep-interview/prometheus
+ * corpse-block checks (deciding whether to BLOCK), and listOthers/adopt below
+ * (deciding whether a source is a genuine, in-progress adoption candidate) — a
+ * source revived only by a heartbeat must not look "in progress" to either.
+ *
+ * Falling back to `last_touched_at` directly (rather than to `started_at`) is
+ * safe only because of the invariant backfillProgressTouchedAt establishes:
+ * `progress_touched_at` absent ⟹ no GC-only writer has ever touched this file ⟹
+ * `last_touched_at` is still that file's last genuine-activity timestamp, not a
+ * value a GC-only write could have kept artificially fresh.
+ */
+export function isProgressLive(
+	parsed: {
+		active?: boolean;
+		last_touched_at?: string;
+		started_at?: string;
+		progress_touched_at?: string;
+	},
+	nowEpoch: number,
+): boolean {
+	return isStateLive(
+		{ ...parsed, last_touched_at: parsed.progress_touched_at ?? parsed.last_touched_at },
+		nowEpoch,
+	);
+}
+
 // ---------------------------------------------------------------------------
 // State-type prefix map
 // ---------------------------------------------------------------------------
@@ -221,28 +268,56 @@ function parseEpoch(iso: string): number | null {
 }
 
 /**
- * Returns the `progress_touched_at` patch a GC-only writer (touchSessionStates,
- * restampAfterAdopt) must apply BEFORE it overwrites `last_touched_at`.
+ * Sentinel backfilled into `progress_touched_at` when there is no genuine
+ * `last_touched_at` to preserve (absent or not a string) — an epoch old enough
+ * that isStateLive/isProgressLive always read it as dead. Without this, the
+ * naive backfill `{ progress_touched_at: parsed["last_touched_at"] }` would be
+ * `{ progress_touched_at: undefined }` on such a file; JSON.stringify drops an
+ * undefined-valued key, so `progress_touched_at` would stay absent on disk after
+ * the FIRST GC-only touch (even though `last_touched_at` was already bumped to
+ * now). A SECOND GC-only touch would then see `progress_touched_at` still
+ * absent and backfill again — this time from the FIRST touch's own fresh GC
+ * stamp, promoting a GC-only timestamp into the progress axis. Stamping this
+ * sentinel instead guarantees `progress_touched_at` is a real, present value
+ * after the very first touch, so a later touch's presence check (below) always
+ * finds it and never re-derives it from an intervening GC write.
+ */
+const NEVER_TOUCHED_SENTINEL = "1970-01-01T00:00:00+00:00";
+
+/**
+ * Returns the `progress_touched_at` patch every GC-only writer must apply
+ * BEFORE it overwrites `last_touched_at`. Callers: this module's
+ * touchSessionStates and restampAfterAdopt below, and
+ * lib/persistent-mode-core/state.ts's updateGoalState/updateUltragoalState on
+ * their heartbeat-only (empty-partial) path — all five state families funnel
+ * their GC-only writes through this one patch, which is what makes the
+ * invariant below actually hold across all five, not just the three (deep-
+ * interview, prometheus, qa) that only ever go through this module's own
+ * writers.
  *
- * Both of those writers refresh `last_touched_at` (the GC-liveness axis) without
- * a genuine producer write ever having happened — unlike mergeWithHeartbeat,
- * which stamps `progress_touched_at` (the wedge-liveness axis lib/persistent-mode-core/
- * decision.ts's isProgressLive reads) only at real work. Left alone, a GC-only
+ * Every GC-only writer refreshes `last_touched_at` (the GC-liveness axis)
+ * without a genuine producer write ever having happened — unlike
+ * mergeWithHeartbeat, which stamps `progress_touched_at` (the wedge-liveness
+ * axis isProgressLive above reads) only at real work. Left alone, a GC-only
  * writer touching a legacy file (one written before `progress_touched_at`
  * existed) would permanently erase that file's last genuine-activity timestamp
  * the moment it stamps `last_touched_at` — the fresh GC stamp becomes the ONLY
  * record left of when the file was last real. This patch closes that: when
- * `progress_touched_at` is already present, a real producer write owns it, so
- * return {} and leave it untouched. When absent, migrate the current (soon to
- * be overwritten) `last_touched_at` into it FIRST, preserving the last genuine-
- * activity timestamp instead of losing it. This establishes the invariant
- * isProgressLive's fallback (decision.ts) depends on: progress_touched_at
- * absent ⟹ no GC-only writer has ever touched this file ⟹ last_touched_at is
- * still that file's last genuine-activity timestamp.
+ * `progress_touched_at` is already present, a real producer write (or an
+ * earlier GC-only backfill) owns it, so return {} and leave it untouched. When
+ * absent, migrate the current (soon to be overwritten) `last_touched_at` into
+ * it FIRST — or, when even that is absent/not a string, stamp
+ * NEVER_TOUCHED_SENTINEL (see its own doc comment for why a plain `undefined`
+ * value cannot be used here) — preserving the last genuine-activity timestamp
+ * instead of losing it. This establishes the invariant isProgressLive's
+ * fallback depends on: progress_touched_at absent ⟹ no GC-only writer has ever
+ * touched this file ⟹ last_touched_at is still that file's last genuine-
+ * activity timestamp.
  */
-function backfillProgressTouchedAt(parsed: Record<string, unknown>): Record<string, unknown> {
+export function backfillProgressTouchedAt(parsed: Record<string, unknown>): Record<string, unknown> {
 	if (typeof parsed["progress_touched_at"] === "string") return {};
-	return { progress_touched_at: parsed["last_touched_at"] };
+	const lta = parsed["last_touched_at"];
+	return { progress_touched_at: typeof lta === "string" ? lta : NEVER_TOUCHED_SENTINEL };
 }
 
 /** Extracts the sid from a state filename given the prefix. */
@@ -279,21 +354,26 @@ function readParsed(path: string): Record<string, unknown> | null {
 }
 
 /**
- * Narrows a parsed state record down to the shape isStateLive expects, without
- * an unsafe cast. Fields with the wrong runtime type are treated as absent —
- * matches how isStateLive already only ever receives well-formed state files
- * written by this module.
+ * Narrows a parsed state record down to the shape isStateLive/isProgressLive
+ * expect, without an unsafe cast. Fields with the wrong runtime type are
+ * treated as absent — matches how isStateLive already only ever receives
+ * well-formed state files written by this module. Includes
+ * `progress_touched_at` (isStateLive itself ignores the extra field; only
+ * isProgressLive reads it) so one shape serves both predicates.
  */
 function toLivenessShape(parsed: Record<string, unknown>): {
 	active?: boolean;
 	last_touched_at?: string;
 	started_at?: string;
+	progress_touched_at?: string;
 } {
 	return {
 		active: typeof parsed["active"] === "boolean" ? parsed["active"] : undefined,
 		last_touched_at:
 			typeof parsed["last_touched_at"] === "string" ? parsed["last_touched_at"] : undefined,
 		started_at: typeof parsed["started_at"] === "string" ? parsed["started_at"] : undefined,
+		progress_touched_at:
+			typeof parsed["progress_touched_at"] === "string" ? parsed["progress_touched_at"] : undefined,
 	};
 }
 
@@ -395,13 +475,21 @@ export interface AdoptionCandidate {
 }
 
 /**
- * Returns all ACTIVE-live candidates of the given type OTHER than the current session.
+ * Returns all ACTIVE + progress-live candidates of the given type OTHER than
+ * the current session.
  *
  * - Reads $OMT_DIR for files matching `STATE_PREFIX[type]*`
  * - Excludes the current session's file
  * - Skips malformed files (parse-fail) without throwing
- * - Filters to ACTIVE-live only (active===true && isStateLive)
+ * - Filters to ACTIVE + progress-live only (active===true && isProgressLive) —
+ *   NOT isStateLive: a source revived only by a GC-only heartbeat
+ *   (touchSessionStates/restampAfterAdopt keep its GC-axis last_touched_at
+ *   fresh with no real work having happened) must not be offered as an
+ *   in-progress candidate merely because that axis looks alive.
  * - Sid derived from filename only — never reads session-id from file content
+ * - `idleSeconds` is likewise measured on the progress axis
+ *   (progress_touched_at ?? last_touched_at), so it reports genuine idle time,
+ *   not idle time since the last heartbeat.
  *
  * Used in adoption UX: skill presents these candidates to the user before calling adopt().
  */
@@ -428,13 +516,15 @@ export function listOthers(type: StateType): AdoptionCandidate[] {
 		// Parse the file — skip malformed
 		const parsed = readParsed(join(omtDir, entry));
 		if (parsed === null) continue;
-		// Only ACTIVE-live candidates (r7 source filter)
+		// Only ACTIVE + progress-live candidates (r7 source filter). Progress axis,
+		// not GC axis: a source revived only by a heartbeat must not qualify.
 		if (parsed["active"] !== true) continue;
-		if (!isStateLive(toLivenessShape(parsed), now)) continue;
+		const shape = toLivenessShape(parsed);
+		if (!isProgressLive(shape, now)) continue;
 		// Pristine seeds are INERT to consumers (f9f3242): skip empty-purpose seeds
 		if (isPristine(type, parsed)) continue;
-		const lta = String(parsed["last_touched_at"] ?? "");
-		const touched = parseEpoch(lta);
+		const progressTouched = shape.progress_touched_at ?? shape.last_touched_at ?? "";
+		const touched = progressTouched ? parseEpoch(progressTouched) : null;
 		const idleSeconds = touched !== null ? Math.max(0, now - touched) : 0;
 		results.push({
 			sid,
@@ -491,8 +581,9 @@ export function restampAfterAdopt(path: string): void {
  *   r3: refused iff current exists AND (ACTIVE non-pristine OR malformed)
  *   r4: atomic fs.renameSync; ENOENT → throw, no mutation
  *   r5: post-rename best-effort heartbeat re-stamp via restampAfterAdopt (failure → stderr warn)
- *   r6: LIVE source adoptable (checked via isStateLive)
- *   r7: source must be ACTIVE-live (TERMINAL/stale/malformed refused)
+ *   r6: LIVE source adoptable (checked via isProgressLive — progress axis, not GC axis)
+ *   r7: source must be ACTIVE + progress-live (TERMINAL/progress-stale/malformed refused;
+ *       a source revived only by a GC-only heartbeat does not qualify)
  *   r8: source must not be pristine (pristine seeds are INERT — f9f3242)
  *
  * Sid is derived from filename only — never reads session-id from file content.
@@ -522,7 +613,11 @@ export function adopt(type: StateType, srcSid: string): void {
 	const dstPath = statePath(type, curSid);
 	const now = Math.floor(Date.now() / 1000);
 
-	// r7: source must be ACTIVE-live
+	// r7: source must be ACTIVE + progress-live. Progress axis, not GC axis: a
+	// source kept "alive" only by a GC-only heartbeat (touchSessionStates/
+	// restampAfterAdopt) with no real work since must be refused, exactly like a
+	// source with no heartbeat at all — otherwise the heartbeat alone would be
+	// enough to resurrect a stale corpse as an adoptable candidate.
 	const srcParsed = readParsed(srcPath);
 	if (srcParsed === null) {
 		throw new Error(
@@ -532,7 +627,7 @@ export function adopt(type: StateType, srcSid: string): void {
 	if (srcParsed["active"] !== true) {
 		throw new Error(`adopt: source "${srcPath}" is not ACTIVE (r7: TERMINAL sources are refused)`);
 	}
-	if (!isStateLive(toLivenessShape(srcParsed), now)) {
+	if (!isProgressLive(toLivenessShape(srcParsed), now)) {
 		throw new Error(
 			`adopt: source "${srcPath}" failed the liveness check (r7: TTL-expired or no parseable timestamp — only live sources are adoptable)`,
 		);
@@ -765,9 +860,10 @@ function typeFromStateFilename(filename: string): StateType | null {
  * directory does not exist, does nothing. A pristine state is skipped — a freshly
  * seeded state must not be kept alive by a heartbeat it never really used. Every
  * per-file error (ENOENT from a read/write race, a parse failure, a malformed file)
- * is swallowed and the sweep continues — this runs inside the Stop hook's subagent
- * guard, immediately before that guard's own return, so a throw here would corrupt
- * the hook's own decision.
+ * is swallowed and the sweep continues — this is called unconditionally at the
+ * very top of makeDecision (lib/persistent-mode-core/decision.ts), before Guard
+ * 2's activeSubagentCount check, wrapped in its own try/catch there, so a throw
+ * here would corrupt the Stop hook's decision if it were allowed to propagate.
  *
  * GC-only writer (see backfillProgressTouchedAt's doc comment): before this
  * refreshes `last_touched_at`, it backfills `progress_touched_at` from the

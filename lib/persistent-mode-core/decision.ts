@@ -21,7 +21,7 @@ import {
 import { generateAttemptId, ensureDir } from "./utils.ts";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { isPristine, isStateLive, touchSessionStates } from "@lib/state-core";
+import { isPristine, isProgressLive, touchSessionStates } from "@lib/state-core";
 
 export interface DecisionContext {
 	projectRoot: string;
@@ -67,51 +67,11 @@ function toRecord(value: object): Record<string, unknown> {
 	return Object.fromEntries(Object.entries(value));
 }
 
-/**
- * Wedge-axis liveness. `touchSessionStates` revives `last_touched_at` on every
- * family so a subagent-busy session's state survives SessionStart GC — but this
- * branch decides whether to BLOCK, and a revived corpse must not wedge the
- * session. Genuine producer writes stamp `progress_touched_at`
- * (mergeWithHeartbeat); a GC-only writer (touchSessionStates, restampAfterAdopt)
- * never stamps it directly — it only backfills it once, from the pre-overwrite
- * `last_touched_at`, the first time it touches a file that lacks it (see
- * `backfillProgressTouchedAt` in lib/state-core.ts).
- *
- * `last_touched_at` is overwritten with `progress_touched_at` when present,
- * falling back to the (untouched-by-any-GC-writer) `last_touched_at` itself
- * when absent — never to `started_at`. An earlier version of this fallback used
- * `started_at` instead, reasoning that `last_touched_at` could not be trusted
- * because the heartbeat revives it. That broke the opposite case: a long-running
- * session (`started_at` hours old) that was genuinely active moments ago
- * (`last_touched_at` fresh) read as dead, because session AGE — not idle time —
- * decided liveness. `started_at` is also never refreshed by anything, so it
- * cannot even distinguish idle from active; it is not a liveness signal at all.
- *
- * Falling back to `last_touched_at` directly is now safe because of the
- * invariant `backfillProgressTouchedAt` establishes: `progress_touched_at`
- * absent ⟹ no GC-only writer has ever touched this file ⟹ `last_touched_at` is
- * still that file's last genuine-activity timestamp — not a value the heartbeat
- * could have kept artificially fresh. The very next GC-only touch (heartbeat or
- * adopt) backfills `progress_touched_at` from that pre-overwrite value BEFORE
- * bumping `last_touched_at`, so the fallback here is only ever exercised on a
- * value no GC write has polluted, and the very next genuine producer write
- * stamps `progress_touched_at` directly, after which this fallback no longer
- * applies to that file at all.
- */
-function isProgressLive(
-	state: {
-		active?: boolean;
-		last_touched_at?: string;
-		started_at?: string;
-		progress_touched_at?: string;
-	},
-	nowEpoch: number,
-): boolean {
-	return isStateLive(
-		{ ...state, last_touched_at: state.progress_touched_at ?? state.last_touched_at },
-		nowEpoch,
-	);
-}
+// isProgressLive (wedge-axis liveness) now lives in lib/state-core.ts, shared
+// with that module's own listOthers/adopt gate — both must judge "is this
+// family's work actually progressing?" by the same rule, or the two consumers
+// silently diverge (as they did before that gate was fixed to read this axis
+// too). See its doc comment there for the full fallback-safety reasoning.
 
 function formatBlockOutput(reason: string): HookOutput {
 	return {
@@ -420,7 +380,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	// Why this does NOT self-blind the corpse checks further down (deep-interview
 	// and prometheus, both via isProgressLive): both read progress_touched_at
 	// first, falling back to last_touched_at only when progress_touched_at is
-	// absent (see isProgressLive's doc comment above). touchSessionStates never
+	// absent (see isProgressLive's doc comment in lib/state-core.ts). touchSessionStates never
 	// stamps progress_touched_at directly — it only BACKFILLS it, once, from the
 	// file's pre-overwrite last_touched_at, before bumping last_touched_at itself
 	// (backfillProgressTouchedAt in lib/state-core.ts). So a corpse's genuinely-
@@ -707,8 +667,8 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// from the one check this task adds.
 			//
 			// This does NOT re-open a wedge on old interviews, for the same two reasons
-			// TTL-stale/pristine already don't wedge on the checks above: (1) `isStateLive`
-			// gates the whole `if` below — a TTL-stale interview falls through to cleanup
+			// TTL-stale/pristine already don't wedge on the checks above: (1) `isProgressLive`
+			// gates the whole `if` below — a progress-stale interview falls through to cleanup
 			// regardless of this flag, exactly like magnitudeUnconverged/hasUnscoredActiveComponent
 			// today; (2) a pristine seed (no `state` key at all) never reaches this branch's
 			// arithmetic in the first place when it has no done-token — it is caught by the
@@ -730,15 +690,23 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			!isPristine("deep-interview", toRecord(deepInterviewStateRaw)) &&
 			isProgressLive(deepInterviewStateRaw, nowEpoch)
 		) {
-			// Block only a LIVE non-pristine interview. Two fall-through exceptions:
+			// Block only a progress-LIVE non-pristine interview. Two fall-through exceptions:
 			//   - Pristine seed (no rich `state`): a seed-only file written by the PreToolUse
 			//     hook before the skill prose ran; INERT to all consumers.
-			//   - TTL-stale (idle past ACTIVE_IDLE_TTL): the interview process is effectively
-			//     dead. Blocking here would wedge the session on a corpse that session-start GC
-			//     (is_state_live) already treats as reapable — this branch's own isStateLive
-			//     check (in the condition above) agrees by falling through instead of
-			//     blocking; the two consumers must stay in agreement.
-			// Either orphan ages toward TTL and is GC'd naturally; neither blocks session stop.
+			//   - Progress-stale (idle past ACTIVE_IDLE_TTL on progress_touched_at ??
+			//     last_touched_at): no real work has happened recently, even if a heartbeat
+			//     has kept the GC axis (last_touched_at) looking fresh. Falling through here
+			//     does NOT mean session-start GC will reap the file soon — GC reads the GC
+			//     axis (bash's is_state_live), which stays fresh as long as the session keeps
+			//     calling into this hook, so "should I block?" (this branch, progress axis)
+			//     and "should GC reap this file?" (bash, GC axis) are deliberately answered by
+			//     different axes and are NOT required to agree. What DOES have to agree — and
+			//     now does, via the shared isProgressLive export in lib/state-core.ts — is
+			//     this progress-axis check and the identical gate listOthers/adopt use before
+			//     offering or accepting this same file as an adoption candidate: a corpse
+			//     revived only by a heartbeat must not look progressing to either consumer.
+			// The orphan is inert either way — it ages toward its own eventual reap once the
+			// owning session stops calling this hook (heartbeat ceases); neither blocks stop.
 			return formatBlockOutput(buildDeepInterviewContinuationMessage(askToolName));
 		}
 	}
@@ -751,10 +719,18 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			cleanupPrometheusState(sessionId);
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
 		} else if (isProgressLive(prometheusState, nowEpoch)) {
-			// TTL-stale (idle past ACTIVE_IDLE_TTL) → fall through, no block: the planning
-			// process is dead and session-start GC will reap it; this fallthrough is the
-			// second consumer that must agree — done-token cleanup above stays unconditional
-			// (an emitted token finalizes regardless of liveness).
+			// Progress-stale (idle past ACTIVE_IDLE_TTL on the progress axis) → fall
+			// through, no block. This does NOT mean session-start GC will reap the file
+			// soon: GC reads the separate GC axis (last_touched_at / bash's
+			// is_state_live), which this same call's touchSessionStates heartbeat just
+			// refreshed — as long as the session keeps calling into this hook, the file
+			// stays GC-alive even though it made no real progress. GC only reaps it once
+			// the session itself stops (heartbeat ceases) and last_touched_at is left to
+			// age past its own TTL. Until then this branch is simply inert — it declines
+			// to block, but nothing cleans the file up either. That is acceptable because
+			// inert does not mean unsafe: it does not wedge the user, and the OTHER
+			// consumer (done-token cleanup above) still fires unconditionally on a real
+			// completion signal regardless of liveness.
 			const blockCount = getBlockCount(stateDir, prometheusAttemptId);
 			if (blockCount >= MAX_BLOCK_COUNT) {
 				cleanupBlockCountFiles(stateDir, prometheusAttemptId);

@@ -2587,13 +2587,18 @@ describe("makeDecision", () => {
 
 		// Corrected invariant (replaces a prior "legacy positive control" test that
 		// asserted the OPPOSITE of what is correct here — it encoded a since-reverted
-		// attempt that fell back to `started_at`). A legacy file that no GC-only
-		// writer has ever touched (progress_touched_at absent, and no heartbeat
-		// crossing happens in this test — activeSubagentCount defaults to 0) must be
-		// judged by `last_touched_at` alone: it is still the file's last genuine-
-		// activity timestamp. A fresh `started_at` on an old, idle session must NOT
-		// resurrect it — session AGE is not the liveness signal, IDLE TIME is.
-		it("legacy file with no heartbeat crossing: a fresh started_at does NOT block a genuinely idle last_touched_at", async () => {
+		// attempt that fell back to `started_at`). A legacy file that has never had a
+		// GC-only writer touch it (progress_touched_at absent) must be judged by
+		// `last_touched_at` alone. touchSessionStates now fires unconditionally on
+		// every makeDecision call regardless of activeSubagentCount, so a heartbeat
+		// crossing DOES happen even in this single-call test — but its effect here is
+		// a backfill, not a corruption: progress_touched_at is set to the PRE-heartbeat
+		// last_touched_at value (this test's stale value), never to the fresh stamp
+		// that same call just wrote to last_touched_at. So the judgment is still
+		// effectively "the pre-heartbeat last_touched_at, unchanged" — a fresh
+		// `started_at` on an old, idle session must NOT resurrect it — session AGE is
+		// not the liveness signal, IDLE TIME is.
+		it("legacy file with a heartbeat crossing: a fresh started_at does NOT block a genuinely idle last_touched_at", async () => {
 			const sid = "wedge-di-legacy-idle-last-touched";
 			const fresh = new Date().toISOString();
 			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
@@ -3043,6 +3048,209 @@ describe("makeDecision", () => {
 			);
 			expect(result).toEqual({ continue: true });
 			expect(fs.existsSync(chainCountFile)).toBe(false);
+		});
+	});
+
+	// Hole 1 (companion to the wedge-axis describe above): updateGoalState and
+	// updateUltragoalState (lib/persistent-mode-core/state.ts) are GC-only writers
+	// in the same sense as touchSessionStates/restampAfterAdopt whenever they are
+	// called with an EMPTY partial — the non-pursuing-active suppression path
+	// refreshes the heartbeat with no real work having happened (ADR-8: "every
+	// suppression read IS a use"). Measured findings (two distinct, independently
+	// confirmed defects — NOT the single symmetric defect a naive read of
+	// touchSessionStates' own fix would suggest):
+	//
+	//  (a) Called through the ONLY current production path (makeDecision), the
+	//      empty-partial case does NOT actually corrupt anything: touchSessionStates
+	//      fires unconditionally, first, on every makeDecision call (see the "The
+	//      heartbeat (touchSessionStates) fires HERE" comment above), and it already
+	//      backfills progress_touched_at before updateGoalState/updateUltragoalState
+	//      ever run — so by the time the empty-partial call reads the file, a legacy
+	//      file's progress_touched_at is already present and gets carried through
+	//      untouched by the plain object spread. The "backfills from touchSessionStates
+	//      preceding it" tests below document and pin this already-correct behavior.
+	//  (b) Called in ISOLATION — i.e. the function's own contract, independent of
+	//      call order in its one current caller — the empty-partial path IS broken:
+	//      it overwrites last_touched_at unconditionally with no backfill of its own,
+	//      permanently losing the file's last genuine-activity timestamp the moment
+	//      progress_touched_at is still absent. This is a real defect in the function
+	//      itself (the documented state-core.ts invariant — "progress_touched_at
+	//      absent ⟹ no GC-only writer has touched this file" — is a lie about this
+	//      function read on its own), even though today's single caller happens to
+	//      never trigger it. The "in isolation" tests below reproduce this directly.
+	//  (c) A DIFFERENT, more serious defect than either (a) or (b) as originally
+	//      hypothesized: once progress_touched_at IS backfilled (by touchSessionStates,
+	//      case (a)), a SUBSEQUENT genuine, non-empty-partial write (e.g. the
+	//      "pursuing" phase's per-Stop iteration++) does NOT advance it — the
+	//      current code has no notion that a non-empty partial is real progress, so
+	//      progress_touched_at freezes at whatever it was first backfilled to and
+	//      never moves again, even while the goal/ultragoal loop keeps genuinely
+	//      iterating. A goal actively pursued for hours would eventually read as
+	//      progress-dead to listOthers/adopt despite continuous real work. The
+	//      "genuine iteration advance" tests below reproduce this — it is the one
+	//      actually reachable through the real makeDecision call path today.
+	describe("goal/ultragoal progress_touched_at across the GC-only vs genuine-write split (hole 1)", () => {
+		it("goal (in isolation): an empty-partial call to updateGoalState loses the genuine last_touched_at with no backfill of its own", async () => {
+			const { updateGoalState } = await import("./state.ts");
+			const sid = "goal-isolated-empty-partial-loses-history";
+			const staleTouch = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+			const statePath = join(omtDir, `goal-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					phase: "blocked",
+					iteration: 3,
+					outcome: "some real goal",
+					max_iterations: 10,
+					started_at: staleTouch,
+					last_touched_at: staleTouch,
+					// no progress_touched_at — legacy shape
+				}),
+			);
+
+			// Called directly — NOT through makeDecision, so touchSessionStates never
+			// runs first. This is the function's own contract in isolation.
+			updateGoalState(sid, {});
+
+			const after = JSON.parse(await readFile(statePath, "utf8"));
+			// last_touched_at is bumped to now, as documented.
+			expect(Math.abs(Date.now() - Date.parse(after.last_touched_at))).toBeLessThan(5000);
+			// The pre-write last_touched_at (the file's last genuine-activity signal)
+			// must survive into progress_touched_at — an unprotected empty-partial
+			// write must not be the one place this invariant is allowed to break.
+			expect(after.progress_touched_at).toBe(staleTouch);
+		});
+
+		it("ultragoal (in isolation): an empty-partial call to updateUltragoalState loses the genuine last_touched_at with no backfill of its own", async () => {
+			const { updateUltragoalState } = await import("./state.ts");
+			const sid = "ultragoal-isolated-empty-partial-loses-history";
+			const staleTouch = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+			const statePath = join(omtDir, `ultragoal-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					phase: "blocked",
+					iteration: 3,
+					outcome: "some real ultragoal",
+					max_iterations: 10,
+					started_at: staleTouch,
+					last_touched_at: staleTouch,
+					// no progress_touched_at — legacy shape
+				}),
+			);
+
+			updateUltragoalState(sid, {});
+
+			const after = JSON.parse(await readFile(statePath, "utf8"));
+			expect(Math.abs(Date.now() - Date.parse(after.last_touched_at))).toBeLessThan(5000);
+			expect(after.progress_touched_at).toBe(staleTouch);
+		});
+
+		it("goal (full stack): an empty-partial suppression heartbeat is ALREADY safe today, because touchSessionStates backfills first", async () => {
+			const sid = "goal-suppression-heartbeat-backfill";
+			const staleTouch = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+			const statePath = join(omtDir, `goal-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					phase: "blocked",
+					iteration: 3,
+					outcome: "some real goal",
+					max_iterations: 10,
+					started_at: staleTouch,
+					last_touched_at: staleTouch,
+					// no progress_touched_at — legacy shape
+				}),
+			);
+
+			makeDecision(createContext({ sessionId: sid }));
+
+			const after = JSON.parse(await readFile(statePath, "utf8"));
+			expect(Math.abs(Date.now() - Date.parse(after.last_touched_at))).toBeLessThan(5000);
+			expect(after.progress_touched_at).toBe(staleTouch);
+		});
+
+		it("ultragoal (full stack): an empty-partial suppression heartbeat is ALREADY safe today, because touchSessionStates backfills first", async () => {
+			const sid = "ultragoal-suppression-heartbeat-backfill";
+			const staleTouch = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+			const statePath = join(omtDir, `ultragoal-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					phase: "blocked",
+					iteration: 3,
+					outcome: "some real ultragoal",
+					max_iterations: 10,
+					started_at: staleTouch,
+					last_touched_at: staleTouch,
+					// no progress_touched_at — legacy shape
+				}),
+			);
+
+			makeDecision(createContext({ sessionId: sid }));
+
+			const after = JSON.parse(await readFile(statePath, "utf8"));
+			expect(Math.abs(Date.now() - Date.parse(after.last_touched_at))).toBeLessThan(5000);
+			expect(after.progress_touched_at).toBe(staleTouch);
+		});
+
+		it("goal: a genuine iteration advance (non-empty partial) DOES advance progress_touched_at, unlike freezing at the first backfilled value", async () => {
+			const sid = "goal-genuine-progress-advances";
+			const staleTouch = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+			const statePath = join(omtDir, `goal-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					iteration: 3,
+					outcome: "some real goal",
+					max_iterations: 10,
+					started_at: staleTouch,
+					last_touched_at: staleTouch,
+					// no progress_touched_at — legacy shape
+				}),
+			);
+
+			makeDecision(createContext({ sessionId: sid }));
+
+			const after = JSON.parse(await readFile(statePath, "utf8"));
+			expect(after.iteration).toBe(4);
+			// A genuine write (iteration advanced) is real progress — progress_touched_at
+			// advances to now. Without the fix, touchSessionStates (which runs first)
+			// backfills progress_touched_at to the stale pre-call last_touched_at, and
+			// updateGoalState's own genuine write never advances it past that — so this
+			// would stay ~7h stale despite iteration having just genuinely moved.
+			expect(Math.abs(Date.now() - Date.parse(after.progress_touched_at))).toBeLessThan(5000);
+		});
+
+		it("ultragoal: a genuine iteration advance (non-empty partial) DOES advance progress_touched_at, unlike freezing at the first backfilled value", async () => {
+			const sid = "ultragoal-genuine-progress-advances";
+			const staleTouch = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+			const statePath = join(omtDir, `ultragoal-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					iteration: 3,
+					outcome: "some real ultragoal",
+					max_iterations: 10,
+					started_at: staleTouch,
+					last_touched_at: staleTouch,
+					// no progress_touched_at — legacy shape
+				}),
+			);
+
+			makeDecision(createContext({ sessionId: sid }));
+
+			const after = JSON.parse(await readFile(statePath, "utf8"));
+			expect(after.iteration).toBe(4);
+			expect(Math.abs(Date.now() - Date.parse(after.progress_touched_at))).toBeLessThan(5000);
 		});
 	});
 });
