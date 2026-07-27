@@ -56,7 +56,7 @@ oh-my-toong/
 ├── config.yaml      # Global defaults (use-platforms, feature-platforms, backup retention)
 ├── claude.yaml      # Per-platform config (config/hooks/mcps/plugins)
 ├── gemini.yaml      # Per-platform config (config/hooks/mcps)
-├── codex.yaml       # Per-platform config (config/mcps/model-map)
+├── codex.yaml       # Per-platform config (hooks/mcps/model-map)
 ├── opencode.yaml    # Per-platform config (config/mcps/model-map)
 └── sync.yaml        # Root sync definition (+ projects/*/sync.yaml per project)
 ```
@@ -91,7 +91,7 @@ skills:
 
 **Post-deploy format** (top-level `format: "<command>"` or `format: ["<arg>", …]`): Optional. When declared, the sync tool runs this command once at each target after deploy, so deployed files land already in the target's own formatter normal form. See `docs/sync-deploy-targets.md`.
 
-**Per-platform YAML** (`{platform}.yaml`): Colocated with `sync.yaml`, inheriting its `path`. Manages config/hooks/mcps/plugins per platform — separate from `sync.yaml` which handles component deployment only (agents, commands, skills, scripts, rules). Config/hooks/mcps deep-merge into the target's gitignored `.claude/settings.local.json` (global sync uses `settings.json`); see `docs/platform-yaml-config-deployment.md` for the deployment target and the two-layer gitignore mechanism (why a personal absolute path is safe in `claude.yaml`, not just `claude.local.yaml`).
+**Per-platform YAML** (`{platform}.yaml`): Colocated with `sync.yaml`, inheriting its `path`. Manages config/hooks/mcps/plugins per platform — separate from `sync.yaml` which handles component deployment only (agents, commands, skills, scripts, rules). Config/hooks/mcps deep-merge into the target's gitignored `.claude/settings.local.json` (global sync uses `settings.json`); a key set to `null` in that merge deletes the key from the target file (RFC 7386 JSON Merge Patch semantics) — deleting the key from the source YAML alone does not remove it from an already-deployed file, only an explicit `null` does — distinct from setting a whole section (`config:`/`hooks:`/`mcps:`) to `null`, which excludes that section from deployment before the merge ever runs (`tools/adapters/claude.ts`'s pre-merge guard); see `docs/platform-yaml-config-deployment.md` for the deployment target and the two-layer gitignore mechanism (why a personal absolute path is safe in `claude.yaml`, not just `claude.local.yaml`).
 
 > **Note**: `mcps/` directory is deprecated. MCPs are now defined inline in per-platform YAML files.
 
@@ -118,6 +118,8 @@ skills:
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
 | qa | Quality Assurance verification | Comprehensive quality verification - nothing escapes |
 
+**`goal` and `ultragoal` are no longer twins.** `ultragoal` began as a structural copy of `goal` and the two were byte-identical outside the loop shape; they are now deliberately diverged — `skills/goal/` stays on six slots while `ultragoal` carries a seventh (`non-goals`), and only `ultragoal` wires Codex's native goal tools into its dispatch loop. An edit to either must not assume the sibling still matches, and must not be mirrored across by default.
+
 ### Hooks
 
 - **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start
@@ -128,6 +130,7 @@ skills:
 - **label-edit-warn.sh** / **codex-label-edit-warn.sh**: Soft-warns (never blocks) when just-written content contains a bare invented/opaque label
 - **persistent-mode/** / **codex-persistent-mode/**: Prevents stopping when work remains incomplete (shared `makeDecision`)
 - **pre-tool-enforcer.sh** / **codex-write-guard.sh**: PreToolUse gates — TaskOutput blocking, session-ledger write guard, code-review artifact identity guard; Codex twin additionally denies dangerous commands (`rm -rf`, `git push --force`)
+- **codex-spawn-depth-gate.sh**: Codex PreToolUse gate capping subagent spawn depth at 2 (Claude enforces the same cap natively via `claude.yaml`'s `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`)
 
 ### Key Workflows
 
