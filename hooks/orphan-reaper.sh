@@ -39,6 +39,24 @@
 # 미회수 원칙, lib/generic-job.ts reapOrphanJobs) -- 그 보고가 /dev/null로
 # 가면 사람이 개입할 유일한 신호가 사라지므로, stdout 계약은 유지한 채
 # stderr만 로그로 보존한다.
+#
+# cwd 고정 (bunfig.toml preload 취약점): bun은 자신의 cwd에 있는
+# bunfig.toml을 읽어 그 preload를 엔트리포인트보다 먼저 실행한다. 이 훅은
+# SessionStart에서 세션 cwd -- 즉 사용자가 방금 열었을 수 있는 임의의
+# 신뢰하지 않는 레포 -- 를 그대로 물려받으므로, 고치지 않으면 그 레포의
+# bunfig.toml이 에이전트 동작 없이 사용자 권한으로 실행된다. $JOB_TS가
+# 절대경로인 것은 이를 막지 못한다 -- bunfig 탐색 기준은 cwd이지 엔트리
+# 포인트의 위치가 아니다. bun은 bunfig.toml을 상위 디렉터리로 탐색하지
+# 않으므로(실측: 하위 디렉터리에서 실행하면 상위의 bunfig가 적용되지
+# 않음), cwd를 OMT 소유 디렉터리($SCRIPT_DIR)로 고정하는 것만으로 이
+# 경로가 닫힌다. OMT_DIR을 명시로 함께 넘기는 이유: job.ts의
+# DEFAULT_JOBS_DIR(skills/orchestrate-review/scripts/job.ts)은 모듈
+# 레벨 상수라 서브커맨드와 무관하게 import 시점에 getOmtDir()를 호출하고,
+# 그것이 mkdirSync(recursive)로 디렉터리를 생성한다 -- cwd만 SCRIPT_DIR로
+# 옮기면 배포 레이아웃($HOME/.claude/hooks, git 레포 아님)에서
+# deriveProjectName이 basename(cwd)로 후퇴해 $HOME/.omt/hooks를 새로
+# 만들어버린다. OMT_DIR을 env로 넘기면 resolveOmtDir이 그것을 최우선으로
+# 읽어 getOmtDir()의 cwd 의존을 끊는다.
 # =============================================================================
 set -euo pipefail
 
@@ -80,9 +98,9 @@ LOG_DIR="$OMT_DIR_RESOLVED/logs"
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 
 if [ -d "$LOG_DIR" ]; then
-  (bun "$JOB_TS" reap --jobs-dir "$OMT_DIR_RESOLVED/jobs" > /dev/null 2>>"$LOG_DIR/orphan-reaper.log" &)
+  (cd "$SCRIPT_DIR" && OMT_DIR="$OMT_DIR_RESOLVED" bun "$JOB_TS" reap --jobs-dir "$OMT_DIR_RESOLVED/jobs" > /dev/null 2>>"$LOG_DIR/orphan-reaper.log" &)
 else
-  (bun "$JOB_TS" reap --jobs-dir "$OMT_DIR_RESOLVED/jobs" > /dev/null 2>/dev/null &)
+  (cd "$SCRIPT_DIR" && OMT_DIR="$OMT_DIR_RESOLVED" bun "$JOB_TS" reap --jobs-dir "$OMT_DIR_RESOLVED/jobs" > /dev/null 2>/dev/null &)
 fi
 
 exit 0

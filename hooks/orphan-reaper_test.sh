@@ -11,6 +11,8 @@
 #   4. returns well inside the 10s SessionStart budget (reap fully detaches).
 #   5. reap diagnostics (stderr) survive to $OMT_DIR/logs/orphan-reaper.log
 #      instead of being discarded, while stdout stays byte-empty.
+#   6. a bunfig.toml preload in the hook's cwd (an arbitrary, possibly
+#      untrusted repo the user just opened) never executes.
 # =============================================================================
 set -euo pipefail
 
@@ -241,6 +243,65 @@ EOF
     [[ "$log_failure" -eq 0 ]]
 }
 
+# =============================================================================
+# Test 6: cwd 고정 -- 훅 프로세스 자신의 실제 cwd(SessionStart가 물려주는
+# 세션 cwd, 즉 사용자가 방금 열었을 수 있는 임의의 신뢰하지 않는 레포)에
+# 놓인 bunfig.toml의 preload가 실행되면 안 된다 (파일 헤더의 "cwd 고정
+# (bunfig.toml preload 취약점)" 문단 참조).
+#
+# JSON 입력의 .cwd 필드만으로는 이 취약점을 재현하지 못한다 -- 그 필드는
+# resolve_omt_dir의 입력일 뿐, 훅 프로세스 자신의 실제 process cwd와는
+# 무관하다(다른 테스트들이 쓰는 run_hook_isolated는 훅을 호출하는 셸의
+# cwd를 바꾸지 않는다). 실제 취약점은 훅을 실행하는 프로세스 자신의 cwd에
+# 달려 있으므로, 이 테스트는 `cd "$TEST_TMP_DIR" &&`로 그 셸 자체를
+# 픽스처 디렉터리로 옮긴 뒤 훅을 호출한다 -- SessionStart가 세션 cwd에서
+# 훅을 실행하는 것과 동일한 조건이다.
+#
+# 픽스처는 preload가 실제로 실행 "가능한" 상황을 만든다: 훅 프로세스의
+# cwd(=$TEST_TMP_DIR)에 정확히 bunfig.toml과 그 preload 대상 스크립트를
+# 둔다. preload가 실행되면 마커 파일이 생기므로, 이 픽스처 자체가
+# 무력하지 않다는 것도 이 테스트 하나로 증명된다 -- 고정이 없었다면(cd
+# 없이 bare `bun "$JOB_TS" ...`였다면) 마커가 생겼을 것이고, 고정이
+# 있으면(현재 코드) 생기지 않는다. 마커는 stderr 대신 파일로 남긴다 --
+# 훅이 stderr를 로그 파일로 리다이렉트하므로 로그를 파싱하는 것보다 파일
+# 존재 여부가 더 단단한 판정이다.
+# =============================================================================
+test_bunfig_preload_in_cwd_does_not_execute() {
+    local marker="$TEST_TMP_DIR/PWNED-PRELOAD-RAN"
+
+    cat > "$TEST_TMP_DIR/pwn.ts" <<EOF
+import { writeFileSync } from "fs";
+writeFileSync("$marker", "pwned");
+EOF
+
+    cat > "$TEST_TMP_DIR/bunfig.toml" <<EOF
+preload = ["$TEST_TMP_DIR/pwn.ts"]
+EOF
+
+    export OMT_DIR="$TEST_TMP_DIR/.omt"
+    mkdir -p "$OMT_DIR"
+    (cd "$TEST_TMP_DIR" && printf '{"cwd": "%s"}' "$TEST_TMP_DIR" | bash "$SCRIPT_DIR/orphan-reaper.sh") > /dev/null
+
+    # preload runs at bun startup, before any entrypoint code runs -- if it
+    # were going to run at all, it already has by the time bun finishes
+    # loading. Poll briefly rather than asserting immediately, since the hook
+    # detaches the whole reap call to the background (see
+    # test_returns_within_budget above) -- no `timeout` binary on this host,
+    # so bound the wait with a polling loop instead.
+    local waited=0
+    local max_wait=5
+    while [[ ! -f "$marker" && "$waited" -lt "$max_wait" ]]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    if [[ -f "$marker" ]]; then
+        echo "ASSERTION FAILED: '$marker' exists -- bunfig.toml preload in the hook's cwd ran before job.ts, meaning an untrusted repo's preload executed with the user's privileges"
+        return 1
+    fi
+    return 0
+}
+
 main() {
     echo "=========================================="
     echo "Orphan Reaper Hook Tests"
@@ -251,6 +312,7 @@ main() {
     run_test test_missing_jq_fails_open
     run_test test_returns_within_budget
     run_test test_reap_diagnostics_preserved_in_log
+    run_test test_bunfig_preload_in_cwd_does_not_execute
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
