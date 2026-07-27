@@ -1049,8 +1049,9 @@ test_execute_succeeds_when_reap_helpers_report_no_failure() {
 # ---------------------------------------------------------------------------
 
 test_conflicting_flags_execute_then_dryrun_rejected() {
-    local stale_ts
+    local stale_ts stale_touch
     stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_touch=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
 
     local proj_dir="$FIXTURE_HOME/.omt/conflict-execute-then-dryrun-project"
     mkdir -p "$proj_dir"
@@ -1064,6 +1065,15 @@ test_conflicting_flags_execute_then_dryrun_rejected() {
   "iteration": 1
 }
 EOF
+
+    # A dead session artifact alongside the dead state file — see
+    # test_dryrun_preserves_real_reap_candidates for why this lane needs its
+    # own genuine candidate, not just the state-file one: reap_session_artifacts
+    # and reap_dead_state_files are two independent delete lanes, and a
+    # rejection guard placed between them would still let this one through.
+    local artifact_file="$proj_dir/codex-todo-conflict-exec-then-dry-artifact.json"
+    printf '{"todos":[]}' > "$artifact_file"
+    touch -t "$stale_touch" "$artifact_file"
 
     local rc=0
     local out
@@ -1083,12 +1093,17 @@ EOF
         echo "ASSERTION FAILED: --execute --dry-run must not delete anything — the conflicting combination was rejected instead of one flag silently winning"
         return 1
     fi
+    if [[ ! -f "$artifact_file" ]]; then
+        echo "ASSERTION FAILED: --execute --dry-run must not delete a dead session artifact either — the rejection guard must sit ahead of BOTH reap lanes"
+        return 1
+    fi
     return 0
 }
 
 test_conflicting_flags_dryrun_then_execute_rejected() {
-    local stale_ts
+    local stale_ts stale_touch
     stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_touch=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
 
     local proj_dir="$FIXTURE_HOME/.omt/conflict-dryrun-then-execute-project"
     mkdir -p "$proj_dir"
@@ -1102,6 +1117,15 @@ test_conflicting_flags_dryrun_then_execute_rejected() {
   "iteration": 1
 }
 EOF
+
+    # A dead session artifact alongside the dead state file — see
+    # test_dryrun_preserves_real_reap_candidates for why this lane needs its
+    # own genuine candidate, not just the state-file one: reap_session_artifacts
+    # and reap_dead_state_files are two independent delete lanes, and a
+    # rejection guard placed between them would still let this one through.
+    local artifact_file="$proj_dir/codex-todo-conflict-dry-then-exec-artifact.json"
+    printf '{"todos":[]}' > "$artifact_file"
+    touch -t "$stale_touch" "$artifact_file"
 
     local rc=0
     local out
@@ -1121,12 +1145,17 @@ EOF
         echo "ASSERTION FAILED: --dry-run --execute must not delete anything — the conflicting combination was rejected instead of one flag silently winning, regardless of argument order"
         return 1
     fi
+    if [[ ! -f "$artifact_file" ]]; then
+        echo "ASSERTION FAILED: --dry-run --execute must not delete a dead session artifact either — the rejection guard must sit ahead of BOTH reap lanes"
+        return 1
+    fi
     return 0
 }
 
 test_unrecognized_argument_rejected_not_silently_dryrun() {
-    local stale_ts
+    local stale_ts stale_touch
     stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+    stale_touch=$(date -j -v-7H "+%Y%m%d%H%M" 2>/dev/null || date -d "7 hours ago" "+%Y%m%d%H%M" 2>/dev/null || echo "200001010000")
 
     local proj_dir="$FIXTURE_HOME/.omt/unrecognized-arg-project"
     mkdir -p "$proj_dir"
@@ -1140,6 +1169,15 @@ test_unrecognized_argument_rejected_not_silently_dryrun() {
   "iteration": 1
 }
 EOF
+
+    # A dead session artifact alongside the dead state file — see
+    # test_dryrun_preserves_real_reap_candidates for why this lane needs its
+    # own genuine candidate, not just the state-file one: reap_session_artifacts
+    # and reap_dead_state_files are two independent delete lanes, and a
+    # rejection guard placed between them would still let this one through.
+    local artifact_file="$proj_dir/codex-todo-unrecognized-arg-artifact.json"
+    printf '{"todos":[]}' > "$artifact_file"
+    touch -t "$stale_touch" "$artifact_file"
 
     local rc=0
     local out
@@ -1161,6 +1199,34 @@ EOF
     # rejection didn't also delete something as a side effect.
     if [[ ! -f "$state_file" ]]; then
         echo "ASSERTION FAILED: an unrecognized argument must not delete anything"
+        return 1
+    fi
+    if [[ ! -f "$artifact_file" ]]; then
+        echo "ASSERTION FAILED: an unrecognized argument must not delete a dead session artifact either — the rejection guard must sit ahead of BOTH reap lanes"
+        return 1
+    fi
+
+    # A typo AFTER a valid flag must be caught too — a parser that stops
+    # validating once it has seen one recognized flag would set DRY_RUN=0
+    # from --execute, never notice --excute, and delete for real (rc=0).
+    # Reuses the same $state_file and $artifact_file: the checks above
+    # already proved a bare --excute doesn't touch either, so both are
+    # still genuine reap candidates here.
+    local rc2=0
+    local out2
+    out2=$(bash "$CLEANUP_SCRIPT" --execute --excute 2>&1) || rc2=$?
+
+    if [[ $rc2 -eq 0 ]]; then
+        echo "ASSERTION FAILED: --execute --excute must exit non-zero — a typo after a valid flag must not be silently ignored"
+        echo "  Output: ${out2}"
+        return 1
+    fi
+    if [[ ! -f "$state_file" ]]; then
+        echo "ASSERTION FAILED: --execute --excute must not delete anything — validation stopping after the first recognized flag would silently execute"
+        return 1
+    fi
+    if [[ ! -f "$artifact_file" ]]; then
+        echo "ASSERTION FAILED: --execute --excute must not delete a dead session artifact either — validation stopping after the first recognized flag would silently execute"
         return 1
     fi
     return 0
