@@ -26,6 +26,11 @@ setup_test_env() {
     export HOME="$TEST_HOME"
     unset OMT_DIR
     unset OMT_PROJECT
+    # Scrub CLAUDE_ENV_FILE before every test's body runs -- otherwise any
+    # test spawning resume-forge-start.sh without its own override inherits
+    # the ambient value (e.g. a live Claude Code session's real env file) and
+    # the hook silently overwrites it with this suite's throwaway fixtures.
+    unset CLAUDE_ENV_FILE
 
     # Pre-compute TEST_OMT_DIR: mirrors resume-forge-start.sh OMT_DIR derivation.
     # Since TEST_TMP_DIR has no real git repo, PROJECT_NAME = basename(TEST_TMP_DIR).
@@ -378,6 +383,36 @@ test_exports_omt_project_via_claude_env_file() {
     fi
 }
 
+test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
+    # Regression guard for the ambient CLAUDE_ENV_FILE leak: this suite's own
+    # unscrubbed resume-forge-start.sh call sites used to inherit whatever
+    # CLAUDE_ENV_FILE was ambient in the runner's shell (e.g. a live Claude
+    # Code session's real env file) and the hook would unconditionally append
+    # export lines to it. setup_test_env() now scrubs CLAUDE_ENV_FILE before
+    # every test's body runs; this test re-invokes that real function (not a
+    # copy of it) after re-introducing an ambient value, so if the scrub is
+    # ever removed from setup_test_env, this goes red.
+    local fixture baseline
+    fixture=$(mktemp)
+    baseline=$(mktemp)
+    cp "$fixture" "$baseline"
+
+    export CLAUDE_ENV_FILE="$fixture"
+    setup_test_env
+    echo '{"cwd": "'"$TEST_TMP_DIR"'"}' \
+        | "$SCRIPT_DIR/resume-forge-start.sh" > /dev/null 2>&1 || true
+
+    local result=0
+    if ! cmp -s "$baseline" "$fixture"; then
+        echo "ASSERTION FAILED: CLAUDE_ENV_FILE fixture must stay byte-unchanged when ambient -- setup_test_env's scrub regressed"
+        echo "  fixture contents: $(cat "$fixture")"
+        result=1
+    fi
+
+    rm -f "$fixture" "$baseline"
+    return $result
+}
+
 # =============================================================================
 # Main Test Runner
 # =============================================================================
@@ -409,6 +444,7 @@ main() {
     # CLAUDE_ENV_FILE exports
     run_test test_exports_omt_dir_via_claude_env_file
     run_test test_exports_omt_project_via_claude_env_file
+    run_test test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
