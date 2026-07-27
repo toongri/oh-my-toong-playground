@@ -635,7 +635,8 @@ EOF
     return 0
 }
 
-# execute: the state file is deleted; no stray fragments left from word-split
+# execute: the state file is deleted; a seeded word-split artifact and a
+# seeded sibling file in the same project dir both survive untouched
 test_dead_state_space_in_home_execute_deletes_correct_file() {
     local stale_ts
     stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
@@ -660,6 +661,22 @@ test_dead_state_space_in_home_execute_deletes_correct_file() {
 }
 EOF
 
+    # Seed the two collateral-deletion shapes a word-split of a
+    # space-bearing HOME could touch, so --execute is checked against them
+    # directly instead of only against the intended target:
+    # (a) the word-split artifact — the path a naive `rm -f $HOME/...`
+    #     would form if HOME were left unquoted and split at the first
+    #     space ("$space_home/John Doe" -> "$space_home/John" + "Doe/...").
+    local stray_word_split_dir="$space_home/John"
+    mkdir -p "$stray_word_split_dir"
+    local stray_word_split_marker="$stray_word_split_dir/word-split-marker.txt"
+    echo "must survive --execute" > "$stray_word_split_marker"
+    # (b) a sibling file in the same project dir as the real target, which
+    #     --execute must leave alone (proves deletion is scoped to the
+    #     matched candidate, not the whole directory).
+    local sibling_file="$proj_dir/sibling-untouched.txt"
+    echo "must survive --execute" > "$sibling_file"
+
     HOME="$space_home_with_spaces" bash "$CLEANUP_SCRIPT" --execute > /dev/null 2>&1
 
     local result=0
@@ -670,14 +687,16 @@ EOF
         result=1
     fi
 
-    # Stray path fragments from word-split would be like "/tmp/tmpXXX/John" and "Doe/.omt/..."
-    # We detect this by checking no parent dirs or siblings were created erroneously.
-    # Specifically: the word before the space ("John") should not exist as a directory
-    # inside the fixture home (it'd be created by `rm -f /tmp/xxx/John` treating it as path).
-    # The real canary: proj_dir should be gone (rmdir cleaned it), but space_home itself intact.
-    if [[ -d "$space_home_with_spaces/.omt/space-exec-proj" ]]; then
-        # dir still exists — but only matters if state file was deleted; rmdir fails on non-empty
-        : # acceptable if something else is in there
+    # The word-split artifact must survive untouched.
+    if [[ ! -f "$stray_word_split_marker" ]]; then
+        echo "ASSERTION FAILED: word-split artifact ($stray_word_split_marker) was deleted by --execute"
+        result=1
+    fi
+
+    # The sibling file in the same project dir must survive untouched.
+    if [[ ! -f "$sibling_file" ]]; then
+        echo "ASSERTION FAILED: sibling file ($sibling_file) was deleted by --execute"
+        result=1
     fi
 
     rm -rf "$space_home"
