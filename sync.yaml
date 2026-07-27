@@ -44,6 +44,11 @@ skills:
     - scan-pdf-to-notes
     - component: meeting-notes
       platforms: [claude]
+    # 전역 등록된 SessionStart 훅 orphan-reaper.sh(claude.yaml)가
+    # $HOME/.claude/skills/orchestrate-review/scripts/job.ts를 참조한다.
+    # 전역 배포가 없으면 대상 파일이 없어 그 훅이 fail-open으로 조용히
+    # 무력화된다.
+    - orchestrate-review
     # codex 개방 근거는 두 겹이고, 두 겹이 다 필요하다.
     # (1) .md — rewrite 규칙 6a가 Skill() 호출을 $X mention sigil로 치환한다
     #     (tools/lib/rewrite-rules.ts의 id "6a" 규칙). make validate의 codex-rewrite
