@@ -3377,4 +3377,58 @@ describe("story layer: Codex native-goal snapshot cross-check gate (Gate 9)", ()
 		expect(result.stderr).toContain("--codex-goal-json");
 		expect(rawState().phase).not.toBe("complete");
 	});
+
+	// (결함 A-a, CLI 계층 회귀 가드) 기존 AC1은 setGoalState를 직접 호출해 CLI의
+	// `str(args["codex-goal-objective"])` 매핑 자체는 미검증이었다 — 이 줄이 지워져도 스위트는
+	// green이었다. `runCli`로 실제 CLI 인자 파싱까지 거쳐야 그 매핑이 깨지면 이 테스트가 빨개진다.
+	// 무엇이 훼손되면 빨개지는가: `set` 분기의 `codex_goal_objective: str(args["codex-goal-objective"])`
+	// 줄이 제거되면 저장이 조용히 멈춰 두 단언 모두 실패한다.
+	test("CLI: `set --phase pursuing --codex-goal-objective`가 실제로 저장하고 재호출 시 덮어쓴다", () => {
+		runCli('set --phase pursuing --codex-goal-objective "ship feature via cli"');
+		expect(rawState().codex_goal_objective).toBe("ship feature via cli");
+
+		runCli('set --phase pursuing --codex-goal-objective "ship feature via cli v2"');
+		expect(rawState().codex_goal_objective).toBe("ship feature via cli v2");
+	});
+
+	// (결함 A-b, CLI 계층 회귀 가드) 기존 게이트 테스트는 전부 requestComplete를 직접 호출해
+	// `requestComplete(sessionId, codexGoalArg)`로의 인자 배관 자체는 미검증이었다. Gate 9를
+	// 무장(codex_goal_objective 비공백)시킨 뒤 `--codex-goal-json`을 CLI로 넘겨야만, 그 배관이
+	// 끊겼을 때만 이 테스트가 감지한다 — 무장하지 않으면 Gate 9 분기 자체가 스킵되어 배관이
+	// 끊겨도 통과해버린다.
+	// 무엇이 훼손되면 빨개지는가: `request-complete` 분기에서 `requestComplete(sessionId, codexGoalArg)`가
+	// `requestComplete(sessionId)`로 바뀌면, 무장된 Gate 9가 codexGoalArg===undefined를 보고
+	// 거부하여 CLI가 비정상 종료하고 이 테스트가 실패한다.
+	test("CLI: `request-complete --codex-goal-json`이 phase=complete에 도달한다", () => {
+		const artifact = buildSatisfiedFixture(S);
+		writeVerdictArtifact(S, artifact);
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship it via cli" });
+
+		const snapshotPath = `${tmpDir}/gate9-cli-request-complete-snapshot.json`;
+		writeFileSync(
+			snapshotPath,
+			JSON.stringify({ goal: { objective: "ship it via cli", status: "complete" } }),
+			"utf8",
+		);
+
+		runCli(`request-complete --codex-goal-json ${snapshotPath}`);
+		expect(rawState().phase).toBe("complete");
+	});
+
+	// (결함 B) mergeWrite의 codex_goal_objective 보존 해저드: 저자 주석이 명시한 대로, 이 필드가
+	// mergeWrite의 next/prior 병합 목록에서 빠지면 플래그 없는 평범한 `set --phase pursuing` 한
+	// 번만으로 이미 등록된 codex_goal_objective가 조용히 지워진다 — 게이트 영구 무장 해제. 기존
+	// AC1은 두 호출 모두 codex-goal-objective 플래그를 실어서 호출했으므로 덮어쓰기만 고정했고
+	// 보존은 전혀 고정하지 않았다.
+	// 무엇이 훼손되면 빨개지는가: `mergeWrite`의
+	// `codex_goal_objective: next.codex_goal_objective ?? prior.codex_goal_objective ?? ""` 줄이
+	// 제거되면, 플래그 없는 두 번째 set 이후 값이 사라져 마지막 단언이 실패한다.
+	test("mergeWrite: 플래그 없는 `set --phase pursuing` 한 번은 기존 codex_goal_objective를 보존한다", () => {
+		setGoalState(S, { phase: "pursuing", codex_goal_objective: "ship feature Z" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature Z");
+
+		// codex 플래그 없는 평범한 set — 값이 지워지면 안 된다.
+		setGoalState(S, { phase: "pursuing" });
+		expect(readGoalState(S)!.codex_goal_objective).toBe("ship feature Z");
+	});
 });
