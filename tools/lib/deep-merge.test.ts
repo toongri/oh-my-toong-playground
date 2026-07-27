@@ -52,9 +52,25 @@ describe("deepMerge", () => {
 		expect(result).toEqual({ key: [1, 2] });
 	});
 
-	it("handles null values in override — replaces base value", () => {
-		const result = deepMerge({ a: { x: 1 } }, { a: null } as unknown as Record<string, unknown>);
-		expect(result).toEqual({ a: null });
+	it("deletes a top-level key when override value is null", () => {
+		const result = deepMerge({ a: 1, b: 2 }, { b: null } as unknown as Record<string, unknown>);
+		expect(result).toEqual({ a: 1 });
+		expect("b" in result).toBe(false);
+	});
+
+	it("deletes a nested key when override value is null, keeping the parent", () => {
+		const result = deepMerge(
+			{ env: { A: 1, B: 2 } },
+			{ env: { B: null } } as unknown as Record<string, unknown>,
+		);
+		expect(result).toEqual({ env: { A: 1 } });
+		expect("B" in (result.env as Record<string, unknown>)).toBe(false);
+	});
+
+	it("does not create a key when override sets null on a key absent from base", () => {
+		const result = deepMerge({ a: 1 }, { b: null } as unknown as Record<string, unknown>);
+		expect(result).toEqual({ a: 1 });
+		expect("b" in result).toBe(false);
 	});
 
 	it("handles null values in base — override wins", () => {

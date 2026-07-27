@@ -35,7 +35,10 @@ hooks:
 
 config:
   language: "한국어"
-  outputStyle: "Explanatory"
+  # 배포된 settings.json에서 outputStyle 키를 삭제하기 위한 tombstone.
+  # deepMerge는 additive라 소스에서 키를 지우는 것만으로는 이미 배포된 값이
+  # 지워지지 않는다 -- override 쪽에 null을 명시해야 delete가 실행된다.
+  outputStyle: null
   includeCoAuthoredBy: false
   env:
     CLAUDE_CODE_AUTO_COMPACT_WINDOW: "400000"
