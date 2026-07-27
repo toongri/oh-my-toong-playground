@@ -2366,6 +2366,128 @@ describe("makeDecision", () => {
 	});
 
 	// -------------------------------------------------------------------------
+	// Wedge regression: touchSessionStates (above) revives last_touched_at on
+	// EVERY family for a subagent-busy session, so a still-in-use state survives
+	// SessionStart GC. But deep-interview and prometheus decide whether to BLOCK
+	// using that same field (isStateLive) — so a heartbeat-revived TTL-stale
+	// corpse used to wedge the session forever. decision.ts now judges blocking
+	// via progress_touched_at (a wedge-axis signal the heartbeat never touches),
+	// falling back to last_touched_at only when progress_touched_at is absent
+	// (pre-existing on-disk files written before this field existed).
+	// -------------------------------------------------------------------------
+	describe("wedge-axis liveness: progress_touched_at vs last_touched_at (heartbeat revival guard)", () => {
+		const staleIso = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
+
+		it("deep-interview corpse revived by the heartbeat does not wedge the session", async () => {
+			const sid = "wedge-di-corpse";
+			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: staleIso,
+					last_touched_at: staleIso,
+					progress_touched_at: staleIso,
+					state: {
+						phase: "in_progress",
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
+				}),
+			);
+
+			// Heartbeat crossing: a Stop call while a subagent is active revives
+			// last_touched_at (GC axis) but must not touch progress_touched_at.
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			expect(heartbeatResult).toEqual({ continue: true });
+
+			const revived = JSON.parse(await readFile(statePath, "utf8"));
+			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
+			expect(revived.progress_touched_at).toBe(staleIso);
+
+			// Now Stop with no subagents active — must NOT wedge on the revived corpse.
+			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+			expect(stopResult).toEqual({ continue: true });
+		});
+
+		it("prometheus corpse revived by the heartbeat does not wedge the session (before the MAX_BLOCK_COUNT escape is even reached)", async () => {
+			const sid = "wedge-prometheus-corpse";
+			const statePath = join(omtDir, `prometheus-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: staleIso,
+					last_touched_at: staleIso,
+					progress_touched_at: staleIso,
+				}),
+			);
+
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			expect(heartbeatResult).toEqual({ continue: true });
+
+			const revived = JSON.parse(await readFile(statePath, "utf8"));
+			expect(Math.abs(Date.now() - Date.parse(revived.last_touched_at))).toBeLessThan(5000);
+			expect(revived.progress_touched_at).toBe(staleIso);
+
+			// First Stop call after revival — must not block, well before MAX_BLOCK_COUNT (5).
+			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+			expect(stopResult).toEqual({ continue: true });
+		});
+
+		it("positive control: a genuinely in-progress deep interview (fresh progress_touched_at) still blocks", async () => {
+			const sid = "wedge-di-genuine-progress";
+			const fresh = new Date().toISOString();
+			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					progress_touched_at: fresh,
+					state: {
+						phase: "in_progress",
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ sessionId: sid, lastAssistantMessage: "still working, no done token" }),
+			);
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<deep-interview-continuation>");
+		});
+
+		it("legacy fallback: a state with no progress_touched_at field at all still blocks on a fresh last_touched_at (today's behavior preserved)", async () => {
+			const sid = "wedge-di-legacy-fallback";
+			const fresh = new Date().toISOString();
+			const statePath = join(omtDir, `deep-interview-active-state-${sid}.json`);
+			await writeFile(
+				statePath,
+				JSON.stringify({
+					active: true,
+					started_at: fresh,
+					last_touched_at: fresh,
+					// no progress_touched_at — simulates a file written before this field existed
+					state: {
+						phase: "in_progress",
+						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
+					},
+				}),
+			);
+
+			const result = makeDecision(
+				createContext({ sessionId: sid, lastAssistantMessage: "still working, no done token" }),
+			);
+
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("<deep-interview-continuation>");
+		});
+	});
+
+	// -------------------------------------------------------------------------
 	// Story 3: the shared continuation-contract skeleton (continuationContract())
 	// must appear in every continuation builder's output, with per-family ask
 	// posture: "preferred" (deep-interview/prometheus/todo) vs "exceptional"

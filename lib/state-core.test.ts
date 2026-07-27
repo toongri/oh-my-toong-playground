@@ -211,6 +211,20 @@ describe("mergeWithHeartbeat (A5)", () => {
 		const result = mergeWithHeartbeat(prior, { outcome: "new" });
 		expect(result.outcome).toBe("new");
 	});
+
+	// Wedge-axis regression: last_touched_at (GC axis) and progress_touched_at
+	// (wedge axis) answer different questions and must both be stamped by every
+	// genuine producer write, so decision.ts can tell a heartbeat-revived corpse
+	// apart from real progress.
+	test("also stamps progress_touched_at alongside last_touched_at", () => {
+		const prior = {
+			active: true,
+			started_at: "2020-01-01T00:00:00+00:00",
+			last_touched_at: "2020-01-01T00:00:00+00:00",
+		};
+		const result = mergeWithHeartbeat(prior, {});
+		expect(result.progress_touched_at).toBe(result.last_touched_at);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -1330,5 +1344,31 @@ describe("touchSessionStates", () => {
 		const theirs = readState(omtDir, `goal-state-${other}.json`) as Record<string, unknown>;
 		expect(Math.abs(Date.now() - Date.parse(mine["last_touched_at"] as string))).toBeLessThan(5000);
 		expect(theirs["last_touched_at"]).toBe(old);
+	});
+
+	// The load-bearing tooth for the GC-axis/wedge-axis split: the heartbeat may
+	// freely advance last_touched_at (GC liveness), but must never touch
+	// progress_touched_at (decision.ts's wedge-liveness signal) — otherwise a
+	// revived corpse would look like real progress again.
+	test("advances last_touched_at but leaves progress_touched_at untouched — proves the GC axis and the wedge axis are separate signals", () => {
+		const sid = "touch-progress-separation";
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			state: { initial_idea: "x" },
+			started_at: old,
+			last_touched_at: old,
+			progress_touched_at: old,
+		});
+
+		touchSessionStates(sid);
+
+		const parsed = readState(omtDir, `deep-interview-active-state-${sid}.json`) as Record<
+			string,
+			unknown
+		>;
+		const touchedMs = Date.parse(parsed["last_touched_at"] as string);
+		expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+		expect(parsed["progress_touched_at"]).toBe(old);
 	});
 });

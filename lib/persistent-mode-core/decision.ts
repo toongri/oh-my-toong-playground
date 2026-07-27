@@ -67,6 +67,30 @@ function toRecord(value: object): Record<string, unknown> {
 	return Object.fromEntries(Object.entries(value));
 }
 
+/**
+ * Wedge-axis liveness. `touchSessionStates` revives `last_touched_at` on every
+ * family so a subagent-busy session's state survives SessionStart GC — but this
+ * branch decides whether to BLOCK, and a revived corpse must not wedge the
+ * session. Genuine producer writes stamp `progress_touched_at`
+ * (mergeWithHeartbeat); the heartbeat never touches it. Files written before
+ * that field existed fall back to `last_touched_at` — self-healing on the next
+ * genuine write.
+ */
+function isProgressLive(
+	state: {
+		active?: boolean;
+		last_touched_at?: string;
+		started_at?: string;
+		progress_touched_at?: string;
+	},
+	nowEpoch: number,
+): boolean {
+	if (typeof state.progress_touched_at === "string") {
+		return isStateLive({ ...state, last_touched_at: state.progress_touched_at }, nowEpoch);
+	}
+	return isStateLive(state, nowEpoch);
+}
+
 function formatBlockOutput(reason: string): HookOutput {
 	return {
 		decision: "block",
@@ -660,14 +684,14 @@ export function makeDecision(context: DecisionContext): HookOutput {
 
 			if (
 				(magnitudeUnconverged || hasUnscoredActiveComponent || hasNoNonGoalDecider) &&
-				isStateLive(deepInterviewStateRaw, nowEpoch)
+				isProgressLive(deepInterviewStateRaw, nowEpoch)
 			) {
 				return formatBlockOutput(buildDeepInterviewContinuationMessage(askToolName));
 			}
 			cleanupDeepInterviewState(sessionId);
 		} else if (
 			!isPristine("deep-interview", toRecord(deepInterviewStateRaw)) &&
-			isStateLive(deepInterviewStateRaw, nowEpoch)
+			isProgressLive(deepInterviewStateRaw, nowEpoch)
 		) {
 			// Block only a LIVE non-pristine interview. Two fall-through exceptions:
 			//   - Pristine seed (no rich `state`): a seed-only file written by the PreToolUse
@@ -689,7 +713,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		if (detectPrometheusDone(lastAssistantMessage)) {
 			cleanupPrometheusState(sessionId);
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
-		} else if (isStateLive(prometheusState, nowEpoch)) {
+		} else if (isProgressLive(prometheusState, nowEpoch)) {
 			// TTL-stale (idle past ACTIVE_IDLE_TTL) → fall through, no block: the planning
 			// process is dead and session-start GC will reap it; this fallthrough is the
 			// second consumer that must agree — done-token cleanup above stays unconditional
