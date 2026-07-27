@@ -105,35 +105,55 @@ The details of the library's skills (42) and agents (13) live under `docs/`.
 
    `make sync` fails unless the current branch is the default branch and the working tree has no staged, unstaged, or untracked changes — synchronization only runs after a commit. There is no dedicated env var or CLI flag that turns the gate off, though redirecting `HOME` can still bypass it via your ambient global git config. `make sync-dry` is exempt from this gate, so it stays usable as a preview even before committing. See `docs/sync-deploy-targets.md` (Korean) for the gate's exact scope and trade-offs.
 
-### Per-Project Skill Differentiation
+### Per-Project Convention Differentiation
 
-When skills with the same name need different conventions per project's language/framework, create project-specific overrides in the `projects/` directory.
+Different projects' languages and frameworks sometimes call for different judgment criteria, even under the same convention name. The `projects/` directory expresses this with a project-scoped `rules/` and `docs/`: `rules/` is a thin index that only says "open this document for this situation," while `docs/` holds the actual grounding — judgment criteria, examples, rationale. Splitting the index from the documents lets an agent open only what a situation needs instead of reading everything every time, and keeps the criteria living in exactly one place so rules and docs never duplicate each other.
+
+Two projects differentiate their conventions this way.
 
 ```
 projects/
-└── loopers-kotlin-spring-template/
-    └── skills/
-        ├── testing/
-        │   └── SKILL.md    # Classical TDD, no verify(), BDD structure
-        └── implementation/
-            └── SKILL.md    # Kotlin/Spring architecture patterns
+├── loop-pack-fe-l2-vol1/            # 16 docs + 8 rules
+│   ├── rules/                        # situational index: react, testing, nextjs, ...
+│   └── docs/
+│       ├── react/                    # component boundaries, hook design, props contracts
+│       ├── testing/                  # test layers, tooling, verification criteria
+│       └── nextjs/                   # App Router, data/asset conventions
+└── loopers-kotlin-spring-template/  # 19 docs + 7 rules
+    ├── rules/                        # situational index: test-strategy, layer-placement, ...
+    └── docs/
+        ├── testing/                  # per-level test criteria: unit, integration, concurrency, ...
+        └── implementation/           # architecture patterns: domain events, layer boundaries, ...
 ```
 
-When a skill is referenced in `sync.yaml`, the sync process searches the project folder first and falls back to global.
+`sync.yaml` declares which rules and docs a project deploys. A doc item written as a directory name lands whole — the entire subtree beneath it.
 
 ```yaml
 # projects/loopers-kotlin-spring-template/sync.yaml
-skills:
+rules:
   items:
-    - testing          # → projects/loopers-.../skills/testing/ (project first)
-    - diagnose         # → skills/diagnose/ (global fallback)
+    - test-strategy
+    - layer-placement
+    - domain-model
+    - api-contract
+    # ... 7 project-scoped rules total, each pointing into docs/testing or docs/implementation
 
+# The grounding docs the rules point readers to with "read docs/testing/...". Directory form →
+# the whole docs/testing/ lands as docs/testing/, and implementation/ as docs/implementation/.
+docs:
+  items:
+    - testing
+    - implementation
+```
+
+Skill overrides are still supported. `projects/toong-java-spring-template/` overrides the `testing`/`implementation` skills directly from its project folder — when `sync.yaml` references a skill, sync searches the project folder first and falls back to global. To inject a project skill into just one agent, use `add-skills`.
+
+```yaml
 agents:
   items:
     - component: sisyphus-junior
       add-skills:
-        - testing          # Injects project-specific testing skill into sisyphus-junior
-        - implementation   # Injects project-specific implementation skill into sisyphus-junior
+        - testing   # Injects the project's testing skill into sisyphus-junior
 ```
 
 ## Local Override

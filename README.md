@@ -105,35 +105,55 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
    `make sync`는 현재 브랜치가 default 브랜치가 아니거나 워킹트리에 staged/unstaged/untracked 변경이 하나라도 있으면 실패합니다 — 즉 커밋 후에만 동기화할 수 있습니다. 게이트를 끄는 전용 환경변수나 CLI 플래그는 없지만, `HOME`을 갈아끼우면 전역 git 설정을 통해 우회할 수 있습니다. `make sync-dry`는 이 게이트 대상이 아니므로 커밋 전에도 미리보기용으로 쓸 수 있습니다. 게이트가 실제로 막는 범위와 트레이드오프는 `docs/sync-deploy-targets.md` 참고.
 
-### 프로젝트별 스킬 분화
+### 프로젝트별 컨벤션 분화
 
-같은 이름의 스킬이라도 프로젝트의 언어/프레임워크에 따라 다른 컨벤션이 필요할 때, `projects/` 디렉토리에 프로젝트별 오버라이드를 생성합니다.
+같은 컨벤션이라도 프로젝트의 언어/프레임워크에 따라 판단 기준이 달라질 때가 있습니다. `projects/` 디렉토리는 프로젝트 스코프의 `rules/`와 `docs/`로 이걸 표현합니다: `rules/`는 "이런 상황이면 이 문서를 열어라"만 말하는 얇은 인덱스이고, 판단 기준·예시·근거는 `docs/`가 근거 문서로 담습니다. 인덱스와 문서를 나누면 에이전트가 매번 전량을 읽지 않고 필요한 문서만 열 수 있고, 판단 기준이 문서 쪽 한 곳에만 있어 rule과 doc 사이에 중복이 생기지 않습니다.
+
+두 프로젝트가 이 방식으로 컨벤션을 분화시킵니다.
 
 ```
 projects/
-└── loopers-kotlin-spring-template/
-    └── skills/
-        ├── testing/
-        │   └── SKILL.md    # Classical TDD, verify() 금지, BDD 구조
-        └── implementation/
-            └── SKILL.md    # Kotlin/Spring 아키텍처 패턴
+├── loop-pack-fe-l2-vol1/            # docs 16개 + rules 8개
+│   ├── rules/                        # react, testing, nextjs 등 상황별 인덱스
+│   └── docs/
+│       ├── react/                    # 컴포넌트 경계, 훅 설계, props 계약
+│       ├── testing/                  # 테스트 레이어, 도구, 검증 기준
+│       └── nextjs/                   # App Router, 데이터/에셋 규칙
+└── loopers-kotlin-spring-template/  # docs 19개 + rules 7개
+    ├── rules/                        # test-strategy, layer-placement 등 상황별 인덱스
+    └── docs/
+        ├── testing/                  # 단위/통합/동시성 등 레벨별 테스트 기준
+        └── implementation/           # 도메인 이벤트, 레이어 경계 등 아키텍처 패턴
 ```
 
-`sync.yaml`에서 스킬을 참조하면, 동기화 시 해당 프로젝트 폴더를 먼저 검색하고 없으면 글로벌로 폴백합니다.
+`sync.yaml`은 프로젝트가 어떤 rule과 doc을 배포할지 선언합니다. doc 항목은 디렉토리 이름으로 적으면 하위 전체가 그대로 착지합니다.
 
 ```yaml
 # projects/loopers-kotlin-spring-template/sync.yaml
-skills:
+rules:
   items:
-    - testing          # → projects/loopers-.../skills/testing/ (프로젝트 우선)
-    - diagnose         # → skills/diagnose/ (글로벌 폴백)
+    - test-strategy
+    - layer-placement
+    - domain-model
+    - api-contract
+    # ... 이 프로젝트 스코프 rule 7개, 각각 docs/testing 또는 docs/implementation의 문서를 가리킴
 
+# rule들이 "docs/testing/…를 읽어라"로 가리키는 근거 문서. 디렉토리 형태 →
+# docs/testing/ 전체가 docs/testing/로, implementation/ 전체가 docs/implementation/로 착지한다.
+docs:
+  items:
+    - testing
+    - implementation
+```
+
+스킬 오버라이드는 여전히 지원됩니다. `projects/toong-java-spring-template/`는 `testing`/`implementation` 스킬을 프로젝트 폴더에서 직접 오버라이드합니다 — `sync.yaml`에서 스킬을 참조하면 동기화 시 프로젝트 폴더를 먼저 검색하고 없으면 글로벌로 폴백합니다. 특정 에이전트에만 프로젝트 스킬을 주입하려면 `add-skills`를 씁니다.
+
+```yaml
 agents:
   items:
     - component: sisyphus-junior
       add-skills:
-        - testing          # sisyphus-junior에 프로젝트별 testing 스킬 주입
-        - implementation   # sisyphus-junior에 프로젝트별 implementation 스킬 주입
+        - testing   # sisyphus-junior에 프로젝트별 testing 스킬 주입
 ```
 
 ## 로컬 오버라이드
