@@ -288,7 +288,7 @@ class CouponV1Response {
 
 ## 11. 이런 생각이 들면 멈춰라 — Critical Rules 발췌
 
-`SKILL.md`의 Critical Rules에 실린 전체 Red Flags 목록 중, DTO 흐름에 관한 것은 아래 한 행이다. 나머지 항목은 각 관심사의 형제 문서가 갖고 있다.
+이 프로젝트의 Critical Rules Red Flags 중, DTO 흐름에 관한 것은 아래 한 행이다. 나머지 항목은 각 관심사의 형제 문서가 갖고 있다.
 
 | Thought | Reality |
 |---|---|

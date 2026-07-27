@@ -374,9 +374,9 @@ import org.springframework.data.jpa.repository.JpaRepository  // ❌
 
 | Domain에서 허용 | Domain에서 금지 |
 |------------------|---------------------|
-| JPA: `@Entity`, `@Table`, `@Column` | `@Transactional` |
-| `@Component` on Service | `@JsonProperty`, `@JsonIgnore` |
-| | Spring Data imports |
+| JPA: `@Entity`, `@Table`, `@Column` 등 | `@Transactional` |
+| Kotlin 표준 라이브러리 | `@JsonProperty`, `@JsonIgnore` |
+| `registerEvent()`를 통한 도메인 이벤트 | Spring Data imports |
 
 **Repository 추상화**: 인터페이스는 도메인에, 구현체는 인프라스트럭처에 둔다.
 

@@ -23,19 +23,22 @@ Swagger 어노테이션을 Controller에 직접 붙이면 비즈니스 로직과
 | `ApiSpec` 인터페이스 | Swagger 어노테이션은 여기에만 두고, Controller는 이 인터페이스를 구현한다 |
 | `Query`/`PageQuery` | 페이지네이션을 데이터 클래스로 캡슐화하고 `init`에서 검증한다 |
 
-`Query`/`PageQuery`의 `init` 검증은 아래처럼 `require()`로 짧게 쓸 수도 있다. 메시지 포맷은 항상 `[field = $value] ...` — 필드 접두사가 문장 맨 앞에 온다.
+`Query`/`PageQuery`의 `init` 검증은 아래처럼 `CoreException`을 던져 표현한다. 메시지 포맷은 항상 `[field = $value] ...` — 필드 접두사가 문장 맨 앞에 온다.
 
 ```kotlin
 data class ProductPageQuery(val page: Int, val size: Int) {
     init {
-        require(page >= 0) { "[page = $page] 페이지는 0 이상이어야 합니다." }
-        require(size in 1..100) { "[size = $size] 페이지 크기는 1~100이어야 합니다." }
+        if (page < 0) {
+            throw CoreException(ErrorType.BAD_REQUEST, "[page = $page] 페이지는 0 이상이어야 합니다.")
+        }
+        if (size !in 1..100) {
+            throw CoreException(ErrorType.BAD_REQUEST, "[size = $size] 페이지 크기는 1~100이어야 합니다.")
+        }
     }
 }
 ```
 
-> ⚠️ 주의
-> `require()`는 `IllegalArgumentException`을 던지는 축약형이다. §3에서 다루는 표준 구현은 `CoreException` + `ErrorType`을 명시적으로 던지는 if-throw 방식을 쓴다. 두 방식 모두 같은 자리에서 검증하고 같은 메시지 포맷을 따른다는 점이 핵심이며, `CoreException`/`ErrorType` 자체의 규칙은 [error-handling.md](./error-handling.md)가 다룬다.
+예외·검증 처방의 전체 규약은 [error-handling.md](./error-handling.md)에서 다룬다.
 
 ## 2. ApiSpec 패턴 — Swagger 문서화 분리
 
