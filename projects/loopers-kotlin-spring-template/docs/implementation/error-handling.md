@@ -54,15 +54,15 @@ enum class ErrorType(
     val message: String
 ) {
     // General
-    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "A temporary error has occurred."),
-    BAD_REQUEST(HttpStatus.BAD_REQUEST, "Bad Request", "Invalid request."),
-    NOT_FOUND(HttpStatus.NOT_FOUND, "Not Found", "Resource does not exist."),
-    CONFLICT(HttpStatus.CONFLICT, "Conflict", "Resource already exists."),
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "일시적인 오류가 발생했습니다."),
+    BAD_REQUEST(HttpStatus.BAD_REQUEST, "Bad Request", "잘못된 요청입니다."),
+    NOT_FOUND(HttpStatus.NOT_FOUND, "Not Found", "존재하지 않는 리소스입니다."),
+    CONFLICT(HttpStatus.CONFLICT, "Conflict", "이미 존재하는 리소스입니다."),
 
     // Domain-specific additions (examples)
-    INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "Insufficient Balance", "Insufficient balance."),
-    COUPON_EXPIRED(HttpStatus.BAD_REQUEST, "Coupon Expired", "The coupon has expired."),
-    ALREADY_USED(HttpStatus.CONFLICT, "Already Used", "The resource has already been used."),
+    INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "Insufficient Balance", "잔액이 부족합니다."),
+    COUPON_EXPIRED(HttpStatus.BAD_REQUEST, "Coupon Expired", "만료된 쿠폰입니다."),
+    ALREADY_USED(HttpStatus.CONFLICT, "Already Used", "이미 사용된 리소스입니다."),
 }
 ```
 

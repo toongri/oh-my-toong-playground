@@ -368,7 +368,7 @@ class ProductService(
     @Transactional
     fun updateStock(productId: Long, quantity: Int) {
         val product = productRepository.findById(productId)
-            ?: throw CoreException(ErrorType.NOT_FOUND, "[productId = $productId] Product not found.")
+            ?: throw CoreException(ErrorType.NOT_FOUND, "[productId = $productId] 상품을 찾을 수 없습니다.")
 
         product.updateStock(quantity)
 
