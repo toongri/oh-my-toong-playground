@@ -2,7 +2,7 @@
 
 **[한국어](README.md)** | English
 
-**A version-controlled central library of skills/agents/hooks/rules — selectively synced into each project's `.claude/`, differentiated via upward-search override**
+**A version-controlled central library of skills/agents/hooks/rules/docs — selectively synced into each project, differentiated via upward-search override**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -23,11 +23,11 @@ I'm developing this while being inspired by, studying, and referencing the follo
 
 ## What is oh-my-toong?
 
-oh-my-toong is an **agent central-management project**. It keeps skills, agents, hooks, and rules in a single version-controlled central library and **selectively** syncs them into each target project's `.claude/`. The same library can yield a different configuration per project — that's the job of **upward-search override**.
+oh-my-toong is an **agent central-management project**. It keeps skills, agents, hooks, rules, and docs in a single version-controlled central library and **selectively** syncs them into each target project. Components land in a platform directory (`.claude/`, `.codex/`, …); docs land in the target repo's own `docs/`. The same library can yield a different configuration per project — that's the job of **upward-search override**.
 
 ## Features
 
-- **Central library** — version-control skills, agents, hooks, and rules in one repository
+- **Central library** — version-control skills, agents, hooks, rules, and docs in one repository
 - **Declarative sync** — deploy only the components you need into a target project's `.claude/` via `sync.yaml`
 - **Per-project differentiation** — override global components with project-specific conventions via upward search
 - **Orphan cleanup** — components removed from the library disappear from targets on the next sync
@@ -35,14 +35,14 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 
 ## Philosophy — Why This Design
 
-**Step 1 — Same Name, Different Content**: You could simply copy the same skills to every project, but there's a key dilemma. For example, `testing` in a Kotlin/Spring project means "Classical TDD, no verify(), BDD structure," while a different project may follow entirely different conventions. The same goes for `implementation`. **Skills with the same name must carry different content per project.**
+**Step 1 — Prompts Belong Under Version Control**: Skills, rules, and docs are the inputs that determine an agent's behavior, so they deserve the same treatment as code. But the place they're actually read from is a `.claude/` scattered across each project — edit them there and the history is lost, and the next sync overwrites the edit anyway. So editing always happens in the library; targets only receive deployments.
 
-**Step 2 — Central Management + Project Differentiation**: oh-my-toong solves this dilemma with two mechanisms.
+**Step 2 — Conventions Differ per Project, and So Does the Vessel That Holds Them**: The same `testing` means "Classical TDD, no verify(), BDD structure" in `projects/toong-java-spring-template/` and something else entirely elsewhere. There are two ways to express that differentiation.
 
-- **Global components** (`skills/`, `agents/`, etc.): things common across projects, version-controlled in one place
-- **Project overrides** (`projects/<name>/skills/`): things that must differ per project, differentiated by project
+- **Skill override** (`projects/<name>/skills/`): during sync, **Upward Search** applies — when `sync.yaml` references `testing`, it looks in the project folder first and falls back to the global `skills/testing/`. Use this to swap a whole convention wholesale.
+- **rules index + docs grounding** (`projects/<name>/rules/`, `projects/<name>/docs/`): when a convention is too large for a single skill, split it across rules and docs. `loopers-kotlin-spring-template` (19 docs + 7 rules) keeps its rules a pure index — they say only which document to open. `loop-pack-fe-l2-vol1` (16 docs + 8 rules) puts frequently-used criteria directly in the rules and defers only the deeper grounding to docs. Either way the point is to bound what stays always-loaded.
 
-During sync, an **Upward Search** logic applies. When a project's `sync.yaml` references `testing`, it first looks in the project's `projects/<name>/skills/testing/`, falling back to the global `skills/testing/` if not found.
+**Step 3 — The Same Content Sits in a Different Place on Each Platform**: Claude uses `.claude/`, Codex splits across `.codex/` and `.agents/`, Gemini uses `.gemini/` — directory layout and supported categories differ across the board. Adapters absorb that difference, so a convention is written once and `sync.yaml`'s `platforms` decides which platforms it reaches and how far.
 
 ## Documentation
 
@@ -106,35 +106,55 @@ The details of the library's skills (42) and agents (13) live under `docs/`.
 
    `make sync` fails unless the current branch is the default branch and the working tree has no staged, unstaged, or untracked changes — synchronization only runs after a commit. There is no dedicated env var or CLI flag that turns the gate off, though redirecting `HOME` can still bypass it via your ambient global git config. `make sync-dry` is exempt from this gate, so it stays usable as a preview even before committing. See `docs/sync-deploy-targets.md` (Korean) for the gate's exact scope and trade-offs.
 
-### Per-Project Skill Differentiation
+### Per-Project Convention Differentiation
 
-When skills with the same name need different conventions per project's language/framework, create project-specific overrides in the `projects/` directory.
+Different projects' languages and frameworks sometimes call for different judgment criteria, even under the same convention name. The `projects/` directory expresses this with a project-scoped `rules/` and `docs/`: `rules/` is the thin always-loaded layer; `docs/` holds the actual grounding — judgment criteria, examples, rationale. Splitting the two lets an agent open only what a situation needs instead of reading everything every time. How thin the rules stay is the project's call: `loopers-kotlin-spring-template` keeps them a pure index that only says "open this document for this situation," so the criteria live in docs alone, while `loop-pack-fe-l2-vol1` puts frequently-used criteria directly in the rules and defers only the deeper grounding.
+
+Two projects differentiate their conventions with this structure.
 
 ```
 projects/
-└── loopers-kotlin-spring-template/
-    └── skills/
-        ├── testing/
-        │   └── SKILL.md    # Classical TDD, no verify(), BDD structure
-        └── implementation/
-            └── SKILL.md    # Kotlin/Spring architecture patterns
+├── loop-pack-fe-l2-vol1/            # 16 docs + 8 rules
+│   ├── rules/                        # situational index: react, testing, nextjs, ...
+│   └── docs/
+│       ├── react/                    # component boundaries, hook design, props contracts
+│       ├── testing/                  # test layers, tooling, verification criteria
+│       └── nextjs/                   # App Router, data/asset conventions
+└── loopers-kotlin-spring-template/  # 19 docs + 7 rules
+    ├── rules/                        # situational index: test-strategy, layer-placement, ...
+    └── docs/
+        ├── testing/                  # per-level test criteria: unit, integration, concurrency, ...
+        └── implementation/           # architecture patterns: domain events, layer boundaries, ...
 ```
 
-When a skill is referenced in `sync.yaml`, the sync process searches the project folder first and falls back to global.
+`sync.yaml` declares which rules and docs a project deploys. A doc item written as a directory name lands whole — the entire subtree beneath it.
 
 ```yaml
 # projects/loopers-kotlin-spring-template/sync.yaml
-skills:
+rules:
   items:
-    - testing          # → projects/loopers-.../skills/testing/ (project first)
-    - diagnose         # → skills/diagnose/ (global fallback)
+    - test-strategy
+    - layer-placement
+    - domain-model
+    - api-contract
+    # ... 7 project-scoped rules total, each pointing into docs/testing or docs/implementation
 
+# The grounding docs the rules point readers to with "read docs/testing/...". Directory form →
+# the whole docs/testing/ lands as docs/testing/, and implementation/ as docs/implementation/.
+docs:
+  items:
+    - testing
+    - implementation
+```
+
+Skill overrides are still supported. `projects/toong-java-spring-template/` overrides the `testing`/`implementation` skills directly from its project folder — when `sync.yaml` references a skill, sync searches the project folder first and falls back to global. To inject a project skill into just one agent, use `add-skills`.
+
+```yaml
 agents:
   items:
     - component: sisyphus-junior
       add-skills:
-        - testing          # Injects project-specific testing skill into sisyphus-junior
-        - implementation   # Injects project-specific implementation skill into sisyphus-junior
+        - testing   # Injects the project's testing skill into sisyphus-junior
 ```
 
 ## Local Override
