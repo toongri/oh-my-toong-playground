@@ -80,7 +80,7 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
-- If response shows `"overallState": "awaiting_resume"` → run `results --manifest "$JOB_DIR"`, find each entry whose `errorMessage` is `"awaiting_resume"`, and run `resume-member` on that member per Member Resume Policy.
+- If response shows `"overallState": "awaiting_resume"` → that response already carries the full manifest; find each entry whose `errorMessage` is `"awaiting_resume"` and run `resume-member` on that member per Member Resume Policy.
 - Otherwise (`"running"`, `"queued"`, etc., excluding `awaiting_resume` above), or if the Bash tool itself times out/force-kills the call with no JSON returned at all → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total**, counting both cases.
 - If the 6th call still does not report `"done"`:
   1. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`, and read `outputFilePath` per finder from the manifest JSON it prints per Allowed Read Usage.
