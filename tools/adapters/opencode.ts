@@ -45,6 +45,7 @@ export function translateAgentFrontmatter(
 	content: string,
 	modelMap?: ModelMap,
 	agentFile?: string,
+	agentName?: string,
 ): string {
 	const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content);
 
@@ -63,7 +64,7 @@ export function translateAgentFrontmatter(
 
 	// P2-5: Apply model map to model field if provided
 	if (modelMap && typeof frontmatter["model"] === "string") {
-		frontmatter["model"] = applyModelMap(modelMap, frontmatter["model"], agentFile ?? "");
+		frontmatter["model"] = applyModelMap(modelMap, frontmatter["model"], agentFile ?? "", agentName);
 	}
 
 	return serializeFrontmatter(frontmatter, body);
@@ -114,7 +115,7 @@ export const opencodeAdapter: PlatformAdapter = {
 		// Translate frontmatter for OpenCode compatibility (P2-5: pass modelMap)
 		try {
 			const content = await fs.readFile(targetFile, "utf-8");
-			const translated = translateAgentFrontmatter(content, modelMap, displayName);
+			const translated = translateAgentFrontmatter(content, modelMap, sourcePath, displayName);
 			await fs.writeFile(targetFile, translated, "utf-8");
 		} catch {
 			logWarn(`Failed to translate frontmatter for: ${sourcePath}. Copying as-is.`);

@@ -188,6 +188,23 @@ Body.`;
 		expect(result).not.toContain("model: opus\n");
 	});
 
+	it("applies a per-agent override, not just the tier default, via `translateAgentFrontmatter`", () => {
+		const content = `---
+name: oracle
+model: opus
+---
+
+Body.`;
+
+		const modelMap: ModelMap = {
+			tiers: { opus: { model: "openai/o3" } },
+			agents: { oracle: { model: "openai/o3-special" } },
+		};
+		const result = translateAgentFrontmatter(content, modelMap, "agents/oracle.md", "oracle");
+
+		expect(result).toContain("model: openai/o3-special");
+	});
+
 	it("throws when the frontmatter model tier is not in model map (P2-5) via `translateAgentFrontmatter`", () => {
 		const content = `---
 name: oracle
