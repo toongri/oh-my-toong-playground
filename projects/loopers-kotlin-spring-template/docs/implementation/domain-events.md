@@ -148,6 +148,10 @@ class StockDeductionOutboxListener(
 
 `AFTER_COMMIT` 리스너는 커밋이 끝난 뒤 실행되며, 기본은 이벤트를 발행한 스레드에서 동기적으로 실행된다 — 별도 스레드가 필요하면 `@Async`를 함께 붙여야 한다. 커밋은 이미 끝났으므로 리스너 실패가 원본 트랜잭션을 롤백시키지는 않는다. 다만 예외가 삼켜지는 경로는 동기냐 `@Async`냐에 따라 다르다 — 동기 리스너는 Spring이 `afterCompletion()` 콜백 호출을 예외로부터 감싸 로깅만 하고 삼키고(`TransactionSynchronizationUtils`), `@Async`를 붙인 비동기 리스너는 그 감싸는 지점에 도달하기 전에 별도 스레드에서 예외가 던져지므로 대신 `AsyncUncaughtExceptionHandler`가 받아 기본적으로 로깅만 한다. 메커니즘은 다르지만 결과는 같다 — 동기 실행이든 `@Async`를 붙인 비동기 실행이든 예외는 호출자에게 전파되지 않는다. 커밋은 이미 끝났고 컨트롤러는 정상 응답을 반환한다. 리스너 스스로 예외를 잡고 로깅해야 하는 건 `@Async` 여부와 무관한 무조건적 요구다.
 
+동기 `AFTER_COMMIT` 리스너가 **DB에 쓰는** 경우에는 전파 설정이 하나 더 필요하다. 커밋은 끝났지만 트랜잭션 리소스는 아직 스레드에 바인딩된 상태라, 기본 `REQUIRED`로 호출한 서비스는 이미 커밋된 그 트랜잭션에 그대로 참여하고 **뒤따르는 커밋이 없어 쓰기가 조용히 사라진다**. Spring의 `TransactionSynchronization.afterCommit()` javadoc이 이 상황에 `PROPAGATION_REQUIRES_NEW`를 쓰라고 명시한다. 따라서 리스너 메서드에 `@Transactional(propagation = Propagation.REQUIRES_NEW)`를 붙여 새 트랜잭션을 연다 — 전파는 호출 문맥의 문제이므로 서비스가 아니라 리스너 쪽에 붙인다(서비스에 붙이면 일반 Facade 경로에서까지 트랜잭션이 갈라진다).
+
+이 요구는 **동기 실행 + 트랜잭션 리소스 접근**이 겹칠 때만 성립한다. `@Async` 리스너는 별도 스레드라 바인딩된 리소스 자체가 없고, 외부 API 호출이나 Redis 조작(`cacheTemplate.evict`)은 애초에 이 트랜잭션의 리소스가 아니다 — 둘 다 해당 없다.
+
 ```kotlin
 // ✅ CORRECT: Async listener (after commit, with error handling)
 @Component

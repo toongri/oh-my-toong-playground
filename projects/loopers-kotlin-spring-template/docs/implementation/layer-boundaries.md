@@ -299,6 +299,7 @@ class RewardEventListener(
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)  // 원본 트랜잭션은 이미 커밋됨 — 새 트랜잭션이 없으면 적립이 커밋되지 않는다
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onOrderCompleted(event: OrderCompletedEventV1) {
         logger.info("[Event] Reward accumulation start - eventType: ${event::class.simpleName}, userId: ${event.userId}")
