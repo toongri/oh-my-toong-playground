@@ -1,7 +1,7 @@
 ---
 name: hermes
 description: Use when fetching content from blocked, authenticated, or bot-protected sources that resist plain HTTP. Depth-escalation peer to explore/librarian — escalates through three tiers (curl_cffi → agent-reach → Chrome stealth) until the validator confirms extraction
-model: opus
+model: sonnet
 skills: insane-browsing
 disallowedTools: Agent
 ---
