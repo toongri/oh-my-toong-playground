@@ -389,8 +389,10 @@ class ProductStockCacheEvictionListener(
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onStockDepleted(event: StockDepletedEventV1) {
+        logger.info("[Event] Product cache eviction start - eventType: ${event::class.simpleName}, productId: ${event.productId}")
         try {
             cacheTemplate.evict(ProductCacheKeys.ProductDetail(event.productId))
+            logger.info("[Event] Product cache eviction complete - eventType: ${event::class.simpleName}, productId: ${event.productId}")
         } catch (e: Exception) {
             logger.error("[Event] Product cache eviction failed - eventType: ${event::class.simpleName}, productId: ${event.productId}", e)
         }
