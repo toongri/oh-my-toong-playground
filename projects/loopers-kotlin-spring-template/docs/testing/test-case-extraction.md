@@ -91,7 +91,7 @@ SPEC ACCEPTANCE CRITERIA ≠ TEST CASES
 
 ### 2단계: 테스트 레벨 결정
 
-각 요구사항이 어느 레벨(Unit, Integration, Concurrency, Adapter, E2E)에 속하는지 결정한다. 레벨 분류 기준은 `./test-levels.md`를 참고한다.
+각 요구사항이 어느 레벨(Unit, Integration, Concurrency, Adapter, E2E, Batch)에 속하는지 결정한다. 레벨 분류 기준은 `./test-levels.md`를 참고한다.
 
 ### 3단계: 레벨별 케이스 추출
 
