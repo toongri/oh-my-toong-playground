@@ -81,9 +81,10 @@ fun use(amount: Money) {
 
 ### 규칙 5: 불변 값 객체
 
-Value Object는 모든 필드에 `val`을 쓰고, 연산은 새 인스턴스를 반환한다.
+Value Object는 모든 필드에 `val`을 쓰고, 연산은 새 인스턴스를 반환한다. 엔티티 필드로 직접 영속화되는 값 객체는 `@Embeddable`을 붙여야 JPA가 내장 타입으로 매핑한다.
 
 ```kotlin
+@Embeddable
 data class Money(
     val amount: BigDecimal,  // val, not var
     val currency: Currency
@@ -163,9 +164,11 @@ class Order private constructor(
     totalAmount: Money,
 ) : BaseEntity() {  // Rule 1: Extend BaseEntity
 
+    @Enumerated(EnumType.STRING)
     var status: OrderStatus = OrderStatus.PENDING
         private set  // Rule 3: private set REQUIRED
 
+    @Embedded
     var totalAmount: Money = totalAmount
         private set  // Rule 3: ALL mutable fields
 
@@ -196,6 +199,11 @@ class Order private constructor(
     }
 }
 ```
+
+> ⚠️ 주의
+> `status`에 `@Enumerated(EnumType.STRING)`이 반드시 있어야 한다 — JPA의 enum 영속화 기본값은 **ORDINAL**(선언 순서 정수)이라, 이 어노테이션 없이 운영 데이터가 쌓인 뒤 `OrderStatus`의 맨 끝이 아닌 위치에 상수를 하나 추가하면 저장된 모든 행이 조용히 재매핑된다 — 예를 들어 `PLACED` 행이 `CONFIRMED`로 읽히는 식이다.
+>
+> `class Order private constructor(...)` — Kotlin 클래스는 `open`이 없으면 기본이 final이고, 여기 생성자는 `private`이다. 이 조합은 Hibernate가 프록시를 만들고(클래스를 열어야 함) 리플렉션으로 인스턴스를 생성하는(no-arg 생성자가 필요) 데 필요한 전제를 코드만으로는 충족하지 않는다 — `kotlin-jpa`(allopen) 플러그인이 `@Entity` 클래스를 열고, `kotlin-noarg` 플러그인이 no-arg 생성자를 합성해줘야 이 형태가 실제로 동작한다. 두 플러그인 설정은 이 문서의 범위 밖이다.
 
 ## 4. 안티패턴
 
