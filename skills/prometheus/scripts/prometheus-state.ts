@@ -13,6 +13,7 @@
  */
 
 import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
+import { basename, dirname, join } from "path";
 import { execSync } from "child_process";
 import { getOmtDir } from "@lib/omt-dir";
 import {
@@ -189,6 +190,73 @@ export function setPrometheusState(
 				"(pass --plan-path or set it earlier at S2)\n",
 		);
 		process.exit(1);
+	}
+
+	// F7: S6 and later are reachable only after Stage A renders the presentation, so a
+	// presentation for THIS version of the plan must already be on disk. The prose
+	// prohibition at the Stage A step had been in place for two months when production
+	// still measured 5 prometheus plans with 1 compliant presentation — a reminder is
+	// the wrong form for an omitted required artifact. Both conditions below are
+	// mechanically checkable, so refuse the write rather than restate the rule.
+	const phaseOrdinal = /^S(\d)$/.exec(opts.phase);
+	if (phaseOrdinal && Number(phaseOrdinal[1]) >= 6) {
+		// Typed on the binding, not just the arrow: TS narrows control flow through a
+		// never-returning call only when the const carries the annotation.
+		const refuse: (reason: string) => never = (reason) => {
+			process.stderr.write(`prometheus-state: cannot advance to ${opts.phase} — ${reason}\n`);
+			process.exit(1);
+		};
+
+		// plan_path is set at S2 and preserved by later writes, so an empty one here
+		// means that write was skipped. Treating the underivable check as success would
+		// leave the whole gate bypassable by never passing --plan-path.
+		if (resolvedPlanPath === "") {
+			refuse(
+				`plan_path is empty. It is set at S2 and preserved afterwards, so an empty ` +
+					`plan_path at ${opts.phase} means the S2 state write was skipped. Pass --plan-path.`,
+			);
+		}
+
+		const presentationPath = join(
+			dirname(resolvedPlanPath),
+			"presentation",
+			basename(resolvedPlanPath),
+		);
+		if (!existsSync(presentationPath)) {
+			refuse(
+				`the Stage A presentation is absent at ${presentationPath}. Render the plan ` +
+					`there (S5 Stage A) first — skipping it hands the user an unrendered plan.`,
+			);
+		}
+
+		// Existence alone passes a render left behind by an EARLIER pass through S5. The
+		// loop-backs (scoped re-review after a Momus REQUEST_CHANGES, and the S7→S0
+		// revise) rewrite the plan at the same path, and the presentation stem is pinned
+		// to the plan stem — so the previous render sits exactly where this check looks,
+		// and nothing deletes it. A stale review document is worse than a missing one:
+		// the user reviews it believing it describes the current plan.
+		const mtimeOf = (p: string): number | null => {
+			try {
+				return statSync(p).mtimeMs;
+			} catch {
+				return null;
+			}
+		};
+		const planMtime = mtimeOf(resolvedPlanPath);
+		if (planMtime === null) {
+			refuse(
+				`plan_path is set to ${resolvedPlanPath} but no file resolves there, so the ` +
+					`presentation cannot be checked against the plan it claims to render.`,
+			);
+		}
+		const presentationMtime = mtimeOf(presentationPath);
+		if (presentationMtime !== null && presentationMtime < planMtime) {
+			refuse(
+				`the Stage A presentation at ${presentationPath} predates the plan it renders. ` +
+					`The plan was revised after that render, so the presentation is stale — ` +
+					`re-run Stage A before recording ${opts.phase}.`,
+			);
+		}
 	}
 
 	const priorSteps = prior.steps ?? FRESH_STEPS;

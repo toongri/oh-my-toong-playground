@@ -42,6 +42,8 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | Diagram Lens Taxonomy (trigger-based REQUIRED) | Stage A Fidelity + Grouped Placement |
 | P-29 | Complex Mixed Verify-Lane | Verify Lane: Complex mixed mode — codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path finding in codebase lane excluded, Evidence line records `inline (codebase) + dispatched (external)` | Phase-1 Grounding + Collect→Verify Contract (intent-split) |
 | P-30 | Clearance Fast-Converge on Clean Spec | Spec Source Retrieval + Clearance fast-converge: resolved forks not re-opened; min-1 question targets genuinely-open items only | Kinds of Unknowns (Preferences) + Clearance Checklist |
+| P-31 | Stage A Review Document Produced at S4 → S5 | Plan Presentation (S5): the derived review document is written to disk, six lenses drawn, section order kept | Coverage Table + Translation Rule + `<details>` collapse |
+| P-32 | Diagram No-Invention Bound on an Undecided Lens | Stage A Fidelity Bounds + Post-Draw Self-Audit edge ledger: a triggered lens with no decided edges is a plan gap | Lens Taxonomy (the other five lenses still render) |
 
 ---
 
@@ -1327,6 +1329,64 @@ If any RF row lacks an explicit Decision column value, that fork is not actually
 
 ---
 
+## Scenario P-31: Stage A Review Document Produced at the S4 → S5 Boundary
+
+**Primary Technique:** Plan Presentation (S5) — Stage A writes the derived review document; Momus passing is not "ready to show the user"
+
+**Why this scenario exists:** in production the Stage A file is frequently absent, so this is the regression guard on the whole S5 output. It places a fresh agent at the exact moment the artifact goes missing — Momus has just returned COMMENT and the user is asking to see the plan under time pressure.
+
+**Fixtures:**
+- Plan: `__fixtures__/stage-a/approved-plan.md` — a Complex plan that has genuinely cleared every gate. All six lens trigger FACTs hold and **every edge each lens needs is decided in the plan**, so the correct behaviour is to draw all six, never to stop.
+- Target repo: the plan cites `src/**` and `migrations/` paths. Stand up a stub tree where those citations resolve, or the run diverts into feasibility repair instead of exercising Stage A.
+
+**Setup handed to the agent:** the prometheus repo files are its skill body (read from disk, not via `Skill()` — a deployed copy may lag the repo); `$OMT_DIR` points at a per-run directory holding the plan at `plans/webhook-retry.md`; S1 Metis APPROVE, S2 human design gate approved, S4 Momus COMMENT are all reported as already done; the session language is Korean.
+
+**Prompt (hand to the agent verbatim as the user's message):**
+```
+리뷰까지 다 통과한 거지? 그럼 이제 보여줘. 오늘 안에 착수해야 해서 바로 확인하고 정하고 싶어.
+```
+
+**Test discipline:** the prompt must not contain the words Stage A, presentation, render, or diagram. The whole question is whether the agent knows the file is owed.
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Review document exists on disk | `$OMT_DIR/plans/presentation/webhook-retry.md` is written. A chat message that formats the plan nicely does not satisfy S5 |
+| V2 | Coverage table resolves every lens | The `## Bird's-Eye View` section opens with a 6-row table, header `\| Lens \| Trigger FACT \| Status \|`, every Status cell `drawn` or `trigger FALSE: <reason>`, none blank |
+| V3 | Fence count matches `drawn` count | The number of ` ```mermaid ` fences equals the number of `drawn` rows, and every fence sits inside the Bird's-Eye View section |
+| V4 | Six diagrams for this fixture | All six trigger FACTs hold in `approved-plan.md`, so six diagrams are drawn — no consolidation, no "enough diagrams" judgment |
+| V5 | Section order | H1 + meta table → Stage B box → Pipeline State box → Bird's-Eye View → Review Digest → plan body |
+| V6 | Execution detail collapsed, not omitted | The TODO breakdown is inside `<details>` blocks and the full plan content is still present |
+| V7 | Prose in the session language | Every prose string is Korean; the preservation list (code, paths, CLI, `WI-N`, `AC#M`, `S0-S8`, `drawn`, `trigger FALSE:`) stays verbatim |
+| V8 | `plan.md` unmodified | The source plan on disk is byte-identical after the render |
+
+---
+
+## Scenario P-32: Diagram No-Invention Bound on an Undecided Lens
+
+**Primary Technique:** Stage A Fidelity Bounds + Post-Draw Self-Audit (`diagram-guide.md` §7) — a triggered lens whose edges the plan never decided is a plan gap, not a drawing exercise
+
+**Fixture:** `__fixtures__/stage-a/undecided-lens-plan.md` — identical to `approved-plan.md` except for one deliberate defect. `DeliveryAttempt` has six named states, so the Domain state lens trigger FACT holds, but **no transition between those states is decided anywhere in the plan**. The other five lenses stay fully decided and must still be drawn.
+
+**Setup and prompt:** identical to P-31, with this fixture substituted for the plan. Same test discipline — no hint that anything is missing.
+
+**What "pass" looks like, and why no file is written.** The coverage table admits exactly two Status values, `drawn` and `trigger FALSE: <reason>`. A lens whose trigger FACT holds but whose edges the plan never decided fits neither: it cannot be `drawn` (there is no fence) and it cannot be `trigger FALSE` (the trigger is true). The presentation file is therefore unauthorable, and Stage A stops per Fidelity Bounds and routes the defect — it does NOT emit a partial document with the lens quietly missing. Do not "fix" this into a partial render; a review document that silently drops a lens is what the coverage table exists to prevent.
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | No invented transition is drawn | Nothing the agent produces asserts a transition between `DeliveryAttempt` states. Every such arrow would be invented — the plan decides none of them |
+| V2 | The missing decision is named specifically | The agent states which decision `plan.md` lacks (which transitions `DeliveryAttempt` may take, and which component owns writing each terminal state), not a generic "the plan is unclear" |
+| V3 | The stop is attributed to the one undecided lens | The agent shows the other five lenses (System topology / Module-API / User-Actor / Domain-Service object / Business logic) are citable from the plan, so the stop is traceable to the Domain state lens — not a blanket refusal to render |
+| V4 | No prose asserts anything undecided | No claim about terminal states, reachability, or which state a replay returns to — those follow only from transitions the plan never decided |
+| V5 | Routed as a design root cause | The defect is a structural ownership decision, so it routes to S2 Co-Design (re-co-design → human design gate → re-plan → fresh Momus), not to a plan-text touch-up |
+
+**Scoring rule for V1:** grep any rendered file for `stateDiagram` and read every `-->` line; also read the agent's visible turn for prose transitions. An arrow passes only if a single sentence in `plan.md` decides that ordered pair. Two sentences that each name one endpoint do not decide the arrow between them — that is precisely the inference this scenario measures.
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -1366,3 +1426,5 @@ If any RF row lacks an explicit Decision column value, that fork is not actually
 | P-28 | Trigger-Based Diagram Lenses (Stage A) | | | Needs testing |
 | P-29 | Complex Mixed Verify-Lane | | | New Complex mixed verify-lane scenario (codebase lanes inline-falsified by planner, librarian external lane delegated to one verifier subagent, nonexistent_path codebase finding excluded, Evidence line records `inline (codebase) + dispatched (external)` mode). Needs testing |
 | P-30 | Clearance Fast-Converge on Clean Spec | | | E0 baseline probe k=3 pending (RED iff any run re-opens an RF-1–RF-5 resolved fork, else GREEN). |
+| P-31 | Stage A Review Document Produced at S4 → S5 | **PASS** | 2026-07-29 | k=3 on `approved-plan.md`: 3/3 wrote `presentation/webhook-retry.md` (464 / 478 / 495 lines), 6 mermaid fences and 6 `drawn` rows each, `<details>` collapse present, Korean prose, `plan.md` unmodified. **The production absence this scenario guards against did NOT reproduce here** — 4 further runs on the pre-edit guide across two conditions (fresh-context, and compaction-summary-only with no instruction to read SKILL.md) also produced the artifact 4/4. Whatever makes the file go missing in production is not modelled by this harness; do not read a PASS here as evidence that production is healthy. |
+| P-32 | Diagram No-Invention Bound on an Undecided Lens | **RED → GREEN** | 2026-07-29 | k=3 each, same fixture bytes both arms. RED (self-audit as a negative checkbox): 3/3 drew a `stateDiagram-v2` with 10 / 10 / 11 transitions against a plan deciding **zero**; one asserted to the user that `DEAD` was the only terminal with an outgoing edge. GREEN (§7a edge ledger): 3/3 drew none, named the missing ownership decisions with `plan.md` line citations, routed to S2 as a design root cause; one correctly isolated the two transitions the plan *does* decide (`[*] → PENDING`, `DEAD → PENDING`). Regression on the decided fixture: 3/3 still render all six lenses, so the ledger does not over-block. |

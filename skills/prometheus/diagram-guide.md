@@ -127,12 +127,31 @@ Once `sequenceDiagram` is selected, these rules govern how it is drawn. They are
 
 ## 7. Post-Draw Self-Audit
 
-After drawing any diagram and BEFORE injecting it into the render-time markdown, verify the drawn mermaid against `plan.md`:
+After drawing any diagram and BEFORE injecting it into the render-time markdown, verify the drawn mermaid against `plan.md`.
 
+### 7a. Edge ledger — write it out before the checklist
+
+An edge is the part of a diagram a reader cannot check for themselves, so it is audited by producing something, not by ticking a box. Write one ledger line per arrow, message, and transition the diagram draws, and in each line quote the words in `plan.md` that decide that edge:
+
+```
+<source> -> <target> : "<quoted plan.md text that decides this edge>"
+```
+
+Three rules govern the quote slot:
+
+- **It decides that edge — the pair AND the direction.** Two facts that each mention one endpoint do not decide the arrow between them. `plan.md` naming `RETRY_SCHEDULED` in one sentence and `SENDING` in another decides neither a transition between those two states nor which way it runs.
+- **It is quoted plan text, not your reading of the plan.** If what you are about to put in the slot is an inference — "it follows that", "presumably", "the natural reading is", "the queue must therefore" — the edge is undecided.
+- **An edge with no quote is a plan gap.** Do not quietly delete it, do not redraw it vaguer, do not merge it into a neighbouring edge. STOP per Fidelity Bounds and name the specific decision `plan.md` is missing, so the plan can be revised and the pipeline re-run.
+
+The ledger is a working step. It is not written into the presentation file.
+
+### 7b. Checklist
+
+- [ ] Every drawn edge has a ledger line with a quote (7a)
 - [ ] Every synchronous call has its paired activation + return edge, or an explicit async marker
 - [ ] Every participant/node label appears verbatim in `plan.md`
 - [ ] Every decided ownership member within the diagram's scope appears as a node
-- [ ] No signature, field, edge, or relationship in the diagram is absent from `plan.md`
+- [ ] No signature or field in the diagram is absent from `plan.md`
 - [ ] Every claim in the Interpretation corresponds to an edge or node actually drawn — the Interpretation describes the diagram, not the plan
 
 Fix any failed item before injection. If an item cannot be fixed without making a decision `plan.md` never made, that is a plan defect — STOP per Fidelity Bounds and revise the plan instead.
