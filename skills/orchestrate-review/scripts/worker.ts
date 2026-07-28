@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 
 import { initLogger, logInfo, logError, logStart, logEnd } from "@lib/logging";
-import { exitWithError, parseArgs } from "@lib/job-utils";
+import { exitWithError, parseArgs, logRootForJobsDir } from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
 import { splitCommand, atomicWriteJson, runOneTurn } from "@lib/worker-utils";
 import { detectCliType } from "@lib/generic-job";
@@ -97,15 +97,9 @@ function main() {
 	const command = options.command;
 	const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
-	// Same convention as job.ts's initLoggerFromJobDir: log root lives beside the
-	// `jobs/` directory holding the job, never at an independently-resolved OMT
-	// dir — otherwise a worker spawned against a test's temp jobs-dir (what the
-	// test suite does) writes its log into the real per-project OMT dir instead.
 	const resolvedJobDir = jobDir ? path.resolve(String(jobDir)) : null;
 	const jobId = resolvedJobDir ? path.basename(resolvedJobDir).replace(/^chunk-review-/, "") : "unknown";
-	const logRoot = resolvedJobDir
-		? path.dirname(path.resolve(path.dirname(resolvedJobDir)))
-		: getOmtDir();
+	const logRoot = resolvedJobDir ? logRootForJobsDir(path.dirname(resolvedJobDir)) : getOmtDir();
 	initLogger("chunk-review-worker", logRoot, jobId);
 	logStart();
 

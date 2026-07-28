@@ -285,6 +285,20 @@ export function findProjectRoot(scriptDir: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Log root resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Log root for a run: logs live beside the `jobs/` directory holding the job,
+ * never at an independently-resolved OMT dir. A run pointed at a custom
+ * `--jobs-dir` / `$CHUNK_REVIEW_JOBS_DIR` — which is what the test suite does —
+ * then writes its log there too, instead of into the real per-project OMT dir.
+ */
+export function logRootForJobsDir(jobsDir: string): string {
+	return path.dirname(path.resolve(jobsDir));
+}
+
+// ---------------------------------------------------------------------------
 // Chairman exclusion resolution
 // ---------------------------------------------------------------------------
 

@@ -15,6 +15,7 @@ import {
 	findProjectRoot,
 	resolveChairmanExclusion,
 	normalizeBool,
+	logRootForJobsDir,
 } from "@lib/job-utils";
 
 import { initLogger, logInfo, logStart, logEnd } from "@lib/logging";
@@ -128,16 +129,6 @@ function buildManifest(jobDir: string) {
 // ---------------------------------------------------------------------------
 // Logging helper for non-start commands (extract jobId from jobDir path)
 // ---------------------------------------------------------------------------
-
-/**
- * Log root for a run: logs live beside the `jobs/` directory holding the job,
- * never at an independently-resolved OMT dir. A run pointed at a custom
- * `--jobs-dir` / `$CHUNK_REVIEW_JOBS_DIR` — which is what the test suite does —
- * then writes its log there too, instead of into the real per-project OMT dir.
- */
-function logRootForJobsDir(jobsDir: string): string {
-	return path.dirname(path.resolve(jobsDir));
-}
 
 function initLoggerFromJobDir(jobDir: string): void {
 	const resolved = path.resolve(jobDir);
@@ -258,10 +249,10 @@ async function cmdCollect(options: Record<string, unknown>, jobDir: string): Pro
 	logMemberDurations(jobDir);
 }
 
-function cmdStop(options: Record<string, unknown>, jobDir: string): void {
+async function cmdStop(options: Record<string, unknown>, jobDir: string): Promise<void> {
 	initLoggerFromJobDir(jobDir);
 	logInfo(`stop: ${path.resolve(jobDir)}`);
-	_cmdStop(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
+	await _cmdStop(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
 }
 
 function cmdClean(options: Record<string, unknown>, jobDir: string): void {
@@ -562,7 +553,7 @@ async function main(): Promise<void> {
 	if (command === "stop") {
 		const jobDir = rest[0];
 		if (!jobDir) exitWithError("stop: missing jobDir");
-		cmdStop(options, jobDir);
+		await cmdStop(options, jobDir);
 		return;
 	}
 	if (command === "clean") {
