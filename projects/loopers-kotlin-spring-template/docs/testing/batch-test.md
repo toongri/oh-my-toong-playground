@@ -270,7 +270,7 @@ fun `job fails when input file is missing`() {
 
 ## 6. 품질 체크리스트
 
-- [ ] Reader/Processor/Writer 개별 컴포넌트를 따로 테스트하지 않았는가 (인프라 계층이자 프레임워크 컴포넌트다)
+- [ ] Reader/Processor/Writer 개별 컴포넌트를 따로 테스트하지 않았는가 (인프라 계층이자 프레임워크 컴포넌트다 — Domain Model로 뽑아낼 수 없는 로직을 담은 드문 경우는 예외, 1번 절 참고)
 - [ ] 비즈니스 로직이 Processor가 아니라 Domain Model에 있고, 거기서 Unit Test로 검증됐는가
 - [ ] Step Integration Test를 기본 패턴으로 삼아 파이프라인 배선을 검증했는가
 - [ ] Job Integration Test는 Decider·조건부 흐름 같은 복잡한 분기가 있을 때만 작성했는가
