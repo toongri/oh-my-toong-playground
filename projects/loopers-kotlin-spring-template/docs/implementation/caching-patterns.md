@@ -420,7 +420,7 @@ class ProductUpdateCacheEvictionListener(
 }
 ```
 
-두 리스너 모두 `cacheTemplate.evict(...)`를 try-catch로 감싸고 `logger.error`로 실패를 남긴다 — Spring이 `afterCompletion()` 경로에서 발생한 예외를 자신의 로거로 ERROR 한 줄만 남기고 호출자에게는 전파하지 않으므로, 그 한 줄에는 `productId`·`eventType` 같은 도메인 맥락이 없다. 잡지 않으면 Redis 장애 같은 무효화 실패가 어떤 상품 때문인지 알 수 없는 프레임워크 로그 한 줄로만 남는다 — 그래서 리스너 안에서 도메인 맥락을 담아 직접 로깅해야 한다.
+두 리스너 모두 `cacheTemplate.evict(...)`를 try-catch로 감싸고 `logger.error`로 실패를 남긴다 — 이 리스너들은 동기 실행이라 Spring이 `afterCompletion()` 경로에서 발생한 예외를 자신의 로거로 ERROR 한 줄만 남기고 호출자에게는 전파하지 않으므로, 그 한 줄에는 `productId`·`eventType` 같은 도메인 맥락이 없다(리스너에 `@Async`를 붙였다면 대신 `AsyncUncaughtExceptionHandler`가 같은 역할을 한다 — [domain-events.md](./domain-events.md) §5 참고). 잡지 않으면 Redis 장애 같은 무효화 실패가 어떤 상품 때문인지 알 수 없는 프레임워크 로그 한 줄로만 남는다 — 그래서 리스너 안에서 도메인 맥락을 담아 직접 로깅해야 한다.
 
 **무효화 규칙:**
 - **분산 시스템**: Kafka Consumer로 이벤트를 소비해 무효화한다
