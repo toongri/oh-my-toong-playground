@@ -60,8 +60,14 @@ const COUNCIL_CONFIG_PATH = path.join(
 
 const codexPath = Bun.which("codex");
 
-/** 실 codex 프로세스 3회 spawn을 감당할 beforeAll 타임아웃 (bun:test 기본 5s보다 넉넉히). */
-const BEFORE_ALL_TIMEOUT_MS = 60_000;
+/**
+ * 실 codex 프로세스 3회 spawn(Promise.all 병렬)을 감당할 beforeAll 타임아웃
+ * (bun:test 기본 5s보다 넉넉히). 병렬화 전 순차 실행 시 beforeAll 실측 ~9-10초였던
+ * 것이, 병렬화 후 3회 반복 실측 5.46s/5.74s/5.75s로 줄었다 — 30s는 그 worst-case
+ * 대비 약 5배 여유로, 순차 시절 60s가 순차 실측(~9-10s) 대비 갖던 여유 폭과 같은
+ * 비율이다. CI 환경이 로컬보다 느릴 수 있어 실측치에 딱 맞추지 않고 그 여유를 유지한다.
+ */
+const BEFORE_ALL_TIMEOUT_MS = 30_000;
 
 /** AC7: codex 부재는 skip이 아니라 명시적 실패다. */
 function requireCodex(): void {
@@ -162,11 +168,18 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
 		// baseline 1회 + declaredNames 전체를 한 번에 deny 적용 1회 + 대조군 1회 — 프로덕션에서도
 		// settings.deny.skills는 job 하나당 한 번에 전체가 적용되므로, 이 구성이 실제 사용 방식과
 		// 동일한 전송 단위다.
-		const baselineOutput = await probePromptInput(buildExtraArgs([]));
-		const denyAllOutput = await probePromptInput(buildExtraArgs(declaredNames));
-		const controlOutput = await probePromptInput(buildExtraArgs(["__no_such_skill__"]));
-		// 3회 실 codex 프로세스 spawn(각 ~2-3초) 합산이 bun:test 기본 hook 타임아웃(5s)을
-		// 넘는다 — BEFORE_ALL_TIMEOUT_MS로 넉넉히 확장.
+		//
+		// 세 spawn은 서로 독립이다 — `codex debug prompt-input`은 순수 렌더 커맨드로, 인자로
+		// 받은 -c 오버라이드와 프롬프트만으로 JSON을 stdout에 쓸 뿐 어떤 파일에도 쓰지 않는다
+		// (실측: 동시 2회 호출 후에도 `~/.codex/history.jsonl`/`state_*.sqlite` mtime 불변, 두
+		// 출력 바이트 동일). 그래서 Promise.all로 병렬 실행해도 경합이 없다.
+		const [baselineOutput, denyAllOutput, controlOutput] = await Promise.all([
+			probePromptInput(buildExtraArgs([])),
+			probePromptInput(buildExtraArgs(declaredNames)),
+			probePromptInput(buildExtraArgs(["__no_such_skill__"])),
+		]);
+		// 병렬 실행 후에도 3회 실 codex 프로세스 spawn(각 ~2-3초)이 bun:test 기본 hook
+		// 타임아웃(5s)을 넘을 수 있어 BEFORE_ALL_TIMEOUT_MS로 넉넉히 확장해 둔다.
 
 		// 측정 창을 <skills_instructions> 블록 내부로 좁힌다 — 세 출력 각각 한 번씩만 추출해
 		// 아래 모든 테스트가 재사용한다. 추출 실패(태그 0개/2개 이상)는 여기서 즉시 하드 실패한다.
