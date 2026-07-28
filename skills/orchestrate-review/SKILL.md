@@ -19,7 +19,7 @@ When finders cannot deliver — none configured/available after filtering, or al
 
 1. Write the interpolated prompt to a temp file.
 2. Start job: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
-3. Collect: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"` — repeat until `overallState` is `"done"`.
+3. Collect: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"` — repeat per Step 2's branching (cap: 6 calls total; `awaiting_resume` routes to `resume-member`, it is not a re-poll case).
 4. Read each finder's output file via the Read tool.
 5. Merge candidates using the Aggregation rules.
 6. Run `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text. This step **MUST** run before `clean` — the job dir is deleted in the next teardown step and the per-member token data is gone.
