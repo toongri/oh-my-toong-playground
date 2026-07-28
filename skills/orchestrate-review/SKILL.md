@@ -85,7 +85,8 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 600000 "$JOB_DIR"
   1. Run `results --manifest "$JOB_DIR"` and read whichever finders' `outputFilePath` is already non-null per Allowed Read Usage.
   2. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`.
   3. Apply the Degradation Policy's partial-merge path, treating every finder that never produced a non-null `outputFilePath` as not-responded (denominator stays N = total dispatched).
-  4. Teardown with `clean --force "$JOB_DIR"` in place of the ordinary `clean "$JOB_DIR"`.
+  4. Run `usage-summary.ts "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text.
+  5. Teardown with `clean --force "$JOB_DIR"` in place of the ordinary `clean "$JOB_DIR"`.
 
 Response JSON (done):
 ```json
