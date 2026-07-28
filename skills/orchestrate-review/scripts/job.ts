@@ -206,7 +206,7 @@ function cmdResults(options: Record<string, unknown>, jobDir: string): void {
  * start: a terminal status.json carries `finishedAt` but no `startedAt` (the
  * running-state write that sets it is replaced wholesale when the member
  * finishes). `createdAt` is an accurate common origin because every member is
- * spawned in the same pass — measured at 3ms spread across 6 members.
+ * spawned in the same pass — measured at 3ms of spawn spread.
  */
 function logMemberDurations(jobDir: string): void {
 	const resolved = path.resolve(jobDir);
