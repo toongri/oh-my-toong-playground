@@ -258,7 +258,6 @@ fun `throws BAD_REQUEST CoreException when deduct amount exceeds balance`() {
 
     // then
     assertThat(exception.errorType).isEqualTo(ErrorType.BAD_REQUEST)
-    assertThat(exception.message).isEqualTo("포인트가 부족합니다.")
 }
 ```
 
@@ -294,7 +293,6 @@ fun `throws BAD_REQUEST CoreException when increase amount is zero or below`(amo
 
     // then
     assertThat(exception.errorType).isEqualTo(ErrorType.BAD_REQUEST)
-    assertThat(exception.message).isEqualTo("재고 증가량은 0보다 커야 합니다.")
 }
 ```
 
