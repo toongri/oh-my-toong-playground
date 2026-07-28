@@ -35,7 +35,7 @@ Run a single chunk against a known diff and inspect each member's `assembled-pro
 
 ## Test Input: JWT Auth Implementation
 
-**Files in scope**: `src/auth/login.ts` (added), `src/auth/middleware.ts` (added)
+**Files in scope**: `src/auth/login.ts` (added), `src/auth/middleware.ts` (modified — deletes the prior expiry check on the verify path)
 
 **Seeded so each angle has something to find or correctly stay silent on**:
 - removed expiry check on the verify path (correctness / regression)
