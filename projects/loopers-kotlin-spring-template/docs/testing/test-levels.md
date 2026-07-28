@@ -68,8 +68,8 @@
 | 동시성 제어(락, 중복 방지)                                 | Concurrency | `*ConcurrencyTest.kt`         |
 | 외부 API 클라이언트, 복잡한 DB 쿼리, 복원력(resilience)    | Adapter     | `*AdapterTest.kt`             |
 | 전체 API 요청/응답                                         | E2E         | `*ApiE2ETest.kt`              |
-| Spring Batch Step 파이프라인 검증                          | Integration | `*StepIntegrationTest.kt`     |
-| Spring Batch Job의 분기 로직                               | Integration | `*JobIntegrationTest.kt`      |
+| Spring Batch Step 파이프라인 검증                          | Batch       | `*StepIntegrationTest.kt`     |
+| Spring Batch Job의 분기 로직                               | Batch       | `*JobIntegrationTest.kt`      |
 
 ## 4. 판단 흐름
 
