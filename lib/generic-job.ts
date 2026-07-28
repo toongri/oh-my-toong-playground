@@ -1318,37 +1318,64 @@ export function cmdResults(
 // Command: stop
 // ---------------------------------------------------------------------------
 
-export function cmdStop(
+// Cap on waiting for a stopped member's own exit — must not hang indefinitely.
+const STOP_WAIT_CAP_MS = 10_000;
+
+export async function cmdStop(
 	_options: Record<string, unknown>,
 	jobDir: string,
 	config: JobConfig,
-): void {
+): Promise<void> {
 	const resolvedJobDir = path.resolve(jobDir);
 	const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
 	if (!fs.existsSync(entitiesRoot))
 		exitWithError(`No ${config.entityDirName} folder found: ${entitiesRoot}`);
 
-	let stoppedAny = false;
+	// Wait axis: whether status.pid exists, not whether process.kill actually succeeded.
+	// worker-utils.ts writes status.json in two steps (state:"running" first with pid:null,
+	// then again with the real child.pid once the CLI child is spawned) — a member read in
+	// that gap has no pid to signal, so waiting on it can't hasten its exit, only babysit the
+	// CLI's own natural run to completion.
+	let hadRunning = false;
+	const waitEntries: string[] = [];
 	for (const entry of fs.readdirSync(entitiesRoot)) {
 		const statusPath = path.join(entitiesRoot, entry, "status.json");
 		const status = readJsonIfExists(statusPath);
 		if (!isRecord(status)) continue;
 		if (status.state !== "running") continue;
-		if (!status.pid) continue;
+		hadRunning = true;
 
-		try {
-			process.kill(Number(status.pid), "SIGTERM");
-			stoppedAny = true;
-		} catch {
-			// ignore
+		if (status.pid) {
+			try {
+				process.kill(Number(status.pid), "SIGTERM");
+			} catch {
+				// ESRCH: child already exited, but the worker itself hasn't flipped state yet
+				// (it's still parsing output) — still wait for that transition (bcb6c50d).
+			}
+			waitEntries.push(entry);
 		}
+		// else: no pid recorded yet — no handle to signal, and cmdStop's own pid is never
+		// persisted anywhere either (generic-job.ts spawns the worker detached + unref()s it),
+		// so there's nothing to wait on. Not waiting here is not a regression: main never
+		// waited on this member either, since it wasn't in the running set with a pid.
 	}
 
-	process.stdout.write(
-		stoppedAny
+	const stillRunning = (entry: string): boolean => {
+		const status = readJsonIfExists(path.join(entitiesRoot, entry, "status.json"));
+		return isRecord(status) && status.state === "running";
+	};
+	const waitStart = Date.now();
+	while (waitEntries.some(stillRunning) && Date.now() - waitStart < STOP_WAIT_CAP_MS) {
+		await sleepMs(250);
+	}
+
+	const manifest = buildManifest(jobDir, config);
+	const stopMessage = !hadRunning
+		? `stop: no running ${config.entityPlural}\n`
+		: waitEntries.length > 0
 			? `stop: sent SIGTERM to running ${config.entityPlural}\n`
-			: `stop: no running ${config.entityPlural}\n`,
-	);
+			: `stop: running ${config.entityPlural} found but none had a pid to signal\n`;
+	process.stdout.write(`${stopMessage}${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1994,7 +2021,7 @@ export function doctorOrphanJobs(
 // ---------------------------------------------------------------------------
 
 const COLLECT_POLL_INTERVAL_MS = 5000;
-const COLLECT_TIMEOUT_HARDCAP_MS = 300000;
+const COLLECT_TIMEOUT_HARDCAP_MS = 600000;
 
 export async function cmdCollect(
 	options: Record<string, unknown>,
@@ -2013,9 +2040,12 @@ export async function cmdCollect(
 	const start = Date.now();
 	while (true) {
 		const status = await computeStatus(jobDir, config);
-		if (status.overallState === "done") {
+		// awaiting_resume already ended its own turn — further polling cannot change it.
+		if (status.overallState === "done" || status.overallState === "awaiting_resume") {
 			const manifest = buildManifest(jobDir, config);
-			process.stdout.write(`${JSON.stringify({ overallState: "done", ...manifest }, null, 2)}\n`);
+			process.stdout.write(
+				`${JSON.stringify({ overallState: status.overallState, ...manifest }, null, 2)}\n`,
+			);
 			return;
 		}
 		if (timeoutMs > 0 && Date.now() - start >= timeoutMs) {

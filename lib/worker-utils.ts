@@ -10,7 +10,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { spawn, type ChildProcess } from "child_process";
-import type { AgentDriver, CliType } from "./agent-drivers/types";
+import type { AgentDriver, CliType, ParseResult } from "./agent-drivers/types";
 import { pickDriver } from "./agent-drivers/types";
 // Driver registration side effects:
 import "./agent-drivers/opencode";
@@ -364,7 +364,14 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 				heartbeatHandle = null;
 			}
 			try {
-				atomicWriteJson(statusPath, payload);
+				// The CLI child has exited, but the caller (executeOneTurn) still has to parse
+				// raw stdout and issue its own final status.json write. Persisting payload's
+				// terminal state here would let readers (buildManifest/computeStatus) treat the
+				// still-unparsed output.txt as final during that window. Keep state:"running" on
+				// disk — an already-understood non-terminal state for the heartbeat-staleness
+				// recovery in generic-job.ts's computeStatus, which still reclaims a crash here.
+				// The resolved payload (below) is unchanged and carries the real terminal state.
+				atomicWriteJson(statusPath, { ...payload, state: "running" });
 			} catch {
 				/* ignore */
 			}
@@ -540,8 +547,20 @@ async function executeOneTurn(
 		/* absent → empty */
 	}
 
-	// Parse stdout via driver
-	const parsed = driverInstance ? driverInstance.parseStdout(rawStdout) : null;
+	// Parse stdout via driver. A driver that THROWS mid-parse is treated as a parse
+	// failure, not as a lost turn: finalize() deliberately leaves state:"running" on disk
+	// until this point, so an escaping exception would strand the member as running until
+	// heartbeat staleness reclaims it (~60s) and replace its real terminal state with a
+	// synthesized "Worker stale" error. Falling through to the parsed===null branch below
+	// keeps the concrete process-level state (missing_cli/timed_out/canceled, else error).
+	let parsed: ParseResult | null = null;
+	if (driverInstance) {
+		try {
+			parsed = driverInstance.parseStdout(rawStdout);
+		} catch {
+			parsed = null;
+		}
+	}
 
 	let state: string;
 	let sessionID: string | null;

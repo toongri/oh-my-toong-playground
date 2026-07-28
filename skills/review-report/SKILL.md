@@ -133,7 +133,7 @@ Produce all four sections, in order.
 Findings come **only** from a dispatched `code-reviewer` agent running in an isolated context — never inline, never via a file handoff.
 
 1. Dispatch a `code-reviewer` agent via the Task tool (`subagent_type: "code-reviewer"`), **in the foreground, waiting for it to return before going further**, passing the review target so the agent operates on the same range as the walkthrough: the input mode and range from Step 1 (PR number/URL, or `<base>...<target>`), plus any intent/requirements context already gathered. This skill consumes the agent's return value, not a file it writes, so the findings must be in hand before the HTML render assembles the report; a detached dispatch hands back a job reference instead of findings, and reading a subagent's transcript is prohibited, so there is no recovery path — the report renders with an empty Findings section.
-2. The agent runs the full pure code-review: it fans out the angle finders, verifies each candidate (CONFIRMED / PLAUSIBLE / REFUTED), drops REFUTED, and **returns the verified findings as render-time markdown finding cards** — the existing finding contract (verdict-labeled `<div class="finding" data-verdict="…">` cards, split into Correctness and Cleanup, plus any Out of Scope / Unverified sections). It does **not** render HTML.
+2. The agent runs the full pure code-review: it fans out the angle finders, verifies each candidate (CONFIRMED / PLAUSIBLE / REFUTED), drops REFUTED, and **returns the verified findings as render-time markdown finding cards** — the existing finding contract (verdict-labeled `<div class="finding" data-verdict="…">` cards, split into Correctness, Requirement Gap, and Cleanup, plus any Out of Scope / Unverified sections). It does **not** render HTML.
 3. **Collect the agent's findings text verbatim.** Do not re-judge verdicts, do not re-rank, do not reformat the cards — the agent already verified and ranked. You assemble its output into the render markdown unchanged.
 
 The agent's transcript stays in its own context. This skill's context receives only the returned findings markdown — keeping the render context clean.
@@ -168,7 +168,7 @@ where `{repo-basename}` = `basename -s .git $(git remote get-url origin)`, or `b
 
 ### Step R4: Substitute Placeholders and Write
 
-(Placeholder substitution and write procedure: **see `${CLAUDE_SKILL_DIR}/references/render-assembly.md`** — read it if you have not already done so at Step R1. The template carries 9 placeholders; substitute every one, HTML-escaping every active-HTML placeholder, then write to `$OMT_DIR/reviews/{slug}.html`.)
+(Placeholder substitution and write procedure: **see `${CLAUDE_SKILL_DIR}/references/render-assembly.md`** — read it if you have not already done so at Step R1. The template carries 10 placeholders; substitute every one, HTML-escaping every active-HTML placeholder, then write to `$OMT_DIR/reviews/{slug}.html`.)
 
 ### Step R5: Open and Print Terminal Pointer
 
@@ -186,8 +186,9 @@ Print the terminal pointer (finding counts by verdict/category + the html path �
 
 ```
 Review written: $OMT_DIR/reviews/{slug}.html
-Correctness: {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
-Cleanup:     {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
+Correctness:     {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
+Requirement gap: {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
+Cleanup:         {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
 ```
 
 ### Example Final Output

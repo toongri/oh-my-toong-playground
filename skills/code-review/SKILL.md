@@ -81,6 +81,7 @@ digraph role_separation {
 **Allowed in orchestrator context:**
 - `git diff {range} --stat` output
 - `git diff {range} --name-only` output
+- `git diff {range} --numstat` output
 - `git log {range} --oneline` output
 - CLAUDE.md file content
 - Step 3 evidence summary (structured table — build/test/lint status + test coverage mapping, truncated to summary on success / last 30 lines on failure)
@@ -298,8 +299,9 @@ Collect in parallel (using `{range}` from Step 0):
 
 1. `git diff {range} --stat` (change scale)
 2. `git diff {range} --name-only` (file list)
-3. `git log {range} --oneline` (commit history)
-4. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
+3. `git diff {range} --numstat` (per-file insertion/deletion counts)
+4. `git log {range} --oneline` (commit history)
+5. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
 ## Step 3: Evidence Verification
 
@@ -371,19 +373,19 @@ If any check fails:
 
 ## Step 4: Chunking Decision
 
-Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`):
+Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`) — of the two line counts, only `X` (insertions), never `Y` (deletions), feeds this decision:
 
 | Condition | Strategy |
 |-----------|----------|
-| Total changed lines (insertions + deletions) < 1500 AND changed files < 30 | Single review |
-| Total changed lines >= 1500 OR changed files >= 30 | Group into chunks by directory/module affinity |
+| Insertion lines < 2000 AND changed files < 30 | Single review |
+| Insertion lines >= 2000 OR changed files >= 30 | Group into chunks by directory/module affinity |
 
 Chunking heuristic: group files sharing a directory prefix or import relationships.
 
 **Per-chunk size guide:**
-- Target ~1500 lines per chunk (soft guide — files are the atomic unit)
-- If adding the next file exceeds ~1500 lines, start a new chunk
-- If a single file alone exceeds ~1500 lines, it becomes its own chunk
+- Target ~2000 insertion lines per chunk (soft guide — files are the atomic unit)
+- If adding the next file exceeds ~2000 insertion lines, start a new chunk
+- If a single file alone exceeds ~2000 insertion lines, it becomes its own chunk
 - If a directory group is oversized, split by subdirectory; if still oversized (flat structure), batch alphabetically (~10-15 files per chunk)
 
 ### Per-Chunk Diff Command Construction
@@ -479,8 +481,8 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
 
 **Inline judgment steps:**
 
-1. **Dedup near-duplicates first** (same defect, same location, same reason → keep one, merging the `found by` angles and keeping the most concrete failure scenario). Deduplication reduces the judgment workload before it starts.
-2. **MANDATORY READ: `references/verifier-prompt.md`** — read it before beginning judgment. The verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), verification method, and 9-field output contract all live there. Escalated candidates reuse this file as their dispatch prompt.
+1. **Dedup near-duplicates first** (same defect, same location, same reason → keep one, and carry onto it everything the duplicates contributed: the merged `found by` angles, the most concrete failure scenario, and any field only one of them supplied). Merging removes the repetition, never the substance. Deduplication reduces the judgment workload before it starts.
+2. **MANDATORY READ: `references/verifier-prompt.md`** — read it before beginning judgment. The verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), verification method, and the enrichment output contract all live there. Escalated candidates reuse this file as their dispatch prompt.
 3. For each remaining candidate, in order:
 
    **REASONING** — read the code at the issue location (Read/Grep on the candidate file), trace the call chain from the entry point, and check the execution context (threading, dispatch model, runtime configuration). Apply the verdict ladder from `references/verifier-prompt.md`. Reason explicitly before issuing a score.
@@ -489,7 +491,7 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
 
    **VERDICT** — exactly one of CONFIRMED / PLAUSIBLE / REFUTED (ladder in `references/verifier-prompt.md`).
 
-   For **CONFIRMED** or **PLAUSIBLE** (kept findings), emit the full 9-field enrichment inline:
+   For **CONFIRMED** or **PLAUSIBLE** (kept findings), emit the full enrichment inline:
 
    ```
    VERDICT: <CONFIRMED | PLAUSIBLE>
@@ -501,6 +503,7 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
    FAILURE SCENARIO: <concrete inputs/state -> wrong output, crash, or lost effect; for a cleanup finding, the concrete cost>
    FIX: <concrete diff, or design direction if structural>
    BLAST RADIUS: <grep/reference evidence — what else references this, or "This location only">
+   AC: <the candidate's acceptance criterion / inferred intent — omit this line entirely when it carries none>
    FOUND BY: <angle(s)>
    ```
 
@@ -517,7 +520,7 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
 
 **Cap & batching:** judge at most **25 candidates per batch** inline. If more survive dedup, batch by file proximity, **correctness candidates first**, and state how many were deferred — never silently drop.
 
-**The verdict ladder, verification method, and 9-field output contract all live in `references/verifier-prompt.md`** — that is the single source; the inline judgment mirrors this contract directly.
+**The verdict ladder, verification method, and the enrichment output contract all live in `references/verifier-prompt.md`** — that is the single source; the inline judgment mirrors this contract directly.
 
 ### Phase 3: Findings Synthesis (report-only)
 
@@ -525,7 +528,7 @@ This is a **report**. You surface verified findings, ranked by what matters most
 
 1. **Merge** verified findings that describe the same defect (same root cause, across chunks) — combine their evidence and note the corroborating angles. (Near-duplicates within a chunk were already deduped before verification.)
 2. **Class** each finding: **correctness** (the change behaves wrong), **cleanup** (behaves correctly but is low quality), or **requirement-gap** (an AC or stated requirement is absent — the behavior is missing, not wrong), from the angle that found it.
-3. **Rank** most-significant first: **correctness before cleanup**; within a class, **CONFIRMED before PLAUSIBLE**.
+3. **Rank** most-significant first: **correctness, then requirement-gap, then cleanup**; within a class, **CONFIRMED before PLAUSIBLE**.
 4. **Cap**: keep the most significant findings. If a review produced an unwieldy number, keep the top ~15 and state how many were dropped — never silently truncate.
 5. **Pre-existing**: a candidate on an unchanged context line is tagged `[Pre-existing]` and listed under Out of Scope — unless the change aggravates it (increases blast radius or frequency), in which case it stays in the main list.
 
@@ -545,7 +548,7 @@ This is a **report**. It does not gate. There is no Assessment / "Ready to merge
 
 **Exception — completion-gate dispatch.** When the dispatch prompt carried a `{gate}-codereview-{sid}.json` artifact path (the same non-interactive discriminator Step 1 uses), the deliverable is that artifact, not terminal text: write the ranked findings there as `{"status": "COMPLETE", "reviewer": …, "at": …, "findings": [{"class", "verdict", "ref"}]}` — the schema `skills/{gate}/references/completion-gate.md` defines, and the same one the build-failure `INCONCLUSIVE` write above uses. The caller reads only that file; it never transcribes returned text, so ending a completion-gate dispatch with terminal text alone deadlocks it on an absent artifact.
 
-Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup / requirement-gap), `file:line`, and enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the 9-field shape from `references/verifier-prompt.md`, produced inline for non-escalated findings or by the escalated verifier for superseded ones). Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by `review-report` when it dispatches a code-reviewer agent that runs this skill — do not invent a different format.
+Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup / requirement-gap), `file:line`, and enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the enrichment shape from `references/verifier-prompt.md`, produced inline for non-escalated findings or by the escalated verifier for superseded ones). Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by `review-report` when it dispatches a code-reviewer agent that runs this skill — do not invent a different format.
 
 ## Reference Files (on-demand)
 

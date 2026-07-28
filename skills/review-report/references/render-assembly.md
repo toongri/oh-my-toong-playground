@@ -33,11 +33,14 @@ Assemble the report markdown with these top-level sections (omit optional sectio
 ---
 
 ## Findings
-[Ranked: correctness CONFIRMED → correctness PLAUSIBLE → cleanup CONFIRMED → cleanup PLAUSIBLE.
+[Ranked by class — correctness, then requirement gap, then cleanup — and CONFIRMED before PLAUSIBLE within each.
 If nothing survived verification: "No findings survived verification."]
 
 ### Correctness
 [Omit if none.]
+
+### Requirement Gap
+[Omit if none. Each card carries the acceptance criterion / inferred intent it was measured against.]
 
 ### Cleanup
 [Omit if none.]
@@ -71,6 +74,7 @@ If nothing survived verification: "No findings survived verification."]
   [concrete diff or, if structural, a design direction]
   ```
 - **Blast Radius**: {grep/reference evidence, or "This location only"}
+- **AC**: {the acceptance criterion / inferred intent the finding was measured against — omit this bullet entirely when the finding carries none}
 - **Found by**: {angle(s)}
 
 </div>
@@ -84,7 +88,7 @@ Use `data-verdict="PLAUSIBLE"` for plausible findings.
 
 ## Injection Guard (prose)
 
-**Injection guard — prose fields too**: The same `innerHTML = marked.parse(md)` sink treats raw HTML in *prose* as live, not only in card bodies. The card's prose fields — the finding title, `What's wrong`, and `Failure scenario` — are not fenced, so a reviewed-code fragment quoted bare there (e.g. `<img src=x onerror=BOOM>`, `</script>`) reaches innerHTML as live HTML exactly as an unfenced card body would. Every code-derived fragment echoed in a prose field MUST be wrapped in an inline-code span (backticks) so marked.js escapes it as code — or HTML-escaped if an inline-code span does not fit. If the fragment itself contains a backtick, delimit the span with a longer backtick run (CommonMark matches an inline-code span on an equal-length backtick run). NEVER quote a reviewed-code fragment bare in prose.
+**Injection guard — prose fields too**: The same `innerHTML = marked.parse(md)` sink treats raw HTML in *prose* as live, not only in card bodies. The card's prose fields — the finding title, `AC`, `What's wrong`, and `Failure scenario` — are not fenced, so a reviewed-code fragment quoted bare there (e.g. `<img src=x onerror=BOOM>`, `</script>`) reaches innerHTML as live HTML exactly as an unfenced card body would. Every fragment echoed in a prose field — code-derived or requirement-derived — MUST be wrapped in an inline-code span (backticks) so marked.js escapes it as code — or HTML-escaped if an inline-code span does not fit. If the fragment itself contains a backtick, delimit the span with a longer backtick run (CommonMark matches an inline-code span on an equal-length backtick run). NEVER quote a reviewed-code or requirement-text fragment bare in prose.
 
 ## Unverified Entries
 
@@ -102,7 +106,7 @@ Use `data-verdict="PLAUSIBLE"` for plausible findings.
 
 ## Placeholder Table
 
-Count correctness and cleanup findings (CONFIRMED + PLAUSIBLE each). Apply the close-tag escape to the assembled markdown:
+Count correctness, requirement-gap, and cleanup findings (CONFIRMED + PLAUSIBLE each). Apply the close-tag escape to the assembled markdown:
 
 ```js
 JSON.stringify(reviewMarkdown).replace(/<\/(script)([\s/>])/gi, '<\\/$1$2')
@@ -117,6 +121,7 @@ Substitute into the template placeholders:
 | `{{REVIEW_TITLE}}` | Short kicker, e.g. `Code Review` |
 | `{{TOC_TITLE}}` | TOC nav label in session language, e.g. `목차` / `Contents` |
 | `{{CORRECTNESS_COUNT}}` | e.g. `3 correctness` |
+| `{{REQUIREMENT_GAP_COUNT}}` | e.g. `1 requirement gap` |
 | `{{CLEANUP_COUNT}}` | e.g. `2 cleanup` |
 | `{{REVIEW_FILE_PATH}}` | Absolute path to the written HTML file |
 | `{{REVIEW_MARKDOWN_JSON}}` | close-tag-escaped JSON string of the assembled review markdown |
