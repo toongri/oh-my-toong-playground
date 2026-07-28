@@ -518,10 +518,30 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	const denySkills = extractDenySkills(config["chunk-review"].settings);
 	assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
-	const configuredMcpServers = enumerateConfiguredMcpServers(
-		process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
-	);
-	const mcpBlock = computeMcpBlockList(config["chunk-review"].settings, configuredMcpServers);
+	// The block list is per-member, not per-job: a member's own `env:` may set
+	// CODEX_HOME, and that override does reach the spawned codex process
+	// (buildAugmentedCommand seeds --env from entity.env, and worker-utils
+	// spawns with it). Enumerating once from the conductor's home would then
+	// compute against the wrong config.toml in both directions — a server only
+	// the member declares escapes the whitelist, and a server only the
+	// conductor declares yields `-c mcp_servers.<name>.enabled=false` for a
+	// name the member never declares, which makes codex fail to boot
+	// ("Error loading config.toml: invalid transport").
+	//
+	// Memoized per resolved home so N members sharing one home read config.toml
+	// once — the common case, where no member overrides CODEX_HOME at all.
+	const conductorCodexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+	const mcpServersByHome = new Map<string, string[]>();
+	const mcpBlockByMember = members.map((member) => {
+		const env = isRecord(member.env) ? member.env : {};
+		const codexHome = env.CODEX_HOME ? String(env.CODEX_HOME) : conductorCodexHome;
+		let configured = mcpServersByHome.get(codexHome);
+		if (configured === undefined) {
+			configured = enumerateConfiguredMcpServers(codexHome);
+			mcpServersByHome.set(codexHome, configured);
+		}
+		return computeMcpBlockList(config["chunk-review"].settings, configured);
+	});
 
 	const jobId = generateJobId();
 	initLogger("chunk-review-job", getOmtDir(), jobId);
@@ -572,9 +592,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			excludeChairmanFromMembers,
 			timeoutSec: timeoutSec || null,
 			denySkills,
-			mcpBlock,
 		},
-		members: members.map((r) => ({
+		members: members.map((r, i) => ({
 			name: String(r.name),
 			command: String(r.command),
 			emoji: r.emoji ? String(r.emoji) : null,
@@ -583,6 +602,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			effort_level: r.effort_level || null,
 			output_format: r.output_format || null,
 			env: r.env ?? {},
+			mcpBlock: mcpBlockByMember[i],
 			workerPgid: unsetWorkerPgid(),
 			workerPgidStartedAt: unsetWorkerPgidStartedAt(),
 		})),
@@ -590,7 +610,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	const spawned: SpawnedWorker[] = _spawnWorkers({
-		entities: members.map((r) => ({ ...r, deny: denySkills, mcpBlock })),
+		entities: members.map((r, i) => ({ ...r, deny: denySkills, mcpBlock: mcpBlockByMember[i] })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: membersDir,

@@ -3942,12 +3942,16 @@ describe("parseChunkReviewConfig settings.mcps.allow", () => {
 });
 
 // ---------------------------------------------------------------------------
-// start: settings.mcps.allow → job.json settings.mcpBlock (computeMcpBlockList
+// start: settings.mcps.allow → job.json members[].mcpBlock (computeMcpBlockList
 // wiring). Uses cmdStart directly (not via subprocess) so CODEX_HOME can be
 // pointed at a hermetic config.toml fixture instead of the real host's.
+//
+// The block list is recorded per member because a member's own `env.CODEX_HOME`
+// changes which config.toml its worker actually reads — see cmdStart's
+// mcpBlockByMember.
 // ---------------------------------------------------------------------------
 
-describe("start: settings.mcps.allow recorded in job.json settings.mcpBlock", () => {
+describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", () => {
 	let tmpDir: string;
 	let jobsDir: string;
 	let codexHomeDir: string;
@@ -3982,7 +3986,7 @@ describe("start: settings.mcps.allow recorded in job.json settings.mcpBlock", ()
 		fs.rmSync(codexHomeDir, { recursive: true, force: true });
 	});
 
-	test("job.json settings.mcpBlock is the complement of settings.mcps.allow against configured servers", async () => {
+	test("job.json members[].mcpBlock is the complement of settings.mcps.allow against configured servers", async () => {
 		const configPath = path.join(tmpDir, "config.yaml");
 		fs.writeFileSync(
 			configPath,
@@ -4012,7 +4016,68 @@ describe("start: settings.mcps.allow recorded in job.json settings.mcpBlock", ()
 		const jobMeta = JSON.parse(
 			fs.readFileSync(path.join(jobsDir, entry as string, "job.json"), "utf8"),
 		);
-		expect(jobMeta.settings.mcpBlock).toEqual(["figma", "notion"]);
+		expect(jobMeta.members.map((m: { mcpBlock: string[] }) => m.mcpBlock)).toEqual([
+			["figma", "notion"],
+		]);
+	});
+
+	test("a member's own env.CODEX_HOME decides which config.toml its block list is computed against", async () => {
+		// The member home declares a DISJOINT server set from the conductor home
+		// (see beforeEach: codegraph/figma/notion). Both failure directions the
+		// per-member computation exists to prevent are visible in one assertion:
+		// "linear" (member-only) must be blocked, and "figma"/"notion"
+		// (conductor-only) must NOT appear — passing a name the member's own
+		// config.toml never declares makes codex fail to boot.
+		const memberCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-member-"));
+		fs.writeFileSync(
+			path.join(memberCodexHome, "config.toml"),
+			["[mcp_servers.codegraph]", 'command = "stub"', "", "[mcp_servers.linear]", 'command = "stub"'].join(
+				"\n",
+			),
+		);
+
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"    - name: carol",
+				"      command: echo carol",
+				"      env:",
+				`        CODEX_HOME: ${memberCodexHome}`,
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				"    mcps:",
+				"      allow:",
+				"        - codegraph",
+			].join("\n"),
+		);
+
+		try {
+			await cmdStart(
+				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				"test prompt",
+			);
+
+			const entry = fs.readdirSync(jobsDir).find((e) => e.startsWith("chunk-review-"));
+			expect(entry).toBeDefined();
+			const jobMeta = JSON.parse(
+				fs.readFileSync(path.join(jobsDir, entry as string, "job.json"), "utf8"),
+			);
+			const byName = Object.fromEntries(
+				jobMeta.members.map((m: { name: string; mcpBlock: string[] }) => [m.name, m.mcpBlock]),
+			);
+			expect(byName.bob).toEqual(["figma", "notion"]);
+			expect(byName.carol).toEqual(["linear"]);
+		} finally {
+			fs.rmSync(memberCodexHome, { recursive: true, force: true });
+		}
 	});
 });
 
