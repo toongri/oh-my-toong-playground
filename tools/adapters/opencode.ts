@@ -8,7 +8,7 @@ import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
-import { assertMappedTier } from "../lib/model-map.ts";
+import { assertMappedTier, ModelMapError } from "../lib/model-map.ts";
 
 // =============================================================================
 // Model Map Helper
@@ -117,7 +117,14 @@ export const opencodeAdapter: PlatformAdapter = {
 			const content = await fs.readFile(targetFile, "utf-8");
 			const translated = translateAgentFrontmatter(content, modelMap, sourcePath, displayName);
 			await fs.writeFile(targetFile, translated, "utf-8");
-		} catch {
+		} catch (err) {
+			if (err instanceof ModelMapError) {
+				// The initial copy (line 112) already wrote the raw, untranslated
+				// frontmatter — remove it so no file is left containing the
+				// unmapped tier string before propagating the hard-fail.
+				await fs.rm(targetFile, { force: true });
+				throw err;
+			}
 			logWarn(`Failed to translate frontmatter for: ${sourcePath}. Copying as-is.`);
 			await fs.copyFile(sourcePath, targetFile);
 		}

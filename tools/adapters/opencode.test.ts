@@ -815,6 +815,23 @@ Body content.`,
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}
 	});
+
+	it("rejects and leaves no file containing the raw tier when the tier is unmapped via `syncAgentsDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			// Fixture agentFile declares `model: opus`, but this map has no `opus` tier.
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "openai/gpt-4o" } } };
+			await expect(
+				opencodeAdapter.syncAgentsDirect(targetDir, "oracle", agentFile, [], [], false, modelMap),
+			).rejects.toThrow(/oracle\.md.*opus|opus.*oracle\.md/);
+
+			const target = path.join(targetDir, ".opencode", "agents", "oracle.md");
+			const content = await fs.readFile(target, "utf-8").catch(() => "");
+			expect(content).not.toContain("model: opus");
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
 });
 
 // =============================================================================
