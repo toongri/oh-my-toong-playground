@@ -190,7 +190,7 @@ class Order private constructor(
 
     init {  // Rule 6: Validate on construction
         if (!totalAmount.isPositive()) {
-            throw CoreException(ErrorType.BAD_REQUEST, "총 금액은 양수여야 합니다.")
+            throw CoreException(ErrorType.BAD_REQUEST, "[totalAmount = $totalAmount] 총 금액은 양수여야 합니다.")
         }
     }
 
