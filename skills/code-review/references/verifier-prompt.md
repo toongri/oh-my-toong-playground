@@ -151,5 +151,6 @@ WHAT'S WRONG: <the problem, grounded in the quoted line>
 FAILURE SCENARIO: <concrete inputs/state -> wrong output, crash, or lost effect; for a cleanup finding, the concrete cost — what is duplicated, wasted, or harder to maintain>
 FIX: <concrete diff, or a design direction if the change is structural>
 BLAST RADIUS: <grep/reference evidence — what else references this, or "This location only">
+AC: {CANDIDATE_AC} — omit this line entirely when the candidate carries no acceptance criterion
 FOUND BY: {CANDIDATE_FOUND_BY}
 ```

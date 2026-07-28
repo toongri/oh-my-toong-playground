@@ -482,7 +482,7 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
 **Inline judgment steps:**
 
 1. **Dedup near-duplicates first** (same defect, same location, same reason → keep one, and carry onto it everything the duplicates contributed: the merged `found by` angles, the most concrete failure scenario, and any field only one of them supplied). Merging removes the repetition, never the substance. Deduplication reduces the judgment workload before it starts.
-2. **MANDATORY READ: `references/verifier-prompt.md`** — read it before beginning judgment. The verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), verification method, and 9-field output contract all live there. Escalated candidates reuse this file as their dispatch prompt.
+2. **MANDATORY READ: `references/verifier-prompt.md`** — read it before beginning judgment. The verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), verification method, and the enrichment output contract all live there. Escalated candidates reuse this file as their dispatch prompt.
 3. For each remaining candidate, in order:
 
    **REASONING** — read the code at the issue location (Read/Grep on the candidate file), trace the call chain from the entry point, and check the execution context (threading, dispatch model, runtime configuration). Apply the verdict ladder from `references/verifier-prompt.md`. Reason explicitly before issuing a score.
@@ -491,7 +491,7 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
 
    **VERDICT** — exactly one of CONFIRMED / PLAUSIBLE / REFUTED (ladder in `references/verifier-prompt.md`).
 
-   For **CONFIRMED** or **PLAUSIBLE** (kept findings), emit the full 9-field enrichment inline:
+   For **CONFIRMED** or **PLAUSIBLE** (kept findings), emit the full enrichment inline:
 
    ```
    VERDICT: <CONFIRMED | PLAUSIBLE>
@@ -503,6 +503,7 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
    FAILURE SCENARIO: <concrete inputs/state -> wrong output, crash, or lost effect; for a cleanup finding, the concrete cost>
    FIX: <concrete diff, or design direction if structural>
    BLAST RADIUS: <grep/reference evidence — what else references this, or "This location only">
+   AC: <the candidate's acceptance criterion / inferred intent — omit this line entirely when it carries none>
    FOUND BY: <angle(s)>
    ```
 
@@ -519,7 +520,7 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
 
 **Cap & batching:** judge at most **25 candidates per batch** inline. If more survive dedup, batch by file proximity, **correctness candidates first**, and state how many were deferred — never silently drop.
 
-**The verdict ladder, verification method, and 9-field output contract all live in `references/verifier-prompt.md`** — that is the single source; the inline judgment mirrors this contract directly.
+**The verdict ladder, verification method, and the enrichment output contract all live in `references/verifier-prompt.md`** — that is the single source; the inline judgment mirrors this contract directly.
 
 ### Phase 3: Findings Synthesis (report-only)
 
@@ -545,7 +546,7 @@ This is a **report**. You surface verified findings, ranked by what matters most
 
 This is a **report**. It does not gate. There is no Assessment / "Ready to merge" section, and there is no HTML — the deliverable is the Phase 3 findings as terminal text.
 
-Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup / requirement-gap), `file:line`, and enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the 9-field shape from `references/verifier-prompt.md`, produced inline for non-escalated findings or by the escalated verifier for superseded ones). Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by `review-report` when it dispatches a code-reviewer agent that runs this skill — do not invent a different format.
+Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup / requirement-gap), `file:line`, and enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the enrichment shape from `references/verifier-prompt.md`, produced inline for non-escalated findings or by the escalated verifier for superseded ones). Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by `review-report` when it dispatches a code-reviewer agent that runs this skill — do not invent a different format.
 
 ## Reference Files (on-demand)
 
