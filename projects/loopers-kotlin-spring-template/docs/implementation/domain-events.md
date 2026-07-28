@@ -286,7 +286,7 @@ fun onOrderCreated(event: OrderCreatedEventV1)
 | "Event factory method unnecessary" | ALWAYS use `companion object { fun from(entity) }` pattern. Encapsulates conversion. |
 | "Just @EventListener is enough" | Use @TransactionalEventListener with explicit phase. Phase control is required. |
 | "Logging in listeners is optional" | ALWAYS log `[Event] Action start/complete - eventType: X, id: Y`. Required for debugging. |
-| "Async listener doesn't need try-catch" | Async failures MUST be caught and logged. Propagating exceptions breaks async processing. |
+| "Listener doesn't need try-catch" | Exceptions MUST be caught and logged. Spring swallows them in `afterCompletion()` — an uncaught one disappears silently, sync or async alike. |
 | "Direct synchronous call is clearer" | Events are required for cross-domain. "Clearer" != correct architecture. |
 | "Single @Transactional covers everything" | External calls MUST be after commit. Use AFTER_COMMIT event listener. |
 
@@ -298,4 +298,4 @@ fun onOrderCreated(event: OrderCreatedEventV1)
 |---|---|
 | "Event without V1 suffix" | Version suffix required |
 | "Just @EventListener" | Use @TransactionalEventListener with phase |
-| "Async listener without try-catch" | Async failures must be caught and logged |
+| "Listener without try-catch" | Exceptions must be caught and logged — sync or async alike |
