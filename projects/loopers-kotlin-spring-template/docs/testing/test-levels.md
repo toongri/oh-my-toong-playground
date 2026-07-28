@@ -29,8 +29,8 @@
 | Integration | `*IntegrationTest.kt`   | Service + Repository, 트랜잭션         | 실제 DB                    |
 | Concurrency | `*ConcurrencyTest.kt`   | 락, 경쟁 상태(race condition)          | 실제 DB                    |
 | Adapter     | `*AdapterTest.kt`       | 외부 API 클라이언트, 쿼리              | WireMock, Testcontainers   |
-| E2E         | `*E2ETest.kt`           | 전체 API 흐름, 인증                    | 전체 스택                  |
-| Batch       | `*BatchTest.kt`         | Spring Batch Job                       | 실제 DB                    |
+| E2E         | `*ApiE2ETest.kt`        | 전체 API 흐름, 인증                    | 전체 스택                  |
+| Batch       | `*StepIntegrationTest.kt` / `*JobIntegrationTest.kt` | Spring Batch Job          | 실제 DB                    |
 
 각 레벨을 어떻게 판단하는지는 §3~§6, 외부 의존성을 다루는 원칙은 §7 이후에서 다룬다.
 
