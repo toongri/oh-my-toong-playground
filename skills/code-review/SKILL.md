@@ -298,8 +298,9 @@ Collect in parallel (using `{range}` from Step 0):
 
 1. `git diff {range} --stat` (change scale)
 2. `git diff {range} --name-only` (file list)
-3. `git log {range} --oneline` (commit history)
-4. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
+3. `git diff {range} --numstat` (per-file insertion/deletion counts)
+4. `git log {range} --oneline` (commit history)
+5. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
 ## Step 3: Evidence Verification
 
@@ -371,7 +372,7 @@ If any check fails:
 
 ## Step 4: Chunking Decision
 
-Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`) — only `X` (insertions) drives this decision:
+Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`) — of the two line counts, only `X` (insertions), never `Y` (deletions), feeds this decision:
 
 | Condition | Strategy |
 |-----------|----------|
