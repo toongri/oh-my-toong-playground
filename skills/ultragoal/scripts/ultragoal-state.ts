@@ -1169,7 +1169,8 @@ export function requestComplete(sessionId: string): boolean {
  * where criterion is the top-level verification_surface slot when non-empty,
  * else the outcome itself — so the block never goes structurally empty while
  * an outcome exists (an empty block reads as "no AC" to the code-review
- * coverage finder, which then skips requirement-gap detection entirely).
+ * requirement finder, which then falls back to inferring intent from the
+ * diff/commits/tests instead of mapping against acceptance criteria).
  * An empty outcome has nothing to fall back to, so it still returns "".
  * Feeds the code-review lane's `{REQUIREMENTS}` input (Hop B).
  */
