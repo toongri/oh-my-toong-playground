@@ -120,7 +120,7 @@ class CouponService(
     @Transactional(readOnly = true)
     fun findById(id: Long): Coupon {
         return couponRepository.findById(id)
-            ?: throw CoreException(ErrorType.NOT_FOUND, "[couponId = $id] Coupon not found.")
+            ?: throw CoreException(ErrorType.NOT_FOUND, "[couponId = $id] 쿠폰을 찾을 수 없습니다.")
     }
 
     @Transactional
@@ -329,7 +329,7 @@ class OrderService {
     @Transactional
     fun fulfill(command: OrderCommand): Order {
         val order = orderRepository.findById(command.orderId)
-            ?: throw CoreException(ErrorType.NOT_FOUND, "[orderId = ${command.orderId}] Order not found.")
+            ?: throw CoreException(ErrorType.NOT_FOUND, "[orderId = ${command.orderId}] 주문을 찾을 수 없습니다.")
 
         order.fulfill()  // Entity handles type-specific processing (polymorphism or internal logic)
         return orderRepository.save(order)
