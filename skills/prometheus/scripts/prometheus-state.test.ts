@@ -7,6 +7,7 @@ import {
 	writeFileSync,
 	readFileSync,
 	unlinkSync,
+	utimesSync,
 } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
@@ -801,15 +802,73 @@ describe("Stage A presentation gate (F7)", () => {
 		expect(code).toBe(0);
 	});
 
-	// (F7-nopath) with no plan_path the presentation path is underivable — the gate
-	// cannot judge, so it must not block on a check it never performed
-	test("S6 with no plan_path is not gated", () => {
+	// (F7-nopath) plan_path is set at S2 and preserved afterwards, so an empty one at
+	// S6 means that write was skipped — the same instruction-skipping class the gate
+	// exists to catch. Letting it through would leave a hole big enough to drive the
+	// whole pipeline through: never pass --plan-path, and no phase is ever checked.
+	test("S6 with no plan_path exits non-zero", () => {
 		writePristinePromState("gateNoPath");
-		const { code } = runPromCliMerged("set --phase S6", {
+		const { code, out } = runPromCliMerged("set --phase S6", {
 			OMT_SESSION_ID: "gateNoPath",
 			OMT_DIR: tmpDir,
 		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/plan_path|plan-path/i);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateNoPath.json`, "utf8"));
+		expect(state.phase).toBe("S0");
+	});
+
+	// (F7-stale) The loop-back paths — scoped re-review after a Momus REQUEST_CHANGES,
+	// and the user-initiated S7→S0 revise — rewrite the plan at the SAME path, and the
+	// presentation stem is pinned to the plan stem (review-pipeline.md), so an earlier
+	// pass's render sits exactly where the existence check looks. Nothing deletes it.
+	// A stale review document is worse than a missing one: the user reviews it
+	// believing it describes the current plan.
+	test("S6 with a presentation older than the plan exits non-zero", () => {
+		const planPath = seedPlan("gateStale");
+		writePresentation();
+		// presentation rendered at T, plan revised at T+60s
+		const rendered = new Date(Date.now() - 60_000);
+		utimesSync(`${tmpDir}/plans/presentation/plan.md`, rendered, rendered);
+		const revised = new Date();
+		utimesSync(planPath, revised, revised);
+		const { code, out } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+			OMT_SESSION_ID: "gateStale",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/stale|older|re-render|재렌더/i);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateStale.json`, "utf8"));
+		expect(state.phase).toBe("S0");
+	});
+
+	// (F7-rerendered) the same plan passes once Stage A actually re-rendered
+	test("S6 succeeds when the presentation is newer than the plan", () => {
+		const planPath = seedPlan("gateRerendered");
+		writePresentation();
+		const revised = new Date(Date.now() - 60_000);
+		utimesSync(planPath, revised, revised);
+		const rendered = new Date();
+		utimesSync(`${tmpDir}/plans/presentation/plan.md`, rendered, rendered);
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+			OMT_SESSION_ID: "gateRerendered",
+			OMT_DIR: tmpDir,
+		});
 		expect(code).toBe(0);
+	});
+
+	// (F7-noplan) plan_path set but the plan file itself is gone — the staleness
+	// comparison has no left-hand side. Broken state, named rather than crashed.
+	test("S6 with a plan_path that does not resolve exits non-zero", () => {
+		writePristinePromState("gateNoPlanFile");
+		mkdirSync(`${tmpDir}/plans/presentation`, { recursive: true });
+		writeFileSync(`${tmpDir}/plans/presentation/ghost.md`, "# presentation\n", "utf8");
+		const { code, out } = runPromCliMerged(`set --phase S6 --plan-path ${tmpDir}/plans/ghost.md`, {
+			OMT_SESSION_ID: "gateNoPlanFile",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/plan|resolve|absent/i);
 	});
 
 	// (F7-derive) the presentation path is derived from the plan's own directory, not

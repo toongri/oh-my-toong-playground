@@ -1167,7 +1167,13 @@ After reconciliation, the design passes through the human design gate, then S3 p
 
 This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execute Stages A → B → C before any user-facing handoff. Skipping = treating the plan as user-ready when it is unrendered. **Past sessions have skipped Stage A entirely; do NOT.**
 
-**This is enforced, not just stated.** `prometheus-state.ts` refuses to record phase S6 or later while the Stage A presentation file is absent from disk — the write exits non-zero and the phase does not advance. There is no way to reach S6/S7/S8 with an unrendered plan, so a skipped Stage A does not surface as a quietly missing file at handoff; it surfaces as a hard stop at the very next state write. The path it checks is the Stage A output path: `<plan's directory>/presentation/<plan's filename>`.
+**This is enforced, not just stated.** `prometheus-state.ts` refuses to record phase S6 or later — the write exits non-zero and the phase does not advance — unless all three hold at `<plan's directory>/presentation/<plan's filename>`:
+
+- `plan_path` is set (it is set at S2 and preserved; empty here means that write was skipped)
+- the presentation file exists
+- it is not older than the plan — a render from an earlier pass through S5 does not satisfy a revised plan
+
+The third is what the loop-backs need: after a scoped re-review or an S7→S0 revise, the plan is rewritten at the same path while the previous render stays on disk. **Re-run Stage A on every pass through S5, not just the first.** A skipped or stale render surfaces as a hard stop at the next state write rather than as a wrong document in the user's hands.
 
 | Stage | Mandate | Detail location |
 |---|---|---|
