@@ -40,7 +40,7 @@ You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" stop "$JOB_DIR"` — SIGTERM any still-`running` finder (see Step 2)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` — harvest per-member token usage; **run BEFORE `clean`** (job dir is deleted by clean)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir; teardown step, run only after usage-summary and everything else is complete
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean --force "$JOB_DIR"` — same as `clean`, but skips the active-member guard (see Step 2)
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean --force "$JOB_DIR"` — same as `clean`, but skips the active-member guard; use it when an ordinary `clean` is refused for active members
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call, except `collect` and `resume-member` (both `timeout: 600000`) — see Member Resume Policy for what to do if Bash kills a `resume-member` call before it returns.
 
@@ -50,7 +50,7 @@ These constraints govern the orchestration path — while dispatched finders are
 
 You may use Read for EXACTLY this 1 operation. No other file reads.
 
-1. Read each finder's `outputFilePath` from the manifest JSON — these point to `output.txt` files in the job directory. Only read entries where `outputFilePath` is non-null (null means the finder failed; `errorMessage` explains why). The manifest comes from either `collect`'s `"done"` response or `results --manifest "$JOB_DIR"`.
+1. Read each finder's `outputFilePath` from the manifest JSON — these point to `output.txt` files in the job directory. Only read entries where `outputFilePath` is non-null (null means the finder failed; `errorMessage` explains why). The manifest comes from `collect`'s `"done"` response, `results --manifest "$JOB_DIR"`, or `stop "$JOB_DIR"`.
 
 ### Interpolated Prompt Passthrough
 
@@ -86,7 +86,7 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"
   1. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`, and read `outputFilePath` per finder from the manifest JSON it prints per Allowed Read Usage.
   2. Apply the Degradation Policy table below to the resulting responded/N ratio — treating every finder that never produced a non-null `outputFilePath` as not-responded (denominator stays N = total dispatched).
   3. Run `usage-summary.ts "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text.
-  4. Teardown with `clean --force "$JOB_DIR"` in place of the ordinary `clean "$JOB_DIR"`.
+  4. Teardown with `clean "$JOB_DIR"`.
 
 Response JSON (done):
 ```json
@@ -136,7 +136,7 @@ These constraints govern the orchestration path — while dispatched finders are
 
 **Member Resume Policy (`resume-member`):**
 
-Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), or an `awaiting_resume` member is still `awaiting_resume` after 3 `resume-member` attempts, fall back to in-session per the trigger logic below. Once every finder is finished, run `usage-summary.ts` (harvest token counts), then run `clean --force`.
+Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), or an `awaiting_resume` member is still `awaiting_resume` after 3 `resume-member` attempts, fall back to in-session per the trigger logic below. Once every finder is finished, run `usage-summary.ts` (harvest token counts), then run `clean`.
 
 ```
 bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your candidate list."
