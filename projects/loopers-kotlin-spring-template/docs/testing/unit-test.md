@@ -164,11 +164,11 @@ class Order private constructor(...) {
 }
 
 // In test:
-private fun createOrderWithStatus(status: OrderStatus): Order =
+private fun createOrderWithStatus(status: OrderStatus = OrderStatus.PLACED): Order =
     Order.forTest(status = status)
 
 // Option 2: Reflection helper (when modifying production code is not possible)
-private fun createOrderWithStatus(status: OrderStatus): Order {
+private fun createOrderWithStatus(status: OrderStatus = OrderStatus.PLACED): Order {
     val order = Order.create(userId = 1L, items = listOf(createOrderItem()))
     val statusField = Order::class.java.getDeclaredField("status")
     statusField.isAccessible = true
