@@ -112,7 +112,7 @@ sequenceDiagram
   +}
   ```
 - **Blast Radius**: `OrderController.kt:initiatePayment()` calls `processPayment()`; the new `PaymentApplicationService` becomes the transaction owner.
-- **Found by**: correctness (corroborated by cleanup)
+- **Found by**: correctness
 
 **[PLAUSIBLE] Webhook marks order PAID without re-checking the charged amount**
 - **Location**: `OrderPaymentController.kt:88` — `handleWebhook()`
