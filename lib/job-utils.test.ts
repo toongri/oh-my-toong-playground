@@ -24,6 +24,7 @@ import {
 	findProjectRoot,
 	stripAnsi,
 	resolveChairmanExclusion,
+	logRootForJobsDir,
 	type WaitCursor,
 } from "./job-utils.ts";
 
@@ -760,6 +761,20 @@ describe("findProjectRoot", () => {
 		const scriptDir = path.join(tmpDir, "scripts", "chunk-review");
 		fs.mkdirSync(scriptDir, { recursive: true });
 		expect(findProjectRoot(scriptDir)).toBe(tmpDir);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// logRootForJobsDir
+// ---------------------------------------------------------------------------
+
+describe("logRootForJobsDir", () => {
+	test("정상 깊이의 jobs-dir이면 그 부모 디렉터리를 반환한다", () => {
+		expect(logRootForJobsDir("/a/b/jobs")).toBe("/a/b");
+	});
+
+	test("얕은 jobs-dir(루트 바로 아래)이면 파일시스템 루트를 반환한다 (현재 동작 — 이 결과가 mkdirSync EACCES로 이어지는 결함은 이번 태스크의 수정 대상이 아니다)", () => {
+		expect(logRootForJobsDir("/jobs")).toBe("/");
 	});
 });
 
