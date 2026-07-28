@@ -55,59 +55,59 @@ function makeCliStubDir(): string {
 let sharedStubDir: string;
 
 /**
- * Filename prefix every log this suite's CLI invocations can produce shares —
- * initLoggerFromJobDir (job.ts) always calls initLogger("chunk-review-job", …),
- * and lib/logging.ts's initLogger names the file `${component}-${sessionId}.log`.
- * Snapshotting only names with this prefix keeps the two canaries below scoped
- * to what THIS suite could have written, so an unrelated suite (161 files run
- * in the same `bun test` invocation) writing its own component's log into the
- * same shared directory can't false-positive this suite's drift check.
+ * Log filename a jobDir's fixture produces, mirroring initLoggerFromJobDir's
+ * (job.ts) jobId extraction and initLogger's (lib/logging.ts) filename template.
  */
-const LOG_FILE_PREFIX = "chunk-review-job-";
+function expectedLogFileName(jobDirBasename: string): string {
+	const jobId = jobDirBasename.replace(/^chunk-review-/, "");
+	const sanitized = jobId.replace(/[^a-zA-Z0-9-]/g, "-");
+	return `chunk-review-job-${sanitized}.log`;
+}
 
 /**
- * Real log directory an unfixed jobDir-under-tmpDir fixture leaks into:
- * initLoggerFromJobDir derives its root two levels up from jobDir, so a
- * fixture missing the `jobs/` nesting lands on os.tmpdir() itself (the
- * shared, machine-level temp root, not a per-test tmpDir) — see job.ts's
- * logRootForJobsDir. Snapshotting by mtime (not just presence/count) is
- * required: log filenames are fixed, so a leaking run overwrites an
- * existing file's content without changing how many files exist.
+ * Every jobDir basename this suite passes to status/results/collect/stop/clean
+ * (the five commands that call initLoggerFromJobDir). A fixture must route its
+ * literal through suiteJobDirBasename() below so a name missing from this array
+ * fails to typecheck instead of silently escaping the AC9 canary.
+ */
+const SUITE_JOB_DIR_BASENAMES = [
+	"evil",
+	"chunk-review-test",
+	"not-a-job",
+	"job-qa1",
+	"job-qa2",
+	"job-qa3",
+	"job-qa4",
+	"job-manifest1",
+	"job-manifest2",
+	"job-manifest3",
+	"job-manifest4",
+	"job-overflow-replay",
+	"job-collect-done",
+	"chunk-review-logroot01",
+	"chunk-review-durations1",
+	"job-collect-timeout",
+	"chunk-review-hardcap-clamp",
+	"job-collect-size-bytes",
+] as const;
+
+function suiteJobDirBasename(name: (typeof SUITE_JOB_DIR_BASENAMES)[number]): string {
+	return name;
+}
+
+/**
+ * Real log directory an unfixed jobDir-under-tmpDir fixture leaks into —
+ * see job.ts's logRootForJobsDir.
  */
 const REAL_TMP_LOG_DIR = path.join(os.tmpdir(), "logs");
 
 /**
- * Real log directory AC9 names literally ("~/.omt/<project>/logs/"). No
- * command path in this suite currently reaches it (every `start` invocation
- * passes --jobs-dir; collect/status/stop/clean derive their log root from the
- * given jobDir, never from getOmtDir() — see logRootForJobsDir's comment in
- * job.ts), but a regression that makes the logger fall back to getOmtDir()
- * directly would land here, and only this canary — not the os.tmpdir() one —
- * would show it.
+ * Real log directory AC9 names literally ("~/.omt/<project>/logs/").
  */
 const REAL_OMT_LOG_DIR = path.join(getOmtDir(), "logs");
 
-function snapshotLogDirMtimes(dir: string): Record<string, number> {
-	if (!fs.existsSync(dir)) return {};
-	const map: Record<string, number> = {};
-	for (const name of fs.readdirSync(dir)) {
-		if (!name.startsWith(LOG_FILE_PREFIX)) continue;
-		map[name] = fs.statSync(path.join(dir, name)).mtimeMs;
-	}
-	return map;
-}
-
-// Captured once, before any test in this file runs, so the AC9 "no real
-// OMT_DIR contamination" check below can catch a leak from ANY fixture in
-// this file (not just its own) that writes into the shared log dir instead
-// of its own tmpDir/jobs/logs.
-let logDirBaselineBeforeSuite: Record<string, number>;
-let omtLogDirBaselineBeforeSuite: Record<string, number>;
-
 beforeAll(() => {
 	sharedStubDir = makeCliStubDir();
-	logDirBaselineBeforeSuite = snapshotLogDirMtimes(REAL_TMP_LOG_DIR);
-	omtLogDirBaselineBeforeSuite = snapshotLogDirMtimes(REAL_OMT_LOG_DIR);
 });
 
 afterAll(() => {
@@ -1141,7 +1141,7 @@ describe("cmdClean path traversal guard", () => {
 		const jobsDir = path.join(tmpDir, "jobs");
 		fs.mkdirSync(jobsDir, { recursive: true });
 
-		const outsidePath = path.join(tmpDir, "not-jobs", "evil");
+		const outsidePath = path.join(tmpDir, "not-jobs", suiteJobDirBasename("evil"));
 		fs.mkdirSync(outsidePath, { recursive: true });
 
 		try {
@@ -1162,7 +1162,7 @@ describe("cmdClean path traversal guard", () => {
 
 	test("accepts and cleans a path inside the configured jobs directory", () => {
 		const jobsDir = path.join(tmpDir, "jobs");
-		const jobDir = path.join(jobsDir, "chunk-review-test");
+		const jobDir = path.join(jobsDir, suiteJobDirBasename("chunk-review-test"));
 		fs.mkdirSync(jobDir, { recursive: true });
 		fs.writeFileSync(path.join(jobDir, "dummy.txt"), "test");
 
@@ -1180,7 +1180,7 @@ describe("cmdClean path traversal guard", () => {
 		// Simulate a job created with --jobs-dir /custom: the job directory is NOT
 		// under the default jobs directory, but it contains job.json proving it's real.
 		const customJobsDir = path.join(tmpDir, "custom-jobs");
-		const jobDir = path.join(customJobsDir, "chunk-review-test");
+		const jobDir = path.join(customJobsDir, suiteJobDirBasename("chunk-review-test"));
 		fs.mkdirSync(jobDir, { recursive: true });
 		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "test-custom" }));
 		fs.writeFileSync(path.join(jobDir, "dummy.txt"), "test");
@@ -1194,7 +1194,7 @@ describe("cmdClean path traversal guard", () => {
 
 	test("rejects a path outside jobs directory without job.json", () => {
 		// An arbitrary directory without job.json should still be rejected
-		const outsidePath = path.join(tmpDir, "jobs", "not-a-job");
+		const outsidePath = path.join(tmpDir, "jobs", suiteJobDirBasename("not-a-job"));
 		fs.mkdirSync(outsidePath, { recursive: true });
 		fs.writeFileSync(path.join(outsidePath, "important.txt"), "do not delete");
 
@@ -2171,7 +2171,7 @@ describe("cmdResults", () => {
 	});
 
 	test("--json 출력에서 prompt, stderr 필드가 제거됨", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-qa1");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-qa1"));
 		const largeStderr = "x".repeat(33000);
 		const largePrompt = "p".repeat(30000);
 		setupJobFixture(
@@ -2204,7 +2204,7 @@ describe("cmdResults", () => {
 	});
 
 	test("3 reviewers --json 출력이 30000자 미만", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-qa2");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-qa2"));
 		setupJobFixture(
 			jobDir,
 			{
@@ -2244,7 +2244,7 @@ describe("cmdResults", () => {
 	});
 
 	test("non-JSON: output 비어있으면 stderr fallback 출력", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-qa3");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-qa3"));
 		setupJobFixture(jobDir, {
 			"claude-0": {
 				member: "claude",
@@ -2262,7 +2262,7 @@ describe("cmdResults", () => {
 	});
 
 	test("non-JSON: output 있으면 output 출력, stderr 미포함", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-qa4");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-qa4"));
 		setupJobFixture(jobDir, {
 			"claude-0": {
 				member: "claude",
@@ -2281,7 +2281,7 @@ describe("cmdResults", () => {
 	});
 
 	test("--manifest: done reviewer의 outputFilePath가 job dir 내 output.txt 참조", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-manifest1");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-manifest1"));
 		setupJobFixture(jobDir, {
 			"claude-0": {
 				member: "claude",
@@ -2310,7 +2310,7 @@ describe("cmdResults", () => {
 	});
 
 	test("--manifest: failed/non_retryable reviewer의 outputFilePath가 null + errorMessage 존재", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-manifest2");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-manifest2"));
 		setupJobFixture(jobDir, {
 			"claude-0": {
 				member: "claude",
@@ -2349,7 +2349,7 @@ describe("cmdResults", () => {
 	});
 
 	test("--manifest: JSON schema 검증 (id, reviewers 필드 구조)", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-manifest3");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-manifest3"));
 		setupJobFixture(jobDir, {
 			"claude-0": { member: "claude", state: "done", exitCode: 0, output: "output A", stderr: "" },
 			"codex-0": { member: "codex", state: "done", exitCode: 0, output: "output B", stderr: "" },
@@ -2388,7 +2388,7 @@ describe("cmdResults", () => {
 	});
 
 	test("--manifest: stdout가 경량 (2KB 미만, output 인라인 없음)", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-manifest4");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-manifest4"));
 		const largeOutput = "x".repeat(50000);
 		setupJobFixture(jobDir, {
 			"claude-0": { member: "claude", state: "done", exitCode: 0, output: largeOutput, stderr: "" },
@@ -2423,7 +2423,7 @@ describe("cmdResults", () => {
 		'{"type":"error","timestamp":1778226218594,"sessionID":"ses_1f9755009ffee8JrpYLKy1QwzO","error":{"name":"ContextOverflowError","data":{"message":"Input exceeds context window of this model","responseBody":"{\\"type\\":\\"error\\",\\"sequence_number\\":2,\\"error\\":{\\"type\\":\\"invalid_request_error\\",\\"code\\":\\"context_length_exceeded\\",\\"message\\":\\"Your input exceeds the context window of this model. Please adjust your input and try again.\\",\\"param\\":\\"input\\"}}"}}}\n';
 
 	test("replay smoke: gpt-S5-500k overflow → manifest outputFilePath null", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-overflow-replay");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-overflow-replay"));
 		setupJobFixture(jobDir, {
 			"gpt-0": {
 				member: "gpt",
@@ -2601,7 +2601,7 @@ describe("cmdCollect", () => {
 	});
 
 	test("done 상태: manifest JSON 반환", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-collect-done");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-collect-done"));
 		setupCollectFixture(jobDir, {
 			"claude-0": { member: "claude", state: "done", exitCode: 0, output: "review output A" },
 			"codex-0": { member: "codex", state: "done", exitCode: 0, output: "review output B" },
@@ -2626,7 +2626,8 @@ describe("cmdCollect", () => {
 		// Production layout: <omtDir>/jobs/<jobId>. The logger derives its root two
 		// levels up from jobDir, so a run pointed at a temp jobs-dir logs there —
 		// this is what keeps the suite from writing into ~/.omt/<project>/logs/.
-		const jobDir = path.join(tmpDir, "jobs", "chunk-review-logroot01");
+		const jobDirBasename = suiteJobDirBasename("chunk-review-logroot01");
+		const jobDir = path.join(tmpDir, "jobs", jobDirBasename);
 		setupCollectFixture(jobDir, {
 			"claude-0": { member: "claude", state: "done", exitCode: 0, output: "x" },
 		});
@@ -2635,40 +2636,23 @@ describe("cmdCollect", () => {
 			stdio: "pipe",
 		});
 
-		const logPath = path.join(tmpDir, "logs", "chunk-review-job-logroot01.log");
+		const expectedLogFile = expectedLogFileName(jobDirBasename);
+		const logPath = path.join(tmpDir, "logs", expectedLogFile);
 		expect(fs.existsSync(logPath)).toBe(true);
 		expect(fs.readFileSync(logPath, "utf8")).toContain("collect:");
 
-		// Negative assertion: the shared leak target (os.tmpdir()/logs) must show
-		// zero drift from the pre-suite baseline — no new file and no mtime change
-		// on an existing one. Comparing against the suite-wide baseline (captured
-		// once in the file-level beforeAll above), rather than a snapshot taken
-		// just before this test's own command, is what lets this also catch a
-		// regression in any earlier fixture in this file — this test runs after
-		// every other fixture that exercises the CLI via execFileSync, so their
-		// contamination (if any) has already landed by the time this check runs.
-		const afterSuite = snapshotLogDirMtimes(REAL_TMP_LOG_DIR);
-		expect(Object.keys(afterSuite).length).toBe(Object.keys(logDirBaselineBeforeSuite).length);
-		for (const [name, mtime] of Object.entries(afterSuite)) {
-			expect(mtime).toBe(logDirBaselineBeforeSuite[name]);
-		}
-
-		// Second axis, same technique: AC9's own wording names getOmtDir()'s
-		// logs/ directory literally ("~/.omt/<project>/logs/"), not os.tmpdir()'s
-		// — a logger regression that falls back to getOmtDir() directly (instead
-		// of deriving the root from jobDir) would leave the os.tmpdir() canary
-		// above silent and only show up here.
-		const afterSuiteOmt = snapshotLogDirMtimes(REAL_OMT_LOG_DIR);
-		expect(Object.keys(afterSuiteOmt).length).toBe(
-			Object.keys(omtLogDirBaselineBeforeSuite).length,
-		);
-		for (const [name, mtime] of Object.entries(afterSuiteOmt)) {
-			expect(mtime).toBe(omtLogDirBaselineBeforeSuite[name]);
+		// Checks only the exact filenames this suite's own fixtures can produce, not a
+		// directory snapshot, so an unrelated concurrent session's own logs can't
+		// false-positive it, while still catching a regression in any fixture's jobs/ nesting.
+		for (const basename of SUITE_JOB_DIR_BASENAMES) {
+			const file = expectedLogFileName(basename);
+			expect(fs.existsSync(path.join(REAL_TMP_LOG_DIR, file))).toBe(false);
+			expect(fs.existsSync(path.join(REAL_OMT_LOG_DIR, file))).toBe(false);
 		}
 	});
 
 	test("collect 후 멤버별 소요를 job createdAt 기준으로 기록", () => {
-		const jobDir = path.join(tmpDir, "jobs", "chunk-review-durations1");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("chunk-review-durations1"));
 		setupCollectFixture(jobDir, {
 			"alpha-0": { member: "alpha", state: "done", exitCode: 0, output: "a" },
 			"beta-0": { member: "beta", state: "done", exitCode: 0, output: "b" },
@@ -2716,7 +2700,7 @@ describe("cmdCollect", () => {
 	});
 
 	test("timeout: not-done JSON 반환 (overallState, id, counts)", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-collect-timeout");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-collect-timeout"));
 		setupCollectFixture(jobDir, {
 			"claude-0": { member: "claude", state: "running", exitCode: 0, output: "" },
 			"codex-0": { member: "codex", state: "queued", exitCode: 0, output: "" },
@@ -2766,7 +2750,7 @@ describe("cmdCollect", () => {
 		// without ever reading it directly (lib/generic-job.ts stays untouched, per this
 		// pursuit's non-goal). A member left in a non-terminal state (never "done") keeps the
 		// loop from returning before it ever reaches the timeout comparison.
-		const jobDir = path.join(tmpDir, "jobs", "chunk-review-hardcap-clamp");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("chunk-review-hardcap-clamp"));
 		setupCollectFixture(jobDir, {
 			"claude-0": { member: "claude", state: "queued", exitCode: 0, output: "" },
 		});
@@ -2822,7 +2806,7 @@ describe("cmdCollect", () => {
 	});
 
 	test("cmdCollect propagates size_bytes to chairman payload", () => {
-		const jobDir = path.join(tmpDir, "jobs", "job-collect-size-bytes");
+		const jobDir = path.join(tmpDir, "jobs", suiteJobDirBasename("job-collect-size-bytes"));
 		fs.mkdirSync(jobDir, { recursive: true });
 		fs.writeFileSync(
 			path.join(jobDir, "job.json"),
