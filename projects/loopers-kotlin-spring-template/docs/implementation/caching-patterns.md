@@ -22,7 +22,7 @@
 
 캐싱은 **Application Layer(Facade)**에서 **Cache-Aside 패턴**으로만 관리한다. 세밀한 제어를 위해 `@Cacheable` 어노테이션 대신 `CacheTemplate`을 쓴다.
 
-이 프로젝트에서 캐싱이 실제로 답하는 질문은 "무엇을 캐싱하나"가 아니라 **"어느 레이어에 두나"**다. 캐시 로직이 Service나 Repository로 새어 들어가는 순간 레이어 경계가 무너진다 — 그래서 아래 6가지가 전부 협상 불가 규칙이다.
+이 프로젝트에서 캐싱이 실제로 답하는 질문은 "무엇을 캐싱하나"가 아니라 **"어느 레이어에 두나"**다. 비즈니스 Service나 Repository로 read-through 캐싱 로직이 새어 들어가는 순간 레이어 경계가 무너진다(캐시 무효화 전담 컴포넌트·배치 Writer는 예외 — 2절 참고) — 그래서 아래 6가지가 전부 협상 불가 규칙이다.
 
 | 규칙 | 패턴 |
 |------|------|
@@ -460,7 +460,7 @@ class RedisAggregationWriter(
 다음 패턴은 예외 없이 금지한다.
 
 - `@Cacheable`, `@CacheEvict` 어노테이션
-- Service/Repository/Infrastructure에서의 캐싱
+- 비즈니스 Service/Repository/Infrastructure에서의 read-through 캐싱(캐시 무효화 전담 컴포넌트·배치 Writer는 예외 — 2절 참고)
 - Entity 또는 Response DTO를 그대로 캐싱
 - `allEntries=true` 무효화
 
