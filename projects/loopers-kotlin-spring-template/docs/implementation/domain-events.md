@@ -193,8 +193,10 @@ fun completeOrder(orderId: Long): Order {
 // Other domains listen to event
 @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 fun onOrderCompleted(event: OrderCompletedEventV1) {
+    logger.info("[Event] Notification start - eventType: ${event::class.simpleName}, orderId: ${event.orderId}")
     try {
         notificationService.sendOrderConfirmation(event.orderId)
+        logger.info("[Event] Notification complete - eventType: ${event::class.simpleName}, orderId: ${event.orderId}")
     } catch (e: Exception) {
         logger.error("[Event] Notification failed - eventType: ${event::class.simpleName}, orderId: ${event.orderId}", e)
     }
@@ -223,8 +225,10 @@ fun createOrder(command: OrderCommand): Order {
 // EventListener handles external call AFTER_COMMIT
 @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 fun onOrderCreated(event: OrderCreatedEventV1) {
+    logger.info("[Event] Payment request start - eventType: ${event::class.simpleName}, orderId: ${event.orderId}")
     try {
         paymentGateway.requestPayment(event.orderId)
+        logger.info("[Event] Payment request complete - eventType: ${event::class.simpleName}, orderId: ${event.orderId}")
     } catch (e: Exception) {
         logger.error("[Event] Payment request failed - eventType: ${event::class.simpleName}, orderId: ${event.orderId}", e)
     }

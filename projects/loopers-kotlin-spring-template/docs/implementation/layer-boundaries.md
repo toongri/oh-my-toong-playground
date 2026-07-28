@@ -239,8 +239,10 @@ class OrderEventListener(
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onOrderCreated(event: OrderCreatedEventV1) {
+        logger.info("[Event] Notification start - eventType: ${event::class.simpleName}, orderId: ${event.orderId}")
         try {
             notificationService.sendOrderConfirmation(event.orderId)
+            logger.info("[Event] Notification complete - eventType: ${event::class.simpleName}, orderId: ${event.orderId}")
         } catch (e: Exception) {
             logger.error("[Event] Notification failed - eventType: ${event::class.simpleName}, orderId: ${event.orderId}", e)
         }
@@ -299,8 +301,10 @@ class RewardEventListener(
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onOrderCompleted(event: OrderCompletedEventV1) {
+        logger.info("[Event] Reward accumulation start - eventType: ${event::class.simpleName}, userId: ${event.userId}")
         try {
             rewardService.accumulate(event.userId, event.totalAmount)
+            logger.info("[Event] Reward accumulation complete - eventType: ${event::class.simpleName}, userId: ${event.userId}")
         } catch (e: Exception) {
             logger.error("[Event] Reward accumulation failed - eventType: ${event::class.simpleName}, userId: ${event.userId}", e)
         }
