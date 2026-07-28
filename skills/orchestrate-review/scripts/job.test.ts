@@ -248,7 +248,7 @@ describe("parseChunkReviewConfig", () => {
 		expect(names).toEqual(["correctness", "regression", "cleanup", "requirement"]);
 	});
 
-	test("모든 멤버의 해석된 명령이 `agents.enabled=false` 를 포함한다", async () => {
+	test("모든 멤버의 해석된 명령이 `-c agents.enabled=false` 를 포함한다", async () => {
 		const realPath = path.join(import.meta.dirname, "..", "orchestrate-review.config.yaml");
 		const result = await parseChunkReviewConfig(realPath);
 		const denySkills = extractDenySkills(
@@ -258,7 +258,7 @@ describe("parseChunkReviewConfig", () => {
 			const entity = { ...member, deny: denySkills };
 			const cliType = detectCliType(entity.command as string);
 			const { command } = buildAugmentedCommand(entity, cliType);
-			expect(command.includes("agents.enabled=false")).toBe(true);
+			expect(command.includes("-c agents.enabled=false")).toBe(true);
 		}
 	});
 });
