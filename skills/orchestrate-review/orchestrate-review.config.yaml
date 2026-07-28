@@ -9,57 +9,50 @@ chunk-review:
     #
     # Per-angle model: each member carries its own command/model, so any angle
     # can run on a different CLI/model. Today every angle runs on codex at gpt-5.6-sol,
-    # high reasoning effort. `model` + `effort_level` + `output_format` (below) plus
+    # medium reasoning effort. `model` + `effort_level` + `output_format` (below) plus
     # `settings.deny.skills` (below) resolve (via buildAugmentedCommand) to:
-    #   codex exec -m gpt-5.6-sol -c skills.config=[…from settings.deny.skills below…] \
-    #     -c model_reasoning_effort=high --json --skip-git-repo-check
+    #   codex exec -c agents.enabled=false -m gpt-5.6-sol \
+    #     -c skills.config=[…from settings.deny.skills below…] \
+    #     -c model_reasoning_effort=medium --json --skip-git-repo-check
+    # `agents.enabled=false` strips codex's subagent tool descriptions (spawn_agent etc.)
+    # from the session entirely, so a finder can't spawn subagents even if asked to.
     # Note: codex uses bare model ids (no `openai/` prefix). Git history attests
     # codex with gpt-5.4 / gpt-5.3-codex (gpt-5.5 itself only ran via opencode);
     # if codex rejects `gpt-5.6-sol`, fall back to `gpt-5.5`.
     # Change one member's `model`/`command` to run that angle on a different model/CLI.
     #
-    # Angle set: 3 correctness lenses + 1 cleanup lens + 1 security lens + 1 coverage lens.
-    - name: line-scan
-      command: codex exec
-      model: gpt-5.6-sol
-      emoji: "\U0001F50D"
-      color: "BLUE"
-      effort_level: high
-      output_format: json
-    - name: regression
-      command: codex exec
-      model: gpt-5.6-sol
-      emoji: "\U0001F5D1"
-      color: "MAGENTA"
-      effort_level: high
-      output_format: json
-    - name: cross-file
-      command: codex exec
+    # Angle set: 4 angles, each asking a distinct question about the diff —
+    # `correctness` (does this code misbehave, including under input an
+    # attacker controls), `regression` (what did this change remove),
+    # `cleanup` (is this more than necessary), `requirement` (was what was
+    # asked for actually done, and is it actually verified).
+    - name: correctness
+      command: codex exec -c agents.enabled=false
       model: gpt-5.6-sol
       emoji: "\U0001F517"
       color: "CYAN"
-      effort_level: high
+      effort_level: medium
+      output_format: json
+    - name: regression
+      command: codex exec -c agents.enabled=false
+      model: gpt-5.6-sol
+      emoji: "\U0001F5D1"
+      color: "MAGENTA"
+      effort_level: medium
       output_format: json
     - name: cleanup
-      command: codex exec
+      command: codex exec -c agents.enabled=false
       model: gpt-5.6-sol
       emoji: "\U0001F9F9"
       color: "YELLOW"
-      effort_level: high
+      effort_level: medium
       output_format: json
-    - name: security
-      command: codex exec
-      model: gpt-5.6-sol
-      emoji: "\U0001F512"
-      color: "RED"
-      effort_level: high
-      output_format: json
-    - name: coverage
-      command: codex exec
+    - name: requirement
+      command: codex exec -c agents.enabled=false
       model: gpt-5.6-sol
       emoji: "\U0001F4CB"
       color: "GREEN"
-      effort_level: high
+      effort_level: medium
       output_format: json
   settings:
     timeout: 1800
@@ -67,17 +60,50 @@ chunk-review:
     # for compatibility if a claude-hosted angle is added later.
     exclude_chairman_from_members: false
     deny:
-      # Self-recursion fan-out guard: each dispatched angle runs `codex exec`,
-      # so without this it could itself invoke a review/council skill and
-      # spawn another fan-out beneath this one. Blocks the 3 skills that can
-      # start a review/council job. `code-review` has no codex-side SKILL.md
-      # today (not deployed to codex in any of its 4 scopes) — declared
-      # anyway so this guard self-activates the day `code-review`'s
-      # `platforms` config adds codex, instead of silently staying a no-op.
+      # Three separate reasons, not one list: (1) self-recursion fan-out guard, 3 skills — each
+      # angle runs `codex exec`, which could otherwise invoke a review/council skill and spawn
+      # another fan-out beneath this one; already live since `code-review` deploys to codex via
+      # root `sync.yaml`'s `platforms: [claude, codex]`.
+      # (2) role-boundary guard, `diagnose` alone — a finder must surface un-judged candidates,
+      # not verify them (that's the upstream code-review skill's job), and `diagnose` (a
+      # READ-ONLY root-cause consultant) would pull a finder across that line.
+      # (3) prompt-budget guard, the remaining 24 — none help a finder read code and surface
+      # candidates, so each is dead prompt weight; the size this saves is pinned by
+      # `codex-skill-deny-efficacy.test.ts`, not restated here.
+      #
+      # List stops at 28: further items are OpenAI-bundled plugin skills outside this repo,
+      # named in `plugin:skill` colon form, which `lib/generic-job.ts`'s `assertDenySkillsShape`
+      # rejects outright. Fail-open by design: a skill added later stays loadable — unlisted
+      # means visible, the safe direction.
       skills:
-        - orchestrate-review
-        - code-review
+        - agent-browser
         - agent-council
+        - clarify
+        - code-review
+        - collect-jd
+        - craft-issue
+        - create-slides
+        - deep-interview
+        - design-review
+        - diagnose
+        - git-master
+        - goal
+        - hud
+        - humanizer
+        - insane-browsing
+        - make-pr
+        - momus
+        - orchestrate-review
+        - prometheus
+        - qa
+        - review-report
+        - scan-pdf-to-notes
+        - sisyphus
+        - slides-review
+        - technical-copywriting
+        - technical-writing
+        - ultragoal
+        - ultraresearch
     mcps:
       # A review worker's codex process inherits every MCP server declared in
       # ~/.codex/config.toml regardless of whether it's used (measured: 13

@@ -8,13 +8,13 @@
 
 ### CD-1: Cross-angle corroboration (same candidate, two angles)
 
-**Given**: `line-scan` and `cross-file` both flag `processPayment()` at `PaymentService.kt:42` for the same missing-null-guard mechanism, with different wording.
+**Given**: `correctness` and `regression` both flag `processPayment()` at `PaymentService.kt:42` for the same mechanism (a null guard the diff removed), with different wording.
 
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | The two candidates merge into one entry (same file, line within ±5, same mechanism) |
-| V2 | `found by` lists both `line-scan + cross-file` |
+| V2 | `found by` lists both `correctness + regression` |
 | V3 | The more concrete `failure_scenario` is kept |
 | V4 | No severity, no verdict assigned |
 
@@ -78,20 +78,20 @@
 
 ### CD-D2: One angle fails (3/4)
 
-**Given**: N=4; `cross-file` returns `outputFilePath: null, errorMessage: timed_out`.
+**Given**: N=4; `correctness` returns `outputFilePath: null, errorMessage: timed_out`.
 
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | The merge proceeds with the 3 available finders (not aborted) |
-| V2 | "Partial review (3/N angles). cross-file unavailable: timed_out." prefix |
-| V3 | Angle Coverage marks `cross-file: Unavailable (timed_out)` — distinct from "found nothing" |
+| V2 | "Partial review (3/N angles). correctness unavailable: timed_out." prefix |
+| V3 | Angle Coverage marks `correctness: Unavailable (timed_out)` — distinct from "found nothing" |
 | V4 | N denominator stays 4 |
 | V5 | No `start` re-run |
 
 ### CD-D1: One angle survives (1/4)
 
-**Given**: only `line-scan` returns; the other three fail.
+**Given**: only `correctness` returns; the other three fail.
 
 **Then**:
 | ID | Expected Behavior |
@@ -117,17 +117,17 @@
 
 ## Manifest Workflow Scenarios (MA-*)
 
-> Tests the data-acquisition mechanism: start → collect (poll) → Read each outputFile → merge. Each Bash call uses `timeout: 180000`.
+> Tests the data-acquisition mechanism: start → collect (poll, cap 6 calls; an `awaiting_resume` state routes to `resume-member` first) → Read each outputFile → merge. `start` uses Bash `timeout: 180000`; `collect` uses Bash `timeout: 600000` with `--timeout-ms 540000`.
 
 ### MA-1: Full success (4/4)
 
-**Given**: `job.ts start --prompt-file "$PROMPT_FILE"` returns JOB_DIR; `collect "$JOB_DIR"` polls and returns a done manifest with all four angles' `outputFilePath` non-null.
+**Given**: `job.ts start --prompt-file "$PROMPT_FILE"` returns JOB_DIR; `collect --timeout-ms 540000 "$JOB_DIR"` polls and returns a done manifest with all four angles' `outputFilePath` non-null.
 
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | `start` runs exactly once → JOB_DIR extracted |
-| V2 | `collect "$JOB_DIR"` repeated until `overallState: "done"`, each call `timeout: 180000` |
+| V2 | `collect --timeout-ms 540000 "$JOB_DIR"` repeated (Bash `timeout: 600000`) until `overallState: "done"` |
 | V3 | Each angle's `outputFilePath` is Read via the Read tool (not `cat`) |
 | V4 | Only non-null `outputFilePath` entries are Read |
 | V5 | After collecting candidates, the conductor merges them (CD-* logic) |
@@ -161,7 +161,7 @@
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | `start` < 5s; each `collect` < 180s |
+| V1 | `start` < 5s; each `collect` completes within its Bash `timeout: 600000` (internal `--timeout-ms 540000`) |
 | V2 | `collect` done-stdout is small (manifest only, no inlined candidate text) |
 | V3 | The full candidate text is retrieved per-finder via Read of `outputFilePath` |
 
@@ -170,6 +170,6 @@
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | Bash used only for `start` / `collect` / `resume-member` / `clean` |
+| V1 | Bash used only for writing the interpolated prompt to a temp file (`mktemp` + heredoc, as the job-start step requires before `start --prompt-file`) and for `start` / `collect` / `resume-member` / `results --manifest` / `stop` / `usage-summary.ts` / `clean` / `clean --force` |
 | V2 | Read used only for each `outputFilePath` |
 | V3 | No Grep/Glob/WebSearch; no `git` commands; no source-file reads (on the orchestration path) |

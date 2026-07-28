@@ -4,13 +4,98 @@ import fs from "fs";
 import path from "path";
 
 import { initLogger, logInfo, logError, logStart, logEnd } from "@lib/logging";
-import { exitWithError, parseArgs } from "@lib/job-utils";
+import { exitWithError, parseArgs, logRootForJobsDir } from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
 import { splitCommand, atomicWriteJson, runOneTurn, reapOwnProcessGroup } from "@lib/worker-utils";
 import { detectCliType } from "@lib/generic-job";
 import type { CliType } from "@lib/agent-drivers/types";
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, "prompts");
+
+/**
+ * Per-angle allowlist of the conditional sections in chunk-reviewer-prompt.md
+ * (spec: orchestrate-review-4angle-redesign.md §2.3). The 4 common sections — Review
+ * Premises, Review Scope, What Was Implemented, Diff Command — carry no marker and
+ * always pass through; `project_context` is never listed for any angle.
+ */
+const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
+	correctness: [],
+	regression: ["commit_history"],
+	cleanup: ["non_goal"],
+	requirement: ["requirements", "non_goal", "evidence_results", "commit_history"],
+};
+
+/**
+ * Both markers are anchored to start (`^`) and end (`$`) of their own line (`m` flag) since a
+ * real marker always sits alone on its line — this rejects an inline reproduction of the
+ * closing-marker string inside an interpolated placeholder value that would otherwise
+ * truncate the lazy body match early. Remaining gap: a reproduction that lands alone on its
+ * own line (nothing else on it) still reads as a genuine boundary and truncates early.
+ */
+const SECTION_MARKER_RE = /^<!-- section:([a-z_]+) -->$\n([\s\S]*?)^<!-- \/section:\1 -->$\n?/gm;
+const OPEN_MARKER_RE = /^<!-- section:([a-z_]+) -->$/gm;
+const CLOSE_MARKER_RE = /^<!-- \/section:([a-z_]+) -->$/gm;
+
+/**
+ * The complete, exact set of conditional section names chunk-reviewer-prompt.md declares.
+ * Every one is always interpolated with real content or a backfill sentinel (never omitted) per
+ * code-review/SKILL.md Step 5, so a legitimate prompt.txt always carries exactly this set —
+ * verified against the template itself by worker.test.ts.
+ */
+export const KNOWN_SECTION_NAMES = new Set([
+	"requirements",
+	"project_context",
+	"non_goal",
+	"evidence_results",
+	"commit_history",
+	"field_reference",
+]);
+
+/**
+ * Filtering is only safe when the discovered marker names are EXACTLY KNOWN_SECTION_NAMES —
+ * neither a stray unknown name nor a known name missing — and each has exactly one
+ * standalone-line open marker and one standalone-line close marker. Any deviation means an
+ * interpolated value forged or corrupted a marker-shaped line, and a forged marker is safer
+ * left unfiltered than silently mis-filtered.
+ */
+function hasBalancedMarkers(promptContent: string): boolean {
+	const opens = new Map<string, number>();
+	const closes = new Map<string, number>();
+	for (const m of promptContent.matchAll(OPEN_MARKER_RE)) opens.set(m[1], (opens.get(m[1]) ?? 0) + 1);
+	for (const m of promptContent.matchAll(CLOSE_MARKER_RE)) closes.set(m[1], (closes.get(m[1]) ?? 0) + 1);
+	const names = new Set([...opens.keys(), ...closes.keys()]);
+	if (names.size !== KNOWN_SECTION_NAMES.size) return false;
+	for (const name of names) {
+		if (!KNOWN_SECTION_NAMES.has(name)) return false;
+		if (opens.get(name) !== 1 || closes.get(name) !== 1) return false;
+	}
+	return true;
+}
+
+/**
+ * Strip the conditional sections a given angle's allowlist doesn't cover, then remove every
+ * section marker from what remains — a marker left in the final prompt is noise the finder
+ * could misread as an instruction.
+ *
+ * Unknown member (an angle name absent from ANGLE_SECTION_ALLOWLIST): fails OPEN, passing
+ * every section through rather than killing the job, logged via logError so the drift is
+ * visible in this job's own worker log.
+ */
+export function filterPromptSections(promptContent: string, member: string): string {
+	// Forged marker count (open/close != 1 for some name) → skip filtering entirely rather than risk truncating on the fake boundary.
+	if (!hasBalancedMarkers(promptContent)) return promptContent;
+
+	const allowlist = ANGLE_SECTION_ALLOWLIST[member];
+	if (!allowlist) {
+		logError(
+			`filterPromptSections: unknown member "${member}" — passing all sections through unfiltered`,
+		);
+		return promptContent.replace(SECTION_MARKER_RE, (_match, _name: string, body: string) => body);
+	}
+	return promptContent.replace(SECTION_MARKER_RE, (_match, name: string, body: string) =>
+		allowlist.includes(name) ? body : "",
+	);
+}
 
 /** Type-predicate over CliType's members — narrows detectCliType's `string` return without an `as` assertion. */
 function isCliType(value: string): value is CliType {
@@ -30,8 +115,10 @@ function main() {
 	const command = options.command;
 	const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
-	const jobId = jobDir ? path.basename(String(jobDir)).replace(/^chunk-review-/, "") : "unknown";
-	initLogger("chunk-review-worker", getOmtDir(), jobId);
+	const resolvedJobDir = jobDir ? path.resolve(String(jobDir)) : null;
+	const jobId = resolvedJobDir ? path.basename(resolvedJobDir).replace(/^chunk-review-/, "") : "unknown";
+	const logRoot = resolvedJobDir ? logRootForJobsDir(path.dirname(resolvedJobDir)) : getOmtDir();
+	initLogger("chunk-review-worker", logRoot, jobId);
 	logStart();
 
 	const workerEnv: Record<string, string> = {};
@@ -68,7 +155,8 @@ function main() {
 	const memberDir = path.join(membersRoot, member);
 
 	const promptPath = path.join(jobDir, "prompt.txt");
-	const promptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, "utf8") : "";
+	const rawPromptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, "utf8") : "";
+	const promptContent = filterPromptSections(rawPromptContent, member);
 
 	const EXECUTION_INSTRUCTION =
 		"Execute the diff command from REVIEW CONTENT. Review ONLY the files listed in Review Scope. Produce your full analysis following system instructions.";

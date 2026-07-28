@@ -16,6 +16,7 @@ import {
 	findProjectRoot,
 	resolveChairmanExclusion,
 	normalizeBool,
+	logRootForJobsDir,
 } from "@lib/job-utils";
 
 import { initLogger, logInfo, logStart, logEnd } from "@lib/logging";
@@ -93,6 +94,7 @@ const CHUNK_REVIEW_BOOLEAN_FLAGS = new Set([
 	"exclude-chairman",
 	"stdin",
 	"blocking",
+	"force",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -143,8 +145,9 @@ function buildManifest(jobDir: string) {
 // ---------------------------------------------------------------------------
 
 function initLoggerFromJobDir(jobDir: string): void {
-	const jobId = path.basename(jobDir).replace(/^chunk-review-/, "");
-	initLogger("chunk-review-job", getOmtDir(), jobId);
+	const resolved = path.resolve(jobDir);
+	const jobId = path.basename(resolved).replace(/^chunk-review-/, "");
+	initLogger("chunk-review-job", logRootForJobsDir(path.dirname(resolved)), jobId);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,16 +209,64 @@ function cmdResults(options: Record<string, unknown>, jobDir: string): void {
 	_cmdResults(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
 }
 
+/**
+ * Per-member wall-clock, emitted after each collect returns.
+ *
+ * Members run in parallel, so a chunk costs max(member), not the sum — without
+ * this line nothing records which angle set that max, and the per-member
+ * artifacts are gone once the job is cleaned.
+ *
+ * Elapsed is measured from the job's own `createdAt`, not from a per-member
+ * start: a terminal status.json carries `finishedAt` but no `startedAt` (the
+ * running-state write that sets it is replaced wholesale when the member
+ * finishes). `createdAt` is an accurate common origin because every member is
+ * spawned in the same pass — measured at 3ms of spawn spread.
+ */
+function logMemberDurations(jobDir: string): void {
+	const resolved = path.resolve(jobDir);
+	const membersDir = path.join(resolved, CHUNK_REVIEW_JOB_CONFIG.entityDirName);
+
+	let names: string[];
+	let origin: number;
+	try {
+		names = fs.readdirSync(membersDir).sort();
+		const jobMeta = JSON.parse(fs.readFileSync(path.join(resolved, "job.json"), "utf8"));
+		origin = Date.parse(String(jobMeta.createdAt));
+	} catch {
+		return;
+	}
+	if (!Number.isFinite(origin)) return;
+
+	const parts = names.map((name) => {
+		try {
+			const status = JSON.parse(
+				fs.readFileSync(path.join(membersDir, name, "status.json"), "utf8"),
+			);
+			const finished = Date.parse(String(status.finishedAt));
+			return Number.isFinite(finished)
+				? `${name}=${Math.round((finished - origin) / 1000)}s`
+				: `${name}=${status.state || "unknown"}`;
+		} catch {
+			return `${name}=unreadable`;
+		}
+	});
+
+	if (parts.length > 0) {
+		logInfo(`member durations: ${parts.join(" ")}`);
+	}
+}
+
 async function cmdCollect(options: Record<string, unknown>, jobDir: string): Promise<void> {
 	initLoggerFromJobDir(jobDir);
 	logInfo(`collect: ${path.resolve(jobDir)}`);
 	await _cmdCollect(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
+	logMemberDurations(jobDir);
 }
 
-function cmdStop(options: Record<string, unknown>, jobDir: string): void {
+async function cmdStop(options: Record<string, unknown>, jobDir: string): Promise<void> {
 	initLoggerFromJobDir(jobDir);
 	logInfo(`stop: ${path.resolve(jobDir)}`);
-	_cmdStop(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
+	await _cmdStop(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
 }
 
 function cmdClean(options: Record<string, unknown>, jobDir: string): void {
@@ -544,7 +595,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	});
 
 	const jobId = generateJobId();
-	initLogger("chunk-review-job", getOmtDir(), jobId);
+	initLogger("chunk-review-job", logRootForJobsDir(jobsDir), jobId);
 	logStart();
 	logInfo(`GC: stale jobs cleaned`);
 	// Mirrors cmdReap's own reaped-vs-survived distinction (classifyReapedOrphans)
@@ -693,7 +744,7 @@ async function main(): Promise<void> {
 	if (command === "stop") {
 		const jobDir = rest[0];
 		if (!jobDir) exitWithError("stop: missing jobDir");
-		cmdStop(options, jobDir);
+		await cmdStop(options, jobDir);
 		return;
 	}
 	if (command === "clean") {

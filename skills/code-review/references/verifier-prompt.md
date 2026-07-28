@@ -18,6 +18,7 @@ code deeply. This is the precision gate behind the finders' recall.
 | `{CANDIDATE_LINE}` | the candidate's line (or `?` if none) |
 | `{CANDIDATE_SUMMARY}` | the candidate's one-line summary |
 | `{CANDIDATE_FAILURE_SCENARIO}` | the candidate's stated failure scenario / cost |
+| `{CANDIDATE_AC}` | the acceptance criterion or inferred intent, requirement-gap candidates only (`?` if none) |
 | `{CANDIDATE_FOUND_BY}` | the angle(s) that surfaced it |
 | `{INTENT}` | Step 1 intent/requirements (or `N/A — code-quality-only review`) |
 
@@ -58,6 +59,7 @@ isolation — this is deliberate. Do not look for other issues; do not review th
 - **File**: `{CANDIDATE_FILE}:{CANDIDATE_LINE}`
 - **Summary**: {CANDIDATE_SUMMARY}
 - **Failure scenario (as the finder stated it)**: {CANDIDATE_FAILURE_SCENARIO}
+- **Acceptance criterion / inferred intent**: {CANDIDATE_AC}
 - **Found by**: {CANDIDATE_FOUND_BY}
 
 The finder ran wide for recall and may be wrong. **Do not trust the candidate text — verify it
@@ -149,5 +151,6 @@ WHAT'S WRONG: <the problem, grounded in the quoted line>
 FAILURE SCENARIO: <concrete inputs/state -> wrong output, crash, or lost effect; for a cleanup finding, the concrete cost — what is duplicated, wasted, or harder to maintain>
 FIX: <concrete diff, or a design direction if the change is structural>
 BLAST RADIUS: <grep/reference evidence — what else references this, or "This location only">
+AC: {CANDIDATE_AC} — omit this line entirely when the candidate carries no acceptance criterion
 FOUND BY: {CANDIDATE_FOUND_BY}
 ```

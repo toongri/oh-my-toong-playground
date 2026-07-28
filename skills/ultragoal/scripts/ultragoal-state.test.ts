@@ -2583,7 +2583,8 @@ describe("serialize-requirements subcommand", () => {
 
 	// Zero-confirmed / all-retired, but outcome is set → AC-shaped fallback, not a
 	// structurally empty block (an empty block reads as "no AC" to the code-review
-	// coverage finder, which then skips requirement-gap detection entirely).
+	// requirement finder, which then falls back to inferring intent from the
+	// diff/commits/tests instead of mapping against acceptance criteria).
 	test("AC-shaped fallback when all stories are retired", () => {
 		setGoalState(S, { phase: "planning", outcome: "ship it" });
 		const s1: Story = {

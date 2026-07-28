@@ -27,7 +27,7 @@ Run a single chunk against a known diff and inspect each member's `assembled-pro
 
 | ID | Criterion | Description |
 |----|-----------|-------------|
-| V1 | Role file resolves by member name | `assembled-prompt.txt` for `line-scan` contains the line-scan lens; `cleanup` contains the cleanup lens |
+| V1 | Role file resolves by member name | `assembled-prompt.txt` for `correctness` contains the correctness tracer lens; `cleanup` contains the cleanup lens |
 | V2 | Fallback works | A member with no dedicated `<name>.md` gets `default.md` (all-angle finder) |
 | V3 | stdin delivery | codex receives the full assembled prompt via stdin and runs the diff command from REVIEW CONTENT |
 | V4 | Output is candidates | `output.txt` lists candidates with `file` / `line` / `summary` / `failure_scenario` |
@@ -35,17 +35,17 @@ Run a single chunk against a known diff and inspect each member's `assembled-pro
 
 ## Test Input: JWT Auth Implementation
 
-**Files in scope**: `src/auth/login.ts` (added), `src/auth/middleware.ts` (added)
+**Files in scope**: `src/auth/login.ts` (added), `src/auth/middleware.ts` (modified — deletes the prior expiry check on the verify path)
 
 **Seeded so each angle has something to find or correctly stay silent on**:
-- removed expiry check on the verify path (correctness — line-scan / regression)
-- a caller that now passes an unvalidated token shape (correctness — cross-file)
+- removed expiry check on the verify path (correctness / regression)
+- a caller that now passes an unvalidated token shape (correctness)
 - re-implemented base64url helper when `utils/encoding.ts` already has one (cleanup — reuse)
 
 ## Scenarios
 
-### WP-1: Angle member loads its lens (codex, `line-scan`)
-Member `line-scan` → `assembled-prompt.txt` contains the line-by-line scan lens; the finder surfaces the removed expiry check as a candidate with a `failure_scenario`, no severity.
+### WP-1: Angle member loads its lens (codex, `correctness`)
+Member `correctness` → `assembled-prompt.txt` contains the correctness tracer lens; the finder surfaces the removed expiry check as a candidate with a `failure_scenario`, no severity.
 
 ### WP-2: Fallback to default.md (codex, unknown angle)
 A member named `misc` (no `misc.md`) → `assembled-prompt.txt` contains the all-angle `default.md`; the finder sweeps all lenses and surfaces candidates, no severity.

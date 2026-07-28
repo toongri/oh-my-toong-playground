@@ -238,7 +238,7 @@ async function main() {
 	if (command === "stop") {
 		const jobDir = rest[0];
 		if (!jobDir) exitWithError("stop: missing jobDir");
-		frameworkCmdStop(options, jobDir, DIAGNOSE_CONFIG);
+		await frameworkCmdStop(options, jobDir, DIAGNOSE_CONFIG);
 		return;
 	}
 	if (command === "clean") {

@@ -56,6 +56,7 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 **목적**: `code-review` 내부에서 호출되는 다중 AI 리뷰 오케스트레이터입니다. 각기 다른 검토 렌즈(angle)를 가진 AI 파인더들을 병렬로 fan-out하고, 각자의 candidate 발견 목록을 받아 하나의 중복 제거된 후보 목록으로 합칩니다.
 
 **검토하는 것**:
+- 4개 앵글로 분담 — `correctness`(정확성·공격 가능성, 구 line-scan·cross-file·security 흡수) · `regression`(회귀) · `cleanup`(정리) · `requirement`(요구사항 충족·테스트 품질, 구 coverage 흡수)
 - 각 파인더가 독립적으로 발견한 candidate를 각도별로 수집
 - 중복 제거 및 집계 — 판정(CONFIRMED/PLAUSIBLE/REFUTED)은 하지 않음
 - 상위 `code-review`에 판정 대상 후보 목록 반환

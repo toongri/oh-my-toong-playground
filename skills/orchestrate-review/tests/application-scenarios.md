@@ -19,7 +19,7 @@ These scenarios test whether the **orchestrate-review skill's** Finder Conductor
 
 ## Scenario OR-A1: Full Angle-Finder Fan-out + Merge (Happy Path)
 
-**Given:** the conductor receives an interpolated prompt with `{DIFF_COMMAND}`, 8 changed files, and review context. All four angle finders (line-scan, regression, cross-file, cleanup) are available and return candidates.
+**Given:** the conductor receives an interpolated prompt with `{DIFF_COMMAND}`, 8 changed files, and review context. All four angle finders (correctness, regression, cleanup, requirement) are available and return candidates.
 
 **Then:**
 
@@ -27,7 +27,7 @@ These scenarios test whether the **orchestrate-review skill's** Finder Conductor
 |---|-------------------|-------------------|
 | V1 | Prompt passthrough only | Conductor writes the interpolated prompt to a temp file; does NOT run `{DIFF_COMMAND}` itself or explore source files |
 | V2 | Single dispatch | `job.ts start --prompt-file "$PROMPT_FILE"` is invoked EXACTLY ONCE |
-| V3 | Collect loop | `collect` is called until `"overallState": "done"` |
+| V3 | Collect loop | `collect` is called until `"overallState": "done"`, capped at 6 calls; `awaiting_resume` goes to `resume-member` instead of a re-poll, and an exhausted cap applies the Degradation Policy's partial-merge path |
 | V4 | Read finder outputs | Each finder's non-null `outputFilePath` is read; null entries skipped |
 | V5 | Candidates carried through | Every candidate's `file`/`line`/`summary`/`failure_scenario` is carried through verbatim |
 | V6 | Angle coverage reported | The Angle Coverage block reports each angle's candidate count or "found nothing" |
@@ -37,17 +37,17 @@ These scenarios test whether the **orchestrate-review skill's** Finder Conductor
 
 ## Scenario OR-A2: One Angle Fails — Partial Merge (Degradation)
 
-**Given:** N=4 finders dispatched; `collect` returns done with `cross-file` having `outputFilePath: null, errorMessage: "timed_out"`.
+**Given:** N=4 finders dispatched; `collect` returns done with `correctness` having `outputFilePath: null, errorMessage: "timed_out"`.
 
 **Then:**
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
 | V1 | No job restart | Conductor does NOT call `start` again |
-| V2 | Read only non-null paths | The null `cross-file` entry is skipped |
-| V3 | Partial prefix | Output begins with "Partial review (3/N angles). cross-file unavailable: timed_out." |
-| V4 | Coverage gap noted | Angle Coverage marks `cross-file: Unavailable (timed_out)` and notes the call-site-ripple perspective is absent |
-| V5 | No extrapolation | Conductor does NOT speculate what cross-file "would have found" |
+| V2 | Read only non-null paths | The null `correctness` entry is skipped |
+| V3 | Partial prefix | Output begins with "Partial review (3/N angles). correctness unavailable: timed_out." |
+| V4 | Coverage gap noted | Angle Coverage marks `correctness: Unavailable (timed_out)` and notes the call-site-ripple perspective is absent |
+| V5 | No extrapolation | Conductor does NOT speculate what correctness "would have found" |
 
 ---
 
@@ -75,9 +75,9 @@ These scenarios test whether the **orchestrate-review skill's** Finder Conductor
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
 | V1 | No second start | Conductor does NOT invoke `start` again |
-| V2 | Collect retry | Conductor calls `collect "$JOB_DIR"` again with the original JOB_DIR |
+| V2 | Collect retry | Conductor calls `collect --timeout-ms 540000 "$JOB_DIR"` again with the original JOB_DIR |
 | V3 | Foreground | The retry runs in foreground |
-| V4 | Collect until done | Conductor loops `collect` until done |
+| V4 | Collect until done or cap | Conductor loops `collect` (cap 6 calls) until done; if the cap is exhausted without done, applies the Degradation Policy's partial-merge path |
 | V5 | One chunk per invocation | Conductor processes exactly ONE chunk |
 
 ---
@@ -103,14 +103,14 @@ These scenarios test whether the **orchestrate-review skill's** Finder Conductor
 
 **Primary Technique:** merge faithfully; dedup near-duplicates across angles; do not drop weak candidates.
 
-**Given:** `line-scan` and `cross-file` both flag `OrderService.kt:88` for the same mechanism (a missing null guard), with slightly different wording. `cleanup` flags a weak-looking reuse candidate.
+**Given:** `correctness` and `regression` both flag `OrderService.kt:88` for the same mechanism (a null guard the diff removed), with slightly different wording. `cleanup` flags a weak-looking reuse candidate.
 
 **Then:**
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
 | V1 | Dedup across angles | The two `OrderService.kt:88` candidates (same file, line within ±5, same mechanism) merge into one entry |
-| V2 | Corroboration recorded | The merged entry's `found by` lists both `line-scan + cross-file` |
+| V2 | Corroboration recorded | The merged entry's `found by` lists both `correctness + regression` |
 | V3 | Richest failure_scenario kept | The merged entry keeps the more concrete `failure_scenario` |
 | V4 | Weak candidate kept | The weak cleanup candidate is NOT dropped — the upstream verifier decides |
 | V5 | No augmentation | The conductor adds no candidate of its own |
