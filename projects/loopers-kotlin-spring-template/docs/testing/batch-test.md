@@ -49,7 +49,7 @@ Processor에 비즈니스 로직이 남아있으면, 그 로직을 검증하려�
 | **Step 엔드투엔드** | ✅ | 파이프라인 배선이 동작하는지 검증 |
 | **조건부 흐름이 있는 Job** | ✅ | Decider나 복잡한 분기가 있을 때만 |
 
-> ⚠️ 주의: 이 표의 ❌ 행 두 개(비즈니스 로직이 들어간 Processor, Domain Model을 호출하는 Processor)를 헷갈리지 않는다 — 전자는 애초에 있으면 안 되는 상태(안티패턴, 3번 절 참고)이고, 후자는 올바른 상태이지만 이미 Unit Test가 커버해서 Batch 테스트에서 또 검증할 필요가 없는 상태다.
+> ⚠️ 주의: 이 표의 ❌ 행 두 개(비즈니스 로직이 들어간 Processor, Domain Model을 호출하는 Processor)를 헷갈리지 않는다 — 전자는 애초에 있으면 안 되는 상태(안티패턴 — 3절 참고)이고, 후자는 올바른 상태이지만 이미 Unit Test가 커버해서 Batch 테스트에서 또 검증할 필요가 없는 상태다.
 
 ### Batch 컴포넌트의 Unit Test는 언제 쓰나
 
@@ -270,7 +270,7 @@ fun `job fails when input file is missing`() {
 
 ## 6. 품질 체크리스트
 
-- [ ] Reader/Processor/Writer 개별 컴포넌트를 따로 테스트하지 않았는가 (인프라 계층이자 프레임워크 컴포넌트다 — Domain Model로 뽑아낼 수 없는 로직을 담은 드문 경우는 예외, 1번 절 참고)
+- [ ] Reader/Processor/Writer 개별 컴포넌트를 따로 테스트하지 않았는가 (Domain Model로 뽑아낼 수 없는 로직을 담은 드문 경우는 예외 — 1절 참고)
 - [ ] 비즈니스 로직이 Processor가 아니라 Domain Model에 있고, 거기서 Unit Test로 검증됐는가
 - [ ] Step Integration Test를 기본 패턴으로 삼아 파이프라인 배선을 검증했는가
 - [ ] Job Integration Test는 Decider·조건부 흐름 같은 복잡한 분기가 있을 때만 작성했는가
