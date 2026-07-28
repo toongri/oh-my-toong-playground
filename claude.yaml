@@ -71,13 +71,18 @@ config:
       - "Bash(rm -r -f *)"
       - "Bash(rm -f -r *)"
 
+# 전역에는 레포를 가리지 않고 쓰는 것만 둔다 — 코드 그래프(codegraph)와 브라우저
+# 자동화(playwright). stdio MCP는 세션마다 프로세스로 떠서 세션당 램을 먹으므로
+# (실측: maestro 169MB / playwright 163MB / postgres 99MB / opensearch 86MB /
+# codegraph 87MB), 특정 프로젝트에서만 쓰는 것은 projects/<name>/claude.yaml로
+# 내린다. notion/linear/slack/sentry는 회사 계정과 개인 계정을 섞지 않기 위해
+# 전역에서 빼고 프로젝트별로 등록한다(type: http라 램은 0).
+#
+# 주의: mcps는 config/hooks와 달리 삭제 수단이 없다. tools/adapters/claude.ts의
+# syncMcpsMerge가 mcpServers[name] = json 단순 대입이라 여기서 지워도 이미 배포된
+# ~/.claude.json에는 그대로 남는다(키를 null로 써도 안 지워진다). 실제로 끄려면
+# ~/.claude.json의 최상위 mcpServers에서 직접 지워야 한다.
 mcps:
-  playwright:
-    command: npx
-    args:
-      - "--prefer-offline"
-      - "-y"
-      - "@playwright/mcp@0.0.76"
   # codegraph local code-graph MCP (Tree-sitter -> SQLite call graph; 100% local, no API key).
   # Requires per-machine binary (`npm i -g @colbymchenry/codegraph`) and per-repo `codegraph init` to build the index.
   codegraph:
@@ -85,12 +90,12 @@ mcps:
     args:
       - "serve"
       - "--mcp"
-  # Maestro stdio MCP. Requires the maestro CLI on PATH (and JAVA_HOME in shell env for the JVM-based runner).
-  # On platforms that launch MCP servers in a minimal shell (no profile PATH), replace 'maestro' with its absolute path.
-  maestro:
-    command: maestro
+  playwright:
+    command: npx
     args:
-      - "mcp"
+      - "--prefer-offline"
+      - "-y"
+      - "@playwright/mcp@0.0.76"
 
 plugins:
   items:
