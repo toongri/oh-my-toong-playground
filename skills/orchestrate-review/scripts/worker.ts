@@ -33,6 +33,26 @@ const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
  * own line (nothing else on it) still reads as a genuine boundary and truncates early.
  */
 const SECTION_MARKER_RE = /^<!-- section:([a-z_]+) -->$\n([\s\S]*?)^<!-- \/section:\1 -->$\n?/gm;
+const OPEN_MARKER_RE = /^<!-- section:([a-z_]+) -->$/gm;
+const CLOSE_MARKER_RE = /^<!-- \/section:([a-z_]+) -->$/gm;
+
+/**
+ * A section name is only safe to filter on if it has exactly one standalone-line open marker
+ * and exactly one standalone-line close marker in the input — anything else means an
+ * interpolated value forged a marker-shaped line, and a forged marker is safer left unfiltered
+ * than silently mis-filtered.
+ */
+function hasBalancedMarkers(promptContent: string): boolean {
+	const opens = new Map<string, number>();
+	const closes = new Map<string, number>();
+	for (const m of promptContent.matchAll(OPEN_MARKER_RE)) opens.set(m[1], (opens.get(m[1]) ?? 0) + 1);
+	for (const m of promptContent.matchAll(CLOSE_MARKER_RE)) closes.set(m[1], (closes.get(m[1]) ?? 0) + 1);
+	const names = new Set([...opens.keys(), ...closes.keys()]);
+	for (const name of names) {
+		if (opens.get(name) !== 1 || closes.get(name) !== 1) return false;
+	}
+	return true;
+}
 
 /**
  * Strip the conditional sections a given angle's allowlist doesn't cover, then remove every
@@ -44,6 +64,9 @@ const SECTION_MARKER_RE = /^<!-- section:([a-z_]+) -->$\n([\s\S]*?)^<!-- \/secti
  * visible in this job's own worker log.
  */
 export function filterPromptSections(promptContent: string, member: string): string {
+	// Forged marker count (open/close != 1 for some name) → skip filtering entirely rather than risk truncating on the fake boundary.
+	if (!hasBalancedMarkers(promptContent)) return promptContent;
+
 	const allowlist = ANGLE_SECTION_ALLOWLIST[member];
 	if (!allowlist) {
 		logError(
