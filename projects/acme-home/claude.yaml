@@ -37,3 +37,12 @@ mcps:
   notion-acme:
     type: http
     url: "https://mcp.notion.com/mcp"
+  # 토스페이먼츠 연동가이드 MCP. 호스팅 엔드포인트가 없는 stdio 전용 패키지이며
+  # (mcp.tosspayments.com은 마케팅 사이트로 가는 301일 뿐 MCP가 아니다),
+  # docs.tosspayments.com/llms.txt를 긁어오는 로컬 서버다. 0.0.x 대역이라
+  # 공식 가이드대로 @latest를 쓴다 — 핀 고정하면 금방 낡는다.
+  tosspayments-guide:
+    command: npx
+    args:
+      - "-y"
+      - "@tosspayments/integration-guide-mcp@latest"
