@@ -370,7 +370,13 @@ fun onOrderCreated(event: OrderCreatedEventV1) {
 // Correct - Service makes the decision
 @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 fun onOrderCreated(event: OrderCreatedEventV1) {
-    notificationService.sendOrderConfirmation(event.orderId)  // Service determines VIP status
+    logger.info("[Event] Notification start - eventType: ${event::class.simpleName}, orderId: ${event.orderId}")
+    try {
+        notificationService.sendOrderConfirmation(event.orderId)  // Service determines VIP status
+        logger.info("[Event] Notification complete - eventType: ${event::class.simpleName}, orderId: ${event.orderId}")
+    } catch (e: Exception) {
+        logger.error("[Event] Notification failed - eventType: ${event::class.simpleName}, orderId: ${event.orderId}", e)
+    }
 }
 ```
 
