@@ -52,7 +52,7 @@ fun `decrease stock when valid amount is provided`()
 @DisplayName("재고가 0이 되면 품절 상태로 변경된다")
 fun `change status to OUT_OF_STOCK when stock becomes zero`()
 
-@DisplayName("잔액이 부족하면 INSUFFICIENT_BALANCE 예외가 발생한다")
+@DisplayName("잔액이 부족하면 INSUFFICIENT_BALANCE CoreException 발생")
 fun `throws INSUFFICIENT_BALANCE CoreException when balance is insufficient`()
 ```
 
@@ -99,7 +99,7 @@ inner class StatusTransitions {
             assertThat(order.status).isEqualTo(OrderStatus.CONFIRMED)
         }
 
-        @DisplayName("PLACED가 아닌 상태에서 확정하면 예외가 발생한다")
+        @DisplayName("PLACED가 아닌 상태에서 확정하면 BAD_REQUEST CoreException 발생")
         @ParameterizedTest(name = "{0} 상태에서 confirm() 호출 시 예외")
         @EnumSource(value = OrderStatus::class, names = ["PLACED"], mode = EnumSource.Mode.EXCLUDE)
         fun `throws BAD_REQUEST CoreException when not PLACED`(invalidStatus: OrderStatus) {
