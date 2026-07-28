@@ -117,17 +117,17 @@
 
 ## Manifest Workflow Scenarios (MA-*)
 
-> Tests the data-acquisition mechanism: start → collect (poll) → Read each outputFile → merge. Each Bash call uses `timeout: 180000`.
+> Tests the data-acquisition mechanism: start → collect (poll, cap 6 calls; an `awaiting_resume` state routes to `resume-member` first) → Read each outputFile → merge. `start` uses Bash `timeout: 180000`; `collect` uses Bash `timeout: 600000` with `--timeout-ms 540000`.
 
 ### MA-1: Full success (4/4)
 
-**Given**: `job.ts start --prompt-file "$PROMPT_FILE"` returns JOB_DIR; `collect "$JOB_DIR"` polls and returns a done manifest with all four angles' `outputFilePath` non-null.
+**Given**: `job.ts start --prompt-file "$PROMPT_FILE"` returns JOB_DIR; `collect --timeout-ms 540000 "$JOB_DIR"` polls and returns a done manifest with all four angles' `outputFilePath` non-null.
 
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | `start` runs exactly once → JOB_DIR extracted |
-| V2 | `collect "$JOB_DIR"` repeated until `overallState: "done"`, each call `timeout: 180000` |
+| V2 | `collect --timeout-ms 540000 "$JOB_DIR"` repeated (Bash `timeout: 600000`) until `overallState: "done"` |
 | V3 | Each angle's `outputFilePath` is Read via the Read tool (not `cat`) |
 | V4 | Only non-null `outputFilePath` entries are Read |
 | V5 | After collecting candidates, the conductor merges them (CD-* logic) |
@@ -161,7 +161,7 @@
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | `start` < 5s; each `collect` < 180s |
+| V1 | `start` < 5s; each `collect` completes within its Bash `timeout: 600000` (internal `--timeout-ms 540000`) |
 | V2 | `collect` done-stdout is small (manifest only, no inlined candidate text) |
 | V3 | The full candidate text is retrieved per-finder via Read of `outputFilePath` |
 
@@ -170,6 +170,6 @@
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | Bash used only for `start` / `collect` / `resume-member` / `clean` |
+| V1 | Bash used only for `start` / `collect` / `resume-member` / `results --manifest` / `stop` / `usage-summary.ts` / `clean` / `clean --force` |
 | V2 | Read used only for each `outputFilePath` |
 | V3 | No Grep/Glob/WebSearch; no `git` commands; no source-file reads (on the orchestration path) |
