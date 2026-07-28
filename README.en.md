@@ -40,7 +40,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 **Step 2 — Conventions Differ per Project, and So Does the Vessel That Holds Them**: The same `testing` means "Classical TDD, no verify(), BDD structure" in `projects/toong-java-spring-template/` and something else entirely elsewhere. There are two ways to express that differentiation.
 
 - **Skill override** (`projects/<name>/skills/`): during sync, **Upward Search** applies — when `sync.yaml` references `testing`, it looks in the project folder first and falls back to the global `skills/testing/`. Use this to swap a whole convention wholesale.
-- **rules index + docs grounding** (`projects/<name>/rules/`, `projects/<name>/docs/`): when a convention is too large for a single skill, the always-loaded rules carry only "which document to open," and the criteria live in docs opened on demand. `loop-pack-fe-l2-vol1` (16 docs + 8 rules) and `loopers-kotlin-spring-template` (19 docs + 7 rules) work this way.
+- **rules index + docs grounding** (`projects/<name>/rules/`, `projects/<name>/docs/`): when a convention is too large for a single skill, split it across rules and docs. `loopers-kotlin-spring-template` (19 docs + 7 rules) keeps its rules a pure index — they say only which document to open. `loop-pack-fe-l2-vol1` (16 docs + 8 rules) puts frequently-used criteria directly in the rules and defers only the deeper grounding to docs. Either way the point is to bound what stays always-loaded.
 
 **Step 3 — The Same Content Sits in a Different Place on Each Platform**: Claude uses `.claude/`, Codex splits across `.codex/` and `.agents/`, Gemini uses `.gemini/` — directory layout and supported categories differ across the board. Adapters absorb that difference, so a convention is written once and `sync.yaml`'s `platforms` decides which platforms it reaches and how far.
 
@@ -107,9 +107,9 @@ The details of the library's skills (42) and agents (13) live under `docs/`.
 
 ### Per-Project Convention Differentiation
 
-Different projects' languages and frameworks sometimes call for different judgment criteria, even under the same convention name. The `projects/` directory expresses this with a project-scoped `rules/` and `docs/`: `rules/` is a thin index that only says "open this document for this situation," while `docs/` holds the actual grounding — judgment criteria, examples, rationale. Splitting the index from the documents lets an agent open only what a situation needs instead of reading everything every time, and keeps the criteria living in exactly one place so rules and docs never duplicate each other.
+Different projects' languages and frameworks sometimes call for different judgment criteria, even under the same convention name. The `projects/` directory expresses this with a project-scoped `rules/` and `docs/`: `rules/` is the thin always-loaded layer; `docs/` holds the actual grounding — judgment criteria, examples, rationale. Splitting the two lets an agent open only what a situation needs instead of reading everything every time. How thin the rules stay is the project's call: `loopers-kotlin-spring-template` keeps them a pure index that only says "open this document for this situation," so the criteria live in docs alone, while `loop-pack-fe-l2-vol1` puts frequently-used criteria directly in the rules and defers only the deeper grounding.
 
-Two projects differentiate their conventions this way.
+Two projects differentiate their conventions with this structure.
 
 ```
 projects/
