@@ -377,12 +377,18 @@ class ProductService(
 
 // Local EventListener: cache invalidation
 @Component
-class ProductCacheEvictionListener(
+class ProductStockCacheEvictionListener(
     private val cacheTemplate: CacheTemplate,
 ) {
+    private val logger = LoggerFactory.getLogger(this::class.java)
+
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onStockDepleted(event: StockDepletedEventV1) {
-        cacheTemplate.evict(ProductCacheKeys.ProductDetail(event.productId))
+        try {
+            cacheTemplate.evict(ProductCacheKeys.ProductDetail(event.productId))
+        } catch (e: Exception) {
+            logger.error("[Event] Product cache eviction failed - eventType: ${event::class.simpleName}, productId: ${event.productId}", e)
+        }
     }
 }
 ```
@@ -391,7 +397,7 @@ class ProductCacheEvictionListener(
 
 ```kotlin
 @Component
-class ProductCacheEvictionListener(
+class ProductUpdateCacheEvictionListener(
     private val cacheTemplate: CacheTemplate,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
@@ -399,11 +405,17 @@ class ProductCacheEvictionListener(
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onProductUpdated(event: ProductUpdatedEventV1) {
         logger.info("[Event] Product cache eviction start - eventType: ${event::class.simpleName}, productId: ${event.productId}")
-        cacheTemplate.evict(ProductCacheKeys.ProductDetail(event.productId))
-        logger.info("[Event] Product cache eviction complete - eventType: ${event::class.simpleName}, productId: ${event.productId}")
+        try {
+            cacheTemplate.evict(ProductCacheKeys.ProductDetail(event.productId))
+            logger.info("[Event] Product cache eviction complete - eventType: ${event::class.simpleName}, productId: ${event.productId}")
+        } catch (e: Exception) {
+            logger.error("[Event] Product cache eviction failed - eventType: ${event::class.simpleName}, productId: ${event.productId}", e)
+        }
     }
 }
 ```
+
+두 리스너 모두 `cacheTemplate.evict(...)`를 try-catch로 감싸고 `logger.error`로 실패를 남긴다 — Spring이 `afterCompletion()` 경로에서 발생한 예외를 삼켜 호출자에게 전파하지 않으므로, 잡지 않으면 Redis 장애 같은 무효화 실패가 로그에조차 남지 않고 조용히 사라진다.
 
 **무효화 규칙:**
 - **분산 시스템**: Kafka Consumer로 이벤트를 소비해 무효화한다
