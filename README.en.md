@@ -35,7 +35,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 
 ## Philosophy — Why This Design
 
-**Step 1 — Same Name, Different Content**: You could simply copy the same skills to every project, but there's a key dilemma. For example, `testing` in a Kotlin/Spring project means "Classical TDD, no verify(), BDD structure," while a different project may follow entirely different conventions. The same goes for `implementation`. **Skills with the same name must carry different content per project.**
+**Step 1 — Same Name, Different Content**: You could simply copy the same skills to every project, but there's a key dilemma. For example, `testing` in the Java/Spring project overridden by `projects/toong-java-spring-template/` means "Classical TDD, no verify(), BDD structure," while a different project may follow entirely different conventions. The same goes for `implementation`. **Skills with the same name must carry different content per project.**
 
 **Step 2 — Central Management + Project Differentiation**: oh-my-toong solves this dilemma with two mechanisms.
 
