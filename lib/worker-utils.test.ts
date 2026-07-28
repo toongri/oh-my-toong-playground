@@ -718,6 +718,36 @@ describe("runOneTurn / resumeOneTurn — caller-judgment single-turn pump", () =
 		expect(status.sessionID).toBe("ses_xyz");
 	});
 
+	// parseStdout가 던져도 터미널 상태가 status.json에 남아야 한다. finalize()는 파싱
+	// 완료 전까지 디스크에 state:"running"을 의도적으로 남기므로, 예외가 밖으로 새면
+	// 멤버가 heartbeat staleness로 회수될 때까지 running으로 고착되고 실제 종료 상태가
+	// "Worker stale" 로 대체된다. 실제 도달 경로: opencode 드라이버가 NDJSON 한 줄
+	// `null` 을 JSON.parse 성공으로 events에 넣은 뒤 `ev.type` 을 읽어 TypeError.
+	test("runOneTurn: parseStdout가 예외를 던져도 status.json은 running이 아닌 터미널 상태다", async () => {
+		const memberDir = join(tmpDir, "parse-throw");
+		mkdirSync(memberDir, { recursive: true });
+
+		const throwingDriver = makeOneTurnMockDriver(null);
+		throwingDriver.parseStdout = () => {
+			throw new TypeError("Cannot read properties of null (reading 'type')");
+		};
+		// exit 0 — 프로세스 자체는 정상 종료했고 파싱만 실패한 경우.
+		const mockRunOnce = makeOneTurnMockRunOnce("null\n", 0);
+
+		const result = await runOneTurn(
+			makeOneTurnOpts(memberDir, {
+				driverFactory: () => throwingDriver,
+				runOnceFn: mockRunOnce,
+			}),
+		);
+
+		// 드라이버는 있는데 파싱이 실패한 경로와 동일하게 취급된다.
+		expect(result.state).toBe("error");
+		const status = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("error");
+		expect(status.state).not.toBe("running");
+	});
+
 	// AC-C2: initial resume_count === 0
 	test("runOneTurn resume_count zero init", async () => {
 		const memberDir = join(tmpDir, "c2");
