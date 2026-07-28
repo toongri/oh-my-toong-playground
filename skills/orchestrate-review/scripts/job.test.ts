@@ -1239,6 +1239,40 @@ describe("cmdClean path traversal guard", () => {
 		expect(!fs.existsSync(jobDir)).toBe(true);
 	});
 
+	test("`--force` 는 활성 멤버 가드를 건너뛰고, jobDir 인자를 삼키지 않는다", () => {
+		// --force must be registered as a boolean flag. If it is not, parseArgs binds the
+		// following jobDir as --force's VALUE, the positional list comes back empty, and the
+		// documented escape hatch dies while every other clean test still passes.
+		// The argv shape below is the one SKILL.md documents — `clean --force "$JOB_DIR"`, with
+		// the positional directly after the flag. An order that puts another `--`-prefixed
+		// argument next would mask the defect, since parseArgs already treats a `--`-prefixed
+		// successor as "no value".
+		const jobsDir = path.join(tmpDir, "jobs");
+		const jobDir = path.join(jobsDir, suiteJobDirBasename("chunk-review-test"));
+		fs.mkdirSync(path.join(jobDir, "members", "correctness"), { recursive: true });
+		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "test-force" }));
+		fs.writeFileSync(
+			path.join(jobDir, "members", "correctness", "status.json"),
+			JSON.stringify({ state: "awaiting_resume" }),
+		);
+
+		// Plain clean must refuse: awaiting_resume is an active member state.
+		try {
+			execFileSync(process.execPath, [SCRIPT, "clean", jobDir], { stdio: "pipe" });
+			throw new Error("Expected plain clean to refuse an active member");
+		} catch (err) {
+			expect((err as any).status).toBe(1);
+			expect((err as any).stderr.toString().includes("active")).toBe(true);
+		}
+		expect(fs.existsSync(jobDir)).toBe(true);
+
+		const result = execFileSync(process.execPath, [SCRIPT, "clean", "--force", jobDir], {
+			stdio: "pipe",
+		});
+		expect(result.toString().includes("cleaned:")).toBe(true);
+		expect(fs.existsSync(jobDir)).toBe(false);
+	});
+
 	test("rejects a path outside jobs directory without job.json", () => {
 		// An arbitrary directory without job.json should still be rejected
 		const outsidePath = path.join(tmpDir, "jobs", suiteJobDirBasename("not-a-job"));
