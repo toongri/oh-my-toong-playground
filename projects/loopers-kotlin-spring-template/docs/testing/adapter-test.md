@@ -102,7 +102,7 @@ Adapter Test에서 반복되는 stub 작성을 매 테스트마다 새로 만들
 // Success response
 private fun stubPaymentSuccess() {
     stubFor(
-        post(urlEqualTo("/api/v1/payments"))
+        post(urlEqualTo("/payments"))
             .willReturn(
                 aResponse()
                     .withStatus(200)
@@ -115,7 +115,7 @@ private fun stubPaymentSuccess() {
 // Failure response
 private fun stubPaymentFailure(statusCode: Int, errorBody: String) {
     stubFor(
-        post(urlEqualTo("/api/v1/payments"))
+        post(urlEqualTo("/payments"))
             .willReturn(
                 aResponse()
                     .withStatus(statusCode)
@@ -128,7 +128,7 @@ private fun stubPaymentFailure(statusCode: Int, errorBody: String) {
 // Delayed response (for timeout testing)
 private fun stubPaymentDelayed(delayMs: Int) {
     stubFor(
-        post(urlEqualTo("/api/v1/payments"))
+        post(urlEqualTo("/payments"))
             .willReturn(
                 aResponse()
                     .withStatus(200)
@@ -139,6 +139,8 @@ private fun stubPaymentDelayed(delayMs: Int) {
 ```
 
 ## 6. 패턴별 예시
+
+> `PaymentTimeoutException`·`PaymentValidationException`·`PaymentServerException`은 도메인별 예외가 아니라 어댑터 경계 안에서만 사는 인프라 어댑터-로컬 예외로, 애플리케이션 계층으로 넘어갈 때 `CoreException`으로 번역된다 — 자세한 규칙은 error-handling.md를 참고한다.
 
 ### Retry를 위한 WireMock Scenario
 
@@ -177,7 +179,7 @@ fun `succeeds after payment API transient failure`() {
 
 ### Circuit Breaker 상태 전환
 
-연속 실패가 임계치를 넘으면 Circuit Breaker가 OPEN 상태로 전환되고, OPEN 상태에서는 실제 호출 없이 즉시 실패해야 한다.
+실패율이 설정된 임계값(`failureRateThreshold`)을 넘고 호출 횟수가 최소 호출 수(`minimumNumberOfCalls`)에 도달하면 Circuit Breaker가 OPEN 상태로 전환되고, OPEN 상태에서는 실제 호출 없이 즉시 실패해야 한다.
 
 ```kotlin
 @Test
@@ -187,10 +189,10 @@ fun `circuit breaker opens after consecutive failures`() {
     stubFor(post("/payments").willReturn(serverError()))
 
     val circuitBreaker = circuitBreakerRegistry.circuitBreaker("payment")
-    val failureThreshold = 5  // value configured in application.yml
+    val minimumNumberOfCalls = 10  // resilience4j.circuitbreaker.instances.payment.minimum-number-of-calls (application.yml)
 
-    // when - request until failure threshold
-    repeat(failureThreshold) {
+    // when - reach minimum call count with all failures (failure rate 100% >= failure-rate-threshold)
+    repeat(minimumNumberOfCalls) {
         runCatching { pgPaymentAdapter.requestPayment(request) }
     }
 
