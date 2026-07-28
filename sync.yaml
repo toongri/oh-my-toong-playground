@@ -44,6 +44,17 @@ skills:
     - scan-pdf-to-notes
     - component: meeting-notes
       platforms: [claude]
+    # 전역 등록된 SessionStart 훅 orphan-reaper.sh(claude.yaml)가
+    # $HOME/.claude/skills/orchestrate-review/scripts/job.ts를 참조한다.
+    # 전역 배포가 없으면 대상 파일이 없어 그 훅이 fail-open으로 조용히
+    # 무력화된다.
+    # SKILL.md는 명령을 ${CLAUDE_SKILL_DIR}로 적는다(12곳). claude는 이를
+    # 스킬 주입 시점에 런타임으로 확장하고, codex는 sync 시점에 tools/sync.ts의
+    # bakeSkillDirToken이 절대경로로 구워 넣는다. gemini/opencode는 둘 중
+    # 어느 쪽도 없어 변수가 미해석 상태로 남고, 그 결과 동작하지 않는다
+    # (실측: 배포된 SKILL.md에 ${CLAUDE_SKILL_DIR} 12곳이 그대로 남음).
+    - component: orchestrate-review
+      platforms: [claude, codex]
     # codex 개방 근거는 두 겹이고, 두 겹이 다 필요하다.
     # (1) .md — rewrite 규칙 6a가 Skill() 호출을 $X mention sigil로 치환한다
     #     (tools/lib/rewrite-rules.ts의 id "6a" 규칙). make validate의 codex-rewrite
@@ -86,6 +97,7 @@ scripts:
 
 rules:
   items:
+    - answer-grounding
     - communication-style
     - continuation-contract
     - convention-grounding

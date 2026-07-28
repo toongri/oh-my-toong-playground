@@ -8,7 +8,7 @@ import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
-import { assertMappedTier } from "../lib/model-map.ts";
+import { assertMappedTier, ModelMapError } from "../lib/model-map.ts";
 
 // =============================================================================
 // Model Map Helper
@@ -45,6 +45,7 @@ export function translateAgentFrontmatter(
 	content: string,
 	modelMap?: ModelMap,
 	agentFile?: string,
+	agentName?: string,
 ): string {
 	const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content);
 
@@ -63,7 +64,7 @@ export function translateAgentFrontmatter(
 
 	// P2-5: Apply model map to model field if provided
 	if (modelMap && typeof frontmatter["model"] === "string") {
-		frontmatter["model"] = applyModelMap(modelMap, frontmatter["model"], agentFile ?? "");
+		frontmatter["model"] = applyModelMap(modelMap, frontmatter["model"], agentFile ?? "", agentName);
 	}
 
 	return serializeFrontmatter(frontmatter, body);
@@ -114,9 +115,16 @@ export const opencodeAdapter: PlatformAdapter = {
 		// Translate frontmatter for OpenCode compatibility (P2-5: pass modelMap)
 		try {
 			const content = await fs.readFile(targetFile, "utf-8");
-			const translated = translateAgentFrontmatter(content, modelMap, displayName);
+			const translated = translateAgentFrontmatter(content, modelMap, sourcePath, displayName);
 			await fs.writeFile(targetFile, translated, "utf-8");
-		} catch {
+		} catch (err) {
+			if (err instanceof ModelMapError) {
+				// The initial copy (line 112) already wrote the raw, untranslated
+				// frontmatter — remove it so no file is left containing the
+				// unmapped tier string before propagating the hard-fail.
+				await fs.rm(targetFile, { force: true });
+				throw err;
+			}
 			logWarn(`Failed to translate frontmatter for: ${sourcePath}. Copying as-is.`);
 			await fs.copyFile(sourcePath, targetFile);
 		}

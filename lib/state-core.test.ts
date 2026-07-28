@@ -20,6 +20,7 @@ import {
 	ACTIVE_IDLE_TTL_SECONDS,
 	TERMINAL_TTL_SECONDS,
 	isStateLive,
+	isProgressLive,
 	STATE_PREFIX,
 	listOthers,
 	adopt,
@@ -27,6 +28,7 @@ import {
 	isPristine,
 	restampAfterAdopt,
 	ensureSeed,
+	touchSessionStates,
 } from "./state-core.ts";
 
 // ---------------------------------------------------------------------------
@@ -210,6 +212,20 @@ describe("mergeWithHeartbeat (A5)", () => {
 		const result = mergeWithHeartbeat(prior, { outcome: "new" });
 		expect(result.outcome).toBe("new");
 	});
+
+	// Wedge-axis regression: last_touched_at (GC axis) and progress_touched_at
+	// (wedge axis) answer different questions and must both be stamped by every
+	// genuine producer write, so decision.ts can tell a heartbeat-revived corpse
+	// apart from real progress.
+	test("also stamps progress_touched_at alongside last_touched_at", () => {
+		const prior = {
+			active: true,
+			started_at: "2020-01-01T00:00:00+00:00",
+			last_touched_at: "2020-01-01T00:00:00+00:00",
+		};
+		const result = mergeWithHeartbeat(prior, {});
+		expect(result.progress_touched_at).toBe(result.last_touched_at);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -295,6 +311,49 @@ describe("isStateLive — started_at fallback", () => {
 		const now = nowEpoch();
 		const parsed = { active: true, last_touched_at: "not-a-date", started_at: isoSecondsAgo(60) };
 		expect(isStateLive(parsed, now)).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// isProgressLive — legacy last_touched_at fallback (ca82a246: "fix: isProgressLive
+// last_touched_at 폴백 복원"). `progress_touched_at` absent on a legacy file must
+// fall back to `last_touched_at` — NOT fall through isStateLive's own chain to
+// started_at. Each fixture below makes last_touched_at and started_at disagree
+// so only the `?? parsed.last_touched_at` fallback (not the started_at fallback
+// underneath it) can produce the asserted answer.
+// ---------------------------------------------------------------------------
+
+describe("isProgressLive — legacy last_touched_at fallback", () => {
+	test("no progress_touched_at, fresh last_touched_at, STALE started_at → live via the last_touched_at fallback", () => {
+		const now = nowEpoch();
+		const staleStartedAt = isoSecondsAgo(7 * 3600); // stale for an active state (TTL 6h)
+		const parsed = {
+			active: true,
+			last_touched_at: isoSecondsAgo(60),
+			started_at: staleStartedAt,
+			// no progress_touched_at
+		};
+		// Sanity: started_at alone is NOT live — so the `true` below can only come
+		// from reading last_touched_at via the fallback, not from falling through
+		// to started_at.
+		expect(isStateLive({ active: true, last_touched_at: staleStartedAt }, now)).toBe(false);
+		expect(isProgressLive(parsed, now)).toBe(true);
+	});
+
+	test("no progress_touched_at, STALE last_touched_at, fresh started_at → dead via the last_touched_at fallback", () => {
+		const now = nowEpoch();
+		const freshStartedAt = isoSecondsAgo(60);
+		const parsed = {
+			active: true,
+			last_touched_at: isoSecondsAgo(7 * 3600), // stale for an active state (TTL 6h)
+			started_at: freshStartedAt,
+			// no progress_touched_at
+		};
+		// Sanity: started_at alone IS live — so the `false` below can only come
+		// from reading last_touched_at via the fallback, not from falling through
+		// to started_at.
+		expect(isStateLive({ active: true, last_touched_at: freshStartedAt }, now)).toBe(true);
+		expect(isProgressLive(parsed, now)).toBe(false);
 	});
 });
 
@@ -723,6 +782,84 @@ describe("adopt", () => {
 });
 
 // ---------------------------------------------------------------------------
+// listOthers/adopt — progress axis, not GC axis, gates adoption (task 1).
+//
+// Base behavior (measured against d215e9ce): a source whose only sign of life is
+// a Stop-hook heartbeat (touchSessionStates) — no genuine work since — must read
+// exactly as it would with no heartbeat at all: not offered by listOthers, and
+// refused by adopt's r7 liveness gate. Before this fix, both read last_touched_at
+// (the GC axis), which touchSessionStates unconditionally revives; the heartbeat
+// alone was enough to resurrect a 7h-idle corpse as a live adoption candidate.
+// ---------------------------------------------------------------------------
+
+describe("listOthers/adopt — progress axis, not GC axis (heartbeat revival guard)", () => {
+	let omtDir: string;
+	const origOmtDir = process.env.OMT_DIR;
+	const origSid = process.env.OMT_SESSION_ID;
+
+	beforeEach(() => {
+		omtDir = mkdtempSync(join(tmpdir(), "state-core-progress-axis-"));
+		process.env.OMT_DIR = omtDir;
+		process.env.OMT_SESSION_ID = "B";
+	});
+
+	afterEach(() => {
+		if (origOmtDir === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = origOmtDir;
+		if (origSid === undefined) delete process.env.OMT_SESSION_ID;
+		else process.env.OMT_SESSION_ID = origSid;
+		rmSync(omtDir, { recursive: true, force: true });
+	});
+
+	test("listOthers excludes a source revived only by the heartbeat, even though last_touched_at is now fresh", () => {
+		const sid = "revived-only-by-heartbeat";
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			current_phase: "deep-interview",
+			started_at: isoSecondsAgo(8 * 3600),
+			last_touched_at: isoSecondsAgo(7 * 3600 + 1),
+			state: { initial_idea: "abandoned interview" },
+		});
+
+		// Negative control: before any heartbeat, this candidate is already excluded
+		// (both axes agree it is TTL-stale) — establishes the pre-heartbeat baseline.
+		expect(listOthers("deep-interview").find((c) => c.sid === sid)).toBeUndefined();
+
+		// A heartbeat revives last_touched_at (GC axis) without any real progress.
+		touchSessionStates(sid);
+		const revived = readState(
+			omtDir,
+			`deep-interview-active-state-${sid}.json`,
+		) as Record<string, unknown>;
+		expect(Math.abs(Date.now() - Date.parse(revived["last_touched_at"] as string))).toBeLessThan(
+			5000,
+		);
+
+		// Progress axis is still stale (backfilled from the pre-heartbeat value) —
+		// must NOT be offered as a candidate despite the now-fresh GC timestamp.
+		expect(listOthers("deep-interview").find((c) => c.sid === sid)).toBeUndefined();
+	});
+
+	test("adopt refuses a source revived only by the heartbeat; source file is left unmutated", () => {
+		const srcSid = "revived-src";
+		writeState(omtDir, `goal-state-${srcSid}.json`, {
+			active: true,
+			outcome: "abandoned goal",
+			phase: "pursuing",
+			iteration: 3,
+			started_at: isoSecondsAgo(8 * 3600),
+			last_touched_at: isoSecondsAgo(7 * 3600 + 1),
+		});
+
+		touchSessionStates(srcSid); // revives the GC axis only, no real work
+
+		expect(() => adopt("goal", srcSid)).toThrow(/liveness check/);
+		expect(existsSync(join(omtDir, `goal-state-${srcSid}.json`))).toBe(true);
+		expect(existsSync(join(omtDir, "goal-state-B.json"))).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // r5 — restampAfterAdopt helper uses writeFileNoCreate (no-create semantics)
 // ---------------------------------------------------------------------------
 
@@ -752,6 +889,76 @@ describe("restampAfterAdopt — writeFileNoCreate 의미론", () => {
 		const p = join(omtDir, "nonexistent-state.json");
 		expect(() => restampAfterAdopt(p)).toThrow();
 		expect(existsSync(p)).toBe(false);
+	});
+
+	// restampAfterAdopt is NOT a GC-only writer: adoption is a genuine progress
+	// event (an explicit user act declaring "I am resuming this work"), so it
+	// must stamp progress_touched_at fresh — never backfill/preserve a prior
+	// value — or a state adopted just inside the TTL loses all continuation
+	// protection (isProgressLive reads the stale preserved value forever after).
+	test("progress_touched_at 부재(레거시) 시에도 backfill이 아니라 신선한 값으로 stamp된다", () => {
+		const p = join(omtDir, "deep-interview-active-state-X.json");
+		const old = "2020-01-01T00:00:00+00:00";
+		writeFileSync(
+			p,
+			JSON.stringify({ active: true, last_touched_at: old, state: { initial_idea: "x" } }, null, 2),
+		);
+		restampAfterAdopt(p);
+		const updated = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
+		expect((updated["last_touched_at"] as string) > old).toBe(true);
+		expect(updated["progress_touched_at"]).not.toBe(old);
+		expect(updated["progress_touched_at"]).not.toBe("1970-01-01T00:00:00+00:00");
+		expect(updated["progress_touched_at"]).toBe(updated["last_touched_at"]);
+	});
+
+	test("progress_touched_at이 이미 존재해도 보존하지 않고 신선한 값으로 갱신한다", () => {
+		const p = join(omtDir, "deep-interview-active-state-Y.json");
+		const old = "2020-01-01T00:00:00+00:00";
+		const existingProgress = "2021-06-15T00:00:00+00:00";
+		writeFileSync(
+			p,
+			JSON.stringify(
+				{ active: true, last_touched_at: old, progress_touched_at: existingProgress },
+				null,
+				2,
+			),
+		);
+		restampAfterAdopt(p);
+		const updated = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
+		expect(updated["progress_touched_at"]).not.toBe(existingProgress);
+		expect(updated["progress_touched_at"]).toBe(updated["last_touched_at"]);
+	});
+
+	// Regression guard for the false-completion path: an adopted state stamped
+	// just inside the 6h ACTIVE_IDLE_TTL must keep FULL continuation protection,
+	// not lose it the instant the original stamp's TTL window would have
+	// elapsed. Evaluated at a nowEpoch PAST that original expiry point — at
+	// "now" both the broken (backfill) and fixed (fresh-stamp) behavior return
+	// true, which would make this test vacuous.
+	test("adopt 직후에는 progress axis도 신선해, 원래 stamp의 만료 시점을 넘겨도 isProgressLive가 true다", () => {
+		const p = join(omtDir, "prometheus-state-ADOPTED.json");
+		const nearExpiry = ACTIVE_IDLE_TTL_SECONDS - 60; // 5h59m ago — just inside the TTL
+		const old = isoSecondsAgo(nearExpiry);
+		writeFileSync(p, JSON.stringify({ active: true, last_touched_at: old, phase: "S1" }, null, 2));
+
+		restampAfterAdopt(p);
+
+		const updated = JSON.parse(readFileSync(p, "utf8")) as {
+			last_touched_at: string;
+			progress_touched_at: string;
+		};
+		// 2 minutes past the point the ORIGINAL stamp (`old`) would have expired.
+		const nowPastOriginalExpiry = nowEpoch() + 120;
+		expect(
+			isProgressLive(
+				{
+					active: true,
+					last_touched_at: updated.last_touched_at,
+					progress_touched_at: updated.progress_touched_at,
+				},
+				nowPastOriginalExpiry,
+			),
+		).toBe(true);
 	});
 });
 
@@ -1094,4 +1301,397 @@ describe("ensureSeed ↔ bash seed parity (ES-parity)", () => {
 			expect(normalizeTs(actual)).toEqual(normalizeTs(expected));
 		});
 	}
+});
+
+// ---------------------------------------------------------------------------
+// touchSessionStates (family-agnostic Stop-hook session-state heartbeat)
+// ---------------------------------------------------------------------------
+
+describe("touchSessionStates", () => {
+	let omtDir: string;
+	const origOmtDir = process.env.OMT_DIR;
+
+	beforeEach(() => {
+		omtDir = mkdtempSync(join(tmpdir(), "state-core-touch-"));
+		process.env.OMT_DIR = omtDir;
+	});
+
+	afterEach(() => {
+		if (origOmtDir === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = origOmtDir;
+		rmSync(omtDir, { recursive: true, force: true });
+	});
+
+	// Extracts touchSessionStates' own source, from its `export function` line to
+	// its matching closing brace (depth-counted — a plain regex would stop at the
+	// first nested `}`), so the literal-free assertion below inspects only this
+	// function's body and not the STATE_PREFIX map defined elsewhere in the file.
+	function extractFunctionSource(src: string, name: string): string {
+		const startIdx = src.indexOf(`export function ${name}`);
+		if (startIdx === -1) throw new Error(`function ${name} not found in source`);
+		const braceStart = src.indexOf("{", startIdx);
+		let depth = 0;
+		let i = braceStart;
+		for (; i < src.length; i++) {
+			if (src[i] === "{") depth++;
+			else if (src[i] === "}") {
+				depth--;
+				if (depth === 0) break;
+			}
+		}
+		return src.slice(startIdx, i + 1);
+	}
+
+	test("updates last_touched_at across all five families in one call, with zero family literals in its own source", () => {
+		const sid = "touch-sid";
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `goal-state-${sid}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 2,
+			outcome: "ship X",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `ultragoal-state-${sid}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 2,
+			outcome: "ship Y",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `prometheus-state-${sid}.json`, {
+			active: true,
+			phase: "S2",
+			plan_path: "some/plan.md",
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			state: { initial_idea: "diving skills" },
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `qa-state-${sid}.json`, {
+			active: true,
+			phase: "IN-PROGRESS",
+			cycle: 1,
+			target: "some target",
+			started_at: old,
+			last_touched_at: old,
+		});
+
+		touchSessionStates(sid);
+
+		const nowMs = Date.now();
+		for (const filename of [
+			`goal-state-${sid}.json`,
+			`ultragoal-state-${sid}.json`,
+			`prometheus-state-${sid}.json`,
+			`deep-interview-active-state-${sid}.json`,
+			`qa-state-${sid}.json`,
+		]) {
+			const parsed = readState(omtDir, filename) as Record<string, unknown>;
+			const touchedMs = Date.parse(parsed["last_touched_at"] as string);
+			expect(Math.abs(nowMs - touchedMs)).toBeLessThan(5000);
+		}
+
+		// The heartbeat must preserve every pre-existing payload field, not just
+		// last_touched_at — a `{ last_touched_at: nowStamp() }` regression (dropping
+		// the `...parsed` spread) would still pass the last_touched_at-only checks
+		// above while silently wiping phase/iteration/outcome/plan_path/state on
+		// every live session. Check actual values, not mere key presence, since a
+		// regression that spreads `{ ...parsed, phase: undefined }`-shaped output
+		// would still pass a presence-only check.
+		const goalAfter = readState(omtDir, `goal-state-${sid}.json`) as Record<string, unknown>;
+		expect(goalAfter["phase"]).toBe("pursuing");
+		expect(goalAfter["iteration"]).toBe(2);
+		expect(goalAfter["outcome"]).toBe("ship X");
+
+		const ultragoalAfter = readState(
+			omtDir,
+			`ultragoal-state-${sid}.json`,
+		) as Record<string, unknown>;
+		expect(ultragoalAfter["phase"]).toBe("pursuing");
+		expect(ultragoalAfter["iteration"]).toBe(2);
+		expect(ultragoalAfter["outcome"]).toBe("ship Y");
+
+		const prometheusAfter = readState(
+			omtDir,
+			`prometheus-state-${sid}.json`,
+		) as Record<string, unknown>;
+		expect(prometheusAfter["phase"]).toBe("S2");
+		expect(prometheusAfter["plan_path"]).toBe("some/plan.md");
+
+		const deepInterviewAfter = readState(
+			omtDir,
+			`deep-interview-active-state-${sid}.json`,
+		) as Record<string, unknown>;
+		expect(deepInterviewAfter["state"]).toEqual({ initial_idea: "diving skills" });
+
+		const qaAfter = readState(omtDir, `qa-state-${sid}.json`) as Record<string, unknown>;
+		expect(qaAfter["phase"]).toBe("IN-PROGRESS");
+		expect(qaAfter["cycle"]).toBe(1);
+		expect(qaAfter["target"]).toBe("some target");
+
+		const src = readFileSync(join(import.meta.dir, "state-core.ts"), "utf8");
+		const fnSrc = extractFunctionSource(src, "touchSessionStates");
+		expect(fnSrc).not.toContain("goal-state-");
+		expect(fnSrc).not.toContain("ultragoal-state-");
+		expect(fnSrc).not.toContain("qa-state-");
+		expect(fnSrc).not.toContain("prometheus-state-");
+		expect(fnSrc).not.toContain("deep-interview-active-state-");
+	});
+
+	test("does NOT update a pristine state file", () => {
+		const sid = "touch-pristine";
+		const seedTs = isoSecondsAgo(60);
+		writeState(omtDir, `goal-state-${sid}.json`, {
+			active: true,
+			phase: "planning",
+			iteration: 0,
+			outcome: "",
+			max_iterations: 10,
+			started_at: seedTs,
+			last_touched_at: seedTs,
+		});
+
+		touchSessionStates(sid);
+
+		const parsed = readState(omtDir, `goal-state-${sid}.json`) as Record<string, unknown>;
+		expect(parsed["last_touched_at"]).toBe(seedTs);
+	});
+
+	test("is a no-op when no state files exist for the session — no write, no throw", () => {
+		const sid = "touch-absent";
+		expect(() => touchSessionStates(sid)).not.toThrow();
+		expect(readdirSync(omtDir).length).toBe(0);
+	});
+
+	// The test above cannot exercise "$OMT_DIR itself does not exist" — its own
+	// beforeEach already mkdtempSync's the directory into existence, so the "no
+	// write, no throw" property was only ever proven for an EMPTY existing
+	// directory, never for a genuinely absent one. touchSessionStates must resolve
+	// the directory via resolveOmtDir (not getOmtDir, which mkdirs) specifically so
+	// a heartbeat never creates $OMT_DIR — a single getOmtDir/resolveOmtDir typo
+	// would violate that hard constraint while still passing every assertion above.
+	test("never creates $OMT_DIR when it does not exist at all", () => {
+		const parent = mkdtempSync(join(tmpdir(), "state-core-touch-absent-parent-"));
+		const neverCreated = join(parent, "does-not-exist", "omt");
+		const prevOmtDir = process.env.OMT_DIR;
+		process.env.OMT_DIR = neverCreated;
+		try {
+			expect(existsSync(neverCreated)).toBe(false);
+			expect(() => touchSessionStates("touch-no-omt-dir")).not.toThrow();
+			expect(existsSync(neverCreated)).toBe(false);
+		} finally {
+			if (prevOmtDir === undefined) delete process.env.OMT_DIR;
+			else process.env.OMT_DIR = prevOmtDir;
+			rmSync(parent, { recursive: true, force: true });
+		}
+	});
+
+	test("a corrupted state file does not abort the sweep — sibling well-formed file is still updated", () => {
+		const sid = "touch-corrupt";
+		writeFileSync(join(omtDir, `goal-state-${sid}.json`), "{not valid json");
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `ultragoal-state-${sid}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 1,
+			outcome: "ship Z",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+
+		expect(() => touchSessionStates(sid)).not.toThrow();
+
+		const parsed = readState(omtDir, `ultragoal-state-${sid}.json`) as Record<string, unknown>;
+		const touchedMs = Date.parse(parsed["last_touched_at"] as string);
+		expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+	});
+
+	// QA 1 — no-create updater count must stay at 2 (pre-existing updateGoalState +
+	// updateUltragoalState). 3+ means a per-family updater was added, abandoning the
+	// family-agnostic property this task establishes.
+	// Measures EXPORT COUNT (`^export function update...`), not writeFileNoCreate
+	// call-site count. A third per-family updater that delegates to one of the
+	// existing two (or uses a different write primitive entirely) adds zero
+	// writeFileNoCreate(-literal call sites, so a call-site-count assertion would
+	// pass right through it — silently abandoning the family-agnostic property
+	// this task establishes. Exported-updater count catches that shape directly.
+	test("QA1: lib/persistent-mode-core/state.ts still exports exactly 2 no-create updaters", () => {
+		const src = readFileSync(
+			join(import.meta.dir, "persistent-mode-core/state.ts"),
+			"utf8",
+		);
+		const updaterExports = src.match(/^export function update/gm) ?? [];
+		expect(updaterExports.length).toBe(2);
+	});
+
+	// QA 2 — the suffix scan must not reach another session's state files. If it did,
+	// every dead session would be kept alive forever.
+	test("QA2: only the target session's state file is touched, another session's is untouched", () => {
+		const sid = "touch-target";
+		const other = "touch-other";
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `goal-state-${sid}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 1,
+			outcome: "mine",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+		writeState(omtDir, `goal-state-${other}.json`, {
+			active: true,
+			phase: "pursuing",
+			iteration: 1,
+			outcome: "theirs",
+			max_iterations: 10,
+			started_at: old,
+			last_touched_at: old,
+		});
+
+		touchSessionStates(sid);
+
+		const mine = readState(omtDir, `goal-state-${sid}.json`) as Record<string, unknown>;
+		const theirs = readState(omtDir, `goal-state-${other}.json`) as Record<string, unknown>;
+		expect(Math.abs(Date.now() - Date.parse(mine["last_touched_at"] as string))).toBeLessThan(5000);
+		expect(theirs["last_touched_at"]).toBe(old);
+	});
+
+	// The load-bearing tooth for the GC-axis/wedge-axis split: the heartbeat may
+	// freely advance last_touched_at (GC liveness), but must never touch
+	// progress_touched_at (decision.ts's wedge-liveness signal) — otherwise a
+	// revived corpse would look like real progress again.
+	test("advances last_touched_at but leaves progress_touched_at untouched — proves the GC axis and the wedge axis are separate signals", () => {
+		const sid = "touch-progress-separation";
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			state: { initial_idea: "x" },
+			started_at: old,
+			last_touched_at: old,
+			progress_touched_at: old,
+		});
+
+		touchSessionStates(sid);
+
+		const parsed = readState(omtDir, `deep-interview-active-state-${sid}.json`) as Record<
+			string,
+			unknown
+		>;
+		const touchedMs = Date.parse(parsed["last_touched_at"] as string);
+		expect(Math.abs(Date.now() - touchedMs)).toBeLessThan(5000);
+		expect(parsed["progress_touched_at"]).toBe(old);
+	});
+
+	// The backfill fix: touchSessionStates is a GC-only writer — it must not
+	// silently destroy the last genuine-activity timestamp of a legacy file (one
+	// written before progress_touched_at existed) by overwriting last_touched_at
+	// with `now`. Before overwriting, it backfills progress_touched_at from the
+	// PRE-overwrite last_touched_at value — the file's last real activity — not
+	// from the freshly-stamped `now`. This is the load-bearing assertion: a
+	// regression that backfilled with `nowStamp()` instead of the original value
+	// would still leave progress_touched_at "present", but with the wrong (fresh)
+	// value, silently reintroducing the corpse-revival bug this backfill exists
+	// to close.
+	test("backfills progress_touched_at from the ORIGINAL (pre-overwrite) last_touched_at, not from the freshly-stamped now", () => {
+		const sid = "touch-backfill-progress";
+		const old = isoSecondsAgo(7 * 3600);
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			state: { initial_idea: "backfill target" },
+			started_at: old,
+			last_touched_at: old,
+			// no progress_touched_at — legacy shape
+		});
+
+		touchSessionStates(sid);
+
+		const parsed = readState(omtDir, `deep-interview-active-state-${sid}.json`) as Record<
+			string,
+			unknown
+		>;
+		// last_touched_at (GC axis) is bumped to now.
+		expect(Math.abs(Date.now() - Date.parse(parsed["last_touched_at"] as string))).toBeLessThan(5000);
+		// progress_touched_at is backfilled from the ORIGINAL last_touched_at value —
+		// not from `now`, and not left absent.
+		expect(parsed["progress_touched_at"]).toBe(old);
+	});
+
+	// Distinct-value variant of "leaves progress_touched_at untouched" above: that
+	// test's fixture happens to set progress_touched_at === last_touched_at, so an
+	// unconditional (presence-check-free) backfill would coincidentally reproduce
+	// the same value and slip through undetected. Using two DIFFERENT values here
+	// makes an unconditional backfill observably wrong: it would overwrite
+	// existingProgress with the (different) old last_touched_at value.
+	test("does not overwrite an existing progress_touched_at even when it differs from last_touched_at", () => {
+		const sid = "touch-preexisting-progress-distinct";
+		const old = isoSecondsAgo(7 * 3600);
+		const existingProgress = isoSecondsAgo(3600);
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			state: { initial_idea: "x" },
+			started_at: old,
+			last_touched_at: old,
+			progress_touched_at: existingProgress,
+		});
+
+		touchSessionStates(sid);
+
+		const parsed = readState(omtDir, `deep-interview-active-state-${sid}.json`) as Record<
+			string,
+			unknown
+		>;
+		expect(parsed["progress_touched_at"]).toBe(existingProgress);
+	});
+
+	// Hole 2: when `last_touched_at` is absent entirely (not just stale — genuinely
+	// never set), backfillProgressTouchedAt's naive `parsed["last_touched_at"]`
+	// value is `undefined`. JSON.stringify drops an `undefined`-valued key, so the
+	// FIRST heartbeat leaves progress_touched_at still absent on disk — even though
+	// last_touched_at itself was just freshly GC-stamped. A SECOND heartbeat then
+	// sees progress_touched_at absent (still) and backfills again — this time from
+	// the FIRST heartbeat's own fresh GC stamp, promoting a GC-only timestamp into
+	// the progress axis. This test pins the fix: after the first heartbeat,
+	// progress_touched_at must already be a real, present value (never re-derived
+	// from a fresh last_touched_at written by an earlier GC-only touch).
+	test("does not promote its own prior GC stamp into progress_touched_at across two heartbeats when last_touched_at was originally absent", () => {
+		const sid = "touch-no-last-touched-at-at-all";
+		writeState(omtDir, `deep-interview-active-state-${sid}.json`, {
+			active: true,
+			state: { initial_idea: "x" },
+			started_at: isoSecondsAgo(300),
+			// no last_touched_at at all — never stamped by any writer
+		});
+
+		touchSessionStates(sid); // first heartbeat
+		const afterFirst = readState(
+			omtDir,
+			`deep-interview-active-state-${sid}.json`,
+		) as Record<string, unknown>;
+		const firstLastTouchedAt = afterFirst["last_touched_at"];
+		expect(typeof afterFirst["progress_touched_at"]).toBe("string");
+
+		touchSessionStates(sid); // second heartbeat
+		const afterSecond = readState(
+			omtDir,
+			`deep-interview-active-state-${sid}.json`,
+		) as Record<string, unknown>;
+
+		// progress_touched_at must never equal a value a GC-only heartbeat wrote as
+		// last_touched_at — that would mean the second call promoted the first
+		// call's GC stamp into the progress axis.
+		expect(afterSecond["progress_touched_at"]).not.toBe(firstLastTouchedAt);
+		// And it must be stable across the second heartbeat (already backfilled once).
+		expect(afterSecond["progress_touched_at"]).toBe(afterFirst["progress_touched_at"]);
+	});
 });
