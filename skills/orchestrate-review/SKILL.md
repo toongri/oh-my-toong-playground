@@ -36,13 +36,13 @@ You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — start a review job
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 600000 "$JOB_DIR"` — collect results (polls internally every 5s, up to the 600000ms timeout passed above). No external sleep needed.
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete finder to a complete answer (see Member Resume Policy; cap 3 attempts)
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" results --manifest "$JOB_DIR"` — fetch the manifest directly, without waiting on `collect`'s done-gate; used at the 6-call collect cap to reach any finder that already finished (see Step 2)
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" stop "$JOB_DIR"` — SIGTERM any still-`running` finder; used at the 6-call collect cap before teardown (see Step 2)
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" results --manifest "$JOB_DIR"` — fetch the manifest directly (see Step 2)
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" stop "$JOB_DIR"` — SIGTERM any still-`running` finder (see Step 2)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` — harvest per-member token usage; **run BEFORE `clean`** (job dir is deleted by clean)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir; teardown step, run only after usage-summary and everything else is complete
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean --force "$JOB_DIR"` — same, but skips the active-member guard; used ONLY at the 6-call collect cap, where a finder may still legitimately be non-terminal
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean --force "$JOB_DIR"` — same as `clean`, but skips the active-member guard (see Step 2)
 
-**CRITICAL**: Always set `timeout: 180000` on every Bash tool call, except `collect` — see Step 2, which blocks up to 600000ms and needs a matching Bash `timeout:`.
+**CRITICAL**: Always set `timeout: 180000` on every Bash tool call, except `collect` and `resume-member` (both `timeout: 600000`) — see Member Resume Policy for what to do if Bash kills a `resume-member` call before it returns.
 
 ### Allowed Read Usage
 
@@ -50,7 +50,7 @@ These constraints govern the orchestration path — while dispatched finders are
 
 You may use Read for EXACTLY this 1 operation. No other file reads.
 
-1. Read each finder's `outputFilePath` from the manifest JSON — these point to `output.txt` files in the job directory. Only read entries where `outputFilePath` is non-null (null means the finder failed; `errorMessage` explains why). The manifest comes from either `collect`'s `"done"` response or `results --manifest "$JOB_DIR"` (the latter at the 6-call collect cap, see Step 2) — same shape, same rule either way.
+1. Read each finder's `outputFilePath` from the manifest JSON — these point to `output.txt` files in the job directory. Only read entries where `outputFilePath` is non-null (null means the finder failed; `errorMessage` explains why). The manifest comes from either `collect`'s `"done"` response or `results --manifest "$JOB_DIR"`.
 
 ### Interpolated Prompt Passthrough
 
@@ -80,15 +80,12 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 600000 "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
-- Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 600000).
-- If the Bash tool itself reports a timeout/forced-kill on a `collect` call and no JSON came back at all, treat this identically to a `"running"` not-done response — count it toward the same cap and call `collect` again. This is safe to retry: `collect`'s not-done path (`status`/`buildManifest`) only reads existing state, so a Bash-side kill mid-call cannot corrupt job state, and `start` already ran exactly once before Step 2 began — re-calling `collect` never re-starts the job.
-- **Cap: 6 calls total** (this counts both ordinary not-done responses and Bash-side timeouts/kills above). Each call blocks up to 600000ms, so 6 calls is up to ~60 minutes of polling — measured chunk wall-clock across 6-angle runs (n=263) is p50 8.4 min / p90 13.2 min / p99 25.2 min, and `orchestrate-review.config.yaml`'s `settings.timeout: 1800` caps any single finder turn at 30 minutes; six 10-minute polls comfortably cover both.
+- Otherwise (`"running"`, `"queued"`, etc.), or if the Bash tool itself times out/force-kills the call with no JSON returned at all → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total**, counting both cases.
 - If the 6th call still does not report `"done"`:
-  1. Run `results --manifest "$JOB_DIR"` to fetch the manifest directly (bypasses `collect`'s done-gate) and read whichever finders' `outputFilePath` is already non-null per Allowed Read Usage.
+  1. Run `results --manifest "$JOB_DIR"` and read whichever finders' `outputFilePath` is already non-null per Allowed Read Usage.
   2. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`.
   3. Apply the Degradation Policy's partial-merge path, treating every finder that never produced a non-null `outputFilePath` as not-responded (denominator stays N = total dispatched).
-  4. Teardown with `clean --force "$JOB_DIR"` in place of the ordinary `clean "$JOB_DIR"` (the active-member guard would otherwise refuse to delete a job dir with a non-terminal member).
-  - Known residual limit: `stop` only signals members in `running` state; a member still `queued` at the cap receives no SIGTERM. Spawn is detached and immediate at job start, so a member sitting `queued` after up to ~60 minutes is not expected in practice, but it is a theoretical edge case this path does not close.
+  4. Teardown with `clean --force "$JOB_DIR"` in place of the ordinary `clean "$JOB_DIR"`.
 
 Response JSON (done):
 ```json
@@ -145,6 +142,8 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member
 ```
 
 The prompt is written by the Conductor to fit the situation. The above is a reference example only.
+
+**If the Bash tool itself kills a `resume-member` call before any JSON comes back: do NOT re-call `resume-member` for that member** — the attempt is already spent and the turn may still be live. Instead, call `collect` next: it will detect the stalled member and flip it to `"error"`, at which point treat it as an outright-failed finder per the trigger logic above.
 
 `usage-summary.ts` harvests token counts from `members/*/status.json` (see step 6 above). `clean` deletes the job dir (needed by `resume-member`), so it is the last step — only after `usage-summary.ts` and everything else is complete.
 
