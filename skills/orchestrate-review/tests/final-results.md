@@ -5,7 +5,7 @@
 > reviews and computed merge verdicts. That design has been reshaped:
 >
 > - `orchestrate-review` is now a **Finder Conductor** that fans out one finder per
->   review **angle** (line-scan / regression / cross-file / cleanup, all on
+>   review **angle** (correctness / regression / cleanup / requirement, all on
 >   codex today) and merges **un-judged candidates** — no severity, no verdict.
 > - `code-review` now **verifies** each candidate via a **verifier fan-out** — one
 >   subagent per candidate reads the code and returns a **verdict**

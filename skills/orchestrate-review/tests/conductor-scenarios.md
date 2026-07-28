@@ -8,13 +8,13 @@
 
 ### CD-1: Cross-angle corroboration (same candidate, two angles)
 
-**Given**: `line-scan` and `cross-file` both flag `processPayment()` at `PaymentService.kt:42` for the same missing-null-guard mechanism, with different wording.
+**Given**: `correctness` and `regression` both flag `processPayment()` at `PaymentService.kt:42` for the same mechanism (a null guard the diff removed), with different wording.
 
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | The two candidates merge into one entry (same file, line within ±5, same mechanism) |
-| V2 | `found by` lists both `line-scan + cross-file` |
+| V2 | `found by` lists both `correctness + regression` |
 | V3 | The more concrete `failure_scenario` is kept |
 | V4 | No severity, no verdict assigned |
 
@@ -78,20 +78,20 @@
 
 ### CD-D2: One angle fails (3/4)
 
-**Given**: N=4; `cross-file` returns `outputFilePath: null, errorMessage: timed_out`.
+**Given**: N=4; `correctness` returns `outputFilePath: null, errorMessage: timed_out`.
 
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | The merge proceeds with the 3 available finders (not aborted) |
-| V2 | "Partial review (3/N angles). cross-file unavailable: timed_out." prefix |
-| V3 | Angle Coverage marks `cross-file: Unavailable (timed_out)` — distinct from "found nothing" |
+| V2 | "Partial review (3/N angles). correctness unavailable: timed_out." prefix |
+| V3 | Angle Coverage marks `correctness: Unavailable (timed_out)` — distinct from "found nothing" |
 | V4 | N denominator stays 4 |
 | V5 | No `start` re-run |
 
 ### CD-D1: One angle survives (1/4)
 
-**Given**: only `line-scan` returns; the other three fail.
+**Given**: only `correctness` returns; the other three fail.
 
 **Then**:
 | ID | Expected Behavior |
