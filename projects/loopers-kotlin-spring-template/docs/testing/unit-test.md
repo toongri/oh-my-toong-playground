@@ -406,13 +406,13 @@ fun `decrease does not register event when quantity greater than 0`() {
 
 값 선택 방법론(경계값·동등분할·Decision Table)은 [test-data-design.md](./test-data-design.md)에서 다룬다. 아래는 그 방법론을 적용한 뒤, 커밋 전 마지막으로 훑는 점검표다.
 
-- [ ] Every business rule in spec has a test case
-- [ ] Every validation condition has a test (valid + invalid)
-- [ ] Boundary values are covered (0, max, exact threshold)
-- [ ] ParameterizedTest used for 3+ cases with same behavior pattern
-- [ ] Domain events verified when state triggers event registration
-- [ ] Factory methods have all parameters defaulted
-- [ ] Boundary values tested with boundary-1, boundary, boundary+1 for EVERY numeric constraint
-- [ ] Each @ValueSource/@CsvSource value represents a named equivalence class
-- [ ] Multi-condition logic tested with systematic combination (Decision Table)
-- [ ] If combinations reduced, reduction rationale documented in test comments
+- [ ] 스펙의 모든 비즈니스 규칙에 테스트 케이스가 있는가
+- [ ] 모든 검증 조건에 테스트가 있는가(유효 + 무효)
+- [ ] 경계값을 커버하는가(0, 최댓값, 정확한 임계값)
+- [ ] 동일한 행동 패턴의 케이스가 3개 이상이면 `ParameterizedTest`를 썼는가
+- [ ] 상태 변화가 이벤트 등록을 유발하면 도메인 이벤트를 검증했는가
+- [ ] 팩토리 메서드의 모든 파라미터에 기본값이 있는가
+- [ ] 모든 수치 제약마다 boundary-1, boundary, boundary+1로 경계값을 테스트했는가
+- [ ] `@ValueSource`/`@CsvSource`의 각 값이 이름 붙일 수 있는 동등 클래스를 대표하는가
+- [ ] 다중 조건 로직을 체계적 조합(Decision Table)으로 테스트했는가
+- [ ] 조합을 축소했다면 그 사유를 테스트 주석에 문서화했는가
