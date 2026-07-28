@@ -528,7 +528,7 @@ This is a **report**. You surface verified findings, ranked by what matters most
 
 1. **Merge** verified findings that describe the same defect (same root cause, across chunks) — combine their evidence and note the corroborating angles. (Near-duplicates within a chunk were already deduped before verification.)
 2. **Class** each finding: **correctness** (the change behaves wrong), **cleanup** (behaves correctly but is low quality), or **requirement-gap** (an AC or stated requirement is absent — the behavior is missing, not wrong), from the angle that found it.
-3. **Rank** most-significant first: **correctness before cleanup**; within a class, **CONFIRMED before PLAUSIBLE**.
+3. **Rank** most-significant first: **correctness, then requirement-gap, then cleanup**; within a class, **CONFIRMED before PLAUSIBLE**.
 4. **Cap**: keep the most significant findings. If a review produced an unwieldy number, keep the top ~15 and state how many were dropped — never silently truncate.
 5. **Pre-existing**: a candidate on an unchanged context line is tagged `[Pre-existing]` and listed under Out of Scope — unless the change aggravates it (increases blast radius or frequency), in which case it stays in the main list.
 

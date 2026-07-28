@@ -33,11 +33,14 @@ Assemble the report markdown with these top-level sections (omit optional sectio
 ---
 
 ## Findings
-[Ranked: correctness CONFIRMED → correctness PLAUSIBLE → cleanup CONFIRMED → cleanup PLAUSIBLE.
+[Ranked by class — correctness, then requirement gap, then cleanup — and CONFIRMED before PLAUSIBLE within each.
 If nothing survived verification: "No findings survived verification."]
 
 ### Correctness
 [Omit if none.]
+
+### Requirement Gap
+[Omit if none. Each card carries the acceptance criterion / inferred intent it was measured against.]
 
 ### Cleanup
 [Omit if none.]
@@ -102,7 +105,7 @@ Use `data-verdict="PLAUSIBLE"` for plausible findings.
 
 ## Placeholder Table
 
-Count correctness and cleanup findings (CONFIRMED + PLAUSIBLE each). Apply the close-tag escape to the assembled markdown:
+Count correctness, requirement-gap, and cleanup findings (CONFIRMED + PLAUSIBLE each). Apply the close-tag escape to the assembled markdown:
 
 ```js
 JSON.stringify(reviewMarkdown).replace(/<\/(script)([\s/>])/gi, '<\\/$1$2')
@@ -117,6 +120,7 @@ Substitute into the template placeholders:
 | `{{REVIEW_TITLE}}` | Short kicker, e.g. `Code Review` |
 | `{{TOC_TITLE}}` | TOC nav label in session language, e.g. `목차` / `Contents` |
 | `{{CORRECTNESS_COUNT}}` | e.g. `3 correctness` |
+| `{{REQUIREMENT_GAP_COUNT}}` | e.g. `1 requirement gap` |
 | `{{CLEANUP_COUNT}}` | e.g. `2 cleanup` |
 | `{{REVIEW_FILE_PATH}}` | Absolute path to the written HTML file |
 | `{{REVIEW_MARKDOWN_JSON}}` | close-tag-escaped JSON string of the assembled review markdown |
