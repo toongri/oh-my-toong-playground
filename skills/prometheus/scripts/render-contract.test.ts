@@ -147,6 +147,42 @@ describe("presence — markdown render contract", () => {
 	it("P7: diagram-guide.md mentions the coverage-table rule", () => {
 		expect(diagramGuideContent.toLowerCase()).toContain("coverage table");
 	});
+
+	// The post-draw self-audit used to test edges with a negative checkbox
+	// ("No ... edge ... is absent from plan.md"), which a token lookup
+	// satisfies: plan.md naming both endpoints separately passes the box while
+	// the arrow between them is invented. Baseline probe: 3/3 agents drew a
+	// full state machine for a plan that decided zero transitions. The audit
+	// now has to emit a per-edge citation instead of ticking a box.
+	it("P8: the self-audit requires a per-edge ledger", () => {
+		expect(diagramGuideContent).toContain("### 7a. Edge ledger");
+	});
+
+	it("P9: the ledger line carries a quote slot for the deciding plan text", () => {
+		expect(diagramGuideContent).toContain(
+			'<source> -> <target> : "<quoted plan.md text that decides this edge>"',
+		);
+	});
+
+	it("P10: the ledger binds the direction, not just the pair", () => {
+		expect(diagramGuideContent).toContain("the pair AND the direction");
+	});
+
+	it("P11: an uncitable edge routes to STOP, not to a quiet delete", () => {
+		expect(diagramGuideContent).toContain("An edge with no quote is a plan gap");
+	});
+
+	it("P12: the checkbox that a token lookup could satisfy is gone", () => {
+		expect(diagramGuideContent).not.toContain(
+			"No signature, field, edge, or relationship in the diagram is absent",
+		);
+	});
+
+	it("P13: the checklist still binds signatures and fields", () => {
+		expect(diagramGuideContent).toContain(
+			"No signature or field in the diagram is absent from `plan.md`",
+		);
+	});
 });
 
 // ---------------------------------------------------------------------------
