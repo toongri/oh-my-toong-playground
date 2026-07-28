@@ -42,13 +42,11 @@ skills:
     - momus
     - diagnose
     - design-review
-    - testing
     - qa
     - component: code-review
       platforms: [claude, codex]
     - make-pr
     - technical-writing
-    - implementation
     - humanizer
     - orchestrate-review
     - review-report
@@ -63,6 +61,32 @@ rules:
     - work-principles
     - coding-discipline
     - least-code
+    # 아래는 이 프로젝트 스코프 rule — testing/implementation 스킬이
+    # docs+rules로 재구성되며 배관도 여기로 옮겨왔다. 항목 단위 platforms
+    # 오버라이드로 opencode까지 도달시킨다 — gemini는 뺀다: gemini 어댑터는
+    # rules를 지원하지 않아(tools/adapters/gemini.ts) 넣어도 경고만 찍고
+    # 스킵되므로, 도달 상한은 [claude, codex, opencode]다.
+    - component: test-strategy
+      platforms: [claude, codex, opencode]
+    - component: test-authoring
+      platforms: [claude, codex, opencode]
+    - component: test-case-design
+      platforms: [claude, codex, opencode]
+    - component: layer-placement
+      platforms: [claude, codex, opencode]
+    - component: domain-model
+      platforms: [claude, codex, opencode]
+    - component: api-contract
+      platforms: [claude, codex, opencode]
+    - component: naming-and-messages
+      platforms: [claude, codex, opencode]
+
+# rule들이 "docs/testing/…를 읽어라"로 가리키는 근거 문서. 디렉토리 형태 →
+# docs/testing/ 전체가 docs/testing/로, implementation/ 전체가 docs/implementation/로 착지한다.
+docs:
+  items:
+    - testing
+    - implementation
 
 provision:
   # 바이너리 설치는 루트 sync.yaml에서 전역 처리. 여기선 repo별 인덱스만.

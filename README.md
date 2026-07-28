@@ -2,7 +2,7 @@
 
 한국어 | **[English](README.en.md)**
 
-**버전 관리되는 중앙 스킬/에이전트/훅/룰 라이브러리 — 프로젝트마다 `.claude/`로 선별 동기화하고, 상향 탐색 오버라이드로 분화한다**
+**버전 관리되는 중앙 스킬/에이전트/훅/룰/문서 라이브러리 — 프로젝트마다 선별 동기화하고, 상향 탐색 오버라이드로 분화한다**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -23,11 +23,11 @@
 
 ## oh-my-toong이란?
 
-oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에이전트, 훅, 룰을 버전 관리되는 하나의 중앙 라이브러리에 모아 두고, 각 대상 프로젝트의 `.claude/`로 **선별적으로** 동기화합니다. 같은 라이브러리를 쓰더라도 프로젝트마다 다른 구성을 줄 수 있는데, 이를 **상향 탐색(upward-search) 오버라이드**가 담당합니다.
+oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에이전트, 훅, 룰, 문서를 버전 관리되는 하나의 중앙 라이브러리에 모아 두고, 각 대상 프로젝트로 **선별적으로** 동기화합니다. 컴포넌트는 플랫폼 디렉터리(`.claude/`, `.codex/` 등)로, 문서는 대상 레포 루트의 `docs/`로 착지합니다. 같은 라이브러리를 쓰더라도 프로젝트마다 다른 구성을 줄 수 있는데, 이를 **상향 탐색(upward-search) 오버라이드**가 담당합니다.
 
 ## 주요 기능
 
-- **중앙 라이브러리** — 스킬, 에이전트, 훅, 룰을 한 저장소에서 버전 관리
+- **중앙 라이브러리** — 스킬, 에이전트, 훅, 룰, 문서를 한 저장소에서 버전 관리
 - **선언적 동기화** — `sync.yaml`로 필요한 컴포넌트만 대상 프로젝트의 `.claude/`로 배포
 - **프로젝트별 분화** — 상향 탐색으로 글로벌 컴포넌트 위에 프로젝트 고유 컨벤션 오버라이드
 - **고아 정리** — 라이브러리에서 제거한 컴포넌트는 다음 sync 때 대상에서도 사라짐
@@ -35,14 +35,14 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 ## 철학 — 왜 이 설계인가
 
-**1단계 — 같은 이름, 다른 내용**: 각 프로젝트에 동일한 스킬을 복사하면 되지만, 핵심 딜레마가 있습니다. 예를 들어 `testing`은 Kotlin/Spring 프로젝트에서 "Classical TDD, verify() 금지, BDD 구조"를 의미하지만, 다른 프로젝트에서는 완전히 다른 컨벤션을 가질 수 있습니다. `implementation`도 마찬가지입니다. **동일한 이름의 스킬이 프로젝트마다 다른 내용을 담아야 합니다.**
+**1단계 — 프롬프트도 버전 관리 대상이다**: 스킬·룰·문서는 에이전트의 행동을 결정하는 입력이므로 코드와 같은 취급을 받아야 합니다. 그런데 실제로 읽히는 자리는 프로젝트마다 흩어진 `.claude/`이고, 거기서 직접 고치면 이력이 남지 않을뿐더러 다음 sync에 덮여 사라집니다. 그래서 편집은 언제나 라이브러리 쪽에서 하고, 대상에는 배포만 합니다.
 
-**2단계 — 중앙 관리 + 프로젝트 분화**: oh-my-toong은 이 딜레마를 두 가지 메커니즘으로 해결합니다.
+**2단계 — 프로젝트마다 컨벤션이 다르고, 분화의 그릇도 하나가 아니다**: 같은 `testing`이라도 `projects/toong-java-spring-template/`에서는 "Classical TDD, verify() 금지, BDD 구조"를 뜻하고 다른 프로젝트에서는 전혀 다른 것을 뜻합니다. 이 분화를 담는 방식은 두 가지입니다.
 
-- **글로벌 컴포넌트** (`skills/`, `agents/` 등): 프로젝트에 관계없이 공통인 것을 한 곳에서 버전 관리
-- **프로젝트 오버라이드** (`projects/<name>/skills/`): 프로젝트마다 달라야 하는 것을 프로젝트별로 분화
+- **스킬 오버라이드** (`projects/<name>/skills/`): 동기화 시 **상향 탐색(Upward Search)** 이 동작해, `sync.yaml`이 `testing`을 참조하면 프로젝트 폴더를 먼저 찾고 없으면 글로벌 `skills/testing/`으로 폴백합니다. 컨벤션 한 덩어리를 통째로 갈아끼울 때 씁니다.
+- **rules 인덱스 + docs 근거** (`projects/<name>/rules/`, `projects/<name>/docs/`): 컨벤션이 스킬 하나에 담기엔 클 때 rules와 docs로 나눕니다. `loopers-kotlin-spring-template`(docs 19 + rules 7)은 rules에 "어느 문서를 열어야 하는지"만 두는 순수 인덱스 방식이고, `loop-pack-fe-l2-vol1`(docs 16 + rules 8)은 자주 쓰는 판단 기준을 rules에 직접 두고 깊은 근거만 docs로 미룹니다 — 어느 쪽이든 항상 로드되는 분량을 통제하는 게 목적입니다.
 
-동기화 시 **상향 탐색(Upward Search)** 로직이 동작합니다. 프로젝트의 `sync.yaml`에서 `testing`을 참조하면, 먼저 해당 프로젝트의 `projects/<name>/skills/testing/`을 찾고, 없으면 글로벌 `skills/testing/`으로 폴백합니다.
+**3단계 — 같은 내용이 플랫폼마다 다른 자리에 앉는다**: Claude는 `.claude/`, Codex는 `.codex/`와 `.agents/` 두 갈래, Gemini는 `.gemini/`로 디렉터리 구조도 지원 카테고리도 제각각입니다. 그 차이는 어댑터가 흡수하므로, 컨벤션은 한 번만 쓰면 되고 어떤 플랫폼으로 얼마나 내보낼지는 `sync.yaml`의 `platforms`가 결정합니다.
 
 ## 문서
 
@@ -106,35 +106,55 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
    `make sync`는 현재 브랜치가 default 브랜치가 아니거나 워킹트리에 staged/unstaged/untracked 변경이 하나라도 있으면 실패합니다 — 즉 커밋 후에만 동기화할 수 있습니다. 게이트를 끄는 전용 환경변수나 CLI 플래그는 없지만, `HOME`을 갈아끼우면 전역 git 설정을 통해 우회할 수 있습니다. `make sync-dry`는 이 게이트 대상이 아니므로 커밋 전에도 미리보기용으로 쓸 수 있습니다. 게이트가 실제로 막는 범위와 트레이드오프는 `docs/sync-deploy-targets.md` 참고.
 
-### 프로젝트별 스킬 분화
+### 프로젝트별 컨벤션 분화
 
-같은 이름의 스킬이라도 프로젝트의 언어/프레임워크에 따라 다른 컨벤션이 필요할 때, `projects/` 디렉토리에 프로젝트별 오버라이드를 생성합니다.
+같은 컨벤션이라도 프로젝트의 언어/프레임워크에 따라 판단 기준이 달라질 때가 있습니다. `projects/` 디렉토리는 프로젝트 스코프의 `rules/`와 `docs/`로 이걸 표현합니다: `rules/`는 항상 로드되는 얇은 층이고 `docs/`가 판단 기준·예시·근거를 담는 근거 문서입니다. 둘로 나누면 에이전트가 매번 전량을 읽지 않고 상황에 필요한 문서만 열 수 있습니다. rules를 어디까지 얇게 둘지는 프로젝트가 정합니다 — `loopers-kotlin-spring-template`은 "이런 상황이면 이 문서를 열어라"만 남긴 순수 인덱스라 판단 기준이 docs 한 곳에만 있고, `loop-pack-fe-l2-vol1`은 자주 쓰는 기준을 rules에 직접 두고 깊은 근거만 docs로 미룹니다.
+
+두 프로젝트가 이 구조로 컨벤션을 분화시킵니다.
 
 ```
 projects/
-└── loopers-kotlin-spring-template/
-    └── skills/
-        ├── testing/
-        │   └── SKILL.md    # Classical TDD, verify() 금지, BDD 구조
-        └── implementation/
-            └── SKILL.md    # Kotlin/Spring 아키텍처 패턴
+├── loop-pack-fe-l2-vol1/            # docs 16개 + rules 8개
+│   ├── rules/                        # react, testing, nextjs 등 상황별 인덱스
+│   └── docs/
+│       ├── react/                    # 컴포넌트 경계, 훅 설계, props 계약
+│       ├── testing/                  # 테스트 레이어, 도구, 검증 기준
+│       └── nextjs/                   # App Router, 데이터/에셋 규칙
+└── loopers-kotlin-spring-template/  # docs 19개 + rules 7개
+    ├── rules/                        # test-strategy, layer-placement 등 상황별 인덱스
+    └── docs/
+        ├── testing/                  # 단위/통합/동시성 등 레벨별 테스트 기준
+        └── implementation/           # 도메인 이벤트, 레이어 경계 등 아키텍처 패턴
 ```
 
-`sync.yaml`에서 스킬을 참조하면, 동기화 시 해당 프로젝트 폴더를 먼저 검색하고 없으면 글로벌로 폴백합니다.
+`sync.yaml`은 프로젝트가 어떤 rule과 doc을 배포할지 선언합니다. doc 항목은 디렉토리 이름으로 적으면 하위 전체가 그대로 착지합니다.
 
 ```yaml
 # projects/loopers-kotlin-spring-template/sync.yaml
-skills:
+rules:
   items:
-    - testing          # → projects/loopers-.../skills/testing/ (프로젝트 우선)
-    - diagnose         # → skills/diagnose/ (글로벌 폴백)
+    - test-strategy
+    - layer-placement
+    - domain-model
+    - api-contract
+    # ... 이 프로젝트 스코프 rule 7개, 각각 docs/testing 또는 docs/implementation의 문서를 가리킴
 
+# rule들이 "docs/testing/…를 읽어라"로 가리키는 근거 문서. 디렉토리 형태 →
+# docs/testing/ 전체가 docs/testing/로, implementation/ 전체가 docs/implementation/로 착지한다.
+docs:
+  items:
+    - testing
+    - implementation
+```
+
+스킬 오버라이드는 여전히 지원됩니다. `projects/toong-java-spring-template/`는 `testing`/`implementation` 스킬을 프로젝트 폴더에서 직접 오버라이드합니다 — `sync.yaml`에서 스킬을 참조하면 동기화 시 프로젝트 폴더를 먼저 검색하고 없으면 글로벌로 폴백합니다. 특정 에이전트에만 프로젝트 스킬을 주입하려면 `add-skills`를 씁니다.
+
+```yaml
 agents:
   items:
     - component: sisyphus-junior
       add-skills:
-        - testing          # sisyphus-junior에 프로젝트별 testing 스킬 주입
-        - implementation   # sisyphus-junior에 프로젝트별 implementation 스킬 주입
+        - testing   # sisyphus-junior에 프로젝트별 testing 스킬 주입
 ```
 
 ## 로컬 오버라이드
