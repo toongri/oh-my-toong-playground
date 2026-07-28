@@ -131,20 +131,9 @@ fi
 # The current session's state is always kept regardless of age.
 source "$SCRIPT_DIR_SS/lib/state-liveness.sh"
 GC_NOW=$(date +%s)
-for state_file in \
-    "$OMT_DIR"/goal-state-*.json \
-    "$OMT_DIR"/ultragoal-state-*.json \
-    "$OMT_DIR"/prometheus-state-*.json \
-    "$OMT_DIR"/deep-interview-active-state-*.json \
-    "$OMT_DIR"/qa-state-*.json; do
-  [ -f "$state_file" ] || continue
-  if is_current_session "$state_file" "$SESSION_ID"; then
-    continue
-  fi
-  if ! is_state_live "$state_file" "$GC_NOW"; then
-    rm -f "$state_file"
-  fi
-done
+# reap_dead_state_files echoes affected paths on both modes (plan TODO 3) --
+# this hook's own stdout must stay session-invariant, so discard it here.
+reap_dead_state_files "$OMT_DIR" "$SESSION_ID" "$GC_NOW" 0 > /dev/null
 
 # Ledger GC (plan TODO 5): session-ledger-*.md is durable-append prose, not
 # JSON, so is_state_live's .active parsing does not apply -- liveness here is
@@ -166,6 +155,42 @@ for ledger_file in "$OMT_DIR"/session-ledger-*.md; do
     rm -f "$ledger_file"
   fi
 done
+
+# GC: reap dead session-scoped artifacts (plan TODO 3: SessionStart artifact
+# GC + drift report), via the same shared liveness helper sourced above.
+# Must run after the ledger GC lane above, not before -- both consume $OMT_DIR
+# state, and this is the artifact lane's assigned position. Discard stdout for
+# the same reason as reap_dead_state_files above.
+#
+# Fail-open when identity could not be resolved: SESSION_ID falls back to the
+# literal "default" sentinel above (:21-23) whenever jq is absent or the
+# payload carried no sessionId. In that case this hook cannot tell its OWN
+# running session's artifacts apart from any other session's -- reap_session_
+# artifacts' is_current_session protection silently stops protecting the real
+# running session once its filename no longer matches "default". Running the
+# reaper anyway would destroy that session's own artifacts under the wrong
+# identity the moment their live-state backing (a STATE_PREFIXES file) has
+# aged out -- and the destroyed artifact can be exactly what a completion
+# gate reads (e.g. {goal,ultragoal}-codereview-{sid}.json). Skip instead:
+# jq-less accumulation is recoverable later via scripts/omt-cleanup/, while a
+# destructive reap under a wrong identity is not. This mirrors CLAUDE.md's
+# documented jq-absence contract ("fail open (no guard) when it is absent").
+# reap_dead_state_files above is NOT similarly guarded: it predates this
+# artifact lane, is not a regression, and each state file also carries its
+# own is_state_live liveness check independent of session identity.
+if [ "$SESSION_ID" = "default" ]; then
+  echo "session-start.sh: skipping session-artifact GC -- SESSION_ID could not be resolved (jq absent or no sessionId in payload); reaping without a real identity risks deleting this session's own artifacts" >&2
+else
+  reap_session_artifacts "$OMT_DIR" "$SESSION_ID" "$GC_NOW" 0 > /dev/null
+fi
+
+# Drift report: unclassified session-keyed files are never reaped, only
+# surfaced -- one line per file, prefixed to identify it as an unclassified
+# session file. Routed to stderr, not stdout: this hook's stdout is injected
+# into the conversation prefix and must stay session-invariant (cache-safe
+# context injection contract) -- a per-session file list is the definition of
+# prefix-variable content.
+list_unclassified_session_files "$OMT_DIR" | sed 's/^/session-start.sh: unclassified session file: /' >&2
 
 # Check for active prometheus state (session-specific)
 if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
@@ -329,6 +354,15 @@ fi
 # therefore mirrors the per-skill restore pattern in a restrained form: an
 # active-session re-read instruction only, with no "Phase:" line, since di
 # has no phase field to source one from.
+#
+# The prefix is hardcoded here rather than looked up from state-liveness.sh's
+# STATE_PREFIXES: that list is scoped to the GC callers (reap_dead_state_files,
+# list_live_session_ids), not to this restore path. Deriving this restore
+# path's file name from a list built for a different purpose meant an edit to
+# STATE_PREFIXES that dropped or renamed the deep-interview entry silently
+# broke deep-interview session restore here -- no error, no stderr, the
+# restore block would just never fire. Restore reads and GC writes are
+# different concerns; each keeps its own literal.
 if [ -f "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" ]; then
   DI_STATE=$(cat "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" 2>/dev/null)
 

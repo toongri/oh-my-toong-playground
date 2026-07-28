@@ -23,12 +23,29 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TESTS_PASSED=0
 TESTS_FAILED=0
+# Must be set before the first setup_test_env call: otherwise its re-entrant
+# check below sees a value inherited from the ambient environment (not one
+# this suite created) and tears down/rm -rf's a directory it never made.
+TEST_TMP_DIR=""
 
 # =============================================================================
 # Test harness — mirrors session-start_test.sh / resume-forge-start_test.sh
 # =============================================================================
 
 setup_test_env() {
+    # Re-entrant: a caller that has already set up a TEST_TMP_DIR/TEST_HOME
+    # (e.g. the CLAUDE_ENV_FILE scrub regression test below, which calls
+    # setup_test_env a second time after run_test's own call) must have its
+    # first pair torn down before a second pair is created, or the first
+    # pair is orphaned without cleanup.
+    # `|| true` is required here (unlike the sibling test files' if/then/fi
+    # teardowns): this file's teardown_test_env uses the short-circuit
+    # `[ -d ] && rm -rf` form, which returns exit 1 under set -e when the
+    # directory is already gone.
+    if [ -n "${TEST_TMP_DIR:-}" ]; then
+        teardown_test_env || true
+    fi
+
     TEST_TMP_DIR=$(mktemp -d)
     mkdir -p "$TEST_TMP_DIR/.omt"
     mkdir -p "$TEST_TMP_DIR/.git"
@@ -39,6 +56,12 @@ setup_test_env() {
     export HOME="$TEST_HOME"
     unset OMT_DIR
     unset OMT_PROJECT
+    # Scrub CLAUDE_ENV_FILE before every test's body runs -- otherwise any
+    # test spawning session-start.sh / resume-forge-start.sh without its own
+    # override inherits the ambient value (e.g. a live Claude Code session's
+    # real env file) and the hook silently overwrites it with this suite's
+    # throwaway fixtures.
+    unset CLAUDE_ENV_FILE
 
     # Pre-compute TEST_OMT_DIR: mirrors hooks' OMT_DIR derivation.
     # TEST_TMP_DIR has no real git repo, so PROJECT_NAME = basename(TEST_TMP_DIR).
@@ -265,6 +288,38 @@ EOF
     return 0
 }
 
+test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
+    # Regression guard for the ambient CLAUDE_ENV_FILE leak: this suite's own
+    # unscrubbed session-start.sh / resume-forge-start.sh call sites used to
+    # inherit whatever CLAUDE_ENV_FILE was ambient in the runner's shell (e.g.
+    # a live Claude Code session's real env file) and the hook would
+    # unconditionally append export lines to it. setup_test_env() now scrubs
+    # CLAUDE_ENV_FILE before every test's body runs; this test re-invokes that
+    # real function (not a copy of it) after re-introducing an ambient value,
+    # so if the scrub is ever removed from setup_test_env, this goes red.
+    local fixture baseline
+    fixture=$(mktemp)
+    baseline=$(mktemp)
+    cp "$fixture" "$baseline"
+
+    export CLAUDE_ENV_FILE="$fixture"
+    setup_test_env
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "leak-guard-sid"}' \
+        | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+    echo '{"cwd": "'"$TEST_TMP_DIR"'"}' \
+        | "$SCRIPT_DIR/resume-forge-start.sh" > /dev/null 2>&1 || true
+
+    local result=0
+    if ! cmp -s "$baseline" "$fixture"; then
+        echo "ASSERTION FAILED: CLAUDE_ENV_FILE fixture must stay byte-unchanged when ambient -- setup_test_env's scrub regressed"
+        echo "  fixture contents: $(cat "$fixture")"
+        result=1
+    fi
+
+    rm -f "$fixture" "$baseline"
+    return $result
+}
+
 # =============================================================================
 # Main runner
 # =============================================================================
@@ -279,6 +334,7 @@ main() {
 
     # AC12 GREEN: real emitters pass all 5 pattern checks
     run_test test_cache_safe_guard_ac12_green
+    run_test test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
