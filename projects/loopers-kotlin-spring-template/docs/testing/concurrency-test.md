@@ -90,11 +90,13 @@ class OrderConcurrencyTest {
 // ❌ WRONG: assertion before await
 repeat(threadCount) { executorService.submit { ... } }
 assertThat(successCount.get()).isEqualTo(1)  // threads still running!
-latch.await(30, TimeUnit.SECONDS)
+val completed = latch.await(30, TimeUnit.SECONDS)
+assertThat(completed).isTrue()
 
 // ✅ CORRECT: assertion after await
 repeat(threadCount) { executorService.submit { ... } }
-latch.await(30, TimeUnit.SECONDS)  // wait for all threads to complete
+val completed = latch.await(30, TimeUnit.SECONDS)  // wait for all threads to complete
+assertThat(completed).isTrue()  // fail if threads hung
 assertThat(successCount.get()).isEqualTo(1)  // now safe
 ```
 
@@ -126,7 +128,8 @@ repeat(threadCount) { index ->
     }
 }
 
-latch.await(30, TimeUnit.SECONDS)
+val completed = latch.await(30, TimeUnit.SECONDS)
+assertThat(completed).isTrue()  // Fail if threads hung
 executorService.shutdown()
 ```
 
@@ -217,7 +220,8 @@ fun `same coupon can only be used once even with concurrent orders`() {
         }
     }
 
-    latch.await(30, TimeUnit.SECONDS)
+    val completed = latch.await(30, TimeUnit.SECONDS)
+    assertThat(completed).isTrue()  // Fail if threads hung
     executorService.shutdown()
 
     // then
@@ -272,7 +276,8 @@ fun `concurrent orders for same product should deduct stock correctly`() {
         }
     }
 
-    latch.await(30, TimeUnit.SECONDS)
+    val completed = latch.await(30, TimeUnit.SECONDS)
+    assertThat(completed).isTrue()  // Fail if threads hung
     executorService.shutdown()
 
     // then
@@ -323,7 +328,8 @@ fun `only one request processed when concurrent requests with same idempotency k
         }
     }
 
-    latch.await(30, TimeUnit.SECONDS)
+    val completed = latch.await(30, TimeUnit.SECONDS)
+    assertThat(completed).isTrue()  // Fail if threads hung
     executorService.shutdown()
 
     // then - all requests succeed and return the same order ID
@@ -344,5 +350,6 @@ fun `only one request processed when concurrent requests with same idempotency k
 - [ ] 스레드 안전한 카운팅에 `AtomicInteger`를 사용하는가
 - [ ] 성공/실패 개수를 모두 검증하는가
 - [ ] 모든 스레드가 끝난 뒤 최종 상태를 검증하는가
+- [ ] `latch.await(...)`/`awaitTermination(...)`의 반환값을 받아 `assertThat(...).isTrue()`로 단언하는가
 - [ ] `executorService.shutdown()`을 호출하는가
 - [ ] `@AfterEach`에서 데이터베이스를 정리하는가
