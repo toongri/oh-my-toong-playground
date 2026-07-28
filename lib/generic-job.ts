@@ -1065,17 +1065,20 @@ export function cmdResults(
 // Command: stop
 // ---------------------------------------------------------------------------
 
-export function cmdStop(
+// Cap on waiting for a stopped member's own exit — must not hang indefinitely.
+const STOP_WAIT_CAP_MS = 10_000;
+
+export async function cmdStop(
 	_options: Record<string, unknown>,
 	jobDir: string,
 	config: JobConfig,
-): void {
+): Promise<void> {
 	const resolvedJobDir = path.resolve(jobDir);
 	const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
 	if (!fs.existsSync(entitiesRoot))
 		exitWithError(`No ${config.entityDirName} folder found: ${entitiesRoot}`);
 
-	let stoppedAny = false;
+	const stoppedPids: number[] = [];
 	for (const entry of fs.readdirSync(entitiesRoot)) {
 		const statusPath = path.join(entitiesRoot, entry, "status.json");
 		const status = readJsonIfExists(statusPath);
@@ -1085,16 +1088,32 @@ export function cmdStop(
 
 		try {
 			process.kill(Number(status.pid), "SIGTERM");
-			stoppedAny = true;
+			stoppedPids.push(Number(status.pid));
 		} catch {
 			// ignore
 		}
 	}
 
+	const isAlive = (pid: number): boolean => {
+		try {
+			process.kill(pid, 0);
+			return true;
+		} catch {
+			return false;
+		}
+	};
+	const waitStart = Date.now();
+	while (stoppedPids.some(isAlive) && Date.now() - waitStart < STOP_WAIT_CAP_MS) {
+		await sleepMs(250);
+	}
+
+	const manifest = buildManifest(jobDir, config);
 	process.stdout.write(
-		stoppedAny
-			? `stop: sent SIGTERM to running ${config.entityPlural}\n`
-			: `stop: no running ${config.entityPlural}\n`,
+		`${
+			stoppedPids.length > 0
+				? `stop: sent SIGTERM to running ${config.entityPlural}\n`
+				: `stop: no running ${config.entityPlural}\n`
+		}${JSON.stringify(manifest, null, 2)}\n`,
 	);
 }
 
@@ -1182,9 +1201,12 @@ export async function cmdCollect(
 	const start = Date.now();
 	while (true) {
 		const status = await computeStatus(jobDir, config);
-		if (status.overallState === "done") {
+		// awaiting_resume already ended its own turn — further polling cannot change it.
+		if (status.overallState === "done" || status.overallState === "awaiting_resume") {
 			const manifest = buildManifest(jobDir, config);
-			process.stdout.write(`${JSON.stringify({ overallState: "done", ...manifest }, null, 2)}\n`);
+			process.stdout.write(
+				`${JSON.stringify({ overallState: status.overallState, ...manifest }, null, 2)}\n`,
+			);
 			return;
 		}
 		if (timeoutMs > 0 && Date.now() - start >= timeoutMs) {
