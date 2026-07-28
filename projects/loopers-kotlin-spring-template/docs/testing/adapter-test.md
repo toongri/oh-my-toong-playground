@@ -179,7 +179,7 @@ fun `succeeds after payment API transient failure`() {
 
 ### Circuit Breaker 상태 전환
 
-실패율이 설정된 임계값(`failureRateThreshold`)을 넘고 호출 횟수가 최소 호출 수(`minimumNumberOfCalls`)에 도달하면 Circuit Breaker가 OPEN 상태로 전환되고, OPEN 상태에서는 실제 호출 없이 즉시 실패해야 한다.
+실패율이 설정된 임계값(`failureRateThreshold`) 이상이고 호출 횟수가 최소 호출 수(`minimumNumberOfCalls`)에 도달하면 Circuit Breaker가 OPEN 상태로 전환되고, OPEN 상태에서는 실제 호출 없이 즉시 실패해야 한다.
 
 ```kotlin
 @Test
