@@ -2831,8 +2831,8 @@ describe("cmdStop — 종료 대기", () => {
 		expect(alice.outputFilePath).toBe(outputPath);
 	}, 10000);
 
-	test("`pid 없는 running 멤버가 끝내 상태를 벗어나지 않으면 상한에서 포기하고 반환한다`", async () => {
-		const jobDir = path.join(tmpDir, "job-stop-cap-no-pid");
+	test("`pid가 null인 running 멤버만 있으면 대기하지 않고 즉시 반환한다`", async () => {
+		const jobDir = path.join(tmpDir, "job-stop-no-pid-no-wait");
 		fs.mkdirSync(jobDir, { recursive: true });
 		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "stop-test" }));
 		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
@@ -2841,10 +2841,13 @@ describe("cmdStop — 종료 대기", () => {
 		fs.mkdirSync(memberDir, { recursive: true });
 		fs.writeFileSync(
 			path.join(memberDir, "status.json"),
-			JSON.stringify({ member: "alice", state: "running" }), // pid 없음 — 대기가 프로세스
-			// 축이었다면 즉시 0ms에 반환했을 케이스
+			// pid: null — worker-utils.ts가 CLI 자식을 spawn하기 전 1단계 기록을 흉내낸다.
+			// 신호를 보낼 핸들이 없으므로 대기 집합에도 들어가면 안 된다.
+			JSON.stringify({ member: "alice", state: "running", pid: null }),
 		);
 
+		// 시간 기반 단언은 flaky하므로 쓰지 않는다: sleepMs를 페이크로 잡아 폴링 루프가
+		// 단 한 번도 돌지 않았음(=대기하지 않고 즉시 반환)을 호출 횟수로 증명한다.
 		let sleepCallCount = 0;
 		const clock = { now: 1_000_000 };
 		mock.module("./job-utils", () => ({
@@ -2862,13 +2865,13 @@ describe("cmdStop — 종료 대기", () => {
 
 		try {
 			const cacheBust = `${realDateNow()}-${Math.random()}`;
-			const freshGenericJob = await import(`./generic-job.ts?stop-wait-cap-nopid=${cacheBust}`);
+			const freshGenericJob = await import(`./generic-job.ts?stop-no-pid-no-wait=${cacheBust}`);
 			await freshGenericJob.cmdStop({}, jobDir, chunkReviewConfig);
 		} finally {
 			Date.now = realDateNow;
 		}
 
-		expect(sleepCallCount).toBeGreaterThan(0);
+		expect(sleepCallCount).toBe(0);
 		const status = JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
 		expect(status.state).toBe("running");
 	}, 10000);

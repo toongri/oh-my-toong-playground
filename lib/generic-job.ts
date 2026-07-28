@@ -1078,24 +1078,33 @@ export async function cmdStop(
 	if (!fs.existsSync(entitiesRoot))
 		exitWithError(`No ${config.entityDirName} folder found: ${entitiesRoot}`);
 
-	// Wait axis: the member's OWN status.json state, not the spawned CLI child's pid liveness.
-	// status.pid is worker-utils.ts's `child.pid` (the CLI child), not the worker process — a
-	// member observed "running" here still needs to wait, whether or not SIGTERM was sendable.
-	const runningEntries: string[] = [];
+	// Wait axis: whether status.pid exists, not whether process.kill actually succeeded.
+	// worker-utils.ts writes status.json in two steps (state:"running" first with pid:null,
+	// then again with the real child.pid once the CLI child is spawned) — a member read in
+	// that gap has no pid to signal, so waiting on it can't hasten its exit, only babysit the
+	// CLI's own natural run to completion.
+	const messageRunningEntries: string[] = [];
+	const waitEntries: string[] = [];
 	for (const entry of fs.readdirSync(entitiesRoot)) {
 		const statusPath = path.join(entitiesRoot, entry, "status.json");
 		const status = readJsonIfExists(statusPath);
 		if (!isRecord(status)) continue;
 		if (status.state !== "running") continue;
-		runningEntries.push(entry);
+		messageRunningEntries.push(entry);
 
 		if (status.pid) {
 			try {
 				process.kill(Number(status.pid), "SIGTERM");
 			} catch {
-				// ignore
+				// ESRCH: child already exited, but the worker itself hasn't flipped state yet
+				// (it's still parsing output) — still wait for that transition (bcb6c50d).
 			}
+			waitEntries.push(entry);
 		}
+		// else: no pid recorded yet — no handle to signal, and cmdStop's own pid is never
+		// persisted anywhere either (generic-job.ts spawns the worker detached + unref()s it),
+		// so there's nothing to wait on. Not waiting here is not a regression: main never
+		// waited on this member either, since it wasn't in the running set with a pid.
 	}
 
 	const stillRunning = (entry: string): boolean => {
@@ -1103,14 +1112,14 @@ export async function cmdStop(
 		return isRecord(status) && status.state === "running";
 	};
 	const waitStart = Date.now();
-	while (runningEntries.some(stillRunning) && Date.now() - waitStart < STOP_WAIT_CAP_MS) {
+	while (waitEntries.some(stillRunning) && Date.now() - waitStart < STOP_WAIT_CAP_MS) {
 		await sleepMs(250);
 	}
 
 	const manifest = buildManifest(jobDir, config);
 	process.stdout.write(
 		`${
-			runningEntries.length > 0
+			messageRunningEntries.length > 0
 				? `stop: sent SIGTERM to running ${config.entityPlural}\n`
 				: `stop: no running ${config.entityPlural}\n`
 		}${JSON.stringify(manifest, null, 2)}\n`,
