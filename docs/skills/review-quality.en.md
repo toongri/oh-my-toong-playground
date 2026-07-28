@@ -56,7 +56,7 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 **Purpose**: A multi-AI review orchestrator called internally by `code-review`. It fans out AI finders in parallel — each with a distinct review lens (angle) — collects their independent candidate findings, and merges them into a single deduplicated candidate list.
 
 **What it does**:
-- Splits the work across 4 angles — `correctness` (absorbed former line-scan + cross-file) · `regression` · `cleanup` · `requirement` (requirement fulfillment, test quality, exploitability; absorbed former coverage + security)
+- Splits the work across 4 angles — `correctness` (correctness + exploitability; absorbed former line-scan + cross-file + security) · `regression` · `cleanup` · `requirement` (requirement fulfillment, test quality; absorbed former coverage)
 - Collects candidates from each angle finder independently
 - Deduplicates and aggregates — does not assign verdicts (CONFIRMED/PLAUSIBLE/REFUTED)
 - Returns the un-judged candidate set to the upstream `code-review` for verification

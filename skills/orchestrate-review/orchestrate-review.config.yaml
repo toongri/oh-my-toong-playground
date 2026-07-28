@@ -22,10 +22,10 @@ chunk-review:
     # Change one member's `model`/`command` to run that angle on a different model/CLI.
     #
     # Angle set: 4 angles, each asking a distinct question about the diff —
-    # `correctness` (does this code misbehave), `regression` (what did this
-    # change remove), `cleanup` (is this more than necessary), `requirement`
-    # (was what was asked for actually done, is it actually verified, can an
-    # attacker flip it).
+    # `correctness` (does this code misbehave, including under input an
+    # attacker controls), `regression` (what did this change remove),
+    # `cleanup` (is this more than necessary), `requirement` (was what was
+    # asked for actually done, and is it actually verified).
     - name: correctness
       command: codex exec -c agents.enabled=false
       model: gpt-5.6-sol
