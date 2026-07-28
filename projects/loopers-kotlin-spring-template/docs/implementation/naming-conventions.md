@@ -80,6 +80,8 @@ class Point {
 }
 ```
 
+**예외 — 프레임워크가 메서드 이름을 강제하는 자리.** 이 규칙은 도메인 코드가 자유롭게 이름을 고를 수 있는 경우에 한한다. `@RestControllerAdvice`의 `@ExceptionHandler` 메서드(`handleCoreException()` 같은 관례적 명명)나 Spring Batch `ItemProcessor` 인터페이스가 요구하는 `process()`처럼, 구현해야 할 인터페이스나 프레임워크 관례가 이름 자체를 지정하는 자리는 대상이 아니다 — 도메인 로직을 담은 메서드에 기술 동사를 쓰지 말라는 것이 이 규칙의 취지다.
+
 ## 4. 변수 네이밍
 
 **완전한 이름을 쓴다.**
@@ -140,5 +142,5 @@ fun usable(): Boolean
 
 | 이런 생각이 들면 | 실제로는 |
 |---|---|
-| `process`/`handle` 같은 이름을 메서드에 쓴다 | 도메인 동사를 써야 한다 |
+| 도메인 메서드에 `process`/`handle` 같은 이름을 쓴다 | 도메인 동사를 써야 한다 (단, `@ExceptionHandler`·`ItemProcessor.process` 같이 프레임워크가 이름을 강제하는 자리는 예외) |
 | 변수 이름을 짧게 줄인다 (`amt`, `qty`) | 완전하고 설명적인 이름이 필요하다 |
