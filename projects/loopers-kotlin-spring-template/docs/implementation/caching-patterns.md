@@ -52,7 +52,9 @@ Infrastructure Layer (캐싱 로직 없음)
 | **Service** | 캐시를 모른다 — 순수 비즈니스 로직만 |
 | **Infrastructure** | 캐싱 로직 없음, 순수 데이터 접근만 |
 
-Service와 Infrastructure는 캐시의 존재 자체를 몰라야 한다. Service가 캐시 히트/미스를 알고 분기한다면, 그 시점부터 Service는 더 이상 "캐시-agnostic"하지 않고 캐싱 관심사와 얽힌다.
+이 표가 겨냥하는 건 **비즈니스 Service의 read-through 캐싱**이다 — 상품 조회처럼 도메인 로직 도중 캐시 히트/미스를 확인하고 분기하는 흐름을 Service에 두지 말라는 것이다. Service가 캐시 히트/미스를 알고 분기한다면, 그 시점부터 Service는 더 이상 "캐시-agnostic"하지 않고 캐싱 관심사와 얽힌다.
+
+이 표의 예외는 두 가지다. **캐시 무효화만 전담하는 컴포넌트**(예: 7절의 `ProductCacheService`)는 이벤트에 반응해 캐시를 지우기만 할 뿐 read-through 캐싱을 하지 않으므로 이 표가 겨냥하는 "Service"가 아니다. **배치 `ItemWriter`**(예: 8절의 `RedisAggregationWriter`)도 Redis 자체가 목적 저장소인 배치 파이프라인이라 Cache-Aside 개념이 적용되지 않는다 — Infrastructure의 "캐싱 로직 없음"과 무관하다.
 
 ## 3. Cache-Aside 패턴 (Facade)
 
@@ -474,8 +476,8 @@ class RedisAggregationWriter(
 | 문자열 리터럴 캐시 키 | sealed class + TTL 내장 |
 | 목록 데이터 전체를 캐싱 | List(ID) + Detail(데이터) 분리 |
 | `@CacheEvict(allEntries=true)` | 도메인 이벤트 + 선택적 evict |
-| Service/Repository의 캐시 로직 | Facade에서만 캐시 관리 |
-| Infrastructure에서의 캐싱 | Infrastructure는 캐시를 모른다 |
+| 비즈니스 Service/Repository의 read-through 캐시 로직 | Facade에서만 캐시 관리 (캐시 무효화 전담 컴포넌트·배치 Writer는 예외 — 2절 참고) |
+| Infrastructure에서의 read-through 캐싱 | Infrastructure는 캐시를 모른다 (배치 Writer가 Redis에 쓰는 것은 예외 — 2절 참고) |
 
 ## 11. 이런 생각이 들면 멈춰라
 
@@ -484,7 +486,7 @@ class RedisAggregationWriter(
 | 이런 생각이 들면 | 현실은 이렇다 |
 |------------------|----------------|
 | "`@Cacheable`이 더 간단한데" | 제어를 위해 `CacheTemplate`을 쓴다 |
-| "Service/Repository에서 캐싱하자" | 캐싱은 Facade에만 있다 |
+| "Service/Repository에서 캐싱하자" | read-through 캐싱은 Facade에만 있다 (캐시 무효화 전담 컴포넌트·배치 Writer는 예외 — 2절 참고) |
 | "Response를 그대로 캐싱하자" | 전용 DTO `CachedXxxV1`을 쓴다 |
 | "문자열 캐시 키로 충분하다" | TTL을 내장한 sealed class를 쓴다 |
 | "`@CacheEvict(allEntries=true)`로 지우자" | 도메인 이벤트 + 선택적 evict를 쓴다 |
