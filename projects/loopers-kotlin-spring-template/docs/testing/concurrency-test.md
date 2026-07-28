@@ -90,11 +90,11 @@ class OrderConcurrencyTest {
 // ❌ WRONG: assertion before await
 repeat(threadCount) { executorService.submit { ... } }
 assertThat(successCount.get()).isEqualTo(1)  // threads still running!
-latch.await()
+latch.await(30, TimeUnit.SECONDS)
 
 // ✅ CORRECT: assertion after await
 repeat(threadCount) { executorService.submit { ... } }
-latch.await()  // wait for all threads to complete
+latch.await(30, TimeUnit.SECONDS)  // wait for all threads to complete
 assertThat(successCount.get()).isEqualTo(1)  // now safe
 ```
 
@@ -126,7 +126,7 @@ repeat(threadCount) { index ->
     }
 }
 
-latch.await()
+latch.await(30, TimeUnit.SECONDS)
 executorService.shutdown()
 ```
 
@@ -217,7 +217,7 @@ fun `same coupon can only be used once even with concurrent orders`() {
         }
     }
 
-    latch.await()
+    latch.await(30, TimeUnit.SECONDS)
     executorService.shutdown()
 
     // then
@@ -272,7 +272,7 @@ fun `concurrent orders for same product should deduct stock correctly`() {
         }
     }
 
-    latch.await()
+    latch.await(30, TimeUnit.SECONDS)
     executorService.shutdown()
 
     // then
@@ -323,13 +323,13 @@ fun `only one request processed when concurrent requests with same idempotency k
         }
     }
 
-    latch.await()
+    latch.await(30, TimeUnit.SECONDS)
     executorService.shutdown()
 
-    // then - all requests should return the same order ID
-    val successResults = results.values.filter { it.isSuccess }.map { it.getOrThrow() }
-    assertThat(successResults).isNotEmpty()
-    assertThat(successResults.map { it.orderId }.distinct()).hasSize(1)
+    // then - all requests succeed and return the same order ID
+    assertThat(results.values.all { it.isSuccess }).isTrue()
+    val orderIds = results.values.map { it.getOrThrow().orderId }
+    assertThat(orderIds.distinct()).hasSize(1)
 
     // stock should only be deducted by 1
     val updatedStock = stockRepository.findByProductId(product.id)!!
