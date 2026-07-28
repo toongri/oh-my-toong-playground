@@ -85,6 +85,7 @@ const CHUNK_REVIEW_BOOLEAN_FLAGS = new Set([
 	"exclude-chairman",
 	"stdin",
 	"blocking",
+	"force",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -134,7 +135,7 @@ function buildManifest(jobDir: string) {
  * `--jobs-dir` / `$CHUNK_REVIEW_JOBS_DIR` — which is what the test suite does —
  * then writes its log there too, instead of into the real per-project OMT dir.
  */
-function logRootForJobsDir(jobsDir: string): string {
+export function logRootForJobsDir(jobsDir: string): string {
 	return path.dirname(path.resolve(jobsDir));
 }
 
