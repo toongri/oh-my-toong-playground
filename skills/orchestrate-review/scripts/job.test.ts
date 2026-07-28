@@ -16,6 +16,7 @@ import {
 	gcStaleJobs,
 } from "./job.ts";
 import * as GenericJob from "@lib/generic-job";
+import * as JobUtils from "@lib/job-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -2547,7 +2548,7 @@ describe("cmdCollect", () => {
 	});
 
 	test("done 상태: manifest JSON 반환", () => {
-		const jobDir = path.join(tmpDir, "job-collect-done");
+		const jobDir = path.join(tmpDir, "jobs", "job-collect-done");
 		setupCollectFixture(jobDir, {
 			"claude-0": { member: "claude", state: "done", exitCode: 0, output: "review output A" },
 			"codex-0": { member: "codex", state: "done", exitCode: 0, output: "review output B" },
@@ -2635,7 +2636,7 @@ describe("cmdCollect", () => {
 	});
 
 	test("timeout: not-done JSON 반환 (overallState, id, counts)", () => {
-		const jobDir = path.join(tmpDir, "job-collect-timeout");
+		const jobDir = path.join(tmpDir, "jobs", "job-collect-timeout");
 		setupCollectFixture(jobDir, {
 			"claude-0": { member: "claude", state: "running", exitCode: 0, output: "" },
 			"codex-0": { member: "codex", state: "queued", exitCode: 0, output: "" },
@@ -2673,27 +2674,61 @@ describe("cmdCollect", () => {
 		expect(parsed).not.toHaveProperty("members");
 	});
 
-	test("hardcap: timeout-ms=999999 → 600000 이하로 클램프", () => {
-		// We can't easily verify the internal clamp value directly, but we can verify
-		// the command completes within a reasonable time (not 999 seconds).
-		// With all reviewers done, it should return immediately regardless of timeout.
-		const jobDir = path.join(tmpDir, "job-collect-hardcap");
+	test("hardcap: timeout-ms=999999 → COLLECT_TIMEOUT_HARDCAP_MS(600000)로 정확히 클램프", async () => {
+		// The clamp (`Math.min(requested, COLLECT_TIMEOUT_HARDCAP_MS)`) can't be observed by
+		// actually waiting it out — even the clamped value is 10 minutes. Instead this drives
+		// cmdCollect's real poll loop against a fully fake clock: `sleepMs` (the only thing the
+		// loop awaits between polls) is replaced so each call advances a fake `Date.now()` by the
+		// requested ms and resolves immediately — no real delay. The loop then runs its true
+		// iteration count in near-zero real time, and the fake-elapsed accumulated at the moment
+		// it hits the timeout branch (sleepCallCount * pollIntervalMs) equals exactly whatever
+		// COLLECT_TIMEOUT_HARDCAP_MS currently is — changing the constant changes this number,
+		// without ever reading it directly (lib/generic-job.ts stays untouched, per this
+		// pursuit's non-goal). A member left in a non-terminal state (never "done") keeps the
+		// loop from returning before it ever reaches the timeout comparison.
+		const jobDir = path.join(tmpDir, "jobs", "chunk-review-hardcap-clamp");
 		setupCollectFixture(jobDir, {
-			"claude-0": { member: "claude", state: "done", exitCode: 0, output: "data" },
+			"claude-0": { member: "claude", state: "queued", exitCode: 0, output: "" },
 		});
+		const testJobConfig = {
+			entitySingular: "member",
+			entityPlural: "members",
+			entityDirName: "members",
+			jobPrefix: "chunk-review-",
+			uiLabel: "[Chunk Review]",
+			configTopLevelKey: "chunk-review",
+		};
 
-		const start = Date.now();
-		const result = execFileSync(
-			process.execPath,
-			[SCRIPT, "collect", "--timeout-ms", "999999", jobDir],
-			{ stdio: "pipe", timeout: 10000 },
-		);
-		const elapsed = Date.now() - start;
-		const parsed = JSON.parse(result.toString());
+		const clock = { now: 1_000_000 };
+		let sleepCallCount = 0;
+		let observedPollIntervalMs = 0;
+		mock.module("@lib/job-utils", () => ({
+			...JobUtils,
+			sleepMs: async (ms: number) => {
+				const msNum = Number(ms);
+				if (Number.isFinite(msNum) && msNum > 0) {
+					sleepCallCount++;
+					observedPollIntervalMs = msNum;
+					clock.now += msNum;
+				}
+			},
+		}));
 
-		// Should return immediately since all reviewers are done
-		expect(parsed.overallState).toBe("done");
-		expect(elapsed).toBeLessThan(5000);
+		const realDateNow = Date.now;
+		const cacheBust = `${realDateNow()}-${Math.random()}`;
+		try {
+			Date.now = () => clock.now;
+			const freshGenericJob = await import(`@lib/generic-job?hardcap-clamp-test=${cacheBust}`);
+			await freshGenericJob.cmdCollect({ "timeout-ms": 999999 }, jobDir, testJobConfig);
+		} finally {
+			Date.now = realDateNow;
+			mock.restore();
+		}
+
+		// Sanity: the fake-sleep path actually ran — guards against the assertion below
+		// passing vacuously if the mock silently failed to intercept.
+		expect(sleepCallCount).toBeGreaterThan(0);
+		expect(sleepCallCount * observedPollIntervalMs).toBe(600000);
 	});
 
 	test("collect: jobDir 누락 시 에러", () => {
@@ -2707,7 +2742,7 @@ describe("cmdCollect", () => {
 	});
 
 	test("cmdCollect propagates size_bytes to chairman payload", () => {
-		const jobDir = path.join(tmpDir, "job-collect-size-bytes");
+		const jobDir = path.join(tmpDir, "jobs", "job-collect-size-bytes");
 		fs.mkdirSync(jobDir, { recursive: true });
 		fs.writeFileSync(
 			path.join(jobDir, "job.json"),
