@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -8,6 +8,12 @@ import os from "os";
 import type { JobConfig, CmdResultsHooks, ResumeMemberOpts } from "./generic-job.ts";
 import type { RunOneTurnOpts } from "./worker-utils.ts";
 import { splitCommand } from "./worker-utils.ts";
+import * as JobUtils from "./job-utils.ts";
+
+// Snapshot the real bindings before any test mocks "./job-utils" — mock.module mutates the
+// shared module namespace object in place, so restoring via `() => JobUtils` after a mock
+// would hand back the already-mutated object. This pristine copy is the real restore target.
+const realJobUtils = { ...JobUtils };
 import {
 	detectCliType,
 	buildAugmentedCommand,
@@ -2636,4 +2642,193 @@ describe("cmdClean 활성 멤버 삭제 거부", () => {
 			expect(fs.existsSync(jobDir)).toBe(true);
 		},
 	);
+});
+
+// ---------------------------------------------------------------------------
+// cmdCollect — awaiting_resume early return
+// ---------------------------------------------------------------------------
+
+describe("cmdCollect — awaiting_resume 조기 반환", () => {
+	let tmpDir: string;
+
+	function setupCollectJob(jobDir: string, entities: Record<string, unknown>) {
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(jobDir, "job.json"),
+			JSON.stringify({ id: "awaiting-resume-test" }),
+		);
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		for (const [name, status] of Object.entries(entities)) {
+			const dir = path.join(entitiesDir, name);
+			fs.mkdirSync(dir, { recursive: true });
+			fs.writeFileSync(path.join(dir, "status.json"), JSON.stringify(status));
+		}
+	}
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+		mock.module("./job-utils", () => realJobUtils);
+		mock.restore();
+	});
+
+	test("awaiting_resume 멤버가 있으면 큰 --timeout-ms에도 폴링 없이 즉시 반환하고 파킹된 멤버를 식별할 수 있다", async () => {
+		const jobDir = path.join(tmpDir, "job-awaiting-resume");
+		setupCollectJob(jobDir, {
+			alice: { member: "alice", state: "awaiting_resume" },
+		});
+
+		// Observable proxy for "didn't burn the poll budget": the loop's only await point
+		// between iterations is sleepMs — zero calls means it returned on the first pass.
+		// Date.now is faked in lockstep so that if the fix is absent, the loop's real poll
+		// count still converges (via the existing hardcap) in near-zero wall-clock time
+		// instead of actually spinning for the real hardcap duration.
+		let sleepCallCount = 0;
+		const clock = { now: 1_000_000 };
+		mock.module("./job-utils", () => ({
+			...JobUtils,
+			sleepMs: async (ms: number) => {
+				const msNum = Number(ms);
+				if (Number.isFinite(msNum) && msNum > 0) {
+					sleepCallCount++;
+					clock.now += msNum;
+				}
+			},
+		}));
+		const realDateNow = Date.now;
+		Date.now = () => clock.now;
+
+		const output: string[] = [];
+		const origWrite = process.stdout.write.bind(process.stdout);
+		process.stdout.write = (chunk: string | Uint8Array, ..._args: unknown[]) => {
+			if (typeof chunk === "string") output.push(chunk);
+			return origWrite(chunk as any);
+		};
+
+		try {
+			const cacheBust = `${realDateNow()}-${Math.random()}`;
+			const freshGenericJob = await import(
+				`./generic-job.ts?awaiting-resume-early-return=${cacheBust}`
+			);
+			await freshGenericJob.cmdCollect({ "timeout-ms": 999999999 }, jobDir, chunkReviewConfig);
+		} finally {
+			process.stdout.write = origWrite;
+			Date.now = realDateNow;
+		}
+
+		expect(sleepCallCount).toBe(0);
+		expect(output.length).toBeGreaterThan(0);
+		const result = JSON.parse(output[0]);
+		expect(result.overallState).toBe("awaiting_resume");
+		const parked = result.members.find((m: any) => m.member === "alice");
+		expect(parked).toBeDefined();
+		expect(parked.errorMessage).toBe("awaiting_resume");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cmdStop — termination wait
+// ---------------------------------------------------------------------------
+
+describe("cmdStop — 종료 대기", () => {
+	let tmpDir: string;
+	const spawned: ReturnType<typeof Bun.spawn>[] = [];
+
+	function setupStopJob(jobDir: string, pid: number) {
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "stop-test" }));
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		const dir = path.join(entitiesDir, "alice");
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(
+			path.join(dir, "status.json"),
+			JSON.stringify({ member: "alice", state: "running", pid }),
+		);
+	}
+
+	function isAlive(pid: number): boolean {
+		try {
+			process.kill(pid, 0);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		for (const child of spawned.splice(0)) {
+			try {
+				child.kill("SIGKILL");
+			} catch {
+				// already dead
+			}
+		}
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+		mock.module("./job-utils", () => realJobUtils);
+		mock.restore();
+	});
+
+	test("SIGTERM 후 대상 프로세스가 실제로 사라진 뒤에 반환한다", async () => {
+		const jobDir = path.join(tmpDir, "job-stop-wait");
+		const child = Bun.spawn(
+			["bash", "-c", "trap 'sleep 0.3; exit 0' TERM; while :; do sleep 0.05; done"],
+			{ stdout: "ignore", stderr: "ignore" },
+		);
+		spawned.push(child);
+		const pid = child.pid;
+		setupStopJob(jobDir, pid);
+
+		await cmdStop({}, jobDir, chunkReviewConfig);
+
+		expect(isAlive(pid)).toBe(false);
+	}, 10000);
+
+	test("대기 상한을 넘으면 상한에서 포기하고 반환한다", async () => {
+		const jobDir = path.join(tmpDir, "job-stop-cap");
+		const child = Bun.spawn(["bash", "-c", "trap '' TERM; while :; do sleep 0.05; done"], {
+			stdout: "ignore",
+			stderr: "ignore",
+		});
+		spawned.push(child);
+		const pid = child.pid;
+		setupStopJob(jobDir, pid);
+
+		// Fast-forward: cmdStop's own wait loop polls via sleepMs/Date.now, both faked here so
+		// the cap (whatever real-ms value it is) elapses in near-zero wall-clock time, the same
+		// technique the sibling cmdCollect hardcap-clamp test uses.
+		let sleepCallCount = 0;
+		const clock = { now: 1_000_000 };
+		mock.module("./job-utils", () => ({
+			...JobUtils,
+			sleepMs: async (ms: number) => {
+				const msNum = Number(ms);
+				if (Number.isFinite(msNum) && msNum > 0) {
+					sleepCallCount++;
+					clock.now += msNum;
+				}
+			},
+		}));
+		const realDateNow = Date.now;
+		Date.now = () => clock.now;
+
+		try {
+			const cacheBust = `${realDateNow()}-${Math.random()}`;
+			const freshGenericJob = await import(`./generic-job.ts?stop-wait-cap=${cacheBust}`);
+			await freshGenericJob.cmdStop({}, jobDir, chunkReviewConfig);
+		} finally {
+			Date.now = realDateNow;
+		}
+
+		expect(sleepCallCount).toBeGreaterThan(0);
+		expect(isAlive(pid)).toBe(true);
+	}, 10000);
 });
