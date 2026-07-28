@@ -80,7 +80,7 @@ inner class IssueCouponConflict { ... }
 
 ## 2. 네이밍 컨벤션
 
-네이밍은 두 층으로 나뉜다. `@DisplayName`은 한국어로 "무엇을 검증하는지"를 설명하고, 메서드명은 백틱을 두른 영어로 "결과와 조건"을 적는다 — 패턴은 `[result] when [condition]`이다.
+네이밍은 두 층으로 나뉜다. `@DisplayName`은 한국어로 "무엇을 검증하는지"를 설명하고, 메서드명은 백틱을 두른 영어로 "결과와 조건"을 적는다 — 조건 분기가 있는 테스트는 `[result] when [condition]` 패턴을 따른다. 조건 없이 단일 동작만 검증하는 테스트(예: `calculates total correctly`, `creates order`)는 `when` 절 대상이 아니다 — 검증할 조건 자체가 없기 때문이다.
 
 ### 예외 테스트 네이밍
 
@@ -92,12 +92,12 @@ inner class IssueCouponConflict { ... }
 
 ```kotlin
 @Test
-@DisplayName("존재하지 않는 사용자면 NotFound CoreException 발생")
-fun `throws NotFound CoreException when user does not exist`()
+@DisplayName("존재하지 않는 사용자면 NOT_FOUND CoreException 발생")
+fun `throws NOT_FOUND CoreException when user does not exist`()
 
 @Test
-@DisplayName("권한이 없으면 Forbidden CoreException 발생")
-fun `throws Forbidden CoreException when user has no permission`()
+@DisplayName("잔액이 부족하면 INSUFFICIENT_BALANCE CoreException 발생")
+fun `throws INSUFFICIENT_BALANCE CoreException when balance is insufficient`()
 ```
 
 ### 메서드명 패턴
@@ -113,8 +113,8 @@ fun `throws Forbidden CoreException when user has no permission`()
 
 **허용하지 않음**:
 
-- ❌ `testIssueCoupon` — 조건이 없다
-- ❌ `couponIssuedSuccessfully` — "when"이 없다
+- ❌ `testIssueCoupon` — 무엇을 검증하는지 알 수 없다
+- ❌ `couponIssuedSuccessfully` — 조건 분기가 있는데도 그 조건이 이름에 없다("when"이 없다)
 - ❌ `should assign coupon` — "should"는 지양한다
 
 ## 3. Given/When/Then 작성
