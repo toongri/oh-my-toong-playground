@@ -233,10 +233,16 @@ class OrderEventListener(
     // ❌ Wrong: Direct Repository call is prohibited
     // private val notificationRepository: NotificationRepository
 
+    private val logger = LoggerFactory.getLogger(this::class.java)
+
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onOrderCreated(event: OrderCreatedEventV1) {
-        notificationService.sendOrderConfirmation(event.orderId)
+        try {
+            notificationService.sendOrderConfirmation(event.orderId)
+        } catch (e: Exception) {
+            logger.error("[Event] Notification failed - eventType: ${event::class.simpleName}, orderId: ${event.orderId}", e)
+        }
     }
 }
 ```
@@ -288,9 +294,15 @@ class OrderFacade(
 class RewardEventListener(
     private val rewardService: RewardService,
 ) {
+    private val logger = LoggerFactory.getLogger(this::class.java)
+
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onOrderCompleted(event: OrderCompletedEventV1) {
-        rewardService.accumulate(event.userId, event.totalAmount)
+        try {
+            rewardService.accumulate(event.userId, event.totalAmount)
+        } catch (e: Exception) {
+            logger.error("[Event] Reward accumulation failed - eventType: ${event::class.simpleName}, userId: ${event.userId}", e)
+        }
     }
 }
 ```
