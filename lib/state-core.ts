@@ -882,6 +882,30 @@ function typeFromStateFilename(filename: string): StateType | null {
  * refreshes `last_touched_at`, it backfills `progress_touched_at` from the
  * pre-overwrite value when absent, so a heartbeat on a legacy file does not erase
  * that file's last genuine-activity timestamp.
+ *
+ * Read-modify-write, no lock: each iteration does read → parse → stamp →
+ * writeFileNoCreate (truncate+write, no lock — see its own doc comment). This is
+ * only safe because the main thread is the sole writer of any given session state
+ * file — the code review on PR #209 flagged this as a lost-update risk, and the
+ * invariant that closes it is measured, not assumed: no agent definition under
+ * agents/ invokes a state CLI, and no dispatch prompt instructs a subagent to. The
+ * state-writing commands in skills/{goal,ultragoal}/references/{planning,
+ * completion-gate}.md (`set`, `set-stories`, `set-verdict`, `confirm-*`,
+ * `request-complete`) all live in skill body prose that only the orchestrator (main
+ * thread) executes; what crosses into the code-reviewer subagent is a serialized
+ * payload and an artifact path, never a state CLI call. Every state-writing skill
+ * (goal, ultragoal, qa, prometheus, deep-interview) writes from its own skill body
+ * on the main thread. This breaks — and a lock or compare-and-retry becomes
+ * necessary — the moment either: a subagent gains a path to invoke a state-writing
+ * skill (subagents already hold the Skill tool, so nothing structural blocks this
+ * today, only convention), or some call site starts running a state CLI command
+ * via a backgrounded shell. Switching the heartbeat to `utimesSync` (mtime-only,
+ * no write) would not sidestep this: liveness reads `last_touched_at` from the JSON
+ * body first and falls back to mtime only when it's absent (hooks/lib/
+ * state-liveness.sh's `is_state_live`; lib/state-core.ts's `isStateLive` above
+ * does not even receive a file path, so it cannot reach mtime at all) — as long as
+ * a state file carries `last_touched_at`, mtime is unreachable, so an mtime-only
+ * heartbeat would go unread.
  */
 export function touchSessionStates(sessionId: string): void {
 	const omtDir = resolveOmtDir();
