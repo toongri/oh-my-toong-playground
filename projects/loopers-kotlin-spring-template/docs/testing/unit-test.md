@@ -9,7 +9,7 @@ Unit Test는 개별 도메인 객체(Entity, Value Object, Policy)가 비즈니�
 3. **추출 패턴** — Entity/VO·상태 전이·계산·정책에서 케이스를 뽑는 4가지 축
 4. **상태 전이 테스트 패턴** — `@Nested`+`@EnumSource`로 상태 머신을 검증하는 법
 5. **private 생성자 엔티티 테스트** — `forTest()` 팩토리 vs 리플렉션
-6. **예외 타입 관례** — `IllegalArgumentException` vs `CoreException`
+6. **예외 타입 관례** — 예외는 `CoreException` 단일 패턴만 쓴다
 7. **패턴별 예시** — 상태 변경·검증 예외·ParameterizedTest·반올림 계산·정책 패턴·도메인 이벤트, 6가지 실전 예시
 8. **품질 체크리스트** — 커밋 전 마지막 점검
 
@@ -106,9 +106,11 @@ inner class StatusTransitions {
             // given
             val order = createOrderWithStatus(invalidStatus)
 
-            // when & then
-            assertThatThrownBy { order.confirm() }
-                .isInstanceOf(IllegalArgumentException::class.java)
+            // when
+            val exception = assertThrows<CoreException> { order.confirm() }
+
+            // then
+            assertThat(exception.errorType).isEqualTo(ErrorType.BAD_REQUEST)
         }
     }
 
@@ -132,6 +134,8 @@ inner class StatusTransitions {
     }
 }
 ```
+
+> ⚠️ 주의: 위 패턴은 `StatusTransitions` → `Confirm`/`Cancel`로 2단계 중첩된다 — 상태 전이처럼 여러 행동을 하나의 상위 범주로 묶을 때에 한해 [test-authoring.md](./test-authoring.md)가 허용하는 예외다.
 
 **핵심 패턴**:
 
@@ -177,24 +181,24 @@ private fun createOrderWithStatus(status: OrderStatus): Order {
 
 ## 6. 예외 타입 관례
 
-이 프로젝트는 두 가지 예외 패턴을 쓴다.
+이 프로젝트는 예외 타입으로 **`CoreException(ErrorType.X)`** 단일 패턴만 쓴다. 도메인 불변식이든 비즈니스 규칙이든 발생 원천과 무관하게 동일하다 — 도메인마다 별도의 예외 클래스를 만들지 않는다는 원칙([error-handling.md](../implementation/error-handling.md))이 Unit Test에도 그대로 적용된다.
 
 | 발생 원천 | 예외 타입 | 검증 패턴 |
 |---|---|---|
-| 도메인 불변식 | `require()` → `IllegalArgumentException` | `assertThatThrownBy { }.isInstanceOf(IllegalArgumentException::class.java)` |
+| 도메인 불변식 | `CoreException(ErrorType.X)` | `assertThat(exception.errorType).isEqualTo(ErrorType.X)` |
 | 비즈니스 규칙 | `CoreException(ErrorType.X)` | `assertThat(exception.errorType).isEqualTo(ErrorType.X)` |
 
 ```kotlin
-// For require() - just verify exception class
-assertThatThrownBy { order.confirm() }
-    .isInstanceOf(IllegalArgumentException::class.java)
+// Domain invariant violation — verify errorType, not exception message
+val exception = assertThrows<CoreException> { order.confirm() }
+assertThat(exception.errorType).isEqualTo(ErrorType.BAD_REQUEST)
 
-// For CoreException - verify type and optionally message
+// Business rule violation — same pattern
 val exception = assertThrows<CoreException> { point.deduct(excess) }
 assertThat(exception.errorType).isEqualTo(ErrorType.BAD_REQUEST)
 ```
 
-> ⚠️ 주의: `require()`가 던지는 예외의 정확한 메시지는 검증하지 않는다 — 메시지는 구현 세부사항이다.
+> ⚠️ 주의: `CoreException`이 던지는 메시지는 검증하지 않는다 — 메시지는 구현 세부사항이다. 검증 대상은 `errorType`뿐이다.
 
 ## 7. 패턴별 예시
 
