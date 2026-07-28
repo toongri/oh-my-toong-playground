@@ -54,11 +54,11 @@ class CouponServiceIntegrationTest {
     inner class IssueCouponFailure {
         // ✅ 실패 케이스 묶음
         @Test
-        fun `throws NOT_FOUND when coupon not exists`() {
+        fun `throws NOT_FOUND CoreException when coupon not exists`() {
             ...
         }
         @Test
-        fun `throws CONFLICT when already issued`() {
+        fun `throws CONFLICT CoreException when already issued`() {
             ...
         }
     }
@@ -107,7 +107,7 @@ fun `throws Forbidden CoreException when user has no permission`()
 | 패턴 | 예시 |
 |----------------|-----------------------------------------------|
 | 성공 | `assigns coupon when valid code` |
-| 예외 | `throws NOT_FOUND when coupon not exists` |
+| 예외 | `throws NOT_FOUND CoreException when coupon not exists` |
 | 상태 변화 | `decreases balance when deduct valid amount` |
 | 불리언 결과 | `returns true when user has permission` |
 
@@ -143,7 +143,7 @@ fun `calculates total correctly`() {
 ```kotlin
 // ✅ GOOD: 테스트 결과에 영향을 주는 구체적 값만
 @Test
-fun `throws CONFLICT when already issued`() {
+fun `throws CONFLICT CoreException when already issued`() {
     // Given: userId=1 이미 couponId=100을 발급받은 상태
     // When: 동일 userId로 동일 couponId 발급 요청
     // Then: CoreException(ErrorType.CONFLICT) 발생
@@ -152,7 +152,7 @@ fun `throws CONFLICT when already issued`() {
 
 // ❌ BAD: 구현 세부사항이 과하다
 @Test
-fun `throws CONFLICT when already issued`() {
+fun `throws CONFLICT CoreException when already issued`() {
     // Given: User entity (id=1, name="홍길동", email="test@test.com", createdAt=2025-01-01)
     //        exists in users table, IssuedCoupon entity with 12 fields exists...
     // ...
@@ -160,7 +160,7 @@ fun `throws CONFLICT when already issued`() {
 
 // ❌ BAD: 너무 모호하다
 @Test
-fun `throws CONFLICT when already issued`() {
+fun `throws CONFLICT CoreException when already issued`() {
     // Given: 사용자가 쿠폰을 가지고 있음
     // When: 발급 요청
     // Then: 에러
