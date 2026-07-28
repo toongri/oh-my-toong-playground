@@ -2,7 +2,7 @@
 
 **[한국어](README.md)** | English
 
-**A version-controlled central library of skills/agents/hooks/rules/docs — selectively synced into each project's `.claude/`, differentiated via upward-search override**
+**A version-controlled central library of skills/agents/hooks/rules/docs — selectively synced into each project, differentiated via upward-search override**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -23,7 +23,7 @@ I'm developing this while being inspired by, studying, and referencing the follo
 
 ## What is oh-my-toong?
 
-oh-my-toong is an **agent central-management project**. It keeps skills, agents, hooks, rules, and docs in a single version-controlled central library and **selectively** syncs them into each target project's `.claude/`. The same library can yield a different configuration per project — that's the job of **upward-search override**.
+oh-my-toong is an **agent central-management project**. It keeps skills, agents, hooks, rules, and docs in a single version-controlled central library and **selectively** syncs them into each target project. Components land in a platform directory (`.claude/`, `.codex/`, …); docs land in the target repo's own `docs/`. The same library can yield a different configuration per project — that's the job of **upward-search override**.
 
 ## Features
 
