@@ -42,8 +42,8 @@ current Sonnet value is this clause applied.
 The test: does the verdict the agent returns come from **its own model's
 reasoning**, or is it carrying another process's output through? The latter is
 delegation. `hermes` is the illustrative case — it looks like it produces its own
-verdict, but the verdict actually comes from the `ValidationVerdict` enum in
-`engine/validators.py`.
+verdict, but the verdict actually comes from the `Verdict` enum in
+`skills/insane-browsing/engine/validators.py`.
 
 ## Current assignment
 
@@ -126,8 +126,8 @@ for choosing opus.
 
 Its role is depth peer to `explore` (codebase) and `librarian` (external docs),
 taking over when they hit a wall — the search family. Both peers are sonnet. Its
-verdict comes from the `ValidationVerdict` enum in `engine/validators.py`, not
-from its own model.
+verdict comes from the `Verdict` enum in
+`skills/insane-browsing/engine/validators.py`, not from its own model.
 
 ### `explore` and `librarian` stay sonnet (2026-07-28)
 
