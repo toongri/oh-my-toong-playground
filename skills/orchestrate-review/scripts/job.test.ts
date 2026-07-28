@@ -15,9 +15,18 @@ import {
 	buildAugmentedCommand,
 	gcStaleJobs,
 } from "./job.ts";
+import { extractDenySkills } from "@lib/generic-job";
 import * as GenericJob from "@lib/generic-job";
 import * as JobUtils from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
+
+// Snapshot the real bindings before any test mocks "@lib/job-utils" — mock.module mutates the
+// shared module namespace object in place (and the swap leaks across this file's boundary since
+// bun test runs every file in one process), so restoring via `() => JobUtils` after a mock would
+// hand back the already-mutated object. This pristine copy is the real restore target.
+const realJobUtils = { ...JobUtils };
+// Same reasoning for "@lib/generic-job".
+const realGenericJob = { ...GenericJob };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -213,6 +222,20 @@ describe("parseChunkReviewConfig", () => {
 		const result = await parseChunkReviewConfig(realPath);
 		const names = result["chunk-review"].members.map((r) => (r as { name: string }).name);
 		expect(names).toEqual(["correctness", "regression", "cleanup", "requirement"]);
+	});
+
+	test("모든 멤버의 해석된 명령이 `agents.enabled=false` 를 포함한다", async () => {
+		const realPath = path.join(import.meta.dirname, "..", "orchestrate-review.config.yaml");
+		const result = await parseChunkReviewConfig(realPath);
+		const denySkills = extractDenySkills(
+			result["chunk-review"].settings as unknown as Record<string, unknown>,
+		);
+		for (const member of result["chunk-review"].members as { name: string; command: unknown }[]) {
+			const entity = { ...member, deny: denySkills };
+			const cliType = detectCliType(entity.command as string);
+			const { command } = buildAugmentedCommand(entity, cliType);
+			expect(command.includes("agents.enabled=false")).toBe(true);
+		}
 	});
 });
 
@@ -2598,6 +2621,8 @@ describe("cmdCollect", () => {
 
 	afterEach(() => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
+		mock.module("@lib/job-utils", () => realJobUtils);
+		mock.restore();
 	});
 
 	test("done 상태: manifest JSON 반환", () => {
@@ -2786,7 +2811,6 @@ describe("cmdCollect", () => {
 			await freshGenericJob.cmdCollect({ "timeout-ms": 999999 }, jobDir, testJobConfig);
 		} finally {
 			Date.now = realDateNow;
-			mock.restore();
 		}
 
 		// Sanity: the fake-sleep path actually ran — guards against the assertion below
@@ -3540,6 +3564,7 @@ describe("start: deny reaches spawnWorkers entities (AC6 wiring)", () => {
 
 	afterEach(() => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
+		mock.module("@lib/generic-job", () => realGenericJob);
 		mock.restore();
 	});
 
