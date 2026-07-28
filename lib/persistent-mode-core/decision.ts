@@ -21,7 +21,7 @@ import {
 import { generateAttemptId, ensureDir } from "./utils.ts";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
-import { isPristine, isStateLive } from "@lib/state-core";
+import { isPristine, isProgressLive, touchSessionStates } from "@lib/state-core";
 
 export interface DecisionContext {
 	projectRoot: string;
@@ -66,6 +66,12 @@ export interface DecisionContext {
 function toRecord(value: object): Record<string, unknown> {
 	return Object.fromEntries(Object.entries(value));
 }
+
+// isProgressLive (wedge-axis liveness) now lives in lib/state-core.ts, shared
+// with that module's own listOthers/adopt gate — both must judge "is this
+// family's work actually progressing?" by the same rule, or the two consumers
+// silently diverge (as they did before that gate was fixed to read this axis
+// too). See its doc comment there for the full fallback-safety reasoning.
 
 function formatBlockOutput(reason: string): HookOutput {
 	return {
@@ -350,6 +356,46 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	// caller, so this defaults to the real Claude tool name there.
 	const askToolName = context.askToolName ?? "AskUserQuestion";
 
+	// The heartbeat (touchSessionStates) fires HERE — on entry to makeDecision,
+	// unconditionally, before Guard 2 below is even evaluated. It used to live
+	// inside that guard's activeSubagentCount > 0 branch, right before the
+	// branch's own return; that placement is now wrong for two measured reasons.
+	//
+	// 1. A session with many running subagents was measured at 6h 38m between
+	//    consecutive artifact writes — longer than the 6h ACTIVE_IDLE_TTL that
+	//    session-start GC reaps on. Guard 2 below returns before makeDecision
+	//    ever reaches stateDir/ensureDir further down, so while many subagents
+	//    are running, nothing past the guard touched state on the old placement
+	//    either — moving the heartbeat here does not change that part, it only
+	//    moves the touch itself ahead of the guard so it still fires on that path.
+	// 2. Independently of subagent activity: goal and ultragoal self-refresh
+	//    their own last_touched_at on every "pursuing" Stop call
+	//    (updateGoalState/updateUltragoalState), but prometheus, deep-interview,
+	//    and qa have no per-family idle-Stop updater of their own — nothing else
+	//    in makeDecision ever wrote their last_touched_at when activeSubagentCount
+	//    was 0. A long-running session with zero active subagents let those three
+	//    families' state age toward the 6h TTL on every ordinary Stop call — the
+	//    same defect this file exists to close, in a different window.
+	//
+	// Why this does NOT self-blind the corpse checks further down (deep-interview
+	// and prometheus, both via isProgressLive): both read progress_touched_at
+	// first, falling back to last_touched_at only when progress_touched_at is
+	// absent (see isProgressLive's doc comment in lib/state-core.ts). touchSessionStates never
+	// stamps progress_touched_at directly — it only BACKFILLS it, once, from the
+	// file's pre-overwrite last_touched_at, before bumping last_touched_at itself
+	// (backfillProgressTouchedAt in lib/state-core.ts). So a corpse's genuinely-
+	// stale timestamp survives into progress_touched_at even after this same call's
+	// heartbeat has already revived last_touched_at to now. This safety holds only
+	// as long as BOTH devices stay in place: if the corpse checks below ever stop
+	// reading progress_touched_at (revert to last_touched_at alone), or if
+	// touchSessionStates ever stamps progress_touched_at itself instead of only
+	// backfilling it, this placement reopens the self-blinding failure mode.
+	try {
+		touchSessionStates(sessionId);
+	} catch {
+		/* never let a heartbeat write failure suppress the guard below */
+	}
+
 	// Guard 2: active subagent tasks are running (type=subagent, status=running|pending).
 	// Claude Code will re-invoke the Stop hook via task-notification when they finish, so blocking now is unnecessary.
 	// Non-subagent background tasks (shell/monitor/etc.) do NOT suppress enforcement — only subagents wake the main
@@ -621,8 +667,8 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// from the one check this task adds.
 			//
 			// This does NOT re-open a wedge on old interviews, for the same two reasons
-			// TTL-stale/pristine already don't wedge on the checks above: (1) `isStateLive`
-			// gates the whole `if` below — a TTL-stale interview falls through to cleanup
+			// TTL-stale/pristine already don't wedge on the checks above: (1) `isProgressLive`
+			// gates the whole `if` below — a progress-stale interview falls through to cleanup
 			// regardless of this flag, exactly like magnitudeUnconverged/hasUnscoredActiveComponent
 			// today; (2) a pristine seed (no `state` key at all) never reaches this branch's
 			// arithmetic in the first place when it has no done-token — it is caught by the
@@ -635,24 +681,32 @@ export function makeDecision(context: DecisionContext): HookOutput {
 
 			if (
 				(magnitudeUnconverged || hasUnscoredActiveComponent || hasNoNonGoalDecider) &&
-				isStateLive(deepInterviewStateRaw, nowEpoch)
+				isProgressLive(deepInterviewStateRaw, nowEpoch)
 			) {
 				return formatBlockOutput(buildDeepInterviewContinuationMessage(askToolName));
 			}
 			cleanupDeepInterviewState(sessionId);
 		} else if (
 			!isPristine("deep-interview", toRecord(deepInterviewStateRaw)) &&
-			isStateLive(deepInterviewStateRaw, nowEpoch)
+			isProgressLive(deepInterviewStateRaw, nowEpoch)
 		) {
-			// Block only a LIVE non-pristine interview. Two fall-through exceptions:
+			// Block only a progress-LIVE non-pristine interview. Two fall-through exceptions:
 			//   - Pristine seed (no rich `state`): a seed-only file written by the PreToolUse
 			//     hook before the skill prose ran; INERT to all consumers.
-			//   - TTL-stale (idle past ACTIVE_IDLE_TTL): the interview process is effectively
-			//     dead. Blocking here would wedge the session on a corpse that session-start GC
-			//     (is_state_live) already treats as reapable — this branch's own isStateLive
-			//     check (in the condition above) agrees by falling through instead of
-			//     blocking; the two consumers must stay in agreement.
-			// Either orphan ages toward TTL and is GC'd naturally; neither blocks session stop.
+			//   - Progress-stale (idle past ACTIVE_IDLE_TTL on progress_touched_at ??
+			//     last_touched_at): no real work has happened recently, even if a heartbeat
+			//     has kept the GC axis (last_touched_at) looking fresh. Falling through here
+			//     does NOT mean session-start GC will reap the file soon — GC reads the GC
+			//     axis (bash's is_state_live), which stays fresh as long as the session keeps
+			//     calling into this hook, so "should I block?" (this branch, progress axis)
+			//     and "should GC reap this file?" (bash, GC axis) are deliberately answered by
+			//     different axes and are NOT required to agree. What DOES have to agree — and
+			//     now does, via the shared isProgressLive export in lib/state-core.ts — is
+			//     this progress-axis check and the identical gate listOthers/adopt use before
+			//     offering or accepting this same file as an adoption candidate: a corpse
+			//     revived only by a heartbeat must not look progressing to either consumer.
+			// The orphan is inert either way — it ages toward its own eventual reap once the
+			// owning session stops calling this hook (heartbeat ceases); neither blocks stop.
 			return formatBlockOutput(buildDeepInterviewContinuationMessage(askToolName));
 		}
 	}
@@ -664,11 +718,19 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		if (detectPrometheusDone(lastAssistantMessage)) {
 			cleanupPrometheusState(sessionId);
 			cleanupBlockCountFiles(stateDir, prometheusAttemptId);
-		} else if (isStateLive(prometheusState, nowEpoch)) {
-			// TTL-stale (idle past ACTIVE_IDLE_TTL) → fall through, no block: the planning
-			// process is dead and session-start GC will reap it; this fallthrough is the
-			// second consumer that must agree — done-token cleanup above stays unconditional
-			// (an emitted token finalizes regardless of liveness).
+		} else if (isProgressLive(prometheusState, nowEpoch)) {
+			// Progress-stale (idle past ACTIVE_IDLE_TTL on the progress axis) → fall
+			// through, no block. This does NOT mean session-start GC will reap the file
+			// soon: GC reads the separate GC axis (last_touched_at / bash's
+			// is_state_live), which this same call's touchSessionStates heartbeat just
+			// refreshed — as long as the session keeps calling into this hook, the file
+			// stays GC-alive even though it made no real progress. GC only reaps it once
+			// the session itself stops (heartbeat ceases) and last_touched_at is left to
+			// age past its own TTL. Until then this branch is simply inert — it declines
+			// to block, but nothing cleans the file up either. That is acceptable because
+			// inert does not mean unsafe: it does not wedge the user, and the OTHER
+			// consumer (done-token cleanup above) still fires unconditionally on a real
+			// completion signal regardless of liveness.
 			const blockCount = getBlockCount(stateDir, prometheusAttemptId);
 			if (blockCount >= MAX_BLOCK_COUNT) {
 				cleanupBlockCountFiles(stateDir, prometheusAttemptId);
