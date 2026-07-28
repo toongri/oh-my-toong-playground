@@ -115,7 +115,7 @@ data class OrderItemSnapshot(
 **필수 패턴 세 가지**:
 
 1. **로깅 포맷**: `logger.info("[Event] {Action} start/complete - eventType: ${event::class.simpleName}, id: $id")`
-2. **AFTER_COMMIT 에러 처리**: `try-catch`와 `logger.error`로 리스너 스스로 예외를 잡고 로깅한다 — `@Async` 여부와 무관한 무조건적 요구다. Spring이 `afterCompletion()` 경로에서 예외를 삼켜 호출자에게 전파하지 않으므로, 잡지 않으면 실패가 조용히 사라진다.
+2. **AFTER_COMMIT 에러 처리**: `try-catch`와 `logger.error`로 리스너 스스로 예외를 잡고 로깅한다 — `@Async` 여부와 무관한 무조건적 요구다. Spring이 `afterCompletion()` 경로에서 예외를 자신의 로거로 ERROR 한 줄만 남기고 호출자에게는 전파하지 않으므로, 잡지 않으면 `orderId` 같은 도메인 맥락 없는 프레임워크 로그 한 줄만 남는다 — 그래서 리스너가 도메인 맥락을 담아 직접 로깅해야 한다.
 3. **Phase 명시**: `TransactionPhase`를 항상 명시적으로 지정한다
 
 > ⚠️ 주의: 이벤트 리스너를 **어느 레이어/패키지에 두는가**는 이 문서의 범위가 아니다 — [./layer-boundaries.md](./layer-boundaries.md)의 Event Listener Location을 참고한다. 여기서는 리스너가 받는 **트랜잭션 단계와 에러 처리**만 다룬다.
@@ -286,7 +286,7 @@ fun onOrderCreated(event: OrderCreatedEventV1)
 | "Event factory method unnecessary" | ALWAYS use `companion object { fun from(entity) }` pattern. Encapsulates conversion. |
 | "Just @EventListener is enough" | Use @TransactionalEventListener with explicit phase. Phase control is required. |
 | "Logging in listeners is optional" | ALWAYS log `[Event] Action start/complete - eventType: X, id: Y`. Required for debugging. |
-| "Listener doesn't need try-catch" | Exceptions MUST be caught and logged. Spring swallows them in `afterCompletion()` — an uncaught one disappears silently, sync or async alike. |
+| "Listener doesn't need try-catch" | Exceptions MUST be caught and logged. Spring logs a bare ERROR line in `afterCompletion()` with no domain context and never propagates it to the caller — sync or async alike, so the listener itself must catch and log with domain context. |
 | "Direct synchronous call is clearer" | Events are required for cross-domain. "Clearer" != correct architecture. |
 | "Single @Transactional covers everything" | External calls MUST be after commit. Use AFTER_COMMIT event listener. |
 
