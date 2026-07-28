@@ -203,7 +203,7 @@ class CouponService {
 
 class RewardFacade {
     @Transactional
-    fun processReward(criteria: RewardCriteria): RewardInfo {
+    fun grantReward(criteria: RewardCriteria): RewardInfo {
         pointService.use(criteria.pointCommand)   // Participates in Facade's tx
         couponService.issue(criteria.couponCommand)  // Participates in Facade's tx
         // Both operations execute atomically in one transaction ✅
@@ -302,7 +302,7 @@ class RewardEventListener(
 @Component
 class OrderFacade {
     @Transactional
-    fun processOrder(order: Order) {
+    fun fulfillOrder(order: Order) {
         if (order.type == OrderType.REGULAR) {     // Business logic!
             shippingService.scheduleStandard(order)
         } else if (order.type == OrderType.SUBSCRIPTION) {  // Business logic!
@@ -318,19 +318,20 @@ class OrderFacade {
 @Component
 class OrderFacade {
     @Transactional
-    fun processOrder(criteria: OrderCriteria): OrderInfo {
-        return orderService.process(criteria.to())  // Service handles type-specific processing
+    fun fulfillOrder(criteria: OrderCriteria): OrderInfo.Fulfill {
+        val order = orderService.fulfill(criteria.to())  // Service handles type-specific processing
+        return OrderInfo.Fulfill.from(order)
     }
 }
 
 @Component
 class OrderService {
     @Transactional
-    fun process(command: OrderCommand): Order {
+    fun fulfill(command: OrderCommand): Order {
         val order = orderRepository.findById(command.orderId)
             ?: throw CoreException(ErrorType.NOT_FOUND, "[orderId = ${command.orderId}] Order not found.")
 
-        order.process()  // Entity handles type-specific processing (polymorphism or internal logic)
+        order.fulfill()  // Entity handles type-specific processing (polymorphism or internal logic)
         return orderRepository.save(order)
     }
 }
