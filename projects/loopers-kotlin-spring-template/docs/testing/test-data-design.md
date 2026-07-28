@@ -38,7 +38,7 @@ fun `decrease succeeds at boundary`(amount: Int, expectedRemaining: Int) {
     assertThat(stock.quantity).isEqualTo(expectedRemaining)
 }
 
-@DisplayName("재고보다 1개 많이 차감하면 예외가 발생한다")
+@DisplayName("재고보다 1개 많이 차감하면 BAD_REQUEST CoreException 발생")
 @Test
 fun `throws BAD_REQUEST CoreException when decrease exceeds quantity by one`() {
     // given
@@ -61,7 +61,7 @@ fun `throws BAD_REQUEST CoreException when decrease exceeds quantity by one`() {
 
 ```kotlin
 // Coupon status: {ACTIVE} = valid, {INACTIVE, EXPIRED, SUSPENDED} = invalid
-@DisplayName("비활성 상태 쿠폰은 발급할 수 없다")
+@DisplayName("비활성 상태 쿠폰이면 BAD_REQUEST CoreException 발생")
 @ParameterizedTest(name = "{0} 상태 쿠폰 → 발급 실패")
 @EnumSource(value = CouponStatus::class, names = ["INACTIVE", "EXPIRED", "SUSPENDED"])
 fun `throws BAD_REQUEST CoreException when coupon status is not ACTIVE`(invalidStatus: CouponStatus) {
