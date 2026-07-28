@@ -152,11 +152,11 @@ The prompt is written by the Conductor to fit the situation. The above is a refe
 
 You merge the finders' candidate lists. You do not judge them.
 
-Each finder returns candidates shaped as `file` / `line` / `summary` / `failure_scenario` (cleanup candidates state a concrete cost in `failure_scenario` instead of a crash). Merge as follows:
+Each finder returns candidates shaped as `file` / `line` / `summary` / `failure_scenario` (cleanup candidates state a concrete cost in `failure_scenario` instead of a crash). The requirement angle's requirement-gap candidates additionally carry an `ac` field — no other angle's candidates have one. Merge as follows:
 
 1. **Collect** every candidate from every finder that returned output.
 2. **Dedup near-duplicates**: two candidates match when they point at the same `file` and a line within ±5 of each other AND describe the same mechanism. Keep the one with the most concrete `failure_scenario`; record that BOTH angles found it (corroboration is a signal the verifier wants).
-3. **Carry through** each surviving candidate verbatim — `file`, `line`, `summary`, `failure_scenario`, and the angle(s) that found it. Do not rewrite, strengthen, or weaken them.
+3. **Carry through** each surviving candidate verbatim — `file`, `line`, `summary`, `failure_scenario`, `ac` when present, and the angle(s) that found it. Do not rewrite, strengthen, or weaken them.
 4. **Do not add, drop, rank, or label.** Weak-looking candidates stay; the upstream verifier decides.
 
 **Denominator:** N = total dispatched finders. A finder that returned no candidates = "found nothing". A finder that failed to respond = "Unavailable ([error state])". These are distinct.
@@ -189,6 +189,7 @@ Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quor
 
 - **{file}:{line}** — {summary}
   - failure_scenario: {concrete inputs/state → wrong output, crash, or lost effect; for cleanup, the concrete cost}
+  - ac: {only for requirement-gap candidates from the requirement angle — the acceptance criterion or inferred intent; omit this line entirely for candidates from any other angle}
   - found by: {angle(s), e.g. "correctness" or "correctness + regression"}
 
 ### Angle Coverage
