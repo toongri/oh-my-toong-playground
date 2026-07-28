@@ -1184,6 +1184,40 @@ model-map:
 		expect(result.errors).toHaveLength(0);
 	});
 
+	it("returns error when a codex model-map effort is misspelled", () => {
+		const path = writeYaml(
+			dir,
+			"codex.yaml",
+			`
+model-map:
+  tiers:
+    opus:
+      model: gpt-5.6-sol
+      effort: hgih
+`,
+		);
+		const result = validatePlatformYaml(path, "codex");
+		expect(result.errors.some((e) => e.includes("effort"))).toBe(true);
+	});
+
+	it("accepts every probe-verified codex effort level", () => {
+		for (const effort of ["low", "medium", "high", "xhigh", "max", "ultra"]) {
+			const path = writeYaml(
+				dir,
+				"codex.yaml",
+				`
+model-map:
+  tiers:
+    opus:
+      model: gpt-5.6-sol
+      effort: ${effort}
+`,
+			);
+			const result = validatePlatformYaml(path, "codex");
+			expect(result.errors).toHaveLength(0);
+		}
+	});
+
 	it("returns error when opencode model-map tier declares effort", () => {
 		const path = writeYaml(
 			dir,
