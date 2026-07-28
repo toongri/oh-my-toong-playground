@@ -133,7 +133,7 @@ fun `calculate admission fee by age`(age: Int, expectedFee: Int) {
 fun `process order with all condition combinations`(
     paid: Boolean, inStock: Boolean, deliverable: Boolean, expected: OrderStatus,
 ) {
-    val result = processor.process(paid, inStock, deliverable)
+    val result = orderStatusEvaluator.evaluate(paid, inStock, deliverable)
     assertThat(result.status).isEqualTo(expected)
 }
 ```
