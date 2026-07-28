@@ -299,16 +299,13 @@ class RewardEventListener(
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)  // 원본 트랜잭션은 이미 커밋됨 — 새 트랜잭션이 없으면 적립이 커밋되지 않는다
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    // 적립은 주문과 원자적으로 묶여야 하는 쓰기 — BEFORE_COMMIT으로 같은 트랜잭션에 넣는다
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun onOrderCompleted(event: OrderCompletedEventV1) {
         logger.info("[Event] Reward accumulation start - eventType: ${event::class.simpleName}, userId: ${event.userId}")
-        try {
-            rewardService.accumulate(event.userId, event.totalAmount)
-            logger.info("[Event] Reward accumulation complete - eventType: ${event::class.simpleName}, userId: ${event.userId}")
-        } catch (e: Exception) {
-            logger.error("[Event] Reward accumulation failed - eventType: ${event::class.simpleName}, userId: ${event.userId}", e)
-        }
+        // try-catch로 삼키지 않는다 — 예외가 전파돼야 주문까지 롤백된다
+        rewardService.accumulate(event.userId, event.totalAmount)
+        logger.info("[Event] Reward accumulation complete - eventType: ${event::class.simpleName}, userId: ${event.userId}")
     }
 }
 ```
