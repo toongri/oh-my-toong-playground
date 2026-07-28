@@ -115,7 +115,7 @@ data class OrderItemSnapshot(
 **필수 패턴 세 가지**:
 
 1. **로깅 포맷**: `logger.info("[Event] {Action} start/complete - eventType: ${event::class.simpleName}, id: $id")`
-2. **AFTER_COMMIT 에러 처리**: `try-catch`와 `logger.error`로 리스너 스스로 예외를 잡고 로깅한다 — `@Async` 여부와 무관한 무조건적 요구다. Spring이 `afterCompletion()` 경로에서 예외를 자신의 로거로 ERROR 한 줄만 남기고 호출자에게는 전파하지 않으므로, 잡지 않으면 `orderId` 같은 도메인 맥락 없는 프레임워크 로그 한 줄만 남는다 — 그래서 리스너가 도메인 맥락을 담아 직접 로깅해야 한다.
+2. **AFTER_COMMIT 에러 처리**: `try-catch`와 `logger.error`로 리스너 스스로 예외를 잡고 로깅한다 — `@Async` 여부와 무관한 무조건적 요구다. 동기 리스너는 Spring의 `afterCompletion()` 콜백 처리가, `@Async` 리스너는 `AsyncUncaughtExceptionHandler`가 예외를 각자 자신의 로거로 ERROR 한 줄만 남기고 호출자에게는 전파하지 않으므로, 잡지 않으면 `orderId` 같은 도메인 맥락 없는 프레임워크 로그 한 줄만 남는다 — 그래서 리스너가 도메인 맥락을 담아 직접 로깅해야 한다. 자세한 경로 차이는 §5를 참고한다.
 3. **Phase 명시**: `TransactionPhase`를 항상 명시적으로 지정한다
 
 > ⚠️ 주의: 이벤트 리스너를 **어느 레이어/패키지에 두는가**는 이 문서의 범위가 아니다 — [./layer-boundaries.md](./layer-boundaries.md)의 Event Listener Location을 참고한다. 여기서는 리스너가 받는 **트랜잭션 단계와 에러 처리**만 다룬다.
@@ -146,7 +146,7 @@ class StockDeductionOutboxListener(
 
 ## 5. AFTER_COMMIT 리스너 (기본 동기)
 
-`AFTER_COMMIT` 리스너는 커밋이 끝난 뒤 실행되며, 기본은 이벤트를 발행한 스레드에서 동기적으로 실행된다 — 별도 스레드가 필요하면 `@Async`를 함께 붙여야 한다. 커밋은 이미 끝났으므로 리스너 실패가 원본 트랜잭션을 롤백시키지는 않는다. Spring은 `AFTER_COMMIT`을 `afterCompletion()` 경로로 라우팅하는데, 이 경로는 각 콜백을 예외로부터 감싸 로깅만 하고 삼킨다 — 그래서 동기 실행이든 `@Async`를 붙인 비동기 실행이든, 예외는 호출자에게 전파되지 않는다. 커밋은 이미 끝났고 컨트롤러는 정상 응답을 반환한다. 리스너 스스로 예외를 잡고 로깅해야 하는 건 `@Async` 여부와 무관한 무조건적 요구다.
+`AFTER_COMMIT` 리스너는 커밋이 끝난 뒤 실행되며, 기본은 이벤트를 발행한 스레드에서 동기적으로 실행된다 — 별도 스레드가 필요하면 `@Async`를 함께 붙여야 한다. 커밋은 이미 끝났으므로 리스너 실패가 원본 트랜잭션을 롤백시키지는 않는다. 다만 예외가 삼켜지는 경로는 동기냐 `@Async`냐에 따라 다르다 — 동기 리스너는 Spring이 `afterCompletion()` 콜백 호출을 예외로부터 감싸 로깅만 하고 삼키고(`TransactionSynchronizationUtils`), `@Async`를 붙인 비동기 리스너는 그 감싸는 지점에 도달하기 전에 별도 스레드에서 예외가 던져지므로 대신 `AsyncUncaughtExceptionHandler`가 받아 기본적으로 로깅만 한다. 메커니즘은 다르지만 결과는 같다 — 동기 실행이든 `@Async`를 붙인 비동기 실행이든 예외는 호출자에게 전파되지 않는다. 커밋은 이미 끝났고 컨트롤러는 정상 응답을 반환한다. 리스너 스스로 예외를 잡고 로깅해야 하는 건 `@Async` 여부와 무관한 무조건적 요구다.
 
 ```kotlin
 // ✅ CORRECT: Async listener (after commit, with error handling)
@@ -298,7 +298,7 @@ fun onOrderCreated(event: OrderCreatedEventV1)
 | "Event factory method unnecessary" | ALWAYS use `companion object { fun from(entity) }` pattern. Encapsulates conversion. |
 | "Just @EventListener is enough" | Use @TransactionalEventListener with explicit phase. Phase control is required. |
 | "Logging in listeners is optional" | ALWAYS log `[Event] Action start/complete - eventType: X, id: Y`. Required for debugging. |
-| "Listener doesn't need try-catch" | Exceptions MUST be caught and logged. Spring logs a bare ERROR line in `afterCompletion()` with no domain context and never propagates it to the caller — sync or async alike, so the listener itself must catch and log with domain context. |
+| "Listener doesn't need try-catch" | Exceptions MUST be caught and logged. Spring logs a bare ERROR line with no domain context and never propagates it to the caller — via `afterCompletion()` for a sync listener, via `AsyncUncaughtExceptionHandler` for an `@Async` one — so the listener itself must catch and log with domain context either way. |
 | "Direct synchronous call is clearer" | Events are required for cross-domain. "Clearer" != correct architecture. |
 | "Single @Transactional covers everything" | External calls MUST be after commit. Use AFTER_COMMIT event listener. |
 
