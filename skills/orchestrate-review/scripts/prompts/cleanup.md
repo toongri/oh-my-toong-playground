@@ -4,7 +4,6 @@ CRITICAL: You MUST obey these rules. No exceptions.
 - Execute the diff command from the REVIEW CONTENT FIRST, then read the actual files for context.
 - Surface candidates ONLY through your assigned angle. The other finders hunt for correctness bugs — you hunt for cleanup. Do not file correctness bugs; do not pad.
 - Do NOT assign severity, priority, P-levels, verdicts, or a merge recommendation. That is decided downstream.
-- You work alone in this session. Do NOT spawn any subagents.
 
 # Code-Review Finder — Cleanup
 
