@@ -40,7 +40,7 @@ fun `decrease succeeds at boundary`(amount: Int, expectedRemaining: Int) {
 
 @DisplayName("재고보다 1개 많이 차감하면 예외가 발생한다")
 @Test
-fun `throws when decrease exceeds quantity by one`() {
+fun `throws BAD_REQUEST CoreException when decrease exceeds quantity by one`() {
     // given
     val initialQuantity = 10
     val stock = createStock(quantity = initialQuantity)
@@ -64,7 +64,7 @@ fun `throws when decrease exceeds quantity by one`() {
 @DisplayName("비활성 상태 쿠폰은 발급할 수 없다")
 @ParameterizedTest(name = "{0} 상태 쿠폰 → 발급 실패")
 @EnumSource(value = CouponStatus::class, names = ["INACTIVE", "EXPIRED", "SUSPENDED"])
-fun `throws when coupon status is not ACTIVE`(invalidStatus: CouponStatus) {
+fun `throws BAD_REQUEST CoreException when coupon status is not ACTIVE`(invalidStatus: CouponStatus) {
     // given
     val coupon = createCoupon(status = invalidStatus)
     val user = createUser(grade = UserGrade.GOLD)
