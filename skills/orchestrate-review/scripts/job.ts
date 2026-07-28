@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 import {
@@ -23,10 +24,15 @@ import { getOmtDir } from "@lib/omt-dir";
 
 import {
 	type JobConfig,
+	type SpawnedWorker,
+	type OrphanJob,
 	assertMembersOrExit,
 	assertDenyEnforceable,
 	assertDenySkillsShape,
+	assertMcpAllowShape,
 	extractDenySkills,
+	enumerateConfiguredMcpServers,
+	computeMcpBlockList,
 	detectCliType,
 	buildAugmentedCommand,
 	gcStaleJobs as _gcStaleJobs,
@@ -39,6 +45,8 @@ import {
 	cmdCollect as _cmdCollect,
 	buildManifest as _buildManifest,
 	cmdResumeMember as _cmdResumeMember,
+	reapOrphanJobs,
+	doctorOrphanJobs,
 } from "@lib/generic-job";
 
 export { cmdResumeMember } from "@lib/generic-job";
@@ -100,6 +108,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function optionalString(value: unknown): string | undefined {
 	return typeof value === "string" ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+	if (typeof value !== "string" && typeof value !== "number") return undefined;
+	const n = Number(value);
+	return Number.isFinite(n) ? n : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -365,8 +379,24 @@ function parseChunkReviewConfig(configPath: string): ChunkReviewConfig {
 	}
 
 	assertDenySkillsShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
+	assertMcpAllowShape(merged["chunk-review"].settings, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
 	return merged;
+}
+
+// ---------------------------------------------------------------------------
+// jobsDir resolution — shared by start/reap/doctor so the 3-tier fallback
+// (--jobs-dir option → CHUNK_REVIEW_JOBS_DIR env var → default under
+// getOmtDir()) can never drift into disagreement between the command that
+// writes job.json's workerPgid anchor and the commands that read it back.
+// ---------------------------------------------------------------------------
+
+function resolveJobsDir(options: Record<string, unknown>): string {
+	return (
+		optionalString(options["jobs-dir"]) ||
+		process.env.CHUNK_REVIEW_JOBS_DIR ||
+		path.join(getOmtDir(), "jobs")
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -384,22 +414,119 @@ Usage:
   job.ts results [--json|--manifest] <jobDir>
   job.ts stop <jobDir>
   job.ts clean <jobDir>
+  job.ts reap [--jobs-dir path] [--grace-ms N]
+  job.ts doctor [--jobs-dir path] [--json]
 
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
   - poll status with repeated short calls to update TODO/plan UIs in host agents
+  - reap kills orphaned job process groups (SIGTERM then SIGKILL); all its output goes to
+    stderr — stdout is always empty, since a SessionStart hook calls it and must not vary
+  - doctor reports orphan counts on stdout without killing anything (diagnostic only)
 `);
+}
+
+/** Probe only — never signals. `kill(-pgid, 0)` sends no signal; ESRCH means
+ *  the group has no member left alive. Used solely to decide the reap log
+ *  wording (reaped vs signalled) per orphan, since reapOrphanJobs' return
+ *  value gives a flat survivingPids list with no per-job attribution. */
+function isPgidGroupAlive(pgid: number): boolean {
+	try {
+		process.kill(-pgid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** Judges, per orphan job reapOrphanJobs already signalled, whether its
+ *  process group actually died — the shared judgment both reap-triggering
+ *  callers (cmdReap, and cmdStart's own reap-on-start step) need so neither
+ *  claims "reaped" for a group that in fact survived the kill. Returns
+ *  structured verdicts only; each caller decides its own phrasing and output
+ *  channel (cmdReap: one stderr line per job; cmdStart: one aggregate
+ *  logInfo line) — the same split this repo's hooks/ core/adapter files use
+ *  (judgment shared, output envelope per caller). */
+function classifyReapedOrphans(
+	reaped: OrphanJob[],
+): Array<{ jobDir: string; pgids: number[]; survived: boolean }> {
+	return reaped.map((orphan) => ({
+		jobDir: orphan.jobDir,
+		pgids: orphan.pgids,
+		survived: orphan.pgids.some((pgid) => isPgidGroupAlive(pgid)),
+	}));
+}
+
+async function cmdReap(options: Record<string, unknown>): Promise<void> {
+	const jobsDir = resolveJobsDir(options);
+	const graceMs = optionalNumber(options["grace-ms"]);
+	const { reaped } = await reapOrphanJobs(
+		jobsDir,
+		CHUNK_REVIEW_JOB_CONFIG,
+		graceMs !== undefined ? { graceMs } : {},
+	);
+	// stdout MUST stay empty — see the Usage note above and the file-level
+	// cache-safe context-injection rule (CLAUDE.md) this exists to satisfy.
+	// Every diagnostic, including reapOrphanJobs' own surviving-PID report,
+	// goes to stderr only.
+	for (const verdict of classifyReapedOrphans(reaped)) {
+		// reapOrphanJobs already wrote its own "N process(es) survived group
+		// kill" line above for whatever didn't die — if this orphan's own pgid
+		// is one of them, don't also claim "reaped" here, or the same stderr
+		// stream carries two contradictory lines for the same process group.
+		if (verdict.survived) {
+			process.stderr.write(
+				`reap: signalled orphan job ${verdict.jobDir} (pgids: ${verdict.pgids.join(", ")}) — some process(es) survived the group kill, see above\n`,
+			);
+		} else {
+			process.stderr.write(
+				`reap: reaped orphan job ${verdict.jobDir} (pgids: ${verdict.pgids.join(", ")})\n`,
+			);
+		}
+	}
+	if (reaped.length === 0) {
+		process.stderr.write("reap: no orphan jobs found\n");
+	}
+}
+
+function cmdDoctor(options: Record<string, unknown>): void {
+	const jobsDir = resolveJobsDir(options);
+	const { orphanJobCount, orphanPgidCount, orphans } = doctorOrphanJobs(
+		jobsDir,
+		CHUNK_REVIEW_JOB_CONFIG,
+	);
+	if (options.json) {
+		process.stdout.write(`${JSON.stringify({ orphanJobCount, orphanPgidCount, orphans }, null, 2)}\n`);
+		return;
+	}
+	process.stdout.write(`orphan jobs: ${orphanJobCount}, orphan process groups: ${orphanPgidCount}\n`);
+	for (const orphan of orphans) {
+		process.stdout.write(`  ${orphan.jobDir} (pgids: ${orphan.pgids.join(", ")})\n`);
+	}
 }
 
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
 	const configPath =
 		optionalString(options.config) || process.env.CHUNK_REVIEW_CONFIG || resolveDefaultConfigFile();
-	const jobsDir =
-		optionalString(options["jobs-dir"]) ||
-		process.env.CHUNK_REVIEW_JOBS_DIR ||
-		path.join(getOmtDir(), "jobs");
+	const jobsDir = resolveJobsDir(options);
 
 	ensureDir(jobsDir);
+	// Reap orphaned job process groups BEFORE gcStaleJobs, not after — the other
+	// trigger besides the SessionStart hook (next task), so an orphan gets swept
+	// up whether the user re-runs a review or opens a new session. gcStaleJobs
+	// deletes any job.json older than GC_MAX_AGE_MS with no liveness check at
+	// all (lib/generic-job.ts), and job.json is the only ownership anchor every
+	// reap layer depends on — running gc first would delete that anchor out from
+	// under a still-alive orphan (a dead conductor's job.json ages past the
+	// 1-hour mark while its codex-exec descendants are still running), making
+	// the orphan unreachable by every layer until the next reboot. graceMs: 0 —
+	// job start must never be delayed by the normal SIGTERM→SIGKILL grace wait
+	// (REAP_GRACE_MS_DEFAULT is 5s): a group findOrphanJobs already judged
+	// orphaned (alive PGID, zero live progress) has nothing left worth waiting
+	// on before SIGKILL.
+	const { reaped: reapedOrphans, survivingPids } = await reapOrphanJobs(jobsDir, CHUNK_REVIEW_JOB_CONFIG, {
+		graceMs: 0,
+	});
 	gcStaleJobs(jobsDir);
 
 	const hostRole = detectHostRole(SKILL_DIR);
@@ -442,10 +569,46 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	const denySkills = extractDenySkills(config["chunk-review"].settings);
 	assertDenyEnforceable(members, denySkills, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
+	// The block list is per-member, not per-job: a member's own `env:` may set
+	// CODEX_HOME, and that override does reach the spawned codex process
+	// (buildAugmentedCommand seeds --env from entity.env, and worker-utils
+	// spawns with it). Enumerating once from the conductor's home would then
+	// compute against the wrong config.toml in both directions — a server only
+	// the member declares escapes the whitelist, and a server only the
+	// conductor declares yields `-c mcp_servers.<name>.enabled=false` for a
+	// name the member never declares, which makes codex fail to boot
+	// ("Error loading config.toml: invalid transport").
+	//
+	// Memoized per resolved home so N members sharing one home read config.toml
+	// once — the common case, where no member overrides CODEX_HOME at all.
+	const conductorCodexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+	const mcpServersByHome = new Map<string, string[]>();
+	const mcpBlockByMember = members.map((member) => {
+		const env = isRecord(member.env) ? member.env : {};
+		const codexHome = env.CODEX_HOME ? String(env.CODEX_HOME) : conductorCodexHome;
+		let configured = mcpServersByHome.get(codexHome);
+		if (configured === undefined) {
+			configured = enumerateConfiguredMcpServers(codexHome);
+			mcpServersByHome.set(codexHome, configured);
+		}
+		return computeMcpBlockList(config["chunk-review"].settings, configured);
+	});
+
 	const jobId = generateJobId();
 	initLogger("chunk-review-job", logRootForJobsDir(jobsDir), jobId);
 	logStart();
 	logInfo(`GC: stale jobs cleaned`);
+	// Mirrors cmdReap's own reaped-vs-survived distinction (classifyReapedOrphans)
+	// — this trigger runs on every review start, so an unconditional "reaped"
+	// claim here would go stale far more often than cmdReap's own SessionStart
+	// trigger. Never claim "reaped" for a group that in fact survived the kill.
+	const reapedOrphanVerdicts = classifyReapedOrphans(reapedOrphans);
+	const anyOrphanSurvived = reapedOrphanVerdicts.some((v) => v.survived);
+	logInfo(
+		anyOrphanSurvived
+			? `reap: ${reapedOrphanVerdicts.length} orphan job(s) signalled — ${survivingPids.length} process(es) survived the group kill`
+			: `reap: ${reapedOrphans.length} orphan job(s) reaped`,
+	);
 	logInfo(`config: ${configPath}, chairman: ${chairmanRole}, members: ${members.length}`);
 
 	const jobDir = path.join(jobsDir, `chunk-review-${jobId}`);
@@ -454,6 +617,22 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 
 	fs.writeFileSync(path.join(jobDir, "prompt.txt"), String(prompt), "utf8");
 
+	// workerPgid는 스폰 전이라 아직 없다(null) — 스폰 후 members가 채워진다(하단
+	// 참고). 함수 반환 타입 애노테이션을 거치는 이유: 리터럴 null을 그냥 쓰거나
+	// `const x: number | null = null`으로 변수에 담아 써도 TS는 그 지점의 값을
+	// 여전히 리터럴 null로 좁혀 추론해, 아래 재할당(workerPgidByName.get(...)
+	// ?? null)과 타입이 맞지 않는다 — 함수 호출식의 타입은 선언된 반환 타입
+	// 그대로 쓰이므로 좁혀지지 않는다. 타입 단언(as) 없이 타입을 넓히는 방법.
+	function unsetWorkerPgid(): number | null {
+		return null;
+	}
+	// Same widening trick as unsetWorkerPgid above, for the spawn-time witness
+	// (`ps -o lstart=`) recorded alongside workerPgid — see lib/generic-job.ts's
+	// judgePgidSignal for why the reaper needs this to tell "still our worker"
+	// apart from "this PGID number is merely alive" (PID/PGID reuse).
+	function unsetWorkerPgidStartedAt(): string | null {
+		return null;
+	}
 	const jobMeta = {
 		id: `chunk-review-${jobId}`,
 		createdAt: new Date().toISOString(),
@@ -465,7 +644,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			timeoutSec: timeoutSec || null,
 			denySkills,
 		},
-		members: members.map((r) => ({
+		members: members.map((r, i) => ({
 			name: String(r.name),
 			command: String(r.command),
 			emoji: r.emoji ? String(r.emoji) : null,
@@ -474,12 +653,15 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 			effort_level: r.effort_level || null,
 			output_format: r.output_format || null,
 			env: r.env ?? {},
+			mcpBlock: mcpBlockByMember[i],
+			workerPgid: unsetWorkerPgid(),
+			workerPgidStartedAt: unsetWorkerPgidStartedAt(),
 		})),
 	};
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
-	_spawnWorkers({
-		entities: members.map((r) => ({ ...r, deny: denySkills })),
+	const spawned: SpawnedWorker[] = _spawnWorkers({
+		entities: members.map((r, i) => ({ ...r, deny: denySkills, mcpBlock: mcpBlockByMember[i] })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: membersDir,
@@ -487,6 +669,15 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 		config: CHUNK_REVIEW_JOB_CONFIG,
 	});
 	logInfo(`workers spawned: ${members.map((r) => String(r.name)).join(", ")}`);
+
+	const workerPgidByName = new Map(spawned.map((w) => [w.name, w.workerPgid]));
+	const workerPgidStartedAtByName = new Map(spawned.map((w) => [w.name, w.workerPgidStartedAt]));
+	jobMeta.members = jobMeta.members.map((m) => ({
+		...m,
+		workerPgid: workerPgidByName.get(m.name) ?? null,
+		workerPgidStartedAt: workerPgidStartedAtByName.get(m.name) ?? null,
+	}));
+	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	if (options.json) {
 		process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);
@@ -562,6 +753,14 @@ async function main(): Promise<void> {
 		cmdClean(options, jobDir);
 		return;
 	}
+	if (command === "reap") {
+		await cmdReap(options);
+		return;
+	}
+	if (command === "doctor") {
+		cmdDoctor(options);
+		return;
+	}
 	if (command === "resume-member") {
 		const jobDirArg = optionalString(options.job);
 		if (!jobDirArg) exitWithError("--job required");
@@ -612,4 +811,8 @@ export {
 	buildAugmentedCommand,
 	gcStaleJobs,
 	cmdStart,
+	cmdReap,
+	cmdDoctor,
+	resolveJobsDir,
+	classifyReapedOrphans,
 };

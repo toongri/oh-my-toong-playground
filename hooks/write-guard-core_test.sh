@@ -545,9 +545,9 @@ test_negative_double_space_nondangerous_allows() {
 # write_guard_core_run's unconditional deny, this one allows the SAME guarded
 # path when agent_type=="code-reviewer" and denies it otherwise (including
 # absent/empty agent_type -- fail-closed not because a main-thread call never
-# carries agent_type (it can, per CLAUDE.md's trust-channel note), but
-# because treating absence as allow would let the orchestrator forge the
-# artifact for free).
+# carries agent_type (it can, on the main thread of a session started with
+# `--agent <name>`), but because treating absence as allow would let the
+# orchestrator forge the artifact for free).
 # =============================================================================
 
 CRSID="$SID"

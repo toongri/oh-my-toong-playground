@@ -684,6 +684,23 @@ const VALID_MODEL_MAP_TOP_FIELDS = new Set(["tiers", "agents"]);
 const VALID_MODEL_MAP_ENTRY_FIELDS = new Set(["model", "effort"]);
 
 /**
+ * Reasoning-effort levels accepted in a codex model-map entry.
+ *
+ * This is the UNION of every model's `supported_reasoning_levels` as probed from
+ * `~/.codex/models_cache.json`, not a per-model list: `ultra` exists only on
+ * gpt-5.6-sol/terra and `max` only on those plus gpt-5.6-luna, while
+ * low/medium/high/xhigh are universal. Validating per model would mean reading
+ * that cache, which is a machine-local file — `make validate` must not depend on
+ * one host's cache, so the union is hardcoded here the same way `codex-versions`
+ * in config.yaml hardcodes a probe-verified set.
+ *
+ * Consequence to keep in mind: a real-but-unsupported pairing (say `ultra` on
+ * gpt-5.5) still passes. The failure this catches is the typo — `hgih`,
+ * `higher`, `Medium` — which previously reached the deployed TOML untouched.
+ */
+const VALID_CODEX_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max", "ultra"]);
+
+/**
  * Validates a model-map.tiers or model-map.agents entry map: each entry needs
  * a string `model`, and `effort` (if present) must be a string — except for
  * opencode, where `effort` is forbidden outright (opencode's ModelMapEntry has
@@ -725,8 +742,14 @@ function validateModelMapEntries(
 			if (entry.effort !== undefined) {
 				result.errors.push(`${entryCtx}.effort: opencode model-map은 effort를 지원하지 않습니다`);
 			}
-		} else if (entry.effort !== undefined && typeof entry.effort !== "string") {
-			result.errors.push(`${entryCtx}.effort: string이어야 합니다 (got ${typeof entry.effort})`);
+		} else if (entry.effort !== undefined) {
+			if (typeof entry.effort !== "string") {
+				result.errors.push(`${entryCtx}.effort: string이어야 합니다 (got ${typeof entry.effort})`);
+			} else if (!VALID_CODEX_EFFORTS.has(entry.effort)) {
+				result.errors.push(
+					`${entryCtx}.effort: 알 수 없는 값 '${entry.effort}' (지원: ${[...VALID_CODEX_EFFORTS].join(", ")})`,
+				);
+			}
 		}
 	}
 }

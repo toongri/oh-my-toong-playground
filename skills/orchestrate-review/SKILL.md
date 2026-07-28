@@ -23,7 +23,7 @@ When finders cannot deliver — none configured/available after filtering, or al
 4. Read each finder's output file via the Read tool.
 5. Merge candidates using the Aggregation rules.
 6. Run `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text. This step **MUST** run before `clean` — the job dir is deleted in the next teardown step and the per-member token data is gone.
-7. Run teardown: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` (deletes the job dir; `usage-summary.ts` was already run in step 6).
+7. Run teardown: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — deletes the job dir, and reaps each worker's process group when it can still verify that group is this job's own (`usage-summary.ts` was already run in step 6).
 8. Return the merged candidate list (including the `### Find Token Usage` block) as the final response, then **STOP** — do not run any further tools.
 
 **If a finder fails (outputFilePath is null in the manifest): apply Degradation Policy. Do NOT re-start the job.**
@@ -39,7 +39,7 @@ You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" results --manifest "$JOB_DIR"` — fetch the manifest directly (see Step 2)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" stop "$JOB_DIR"` — SIGTERM any still-`running` finder (see Step 2)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` — harvest per-member token usage; **run BEFORE `clean`** (job dir is deleted by clean)
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir; teardown step, run only after usage-summary and everything else is complete
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir and reap each worker's process group when its identity can still be verified; teardown step, run only after usage-summary and everything else is complete
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean --force "$JOB_DIR"` — same as `clean`, but skips the active-member guard; use it when an ordinary `clean` is refused for active members
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call, except `collect` and `resume-member` (both `timeout: 600000`) — see Member Resume Policy for what to do if Bash kills a `resume-member` call before it returns.
@@ -146,7 +146,7 @@ The prompt is written by the Conductor to fit the situation. The above is a refe
 
 **If the Bash tool itself kills a `resume-member` call before any JSON comes back: do NOT re-call `resume-member` for that member** — the attempt is already spent and the turn may still be live. Instead, call `collect` next: it will detect the stalled member and flip it to `"error"`, at which point treat it as an outright-failed finder per the trigger logic above.
 
-`usage-summary.ts` harvests token counts from `members/*/status.json` (see step 6 above). `clean` deletes the job dir (needed by `resume-member`), so it is the last step — only after `usage-summary.ts` and everything else is complete.
+`usage-summary.ts` harvests token counts from `members/*/status.json` (see step 6 above). `clean` deletes the job dir and reaps each worker's process group when it can still verify the group is this job's own (needed by `resume-member`), so it is the last step — only after `usage-summary.ts` and everything else is complete.
 
 ## Aggregation
 
@@ -208,4 +208,4 @@ No severity, no priority, no verdict, no merge assessment. If zero candidates su
 
 ## Termination
 
-Run teardown before returning: (1) `usage-summary.ts "$JOB_DIR"` — harvest and append `### Find Token Usage` to the merged text (step 6); (2) `clean "$JOB_DIR"` — deletes the job dir. Once teardown is complete, return the merged candidate list (including the `### Find Token Usage` block) as the final response — your task is **COMPLETE** — do NOT read source files, do NOT explore the codebase, do not run any further tools.
+Run teardown before returning: (1) `usage-summary.ts "$JOB_DIR"` — harvest and append `### Find Token Usage` to the merged text (step 6); (2) `clean "$JOB_DIR"` — deletes the job dir, and reaps each worker's recorded process group (`workerPgid` in `job.json`) whenever it can still verify that group is this job's own. The directory is deleted either way; a group `clean` cannot verify is simply not signaled, and once the directory is gone that group is unrecoverable by any later layer. So skipping this step doesn't just leave an empty directory behind — it leaves live worker processes running, with no guaranteed later chance to reclaim them. A worker also reaps its own process group on its own exit path, and a background reaper later sweeps up whatever orphaned group it can independently verify and that still shows no live progress — but that reaper is bound by the same kind of verification, not a guaranteed catch-all. Neither backstop replaces running `clean` here — because both are conditional, skipping this step is riskier than it looks, not safer. Once teardown is complete, return the merged candidate list (including the `### Find Token Usage` block) as the final response — your task is **COMPLETE** — do NOT read source files, do NOT explore the codebase, do not run any further tools.

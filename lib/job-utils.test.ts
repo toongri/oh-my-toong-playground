@@ -53,8 +53,27 @@ describe("detectHostRole", () => {
 		expect(detectHostRole("/home/user/.codex/skills/agent-council")).toBe("codex");
 	});
 
+	// The codex adapter's real skill landing site — `.agents/skills/<name>`,
+	// not `.codex/skills/`. Without this branch a codex-deployed skill reads
+	// "unknown", and resolveAutoRole turns that into "claude".
+	test("returns codex for paths containing /.agents/skills/", () => {
+		expect(detectHostRole("/home/user/.agents/skills/orchestrate-review")).toBe("codex");
+	});
+
+	test("resolveAutoRole yields codex for an .agents/skills path under role=auto", () => {
+		expect(
+			resolveAutoRole("auto", detectHostRole("/home/user/.agents/skills/orchestrate-review")),
+		).toBe("codex");
+	});
+
 	test("returns unknown for unrecognized paths", () => {
 		expect(detectHostRole("/home/user/projects/my-skill")).toBe("unknown");
+	});
+
+	// Negative control: `.agents/` alone is not a skill root — only the
+	// `/.agents/skills/` segment is. Guards against a loosened substring match.
+	test("returns unknown for /.agents/ without the skills segment", () => {
+		expect(detectHostRole("/home/user/.agents/lib/worker-utils.ts")).toBe("unknown");
 	});
 
 	test("normalizes backslashes on Windows-style paths", () => {

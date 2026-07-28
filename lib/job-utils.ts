@@ -27,7 +27,15 @@ export function detectHostRole(skillDir: string): string {
 	const normalized = skillDir.replace(/\\/g, "/");
 	if (normalized.includes("/.claude/skills/")) return "claude";
 	if (normalized.includes("/.gemini/skills/")) return "gemini";
+	// Codex has TWO skill roots, not one. `.codex/skills/` is the historical
+	// layout; the sync tool's codex adapter actually lands skills in
+	// `.agents/skills/<name>` (deployLocationForManifest, tools/sync.ts) —
+	// measured: ~/.agents/skills/orchestrate-review exists,
+	// ~/.codex/skills/orchestrate-review does not. Recognizing only the former
+	// makes every codex-deployed skill read as "unknown", which
+	// resolveAutoRole below silently resolves to "claude".
 	if (normalized.includes("/.codex/skills/")) return "codex";
+	if (normalized.includes("/.agents/skills/")) return "codex";
 	return "unknown";
 }
 

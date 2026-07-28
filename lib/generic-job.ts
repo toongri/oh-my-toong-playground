@@ -11,7 +11,7 @@
 
 import fs from "fs";
 import path from "path";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 
 import {
 	exitWithError,
@@ -240,6 +240,116 @@ export function extractDenySkills(settings: Record<string, unknown>): string[] {
 	return deny.skills.map((skill) => String(skill));
 }
 
+// ---------------------------------------------------------------------------
+// MCP whitelist engine — settings.mcps.allow validation, config.toml server
+// enumeration, and block-list computation. A review worker's codex process
+// inherits every MCP server declared in ~/.codex/config.toml regardless of
+// whether the review workflow uses it (measured: 13 servers configured on
+// this host, 1 — codegraph — actually used by review workers), and each is a
+// process the worker spawns. This engine computes the complement so
+// buildAugmentedCommand can pass `-c mcp_servers.<name>.enabled=false` for
+// every non-allow-listed configured server, shrinking the process count a
+// worker creates in the first place (orthogonal to the reaping layers
+// elsewhere in this file — this reduces what gets created, not what gets
+// cleaned up after).
+// ---------------------------------------------------------------------------
+
+export function assertMcpAllowShape(
+	settings: Record<string, unknown>,
+	config: JobConfig,
+	configPath: string,
+): void {
+	const keyPrefix = config.configTopLevelKey;
+	const mcps = settings.mcps;
+	if (mcps === null || mcps === undefined) return;
+	if (!isPlainObject(mcps)) {
+		exitWithError(
+			`Invalid config in ${configPath}: '${keyPrefix}.settings.mcps' must be a mapping/object`,
+		);
+	}
+	const allow = mcps.allow;
+	if (allow === null || allow === undefined) return;
+	if (!Array.isArray(allow)) {
+		exitWithError(
+			`Invalid config in ${configPath}: '${keyPrefix}.settings.mcps.allow' must be a list/array of non-empty strings`,
+		);
+	}
+	for (const name of allow) {
+		if (typeof name !== "string" || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+			exitWithError(
+				`Invalid config in ${configPath}: '${keyPrefix}.settings.mcps.allow' must contain only [a-zA-Z0-9_-] MCP server names, got: ${JSON.stringify(name)}`,
+			);
+		}
+	}
+}
+
+/**
+ * Enumerate MCP server names declared in `<codexHome>/config.toml` via
+ * `[mcp_servers.<name>]` headers, sorted and de-duplicated.
+ *
+ * Deliberately reads config.toml directly rather than shelling out to
+ * `codex mcp list --json` — calling that CLI would itself spawn a process,
+ * defeating the point of this engine (fewer processes per job).
+ */
+export function enumerateConfiguredMcpServers(codexHome: string): string[] {
+	let content: string;
+	try {
+		content = fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
+	} catch {
+		// Fail-open: no config.toml (or unreadable) means nothing to enumerate,
+		// and therefore nothing to block against — an empty allowlist target,
+		// not an error.
+		return [];
+	}
+	// Single segment only: matches [mcp_servers.<name>] where <name> contains
+	// no further dot. This host's real config.toml has both
+	// [mcp_servers.maestro] and [mcp_servers.maestro.env] — the latter is a
+	// nested table (env vars for the maestro server), not a second server
+	// named "maestro.env". A looser `^\[mcp_servers\.(.+)\]$` would wrongly
+	// capture "maestro.env" as its own server name.
+	//
+	// Quoted headers ([mcp_servers."weird name"]) are deliberately NOT
+	// matched: such a name cannot be carried safely through a
+	// `-c mcp_servers.<name>.enabled=false` CLI argument, so it is left
+	// unenumerated and stays on (under-recall over over-recall — an
+	// unenumerated server is simply not blocked, never wrongly blocked).
+	const headerRe = /^\s*\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$/;
+	const names = new Set<string>();
+	for (const line of content.split("\n")) {
+		const match = headerRe.exec(line);
+		if (match) names.add(match[1]);
+	}
+	return [...names].sort();
+}
+
+/**
+ * Compute the MCP servers to disable: every `configuredNames` entry not
+ * present in `settings.mcps.allow`.
+ *
+ * Fail-closed by design — the OPPOSITE default direction from
+ * `settings.deny.skills` (unspecified deny = nothing blocked, a no-op).
+ * `mcps.allow` is opt-in: an unspecified `mcps` or `mcps.allow` blocks EVERY
+ * configured server, so a job config that never declares an allowlist does
+ * not silently inherit the ambient config.toml's full MCP surface.
+ */
+export function computeMcpBlockList(
+	settings: Record<string, unknown>,
+	configuredNames: string[],
+): string[] {
+	const mcps = settings.mcps;
+	if (!isPlainObject(mcps) || !Array.isArray(mcps.allow)) {
+		return [...configuredNames].sort();
+	}
+	const allow = new Set(mcps.allow.map((name) => String(name)));
+	// Filter configuredNames — never build the result by iterating `allow` —
+	// so the block list is always a SUBSET of configuredNames. An allow entry
+	// with no matching configured server (e.g. "ghost") must never leak into
+	// the block list: `-c mcp_servers.ghost.enabled=false` for a server codex
+	// never declared makes codex fail to boot ("Error loading config.toml:
+	// invalid transport").
+	return configuredNames.filter((name) => !allow.has(name)).sort();
+}
+
 export function buildAugmentedCommand(
 	entity: {
 		command: unknown;
@@ -248,6 +358,7 @@ export function buildAugmentedCommand(
 		output_format?: unknown;
 		env?: Record<string, string>;
 		deny?: unknown;
+		mcpBlock?: unknown;
 	},
 	cliType: string,
 ): { command: string; env: Record<string, string> } {
@@ -334,6 +445,17 @@ export function buildAugmentedCommand(
 		// gemini/unknown: no enforceable lever here — enforceability is a job-start gate's job, not this translator's.
 	}
 
+	// mcpBlock — MCP server whitelist enforcement (see computeMcpBlockList), codex only.
+	// No quote escaping needed here, unlike deny's skills.config value above: names are
+	// pre-validated to [a-zA-Z0-9_-] by assertMcpAllowShape, so the value can never contain
+	// a space or quote for splitCommand's re-tokenization to mangle.
+	const mcpBlock = Array.isArray(entity.mcpBlock) ? entity.mcpBlock.map((name) => String(name)) : [];
+	if (mcpBlock.length > 0 && cliType === "codex") {
+		for (const name of mcpBlock) {
+			parts.push("-c", `mcp_servers.${name}.enabled=false`);
+		}
+	}
+
 	// effort_level
 	if (entity.effort_level) {
 		if (cliType === "claude") {
@@ -413,6 +535,36 @@ export function gcStaleJobs(jobsDir: string, config: JobConfig): void {
 // Worker spawning
 // ---------------------------------------------------------------------------
 
+export type SpawnedWorker = {
+	name: string;
+	workerPgid: number | null;
+	/** Spawn-time witness: the leader process's own `ps -o lstart=` start time,
+	 *  captured right after spawn. This is what later distinguishes "this PGID
+	 *  number is still our worker" from "this PGID number is alive" — the two
+	 *  are not the same claim, since the OS reuses PID/PGID numbers (see
+	 *  judgePgidSignal below for the full reasoning). `null` when the lookup
+	 *  itself failed — treated as "no witness" by every consumer, never as
+	 *  "assume it's ours". */
+	workerPgidStartedAt: string | null;
+};
+
+/** `ps -o lstart=` for a single freshly-spawned pid — the spawn-time witness
+ *  recorded alongside workerPgid. Mirrors the error handling of the existing
+ *  `ps -A` calls elsewhere in this file (reapOrphanJobs, cmdClean): failure
+ *  has no basis to assert anything, so it degrades to `null` (no witness)
+ *  rather than guessing. */
+function getProcessStartedAt(pid: number): string | null {
+	try {
+		// LC_ALL=C: see getPgidSnapshot's own comment below for why this witness
+		// must render in a fixed locale — this call and that one are the two
+		// sides of the same later comparison, running in different processes.
+		const output = execSync(`LC_ALL=C ps -o lstart= -p ${pid}`, { encoding: "utf8" }).trim();
+		return output || null;
+	} catch {
+		return null;
+	}
+}
+
 export function spawnWorkers({
 	entities,
 	workerPath,
@@ -428,7 +580,7 @@ export function spawnWorkers({
 	entitiesDir: string;
 	timeoutSec: number;
 	config: JobConfig;
-}): void {
+}): SpawnedWorker[] {
 	// Validate names and detect case-insensitive collisions before spawning
 	const seenLower = new Map<string, string>();
 	for (const entity of entities) {
@@ -446,6 +598,8 @@ export function spawnWorkers({
 		}
 		seenLower.set(lower, name);
 	}
+
+	const spawned: SpawnedWorker[] = [];
 
 	for (const entity of entities) {
 		const name = String(entity.name);
@@ -484,7 +638,21 @@ export function spawnWorkers({
 			env: process.env,
 		});
 		child.unref();
+
+		// A detached child is the leader of its own process group, so its PGID
+		// equals its PID — no `ps` lookup needed (see spawnWorkers tests for the
+		// measured proof of this platform contract). The start-time witness
+		// still needs its own `ps` lookup, done immediately so it reflects this
+		// exact process rather than whatever later reuses the same number.
+		const workerPgid = child.pid ?? null;
+		spawned.push({
+			name,
+			workerPgid,
+			workerPgidStartedAt: workerPgid !== null ? getProcessStartedAt(workerPgid) : null,
+		});
 	}
+
+	return spawned;
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +668,98 @@ export const HEARTBEAT_STALE_THRESHOLD_MS = 60_000;
 
 /** Grace period for running entity with no heartbeat yet (startedAt/mtime fallback). */
 export const HEARTBEAT_GRACE_PERIOD_MS = 120_000;
+
+/**
+ * Synchronous stale-heartbeat predicate for a `running` status record.
+ * Extracted from computeStatus's own running-staleness block so `cmdClean`'s
+ * active-member guard can share the exact same judgment instead of a second,
+ * potentially drifting copy of the threshold logic. `cmdClean` needs a sync
+ * predicate — it must stay a sync function itself (5 skill call-sites import
+ * it; see cmdClean's own comment for why) — which computeStatus's async CAS
+ * re-check flow does not provide directly.
+ */
+export function isRunningStatusStale(status: Record<string, unknown>, statusPath: string): boolean {
+	if (status.lastHeartbeat) {
+		// heartbeat present: stale if older than HEARTBEAT_STALE_THRESHOLD_MS
+		const heartbeatAge = Date.now() - toEpochMs(status.lastHeartbeat);
+		return heartbeatAge > HEARTBEAT_STALE_THRESHOLD_MS;
+	}
+	// no heartbeat yet: grace period based on startedAt or file mtime
+	let startTs: number;
+	if (status.startedAt) {
+		startTs = toEpochMs(status.startedAt);
+	} else {
+		try {
+			startTs = fs.statSync(statusPath).mtimeMs;
+		} catch {
+			startTs = Date.now();
+		}
+	}
+	return Date.now() - startTs > HEARTBEAT_GRACE_PERIOD_MS;
+}
+
+/**
+ * Names of members in entitiesDir that currently have live progress: a
+ * non-terminal/resumable state (`awaiting_resume`, `running`, `queued`,
+ * `retrying`) — except a `running` member whose heartbeat is stale (same
+ * judgment isRunningStatusStale/computeStatus already use), which is treated
+ * as not-active since an external SIGKILL can leave a member stuck at
+ * state:"running" forever otherwise.
+ *
+ * Returns `null` — not `[]` — when activity can't be determined: readdirSync
+ * on entitiesDir throws (permission error, EMFILE, I/O error), or a member's
+ * status.json exists on disk but doesn't read back as a record (read/parse
+ * failure). `[]` stays reserved for "read fine, found nothing active" —
+ * entitiesDir itself missing, or a member with no status.json yet, both
+ * still collapse to inactive exactly as before. Conflating "couldn't read"
+ * with "read and found nothing" is the bug this return type exists to close:
+ * an EMFILE during a process blowup (the runaway scenario findOrphanJobs's
+ * own comment below cites — 1,073 processes in 9 minutes) would otherwise
+ * read as "no active members" and hand a live job straight to the reaper.
+ *
+ * Extracted from cmdClean's own active-member guard so findOrphanJobs (layer
+ * 3, below) can reuse the EXACT same predicate cmdClean's guard (layer 2)
+ * uses — the two layers must agree on what "live progress" means, or one
+ * layer treats a job as active while the other treats it as orphaned. They
+ * share the predicate but not the indeterminate handling: layer 3
+ * (findOrphanJobs) skips the job and reports to stderr rather than guessing;
+ * layer 2 (cmdClean) refuses the operation via its existing active-member
+ * guard, recoverable with --force. Both point the same direction — never
+ * destroy on a null verdict — because a false "not orphaned"/false "refused"
+ * is recoverable, and a false "orphaned"/false "deleted" is not.
+ */
+export function findActiveMembers(entitiesDir: string): string[] | null {
+	const activeMemberStates = new Set(["awaiting_resume", "running", "queued", "retrying"]);
+	if (!fs.existsSync(entitiesDir)) return [];
+	let members: string[];
+	try {
+		members = fs.readdirSync(entitiesDir);
+	} catch {
+		// Can't read the entities dir at all — indeterminate, not "no active
+		// members". Callers already validated the path via their own guards;
+		// this is a runtime read failure (permission/EMFILE/I-O), not a bad path.
+		return null;
+	}
+	const active: string[] = [];
+	for (const e of members) {
+		const statusPath = path.join(entitiesDir, e, "status.json");
+		const status = readJsonIfExists(statusPath);
+		if (!isRecord(status)) {
+			// readJsonIfExists collapses "absent" and "exists but unreadable/
+			// unparseable" into the same null — distinguish here. A status.json
+			// that exists but doesn't come back as a record is indeterminate,
+			// not inactive; a genuinely absent status.json (member hasn't
+			// written one yet) stays inactive, same as before.
+			if (fs.existsSync(statusPath)) return null;
+			continue;
+		}
+		const state = typeof status.state === "string" ? status.state : "";
+		if (!activeMemberStates.has(state)) continue;
+		if (state === "running" && isRunningStatusStale(status, statusPath)) continue;
+		active.push(e);
+	}
+	return active;
+}
 
 export async function computeStatus(
 	jobDir: string,
@@ -574,26 +834,19 @@ export async function computeStatus(
 
 		// Staleness check for running entities (heartbeat-based)
 		if (status.state === "running") {
-			let isStale: boolean;
 			let startTs: number;
 			if (status.lastHeartbeat) {
-				// heartbeat present: stale if older than HEARTBEAT_STALE_THRESHOLD_MS
-				const heartbeatAge = Date.now() - toEpochMs(status.lastHeartbeat);
-				isStale = heartbeatAge > HEARTBEAT_STALE_THRESHOLD_MS;
 				startTs = toEpochMs(status.lastHeartbeat);
+			} else if (status.startedAt) {
+				startTs = toEpochMs(status.startedAt);
 			} else {
-				// no heartbeat yet: grace period based on startedAt or file mtime
-				if (status.startedAt) {
-					startTs = toEpochMs(status.startedAt);
-				} else {
-					try {
-						startTs = fs.statSync(statusPath).mtimeMs;
-					} catch {
-						startTs = Date.now();
-					}
+				try {
+					startTs = fs.statSync(statusPath).mtimeMs;
+				} catch {
+					startTs = Date.now();
 				}
-				isStale = Date.now() - startTs > HEARTBEAT_GRACE_PERIOD_MS;
 			}
+			const isStale = isRunningStatusStale(status, statusPath);
 
 			if (isStale) {
 				// CAS pattern: sleep then re-read to avoid race with legitimate completion
@@ -1126,6 +1379,179 @@ export async function cmdStop(
 }
 
 // ---------------------------------------------------------------------------
+// PGID witness verification — shared by cmdClean (layer 2) and
+// findOrphanJobs (layer 3) below.
+//
+// The recorded PGID number alone does not prove ownership. Layer 1
+// (reapOwnProcessGroup, lib/worker-utils.ts) SIGKILLs the worker's own group
+// on its normal exit path, which immediately frees that PGID number back to
+// the OS — but job.json keeps holding it until clean/reap runs, up to
+// GC_MAX_AGE_MS (1 hour) later. Measured on this host: PIDs progress ~862/s,
+// and the ~99999-wide macOS PID space wraps in roughly two minutes — so
+// "this PGID is alive" within that hour-long window is a claim about a
+// *number*, not about *this job's worker*. Signaling on that claim alone
+// risks killing whatever unrelated process now owns the number (an editor,
+// another agent session, a build) — the exact failure "오살보다 미회수"
+// (under-reaping over mis-killing) exists to prevent.
+//
+// The fix: record the leader process's own start time (`ps -o lstart=`) at
+// spawn time (SpawnedWorker.workerPgidStartedAt, above), then re-check it
+// against the *current* leader's start time before ever signaling.
+// ---------------------------------------------------------------------------
+
+/**
+ * One-shot snapshot of every live process's pgid/pid/start-time, from a
+ * single `ps -A` call — reused for every candidate in one sweep, same
+ * reasoning as the existing single-call `ps -A` pattern below
+ * (findOrphanJobs' comment (ii)) rather than one subprocess per candidate
+ * PGID.
+ *
+ * Two views over the same rows:
+ * - `leaderStartTimes`: the start time of the live process-group LEADER
+ *   (the row where pid === pgid — a worker's PGID always equals its own
+ *   leader PID, spawnWorkers' detached-spawn contract above) for a given
+ *   PGID, if a leader is currently alive under that number at all.
+ * - `memberStartTimes`: the start times of EVERY live row currently under a
+ *   given PGID (the leader row too, when alive). This is what lets
+ *   judgePgidSignal recover a group whose LEADER died (SIGKILL, panic, OOM)
+ *   while its descendants (a spawned `codex exec`, an MCP server) are still
+ *   alive under the same PGID — no leader row exists to compare a start
+ *   time against, but the surviving descendants' own start times are still
+ *   usable for a partial identity check (see judgePgidSignal below).
+ *
+ * `LC_ALL=C` pins the `lstart` rendering to a fixed format regardless of the
+ * calling process's own locale. The witness this produces is recorded once,
+ * in one process's environment (cmdStart, via getProcessStartedAt above),
+ * and re-checked later from a different process's environment (the
+ * SessionStart hook's detached `bun`) — without a fixed locale on both
+ * sides, the same real process can render as two different strings and
+ * every re-check becomes a permanent, silent "mismatch".
+ *
+ * Throws on `ps` failure so callers can distinguish "no live processes"
+ * from "couldn't ask at all" (the latter has no basis to judge anything,
+ * matching the existing `ps -A` call sites' try/catch-at-the-call-site
+ * style in this file).
+ */
+export interface PgidSnapshot {
+	leaderStartTimes: Map<number, string>;
+	memberStartTimes: Map<number, string[]>;
+}
+
+export function getPgidSnapshot(): PgidSnapshot {
+	const leaderStartTimes = new Map<number, string>();
+	const memberStartTimes = new Map<number, string[]>();
+	const psOutput = execSync("LC_ALL=C ps -o pgid=,pid=,lstart= -A", { encoding: "utf8" });
+	for (const line of psOutput.split("\n")) {
+		const trimmed = line.trim();
+		if (!trimmed) continue;
+		const match = trimmed.match(/^(\d+)\s+(\d+)\s+(.+)$/);
+		if (!match) continue;
+		const pgid = Number(match[1]);
+		const pid = Number(match[2]);
+		const startedAt = match[3].trim();
+		const existing = memberStartTimes.get(pgid);
+		if (existing) existing.push(startedAt);
+		else memberStartTimes.set(pgid, [startedAt]);
+		if (pid === pgid) leaderStartTimes.set(pgid, startedAt);
+	}
+	return { leaderStartTimes, memberStartTimes };
+}
+
+export type PgidSignalVerdict = "signal" | "no-witness" | "leader-dead" | "mismatch";
+
+/** Short reason string for every non-"signal" verdict — shared by cmdClean,
+ *  findOrphanJobs, and reapOrphanJobs's post-grace re-check so a skipped
+ *  candidate is always reported with the same wording regardless of which
+ *  layer skipped it (defect: a skip used to be silent outside "mismatch"). */
+export function pgidVerdictReason(verdict: PgidSignalVerdict): string {
+	switch (verdict) {
+		case "no-witness":
+			return "no spawn-time witness recorded (old-format job.json, or the spawn-time ps lookup failed)";
+		case "leader-dead":
+			return "no live process verified as this job's own PGID group (either the group is gone entirely, or its surviving descendants predate this job's own recorded spawn time)";
+		case "mismatch":
+			return "recorded witness does not match the current process's start time (PID/PGID reused by an unrelated process)";
+		case "signal":
+			return "verified";
+	}
+}
+
+/**
+ * Judge whether it is safe to send a signal to `pgid`, given the spawn-time
+ * witness recorded in job.json (workerPgidStartedAt) and a snapshot of every
+ * currently-live process's pgid/start-time (getPgidSnapshot above). cmdClean
+ * and findOrphanJobs both call this exact function so the two layers can
+ * never disagree about what is safe to reap — same reasoning as
+ * isRunningStatusStale/findActiveMembers's shared-predicate extraction.
+ *
+ * - "no-witness": recordedStartedAt is null (old-format job, or the spawn-
+ *   time `ps` lookup failed) — nothing to verify against, so don't signal.
+ * - "mismatch": a live leader owns this PGID number, but its start time
+ *   differs from the recorded witness — the number was reused by an
+ *   unrelated process. Signaling here would be exactly the mis-kill this
+ *   witness exists to prevent.
+ * - "signal": either (a) the live leader's start time matches the recorded
+ *   witness, or (b) no leader is alive under this PGID at all, but every
+ *   live descendant under it started AFTER the recorded leader spawn time —
+ *   a partial identity check for the leader-died-but-group-lives case (see
+ *   below).
+ * - "leader-dead": no live process at all is verified as ours under this
+ *   PGID — either nothing is alive under the number, or something is alive
+ *   but at least one live descendant started BEFORE the recorded leader
+ *   spawn time (this PGID predates our own spawn, so it cannot be our
+ *   group).
+ *
+ * Why the leader-died-but-group-lives fallback exists: a worker's PGID
+ * equals its own leader PID, so a dead leader used to mean "no row in the
+ * snapshot has pid === pgid" → treated as "leader-dead" unconditionally,
+ * even when the group's own descendants (a spawned `codex exec`, an MCP
+ * server) are still alive under that same PGID. That is exactly the SIGKILL
+ * / panic / OOM case layer 3 exists for — under the old rule those groups
+ * were never reaped at all. The fallback recovers them without a full
+ * identity re-verification (there is no live leader row left to compare a
+ * start time against): if NO live descendant predates the recorded leader
+ * spawn time, nothing here contradicts "this is still our group with its
+ * leader gone", so it's treated the same as "signal".
+ *
+ * Residual risk, recorded rather than closed (오살보다 미회수 — under-
+ * reaping over mis-killing is the accepted direction): if this exact PGID
+ * number is reused by an entirely unrelated NEW group after our worker's
+ * true leader died, and THAT new group's own leader also dies while its
+ * descendants (all started after our recordedStartedAt) remain, this
+ * fallback cannot tell the two groups apart and would reap the wrong one.
+ * This only narrows one specific, previously-total blind spot (leader-dead
+ * orphans were never reaped at all); it does not weaken the mismatch check
+ * above, which still catches the far more common case of a live replacement
+ * leader with a different start time.
+ */
+export function judgePgidSignal(
+	pgid: number,
+	recordedStartedAt: string | null,
+	snapshot: PgidSnapshot,
+): PgidSignalVerdict {
+	if (recordedStartedAt === null) return "no-witness";
+	const leaderStartedAt = snapshot.leaderStartTimes.get(pgid);
+	if (leaderStartedAt !== undefined) {
+		return leaderStartedAt === recordedStartedAt ? "signal" : "mismatch";
+	}
+	const memberStarts = snapshot.memberStartTimes.get(pgid);
+	if (!memberStarts || memberStarts.length === 0) return "leader-dead";
+	const recordedMs = toEpochMs(recordedStartedAt);
+	// Fail closed, same as the rest of this witness system: an unparseable
+	// recorded witness gives no basis to compare against, so it must not be
+	// treated as "no member predates it" (NaN comparisons are always false).
+	if (Number.isNaN(recordedMs)) return "no-witness";
+	const anyMemberPredatesRecorded = memberStarts.some((startedAt) => {
+		const memberMs = toEpochMs(startedAt);
+		// An unparseable member start time is treated as predating the
+		// recorded witness (the exclusion direction) rather than silently
+		// dropped by the same NaN-comparison asymmetry.
+		return Number.isNaN(memberMs) || memberMs < recordedMs;
+	});
+	return anyMemberPredatesRecorded ? "leader-dead" : "signal";
+}
+
+// ---------------------------------------------------------------------------
 // Command: clean
 // ---------------------------------------------------------------------------
 
@@ -1157,32 +1583,437 @@ export function cmdClean(
 
 	// Active-member guard: refuse to delete if any member is in a non-terminal/resumable state.
 	// Override with force: true (e.g. options.force = true) to skip this check.
+	// Judgment lives in findActiveMembers, shared with findOrphanJobs (layer 3)
+	// below — see that function's own predicate for why the two layers must agree.
 	if (!options["force"]) {
-		const activeMemberStates = new Set(["awaiting_resume", "running", "queued", "retrying"]);
 		const entitiesDir = path.join(resolvedJobDir, config.entityDirName);
-		if (fs.existsSync(entitiesDir)) {
-			let activeEntries: string[] = [];
-			try {
-				activeEntries = fs.readdirSync(entitiesDir).filter((e) => {
-					const statusPath = path.join(entitiesDir, e, "status.json");
-					const status = readJsonIfExists(statusPath);
-					if (!isRecord(status)) return false;
-					const state = typeof status.state === "string" ? status.state : "";
-					return activeMemberStates.has(state);
-				});
-			} catch {
-				// If we can't read the entities dir, proceed; the path-traversal guard already validated.
+		const activeEntries = findActiveMembers(entitiesDir);
+		if (activeEntries === null) {
+			exitWithError(
+				`clean: could not determine whether ${config.entityPlural} in ${entitiesDir} are active (entities dir or a member's status.json could not be read) — refusing to delete on an indeterminate activity read; use force option to override`,
+			);
+		}
+		if (activeEntries.length > 0) {
+			exitWithError(
+				`clean: refusing to delete job dir with active ${config.entityPlural}: ${activeEntries.join(", ")} — use force option to override`,
+			);
+		}
+	}
+
+	// Reap each member's process group before deleting the directory. Anchor
+	// is job.json's members[].workerPgid (written by cmdStart's spawnWorkers,
+	// e.g. skills/orchestrate-review/scripts/job.ts) — never status.json's
+	// `pid`, which is the codex-exec child's pid, not the worker's own PGID.
+	// Absent/null workerPgid (or an unreadable job.json) means "don't know
+	// what to kill" — skip the kill entirely rather than guess. Under-reaping
+	// (a process leaks) is the safe failure here; over-reaping (killing a
+	// process this job never owned) is not, and this function only ever has
+	// this one jobDir's own job.json to go on.
+	const jobMetaForKill = readJsonIfExists(path.join(resolvedJobDir, "job.json"));
+	const membersForKill =
+		isRecord(jobMetaForKill) && Array.isArray(jobMetaForKill.members) ? jobMetaForKill.members : [];
+	const memberWitnessesForKill = membersForKill
+		.map((m) => {
+			if (!isRecord(m)) return null;
+			const pgid = m.workerPgid;
+			if (!(typeof pgid === "number" && Number.isInteger(pgid) && pgid > 0)) return null;
+			const startedAt = typeof m.workerPgidStartedAt === "string" ? m.workerPgidStartedAt : null;
+			return { pgid, startedAt };
+		})
+		.filter((m): m is { pgid: number; startedAt: string | null } => m !== null);
+
+	// Members with no valid workerPgid recorded at all (some skills never
+	// wire up this anchor) never reach the witness loop below, so they used
+	// to vanish silently. Report each one here, before this job's directory
+	// (their only ownership anchor) is deleted — same reasoning as the
+	// per-verdict report inside the loop below.
+	for (const m of membersForKill) {
+		if (!isRecord(m)) continue;
+		const pgid = m.workerPgid;
+		if (typeof pgid === "number" && Number.isInteger(pgid) && pgid > 0) continue;
+		const name = typeof m.name === "string" ? m.name : "<unknown>";
+		process.stderr.write(
+			`clean: no workerPgid recorded for member "${name}" in ${resolvedJobDir} — ${pgidVerdictReason("no-witness")}; cannot verify or signal any process for it. This job's directory is about to be deleted, so this becomes unrecoverable by any reap layer after this.\n`,
+		);
+	}
+
+	// The witness check itself needs a `ps` snapshot — if that fails, there is
+	// no basis to verify anything, so every candidate below resolves to
+	// "leader-dead" (empty maps) and nothing gets signaled. Fail closed, same
+	// as the rest of this witness system.
+	let snapshotForKill: PgidSnapshot;
+	try {
+		snapshotForKill = getPgidSnapshot();
+	} catch {
+		snapshotForKill = { leaderStartTimes: new Map(), memberStartTimes: new Map() };
+	}
+
+	const pgidsToKill: number[] = [];
+	for (const { pgid, startedAt } of memberWitnessesForKill) {
+		const verdict = judgePgidSignal(pgid, startedAt, snapshotForKill);
+		if (verdict !== "signal") {
+			// Report every skip, not just "mismatch" — cmdClean is about to
+			// destroy this job's own job.json, the only ownership anchor every
+			// reap layer (including this one) depends on. Once that happens, a
+			// still-alive process group under this pgid becomes unrecoverable
+			// by any layer, so a silent skip here is the worst place for one.
+			process.stderr.write(
+				`clean: skipping pgid ${pgid} for ${resolvedJobDir} (verdict: ${verdict}) — ${pgidVerdictReason(verdict)}; not signaling. This job's directory is about to be deleted, so this process group becomes unrecoverable by any reap layer after this.\n`,
+			);
+			continue;
+		}
+		pgidsToKill.push(pgid);
+	}
+
+	for (const pgid of pgidsToKill) {
+		// No grace period between SIGTERM and SIGKILL, unlike
+		// reapOwnProcessGroup's self-reap: that 5s grace period exists to let
+		// a live worker exit cleanly on its own normal path, but a member
+		// that reaches this guard is already terminal or heartbeat-stale (the
+		// active-member guard above only lets those through), so there is no
+		// still-working process here to give a grace period to.
+		try {
+			process.kill(-pgid, "SIGTERM");
+		} catch {
+			/* ESRCH: group already empty — nothing to reap */
+		}
+		try {
+			process.kill(-pgid, "SIGKILL");
+		} catch {
+			/* ESRCH: group already empty — nothing to reap */
+		}
+	}
+
+	// Report-only pass: cmdClean is not the leader of any of these groups
+	// (unlike reapOwnProcessGroup, which signals its own group), so it has no
+	// basis for deciding what a surviving process actually is or whether
+	// escalating further is safe. Report to stderr and stop — a human or the
+	// layer-3 orphan reaper decides from here.
+	if (pgidsToKill.length > 0) {
+		try {
+			const psOutput = execSync("ps -o pgid=,pid= -A", { encoding: "utf8" });
+			const pgidSet = new Set(pgidsToKill);
+			const survivingPids: string[] = [];
+			for (const line of psOutput.split("\n")) {
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+				const [pgidStr, pidStr] = trimmed.split(/\s+/);
+				if (pgidSet.has(Number(pgidStr))) survivingPids.push(pidStr);
 			}
-			if (activeEntries.length > 0) {
-				exitWithError(
-					`clean: refusing to delete job dir with active ${config.entityPlural}: ${activeEntries.join(", ")} — use force option to override`,
+			if (survivingPids.length > 0) {
+				process.stderr.write(
+					`clean: ${survivingPids.length} process(es) survived group kill for ${resolvedJobDir}: pid ${survivingPids.join(", ")}\n`,
 				);
 			}
+		} catch {
+			// ps unavailable or failed — best-effort reporting only, never block clean
 		}
 	}
 
 	fs.rmSync(resolvedJobDir, { recursive: true, force: true });
 	process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
+}
+
+// ---------------------------------------------------------------------------
+// Orphan process-group reaper — layer 3 of the 3-layer defense.
+//
+// Layer 1 (reapOwnProcessGroup, lib/worker-utils.ts) only runs if a worker
+// reaches its own normal teardown path. Layer 2 (cmdClean's group-kill above)
+// only runs if the conductor (the LLM session driving the job) reaches ITS
+// teardown and calls clean. When a worker dies by SIGKILL, panic, or OOM,
+// neither layer runs and the worker's process group is orphaned — this layer
+// sweeps those up independently of any conductor ever running again.
+//
+// (i) Why this is NOT a PPID-based orphan check. The obvious-looking rule
+// "PGID is alive but has no parent (PPID=1)" was tried and falsified by
+// direct measurement on this host: workers are spawned with `detached: true`
+// + `child.unref()`, and the CLI that spawns them (job.ts start) returns
+// immediately and exits, so the worker's own parent disappears within
+// seconds — reparenting EVERY healthy worker to PPID=1, not just orphaned
+// ones. Measured: spawn a detached child, kill the parent immediately, then
+// `ps -o pid=,ppid=,pgid=` on the child → `28309  1  28309` — PPID=1,
+// PGID=self. That is the normal steady state of a healthy running worker,
+// not an orphan signal; a PPID=1 rule would kill every healthy review
+// worker within seconds of dispatch. The actual anchor is job.json's
+// members[].workerPgid (the same anchor cmdClean already uses above)
+// combined with the job's own progress state: a PGID group that is alive
+// while its job has NO live progress (findActiveMembers, shared with
+// cmdClean) is the orphan signal — not process ancestry.
+// ---------------------------------------------------------------------------
+
+export interface OrphanJob {
+	jobDir: string;
+	pgids: number[];
+	/** Recorded workerPgidStartedAt witness for each entry in `pgids`, same
+	 *  index alignment. Carried through (rather than re-derived) so
+	 *  reapOrphanJobs can re-verify PGID identity again after the SIGTERM→
+	 *  SIGKILL grace wait, not just once at judgment time here — the wait is
+	 *  exactly the window in which a freed PGID number can be handed to an
+	 *  unrelated new process (see reapOrphanJobs below). Optional (not just
+	 *  index-safe when absent) so a consumer constructing an OrphanJob-shaped
+	 *  literal without this field — e.g. a test exercising a narrower
+	 *  {jobDir, pgids} view — still type-checks; findOrphanJobs itself always
+	 *  populates it. Always non-null per entry when present: every pgid
+	 *  landing in `pgids` already passed judgePgidSignal with a non-null
+	 *  recordedStartedAt (verdict "signal" requires it). */
+	witnesses?: string[];
+}
+
+/** Production default grace period between SIGTERM and SIGKILL — matches the
+ *  value layer 1 (reapOwnProcessGroup) and the timeout-escalation path
+ *  already use; not a newly-invented number. */
+export const REAP_GRACE_MS_DEFAULT = 5000;
+
+/**
+ * Judge which jobs under jobsDir are orphaned: their recorded process group
+ * is alive, but the job itself has no live progress left (findActiveMembers
+ * returns none — every member is terminal, `running` with a stale heartbeat,
+ * or has no status.json at all). Pure judgment — no kill, no delete.
+ * reapOrphanJobs and doctorOrphanJobs both call this exact function so the
+ * two engines can never disagree about what counts as orphaned.
+ */
+export function findOrphanJobs(jobsDir: string, config: JobConfig): OrphanJob[] {
+	const orphans: OrphanJob[] = [];
+
+	let resolvedJobsDir: string;
+	let entries: string[];
+	try {
+		resolvedJobsDir = fs.realpathSync(jobsDir);
+		entries = fs.readdirSync(jobsDir);
+	} catch {
+		return orphans;
+	}
+
+	// (ii) One `ps` call for the whole sweep, not one per job. jobsDir can hold
+	// many stale job directories at once — this is exactly the runaway
+	// scenario this layer exists for (1,073 processes across many jobs in 9
+	// minutes) — so spawning `ps -A` once and reusing the parsed snapshot for
+	// every candidate job avoids an O(job count) subprocess-spawn fan-out for
+	// what is fundamentally one snapshot-in-time liveness+identity question.
+	// This snapshot also carries start times, not just liveness — see
+	// judgePgidSignal above for why liveness alone is not enough to prove
+	// ownership.
+	let snapshot: PgidSnapshot;
+	try {
+		snapshot = getPgidSnapshot();
+	} catch {
+		// ps unavailable — no basis to judge liveness, so no basis to reap.
+		return orphans;
+	}
+
+	for (const entry of entries) {
+		if (!entry.startsWith(config.jobPrefix)) continue;
+
+		const candidatePath = path.join(jobsDir, entry);
+
+		// Path traversal guard — same pattern as gcStaleJobs above.
+		let realCandidatePath: string;
+		try {
+			realCandidatePath = fs.realpathSync(candidatePath);
+		} catch {
+			continue;
+		}
+		const relative = path.relative(resolvedJobsDir, realCandidatePath);
+		const isUnder = !relative.startsWith("..") && !path.isAbsolute(relative);
+		if (!isUnder) continue;
+
+		let jobMeta: unknown;
+		try {
+			jobMeta = readJsonIfExists(path.join(candidatePath, "job.json"));
+		} catch {
+			continue;
+		}
+		if (!isRecord(jobMeta)) continue;
+
+		const members = Array.isArray(jobMeta.members) ? jobMeta.members : [];
+		const memberWitnesses = members
+			.map((m) => {
+				if (!isRecord(m)) return null;
+				const pgid = m.workerPgid;
+				if (!(typeof pgid === "number" && Number.isInteger(pgid) && pgid > 0)) return null;
+				const startedAt = typeof m.workerPgidStartedAt === "string" ? m.workerPgidStartedAt : null;
+				return { pgid, startedAt };
+			})
+			.filter((m): m is { pgid: number; startedAt: string | null } => m !== null);
+
+		// Members with no valid workerPgid recorded at all never reach the
+		// witness loop above and used to vanish silently — report each one,
+		// mirroring cmdClean's report, before falling through to the skip
+		// below.
+		for (const m of members) {
+			if (!isRecord(m)) continue;
+			const pgid = m.workerPgid;
+			if (typeof pgid === "number" && Number.isInteger(pgid) && pgid > 0) continue;
+			const name = typeof m.name === "string" ? m.name : "<unknown>";
+			process.stderr.write(
+				`orphan-reaper: no workerPgid recorded for member "${name}" in ${candidatePath} — ${pgidVerdictReason("no-witness")}; not signaling\n`,
+			);
+		}
+		// No workerPgid recorded at all — no basis to judge this job, skip it.
+		if (memberWitnesses.length === 0) continue;
+
+		const signalablePgids: number[] = [];
+		const signalableWitnesses: string[] = [];
+		for (const { pgid, startedAt } of memberWitnesses) {
+			const verdict = judgePgidSignal(pgid, startedAt, snapshot);
+			if (verdict !== "signal") {
+				process.stderr.write(
+					`orphan-reaper: skipping pgid ${pgid} in ${candidatePath} (verdict: ${verdict}) — ${pgidVerdictReason(verdict)}; not signaling\n`,
+				);
+				continue;
+			}
+			// startedAt is guaranteed non-null here — judgePgidSignal only
+			// returns "signal" when recordedStartedAt !== null.
+			if (startedAt !== null) {
+				signalablePgids.push(pgid);
+				signalableWitnesses.push(startedAt);
+			}
+		}
+		// Recorded group isn't actually alive under a verified identity —
+		// nothing to reap here.
+		if (signalablePgids.length === 0) continue;
+
+		// The job still has live progress — it's working normally, not orphaned.
+		const entitiesDir = path.join(candidatePath, config.entityDirName);
+		const activeMembers = findActiveMembers(entitiesDir);
+		if (activeMembers === null) {
+			// Couldn't determine activity (entities dir or a member's
+			// status.json could not be read) — this is NOT evidence of "no
+			// activity". A live, identity-verified process group would
+			// otherwise be handed to the reaper on an unreadable directory
+			// alone; report it and skip instead of guessing.
+			process.stderr.write(
+				`orphan-reaper: could not determine active members for ${candidatePath} — entities dir or a member's status.json could not be read; treating as not orphaned, not signaling\n`,
+			);
+			continue;
+		}
+		if (activeMembers.length > 0) continue;
+
+		orphans.push({ jobDir: candidatePath, pgids: signalablePgids, witnesses: signalableWitnesses });
+	}
+
+	return orphans;
+}
+
+/**
+ * Reap every orphan job's process group: SIGTERM, wait opts.graceMs (default
+ * REAP_GRACE_MS_DEFAULT), then SIGKILL. Does NOT delete job directories —
+ * that remains cmdClean's job on its own next run. (iii) A final `ps` pass
+ * collects whatever survives both signals and reports it to stderr only —
+ * this function is not the leader of any of these groups (unlike
+ * reapOwnProcessGroup, which signals its own group), so — like cmdClean's own
+ * report-only pass above — it has no basis to judge what a surviving process
+ * actually is or whether killing it again would be safe. Escalating past
+ * SIGKILL is a decision for a human or a future layer, not this one.
+ *
+ * (iv) Re-verifies identity again after the grace wait, before ever sending
+ * SIGKILL — findOrphanJobs already verified identity once, but that
+ * judgment is only as fresh as the snapshot it was taken from. The SIGTERM
+ * above can itself end the group during the wait (its whole point, on the
+ * normal path), freeing its PGID number back to the OS — and the wait is
+ * long enough (REAP_GRACE_MS_DEFAULT is 5s; this host's own measured PID
+ * churn is ~862/s) for that number to be handed to an unrelated new
+ * process before SIGKILL fires. SIGKILL-ing on the pre-wait judgment alone
+ * would be exactly the mis-kill this whole witness system exists to
+ * prevent, just moved one signal later. `opts.getSnapshotFn` exists purely
+ * so a test can fabricate that post-wait world deterministically instead of
+ * waiting on real, non-deterministic PID reuse.
+ */
+export async function reapOrphanJobs(
+	jobsDir: string,
+	config: JobConfig,
+	opts: { graceMs?: number; getSnapshotFn?: () => PgidSnapshot } = {},
+): Promise<{ reaped: OrphanJob[]; survivingPids: number[] }> {
+	const orphans = findOrphanJobs(jobsDir, config);
+	const graceMs = opts.graceMs ?? REAP_GRACE_MS_DEFAULT;
+	const getSnapshot = opts.getSnapshotFn ?? getPgidSnapshot;
+
+	for (const orphan of orphans) {
+		for (const pgid of orphan.pgids) {
+			try {
+				process.kill(-pgid, "SIGTERM");
+			} catch {
+				/* ESRCH: group already empty */
+			}
+		}
+	}
+
+	// Zero orphans means nothing was signaled above — waiting out the grace
+	// period anyway would idle a background process (e.g. the SessionStart
+	// hook's detached reap) for no reason on every session start, which fights
+	// the exact process-accumulation problem this reaper exists to fix.
+	if (orphans.length > 0 && graceMs > 0) await sleepMs(graceMs);
+
+	if (orphans.length > 0) {
+		// See (iv) above: re-snapshot and re-judge every candidate against its
+		// own carried witness before escalating to SIGKILL. Snapshot failure
+		// degrades to empty maps — same fail-closed posture as every other `ps`
+		// call in this witness system — so every candidate resolves to
+		// "leader-dead"/"no-witness" and nothing gets SIGKILLed on a failed ask.
+		let postGraceSnapshot: PgidSnapshot;
+		try {
+			postGraceSnapshot = getSnapshot();
+		} catch {
+			postGraceSnapshot = { leaderStartTimes: new Map(), memberStartTimes: new Map() };
+		}
+
+		for (const orphan of orphans) {
+			for (let i = 0; i < orphan.pgids.length; i++) {
+				const pgid = orphan.pgids[i];
+				const startedAt = orphan.witnesses?.[i] ?? null;
+				const verdict = judgePgidSignal(pgid, startedAt, postGraceSnapshot);
+				if (verdict !== "signal") {
+					process.stderr.write(
+						`reap: skipping SIGKILL for pgid ${pgid} in ${orphan.jobDir} after grace period (verdict: ${verdict}) — ${pgidVerdictReason(verdict)}; not signaling\n`,
+					);
+					continue;
+				}
+				try {
+					process.kill(-pgid, "SIGKILL");
+				} catch {
+					/* ESRCH: group already empty */
+				}
+			}
+		}
+	}
+
+	const survivingPids: number[] = [];
+	const allPgids = orphans.flatMap((o) => o.pgids);
+	if (allPgids.length > 0) {
+		try {
+			const psOutput = execSync("ps -o pgid=,pid= -A", { encoding: "utf8" });
+			const pgidSet = new Set(allPgids);
+			for (const line of psOutput.split("\n")) {
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+				const [pgidStr, pidStr] = trimmed.split(/\s+/);
+				if (pgidSet.has(Number(pgidStr))) survivingPids.push(Number(pidStr));
+			}
+		} catch {
+			// ps unavailable or failed — best-effort reporting only, never throw.
+		}
+	}
+	if (survivingPids.length > 0) {
+		process.stderr.write(
+			`reap: ${survivingPids.length} process(es) survived group kill: pid ${survivingPids.join(", ")}\n`,
+		);
+	}
+
+	return { reaped: orphans, survivingPids };
+}
+
+/**
+ * Count-only view of findOrphanJobs — never kills, never deletes. Calls the
+ * exact same findOrphanJobs reapOrphanJobs calls, so `doctor` and `reap`
+ * can never disagree about what counts as orphaned.
+ */
+export function doctorOrphanJobs(
+	jobsDir: string,
+	config: JobConfig,
+): { orphanJobCount: number; orphanPgidCount: number; orphans: OrphanJob[] } {
+	const orphans = findOrphanJobs(jobsDir, config);
+	const orphanPgidCount = orphans.reduce((sum, o) => sum + o.pgids.length, 0);
+	return { orphanJobCount: orphans.length, orphanPgidCount, orphans };
 }
 
 // ---------------------------------------------------------------------------

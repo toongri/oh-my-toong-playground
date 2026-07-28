@@ -65,6 +65,8 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 - "Conductor, not a reviewer" — does not read code itself, assign severity, or decide whether anything should be merged.
 - If all finders are unavailable (no config, CLI not installed, timeout), falls back to in-session finder mode directly.
 
+**Process cleanup**: Each finder runs as its own worker process, reaped through three independent paths — the worker's own exit path, job cleanup (`clean`), and reclamation when a new session starts. The latter two only signal when they can confirm the process group is still this job's own, so a conductor that never reaches its own cleanup step isn't always backed up by the other paths. Which MCP servers a worker can start is also restricted by an allowlist (`mcps.allow`) in the job config; leaving it unset blocks every server this engine enumerates (opt-in, fail-closed). Its sibling setting under the same `settings:` block, `deny.skills` (which blocks specific skills a review worker can invoke), defaults the opposite way: leaving it unset blocks nothing (a no-op).
+
 **When to use**: In most cases, `code-review` calls this internally and you do not need to invoke it directly. It can be wired directly when building a custom multi-AI review pipeline.
 
 ---
