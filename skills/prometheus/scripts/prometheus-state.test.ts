@@ -1,5 +1,13 @@
 import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, unlinkSync } from "fs";
+import {
+	mkdtempSync,
+	mkdirSync,
+	rmSync,
+	existsSync,
+	writeFileSync,
+	readFileSync,
+	unlinkSync,
+} from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import * as os from "os";
@@ -715,6 +723,109 @@ describe("mark-design-done plan_path guard (F6)", () => {
 		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-mdPrior.json`, "utf8"));
 		expect(state.steps.design_decisions.done).toBe(true);
 		expect(state.steps.design_decisions.ref).toBe(`${tmpDir}/plans/prior.md`);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// (F7) advancing past S5 requires the Stage A presentation file on disk
+// ---------------------------------------------------------------------------
+
+describe("Stage A presentation gate (F7)", () => {
+	/**
+	 * Stage A renders the plan to `<plans dir>/presentation/<plan basename>`, and the
+	 * pipeline reaches S6 only after that render. Production measurement: of 5 plans
+	 * carrying the prometheus signature, 2 had a presentation file and 1 was compliant
+	 * — and the prose prohibition at the Stage A step had been in place for two months
+	 * when those skips happened. Prose is the wrong form for an omitted required
+	 * artifact; file existence is mechanically checkable, so the state write refuses.
+	 */
+	function seedPlan(sid: string, name = "plan.md"): string {
+		const planPath = `${tmpDir}/plans/${name}`;
+		mkdirSync(`${tmpDir}/plans`, { recursive: true });
+		writeFileSync(planPath, "# plan\n", "utf8");
+		writePristinePromState(sid);
+		return planPath;
+	}
+
+	function writePresentation(name = "plan.md"): void {
+		mkdirSync(`${tmpDir}/plans/presentation`, { recursive: true });
+		writeFileSync(`${tmpDir}/plans/presentation/${name}`, "# presentation\n", "utf8");
+	}
+
+	// (F7-missing) S6 with no presentation file — the skip this gate exists to catch
+	test("S6 without the presentation file exits non-zero and does not advance", () => {
+		const planPath = seedPlan("gateMissing");
+		const { code, out } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+			OMT_SESSION_ID: "gateMissing",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/presentation|Stage A/i);
+		// The phase must not have advanced past S5
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gateMissing.json`, "utf8"));
+		expect(state.phase).toBe("S0");
+	});
+
+	// (F7-present) same call succeeds once Stage A actually rendered
+	test("S6 succeeds once the presentation file exists", () => {
+		const planPath = seedPlan("gatePresent");
+		writePresentation();
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${planPath}`, {
+			OMT_SESSION_ID: "gatePresent",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).toBe(0);
+		const state = JSON.parse(readFileSync(`${tmpDir}/prometheus-state-gatePresent.json`, "utf8"));
+		expect(state.phase).toBe("S6");
+	});
+
+	// (F7-downstream) S7 and S8 are past S5 too — the gate is on the whole tail,
+	// not just the S5→S6 edge, so a session cannot jump the render by landing later
+	test.each(["S7", "S8"])("%s without the presentation file exits non-zero", (phase) => {
+		const planPath = seedPlan(`gate${phase}`);
+		const { code, out } = runPromCliMerged(`set --phase ${phase} --plan-path ${planPath}`, {
+			OMT_SESSION_ID: `gate${phase}`,
+			OMT_DIR: tmpDir,
+		});
+		expect(code).not.toBe(0);
+		expect(out).toMatch(/presentation|Stage A/i);
+	});
+
+	// (F7-upstream) S0-S5 precede the render — gating them would deadlock the pipeline
+	test.each(["S0", "S3", "S5"])("%s is not gated (render has not happened yet)", (phase) => {
+		const planPath = seedPlan(`open${phase}`);
+		const { code } = runPromCliMerged(`set --phase ${phase} --plan-path ${planPath}`, {
+			OMT_SESSION_ID: `open${phase}`,
+			OMT_DIR: tmpDir,
+		});
+		expect(code).toBe(0);
+	});
+
+	// (F7-nopath) with no plan_path the presentation path is underivable — the gate
+	// cannot judge, so it must not block on a check it never performed
+	test("S6 with no plan_path is not gated", () => {
+		writePristinePromState("gateNoPath");
+		const { code } = runPromCliMerged("set --phase S6", {
+			OMT_SESSION_ID: "gateNoPath",
+			OMT_DIR: tmpDir,
+		});
+		expect(code).toBe(0);
+	});
+
+	// (F7-derive) the presentation path is derived from the plan's own directory, not
+	// from $OMT_DIR — a plan recorded outside the current $OMT_DIR still resolves
+	test("presentation path derives from the plan's directory, not $OMT_DIR", () => {
+		const altDir = mkdtempSync(join(tmpdir(), "prometheus-altplans-"));
+		mkdirSync(`${altDir}/plans/presentation`, { recursive: true });
+		writeFileSync(`${altDir}/plans/alt.md`, "# plan\n", "utf8");
+		writeFileSync(`${altDir}/plans/presentation/alt.md`, "# presentation\n", "utf8");
+		writePristinePromState("gateAltDir");
+		const { code } = runPromCliMerged(`set --phase S6 --plan-path ${altDir}/plans/alt.md`, {
+			OMT_SESSION_ID: "gateAltDir",
+			OMT_DIR: tmpDir,
+		});
+		rmSync(altDir, { recursive: true, force: true });
+		expect(code).toBe(0);
 	});
 });
 
