@@ -115,6 +115,30 @@ const REAL_TMP_LOG_DIR = path.join(os.tmpdir(), "logs");
  */
 const REAL_OMT_LOG_DIR = path.join(getOmtDir(), "logs");
 
+/** mtimeMs+size fingerprint, or null if the file didn't exist at snapshot time. */
+type FileFingerprint = { mtimeMs: number; size: number } | null;
+
+function fingerprint(filePath: string): FileFingerprint {
+	try {
+		const st = fs.statSync(filePath);
+		return { mtimeMs: st.mtimeMs, size: st.size };
+	} catch {
+		return null;
+	}
+}
+
+// Snapshotted at module load — before any test in this file (or, best-effort, a
+// concurrent worktree's own run) can write a log — so the AC9 canary below judges
+// "did this suite change these files" rather than "do these names exist right now".
+// A name pre-existing from an unrelated run is untouched by this suite and must stay
+// untouched; the canary only fails on a fingerprint delta this suite itself causes.
+const SUITE_LOG_FINGERPRINTS_BEFORE = new Map<string, FileFingerprint>();
+for (const basename of SUITE_JOB_DIR_BASENAMES) {
+	const file = expectedLogFileName(basename);
+	SUITE_LOG_FINGERPRINTS_BEFORE.set(path.join(REAL_TMP_LOG_DIR, file), fingerprint(path.join(REAL_TMP_LOG_DIR, file)));
+	SUITE_LOG_FINGERPRINTS_BEFORE.set(path.join(REAL_OMT_LOG_DIR, file), fingerprint(path.join(REAL_OMT_LOG_DIR, file)));
+}
+
 beforeAll(() => {
 	sharedStubDir = makeCliStubDir();
 });
@@ -2666,13 +2690,16 @@ describe("cmdCollect", () => {
 		expect(fs.existsSync(logPath)).toBe(true);
 		expect(fs.readFileSync(logPath, "utf8")).toContain("collect:");
 
-		// Checks only the exact filenames this suite's own fixtures can produce, not a
-		// directory snapshot, so an unrelated concurrent session's own logs can't
-		// false-positive it, while still catching a regression in any fixture's jobs/ nesting.
+		// Checks only the exact filenames this suite's own fixtures can produce, compared
+		// against the module-load-time snapshot — a pre-existing file (e.g. left behind by
+		// another worktree running this same suite) is allowed to sit there unchanged, but
+		// this run creating or appending to any of them is a real regression and fails.
 		for (const basename of SUITE_JOB_DIR_BASENAMES) {
 			const file = expectedLogFileName(basename);
-			expect(fs.existsSync(path.join(REAL_TMP_LOG_DIR, file))).toBe(false);
-			expect(fs.existsSync(path.join(REAL_OMT_LOG_DIR, file))).toBe(false);
+			for (const dir of [REAL_TMP_LOG_DIR, REAL_OMT_LOG_DIR]) {
+				const filePath = path.join(dir, file);
+				expect(fingerprint(filePath)).toEqual(SUITE_LOG_FINGERPRINTS_BEFORE.get(filePath) ?? null);
+			}
 		}
 	});
 
