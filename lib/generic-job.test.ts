@@ -2824,9 +2824,24 @@ describe("cmdStop — 종료 대기", () => {
 			);
 		}, 150);
 
-		await cmdStop({}, jobDir, chunkReviewConfig);
+		// 검증 대상은 cmdStop이 스스로 대기 후 재스냅샷해 stdout으로 찍는 JSON이다 —
+		// 테스트가 별도로 buildManifest를 다시 만들면 cmdStop이 재스냅샷을 안 해도
+		// 통과해버린다. cmdStop이 실제로 쓴 stdout을 캡처해 그 JSON을 파싱한다.
+		const output: string[] = [];
+		const origWrite = process.stdout.write.bind(process.stdout);
+		process.stdout.write = ((chunk: any) => {
+			output.push(String(chunk));
+			return true;
+		}) as any;
 
-		const manifest = buildManifest(jobDir, chunkReviewConfig);
+		try {
+			await cmdStop({}, jobDir, chunkReviewConfig);
+		} finally {
+			process.stdout.write = origWrite;
+		}
+
+		const raw = output.join("");
+		const manifest = JSON.parse(raw.slice(raw.indexOf("{")));
 		const alice = manifest[chunkReviewConfig.entityPlural].find((m: any) => m.member === "alice");
 		expect(alice.outputFilePath).toBe(outputPath);
 	}, 10000);
