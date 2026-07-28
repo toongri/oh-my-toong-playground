@@ -22,11 +22,11 @@
 #     falsifying the earlier assumption that Codex lacked this event; the
 #     ledger write-guard is wired there just like Claude's, alongside the
 #     SessionStart recording instruction (rules-injector).
-#   - The four core Claude hooks (keyword-detector.sh, pre-tool-enforcer.sh,
-#     session-start.sh, persistent-mode) are registered in the TRACKED root
-#     claude.yaml, and in NO projects/*/claude.yaml. Two invariants the pairing
-#     check above cannot see:
-#       (a) TRACKED, not claude.local.yaml. These four carry nothing
+#   - The five core Claude hooks (keyword-detector.sh, pre-tool-enforcer.sh,
+#     session-start.sh, orphan-reaper.sh, persistent-mode) are registered in
+#     the TRACKED root claude.yaml, and in NO projects/*/claude.yaml. Two
+#     invariants the pairing check above cannot see:
+#       (a) TRACKED, not claude.local.yaml. These five carry nothing
 #           device-specific, and claude.local.yaml is gitignored -- parking
 #           them there put the whole global hook registration outside version
 #           control, so a fresh clone got no hooks and anyone reading only the
@@ -63,6 +63,16 @@ run_test() {
 
 # Extract the lines nested under a 2-space-indented top-level hooks key
 # (e.g. "SessionStart", "PreToolUse") up to the next 2-space-indented key.
+# Full-line comments (e.g. "# - component: orphan-reaper.sh") are stripped
+# before returning -- otherwise a commented-out/disabled registration would
+# satisfy a plain `grep -qF "component: X"` and pass vacuously (a real
+# instance: a project claude.yaml documenting or intentionally disabling a
+# registration in a comment would falsely count as "registered"). Every
+# caller inherits this normalization; none should re-strip or re-match raw
+# text from the file directly. `|| true` absorbs grep's exit 1 when the
+# block is empty or entirely comments (e.g. an event the file doesn't use)
+# -- under `set -euo pipefail` that exit would otherwise abort the whole
+# script via the unguarded `block=$(...)` assignment at each call site.
 _extract_hook_event_block() {
     local file="$1"
     local event="$2"
@@ -70,7 +80,7 @@ _extract_hook_event_block() {
         $0 == event { infield=1; next }
         infield && /^  [A-Za-z]/ { infield=0 }
         infield { print }
-    ' "$file"
+    ' "$file" | grep -v '^[[:space:]]*#' || true
 }
 
 _all_claude_yaml_files() {
@@ -179,12 +189,13 @@ test_codex_yaml_has_pretooluse_guard() {
 }
 
 # =============================================================================
-# The four core Claude hooks live in the TRACKED root claude.yaml, under the
+# The five core Claude hooks live in the TRACKED root claude.yaml, under the
 # right event -- never only in gitignored claude.local.yaml (invariant (a)).
 # =============================================================================
 _CORE_HOOK_PAIRS="UserPromptSubmit:keyword-detector.sh
 PreToolUse:pre-tool-enforcer.sh
 SessionStart:session-start.sh
+SessionStart:orphan-reaper.sh
 Stop:persistent-mode"
 
 test_core_claude_hooks_registered_in_tracked_root_yaml() {
@@ -204,20 +215,59 @@ EOF
 }
 
 # =============================================================================
+# orphan-reaper.sh -- the second recovery trigger for the orchestrate-review
+# 3-layer defense's layer 3 (job.ts reap, lib/generic-job.ts reapOrphanJobs).
+# The first trigger is cmdStart (job start time); without this SessionStart
+# registration, an orphaned job.json group is never swept unless someone
+# re-runs a review, so this must land in the TRACKED root claude.yaml
+# (invariant (a) above) exactly like the other four core hooks.
+# =============================================================================
+test_orphan_reaper_registered_in_tracked_root_yaml() {
+    local block active_block timeout_line
+    block=$(_extract_hook_event_block "$REPO_DIR/claude.yaml" "SessionStart")
+    # Strip full-line comments before matching -- otherwise a commented-out
+    # registration (e.g. "# - component: orphan-reaper.sh") would also satisfy
+    # a plain grep -qF and pass vacuously.
+    active_block=$(echo "$block" | grep -v '^[[:space:]]*#')
+    if ! echo "$active_block" | grep -qF 'component: orphan-reaper.sh'; then
+        echo "ASSERTION FAILED: root claude.yaml must register orphan-reaper.sh under SessionStart -- the second orphan-recovery trigger (the first is cmdStart at job-start time) would otherwise never fire"
+        return 1
+    fi
+
+    # Pin the sibling "timeout:" key too, not just the component line -- a
+    # missing or drifted timeout would still pass a component-only check.
+    timeout_line=$(echo "$active_block" | grep -A1 'component: orphan-reaper.sh' | grep 'timeout:')
+    if ! echo "$timeout_line" | grep -qE 'timeout:[[:space:]]*10$'; then
+        echo "ASSERTION FAILED: orphan-reaper.sh's sibling 'timeout:' must be 10 (got: ${timeout_line:-<none>})"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
 # No projects/*/claude.yaml re-declares a core hook (invariant (b)): global
 # registration lands in ~/.claude/settings.json and project registration in the
 # target's .claude/settings.local.json, and Claude Code merges both -- so a
 # hook in both scopes fires twice.
 # =============================================================================
 test_core_claude_hooks_not_duplicated_per_project() {
-    local file pair component failed=0
+    local file pair event component block failed=0
     while IFS= read -r file; do
         [ -f "$file" ] || continue
         case "$file" in "$REPO_DIR/claude.yaml") continue ;; esac
         while IFS= read -r pair; do
+            event="${pair%%:*}"
             component="${pair#*:}"
-            if grep -qF "component: $component" "$file"; then
-                echo "ASSERTION FAILED: $file re-declares core hook $component already registered globally in root claude.yaml -- both scopes merge, so the hook would fire twice"
+            # Scope the match to the pair's own event block (not the whole
+            # file) and let _extract_hook_event_block strip comments -- a
+            # matching component name under an unrelated event, or a
+            # commented-out/disabled registration (e.g.
+            # "# - component: orphan-reaper.sh" left as documentation), would
+            # otherwise trip this assertion with no bypass available, blocking
+            # `make validate`/`make sync` for a line that never runs twice.
+            block=$(_extract_hook_event_block "$file" "$event")
+            if echo "$block" | grep -qF "component: $component"; then
+                echo "ASSERTION FAILED: $file re-declares core hook $component under $event already registered globally in root claude.yaml -- both scopes merge, so the hook would fire twice"
                 failed=1
             fi
         done <<EOF
@@ -347,6 +397,7 @@ main() {
     run_test test_precompact_removed_from_all_targets
     run_test test_codex_yaml_has_pretooluse_guard
     run_test test_core_claude_hooks_registered_in_tracked_root_yaml
+    run_test test_orphan_reaper_registered_in_tracked_root_yaml
     run_test test_core_claude_hooks_not_duplicated_per_project
     run_test test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher
     run_test test_codex_yaml_spawn_depth_gate_matcher_never_bare

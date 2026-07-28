@@ -123,6 +123,7 @@ skills:
 ### Hooks
 
 - **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start
+- **orphan-reaper.sh**: SessionStart hook — reaps `orchestrate-review` worker process groups left behind when a conductor never reached teardown
 - **hooks/lib/state-liveness.sh**: Shared TTL/liveness definitions for state-file and session-artifact garbage collection
 - **scripts/omt-cleanup/**: `~/.omt` cleanup CLI, dry-run by default, `--execute` required to delete
 - **keyword-detector.sh** / **codex-keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context (shared core)
