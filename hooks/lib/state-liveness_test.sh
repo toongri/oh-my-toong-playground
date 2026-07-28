@@ -1656,6 +1656,97 @@ test_reap_session_artifacts_newline_filename_defect_b_no_out_of_dir_deletion_exe
   return 0
 }
 
+# SESSION_ARTIFACT_PREFIXES contains a NESTED prefix ("state/block-count-"),
+# so its glob has an intermediate directory component. Path expansion follows
+# a symlink there, yielding a path that is still string-anchored to
+# "$dir/$prefix" — the anchor guard above passes it — while the file it names
+# lives in the symlink target. `rm -f` then deletes outside $dir.
+#
+# The single assertion pairs both halves on ONE fixture so the guard cannot
+# pass by degrading into "reap nothing": the external file must survive AND
+# the sibling ordinary candidate in the same run must still be reaped.
+test_reap_session_artifacts_symlinked_nested_dir_target_not_deleted() {
+  local d="$TEST_TMP_DIR/omt"
+  local outside="$TEST_TMP_DIR/outside"
+  mkdir -p "$d" "$outside"
+
+  local victim="$outside/block-count-symlink-victim-70"
+  : >"$victim"
+  touch_ago "$victim" 25200
+  ln -s "$outside" "$d/state"
+
+  local ordinary="$d/codex-todo-ordinary-stale-71.json"
+  write_state "$ordinary" "{}"
+  touch_ago "$ordinary" 25200
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 >/dev/null
+
+  if [ ! -f "$victim" ]; then
+    echo "  ASSERTION FAILED: <dir>/state is a symlink, so the nested-prefix glob followed it and reap_session_artifacts deleted a file outside \$dir"
+    return 1
+  fi
+  if [ -f "$ordinary" ]; then
+    echo "  ASSERTION FAILED: the symlink guard must skip only the symlinked nested prefix — an ordinary stale candidate in the same run must still be reaped"
+    return 1
+  fi
+  return 0
+}
+
+# The escape is specific to a symlinked DIRECTORY component. A real nested
+# directory must keep reaping normally — without this, the guard above could
+# be satisfied by refusing every nested prefix outright, silently retiring
+# block-count GC.
+test_reap_session_artifacts_real_nested_dir_still_reaped() {
+  local d="$TEST_TMP_DIR/omt"
+  mkdir -p "$d/state"
+
+  local stale="$d/state/block-count-real-nested-stale-72"
+  : >"$stale"
+  touch_ago "$stale" 25200
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 >/dev/null
+
+  if [ -f "$stale" ]; then
+    echo "  ASSERTION FAILED: a stale block-count file under a REAL (non-symlinked) nested directory must still be reaped — the symlink guard must not blanket-skip nested prefixes"
+    return 1
+  fi
+  return 0
+}
+
+# A candidate FILE that is itself a symlink needs no guard, and must not
+# acquire one: `rm -f` unlinks the symlink and leaves the target intact.
+# The symlink is backdated with `touch -h` deliberately — BSD `stat -f %m`
+# reads the symlink rather than its target, so a freshly-created symlink is
+# judged live and never reaches `rm -f`, which would make the target's
+# survival prove nothing about `rm -f`'s behavior.
+test_reap_session_artifacts_symlinked_candidate_file_unlinks_only_the_link() {
+  local d="$TEST_TMP_DIR/omt"
+  local outside="$TEST_TMP_DIR/outside"
+  mkdir -p "$d" "$outside"
+
+  local target="$outside/important.json"
+  write_state "$target" "{}"
+  local link="$d/codex-todo-symlinked-candidate-73.json"
+  ln -s "$target" "$link"
+
+  local t=$((NOW - 25200))
+  local touch_arg
+  touch_arg=$(date -r "$t" "+%Y%m%d%H%M.%S" 2>/dev/null || date -d "@$t" "+%Y%m%d%H%M.%S" 2>/dev/null)
+  touch -h -t "$touch_arg" "$link"
+
+  reap_session_artifacts "$d" "__none__" "$NOW" 0 >/dev/null
+
+  if [ ! -f "$target" ]; then
+    echo "  ASSERTION FAILED: reaping a symlinked candidate must unlink only the symlink — the target outside \$dir was deleted"
+    return 1
+  fi
+  if [ -L "$link" ]; then
+    echo "  ASSERTION FAILED: the stale symlinked candidate itself must be reaped (it is a dead artifact); if it survived, the target's survival above proves nothing about rm -f"
+    return 1
+  fi
+  return 0
+}
+
 # Negative control: the two guards above must not degrade into a blanket
 # `continue` for every candidate — an ordinary live-witnessed artifact must
 # still survive and an ordinary unwitnessed stale artifact must still be
@@ -2017,6 +2108,9 @@ run_test test_list_live_session_ids_space_bearing_dir_witness_pass
 run_test test_list_live_session_ids_newline_filename_no_arbitrary_exec
 run_test test_reap_session_artifacts_newline_filename_defect_a_no_arbitrary_exec_dry_run
 run_test test_reap_session_artifacts_newline_filename_defect_b_no_out_of_dir_deletion_execute
+run_test test_reap_session_artifacts_symlinked_nested_dir_target_not_deleted
+run_test test_reap_session_artifacts_real_nested_dir_still_reaped
+run_test test_reap_session_artifacts_symlinked_candidate_file_unlinks_only_the_link
 run_test test_reap_session_artifacts_ordinary_candidates_unaffected_by_newline_guard
 run_test test_reap_session_artifacts_space_in_filename_still_correctly_judged
 run_test test_reap_dead_state_files_rm_failure_not_echoed_and_reported

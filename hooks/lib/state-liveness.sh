@@ -572,6 +572,69 @@ reap_dead_state_files() {
   [ "$had_failure" = "0" ]
 }
 
+# _state_liveness_prefix_dir_contained <dir> <prefix>
+#
+# Returns:
+#   exit 0 — the directory <prefix>'s glob will expand inside is physically
+#            beneath <dir> (or <prefix> is flat, or that directory does not
+#            exist) — safe to walk
+#   exit 1 — that directory resolves outside <dir> — refuse to walk it
+#
+# SESSION_ARTIFACT_PREFIXES carries NESTED prefixes ("state/block-count-"), so
+# "$dir"/${prefix}* is a two-component glob. Path expansion follows a symlink
+# in an intermediate component: with <dir>/state symlinked elsewhere, the glob
+# yields <dir>/state/block-count-<sid> — a path that is still string-anchored
+# to "$dir/$prefix" (so reap_session_artifacts's own anchor check below passes
+# it) while the file it names lives in the symlink target. `rm -f` on that
+# path then deletes a file outside <dir>. Measured: an external
+# block-count-<sid> is destroyed by both callers.
+#
+# Scoped to the DIRECTORY component on purpose. A candidate FILE that is
+# itself a symlink needs no guard: `rm -f` unlinks the symlink and leaves the
+# target intact (measured — and measured only after backdating the symlink's
+# own mtime, since BSD `stat -f %m` reads the symlink rather than its target,
+# so a freshly-created symlink is judged live and never reaches `rm -f` at
+# all, which looks like the same "target survived" outcome for an entirely
+# different reason).
+#
+# Physical containment (`pwd -P`) rather than a `[ -L "$dir/${prefix%/*}" ]`
+# test: `[ -L ]` inspects only the LAST component, so it would silently pass a
+# deeper prefix whose earlier component is the symlink. `${prefix%/*}` is the
+# full directory portion at any depth, and resolving it physically catches the
+# escape wherever in that portion it occurs. Two forks per nested prefix, and
+# only "state/block-count-" is nested today.
+#
+# <dir> itself being a symlink is deliberately fine: <base> resolves to its
+# physical target, an unescaped subdirectory still sits beneath that, and a
+# deliberately-relocated OMT dir is the intended scope, not an escape.
+_state_liveness_prefix_dir_contained() {
+  local dir="$1"
+  local prefix="$2"
+
+  case "$prefix" in
+    */*) ;;
+    *) return 0 ;;
+  esac
+
+  local sub="$dir/${prefix%/*}"
+  # Nonexistent subdirectory — the glob matches nothing, so there is nothing
+  # to refuse. Reported as contained so the caller's normal empty-candidate
+  # path handles it, not as an escape.
+  [ -d "$sub" ] || return 0
+
+  local phys base
+  phys=$(cd "$sub" 2>/dev/null && pwd -P) || return 1
+  base=$(cd "$dir" 2>/dev/null && pwd -P) || return 1
+
+  # "$base" is quoted inside the pattern so a directory name containing a glob
+  # metacharacter is matched literally (same SC2295-class hazard the prefix
+  # strips elsewhere in this file guard against).
+  case "$phys" in
+    "$base"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # reap_session_artifacts <dir> <current_sid> <now_epoch> <dry_run>
 #
 # For each SESSION_ARTIFACT_PREFIXES entry, walk <dir>/<prefix>*, and reap (or
@@ -633,6 +696,18 @@ reap_session_artifacts() {
   # path->mtime lookup table is ever built (the O(n^2) trap a Bash-3.2
   # associative-array-free lookup would fall into).
   for prefix in $SESSION_ARTIFACT_PREFIXES; do
+    # Refuse to descend through a symlinked directory component of a nested
+    # prefix — otherwise `rm -f` below reaches files outside "$dir". The
+    # string anchor at the bottom of this loop cannot catch it: such a path
+    # IS anchored to "$dir/$prefix", it just does not physically live there.
+    # See _state_liveness_prefix_dir_contained's own doc comment.
+    #
+    # Deliberately NOT applied to list_live_session_ids's matching loop: that
+    # pass only reads mtimes and ADDS live ids, so reading through the symlink
+    # can only preserve more, never destroy. Guarding it there would instead
+    # strip witnesses and make this reaper delete MORE — the wrong direction
+    # for a safety fix.
+    _state_liveness_prefix_dir_contained "$dir" "$prefix" || continue
     candidates=()
     for f in "$dir"/${prefix}*; do
       [ -f "$f" ] || continue
