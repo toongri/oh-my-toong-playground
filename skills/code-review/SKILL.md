@@ -81,6 +81,7 @@ digraph role_separation {
 **Allowed in orchestrator context:**
 - `git diff {range} --stat` output
 - `git diff {range} --name-only` output
+- `git diff {range} --numstat` output
 - `git log {range} --oneline` output
 - CLAUDE.md file content
 - Step 3 evidence summary (structured table — build/test/lint status + test coverage mapping, truncated to summary on success / last 30 lines on failure)
@@ -480,7 +481,7 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
 
 **Inline judgment steps:**
 
-1. **Dedup near-duplicates first** (same defect, same location, same reason → keep one, merging the `found by` angles and keeping the most concrete failure scenario). Deduplication reduces the judgment workload before it starts.
+1. **Dedup near-duplicates first** (same defect, same location, same reason → keep one, and carry onto it everything the duplicates contributed: the merged `found by` angles, the most concrete failure scenario, and any field only one of them supplied). Merging removes the repetition, never the substance. Deduplication reduces the judgment workload before it starts.
 2. **MANDATORY READ: `references/verifier-prompt.md`** — read it before beginning judgment. The verdict ladder (CONFIRMED / PLAUSIBLE / REFUTED), verification method, and 9-field output contract all live there. Escalated candidates reuse this file as their dispatch prompt.
 3. For each remaining candidate, in order:
 

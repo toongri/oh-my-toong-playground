@@ -155,7 +155,7 @@ You merge the finders' candidate lists. You do not judge them.
 Each finder returns candidates shaped as `file` / `line` / `summary` / `failure_scenario` (cleanup candidates state a concrete cost in `failure_scenario` instead of a crash). The requirement angle's requirement-gap candidates additionally carry an `ac` field — no other angle's candidates have one. Merge as follows:
 
 1. **Collect** every candidate from every finder that returned output.
-2. **Dedup near-duplicates**: two candidates match when they point at the same `file` and a line within ±5 of each other AND describe the same mechanism. Keep the one with the most concrete `failure_scenario`; record that BOTH angles found it (corroboration is a signal the verifier wants). If either duplicate carries an `ac` field, carry it onto the kept candidate too.
+2. **Dedup near-duplicates**: two candidates match when they point at the same `file` and a line within ±5 of each other AND describe the same mechanism. Keep the one with the most concrete `failure_scenario`; record that BOTH angles found it (corroboration is a signal the verifier wants). Carry onto the kept candidate any field only one of them supplied — merging removes the repetition, never the substance.
 3. **Carry through** each surviving candidate verbatim — `file`, `line`, `summary`, `failure_scenario`, `ac` when present, and the angle(s) that found it. Do not rewrite, strengthen, or weaken them.
 4. **Do not add, drop, rank, or label.** Weak-looking candidates stay; the upstream verifier decides.
 
