@@ -1,26 +1,39 @@
 # MCP definitions for Codex.
 # Note: Figma uses Codex remote MCP config; gemini still uses mcp-remote.
+
+# Deliberately empty, and it MUST stay declared rather than be deleted.
+# This section previously held `agents.max_depth`, removed once that key was
+# measured inert on the V2 spawn path (codex-spawn-depth-gate.sh now enforces
+# that cap instead). Deleting the whole `config:` key is not equivalent to
+# emptying it: syncPlatformYaml only calls syncConfig when `yaml.config` is
+# present (tools/adapters/codex.ts:715), so with the key absent the deployed
+# `.codex/config.toml` keeps whatever its `# --- omt:config ---` block last
+# received -- forever, on every subsequent sync. Installs synced before the
+# removal would silently retain `[agents] max_depth = 2` while fresh installs
+# get nothing, so "the key is gone" would be true only for new machines.
+# An empty mapping keeps syncConfig reachable; insertManagedBlock replaces the
+# block wholesale, so it lands empty and the stale key is actually cleared.
+config: {}
+
 model-map:
+  # Tiers set the model only. Omitting `effort` leaves `model_reasoning_effort`
+  # out of the emitted role TOML (tools/adapters/codex.ts:55), so each agent runs
+  # at whatever effort the session is configured for instead of a value frozen at
+  # sync time.
   tiers:
     opus:
       model: gpt-5.6-sol
-      effort: high
     sonnet:
       model: gpt-5.6-terra
-      effort: medium
-  agents:
-    code-reviewer:
-      model: gpt-5.6-sol
-      effort: high
-    metis:
-      model: gpt-5.6-sol
-      effort: high
-    momus:
-      model: gpt-5.6-sol
-      effort: high
-    tech-claim-examiner:
-      model: gpt-5.6-sol
-      effort: high
+  # `agents:` is for what a tier cannot express. With tiers carrying model alone,
+  # that is effort: an agent that must pin an effort rather than follow the
+  # session. It previously held code-reviewer/metis/momus/tech-claim-examiner,
+  # all four byte-identical to `tiers.opus`, so they resolved to the same TOML
+  # either way and were removed. A new entry must name what tier it could not
+  # be expressed as. Unlike `config:` above, an absent key is safe here:
+  # resolution is `modelMap.agents?.[name] ?? modelMap.tiers[tier]`
+  # (tools/adapters/codex.ts:54), and agent TOMLs are rewritten wholesale
+  # (codex.ts:431), so nothing stale survives a sync.
 hooks:
   SessionStart:
     - component: rules-injector
@@ -57,6 +70,36 @@ hooks:
     - component: codex-label-commit-gate.sh
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
+    # NOT a Claude<->Codex hook-parity mirror -- Claude enforces the same
+    # nested-spawn-depth policy natively via the CLAUDE_CODE_MAX_SUBAGENT_
+    # SPAWN_DEPTH env var, so it has no matching hook. This hook exists only
+    # because codex has no working native depth cap on this version's V2
+    # spawn path -- see the codex-spawn-depth-gate.sh entry in CLAUDE.md's
+    # Hooks section for why, so a hook is the only enforcement point.
+    #
+    # matcher MUST be ".*[sS]pawn_[aA]gent", never "spawn_agent" or
+    # "^spawn_agent$": Codex's PreToolUse matcher is a full-string regex
+    # match, and the actual tool name observed at runtime is
+    # "collaborationspawn_agent" (not "spawn_agent"). A bare "spawn_agent" or
+    # anchored "^spawn_agent$" never matches that string, so the hook would
+    # silently never fire -- passing both deploy and this repo's own tests
+    # while doing nothing at runtime.
+    #
+    # The [sS]/[aA] case classes exist so the hook body's own defense
+    # against a mixed-case variant (codex-spawn-depth-gate.sh:84's
+    # `tr '[:upper:]' '[:lower:]'` lowercasing before the `*spawn_agent`
+    # case match) is actually reachable -- that lowercasing only runs after
+    # this matcher has already let the call through, so a matcher that
+    # can't match a mixed-case form leaves the hook's own defense as dead
+    # code below it. Limitation: an ALL-CAPS variant
+    # ("COLLABORATIONSPAWN_AGENT") is still uncovered by this matcher --
+    # "[sS]pawn" doesn't match "PAWN" and "[aA]gent" doesn't match "GENT",
+    # since each class only covers the word's first letter. The hook
+    # body's `tr` lowercases the whole string and would cover this case if
+    # reached, but this matcher gate never lets it through.
+    - component: codex-spawn-depth-gate.sh
+      type: command
+      matcher: ".*[sS]pawn_[aA]gent"
   PostToolUse:
     - component: rules-injector
       type: command
@@ -84,22 +127,6 @@ hooks:
     - component: codex-persistent-mode
       type: command
       command: "bun run .codex/hooks/codex-persistent-mode/cli.ts hook stop"
-config:
-  agents:
-    # claude.yaml의 CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH와 같은 축이자 같은
-    # 계산 기준 -- 루트 세션이 depth 0, 자식이 부모+1이고 child_depth >
-    # max_depth면 "Agent depth limit reached"로 차단된다. 2 = 루트 -> 서브 ->
-    # 서브까지 허용.
-    #
-    # 경고: codex 0.145.0에서 이 키는 실질적으로 무동작이다. 상류 정의가
-    # "Maximum nesting depth for V1 agent threads. Ignored by V2."이고
-    # multi_agents_v2/spawn.rs에는 depth 비교 게이트 자체가 없는데, 이 버전의
-    # 스폰은 V2 경로로 돈다 -- `codex features list`가 multi_agent_v2=false로
-    # 보고해도 그렇다. 격리 HOME 프로브에서 max_depth=1인 채로 depth 2 스폰이
-    # 통과했고 rollout의 thread_spawn 기록으로 확인했다. Codex 쪽에는 현재
-    # 중첩 깊이를 제한할 수 있는 대체 키가 없다. V1 경로를 타거나 V2에 캡이
-    # 생기면 그때부터 유효해진다.
-    max_depth: 2
 
 mcps:
   context7:
