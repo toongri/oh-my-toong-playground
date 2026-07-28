@@ -140,7 +140,7 @@ private fun stubPaymentDelayed(delayMs: Int) {
 
 ## 6. 패턴별 예시
 
-> `PaymentTimeoutException`·`PaymentValidationException`·`PaymentServerException`은 도메인별 예외가 아니라 어댑터 경계 안에서만 사는 인프라 어댑터-로컬 예외로, 애플리케이션 계층으로 넘어갈 때 `CoreException`으로 번역된다 — 자세한 규칙은 error-handling.md를 참고한다.
+> `PaymentTimeoutException`·`PaymentValidationException`·`PaymentServerException`은 도메인별 예외가 아니라 어댑터 경계 안에서만 사는 인프라 어댑터-로컬 예외로, 애플리케이션 계층으로 넘어갈 때 `CoreException`으로 번역된다 — 자세한 규칙은 [error-handling.md](../implementation/error-handling.md)를 참고한다.
 
 ### Retry를 위한 WireMock Scenario
 

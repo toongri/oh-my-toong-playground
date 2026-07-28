@@ -229,12 +229,13 @@ fun `rolls back ALL changes when intermediate step fails`() {
     val initialBalance = Money.krw(50000)
     val product = createProduct(stockQuantity = initialStock)
     createPointAccount(userId, initialBalance)
-    val coupon = createIssuedCoupon(userId)  // Not used yet
+    val expiredCoupon = createCoupon(status = CouponStatus.EXPIRED)
+    val coupon = createIssuedCoupon(userId = userId, coupon = expiredCoupon)  // Expired
 
     // when - trigger failure in step 3 (coupon)
     val criteria = placeOrderCriteria(
         usePoint = Money.krw(10000),
-        issuedCouponId = expiredCouponId,  // Will fail
+        issuedCouponId = coupon.id,  // Will fail
     )
     assertThrows<CoreException> { orderFacade.placeOrder(criteria) }
 

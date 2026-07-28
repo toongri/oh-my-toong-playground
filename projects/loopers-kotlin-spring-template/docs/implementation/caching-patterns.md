@@ -269,7 +269,7 @@ data class CachedProductDetailV1(
 fun findProducts(criteria: ProductCriteria.FindProducts): ProductInfo.FindProducts {
     val cacheKey = ProductCacheKeys.ProductList.from(criteria)
 
-    if (!cacheKey.shouldCache()) return productService.findProducts(command)
+    if (!cacheKey.shouldCache()) return productService.findProducts(criteria)
 
     val cachedList = cacheTemplate.get(cacheKey, TYPE_CACHED_PRODUCT_LIST_V1)
 
@@ -295,7 +295,7 @@ fun findProducts(criteria: ProductCriteria.FindProducts): ProductInfo.FindProduc
     }
 
     // Cache miss: fetch from DB and cache both List + Detail
-    val slice = productService.findProducts(command)
+    val slice = productService.findProducts(criteria)
 
     // Do not cache empty results
     if (slice.content.isNotEmpty()) {
@@ -334,9 +334,9 @@ class ProductStockEventConsumer(
 
     @KafkaListener(topics = ["stock-events"], groupId = "cache-invalidation")
     fun onStockEvent(event: StockDepletedEventV1) {
-        logger.info("[Event] Stock depleted cache eviction - productIds: ${event.productIds}")
-        productCacheService.evictStockDepletedProducts(
-            ProductCacheService.EvictStockDepletedCommand(event.productIds)
+        logger.info("[Event] Stock depleted cache eviction - productId: ${event.productId}")
+        productCacheService.evictStockDepletedProduct(
+            ProductCacheService.EvictStockDepletedCommand(event.productId)
         )
     }
 }
@@ -346,11 +346,10 @@ class ProductStockEventConsumer(
 class ProductCacheService(
     private val cacheTemplate: CacheTemplate,
 ) {
-    data class EvictStockDepletedCommand(val productIds: List<Long>)
+    data class EvictStockDepletedCommand(val productId: Long)
 
-    fun evictStockDepletedProducts(command: EvictStockDepletedCommand) {
-        val cacheKeys = command.productIds.map { ProductCacheKeys.ProductDetail(it) }
-        cacheTemplate.evictAll(cacheKeys)
+    fun evictStockDepletedProduct(command: EvictStockDepletedCommand) {
+        cacheTemplate.evict(ProductCacheKeys.ProductDetail(command.productId))
     }
 }
 ```
