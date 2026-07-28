@@ -2777,19 +2777,100 @@ describe("cmdStop — 종료 대기", () => {
 		mock.restore();
 	});
 
-	test("SIGTERM 후 대상 프로세스가 실제로 사라진 뒤에 반환한다", async () => {
+	test("SIGTERM 후 대상 프로세스가 죽고 status가 done으로 전이된 뒤에 반환한다", async () => {
+		// 대기 축은 프로세스 생존이 아니라 status.json의 state다. 자식이 죽는 것만으로는
+		// cmdStop이 반환할 근거가 없다 — 실제 워커처럼 자식 종료 후 status를 done으로
+		// 갱신하는 비동기 작업을 함께 띄워, cmdStop이 "그 전이"를 기다리는지 검증한다.
 		const jobDir = path.join(tmpDir, "job-stop-wait");
 		const child = Bun.spawn(
-			["bash", "-c", "trap 'sleep 0.3; exit 0' TERM; while :; do sleep 0.05; done"],
+			["bash", "-c", "trap 'sleep 0.1; exit 0' TERM; while :; do sleep 0.05; done"],
 			{ stdout: "ignore", stderr: "ignore" },
 		);
 		spawned.push(child);
 		const pid = child.pid;
 		setupStopJob(jobDir, pid);
+		const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, "alice", "status.json");
+
+		(async () => {
+			while (isAlive(pid)) await new Promise((r) => setTimeout(r, 20));
+			fs.writeFileSync(statusPath, JSON.stringify({ member: "alice", state: "done", pid }));
+		})();
 
 		await cmdStop({}, jobDir, chunkReviewConfig);
 
 		expect(isAlive(pid)).toBe(false);
+		const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
+		expect(status.state).toBe("done");
+	}, 10000);
+
+	test("`pid가 죽어 있는 running 멤버는 status가 done으로 바뀌길 기다린 뒤 매니페스트에 outputFilePath가 채워진다`", async () => {
+		const jobDir = path.join(tmpDir, "job-stop-dead-pid-output");
+		const deadChild = Bun.spawn(["bash", "-c", "exit 0"], { stdout: "ignore", stderr: "ignore" });
+		await deadChild.exited;
+		const deadPid = deadChild.pid;
+		setupStopJob(jobDir, deadPid);
+		const memberDir = path.join(jobDir, chunkReviewConfig.entityDirName, "alice");
+		const statusPath = path.join(memberDir, "status.json");
+		const outputPath = path.join(memberDir, "output.txt");
+
+		// stop 직전 이미 완료된 파인더를 모사: 자식은 죽어 있지만(SIGTERM은 ESRCH로 실패),
+		// 워커 자신은 output.txt를 다 쓰고 나서야 status를 done으로 뒤집는다 — 그 지연을
+		// 흉내내기 위해 짧은 딜레이 뒤 output.txt + done 전이를 함께 반영한다.
+		setTimeout(() => {
+			fs.writeFileSync(outputPath, "review output");
+			fs.writeFileSync(
+				statusPath,
+				JSON.stringify({ member: "alice", state: "done", pid: deadPid, size_bytes: 13 }),
+			);
+		}, 150);
+
+		await cmdStop({}, jobDir, chunkReviewConfig);
+
+		const manifest = buildManifest(jobDir, chunkReviewConfig);
+		const alice = manifest[chunkReviewConfig.entityPlural].find((m: any) => m.member === "alice");
+		expect(alice.outputFilePath).toBe(outputPath);
+	}, 10000);
+
+	test("`pid 없는 running 멤버가 끝내 상태를 벗어나지 않으면 상한에서 포기하고 반환한다`", async () => {
+		const jobDir = path.join(tmpDir, "job-stop-cap-no-pid");
+		fs.mkdirSync(jobDir, { recursive: true });
+		fs.writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ id: "stop-test" }));
+		const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+		fs.mkdirSync(entitiesDir, { recursive: true });
+		const memberDir = path.join(entitiesDir, "alice");
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(memberDir, "status.json"),
+			JSON.stringify({ member: "alice", state: "running" }), // pid 없음 — 대기가 프로세스
+			// 축이었다면 즉시 0ms에 반환했을 케이스
+		);
+
+		let sleepCallCount = 0;
+		const clock = { now: 1_000_000 };
+		mock.module("./job-utils", () => ({
+			...JobUtils,
+			sleepMs: async (ms: number) => {
+				const msNum = Number(ms);
+				if (Number.isFinite(msNum) && msNum > 0) {
+					sleepCallCount++;
+					clock.now += msNum;
+				}
+			},
+		}));
+		const realDateNow = Date.now;
+		Date.now = () => clock.now;
+
+		try {
+			const cacheBust = `${realDateNow()}-${Math.random()}`;
+			const freshGenericJob = await import(`./generic-job.ts?stop-wait-cap-nopid=${cacheBust}`);
+			await freshGenericJob.cmdStop({}, jobDir, chunkReviewConfig);
+		} finally {
+			Date.now = realDateNow;
+		}
+
+		expect(sleepCallCount).toBeGreaterThan(0);
+		const status = JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
+		expect(status.state).toBe("running");
 	}, 10000);
 
 	test("대기 상한을 넘으면 상한에서 포기하고 반환한다", async () => {

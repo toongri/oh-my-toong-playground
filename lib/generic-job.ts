@@ -1078,39 +1078,39 @@ export async function cmdStop(
 	if (!fs.existsSync(entitiesRoot))
 		exitWithError(`No ${config.entityDirName} folder found: ${entitiesRoot}`);
 
-	const stoppedPids: number[] = [];
+	// Wait axis: the member's OWN status.json state, not the spawned CLI child's pid liveness.
+	// status.pid is worker-utils.ts's `child.pid` (the CLI child), not the worker process — a
+	// member observed "running" here still needs to wait, whether or not SIGTERM was sendable.
+	const runningEntries: string[] = [];
 	for (const entry of fs.readdirSync(entitiesRoot)) {
 		const statusPath = path.join(entitiesRoot, entry, "status.json");
 		const status = readJsonIfExists(statusPath);
 		if (!isRecord(status)) continue;
 		if (status.state !== "running") continue;
-		if (!status.pid) continue;
+		runningEntries.push(entry);
 
-		try {
-			process.kill(Number(status.pid), "SIGTERM");
-			stoppedPids.push(Number(status.pid));
-		} catch {
-			// ignore
+		if (status.pid) {
+			try {
+				process.kill(Number(status.pid), "SIGTERM");
+			} catch {
+				// ignore
+			}
 		}
 	}
 
-	const isAlive = (pid: number): boolean => {
-		try {
-			process.kill(pid, 0);
-			return true;
-		} catch {
-			return false;
-		}
+	const stillRunning = (entry: string): boolean => {
+		const status = readJsonIfExists(path.join(entitiesRoot, entry, "status.json"));
+		return isRecord(status) && status.state === "running";
 	};
 	const waitStart = Date.now();
-	while (stoppedPids.some(isAlive) && Date.now() - waitStart < STOP_WAIT_CAP_MS) {
+	while (runningEntries.some(stillRunning) && Date.now() - waitStart < STOP_WAIT_CAP_MS) {
 		await sleepMs(250);
 	}
 
 	const manifest = buildManifest(jobDir, config);
 	process.stdout.write(
 		`${
-			stoppedPids.length > 0
+			runningEntries.length > 0
 				? `stop: sent SIGTERM to running ${config.entityPlural}\n`
 				: `stop: no running ${config.entityPlural}\n`
 		}${JSON.stringify(manifest, null, 2)}\n`,
