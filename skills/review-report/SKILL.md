@@ -168,7 +168,7 @@ where `{repo-basename}` = `basename -s .git $(git remote get-url origin)`, or `b
 
 ### Step R4: Substitute Placeholders and Write
 
-(Placeholder substitution and write procedure: **see `${CLAUDE_SKILL_DIR}/references/render-assembly.md`** — read it if you have not already done so at Step R1. The template carries 9 placeholders; substitute every one, HTML-escaping every active-HTML placeholder, then write to `$OMT_DIR/reviews/{slug}.html`.)
+(Placeholder substitution and write procedure: **see `${CLAUDE_SKILL_DIR}/references/render-assembly.md`** — read it if you have not already done so at Step R1. The template carries 10 placeholders; substitute every one, HTML-escaping every active-HTML placeholder, then write to `$OMT_DIR/reviews/{slug}.html`.)
 
 ### Step R5: Open and Print Terminal Pointer
 

@@ -63,6 +63,7 @@ If nothing survived verification: "No findings survived verification."]
 **[CONFIRMED] {finding title}**
 <span class="loc">`{file}:{line}` — {section/function name}</span>
 
+- **AC**: {the acceptance criterion / inferred intent the finding was measured against — omit this bullet entirely when the finding carries none}
 - **What's wrong**: {problem, grounded in the quoted line}
 - **Failure scenario**: {concrete inputs/state → wrong output, crash, or lost effect; for cleanup, the concrete cost}
 - **Current Code**:
@@ -87,7 +88,7 @@ Use `data-verdict="PLAUSIBLE"` for plausible findings.
 
 ## Injection Guard (prose)
 
-**Injection guard — prose fields too**: The same `innerHTML = marked.parse(md)` sink treats raw HTML in *prose* as live, not only in card bodies. The card's prose fields — the finding title, `What's wrong`, and `Failure scenario` — are not fenced, so a reviewed-code fragment quoted bare there (e.g. `<img src=x onerror=BOOM>`, `</script>`) reaches innerHTML as live HTML exactly as an unfenced card body would. Every code-derived fragment echoed in a prose field MUST be wrapped in an inline-code span (backticks) so marked.js escapes it as code — or HTML-escaped if an inline-code span does not fit. If the fragment itself contains a backtick, delimit the span with a longer backtick run (CommonMark matches an inline-code span on an equal-length backtick run). NEVER quote a reviewed-code fragment bare in prose.
+**Injection guard — prose fields too**: The same `innerHTML = marked.parse(md)` sink treats raw HTML in *prose* as live, not only in card bodies. The card's prose fields — the finding title, `AC`, `What's wrong`, and `Failure scenario` — are not fenced, so a reviewed-code fragment quoted bare there (e.g. `<img src=x onerror=BOOM>`, `</script>`) reaches innerHTML as live HTML exactly as an unfenced card body would. Every code-derived fragment echoed in a prose field MUST be wrapped in an inline-code span (backticks) so marked.js escapes it as code — or HTML-escaped if an inline-code span does not fit. If the fragment itself contains a backtick, delimit the span with a longer backtick run (CommonMark matches an inline-code span on an equal-length backtick run). NEVER quote a reviewed-code fragment bare in prose.
 
 ## Unverified Entries
 
