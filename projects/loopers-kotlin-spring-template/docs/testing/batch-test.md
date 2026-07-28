@@ -236,7 +236,7 @@ class SettlementStepIntegrationTest {
         assertThat(jobExecution.stepExecutions.first().readCount).isEqualTo(0)
     }
 
-    private fun createOrder(status: OrderStatus): Order {
+    private fun createOrder(status: OrderStatus = OrderStatus.PAID): Order {
         return orderRepository.save(Order.create(status = status))
     }
 }
