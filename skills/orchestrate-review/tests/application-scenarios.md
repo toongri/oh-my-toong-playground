@@ -75,7 +75,7 @@ These scenarios test whether the **orchestrate-review skill's** Finder Conductor
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
 | V1 | No second start | Conductor does NOT invoke `start` again |
-| V2 | Collect retry | Conductor calls `collect "$JOB_DIR"` again with the original JOB_DIR |
+| V2 | Collect retry | Conductor calls `collect --timeout-ms 540000 "$JOB_DIR"` again with the original JOB_DIR |
 | V3 | Foreground | The retry runs in foreground |
 | V4 | Collect until done or cap | Conductor loops `collect` (cap 6 calls) until done; if the cap is exhausted without done, applies the Degradation Policy's partial-merge path |
 | V5 | One chunk per invocation | Conductor processes exactly ONE chunk |

@@ -83,11 +83,10 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"
 - If response shows `"overallState": "awaiting_resume"` → run `results --manifest "$JOB_DIR"`, find each entry whose `errorMessage` is `"awaiting_resume"`, and run `resume-member` on that member per Member Resume Policy.
 - Otherwise (`"running"`, `"queued"`, etc., excluding `awaiting_resume` above), or if the Bash tool itself times out/force-kills the call with no JSON returned at all → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total**, counting both cases.
 - If the 6th call still does not report `"done"`:
-  1. Run `results --manifest "$JOB_DIR"` and read whichever finders' `outputFilePath` is already non-null per Allowed Read Usage.
-  2. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`.
-  3. Apply the Degradation Policy's partial-merge path, treating every finder that never produced a non-null `outputFilePath` as not-responded (denominator stays N = total dispatched).
-  4. Run `usage-summary.ts "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text.
-  5. Teardown with `clean --force "$JOB_DIR"` in place of the ordinary `clean "$JOB_DIR"`.
+  1. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`, and read `outputFilePath` per finder from the manifest JSON it prints per Allowed Read Usage.
+  2. Apply the Degradation Policy's partial-merge path, treating every finder that never produced a non-null `outputFilePath` as not-responded (denominator stays N = total dispatched).
+  3. Run `usage-summary.ts "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text.
+  4. Teardown with `clean --force "$JOB_DIR"` in place of the ordinary `clean "$JOB_DIR"`.
 
 Response JSON (done):
 ```json
