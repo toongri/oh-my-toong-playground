@@ -16,10 +16,8 @@ const PROMPTS_DIR = path.resolve(import.meta.dirname, "prompts");
 /**
  * Per-angle allowlist of the conditional sections in chunk-reviewer-prompt.md
  * (spec: orchestrate-review-4angle-redesign.md §2.3). The 4 common sections — Review
- * Premises, Review Scope, What Was Implemented, Diff Command — carry no marker at all
- * and always pass through, since "no marker on the common sections" is the simpler shape:
- * the filter only ever has to act on marked sections absent from this list.
- * `project_context` is never listed for any angle — it is dropped for all four.
+ * Premises, Review Scope, What Was Implemented, Diff Command — carry no marker and
+ * always pass through; `project_context` is never listed for any angle.
  */
 const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
 	correctness: [],
@@ -29,35 +27,22 @@ const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
 };
 
 /**
- * Both markers are anchored to start (`^`) and end (`$`) of their own line (`m` flag) —
- * a section marker in this template always sits alone on its own line, so this rejects an
- * inline reproduction of the closing-marker string (e.g. a quoted excerpt of this very
- * template appearing inside an interpolated placeholder value) that would otherwise
- * truncate the lazy body match early and let everything after it leak past the filter.
- *
- * Known unclosed residual risk, by design: this only rejects an INLINE (same-line, with
- * other text) reproduction of the marker. If an interpolated placeholder value reproduces
- * the literal closing-marker text ALONE on its own line — nothing else on that line — the
- * anchored regex still matches it as a genuine section boundary and truncates early. No
- * finite static rule closes this without also being able to reject a legitimate marker line
- * that just happens to look identical; changing the interpolation order (escaping/quoting
- * marker-shaped substrings before they're substituted in) would close it but is out of scope
- * here — the fix stays inside this filter, not upstream in how values are interpolated.
+ * Both markers are anchored to start (`^`) and end (`$`) of their own line (`m` flag) since a
+ * real marker always sits alone on its line — this rejects an inline reproduction of the
+ * closing-marker string inside an interpolated placeholder value that would otherwise
+ * truncate the lazy body match early. Remaining gap: a reproduction that lands alone on its
+ * own line (nothing else on it) still reads as a genuine boundary and truncates early.
  */
 const SECTION_MARKER_RE = /^<!-- section:([a-z_]+) -->$\n([\s\S]*?)^<!-- \/section:\1 -->$\n?/gm;
 
 /**
  * Strip the conditional sections a given angle's allowlist doesn't cover, then remove every
  * section marker from what remains — a marker left in the final prompt is noise the finder
- * could misread as an instruction, so markers never survive regardless of member.
+ * could misread as an instruction.
  *
- * Unknown member (an angle name absent from ANGLE_SECTION_ALLOWLIST, e.g.
- * orchestrate-review.config.yaml grows a 5th angle before this map is updated): fail OPEN,
- * not closed. Passing every section through only costs extra tokens; failing closed would
- * kill that angle's job outright the moment the config changes, with no bypass/ask path in
- * this worker to recover from a false deny. Logged via logError (not silent) so the drift is
- * visible in this job's own worker log — this pursuit has already seen a silent fallback here
- * hide a broken measurement window behind an otherwise-green test suite.
+ * Unknown member (an angle name absent from ANGLE_SECTION_ALLOWLIST): fails OPEN, passing
+ * every section through rather than killing the job, logged via logError so the drift is
+ * visible in this job's own worker log.
  */
 export function filterPromptSections(promptContent: string, member: string): string {
 	const allowlist = ANGLE_SECTION_ALLOWLIST[member];

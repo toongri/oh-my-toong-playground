@@ -1,45 +1,19 @@
 #!/usr/bin/env bun
 
 /**
- * Codex 축 실효성 실측 테스트.
+ * Codex 축 실효성 실측 테스트 — 실제 codex 프로세스를 spawn하는 통합 테스트.
  *
- * settings.deny.skills 선언이 실제로 codex 프롬프트에서 해당 스킬을 억제하는지를,
- * 프로덕션 전송 경로(buildAugmentedCommand → splitCommand — spawnWorkers가 워커에
- * --command로 넘긴 문자열을 워커가 재토큰화하는 것과 동일한 경로)를 통과한 실제 argv로
- * `codex debug prompt-input`을 돌려 baseline(deny 미적용) / deny(적용) 쌍 비교로 검증한다.
+ * settings.deny.skills 선언이 실제로 codex 프롬프트에서 해당 스킬을 억제하는지, 프로덕션
+ * 전송 경로(buildAugmentedCommand → splitCommand)를 그대로 통과한 실제 argv로 `codex debug
+ * prompt-input`을 돌려 baseline(deny 미적용) / deny(적용) 쌍 비교로 검증한다.
  *
- * 측정 창: 스킬은 프롬프트의 `<skills_instructions>...</skills_instructions>` 블록 안에서만
- * `- <name>: <설명> (file: <root-alias>/<name>/SKILL.md)` 형태로 열거된다. codex의 developer
- * 메시지는 <skills_instructions> → <permissions instructions> → <recommended_plugins> →
- * <INSTRUCTIONS>(AGENTS.md/CLAUDE.md echo) → <environment_context> 순 content 블록으로
- * 구성되고, 스킬 나열이 실릴 수 있는 자리는 구조적으로 <skills_instructions> 블록 하나뿐이다 —
- * <INSTRUCTIONS>는 스킬 로딩 메커니즘이 아니라 순수 문서 텍스트 echo다.
- *
- * 창을 블록으로 좁힌 이유(실측 근거): deny 목록을 4개→28개로 늘렸을 때 "prometheus" 하나에서
- * 단언이 깨졌다. 원인은 억제 실패가 아니라 측정 오탐이었다 — 이 레포의 AGENTS.md는 CLAUDE.md로의
- * 심링크이고 codex가 이를 project instructions로 실어 <INSTRUCTIONS> 블록으로 echo하는데,
- * CLAUDE.md:200에 `Read("skills/prometheus/SKILL.md")  // Wrong`이라는 문서 예시가 있다. 이
- * 예시 1건이 전체 출력 기준 카운트에 항상 섞여, deny가 <skills_instructions> 블록의 나열 항목을
- * 실제로는 지웠는데도 전체 카운트는 2→1로만 줄어 0을 기대하는 단언이 깨졌다(실측: 전체 baseline
- * 2 / 블록 1, deny 후 전체 1 / 블록 0 — 블록 안 나열 항목은 정상적으로 사라졌다). 억제는
- * 정상이었고 측정 단위가 오탐을 낸 것이다.
- *
- * `(file: ...)` 괄호 형태만 세는 대안은 고르지 않았다: 실측 baseline의 나열은
- * `- imagegen: ... (file: r3/imagegen/SKILL.md)`처럼 root alias 축약(r0~r7)을 쓰는데, 이는
- * 위 문단이 기술한 형식과도 달라진다 — 포맷을 더 고정하는 정규식은 렌더링 변형에 더 취약하고,
- * 블록 스코핑 + `/<name>/SKILL.md` suffix 매칭은 root alias/prefix가 무엇이든 살아남는다.
- *
- * 새 실패 모드와 가드: 창을 블록으로 좁히면 codex가 상류에서 블록 태그 이름을 바꿨을 때 추출이
- * 아무것도 못 찾고 baseline이 전부 0이 되어, 핵심 deny 단언이 전부 "측정 불가"로 스킵되며
- * 테스트는 초록인데 가드는 사라진 상태가 될 수 있다. 이를 막기 위해 (1) 블록 추출은
- * `<skills_instructions>` 여는/닫는 태그가 정확히 1쌍이 아니면 즉시 하드 실패하고(빈 문자열로
- * 계속 진행하는 fallback 금지), (2) "최소 1개 측정 가능" 단언을 "선언 이름의 과반이 측정
- * 가능"으로 강화했다 — 우연히 1개만 살아남아도 통과하던 약한 하한을 없앴다.
- *
- * job.test.ts와 별도 파일로 둔 이유: job.test.ts는 tmp 설정 + mock 기반의 빠른 단위 테스트만
- * 담는 반면, 이 테스트는 실제 codex 프로세스를 3회 spawn하는(초 단위) 외부-바이너리 의존
- * 통합 테스트라 성격이 다르다. orchestrate-review.config.yaml의 실제 선언값을 읽는 것이 이
- * 테스트의 핵심이라 job.ts와 같은 디렉터리에 colocate한다.
+ * 측정 창은 `<skills_instructions>...</skills_instructions>` 블록 내부로 좁힌다 — 스킬
+ * 나열이 실릴 수 있는 자리는 구조적으로 이 블록뿐이고, 전체 출력 기준으로 세면 CLAUDE.md
+ * echo 속 문서 예시가 카운트에 섞여 오탐이 난다. 가드 두 개: (1) 여는/닫는 태그가 정확히
+ * 1쌍이 아니면 빈 문자열로 계속 진행하는 대신 즉시 하드 실패, (2) "최소 1개 측정 가능"
+ * 대신 "선언 이름의 과반이 측정 가능"을 요구한다 — codex가 상류에서 블록 태그명을 바꾸면
+ * baseline이 전부 0이 되어, 좁히지 않았다면 테스트는 초록인데 가드는 사라진 상태가 될 수
+ * 있다.
  */
 
 import { describe, test, expect, beforeAll } from "bun:test";
