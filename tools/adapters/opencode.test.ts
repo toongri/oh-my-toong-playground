@@ -188,6 +188,23 @@ Body.`;
 		expect(result).not.toContain("model: opus\n");
 	});
 
+	it("applies a per-agent override, not just the tier default, via `translateAgentFrontmatter`", () => {
+		const content = `---
+name: oracle
+model: opus
+---
+
+Body.`;
+
+		const modelMap: ModelMap = {
+			tiers: { opus: { model: "openai/o3" } },
+			agents: { oracle: { model: "openai/o3-special" } },
+		};
+		const result = translateAgentFrontmatter(content, modelMap, "agents/oracle.md", "oracle");
+
+		expect(result).toContain("model: openai/o3-special");
+	});
+
 	it("throws when the frontmatter model tier is not in model map (P2-5) via `translateAgentFrontmatter`", () => {
 		const content = `---
 name: oracle
@@ -794,6 +811,23 @@ Body content.`,
 			const content = await fs.readFile(target, "utf-8");
 			// File must exist regardless of translation failure
 			expect(content).toBeTruthy();
+		} finally {
+			await fs.rm(targetDir, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects and leaves no file containing the raw tier when the tier is unmapped via `syncAgentsDirect`", async () => {
+		const targetDir = await mkTempDir();
+		try {
+			// Fixture agentFile declares `model: opus`, but this map has no `opus` tier.
+			const modelMap: ModelMap = { tiers: { sonnet: { model: "openai/gpt-4o" } } };
+			await expect(
+				opencodeAdapter.syncAgentsDirect(targetDir, "oracle", agentFile, [], [], false, modelMap),
+			).rejects.toThrow(/oracle\.md.*opus|opus.*oracle\.md/);
+
+			const target = path.join(targetDir, ".opencode", "agents", "oracle.md");
+			const content = await fs.readFile(target, "utf-8").catch(() => "");
+			expect(content).not.toContain("model: opus");
 		} finally {
 			await fs.rm(targetDir, { recursive: true, force: true });
 		}

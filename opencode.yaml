@@ -1,11 +1,24 @@
 # MCP definitions for OpenCode.
 # Note: Figma uses OpenCode remote MCP config; codex/gemini still use mcp-remote.
+# No agent reaches this map today: config.yaml's `feature-platforms.agents` is
+# [claude, codex], and no sync.yaml overrides it for opencode. It stays declared
+# anyway, because without it `translateAgentFrontmatter` leaves the frontmatter
+# tier verbatim -- an agent would deploy with `model: sonnet`, which opencode
+# cannot resolve, and nothing would say so. The map is the thing that turns that
+# silent breakage into a named sync failure via `assertMappedTier`.
+#
+# Both tiers pointing at one model is therefore untested rather than considered:
+# grading them apart only becomes a real question when agents actually deploy
+# here, and the opencode model list is unconfirmed on this host anyway (`opencode
+# models` needs a `timeout` binary macOS does not ship).
 model-map:
   tiers:
     opus:
       model: openai/gpt-5.5
     sonnet:
       model: openai/gpt-5.5
+  # Empty by rule, not by accident -- see codex.yaml: `agents:` is for what a
+  # tier cannot express (effort differentiation), and nothing here needs it.
   agents: {}
 mcps:
   context7:
