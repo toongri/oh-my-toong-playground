@@ -13,6 +13,7 @@
  */
 
 import { existsSync, readFileSync, unlinkSync, statSync } from "fs";
+import { basename, dirname, join } from "path";
 import { execSync } from "child_process";
 import { getOmtDir } from "@lib/omt-dir";
 import {
@@ -189,6 +190,31 @@ export function setPrometheusState(
 				"(pass --plan-path or set it earlier at S2)\n",
 		);
 		process.exit(1);
+	}
+
+	// F7: S6 and later are reachable only after Stage A renders the presentation, so
+	// the file must already be on disk. The prose prohibition at the Stage A step had
+	// been in place for two months when production still measured 5 prometheus plans
+	// with 1 compliant presentation — a reminder is the wrong form for an omitted
+	// required artifact. File existence is mechanically checkable, so refuse the write.
+	// Gate only when plan_path is known: without it the presentation path is
+	// underivable, and a check that cannot run must not block.
+	const phaseOrdinal = /^S(\d)$/.exec(opts.phase);
+	if (phaseOrdinal && Number(phaseOrdinal[1]) >= 6 && resolvedPlanPath !== "") {
+		const presentationPath = join(
+			dirname(resolvedPlanPath),
+			"presentation",
+			basename(resolvedPlanPath),
+		);
+		if (!existsSync(presentationPath)) {
+			process.stderr.write(
+				`prometheus-state: cannot advance to ${opts.phase} — the Stage A presentation is ` +
+					`absent at ${presentationPath}\n` +
+					`Render the plan to that path (S5 Stage A) before recording ${opts.phase}. ` +
+					`Skipping Stage A hands the user an unrendered plan.\n`,
+			);
+			process.exit(1);
+		}
 	}
 
 	const priorSteps = prior.steps ?? FRESH_STEPS;
