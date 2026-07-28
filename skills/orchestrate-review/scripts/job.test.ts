@@ -17,6 +17,7 @@ import {
 } from "./job.ts";
 import * as GenericJob from "@lib/generic-job";
 import * as JobUtils from "@lib/job-utils";
+import { getOmtDir } from "@lib/omt-dir";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +55,17 @@ function makeCliStubDir(): string {
 let sharedStubDir: string;
 
 /**
+ * Filename prefix every log this suite's CLI invocations can produce shares —
+ * initLoggerFromJobDir (job.ts) always calls initLogger("chunk-review-job", …),
+ * and lib/logging.ts's initLogger names the file `${component}-${sessionId}.log`.
+ * Snapshotting only names with this prefix keeps the two canaries below scoped
+ * to what THIS suite could have written, so an unrelated suite (161 files run
+ * in the same `bun test` invocation) writing its own component's log into the
+ * same shared directory can't false-positive this suite's drift check.
+ */
+const LOG_FILE_PREFIX = "chunk-review-job-";
+
+/**
  * Real log directory an unfixed jobDir-under-tmpDir fixture leaks into:
  * initLoggerFromJobDir derives its root two levels up from jobDir, so a
  * fixture missing the `jobs/` nesting lands on os.tmpdir() itself (the
@@ -64,10 +76,22 @@ let sharedStubDir: string;
  */
 const REAL_TMP_LOG_DIR = path.join(os.tmpdir(), "logs");
 
+/**
+ * Real log directory AC9 names literally ("~/.omt/<project>/logs/"). No
+ * command path in this suite currently reaches it (every `start` invocation
+ * passes --jobs-dir; collect/status/stop/clean derive their log root from the
+ * given jobDir, never from getOmtDir() — see logRootForJobsDir's comment in
+ * job.ts), but a regression that makes the logger fall back to getOmtDir()
+ * directly would land here, and only this canary — not the os.tmpdir() one —
+ * would show it.
+ */
+const REAL_OMT_LOG_DIR = path.join(getOmtDir(), "logs");
+
 function snapshotLogDirMtimes(dir: string): Record<string, number> {
 	if (!fs.existsSync(dir)) return {};
 	const map: Record<string, number> = {};
 	for (const name of fs.readdirSync(dir)) {
+		if (!name.startsWith(LOG_FILE_PREFIX)) continue;
 		map[name] = fs.statSync(path.join(dir, name)).mtimeMs;
 	}
 	return map;
@@ -78,10 +102,12 @@ function snapshotLogDirMtimes(dir: string): Record<string, number> {
 // this file (not just its own) that writes into the shared log dir instead
 // of its own tmpDir/jobs/logs.
 let logDirBaselineBeforeSuite: Record<string, number>;
+let omtLogDirBaselineBeforeSuite: Record<string, number>;
 
 beforeAll(() => {
 	sharedStubDir = makeCliStubDir();
 	logDirBaselineBeforeSuite = snapshotLogDirMtimes(REAL_TMP_LOG_DIR);
+	omtLogDirBaselineBeforeSuite = snapshotLogDirMtimes(REAL_OMT_LOG_DIR);
 });
 
 afterAll(() => {
@@ -2625,6 +2651,19 @@ describe("cmdCollect", () => {
 		expect(Object.keys(afterSuite).length).toBe(Object.keys(logDirBaselineBeforeSuite).length);
 		for (const [name, mtime] of Object.entries(afterSuite)) {
 			expect(mtime).toBe(logDirBaselineBeforeSuite[name]);
+		}
+
+		// Second axis, same technique: AC9's own wording names getOmtDir()'s
+		// logs/ directory literally ("~/.omt/<project>/logs/"), not os.tmpdir()'s
+		// — a logger regression that falls back to getOmtDir() directly (instead
+		// of deriving the root from jobDir) would leave the os.tmpdir() canary
+		// above silent and only show up here.
+		const afterSuiteOmt = snapshotLogDirMtimes(REAL_OMT_LOG_DIR);
+		expect(Object.keys(afterSuiteOmt).length).toBe(
+			Object.keys(omtLogDirBaselineBeforeSuite).length,
+		);
+		for (const [name, mtime] of Object.entries(afterSuiteOmt)) {
+			expect(mtime).toBe(omtLogDirBaselineBeforeSuite[name]);
 		}
 	});
 
