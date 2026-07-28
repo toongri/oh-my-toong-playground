@@ -364,7 +364,14 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 				heartbeatHandle = null;
 			}
 			try {
-				atomicWriteJson(statusPath, payload);
+				// The CLI child has exited, but the caller (executeOneTurn) still has to parse
+				// raw stdout and issue its own final status.json write. Persisting payload's
+				// terminal state here would let readers (buildManifest/computeStatus) treat the
+				// still-unparsed output.txt as final during that window. Keep state:"running" on
+				// disk — an already-understood non-terminal state for the heartbeat-staleness
+				// recovery in generic-job.ts's computeStatus, which still reclaims a crash here.
+				// The resolved payload (below) is unchanged and carries the real terminal state.
+				atomicWriteJson(statusPath, { ...payload, state: "running" });
 			} catch {
 				/* ignore */
 			}

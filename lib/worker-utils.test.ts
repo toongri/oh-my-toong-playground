@@ -257,26 +257,38 @@ describe("runOnce heartbeat", () => {
 		await promise;
 	});
 
-	test("finalize 후 heartbeat interval이 정리되어 status.json이 갱신되지 않음", async () => {
+	// RED (pre-fix): `finalize` wrote the terminal state straight to status.json, so a reader
+	// polling in the window between "child died" and "executeOneTurn parsed output.txt and
+	// wrote its own final status" (buildManifest's isReadable check, cmdCollect, cmdStop) saw
+	// state:"done" while output.txt still held the raw, unparsed stdout.
+	// GREEN (post-fix): `finalize`'s resolved value (runResult, consumed by executeOneTurn)
+	// still carries the real terminal state, but the disk write during this window stays
+	// state:"running" — a state generic-job.ts's computeStatus already knows how to reclaim
+	// via heartbeat staleness if the caller crashes before its own final write.
+	test("`finalize` 직후 status.json은 running — 파싱 전 terminal 노출 안 됨", async () => {
 		const opts = makeRunOnceOpts({
 			args: ["-c", "exit 0"],
 			command: '/bin/sh -c "exit 0"',
 		});
 		const statusPath = join(opts.memberDir, "status.json");
 
-		await runOnce(opts);
+		const result = await runOnce(opts);
 
-		// Read status immediately after resolve — should be terminal state
+		// runOnce's resolved value (what executeOneTurn reads as runResult.state) is unchanged.
+		expect(result.state).toBe("done");
+
+		// The disk write `finalize` just performed must NOT be terminal yet.
 		const statusAfterFinalize = JSON.parse(readFileSync(statusPath, "utf8"));
-		expect(statusAfterFinalize.state).toBe("done");
+		expect(statusAfterFinalize.state).not.toBe("done");
+		expect(statusAfterFinalize.state).toBe("running");
 
 		// Wait for multiple heartbeat cycles that would fire if interval leaked
 		await sleepMsAsync(200);
 
-		// status.json should still not have lastHeartbeat (finalize wrote terminal payload without it)
+		// status.json should still not have lastHeartbeat (heartbeat interval was cleared by finalize)
 		const statusAfterWait = JSON.parse(readFileSync(statusPath, "utf8"));
 		expect(statusAfterWait.lastHeartbeat).toBeUndefined();
-		expect(statusAfterWait.state).toBe("done");
+		expect(statusAfterWait.state).toBe("running");
 	});
 
 	test("state가 running이 아닌 경우 heartbeat가 status.json을 덮어쓰지 않음", async () => {
@@ -809,6 +821,11 @@ describe("runOneTurn / resumeOneTurn — caller-judgment single-turn pump", () =
 		// output.txt overwritten with parsed text
 		const outputContent = readFileSync(join(memberDir, "output.txt"), "utf8");
 		expect(outputContent).toBe("parsed body");
+
+		// status.json's final on-disk state is terminal together with the parsed output —
+		// the two must land as one observable snapshot, not disk-terminal-before-parsed-text.
+		const finalStatus = JSON.parse(readFileSync(join(memberDir, "status.json"), "utf8"));
+		expect(finalStatus.state).toBe("done");
 
 		// No _turn-0 subdir
 		expect(existsSync(join(memberDir, "_turn-0"))).toBe(false);
