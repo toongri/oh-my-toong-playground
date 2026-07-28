@@ -46,8 +46,8 @@ fun `throws when decrease exceeds quantity by one`() {
     val stock = createStock(quantity = initialQuantity)
 
     // when & then — boundary+1: 초과
-    assertThatThrownBy { stock.decrease(initialQuantity + 1) }
-        .isInstanceOf(IllegalArgumentException::class.java)
+    val exception = assertThrows<CoreException> { stock.decrease(initialQuantity + 1) }
+    assertThat(exception.errorType).isEqualTo(ErrorType.BAD_REQUEST)
 }
 ```
 
@@ -70,8 +70,8 @@ fun `throws when coupon status is not ACTIVE`(invalidStatus: CouponStatus) {
     val user = createUser(grade = UserGrade.GOLD)
 
     // when & then
-    assertThatThrownBy { coupon.issue(user) }
-        .isInstanceOf(IllegalStateException::class.java)
+    val exception = assertThrows<CoreException> { coupon.issue(user) }
+    assertThat(exception.errorType).isEqualTo(ErrorType.BAD_REQUEST)
 }
 ```
 
