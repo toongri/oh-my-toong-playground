@@ -203,7 +203,7 @@ class Order private constructor(
 > ⚠️ 주의
 > `status`에 `@Enumerated(EnumType.STRING)`이 반드시 있어야 한다 — JPA의 enum 영속화 기본값은 **ORDINAL**(선언 순서 정수)이라, 이 어노테이션 없이 운영 데이터가 쌓인 뒤 `OrderStatus`의 맨 끝이 아닌 위치에 상수를 하나 추가하면 저장된 모든 행이 조용히 재매핑된다 — 예를 들어 `PLACED` 행이 `CONFIRMED`로 읽히는 식이다.
 >
-> `class Order private constructor(...)` — Kotlin 클래스는 `open`이 없으면 기본이 final이고, 여기 생성자는 `private`이다. 이 조합은 Hibernate가 프록시를 만들고(클래스를 열어야 함) 리플렉션으로 인스턴스를 생성하는(no-arg 생성자가 필요) 데 필요한 전제를 코드만으로는 충족하지 않는다 — `kotlin-jpa`(allopen) 플러그인이 `@Entity` 클래스를 열고, `kotlin-noarg` 플러그인이 no-arg 생성자를 합성해줘야 이 형태가 실제로 동작한다. 두 플러그인 설정은 이 문서의 범위 밖이다.
+> `class Order private constructor(...)` — Kotlin 클래스는 `open`이 없으면 기본이 final이고, 여기 생성자는 `private`이다. 이 조합은 Hibernate가 프록시를 만들고(클래스를 열어야 함) 리플렉션으로 인스턴스를 생성하는(no-arg 생성자가 필요) 데 필요한 전제를 코드만으로는 충족하지 않는다 — no-arg 생성자는 `no-arg` 플러그인이 합성하며, `kotlin-jpa`는 그 `no-arg` 위에 씌운 래퍼로 `@Entity`·`@Embeddable`·`@MappedSuperclass`를 no-arg 대상 어노테이션으로 미리 등록해 줄 뿐이다. 클래스를 여는 것은 별개로 `all-open` 플러그인의 몫이고, `kotlin-spring`은 그 `all-open` 위에 씌운 래퍼이지만 기본 대상 목록에 `@Entity`는 들어있지 않다 — 그래서 `@Entity` 클래스를 실제로 열려면 `all-open` 설정에 `@Entity`를 직접 등록해야 한다. 두 플러그인 설정은 이 문서의 범위 밖이다.
 
 ## 4. 안티패턴
 
