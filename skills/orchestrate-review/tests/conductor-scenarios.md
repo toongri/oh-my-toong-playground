@@ -170,6 +170,6 @@
 **Then**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | Bash used only for `start` / `collect` / `resume-member` / `results --manifest` / `stop` / `usage-summary.ts` / `clean` / `clean --force` |
+| V1 | Bash used only for writing the interpolated prompt to a temp file (`mktemp` + heredoc, as the job-start step requires before `start --prompt-file`) and for `start` / `collect` / `resume-member` / `results --manifest` / `stop` / `usage-summary.ts` / `clean` / `clean --force` |
 | V2 | Read used only for each `outputFilePath` |
 | V3 | No Grep/Glob/WebSearch; no `git` commands; no source-file reads (on the orchestration path) |
