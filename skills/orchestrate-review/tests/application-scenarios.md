@@ -27,7 +27,7 @@ These scenarios test whether the **orchestrate-review skill's** Finder Conductor
 |---|-------------------|-------------------|
 | V1 | Prompt passthrough only | Conductor writes the interpolated prompt to a temp file; does NOT run `{DIFF_COMMAND}` itself or explore source files |
 | V2 | Single dispatch | `job.ts start --prompt-file "$PROMPT_FILE"` is invoked EXACTLY ONCE |
-| V3 | Collect loop | `collect` is called until `"overallState": "done"` |
+| V3 | Collect loop | `collect` is called until `"overallState": "done"`, capped at 6 calls; `awaiting_resume` goes to `resume-member` instead of a re-poll, and an exhausted cap applies the Degradation Policy's partial-merge path |
 | V4 | Read finder outputs | Each finder's non-null `outputFilePath` is read; null entries skipped |
 | V5 | Candidates carried through | Every candidate's `file`/`line`/`summary`/`failure_scenario` is carried through verbatim |
 | V6 | Angle coverage reported | The Angle Coverage block reports each angle's candidate count or "found nothing" |

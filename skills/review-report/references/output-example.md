@@ -8,7 +8,7 @@ This example demonstrates the complete report-only output format: the Walkthroug
 ## Walkthrough
 
 ### Change Summary
-Implements end-to-end order payment flow for the e-commerce platform, spanning three domains: order lifecycle management (creation, validation, state transitions), payment gateway integration (Stripe charge creation, webhook handling, refund support), and inventory reservation (stock deduction on payment confirmation with Kafka-based async messaging). The PR introduces 9 new files and modifies 3 existing files across the API, domain, infrastructure, and messaging layers. Orders transition through a state machine (`CREATED` → `PENDING_PAYMENT` → `PAYMENT_IN_PROGRESS` → `PAID` → `FULFILLMENT_READY`), with inventory reserved asynchronously on payment confirmation via a Kafka event. A Flyway migration adds the `payment_records` and `inventory_reservations` tables to support the new flows.
+Implements end-to-end order payment flow for the e-commerce platform, spanning three domains: order lifecycle management (creation, validation, state transitions), payment gateway integration (Stripe charge creation, webhook handling), and inventory reservation (stock deduction on payment confirmation with Kafka-based async messaging). The PR introduces 9 new files and modifies 3 existing files across the API, domain, infrastructure, and messaging layers. Orders transition through a state machine (`CREATED` → `PENDING_PAYMENT` → `PAYMENT_IN_PROGRESS` → `PAID` → `FULFILLMENT_READY`), with inventory reserved asynchronously on payment confirmation via a Kafka event. A Flyway migration adds the `payment_records` and `inventory_reservations` tables to support the new flows.
 
 ### Core Logic Analysis
 
@@ -37,7 +37,7 @@ classDiagram
 
     OrderController --> OrderService : delegates
     OrderService --> PaymentGateway : payment delegation
-    OrderPaymentController --> StripeGatewayAdapter : charge/refund
+    OrderPaymentController --> StripeGatewayAdapter : charge
     OrderPaymentController --> PaymentEventProducer : publish
     StripeGatewayAdapter ..|> PaymentGateway : implements
     PaymentEventProducer --> InventoryService : Kafka payment-events
