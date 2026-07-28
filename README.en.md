@@ -58,6 +58,7 @@ The details of the library's skills (42) and agents (13) live under `docs/`.
 | [Utilities & Personal Workflows](docs/skills/utilities-personal.en.md) | hud · resume · jd · mock-interview, etc. |
 | [Private Fork Management](docs/PRIVATE-FORK-MANAGEMENT.en.md) | Operating a private fork — mirroring upstream and continuous sync |
 | [Orchestration Guide](docs/ORCHESTRATION.en.md) | prometheus → sisyphus workflow and usage |
+| [Model Assignment](docs/model-assignment.en.md) | Per-agent model tier principles and `model-map` substitution rules |
 
 ## Quick Start
 
