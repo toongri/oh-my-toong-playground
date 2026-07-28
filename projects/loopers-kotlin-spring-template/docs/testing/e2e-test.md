@@ -150,7 +150,7 @@ private fun placeOrder(
 ```kotlin
 private fun stubPgPaymentSuccess() {
     stubFor(
-        post(urlEqualTo("/api/v1/payments"))
+        post(urlEqualTo("/payments"))
             .willReturn(
                 aResponse()
                     .withStatus(200)

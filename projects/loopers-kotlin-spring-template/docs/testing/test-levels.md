@@ -172,7 +172,7 @@ WireMock은 **우리가 통제할 수 없는 외부 시스템**(결제 게이트
 ```kotlin
 // 외부 API 응답을 stub
 stubFor(
-    post(urlEqualTo("/v1/payments"))
+    post(urlEqualTo("/payments"))
         .willReturn(
             aResponse()
                 .withStatus(200)
@@ -182,7 +182,7 @@ stubFor(
 
 // 실패 시나리오를 stub
 stubFor(
-    post(urlEqualTo("/v1/payments"))
+    post(urlEqualTo("/payments"))
         .willReturn(serverError())
 )
 ```
