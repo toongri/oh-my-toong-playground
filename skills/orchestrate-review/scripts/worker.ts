@@ -37,10 +37,26 @@ const OPEN_MARKER_RE = /^<!-- section:([a-z_]+) -->$/gm;
 const CLOSE_MARKER_RE = /^<!-- \/section:([a-z_]+) -->$/gm;
 
 /**
- * A section name is only safe to filter on if it has exactly one standalone-line open marker
- * and exactly one standalone-line close marker in the input — anything else means an
- * interpolated value forged a marker-shaped line, and a forged marker is safer left unfiltered
- * than silently mis-filtered.
+ * The complete, exact set of conditional section names chunk-reviewer-prompt.md declares.
+ * Every one is always interpolated with real content or a backfill sentinel (never omitted) per
+ * code-review/SKILL.md Step 5, so a legitimate prompt.txt always carries exactly this set —
+ * verified against the template itself by worker.test.ts.
+ */
+export const KNOWN_SECTION_NAMES = new Set([
+	"requirements",
+	"project_context",
+	"non_goal",
+	"evidence_results",
+	"commit_history",
+	"field_reference",
+]);
+
+/**
+ * Filtering is only safe when the discovered marker names are EXACTLY KNOWN_SECTION_NAMES —
+ * neither a stray unknown name nor a known name missing — and each has exactly one
+ * standalone-line open marker and one standalone-line close marker. Any deviation means an
+ * interpolated value forged or corrupted a marker-shaped line, and a forged marker is safer
+ * left unfiltered than silently mis-filtered.
  */
 function hasBalancedMarkers(promptContent: string): boolean {
 	const opens = new Map<string, number>();
@@ -48,7 +64,9 @@ function hasBalancedMarkers(promptContent: string): boolean {
 	for (const m of promptContent.matchAll(OPEN_MARKER_RE)) opens.set(m[1], (opens.get(m[1]) ?? 0) + 1);
 	for (const m of promptContent.matchAll(CLOSE_MARKER_RE)) closes.set(m[1], (closes.get(m[1]) ?? 0) + 1);
 	const names = new Set([...opens.keys(), ...closes.keys()]);
+	if (names.size !== KNOWN_SECTION_NAMES.size) return false;
 	for (const name of names) {
+		if (!KNOWN_SECTION_NAMES.has(name)) return false;
 		if (opens.get(name) !== 1 || closes.get(name) !== 1) return false;
 	}
 	return true;
