@@ -37,8 +37,8 @@
 
 판별 기준: 그 에이전트가 반환하는 판정이 **자기 모델의 추론에서 나오는가**, 아니면
 다른 프로세스의 산출물을 그대로 옮기는가. 후자면 위임형이다. `hermes`가 좋은 예로,
-verdict를 자기가 만드는 것처럼 보이지만 실제로는 `engine/validators.py`의
-`ValidationVerdict` enum이 산출한다.
+verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insane-browsing/engine/validators.py`의
+`Verdict` enum이 산출한다.
 
 ## 현재 배정
 
@@ -116,7 +116,7 @@ resolveCodexAgentModel: modelMap.agents?.[name] ?? modelMap.tiers[tier]
 
 역할은 `explore`(코드베이스)·`librarian`(외부 문서)의 depth peer로, 두 에이전트가
 막혔을 때 이어받는 탐색 계열이다. 두 peer 모두 sonnet이다. verdict는 자기 모델이 아니라
-`engine/validators.py`의 `ValidationVerdict` enum이 만든다.
+`skills/insane-browsing/engine/validators.py`의 `Verdict` enum이 만든다.
 
 ### `explore`·`librarian`을 sonnet으로 유지 (2026-07-28)
 
