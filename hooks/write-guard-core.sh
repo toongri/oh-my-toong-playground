@@ -23,9 +23,12 @@
 #    NOT because a main-thread call never carries agent_type (it can, on the
 #    main thread of a session started with `--agent <name>`), but because
 #    treating absence as allow would let an ordinary orchestrator forge the
-#    artifact itself at zero extra cost. See CLAUDE.md's Code-review artifact
-#    identity guard entry for the trust-channel rationale and the residual
-#    `--agent code-reviewer` risk this leaves open).
+#    artifact itself at zero extra cost. Residual risk left open: a session
+#    started with `--agent code-reviewer` carries this same agent_type on its
+#    own main-thread tool calls too, with no agent_id to tell that apart from
+#    a real subagent dispatch -- requiring agent_id as well was rejected
+#    since this guard has no bypass/ask escape hatch, so a false deny would
+#    be unrecoverable).
 #
 # The per-platform shim owns extraction of candidate target paths from its
 # own tool-input shape (Claude tool_input.file_path/.command; Codex
