@@ -25,18 +25,18 @@
 
 ```dot
 digraph layer {
-    "Single domain?" [shape=diamond];
-    "Service" [shape=box];
-    "Multiple domains?" [shape=diamond];
-    "Facade" [shape=box];
     "HTTP?" [shape=diamond];
     "Controller" [shape=box];
+    "Multiple domains?" [shape=diamond];
+    "Facade" [shape=box];
+    "Single domain?" [shape=diamond];
+    "Service" [shape=box];
 
-    "Single domain?" -> "Service" [label="yes"];
-    "Single domain?" -> "Multiple domains?" [label="no"];
-    "Multiple domains?" -> "Facade" [label="yes"];
-    "Multiple domains?" -> "HTTP?" [label="no"];
     "HTTP?" -> "Controller" [label="yes"];
+    "HTTP?" -> "Multiple domains?" [label="no"];
+    "Multiple domains?" -> "Facade" [label="yes"];
+    "Multiple domains?" -> "Single domain?" [label="no"];
+    "Single domain?" -> "Service" [label="yes"];
 }
 ```
 
