@@ -340,7 +340,7 @@ class OrderService {
 
 ```kotlin
 // Wrong
-@EventListener
+@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 fun onOrderCreated(event: OrderCreatedEventV1) {
     if (event.totalAmount >= 100000) {  // Business logic leakage!
         // VIP notification
@@ -350,7 +350,7 @@ fun onOrderCreated(event: OrderCreatedEventV1) {
 }
 
 // Correct - Service makes the decision
-@EventListener
+@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 fun onOrderCreated(event: OrderCreatedEventV1) {
     notificationService.sendOrderConfirmation(event.orderId)  // Service determines VIP status
 }
@@ -372,11 +372,11 @@ import org.springframework.data.jpa.repository.JpaRepository  // ❌
 
 **도메인은 다른 레이어에서 아무것도 import하지 않는다.**
 
-이 절의 규칙은 Entity·Value Object 같은 순수 도메인 모델을 대상으로 한다. Service는 3절의 패키지 구조상 `domain/`에 위치하지만 Spring 빈으로 등록되어 오케스트레이션을 수행하는 컴포넌트이므로 `@Component`/`@Service` 스테레오타입 어노테이션이 붙는다 — 5절의 `CouponService`가 그 예다.
+이 절의 규칙은 Entity·Value Object 같은 순수 도메인 모델을 대상으로 한다. Service는 3절의 패키지 구조상 `domain/`에 위치하지만 Spring 빈으로 등록되어 오케스트레이션을 수행하는 컴포넌트이므로 `@Component`/`@Service` 스테레오타입 어노테이션은 물론, 5·6절이 규정하는 대로 원자성이 필요할 때는 `@Transactional`도 붙는다 — 5절의 `CouponService`가 그 예다.
 
 | Domain에서 허용 | Domain에서 금지 |
 |------------------|---------------------|
-| JPA: `@Entity`, `@Table`, `@Column` 등 | `@Transactional` |
+| JPA: `@Entity`, `@Table`, `@Column` 등 | `@Transactional` (Entity·Value Object 한정 — Service는 위 예외 참조) |
 | Kotlin 표준 라이브러리 | `@JsonProperty`, `@JsonIgnore` |
 | `registerEvent()`를 통한 도메인 이벤트 | Spring Data imports |
 
@@ -391,9 +391,9 @@ import org.springframework.data.jpa.repository.JpaRepository  // ❌
 반대로 아래 import가 `domain/` 패키지 파일에 있으면 위반이다.
 
 ```kotlin
-// These imports in domain/ package = VIOLATION
-import org.springframework.stereotype.*          // @Component, @Service
-import org.springframework.transaction.*         // @Transactional
+// These imports in domain/ package (Entity·Value Object 등 순수 도메인 모델) = VIOLATION
+import org.springframework.stereotype.*          // @Component, @Service — Entity/VO 한정 위반, Service는 위 예외 참조
+import org.springframework.transaction.*         // @Transactional — Entity/VO 한정 위반, Service는 위 예외 참조
 import org.springframework.data.*                // JpaRepository
 import org.springframework.web.*                 // @RestController
 import com.fasterxml.jackson.annotation.*        // @JsonProperty
@@ -444,7 +444,7 @@ import org.springframework.web.*
 | "Facade is unnecessary for simple cases" | Facade is ALWAYS required |
 | "Service calling Service" | Coordinate in Facade |
 | "Facade->Facade dependency" | Use domain events |
-| "@Transactional on Service" | Only readOnly or managed in Facade |
+| "@Transactional on Service" | Normal when atomicity is needed within a single domain (5·6절) — Facade is only needed to combine multiple Services |
 | "Inject JpaRepository directly" | Define interface in domain |
 | "@JsonProperty in domain" | JSON is infrastructure concern |
 | "Business logic in Facade" | Facade coordinates only, logic in Service/Entity |
