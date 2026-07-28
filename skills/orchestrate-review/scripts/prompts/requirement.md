@@ -22,15 +22,15 @@ Locate `## Diff Command` in the REVIEW CONTENT and run it via Bash. If it fails 
 
 ### 1. Requirement fulfillment
 
-Exactly one of the following two paths applies, depending on `{REQUIREMENTS}` — never both.
+Exactly one of the following two paths applies, depending on the `## Requirements/Plan` section in the REVIEW CONTENT — never both.
 
-#### When `{REQUIREMENTS}` is empty or contains no acceptance criteria (intent-inference path)
+#### When `## Requirements/Plan` is empty or contains no acceptance criteria (intent-inference path)
 
 Skip AC mapping entirely. Instead, infer what this change was trying to do from the diff itself: the shape of the added/changed logic, the commit messages, the tests it adds or modifies, and any in-repo documentation the change touches. State the inferred intent explicitly, then compare it against what the diff actually implements. Surface as a candidate any gap between the inferred intent and the real implementation — a case the inferred intent implies but the code does not handle, or a half-finished piece of the inferred intent.
 
 #### When acceptance criteria are present (AC-mapping path)
 
-Work through each acceptance criterion in `{REQUIREMENTS}` one at a time (per-AC mapping):
+Work through each acceptance criterion in `## Requirements/Plan` one at a time (per-AC mapping):
 
 1. **Identify the criterion** — quote or paraphrase the AC precisely as stated.
 2. **Locate relevant diff hunks** — find the changed lines, added/removed logic, or new tests that would satisfy this criterion. Use Read/Grep/Glob on the working directory to confirm what the post-change code actually does.
@@ -67,7 +67,7 @@ Frame every candidate here as an attack, not a defect description: the same rege
 
 ## Scope
 
-Surface candidates ONLY for files listed in `## Review Scope`. Files outside the list are reference material you read to understand the change — do not file candidates against them.
+Surface candidates ONLY for files listed in `## Review Scope`. Files outside the list are reference material you read to understand the change — do not file candidates against them. When the diff has been split into multiple review chunks, `## Review Scope` names only your slice of the full change — an AC whose implementation plausibly lives in another chunk should not be surfaced as unmet just because you cannot find it in yours.
 
 ## Output
 
@@ -80,6 +80,6 @@ A list of candidate findings. All three axes — requirement gaps, test-quality 
 
 Requirement-gap candidates additionally include:
 
-- **ac**: the acceptance criterion text (quoted or paraphrased from `{REQUIREMENTS}`), or, on the intent-inference path, the inferred intent you compared the implementation against
+- **ac**: the acceptance criterion text (quoted or paraphrased from `## Requirements/Plan`), or, on the intent-inference path, the inferred intent you compared the implementation against
 
 No severity, no priority, no verdict, no merge recommendation. If nothing qualifies through any of the three axes, say so explicitly rather than padding.
