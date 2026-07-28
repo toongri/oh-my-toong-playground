@@ -16,26 +16,24 @@
 config: {}
 
 model-map:
+  # Tiers set the model only. Omitting `effort` leaves `model_reasoning_effort`
+  # out of the emitted role TOML (tools/adapters/codex.ts:55), so each agent runs
+  # at whatever effort the session is configured for instead of a value frozen at
+  # sync time.
   tiers:
     opus:
       model: gpt-5.6-sol
-      effort: high
     sonnet:
       model: gpt-5.6-terra
-      effort: medium
-  agents:
-    code-reviewer:
-      model: gpt-5.6-sol
-      effort: high
-    metis:
-      model: gpt-5.6-sol
-      effort: high
-    momus:
-      model: gpt-5.6-sol
-      effort: high
-    tech-claim-examiner:
-      model: gpt-5.6-sol
-      effort: high
+  # `agents:` is for what a tier cannot express. With tiers carrying model alone,
+  # that is effort: an agent that must pin an effort rather than follow the
+  # session. It previously held code-reviewer/metis/momus/tech-claim-examiner,
+  # all four byte-identical to `tiers.opus`, so they resolved to the same TOML
+  # either way and were removed. A new entry must name what tier it could not
+  # be expressed as. Unlike `config:` above, an absent key is safe here:
+  # resolution is `modelMap.agents?.[name] ?? modelMap.tiers[tier]`
+  # (tools/adapters/codex.ts:54), and agent TOMLs are rewritten wholesale
+  # (codex.ts:431), so nothing stale survives a sync.
 hooks:
   SessionStart:
     - component: rules-injector
