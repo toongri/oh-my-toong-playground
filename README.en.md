@@ -2,7 +2,7 @@
 
 **[한국어](README.md)** | English
 
-**A version-controlled central library of skills/agents/hooks/rules — selectively synced into each project's `.claude/`, differentiated via upward-search override**
+**A version-controlled central library of skills/agents/hooks/rules/docs — selectively synced into each project's `.claude/`, differentiated via upward-search override**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -23,11 +23,11 @@ I'm developing this while being inspired by, studying, and referencing the follo
 
 ## What is oh-my-toong?
 
-oh-my-toong is an **agent central-management project**. It keeps skills, agents, hooks, and rules in a single version-controlled central library and **selectively** syncs them into each target project's `.claude/`. The same library can yield a different configuration per project — that's the job of **upward-search override**.
+oh-my-toong is an **agent central-management project**. It keeps skills, agents, hooks, rules, and docs in a single version-controlled central library and **selectively** syncs them into each target project's `.claude/`. The same library can yield a different configuration per project — that's the job of **upward-search override**.
 
 ## Features
 
-- **Central library** — version-control skills, agents, hooks, and rules in one repository
+- **Central library** — version-control skills, agents, hooks, rules, and docs in one repository
 - **Declarative sync** — deploy only the components you need into a target project's `.claude/` via `sync.yaml`
 - **Per-project differentiation** — override global components with project-specific conventions via upward search
 - **Orphan cleanup** — components removed from the library disappear from targets on the next sync
@@ -35,14 +35,14 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 
 ## Philosophy — Why This Design
 
-**Step 1 — Same Name, Different Content**: You could simply copy the same skills to every project, but there's a key dilemma. For example, `testing` in the Java/Spring project overridden by `projects/toong-java-spring-template/` means "Classical TDD, no verify(), BDD structure," while a different project may follow entirely different conventions. The same goes for `implementation`. **Skills with the same name must carry different content per project.**
+**Step 1 — Prompts Belong Under Version Control**: Skills, rules, and docs are the inputs that determine an agent's behavior, so they deserve the same treatment as code. But the place they're actually read from is a `.claude/` scattered across each project — edit them there and the history is lost, and the next sync overwrites the edit anyway. So editing always happens in the library; targets only receive deployments.
 
-**Step 2 — Central Management + Project Differentiation**: oh-my-toong solves this dilemma with two mechanisms.
+**Step 2 — Conventions Differ per Project, and So Does the Vessel That Holds Them**: The same `testing` means "Classical TDD, no verify(), BDD structure" in `projects/toong-java-spring-template/` and something else entirely elsewhere. There are two ways to express that differentiation.
 
-- **Global components** (`skills/`, `agents/`, etc.): things common across projects, version-controlled in one place
-- **Project overrides** (`projects/<name>/skills/`): things that must differ per project, differentiated by project
+- **Skill override** (`projects/<name>/skills/`): during sync, **Upward Search** applies — when `sync.yaml` references `testing`, it looks in the project folder first and falls back to the global `skills/testing/`. Use this to swap a whole convention wholesale.
+- **rules index + docs grounding** (`projects/<name>/rules/`, `projects/<name>/docs/`): when a convention is too large for a single skill, the always-loaded rules carry only "which document to open," and the criteria live in docs opened on demand. `loop-pack-fe-l2-vol1` (16 docs + 8 rules) and `loopers-kotlin-spring-template` (19 docs + 7 rules) work this way.
 
-During sync, an **Upward Search** logic applies. When a project's `sync.yaml` references `testing`, it first looks in the project's `projects/<name>/skills/testing/`, falling back to the global `skills/testing/` if not found.
+**Step 3 — The Same Content Sits in a Different Place on Each Platform**: Claude uses `.claude/`, Codex splits across `.codex/` and `.agents/`, Gemini uses `.gemini/` — directory layout and supported categories differ across the board. Adapters absorb that difference, so a convention is written once and `sync.yaml`'s `platforms` decides which platforms it reaches and how far.
 
 ## Documentation
 
