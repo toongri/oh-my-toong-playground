@@ -1,6 +1,6 @@
 import { DeepInterviewState, PrometheusState, GoalState, UltragoalState } from "./types.ts";
 import { readFileOrNull, writeFileSafe, deleteFile, ensureDir } from "./utils.ts";
-import { writeFileNoCreate } from "@lib/state-core";
+import { writeFileNoCreate, backfillProgressTouchedAt } from "@lib/state-core";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 
@@ -130,15 +130,29 @@ export function updateGoalState(sessionId: string, partial: Partial<GoalState>):
 	}
 
 	// Stamp last_touched_at UNCONDITIONALLY — an empty partial still refreshes
-	// the heartbeat (ADR-8: every use of a state is a use).
+	// the heartbeat (ADR-8: every use of a state is a use). An empty partial is a
+	// GC-only write in exactly the sense lib/state-core.ts's touchSessionStates/
+	// restampAfterAdopt are: no real work happened, so it must go through the same
+	// backfillProgressTouchedAt patch those writers use — preserving, not
+	// advancing, progress_touched_at — or this function would be the one GC-only
+	// writer that silently erases a legacy file's last genuine-activity timestamp.
+	// A non-empty partial IS genuine producer activity (e.g. the per-Stop
+	// iteration++ while pursuing), so it advances progress_touched_at to `ts`
+	// instead, mirroring mergeWithHeartbeat — otherwise, once progress_touched_at
+	// is backfilled once, it would never move again even while the loop keeps
+	// genuinely iterating, and an actively-pursued goal would eventually read as
+	// progress-dead to lib/state-core.ts's listOthers/adopt.
 	// writeFileNoCreate (single open-truncate-write syscall) throws ENOENT if the file
 	// was renamed away between our read and this write — i.e. the adopt TOCTOU window.
 	// Catching ENOENT preserves the existing "file absent → do nothing" semantics while
 	// closing the race: the write syscall itself refuses creation (ADR-7 / F10).
+	const ts = nowStamp();
+	const progressPatch =
+		Object.keys(partial).length === 0 ? backfillProgressTouchedAt(raw) : { progress_touched_at: ts };
 	try {
 		writeFileNoCreate(
 			path,
-			JSON.stringify({ ...raw, ...partial, last_touched_at: nowStamp() }, null, 2),
+			JSON.stringify({ ...raw, ...partial, ...progressPatch, last_touched_at: ts }, null, 2),
 		);
 	} catch (err) {
 		if (err !== null && typeof err === "object" && "code" in err && err.code === "ENOENT") return;
@@ -184,7 +198,8 @@ export function readUltragoalStateRaw(sessionId: string): UltragoalState | null 
 }
 
 // Strict spread-overlay writer, mirroring updateGoalState (see its comment for the
-// no-create/no-seed rationale — a second writer for ultragoal must stay just as strict).
+// no-create/no-seed rationale — a second writer for ultragoal must stay just as strict
+// — including the empty-partial-vs-genuine-write progress_touched_at split).
 export function updateUltragoalState(sessionId: string, partial: Partial<UltragoalState>): void {
 	const path = join(getOmtDir(), `ultragoal-state-${sessionId}.json`);
 	const content = readFileOrNull(path);
@@ -197,10 +212,13 @@ export function updateUltragoalState(sessionId: string, partial: Partial<Ultrago
 		return;
 	}
 
+	const ts = nowStamp();
+	const progressPatch =
+		Object.keys(partial).length === 0 ? backfillProgressTouchedAt(raw) : { progress_touched_at: ts };
 	try {
 		writeFileNoCreate(
 			path,
-			JSON.stringify({ ...raw, ...partial, last_touched_at: nowStamp() }, null, 2),
+			JSON.stringify({ ...raw, ...partial, ...progressPatch, last_touched_at: ts }, null, 2),
 		);
 	} catch (err) {
 		if (err !== null && typeof err === "object" && "code" in err && err.code === "ENOENT") return;

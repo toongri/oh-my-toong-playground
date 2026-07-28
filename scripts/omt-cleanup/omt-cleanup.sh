@@ -1,11 +1,15 @@
 #!/bin/bash
 # =============================================================================
-# omt-cleanup.sh — dry-run-gated ~/.omt residue cleanup
+# omt-cleanup.sh — dry-run-gated ~/.omt session-artifact cleanup
 #
 # Usage:
-#   omt-cleanup.sh              # dry-run (default): list residue + preserved, delete nothing
+#   omt-cleanup.sh              # dry-run (default): report reap candidates; delete nothing
 #   omt-cleanup.sh --dry-run    # same as default
-#   omt-cleanup.sh --execute    # delete confirmed-residue entries; preserve live-state/legit
+#   omt-cleanup.sh --execute    # reap dead state files and dead session artifacts (file-level only — directories are never removed)
+#
+# --dry-run and --execute are mutually exclusive: passing both, or any
+# unrecognized argument, is rejected on stderr with a non-zero exit before
+# anything is deleted.
 #
 # Parameterized on $HOME. Tests redirect HOME to a temp fixture.
 # macOS Bash 3.2 compatible.
@@ -23,117 +27,45 @@ source "$SCRIPT_DIR_CLEANUP/../../hooks/lib/state-liveness.sh"
 OMT_DIR="${HOME}/.omt"
 CLEANUP_NOW=$(date +%s)
 
-# Confirmed-residue names (14 entries from §1 classification table).
-# Order matches the 7 slugs + name-based residue.
-RESIDUE_NAMES="
-capricious-watcher
-dented-gold
-radical-water
-scrawny-peak
-medieval-cadmium
-frosted-anglerfish
-fire-cockroach
-oh-my-toong
-stage
-algocare-home-stage
-omt-test
-tmp
-evidence
-toong
-"
-
-# ---------------------------------------------------------------------------
-# Preserve predicates (by CLASS/PATTERN — no literal UUIDs)
-#
-# An entry is PRESERVED if any of the following is true:
-#   P1 — name starts with "algocare-" (but is NOT "algocare-home-stage" — handled by residue
-#        list; the prefix match comes after residue classification)
-#   P2 — name is "oh-my-toong-playground"
-#   P3 — name is "cache"
-#   P4 — directory contains a goal-state-*.json file with "active":true
-#   P4b — directory contains an ultragoal-state-*.json file with "active":true
-#         (ultragoal shares GoalState's exact JSON shape)
-#   P5 — directory contains a deep-interview-active-state-*.json file
-#   P6 — directory contains a prometheus-state-*.json file
-#   P7 — directory contains a qa-state-*.json file
-# ---------------------------------------------------------------------------
-
-is_residue() {
-    local name="$1"
-    local n
-    for n in $RESIDUE_NAMES; do
-        if [[ "$name" == "$n" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-list_state_files() {
-    # Echoes existing managed state files in $1, one per line.
-    local dir="$1" f
-    for f in \
-        "$dir"/goal-state-*.json \
-        "$dir"/ultragoal-state-*.json \
-        "$dir"/prometheus-state-*.json \
-        "$dir"/deep-interview-active-state-*.json \
-        "$dir"/qa-state-*.json; do
-        [[ -f "$f" ]] && echo "$f"
-    done
-    return 0
-}
-
-has_any_state_file() {
-    # Returns 0 (true) iff dir contains at least one state file (live or dead) across the managed prefixes.
-    local dir="$1"
-    local f
-    while IFS= read -r f; do
-        return 0
-    done < <(list_state_files "$dir")
-    return 1
-}
-
-has_live_state() {
-    # Returns 0 (true) iff dir contains at least one LIVE state file across the managed prefixes.
-    # Liveness is defined by is_state_live from hooks/lib/state-liveness.sh.
-    local dir="$1"
-    local f
-    while IFS= read -r f; do
-        if is_state_live "$f" "$CLEANUP_NOW"; then
-            return 0
-        fi
-    done < <(list_state_files "$dir")
-    return 1
-}
-
-is_preserved() {
-    local name="$1"
-    local dir="$OMT_DIR/$name"
-
-    # P2: current project
-    [[ "$name" == "oh-my-toong-playground" ]] && return 0
-
-    # P3: global hud cache
-    [[ "$name" == "cache" ]] && return 0
-
-    # P1: algocare-* projects (excluding algocare-home-stage which is in residue list)
-    if [[ "$name" == algocare-* ]]; then
-        # algocare-home-stage is listed as residue; all other algocare-* are legit
-        [[ "$name" == "algocare-home-stage" ]] || return 0
-    fi
-
-    # P4/P4b/P5/P6/P7: contains at least one LIVE state file (goal, ultragoal, prometheus, deep-interview, or qa)
-    has_live_state "$dir" && return 0
-
-    return 1
-}
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+print_usage() {
+    cat >&2 << 'EOF'
+Usage:
+  omt-cleanup.sh              # dry-run (default): report reap candidates; delete nothing
+  omt-cleanup.sh --dry-run    # same as default
+  omt-cleanup.sh --execute    # reap dead state files and dead session artifacts (file-level only — directories are never removed)
+EOF
+}
+
 DRY_RUN=1
-if [[ "${1:-}" == "--execute" ]]; then
+SAW_DRY_RUN=0
+SAW_EXECUTE=0
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run)
+            SAW_DRY_RUN=1
+            ;;
+        --execute)
+            SAW_EXECUTE=1
+            ;;
+        *)
+            echo "omt-cleanup: unrecognized argument: $arg" >&2
+            print_usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ $SAW_DRY_RUN -eq 1 && $SAW_EXECUTE -eq 1 ]]; then
+    echo "omt-cleanup: --dry-run and --execute are mutually exclusive" >&2
+    print_usage
+    exit 1
+fi
+
+if [[ $SAW_EXECUTE -eq 1 ]]; then
     DRY_RUN=0
 fi
 
@@ -145,93 +77,164 @@ fi
 echo "=== omt-cleanup: scanning $OMT_DIR ==="
 echo ""
 
-DELETE_LIST=""
-DEAD_STATE_FILES=""
-PRESERVE_LIST=""
+DEAD_STATE_OUT=""
+DEAD_ARTIFACTS_OUT=""
+UNCLASSIFIED_OUT=""
+SYMLINK_OUT=""
+HAD_REAP_FAILURE=0
 
-# Iterate top-level entries only
+# Fan out to every top-level directory. Every classification and liveness
+# judgment comes from hooks/lib/state-liveness.sh — this script names no
+# directory and enumerates no prefix of its own. The directory being
+# processed (never $OMT_DIR itself) is passed as the first argument, per
+# each helper's calling convention.
+#
+# __none__ is passed as the session id: this script runs outside any
+# session, so it has no current-session id to supply. __none__ cannot
+# suffix-match a real filename, so it protects nothing by identity alone —
+# safety instead comes from the artifact reaper independently preserving
+# any candidate whose own session id is still live.
+#
+# A symlinked entry is skipped before either reaper ever sees it, not
+# filtered by them: the glob's trailing slash makes `"$OMT_DIR"/*/` follow a
+# directory symlink and yield the TARGET's path, so reap_dead_state_files /
+# reap_session_artifacts would otherwise run `rm -f` against files outside
+# $OMT_DIR entirely (the symlink target can live anywhere on disk). Skipped
+# entries are still surfaced in the SYMLINKS report section below — never
+# silently dropped — following this script's existing UNCLASSIFIED
+# reported-not-acted-on convention.
 for entry_path in "$OMT_DIR"/*/; do
-    # Strip trailing slash; get basename
     entry_path="${entry_path%/}"
-    name="$(basename "$entry_path")"
 
-    if is_preserved "$name"; then
-        PRESERVE_LIST="$PRESERVE_LIST $name"
-    elif is_residue "$name"; then
-        DELETE_LIST="$DELETE_LIST $name"
-    elif has_any_state_file "$OMT_DIR/$name" && ! has_live_state "$OMT_DIR/$name"; then
-        # Unknown entry: has state files but ALL are dead — reap only the state files (file-level).
-        # The directory is removed afterwards only if it is empty.
-        # Accumulate newline-separated so paths with spaces are not split on consumption.
-        local_dir="$OMT_DIR/$name"
-        local_files="$(list_state_files "$local_dir")"
-        if [[ -n "$DEAD_STATE_FILES" ]]; then
-            DEAD_STATE_FILES="${DEAD_STATE_FILES}
-${local_files}"
+    # The -L check MUST run after the trailing slash is stripped above, not
+    # against the raw glob match: `[ -L "path/" ]` follows the symlink (the
+    # trailing slash forces path resolution) and reports false even for a
+    # symlinked directory, silently defeating this guard.
+    if [ -L "$entry_path" ]; then
+        if [[ -n "$SYMLINK_OUT" ]]; then
+            SYMLINK_OUT="${SYMLINK_OUT}
+${entry_path}"
         else
-            DEAD_STATE_FILES="$local_files"
+            SYMLINK_OUT="$entry_path"
         fi
-    else
-        # Unknown entry with no state files, or with live state — preserve (conservative)
-        PRESERVE_LIST="$PRESERVE_LIST $name"
+        continue
+    fi
+
+    # `if ! var=$(cmd); then` (not a bare `var=$(cmd)` statement) is load-bearing
+    # under `set -e`: a bare assignment whose command substitution fails would
+    # abort the whole fan-out right here, mid-scan, before later directories or
+    # the report trailer ever print. Wrapping it in an if-condition is what lets
+    # a real reap failure be recorded and the scan still run to completion — the
+    # non-zero exit happens once, at the very end, after the full report prints.
+    if ! dead_state="$(reap_dead_state_files "$entry_path" __none__ "$CLEANUP_NOW" "$DRY_RUN")"; then
+        HAD_REAP_FAILURE=1
+    fi
+    if [[ -n "$dead_state" ]]; then
+        if [[ -n "$DEAD_STATE_OUT" ]]; then
+            DEAD_STATE_OUT="${DEAD_STATE_OUT}
+${dead_state}"
+        else
+            DEAD_STATE_OUT="$dead_state"
+        fi
+    fi
+
+    if ! dead_artifacts="$(reap_session_artifacts "$entry_path" __none__ "$CLEANUP_NOW" "$DRY_RUN")"; then
+        HAD_REAP_FAILURE=1
+    fi
+    if [[ -n "$dead_artifacts" ]]; then
+        if [[ -n "$DEAD_ARTIFACTS_OUT" ]]; then
+            DEAD_ARTIFACTS_OUT="${DEAD_ARTIFACTS_OUT}
+${dead_artifacts}"
+        else
+            DEAD_ARTIFACTS_OUT="$dead_artifacts"
+        fi
+    fi
+
+    unclassified="$(list_unclassified_session_files "$entry_path")"
+    if [[ -n "$unclassified" ]]; then
+        if [[ -n "$UNCLASSIFIED_OUT" ]]; then
+            UNCLASSIFIED_OUT="${UNCLASSIFIED_OUT}
+${unclassified}"
+        else
+            UNCLASSIFIED_OUT="$unclassified"
+        fi
     fi
 done
 
-# Print RESIDUE section (full-directory deletions)
-echo "--- RESIDUE (to delete) ---"
-if [[ -z "$DELETE_LIST" ]]; then
-    echo "  (none)"
-else
-    for name in $DELETE_LIST; do
-        echo "  DELETE  $name"
-    done
+# Reap-lane label carries mode in its own text: dry-run has deleted nothing
+# yet (DELETE), execute already deleted by the time this prints (DELETED).
+# Both call sites above already performed the real deletion (or not) inline
+# with dry_run's polarity, so this label only decides how the same paths are
+# described — it triggers no second scan and no second deletion.
+REAP_LABEL="  DELETE  "
+if [[ $DRY_RUN -eq 0 ]]; then
+    REAP_LABEL="  DELETED "
 fi
 
-echo ""
-
-# Print DEAD-STATE section (file-level reap)
 echo "--- DEAD-STATE (state files to reap) ---"
-if [[ -z "$DEAD_STATE_FILES" ]]; then
+if [[ -z "$DEAD_STATE_OUT" ]]; then
     echo "  (none)"
 else
     while IFS= read -r f; do
-        echo "  DELETE  $f"
-    done <<< "$DEAD_STATE_FILES"
+        echo "${REAP_LABEL}${f}"
+    done <<< "$DEAD_STATE_OUT"
 fi
 
 echo ""
 
-# Print PRESERVED section
-echo "--- PRESERVED (live-state / legit) ---"
-if [[ -z "$PRESERVE_LIST" ]]; then
+echo "--- SESSION-ARTIFACTS (to reap) ---"
+if [[ -z "$DEAD_ARTIFACTS_OUT" ]]; then
     echo "  (none)"
 else
-    for name in $PRESERVE_LIST; do
-        echo "  PRESERVED  $name"
-    done
+    while IFS= read -r f; do
+        echo "${REAP_LABEL}${f}"
+    done <<< "$DEAD_ARTIFACTS_OUT"
 fi
 
 echo ""
 
-# Execute deletions only when --execute is passed
-if [[ $DRY_RUN -eq 1 ]]; then
-    echo "=== dry-run complete — nothing deleted. Pass --execute to remove residue. ==="
+# Unclassified files are never deleted by this script — REPORT is the only
+# label they ever get, in either mode.
+echo "--- UNCLASSIFIED (reported, not reaped) ---"
+if [[ -z "$UNCLASSIFIED_OUT" ]]; then
+    echo "  (none)"
 else
-    echo "=== executing deletions ==="
-    # Residue: full directory removal
-    for name in $DELETE_LIST; do
-        target="$OMT_DIR/$name"
-        echo "  removing $target"
-        rm -rf "$target"
-    done
-    # Dead-state: reap state files; remove directory only if empty
-    if [[ -n "$DEAD_STATE_FILES" ]]; then
-        while IFS= read -r f; do
-            echo "  reaping $f"
-            rm -f "$f"
-            dir="$(dirname "$f")"
-            rmdir "$dir" 2>/dev/null || true
-        done <<< "$DEAD_STATE_FILES"
-    fi
+    while IFS= read -r f; do
+        echo "  REPORT  ${f}"
+    done <<< "$UNCLASSIFIED_OUT"
+fi
+
+echo ""
+
+# Symlinked entries are never followed and never reaped by this script — the
+# same "report, don't act" contract as UNCLASSIFIED above, so a symlinked
+# project directory doesn't vanish from the operator's view just because the
+# fan-out declines to enter it.
+echo "--- SYMLINKS (skipped — not followed) ---"
+if [[ -z "$SYMLINK_OUT" ]]; then
+    echo "  (none)"
+else
+    while IFS= read -r f; do
+        echo "  SYMLINK ${f}"
+    done <<< "$SYMLINK_OUT"
+fi
+
+echo ""
+
+if [[ $DRY_RUN -eq 1 ]]; then
+    echo "=== dry-run complete — nothing deleted. Pass --execute to reap dead state files and artifacts. ==="
+else
     echo "=== done ==="
+fi
+
+# A DELETED label does mean the underlying rm succeeded — reap_dead_state_files
+# and reap_session_artifacts (hooks/lib/state-liveness.sh) only echo a path to
+# stdout after rm -f has actually succeeded; an rm failure is reported on
+# stderr as "reap: failed to delete <path>" and never reaches stdout. The exit
+# code exists because that stderr-only failure is otherwise invisible to a
+# caller that isn't reading stderr: if any reap call failed, this script fails
+# too, even though the report above (built from stdout alone) always prints in
+# full first.
+if [[ $HAD_REAP_FAILURE -eq 1 ]]; then
+    exit 1
 fi

@@ -2188,9 +2188,8 @@ test_regression_backtick_semicolon_in_dq_denies() {
 # 5th positional arg supplies agent_type's value; omitting it entirely
 # (4-arg call) reproduces the common main-thread payload shape -- the
 # agent_type KEY absent altogether, not present-with-empty-string, since an
-# ordinary main-thread tool call doesn't carry the field (per CLAUDE.md's
-# trust-channel note, a `--agent <name>` main-thread session is the
-# exception).
+# ordinary main-thread tool call doesn't carry the field (a `--agent <name>`
+# main-thread session is the exception).
 codex_full_payload() {
     local tool_name="$1" tool_input="$2" sid="$3" cwd="$4"
     if [ "$#" -ge 5 ]; then
