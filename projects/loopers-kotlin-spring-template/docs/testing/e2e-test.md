@@ -60,8 +60,8 @@ fun `returns 200 OK when payment callback succeeds`()
 @DisplayName("존재하지 않는 orderId로 콜백이 오면 404 Not Found를 반환한다")
 fun `returns 404 Not Found when orderId does not exist`()
 
-@DisplayName("인증 헤더 없이 요청하면 401을 반환한다")
-fun `returns 401 when authorization header is missing`()
+@DisplayName("X-USER-ID 헤더가 없으면 400 Bad Request를 반환한다")
+fun `returns 400 Bad Request when X-USER-ID header is missing`()
 ```
 
 테스트 클래스 파일명은 `*ApiE2ETest.kt` 패턴을 따른다 — 4번 절(테스트 셋업)의 `OrderV1ApiE2ETest`가 그 예시다. 일반 BDD 구조·`@Nested` 조직·메서드 네이밍 규칙은 `./test-authoring.md`에서 다룬다. 이 절은 E2E 레벨에 특화된 네이밍 예시만 다룬다.
@@ -168,7 +168,7 @@ private fun stubPgPaymentSuccess() {
 }
 ```
 
-`transactionKey`에 `System.currentTimeMillis()`를 섞어 매 호출마다 다른 값을 주는 이유는, 같은 테스트 클래스 안에서 여러 테스트가 이 스텁을 재사용해도 트랜잭션 키가 충돌하지 않게 하기 위해서다.
+`transactionKey`에 섞은 `System.currentTimeMillis()`는 Kotlin 삼중따옴표 리터럴 안에 있고, 그 리터럴은 `.withBody(...)`로 스텁을 등록하는 시점에 딱 한 번 평가된다 — 요청이 몇 번 들어오든 이 스텁이 매칭되는 동안은 항상 같은 `transactionKey` 값을 반환하는 상수다. 즉 이 값은 호출마다 트랜잭션 키가 충돌하지 않게 막아주는 장치가 아니라, 테스트용으로 그럴듯한 값 하나를 채워 넣는 용도일 뿐이다. 같은 테스트 클래스에서 이 스텁을 여러 번 재사용하며 호출마다 다른 `transactionKey`가 실제로 필요하다면(예: 트랜잭션 키 충돌 자체를 검증하는 테스트), WireMock의 response templating(`{{now}}` 또는 `ResponseTemplateTransformer`)으로 바꿔야 한다.
 
 ## 7. 패턴별 예시
 
@@ -177,7 +177,7 @@ private fun stubPgPaymentSuccess() {
 ```kotlin
 @Test
 @DisplayName("주문을 생성하면 200 OK와 주문 ID를 반환한다")
-fun returnOrderId_whenOrderIsPlaced() {
+fun `returns 200 OK when order is placed`() {
     // given
     val userId = 1L
     val product = createProduct(price = Money.krw(20000))
@@ -205,7 +205,7 @@ fun returnOrderId_whenOrderIsPlaced() {
 ```kotlin
 @Test
 @DisplayName("포인트가 부족하면 400 Bad Request를 반환한다")
-fun returnBadRequest_whenInsufficientPoints() {
+fun `returns 400 Bad Request when insufficient points`() {
     // given
     val userId = 1L
     val product = createProduct(price = Money.krw(20000))
@@ -227,7 +227,7 @@ fun returnBadRequest_whenInsufficientPoints() {
 
 @Test
 @DisplayName("재고가 부족하면 400 Bad Request를 반환한다")
-fun returnBadRequest_whenInsufficientStock() {
+fun `returns 400 Bad Request when insufficient stock`() {
     // given
     val userId = 1L
     val product = createProduct(price = Money.krw(20000), stockQuantity = 5)
@@ -253,7 +253,7 @@ fun returnBadRequest_whenInsufficientStock() {
 ```kotlin
 @Test
 @DisplayName("존재하지 않는 상품을 주문하면 404 Not Found를 반환한다")
-fun returnNotFound_whenProductDoesNotExist() {
+fun `returns 404 Not Found when product does not exist`() {
     // given
     val userId = 1L
     createPointAccount(userId, Money.krw(100000))
@@ -278,7 +278,7 @@ fun returnNotFound_whenProductDoesNotExist() {
 ```kotlin
 @Test
 @DisplayName("X-USER-ID 헤더가 없으면 400 Bad Request를 반환한다")
-fun returnBadRequest_whenUserIdHeaderIsMissing() {
+fun `returns 400 Bad Request when X-USER-ID header is missing`() {
     // given
     val product = createProduct()
     val request = OrderV1Request.PlaceOrder(
