@@ -186,6 +186,9 @@ class SettlementStepIntegrationTest {
     private lateinit var jobLauncherTestUtils: JobLauncherTestUtils
 
     @Autowired
+    private lateinit var jobRepositoryTestUtils: JobRepositoryTestUtils
+
+    @Autowired
     private lateinit var orderRepository: OrderRepository
 
     @Autowired
@@ -201,6 +204,7 @@ class SettlementStepIntegrationTest {
 
     @AfterEach
     fun tearDown() {
+        jobRepositoryTestUtils.removeJobExecutions()
         databaseCleanUp.truncateAllTables()
     }
 
