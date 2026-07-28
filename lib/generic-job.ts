@@ -1083,14 +1083,14 @@ export async function cmdStop(
 	// then again with the real child.pid once the CLI child is spawned) — a member read in
 	// that gap has no pid to signal, so waiting on it can't hasten its exit, only babysit the
 	// CLI's own natural run to completion.
-	const messageRunningEntries: string[] = [];
+	let hadRunning = false;
 	const waitEntries: string[] = [];
 	for (const entry of fs.readdirSync(entitiesRoot)) {
 		const statusPath = path.join(entitiesRoot, entry, "status.json");
 		const status = readJsonIfExists(statusPath);
 		if (!isRecord(status)) continue;
 		if (status.state !== "running") continue;
-		messageRunningEntries.push(entry);
+		hadRunning = true;
 
 		if (status.pid) {
 			try {
@@ -1117,13 +1117,12 @@ export async function cmdStop(
 	}
 
 	const manifest = buildManifest(jobDir, config);
-	process.stdout.write(
-		`${
-			messageRunningEntries.length > 0
-				? `stop: sent SIGTERM to running ${config.entityPlural}\n`
-				: `stop: no running ${config.entityPlural}\n`
-		}${JSON.stringify(manifest, null, 2)}\n`,
-	);
+	const stopMessage = !hadRunning
+		? `stop: no running ${config.entityPlural}\n`
+		: waitEntries.length > 0
+			? `stop: sent SIGTERM to running ${config.entityPlural}\n`
+			: `stop: running ${config.entityPlural} found but none had a pid to signal\n`;
+	process.stdout.write(`${stopMessage}${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 // ---------------------------------------------------------------------------
