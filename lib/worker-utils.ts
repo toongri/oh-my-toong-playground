@@ -666,3 +666,54 @@ export async function resumeOneTurn(
 
 	return executeOneTurn(builtCmd, opts, driver, runOnceFn);
 }
+
+// ---------------------------------------------------------------------------
+// reapOwnProcessGroup — worker self-reap on its own exit path
+// ---------------------------------------------------------------------------
+
+/**
+ * Reap this worker's own process group: SIGTERM the whole group, wait 5s,
+ * then SIGKILL the whole group. A detached-spawned worker is the leader of
+ * its own process group, and codex exec plus its descendant MCP processes
+ * hang off it under that same PGID — this reaps all of them.
+ *
+ * Must be called from inside the worker's own normal exit path (its `.then`
+ * after the turn completes). Scope limit, not optional: this layer only runs
+ * when the worker actually walks that path — if the worker itself dies via
+ * SIGKILL, panic, or OOM before reaching this call, nothing here recovers
+ * the orphaned group. That gap is why a separate orphan reaper (outside this
+ * function) exists as a second layer.
+ *
+ * Targets the process GROUP (-process.pid), not a single PID: a single-PID
+ * kill (as the timeout escalation above does, against a specific child) can
+ * never reach descendants. Because the group includes this worker itself (it
+ * is the group leader), the final SIGKILL below also terminates this worker
+ * — expected, since this only runs on a path where the worker was about to
+ * exit anyway.
+ */
+export async function reapOwnProcessGroup(): Promise<void> {
+	// Must be installed BEFORE the SIGTERM below, not after — otherwise the
+	// worker kills itself with the very signal it's about to send its group.
+	process.on("SIGTERM", () => {
+		/* ignore: this worker is part of the group it's about to signal */
+	});
+
+	try {
+		process.kill(-process.pid, "SIGTERM");
+	} catch {
+		/* group already empty (ESRCH) — nothing to reap */
+	}
+
+	// 5s grace period, matching the timeout escalation above. Must stay
+	// ref'd (no unref()) — an unref'd timer lets the process exit before it
+	// fires, so the SIGKILL escalation below never runs.
+	await new Promise<void>((resolve) => {
+		setTimeout(resolve, 5000);
+	});
+
+	try {
+		process.kill(-process.pid, "SIGKILL");
+	} catch {
+		/* group already empty (ESRCH) — nothing to reap */
+	}
+}
