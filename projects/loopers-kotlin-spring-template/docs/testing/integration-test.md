@@ -578,8 +578,8 @@ fun `rolls back all changes when stock is insufficient`() {
 
 ## 11. 품질 체크리스트
 
-- [ ] Transaction atomicity (rollback) cases exist
-- [ ] Spring Event → Listener result verification (use Awaitility only for `@Async` AFTER_COMMIT listeners)
-- [ ] Kafka Consumer: idempotency verification
-- [ ] Individual domain logic already verified in Unit is not repeated
-- [ ] DB, Redis, WireMock cleanup in `@AfterEach`
+- [ ] 트랜잭션 원자성(롤백) 케이스가 존재하는가
+- [ ] Spring Event → Listener 결과를 검증했는가(`@Async` AFTER_COMMIT 리스너에만 Awaitility를 쓴다)
+- [ ] Kafka Consumer의 멱등성을 검증했는가
+- [ ] Unit에서 이미 검증한 개별 도메인 로직을 반복 검증하지 않았는가
+- [ ] `@AfterEach`에서 DB, Redis, WireMock을 정리했는가
