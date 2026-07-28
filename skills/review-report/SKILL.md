@@ -133,7 +133,7 @@ Produce all four sections, in order.
 Findings come **only** from a dispatched `code-reviewer` agent running in an isolated context — never inline, never via a file handoff.
 
 1. Dispatch a `code-reviewer` agent via the Task tool (`subagent_type: "code-reviewer"`), passing the review target so the agent operates on the same range as the walkthrough: the input mode and range from Step 1 (PR number/URL, or `<base>...<target>`), plus any intent/requirements context already gathered.
-2. The agent runs the full pure code-review: it fans out the angle finders, verifies each candidate (CONFIRMED / PLAUSIBLE / REFUTED), drops REFUTED, and **returns the verified findings as render-time markdown finding cards** — the existing finding contract (verdict-labeled `<div class="finding" data-verdict="…">` cards, split into Correctness and Cleanup, plus any Out of Scope / Unverified sections). It does **not** render HTML.
+2. The agent runs the full pure code-review: it fans out the angle finders, verifies each candidate (CONFIRMED / PLAUSIBLE / REFUTED), drops REFUTED, and **returns the verified findings as render-time markdown finding cards** — the existing finding contract (verdict-labeled `<div class="finding" data-verdict="…">` cards, split into Correctness, Requirement Gap, and Cleanup, plus any Out of Scope / Unverified sections). It does **not** render HTML.
 3. **Collect the agent's findings text verbatim.** Do not re-judge verdicts, do not re-rank, do not reformat the cards — the agent already verified and ranked. You assemble its output into the render markdown unchanged.
 
 The agent's transcript stays in its own context. This skill's context receives only the returned findings markdown — keeping the render context clean.
@@ -186,8 +186,9 @@ Print the terminal pointer (finding counts by verdict/category + the html path �
 
 ```
 Review written: $OMT_DIR/reviews/{slug}.html
-Correctness: {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
-Cleanup:     {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
+Correctness:     {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
+Requirement gap: {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
+Cleanup:         {N confirmed} CONFIRMED, {N plausible} PLAUSIBLE
 ```
 
 ### Example Final Output

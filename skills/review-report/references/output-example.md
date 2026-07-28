@@ -2,7 +2,7 @@
 
 Synthesized from 3 chunks: (A) Order API + domain, (B) Payment integration, (C) Inventory + messaging.
 
-This example demonstrates the complete report-only output format: the Walkthrough, then verdict-labeled findings split into Correctness and Cleanup. There is no merge verdict — the review reports, it does not gate.
+This example demonstrates the complete report-only output format: the Walkthrough, then verdict-labeled findings split into Correctness, Requirement Gap, and Cleanup. There is no merge verdict — the review reports, it does not gate.
 
 ````
 ## Walkthrough
@@ -135,6 +135,24 @@ sequenceDiagram
 - **Fix**: In `handleWebhook()`, load the order and assert `event.amount == order.totalMinorUnits` before transitioning to PAID; reject and alert on mismatch.
 - **Blast Radius**: webhook path only; `verifyWebhookSignature()` already runs first.
 - **Found by**: regression
+
+### Requirement Gap
+
+**[CONFIRMED] Refund path is specified but never implemented**
+- **Location**: `OrderPaymentController.kt` — no refund handler exists
+- **Current Code**:
+  ```kotlin
+  // OrderPaymentController exposes only:
+  //   POST /{orderId}/payment   -> processPayment()
+  //   POST /webhook             -> handleWebhook()
+  // No refund endpoint, and no call into stripeGatewayAdapter.refund().
+  ```
+- **What's wrong**: The acceptance criterion requires a refund path for a failed fulfillment, but the diff adds neither an endpoint nor a gateway call for it. The payment side is complete; the reverse side is absent.
+- **Failure scenario**: An operator handling a failed fulfillment has no way to return the charge — the order sits PAID with the money captured, and the reconciliation job flags it as a permanent mismatch.
+- **Fix**: Add `POST /{orderId}/refund` calling `stripeGatewayAdapter.refund(paymentIntentId, amount)`, transitioning the order to REFUNDED inside the same transaction boundary as the status write.
+- **Blast Radius**: new endpoint; touches `OrderStatus` transitions and the reconciliation job's expectations.
+- **AC**: "A captured payment can be reversed when fulfillment fails, and the order reaches a terminal REFUNDED state."
+- **Found by**: requirement
 
 ### Cleanup
 
