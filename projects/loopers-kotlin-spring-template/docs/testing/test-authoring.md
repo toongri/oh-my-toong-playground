@@ -84,20 +84,13 @@ inner class IssueCouponConflict { ... }
 
 ### 예외 테스트 네이밍
 
-예외를 검증하는 테스트는 두 가지 패턴 중 하나를 따른다.
+예외를 검증하는 테스트는 다음 패턴을 따른다.
 
 | 패턴 | 한국어(DisplayName) | 영어(메서드명) |
 |---------|---------------------|----------------------|
-| 구체적 예외 타입 | `[condition]하면 [SPECIFIC_ERROR] 예외가 발생한다` | `throws [SPECIFIC_ERROR] when [condition]` |
 | CoreException | `[condition]하면 [ErrorType] CoreException 발생` | `throws [ErrorType] CoreException when [condition]` |
 
 ```kotlin
-// 구체적 예외 타입 — 예외 클래스명 자체가 설명적일 때
-@Test
-@DisplayName("잔액이 부족하면 InsufficientBalanceException 예외가 발생한다")
-fun `throws InsufficientBalanceException when balance is insufficient`()
-
-// CoreException — ErrorType enum과 함께 CoreException을 쓸 때
 @Test
 @DisplayName("존재하지 않는 사용자면 NotFound CoreException 발생")
 fun `throws NotFound CoreException when user does not exist`()
