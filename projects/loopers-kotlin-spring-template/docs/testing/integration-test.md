@@ -35,7 +35,7 @@ Integration Test의 책임은 호출 방식에 따라 세 갈래로 나뉜다.
 
 **이벤트 기반 흐름**은 Spring Event를 통한 컴포넌트 간 통신을 검증한다. 이벤트 발행 후 리스너가 올바르게 반응하는지, BEFORE_COMMIT과 AFTER_COMMIT에 따라 타이밍이 기대대로 동작하는지 확인한다.
 
-**메시지 기반 통합**은 Kafka Consumer의 동작을 검증한다. 메시지 수신 후 올바르게 처리되는지, 실패가 DLT(Dead Letter Topic)로 전송되는지, 중복 메시지에 멱등성이 보장되는지 확인한다.
+**메시지 기반 통합**은 Kafka Consumer의 동작을 검증한다. 메시지 수신 후 올바르게 처리되는지, 실패 시 예외를 던지는지, 중복 메시지에 멱등성이 보장되는지 확인한다 — DLT(Dead Letter Topic) 라우팅은 Consumer의 책임이 아니라 인프라 테스트의 몫이다 (§9).
 
 ## 2. 파일명과 네이밍
 
@@ -155,7 +155,7 @@ fun `places order with point usage`() {
 | Transaction Atomicity | Rollback when intermediate step fails |
 | Idempotency | Same request multiple times produces identical result |
 | Spring Event Orchestration | Service → Event → Listener result verification |
-| Kafka Consumer | Message receipt → processing → DB state, DLT |
+| Kafka Consumer | Message receipt → processing → DB state, exception on failure |
 
 각 축의 구체적인 코드는 6~9절에서 확인할 수 있다.
 
@@ -256,7 +256,7 @@ fun `rolls back ALL changes when intermediate step fails`() {
 
 > ⚠️ 주의: Spring Event와 Listener는 함수 호출을 **분리(decoupling)한 것뿐**이지 책임을 분리한 게 아니다. 이벤트를 발행하는 서비스는 오케스트레이션의 일부로서 리스너의 동작까지 책임진다.
 
-### AFTER_COMMIT 이벤트 (비동기)
+### AFTER_COMMIT 이벤트 (`@Async` 리스너)
 
 ```kotlin
 @Test
@@ -277,7 +277,7 @@ fun `PaymentPaidEventV1 triggers order completion`() {
         applicationEventPublisher.publishEvent(event)
     }
 
-    // then - 비동기 처리이므로 Awaitility 사용
+    // then - `@Async` 리스너이므로 Awaitility 사용
     await().atMost(5, TimeUnit.SECONDS).untilAsserted {
         val updatedOrder = orderRepository.findById(order.id)!!
         assertThat(updatedOrder.status).isEqualTo(OrderStatus.PAID)
@@ -578,7 +578,7 @@ fun `rolls back all changes when stock is insufficient`() {
 ## 11. 품질 체크리스트
 
 - [ ] Transaction atomicity (rollback) cases exist
-- [ ] Spring Event → Listener result verification (use Awaitility for AFTER_COMMIT)
-- [ ] Kafka Consumer: DLT, idempotency verification
+- [ ] Spring Event → Listener result verification (use Awaitility only for `@Async` AFTER_COMMIT listeners)
+- [ ] Kafka Consumer: idempotency verification
 - [ ] Individual domain logic already verified in Unit is not repeated
 - [ ] DB, Redis, WireMock cleanup in `@AfterEach`
