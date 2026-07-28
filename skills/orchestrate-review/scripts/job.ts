@@ -135,7 +135,7 @@ function buildManifest(jobDir: string) {
  * `--jobs-dir` / `$CHUNK_REVIEW_JOBS_DIR` — which is what the test suite does —
  * then writes its log there too, instead of into the real per-project OMT dir.
  */
-export function logRootForJobsDir(jobsDir: string): string {
+function logRootForJobsDir(jobsDir: string): string {
 	return path.dirname(path.resolve(jobsDir));
 }
 
