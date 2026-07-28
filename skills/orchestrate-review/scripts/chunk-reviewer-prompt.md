@@ -68,6 +68,7 @@ Execute the following command to obtain the diff for review. You MUST run this c
 {COMMIT_HISTORY}
 <!-- /section:commit_history -->
 
+<!-- section:field_reference -->
 ---
 
 ## Field Reference
@@ -83,3 +84,4 @@ Execute the following command to obtain the diff for review. You MUST run this c
 | {FILE_LIST} | Required | Step 2 git diff --name-only |
 | {DIFF_COMMAND} | Required | Step 4 — constructed from range + chunk file list |
 | {COMMIT_HISTORY} | Required | Step 2 git log output |
+<!-- /section:field_reference -->

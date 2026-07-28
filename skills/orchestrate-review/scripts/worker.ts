@@ -9,6 +9,7 @@ import { getOmtDir } from "@lib/omt-dir";
 import { splitCommand, atomicWriteJson, runOneTurn } from "@lib/worker-utils";
 import { detectCliType } from "@lib/generic-job";
 import type { CliType } from "@lib/agent-drivers/types";
+import { logRootForJobsDir } from "./job.ts";
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, "prompts");
 
@@ -27,7 +28,23 @@ const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
 	requirement: ["requirements", "non_goal", "evidence_results", "commit_history"],
 };
 
-const SECTION_MARKER_RE = /<!-- section:([a-z_]+) -->\n?([\s\S]*?)<!-- \/section:\1 -->\n?/g;
+/**
+ * Both markers are anchored to start (`^`) and end (`$`) of their own line (`m` flag) —
+ * a section marker in this template always sits alone on its own line, so this rejects an
+ * inline reproduction of the closing-marker string (e.g. a quoted excerpt of this very
+ * template appearing inside an interpolated placeholder value) that would otherwise
+ * truncate the lazy body match early and let everything after it leak past the filter.
+ *
+ * Known unclosed residual risk, by design: this only rejects an INLINE (same-line, with
+ * other text) reproduction of the marker. If an interpolated placeholder value reproduces
+ * the literal closing-marker text ALONE on its own line — nothing else on that line — the
+ * anchored regex still matches it as a genuine section boundary and truncates early. No
+ * finite static rule closes this without also being able to reject a legitimate marker line
+ * that just happens to look identical; changing the interpolation order (escaping/quoting
+ * marker-shaped substrings before they're substituted in) would close it but is out of scope
+ * here — the fix stays inside this filter, not upstream in how values are interpolated.
+ */
+const SECTION_MARKER_RE = /^<!-- section:([a-z_]+) -->$\n([\s\S]*?)^<!-- \/section:\1 -->$\n?/gm;
 
 /**
  * Strip the conditional sections a given angle's allowlist doesn't cover, then remove every
@@ -73,8 +90,14 @@ function main() {
 	const command = options.command;
 	const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
-	const jobId = jobDir ? path.basename(String(jobDir)).replace(/^chunk-review-/, "") : "unknown";
-	initLogger("chunk-review-worker", getOmtDir(), jobId);
+	// Same convention as job.ts's initLoggerFromJobDir: log root lives beside the
+	// `jobs/` directory holding the job, never at an independently-resolved OMT
+	// dir — otherwise a worker spawned against a test's temp jobs-dir (what the
+	// test suite does) writes its log into the real per-project OMT dir instead.
+	const resolvedJobDir = jobDir ? path.resolve(String(jobDir)) : null;
+	const jobId = resolvedJobDir ? path.basename(resolvedJobDir).replace(/^chunk-review-/, "") : "unknown";
+	const logRoot = resolvedJobDir ? logRootForJobsDir(path.dirname(resolvedJobDir)) : getOmtDir();
+	initLogger("chunk-review-worker", logRoot, jobId);
 	logStart();
 
 	const workerEnv: Record<string, string> = {};
