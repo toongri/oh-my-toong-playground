@@ -249,7 +249,7 @@ data class CachedProductDetailV1(
 
 ```kotlin
 // List cache: store IDs only
-data class CachedProductList(
+data class CachedProductListV1(
     val productIds: List<Long>,
     val hasNext: Boolean,
 )
@@ -271,7 +271,7 @@ fun findProducts(criteria: ProductCriteria.FindProducts): ProductInfo.FindProduc
 
     if (!cacheKey.shouldCache()) return productService.findProducts(command)
 
-    val cachedList = cacheTemplate.get(cacheKey, TYPE_CACHED_PRODUCT_LIST)
+    val cachedList = cacheTemplate.get(cacheKey, TYPE_CACHED_PRODUCT_LIST_V1)
 
     if (cachedList != null) {
         // 1. List cache hit → bulk fetch Detail cache
@@ -296,12 +296,16 @@ fun findProducts(criteria: ProductCriteria.FindProducts): ProductInfo.FindProduc
 
     // Cache miss: fetch from DB and cache both List + Detail
     val slice = productService.findProducts(command)
-    cacheTemplate.put(cacheKey, CachedProductList(slice.content.map { it.productId }, slice.hasNext()))
 
-    val detailCacheMap = slice.content.associate {
-        ProductCacheKeys.ProductDetail(it.productId) to CachedProductDetailV1.from(it)
+    // Do not cache empty results
+    if (slice.content.isNotEmpty()) {
+        cacheTemplate.put(cacheKey, CachedProductListV1(slice.content.map { it.productId }, slice.hasNext()))
+
+        val detailCacheMap = slice.content.associate {
+            ProductCacheKeys.ProductDetail(it.productId) to CachedProductDetailV1.from(it)
+        }
+        cacheTemplate.putAll(detailCacheMap)
     }
-    cacheTemplate.putAll(detailCacheMap)
 
     return ProductInfo.FindProducts.from(slice)
 }
