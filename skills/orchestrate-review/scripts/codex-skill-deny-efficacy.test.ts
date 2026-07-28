@@ -159,6 +159,8 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
 	let baselineBlock: string;
 	let denyAllBlock: string;
 	let controlBlock: string;
+	let baselineLength: number;
+	let denyAllLength: number;
 
 	beforeAll(async () => {
 		requireCodex();
@@ -181,6 +183,11 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
 		// 병렬 실행 후에도 3회 실 codex 프로세스 spawn(각 ~2-3초)이 bun:test 기본 hook
 		// 타임아웃(5s)을 넘을 수 있어 BEFORE_ALL_TIMEOUT_MS로 넉넉히 확장해 둔다.
 
+		// AC3(전체 프롬프트 최소 11,000자 감소)의 "전체 프롬프트"는 블록 추출 전 원문 길이다 —
+		// 블록 추출로 잘라내기 전에 먼저 기록해 둔다.
+		baselineLength = baselineOutput.length;
+		denyAllLength = denyAllOutput.length;
+
 		// 측정 창을 <skills_instructions> 블록 내부로 좁힌다 — 세 출력 각각 한 번씩만 추출해
 		// 아래 모든 테스트가 재사용한다. 추출 실패(태그 0개/2개 이상)는 여기서 즉시 하드 실패한다.
 		baselineBlock = extractSkillsInstructionsBlock(baselineOutput);
@@ -201,6 +208,23 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
 				"과반에 못 미치면 단순 배포 스코프 차이가 아니라 <skills_instructions> 블록 추출 자체가 " +
 				"깨졌을 가능성을 의심하라.",
 		).toBeGreaterThan(declaredNames.length / 2);
+	});
+
+	test("AC3: 전체 프롬프트는 deny 적용 후 baseline 대비 최소 11,000자 줄어든다 (블록 추출 전 원문 길이)", () => {
+		const delta = baselineLength - denyAllLength;
+		expect(
+			delta,
+			`baseline ${baselineLength}자 → deny 적용 ${denyAllLength}자 (delta ${delta}자) — ` +
+				"AC3가 요구하는 최소 11,000자 감소에 못 미친다.",
+		).toBeGreaterThanOrEqual(11000);
+	});
+
+	test("AC3: <skills_instructions> 블록은 deny 적용 후 10,000자 미만으로 준다", () => {
+		expect(
+			denyAllBlock.length,
+			`baseline 블록 ${baselineBlock.length}자 → deny 적용 블록 ${denyAllBlock.length}자 — ` +
+				"AC3가 요구하는 10,000자 미만에 못 미친다.",
+		).toBeLessThan(10000);
 	});
 
 	test("baseline > 0인 선언 이름은 deny 적용 시 반드시 0이다 (블록 내부, baseline === 0인 이름은 측정 불가로 보고하고 단언에서 제외한다)", () => {

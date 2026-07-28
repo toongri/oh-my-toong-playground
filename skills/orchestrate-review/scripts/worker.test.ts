@@ -1,11 +1,14 @@
 #!/usr/bin/env bun
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import fs from "fs";
 import path from "path";
+import os from "os";
+import { execFileSync } from "child_process";
 import { filterPromptSections } from "./worker.ts";
 
 const TEMPLATE_PATH = path.join(import.meta.dirname, "chunk-reviewer-prompt.md");
+const WORKER_PATH = path.join(import.meta.dirname, "worker.ts");
 
 /**
  * Build a realistic prompt.txt-equivalent fixture from the actual template file, with each
@@ -159,5 +162,51 @@ describe("filterPromptSections", () => {
 		expect(filtered).not.toContain("PROJECT_CONTEXT_SENTINEL");
 		expect(filtered).not.toContain("<!-- section:");
 		expect(filtered).not.toContain("<!-- /section:");
+	});
+});
+
+// filterPromptSections being correct and its result actually reaching the finder are two
+// different claims — the suite above only tests the former by calling the function directly.
+// This drives worker.ts's real main() as a subprocess (job-dir/member/command CLI contract,
+// same shape lib/generic-job.ts's spawnWorkers uses) and inspects assembled-prompt.txt, the
+// file assemblePrompt (lib/worker-utils.ts) writes with whatever `reviewContent` it was passed
+// — a real production side effect of the runOneTurn → runOnce → assemblePrompt call chain, not
+// a mock. `--command true` is enough: assembled-prompt.txt is written before the command is
+// ever spawned, so what the command does is irrelevant to what this test checks.
+describe("main() 배선: prompt.txt가 필터링되어 reviewContent로 전달된다", () => {
+	let tmpRoot: string;
+
+	function makeJobDir(): string {
+		tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "chunk-worker-wiring-test-"));
+		const jobDir = path.join(tmpRoot, "jobs", "chunk-review-wiring-test");
+		fs.mkdirSync(path.join(jobDir, "members", "correctness"), { recursive: true });
+		return jobDir;
+	}
+
+	afterEach(() => {
+		fs.rmSync(tmpRoot, { recursive: true, force: true });
+	});
+
+	it("correctness 앵글로 실행하면 assembled-prompt.txt에 공통 섹션은 남고 조건부 섹션은 전부 제거된다", () => {
+		const jobDir = makeJobDir();
+		fs.writeFileSync(path.join(jobDir, "prompt.txt"), buildFixturePrompt(), "utf8");
+
+		execFileSync(
+			process.execPath,
+			[WORKER_PATH, "--job-dir", jobDir, "--member", "correctness", "--command", "true"],
+			{ stdio: "pipe" },
+		);
+
+		const assembled = fs.readFileSync(
+			path.join(jobDir, "members", "correctness", "assembled-prompt.txt"),
+			"utf8",
+		);
+
+		// prompt.txt was actually read: a common section (no marker, always passes through) is present.
+		expect(assembled).toContain("FILE_LIST_SENTINEL");
+		// correctness blocks every conditional section — none of them may reach the finder.
+		for (const sentinel of ALL_CONDITIONAL_SENTINELS) {
+			expect(assembled).not.toContain(sentinel);
+		}
 	});
 });
