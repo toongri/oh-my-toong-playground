@@ -129,8 +129,8 @@ repeat(threadCount) { index ->
 }
 
 val completed = latch.await(30, TimeUnit.SECONDS)
-assertThat(completed).isTrue()  // Fail if threads hung
 executorService.shutdown()
+assertThat(completed).isTrue()  // Fail if threads hung
 ```
 
 ### 단언
@@ -221,8 +221,8 @@ fun `same coupon can only be used once even with concurrent orders`() {
     }
 
     val completed = latch.await(30, TimeUnit.SECONDS)
-    assertThat(completed).isTrue()  // Fail if threads hung
     executorService.shutdown()
+    assertThat(completed).isTrue()  // Fail if threads hung
 
     // then
     assertThat(successCount.get()).isEqualTo(1)
@@ -277,8 +277,8 @@ fun `concurrent orders for same product should deduct stock correctly`() {
     }
 
     val completed = latch.await(30, TimeUnit.SECONDS)
-    assertThat(completed).isTrue()  // Fail if threads hung
     executorService.shutdown()
+    assertThat(completed).isTrue()  // Fail if threads hung
 
     // then
     assertThat(successCount.get()).isEqualTo(initialStock)
@@ -329,8 +329,8 @@ fun `only one request processed when concurrent requests with same idempotency k
     }
 
     val completed = latch.await(30, TimeUnit.SECONDS)
-    assertThat(completed).isTrue()  // Fail if threads hung
     executorService.shutdown()
+    assertThat(completed).isTrue()  // Fail if threads hung
 
     // then - all requests succeed and return the same order ID
     assertThat(results.values.all { it.isSuccess }).isTrue()
