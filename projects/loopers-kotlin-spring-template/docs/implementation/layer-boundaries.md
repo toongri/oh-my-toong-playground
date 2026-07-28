@@ -278,37 +278,24 @@ class OrderFacade(
     private val rewardFacade: RewardFacade,  // Facade-to-Facade dependency!
 )
 
-// ✅ CORRECT: Event-based communication
+// ✅ CORRECT: Facade가 여러 Service를 직접 조합한다
 @Component
 class OrderFacade(
     private val orderService: OrderService,
+    private val rewardService: RewardService,   // Facade→Service 여럿은 허용 — 5절
     private val eventPublisher: ApplicationEventPublisher,
 ) {
     @Transactional
     fun completeOrder(orderId: Long): OrderInfo {
         val order = orderService.complete(orderId)
-        eventPublisher.publishEvent(OrderCompletedEventV1.from(order))
+        rewardService.accumulate(order.userId, order.totalAmount)     // 원자적 쓰기 — 같은 트랜잭션, 같은 호출 스택
+        eventPublisher.publishEvent(OrderCompletedEventV1.from(order))  // 알림은 트랜잭션 밖 — 7절 리스너가 받는다
         return OrderInfo.from(order)
     }
 }
-
-// Other domains handle via event listeners
-@Component
-class RewardEventListener(
-    private val rewardService: RewardService,
-) {
-    private val logger = LoggerFactory.getLogger(this::class.java)
-
-    // 적립은 주문과 원자적으로 묶여야 하는 쓰기 — BEFORE_COMMIT으로 같은 트랜잭션에 넣는다
-    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
-    fun onOrderCompleted(event: OrderCompletedEventV1) {
-        logger.info("[Event] Reward accumulation start - eventType: ${event::class.simpleName}, userId: ${event.userId}")
-        // try-catch로 삼키지 않는다 — 예외가 전파돼야 주문까지 롤백된다
-        rewardService.accumulate(event.userId, event.totalAmount)
-        logger.info("[Event] Reward accumulation complete - eventType: ${event::class.simpleName}, userId: ${event.userId}")
-    }
-}
 ```
+
+Facade→Facade를 금지한다고 해서 도메인 간 호출을 전부 이벤트로 돌리라는 뜻이 아니다. 5절의 표대로 **Facade는 여러 Service를 조합할 수 있고**, 원자적으로 묶여야 하는 쓰기는 그렇게 처리한다. 적립을 리스너로 빼면 결합도는 크게 줄지 않으면서 — 주문 완료 시 무엇이 실행되는지가 코드에서 사라져 — 추적만 어려워진다. 이벤트는 **트랜잭션 밖으로 나가야 하는 작업**(알림·외부 호출)에 쓴다. 판단표는 [./domain-events.md](./domain-events.md) 3절에 있다.
 
 ### ❌ Facade의 비즈니스 로직
 

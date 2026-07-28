@@ -1,6 +1,6 @@
 # 도메인 이벤트와 EventListener
 
-도메인 이벤트를 언제 어떻게 발행하고 받는가 — 이벤트 정의 규칙, EventListener의 트랜잭션 단계, 크로스도메인 통신에서 이벤트를 쓰는 이유를 다룬다.
+도메인 이벤트를 언제 어떻게 발행하고 받는가 — 이벤트 정의 규칙, EventListener의 트랜잭션 단계, 크로스도메인 통신에서 이벤트를 쓸 자리와 쓰지 않을 자리를 다룬다.
 
 ## 목차
 
@@ -9,7 +9,7 @@
 3. **EventListener — 트랜잭션 단계 선택** — BEFORE_COMMIT vs AFTER_COMMIT, 로깅 포맷
 4. **BEFORE_COMMIT 리스너 (동기)** — 코드 예시
 5. **AFTER_COMMIT 리스너 (기본 동기)** — 코드 예시
-6. **크로스도메인 통신 — Facade 대신 이벤트** — Facade→Facade 금지, 외부 호출은 커밋 이후로
+6. **크로스도메인 통신 — Facade→Facade 금지** — 원자적 쓰기는 Service 조합으로, 외부 호출은 커밋 이후로
 7. **안티패턴 — 이벤트 구조와 리스너**
 8. **이 문서의 Red Flags**
 9. **이런 생각이 들면 멈춰라 — Critical Rules 발췌**
@@ -103,11 +103,11 @@ data class OrderItemSnapshot(
 
 리스너를 등록할 때 가장 먼저 결정할 것은 트랜잭션 단계다. 같은 트랜잭션 안에서 실패가 전체를 롤백해야 하면 `BEFORE_COMMIT`, 커밋이 끝난 뒤 별도로 처리해도 되면 `AFTER_COMMIT`이다.
 
-갈림의 실제 축은 **트랜잭션이 필요한가**와 **소실돼도 되는가** 둘이다. 이 둘로 세 갈래가 나온다.
+갈림의 실제 축은 **원본 트랜잭션에 묶여야 하는가**와 **커밋 이후로 미뤄도 되는가** 둘이다. 이 둘로 세 갈래가 나온다.
 
 | 상황 | 처리 |
 |------|------|
-| 원본과 원자적으로 묶여야 하는 쓰기 | 기존 서비스 안에서 직접 처리하거나 `BEFORE_COMMIT` 리스너로 같은 트랜잭션에 넣는다 |
+| 원본과 원자적으로 묶여야 하는 비즈니스 처리 | 리스너로 빼지 않는다 — Facade에서 Service를 하나 더 동기 호출한다 |
 | 커밋 이후에 처리해도 되고 DB 트랜잭션이 필요 없는 작업 — 알림·외부 호출, 캐시 무효화, 데이터마트 적재, 로그 | `AFTER_COMMIT`. 발행 스레드를 붙잡으면 안 될 때만 `@Async`를 더한다 |
 | 비동기로 빼고 싶은데 트랜잭션도 필요하다 | **레드 시그널** — 아래 참조 |
 
@@ -136,6 +136,8 @@ data class OrderItemSnapshot(
 ## 4. BEFORE_COMMIT 리스너 (동기)
 
 `BEFORE_COMMIT` 리스너는 같은 트랜잭션 안에서 실행되므로, 실패하면 이벤트를 발행한 트랜잭션 전체가 롤백된다.
+
+쓰임은 좁다. 비즈니스 처리를 여기로 빼지 않는다 — 그건 Facade에서 Service를 하나 더 호출할 자리다. `BEFORE_COMMIT`이 맞는 건 아웃박스 적재처럼 **호출한 서비스 안에서 처리해도 무방하지만 부수 관심사라 바깥으로 빼두고 싶은 작업**이다. 그 경우에도 대가를 안다 — 트랜잭션이 커밋될 때 무엇이 함께 실행되는지가 호출 코드에서 사라져 추적이 어려워진다.
 
 ```kotlin
 // ✅ CORRECT: Sync listener (same transaction, rolls back on failure)
@@ -186,9 +188,9 @@ class OrderNotificationListener(
 }
 ```
 
-## 6. 크로스도메인 통신 — Facade 대신 이벤트
+## 6. 크로스도메인 통신 — Facade→Facade 금지
 
-크로스도메인 통신은 반드시 이벤트를 써야 한다. Facade가 다른 Facade를 직접 호출하는 구조는 금지다.
+금지되는 것은 Facade가 다른 Facade를 직접 호출하는 구조다. 크로스도메인 호출을 전부 이벤트로 돌리라는 뜻은 아니다 — 원자적으로 묶여야 하는 쓰기는 Facade가 여러 Service를 직접 조합해 처리한다([./layer-boundaries.md](./layer-boundaries.md) 5절). 이벤트는 트랜잭션 밖으로 나가야 하는 작업에 쓴다.
 
 ```kotlin
 // ❌ FORBIDDEN: Facade calling another Facade
@@ -314,7 +316,7 @@ fun onOrderCreated(event: OrderCreatedEventV1)
 | "Just @EventListener is enough" | Use @TransactionalEventListener with explicit phase. Phase control is required. |
 | "Logging in listeners is optional" | ALWAYS log `[Event] Action start/complete - eventType: X, id: Y`. Required for debugging. |
 | "Listener doesn't need try-catch" | Exceptions MUST be caught and logged. Spring logs a bare ERROR line with no domain context and never propagates it to the caller — via `afterCompletion()` for a sync listener, via `AsyncUncaughtExceptionHandler` for an `@Async` one — so the listener itself must catch and log with domain context either way. |
-| "Direct synchronous call is clearer" | Events are required for cross-domain. "Clearer" != correct architecture. |
+| "Facade에서 다른 Facade를 부르면 간단한데" | Facade→Facade는 금지다. 원자적 쓰기는 Facade가 여러 Service를 조합하고, 트랜잭션 밖 작업만 이벤트로 뺀다. |
 | "Single @Transactional covers everything" | External calls MUST be after commit. Use AFTER_COMMIT event listener. |
 
 ## 9. 이런 생각이 들면 멈춰라 — Critical Rules 발췌
