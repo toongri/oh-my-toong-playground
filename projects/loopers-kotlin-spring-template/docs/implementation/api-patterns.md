@@ -56,7 +56,20 @@ interface ProductV1ApiSpec {
     fun search(
         @Parameter(description = "검색 키워드", example = "노트북")
         keyword: String?,
+        @Parameter(description = "페이지 번호", example = "0")
+        page: Int,
+        @Parameter(description = "페이지 크기", example = "20")
+        size: Int,
     ): ApiResponse<ProductV1Response.Search>
+
+    @Operation(summary = "상품 생성", description = "새 상품을 생성합니다.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "생성 성공"),
+        ApiResponse(responseCode = "400", description = "잘못된 요청")
+    ])
+    fun create(
+        request: ProductV1Request.Create,
+    ): ApiResponse<ProductV1Response.Create>
 }
 
 // Controller는 인터페이스를 구현 — Swagger 어노테이션 없이 깔끔하다
@@ -66,7 +79,18 @@ class ProductV1Controller(
     private val productFacade: ProductFacade,
 ) : ProductV1ApiSpec {
     @GetMapping("/search")
-    override fun search(keyword: String?): ApiResponse<ProductV1Response.Search> {
+    override fun search(
+        @RequestParam keyword: String?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ApiResponse<ProductV1Response.Search> {
+        // implementation only
+    }
+
+    @PostMapping
+    override fun create(
+        @RequestBody request: ProductV1Request.Create,
+    ): ApiResponse<ProductV1Response.Create> {
         // implementation only
     }
 }
