@@ -84,7 +84,7 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"
 - Otherwise (`"running"`, `"queued"`, etc., excluding `awaiting_resume` above), or if the Bash tool itself times out/force-kills the call with no JSON returned at all → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total**, counting both cases.
 - If the 6th call still does not report `"done"`:
   1. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`, and read `outputFilePath` per finder from the manifest JSON it prints per Allowed Read Usage.
-  2. Apply the Degradation Policy's partial-merge path, treating every finder that never produced a non-null `outputFilePath` as not-responded (denominator stays N = total dispatched).
+  2. Apply the Degradation Policy table below to the resulting responded/N ratio — treating every finder that never produced a non-null `outputFilePath` as not-responded (denominator stays N = total dispatched).
   3. Run `usage-summary.ts "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text.
   4. Teardown with `clean --force "$JOB_DIR"` in place of the ordinary `clean "$JOB_DIR"`.
 
@@ -136,7 +136,7 @@ These constraints govern the orchestration path — while dispatched finders are
 
 **Member Resume Policy (`resume-member`):**
 
-Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), or an `awaiting_resume` member is still `awaiting_resume` after 3 `resume-member` attempts, fall back to in-session per the trigger logic below. Once every finder is finished, run `usage-summary.ts` (harvest token counts), then run `clean`.
+Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), or an `awaiting_resume` member is still `awaiting_resume` after 3 `resume-member` attempts, fall back to in-session per the trigger logic below. Once every finder is finished, run `usage-summary.ts` (harvest token counts), then run `clean --force`.
 
 ```
 bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your candidate list."
@@ -155,7 +155,7 @@ You merge the finders' candidate lists. You do not judge them.
 Each finder returns candidates shaped as `file` / `line` / `summary` / `failure_scenario` (cleanup candidates state a concrete cost in `failure_scenario` instead of a crash). The requirement angle's requirement-gap candidates additionally carry an `ac` field — no other angle's candidates have one. Merge as follows:
 
 1. **Collect** every candidate from every finder that returned output.
-2. **Dedup near-duplicates**: two candidates match when they point at the same `file` and a line within ±5 of each other AND describe the same mechanism. Keep the one with the most concrete `failure_scenario`; record that BOTH angles found it (corroboration is a signal the verifier wants).
+2. **Dedup near-duplicates**: two candidates match when they point at the same `file` and a line within ±5 of each other AND describe the same mechanism. Keep the one with the most concrete `failure_scenario`; record that BOTH angles found it (corroboration is a signal the verifier wants). If either duplicate carries an `ac` field, carry it onto the kept candidate too.
 3. **Carry through** each surviving candidate verbatim — `file`, `line`, `summary`, `failure_scenario`, `ac` when present, and the angle(s) that found it. Do not rewrite, strengthen, or weaken them.
 4. **Do not add, drop, rank, or label.** Weak-looking candidates stay; the upstream verifier decides.
 
