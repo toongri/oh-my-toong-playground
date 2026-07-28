@@ -204,9 +204,10 @@ class CouponService {
 class RewardFacade {
     @Transactional
     fun grantReward(criteria: RewardCriteria): RewardInfo {
-        pointService.use(criteria.pointCommand)   // Participates in Facade's tx
-        couponService.issue(criteria.couponCommand)  // Participates in Facade's tx
+        val point = pointService.use(criteria.pointCommand)   // Participates in Facade's tx
+        val coupon = couponService.issue(criteria.couponCommand)  // Participates in Facade's tx
         // Both operations execute atomically in one transaction ✅
+        return RewardInfo.from(point, coupon)
     }
 }
 

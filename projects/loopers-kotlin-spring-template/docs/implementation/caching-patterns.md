@@ -92,7 +92,7 @@ class RankingFacade(
 }
 ```
 
-이 흐름의 순서가 규칙이다 — 캐싱 조건 확인 → 캐시 조회 → 미스 시에만 Service 호출 → 빈 결과는 캐싱하지 않고 저장. 아래는 `Criteria`/`Info` DTO 흐름을 쓰는 동일한 패턴이다. Facade가 어떤 DTO 계층을 쓰든 Cache-Aside 순서 자체는 바뀌지 않는다는 것을 보여준다.
+이 흐름의 순서가 규칙이다 — 캐싱 조건 확인 → 캐시 조회 → 미스 시에만 Service 호출 → 결과가 비어있지 않을 때만 캐싱. 아래는 `Criteria`/`Info` DTO 흐름을 쓰는 동일한 패턴이다. Facade가 어떤 DTO 계층을 쓰든 Cache-Aside 순서 자체는 바뀌지 않는다는 것을 보여준다.
 
 ```kotlin
 @Component
@@ -269,7 +269,7 @@ data class CachedProductDetailV1(
 fun findProducts(criteria: ProductCriteria.FindProducts): ProductInfo.FindProducts {
     val cacheKey = ProductCacheKeys.ProductList.from(criteria)
 
-    if (!cacheKey.shouldCache()) return productService.findProducts(criteria)
+    if (!cacheKey.shouldCache()) return ProductInfo.FindProducts.from(productService.findProducts(criteria))
 
     val cachedList = cacheTemplate.get(cacheKey, TYPE_CACHED_PRODUCT_LIST_V1)
 
