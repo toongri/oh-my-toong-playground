@@ -53,7 +53,7 @@ fun `decrease stock when valid amount is provided`()
 fun `change status to OUT_OF_STOCK when stock becomes zero`()
 
 @DisplayName("잔액이 부족하면 INSUFFICIENT_BALANCE 예외가 발생한다")
-fun `throws INSUFFICIENT_BALANCE when balance is insufficient`()
+fun `throws INSUFFICIENT_BALANCE CoreException when balance is insufficient`()
 ```
 
 메서드 이름을 언제 어느 정도로 세분화할지(Given/When/Then 상세도, `@Nested` 조직 규칙)는 이 문서가 다루지 않는다 — [test-authoring.md](./test-authoring.md)를 참고한다.
@@ -102,7 +102,7 @@ inner class StatusTransitions {
         @DisplayName("PLACED가 아닌 상태에서 확정하면 예외가 발생한다")
         @ParameterizedTest(name = "{0} 상태에서 confirm() 호출 시 예외")
         @EnumSource(value = OrderStatus::class, names = ["PLACED"], mode = EnumSource.Mode.EXCLUDE)
-        fun `throws when not PLACED`(invalidStatus: OrderStatus) {
+        fun `throws BAD_REQUEST CoreException when not PLACED`(invalidStatus: OrderStatus) {
             // given
             val order = createOrderWithStatus(invalidStatus)
 
