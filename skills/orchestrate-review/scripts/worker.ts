@@ -9,7 +9,6 @@ import { getOmtDir } from "@lib/omt-dir";
 import { splitCommand, atomicWriteJson, runOneTurn } from "@lib/worker-utils";
 import { detectCliType } from "@lib/generic-job";
 import type { CliType } from "@lib/agent-drivers/types";
-import { logRootForJobsDir } from "./job.ts";
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, "prompts");
 
@@ -81,7 +80,9 @@ function main() {
 	// test suite does) writes its log into the real per-project OMT dir instead.
 	const resolvedJobDir = jobDir ? path.resolve(String(jobDir)) : null;
 	const jobId = resolvedJobDir ? path.basename(resolvedJobDir).replace(/^chunk-review-/, "") : "unknown";
-	const logRoot = resolvedJobDir ? logRootForJobsDir(path.dirname(resolvedJobDir)) : getOmtDir();
+	const logRoot = resolvedJobDir
+		? path.dirname(path.resolve(path.dirname(resolvedJobDir)))
+		: getOmtDir();
 	initLogger("chunk-review-worker", logRoot, jobId);
 	logStart();
 
