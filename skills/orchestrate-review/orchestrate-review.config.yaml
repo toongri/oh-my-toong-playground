@@ -11,8 +11,11 @@ chunk-review:
     # can run on a different CLI/model. Today every angle runs on codex at gpt-5.6-sol,
     # medium reasoning effort. `model` + `effort_level` + `output_format` (below) plus
     # `settings.deny.skills` (below) resolve (via buildAugmentedCommand) to:
-    #   codex exec -m gpt-5.6-sol -c skills.config=[…from settings.deny.skills below…] \
+    #   codex exec -c agents.enabled=false -m gpt-5.6-sol \
+    #     -c skills.config=[…from settings.deny.skills below…] \
     #     -c model_reasoning_effort=medium --json --skip-git-repo-check
+    # `agents.enabled=false` strips codex's subagent tool descriptions (spawn_agent etc.)
+    # from the session entirely, so a finder can't spawn subagents even if asked to.
     # Note: codex uses bare model ids (no `openai/` prefix). Git history attests
     # codex with gpt-5.4 / gpt-5.3-codex (gpt-5.5 itself only ran via opencode);
     # if codex rejects `gpt-5.6-sol`, fall back to `gpt-5.5`.
@@ -24,28 +27,28 @@ chunk-review:
     # (was what was asked for actually done, is it actually verified, can an
     # attacker flip it).
     - name: correctness
-      command: codex exec
+      command: codex exec -c agents.enabled=false
       model: gpt-5.6-sol
       emoji: "\U0001F517"
       color: "CYAN"
       effort_level: medium
       output_format: json
     - name: regression
-      command: codex exec
+      command: codex exec -c agents.enabled=false
       model: gpt-5.6-sol
       emoji: "\U0001F5D1"
       color: "MAGENTA"
       effort_level: medium
       output_format: json
     - name: cleanup
-      command: codex exec
+      command: codex exec -c agents.enabled=false
       model: gpt-5.6-sol
       emoji: "\U0001F9F9"
       color: "YELLOW"
       effort_level: medium
       output_format: json
     - name: requirement
-      command: codex exec
+      command: codex exec -c agents.enabled=false
       model: gpt-5.6-sol
       emoji: "\U0001F4CB"
       color: "GREEN"
