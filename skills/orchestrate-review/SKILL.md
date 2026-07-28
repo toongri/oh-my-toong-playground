@@ -19,7 +19,7 @@ When finders cannot deliver — none configured/available after filtering, or al
 
 1. Write the interpolated prompt to a temp file.
 2. Start job: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
-3. Collect: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 600000 "$JOB_DIR"` — repeat until `overallState` is `"done"`.
+3. Collect: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"` — repeat until `overallState` is `"done"`.
 4. Read each finder's output file via the Read tool.
 5. Merge candidates using the Aggregation rules.
 6. Run `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text. This step **MUST** run before `clean` — the job dir is deleted in the next teardown step and the per-member token data is gone.
@@ -34,7 +34,7 @@ These constraints govern the orchestration path — while dispatched finders are
 
 You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — start a review job
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 600000 "$JOB_DIR"` — collect results (polls internally every 5s, up to the 600000ms timeout passed above). No external sleep needed.
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"` — collect results (polls internally every 5s, up to the 540000ms timeout passed above). No external sleep needed.
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete finder to a complete answer (see Member Resume Policy; cap 3 attempts)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" results --manifest "$JOB_DIR"` — fetch the manifest directly (see Step 2)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" stop "$JOB_DIR"` — SIGTERM any still-`running` finder (see Step 2)
@@ -73,14 +73,15 @@ Output: JOB_DIR path (one line on stdout). Each configured angle is dispatched a
 
 ### Step 2 — Collect (Bash, timeout: 600000)
 
-`collect` polls internally every 5 seconds until all finders complete or its internal timeout (600000ms, passed explicitly below) expires. No external sleep needed.
+`collect` polls internally every 5 seconds until all finders complete or its internal timeout (540000ms, passed explicitly below) expires. No external sleep needed.
 
 ```bash
-bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 600000 "$JOB_DIR"
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
-- Otherwise (`"running"`, `"queued"`, etc.), or if the Bash tool itself times out/force-kills the call with no JSON returned at all → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total**, counting both cases.
+- If response shows `"overallState": "awaiting_resume"` → run `results --manifest "$JOB_DIR"`, find each entry whose `errorMessage` is `"awaiting_resume"`, and run `resume-member` on that member per Member Resume Policy.
+- Otherwise (`"running"`, `"queued"`, etc., excluding `awaiting_resume` above), or if the Bash tool itself times out/force-kills the call with no JSON returned at all → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total**, counting both cases.
 - If the 6th call still does not report `"done"`:
   1. Run `results --manifest "$JOB_DIR"` and read whichever finders' `outputFilePath` is already non-null per Allowed Read Usage.
   2. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`.
@@ -136,7 +137,7 @@ These constraints govern the orchestration path — while dispatched finders are
 
 **Member Resume Policy (`resume-member`):**
 
-Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), fall back to in-session per the trigger logic below. Once every finder is finished, run `usage-summary.ts` (harvest token counts), then run `clean`.
+Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), or an `awaiting_resume` member is still `awaiting_resume` after 3 `resume-member` attempts, fall back to in-session per the trigger logic below. Once every finder is finished, run `usage-summary.ts` (harvest token counts), then run `clean`.
 
 ```
 bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your candidate list."
