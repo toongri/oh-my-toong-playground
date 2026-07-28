@@ -4,7 +4,7 @@ import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll, moc
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { execFileSync } from "child_process";
+import { execFileSync, spawn, spawnSync } from "child_process";
 
 import {
 	buildUiPayload,
@@ -14,6 +14,9 @@ import {
 	detectCliType,
 	buildAugmentedCommand,
 	gcStaleJobs,
+	cmdStart,
+	cmdReap,
+	classifyReapedOrphans,
 } from "./job.ts";
 import { extractDenySkills } from "@lib/generic-job";
 import * as GenericJob from "@lib/generic-job";
@@ -53,6 +56,106 @@ function makeCliStubDir(): string {
 		fs.chmodSync(stubPath, 0o755);
 	}
 	return stubDir;
+}
+
+/**
+ * Builds an orphan job fixture directly on disk: a real detached process group
+ * (a `sleep 30`, so it stays alive for the duration of a test) recorded as a
+ * job's only member's `workerPgid`, with that member's status already terminal
+ * ("done"). This is exactly lib/generic-job.ts's `findOrphanJobs` predicate —
+ * alive PGID + zero live progress (`findActiveMembers` returns none) — so the
+ * fixture is judged orphaned without needing to fake or bypass that judgment.
+ */
+function makeOrphanJobFixture(
+	jobsDir: string,
+	name: string,
+	opts: { createdAt?: string } = {},
+): { jobDir: string; pgid: number } {
+	const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+	child.unref();
+	// A detached child is the leader of its own process group, so PGID === PID
+	// (same platform contract lib/generic-job.ts's spawnWorkers relies on).
+	const pgid = child.pid as number;
+	// Spawn-time witness (same `ps -o lstart=` value spawnWorkers itself records)
+	// — required since the orphan reaper only signals a PGID whose current
+	// leader's start time matches this recorded value (PID/PGID reuse guard).
+	const workerPgidStartedAt = execFileSync("ps", ["-o", "lstart=", "-p", String(pgid)], {
+		encoding: "utf8",
+	}).trim();
+
+	const jobDir = path.join(jobsDir, `chunk-review-${name}`);
+	const memberDir = path.join(jobDir, "members", "alice");
+	fs.mkdirSync(memberDir, { recursive: true });
+	fs.writeFileSync(
+		path.join(jobDir, "job.json"),
+		JSON.stringify({
+			id: `chunk-review-${name}`,
+			createdAt: opts.createdAt ?? new Date().toISOString(),
+			members: [{ name: "alice", workerPgid: pgid, workerPgidStartedAt }],
+		}),
+	);
+	fs.writeFileSync(
+		path.join(memberDir, "status.json"),
+		JSON.stringify({ member: "alice", state: "done", exitCode: 0 }),
+	);
+	return { jobDir, pgid };
+}
+
+/**
+ * Same fixture shape as makeOrphanJobFixture, but with N members — each its
+ * own detached `sleep 30` process group — under a single job. Exists to
+ * reproduce the job-count-vs-process-count mislabel: findOrphanJobs collapses
+ * this into ONE orphan entry with `pgids.length === memberNames.length`, so a
+ * caller that reports "N orphan job(s) ... M process(es)" using the same N
+ * for both is wrong whenever a job has more than one live member.
+ */
+function makeMultiMemberOrphanJobFixture(
+	jobsDir: string,
+	name: string,
+	memberNames: string[],
+): { jobDir: string; pgids: number[] } {
+	const jobDir = path.join(jobsDir, `chunk-review-${name}`);
+	const members: Array<{ name: string; workerPgid: number; workerPgidStartedAt: string }> = [];
+	const pgids: number[] = [];
+	for (const memberName of memberNames) {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		child.unref();
+		const pgid = child.pid as number;
+		const workerPgidStartedAt = execFileSync("ps", ["-o", "lstart=", "-p", String(pgid)], {
+			encoding: "utf8",
+		}).trim();
+		const memberDir = path.join(jobDir, "members", memberName);
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(memberDir, "status.json"),
+			JSON.stringify({ member: memberName, state: "done", exitCode: 0 }),
+		);
+		members.push({ name: memberName, workerPgid: pgid, workerPgidStartedAt });
+		pgids.push(pgid);
+	}
+	fs.writeFileSync(
+		path.join(jobDir, "job.json"),
+		JSON.stringify({ id: `chunk-review-${name}`, createdAt: new Date().toISOString(), members }),
+	);
+	return { jobDir, pgids };
+}
+
+/** `kill(pgid, 0)` sends no signal — it only probes whether the group still exists. */
+function isPgidAlive(pgid: number): boolean {
+	try {
+		process.kill(-pgid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function killPgidIfAlive(pgid: number): void {
+	try {
+		process.kill(-pgid, "SIGKILL");
+	} catch {
+		// already reaped/exited — nothing to clean up
+	}
 }
 
 // `start` spawns its worker detached; `execFileSync("start", …)` returns long before
@@ -260,6 +363,12 @@ describe("parseChunkReviewConfig", () => {
 			const { command } = buildAugmentedCommand(entity, cliType);
 			expect(command.includes("-c agents.enabled=false")).toBe(true);
 		}
+	});
+
+	test('real config declares settings.mcps.allow as exactly ["codegraph"]', async () => {
+		const realPath = path.join(import.meta.dirname, "..", "orchestrate-review.config.yaml");
+		const result = await parseChunkReviewConfig(realPath);
+		expect(result["chunk-review"].settings.mcps).toEqual({ allow: ["codegraph"] });
 	});
 });
 
@@ -1169,6 +1278,570 @@ describe("gcStaleJobs", () => {
 		expect(fs.existsSync(outsideDir)).toBe(true);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// job.ts reap — kills orphan process groups, stdout MUST stay empty (cache-safe
+// SessionStart contract; see the reap docstring in job.ts).
+//
+// Placed before any mock.module(...) usage in this file: bun test runs every
+// test file in one process, and mock.module leaks across file boundaries —
+// tests that need the real @lib/generic-job engine must run before the first
+// mock.module call anywhere in this file (see job.ts's MUST DO notes).
+// ---------------------------------------------------------------------------
+
+describe("job.ts reap", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+	let jobsDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("stdout는 완전히 비어 있고, 회수할 고아가 있을 때 진단은 stderr로만 나간다", () => {
+		const { jobDir, pgid } = makeOrphanJobFixture(jobsDir, "cache-safe");
+
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "0"],
+			{ stdio: "pipe" },
+		);
+
+		// The real substance of this test: stdout carries zero bytes even though
+		// there WAS something to reap — an empty stdout with nothing to do would
+		// prove nothing about the cache-safety requirement.
+		expect(result.toString()).toBe("");
+
+		// stderr — not stdout — carries the diagnostic.
+		expect(fs.existsSync(jobDir)).toBe(true); // reap never deletes the directory
+
+		killPgidIfAlive(pgid);
+	});
+
+	test("stderr에 회수 진단이 기록되고, 회수된 고아 프로세스 그룹은 더 이상 살아있지 않다", () => {
+		const { jobDir, pgid } = makeOrphanJobFixture(jobsDir, "reaped-effect");
+
+		const proc = spawnSync(
+			process.execPath,
+			[SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "0"],
+			{ encoding: "utf8" },
+		);
+
+		expect(proc.status).toBe(0);
+		expect(proc.stdout).toBe("");
+		expect(proc.stderr.length).toBeGreaterThan(0);
+		expect(proc.stderr).toContain(jobDir);
+		expect(isPgidAlive(pgid)).toBe(false);
+	});
+
+	test("--grace-ms 옵션이 reapOrphanJobs로 전달된다 (유예 시간 실측)", () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "grace-passthrough");
+
+		const start = Date.now();
+		execFileSync(process.execPath, [SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "300"], {
+			stdio: "pipe",
+		});
+		const elapsed = Date.now() - start;
+
+		// Default grace is REAP_GRACE_MS_DEFAULT (5000ms) — an elapsed time well
+		// under that but still >= most of the requested 300ms proves --grace-ms
+		// reached reapOrphanJobs rather than being ignored (which would either
+		// return near-instantly or take the full 5s default).
+		expect(elapsed).toBeGreaterThanOrEqual(250);
+		expect(elapsed).toBeLessThan(4000);
+
+		killPgidIfAlive(pgid);
+	});
+
+	test("회수할 고아가 없으면 stdout은 비고 정상 종료한다", () => {
+		// --grace-ms 0으로 명시했으니 유예가 없다는 것은 자명하다 — 여기서 확인하는
+		// 것은 그 값과 무관하게 정상 종료(빈 stdout)한다는 점.
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "0"],
+			{ stdio: "pipe" },
+		);
+		expect(result.toString()).toBe("");
+	});
+
+	test("이 job과 무관한 프로세스는 reap 회수 전후 모두 살아있다 (오살 방지 방관자)", () => {
+		// 방관자 — 어떤 job.json에도 workerPgid로 기록되지 않은 무관한 프로세스.
+		// reap이 잘못된 그룹에 신호를 보내면 이 프로세스가 사라진다.
+		const bystander = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		bystander.unref();
+		const bystanderPgid = bystander.pid;
+		if (bystanderPgid === undefined) throw new Error("spawn failed to produce a pid");
+
+		try {
+			expect(isPgidAlive(bystanderPgid)).toBe(true);
+
+			const { pgid } = makeOrphanJobFixture(jobsDir, "bystander-reap");
+			execFileSync(process.execPath, [SCRIPT, "reap", "--jobs-dir", jobsDir, "--grace-ms", "0"], {
+				stdio: "pipe",
+			});
+
+			expect(isPgidAlive(pgid)).toBe(false);
+			// 핵심 단언 — 오살 방지: 무관한 프로세스는 여전히 살아있어야 한다.
+			expect(isPgidAlive(bystanderPgid)).toBe(true);
+		} finally {
+			killPgidIfAlive(bystanderPgid);
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// job.ts cmdReap — 로그는 그룹킬 후 생존한 프로세스를 "reaped"라고 주장하면
+// 안 된다 (결함 B). reapOrphanJobs 자신도 별도로 "survived group kill" 줄을
+// stderr에 남기므로, cmdReap이 매 orphan마다 무조건 "reaped"를 쓰면 같은
+// stderr 스트림에 서로 모순되는 두 줄이 남는다.
+// ---------------------------------------------------------------------------
+
+describe("job.ts cmdReap — 생존 프로세스를 회수됐다고 보고하지 않는다", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("group kill 후에도 프로세스가 살아남으면 stderr에 'reaped' 성공 주장이 없다", async () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "survivor");
+
+		// 선행 단언: 회수 전에 그룹이 실제로 살아있음을 먼저 확인한다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		const stderrChunks: string[] = [];
+		const originalStderrWrite = process.stderr.write;
+		(process.stderr as unknown as { write: unknown }).write = (chunk: unknown) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		};
+
+		const originalKill = process.kill;
+		// kill을 no-op으로 바꿔 실제로는 신호를 보내지 않는다 — 그러면 프로세스는
+		// 반드시 살아남으므로 "생존" 분기가 타이밍에 의존하지 않고 결정적으로
+		// 재현된다 (lib/generic-job.test.ts의 동일 기법).
+		(process as unknown as { kill: unknown }).kill = () => true;
+
+		try {
+			await cmdReap({ "jobs-dir": jobsDir, "grace-ms": 0 });
+		} finally {
+			process.kill = originalKill;
+			process.stderr.write = originalStderrWrite;
+		}
+
+		const combined = stderrChunks.join("");
+		expect(combined).not.toContain("reaped orphan job");
+		// 오살 방지: kill이 no-op이었으므로 프로세스는 실제로 살아있어야 한다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		killPgidIfAlive(pgid);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// job.ts doctor — reports orphan counts on stdout, never kills.
+// ---------------------------------------------------------------------------
+
+describe("job.ts doctor", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+	let jobsDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("kill 없이 고아 카운트를 stdout에 보고하고, 그룹은 doctor 실행 후에도 살아있다", () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "doctor-no-kill");
+
+		const result = execFileSync(process.execPath, [SCRIPT, "doctor", "--jobs-dir", jobsDir, "--json"], {
+			stdio: "pipe",
+		});
+		const output = JSON.parse(result.toString());
+		expect(output.orphanJobCount).toBe(1);
+		expect(output.orphanPgidCount).toBe(1);
+
+		// kill 없음의 증거: doctor 호출 이후에도 프로세스 그룹이 여전히 살아있다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		killPgidIfAlive(pgid);
+	});
+
+	test("고아가 없으면 카운트 0을 보고한다", () => {
+		const result = execFileSync(process.execPath, [SCRIPT, "doctor", "--jobs-dir", jobsDir, "--json"], {
+			stdio: "pipe",
+		});
+		const output = JSON.parse(result.toString());
+		expect(output.orphanJobCount).toBe(0);
+		expect(output.orphanPgidCount).toBe(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cmdStart also reaps orphans at job-start time (in-process, real engine —
+// cmdStart is directly exported and imported at the top of this file).
+// ---------------------------------------------------------------------------
+
+describe("cmdStart reaps orphan jobs on start", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("job 시작 시 기존 고아 job의 프로세스 그룹을 회수한다", async () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "start-reap");
+
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		expect(isPgidAlive(pgid)).toBe(false);
+
+		// cleanup: kill this test's own newly-spawned worker(s), best-effort.
+		for (const entry of fs.readdirSync(jobsDir)) {
+			const jobJsonPath = path.join(jobsDir, entry, "job.json");
+			if (!fs.existsSync(jobJsonPath)) continue;
+			const meta = JSON.parse(fs.readFileSync(jobJsonPath, "utf8"));
+			for (const member of meta.members ?? []) {
+				if (typeof member.workerPgid === "number") killPgidIfAlive(member.workerPgid);
+			}
+		}
+	});
+
+	test("createdAt이 GC 임계(1시간)보다 오래된 고아 job도 회수한다 (GC가 앵커를 지우기 전에 회수해야 한다)", async () => {
+		// gcStaleJobs(GC_MAX_AGE_MS=1시간)가 reapOrphanJobs보다 먼저 돌면 이 job의
+		// job.json(모든 회수 계층의 유일한 소유권 앵커)이 생존 여부 확인 없이
+		// 지워진다 — 그러면 reapOrphanJobs가 뒤이어 돌아도 지울 앵커가 이미 없어
+		// 이 프로세스 그룹은 회수되지 않는다. 순서를 바꾸지 않으면 RED.
+		const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
+		const { pgid } = makeOrphanJobFixture(jobsDir, "gc-race", { createdAt: twoHoursAgo });
+
+		// 선행 단언: 회수 전에 그룹이 실제로 살아있음을 먼저 확인한다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		expect(isPgidAlive(pgid)).toBe(false);
+
+		// cleanup: kill this test's own newly-spawned worker(s), best-effort.
+		for (const entry of fs.readdirSync(jobsDir)) {
+			const jobJsonPath = path.join(jobsDir, entry, "job.json");
+			if (!fs.existsSync(jobJsonPath)) continue;
+			const meta = JSON.parse(fs.readFileSync(jobJsonPath, "utf8"));
+			for (const member of meta.members ?? []) {
+				if (typeof member.workerPgid === "number") killPgidIfAlive(member.workerPgid);
+			}
+		}
+	});
+
+	test("이 job과 무관한 프로세스는 cmdStart의 회수 전후 모두 살아있다 (오살 방지 방관자)", async () => {
+		const bystander = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		bystander.unref();
+		const bystanderPgid = bystander.pid;
+		if (bystanderPgid === undefined) throw new Error("spawn failed to produce a pid");
+
+		try {
+			expect(isPgidAlive(bystanderPgid)).toBe(true);
+
+			const { pgid } = makeOrphanJobFixture(jobsDir, "bystander-start");
+
+			const configPath = path.join(tmpDir, "config.yaml");
+			fs.writeFileSync(
+				configPath,
+				[
+					"chunk-review:",
+					"  chairman:",
+					"    role: none",
+					"  members:",
+					"    - name: bob",
+					"      command: echo bob",
+					"  settings:",
+					"    exclude_chairman_from_members: false",
+					"    timeout: 10",
+				].join("\n"),
+			);
+
+			await cmdStart(
+				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				"test prompt",
+			);
+
+			expect(isPgidAlive(pgid)).toBe(false);
+			// 핵심 단언 — 오살 방지: 무관한 프로세스는 여전히 살아있어야 한다.
+			expect(isPgidAlive(bystanderPgid)).toBe(true);
+
+			for (const entry of fs.readdirSync(jobsDir)) {
+				const jobJsonPath = path.join(jobsDir, entry, "job.json");
+				if (!fs.existsSync(jobJsonPath)) continue;
+				const meta = JSON.parse(fs.readFileSync(jobJsonPath, "utf8"));
+				for (const member of meta.members ?? []) {
+					if (typeof member.workerPgid === "number") killPgidIfAlive(member.workerPgid);
+				}
+			}
+		} finally {
+			killPgidIfAlive(bystanderPgid);
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// classifyReapedOrphans — shared judgment core cmdReap and cmdStart's reap
+// log both call into: per-orphan verdict of whether the group actually died
+// after being signalled, using the same isPgidGroupAlive probe cmdReap used
+// before this extraction. Tested directly (not through either caller) so the
+// judgment is verified independent of either caller's own phrasing/channel.
+// ---------------------------------------------------------------------------
+
+describe("classifyReapedOrphans", () => {
+	test("프로세스 그룹이 살아있으면 survived: true를 반환한다", () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		child.unref();
+		const pgid = child.pid as number;
+		try {
+			expect(isPgidAlive(pgid)).toBe(true);
+
+			const verdicts = classifyReapedOrphans([{ jobDir: "/tmp/whatever", pgids: [pgid] }]);
+
+			expect(verdicts).toEqual([{ jobDir: "/tmp/whatever", pgids: [pgid], survived: true }]);
+		} finally {
+			killPgidIfAlive(pgid);
+		}
+	});
+
+	test("프로세스 그룹이 죽었으면 survived: false를 반환한다", async () => {
+		const child = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+		child.unref();
+		const pgid = child.pid as number;
+		process.kill(-pgid, "SIGKILL");
+		// SIGKILL is asynchronous — poll until the group is actually gone before
+		// asserting, or this test would flake on a slow host.
+		for (let i = 0; i < 50 && isPgidAlive(pgid); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		expect(isPgidAlive(pgid)).toBe(false);
+
+		const verdicts = classifyReapedOrphans([{ jobDir: "/tmp/whatever", pgids: [pgid] }]);
+
+		expect(verdicts).toEqual([{ jobDir: "/tmp/whatever", pgids: [pgid], survived: false }]);
+	});
+
+	test("reaped가 빈 배열이면 빈 배열을 반환한다", () => {
+		expect(classifyReapedOrphans([])).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// cmdStart의 reap 로그 — 독립 code review 2차가 CONFIRMED로 확정한 결함: cmdReap
+// 은 group kill 후 생존 프로세스를 확인해 "reaped"라고 무조건 주장하지 않도록
+// 고쳐졌지만, 같은 reapOrphanJobs를 호출하는 형제 cmdStart는 안 고쳐진 채
+// survivingPids를 버리고 항상 "N orphan job(s) reaped"라고 logInfo했다.
+// ---------------------------------------------------------------------------
+
+describe("cmdStart reap 로그 — 생존 프로세스를 회수됐다고 보고하지 않는다", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+	let originalOmtDir: string | undefined;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		originalOmtDir = process.env.OMT_DIR;
+		process.env.OMT_DIR = tmpDir;
+	});
+
+	afterEach(() => {
+		if (originalOmtDir === undefined) delete process.env.OMT_DIR;
+		else process.env.OMT_DIR = originalOmtDir;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function writeStartConfig(): string {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		return configPath;
+	}
+
+	function readStartLog(): string {
+		const logsDir = path.join(tmpDir, "logs");
+		const files = fs.readdirSync(logsDir).filter((f) => f.startsWith("chunk-review-job-"));
+		expect(files.length).toBe(1);
+		return fs.readFileSync(path.join(logsDir, files[0]), "utf8");
+	}
+
+	function killSpawnedWorkers(): void {
+		for (const entry of fs.readdirSync(jobsDir)) {
+			const jobJsonPath = path.join(jobsDir, entry, "job.json");
+			if (!fs.existsSync(jobJsonPath)) continue;
+			const meta = JSON.parse(fs.readFileSync(jobJsonPath, "utf8"));
+			for (const member of meta.members ?? []) {
+				if (typeof member.workerPgid === "number") killPgidIfAlive(member.workerPgid);
+			}
+		}
+	}
+
+	test("group kill 후에도 프로세스가 살아남으면 로그에 'orphan job(s) reaped' 무조건 성공 주장이 없다", async () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "start-survivor");
+		expect(isPgidAlive(pgid)).toBe(true);
+		const configPath = writeStartConfig();
+
+		const originalKill = process.kill;
+		// kill을 no-op으로 바꿔 실제로는 신호를 보내지 않는다 — 그러면 프로세스는
+		// 반드시 살아남으므로 "생존" 분기가 타이밍에 의존하지 않고 결정적으로
+		// 재현된다 (job.ts cmdReap 테스트와 동일 기법).
+		(process as unknown as { kill: unknown }).kill = () => true;
+
+		try {
+			await cmdStart(
+				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				"test prompt",
+			);
+		} finally {
+			process.kill = originalKill;
+		}
+
+		const logContent = readStartLog();
+		expect(logContent).not.toContain("orphan job(s) reaped");
+		// 오살 방지: kill이 no-op이었으므로 프로세스는 실제로 살아있어야 한다.
+		expect(isPgidAlive(pgid)).toBe(true);
+
+		killPgidIfAlive(pgid);
+		killSpawnedWorkers();
+	});
+
+	test("실제로 전부 회수된 경우엔 여전히 회수 성공을 로그에 남긴다 (음성 대조군)", async () => {
+		const { pgid } = makeOrphanJobFixture(jobsDir, "start-reaped-ok");
+		expect(isPgidAlive(pgid)).toBe(true);
+		const configPath = writeStartConfig();
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		const logContent = readStartLog();
+		expect(logContent).toContain("1 orphan job(s) reaped");
+		expect(isPgidAlive(pgid)).toBe(false);
+
+		killSpawnedWorkers();
+	});
+
+	test("한 job에 살아있는 pgid가 2개 이상이면 로그의 process(es) 수는 job 수가 아니라 실제 생존 프로세스 수를 반영한다", async () => {
+		// 결함 재현: job은 1개뿐인데 그 job의 살아있는 멤버는 2개다.
+		// classifyReapedOrphans는 job 단위로 survived: boolean 하나만 반환하므로,
+		// 그 개수(1)를 그대로 "process(es) survived"로 찍으면 실제 생존 프로세스
+		// 수(2)와 어긋난다.
+		const { pgids } = makeMultiMemberOrphanJobFixture(jobsDir, "start-multi-survivor", [
+			"alice",
+			"bob",
+		]);
+		expect(pgids.every((pgid) => isPgidAlive(pgid))).toBe(true);
+		const configPath = writeStartConfig();
+
+		const originalKill = process.kill;
+		// kill을 no-op으로 바꿔 두 프로세스 모두 결정적으로 생존시킨다.
+		(process as unknown as { kill: unknown }).kill = () => true;
+
+		try {
+			await cmdStart(
+				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				"test prompt",
+			);
+		} finally {
+			process.kill = originalKill;
+		}
+
+		const logContent = readStartLog();
+		expect(logContent).toContain("1 orphan job(s) signalled");
+		// 핵심 단언: 실제 생존 프로세스 수(2)가 찍혀야 하고, job 수(1)를 그대로
+		// process 수로 잘못 라벨링한 "1 process(es) survived"가 찍히면 안 된다.
+		expect(logContent).toContain("2 process(es) survived the group kill");
+		expect(logContent).not.toContain("1 process(es) survived the group kill");
+		// 오살 방지: kill이 no-op이었으므로 두 프로세스 모두 실제로 살아있어야 한다.
+		expect(pgids.every((pgid) => isPgidAlive(pgid))).toBe(true);
+
+		for (const pgid of pgids) killPgidIfAlive(pgid);
+		killSpawnedWorkers();
+	});
+});
+
+// ---------------------------------------------------------------------------
 // cmdClean — path traversal guard (Fix A)
 // ---------------------------------------------------------------------------
 
@@ -3476,6 +4149,188 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 });
 
 // ---------------------------------------------------------------------------
+// parseChunkReviewConfig settings.mcps.allow — shape guard (assertMcpAllowShape)
+// ---------------------------------------------------------------------------
+
+describe("parseChunkReviewConfig settings.mcps.allow", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function expectParseExitsWithError(configPath: string, expectedSubstring: string) {
+		const scriptContent = `
+      const { parseChunkReviewConfig } = await import('${path.resolve(import.meta.dirname, "./job.ts").replace(/'/g, "\\'")}');
+      await parseChunkReviewConfig('${configPath.replace(/'/g, "\\'")}');
+    `;
+		try {
+			execFileSync(process.execPath, ["-e", scriptContent], {
+				encoding: "utf8",
+				stdio: ["pipe", "pipe", "pipe"],
+			});
+			throw new Error("Expected parseChunkReviewConfig subprocess to exit non-zero");
+		} catch (err) {
+			expect((err as any).status).toBe(1);
+			expect((err as any).stderr.toString()).toContain(expectedSubstring);
+		}
+	}
+
+	test("exits 1 when mcps.allow is not an array (a string)", () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			["chunk-review:", "  settings:", "    mcps:", '      allow: "codegraph"'].join("\n"),
+		);
+		expectParseExitsWithError(configPath, `Invalid config in ${configPath}`);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// start: settings.mcps.allow → job.json members[].mcpBlock (computeMcpBlockList
+// wiring). Uses cmdStart directly (not via subprocess) so CODEX_HOME can be
+// pointed at a hermetic config.toml fixture instead of the real host's.
+//
+// The block list is recorded per member because a member's own `env.CODEX_HOME`
+// changes which config.toml its worker actually reads — see cmdStart's
+// mcpBlockByMember.
+// ---------------------------------------------------------------------------
+
+describe("start: settings.mcps.allow recorded in job.json members[].mcpBlock", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+	let codexHomeDir: string;
+	let prevCodexHome: string | undefined;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		codexHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-test-"));
+		fs.writeFileSync(
+			path.join(codexHomeDir, "config.toml"),
+			[
+				"[mcp_servers.codegraph]",
+				'command = "stub"',
+				"",
+				"[mcp_servers.figma]",
+				'command = "stub"',
+				"",
+				"[mcp_servers.notion]",
+				'command = "stub"',
+			].join("\n"),
+		);
+		prevCodexHome = process.env.CODEX_HOME;
+		process.env.CODEX_HOME = codexHomeDir;
+	});
+
+	afterEach(() => {
+		if (prevCodexHome === undefined) delete process.env.CODEX_HOME;
+		else process.env.CODEX_HOME = prevCodexHome;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+		fs.rmSync(codexHomeDir, { recursive: true, force: true });
+	});
+
+	test("job.json members[].mcpBlock is the complement of settings.mcps.allow against configured servers", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				"    mcps:",
+				"      allow:",
+				"        - codegraph",
+			].join("\n"),
+		);
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		const entry = fs.readdirSync(jobsDir).find((e) => e.startsWith("chunk-review-"));
+		expect(entry).toBeDefined();
+		const jobMeta = JSON.parse(
+			fs.readFileSync(path.join(jobsDir, entry as string, "job.json"), "utf8"),
+		);
+		expect(jobMeta.members.map((m: { mcpBlock: string[] }) => m.mcpBlock)).toEqual([
+			["figma", "notion"],
+		]);
+	});
+
+	test("a member's own env.CODEX_HOME decides which config.toml its block list is computed against", async () => {
+		// The member home declares a DISJOINT server set from the conductor home
+		// (see beforeEach: codegraph/figma/notion). Both failure directions the
+		// per-member computation exists to prevent are visible in one assertion:
+		// "linear" (member-only) must be blocked, and "figma"/"notion"
+		// (conductor-only) must NOT appear — passing a name the member's own
+		// config.toml never declares makes codex fail to boot.
+		const memberCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-member-"));
+		fs.writeFileSync(
+			path.join(memberCodexHome, "config.toml"),
+			["[mcp_servers.codegraph]", 'command = "stub"', "", "[mcp_servers.linear]", 'command = "stub"'].join(
+				"\n",
+			),
+		);
+
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: bob",
+				"      command: echo bob",
+				"    - name: carol",
+				"      command: echo carol",
+				"      env:",
+				`        CODEX_HOME: ${memberCodexHome}`,
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				"    mcps:",
+				"      allow:",
+				"        - codegraph",
+			].join("\n"),
+		);
+
+		try {
+			await cmdStart(
+				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				"test prompt",
+			);
+
+			const entry = fs.readdirSync(jobsDir).find((e) => e.startsWith("chunk-review-"));
+			expect(entry).toBeDefined();
+			const jobMeta = JSON.parse(
+				fs.readFileSync(path.join(jobsDir, entry as string, "job.json"), "utf8"),
+			);
+			const byName = Object.fromEntries(
+				jobMeta.members.map((m: { name: string; mcpBlock: string[] }) => [m.name, m.mcpBlock]),
+			);
+			expect(byName.bob).toEqual(["figma", "notion"]);
+			expect(byName.carol).toEqual(["linear"]);
+		} finally {
+			fs.rmSync(memberCodexHome, { recursive: true, force: true });
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
 // start: assertDenyEnforceable gate wiring (cmdStart calls it right after
 // assertMembersOrExit, before spawning workers)
 // ---------------------------------------------------------------------------
@@ -3611,6 +4466,167 @@ describe("start: assertDenyEnforceable gate wiring", () => {
 });
 
 // ---------------------------------------------------------------------------
+// cmdStart — job.json members[].workerPgid 앵커 기록
+// ---------------------------------------------------------------------------
+
+describe("cmdStart writes workerPgid to job.json", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test("job.json의 모든 members가 양의 정수 `workerPgid`를 가진다", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		const jobDirName = fs.readdirSync(jobsDir)[0];
+		const jobDir = path.join(jobsDir, jobDirName);
+		const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+
+		expect(jobMeta.members.length).toBe(2);
+		for (const member of jobMeta.members) {
+			expect("workerPgid" in member).toBeTruthy();
+			expect(Number.isInteger(member.workerPgid)).toBe(true);
+			expect(member.workerPgid).toBeGreaterThan(0);
+		}
+
+		// cleanup spawned worker process groups (may have already exited — best-effort)
+		for (const member of jobMeta.members) {
+			try {
+				process.kill(-member.workerPgid, "SIGKILL");
+			} catch {
+				// already exited — nothing to clean up
+			}
+		}
+	});
+
+	test("job.json의 모든 members가 spawn 시각 증인(`workerPgidStartedAt`)을 가진다", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		await cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		const jobDirName = fs.readdirSync(jobsDir)[0];
+		const jobDir = path.join(jobsDir, jobDirName);
+		const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+
+		expect(jobMeta.members.length).toBe(2);
+		for (const member of jobMeta.members) {
+			// 오살 회귀 결함의 수정 검증: 회수기가 "이 PGID 번호가 우리 것"을
+			// 확인할 유일한 근거가 이 증인이다 — 부재하면 findOrphanJobs/cmdClean
+			// 어느 쪽도 이 워커를 회수하지 않는다.
+			expect("workerPgidStartedAt" in member).toBeTruthy();
+			expect(typeof member.workerPgidStartedAt).toBe("string");
+			expect((member.workerPgidStartedAt as string).length).toBeGreaterThan(0);
+		}
+
+		// cleanup spawned worker process groups (may have already exited — best-effort)
+		for (const member of jobMeta.members) {
+			try {
+				process.kill(-member.workerPgid, "SIGKILL");
+			} catch {
+				// already exited — nothing to clean up
+			}
+		}
+	});
+
+	test("반환 배열에 이름이 없는 멤버는 workerPgid: null로 병합된다", async () => {
+		let capturedJobDir = "";
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: ({ jobDir }: { jobDir: string }) => {
+				capturedJobDir = jobDir;
+				// Only "alice" is reported back — "bob" is absent from the returned array,
+				// simulating a spawn that didn't report every entity by name.
+				return [{ name: "alice", workerPgid: 4242 }];
+			},
+		}));
+
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+			].join("\n"),
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		const mod = await import(`./job.ts?workerpgid-merge=${Date.now()}-${Math.random()}`);
+		await mod.cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		expect(capturedJobDir).not.toBe("");
+		const jobMeta = JSON.parse(fs.readFileSync(path.join(capturedJobDir, "job.json"), "utf8"));
+		const alice = jobMeta.members.find((m: { name: string }) => m.name === "alice");
+		const bob = jobMeta.members.find((m: { name: string }) => m.name === "bob");
+		expect(alice.workerPgid).toBe(4242);
+		expect(bob.workerPgid).toBe(null);
+
+		mock.restore();
+	});
+});
+
+// ---------------------------------------------------------------------------
 // start → spawnWorkers wiring: declared deny reaches each dispatched entity
 // (AC6 — verified by spying on the shared lib's spawnWorkers, per the spec's
 // allowed fallback method since detached workers are not easily inspectable).
@@ -3657,6 +4673,7 @@ describe("start: deny reaches spawnWorkers entities (AC6 wiring)", () => {
 			...GenericJob,
 			spawnWorkers: ({ entities }: { entities: Array<Record<string, unknown>> }) => {
 				capturedEntities = entities;
+				return [];
 			},
 		}));
 
@@ -3671,3 +4688,93 @@ describe("start: deny reaches spawnWorkers entities (AC6 wiring)", () => {
 		expect(capturedEntities?.[0].deny).toEqual(["orchestrate-review", "code-review"]);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// start → spawnWorkers wiring: the computed mcpBlock reaches each dispatched
+// entity (closes the untested seam between computeMcpBlockList's calculation
+// and buildAugmentedCommand's translation — the transmission point itself was
+// unasserted: job.ts:593 could drop or misspell mcpBlock in the entities map
+// and every existing test would still pass green).
+// ---------------------------------------------------------------------------
+
+describe("start: mcpBlock reaches spawnWorkers entities", () => {
+	let tmpDir: string;
+	let jobsDir: string;
+	let codexHomeDir: string;
+	let prevCodexHome: string | undefined;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+		codexHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-test-"));
+		fs.writeFileSync(
+			path.join(codexHomeDir, "config.toml"),
+			[
+				"[mcp_servers.codegraph]",
+				'command = "stub"',
+				"",
+				"[mcp_servers.figma]",
+				'command = "stub"',
+				"",
+				"[mcp_servers.notion]",
+				'command = "stub"',
+			].join("\n"),
+		);
+		prevCodexHome = process.env.CODEX_HOME;
+		process.env.CODEX_HOME = codexHomeDir;
+	});
+
+	afterEach(() => {
+		if (prevCodexHome === undefined) delete process.env.CODEX_HOME;
+		else process.env.CODEX_HOME = prevCodexHome;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+		fs.rmSync(codexHomeDir, { recursive: true, force: true });
+		mock.restore();
+	});
+
+	test("every dispatched entity carries the computed mcpBlock", async () => {
+		const configPath = path.join(tmpDir, "config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"chunk-review:",
+				"  chairman:",
+				"    role: none",
+				"  members:",
+				"    - name: alice",
+				"      command: echo alice",
+				"    - name: bob",
+				"      command: echo bob",
+				"  settings:",
+				"    exclude_chairman_from_members: false",
+				"    timeout: 10",
+				"    mcps:",
+				"      allow:",
+				"        - codegraph",
+			].join("\n"),
+		);
+
+		let capturedEntities: Array<Record<string, unknown>> | undefined;
+		mock.module("@lib/generic-job", () => ({
+			...GenericJob,
+			spawnWorkers: ({ entities }: { entities: Array<Record<string, unknown>> }) => {
+				capturedEntities = entities;
+				return [];
+			},
+		}));
+
+		const mod = await import(`./job.ts?mcpblock-transmission=${Date.now()}-${Math.random()}`);
+		await mod.cmdStart(
+			{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+			"test prompt",
+		);
+
+		expect(capturedEntities).toBeDefined();
+		expect(capturedEntities?.length).toBe(2);
+		for (const entity of capturedEntities ?? []) {
+			expect(entity.mcpBlock).toEqual(["figma", "notion"]);
+		}
+	});
+});
+

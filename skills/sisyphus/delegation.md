@@ -98,10 +98,6 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 
 When delegating to sisyphus-junior, refer to the Load Skills table in the `<skill-catalog>` block and include situation-matching skills in Section 7.
 
-### Model: Junior always runs Sonnet
-
-sisyphus-junior runs on Sonnet — always. Do NOT pass `model="opus"` to junior. Junior is the generation agent; its output is checked by junior's own mandatory tests, and re-checked by the orchestrator's inline verify only when the orchestrator creates an explicit verify task — implement tasks get no automatic verify pass. If an implementation seems to need more capability, tighten junior's required tests or add an explicit verify task — never escalate the generator to Opus.
-
 ---
 
 ## Mnemosyne Delegation Template
@@ -157,10 +153,6 @@ Agent(subagent_type="explore", prompt="I'm implementing JWT auth for the REST AP
 // External docs
 Agent(subagent_type="librarian", prompt="I'm implementing JWT auth and need current security best practices for token storage and expiration. Find: OWASP auth guidelines, recommended token lifetimes, refresh rotation. Skip tutorials — production security guidance only.")
 ```
-
-### Research Depth (opus escalation)
-
-For complex research beyond simple library lookups, delegate to librarian with opus: `Agent(subagent_type="librarian", model="opus", prompt=...)`. The inline `model` argument overrides the agent's sonnet default.
 
 ---
 

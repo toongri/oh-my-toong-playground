@@ -27,10 +27,13 @@
  *   set --phase <planning|pursuing> [--outcome ..] [--verification-surface ..]
  *       [--constraints ..] [--boundaries ..] [--non-goals ..] [--max-iterations <n>]
  *       [--blocked-stop ..] [--plan-path ..] [--resume-summary ..]
- *       [--completion-evidence p1,p2]
+ *       [--completion-evidence p1,p2] [--codex-goal-objective <text>]
  *   set-budget-limited                       (system-only)
  *   set-blocked --reason <text>              (system-only)
- *   request-complete                         (gated: requires objective_verdict=APPROVE and completion evidence)
+ *   request-complete [--codex-goal-json <json|path>]
+ *                                         (gated: requires objective_verdict=APPROVE and completion
+ *                                          evidence; PLUS a Codex native-goal snapshot cross-check
+ *                                          when codex_goal_objective is non-empty — see Gate 9 below)
  *   set-verdict --verdict <APPROVE|REQUEST_CHANGES|COMMENT|absent>
  *   get
  *   status
@@ -133,6 +136,17 @@ export interface GoalState {
 	 * touches these directly.
 	 */
 	stories?: Story[];
+	/**
+	 * The exact objective string this session registered with Codex's native
+	 * `create_goal`/`update_goal` tool (Codex path only). A SINGLE value —
+	 * overwritten, never accumulated, on each `set --codex-goal-objective`
+	 * call (e.g. the next story's `create_goal`). Empty string (the default,
+	 * and the entire Claude path) means no native Codex goal has been
+	 * registered for this session — Gate 9 in requestComplete is armed ONLY
+	 * when this field is non-empty. Reset to "" by `adopt` — see the adopt
+	 * CLI branch below for why.
+	 */
+	codex_goal_objective: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +274,10 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
 		// non-story write. Writers: setStories, setSingleStory, addStory, reviseStory,
 		// confirmStory, retireStory.
 		stories: next.stories ?? prior.stories ?? [],
+		// Same D-5 hazard class: codex_goal_objective must be enumerated here, or a bare
+		// `set --phase pursuing` (no codex flag) would silently wipe the last-registered
+		// native-goal objective back to "" on every unrelated write.
+		codex_goal_objective: next.codex_goal_objective ?? prior.codex_goal_objective ?? "",
 	};
 	const state: GoalState = mergeWithHeartbeat(partial, {});
 	try {
@@ -360,6 +378,7 @@ export interface SetGoalOpts {
 	plan_path?: string;
 	resume_summary?: string;
 	completion_evidence_paths?: string[];
+	codex_goal_objective?: string;
 }
 
 /**
@@ -469,6 +488,7 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		plan_path: opts.plan_path,
 		resume_summary: opts.resume_summary,
 		completion_evidence_paths: opts.completion_evidence_paths,
+		codex_goal_objective: opts.codex_goal_objective,
 	};
 	if (opts.phase === "planning") {
 		// ADR-3: Stale verdict cannot survive a re-plan. Three verdict carriers must all be
@@ -484,6 +504,15 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		// `pursuing` phase right before completing. A new objective must never complete on a
 		// prior objective's evidence.
 		next.completion_evidence_paths = [];
+		// A recorded codex_goal_objective is a FOURTH carrier of the same staleness, and it
+		// arms Gate 9. It names the native goal registered for the story that was being
+		// pursued — the very story a re-plan revises or retires. Left behind, the gate stays
+		// armed against a story that no longer exists, and if that orphaned native goal is
+		// ever closed as `complete` the objective matches and status matches, so the gate
+		// opens for a story set it was never registered against. Re-arming is the dispatch
+		// loop's job (step 3 calls create_goal again for the new current story), so clearing
+		// here degrades to the existing 8 gates rather than deadlocking.
+		next.codex_goal_objective = "";
 		// Delete the on-disk verdict artifact. ENOENT is ignored (no artifact = already clean).
 		// Fail-open: if deletion fails for any other reason, the re-plan still proceeds;
 		// the subsequent requestComplete will find an artifact with mismatched state and refuse.
@@ -1050,9 +1079,75 @@ export function readCodeReviewArtifact(sessionId: string): CodeReviewArtifact | 
 }
 
 /**
+ * Collapses whitespace runs to a single space and trims both ends. The shape
+ * the Codex native-goal snapshot cross-check (Gate 9, below) normalizes BOTH
+ * sides through before comparing — a newline, repeated-space, or leading/
+ * trailing whitespace difference between the registered objective and the
+ * snapshot must not fail the match; only a substantive text difference should.
+ */
+function normalizeWhitespaceForCompare(s: string): string {
+	return s.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Parses a `--codex-goal-json` argument: JSON first, falling back to reading
+ * `arg` as a file path and parsing its contents. Returns the parsed record on
+ * success, or null when both attempts fail (malformed JSON string AND not a
+ * readable/parseable file). The caller (Gate 9) degrades a null result to a
+ * gate refusal; the CLI additionally uses a null result to emit a stderr
+ * message that identifies this specifically as a parse failure, distinct from
+ * an ordinary objective/status mismatch.
+ */
+function parseCodexGoalSnapshot(arg: string): Record<string, unknown> | null {
+	try {
+		const parsed = JSON.parse(arg);
+		if (isRecord(parsed)) return parsed;
+	} catch {
+		// Not valid inline JSON — fall through to the file-path interpretation.
+	}
+	const fileContent = readFileOrNull(arg);
+	if (fileContent === null) return null;
+	try {
+		const parsed = JSON.parse(fileContent);
+		return isRecord(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Extracts the objective string from a Codex native-goal snapshot via the
+ * documented key fallback: `goal.objective ?? goal.goal ?? goal.description ??
+ * root.objective` (nullish-coalescing, not `||` — a falsy-but-present string
+ * like "" must not fall through). `goal` defaults to `{}` when the snapshot
+ * carries no nested `goal` object at all, so the root-level fallback is
+ * reachable without a property-access throw. Returns undefined when no link
+ * in the chain resolves to a string.
+ */
+function extractCodexGoalObjective(snapshot: Record<string, unknown>): string | undefined {
+	const goal = isRecord(snapshot["goal"]) ? snapshot["goal"] : {};
+	const objective = goal["objective"] ?? goal["goal"] ?? goal["description"] ?? snapshot["objective"];
+	return typeof objective === "string" ? objective : undefined;
+}
+
+/**
+ * Extracts the status string from a Codex native-goal snapshot. Not itself
+ * AC-specified with a key fallback the way objective is — this mirrors
+ * objective's goal-then-root shape (the natural `get_goal` response shape
+ * nests both under `goal`) since no separate fallback chain is documented for
+ * status. Returns undefined when neither location holds a string.
+ */
+function extractCodexGoalStatus(snapshot: Record<string, unknown>): string | undefined {
+	const goal = isRecord(snapshot["goal"]) ? snapshot["goal"] : {};
+	const status = goal["status"] ?? snapshot["status"];
+	return typeof status === "string" ? status : undefined;
+}
+
+/**
  * The ONLY path to phase=complete. Gated: requires `objective_verdict=APPROVE` AND
  * completion-evidence present (existing dual gate), PLUS artifact-backed per-story
- * checks (T4 extension — D-11).
+ * checks (T4 extension — D-11), PLUS (when armed) the Codex native-goal snapshot
+ * cross-check (Gate 9, below).
  *
  * Extended refusal branches (each independent):
  *   1. Artifact absent, schema-invalid, or contains duplicate story ids
@@ -1063,14 +1158,20 @@ export function readCodeReviewArtifact(sessionId: string): CodeReviewArtifact | 
  *   6. Any non-retired story unconfirmed
  *   7. Zero non-retired stories
  *   8. Existing dual gate unmet (objective_verdict !== 'APPROVE' or empty evidence)
+ *   9. Codex native-goal snapshot cross-check (armed only when codex_goal_objective is
+ *      non-empty — see Gate 9 below; a complete no-op, and gates 1-8 fully unchanged,
+ *      on the Claude path where codex_goal_objective is always "")
  *
  * Precedence rule (D-3): one non-APPROVE per-story entry blocks regardless of
  * objective_verdict in state.
  *
+ * `codexGoalArg` is the raw `--codex-goal-json` value (inline JSON or a file path) —
+ * only consulted when Gate 9 is armed.
+ *
  * Returns false (no state change) when any gate is not satisfied. Succeeds even
  * over a prior budget_limited (complete-wins, ADR-7).
  */
-export function requestComplete(sessionId: string): boolean {
+export function requestComplete(sessionId: string, codexGoalArg?: string): boolean {
 	const prior = readPrior(sessionId);
 	const evidence = Array.isArray(prior.completion_evidence_paths)
 		? prior.completion_evidence_paths
@@ -1155,6 +1256,43 @@ export function requestComplete(sessionId: string): boolean {
 	}
 	if (codeReview.findings.some((f) => f.verdict === "CONFIRMED")) {
 		return false;
+	}
+
+	// Gate 9 (Codex native-goal snapshot cross-check): Codex's create_goal/update_goal
+	// tools carry no verification of their own — handle_update only checks the status
+	// enum before writing straight to its DB (pure self-grading). So on the Codex path,
+	// this CLI's own request-complete must independently cross-check the model's own
+	// native-goal claim against a snapshot of what it actually registered, rather than
+	// trust the native tool's bare "complete" write. Capability-as-state, not
+	// platform-detection: this gate is armed ONLY when codex_goal_objective is
+	// non-empty (i.e. `set --codex-goal-objective` was actually called — the Codex
+	// path). On the Claude path codex_goal_objective is always "" and every branch
+	// below is skipped, so gates 1-8 above are byte-for-byte unchanged for Claude.
+	const codexGoalObjective = prior.codex_goal_objective ?? "";
+	if (codexGoalObjective.trim() !== "") {
+		// Missing arg while the gate is armed is a REFUSAL, not a pass-through — this is
+		// the gate's core safety property: an omitted verification input must never be
+		// silently waved through.
+		if (codexGoalArg === undefined) {
+			return false;
+		}
+		const snapshot = parseCodexGoalSnapshot(codexGoalArg);
+		if (snapshot === null) {
+			return false;
+		}
+		const snapshotObjective = extractCodexGoalObjective(snapshot);
+		if (snapshotObjective === undefined) {
+			return false;
+		}
+		if (
+			normalizeWhitespaceForCompare(snapshotObjective) !==
+			normalizeWhitespaceForCompare(codexGoalObjective)
+		) {
+			return false;
+		}
+		if (extractCodexGoalStatus(snapshot) !== "complete") {
+			return false;
+		}
 	}
 
 	mergeWrite(sessionId, { phase: "complete", active: false });
@@ -1277,8 +1415,17 @@ export function serializeReviewContext(sessionId: string): {
  * valueless flag immediately followed by another flag would swallow that
  * flag's NAME as a bogus value instead of coercing to boolean `true` (see
  * ultragoal-state.test.ts's "completion-evidence rejects a swallowed flag name").
+ *
+ * `--codex-goal-objective` joins this set for the same reason as evidence/rationale:
+ * it is model-authored free-form text (the exact string registered with Codex's
+ * native `create_goal`), not a structured value — it could legitimately begin with
+ * "--" (e.g. an objective that quotes a CLI flag). `--codex-goal-json` deliberately
+ * does NOT join this set: its value is either inline JSON (which starts with `{`,
+ * `[`, `"`, or a digit — never `--`) or a file path (which starts with `/`, `.`, or a
+ * name — also never `--`), so the default shape-guessing consumption below is
+ * correct for it, the same as `--completion-evidence`/`--plan-path`.
  */
-const FREE_TEXT_VALUE_FLAGS = new Set(["evidence", "rationale"]);
+const FREE_TEXT_VALUE_FLAGS = new Set(["evidence", "rationale", "codex-goal-objective"]);
 
 /**
  * Splits argv into flags (`--key value` / `--key` boolean) and positionals, in
@@ -1327,6 +1474,33 @@ function str(v: string | boolean | undefined): string | undefined {
 	return v !== undefined ? String(v) : undefined;
 }
 
+/**
+ * Resolves the conventional `-` flag value to the full stdin content, so a value
+ * carrying shell-hostile characters never has to survive a quoting round-trip.
+ *
+ * The documented arming/completion commands wrap their value in single quotes,
+ * which cannot express an apostrophe: one apostrophe in a story's WHAT statement
+ * terminates the quoted string early and kills the command (leaving the gate
+ * UNARMED — the fail-open direction that voids this gate entirely), while two
+ * silently truncate the value at the first unquoted space and leak the remainder
+ * as stray argv. Reading from stdin sidesteps shell quoting altogether: paired
+ * with a quoted heredoc at the call site, every byte arrives verbatim.
+ *
+ * Only reached when the caller explicitly passed `-`, which implies a piped
+ * stdin; a literal single dash is not otherwise a meaningful value for either
+ * flag that uses this.
+ *
+ * ONE trailing newline is stripped — the one a heredoc appends. Without this the
+ * recorded objective differs from the registered one by that byte, and the
+ * "byte-identical to what create_goal registered" invariant would hold only
+ * because the comparison normalizes whitespace. Depending on the comparison to
+ * absorb a difference the writer introduced is weaker than not introducing it.
+ */
+function resolveStdinValue(v: string | undefined): string | undefined {
+	if (v !== "-") return v;
+	return readFileSync(0, "utf8").replace(/\n$/, "");
+}
+
 /** Like `str`, but a missing flag or a valueless boolean flag both read as "" —
  * the shape `requireSteeringReason`'s blank check expects, so CLI omission and
  * CLI whitespace collapse to the same rejection path. */
@@ -1359,6 +1533,29 @@ function main(): void {
 			if (args["completion-evidence"] === true) {
 				process.stderr.write("set: --completion-evidence requires a value\n");
 				process.exit(1);
+			}
+			// Same class, one direction worse: an empty --codex-goal-objective does not
+			// merely record a bogus value, it DISARMS Gate 9 — and a disarmed gate lets
+			// completion through with no cross-check at all (fail-open), while also
+			// wiping an arming a previous story already recorded. No caller ever arms
+			// with nothing: clearing is internal (`--phase planning`, `adopt`), never a
+			// flag. So an explicitly-supplied empty value is always a transport failure.
+			// The concrete one measured: a quoted heredoc whose payload contains a line
+			// equal to its delimiter ends the body there — first-line collision yields a
+			// 0-byte body — and the remaining lines run as shell commands. Refuse before
+			// any state mutation so the failure is loud and the prior arming survives.
+			// Whitespace-only is refused on the same footing: Gate 9 arms on
+			// `trim() !== ""`, so storing it would leave the appearance of an arming
+			// without the gate.
+			let codexGoalObjective: string | undefined;
+			if (args["codex-goal-objective"] !== undefined) {
+				codexGoalObjective = resolveStdinValue(str(args["codex-goal-objective"]));
+				if (codexGoalObjective === undefined || codexGoalObjective.trim() === "") {
+					process.stderr.write(
+						"set: --codex-goal-objective was supplied but resolved to an empty value — refusing rather than disarming the completion cross-check (a quoted heredoc whose payload contains a line equal to its delimiter produces exactly this)\n",
+					);
+					process.exit(1);
+				}
 			}
 			let maxIter: number | undefined;
 			if (args["max-iterations"] !== undefined) {
@@ -1395,6 +1592,8 @@ function main(): void {
 				plan_path: str(args["plan-path"]),
 				resume_summary: str(args["resume-summary"]),
 				completion_evidence_paths: completionEvidence,
+				// Already resolved (and empty-checked) above — stdin can only be read once.
+				codex_goal_objective: codexGoalObjective,
 			});
 		} else if (subcommand === "set-verdict") {
 			const v = String(args["verdict"] ?? "absent");
@@ -1475,11 +1674,26 @@ function main(): void {
 		} else if (subcommand === "set-blocked") {
 			setBlocked(sessionId, String(args["reason"] ?? ""));
 		} else if (subcommand === "request-complete") {
-			const ok = requestComplete(sessionId);
+			const codexGoalArg = resolveStdinValue(str(args["codex-goal-json"]));
+			const ok = requestComplete(sessionId, codexGoalArg);
 			if (!ok) {
-				process.stderr.write(
-					"request-complete: refused — requires objective_verdict=APPROVE and completion evidence present\n",
-				);
+				// Distinguish a --codex-goal-json parse failure (neither valid inline JSON nor
+				// a readable file) from an ordinary gate refusal (mismatch/incomplete/absent
+				// evidence) — the former needs an identifiably different stderr message so the
+				// caller knows to fix the argument itself, not chase an unrelated gate.
+				if (codexGoalArg !== undefined && parseCodexGoalSnapshot(codexGoalArg) === null) {
+					process.stderr.write(
+						`request-complete: refused — --codex-goal-json could not be parsed as JSON or read as a file path: "${codexGoalArg}"\n`,
+					);
+				} else {
+					// The enumeration must name every condition that can refuse, Gate 9
+					// included. Listing only the verdict and evidence made a snapshot
+					// mismatch report a cause that was already satisfied, sending the
+					// caller to fix the wrong thing.
+					process.stderr.write(
+						"request-complete: refused — requires objective_verdict=APPROVE, completion evidence present, and (when codex_goal_objective is recorded) a --codex-goal-json snapshot whose objective matches it with status=complete\n",
+					);
+				}
 				process.exit(1);
 			}
 		} else if (subcommand === "get") {
@@ -1502,6 +1716,16 @@ function main(): void {
 				process.exit(1);
 			}
 			adopt("ultragoal", srcSid);
+			// codex_goal_objective is thread-scoped state: Codex's native create_goal/
+			// update_goal tools write to a DB row keyed by thread_id (PRIMARY KEY), and
+			// the adopting session runs in a different runtime/thread that has no way
+			// to reach that row (no get_goal call can retrieve it here). If the
+			// adopted-over string survived, Gate 9 in requestComplete would stay
+			// armed forever with no --codex-goal-json snapshot ever able to satisfy
+			// it — the pursuit could never complete. Clear it here; every other
+			// adopted field (stories, phase, iteration, resume_summary, ...) is left
+			// untouched by mergeWrite's `next.x ?? prior.x` merge.
+			mergeWrite(sessionId, { codex_goal_objective: "" });
 		} else if (subcommand === "confirm-story") {
 			// confirm-story takes no other value-bearing flags, so a raw argv scan for the
 			// first non-"--" token past the subcommand is still safe here (unlike
