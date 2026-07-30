@@ -141,3 +141,4 @@ If ANY check fails:
 | "0 tests passed = all pass" | 0 tests = failure, not success |
 | "I'll just use npm test" | Discover actual commands. Don't assume. |
 | "Standard commands work everywhere" | Each project is different. Check first. |
+| "Starting multiple local apps or seeding local DBs costs too much" | Setup cost is never a reason to skip adversarial scenarios. Run every authored scenario and retain evidence proving correct development. |

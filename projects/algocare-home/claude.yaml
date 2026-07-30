@@ -34,10 +34,13 @@ hooks:
       timeout: 10
 
 # 업무용 MCP는 전부 여기 모은다. 두 가지 이유가 겹친다.
-#   1) 램 — stdio MCP는 세션마다 프로세스로 뜬다(실측: maestro 169MB / postgres
-#      99MB / opensearch 86MB). 전역에 두면 OMT나 개인 레포 세션도 쓰지도 않는
-#      3종을 물어 세션당 354MB를 낭비한다. codegraph·playwright는 레포를 가리지
+#   1) 램 — stdio MCP는 세션마다 프로세스로 뜬다(실측: postgres 99MB /
+#      opensearch 86MB). 전역에 두면 OMT나 개인 레포 세션도 쓰지도 않는
+#      2종을 물어 세션당 185MB를 낭비한다. codegraph·playwright는 레포를 가리지
 #      않고 쓰므로 전역에 남긴다.
+#      이 수치는 소스 선언 기준이다. sync는 선언된 MCP를 대입만 하므로 여기서
+#      지워도 이미 배포된 ~/.claude.json 항목은 그대로 남는다 — 이미 sync한
+#      머신에서는 `claude mcp remove <name>`으로 배포본을 정리해야 185MB가 성립한다.
 #   2) 계정 분리 — notion/linear/slack/sentry는 회사 워크스페이스와 개인 계정이
 #      다르다. OAuth 토큰이 MCP 서버 이름 단위로 저장되므로, 전역에 한 벌만 두면
 #      회사/개인 중 하나로 고정된다. type: http라 프로세스는 뜨지 않아 램은 0.
@@ -67,18 +70,6 @@ mcps:
   sentry:
     type: http
     url: "https://mcp.sentry.dev/mcp"
-  # Maestro stdio MCP (RN 모바일 UI 테스트). maestro는 JVM 기반이라 JDK를 못 찾으면
-  # "Unable to locate a Java Runtime"으로 죽는다. macOS에 등록된 JVM이 없고
-  # (/usr/libexec/java_home이 아무것도 못 찾는다) brew openjdk는 keg-only이므로
-  # JAVA_HOME을 명시해야 한다. 개인 절대경로지만 배포 착지점인 settings 계열은
-  # 대상 레포에서 gitignore되므로 추적되는 claude.yaml에 둔다
-  # (docs/platform-yaml-config-deployment.md).
-  maestro:
-    command: maestro
-    args:
-      - "mcp"
-    env:
-      JAVA_HOME: /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
   # playwright는 레포를 가리지 않고 쓰므로 전역(루트 claude.yaml)에 둔다.
   # Requires shell env: OPENSEARCH_URL, OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD
   # (AWS: AWS_REGION, AWS_IAM_ARN or AWS_PROFILE). See opensearch-project/opensearch-mcp-server-py.

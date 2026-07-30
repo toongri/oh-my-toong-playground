@@ -278,8 +278,9 @@ describe("qa-state CLI wiring", () => {
 		expect(out).toBe("null");
 	});
 
-	test("(B2) CLI exits non-zero when OMT_SESSION_ID is empty", () => {
-		const env = { ...process.env, OMT_SESSION_ID: "" };
+	test("(B2) CLI exits non-zero when no session identifier is available", () => {
+		const env: NodeJS.ProcessEnv = { ...process.env, OMT_SESSION_ID: "" };
+		delete env.CODEX_THREAD_ID;
 		expect(() =>
 			execSync(`bun ${script} set --phase PLAN`, { encoding: "utf8", env }),
 		).toThrow();
