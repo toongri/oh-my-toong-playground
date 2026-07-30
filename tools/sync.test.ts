@@ -3783,12 +3783,13 @@ describe("processYaml — rewritePlatformPaths hooks-provenance regression (team
 		expect(omtHookReadme).not.toContain(".claude/");
 	});
 
-	it("opencode: the hooks/ scoping mechanism is wired identically for opencode — a declared hook name is rewritten, a same-run foreign name under hooks/ is not", async () => {
-		// opencode.yaml's hook resolution still runs syncPlatformConfigs's generic
-		// component-resolution loop even though opencodeAdapter.syncHooksDirect
-		// itself just warns and no-ops (opencode has no real hook-deploy
-		// capability) — proving the SAME `ownedHookNames` wiring this fix adds for
-		// codex/gemini also reaches opencode, not a codex/gemini-only patch.
+	it("opencode: declaring a hook for a platform that deploys no hooks claims no ownership", async () => {
+		// opencodeAdapter refuses the whole hooks section (it warns and skips), so
+		// OMT never writes anything under .opencode/hooks/ — which makes every file
+		// there someone else's. Recording ownership off the DECLARATION let the
+		// rewrite walk mutate a hand-authored file on the strength of a hook that
+		// was never deployed. The gemini case above already carries the "this
+		// wiring is not codex-only" proof, and gemini actually deploys hooks.
 		await writeFile(
 			path.join(rootDir, "hooks", "my-hook", "index.ts"),
 			"export const run = () => {};\n",
@@ -3802,8 +3803,8 @@ describe("processYaml — rewritePlatformPaths hooks-provenance regression (team
 		);
 
 		// Planted directly on disk — opencodeAdapter never copies either of these
-		// for real. One path matches the declared hook name ("my-hook"); the
-		// other does not, standing in for a team-owned file under the same root.
+		// for real. One path matches the declared hook name ("my-hook"), the other
+		// does not; neither is OMT's, so both must survive.
 		const declaredNameFile = path.join(targetPath, ".opencode", "hooks", "my-hook", "README.md");
 		const foreignNameFile = path.join(targetPath, ".opencode", "hooks", "unrelated", "README.md");
 		const before = "See .claude/rules/ for conventions.\n";
@@ -3819,8 +3820,8 @@ describe("processYaml — rewritePlatformPaths hooks-provenance regression (team
 
 		expect(
 			await readFile(declaredNameFile),
-			".opencode/hooks/my-hook/README.md (declared this run) must be rewritten",
-		).toContain(".opencode/rules/");
+			".opencode/hooks/my-hook/README.md must survive — the declaration deployed nothing",
+		).toBe(before);
 		expect(
 			await readFile(foreignNameFile),
 			".opencode/hooks/unrelated/README.md (not declared this run) must survive byte-identical",
