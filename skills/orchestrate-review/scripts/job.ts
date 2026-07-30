@@ -116,6 +116,20 @@ function optionalNumber(value: unknown): number | undefined {
 	return Number.isFinite(n) ? n : undefined;
 }
 
+function resolveConductorSessionId(): string | null {
+	const omtSessionId = process.env.OMT_SESSION_ID;
+	const codexThreadId = process.env.CODEX_THREAD_ID;
+	const isSafeSessionId = (id: string) =>
+		id.length >= 1 && id.length <= 200 && /^[A-Za-z0-9_-]+$/.test(id);
+
+	if (omtSessionId !== undefined && codexThreadId !== undefined && omtSessionId !== codexThreadId) {
+		return null;
+	}
+	if (omtSessionId !== undefined) return isSafeSessionId(omtSessionId) ? omtSessionId : null;
+	if (codexThreadId !== undefined) return isSafeSessionId(codexThreadId) ? codexThreadId : null;
+	return null;
+}
+
 // ---------------------------------------------------------------------------
 // Wrapper functions — pre-apply CHUNK_REVIEW_JOB_CONFIG for test compatibility
 // ---------------------------------------------------------------------------
@@ -614,6 +628,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	const jobDir = path.join(jobsDir, `chunk-review-${jobId}`);
 	const membersDir = path.join(jobDir, "members");
 	ensureDir(membersDir);
+	const conductorSessionId = resolveConductorSessionId();
 
 	fs.writeFileSync(path.join(jobDir, "prompt.txt"), String(prompt), "utf8");
 
@@ -636,6 +651,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 	const jobMeta = {
 		id: `chunk-review-${jobId}`,
 		createdAt: new Date().toISOString(),
+		conductorSessionId,
 		configPath,
 		hostRole,
 		chairmanRole,
