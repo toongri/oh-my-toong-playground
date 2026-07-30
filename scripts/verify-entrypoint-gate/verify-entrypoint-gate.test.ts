@@ -1036,6 +1036,119 @@ describe("arming — overlay presence, not registration site, decides where the 
 		}
 	});
 
+	test("a cd inside a nested shell arms", () => {
+		// `bash -c '…'` keeps its inner command in one quoted segment, so the scan
+		// sees a `bash` token and no `cd`. Attempt detection already descends into
+		// `bash -c`/`eval`; arming has to descend the same way or the descent never
+		// happens — the early return fires first.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-nestsh-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-nestsh-outside-"));
+		try {
+			for (const cmd of [
+				`bash -c 'cd ${armed} && npx vitest run'`,
+				`sh -c "cd ${armed} && npx vitest run"`,
+				`eval "cd ${armed} && npx vitest run"`,
+			]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("a cd on the failed side of || does not become the only base for the next one", () => {
+		// `cd missing || cd protected` runs the second `cd` from the ORIGINAL
+		// directory, because the first one failed. Advancing a single cursor made
+		// `protected` resolve under `missing/`, which exists nowhere.
+		const start = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-orbranch-"));
+		const armed = join(start, "protected");
+		mkdirSync(join(armed, ".claude", "scripts", "verify-entrypoint-gate"), { recursive: true });
+		writeFileSync(join(armed, "pnpm-workspace.yaml"), "packages: []\n");
+		writeFileSync(join(armed, "package.json"), JSON.stringify({ scripts: { verify: "echo v", test: "echo t" } }));
+		writeFileSync(
+			join(armed, ".claude", "scripts", "verify-entrypoint-gate", "verify-entrypoint-gate.local.yaml"),
+			"# armed\n",
+		);
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-orbranch-outside-"));
+		try {
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: `cd ${start}/missing || cd ${start}/protected && npx vitest run`, workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(output).not.toBe("");
+			expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+
+			// Same shape written relatively — the form that actually motivated this,
+			// since an absolute second target would have resolved either way.
+			const relative = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: "cd missing || cd protected && npx vitest run", workdir: start },
+				}),
+				moduleDir,
+			);
+			expect(relative).not.toBe("");
+			expect(JSON.parse(relative).hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(start, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("an unquoted tilde operand is expanded before the overlay probe", () => {
+		// `cd ~/…` is the everyday way to name a repo. Left literal, it probes
+		// `<cwd>/~/…`, which exists nowhere, so the gate armed on nothing.
+		// HOME is redirected at the process level for this test so the armed
+		// workspace really does sit under the home the hook resolves.
+		const home = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-tilde-home-"));
+		const armed = join(home, "repos", "protected");
+		mkdirSync(join(armed, ".claude", "scripts", "verify-entrypoint-gate"), { recursive: true });
+		writeFileSync(join(armed, "pnpm-workspace.yaml"), "packages: []\n");
+		writeFileSync(join(armed, "package.json"), JSON.stringify({ scripts: { verify: "echo v", test: "echo t" } }));
+		writeFileSync(
+			join(armed, ".claude", "scripts", "verify-entrypoint-gate", "verify-entrypoint-gate.local.yaml"),
+			"# armed\n",
+		);
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-tilde-outside-"));
+		const realHome = process.env.HOME;
+		try {
+			process.env.HOME = home;
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: "cd ~/repos/protected && npx vitest run", workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(output).not.toBe("");
+			expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+
+			// A QUOTED tilde is literal to the shell, so it must stay literal here.
+			const quoted = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: `cd "~/repos/protected" && npx vitest run`, workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(quoted).toBe("");
+		} finally {
+			if (realHome === undefined) delete process.env.HOME;
+			else process.env.HOME = realHome;
+			rmSync(home, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
 	test("a cd target the gate cannot resolve statically does not arm on a false path", () => {
 		// Shell-variable indirection (`cd $DIR`) is an accepted gap class for this
 		// gate — the point of pinning it is that the unresolved token must not be
