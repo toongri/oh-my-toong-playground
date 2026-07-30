@@ -434,6 +434,25 @@ test_codex_spawn_depth_gate_matcher_reaches_runtime_tool_name() {
     fi
 }
 
+test_codex_review_dispatch_gate_registered_and_reaches_namespaced_tool() {
+    local block matcher_line matcher
+    block=$(_extract_hook_event_block "$REPO_DIR/codex.yaml" "PreToolUse")
+    if ! echo "$block" | grep -qF 'component: codex-review-dispatch-gate.sh'; then
+        echo "ASSERTION FAILED: codex.yaml PreToolUse must register codex-review-dispatch-gate.sh"
+        return 1
+    fi
+    matcher_line=$(echo "$block" | grep -A2 'component: codex-review-dispatch-gate.sh' | grep 'matcher:')
+    if ! echo "$matcher_line" | grep -qE 'matcher:[[:space:]]*"\.\*\[sS\]pawn_\[aA\]gent"'; then
+        echo "ASSERTION FAILED: codex-review-dispatch-gate.sh matcher must be exactly \".*[sS]pawn_[aA]gent\" (got: ${matcher_line:-<none>})"
+        return 1
+    fi
+    matcher=$(echo "$matcher_line" | sed -E 's/^[[:space:]]*matcher:[[:space:]]*"(.*)"[[:space:]]*$/\1/')
+    if ! printf '%s\n' "collaborationspawn_agent" | grep -qE "^${matcher}\$"; then
+        echo "ASSERTION FAILED: review-dispatch matcher \"$matcher\" does not full-match collaborationspawn_agent"
+        return 1
+    fi
+}
+
 test_codex_yaml_keeps_config_section_declared_so_stale_keys_can_be_cleared() {
     if ! grep -qE '^config:' "$REPO_DIR/codex.yaml"; then
         echo "ASSERTION FAILED: codex.yaml declares no top-level 'config:' key."
@@ -468,6 +487,7 @@ main() {
     run_test test_codex_yaml_spawn_depth_gate_registered_with_full_match_matcher
     run_test test_codex_yaml_spawn_depth_gate_matcher_never_bare
     run_test test_codex_spawn_depth_gate_matcher_reaches_runtime_tool_name
+    run_test test_codex_review_dispatch_gate_registered_and_reaches_namespaced_tool
     run_test test_codex_yaml_keeps_config_section_declared_so_stale_keys_can_be_cleared
 
     echo "=========================================="

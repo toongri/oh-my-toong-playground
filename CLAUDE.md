@@ -121,7 +121,7 @@ skills:
 | agent-device | iOS, tvOS, macOS, Android, Vega OS TV E2E | Load this skill before using its driver CLI; delegates runtime help |
 | dogfood | Mobile exploratory QA | Load this skill before using its driver CLI |
 
-**`goal` and `ultragoal` are no longer twins.** `ultragoal` began as a structural copy of `goal` and the two were byte-identical outside the loop shape; they are now deliberately diverged — `skills/goal/` stays on six slots while `ultragoal` carries a seventh (`non-goals`), and only `ultragoal` wires Codex's native goal tools into its dispatch loop. An edit to either must not assume the sibling still matches, and must not be mirrored across by default.
+**`goal` and `ultragoal` are no longer twins.** `ultragoal` began as a structural copy of `goal` and the two were byte-identical outside the loop shape; they are now deliberately diverged — `skills/goal/` stays on six slots while `ultragoal` carries a seventh (`non-goals`), only `ultragoal` wires Codex's native goal tools into its dispatch loop, and the five-round final-review budget is ultragoal-only. An edit to either must not assume the sibling still matches, and must not be mirrored across by default.
 
 ### Hooks
 
@@ -134,6 +134,7 @@ skills:
 - **label-edit-warn.sh** / **codex-label-edit-warn.sh**: Soft-warns (never blocks) when just-written content contains a bare invented/opaque label
 - **persistent-mode/** / **codex-persistent-mode/**: Prevents stopping when work remains incomplete (shared `makeDecision`)
 - **pre-tool-enforcer.sh** / **codex-write-guard.sh**: PreToolUse gates — TaskOutput blocking, session-ledger write guard, code-review artifact identity guard; Codex twin additionally denies dangerous commands (`rm -rf`, `git push --force`)
+- **review-dispatch-gate-core.sh** / **pre-tool-enforcer.sh** / **codex-review-dispatch-gate.sh**: Shared final-review dispatch budget — Claude/Codex shims atomically claim only active `phase=pursuing` `code-reviewer` dispatches; the initial five-dispatch window denies cap exhaustion or completion-eligible re-dispatch until explicit user approval renews the cap by 5.
 - **review-exec-guard.sh** / **codex-review-exec-guard.sh**: Review-context PreToolUse guards — enforce the shared static-review execution invariant for `orchestrate-review`; block tests, builds, installs, and linters only while member or conductor review context is active
 - **codex-spawn-depth-gate.sh**: Codex PreToolUse gate capping subagent spawn depth at 2 (Claude enforces the same cap natively via `claude.yaml`'s `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`)
 

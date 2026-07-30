@@ -16,7 +16,7 @@ import {
 // Guards the T1 EXTERNAL contract for the code-review completion lane:
 //   - every verdict in {CONFIRMED, PLAUSIBLE}  (readCodeReviewArtifact rejects
 //     the whole artifact on any enum violation — never-false-complete)
-//   - every class in {correctness, cleanup}
+//   - every class in {correctness, cleanup, requirement-gap}
 //   - zero serialized `confidence` in any finding  (readCodeReviewArtifact
 //     ignores extra keys so it will NOT reject a leaked confidence; only this
 //     raw-string scan catches that — ADR D-3, risk R1)
@@ -202,10 +202,10 @@ describe("V8: code-review 아티팩트 열거형 계약 보존 (redesign 경로)
 
 describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)", () => {
 	// REGRESSION GUARD, not a fresh RED: `requirement-gap` is already listed in
-	// VALID_CLASSES, and requestComplete's CONFIRMED gate keys only on
-	// `verdict`, never on `class` — so this test passes today. Its job is to
-	// pin that pairing against a future regression that narrows either the
-	// class enum or the CONFIRMED gate.
+	// VALID_CLASSES, and requestComplete blocks CONFIRMED findings in the
+	// correctness and requirement-gap classes — so this test passes today. Its
+	// job is to pin that pairing against a future regression that narrows either
+	// the class enum or the blocking classes.
 	test("REGRESSION GUARD: requirement-gap 클래스 CONFIRMED finding — 아티팩트 수락 + requestComplete refuse", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeArtifact(SID, {
@@ -217,7 +217,7 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 
 		// 수락: requirement-gap이 VALID_CLASSES에 속해 있어 isCodeReviewArtifact가 아티팩트를 거부하지 않음.
 		expect(readCodeReviewArtifact(SID)).not.toBeNull();
-		// refuse: requestComplete는 verdict==='CONFIRMED'만 보고 class는 무시 — 완료가 차단됨.
+		// refuse: requestComplete는 CONFIRMED requirement-gap을 차단하므로 완료가 차단됨.
 		expect(requestComplete(SID)).toBe(false);
 	});
 

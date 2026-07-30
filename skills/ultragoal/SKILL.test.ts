@@ -157,7 +157,8 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	// reference travels with the contract paragraph, so it is the
 	// code-review-lane bullet ordering assertion below (which keeps the
 	// contract paragraph after that paragraph and its bullets) that keeps
-	// it valid. Separately, the "Code-review lane: any CONFIRMED finding"
+	// it valid. Separately, the "Code-review lane: `CONFIRMED` `correctness` or
+	// `requirement-gap` finding"
 	// bullet's "the dispatch-prompt contract above" points at the contract
 	// paragraph — and it is this one pointer that goes dangling if the
 	// contract paragraph moves below it; the sibling test below guards
@@ -200,7 +201,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	test("the 'dispatch-prompt contract above' pointer at the concrete-progress bullet sits after the contract paragraph it points back at", () => {
 		const contractParagraphLead = "carries exactly two things —";
 		const confirmedFindingBullet =
-			"- **Code-review lane: any CONFIRMED finding**";
+			"- **Code-review lane: `CONFIRMED` `correctness` or `requirement-gap` finding**";
 		const inconclusiveBullet =
 			'- **Code-review lane: `status: "INCONCLUSIVE"`**';
 		const pointerPhrase = "dispatch-prompt contract above";
@@ -387,6 +388,35 @@ describe("identity: frontmatter and state-namespace point at ultragoal, not goal
 		// bare not.toContain would always fail here — a negative lookbehind excludes
 		// the ultra-prefixed occurrences and checks only for a BARE goal-state.ts.
 		expect(skillMd).not.toMatch(/(?<!ultra)goal-state\.ts/);
+	});
+});
+
+describe("review dispatch budget runtime contract", () => {
+	test("State CLI table distinguishes automatic claim from user-approved renewal", () => {
+		expect(skillMd).toContain("`claim-review-dispatch` | PreToolUse hook only");
+		expect(skillMd).toContain("The initial cap is 5");
+		expect(skillMd).toContain("`approve-review-dispatch-renewal` | orchestrator, only after explicit user approval to continue");
+		expect(skillMd).toContain("Adds exactly 5");
+		expect(skillMd).toContain("SHA-256 of the current code-review artifact's exact raw bytes");
+	});
+
+	test("completion reference pins the five-round Claude/Codex hook contract and exact renewal command", () => {
+		expect(completionGateMd).toContain("### Five-round review dispatch budget");
+		expect(completionGateMd).toContain("Claude and Codex `PreToolUse` hooks automatically run `claim-review-dispatch`");
+		expect(completionGateMd).toContain("The initial cap is 5");
+		expect(completionGateMd).toContain(
+		"bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal",
+	);
+	});
+
+	test("completion-eligible findings permit AI discretion and final file-line summary", () => {
+		expect(completionGateMd).toContain("**Completion-eligible discretion.**");
+		expect(completionGateMd).toContain("**마무리** → run `request-complete`");
+		expect(completionGateMd).toContain("**계속** → ask the user; only after explicit approval, pass the selected `CONFIRMED` `cleanup` finding(s) to sisyphus for repair");
+		expect(completionGateMd).toContain("before the next code-reviewer dispatch");
+		expect(completionGateMd).toContain("`PLAUSIBLE` findings remain non-blocking report items");
+		expect(completionGateMd).toContain("exact `file:line` reference and a one-line summary");
+		expect(completionGateMd).not.toContain("**Once the gate opens, a surviving non-blocking finding is not fixed on the spot.**");
 	});
 });
 
