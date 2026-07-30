@@ -215,6 +215,10 @@ main() {
     run_test jvm-deny-sh-kotlinc test_jvm_denied_row "sh -c 'kotlinc Main.kt'" jvm-deny-sh-kotlinc
     run_test jvm-deny-bash-javac test_jvm_denied_row "bash -c 'javac Main.java'" jvm-deny-bash-javac
     run_test jvm-deny-zsh-java test_jvm_denied_row "zsh -c 'java Main'" jvm-deny-zsh-java
+    run_test jvm-deny-java-version-main test_jvm_denied_row 'java -version Main' jvm-deny-java-version-main
+    run_test jvm-deny-java-double-version-main test_jvm_denied_row 'java --version Main' jvm-deny-java-double-version-main
+    run_test jvm-deny-kotlin-version-main test_jvm_denied_row 'kotlin -version MainKt' jvm-deny-kotlin-version-main
+    run_test jvm-deny-kotlin-double-version-main test_jvm_denied_row 'kotlin --version MainKt' jvm-deny-kotlin-double-version-main
     run_test jvm-allow-gradle-tasks test_jvm_allowed_row 'gradle tasks' jvm-allow-gradle-tasks
     run_test jvm-allow-gradle-help-task test_jvm_allowed_row 'gradle help --task test' jvm-allow-gradle-help-task
     run_test jvm-allow-gradle-properties test_jvm_allowed_row 'gradle properties' jvm-allow-gradle-properties
