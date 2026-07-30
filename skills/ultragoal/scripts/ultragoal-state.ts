@@ -396,14 +396,20 @@ function withStateLock<T>(stateFilePath: string, callback: () => T): T {
 function readStateLockOwner(lockPath: string): ReviewLockOwner | undefined {
 	try {
 		const value: unknown = JSON.parse(readFileSync(join(lockPath, REVIEW_LOCK_OWNER_FILE), "utf8"));
-		const candidate = value as Partial<ReviewLockOwner>;
 		if (
-			typeof value === "object" && value !== null &&
-			typeof candidate.ownerPid === "number" && Number.isInteger(candidate.ownerPid) && candidate.ownerPid > 0 &&
-			typeof candidate.token === "string" && candidate.token.length > 0 &&
-			typeof candidate.startedAt === "number"
-		) return value as ReviewLockOwner;
-	} catch {}
+			isRecord(value) &&
+			typeof value.ownerPid === "number" &&
+			Number.isInteger(value.ownerPid) &&
+			value.ownerPid > 0 &&
+			typeof value.token === "string" &&
+			value.token.length > 0 &&
+			typeof value.startedAt === "number"
+		) {
+			return { ownerPid: value.ownerPid, token: value.token, startedAt: value.startedAt };
+		}
+	} catch {
+		return undefined;
+	}
 	return undefined;
 }
 
