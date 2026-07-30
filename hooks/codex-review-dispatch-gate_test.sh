@@ -109,6 +109,34 @@ test_malformed_state_denies_safely() {
     assert_deny "$out" "$rc" "malformed state"
 }
 
+test_schema_valid_malformed_states_fail_closed_or_pass_known_inactive() {
+    local out rc=0 state_file
+    state_file="$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json"
+
+    printf '%s' '{"active":true,"phase":"pursuit","iteration":0,"max_iterations":10}' > "$state_file"
+    out=$(payload "collaborationspawn_agent" "code-reviewer" | run_hook) || rc=$?
+    assert_deny "$out" "$rc" "invalid phase" || return 1
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ] || return 1
+
+    rc=0
+    printf '%s' '{"active":true,"phase":"pursuing","iteration":"bad","max_iterations":10}' > "$state_file"
+    out=$(payload "collaborationspawn_agent" "code-reviewer" | run_hook) || rc=$?
+    assert_deny "$out" "$rc" "invalid pursuing iteration" || return 1
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ] || return 1
+
+    rc=0
+    printf '%s' '{"active":true,"phase":"planning","iteration":"bad","max_iterations":10}' > "$state_file"
+    out=$(payload "collaborationspawn_agent" "code-reviewer" | run_hook) || rc=$?
+    assert_allow "$out" "$rc" "planning with unrelated corruption" || return 1
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ] || return 1
+
+    rc=0
+    printf '%s' '{"active":false,"phase":"pursuing","iteration":"bad","max_iterations":10}' > "$state_file"
+    out=$(payload "collaborationspawn_agent" "code-reviewer" | run_hook) || rc=$?
+    assert_allow "$out" "$rc" "inactive with unrelated corruption" || return 1
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ]
+}
+
 test_jq_absent_allows() {
     local out rc=0 no_jq_bin cmd
     seed_pursuing
@@ -125,6 +153,7 @@ main() {
     run_test test_completion_eligible_denied
     run_test test_planning_nonreviewer_and_nontool_pass
     run_test test_malformed_state_denies_safely
+    run_test test_schema_valid_malformed_states_fail_closed_or_pass_known_inactive
     run_test test_jq_absent_allows
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
     [ "$TESTS_FAILED" -eq 0 ]
