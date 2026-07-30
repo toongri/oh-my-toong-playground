@@ -27,6 +27,8 @@ Each `OUT of Scope` item must carry a decider — `| decider: {how to tell a fin
 
 **On Metis REQUEST_CHANGES**: Return to Interview Mode — and ask the user first. Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Before re-invoking Metis, ask the user to clarify the gaps Metis identified via the normal Interview question channel, and apply the answer and the resulting revision. Only then re-invoke Metis with the same 3-Section structure containing updated content. This loop is bounded by the shared 2-round cap owned by prometheus (`SKILL.md > ### State Lifecycle Directives`); metis stays round-unaware.
 
+**On nonempty Questions for User (any verdict)**: route the questions to the user via the normal Interview question channel and apply the answers before advancing — an APPROVE/COMMENT verdict does not waive them.
+
 ---
 
 ## Daedalus Invocation Template

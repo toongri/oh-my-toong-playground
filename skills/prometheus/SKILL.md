@@ -1027,6 +1027,8 @@ Daedalus does NOT appear in this table — it is advisory and emits no gating si
 | **REQUEST_CHANGES** | Revise, re-invoke. Loop until APPROVE or COMMENT, bounded by the shared 2-round carried-forward cap |
 | **Missing / ambiguous** (no explicit verdict label, punch-list only, "verdict inferable") | Treat as REQUEST_CHANGES |
 
+Regardless of verdict, a Metis output whose **Questions for User** section is nonempty routes those questions through the Interview channel — prometheus asks the user and applies the answers before advancing past S1. APPROVE/COMMENT does not waive an unanswered user-decision question.
+
 > "Incorporate findings": absorb reviewer findings into the plan. Reviewer names, verdict labels, and advisory enumeration do NOT appear in the plan body — reviewers shape the plan, they do not annotate it. But **absorbing is not dropping**: a Metis COMMENT or demoted-to-advisory finding is recorded into the plan's Context / interview-summary as a carried-forward concern (its substance, not its reviewer attribution), so S3 plan-writing addresses it proactively — e.g. decomposing a flagged batch AC per-TODO — and Momus at S4 reviews an already-resolved AC instead of re-blocking. A demoted finding that silently evaporates is coverage loss; a recorded one pre-empts the S4 arms-race (COMMENT-carry).
 
 ### Operational Definition of "Revise"
