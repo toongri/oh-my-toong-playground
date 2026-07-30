@@ -11,6 +11,10 @@ TESTS_FAILED=0
 run_test() {
     local name="$1"
     shift
+    # Single-argument form: the name IS the test function. Without this, `shift`
+    # leaves "$@" empty and `if "$@"` runs the empty command, which succeeds --
+    # reporting PASS for a test that never executed.
+    [ "$#" -gt 0 ] || set -- "$name"
     if "$@"; then
         echo "[PASS] $name"
         ((TESTS_PASSED++)) || true
@@ -71,6 +75,36 @@ test_member_extracts_codex_shell_payloads_and_denies() {
     return "$result"
 }
 
+# The default finder path: a Claude conductor spawns Codex finders, so the
+# worker carries the conductor's inherited OMT_SESSION_ID while the nested Codex
+# session supplies its own CODEX_THREAD_ID. Those two identities disagree by
+# construction, and the role marker must still arm the guard.
+test_member_denies_despite_identity_disagreement() {
+    new_sandbox
+    local command out result=0
+    for command in 'pnpm test' 'gradle test'; do
+        out=$(payload exec_command cmd "$command" codex_thread | env OMT_DIR="$SBX/omt" OMT_SESSION_ID=claude_conductor CODEX_THREAD_ID=codex_thread OMT_REVIEW_ROLE=member bash "$HOOK")
+        assert_denied "$out" "member-identity-disagreement-$command" || result=1
+    done
+    cleanup_sandbox
+    return "$result"
+}
+
+test_package_runner_targets_denied() {
+    new_sandbox
+    local command out rc result=0
+    for command in 'npx jest' 'npx --yes vitest' 'npx -p typescript tsc' 'pnpm exec vitest' 'npm exec eslint .' 'yarn dlx eslint .' 'pnpm dlx vitest' 'bun x vitest' 'bunx jest' "sh -c 'npx jest'" 'git diff && pnpm exec vitest'; do
+        out=$(payload exec_command cmd "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK")
+        assert_denied "$out" "runner-deny-$command" || result=1
+    done
+    for command in 'npx' 'pnpm exec prettier --write .' 'rg "npx jest"'; do
+        rc=0; out=$(payload exec_command cmd "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK") || rc=$?
+        assert_allowed "$out" "$rc" "runner-allow-$command" || result=1
+    done
+    cleanup_sandbox
+    return "$result"
+}
+
 test_conductor_env_absent_payload_identity_and_other_session() {
     new_sandbox
     mkdir -p "$JOBS/chunk-review-one"
@@ -97,8 +131,13 @@ test_fail_open_and_non_shell_routes() {
     rc=0; out=$(run_codex exec_command cmd 'pnpm test') || rc=$?
     assert_allowed "$out" "$rc" malformed-job || result=1
     rm -rf "$JOBS/chunk-review-malformed"
-    rc=0; out=$(payload exec_command cmd 'pnpm test' 'unsafe/session' | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK") || rc=$?
+    # An unsafe session identity fails open only where identity is what arms the
+    # guard -- the conductor route. The member marker is set at worker spawn and
+    # carries no identity claim, so it arms the guard regardless.
+    rc=0; out=$(payload exec_command cmd 'pnpm test' 'unsafe/session' | env -u OMT_SESSION_ID -u CODEX_THREAD_ID -u OMT_REVIEW_ROLE OMT_DIR="$SBX/omt" bash "$HOOK") || rc=$?
     assert_allowed "$out" "$rc" unsafe-id || result=1
+    out=$(payload exec_command cmd 'pnpm test' 'unsafe/session' | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK")
+    assert_denied "$out" unsafe-id-member || result=1
     rc=0; out=$(payload exec_command cmd 'pnpm test' conductor | env OMT_DIR="$SBX/omt" OMT_SESSION_ID=conductor CODEX_THREAD_ID=other bash "$HOOK") || rc=$?
     assert_allowed "$out" "$rc" identity-mismatch || result=1
     rc=0; out=$(payload edit command 'pnpm test' | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK") || rc=$?
@@ -214,6 +253,8 @@ test_jvm_unbounded_nested_static_scan() {
 
 main() {
     run_test test_member_extracts_codex_shell_payloads_and_denies
+    run_test test_member_denies_despite_identity_disagreement
+    run_test test_package_runner_targets_denied
     run_test test_conductor_env_absent_payload_identity_and_other_session
     run_test test_fail_open_and_non_shell_routes
     run_test test_static_and_orchestration_commands_allow
