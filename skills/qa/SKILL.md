@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Use when verifying a code change through a standalone adversarial e2e cycle — drives the changed surface for real (curl/agent-browser/maestro/bash) and attacks it across the 6-category matrix (failure/boundary/injection/interruption/misleading-success/idempotency), owning diagnosis→fix→re-verify to green via `oracle` (diagnosis) and `sisyphus-junior` (fix) before issuing a binary APPROVE/REQUEST_CHANGES verdict.
+description: Use when verifying a code change through a standalone adversarial e2e cycle — drives the changed surface for real (curl/agent-browser/agent-device/bash) and attacks it across the 6-category matrix (failure/boundary/injection/interruption/misleading-success/idempotency), owning diagnosis→fix→re-verify to green via `oracle` (diagnosis) and `sisyphus-junior` (fix) before issuing a binary APPROVE/REQUEST_CHANGES verdict.
 ---
 
 <Role>
@@ -15,7 +15,7 @@ Pure dynamic adversarial-e2e verification skill. qa reads the change to author h
 
 qa is **standalone and stateful**. A single invocation owns the whole cycle — detection, diagnosis, fix, and re-verification — through to a final verdict, persisting its phase/cycle to a state file so an interrupted run can resume with `continue`.
 
-**Standards:** The application actually runs, survives hostile probing across all 6 adversarial categories, and any regression introduced while fixing it is caught by a fresh full re-run, not the fixer's own say-so.
+**Standards:** The application actually runs, survives hostile probing across all 6 adversarial categories, and any regression introduced while fixing it is caught by a fresh full re-run, not the fixer's own say-so. Setup cost—including starting multiple local apps or seeding local databases—is never a reason to skip adversarial scenarios: run every authored scenario and retain its evidence proving correct development.
 
 </Role>
 
@@ -102,8 +102,10 @@ Drive the changed surface for real and attack it. Two parts, both required when 
 |-------------|--------|
 | API endpoint | `curl` |
 | Frontend / UI | `agent-browser` (fallback: `playwright`) |
-| Mobile / App | `maestro` |
+| Mobile / native UI | `agent-device` |
 | CLI / TUI | interactive `bash` |
+
+For mobile/native UI work, load the `agent-device` skill first and derive the current concrete commands from its runtime `agent-device help <topic>` guidance. Do not copy or invent concrete driving command syntax in this skill.
 
 An internal risk surface with no direct UI/API is driven via its nearest entry point — an API/`curl` call if reachable, or a `bash` harness that invokes the code path directly.
 
@@ -197,7 +199,7 @@ Every verification **command execution** (BASELINE, ADVERSARIAL E2E, RE-VERIFY) 
 
 | Output Type | Disposition | Examples |
 |-------------|-------------|---------|
-| Objective command output | Save to file | build/test/lint logs, curl response body + status, agent-browser/Playwright/Maestro screenshots and reports, CLI execution logs |
+| Objective command output | Save to file | build/test/lint logs, curl response body + status, agent-browser/Playwright/agent-device screenshots and reports, CLI execution logs |
 | Subjective judgment | Response only (no file) | PLAN's spec/AC reading, oracle's diagnosis narrative |
 
 ### Evidence File Content Requirements
@@ -307,7 +309,7 @@ CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [
 PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed
 BASELINE:   build/test/lint green. See stage1-commands.md
 MATRIX:     6 categories — failure paths, boundary/malformed input, injection, interruption, misleading success, idempotency. Breadth via scenario-authoring.md, depth via stage3-handson.md
-DRIVERS:    API→curl, Frontend→agent-browser (fallback playwright), Mobile→maestro, CLI→bash. No tmux.
+DRIVERS:    API→curl, Frontend→agent-browser (fallback playwright), Mobile/native UI→agent-device (load its skill first; use runtime help guidance), CLI→bash. No tmux.
 LOOP:       DIAGNOSIS→oracle (fresh, read-only) | FIX→sisyphus-junior (commits own scoped fix, never git commit -a) | RE-VERIFY→qa, full re-run, distrust fixer
 EXIT:       Goal Met / max_cycles=5 / Same-Failure-3x (scenario-id+root-cause-file+root-cause-symbol) / Safety
 ROLLBACK:   git revert fix_head_before..HEAD only, NEVER git reset --hard; 3 guards: linear-descendant, non-empty-range=ERROR, post-revert disjointness on user_dirty_set; REFUSE the cycle on user_dirty_set overlap; rm -rf/force auto-deny honored
