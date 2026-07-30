@@ -58,7 +58,24 @@ The artifact schema the code-reviewer must emit:
 
 **Pass signal:** completion requires `status === "COMPLETE"` AND no `CONFIRMED` finding whose `class` is `correctness` or `requirement-gap`. `CONFIRMED` `cleanup` findings and all `PLAUSIBLE` findings are non-blocking; they are reported but do not prevent completion. `status === "INCONCLUSIVE"` blocks regardless of findings.
 
-**Once the gate opens, a surviving non-blocking finding is not fixed on the spot.** When `status === "COMPLETE"` and zero blocking `CONFIRMED` (`correctness` or `requirement-gap`) findings remain, leave any `PLAUSIBLE` or `CONFIRMED` `cleanup` finding as-is — a self-initiated fix here reopens the diff and extends the review cycle instead of closing it. If it is worth fixing, promote it to a new story and get the user's approval before dispatching sisyphus against it. It stays in the report either way; only who decides moves.
+**Completion-eligible discretion.** When `status === "COMPLETE"` and only `PLAUSIBLE` or `CONFIRMED` `cleanup` findings remain, choose based on the current value of the findings and the remaining time:
+
+- **마무리** → run `request-complete`, then report every remaining non-blocking finding with its exact `file:line` reference and a one-line summary.
+- **계속** → ask the user; only after explicit approval, pass the selected `CONFIRMED` `cleanup` finding(s) to sisyphus for repair, then run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal` before the next code-reviewer dispatch.
+
+`PLAUSIBLE` findings remain non-blocking report items. They are not confirmed work items and this rule does not require dispatching sisyphus to fix them.
+
+### Five-round review dispatch budget
+
+Before an active `phase=pursuing` code-reviewer dispatch, the Claude and Codex `PreToolUse` hooks automatically run `claim-review-dispatch`; an allowed claim persists `used += 1` before dispatch. The initial cap is 5. Per-story dispatches, non-reviewer dispatches, and any non-pursuing state are unaffected. The hooks do not change `code-review` or `orchestrate-review` behavior; they only decide whether the already-planned code-reviewer dispatch may proceed.
+
+At the cap, the hook denies the next dispatch and the AI must ask the user whether to **마무리** or **계속**. A completion-eligible artifact (a `COMPLETE` artifact with no `CONFIRMED` `correctness` or `requirement-gap` finding, including cleanup-only or PLAUSIBLE-only findings) also denies re-dispatch until the AI either runs `request-complete` or asks to continue. After an explicit user approval to continue, the orchestrator runs exactly:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal
+```
+
+Each approval adds `cap += 5` and stores the SHA-256 of the current code-review artifact's exact raw bytes. That marker approves only that artifact version: a byte-changed completion-eligible artifact requires a new user approval. The hook alone calls `claim-review-dispatch`; the orchestrator must never edit the counters itself.
 
 The two block reasons route differently: a blocking code-review finding (`CONFIRMED` `correctness` or `requirement-gap`, under `status: "COMPLETE"`) routes back to sisyphus re-dispatch targeted at those specific findings — the same concrete-progress shape as an objective-lane REQUEST_CHANGES verdict. An `INCONCLUSIVE` status routes to a **reviewer-only re-run** instead — re-dispatch a fresh **code-reviewer** over the same diff, NOT sisyphus (there is no confirmed work item to fix; the review itself just needs to finish).
 
@@ -104,6 +121,7 @@ Every non-APPROVE verdict drives a concrete progress action — never action-les
 - **Strategic plan inadequacy** (the plan itself cannot reach the objective — the decomposition is wrong, not merely unfinished) → steer the plan directly (correct the TODO breakdown yourself), then re-dispatch `Skill(skill: "sisyphus")` against the corrected TODOs; phase remains `pursuing`.
 - **COMMENT (soft pass — non-blocking notes)** → re-dispatch `Skill(skill: "sisyphus")` to address the self-check notes, then re-verify toward APPROVE; do NOT `request-complete` on a COMMENT (the code gate requires `objective_verdict=APPROVE`).
 - **Code-review lane: `CONFIRMED` `correctness` or `requirement-gap` finding** (under `status: "COMPLETE"`) → re-dispatch `Skill(skill: "sisyphus")` on the specific findings in `ultragoal-codereview-{sid}.json`. Phase remains `pursuing`; run a fresh code-review dispatch after sisyphus resolves the findings — that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed. A `CONFIRMED` `cleanup` finding is reported but does not trigger re-dispatch.
+- **Code-review lane: completion-eligible cleanup-only or PLAUSIBLE-only artifact** → use the completion-eligible discretion above: finish with `request-complete` and the remaining-finding report, or after explicit user approval send selected `CONFIRMED` `cleanup` finding(s) to sisyphus, then run `approve-review-dispatch-renewal` before the next code-reviewer dispatch. `PLAUSIBLE` findings stay report-only unless separately chosen by the user. This routing changes neither `code-review` nor `orchestrate-review`; it only controls the ultragoal dispatch permission.
 - **Code-review lane: `status: "INCONCLUSIVE"`** (reviewer timeout, ack-only response, `BLOCKED` reviewer, or genuine reviewer uncertainty) → re-dispatch a **fresh code-reviewer only** over the same diff — NOT sisyphus, since no finding was confirmed. Phase remains `pursuing`.
 
 ### Blocked-stop
