@@ -1390,6 +1390,12 @@ export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchC
 			}
 			const prior = parseClaimableState(rawState);
 			if (prior === null) return { allowed: false, reason: "failure", used: 0, cap: 0 };
+			// Renewal is only meaningful for an active review loop. The caller's
+			// authorization is advisory while it waits for this lock, so re-check
+			// the live state before extending the cap or recording an artifact hash.
+			if (!prior.active || prior.phase !== "pursuing") {
+				return { allowed: false, reason: "failure", used: 0, cap: 0 };
+			}
 			const used = validNonNegativeInteger(prior.review_dispatch_used)
 				? prior.review_dispatch_used
 				: 0;
