@@ -161,6 +161,14 @@ flowchart TB
 
 **Routing principle**: The delegation target is decided by task type. Implementation tasks that change files go to sisyphus-junior, verification tasks needing a PASS/FAIL verdict are handled inline by sisyphus (it runs the AC commands itself), root-cause/architecture analysis goes to oracle, and codebase search goes to explore. Whatever path the previous task took, a new task follows the path of its own type.
 
+### ultragoal final-review convergence
+
+**Scope**: Per-story sisyphus execution and self-verification are unchanged. This control applies only to the final accumulated-diff `code-reviewer` dispatch after every story is `APPROVE`d.
+
+**Decision**: `CONFIRMED` `correctness` or `requirement-gap` findings and an `INCONCLUSIVE` review block completion. A `COMPLETE` review with only `cleanup` remaining may finish at the AI's discretion based on its current value and time remaining; it then reports each remaining finding with an exact `file:line` and one-line summary.
+
+**Five-dispatch window and user mediation**: Claude and Codex `PreToolUse` hooks automatically claim/count active `phase=pursuing` `code-reviewer` dispatches. The initial window is five; cap exhaustion or re-dispatch of a completion-eligible artifact is denied. To continue, obtain explicit user approval, run `approve-review-dispatch-renewal` to increase the cap by five, then dispatch the next final review.
+
 ---
 
 ## 6. Supporting Skills

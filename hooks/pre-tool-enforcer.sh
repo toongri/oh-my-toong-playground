@@ -50,6 +50,8 @@ fi
 _wg_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hooks/write-guard-core.sh
 source "$_wg_script_dir/write-guard-core.sh"
+# shellcheck source=hooks/review-dispatch-gate-core.sh
+source "$_wg_script_dir/review-dispatch-gate-core.sh"
 
 # _wg_strip_dquotes <token> -- removes EVERY double-quote character in the
 # token, not just an outermost pair. Double-quoted write targets (`> "$f"`)
@@ -392,6 +394,21 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
         _wg_cr_out=$(printf '%s' "$_wg_candidates" | codereview_guard_core_run "$_wg_omt_dir" "$_wg_sid" "$_wg_agent_type")
         if [[ -n "$_wg_cr_out" ]]; then
             printf '%s\n' "$_wg_cr_out"
+            exit 0
+        fi
+    fi
+fi
+
+# Ultragoal review dispatch budget: only the harness-owned Agent invocation
+# with its nested subagent_type exactly code-reviewer is a candidate. The
+# top-level agent_type describes the current agent identity and is unrelated.
+# jq absence follows this hook's existing best-effort posture (allow/no abort).
+if [[ "$toolName" == "Agent" ]] && command -v jq > /dev/null 2>&1; then
+    _rdg_subagent_type=$(printf '%s' "$input" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null) || _rdg_subagent_type=""
+    if [[ "$_rdg_subagent_type" == "code-reviewer" ]]; then
+        _rdg_out=$(review_dispatch_gate_core_run "$input")
+        if [[ -n "$_rdg_out" ]]; then
+            printf '%s\n' "$_rdg_out"
             exit 0
         fi
     fi

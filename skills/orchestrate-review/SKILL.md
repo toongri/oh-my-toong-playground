@@ -15,32 +15,21 @@ You are the **Finder Conductor** for this chunk. The multi-AI review fans out on
 
 The normal orchestration Bash allowlist remains available only for its lifecycle work: `job.ts` (`start`, `collect`, `resume-member`, `results`, `stop`, `clean`) and `usage-summary.ts`. The fallback's release from that allowlist never releases this static-only ban. Cleanup owns the light-touch **Test value** lens (false confidence/fake coverage, verification value, and feedback-loop cost); requirement remains focused on **AC mapping** / acceptance criteria or intent inference.
 
-When finders cannot deliver — none configured/available after filtering, or all fail — **you become the in-session finder yourself**: READ `prompts/default.md` and perform the all-angle finder pass directly as that persona, following its tool requirements (run the diff, read source, surface candidates). This fallback is part of your role, not a violation of it.
+When finders cannot deliver — none configured/available after filtering, or all fail — **you become the in-session finder yourself**: READ `prompts/default.md` and perform the all-angle finder pass directly as that persona, following its tool requirements (run the diff, read source, surface candidates). This fallback is part of your role, not a violation of it. In the fallback, the orchestration-path constraint sets below (Allowed Bash Usage, Allowed Read Usage, Conductor Boundaries) no longer bind — follow `prompts/default.md`'s tool requirements instead; the Global Static-Review Invariant applies unchanged.
 
 > **N** = total dispatched finder count for this chunk (may be less than the configured angles if one is filtered or fails).
 
 ## CRITICAL: Execution Constraint
 
-**The `start` subcommand runs EXACTLY ONCE. No exceptions.**
-
-1. Write the interpolated prompt to a temp file.
-2. Start job: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
-3. Collect: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"` — repeat per Step 2's branching (cap: 6 calls total; `awaiting_resume` routes to `resume-member`, it is not a re-poll case).
-4. Read each finder's output file via the Read tool.
-5. Merge candidates using the Aggregation rules.
-6. Run `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` and append the result as a `### Find Token Usage` block to the merged candidate text. This step **MUST** run before `clean` — the job dir is deleted in the next teardown step and the per-member token data is gone.
-7. Run teardown: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — deletes the job dir, and reaps each worker's process group when it can still verify that group is this job's own (`usage-summary.ts` was already run in step 6).
-8. Return the merged candidate list (including the `### Find Token Usage` block) as the final response, then **STOP** — do not run any further tools.
+**The `start` subcommand runs EXACTLY ONCE. No exceptions.** The full procedure is the Conductor Workflow below (Request → Collect → Read → Merge).
 
 **If a finder fails (outputFilePath is null in the manifest): apply Degradation Policy. Do NOT re-start the job.**
 
 ### Allowed Bash Usage
 
-These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path, only this normal orchestration-command allowlist does not apply; follow `prompts/default.md`'s tool requirements instead. The Global Static-Review Invariant applies unchanged.
-
 You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — start a review job
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"` — collect results (polls internally every 5s, up to the 540000ms timeout passed above). No external sleep needed.
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"` — collect results (blocks until done or the 540000ms timeout; no external sleep needed)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete finder to a complete answer (see Member Resume Policy; cap 3 attempts)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" results --manifest "$JOB_DIR"` — fetch the manifest directly (see Step 2)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" stop "$JOB_DIR"` — SIGTERM any still-`running` finder (see Step 2)
@@ -48,11 +37,9 @@ You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir and reap each worker's process group when its identity can still be verified; teardown step, run only after usage-summary and everything else is complete
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean --force "$JOB_DIR"` — same as `clean`, but skips the active-member guard; use it when an ordinary `clean` is refused for active members
 
-**CRITICAL**: Always set `timeout: 180000` on every Bash tool call, except `collect` and `resume-member` (both `timeout: 600000`) — see Member Resume Policy for what to do if Bash kills a `resume-member` call before it returns.
+**CRITICAL**: Set `timeout: 600000` on `collect` and `resume-member` Bash calls — the Bash tool's default timeout would kill them mid-poll. See Member Resume Policy for what to do if Bash kills a `resume-member` call before it returns.
 
 ### Allowed Read Usage
-
-These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path, only this normal orchestration Read limit does not apply; follow `prompts/default.md`'s tool requirements instead. The Global Static-Review Invariant applies unchanged.
 
 You may use Read for EXACTLY this 1 operation. No other file reads.
 
@@ -66,7 +53,7 @@ The interpolated prompt you receive contains `{DIFF_COMMAND}`, file lists, and r
 
 **Protocol: Request → Collect → Read → Merge**
 
-### Step 1 — Request (Bash, timeout: 180000)
+### Step 1 — Request (Bash)
 Create a temporary file with the interpolated review prompt, then start the review job:
 ```bash
 PROMPT_FILE=$(mktemp)
@@ -115,8 +102,6 @@ Each finder CLI emits its native structured output (codex: NDJSON via `--json`; 
 
 ## Conductor Boundaries (NON-NEGOTIABLE)
 
-These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path, only these conductor-role boundaries do not apply; follow `prompts/default.md`'s finder role instead. The Global Static-Review Invariant applies unchanged.
-
 **You are the CONDUCTOR, not a reviewer — on the orchestration path.**
 
 | Conductor Does | Conductor Does NOT |
@@ -131,7 +116,7 @@ These constraints govern the orchestration path — while dispatched finders are
 **Hard Constraints:**
 
 0. **Each Bash call MUST run in FOREGROUND.** All subcommands (start, collect) run synchronously. No background execution.
-1. **You are NOT a reviewer on the orchestration path.** Even if you "know" a defect, your role is conducting until finders cannot deliver.
+1. **Even if you "know" a defect, your role is conducting until finders cannot deliver.**
 2. **Predicting is NOT the same as getting input.** "Based on typical patterns" = VIOLATION.
 3. **Merge ONLY after ALL results collected.** No quorum logic. Degradation Policy (below) governs infrastructure failure scenarios.
 4. **MUST NOT assign severity, priority, or P-levels.** Finders do not emit them and neither do you. Verdict assignment happens upstream in `code-review`.
@@ -142,7 +127,7 @@ These constraints govern the orchestration path — while dispatched finders are
 
 **Member Resume Policy (`resume-member`):**
 
-Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), or an `awaiting_resume` member is still `awaiting_resume` after 3 `resume-member` attempts, fall back to in-session per the trigger logic below. Once every finder is finished, run `usage-summary.ts` (harvest token counts), then run `clean`.
+Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), or an `awaiting_resume` member is still `awaiting_resume` after 3 `resume-member` attempts, fall back to in-session per the trigger logic below.
 
 ```
 bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your candidate list."
@@ -151,8 +136,6 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member
 The prompt is written by the Conductor to fit the situation. The above is a reference example only.
 
 **If the Bash tool itself kills a `resume-member` call before any JSON comes back: do NOT re-call `resume-member` for that member** — the attempt is already spent and the turn may still be live. Instead, call `collect` next: it will detect the stalled member and flip it to `"error"`, at which point treat it as an outright-failed finder per the trigger logic above.
-
-`usage-summary.ts` harvests token counts from `members/*/status.json` (see step 6 above). `clean` deletes the job dir and reaps each worker's process group when it can still verify the group is this job's own (needed by `resume-member`), so it is the last step — only after `usage-summary.ts` and everything else is complete.
 
 ## Aggregation
 
@@ -178,13 +161,13 @@ Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quor
 | N/N | Full merge | Standard candidate list |
 | Partial (1 < responded < N) | Partial merge | Prepend: "Partial review ({responded}/N angles). [failed angle] unavailable: [state]." |
 | 1/N | One-angle merge | Prepend: "Limited review (1/N angles). One finder output only." |
-| 0/N | In-session fallback (return immediately, no re-run) | READ `prompts/default.md` and deliver the all-angle finder pass in-session. |
+| 0/N | In-session fallback (return immediately, no re-run) | Deliver the all-angle finder pass in-session per the Role Declaration's fallback. |
 
 **Denominator:** Always N (= total dispatched), not total responded. Note which angle's perspective is absent and what coverage gap that creates. Do NOT extrapolate what the missing angle "would have found".
 
 **Diff command failure:** If all finders report that the diff command failed (error or empty output), do NOT attempt a merge. Report "Diff command failed for this chunk: [error details]" and return immediately.
 
-**Start non-zero:** If `start` exits non-zero or `$JOB_DIR` is empty, fall back to in-session: READ `prompts/default.md` and perform the all-angle finder pass directly in-session. When the cause is the no-members guard — stderr contains `to dispatch` — enter the fallback silently (expected path: empty/all-filtered angle config). For any other non-zero exit (an unexpected failure — disk/permission, spawn error, a bug), first surface the failure reason (include the stderr line) in your output, then proceed with the in-session fallback.
+**Start non-zero:** If `start` exits non-zero or `$JOB_DIR` is empty, fall back to in-session per the Role Declaration's fallback. When the cause is the no-members guard — stderr contains `to dispatch` — enter the fallback silently (expected path: empty/all-filtered angle config). For any other non-zero exit (an unexpected failure — disk/permission, spawn error, a bug), first surface the failure reason (include the stderr line) in your output, then proceed with the in-session fallback.
 
 ## Aggregation Output Format
 
@@ -214,4 +197,4 @@ No severity, no priority, no verdict, no merge assessment. If zero candidates su
 
 ## Termination
 
-Run teardown before returning: (1) `usage-summary.ts "$JOB_DIR"` — harvest and append `### Find Token Usage` to the merged text (step 6); (2) `clean "$JOB_DIR"` — deletes the job dir, and reaps each worker's recorded process group (`workerPgid` in `job.json`) whenever it can still verify that group is this job's own. The directory is deleted either way; a group `clean` cannot verify is simply not signaled, and once the directory is gone that group is unrecoverable by any later layer. So skipping this step doesn't just leave an empty directory behind — it leaves live worker processes running, with no guaranteed later chance to reclaim them. A worker also reaps its own process group on its own exit path, and a background reaper later sweeps up whatever orphaned group it can independently verify and that still shows no live progress — but that reaper is bound by the same kind of verification, not a guaranteed catch-all. Neither backstop replaces running `clean` here — because both are conditional, skipping this step is riskier than it looks, not safer. Once teardown is complete, return the merged candidate list (including the `### Find Token Usage` block) as the final response — your task is **COMPLETE** — do NOT read source files, do NOT explore the codebase, do not run any further tools.
+Run teardown before returning: (1) `usage-summary.ts "$JOB_DIR"` — harvest and append `### Find Token Usage` to the merged text; (2) `clean "$JOB_DIR"` — deletes the job dir and reaps each worker's recorded process group (`workerPgid` in `job.json`) when it can still verify that group is this job's own. Skipping `clean` doesn't just leave a directory behind — it leaves live worker processes running, and the self-reap and background-reaper backstops are conditional, not a guaranteed catch-all. Once teardown is complete, return the merged candidate list (including the `### Find Token Usage` block) as the final response — your task is **COMPLETE** — do NOT read source files, do NOT explore the codebase, do not run any further tools.

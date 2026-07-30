@@ -1681,6 +1681,127 @@ test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
 }
 
 # =============================================================================
+# Ultragoal review-dispatch budget gate: Claude Agent + nested code-reviewer
+# selector only. The state CLI owns every counter mutation; this suite checks
+# the hook's real stdin wiring and deny envelopes, never shell-side counters.
+# =============================================================================
+
+rdg_seed_pursuing() {
+    cat > "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json" <<'EOF'
+{"active":true,"phase":"pursuing","iteration":0,"max_iterations":10,"started_at":"2026-01-01T00:00:00","last_touched_at":"2026-01-01T00:00:00"}
+EOF
+}
+
+rdg_agent_payload() {
+    jq -n --arg subtype "$1" '{tool_name:"Agent",tool_input:{subagent_type:$subtype}}'
+}
+
+test_rdg_matching_claude_candidate_allows_and_increments() {
+    local out
+    rdg_seed_pursuing
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED rdg allowed candidate: $out"; return 1; }
+    [ "$(jq -r '.review_dispatch_used' "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json")" = "1" ]
+}
+
+test_rdg_sixth_candidate_denied_without_increment() {
+    local i out
+    rdg_seed_pursuing
+    for i in 1 2 3 4 5; do
+        rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
+    done
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED rdg sixth: $out"; return 1; }
+    printf '%s' "$out" | grep -q 'approve-review-dispatch-renewal' || return 1
+    [ "$(jq -r '.review_dispatch_used' "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json")" = "5" ]
+}
+
+test_rdg_clean_and_cleanup_reviews_deny_with_completion_actions() {
+    local out
+    rdg_seed_pursuing
+    printf '%s' '{"status":"COMPLETE","findings":[{"class":"cleanup","verdict":"CONFIRMED"}],"reviewer":"r","at":"now"}' > "$OMT_DIR/ultragoal-codereview-$OMT_SESSION_ID.json"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED rdg completion eligible: $out"; return 1; }
+    printf '%s' "$out" | grep -q 'request-complete' || return 1
+    printf '%s' "$out" | grep -q 'approve-review-dispatch-renewal' || return 1
+    [ "$(jq -r '.review_dispatch_used // 0' "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json")" = "0" ]
+}
+
+test_rdg_planning_nonreviewer_and_nonagent_pass_without_count() {
+    local out
+    rdg_seed_pursuing
+    jq '.phase="planning"' "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json" > "$OMT_DIR/state.tmp"
+    mv "$OMT_DIR/state.tmp" "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || return 1
+    out=$(rdg_agent_payload "sisyphus-junior" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || return 1
+    out=$(printf '%s' '{"tool_name":"Read","tool_input":{"subagent_type":"code-reviewer"}}' | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || return 1
+    [ "$(jq -r '.review_dispatch_used // 0' "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json")" = "0" ]
+}
+
+test_rdg_malformed_claim_state_denies_safely() {
+    local out
+    rdg_seed_pursuing
+    printf '%s' '{broken' > "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED rdg malformed state: $out"; return 1; }
+}
+
+test_rdg_schema_valid_malformed_states_fail_closed_or_pass_known_inactive() {
+    local out state_file
+    state_file="$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json"
+
+    printf '%s' '{"active":true,"phase":"pursuit","iteration":0,"max_iterations":10}' > "$state_file"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED rdg invalid phase: $out"; return 1; }
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ] || return 1
+
+    printf '%s' '{"active":true,"phase":"pursuing","iteration":"bad","max_iterations":10}' > "$state_file"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED rdg invalid pursuing iteration: $out"; return 1; }
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ] || return 1
+
+    printf '%s' '{"active":true,"phase":"planning","iteration":"bad","max_iterations":10}' > "$state_file"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED rdg planning corruption should allow: $out"; return 1; }
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ] || return 1
+
+    printf '%s' '{"active":false,"phase":"pursuing","iteration":"bad","max_iterations":10}' > "$state_file"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED rdg inactive corruption should allow: $out"; return 1; }
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ]
+}
+
+test_rdg_unset_omt_dir_malformed_current_state_denies_safely() {
+    local out home_dir project_cwd resolved_omt
+    home_dir="$TEST_TMP_DIR/home"
+    project_cwd="$(cd "$SCRIPT_DIR/.." && pwd)"
+    mkdir -p "$home_dir"
+    resolved_omt=$(env -u OMT_DIR HOME="$home_dir" bash -c "source '$SCRIPT_DIR/lib/omt-dir.sh'; resolve_omt_dir '$project_cwd'")
+    printf '%s' '{broken' > "$resolved_omt/ultragoal-state-$OMT_SESSION_ID.json"
+    out=$(jq -n --arg cwd "$project_cwd" '{tool_name:"Agent",tool_input:{subagent_type:"code-reviewer"},cwd:$cwd}' \
+        | env -u OMT_DIR HOME="$home_dir" bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED rdg unset OMT_DIR malformed state: $out"; return 1; }
+}
+
+test_rdg_jq_absent_follows_allow_posture() {
+    local out no_jq_bin cmd
+    rdg_seed_pursuing
+    no_jq_bin="$TEST_TMP_DIR/no-jq-bin"
+    mkdir -p "$no_jq_bin"
+    # Keep the shell utilities this legacy hook itself needs, but deliberately
+    # omit jq so this exercises its documented best-effort posture.
+    for cmd in cat grep sed dirname pwd awk date; do
+        ln -s "$(command -v "$cmd")" "$no_jq_bin/$cmd"
+    done
+    out=$(printf '%s' '{"tool_name":"Agent","tool_input":{"subagent_type":"code-reviewer"}}' | PATH="$no_jq_bin" /bin/bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED rdg jq absent should allow: $out"; return 1; }
+    [ ! -e "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json.lock" ]
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1800,6 +1921,14 @@ main() {
     run_test test_cr13_bash_mv_source_goal_codereview_code_reviewer_allowed
     run_test test_cr14_bash_cp_source_ultragoal_codereview_allowed
     run_test test_cr15_bash_mv_source_ledger_denied
+    run_test test_rdg_matching_claude_candidate_allows_and_increments
+    run_test test_rdg_sixth_candidate_denied_without_increment
+    run_test test_rdg_clean_and_cleanup_reviews_deny_with_completion_actions
+    run_test test_rdg_planning_nonreviewer_and_nonagent_pass_without_count
+    run_test test_rdg_malformed_claim_state_denies_safely
+    run_test test_rdg_schema_valid_malformed_states_fail_closed_or_pass_known_inactive
+    run_test test_rdg_unset_omt_dir_malformed_current_state_denies_safely
+    run_test test_rdg_jq_absent_follows_allow_posture
     run_test test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call
 
     echo "=========================================="
