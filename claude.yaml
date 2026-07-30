@@ -4,7 +4,7 @@
 # 5종(keyword-detector.sh / pre-tool-enforcer.sh / session-start.sh /
 # orphan-reaper.sh / persistent-mode)에는 device-specific 요소가 없으므로
 # 여기서 추적한다. claude.local.yaml에는 실제로 머신마다 다른 것만 남긴다
-# -- Superset 훅 preserve 규칙, maestro JAVA_HOME 절대경로, env 의존 MCP.
+# -- Superset 훅 preserve 규칙, env 의존 MCP.
 #
 # projects/*/claude.yaml에 같은 5종을 다시 쓰지 말 것: 전역 등록은
 # ~/.claude/settings.json에, 프로젝트 등록은 대상의
@@ -73,7 +73,7 @@ config:
 
 # 전역에는 레포를 가리지 않고 쓰는 것만 둔다 — 코드 그래프(codegraph)와 브라우저
 # 자동화(playwright). stdio MCP는 세션마다 프로세스로 떠서 세션당 램을 먹으므로
-# (실측: maestro 169MB / playwright 163MB / postgres 99MB / opensearch 86MB /
+# (실측: playwright 163MB / postgres 99MB / opensearch 86MB /
 # codegraph 87MB), 특정 프로젝트에서만 쓰는 것은 projects/<name>/claude.yaml로
 # 내린다. notion/linear/slack/sentry는 회사 계정과 개인 계정을 섞지 않기 위해
 # 전역에서 빼고 프로젝트별로 등록한다(type: http라 램은 0).
