@@ -776,7 +776,7 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 |---|-------|-------------------|
 | V1 | QA Scenarios written as mandatory | When Prometheus drafts the plan, the `## QA Scenarios` section in plan-template contains the Scenario Verification Principle declaration, and Prometheus writes QA Scenarios for every TODO in the plan — not skipping or marking them optional |
 | V2 | QA Scenarios reflect consumer-boundary | The QA Scenarios written for the endpoint TODO verify at the consumer boundary (e.g., `curl -X POST /api/orders` with JSON body and HTTP status assertion, or equivalent consumer-perspective tool) — not at the implementation level (e.g., unit test of internal order factory function only) |
-| V3 | Principle is modality-agnostic | The declaration does not mandate a specific tool. Verification tool choice (curl, playwright, maestro, grep, bun test, etc.) is driven by what the consumer observes — not by a hardcoded modality rule. Examples appear only as illustrations, not as mandatory commands |
+| V3 | Principle is modality-agnostic | The declaration does not mandate a specific tool. Verification tool choice (curl, playwright, agent-device, grep, bun test, etc.) is driven by what the consumer observes — not by a hardcoded modality rule. Examples appear only as illustrations, not as mandatory commands |
 
 ---
 
