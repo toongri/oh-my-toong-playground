@@ -33,6 +33,8 @@ import {
 	serializeRequirements,
 	BACKFILL_MARKER,
 	readCodeReviewArtifact,
+	claimReviewDispatch,
+	approveReviewDispatchRenewal,
 	type GoalPhase,
 	type Story,
 } from "./ultragoal-state.ts";
@@ -78,6 +80,78 @@ beforeEach(() => {
 	process.env.OMT_DIR = tmpDir;
 	process.env.OMT_SESSION_ID = S;
 	seedGoalFile(S);
+});
+
+describe("review dispatch budget", () => {
+	function writeCleanReview(): void {
+		writeCodeReviewArtifact(S, {
+			status: "COMPLETE",
+			findings: [{ class: "cleanup", verdict: "CONFIRMED" }],
+			reviewer: "reviewer",
+			at: "2026-07-30T00:00:00",
+		});
+	}
+
+	test("backfills five-round budget without changing max_iterations", () => {
+		setGoalState(S, { phase: "planning", max_iterations: 13 });
+		const state = rawState();
+		expect(state.review_dispatch_used).toBe(0);
+		expect(state.review_dispatch_cap).toBe(5);
+		expect(state.approved_review_artifact_sha256).toBe("");
+		expect(state.max_iterations).toBe(13);
+	});
+
+	test("claims persist until the cap, while missing or malformed artifacts count normally", () => {
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 1, cap: 5 });
+		writeFileSync(codeReviewArtifactPath(S), "not json", "utf8");
+		for (let used = 2; used <= 5; used += 1) {
+			expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used, cap: 5 });
+		}
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "budget_exhausted", used: 5, cap: 5 });
+	});
+
+	test("clean eligible artifact denies without consuming, but approval renews and exact bytes bypass", () => {
+		writeCleanReview();
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 0, cap: 5 });
+		const approval = approveReviewDispatchRenewal(S);
+		expect(approval).toMatchObject({ allowed: true, reason: "allowed", used: 0, cap: 10 });
+		expect(rawState().approved_review_artifact_sha256).toMatch(/^[0-9a-f]{64}$/);
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 1, cap: 10 });
+		// Schema-equivalent but byte-changed content is a new eligible artifact and must deny again.
+		writeFileSync(codeReviewArtifactPath(S), `${readFileSync(codeReviewArtifactPath(S), "utf8")}\n`, "utf8");
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "completion_eligible", used: 1, cap: 10 });
+	});
+
+	test("INCONCLUSIVE review is not completion eligible and therefore consumes budget", () => {
+		writeCodeReviewArtifact(S, { status: "INCONCLUSIVE", findings: [], reviewer: "r", at: "now" });
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 1, cap: 5 });
+	});
+
+	test("malformed state or absent/malformed approval artifact fails closed", () => {
+		writeFileSync(resolveStatePath(S), "{broken", "utf8");
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "failure" });
+		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: false, reason: "failure" });
+	});
+
+	test("concurrent hook claims reserve at most the cap", () => {
+		const output = execSync(
+			`bash -c 'for i in 1 2 3 4 5 6 7 8 9 10; do bun "$1" claim-review-dispatch & done; wait || true' -- ${JSON.stringify(script)}`,
+			{ encoding: "utf8", env: { ...process.env } },
+		);
+		const results = output.trim().split("\n").map((line) => JSON.parse(line));
+		expect(results.filter((r) => r.allowed).length).toBe(5);
+		expect(rawState().review_dispatch_used).toBe(5);
+	});
+
+	test("CLI emits JSON and nonzero exit for denied claim", () => {
+		writeCleanReview();
+		const denied = runCliCaptured("claim-review-dispatch");
+		expect(denied.status).not.toBe(0);
+		expect(JSON.parse(denied.stdout)).toMatchObject({ allowed: false, reason: "completion_eligible" });
+		const approved = runCliCaptured("approve-review-dispatch-renewal");
+		expect(approved.status).toBe(0);
+		expect(JSON.parse(approved.stdout)).toMatchObject({ allowed: true, cap: 10 });
+	});
 });
 
 afterEach(() => {
@@ -162,6 +236,9 @@ describe("goal state", () => {
 		expect(s).toHaveProperty("completion_evidence_paths");
 		expect(s).toHaveProperty("schema_version");
 		expect(s).toHaveProperty("last_touched_at");
+		expect(s.review_dispatch_used).toBe(0);
+		expect(s.review_dispatch_cap).toBe(5);
+		expect(s.approved_review_artifact_sha256).toBe("");
 	});
 
 	// AC #3 — name omits literal parens so bun's `-t` regex (the plan's exact

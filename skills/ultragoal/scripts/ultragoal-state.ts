@@ -51,8 +51,9 @@
  *   or whitespace-only values are refused (ADR D-4).
  */
 
-import { readFileSync, unlinkSync } from "fs";
+import { mkdirSync, readFileSync, rmSync, unlinkSync } from "fs";
 import { execSync } from "child_process";
+import { createHash } from "crypto";
 import { getOmtDir } from "@lib/omt-dir";
 import {
 	mergeWithHeartbeat,
@@ -98,6 +99,10 @@ export interface Story {
 	steering_rationale?: string;
 }
 const DEFAULT_MAX_ITERATIONS = 10;
+const DEFAULT_REVIEW_DISPATCH_CAP = 5;
+const REVIEW_LOCK_RETRIES = 100;
+const REVIEW_LOCK_RETRY_MS = 5;
+const REVIEW_LOCK_SLEEP = new Int32Array(new SharedArrayBuffer(4));
 
 export interface GoalState {
 	// --- 5 content slots ---
@@ -129,6 +134,12 @@ export interface GoalState {
 	schema_version: number;
 	/** Refreshed on every write (heartbeat). Used by the GC liveness check. */
 	last_touched_at: string;
+	/** Code-review dispatches atomically reserved by hook-facing callers. */
+	review_dispatch_used: number;
+	/** Initial five-review allowance; explicit user approval adds exactly five. */
+	review_dispatch_cap: number;
+	/** SHA-256 of the exact approved code-review artifact bytes, or empty when unapproved. */
+	approved_review_artifact_sha256: string;
 	/**
 	 * WHAT-slices of the objective. Defined during planning, tracked through completion.
 	 * Absent field reads as [] (backward-compatible). Writers: setStories, setSingleStory,
@@ -241,6 +252,11 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
 	// work is never clobbered; the strict writeFileNoCreate below is unchanged.
 	ensureSeed("ultragoal", sessionId);
 	const stateFilePath = resolveStatePath(sessionId);
+	return withStateLock(stateFilePath, () => mergeWriteLocked(sessionId, stateFilePath, next));
+}
+
+/** Caller must hold the per-session state lock. */
+function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partial<GoalState>): GoalState {
 	const prior = readPrior(sessionId);
 	// `??` rejects only null/undefined; a corrupt on-disk max_iterations (e.g. a string or
 	// a fractional/<1 value) would otherwise survive uncoerced and defeat the hook's
@@ -278,6 +294,14 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
 		// `set --phase pursuing` (no codex flag) would silently wipe the last-registered
 		// native-goal objective back to "" on every unrelated write.
 		codex_goal_objective: next.codex_goal_objective ?? prior.codex_goal_objective ?? "",
+		review_dispatch_used: validNonNegativeInteger(next.review_dispatch_used ?? prior.review_dispatch_used)
+			? (next.review_dispatch_used ?? prior.review_dispatch_used)!
+			: 0,
+		review_dispatch_cap: validNonNegativeInteger(next.review_dispatch_cap ?? prior.review_dispatch_cap)
+			? (next.review_dispatch_cap ?? prior.review_dispatch_cap)!
+			: DEFAULT_REVIEW_DISPATCH_CAP,
+		approved_review_artifact_sha256:
+			next.approved_review_artifact_sha256 ?? prior.approved_review_artifact_sha256 ?? "",
 	};
 	const state: GoalState = mergeWithHeartbeat(partial, {});
 	try {
@@ -294,6 +318,61 @@ function mergeWrite(sessionId: string, next: Partial<GoalState>): GoalState {
 		throw err;
 	}
 	return state;
+}
+
+function validNonNegativeInteger(value: unknown): value is number {
+	return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+/** Missing review fields are legacy defaults; malformed existing state is never claimable. */
+function parseClaimableState(raw: string): Partial<GoalState> | null {
+	try {
+		const state: unknown = JSON.parse(raw);
+		if (!isRecord(state)) return null;
+		const phases = ["planning", "pursuing", "budget_limited", "blocked", "complete"] as const;
+		if (
+			typeof state.active !== "boolean" ||
+			!isOneOf(state.phase, phases) ||
+			!validNonNegativeInteger(state.iteration) ||
+			typeof state.max_iterations !== "number" ||
+			!Number.isInteger(state.max_iterations) ||
+			state.max_iterations < 1 ||
+			(state.review_dispatch_used !== undefined && !validNonNegativeInteger(state.review_dispatch_used)) ||
+			(state.review_dispatch_cap !== undefined && !validNonNegativeInteger(state.review_dispatch_cap)) ||
+			(state.approved_review_artifact_sha256 !== undefined &&
+				typeof state.approved_review_artifact_sha256 !== "string")
+		) {
+			return null;
+		}
+		return state;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Minimal mkdir lock for every read-modify-write of this state file. A contention
+ * timeout fails closed; we never perform an unlocked fallback after a lock error.
+ */
+function withStateLock<T>(stateFilePath: string, callback: () => T): T {
+	const lockPath = `${stateFilePath}.lock`;
+	for (let attempt = 0; attempt < REVIEW_LOCK_RETRIES; attempt += 1) {
+		try {
+			mkdirSync(lockPath);
+			try {
+				return callback();
+			} finally {
+				rmSync(lockPath, { recursive: true, force: true });
+			}
+		} catch (err) {
+			if (isErrnoException(err) && err.code === "EEXIST") {
+				Atomics.wait(REVIEW_LOCK_SLEEP, 0, 0, REVIEW_LOCK_RETRY_MS);
+				continue;
+			}
+			throw err;
+		}
+	}
+	throw new Error("ultragoal-state: state lock contended; refusing unlocked write");
 }
 
 // ---------------------------------------------------------------------------
@@ -328,7 +407,22 @@ export function readGoalState(sessionId: string): GoalState | null {
 		) {
 			return null;
 		}
-		return state.active ? state : null;
+		if (!state.active) return null;
+		// The shared seed skeleton predates review dispatch state. Keep reads compatible
+		// with those files without making a re-plan reset an already-persisted budget.
+		return {
+			...state,
+			review_dispatch_used: validNonNegativeInteger(state.review_dispatch_used)
+				? state.review_dispatch_used
+				: 0,
+			review_dispatch_cap: validNonNegativeInteger(state.review_dispatch_cap)
+				? state.review_dispatch_cap
+				: DEFAULT_REVIEW_DISPATCH_CAP,
+			approved_review_artifact_sha256:
+				typeof state.approved_review_artifact_sha256 === "string"
+					? state.approved_review_artifact_sha256
+					: "",
+		};
 	} catch {
 		return null;
 	}
@@ -1067,15 +1161,122 @@ function isCodeReviewArtifact(value: unknown): value is CodeReviewArtifact {
  * block, never mask a CONFIRMED finding). `findings: []` is valid and clean.
  */
 export function readCodeReviewArtifact(sessionId: string): CodeReviewArtifact | null {
-	const content = readFileOrNull(resolveCodeReviewArtifactPath(sessionId));
-	if (!content) return null;
+	const reviewed = readCodeReviewArtifactRaw(sessionId);
+	return reviewed?.artifact ?? null;
+}
+
+/** Reads the raw bytes and parsed artifact together so approval hashes exactly what validation saw. */
+function readCodeReviewArtifactRaw(
+	sessionId: string,
+): { raw: string; artifact: CodeReviewArtifact } | null {
+	const raw = readFileOrNull(resolveCodeReviewArtifactPath(sessionId));
+	if (raw === null) return null;
 	let obj: unknown;
 	try {
-		obj = JSON.parse(content);
+		obj = JSON.parse(raw);
 	} catch {
 		return null;
 	}
-	return isCodeReviewArtifact(obj) ? obj : null;
+	return isCodeReviewArtifact(obj) ? { raw, artifact: obj } : null;
+}
+
+/** Single completion predicate shared by requestComplete and review-dispatch eligibility. */
+function isCompletionEligibleCodeReview(artifact: CodeReviewArtifact): boolean {
+	return (
+		artifact.status === "COMPLETE" &&
+		!artifact.findings.some(
+			(f) =>
+				f.verdict === "CONFIRMED" &&
+				(f.class === "correctness" || f.class === "requirement-gap"),
+		)
+	);
+}
+
+function sha256(raw: string): string {
+	return createHash("sha256").update(raw, "utf8").digest("hex");
+}
+
+export type ReviewDispatchClaim = {
+	allowed: boolean;
+	reason: "allowed" | "budget_exhausted" | "completion_eligible" | "failure";
+	used: number;
+	cap: number;
+};
+
+/**
+ * Hook-facing, atomic review dispatch reservation. The artifact check, approved-byte
+ * comparison, cap check, and persisted increment occur under one state-file lock.
+ */
+export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
+	const stateFilePath = resolveStatePath(sessionId);
+	try {
+		ensureSeed("ultragoal", sessionId);
+		return withStateLock(stateFilePath, () => {
+			const rawState = readFileOrNull(stateFilePath);
+			if (rawState === null) return { allowed: false, reason: "failure", used: 0, cap: 0 };
+			const prior = parseClaimableState(rawState);
+			if (prior === null) return { allowed: false, reason: "failure", used: 0, cap: 0 };
+			const used = validNonNegativeInteger(prior.review_dispatch_used)
+				? prior.review_dispatch_used
+				: 0;
+			const cap = validNonNegativeInteger(prior.review_dispatch_cap)
+				? prior.review_dispatch_cap
+				: DEFAULT_REVIEW_DISPATCH_CAP;
+			if (used >= cap) return { allowed: false, reason: "budget_exhausted", used, cap };
+
+			const reviewed = readCodeReviewArtifactRaw(sessionId);
+			const approved = prior.approved_review_artifact_sha256 ?? "";
+			if (
+				reviewed !== null &&
+				isCompletionEligibleCodeReview(reviewed.artifact) &&
+				sha256(reviewed.raw) !== approved
+			) {
+				return { allowed: false, reason: "completion_eligible", used, cap };
+			}
+
+			const state = mergeWriteLocked(sessionId, stateFilePath, {
+				review_dispatch_used: used + 1,
+			});
+			return {
+				allowed: true,
+				reason: "allowed",
+				used: state.review_dispatch_used,
+				cap: state.review_dispatch_cap,
+			};
+		});
+	} catch {
+		return { allowed: false, reason: "failure", used: 0, cap: 0 };
+	}
+}
+
+/** User-authorized renewal: validates and hashes the current conventional artifact under the same lock. */
+export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchClaim {
+	const stateFilePath = resolveStatePath(sessionId);
+	try {
+		ensureSeed("ultragoal", sessionId);
+		return withStateLock(stateFilePath, () => {
+			const reviewed = readCodeReviewArtifactRaw(sessionId);
+			const rawState = readFileOrNull(stateFilePath);
+			if (reviewed === null || rawState === null) {
+				return { allowed: false, reason: "failure", used: 0, cap: 0 };
+			}
+			const prior = parseClaimableState(rawState);
+			if (prior === null) return { allowed: false, reason: "failure", used: 0, cap: 0 };
+			const used = validNonNegativeInteger(prior.review_dispatch_used)
+				? prior.review_dispatch_used
+				: 0;
+			const cap = validNonNegativeInteger(prior.review_dispatch_cap)
+				? prior.review_dispatch_cap
+				: DEFAULT_REVIEW_DISPATCH_CAP;
+			const state = mergeWriteLocked(sessionId, stateFilePath, {
+				review_dispatch_cap: cap + DEFAULT_REVIEW_DISPATCH_CAP,
+				approved_review_artifact_sha256: sha256(reviewed.raw),
+			});
+			return { allowed: true, reason: "allowed", used, cap: state.review_dispatch_cap };
+		});
+	} catch {
+		return { allowed: false, reason: "failure", used: 0, cap: 0 };
+	}
 }
 
 /**
@@ -1251,16 +1452,7 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	// INCONCLUSIVE (D1): the review itself did not finish (timeout/ack-only/BLOCKED/
 	// genuinely uncertain) — distinct from a finished review that found CONFIRMED work.
 	// Blocks completion without implying a sisyphus re-dispatch is warranted.
-	if (codeReview.status === "INCONCLUSIVE") {
-		return false;
-	}
-	if (
-		codeReview.findings.some(
-			(f) =>
-				f.verdict === "CONFIRMED" &&
-				(f.class === "correctness" || f.class === "requirement-gap"),
-		)
-	) {
+	if (!isCompletionEligibleCodeReview(codeReview)) {
 		return false;
 	}
 
@@ -1702,6 +1894,14 @@ function main(): void {
 				}
 				process.exit(1);
 			}
+		} else if (subcommand === "claim-review-dispatch") {
+			const result = claimReviewDispatch(sessionId);
+			process.stdout.write(JSON.stringify(result) + "\n");
+			if (!result.allowed) process.exit(1);
+		} else if (subcommand === "approve-review-dispatch-renewal") {
+			const result = approveReviewDispatchRenewal(sessionId);
+			process.stdout.write(JSON.stringify(result) + "\n");
+			if (!result.allowed) process.exit(1);
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readGoalGet(sessionId)) + "\n");
 		} else if (subcommand === "status") {
@@ -1854,7 +2054,7 @@ function main(): void {
 			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|serialize-requirements|serialize-review-context> [options]\n",
+				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|serialize-requirements|serialize-review-context> [options]\n",
 			);
 			process.exit(1);
 		}
