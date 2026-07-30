@@ -56,14 +56,26 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 **목적**: `code-review` 내부에서 호출되는 다중 AI 리뷰 오케스트레이터입니다. 각기 다른 검토 렌즈(angle)를 가진 AI 파인더들을 병렬로 fan-out하고, 각자의 candidate 발견 목록을 받아 하나의 중복 제거된 후보 목록으로 합칩니다.
 
 **검토하는 것**:
-- 4개 앵글로 분담 — `correctness`(정확성·공격 가능성, 구 line-scan·cross-file·security 흡수) · `regression`(회귀) · `cleanup`(정리) · `requirement`(요구사항 충족·테스트 품질, 구 coverage 흡수)
+- 4개 앵글로 분담 — `correctness`(정확성·공격 가능성, 구 line-scan·cross-file·security 흡수) · `regression`(회귀) · `cleanup`(정리와 가벼운 Test value 관점) · `requirement`(AC 매핑 또는 의도 추론, 구 coverage 흡수)
 - 각 파인더가 독립적으로 발견한 candidate를 각도별로 수집
 - 중복 제거 및 집계 — 판정(CONFIRMED/PLAUSIBLE/REFUTED)은 하지 않음
 - 상위 `code-review`에 판정 대상 후보 목록 반환
 
+**정적 검토 전용**:
+- 멤버, 컨덕터, 그리고 in-session fallback은 모두 정적 검토만 합니다. 테스트·빌드·린터·설치·프로젝트 코드를 실행하지 않습니다.
+- 후보는 diff, 소스 읽기, 검색으로 뒷받침합니다. 정적으로 판단할 수 없는 부분은 실행으로 해소하지 않고 불확실성 또는 커버리지 한계로 드러냅니다.
+- 컨덕터의 orchestration lifecycle 명령(`job.ts`의 `start`·`collect`·`resume-member`·`results`·`stop`·`clean`, `usage-summary.ts`)은 계속 사용할 수 있습니다. fallback에도 정적 검토 제한은 그대로 적용됩니다.
+
 **역할 경계**:
 - "컨덕터이지 리뷰어가 아닙니다" — 코드를 직접 읽거나, 심각도를 부여하거나, 병합 여부를 판단하지 않습니다.
 - 파인더가 모두 불가능한 경우(설정 없음·CLI 미설치·타임아웃) in-session fallback으로 직접 파인더 역할을 수행합니다.
+- `requirement`는 제공된 AC를 매핑하고, AC가 없으면 diff에서 의도를 추론하는 역할만 맡습니다.
+- `cleanup`은 Test value를 가볍게 살핍니다. 거짓 신뢰·가짜 커버리지, 검증 가치 대비 피드백 루프 비용, 구현 결합적이거나 불안정한 테스트를 다루며, 점수화 기준은 아닙니다.
+
+**실행 제한 적용**:
+- 프롬프트 계약과 전용 Claude/Codex PreToolUse 가드 쌍(`review-exec-guard.sh` / `codex-review-exec-guard.sh`)이 함께 적용합니다. 두 가드는 공유 shell 불변식으로 같은 고비용 명령을 판정합니다.
+- 워커는 `OMT_REVIEW_ROLE=member`를 받아 멤버 검토 컨텍스트를 표시합니다. 컨덕터는 job 메타데이터의 `conductorSessionId`와 살아 있는 job 디렉터리로 검토 컨텍스트가 확인될 때만 적용 대상이 됩니다.
+- 따라서 이 제한은 검토 컨텍스트에서만 활성화됩니다. 같은 고비용 명령도 일반 개발 세션에서는 이 가드에 의해 차단되지 않습니다.
 
 **프로세스 정리**: 각 파인더는 별도 워커 프로세스로 실행되며, 워커 자신의 종료 경로·job 정리(`clean`)·새 세션 시작 시 회수라는 세 가지 경로로 그 프로세스를 거둡니다. 다만 뒤의 두 경로는 그 프로세스 그룹이 이 job의 것임을 확인할 수 있을 때만 신호를 보내므로, 컨덕터가 정리 단계에 도달하지 못해도 나머지 경로가 항상 뒤를 받쳐주는 것은 아닙니다. 워커가 기동할 수 있는 MCP 서버도 설정 파일의 화이트리스트(`mcps.allow`)로 제한되며, 화이트리스트를 지정하지 않으면 이 엔진이 열거하는 서버가 모두 차단됩니다(opt-in, fail-closed). 같은 `settings:` 블록의 형제 설정인 `deny.skills`(리뷰 워커가 호출할 수 없는 스킬을 지정하는 설정)는 기본값 방향이 정반대여서, 지정하지 않으면 아무것도 차단하지 않습니다(no-op).
 
