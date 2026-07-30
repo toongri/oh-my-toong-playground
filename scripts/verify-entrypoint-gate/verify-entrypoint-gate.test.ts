@@ -948,6 +948,35 @@ describe("arming — overlay presence, not registration site, decides where the 
 		}
 	});
 
+	test("a cd wrapped in a transparent prefix still arms", () => {
+		// Each prefix below leaves `cd` running as the shell's own builtin, so the
+		// directory really does move (measured in bash: `command cd`, `builtin cd`,
+		// `\cd`, and a leading `FOO=1` assignment all change the shell's cwd).
+		// Matching the raw text against a bare /^cd/ missed every one of them, which
+		// reopened the same bypass the plain-`cd` case above closes.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-wrapcd-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-wrapcd-outside-"));
+		try {
+			const wrapped = [
+				`command cd ${armed} && npx vitest run`,
+				`builtin cd ${armed} && npx vitest run`,
+				`\\cd ${armed} && npx vitest run`,
+				`FOO=1 cd ${armed} && npx vitest run`,
+			];
+			for (const cmd of wrapped) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
 	test("a cd target the gate cannot resolve statically does not arm on a false path", () => {
 		// Shell-variable indirection (`cd $DIR`) is an accepted gap class for this
 		// gate — the point of pinning it is that the unresolved token must not be

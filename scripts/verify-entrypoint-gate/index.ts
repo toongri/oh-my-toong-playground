@@ -511,7 +511,12 @@ function stripLeadingTransparentWrappers(text: string): string {
 		const match = /^\s*(\S+)(\s+|$)/.exec(s);
 		if (match === null) break;
 		const word = normalizeToken(match[1]);
-		if (word !== "command" && word !== "env") break;
+		// `builtin` is here for armingCandidates' sake: `builtin cd <dir>` really
+		// does move the shell's directory (measured in bash), so the arming scan
+		// has to see through it. It costs attempt-detection nothing — `builtin`
+		// only ever prefixes a shell builtin, and `builtin pnpm test` is a command
+		// the shell rejects outright.
+		if (word !== "command" && word !== "env" && word !== "builtin") break;
 		s = stripLeadingEnvAssignments(s.slice(match[0].length));
 	}
 	return s;
@@ -661,12 +666,22 @@ export function findOverlayDir(startDir: string): string | null {
 // is skipped rather than guessed: joining an unexpanded token onto cwd would
 // probe a path that does not exist, and shell-variable indirection is an
 // accepted gap class for this gate.
+//
+// The `cd` word itself is read through the same unwrapping step 1 uses for
+// attempt detection, because the prefixes that hide it from a raw /^cd/ match
+// leave it running as the shell's own builtin all the same: `command cd`,
+// `builtin cd`, `\cd`, and a leading `FOO=1` assignment each still move the
+// directory (measured in bash). `env cd` does NOT — env is external, so its
+// child's chdir dies with it — and unwrapping it here over-arms that one shape.
+// That direction is the safe one: an over-armed command is judged rather than
+// waved through, and `env cd <dir> && …` is not a shape anyone writes.
 function armingCandidates(command: string, cwd: string): string[] {
 	const candidates = [cwd];
 	for (const segment of splitSegments(command)) {
-		const match = /^\s*cd\s+(?:--\s+)?("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(segment);
-		if (match === null) continue;
-		const target = match[1].replace(/^["']|["']$/g, "");
+		const unwrapped = stripLeadingTransparentWrappers(stripLeadingEnvAssignments(segment));
+		const match = /^(\S+)\s+(?:--\s+)?("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(unwrapped);
+		if (match === null || normalizeToken(match[1]) !== "cd") continue;
+		const target = match[2].replace(/^["']|["']$/g, "");
 		if (target.length === 0 || target.includes("$") || target.includes("`")) continue;
 		candidates.push(resolve(cwd, target));
 	}
