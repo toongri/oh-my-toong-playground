@@ -272,7 +272,15 @@ function isVerificationAttemptSegment(segment: string, entrypoints: string[], ru
 
 	const nestedInner = nestedShellInnerCommand(unwrapped);
 	if (nestedInner !== null) {
-		return isVerificationAttemptSegment(nestedInner, entrypoints, runners, via);
+		// The inner command is a command LINE, not a single command: the outer
+		// quotes hide its `&&`/`;`/`|` from splitSegments, so descending without
+		// re-splitting reads `cd x && npx vitest` as one segment whose first token
+		// is `cd` — no runner, no attempt, straight through. Predates the arming
+		// work: the same string passes with the payload's own workdir inside the
+		// protected repo, where arming was never in question.
+		return splitSegments(nestedInner).some((inner) =>
+			isVerificationAttemptSegment(inner, entrypoints, runners, via),
+		);
 	}
 
 	const normalized = stripAfterEndOfOptions(unwrapped);
@@ -511,7 +519,12 @@ function stripLeadingTransparentWrappers(text: string): string {
 		const match = /^\s*(\S+)(\s+|$)/.exec(s);
 		if (match === null) break;
 		const word = normalizeToken(match[1]);
-		if (word !== "command" && word !== "env") break;
+		// `builtin` is here for armingCandidates' sake: `builtin cd <dir>` really
+		// does move the shell's directory (measured in bash), so the arming scan
+		// has to see through it. It costs attempt-detection nothing — `builtin`
+		// only ever prefixes a shell builtin, and `builtin pnpm test` is a command
+		// the shell rejects outright.
+		if (word !== "command" && word !== "env" && word !== "builtin") break;
 		s = stripLeadingEnvAssignments(s.slice(match[0].length));
 	}
 	return s;
@@ -535,11 +548,29 @@ function nestedShellInnerCommand(text: string): string | null {
 	if (first === "eval") return unwrapOuterQuotes(rest);
 
 	if (first === "bash" || first === "sh" || first === "zsh") {
-		const cMatch = /^-c\s+(.+)$/.exec(rest);
-		return cMatch === null ? null : unwrapOuterQuotes(cMatch[1]);
+		// `-c` is not a spelling, it is a flag inside a cluster: `bash -lc`,
+		// `sh -euc`, `bash -x -c` all run the operand exactly the way `-c` does.
+		// Matching the literal `-c` alone left every one of them unparsed.
+		const cMatch = /^(?:-[a-zA-Z]+\s+)*-[a-zA-Z]*c\s+(.+)$/.exec(rest);
+		if (cMatch === null) return null;
+		return leadingQuotedSpan(cMatch[1]) ?? unwrapOuterQuotes(cMatch[1]);
 	}
 
 	return null;
+}
+
+// The operand of `-c` when it is quoted and something trails it (`bash -c 'cmd'
+// scriptname` — the shell reads the trailing words as $0/$@, not as part of the
+// command). unwrapOuterQuotes cannot see that: the string as a whole is not
+// quoted, so it hands back the operand with its quotes and the trailing words
+// still attached. Returns null when the text does not open with a quote, which
+// is the unquoted `bash -c cmd` case unwrapOuterQuotes already handles.
+function leadingQuotedSpan(text: string): string | null {
+	const t = text.trim();
+	const quote = t[0];
+	if (quote !== '"' && quote !== "'") return null;
+	const end = t.indexOf(quote, 1);
+	return end === -1 ? null : t.slice(1, end);
 }
 
 function unwrapOuterQuotes(text: string): string {
@@ -600,24 +631,143 @@ export function readPackageScripts(workspaceRoot: string): string[] {
 
 // -----------------------------------------------------------------------------
 // Config loading — base (this module's own directory, committed) + local
-// (the TARGET WORKSPACE ROOT's `.claude/scripts/verify-entrypoint-gate/`,
-// deployed there as a project overlay) merged one key at a time: a key local
-// declares replaces base's whole array for that key; a key local omits falls
-// through to base. `localDir` has no static default — it depends on the
-// workspace root resolved from `cwd`, so callers pass it explicitly (or omit
-// it to get base-only, e.g. when no workspace root was found at all).
+// (the project overlay deployed into `.claude/scripts/verify-entrypoint-gate/`
+// or `.codex/scripts/...`, found by findOverlayDir below) merged one key at a
+// time: a key local declares replaces base's whole array for that key; a key
+// local omits falls through to base. `localDir` has no static default — it
+// depends on the cwd the command runs in, so callers pass it explicitly (the
+// base-only `undefined` form survives for direct callers and tests; the hook
+// path never uses it, since no overlay means the gate does not run at all).
 // -----------------------------------------------------------------------------
-// Resolves which project-overlay directory to read `verify-entrypoint-gate.
-// local.yaml` from, for a given workspace root. Both platforms sync the SAME
-// overlay source to two different deploy roots (`.claude/scripts/...` and
-// `.codex/scripts/...` — see deployLocationForManifest in tools/sync.ts), so
-// their content is identical; this order only decides which copy's presence
-// to trust first when both COULD exist (`.claude` wins), never a policy
-// difference between the two.
-function resolveLocalDir(workspaceRoot: string): string {
-	const claudeDir = join(workspaceRoot, ".claude", "scripts", "verify-entrypoint-gate");
-	if (existsSync(join(claudeDir, "verify-entrypoint-gate.local.yaml"))) return claudeDir;
-	return join(workspaceRoot, ".codex", "scripts", "verify-entrypoint-gate");
+// Resolves the project-overlay directory: the nearest ancestor of the
+// command's OWN cwd carrying a deployed `verify-entrypoint-gate.local.yaml`.
+// Its presence is also what ARMS the gate — see processHookInput, which
+// returns "" when this yields null.
+//
+// Arming lives here, not at the hook's registration site, because the hook
+// registers globally ($HOME/.codex/hooks.json via root codex.yaml) and is
+// therefore invoked in every repo. Registering per-project instead is not an
+// option for codex: a project registration lands in `<repo>/.codex/hooks.json`,
+// which target repos track in git, and the adapter replaces that file's whole
+// `hooks` key (tools/adapters/codex.ts's updateSettings) — it would overwrite
+// the team's own committed hook entries. So scope is decided by deployed
+// policy DATA instead: `make sync` puts an overlay only in the repos this
+// policy was written for, and a repo without one is passed through untouched
+// rather than fail-closed denied (a repo with no pnpm workspace would
+// otherwise have every `pytest` / `npx tsc` denied for a reason that does not
+// apply to it).
+//
+// Both platforms sync the SAME overlay source to two different deploy roots
+// (`.claude/scripts/...` and `.codex/scripts/...` — see
+// deployLocationForManifest in tools/sync.ts), so their content is identical;
+// the `.claude`-first order only decides which copy's presence to trust when
+// both COULD exist, never a policy difference between the two.
+export function findOverlayDir(startDir: string): string | null {
+	let dir = resolve(startDir);
+	while (true) {
+		for (const platformDir of [".claude", ".codex"]) {
+			const candidate = join(dir, platformDir, "scripts", "verify-entrypoint-gate");
+			if (existsSync(join(candidate, "verify-entrypoint-gate.local.yaml"))) return candidate;
+		}
+		const parent = dirname(dir);
+		if (parent === dir) return null;
+		dir = parent;
+	}
+}
+
+// Arming reads the directory the command actually RUNS in, which is not always
+// the payload's own workdir: a leading `cd <dir>` moves it. `cd <armed repo> &&
+// npx vitest`, issued with a workdir outside that repo, would otherwise find no
+// overlay and return before decide() — never reaching the compound-command deny
+// that catches this exact shape. So every `cd` target in the command joins cwd
+// as an arming candidate.
+//
+// Each target is resolved against EVERY base collected so far, not against a
+// single moving cursor. A cursor has to answer which branch of the command
+// actually ran — `cd missing || cd repo` runs its second `cd` from the original
+// directory, `cd base && cd repo` from the first one's landing spot — and this
+// gate cannot know that from the text. Resolving against all of them keeps both
+// readings, and an extra candidate can only ever ADD arming (a deny), never
+// remove it. `bash -c '…'`/`eval '…'` recurse through the same collection, since
+// splitSegments keeps their inner command inside one quoted segment and step 1's
+// attempt detection descends into it too — arming has to descend first or the
+// early return fires before that descent can happen.
+//
+// Arming on the SESSION's directory instead was the other way to close this,
+// and it is wrong: it arms on where the session sits rather than where the
+// command runs, which re-denies a cross-repo `pytest` issued from a session
+// that happens to be inside the protected repo — the false deny this whole
+// arming rule exists to remove.
+//
+// Anything dash-led between `cd` and its operand is skipped rather than read as
+// the directory: `cd [-L|-P] [dir]` is bash's own usage (zsh adds more), and
+// taking the token right after `cd` would probe `<cwd>/-P` and arm nothing. The
+// skip is deliberately shape-based, not an option table — an unknown flag from
+// some other shell costs nothing here, while a missed one is a bypass. `cd -`
+// falls out of this as unresolvable, which is correct: OLDPWD is not knowable
+// from the command text.
+//
+// A `cd` whose target this cannot resolve statically (`cd $REPO`, `cd "$(…)"`)
+// is skipped rather than guessed: joining an unexpanded token onto cwd would
+// probe a path that does not exist, and shell-variable indirection is an
+// accepted gap class for this gate.
+//
+// The `cd` word itself is read through the same unwrapping step 1 uses for
+// attempt detection, because the prefixes that hide it from a raw /^cd/ match
+// leave it running as the shell's own builtin all the same: `command cd`,
+// `builtin cd`, `\cd`, and a leading `FOO=1` assignment each still move the
+// directory (measured in bash). `env cd` does NOT — env is external, so its
+// child's chdir dies with it — and unwrapping it here over-arms that one shape.
+// That direction is the safe one: an over-armed command is judged rather than
+// waved through, and `env cd <dir> && …` is not a shape anyone writes.
+// Builtins that take a directory operand and move the shell into it. `pushd`
+// belongs here with `cd` — it changes the working directory in both bash and
+// zsh (measured); the directory stack is bookkeeping on the side. `popd` does
+// not: its destination is on that stack, not in the command text, so it joins
+// `cd -` and `cd $VAR` as unknowable rather than being guessed at.
+const DIR_CHANGING_BUILTINS = ["cd", "pushd"];
+
+function armingCandidates(command: string, cwd: string): string[] {
+	const bases = [cwd];
+	const add = (dir: string): void => {
+		if (!bases.includes(dir)) bases.push(dir);
+	};
+	for (const segment of splitSegments(command)) {
+		const unwrapped = stripLeadingTransparentWrappers(stripLeadingEnvAssignments(segment));
+
+		const inner = nestedShellInnerCommand(unwrapped);
+		if (inner !== null) {
+			for (const base of [...bases]) {
+				for (const nested of armingCandidates(inner, base)) add(nested);
+			}
+			continue;
+		}
+
+		const match = /^(\S+)((?:\s+-\S*)*)\s+("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(unwrapped);
+		if (match === null || !DIR_CHANGING_BUILTINS.includes(normalizeToken(match[1]))) continue;
+		const target = cdOperand(match[3]);
+		if (target === null) continue;
+		for (const base of [...bases]) add(resolve(base, target));
+	}
+	return bases;
+}
+
+// The literal directory a `cd` operand names, or null when this cannot know it.
+// Quoting matters here and only here: the shell expands `~` in `cd ~/x` and does
+// NOT in `cd "~/x"`, so the quote characters are read before they are stripped.
+// `~user` is left literal — resolving another account's home needs a passwd
+// lookup this gate has no business doing, and the literal simply probes a path
+// that does not exist, which is the same non-arming outcome as `cd $REPO`.
+function cdOperand(raw: string): string | null {
+	const quoted = raw.startsWith('"') || raw.startsWith("'");
+	const target = raw.replace(/^["']|["']$/g, "");
+	if (target.length === 0 || target.includes("$") || target.includes("`")) return null;
+	if (quoted) return target;
+	const home = process.env.HOME;
+	if (home === undefined || home.length === 0) return target;
+	if (target === "~") return home;
+	if (target.startsWith("~/")) return join(home, target.slice(2));
+	return target;
 }
 
 export function loadConfig(
@@ -712,9 +862,17 @@ export function processHookInput(
 		const workdir = pickNonEmptyString(input.tool_input?.workdir) ?? pickNonEmptyString(input.tool_input?.cwd);
 		const cwd = workdir === undefined ? resolve(topCwd) : resolve(topCwd, workdir);
 
+		// Arming gate — no deployed overlay above any directory this command can
+		// reach means this repo was never given this policy, so nothing is judged
+		// here at all.
+		const overlayDir = armingCandidates(command, cwd).reduce<string | null>(
+			(found, candidate) => found ?? findOverlayDir(candidate),
+			null,
+		);
+		if (overlayDir === null) return "";
+
 		const workspaceRoot = findWorkspaceRoot(cwd);
-		const localDir = workspaceRoot === null ? undefined : resolveLocalDir(workspaceRoot);
-		const policy = loadConfig(baseDir, localDir);
+		const policy = loadConfig(baseDir, overlayDir);
 		const scripts = workspaceRoot === null ? [] : readPackageScripts(workspaceRoot);
 
 		const result = decide({

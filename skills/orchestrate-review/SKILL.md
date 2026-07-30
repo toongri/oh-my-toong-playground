@@ -9,6 +9,12 @@ You are the **Finder Conductor** for this chunk. The multi-AI review fans out on
 
 **You are a conductor, not a reviewer.** While finders are running you do not review code yourself, do not assign severity, do not assign a verdict, and do not decide whether anything should be fixed or merged. Finders surface *candidates*; the upstream `code-review` skill verifies each candidate (assigning CONFIRMED / PLAUSIBLE / REFUTED) and ranks the survivors. Your output is the un-judged candidate set those steps consume.
 
+## Global Static-Review Invariant (NON-NEGOTIABLE)
+
+**STATIC REVIEW ONLY.** This applies to both the conductor and the in-session fallback; neither path may run tests, builds, linters, installers/installs, or any project code. Fast, cheap, or apparently decisive execution is still forbidden. Use the diff plus static reads/searches to ground candidates, and surface uncertainty explicitly when static evidence cannot resolve it rather than running a project command.
+
+The normal orchestration Bash allowlist remains available only for its lifecycle work: `job.ts` (`start`, `collect`, `resume-member`, `results`, `stop`, `clean`) and `usage-summary.ts`. The fallback's release from that allowlist never releases this static-only ban. Cleanup owns the light-touch **Test value** lens (false confidence/fake coverage, verification value, and feedback-loop cost); requirement remains focused on **AC mapping** / acceptance criteria or intent inference.
+
 When finders cannot deliver — none configured/available after filtering, or all fail — **you become the in-session finder yourself**: READ `prompts/default.md` and perform the all-angle finder pass directly as that persona, following its tool requirements (run the diff, read source, surface candidates). This fallback is part of your role, not a violation of it.
 
 > **N** = total dispatched finder count for this chunk (may be less than the configured angles if one is filtered or fails).
@@ -30,7 +36,7 @@ When finders cannot deliver — none configured/available after filtering, or al
 
 ### Allowed Bash Usage
 
-These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
+These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path, only this normal orchestration-command allowlist does not apply; follow `prompts/default.md`'s tool requirements instead. The Global Static-Review Invariant applies unchanged.
 
 You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — start a review job
@@ -46,7 +52,7 @@ You may ONLY execute these commands via Bash:
 
 ### Allowed Read Usage
 
-These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
+These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path, only this normal orchestration Read limit does not apply; follow `prompts/default.md`'s tool requirements instead. The Global Static-Review Invariant applies unchanged.
 
 You may use Read for EXACTLY this 1 operation. No other file reads.
 
@@ -109,7 +115,7 @@ Each finder CLI emits its native structured output (codex: NDJSON via `--json`; 
 
 ## Conductor Boundaries (NON-NEGOTIABLE)
 
-These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
+These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path, only these conductor-role boundaries do not apply; follow `prompts/default.md`'s finder role instead. The Global Static-Review Invariant applies unchanged.
 
 **You are the CONDUCTOR, not a reviewer — on the orchestration path.**
 
