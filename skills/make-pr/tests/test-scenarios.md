@@ -2,7 +2,7 @@
 
 Skill type: Technique
 Testing approach: Application / Variation / Edge Case (per writing-skills guide)
-Last tested: 2026-04-09 (Round 10)
+Last tested: 2026-07-30 (Round 11)
 
 ---
 
@@ -1721,3 +1721,76 @@ Improvement context: Step 0를 확장하여 heuristic 기반 parent branch 감�
 ### GREEN Result (수정된 스킬)
 
 **9/9 PASS** — Step 8 CAS에서 `git fetch + target SHA 확인`(C1) → BASELINE vs CURRENT 비교(C2) → 불일치 감지(C3) → SYNC_STRATEGY=rebase 자동 재사용 (재질문 없음)(C4) → rebase 실행 중 src/api.ts conflict 감지 → Step 0-C 진입(C5) → AskUserQuestion 3가지 선택지 제공(C6) → git add + rebase --continue(C7) → rebase 완료 후 Step 1 복귀 없이 push + `gh pr create` 직행(C8) → "PR description is NOT re-written"(C9).
+
+---
+
+## Scenario 27: PR Convention Compliance (assignee / label / title / branch name)
+
+**Type:** Application + Variation
+**Round:** 11
+**Purpose:** PR 생성 시 (1) repo의 기존 PR 컨벤션(제목·브랜치명·label)을 서베이해 적용하는지, (2) `--assignee @me`로 gh 인증 유저에게 assign하는지 검증. 변형 시나리오로 컨벤션 미성립 레포에서 fallback으로 후퇴하는지 검증.
+
+### Input (main scenario)
+
+- Session state: Step 0~5 완료 (target=main, behind=0, 인터뷰 완료, 단일 thesis), 현재 브랜치는 머신 생성명 `wobbly-otter` (원격 미존재)
+- Simulated `gh pr list --state all --limit 30` 출력: 8건 — 제목 전부 `type(domain): 한국어` 스타일, 브랜치 전부 `type/kebab-topic`, feature PR은 `enhancement`+도메인 label 부착
+- Simulated `gh label list` 출력: enhancement / bug / documentation / refactor / order / payment / member
+- Scripted user: 초안 승인 + PR 생성 확인 일괄 ("좋아, 승인. PR도 만들어줘."), AskUserQuestion은 항상 첫 옵션 선택
+
+### Success Criteria (main)
+
+| # | Criterion | Description |
+|---|-----------|-------------|
+| 1 | 컨벤션 서베이 실행 | 제목 작성 전 `gh pr list` + `gh label list` 실행 |
+| 2 | 제목이 서베이 컨벤션 준수 | `feat(order): ...` 스코프 스타일 (기본값 `feat: ...` 아님) |
+| 3 | label이 컨벤션 + 실재 label만 | `enhancement`+`order` 등 gh label list 실재 label에서 선택 |
+| 4 | 브랜치명 컨벤션 체크 | `git ls-remote` 원격 부재 확인 후 AskUserQuestion으로 rename 제안 |
+| 5 | `--assignee @me` 포함 | 최종 `gh pr create`에 항상 포함 |
+| 6 | `--label` 플래그 포함 | 선택된 label당 1회 |
+| 7 | 기존 플로우 회귀 없음 | CAS check, 일반 push(rebase 미사용 시), 사용자 확인 게이트, 한국어 |
+
+### Input (variation: convention-less repo)
+
+동일 세션 상태에서 서베이 표본만 변경: PR 3건(비일관 제목: 한국어 bare / 영어 감탄문 / 영어 소문자, label 전부 없음, 브랜치 잡다), label은 bug/documentation만 존재. **변화시킨 축은 "서베이 표본의 수와 일관성" 하나.**
+
+### Success Criteria (variation)
+
+| # | Criterion | Description |
+|---|-----------|-------------|
+| V1 | 전 축 컨벤션 미성립 판정 | 표본 3건 < 5건 하한 → 모든 축 "no convention" |
+| V2 | 제목 fallback | conventional commit 한국어 50자 이내 |
+| V3 | label 미적용 + 미발명 | `--label` 플래그 완전 생략, 존재하지 않는 label 미발명 |
+| V4 | 브랜치명 유지 | rename 제안 없음 (`wobbly-otter` 그대로 push) |
+| V5 | `--assignee @me` 유지 | fallback과 무관하게 항상 포함 |
+
+### RED Baseline Result (Round 10 스킬)
+
+| # | Criterion | Result | Notes |
+|---|-----------|--------|-------|
+| 1 | 컨벤션 서베이 실행 | **FAIL** | `gh pr list`/`gh label list` 미실행 — 스킬에 단계 자체가 없음 |
+| 2 | 제목이 서베이 컨벤션 준수 | **FAIL** | 하드코딩된 기본 스타일(`feat: 한국어`)로만 작성 |
+| 3 | label 적용 | **FAIL** | `--label` 플래그 전무 |
+| 4 | 브랜치명 컨벤션 체크 | **FAIL** | "no branch rename is part of this workflow"라고 명시 진술, `wobbly-otter` 그대로 push |
+| 5 | `--assignee @me` 포함 | **FAIL** | assignee 플래그 전무 |
+| 6 | `--label` 플래그 포함 | **FAIL** | 3번과 동일 |
+| 7 | 기존 플로우 회귀 없음 | PASS | CAS check·push·확인 게이트는 정상 |
+
+**Summary: 1/7 PASS, 6/7 FAIL** — 컨벤션 서베이·assignee·label·브랜치명 체크 전부 구조적 부재.
+
+### GREEN Result (Round 11 스킬)
+
+**Main: 7/7 PASS** — 서베이 실행 → `feat(order): 주문 생성 이벤트 발행 구조 도입` + `enhancement`/`order` label 도출 → `git ls-remote` 확인 후 `feature/order-created-event` rename 제안(AskUserQuestion) → `gh pr create --assignee @me --label "enhancement" --label "order"`.
+
+**Variation: 5/5 PASS** — 최초 GREEN에서는 표본 하한 부재로 3건 중 2건(약한 다수)을 컨벤션으로 확정하는 루프홀 발견(제목을 영어 bare로 작성). REFACTOR로 "≥5건 AND 과반" 이중 조건 명문화 후 재실행: 전 축 no convention 판정 → 제목 fallback(`feat: 주문 생성 이벤트 발행 구조 도입`), label 미적용, rename 미제안, `--assignee @me` 유지.
+
+---
+
+## Gaps Found and Fixed (Round 11)
+
+| Gap | Found In | Fix Applied |
+|-----|----------|-------------|
+| PR 컨벤션 서베이 부재 — 제목/브랜치명/label이 repo 관례와 무관하게 작성됨 | Scenario 27 RED baseline | Step 1에 PR Convention Survey 추가 (`gh pr list --state all --limit 30` + `gh label list`, 축별 컨벤션 도출 + fallback 규칙) |
+| assignee 미지정 | Scenario 27 RED baseline | Step 8 `gh pr create`에 `--assignee @me` 상시 포함 |
+| label 미적용 | Scenario 27 RED baseline | Step 6에 PR Labels 서브섹션 추가 (실재 label만, 컨벤션 기반 선택), Step 8에 `--label` 플래그 |
+| 머신 생성 브랜치명 무검사 push | Scenario 27 RED baseline | Step 8에 Branch Name Convention Check 추가 (원격 미존재 브랜치만 rename 제안, AskUserQuestion) |
+| 빈약한 표본(3건)의 과반을 컨벤션으로 확정 | Scenario 27 variation 최초 GREEN | 컨벤션 성립 조건을 "≥5건 서베이 AND 과반 공유" 이중 조건으로 강화 |

@@ -45,7 +45,7 @@ Never write a PR description without sufficient context. Continue the interview 
 
 ## Scope
 
-Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. Detects base branch via heuristic merge-base analysis, confirms target branch with user, performs target branch synchronization with conflict resolution at request start, then collects metadata → interview → assessment → description. Creates the PR via `gh pr create` after user approval.
+Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. Detects base branch via heuristic merge-base analysis, confirms target branch with user, performs target branch synchronization with conflict resolution at request start, then collects metadata + surveys repo PR conventions (title/branch/label) → interview → assessment → description. Creates the PR via `gh pr create` after user approval, assigned to the authenticated gh user, with labels per the surveyed convention.
 
 ---
 
@@ -285,7 +285,7 @@ If `git rebase --continue` triggers a new conflict (rebase replays commits one b
 
 ---
 
-## Step 1: Collect Git Metadata
+## Step 1: Collect Git Metadata & PR Conventions
 
 After base branch detection and fetch, collect lightweight git metadata.
 
@@ -301,6 +301,30 @@ git log origin/{base-branch}..HEAD --format='%s%n%b'
 ```
 
 Use this metadata as supplementary context for the interview. Use it to gauge the scope and scale of changes, but do NOT read actual file contents.
+
+### PR Convention Survey
+
+Survey the repo's recent PRs to learn its title, branch-name, and label conventions. Run once per session, right after metadata collection:
+
+```bash
+# Recent PRs (10-30): title / branch / label conventions
+gh pr list --state all --limit 30 --json number,title,labels,headRefName
+
+# Labels that actually exist in the repo
+gh label list --limit 100
+```
+
+From the survey, derive and record three values for later steps:
+
+| Value | Derived from | What to extract |
+|-------|-------------|-----------------|
+| `{title-convention}` | `title` field | Prefix style (conventional commit / gitmoji / bare), language, typical length |
+| `{branch-convention}` | `headRefName` field | Naming pattern (e.g., `feat/*`, `fix/*`, `{user}/*`, kebab-case topic) |
+| `{label-convention}` | `labels` field | Which labels are applied to which kinds of change (feature/fix/refactor/docs …) |
+
+**Convention exists only when a majority pattern does.** An axis counts as having a convention only when BOTH hold: (1) at least 5 PRs were surveyed, and (2) at least half of them share the pattern. With fewer than 5 surveyed PRs, mark every axis "no convention" — a handful of PRs is not a convention. For any axis without a convention, use the fallback defaults (title: conventional commit style Korean, branch: keep current name, labels: none).
+
+**Never invent labels.** Only labels present in `gh label list` output may ever be applied. If no existing label fits, apply none.
 
 ---
 
@@ -413,10 +437,15 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 ### PR Title
 
 - Include a PR title along with the description body
-- Format: conventional commit style (`feat:`, `fix:`, `refactor:`, etc.)
-- Language: Korean
-- Length: under 50 characters (excluding prefix)
-- Example: `refactor: 주문-결제 간 이벤트 기반 아키텍처 전환`
+- Format: follow `{title-convention}` from the Step 1 PR Convention Survey — match the surveyed prefix style, language, and length
+- Fallback (no surveyed convention): conventional commit style (`feat:`, `fix:`, `refactor:`, etc.), Korean, under 50 characters (excluding prefix)
+- Fallback example: `refactor: 주문-결제 간 이벤트 기반 아키텍처 전환`
+
+### PR Labels
+
+- Select labels per `{label-convention}` from the Step 1 survey: pick the label(s) the repo applies to this kind of change
+- Only labels that exist in `gh label list` output — never invent one; if none fits, apply none
+- Present the selected labels alongside the title and body in Step 7 so the user reviews them together
 
 ### Writing Principles
 
@@ -497,8 +526,17 @@ CURRENT_TARGET_SHA=$(git rev-parse origin/{base-branch})
 5. After successful sync: proceed to push + `gh pr create`
 6. PR description is NOT re-written (the feature branch changes are the same; only the base has moved)
 
-- If user confirms: push the branch and run `gh pr create` with the approved title and description
+- If user confirms: check branch name convention, push the branch, and run `gh pr create` with the approved title, description, assignee, and labels
 - If user declines: output the final PR description only
+
+### Branch Name Convention Check (before push)
+
+If `{branch-convention}` exists (Step 1 survey) and the current branch name does not match it:
+
+1. Skip when the branch already exists on origin (`git ls-remote --heads origin {current-branch}` non-empty) — renaming a pushed branch orphans the remote copy
+2. Otherwise propose a convention-conforming name via AskUserQuestion:
+   - **{proposed-name}으로 변경**: `git branch -m {proposed-name}` then push under the new name
+   - **현재 이름 유지**: push as-is
 
 **For single PR** (create after remote push):
 
@@ -512,14 +550,17 @@ TITLE=$(cat <<'EOF'
 PR title
 EOF
 )
-gh pr create --base {base-branch} --head $(git branch --show-current) --title "$TITLE" --body "$(cat <<'EOF'
+gh pr create --base {base-branch} --head $(git branch --show-current) --assignee @me --title "$TITLE" --body "$(cat <<'EOF'
 PR description body
 EOF
-)"
+)" --label "{label-1}" --label "{label-2}"
 ```
 
+- `--assignee @me` is always included: the PR is assigned to the authenticated gh user
+- `--label` once per selected label from Step 6; omit the flag entirely when no label was selected
+
 **Sub-PR (Stacked split):**
-- Branch push already completed during Step 5 branch separation procedure
+- Branch push already completed during Step 5 branch separation procedure (sub-branch names follow `{branch-convention}`)
 - First sub-PR: `--base {base-branch}`
 - Subsequent sub-PRs: `--base {previous-split-branch}`
 
@@ -528,10 +569,10 @@ TITLE=$(cat <<'EOF'
 PR title
 EOF
 )
-gh pr create --base {appropriate-base} --head {target-sub-branch} --title "$TITLE" --body "$(cat <<'EOF'
+gh pr create --base {appropriate-base} --head {target-sub-branch} --assignee @me --title "$TITLE" --body "$(cat <<'EOF'
 PR description body
 EOF
-)"
+)" --label "{label-1}"
 ```
 
 Return the PR URL to the user after successful creation.
