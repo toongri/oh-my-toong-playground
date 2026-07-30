@@ -607,6 +607,19 @@ export function readPackageScripts(workspaceRoot: string): string[] {
 // workspace root resolved from `cwd`, so callers pass it explicitly (or omit
 // it to get base-only, e.g. when no workspace root was found at all).
 // -----------------------------------------------------------------------------
+// Resolves which project-overlay directory to read `verify-entrypoint-gate.
+// local.yaml` from, for a given workspace root. Both platforms sync the SAME
+// overlay source to two different deploy roots (`.claude/scripts/...` and
+// `.codex/scripts/...` — see deployLocationForManifest in tools/sync.ts), so
+// their content is identical; this order only decides which copy's presence
+// to trust first when both COULD exist (`.claude` wins), never a policy
+// difference between the two.
+function resolveLocalDir(workspaceRoot: string): string {
+	const claudeDir = join(workspaceRoot, ".claude", "scripts", "verify-entrypoint-gate");
+	if (existsSync(join(claudeDir, "verify-entrypoint-gate.local.yaml"))) return claudeDir;
+	return join(workspaceRoot, ".codex", "scripts", "verify-entrypoint-gate");
+}
+
 export function loadConfig(
 	baseDir: string = fileURLToPath(new URL(".", import.meta.url)),
 	localDir?: string,
@@ -651,19 +664,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // -----------------------------------------------------------------------------
-// PreToolUse IO contract — parses the hook's stdin JSON (which includes
-// `cwd`, the Bash tool's working directory — see docs.claude.com/en/docs/
-// claude-code/hooks), resolves the workspace root + package.json scripts for
-// that cwd, calls decide(), and formats the output envelope. There is no
+// PreToolUse IO contract — parses the hook's stdin JSON, resolves the
+// workspace root + package.json scripts for the command's own working
+// directory, calls decide(), and formats the output envelope. There is no
 // "allow" envelope anywhere in this file: a deny produces a permissionDecision
 // deny envelope, everything else produces "" (no hook output at all, i.e. the
 // tool call proceeds through the harness's normal permission flow untouched).
+//
+// Two payload shapes land here, both routed through the SAME decide() core:
+//   - Claude: tool_name "Bash", command in tool_input.command, cwd at the
+//     top level (docs.claude.com/en/docs/claude-code/hooks).
+//   - Codex: tool_name "bash"/"exec_command"/"shell_command" (any case —
+//     compared lowercased), command in tool_input.command falling back to
+//     tool_input.cmd, and the command's OWN execution directory in
+//     tool_input.workdir falling back to tool_input.cwd (resolved against
+//     the top-level cwd) — mirroring hooks/codex-write-guard.sh and
+//     hooks/codex-label-commit-gate.sh's identical fallback/precedence.
+// Claude's payload never carries tool_input.cmd/workdir/cwd, so the fallback
+// logic below is a no-op for it and its resolved command/cwd stay byte-
+// identical to before this dual-payload support was added.
 // -----------------------------------------------------------------------------
 type PreToolUseInput = {
 	tool_name?: unknown;
-	tool_input?: { command?: unknown };
+	tool_input?: { command?: unknown; cmd?: unknown; workdir?: unknown; cwd?: unknown };
 	cwd?: unknown;
 };
+
+const SUPPORTED_TOOL_NAMES = new Set(["bash", "exec_command", "shell_command"]);
+
+function pickNonEmptyString(value: unknown): string | undefined {
+	return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
 
 export function processHookInput(
 	raw: string,
@@ -671,15 +702,18 @@ export function processHookInput(
 ): string {
 	try {
 		const input: PreToolUseInput = JSON.parse(raw);
-		if (input.tool_name !== "Bash") return "";
+		const toolName = typeof input.tool_name === "string" ? input.tool_name.toLowerCase() : "";
+		if (!SUPPORTED_TOOL_NAMES.has(toolName)) return "";
 
-		const command = input.tool_input?.command;
-		if (typeof command !== "string" || command.trim().length === 0) return "";
+		const command = pickNonEmptyString(input.tool_input?.command) ?? pickNonEmptyString(input.tool_input?.cmd);
+		if (command === undefined) return "";
 
-		const cwd = typeof input.cwd === "string" && input.cwd.length > 0 ? resolve(input.cwd) : resolve(process.cwd());
+		const topCwd = typeof input.cwd === "string" && input.cwd.length > 0 ? input.cwd : process.cwd();
+		const workdir = pickNonEmptyString(input.tool_input?.workdir) ?? pickNonEmptyString(input.tool_input?.cwd);
+		const cwd = workdir === undefined ? resolve(topCwd) : resolve(topCwd, workdir);
 
 		const workspaceRoot = findWorkspaceRoot(cwd);
-		const localDir = workspaceRoot === null ? undefined : join(workspaceRoot, ".claude", "scripts", "verify-entrypoint-gate");
+		const localDir = workspaceRoot === null ? undefined : resolveLocalDir(workspaceRoot);
 		const policy = loadConfig(baseDir, localDir);
 		const scripts = workspaceRoot === null ? [] : readPackageScripts(workspaceRoot);
 
