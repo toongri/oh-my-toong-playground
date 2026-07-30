@@ -6,12 +6,28 @@ provision:
   - check: "command -v codegraph"
     commands:
       - "npm i -g @colbymchenry/codegraph"
-  - check: "command -v agent-device"
+  # 존재만으론 부족 — skills/agent-device/SKILL.md:18이 >= 0.20.0을 요구하고
+  # 미달 시 멈춘다. 낡은 설치본이 있으면 "command -v"는 통과해버려 업그레이드가
+  # 안 도는 구멍이 있었다. semver를 grep으로 뽑아 sort -V로 0.20.0과 비교한다
+  # (macOS BSD sort -V가 semver를 올바르게 정렬함을 실측).
+  - check: 'v=$(agent-device --version 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1); [ -n "$v" ] && [ "$(printf "%s\n%s\n" 0.20.0 "$v" | sort -V | head -1)" = 0.20.0 ]'
     commands:
       - "npm i -g agent-device@latest"
+  # CLI 존재 체크. skills/agent-browser/SKILL.md:14의 설치 계약은
+  # `npm i -g agent-browser && agent-browser install` 두 단계라 CLI만으론
+  # Chrome이 없는 상태가 존재한다 — 아래 항목이 그 두 번째 단계를 검사한다.
+  # 이 항목이 먼저 와야 신규 머신에서 CLI 자체가 없을 때 doctor 체크가
+  # 무의미하게 먼저 도는 일이 없다.
   - check: "command -v agent-browser"
     commands:
       - "npm i -g agent-browser@latest"
+  # doctor의 Chrome 섹션은 `  pass  Google Chrome for Testing <ver> at <path>`
+  # 형태로 출력된다(실측). 앵커를 느슨하게 둔 이유: 상류 출력 포맷이 바뀌면
+  # 이 체크가 실패해 `agent-browser install`(멱등)이 도는 쪽으로 흐르게
+  # 하려는 것 — fail-toward-provisioning이 안전한 방향이다.
+  - check: 'agent-browser doctor 2>&1 | grep -qE "pass +Google Chrome"'
+    commands:
+      - "agent-browser install"
 
 # goal/ultragoal의 실행 체인 중 에이전트 절반. 아래 skills의 sisyphus·
 # code-review와 짝이며, 넷이 다 있어야 체인이 닫힌다 — sisyphus가 실행을

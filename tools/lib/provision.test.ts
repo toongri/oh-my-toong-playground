@@ -5,6 +5,8 @@ import path from "node:path";
 import { runProvision } from "./provision.ts";
 import type { ProvisionItem } from "./types.ts";
 
+const ROOT_SYNC_YAML_PATH = path.join(import.meta.dir, "..", "..", "sync.yaml");
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -124,5 +126,140 @@ describe("runProvision", () => {
 
 		const content = fs.readFileSync(markerPath(dir, "order.txt"), "utf8");
 		expect(content).toBe("01");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Root sync.yaml provision readiness checks
+//
+// These tests read the actual root sync.yaml (not a hardcoded copy of its
+// check string) so a future edit to sync.yaml's provision block is caught
+// here instead of silently drifting from what's actually deployed.
+// ---------------------------------------------------------------------------
+
+/** Loads the `provision` array straight from the tracked root sync.yaml. */
+function loadRootProvisionItems(): ProvisionItem[] {
+	const parsed = Bun.YAML.parse(fs.readFileSync(ROOT_SYNC_YAML_PATH, "utf8")) as {
+		provision?: ProvisionItem[];
+	};
+	return parsed.provision ?? [];
+}
+
+/** Finds the `check` of the provision item whose `commands` mention `commandSubstring`. */
+function findCheckByCommandSubstring(items: ProvisionItem[], commandSubstring: string): string {
+	const item = items.find((i) => i.commands.some((c) => c.includes(commandSubstring)));
+	if (!item?.check) {
+		throw new Error(`no provision item with a check found for command substring: ${commandSubstring}`);
+	}
+	return item.check;
+}
+
+function writeStub(dir: string, name: string, script: string): void {
+	const p = path.join(dir, name);
+	fs.writeFileSync(p, script);
+	fs.chmodSync(p, 0o755);
+}
+
+// The check strings shell out to bash/grep/sort/head (printf is a bash builtin,
+// no binary needed). PATH is built stub-dir-first so a stubbed agent-device/
+// agent-browser always shadows any real install on this machine, with /bin and
+// /usr/bin appended only so bash itself and those coreutils can still resolve.
+function stubPath(stubDir: string): string {
+	return `${stubDir}:/bin:/usr/bin`;
+}
+
+function runCheck(check: string, stubDir: string): number {
+	const proc = Bun.spawnSync(["bash", "-c", check], { env: { PATH: stubPath(stubDir) } });
+	return proc.exitCode ?? 1;
+}
+
+describe("sync.yaml provision: agent-device 버전 readiness 체크", () => {
+	const tmpdirs: string[] = [];
+
+	afterEach(() => {
+		for (const d of tmpdirs.splice(0)) {
+			try {
+				fs.rmSync(d, { recursive: true, force: true });
+			} catch {
+				// best-effort
+			}
+		}
+	});
+
+	function newStubDir(): string {
+		const d = fs.mkdtempSync(path.join(os.tmpdir(), "provision-check-test-"));
+		tmpdirs.push(d);
+		return d;
+	}
+
+	it("0.19.9 설치본 — exit != 0 (프로비저닝 필요)", () => {
+		const check = findCheckByCommandSubstring(loadRootProvisionItems(), "agent-device");
+		const dir = newStubDir();
+		writeStub(dir, "agent-device", "#!/bin/sh\necho '0.19.9'\n");
+
+		expect(runCheck(check, dir)).not.toBe(0);
+	});
+
+	it("0.20.0 설치본 — 경계값, exit 0 (통과)", () => {
+		const check = findCheckByCommandSubstring(loadRootProvisionItems(), "agent-device");
+		const dir = newStubDir();
+		writeStub(dir, "agent-device", "#!/bin/sh\necho '0.20.0'\n");
+
+		expect(runCheck(check, dir)).toBe(0);
+	});
+
+	it("0.20.2 설치본 — exit 0 (통과)", () => {
+		const check = findCheckByCommandSubstring(loadRootProvisionItems(), "agent-device");
+		const dir = newStubDir();
+		writeStub(dir, "agent-device", "#!/bin/sh\necho '0.20.2'\n");
+
+		expect(runCheck(check, dir)).toBe(0);
+	});
+
+	it("agent-device가 PATH에 없음 — exit != 0", () => {
+		const check = findCheckByCommandSubstring(loadRootProvisionItems(), "agent-device");
+		const dir = newStubDir(); // empty — no `agent-device` stub written
+
+		expect(runCheck(check, dir)).not.toBe(0);
+	});
+});
+
+describe("sync.yaml provision: agent-browser Chrome readiness 체크 (doctor)", () => {
+	const tmpdirs: string[] = [];
+
+	afterEach(() => {
+		for (const d of tmpdirs.splice(0)) {
+			try {
+				fs.rmSync(d, { recursive: true, force: true });
+			} catch {
+				// best-effort
+			}
+		}
+	});
+
+	function newStubDir(): string {
+		const d = fs.mkdtempSync(path.join(os.tmpdir(), "provision-check-test-"));
+		tmpdirs.push(d);
+		return d;
+	}
+
+	it("`doctor`가 `pass  Google Chrome` 줄을 출력 — exit 0", () => {
+		const check = findCheckByCommandSubstring(loadRootProvisionItems(), "agent-browser install");
+		const dir = newStubDir();
+		writeStub(
+			dir,
+			"agent-browser",
+			'#!/bin/sh\necho "  pass  Google Chrome for Testing 151.0.7922.34 at /path"\n',
+		);
+
+		expect(runCheck(check, dir)).toBe(0);
+	});
+
+	it("`doctor`가 그 줄을 출력하지 않음 — exit != 0", () => {
+		const check = findCheckByCommandSubstring(loadRootProvisionItems(), "agent-browser install");
+		const dir = newStubDir();
+		writeStub(dir, "agent-browser", '#!/bin/sh\necho "  fail  Google Chrome not found"\n');
+
+		expect(runCheck(check, dir)).not.toBe(0);
 	});
 });
