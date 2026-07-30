@@ -10,7 +10,8 @@ TESTS_FAILED=0
 
 run_test() {
     local name="$1"
-    if "$name"; then
+    shift
+    if "$@"; then
         echo "[PASS] $name"
         ((TESTS_PASSED++)) || true
     else
@@ -144,12 +145,96 @@ test_matches_claude_reason_and_verdict() {
     return "$result"
 }
 
+test_jvm_denied_row() {
+    local command="$1" label="$2" out
+    new_sandbox
+    out=$(payload exec_command cmd "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID -u OMT_REVIEW_ROLE OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK")
+    assert_denied "$out" "$label"
+    local result=$?
+    cleanup_sandbox
+    return "$result"
+}
+
+test_jvm_allowed_row() {
+    local command="$1" label="$2" active="${3:-active}" out rc=0
+    new_sandbox
+    if [ "$active" = inactive ]; then
+        out=$(payload exec_command cmd "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID -u OMT_REVIEW_ROLE OMT_DIR="$SBX/omt" bash "$HOOK") || rc=$?
+    else
+        out=$(payload exec_command cmd "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID -u OMT_REVIEW_ROLE OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK") || rc=$?
+    fi
+    assert_allowed "$out" "$rc" "$label"
+    local result=$?
+    cleanup_sandbox
+    return "$result"
+}
+
 main() {
     run_test test_member_extracts_codex_shell_payloads_and_denies
     run_test test_conductor_env_absent_payload_identity_and_other_session
     run_test test_fail_open_and_non_shell_routes
     run_test test_static_and_orchestration_commands_allow
     run_test test_matches_claude_reason_and_verdict
+    run_test jvm-deny-gradle-test test_jvm_denied_row 'gradle test' jvm-deny-gradle-test
+    run_test jvm-deny-gradlew-qualified-test test_jvm_denied_row './gradlew :app:test' jvm-deny-gradlew-qualified-test
+    run_test jvm-deny-gradlew-suffixed-test test_jvm_denied_row 'gradlew testDebugUnitTest' jvm-deny-gradlew-suffixed-test
+    run_test jvm-deny-gradle-build test_jvm_denied_row 'gradle build' jvm-deny-gradle-build
+    run_test jvm-deny-gradle-check test_jvm_denied_row 'gradle check' jvm-deny-gradle-check
+    run_test jvm-deny-gradle-assemble test_jvm_denied_row 'gradle assemble' jvm-deny-gradle-assemble
+    run_test jvm-deny-gradle-assemble-suffixed test_jvm_denied_row 'gradle assembleDebug' jvm-deny-gradle-assemble-suffixed
+    run_test jvm-deny-gradle-compile test_jvm_denied_row 'gradle compileKotlin' jvm-deny-gradle-compile
+    run_test jvm-deny-gradlew-qualified-compile test_jvm_denied_row './gradlew :app:compileKotlin' jvm-deny-gradlew-qualified-compile
+    run_test jvm-deny-gradle-classes test_jvm_denied_row 'gradle classes' jvm-deny-gradle-classes
+    run_test jvm-deny-gradle-lint test_jvm_denied_row 'gradle lint' jvm-deny-gradle-lint
+    run_test jvm-deny-gradle-lint-suffixed test_jvm_denied_row 'gradle lintRelease' jvm-deny-gradle-lint-suffixed
+    run_test jvm-deny-gradle-ktlint test_jvm_denied_row 'gradle ktlintCheck' jvm-deny-gradle-ktlint
+    run_test jvm-deny-gradle-detekt test_jvm_denied_row 'gradle detekt' jvm-deny-gradle-detekt
+    run_test jvm-deny-gradlew-option test_jvm_denied_row './gradlew --no-daemon test' jvm-deny-gradlew-option
+    run_test jvm-deny-gradle-mixed-help test_jvm_denied_row 'gradle help test' jvm-deny-gradle-mixed-help
+    run_test jvm-deny-gradle-mixed-help-task test_jvm_denied_row 'gradle help --task test build' jvm-deny-gradle-mixed-help-task
+    run_test jvm-deny-mvn-compile test_jvm_denied_row 'mvn compile' jvm-deny-mvn-compile
+    run_test jvm-deny-mvn-test-compile test_jvm_denied_row 'mvn test-compile' jvm-deny-mvn-test-compile
+    run_test jvm-deny-mvn-test test_jvm_denied_row 'mvn test' jvm-deny-mvn-test
+    run_test jvm-deny-mvn-integration-test test_jvm_denied_row 'mvn integration-test' jvm-deny-mvn-integration-test
+    run_test jvm-deny-mvn-package test_jvm_denied_row 'mvn package' jvm-deny-mvn-package
+    run_test jvm-deny-mvn-verify test_jvm_denied_row 'mvn verify' jvm-deny-mvn-verify
+    run_test jvm-deny-mvn-install test_jvm_denied_row 'mvn install' jvm-deny-mvn-install
+    run_test jvm-deny-mvn-ktlint test_jvm_denied_row 'mvn ktlint:check' jvm-deny-mvn-ktlint
+    run_test jvm-deny-mvn-detekt test_jvm_denied_row 'mvn detekt:check' jvm-deny-mvn-detekt
+    run_test jvm-deny-mvnw-option test_jvm_denied_row '/path/to/mvnw -q verify' jvm-deny-mvnw-option
+    run_test jvm-deny-mvn-mixed-help test_jvm_denied_row 'mvn help:effective-pom test' jvm-deny-mvn-mixed-help
+    run_test jvm-deny-ktlint test_jvm_denied_row ktlint jvm-deny-ktlint
+    run_test jvm-deny-detekt test_jvm_denied_row detekt jvm-deny-detekt
+    run_test jvm-deny-kotlinc test_jvm_denied_row 'kotlinc Main.kt' jvm-deny-kotlinc
+    run_test jvm-deny-javac test_jvm_denied_row 'javac Main.java' jvm-deny-javac
+    run_test jvm-deny-kotlin-runtime test_jvm_denied_row 'kotlin MainKt' jvm-deny-kotlin-runtime
+    run_test jvm-deny-java-runtime test_jvm_denied_row 'java Main' jvm-deny-java-runtime
+    run_test jvm-deny-java-jar test_jvm_denied_row 'java -jar tests.jar' jvm-deny-java-jar
+    run_test jvm-deny-env-gradle test_jvm_denied_row 'CI=1 gradle test' jvm-deny-env-gradle
+    run_test jvm-deny-chain-mvn test_jvm_denied_row 'git diff && mvn package' jvm-deny-chain-mvn
+    run_test jvm-deny-sh-kotlinc test_jvm_denied_row "sh -c 'kotlinc Main.kt'" jvm-deny-sh-kotlinc
+    run_test jvm-deny-bash-javac test_jvm_denied_row "bash -c 'javac Main.java'" jvm-deny-bash-javac
+    run_test jvm-deny-zsh-java test_jvm_denied_row "zsh -c 'java Main'" jvm-deny-zsh-java
+    run_test jvm-allow-gradle-tasks test_jvm_allowed_row 'gradle tasks' jvm-allow-gradle-tasks
+    run_test jvm-allow-gradle-help-task test_jvm_allowed_row 'gradle help --task test' jvm-allow-gradle-help-task
+    run_test jvm-allow-gradle-properties test_jvm_allowed_row 'gradle properties' jvm-allow-gradle-properties
+    run_test jvm-allow-gradle-version test_jvm_allowed_row 'gradle --version' jvm-allow-gradle-version
+    run_test jvm-allow-gradlew-version test_jvm_allowed_row './gradlew --version' jvm-allow-gradlew-version
+    run_test jvm-allow-mvn-effective-pom test_jvm_allowed_row 'mvn help:effective-pom' jvm-allow-mvn-effective-pom
+    run_test jvm-allow-mvn-effective-settings test_jvm_allowed_row 'mvn help:effective-settings' jvm-allow-mvn-effective-settings
+    run_test jvm-allow-mvn-version test_jvm_allowed_row 'mvn --version' jvm-allow-mvn-version
+    run_test jvm-allow-mvnw-version test_jvm_allowed_row './mvnw --version' jvm-allow-mvnw-version
+    run_test jvm-allow-java-version test_jvm_allowed_row 'java -version' jvm-allow-java-version
+    run_test jvm-allow-java-double-version test_jvm_allowed_row 'java --version' jvm-allow-java-double-version
+    run_test jvm-allow-kotlin-version test_jvm_allowed_row 'kotlin -version' jvm-allow-kotlin-version
+    run_test jvm-allow-kotlin-double-version test_jvm_allowed_row 'kotlin --version' jvm-allow-kotlin-double-version
+    run_test jvm-allow-rg-literal test_jvm_allowed_row 'rg "gradle test"' jvm-allow-rg-literal
+    run_test jvm-allow-inactive-jvm test_jvm_allowed_row 'gradle test' jvm-allow-inactive-jvm inactive
+    run_test regression-deny-cargo-test test_jvm_denied_row 'cargo test' regression-deny-cargo-test
+    run_test regression-deny-cargo-build test_jvm_denied_row 'cargo build' regression-deny-cargo-build
+    run_test regression-deny-cargo-check test_jvm_denied_row 'cargo check' regression-deny-cargo-check
+    run_test regression-deny-go-test test_jvm_denied_row 'go test' regression-deny-go-test
+    run_test regression-deny-go-build test_jvm_denied_row 'go build' regression-deny-go-build
     echo "Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
     [ "$TESTS_FAILED" -eq 0 ]
 }
