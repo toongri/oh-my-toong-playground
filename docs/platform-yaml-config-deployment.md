@@ -70,10 +70,12 @@ gitignore되므로, `claude.yaml`에 뒀든 `claude.local.yaml`에 뒀든 그 �
 
 ### `hooks:`를 `claude.local.yaml`에 두면 생기는 사각
 
-`hooks:` 블록은 위 기본 규칙이 특히 세게 적용된다. 코어 훅
-(`keyword-detector.sh`·`pre-tool-enforcer.sh`·`session-start.sh`·`persistent-mode`)은
-device-specific 요소가 없으므로 반드시 `claude.yaml`에 둔다. `claude.local.yaml`에
-두면 실제로 두 가지가 깨진다:
+`hooks:` 블록은 위 기본 규칙이 특히 세게 적용된다. 6개 코어 훅
+(`keyword-detector.sh`·`pre-tool-enforcer.sh`·`review-exec-guard.sh`·
+`session-start.sh`·`orphan-reaper.sh`·`persistent-mode`)은 device-specific 요소가
+없으므로 반드시 추적되는 루트 `claude.yaml`에 둔다. 특히
+`review-exec-guard.sh`는 전역으로 등록하되, 내부적으로 review context에서만
+활성화된다. `claude.local.yaml`에 두면 실제로 두 가지가 깨진다:
 
 - **새 클론에 훅이 없다.** 오버레이 파일은 gitignore되므로 다른 머신에서는 전역
   훅 등록이 통째로 비어 있다.
@@ -88,9 +90,11 @@ device-specific 요소가 없으므로 반드시 `claude.yaml`에 둔다. `claud
 `claude.local.yaml`에는 머신마다 진짜 다른 것만 남긴다 — Superset 훅 `preserve`
 규칙처럼 그 도구가 설치된 머신에서만 의미가 있는 것.
 
-두 불변식은 `hooks/hook-registration_test.sh`의
+이 전역 등록은 프로젝트별 중복 등록을 뜻하지 않는다. 오히려 루트에만 한 번
+등록해야 한다. 두 불변식은 `hooks/hook-registration_test.sh`의
 `test_core_claude_hooks_registered_in_tracked_root_yaml` /
-`test_core_claude_hooks_not_duplicated_per_project`가 정적으로 강제한다.
+`test_core_claude_hooks_not_duplicated_per_project`가 6개 코어 훅에 대해 정적으로
+강제한다.
 
 ## 검증
 

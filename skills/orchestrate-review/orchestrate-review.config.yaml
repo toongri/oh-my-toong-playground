@@ -1,4 +1,10 @@
 chunk-review:
+  # STATIC REVIEW ONLY: every finder is limited to diff/read/search evidence.
+  # Tests, builds, linters, installers/installs, and project-code execution are
+  # forbidden even when fast, cheap, relevant, or decisive; surface unresolved
+  # uncertainty statically instead. Cleanup owns the light-touch Test value lens
+  # (false confidence/fake coverage, verification value, feedback-loop cost), while
+  # requirement owns AC mapping / acceptance criteria or intent inference.
   members:
     # Each member is a FINDER ANGLE, not a model. The multi-AI review fans out
     # one CLI invocation per angle, each given a distinct review lens via its

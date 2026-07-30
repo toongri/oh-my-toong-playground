@@ -81,6 +81,12 @@ hooks:
     - component: codex-label-commit-gate.sh
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
+    # Claude<->Codex hook-parity: root claude.yaml registers review-exec-guard.sh
+    # globally for Bash, so its Codex analog covers every root-config shell-tool
+    # spelling. Codex applies this matcher as a full-string regex.
+    - component: codex-review-exec-guard.sh
+      type: command
+      matcher: "Bash|bash|exec_command|shell_command"
     # verify-entrypoint-gate — 무필터 test/lint deny + entrypoint 화이트리스트.
     # 이 훅만 전역에 있는 이유가 다른 항목들과 다르다. 나머지는 "루트 claude.yaml이
     # 전역이니 Codex도 전역"이라는 패리티 미러지만, 이건 Claude 짝이 여전히
