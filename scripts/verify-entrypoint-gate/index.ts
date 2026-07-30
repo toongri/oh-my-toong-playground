@@ -548,11 +548,29 @@ function nestedShellInnerCommand(text: string): string | null {
 	if (first === "eval") return unwrapOuterQuotes(rest);
 
 	if (first === "bash" || first === "sh" || first === "zsh") {
-		const cMatch = /^-c\s+(.+)$/.exec(rest);
-		return cMatch === null ? null : unwrapOuterQuotes(cMatch[1]);
+		// `-c` is not a spelling, it is a flag inside a cluster: `bash -lc`,
+		// `sh -euc`, `bash -x -c` all run the operand exactly the way `-c` does.
+		// Matching the literal `-c` alone left every one of them unparsed.
+		const cMatch = /^(?:-[a-zA-Z]+\s+)*-[a-zA-Z]*c\s+(.+)$/.exec(rest);
+		if (cMatch === null) return null;
+		return leadingQuotedSpan(cMatch[1]) ?? unwrapOuterQuotes(cMatch[1]);
 	}
 
 	return null;
+}
+
+// The operand of `-c` when it is quoted and something trails it (`bash -c 'cmd'
+// scriptname` — the shell reads the trailing words as $0/$@, not as part of the
+// command). unwrapOuterQuotes cannot see that: the string as a whole is not
+// quoted, so it hands back the operand with its quotes and the trailing words
+// still attached. Returns null when the text does not open with a quote, which
+// is the unquoted `bash -c cmd` case unwrapOuterQuotes already handles.
+function leadingQuotedSpan(text: string): string | null {
+	const t = text.trim();
+	const quote = t[0];
+	if (quote !== '"' && quote !== "'") return null;
+	const end = t.indexOf(quote, 1);
+	return end === -1 ? null : t.slice(1, end);
 }
 
 function unwrapOuterQuotes(text: string): string {
