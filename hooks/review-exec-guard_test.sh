@@ -106,6 +106,21 @@ test_package_runner_targets_denied() {
     return "$result"
 }
 
+test_interpreter_module_and_python_runner_targets_denied() {
+    new_sandbox
+    local command out rc result=0
+    for command in 'python -m pytest' 'python3 -m pytest' 'python3.12 -m pytest' 'python -m unittest' 'python -m unittest discover' 'python -m mypy .' 'python -m ruff check' 'mypy .' 'uv run pytest' 'poetry run pytest' 'pipenv run pytest' 'uv run -q pytest' 'git diff && python -m pytest'; do
+        out=$(payload "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK")
+        assert_denied "$out" "interp-deny-$command" || result=1
+    done
+    for command in 'python script.py' 'python --version' 'python -m http.server' 'python -m json.tool' 'uv run manage.py migrate' 'rg "python -m pytest"'; do
+        rc=0; out=$(payload "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK") || rc=$?
+        assert_allowed "$out" "$rc" "interp-allow-$command" || result=1
+    done
+    cleanup_sandbox
+    return "$result"
+}
+
 test_matching_conductor_denies_even_done_status() {
     new_sandbox
     mkdir -p "$JOBS/chunk-review-one"
@@ -250,6 +265,7 @@ main() {
     run_test test_member_denies_representative_high_cost_commands
     run_test test_member_denies_despite_identity_disagreement
     run_test test_package_runner_targets_denied
+    run_test test_interpreter_module_and_python_runner_targets_denied
     run_test test_matching_conductor_denies_even_done_status
     run_test test_other_session_and_removed_job_allow
     run_test test_no_marker_malformed_unsafe_mismatch_and_no_jq_fail_open
