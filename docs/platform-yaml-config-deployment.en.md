@@ -2,9 +2,11 @@
 
 Unlike components (agents/skills/…), `config`, `hooks`, and `mcps` in
 `claude.yaml` (and its `claude.local.yaml` overlay) are not copied as files.
-They are **merged into the target project's settings file**. The safe home for
-personal absolute paths (for example, `TURBO_CACHE_DIR`) follows from this
-deployment path and the **two distinct gitignore layers**.
+`config` and `hooks` are **merged into the target project's settings file**,
+but `mcps` is **assigned per entry into a different file (`~/.claude.json`)** —
+see "What is deployed where" below. The safe home for personal absolute paths
+(for example, `TURBO_CACHE_DIR`) follows from this deployment path and the
+**two distinct gitignore layers**.
 
 ## What is deployed where
 
@@ -13,20 +15,31 @@ deployment path and the **two distinct gitignore layers**.
   `.claude/settings.json`** — the `isGlobalSync(targetPath) ? "settings.json" :
   "settings.local.json"` branch in `tools/adapters/claude.ts`.
 - Deep merge does not replace the entire existing settings file; it is
-  fundamentally **additive** (only matching keys are updated). `mcps` is also
-  merged into its corresponding section of the same file.
+  fundamentally **additive** (only matching keys are updated).
 - There is one **key-level exception**: a key with the value `null` is
   **removed** from the target file (RFC 7386 JSON Merge Patch semantics;
   `tools/lib/deep-merge.ts`). Simply deleting a key from the source YAML leaves
   its old value in the deployed file because additive merging carries it
-  forward. To delete it, explicitly set that key to `null`. This is a
-  **different mechanism from section-level `null`**: setting an entire section
-  to `null`, such as `config: null` or `hooks: null`, causes the guard in
-  `tools/adapters/claude.ts` (the `yaml.config !== null` / `yaml.hooks !== null`
-  checks in `syncPlatformYaml`) to exclude that section from deployment before
-  `deepMerge` is called. Key-level `null` deletes an individual key inside a
-  section; section-level `null` skips deployment of the whole section. Do not
-  confuse the two.
+  forward. To delete it, explicitly set that key to `null`.
+
+**`mcps` sits on a different axis** — it is not merged into that same file, and
+it has no deletion lever:
+
+| | `config`/`hooks`/`statusLine` | `mcps` |
+|---|---|---|
+| Destination | the target's `.claude/settings.local.json` (global sync uses `settings.json`) | `~/.claude.json` (override with the `CLAUDE_USER_CONFIG` environment variable) |
+| Merge behavior | `deepMerge` — additive, existing values preserved | per-entry assignment (`syncMcpsMerge`, `tools/adapters/claude.ts:749-785`): `mcpServers[name] = serverJson` |
+| Key-level `null` | deletes the key (RFC 7386, `tools/lib/deep-merge.ts:20-23`) | **does not delete** — a literal `null` is written to `mcpServers[name]`. Deleting the MCP declaration from the source YAML never touches the old value either, because the assignment is additive, so it stays in the deployed file forever |
+| Removal path | explicitly set that key to `null` | `claude mcp remove <name> -s local` — the only removal path |
+
+Section-level `null` is valid on both axes: setting an entire section to `null`
+— `config: null` / `hooks: null` / `mcps: null` — makes the guard in
+`tools/adapters/claude.ts` (the `yaml.config !== null` / `yaml.hooks !== null` /
+`yaml.mcps !== null` checks in `syncPlatformYaml`, line 530 of the same file)
+exclude that section from deployment before `deepMerge` (or, for `mcps`, the
+per-entry assignment) is ever called. Key-level `null` deletes an individual key
+inside a section (`mcps` has no such lever); section-level `null` skips
+deployment of the whole section. Do not confuse the two.
 
 ## The two gitignore layers (the key point)
 
