@@ -644,6 +644,35 @@ export function findOverlayDir(startDir: string): string | null {
 	}
 }
 
+// Arming reads the directory the command actually RUNS in, which is not always
+// the payload's own workdir: a leading `cd <dir>` moves it. `cd <armed repo> &&
+// npx vitest`, issued with a workdir outside that repo, would otherwise find no
+// overlay and return before decide() — never reaching the compound-command deny
+// that catches this exact shape. So every `cd` target in the command joins cwd
+// as an arming candidate.
+//
+// Arming on the SESSION's directory instead was the other way to close this,
+// and it is wrong: it arms on where the session sits rather than where the
+// command runs, which re-denies a cross-repo `pytest` issued from a session
+// that happens to be inside the protected repo — the false deny this whole
+// arming rule exists to remove.
+//
+// A `cd` whose target this cannot resolve statically (`cd $REPO`, `cd "$(…)"`)
+// is skipped rather than guessed: joining an unexpanded token onto cwd would
+// probe a path that does not exist, and shell-variable indirection is an
+// accepted gap class for this gate.
+function armingCandidates(command: string, cwd: string): string[] {
+	const candidates = [cwd];
+	for (const segment of splitSegments(command)) {
+		const match = /^\s*cd\s+(?:--\s+)?("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(segment);
+		if (match === null) continue;
+		const target = match[1].replace(/^["']|["']$/g, "");
+		if (target.length === 0 || target.includes("$") || target.includes("`")) continue;
+		candidates.push(resolve(cwd, target));
+	}
+	return candidates;
+}
+
 export function loadConfig(
 	baseDir: string = fileURLToPath(new URL(".", import.meta.url)),
 	localDir?: string,
@@ -736,9 +765,13 @@ export function processHookInput(
 		const workdir = pickNonEmptyString(input.tool_input?.workdir) ?? pickNonEmptyString(input.tool_input?.cwd);
 		const cwd = workdir === undefined ? resolve(topCwd) : resolve(topCwd, workdir);
 
-		// Arming gate — no deployed overlay above this cwd means this repo was
-		// never given this policy, so nothing is judged here at all.
-		const overlayDir = findOverlayDir(cwd);
+		// Arming gate — no deployed overlay above any directory this command can
+		// reach means this repo was never given this policy, so nothing is judged
+		// here at all.
+		const overlayDir = armingCandidates(command, cwd).reduce<string | null>(
+			(found, candidate) => found ?? findOverlayDir(candidate),
+			null,
+		);
 		if (overlayDir === null) return "";
 
 		const workspaceRoot = findWorkspaceRoot(cwd);

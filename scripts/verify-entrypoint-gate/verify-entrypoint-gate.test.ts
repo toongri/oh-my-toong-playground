@@ -914,6 +914,59 @@ describe("arming — overlay presence, not registration site, decides where the 
 		}
 	});
 
+	test("a command that cd's into an armed workspace from outside it is still armed", () => {
+		// Arming reads the directory the command actually RUNS in, so a leading
+		// `cd <armed workspace>` moves that target even when the payload's own
+		// workdir sits outside. Without this, `cd <repo> && npx vitest` returns
+		// before decide() and never reaches the compound-command deny that this
+		// exact shape is otherwise caught by — a bypass of the gate's whole point.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-cd-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-cd-outside-"));
+		try {
+			for (const cmd of [`cd ${armed} && npx vitest run`, `cd ${armed} && pnpm verify --force`]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+
+			// The complement stays open: cd'ing to a directory with no overlay is
+			// not this gate's business, so it must still pass through.
+			const passOutput = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: `cd ${outside} && npx vitest run`, workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(passOutput).toBe("");
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("a cd target the gate cannot resolve statically does not arm on a false path", () => {
+		// Shell-variable indirection (`cd $DIR`) is an accepted gap class for this
+		// gate — the point of pinning it is that the unresolved token must not be
+		// joined onto cwd as if it were a literal directory name.
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-cd-var-"));
+		try {
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: "cd $REPO && npx vitest run", workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(output).toBe("");
+		} finally {
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
 	test("an overlay at the workspace root arms a command run in a nested directory", () => {
 		const root = makeArmedWorkspace("verify-entrypoint-gate-nested-");
 		try {
