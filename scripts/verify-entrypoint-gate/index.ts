@@ -272,7 +272,15 @@ function isVerificationAttemptSegment(segment: string, entrypoints: string[], ru
 
 	const nestedInner = nestedShellInnerCommand(unwrapped);
 	if (nestedInner !== null) {
-		return isVerificationAttemptSegment(nestedInner, entrypoints, runners, via);
+		// The inner command is a command LINE, not a single command: the outer
+		// quotes hide its `&&`/`;`/`|` from splitSegments, so descending without
+		// re-splitting reads `cd x && npx vitest` as one segment whose first token
+		// is `cd` — no runner, no attempt, straight through. Predates the arming
+		// work: the same string passes with the payload's own workdir inside the
+		// protected repo, where arming was never in question.
+		return splitSegments(nestedInner).some((inner) =>
+			isVerificationAttemptSegment(inner, entrypoints, runners, via),
+		);
 	}
 
 	const normalized = stripAfterEndOfOptions(unwrapped);
@@ -654,9 +662,18 @@ export function findOverlayDir(startDir: string): string | null {
 // npx vitest`, issued with a workdir outside that repo, would otherwise find no
 // overlay and return before decide() — never reaching the compound-command deny
 // that catches this exact shape. So every `cd` target in the command joins cwd
-// as an arming candidate — each one resolved against where the previous `cd`
-// landed, not against cwd, because that is what the shell does: in
-// `cd <base> && cd repo`, `repo` is `<base>/repo`.
+// as an arming candidate.
+//
+// Each target is resolved against EVERY base collected so far, not against a
+// single moving cursor. A cursor has to answer which branch of the command
+// actually ran — `cd missing || cd repo` runs its second `cd` from the original
+// directory, `cd base && cd repo` from the first one's landing spot — and this
+// gate cannot know that from the text. Resolving against all of them keeps both
+// readings, and an extra candidate can only ever ADD arming (a deny), never
+// remove it. `bash -c '…'`/`eval '…'` recurse through the same collection, since
+// splitSegments keeps their inner command inside one quoted segment and step 1's
+// attempt detection descends into it too — arming has to descend first or the
+// early return fires before that descent can happen.
 //
 // Arming on the SESSION's directory instead was the other way to close this,
 // and it is wrong: it arms on where the session sits rather than where the
@@ -686,18 +703,46 @@ export function findOverlayDir(startDir: string): string | null {
 // That direction is the safe one: an over-armed command is judged rather than
 // waved through, and `env cd <dir> && …` is not a shape anyone writes.
 function armingCandidates(command: string, cwd: string): string[] {
-	const candidates = [cwd];
-	let current = cwd;
+	const bases = [cwd];
+	const add = (dir: string): void => {
+		if (!bases.includes(dir)) bases.push(dir);
+	};
 	for (const segment of splitSegments(command)) {
 		const unwrapped = stripLeadingTransparentWrappers(stripLeadingEnvAssignments(segment));
+
+		const inner = nestedShellInnerCommand(unwrapped);
+		if (inner !== null) {
+			for (const base of [...bases]) {
+				for (const nested of armingCandidates(inner, base)) add(nested);
+			}
+			continue;
+		}
+
 		const match = /^(\S+)((?:\s+-\S*)*)\s+("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(unwrapped);
 		if (match === null || normalizeToken(match[1]) !== "cd") continue;
-		const target = match[3].replace(/^["']|["']$/g, "");
-		if (target.length === 0 || target.includes("$") || target.includes("`")) continue;
-		current = resolve(current, target);
-		candidates.push(current);
+		const target = cdOperand(match[3]);
+		if (target === null) continue;
+		for (const base of [...bases]) add(resolve(base, target));
 	}
-	return candidates;
+	return bases;
+}
+
+// The literal directory a `cd` operand names, or null when this cannot know it.
+// Quoting matters here and only here: the shell expands `~` in `cd ~/x` and does
+// NOT in `cd "~/x"`, so the quote characters are read before they are stripped.
+// `~user` is left literal — resolving another account's home needs a passwd
+// lookup this gate has no business doing, and the literal simply probes a path
+// that does not exist, which is the same non-arming outcome as `cd $REPO`.
+function cdOperand(raw: string): string | null {
+	const quoted = raw.startsWith('"') || raw.startsWith("'");
+	const target = raw.replace(/^["']|["']$/g, "");
+	if (target.length === 0 || target.includes("$") || target.includes("`")) return null;
+	if (quoted) return target;
+	const home = process.env.HOME;
+	if (home === undefined || home.length === 0) return target;
+	if (target === "~") return home;
+	if (target.startsWith("~/")) return join(home, target.slice(2));
+	return target;
 }
 
 export function loadConfig(
