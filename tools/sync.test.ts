@@ -3933,6 +3933,35 @@ describe("processYaml — rewritePlatformPaths rules-provenance regression (team
 		expect(omtRule).not.toContain(".claude/");
 	});
 
+	it("gemini: declaring a rule for a platform that cannot deploy rules claims no ownership", async () => {
+		// Gemini is absent from SUPPORTED_CATEGORIES.gemini for "rules", so
+		// syncCategory skips the item with a warning and writes nothing. Ownership
+		// recorded off the DECLARATION rather than the deploy would still hand the
+		// rewrite walk that name, and a hand-authored .gemini/rules/<same name>.md
+		// would be mutated by a run that deployed no rule at all.
+		await writeFile(path.join(rootDir, "rules", "my-rule.md"), "See .claude/hooks/ for conventions.\n");
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nrules:\n  platforms: [gemini]\n  items:\n    - my-rule\n`,
+		);
+
+		const handAuthored = path.join(targetPath, ".gemini", "rules", "my-rule.md");
+		const before = "See .claude/hooks/ for conventions.\n";
+		await writeFile(handAuthored, before);
+
+		const adapters = makeAdapterMap(["gemini"]);
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(
+			await readFile(handAuthored),
+			"gemini cannot deploy rules, so nothing under .gemini/rules/ is OMT-owned",
+		).toBe(before);
+	});
+
 	it("opencode: the rules/ scoping mechanism is wired identically for opencode — a declared rule name is rewritten, a same-run foreign name under rules/ is not", async () => {
 		await writeFile(
 			path.join(rootDir, "rules", "my-rule", "index.md"),

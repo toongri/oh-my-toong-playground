@@ -1887,6 +1887,13 @@ export async function processYaml(
 					if (!("error" in resolved)) {
 						for (const platform of platforms) {
 							if (platform === "claude") continue;
+							// Ownership follows what can actually be deployed, not what was
+							// declared. syncCategory skips an unsupported platform×category
+							// pair outright (gemini has no rules support), so claiming the
+							// name here would hand the rewrite walk a file OMT never wrote —
+							// a hand-authored .gemini/rules/<same name>.md would be mutated
+							// by a run that deployed no rule at all.
+							if (!SUPPORTED_CATEGORIES[platform]?.has("rules")) continue;
 							addOwnedName(ownedRuleNames, platform, resolved.displayName);
 						}
 					}
