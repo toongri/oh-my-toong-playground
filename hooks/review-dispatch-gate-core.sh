@@ -68,7 +68,7 @@ review_dispatch_gate_core_run() {
     # pursuing are intentionally no-ops: they must not consume review budget.
     # A present-but-malformed state is different from no state and fails closed.
     if ! printf '%s' "$state_out" | jq -e '. != null and .active == true and .phase == "pursuing"' > /dev/null 2>&1; then
-        if [ -n "$omt_dir" ] && [ -f "${omt_dir}/ultragoal-state-${sid}.json" ] && ! jq -e 'type == "object" and (has("active") and has("phase") and has("iteration") and has("max_iterations"))' "${omt_dir}/ultragoal-state-${sid}.json" > /dev/null 2>&1; then
+        if [ -n "$omt_dir" ] && [ -f "${omt_dir}/ultragoal-state-${sid}.json" ] && ! jq -e 'type == "object" and (.active == false or .phase == "planning" or .phase == "budget_limited" or .phase == "blocked" or .phase == "complete")' "${omt_dir}/ultragoal-state-${sid}.json" > /dev/null 2>&1; then
             _rdg_deny '코드 리뷰 dispatch 상태가 손상되었습니다. 안전하게 중단하고 상태를 확인하세요.'
         fi
         return 0

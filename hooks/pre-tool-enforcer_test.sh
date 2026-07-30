@@ -1749,6 +1749,31 @@ test_rdg_malformed_claim_state_denies_safely() {
     hg_is_deny "$out" || { echo "ASSERTION FAILED rdg malformed state: $out"; return 1; }
 }
 
+test_rdg_schema_valid_malformed_states_fail_closed_or_pass_known_inactive() {
+    local out state_file
+    state_file="$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json"
+
+    printf '%s' '{"active":true,"phase":"pursuit","iteration":0,"max_iterations":10}' > "$state_file"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED rdg invalid phase: $out"; return 1; }
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ] || return 1
+
+    printf '%s' '{"active":true,"phase":"pursuing","iteration":"bad","max_iterations":10}' > "$state_file"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED rdg invalid pursuing iteration: $out"; return 1; }
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ] || return 1
+
+    printf '%s' '{"active":true,"phase":"planning","iteration":"bad","max_iterations":10}' > "$state_file"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED rdg planning corruption should allow: $out"; return 1; }
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ] || return 1
+
+    printf '%s' '{"active":false,"phase":"pursuing","iteration":"bad","max_iterations":10}' > "$state_file"
+    out=$(rdg_agent_payload "code-reviewer" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_allow "$out" || { echo "ASSERTION FAILED rdg inactive corruption should allow: $out"; return 1; }
+    [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ]
+}
+
 test_rdg_unset_omt_dir_malformed_current_state_denies_safely() {
     local out home_dir project_cwd resolved_omt
     home_dir="$TEST_TMP_DIR/home"
@@ -1901,6 +1926,7 @@ main() {
     run_test test_rdg_clean_and_cleanup_reviews_deny_with_completion_actions
     run_test test_rdg_planning_nonreviewer_and_nonagent_pass_without_count
     run_test test_rdg_malformed_claim_state_denies_safely
+    run_test test_rdg_schema_valid_malformed_states_fail_closed_or_pass_known_inactive
     run_test test_rdg_unset_omt_dir_malformed_current_state_denies_safely
     run_test test_rdg_jq_absent_follows_allow_posture
     run_test test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call
