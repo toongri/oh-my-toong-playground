@@ -38,6 +38,9 @@ hooks:
 #      opensearch 86MB). 전역에 두면 OMT나 개인 레포 세션도 쓰지도 않는
 #      2종을 물어 세션당 185MB를 낭비한다. codegraph·playwright는 레포를 가리지
 #      않고 쓰므로 전역에 남긴다.
+#      이 수치는 소스 선언 기준이다. sync는 선언된 MCP를 대입만 하므로 여기서
+#      지워도 이미 배포된 ~/.claude.json 항목은 그대로 남는다 — 이미 sync한
+#      머신에서는 `claude mcp remove <name>`으로 배포본을 정리해야 185MB가 성립한다.
 #   2) 계정 분리 — notion/linear/slack/sentry는 회사 워크스페이스와 개인 계정이
 #      다르다. OAuth 토큰이 MCP 서버 이름 단위로 저장되므로, 전역에 한 벌만 두면
 #      회사/개인 중 하나로 고정된다. type: http라 프로세스는 뜨지 않아 램은 0.
