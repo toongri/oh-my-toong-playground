@@ -1377,7 +1377,14 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 	}
 }
 
-/** User-authorized renewal: validates and hashes the current conventional artifact under the same lock. */
+/**
+ * User-authorized renewal: extends the cap under the same lock, and hashes the
+ * current conventional artifact when a valid one exists. An absent or invalid
+ * artifact does NOT block renewal — five dispatches can all die before writing
+ * any artifact, and renewal is the only in-band recovery from that cap
+ * exhaustion (the hash is simply left untouched; the claim-side
+ * completion-eligible deny only ever fires on a valid eligible artifact).
+ */
 export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchClaim {
 	const stateFilePath = resolveStatePath(sessionId);
 	try {
@@ -1385,7 +1392,7 @@ export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchC
 		return withStateLock(stateFilePath, () => {
 			const reviewed = readCodeReviewArtifactRaw(sessionId);
 			const rawState = readFileOrNull(stateFilePath);
-			if (reviewed === null || rawState === null) {
+			if (rawState === null) {
 				return { allowed: false, reason: "failure", used: 0, cap: 0 };
 			}
 			const prior = parseClaimableState(rawState);
@@ -1404,7 +1411,7 @@ export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchC
 				: DEFAULT_REVIEW_DISPATCH_CAP;
 			const state = mergeWriteLocked(sessionId, stateFilePath, {
 				review_dispatch_cap: cap + DEFAULT_REVIEW_DISPATCH_CAP,
-				approved_review_artifact_sha256: sha256(reviewed.raw),
+				...(reviewed === null ? {} : { approved_review_artifact_sha256: sha256(reviewed.raw) }),
 			});
 			return { allowed: true, reason: "allowed", used, cap: state.review_dispatch_cap };
 		});
