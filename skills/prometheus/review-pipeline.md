@@ -23,9 +23,11 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 [Confirmed AC in full — paste verbatim. No summarizing.]
 ```
 
-Each `OUT of Scope` item must carry a decider — `| decider: {how to tell a finding belongs to this exclusion}` — so a reviewer can tell whether a candidate finding falls inside it. An exclusion without a decider has no edge to any finding, so it does nothing. The gate at `agents/metis.md:104` (B3) rejects an undecidered exclusion with REQUEST_CHANGES; this template fixes the format that gate checks.
+Each `OUT of Scope` item must carry a decider — `| decider: {how to tell a finding belongs to this exclusion}` — so a reviewer can tell whether a candidate finding falls inside it. An exclusion without a decider has no edge to any finding, so it does nothing. The gate in `agents/metis.md` (B3) rejects an undecidered exclusion with REQUEST_CHANGES; this template fixes the format that gate checks.
 
-**On Metis REQUEST_CHANGES**: Return to Interview Mode. Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Ask the user to clarify the gaps Metis identified. After resolving gaps via interview, re-invoke Metis with the same 3-Section structure containing updated content. This Interview→re-invoke loop is bounded by the K=3 orchestrator-owned carried-forward cap: after the 3rd identical Metis REQUEST_CHANGES on the same `(B-axis, requirement locus)` item, prometheus records the residual as a carried-forward gap and proceeds to S2 rather than looping a 4th time (see `SKILL.md > ### State Lifecycle Directives`). metis stays round-unaware — the cap is prometheus-owned.
+**On Metis REQUEST_CHANGES**: Return to Interview Mode — and ask the user first. Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Before re-invoking Metis, ask the user to clarify the gaps Metis identified via the normal Interview question channel, and apply the answer and the resulting revision. Only then re-invoke Metis with the same 3-Section structure containing updated content. This loop is bounded by the shared 2-round cap owned by prometheus (`SKILL.md > ### State Lifecycle Directives`); metis stays round-unaware.
+
+**On nonempty Questions for User (any verdict)**: route the questions to the user via the normal Interview question channel and apply the answers before advancing — an APPROVE/COMMENT verdict does not waive them. Recording the answers does not expire the verdict; no re-review is required for answer recording alone.
 
 ---
 
