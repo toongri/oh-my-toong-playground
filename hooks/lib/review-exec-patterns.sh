@@ -44,22 +44,51 @@ review_exec_is_active() {
     review_exec_is_conductor "$omt_dir" "$session_id"
 }
 
-# Preserve text while masking shell metacharacters that are inert inside
-# quotes or escaped. The remaining live chain separators make each executable
-# command start visible to the classifier without substring matching.
+# Preserve executable text while masking shell syntax that is inert. Live
+# command substitutions become their own segments for static classification.
 review_exec_normalize_command() {
     printf '%s' "$1" | awk '
-        BEGIN { sq=sprintf("%c",39); dq=sprintf("%c",34); bs=sprintf("%c",92) }
+        BEGIN { sq=sprintf("%c",39); dq=sprintf("%c",34); bs=sprintf("%c",92); dl=sprintf("%c",36); lp=sprintf("%c",40); rp=sprintf("%c",41); bt=sprintf("%c",96) }
         {
-            out=""; insq=0; indq=0; escaped=0; n=length($0)
+            out=""; insq=0; indq=0; n=length($0)
             for (i=1; i<=n; i++) {
                 c=substr($0,i,1); prev=(i == 1 ? "" : substr($0,i-1,1))
-                if (escaped) { out=out ((c ~ /[;|&<>]/) ? " " : c); escaped=0; continue }
-                if (!insq && c == bs) { escaped=1; continue }
-                if (!indq && c == sq) { insq=!insq; continue }
-                if (!insq && c == dq) { indq=!indq; continue }
+                if (insq) {
+                    if (c == sq) insq=0
+                    else out=out ((c == dl || c == lp || c == rp || c == bt) ? " " : c)
+                    continue
+                }
+                if (c == bs && i < n) { out=out "  "; i++; continue }
+                if (c == sq && !indq) { insq=1; continue }
+                if (c == dq) { indq=!indq; continue }
+                if (c == dl && i < n && substr($0,i+1,1) == lp) {
+                    depth=1; body=""; body_sq=0; body_dq=0; i+=2
+                    for (; i<=n && depth>0; i++) {
+                        c=substr($0,i,1)
+                        if (body_sq) { if (c == sq) body_sq=0; body=body c; continue }
+                        if (c == bs && i < n) { body=body c substr($0,i+1,1); i++; continue }
+                        if (c == sq && !body_dq) { body_sq=1; body=body c; continue }
+                        if (c == dq) { body_dq=!body_dq; body=body c; continue }
+                        if (!body_dq && c == lp) depth++
+                        if (!body_dq && c == rp) { depth--; if (depth == 0) break }
+                        body=body c
+                    }
+                    out=out ";" body ";"
+                    continue
+                }
+                if (c == bt) {
+                    body=""; i++
+                    for (; i<=n; i++) {
+                        c=substr($0,i,1)
+                        if (c == bs && i < n) { body=body c substr($0,i+1,1); i++; continue }
+                        if (c == bt) break
+                        body=body c
+                    }
+                    out=out ";" body ";"
+                    continue
+                }
                 if (!insq && !indq && c == "#" && (i == 1 || prev ~ /[ \t]/)) break
-                if ((insq || indq) && c ~ /[;|&<>]/) { out=out " "; continue }
+                if (indq) { out=out " "; continue }
                 out=out c
             }
             printf "%s;", out
@@ -118,17 +147,30 @@ review_exec_segment_denied() {
         {
             gsub(/^[ \t]+|[ \t]+$/, "")
             if ($0 == "") next
+            seen=1
             count=split($0, words, /[ \t]+/)
             start=1
             while (start <= count && words[start] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) start++
+            if (words[start] == "env") {
+                start++
+                while (start <= count) {
+                    argument=words[start]
+                    if (argument == "--") { start++; break }
+                    if (argument ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || argument ~ /^-[i0]$/ || argument ~ /^--(ignore-environment|null)$/ || argument ~ /^--(unset|chdir)=/) { start++; continue }
+                    if (argument == "-u" || argument == "--unset" || argument == "-C" || argument == "--chdir") { start += 2; continue }
+                    if (argument ~ /^-/) { start++; continue }
+                    break
+                }
+            }
             if (start > count) next
+            classified=1
             if (high_cost(words, start, count)) exit 0
             if (words[start] ~ /(^|\/)(sh|bash|zsh)$/) {
                 for (i=start + 1; i<=count; i++) if (words[i] == "-c" && i + 1 <= count && high_cost(words, i + 1, count)) exit 0
             }
             exit 1
         }
-        END { if (NR == 0) exit 1 }'
+        END { if (!classified) exit 1 }'
 }
 
 review_exec_command_denied() {
