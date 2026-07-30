@@ -65,6 +65,9 @@ import {
 	ensureSeed,
 } from "@lib/state-core";
 
+import { renameSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 export type GoalPhase = "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
 export type ObjectiveVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | "absent";
 export type StoryStatus = "unconfirmed" | "confirmed" | "retired";
@@ -356,25 +359,123 @@ function parseClaimableState(raw: string): Partial<GoalState> | null {
  * Minimal mkdir lock for every read-modify-write of this state file. A contention
  * timeout fails closed; we never perform an unlocked fallback after a lock error.
  */
+const REVIEW_LOCK_STALE_TTL_MS = 30_000;
+const REVIEW_LOCK_OWNER_FILE = "owner.json";
+
+type ReviewLockOwner = { ownerPid: number; token: string; startedAt: number };
+
 function withStateLock<T>(stateFilePath: string, callback: () => T): T {
 	const lockPath = `${stateFilePath}.lock`;
 	for (let attempt = 0; attempt < REVIEW_LOCK_RETRIES; attempt += 1) {
+		const token = crypto.randomUUID();
 		try {
 			mkdirSync(lockPath);
+			writeFileSync(join(lockPath, REVIEW_LOCK_OWNER_FILE), JSON.stringify({
+				ownerPid: process.pid,
+				token,
+				startedAt: Date.now(),
+			} satisfies ReviewLockOwner));
 			try {
 				return callback();
 			} finally {
-				rmSync(lockPath, { recursive: true, force: true });
+				releaseStateLock(lockPath, token);
 			}
 		} catch (err) {
 			if (isErrnoException(err) && err.code === "EEXIST") {
-				Atomics.wait(REVIEW_LOCK_SLEEP, 0, 0, REVIEW_LOCK_RETRY_MS);
+				if (!recoverStaleStateLock(lockPath)) {
+					Atomics.wait(REVIEW_LOCK_SLEEP, 0, 0, REVIEW_LOCK_RETRY_MS);
+				}
 				continue;
 			}
 			throw err;
 		}
 	}
 	throw new Error("ultragoal-state: state lock contended; refusing unlocked write");
+}
+
+function readStateLockOwner(lockPath: string): ReviewLockOwner | undefined {
+	try {
+		const value: unknown = JSON.parse(readFileSync(join(lockPath, REVIEW_LOCK_OWNER_FILE), "utf8"));
+		const candidate = value as Partial<ReviewLockOwner>;
+		if (
+			typeof value === "object" && value !== null &&
+			typeof candidate.ownerPid === "number" && Number.isInteger(candidate.ownerPid) && candidate.ownerPid > 0 &&
+			typeof candidate.token === "string" && candidate.token.length > 0 &&
+			typeof candidate.startedAt === "number"
+		) return value as ReviewLockOwner;
+	} catch {}
+	return undefined;
+}
+
+function isStateLockStale(lockPath: string): boolean {
+	const owner = readStateLockOwner(lockPath);
+	if (owner !== undefined && !isPidAlive(owner.ownerPid)) return true;
+	try {
+		return statSync(lockPath).mtimeMs + REVIEW_LOCK_STALE_TTL_MS < Date.now();
+	} catch {
+		return true;
+	}
+}
+
+function isPidAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (err) {
+		return isErrnoException(err) && err.code === "EPERM";
+	}
+}
+
+/** Serializes stale recovery so a second observer cannot rename a successor lock. */
+function recoverStaleStateLock(lockPath: string): boolean {
+	let recovered = false;
+	if (!withStateLockRecoveryGuard(lockPath, () => {
+		if (!isStateLockStale(lockPath)) return;
+		isolateAndRemoveStaleLock(lockPath);
+		recovered = true;
+	})) return false;
+	return recovered;
+}
+
+/** Prevents stale recovery from racing a token-checked holder release. */
+function withStateLockRecoveryGuard(lockPath: string, callback: () => void): boolean {
+	const recoveryPath = `${lockPath}.recovery`;
+	for (let attempt = 0; attempt < 2; attempt += 1) {
+		try {
+			mkdirSync(recoveryPath);
+		} catch (err) {
+			if (!(isErrnoException(err) && err.code === "EEXIST")) throw err;
+			if (!isStateLockStale(recoveryPath)) return false;
+			isolateAndRemoveStaleLock(recoveryPath);
+			continue;
+		}
+		try {
+			callback();
+			return true;
+		} finally {
+			rmSync(recoveryPath, { recursive: true, force: true });
+		}
+	}
+	return false;
+}
+
+function isolateAndRemoveStaleLock(lockPath: string): void {
+	const stalePath = `${lockPath}.stale-${process.pid}-${crypto.randomUUID()}`;
+	try {
+		renameSync(lockPath, stalePath);
+	} catch (err) {
+		if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "EEXIST")) return;
+		throw err;
+	}
+	rmSync(stalePath, { recursive: true, force: true });
+}
+
+function releaseStateLock(lockPath: string, token: string): void {
+	withStateLockRecoveryGuard(lockPath, () => {
+		if (readStateLockOwner(lockPath)?.token === token) {
+			rmSync(lockPath, { recursive: true, force: true });
+		}
+	});
 }
 
 // ---------------------------------------------------------------------------
