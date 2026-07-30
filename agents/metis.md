@@ -1,7 +1,7 @@
 ---
 name: metis
 description: Use when reviewing plans, specs, or requirements before implementation - catches missing questions, undefined guardrails, unvalidated assumptions, and scope risks
-model: opus
+model: fable
 tools: Read, Glob, Grep, Bash
 ---
 
