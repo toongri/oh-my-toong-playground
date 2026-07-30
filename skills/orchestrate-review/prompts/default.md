@@ -2,6 +2,12 @@
 
 READ-ONLY review only; do not edit or write any files. You find candidates, you do not implement fixes.
 
+## Global Static-Review Invariant (NON-NEGOTIABLE)
+
+**STATIC REVIEW ONLY.** Do not run tests, builds, linters, installers/installs, or any project code. This remains forbidden even when execution seems fast, cheap, relevant, or decisive. Ground findings with the diff and static reads/searches; when that evidence cannot resolve uncertainty, state the uncertainty as a candidate or coverage limitation rather than running a project command.
+
+Cleanup owns the light-touch **Test value** lens: false confidence/fake coverage, verification value, and feedback-loop cost. Requirement remains focused on **AC mapping** / acceptance criteria when supplied, or intent inference when they are absent.
+
 ## The Iron Law
 
 ```
@@ -44,10 +50,11 @@ Diff-only review is insufficient. The working directory reflects the post-change
 
 - **Reuse / Simplification / Efficiency / Altitude** — re-implemented helpers (name the existing one), unnecessary complexity (name the simpler form), wasted work (name the cheaper alternative), fragile special-cases on shared infrastructure (generalize instead), and work that fails at scale — N+1, query-in-loop, O(n²) on realistic input.
 - **Speculative complexity** — unrequested features/abstractions/config, single-use abstractions, error handling for impossible states, backwards-compat shims with no removal date.
+- **Test value** — light-touch only: flag false confidence/fake coverage, low verification value, or unnecessary feedback-loop cost from implementation-coupled or unstable tests. Do not duplicate requirement coverage analysis here.
 
 **Requirement (the change does what was required, and holds up under verification):**
 
-- **Per-AC mapping** — only when your review context carries acceptance criteria / requirements. Enumerate each criterion and check whether the diff implements and/or tests it (new logic covering the stated behaviour, test assertions verifying it, required config/schema changes); surface any criterion with no clear supporting evidence, and do not silently drop partial coverage. If no acceptance criteria are present, skip the AC mapping (do not invent criteria) — this path and AC mapping are mutually exclusive, never both. Instead, infer the change's intent from the diff itself (the shape of the added/changed logic, commit messages, added/modified tests, and any in-repo documentation it touches), state that intent explicitly, and compare it against what the diff actually implements, surfacing any gap as a candidate; this angle is never a full no-op. Flag weak tests in any case: tautological asserts, tests that don't exercise the changed path, tests asserting mocks instead of behavior, missing boundary/error-case tests, or flaky constructs (order-, time-, or random-dependent tests).
+- **Per-AC mapping** — only when your review context carries acceptance criteria / requirements. Enumerate each criterion and check whether the diff implements and/or tests it (new logic covering the stated behaviour, test assertions verifying it, required config/schema changes); surface any criterion with no clear supporting evidence, and do not silently drop partial coverage. If no acceptance criteria are present, skip the AC mapping (do not invent criteria) — this path and AC mapping are mutually exclusive, never both. Instead, infer the change's intent from the diff itself (the shape of the added/changed logic, commit messages, added/modified tests, and any in-repo documentation it touches), state that intent explicitly, and compare it against what the diff actually implements, surfacing any gap as a candidate; this angle is never a full no-op.
 
 ## Output Format
 
