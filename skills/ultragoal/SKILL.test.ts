@@ -391,6 +391,35 @@ describe("identity: frontmatter and state-namespace point at ultragoal, not goal
 	});
 });
 
+describe("review dispatch budget runtime contract", () => {
+	test("State CLI table distinguishes automatic claim from user-approved renewal", () => {
+		expect(skillMd).toContain("`claim-review-dispatch` | PreToolUse hook only");
+		expect(skillMd).toContain("The initial cap is 5");
+		expect(skillMd).toContain("`approve-review-dispatch-renewal` | orchestrator, only after explicit user approval to continue");
+		expect(skillMd).toContain("Adds exactly 5");
+		expect(skillMd).toContain("SHA-256 of the current code-review artifact's exact raw bytes");
+	});
+
+	test("completion reference pins the five-round Claude/Codex hook contract and exact renewal command", () => {
+		expect(completionGateMd).toContain("### Five-round review dispatch budget");
+		expect(completionGateMd).toContain("Claude and Codex `PreToolUse` hooks automatically run `claim-review-dispatch`");
+		expect(completionGateMd).toContain("The initial cap is 5");
+		expect(completionGateMd).toContain(
+		"bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal",
+	);
+	});
+
+	test("completion-eligible findings permit AI discretion and final file-line summary", () => {
+		expect(completionGateMd).toContain("**Completion-eligible discretion.**");
+		expect(completionGateMd).toContain("**마무리** → run `request-complete`");
+		expect(completionGateMd).toContain("**계속** → ask the user; only after explicit approval, pass the selected `CONFIRMED` `cleanup` finding(s) to sisyphus for repair");
+		expect(completionGateMd).toContain("before the next code-reviewer dispatch");
+		expect(completionGateMd).toContain("`PLAUSIBLE` findings remain non-blocking report items");
+		expect(completionGateMd).toContain("exact `file:line` reference and a one-line summary");
+		expect(completionGateMd).not.toContain("**Once the gate opens, a surviving non-blocking finding is not fixed on the spot.**");
+	});
+});
+
 // ---------------------------------------------------------------------------
 // Stop-hook arming gap: the persistent-mode Stop hook only refuses to stop
 // while `phase === "pursuing"`. The Execution Dispatch numbered list must

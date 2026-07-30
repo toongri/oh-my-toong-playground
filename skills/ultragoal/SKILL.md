@@ -32,6 +32,8 @@ Subcommands used by this orchestrator:
 | `reorder-stories --order <id1,id2,...>` | orchestrator | Planning-only reorder of the story array to an exact permutation of the current ids — steers the sequential dispatch order before pursuit begins. |
 | `set-verdict --verdict <APPROVE\|REQUEST_CHANGES\|COMMENT\|absent>` | gate layer | The ONLY writer of `objective_verdict`. |
 | `request-complete` | gate layer | The ONLY path to `phase=complete`; structurally gated on completion-evidence being present and `objective_verdict=APPROVE`. |
+| `claim-review-dispatch` | PreToolUse hook only | Atomically reserves one final code-review dispatch. The initial cap is 5; it persists the reservation before allowing the dispatch. The orchestrator never calls this command directly. |
+| `approve-review-dispatch-renewal` | orchestrator, only after explicit user approval to continue | Adds exactly 5 to the review-dispatch cap and records the SHA-256 of the current code-review artifact's exact raw bytes as the user-approved marker. |
 | `get` / `status` | read | Inspect current state / derived status. |
 
 `set-budget-limited` and `set-blocked --reason <text>` are system-only setters (the hook layer writes `budget_limited`; `set-blocked` records a reported blocker). The orchestrator never writes `complete`, `budget_limited`, or a fabricated verdict by any other route — the narrow gates are structural, not vigilance-based.
