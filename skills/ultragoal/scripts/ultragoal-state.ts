@@ -944,8 +944,8 @@ interface VerdictArtifact {
 // ---------------------------------------------------------------------------
 // Code-review artifact types — the SECOND independent completion lane.
 // Mirrors the verdict artifact: read/validate only, authored by a fresh
-// code-reviewer agent. The gate keys ONLY on verdict==='CONFIRMED'; `class`
-// is a reader-validated, gate-unused informational label.
+// code-reviewer agent. The gate blocks CONFIRMED correctness and requirement-gap
+// findings; cleanup remains a reader-validated non-blocking class.
 // ---------------------------------------------------------------------------
 
 interface CodeReviewFinding {
@@ -1242,8 +1242,8 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	// Code-review lane (D-3): the SECOND independent refusal lane, reached only after
 	// every objective-lane gate above passes — so "both lanes clean" is the completion condition.
 	// Absent/invalid artifact → block (never-false-complete: degrade toward block). The
-	// gate keys ONLY on verdict==='CONFIRMED' (any class — correctness, cleanup, or requirement-gap); `class`
-	// is informational and never branched on.
+// gate blocks only CONFIRMED correctness or requirement-gap findings. CONFIRMED cleanup findings
+// are non-blocking quality notes; `class` is otherwise not branched on.
 	const codeReview = readCodeReviewArtifact(sessionId);
 	if (codeReview === null) {
 		return false;
@@ -1254,7 +1254,13 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	if (codeReview.status === "INCONCLUSIVE") {
 		return false;
 	}
-	if (codeReview.findings.some((f) => f.verdict === "CONFIRMED")) {
+	if (
+		codeReview.findings.some(
+			(f) =>
+				f.verdict === "CONFIRMED" &&
+				(f.class === "correctness" || f.class === "requirement-gap"),
+		)
+	) {
 		return false;
 	}
 
