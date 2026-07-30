@@ -51,7 +51,15 @@
  *   or whitespace-only values are refused (ADR D-4).
  */
 
-import { mkdirSync, readFileSync, rmSync, unlinkSync } from "fs";
+import {
+	mkdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	statSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { execSync } from "child_process";
 import { createHash } from "crypto";
 import { getOmtDir } from "@lib/omt-dir";
@@ -65,7 +73,6 @@ import {
 	ensureSeed,
 } from "@lib/state-core";
 
-import { renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type GoalPhase = "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
@@ -737,6 +744,12 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		// re-plans). readGoalState returns non-null ONLY for an active prior → re-plan.
 		if (!readGoalState(sessionId)) {
 			next.iteration = 0;
+			// A terminal prior state can remain on disk for the same session. Its review
+			// dispatch budget and approval hash belong to the completed/blocked pursuit,
+			// never to the fresh one being planned now.
+			next.review_dispatch_used = 0;
+			next.review_dispatch_cap = DEFAULT_REVIEW_DISPATCH_CAP;
+			next.approved_review_artifact_sha256 = "";
 		}
 	}
 	mergeWrite(sessionId, next);
@@ -1325,6 +1338,12 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 			if (rawState === null) return { allowed: false, reason: "failure", used: 0, cap: 0 };
 			const prior = parseClaimableState(rawState);
 			if (prior === null) return { allowed: false, reason: "failure", used: 0, cap: 0 };
+			// The hook's pre-lock eligibility check is advisory: a terminal transition can
+			// win the race while this caller waits for the state lock. Re-check the live
+			// state under that lock before reserving another review dispatch.
+			if (!prior.active || prior.phase !== "pursuing") {
+				return { allowed: false, reason: "failure", used: 0, cap: 0 };
+			}
 			const used = validNonNegativeInteger(prior.review_dispatch_used)
 				? prior.review_dispatch_used
 				: 0;
