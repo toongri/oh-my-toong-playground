@@ -74,6 +74,9 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 
 **How the execution restriction is applied**:
 - A prompt contract and dedicated Claude/Codex PreToolUse guard twins (`review-exec-guard.sh` / `codex-review-exec-guard.sh`) work together. Both guards use one shared shell invariant to judge the same high-cost commands.
+- At the JVM boundary, only calls whose basenames are `gradle`, `gradlew`, `mvn`, or `mvnw` are covered, and only enumerated high-cost Gradle tasks and Maven phases are blocked. Gradle blocks `test` (including qualified/suffixed forms), `build`, `check`, `assemble*`, `compile*`, `classes`, `lint*`, `ktlint*`, and `detekt*`; Maven blocks `compile`, `test-compile`, `test`, `integration-test`, `package`, `verify`, `install`, `ktlint:check`, and `detekt:check`.
+- Direct lint/compiler execution through `ktlint`, `detekt`, `kotlinc`, and `javac`, plus project-code runtime execution through `java` and `kotlin`, is also blocked. Conversely, unenumerated Gradle/Maven calls default to allow; only pure help/metadata queries and version queries receive special query-exception treatment. A call that mixes a query with execution is not an exception.
+- This query exception does not mean zero-cost or purely static work. Gradle/Maven queries may still configure projects or resolve and access plugins and dependencies, so they are deliberately narrow usability exceptions within static review.
 - Workers receive `OMT_REVIEW_ROLE=member` to mark member review context. A conductor is in scope only when its job metadata's `conductorSessionId` and a live job directory establish review context.
 - The restriction activates only in review context. The same high-cost command remains unblocked by these guards in a normal development session.
 
