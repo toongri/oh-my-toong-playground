@@ -108,6 +108,27 @@ function isCliType(value: string): value is CliType {
 	);
 }
 
+/**
+ * Parses caller-provided worker environment values while pinning the role for every
+ * orchestrate-review finder process. This object is passed unchanged through both
+ * initial and resumed driver commands, then persisted in status.json for resume.
+ */
+export function buildWorkerEnv(rawArgs: string[]): Record<string, string> {
+	const workerEnv: Record<string, string> = {};
+	for (let i = 0; i < rawArgs.length; i++) {
+		if (rawArgs[i] === "--env" && i + 1 < rawArgs.length) {
+			const eqIdx = rawArgs[i + 1].indexOf("=");
+			if (eqIdx > 0) {
+				workerEnv[rawArgs[i + 1].slice(0, eqIdx)] = rawArgs[i + 1].slice(eqIdx + 1);
+			}
+			i++;
+		}
+	}
+
+	workerEnv.OMT_REVIEW_ROLE = "member";
+	return workerEnv;
+}
+
 function main() {
 	const options = parseArgs(process.argv);
 	const jobDir = options["job-dir"];
@@ -121,17 +142,7 @@ function main() {
 	initLogger("chunk-review-worker", logRoot, jobId);
 	logStart();
 
-	const workerEnv: Record<string, string> = {};
-	const rawArgs = process.argv.slice(2);
-	for (let i = 0; i < rawArgs.length; i++) {
-		if (rawArgs[i] === "--env" && i + 1 < rawArgs.length) {
-			const eqIdx = rawArgs[i + 1].indexOf("=");
-			if (eqIdx > 0) {
-				workerEnv[rawArgs[i + 1].slice(0, eqIdx)] = rawArgs[i + 1].slice(eqIdx + 1);
-			}
-			i++;
-		}
-	}
+	const workerEnv = buildWorkerEnv(process.argv.slice(2));
 
 	if (typeof jobDir !== "string" || !jobDir) {
 		logError("missing --job-dir");
