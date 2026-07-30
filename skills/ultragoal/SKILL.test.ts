@@ -157,7 +157,8 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	// reference travels with the contract paragraph, so it is the
 	// code-review-lane bullet ordering assertion below (which keeps the
 	// contract paragraph after that paragraph and its bullets) that keeps
-	// it valid. Separately, the "Code-review lane: any CONFIRMED finding"
+	// it valid. Separately, the "Code-review lane: `CONFIRMED` `correctness` or
+	// `requirement-gap` finding"
 	// bullet's "the dispatch-prompt contract above" points at the contract
 	// paragraph — and it is this one pointer that goes dangling if the
 	// contract paragraph moves below it; the sibling test below guards
@@ -200,7 +201,7 @@ describe("code-review dispatch payload contract: exactly two items, first dispat
 	test("the 'dispatch-prompt contract above' pointer at the concrete-progress bullet sits after the contract paragraph it points back at", () => {
 		const contractParagraphLead = "carries exactly two things —";
 		const confirmedFindingBullet =
-			"- **Code-review lane: any CONFIRMED finding**";
+			"- **Code-review lane: `CONFIRMED` `correctness` or `requirement-gap` finding**";
 		const inconclusiveBullet =
 			'- **Code-review lane: `status: "INCONCLUSIVE"`**';
 		const pointerPhrase = "dispatch-prompt contract above";

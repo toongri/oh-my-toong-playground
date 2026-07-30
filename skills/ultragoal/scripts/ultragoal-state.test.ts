@@ -2326,9 +2326,9 @@ describe("story layer: request-complete verdict gate (T4)", () => {
 // ---------------------------------------------------------------------------
 
 describe("story layer: code-review completion lane (TODO 1)", () => {
-	// AC1: a CONFIRMED finding (correctness OR cleanup) blocks completion even when
-	// the objective lane is fully green. The gate keys ONLY on verdict===CONFIRMED.
-	test("code-review CONFIRMED blocks completion (cleanup class)", () => {
+	// AC1: a CONFIRMED cleanup finding permits completion when the objective lane
+	// is fully green; cleanup-only findings are non-blocking quality notes.
+	test("code-review CONFIRMED cleanup permits completion", () => {
 		const artifact = buildSatisfiedFixture(S);
 		writeVerdictArtifact(S, artifact); // objective lane fully green
 		writeCodeReviewArtifact(S, {
@@ -2337,8 +2337,8 @@ describe("story layer: code-review completion lane (TODO 1)", () => {
 			reviewer: "code-reviewer",
 			at: "2026-06-12T00:00:00",
 		});
-		expect(requestComplete(S)).toBe(false);
-		expect(rawState().phase).toBe("pursuing");
+		expect(requestComplete(S)).toBe(true);
+		expect(rawState().phase).toBe("complete");
 	});
 
 	test("code-review CONFIRMED blocks completion (correctness class)", () => {
