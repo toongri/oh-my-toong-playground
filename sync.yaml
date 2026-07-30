@@ -6,6 +6,12 @@ provision:
   - check: "command -v codegraph"
     commands:
       - "npm i -g @colbymchenry/codegraph"
+  - check: "command -v agent-device"
+    commands:
+      - "npm i -g agent-device@latest"
+  - check: "command -v agent-browser"
+    commands:
+      - "npm i -g agent-browser@latest"
 
 # goal/ultragoal의 실행 체인 중 에이전트 절반. 아래 skills의 sisyphus·
 # code-review와 짝이며, 넷이 다 있어야 체인이 닫힌다 — sisyphus가 실행을
@@ -73,7 +79,9 @@ skills:
       platforms: [claude, codex]
     - component: ultragoal
       platforms: [claude, codex]
+    - agent-device
     - agent-browser
+    - dogfood
     - component: receiving-code-review
       platforms: [claude]
     - component: test-driven-development
