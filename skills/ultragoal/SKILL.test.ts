@@ -397,7 +397,9 @@ describe("review dispatch budget runtime contract", () => {
 		expect(skillMd).toContain("The initial cap is 5");
 		expect(skillMd).toContain("`approve-review-dispatch-renewal` | orchestrator, only after explicit user approval to continue");
 		expect(skillMd).toContain("Adds exactly 5");
-		expect(skillMd).toContain("SHA-256 of the current code-review artifact's exact raw bytes");
+		expect(skillMd).toContain(
+			"when a valid code-review artifact exists, also records the SHA-256 of its exact raw bytes as the user-approved marker",
+		);
 	});
 
 	test("completion reference pins the five-round Claude/Codex hook contract and exact renewal command", () => {
