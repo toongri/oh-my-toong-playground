@@ -141,6 +141,15 @@ function addOwnedName(names: OwnedHookNames | OwnedRuleNames, platform: Platform
 export const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
 
 /**
+ * Platforms whose adapters actually write hooks. Hooks are not a sync.yaml
+ * category — they arrive through `{platform}.yaml` — so SUPPORTED_CATEGORIES
+ * has no entry to consult for them, and this is the equivalent table for that
+ * one axis. OpenCode's adapter refuses the whole hooks section (warn + skip),
+ * so nothing under `.opencode/hooks/` is ever OMT's to rewrite.
+ */
+const HOOK_DEPLOYING_PLATFORMS: Platform[] = ["claude", "gemini", "codex"];
+
+/**
  * Single source of truth for "does this project deploy anything into <path>/.claude/?".
  *
  * True when EITHER:
@@ -533,7 +542,9 @@ export async function syncPlatformConfigs(
 						}
 						// Record the hook's deployed NAME so rewritePlatformPaths can scope
 						// its `hooks/` walk to entries OMT actually resolved this run.
-						if (ownedHookNames) {
+						// Resolving a component is not deploying one: a platform whose
+						// adapter skips hooks outright owns nothing under its `hooks/`.
+						if (ownedHookNames && HOOK_DEPLOYING_PLATFORMS.includes(platform)) {
 							addOwnedName(ownedHookNames, platform, resolved.displayName);
 						}
 					}
