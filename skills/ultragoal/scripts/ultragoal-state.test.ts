@@ -83,6 +83,10 @@ beforeEach(() => {
 });
 
 describe("review dispatch budget", () => {
+	beforeEach(() => {
+		setGoalState(S, { phase: "pursuing" });
+	});
+
 	function writeCleanReview(): void {
 		writeCodeReviewArtifact(S, {
 			status: "COMPLETE",
@@ -127,10 +131,37 @@ describe("review dispatch budget", () => {
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 1, cap: 5 });
 	});
 
-	test("malformed state or absent/malformed approval artifact fails closed", () => {
+	test("absent or malformed approval artifact fails closed independently of state validity", () => {
+		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: false, reason: "failure" });
+		writeFileSync(codeReviewArtifactPath(S), "not json", "utf8");
+		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: false, reason: "failure" });
+
 		writeFileSync(resolveStatePath(S), "{broken", "utf8");
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "failure" });
-		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: false, reason: "failure" });
+	});
+
+	test("fresh pursuit resets inherited review dispatch budget and approval hash", () => {
+		writeCleanReview();
+		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, cap: 10 });
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, used: 1, cap: 10 });
+
+		setBudgetLimited(S);
+		setGoalState(S, { phase: "planning" });
+		setGoalState(S, { phase: "pursuing" });
+		const state = rawState();
+		expect(state.review_dispatch_used).toBe(0);
+		expect(state.review_dispatch_cap).toBe(5);
+		expect(state.approved_review_artifact_sha256).toBe("");
+	});
+
+	test("claims outside an active pursuit fail closed without consuming budget", () => {
+		setGoalState(S, { phase: "planning" });
+		expect(claimReviewDispatch(S)).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
+		expect(rawState().review_dispatch_used).toBe(0);
+
+		setBudgetLimited(S);
+		expect(claimReviewDispatch(S)).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
+		expect(rawState().review_dispatch_used).toBe(0);
 	});
 
 	test("concurrent hook claims reserve at most the cap", () => {
@@ -191,11 +222,13 @@ describe("review dispatch stale-lock recovery", () => {
 	}
 
 	test("dead owner lock is recovered and reserves the first review", () => {
+		setGoalState(S, { phase: "pursuing" });
 		createLock({ ownerPid: 999_999_999, token: "dead-owner", startedAt: Date.now() });
 		expect(claimReviewDispatch(S)).toEqual({ allowed: true, reason: "allowed", used: 1, cap: 5 });
 	});
 
 	test("old ownerless lock is recovered", () => {
+		setGoalState(S, { phase: "pursuing" });
 		createLock();
 		const old = new Date(Date.now() - 31_000);
 		ageLockDirectory(lockPath(), old, old);
@@ -210,6 +243,7 @@ describe("review dispatch stale-lock recovery", () => {
 	});
 
 	test("CLI recovers a dead lock but fails closed for a fresh live lock", () => {
+		setGoalState(S, { phase: "pursuing" });
 		createLock({ ownerPid: 999_999_999, token: "dead-owner", startedAt: Date.now() });
 		expect(JSON.parse(runCli("claim-review-dispatch"))).toMatchObject({ allowed: true, used: 1 });
 
