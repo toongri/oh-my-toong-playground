@@ -74,6 +74,9 @@ oh-my-toong의 리뷰 & 품질 스킬은 코드·설계·슬라이드에 걸쳐 
 
 **실행 제한 적용**:
 - 프롬프트 계약과 전용 Claude/Codex PreToolUse 가드 쌍(`review-exec-guard.sh` / `codex-review-exec-guard.sh`)이 함께 적용합니다. 두 가드는 공유 shell 불변식으로 같은 고비용 명령을 판정합니다.
+- JVM 경계에서는 basename이 `gradle`, `gradlew`, `mvn`, `mvnw`인 호출만 대상으로 하며, 열거된 고비용 Gradle task와 Maven phase만 차단합니다. Gradle은 `test`(qualified/suffixed 포함), `build`, `check`, `assemble*`, `compile*`, `classes`, `lint*`, `ktlint*`, `detekt*`를, Maven은 `compile`, `test-compile`, `test`, `integration-test`, `package`, `verify`, `install`, `ktlint:check`, `detekt:check`를 차단합니다.
+- `ktlint`, `detekt`, `kotlinc`, `javac`의 직접 lint/컴파일 실행과 `java`, `kotlin`의 프로젝트 코드 런타임 실행도 차단합니다. 반대로 열거되지 않은 Gradle/Maven 호출은 기본적으로 허용하며, 순수한 help/metadata 조회와 version 조회만 특별히 조회 예외로 취급합니다. 조회와 실행을 섞은 호출은 예외가 아닙니다.
+- 이 조회 예외는 무비용 또는 순수 정적 작업이라는 뜻이 아닙니다. Gradle/Maven 조회도 프로젝트를 설정하거나 플러그인·의존성을 해석하고 접근할 수 있으므로, 정적 검토에서 의도적으로 남겨 둔 좁은 사용성 예외입니다.
 - 워커는 `OMT_REVIEW_ROLE=member`를 받아 멤버 검토 컨텍스트를 표시합니다. 컨덕터는 job 메타데이터의 `conductorSessionId`와 살아 있는 job 디렉터리로 검토 컨텍스트가 확인될 때만 적용 대상이 됩니다.
 - 따라서 이 제한은 검토 컨텍스트에서만 활성화됩니다. 같은 고비용 명령도 일반 개발 세션에서는 이 가드에 의해 차단되지 않습니다.
 
