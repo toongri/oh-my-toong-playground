@@ -13,7 +13,9 @@ scripts:
     # verify-entrypoint-gate 프로젝트 오버레이. component 미스코프 참조라 own-project
     # 우선(projects/algocare-home/scripts/verify-entrypoint-gate/)으로 해석되어 그
     # 디렉터리(=.local.yaml만 담은) 전체가 각 워크트리의
-    # .claude/scripts/verify-entrypoint-gate/에 배포된다 — index.ts가 그 경로에서
-    # 프로젝트 오버레이를 읽는 위치와 정확히 일치.
+    # .claude/scripts/verify-entrypoint-gate/ + .codex/scripts/verify-entrypoint-gate/에
+    # 배포된다 — index.ts의 resolveLocalDir()가 그 두 경로에서(.claude 우선) 프로젝트
+    # 오버레이를 읽는 위치와 정확히 일치. 훅 등록 자체는 claude.yaml/codex.yaml이 담당하고
+    # (전역 단일본 index.ts를 raw command로 참조), 여기서는 오버레이 정책만 배포한다.
     - component: verify-entrypoint-gate
-      platforms: [claude]
+      platforms: [claude, codex]
