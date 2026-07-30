@@ -691,6 +691,154 @@ describe("processHookInput", () => {
 });
 
 // -----------------------------------------------------------------------------
+// processHookInput — Codex payload support. Field-set provenance: cmd/workdir
+// are drawn from a real rollout capture (see this file's own PROVENANCE note
+// below) and from hooks/codex-write-guard_test.sh:2171-2180's FIXTURE
+// PROVENANCE footnote — a codex-binary `strings` scan is the only source for
+// these field names, which is why this remains marked provisional there and
+// here alike.
+//
+// FIXTURE PROVENANCE (provisional, inherited from hooks/codex-write-
+// guard_test.sh:2171-2180): the exec_command/shell_command field set (tool_name
+// lowercase, tool_input.cmd, tool_input.workdir) is grounded in a real rollout
+// capture (~/.codex/sessions/2026/07/30/rollout-2026-07-30T10-45-36-*.jsonl:
+// `{"cmd":"pnpm verify backend --force ...","workdir":"/Users/toong/repos/
+// acme-home/dolomite-awe"}`), not an official schema doc — Codex ships no
+// public payload reference for these hook fields.
+// -----------------------------------------------------------------------------
+describe("processHookInput — Codex payload support", () => {
+	const moduleDir = fileURLToPath(new URL(".", import.meta.url));
+
+	function makeWorkspace(): string {
+		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-codex-e2e-"));
+		writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+		writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
+		return root;
+	}
+
+	test("exec_command + cmd + workdir: `pnpm verify backend --force` denies — the real dolomite-awe incident shape", () => {
+		const root = makeWorkspace();
+		try {
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: "pnpm verify backend --force", workdir: root },
+					cwd: "/tmp/unrelated",
+				}),
+				moduleDir,
+			);
+			const parsed = JSON.parse(output);
+			expect(parsed.hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("exec_command + cmd + workdir: `pnpm verify backend` (no --force) passes through with empty output", () => {
+		const root = makeWorkspace();
+		try {
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: "pnpm verify backend", workdir: root },
+					cwd: "/tmp/unrelated",
+				}),
+				moduleDir,
+			);
+			expect(output).toBe("");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("shell_command tool_name is also recognized (three-way whitelist)", () => {
+		const root = makeWorkspace();
+		try {
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "shell_command",
+					tool_input: { cmd: "pnpm verify backend --force", cwd: root },
+				}),
+				moduleDir,
+			);
+			expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("a tool_name not in the whitelist (e.g. read_file) passes through silently regardless of cmd content", () => {
+		const output = processHookInput(
+			JSON.stringify({ tool_name: "read_file", tool_input: { cmd: "pnpm verify --all" } }),
+			moduleDir,
+		);
+		expect(output).toBe("");
+	});
+
+	test("neither tool_input.command nor tool_input.cmd present passes through silently", () => {
+		const output = processHookInput(
+			JSON.stringify({ tool_name: "exec_command", tool_input: { workdir: "/tmp" } }),
+			moduleDir,
+		);
+		expect(output).toBe("");
+	});
+
+	test("local overlay resolution prefers .claude/scripts/... over .codex/scripts/... when both exist", () => {
+		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-overlay-order-"));
+		try {
+			writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+			writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
+
+			// .claude overlay empties the entrypoints whitelist entirely, so
+			// "pnpm verify --force" is no longer even recognized as a
+			// verification attempt (passthrough). .codex overlay keeps
+			// "verify" — if it were picked instead, the same command would
+			// deny (--force isn't in allowed_turbo_opts). The two overlays'
+			// diverging outcomes are what makes this test discriminate which
+			// one actually won, not just that loading didn't throw.
+			const claudeLocalDir = join(root, ".claude", "scripts", "verify-entrypoint-gate");
+			mkdirSync(claudeLocalDir, { recursive: true });
+			writeFileSync(join(claudeLocalDir, "verify-entrypoint-gate.local.yaml"), "entrypoints: []\n");
+
+			const codexLocalDir = join(root, ".codex", "scripts", "verify-entrypoint-gate");
+			mkdirSync(codexLocalDir, { recursive: true });
+			writeFileSync(join(codexLocalDir, "verify-entrypoint-gate.local.yaml"), "entrypoints: [verify]\n");
+
+			const output = processHookInput(
+				JSON.stringify({ tool_name: "exec_command", tool_input: { cmd: "pnpm verify --force", workdir: root } }),
+				moduleDir,
+			);
+			expect(output).toBe("");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("tool_input.workdir takes precedence over tool_input.cwd when both are present", () => {
+		const root = makeWorkspace();
+		const decoy = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-codex-decoy-"));
+		try {
+			// decoy has no pnpm-workspace.yaml — if the gate wrongly preferred
+			// tool_input.cwd over tool_input.workdir it would fail-closed deny
+			// for the WRONG reason (workspace root not found) instead of the
+			// shape-mismatch deny this test actually asserts.
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: "pnpm verify backend --force", workdir: root, cwd: decoy },
+				}),
+				moduleDir,
+			);
+			const parsed = JSON.parse(output);
+			expect(parsed.hookSpecificOutput.permissionDecisionReason).toContain("verify");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+			rmSync(decoy, { recursive: true, force: true });
+		}
+	});
+});
+
+// -----------------------------------------------------------------------------
 // Drift pin — every table test above runs decide() against POLICY, a
 // hand-copied snapshot of verify-entrypoint-gate.yaml's shipped values. If
 // the real yaml drifts (an entrypoint renamed, a runner removed), the table
