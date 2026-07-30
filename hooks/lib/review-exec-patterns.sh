@@ -69,7 +69,38 @@ review_exec_normalize_command() {
 review_exec_segment_denied() {
     local segment="$1"
     printf '%s\n' "$segment" | awk '
-        function high_cost(tool, subcommand, third) {
+        function gradle_task_denied(argument, task) {
+            task=argument
+            sub(/^.*:/, "", task)
+            return task ~ /^(test([A-Z].*)?|build|check|assemble.*|compile.*|classes|lint.*|ktlint.*|detekt.*)$/
+        }
+        function gradle_denied(words, start, count, i, argument, first_task, task_query_index) {
+            for (i=start + 1; i<=count; i++) {
+                argument=words[i]
+                if (argument == "--task") task_query_index=i
+                if (argument ~ /^-/) continue
+                if (first_task == "") first_task=argument
+            }
+            for (i=start + 1; i<=count; i++) {
+                argument=words[i]
+                if (argument ~ /^-/) continue
+                if (first_task == "help" && i == task_query_index + 1) continue
+                if (gradle_task_denied(argument)) return 1
+            }
+            return 0
+        }
+        function maven_denied(words, start, count, i, argument) {
+            for (i=start + 1; i<=count; i++) {
+                argument=words[i]
+                if (argument ~ /^(compile|test-compile|test|integration-test|package|verify|install|ktlint:check|detekt:check)$/) return 1
+            }
+            return 0
+        }
+        function high_cost(words, start, count, tool, subcommand, third) {
+            tool=words[start]
+            sub(/^.*\//, "", tool)
+            subcommand=words[start + 1]
+            third=words[start + 2]
             if (tool ~ /^(pnpm|npm|yarn)$/)
                 return subcommand ~ /^(test|build|install|lint)$/ || (subcommand == "run" && third ~ /^(test|build|lint)$/)
             if (tool == "bun")
@@ -78,6 +109,10 @@ review_exec_segment_denied() {
             if (tool == "cargo") return subcommand ~ /^(test|build|check)$/
             if (tool == "go") return subcommand ~ /^(test|build)$/
             if (tool == "make") return subcommand ~ /^(test|build|lint)$/
+            if (tool ~ /^(gradle|gradlew)$/) return gradle_denied(words, start, count)
+            if (tool ~ /^(mvn|mvnw)$/) return maven_denied(words, start, count)
+            if (tool ~ /^(ktlint|detekt|kotlinc|javac)$/) return 1
+            if (tool ~ /^(java|kotlin)$/) return subcommand !~ /^--?version$/
             return 0
         }
         {
@@ -87,9 +122,9 @@ review_exec_segment_denied() {
             start=1
             while (start <= count && words[start] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) start++
             if (start > count) next
-            if (high_cost(words[start], words[start + 1], words[start + 2])) exit 0
+            if (high_cost(words, start, count)) exit 0
             if (words[start] ~ /(^|\/)(sh|bash|zsh)$/) {
-                for (i=start + 1; i<=count; i++) if (words[i] == "-c" && i + 1 <= count && high_cost(words[i + 1], words[i + 2], words[i + 3])) exit 0
+                for (i=start + 1; i<=count; i++) if (words[i] == "-c" && i + 1 <= count && high_cost(words, i + 1, count)) exit 0
             }
             exit 1
         }
