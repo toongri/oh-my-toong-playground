@@ -112,7 +112,7 @@ review_exec_segment_denied() {
             if (tool ~ /^(gradle|gradlew)$/) return gradle_denied(words, start, count)
             if (tool ~ /^(mvn|mvnw)$/) return maven_denied(words, start, count)
             if (tool ~ /^(ktlint|detekt|kotlinc|javac)$/) return 1
-            if (tool ~ /^(java|kotlin)$/) return subcommand !~ /^--?version$/
+            if (tool ~ /^(java|kotlin)$/) return !(count == start + 1 && subcommand ~ /^--?version$/)
             return 0
         }
         {
