@@ -90,9 +90,16 @@ mcps:
   # (enforces read-only transactions + a query-time cap). Requires shell env: DATABASE_URI
   # (postgresql://user:pass@host:5432/dbname). uvx installs PyPI v0.3.0; for Jan-2026
   # fixes install from git main. https://github.com/crystaldba/postgres-mcp
+  # `--with mcp<2`는 mcp SDK를 1.x로 고정한다: postgres-mcp 0.3.0은
+  # mcp.server.fastmcp를 import하는데 mcp 2.0.0이 이 모듈을 제거했고, 의존성
+  # 선언이 `mcp[cli]>=1.5.0`(상한 없음)이라 uvx가 2.x를 끌어와 서버가 import에서
+  # 즉사한다(클라이언트에는 "connection closed: initialize response"로 보임).
+  # upstream이 mcp 2.0 대응 릴리스를 내면 핀을 제거한다.
   postgres:
     command: uvx
     args:
+      - "--with"
+      - "mcp<2"
       - "postgres-mcp"
       - "--access-mode=restricted"
   # ── 토스페이먼츠 MCP 2종: 지금은 불필요해 비활성. 쓸 일이 생기면 아래 블록의
