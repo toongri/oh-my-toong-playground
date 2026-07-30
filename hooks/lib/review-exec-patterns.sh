@@ -206,29 +206,46 @@ review_exec_shell_body() {
         }'
 }
 
+review_exec_enqueue_shorter_unseen() {
+    local candidate="$1" current="$2" known
+    [ -n "$candidate" ] || return 0
+    [ "$candidate" != "$current" ] || return 0
+    [ "${#candidate}" -lt "${#current}" ] || return 0
+    for known in "${review_exec_seen[@]}"; do
+        [ "$known" = "$candidate" ] && return 0
+    done
+    review_exec_seen[${#review_exec_seen[@]}]="$candidate"
+    review_exec_worklist[${#review_exec_worklist[@]}]="$candidate"
+}
+
 review_exec_command_denied_walk() {
-    local command="$1" depth="$2" normalized segment shell_body
-    shell_body=$(review_exec_shell_body "$command")
-    if [ "$depth" -lt 4 ] && [ -n "$shell_body" ] && review_exec_command_denied_walk "$shell_body" $((depth + 1)); then
-        return 0
-    fi
-    normalized=$(review_exec_normalize_command "$command") || return 1
-    while IFS= read -r segment; do
-        review_exec_segment_denied "$segment" && return 0
-        [ "$depth" -lt 4 ] || continue
-        shell_body=$(review_exec_shell_body "$segment")
-        if [ -n "$shell_body" ] && review_exec_command_denied_walk "$shell_body" $((depth + 1)); then
-            return 0
-        fi
-        if [ "$segment" != "$command" ] && review_exec_command_denied_walk "$segment" $((depth + 1)); then
-            return 0
-        fi
-    done <<EOF
+    local command="$1" current normalized segment shell_body
+    local work_index=0
+    local -a review_exec_worklist review_exec_seen
+    review_exec_worklist[0]="$command"
+    review_exec_seen[0]="$command"
+
+    while [ "$work_index" -lt "${#review_exec_worklist[@]}" ]; do
+        current="${review_exec_worklist[$work_index]}"
+        work_index=$((work_index + 1))
+
+        review_exec_segment_denied "$current" && return 0
+        shell_body=$(review_exec_shell_body "$current")
+        review_exec_enqueue_shorter_unseen "$shell_body" "$current"
+
+        normalized=$(review_exec_normalize_command "$current") || continue
+        while IFS= read -r segment; do
+            review_exec_segment_denied "$segment" && return 0
+            shell_body=$(review_exec_shell_body "$segment")
+            review_exec_enqueue_shorter_unseen "$shell_body" "$current"
+            review_exec_enqueue_shorter_unseen "$segment" "$current"
+        done <<EOF
 $(printf '%s' "$normalized" | tr ';|&' '\n')
 EOF
+    done
     return 1
 }
 
 review_exec_command_denied() {
-    review_exec_command_denied_walk "$1" 0
+    review_exec_command_denied_walk "$1"
 }
