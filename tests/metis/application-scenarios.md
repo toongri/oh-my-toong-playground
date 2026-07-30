@@ -97,12 +97,8 @@ These scenarios validate the metis agent's pre-planning analysis quality without
 ```
 
 **Expected:**
-- `QA Directives (Executable Only)` section exists
-- Each item includes all fields:
-  - Check
-  - Command/Assertion
-  - Expected Result
-  - Failure Signal
+- 전용 `QA Directives (Executable Only)` 섹션 신설은 요구하지 않음 — 현행 4-섹션 출력 계약(Domain Context/Findings/Questions for User/Verdict)상 QA directive 항목은 Findings(주로 Advisory)에 나타남
+- 그 안의 QA directive 항목이 template 4-필드 형식을 갖춤: Check / Command-Assertion / Expected Result(결정적 pass) / Failure Signal(결정적 fail)
 - No manual-only wording (`user confirms`, `looks good`, `manual check`)
 
 ---
