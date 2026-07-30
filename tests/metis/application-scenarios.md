@@ -20,7 +20,7 @@ These scenarios validate the metis agent's pre-planning analysis quality without
 | M-10 | Axis-Isolated Control (B3) | B1-B4 whitelist | Unobservable AC end-state => RC citing B3 only |
 | M-11 | Axis-Isolated Control (B4) | B1-B4 whitelist | Unflagged load-bearing assumption => RC citing B4 only (RED-at-HEAD control) |
 | M-12 | Convergence Regression | Batch/Ambiguity demotion | 56-AC-style batch brief => 0 blocking on demoted axes |
-| M-13 | Carried-Forward Deadlock | Option-B orchestrator-owned terminal | K=3 same-item RC => prometheus records residual + proceeds (metis stays RC, round-unaware) |
+| M-13 | Carried-Forward Deadlock | Option-B orchestrator-owned terminal | 2-round artifact cap RC => prometheus records residual + proceeds (metis stays RC, round-unaware) |
 | M-14 | S1→S4 Relocation | COMMENT-carry + plan operationalization | Batch COMMENT => per-TODO AC => momus S4 bounded convergence |
 
 ---
@@ -415,23 +415,29 @@ Scope: In-scope 배치잡 스케줄 설정만. Out-of-scope: 알림 로직 자�
 ```
 
 **라운드 카운터 모델 (prometheus 상태 — metis 호출 밖에서 모델링, 프롬프트에 절대 미포함):**
-prometheus가 위 **동일 브리프**를 3회 연속 디스패치했고 매번 동일 B4 항목(exactly-once
-미검증 가정)에서 REQUEST_CHANGES를 받았다고 가정 — `(B4, 알림 발송 로직)` 키가 K=3 도달.
-이 카운터는 prometheus가 소유하며 metis 프롬프트에는 결코 실리지 않는다(종단 카운터를
-prometheus가 소유하고 metis는 라운드를 수신하지 않는 설계 결정).
+prometheus는 아티팩트(현재 브리프의 버전)를 키로 하는 라운드 카운터를 소유한다 — 최초
+리뷰가 라운드 1, 재리뷰가 라운드 2다. 위 브리프가 라운드 1에서 디스패치되어 동일 B4
+항목(exactly-once 미검증 가정)에서 REQUEST_CHANGES를 받았다고 가정. prometheus는 라운드 1
+REQUEST_CHANGES를 받으면 먼저 블로킹 사용자-질문("기존 알림 발송 로직의 exactly-once 보장을
+어떻게 검증할 것인가")을 Interview로 해소하고, 그 답변을 반영한 수정본으로 재리뷰(라운드
+2)를 정확히 1회 디스패치한다. 라운드 2에서도 동일 B4 항목에 REQUEST_CHANGES가 재발했다고
+가정 — 이 시점에 prometheus는 3번째 라운드를 디스패치하지 않는다. 이 카운터는 prometheus가
+소유하며 metis 프롬프트에는 결코 실리지 않는다(round-unaware 설계 결정 — Option B).
 
 **Expected:**
 - (a) Residual 항목이 명명됨: "기존 알림 발송 로직의 exactly-once 미검증 가정"(B4)
 - (b) metis는 라운드 정보를 프롬프트에서 전혀 받지 않으므로 오직 브리프 내용만으로 **동일
-  B4 항목에 REQUEST_CHANGES를 반환**한다. round-unaware 불변식이 teeth를 갖는 이유는 바로
-  이것이다 — 프롬프트에 라운드 신호가 부재하므로 metis가 라운드를 조건화하는 것 자체가
-  원천 불가능하다(라운드를 프롬프트에 넣으면 round-aware 실패모드도 동일 RC를 내 구별
-  불가가 되어 테스트가 공허해진다). 이 픽스처는 실제 시스템(Option B: metis는 라운드를
-  절대 수신 안 함)에 충실하게 metis 프롬프트를 라운드-무지 상태로 유지한다
-- (c) 관측 대상은 metis의 verdict가 아니라 **prometheus의 행동**: 위 라운드 카운터 모델에서
-  K=3 도달 시 prometheus가 residual을 기록하고 terminal transition(S2 진행)함을 assert —
-  이 K=3은 metis 호출과 분리된 prometheus 상태에서 온다
-- "metis 자신은 REQUEST_CHANGES를 반환(round-unaware) — terminal은 D-1 Option B에 따라
+  B4 항목에 REQUEST_CHANGES를 반환**한다(라운드 1·라운드 2 두 디스패치 모두). round-unaware
+  불변식이 teeth를 갖는 이유는 바로 이것이다 — 프롬프트에 라운드 신호가 부재하므로 metis가
+  라운드를 조건화하는 것 자체가 원천 불가능하다(라운드를 프롬프트에 넣으면 round-aware
+  실패모드도 동일 RC를 내 구별 불가가 되어 테스트가 공허해진다). 이 픽스처는 실제 시스템
+  (Option B: metis는 라운드를 절대 수신 안 함)에 충실하게 metis 프롬프트를 라운드-무지
+  상태로 유지한다
+- (c) 관측 대상은 metis의 verdict가 아니라 **prometheus의 행동**: 라운드 2 REQUEST_CHANGES
+  이후 prometheus가 3번째 라운드를 디스패치하지 않고, residual을 carried-forward gap
+  (`Unknown + Verification Plan`)으로 기록한 뒤 terminal transition(S2 진행)함을 assert —
+  이 2-라운드 캡은 metis 호출과 분리된 prometheus 상태에서 온다
+- "metis 자신은 REQUEST_CHANGES를 반환(round-unaware) — terminal은 Option B에 따라
   prometheus-owned이며, metis의 verdict 자체가 아님"임을 명시
 
 ---
