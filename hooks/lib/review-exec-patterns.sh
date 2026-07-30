@@ -38,10 +38,14 @@ review_exec_is_conductor() {
     return 1
 }
 
-review_exec_is_active() {
-    local omt_dir="$1" session_id="$2"
-    [ "${OMT_REVIEW_ROLE:-}" = "member" ] && return 0
-    review_exec_is_conductor "$omt_dir" "$session_id"
+# Spawn-time role marker on the worker process, deliberately independent of
+# session identity: a Claude conductor spawns the default Codex finders with its
+# own OMT_SESSION_ID inherited through the environment while the nested Codex
+# session supplies its own CODEX_THREAD_ID, so those two identities disagree and
+# review_exec_session_id refuses to resolve. Callers must consult this BEFORE
+# reconciling identities, or the guard falls open on that very path.
+review_exec_is_member() {
+    [ "${OMT_REVIEW_ROLE:-}" = "member" ]
 }
 
 # Preserve executable text while masking shell syntax that is inert. Live
@@ -61,6 +65,12 @@ review_exec_normalize_command() {
                 if (c == bs && i < n) { out=out "  "; i++; continue }
                 if (c == sq && !indq) { insq=1; continue }
                 if (c == dq) { indq=!indq; continue }
+                # Double-quoted text is kept on the same terms as single-quoted
+                # text: dropping it entirely let a quoted command name ("yarn"
+                # build) reach the classifier as a bare argument list. Live
+                # substitutions inside the quotes are already split out above,
+                # so what remains here is either literal or an unexpandable
+                # variable reference, which is blanked like the single-quoted case.
                 if ((c == dl || c == "<" || c == ">") && i < n && substr($0,i+1,1) == lp) {
                     depth=1; body=""; body_sq=0; body_dq=0; i+=2
                     for (; i<=n && depth>0; i++) {
@@ -88,7 +98,7 @@ review_exec_normalize_command() {
                     continue
                 }
                 if (!insq && !indq && c == "#" && (i == 1 || prev ~ /[ \t]/)) break
-                if (indq) { out=out " "; continue }
+                if (indq) { out=out ((c == dl || c == lp || c == rp || c == bt) ? " " : c); continue }
                 out=out c
             }
             printf "%s;", out
@@ -124,6 +134,36 @@ review_exec_segment_denied() {
                 if (argument ~ /^(compile|test-compile|test|integration-test|package|verify|install|ktlint:check|detekt:check)$/) return 1
             }
             return 0
+        }
+        # Package runners (npx, pnpm exec, bun x, yarn dlx, ...) are transparent
+        # wrappers: the high-cost binary is the runner argument, not the runner.
+        # Advance past the runner and its own flags so the real target reaches
+        # high_cost. start strictly increases each round, so this terminates.
+        function strip_runner(words, start, count, tool, subcommand) {
+            while (start < count) {
+                tool=words[start]
+                sub(/^.*\//, "", tool)
+                subcommand=words[start + 1]
+                if (tool ~ /^(npx|bunx|pnpx)$/) {
+                    start++
+                    while (start <= count && words[start] ~ /^-/) {
+                        if (words[start] == "--") { start++; break }
+                        if (words[start] ~ /^(-p|--package|-c|--call)$/) start += 2
+                        else start++
+                    }
+                    continue
+                }
+                if (tool ~ /^(pnpm|npm|yarn|bun)$/ && subcommand ~ /^(exec|x|dlx)$/) {
+                    start += 2
+                    while (start <= count && words[start] ~ /^-/) {
+                        if (words[start] == "--") { start++; break }
+                        start++
+                    }
+                    continue
+                }
+                break
+            }
+            return start
         }
         function high_cost(words, start, count, tool, subcommand, third) {
             tool=words[start]
@@ -162,6 +202,8 @@ review_exec_segment_denied() {
                     break
                 }
             }
+            if (start > count) next
+            start=strip_runner(words, start, count)
             if (start > count) next
             classified=1
             if (high_cost(words, start, count)) exit 0
