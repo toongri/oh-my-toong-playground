@@ -635,7 +635,7 @@ Briefly announce "Consulting Oracle for [reason]" before invocation.
 
 ## Acceptance Criteria (Mandatory Contract)
 
-AC contract is inline (not deferred to `acceptance-criteria.md`) because split-reference rules suffer partial-read. The reference file holds per-tool Verification examples (maestro/agent-browser/curl/grep/CLI/unit) + worked example + Handling User Response that the inline contract points to but does not duplicate.
+AC contract is inline (not deferred to `acceptance-criteria.md`) because split-reference rules suffer partial-read. The reference file holds per-tool Verification examples (agent-device/agent-browser/curl/grep/CLI/unit) + worked example + Handling User Response that the inline contract points to but does not duplicate.
 
 > Full-read `acceptance-criteria.md` here — see `## Reference Full-Read Mandate`.
 
@@ -662,7 +662,7 @@ Verify at the layer the consumer observes:
 
 | Deliverable | Consumer | AC Layer |
 |---|---|---|
-| Mobile feature | End user | Maestro UI scenario |
+| Mobile feature | End user | agent-device UI scenario |
 | Web feature | End user | agent-browser UI scenario |
 | HTTP API | API client | curl + jq integration |
 | CLI command | Shell user | exec + stdout assertion |
@@ -755,7 +755,7 @@ Run on every AC before proposing to user:
 - [ ] Does an implementation exist that passes Verification vacuously? If yes, layer is too deep — move outward.
 - [ ] If citing a unit test, did you justify the unit as consumer-facing (per the three questions above)?
 
-> Per-tool Verification examples (maestro, agent-browser, curl, grep, CLI, unit) + worked example + Handling User Response → [acceptance-criteria.md](acceptance-criteria.md). Lookup-only.
+> Per-tool Verification examples (agent-device, agent-browser, curl, grep, CLI, unit) + worked example + Handling User Response → [acceptance-criteria.md](acceptance-criteria.md). Lookup-only.
 
 ---
 
@@ -920,7 +920,7 @@ Each TODO is a checkbox line `- [ ] N. Title` with body containing:
 
 Each scenario:
 - **Scenario**: `{Name} — {Purpose}`
-- **Tool**: CLI command (`curl`, `bun test`, `agent-browser`, `maestro`, `grep` — NOT prose descriptions)
+- **Tool**: CLI command (`curl`, `bun test`, `agent-browser`, `agent-device`, `grep` — NOT prose descriptions)
 - **Preconditions**: Scenario-level setup state
 - **Steps**: Numbered exact commands
 - **Expected**: Observable outcome on success

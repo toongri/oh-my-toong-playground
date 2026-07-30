@@ -18,7 +18,7 @@ The applicability gate is not "is the surface user-facing?" — it is **does the
 |------------------|-------------|--------|
 | API endpoint, route, handler, REST, HTTP | API | Verify with `curl` |
 | UI, page, component, frontend, render | Frontend | Verify with `agent-browser` (fallback: `playwright`) |
-| Mobile, app, iOS, Android, simulator, emulator | Mobile | Verify with `maestro` |
+| iOS, tvOS, macOS, Android, and Vega OS TV apps; simulator, emulator | Native app | Verify with `agent-device` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
 | Feature-flag-gated logic, payment/notification resolver internals, permission/state-transition branch — no direct UI/API entry point but touches a **risk surface** | Internal / risk surface | Do NOT skip — derive scenarios via [scenario-authoring.md] Layer A→B→C, then verify hands-on |
 | Refactoring, internal logic, utility, helper, config that touches **no risk surface** (pure refactor, no behavior/branch change) | Internal only | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — no risk surface touched) |
@@ -176,58 +176,31 @@ If any agent-browser step returns a non-zero exit code or the required assertion
 
 ---
 
-## Step 3.5: Mobile App Verification (maestro)
+## Step 3.5: Native App Verification (agent-device — iOS, tvOS, macOS, Android, Vega OS TV)
 
-**Verify mobile app behavior with `maestro` on iOS Simulator / Android Emulator.**
+**Verify iOS, tvOS, macOS, Android, and Vega OS TV app behavior through `agent-device`.**
 
 ### Procedure
 
-Mobile/RN E2E verification runs on Maestro, which exposes two surfaces. Use the **Maestro MCP** for interactive inspection while authoring or debugging a flow (e.g. `inspect_screen`, `take_screenshot`); use the **Maestro CLI** for the deterministic, evidence-producing runs in the steps below (`maestro test --format junit --output`). Do not drive both against the same device at once — they both bind port 7001 and collide (maestro issue #2921). When authoring or repairing a `.maestro` flow, keep it deterministic: stable selectors (id/text, not coordinates), condition-based waits (`extendedWaitUntil`, never fixed sleeps), and per-run state isolation (`clearState`).
+Device operation is delegated to the version-current `agent-device` skill. Before discovering, booting, or driving a target, load that skill, then consult the smallest relevant runtime `agent-device help <topic>` (for example, target discovery, platform setup, interaction, or evidence capture). Follow the returned guidance for the installed version; do not substitute remembered command syntax.
 
-1. Ensure `maestro` is installed (`maestro --version`); for iOS, Xcode + iOS Simulator; for Android, Android SDK + emulator
-2. Boot the target simulator/emulator before the test:
-   - **iOS**: derive UDID first (idempotent — `bootstatus -b` boots if needed, waits until fully booted, exits 0 if already booted):
-     ```bash
-     IOS_UDID=$(xcrun simctl list devices available -j | jq -r '.devices | to_entries[] | .value[] | select(.name=="iPhone 16") | .udid' | head -1)
-     [ -n "$IOS_UDID" ] || { echo "iPhone 16 simulator not available" >&2; exit 1; }
-     xcrun simctl bootstatus "$IOS_UDID" -b
-     export IOS_UDID
-     ```
-   - **Android**: launch in background and wait for boot with bounded polling (per `SKILL.md` § Command Execution Policy: Non-Blocking Only). `timeout` is not on default macOS userland; use bash `SECONDS` deadlines:
-     ```bash
-     export ANDROID_SERIAL="emulator-${EMULATOR_PORT:-5554}"
-     emulator -avd <name> -port "${EMULATOR_PORT:-5554}" -no-window -no-boot-anim >/tmp/emulator-${EMULATOR_PORT:-5554}.log 2>&1 &
-     SECONDS=0; until adb -s "$ANDROID_SERIAL" get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
-     SECONDS=0; until [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
-     ```
-3. Run the flow with explicit device binding and output path (`.maestro/<flow>.yaml` is Maestro's repo-root default; point at the project's actual flow path if it stores flows elsewhere). `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/<task-slug>/maestro-<flow>.xml`):
-   - iOS: `maestro --device "$IOS_UDID" test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
-   - Android: `maestro --device "$ANDROID_SERIAL" test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
-   Device binding is mandatory even in single-device sessions to keep evidence deterministic across parallel runs.
-4. Capture evidence: copy the JUnit XML at `$evidence_xml` and any referenced screenshots from `~/.maestro/tests/<run-id>/` into the evidence directory. Record the `<run-id>` from maestro stdout for traceability.
+1. Identify the changed native-app surface and the target platform. `agent-device` supports iOS, tvOS, macOS, Android, and Vega OS TV apps only — Windows and Linux native desktop apps, and TV platforms outside tvOS and Vega OS, have no supported driver here; if the surface falls outside this range, stop and tell the user instead of routing it to `agent-device`. For a supported surface, use the skill's smallest relevant discovery/setup guidance to select a compatible simulator, emulator, physical device, or TV target. Record the chosen target and its app/OS version in the QA evidence.
+2. Turn the applicable caller-provided scenarios (run verbatim) and self-authored scenarios from [scenario-authoring.md] into observable app states and assertions. Use `agent-device`'s version-matched guidance to prepare the target and execute those interactions.
+3. For each scenario, capture the evidence required by this QA cycle: screenshots or UI snapshots that show the asserted state, plus relevant app/device logs and any tool-produced run artifact. Store or reference them using the 3-tier Evidence Path Priority and retain the target identity so another QA run can reproduce the result.
+4. On failure, preserve the failure screenshot/snapshot, relevant logs, target identity, scenario steps, observed state, and the exact assertion that failed. Do not silently retry away a failure; report it under the ADVERSARIAL E2E output contract and continue only where isolation permits.
 
 ### Parallel Workspace Isolation
 
-When multiple QA runs may execute concurrently (parallel git worktrees, CI matrix), each MUST target a distinct device instance — sharing a single emulator across concurrent flows corrupts app state.
-
-- iOS: create a per-workspace device, then use the same UDID-derived boot pattern as Step 2 above:
-  ```bash
-  IOS_UDID=$(xcrun simctl create "qa-$WORKSPACE" "iPhone 16")
-  xcrun simctl bootstatus "$IOS_UDID" -b
-  export IOS_UDID
-  ```
-- Android: name a per-workspace AVD or pass `-port` to differentiate
-- Pass the device id explicitly: `maestro --device <udid> test .maestro/<flow>.yaml`
-
-**Lighter alternative**: a single shared simulator with `clearState: true` at flow start (Maestro built-in) — avoids per-workspace boot overhead, but trades off cross-flow filesystem/keychain isolation. Use when flows self-reset state.
+When multiple QA runs may execute concurrently (parallel git worktrees, CI matrix), use the skill's current isolation guidance so each run receives a distinct target or reliably isolated app state. Record the isolation choice in evidence. A shared target is allowed only when the version-matched guidance supports it and each scenario resets state sufficiently to prevent cross-run contamination.
 
 ### Verification Criteria
 
 | Criterion | Pass Condition |
 |-----------|----------------|
-| Flow completes | All maestro steps `✓`, no `✗` |
-| Element assertion | `assertVisible` / `assertNotVisible` matches expected screen state |
-| Navigation | Screen transitions reach expected destination |
+| Scenario completes | The observable end state matches the scenario's expected result |
+| Element assertion | The required UI state is visibly present or absent in captured evidence |
+| Navigation | Screen transitions reach the expected destination |
+| Evidence | Screenshots/snapshots and relevant logs or run artifacts are retained and referenced |
 
 ### Real-Device Escalation
 
@@ -235,21 +208,7 @@ Items requiring physical hardware (push delivery, biometric enrollment, camera, 
 
 ### Teardown
 
-After all maestro verification completes (pass or fail):
-
-- **iOS — parallel-workspace mode** (created via `xcrun simctl create "qa-$WORKSPACE" ...`):
-  ```bash
-  xcrun simctl shutdown "$IOS_UDID" 2>/dev/null
-  xcrun simctl delete "$IOS_UDID" 2>/dev/null
-  ```
-- **iOS — shared simulator mode** (reused existing `iPhone 16` device): no teardown — the device persists across runs by design.
-- **Android**:
-  ```bash
-  adb -s "$ANDROID_SERIAL" emu kill 2>/dev/null
-  ```
-  Fallback if the device was unreachable: `pkill -f "emulator.*-port ${EMULATOR_PORT:-5554}"`.
-
-Skip teardown only when boot was idempotent and the device was reused, not created. Leaked simulators accumulate disk space; leaked emulator processes block port reuse on subsequent runs.
+After native-app verification completes (pass or fail), use the loaded skill's version-matched teardown guidance for targets created by this QA run. Do not tear down shared targets that the guidance identifies as reusable. Record cleanup success or any retained target in the ADVERSARIAL E2E output.
 
 ---
 

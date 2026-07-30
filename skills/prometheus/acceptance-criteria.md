@@ -10,15 +10,15 @@ Read this file when you want a concrete example for a specific tool, or want to 
 
 When the Verification can be expressed as a runnable command, prefer one that is self-contained. For outcome-based or descriptive ACs where a literal command does not fit, plain prose is acceptable.
 
-### Mobile app E2E (maestro)
+### Mobile app E2E (agent-device)
 
 - [ ] **Login flow on iOS Simulator reaches Home**
-      **Verification**: `maestro --device "$IOS_UDID" test .maestro/auth/login_happy.yaml --format junit --output "$evidence_xml"`
-      (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets. If your flow does not, add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
+      **Verification**: The executor loads the `agent-device` skill before CLI use, derives the iOS-driving commands from the relevant runtime `agent-device help <topic>`, submits valid credentials on `$IOS_UDID`, and records device-visible Home plus the authenticated user identity in `$evidence_xml`.
+      (Setup/Cleanup omitted only when the executor's derived flow resets app state. Otherwise add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
 
 - [ ] **Login flow on Android Emulator reaches Home**
-      **Verification**: `maestro --device "$ANDROID_SERIAL" test .maestro/auth/login_happy.yaml --format junit --output "$evidence_xml"`
-      (Same Setup/Cleanup notes as iOS above.)
+      **Verification**: The executor loads the `agent-device` skill before CLI use, derives the Android-driving commands from the relevant runtime `agent-device help <topic>`, submits valid credentials on `$ANDROID_SERIAL`, and records device-visible Home plus the authenticated user identity in `$evidence_xml`.
+      (Same Setup/Cleanup requirements as iOS above.)
 
 > Mobile ACs assume `$IOS_UDID` / `$ANDROID_SERIAL` are exported by the QA executor — see Executor-Provided Variables in SKILL.md.
 

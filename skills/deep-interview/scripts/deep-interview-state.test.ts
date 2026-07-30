@@ -257,7 +257,11 @@ describe("deep-interview-state CLI main()", () => {
 
 	// CLI absent OMT_SESSION_ID → non-zero exit
 	test("CLI exits non-zero when OMT_SESSION_ID is empty", () => {
-		expect(() => run('init --initial-idea "x"', { OMT_SESSION_ID: "" })).toThrow();
+		const childEnv: NodeJS.ProcessEnv = { ...process.env, OMT_SESSION_ID: "" };
+		delete childEnv.CODEX_THREAD_ID;
+		expect(() =>
+			execSync(`bun ${script} init --initial-idea "x"`, { encoding: "utf8", env: childEnv }),
+		).toThrow();
 	});
 
 	// --- new-flags RED tests ---

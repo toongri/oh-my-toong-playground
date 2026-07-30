@@ -302,11 +302,12 @@ export function enumerateConfiguredMcpServers(codexHome: string): string[] {
 		return [];
 	}
 	// Single segment only: matches [mcp_servers.<name>] where <name> contains
-	// no further dot. This host's real config.toml has both
-	// [mcp_servers.maestro] and [mcp_servers.maestro.env] — the latter is a
-	// nested table (env vars for the maestro server), not a second server
-	// named "maestro.env". A looser `^\[mcp_servers\.(.+)\]$` would wrongly
-	// capture "maestro.env" as its own server name.
+	// no further dot. A config may contain both
+	// [mcp_servers.nutrition-tools] and [mcp_servers.nutrition-tools.env] — the
+	// latter is a nested table (env vars for the nutrition-tools server), not a
+	// second server named "nutrition-tools.env". A looser
+	// `^\[mcp_servers\.(.+)\]$` would wrongly capture "nutrition-tools.env"
+	// as its own server name.
 	//
 	// Quoted headers ([mcp_servers."weird name"]) are deliberately NOT
 	// matched: such a name cannot be carried safely through a
