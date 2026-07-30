@@ -34,7 +34,7 @@ Never write a PR description without sufficient context. Continue the interview 
 | Rule | Why Non-Negotiable | Common Excuse | Reality |
 |------|-------------------|---------------|---------|
 | Clearance Checklist all YES | Insufficient info leads to inaccurate PR | "I roughly get it, just write it" | Missing context leads to wrong PR |
-| Write in Korean | Project convention | "English is easier" | Project rules take priority |
+| Write body & conversation in Korean | Project convention | "English is easier" | Project rules take priority. Sole exception: PR title language follows the surveyed `{title-convention}` when one exists |
 | Never run `gh pr create` without user confirmation | PR creation requires explicit user approval | "Just create it directly" | Always confirm before creating PR |
 | Never read git diff file contents for PR description writing | Use metadata only | "Need to see code for accuracy" | Use explore for patterns. User interview is key. Exception: conflict resolution in Step 0-C requires reading file contents to analyze and resolve conflicts |
 | Never reference non-git content in PR | Reviewers can't access agent-internal files | "Memory/plan adds context" | PR is a public document; internal files are inaccessible to reviewers |
@@ -322,7 +322,7 @@ From the survey, derive and record three values for later steps:
 | `{branch-convention}` | `headRefName` field | Naming pattern (e.g., `feat/*`, `fix/*`, `{user}/*`, kebab-case topic) |
 | `{label-convention}` | `labels` field | Which labels are applied to which kinds of change (feature/fix/refactor/docs …) |
 
-**Convention exists only when a majority pattern does.** An axis counts as having a convention only when BOTH hold: (1) at least 5 PRs were surveyed, and (2) at least half of them share the pattern. With fewer than 5 surveyed PRs, mark every axis "no convention" — a handful of PRs is not a convention. For any axis without a convention, use the fallback defaults (title: conventional commit style Korean, branch: keep current name, labels: none).
+**Convention exists only when a majority pattern does.** An axis counts as having a convention only when BOTH hold: (1) at least 5 PRs were surveyed, and (2) strictly more than half of them share the pattern — an exact tie (e.g., 3-3 between two styles) means no convention. With fewer than 5 surveyed PRs, mark every axis "no convention" — a handful of PRs is not a convention. For any axis without a convention, use the fallback defaults (title: conventional commit style Korean, branch: keep current name, labels: none).
 
 **Never invent labels.** Only labels present in `gh label list` output may ever be applied. If no existing label fits, apply none.
 
@@ -438,6 +438,7 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 
 - Include a PR title along with the description body
 - Format: follow `{title-convention}` from the Step 1 PR Convention Survey — match the surveyed prefix style, language, and length
+- Title-language precedence: for the title only, the surveyed language wins over the Korean default (an English-titled repo gets an English title). The PR body and user conversation remain Korean regardless
 - Fallback (no surveyed convention): conventional commit style (`feat:`, `fix:`, `refactor:`, etc.), Korean, under 50 characters (excluding prefix)
 - Fallback example: `refactor: 주문-결제 간 이벤트 기반 아키텍처 전환`
 
@@ -610,3 +611,4 @@ Read these to calibrate PR body style before writing:
 
 - Entire PR body in Korean
 - Conversations with user also in Korean
+- PR title language follows `{title-convention}` when a surveyed convention exists; fallback is Korean
