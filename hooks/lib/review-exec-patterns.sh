@@ -135,10 +135,11 @@ review_exec_segment_denied() {
             }
             return 0
         }
-        # Package runners (npx, pnpm exec, bun x, yarn dlx, ...) are transparent
-        # wrappers: the high-cost binary is the runner argument, not the runner.
-        # Advance past the runner and its own flags so the real target reaches
-        # high_cost. start strictly increases each round, so this terminates.
+        # Runners and interpreter module invocations (npx, pnpm exec, bun x,
+        # yarn dlx, python -m, uv run, ...) are transparent wrappers: the
+        # high-cost binary is the wrapper argument, not the wrapper. Advance past
+        # the wrapper and its own flags so the real target reaches high_cost.
+        # start strictly increases each round, so this terminates.
         function strip_runner(words, start, count, tool, subcommand) {
             while (start < count) {
                 tool=words[start]
@@ -161,6 +162,17 @@ review_exec_segment_denied() {
                     }
                     continue
                 }
+                # `python -m mod` runs the named module as a script, so the
+                # module is the executable under judgment, not the interpreter.
+                if (tool ~ /^python[0-9.]*$/ && subcommand == "-m") { start += 2; continue }
+                if (tool ~ /^(uv|poetry|pipenv)$/ && subcommand == "run") {
+                    start += 2
+                    while (start <= count && words[start] ~ /^-/) {
+                        if (words[start] == "--") { start++; break }
+                        start++
+                    }
+                    continue
+                }
                 break
             }
             return start
@@ -174,7 +186,7 @@ review_exec_segment_denied() {
                 return subcommand ~ /^(test|build|install|lint)$/ || (subcommand == "run" && third ~ /^(test|build|lint)$/)
             if (tool == "bun")
                 return subcommand ~ /^(test|build|install|lint)$/ || (subcommand == "run" && third ~ /^(test|build|lint)$/)
-            if (tool ~ /^(pytest|py\.test|jest|vitest|mocha|ava|tsc|eslint|biome|ruff)$/) return 1
+            if (tool ~ /^(pytest|py\.test|unittest|jest|vitest|mocha|ava|tsc|mypy|eslint|biome|ruff)$/) return 1
             if (tool == "cargo") return subcommand ~ /^(test|build|check)$/
             if (tool == "go") return subcommand ~ /^(test|build)$/
             if (tool == "make") return subcommand ~ /^(test|build|lint)$/
