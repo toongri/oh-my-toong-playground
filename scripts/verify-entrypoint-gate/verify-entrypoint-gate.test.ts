@@ -977,6 +977,34 @@ describe("arming — overlay presence, not registration site, decides where the 
 		}
 	});
 
+	test("cd options are consumed before the directory operand", () => {
+		// `cd [-L|-P] [dir]` is bash's own usage, so `cd -P <armed>` moves the
+		// directory exactly like the bare form. Reading the token right after `cd`
+		// as the operand probed `<cwd>/-P`, found no overlay, and let the command
+		// through — the same bypass as the wrapped-cd case, wearing a flag.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-cdopt-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-cdopt-outside-"));
+		try {
+			const withOptions = [
+				`cd -P ${armed} && npx vitest run`,
+				`cd -L ${armed} && npx vitest run`,
+				`cd -P -- ${armed} && npx vitest run`,
+				`command cd -P ${armed} && npx vitest run`,
+			];
+			for (const cmd of withOptions) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
 	test("a cd target the gate cannot resolve statically does not arm on a false path", () => {
 		// Shell-variable indirection (`cd $DIR`) is an accepted gap class for this
 		// gate — the point of pinning it is that the unresolved token must not be
