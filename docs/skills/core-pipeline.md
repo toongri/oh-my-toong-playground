@@ -161,6 +161,14 @@ flowchart TB
 
 **라우팅 원칙**: 작업 유형으로 위임 대상을 결정합니다. 파일을 변경하는 구현 태스크는 sisyphus-junior에 위임하고, PASS/FAIL 판정이 필요한 검증 태스크는 sisyphus가 AC 명령을 직접 실행해 인라인으로 처리하며, 원인·아키텍처 분석은 oracle, 코드베이스 검색은 explore로 보냅니다. 직전 태스크가 어떤 경로였든 새 태스크는 자기 유형의 경로를 따릅니다.
 
+### ultragoal 최종 리뷰 수렴
+
+**대상**: 스토리별 sisyphus 실행과 자기 검증은 바뀌지 않습니다. 이 제어는 모든 스토리가 `APPROVE`된 뒤 누적 diff에 대해 실행하는 최종 `code-reviewer` dispatch에만 적용됩니다.
+
+**판정**: `CONFIRMED` `correctness` 또는 `requirement-gap` finding과 `INCONCLUSIVE` review는 완료를 막습니다. `cleanup`만 남은 `COMPLETE` review는 AI가 현재 가치와 남은 시간을 판단해 마무리할 수 있으며, 이때 남은 finding마다 정확한 `file:line`과 한 줄 요약을 보고합니다.
+
+**5회 창과 사용자 중재**: Claude와 Codex의 `PreToolUse` hook은 active `phase=pursuing` `code-reviewer` dispatch를 자동 claim/count합니다. 초기 창은 5회이며 cap 소진 또는 완료 가능 artifact의 재dispatch는 deny합니다. 계속하려면 사용자 명시 승인을 받고 `approve-review-dispatch-renewal`을 실행해 cap을 5 늘린 뒤 다음 최종 리뷰를 dispatch합니다.
+
 ---
 
 ## 6. 보조 스킬
