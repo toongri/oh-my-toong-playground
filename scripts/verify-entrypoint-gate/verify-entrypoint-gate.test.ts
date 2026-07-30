@@ -1062,6 +1062,32 @@ describe("arming — overlay presence, not registration site, decides where the 
 		}
 	});
 
+	test("a nested shell arms regardless of how its -c is spelled or what trails it", () => {
+		// `bash -lc` is the everyday login-shell spelling and `sh -euc` the strict
+		// one; both run the operand exactly like `-c`. Matching `-c` exactly meant
+		// the inner command was never extracted, so no cd target was ever seen.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-lc-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-lc-outside-"));
+		try {
+			for (const cmd of [
+				`bash -lc 'cd ${armed} && npx vitest run'`,
+				`sh -euc 'cd ${armed} && npx vitest run'`,
+				`bash -x -c 'cd ${armed} && npx vitest run'`,
+				`bash -c 'cd ${armed} && npx vitest run' scriptname`,
+			]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
 	test("a cd on the failed side of || does not become the only base for the next one", () => {
 		// `cd missing || cd protected` runs the second `cd` from the ORIGINAL
 		// directory, because the first one failed. Advancing a single cursor made
