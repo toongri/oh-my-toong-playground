@@ -182,7 +182,7 @@ All splits are chained on top of the previous split. The first PR uses `{base-br
 2. Pre-check for mixed commits: run `git log origin/{base-branch}..HEAD --name-status` and cross-reference each commit's changed files against the thesis mapping from step 1. If any single commit modifies files assigned to more than one thesis, **immediately stop and switch to the Graceful Degradation procedure** before creating any branch. Do not proceed to the separation loop.
 
 For each thesis (in stacking order):
-   a. Create branch:
+   a. Create branch — name `{branch-name}` following `{branch-convention}` from the Step 1 PR Convention Survey (fallback when no convention: descriptive kebab-case topic name):
       - First thesis: `git checkout -b {branch-name} origin/{base-branch}`
       - Subsequent theses: `git checkout -b {branch-name} {previous-split-branch}`
    b. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1: `git cherry-pick {hash1} {hash2} ...` (MUST be in chronological order — oldest commit first)
