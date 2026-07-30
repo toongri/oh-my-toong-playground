@@ -25,6 +25,7 @@ const scenarioAuthoringMd = readFileSync(
 	"utf8",
 );
 const stage3Md = readFileSync(join(import.meta.dir, "stage3-handson.md"), "utf8");
+const stage1Md = readFileSync(join(import.meta.dir, "stage1-commands.md"), "utf8");
 
 // ---------------------------------------------------------------------------
 // NEW-PROSE: cycle phase vocabulary (must FAIL before rewrite — RED)
@@ -364,15 +365,40 @@ describe("preserved: 6-category adversarial matrix intent", () => {
 });
 
 describe("preserved: inline modality drivers, no tmux", () => {
-	test("curl, agent-browser, maestro, bash drivers are named", () => {
-		expect(skillMd).toContain("curl");
-		expect(skillMd).toContain("agent-browser");
-		expect(skillMd).toContain("maestro");
-		expect(skillMd).toContain("bash");
+	test("description and driver table route mobile/native UI through agent-device", () => {
+		expect(skillMd).toContain("curl/agent-browser/agent-device/bash");
+		expect(skillMd).toContain("| Mobile / native UI | `agent-device` |");
+	});
+
+	test("mobile/native UI driving loads agent-device and uses its runtime help guidance", () => {
+		expect(skillMd).toContain("load the `agent-device` skill first");
+		expect(skillMd).toContain("`agent-device help <topic>`");
+	});
+
+	test("Quick Reference preserves the agent-device mobile/native UI route", () => {
+		const quickRefStart = skillMd.indexOf("## Quick Reference");
+		expect(quickRefStart).not.toBe(-1);
+		expect(skillMd.slice(quickRefStart)).toContain(
+			"Mobile/native UI→agent-device",
+		);
 	});
 
 	test("tmux is explicitly named as not used (contract note, not a driver)", () => {
 		expect(skillMd.toLowerCase()).toContain("no tmux");
+	});
+});
+
+describe("QA standards: adversarial scenarios are never skipped for setup cost", () => {
+	test("QA Standards require every authored scenario and its evidence regardless of setup cost", () => {
+		expect(skillMd).toContain(
+			"Setup cost—including starting multiple local apps or seeding local databases—is never a reason to skip adversarial scenarios: run every authored scenario and retain its evidence proving correct development.",
+		);
+	});
+
+	test("BASELINE rationalization rebuttal preserves the same rule", () => {
+		expect(stage1Md).toContain(
+			"Setup cost is never a reason to skip adversarial scenarios. Run every authored scenario and retain evidence proving correct development.",
+		);
 	});
 });
 
