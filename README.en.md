@@ -32,7 +32,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 - **Per-project differentiation** — override global components with project-specific conventions via upward search
 - **Orphan cleanup** — components removed from the library disappear from targets on the next sync
 - **Multi-platform support** — Claude / Gemini / Codex / OpenCode abstracted via adapters
-- **Surface-specific E2E routing** — validate web/Electron with `agent-browser`, and mobile/TV/native desktop with `agent-device`
+- **Surface-specific E2E routing** — validate web/Electron with `agent-browser`, and iOS, tvOS, macOS, Android, and Vega OS TV with `agent-device`
 
 ## Philosophy — Why This Design
 
