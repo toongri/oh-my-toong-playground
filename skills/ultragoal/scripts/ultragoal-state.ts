@@ -263,6 +263,8 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 	// `iteration >= max_iterations` budget comparison. Fall back to DEFAULT when the
 	// candidate is not a positive integer.
 	const maxItCandidate = next.max_iterations ?? prior.max_iterations;
+	const reviewDispatchUsedCandidate = next.review_dispatch_used ?? prior.review_dispatch_used;
+	const reviewDispatchCapCandidate = next.review_dispatch_cap ?? prior.review_dispatch_cap;
 	const partial: Omit<GoalState, "last_touched_at"> = {
 		outcome: next.outcome ?? prior.outcome ?? "",
 		verification_surface: next.verification_surface ?? prior.verification_surface ?? "",
@@ -294,11 +296,11 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 		// `set --phase pursuing` (no codex flag) would silently wipe the last-registered
 		// native-goal objective back to "" on every unrelated write.
 		codex_goal_objective: next.codex_goal_objective ?? prior.codex_goal_objective ?? "",
-		review_dispatch_used: validNonNegativeInteger(next.review_dispatch_used ?? prior.review_dispatch_used)
-			? (next.review_dispatch_used ?? prior.review_dispatch_used)!
+		review_dispatch_used: validNonNegativeInteger(reviewDispatchUsedCandidate)
+			? reviewDispatchUsedCandidate
 			: 0,
-		review_dispatch_cap: validNonNegativeInteger(next.review_dispatch_cap ?? prior.review_dispatch_cap)
-			? (next.review_dispatch_cap ?? prior.review_dispatch_cap)!
+		review_dispatch_cap: validNonNegativeInteger(reviewDispatchCapCandidate)
+			? reviewDispatchCapCandidate
 			: DEFAULT_REVIEW_DISPATCH_CAP,
 		approved_review_artifact_sha256:
 			next.approved_review_artifact_sha256 ?? prior.approved_review_artifact_sha256 ?? "",
