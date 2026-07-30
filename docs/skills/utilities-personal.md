@@ -16,7 +16,7 @@ HUD는 Claude Code의 statusLine에 Oh-My-Toong 운영 상태를 실시간으로
 
 ### E2E 드라이버
 
-E2E 상호작용은 대상 표면에 따라 드라이버와 스킬을 함께 선택합니다. 웹·브라우저 페이지와 Electron 데스크톱 앱에는 `agent-browser`를, iOS·Android·모바일·TV·네이티브 데스크톱 앱에는 `agent-device`를 사용합니다. 두 CLI를 실행하기 전에는 항상 해당 스킬을 먼저 로드합니다. `agent-device`의 구체적인 CLI 구문은 이 문서에 복제하지 않으며, 스킬을 로드한 뒤 설치된 버전의 runtime help에서 확인합니다. `dogfood`는 모바일 앱의 탐색적 QA를 `agent-device`로 수행하는 워크플로우입니다.
+E2E 상호작용은 대상 표면에 따라 드라이버와 스킬을 함께 선택합니다. 웹·브라우저 페이지와 Electron 데스크톱 앱에는 `agent-browser`를, iOS·tvOS·macOS·Android·Vega OS TV 앱에는 `agent-device`를 사용합니다. 두 CLI를 실행하기 전에는 항상 해당 스킬을 먼저 로드합니다. `agent-device`의 구체적인 CLI 구문은 이 문서에 복제하지 않으며, 스킬을 로드한 뒤 설치된 버전의 runtime help에서 확인합니다. `dogfood`는 모바일 앱의 탐색적 QA를 `agent-device`로 수행하는 워크플로우입니다.
 
 ---
 

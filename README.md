@@ -32,7 +32,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **프로젝트별 분화** — 상향 탐색으로 글로벌 컴포넌트 위에 프로젝트 고유 컨벤션 오버라이드
 - **고아 정리** — 라이브러리에서 제거한 컴포넌트는 다음 sync 때 대상에서도 사라짐
 - **멀티플랫폼 지원** — Claude / Gemini / Codex / OpenCode를 어댑터로 추상화
-- **표면별 E2E 라우팅** — 웹/Electron은 `agent-browser`, 모바일/TV/네이티브 데스크톱은 `agent-device`로 검증
+- **표면별 E2E 라우팅** — 웹/Electron은 `agent-browser`, iOS·tvOS·macOS·Android·Vega OS TV는 `agent-device`로 검증
 
 ## 철학 — 왜 이 설계인가
 

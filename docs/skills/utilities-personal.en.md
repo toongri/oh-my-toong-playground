@@ -16,7 +16,7 @@ The HUD displays Oh-My-Toong operational state in real time inside Claude Code's
 
 ### E2E Drivers
 
-Choose the driver and skill together based on the surface under test. Use `agent-browser` for web pages, browser pages, and Electron desktop apps; use `agent-device` for iOS, Android, mobile, TV, and native desktop apps. Always load the matching skill before invoking either CLI. This document does not duplicate `agent-device` CLI syntax: after loading the skill, consult the installed version's runtime help. `dogfood` is the workflow for exploratory mobile QA performed with `agent-device`.
+Choose the driver and skill together based on the surface under test. Use `agent-browser` for web pages, browser pages, and Electron desktop apps; use `agent-device` for iOS, tvOS, macOS, Android, and Vega OS TV apps. Always load the matching skill before invoking either CLI. This document does not duplicate `agent-device` CLI syntax: after loading the skill, consult the installed version's runtime help. `dogfood` is the workflow for exploratory mobile QA performed with `agent-device`.
 
 ---
 

@@ -18,7 +18,7 @@ The applicability gate is not "is the surface user-facing?" — it is **does the
 |------------------|-------------|--------|
 | API endpoint, route, handler, REST, HTTP | API | Verify with `curl` |
 | UI, page, component, frontend, render | Frontend | Verify with `agent-browser` (fallback: `playwright`) |
-| Native mobile, TV, desktop app; iOS, Android, simulator, emulator | Native app | Verify with `agent-device` |
+| iOS, tvOS, macOS, Android, and Vega OS TV apps; simulator, emulator | Native app | Verify with `agent-device` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
 | Feature-flag-gated logic, payment/notification resolver internals, permission/state-transition branch — no direct UI/API entry point but touches a **risk surface** | Internal / risk surface | Do NOT skip — derive scenarios via [scenario-authoring.md] Layer A→B→C, then verify hands-on |
 | Refactoring, internal logic, utility, helper, config that touches **no risk surface** (pure refactor, no behavior/branch change) | Internal only | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — no risk surface touched) |
@@ -176,15 +176,15 @@ If any agent-browser step returns a non-zero exit code or the required assertion
 
 ---
 
-## Step 3.5: Native App Verification (agent-device)
+## Step 3.5: Native App Verification (agent-device — iOS, tvOS, macOS, Android, Vega OS TV)
 
-**Verify native mobile, TV, or desktop app behavior through `agent-device`.**
+**Verify iOS, tvOS, macOS, Android, and Vega OS TV app behavior through `agent-device`.**
 
 ### Procedure
 
 Device operation is delegated to the version-current `agent-device` skill. Before discovering, booting, or driving a target, load that skill, then consult the smallest relevant runtime `agent-device help <topic>` (for example, target discovery, platform setup, interaction, or evidence capture). Follow the returned guidance for the installed version; do not substitute remembered command syntax.
 
-1. Identify the changed native-app surface and the target platform. Use the skill's smallest relevant discovery/setup guidance to select a compatible simulator, emulator, physical device, TV, or desktop target. Record the chosen target and its app/OS version in the QA evidence.
+1. Identify the changed native-app surface and the target platform. `agent-device` supports iOS, tvOS, macOS, Android, and Vega OS TV apps only — Windows and Linux native desktop apps, and TV platforms outside tvOS and Vega OS, have no supported driver here; if the surface falls outside this range, stop and tell the user instead of routing it to `agent-device`. For a supported surface, use the skill's smallest relevant discovery/setup guidance to select a compatible simulator, emulator, physical device, or TV target. Record the chosen target and its app/OS version in the QA evidence.
 2. Turn the applicable caller-provided scenarios (run verbatim) and self-authored scenarios from [scenario-authoring.md] into observable app states and assertions. Use `agent-device`'s version-matched guidance to prepare the target and execute those interactions.
 3. For each scenario, capture the evidence required by this QA cycle: screenshots or UI snapshots that show the asserted state, plus relevant app/device logs and any tool-produced run artifact. Store or reference them using the 3-tier Evidence Path Priority and retain the target identity so another QA run can reproduce the result.
 4. On failure, preserve the failure screenshot/snapshot, relevant logs, target identity, scenario steps, observed state, and the exact assertion that failed. Do not silently retry away a failure; report it under the ADVERSARIAL E2E output contract and continue only where isolation permits.
