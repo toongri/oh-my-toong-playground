@@ -662,6 +662,14 @@ export function findOverlayDir(startDir: string): string | null {
 // that happens to be inside the protected repo — the false deny this whole
 // arming rule exists to remove.
 //
+// Anything dash-led between `cd` and its operand is skipped rather than read as
+// the directory: `cd [-L|-P] [dir]` is bash's own usage (zsh adds more), and
+// taking the token right after `cd` would probe `<cwd>/-P` and arm nothing. The
+// skip is deliberately shape-based, not an option table — an unknown flag from
+// some other shell costs nothing here, while a missed one is a bypass. `cd -`
+// falls out of this as unresolvable, which is correct: OLDPWD is not knowable
+// from the command text.
+//
 // A `cd` whose target this cannot resolve statically (`cd $REPO`, `cd "$(…)"`)
 // is skipped rather than guessed: joining an unexpanded token onto cwd would
 // probe a path that does not exist, and shell-variable indirection is an
@@ -679,9 +687,9 @@ function armingCandidates(command: string, cwd: string): string[] {
 	const candidates = [cwd];
 	for (const segment of splitSegments(command)) {
 		const unwrapped = stripLeadingTransparentWrappers(stripLeadingEnvAssignments(segment));
-		const match = /^(\S+)\s+(?:--\s+)?("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(unwrapped);
+		const match = /^(\S+)((?:\s+-\S*)*)\s+("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(unwrapped);
 		if (match === null || normalizeToken(match[1]) !== "cd") continue;
-		const target = match[2].replace(/^["']|["']$/g, "");
+		const target = match[3].replace(/^["']|["']$/g, "");
 		if (target.length === 0 || target.includes("$") || target.includes("`")) continue;
 		candidates.push(resolve(cwd, target));
 	}
