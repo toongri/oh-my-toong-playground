@@ -168,9 +168,55 @@ afterEach(() => {
 	}
 });
 
+import {
+	mkdirSync as createLockDirectory,
+	utimesSync as ageLockDirectory,
+	writeFileSync as writeLockOwner,
+} from "node:fs";
+
 function rawState(): any {
 	return rawStateOf(S);
 }
+
+describe("review dispatch stale-lock recovery", () => {
+	function lockPath(): string {
+		return `${tmpDir}/ultragoal-state-${S}.json.lock`;
+	}
+
+	function createLock(owner?: unknown): void {
+		createLockDirectory(lockPath());
+		if (owner !== undefined) {
+			writeLockOwner(`${lockPath()}/owner.json`, JSON.stringify(owner), "utf8");
+		}
+	}
+
+	test("dead owner lock is recovered and reserves the first review", () => {
+		createLock({ ownerPid: 999_999_999, token: "dead-owner", startedAt: Date.now() });
+		expect(claimReviewDispatch(S)).toEqual({ allowed: true, reason: "allowed", used: 1, cap: 5 });
+	});
+
+	test("old ownerless lock is recovered", () => {
+		createLock();
+		const old = new Date(Date.now() - 31_000);
+		ageLockDirectory(lockPath(), old, old);
+		expect(claimReviewDispatch(S)).toEqual({ allowed: true, reason: "allowed", used: 1, cap: 5 });
+	});
+
+	test("fresh live owner lock is not stolen and leaves the counter unchanged", () => {
+		setGoalState(S, { phase: "planning" });
+		createLock({ ownerPid: process.pid, token: "live-owner", startedAt: Date.now() });
+		expect(claimReviewDispatch(S)).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
+		expect(rawState().review_dispatch_used).toBe(0);
+	});
+
+	test("CLI recovers a dead lock but fails closed for a fresh live lock", () => {
+		createLock({ ownerPid: 999_999_999, token: "dead-owner", startedAt: Date.now() });
+		expect(JSON.parse(runCli("claim-review-dispatch"))).toMatchObject({ allowed: true, used: 1 });
+
+		createLock({ ownerPid: process.pid, token: "live-owner", startedAt: Date.now() });
+		expect(() => runCli("claim-review-dispatch")).toThrow();
+	});
+});
 
 describe("goal state", () => {
 	// AC #1
