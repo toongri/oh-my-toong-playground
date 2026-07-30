@@ -56,14 +56,26 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 **Purpose**: A multi-AI review orchestrator called internally by `code-review`. It fans out AI finders in parallel — each with a distinct review lens (angle) — collects their independent candidate findings, and merges them into a single deduplicated candidate list.
 
 **What it does**:
-- Splits the work across 4 angles — `correctness` (correctness + exploitability; absorbed former line-scan + cross-file + security) · `regression` · `cleanup` · `requirement` (requirement fulfillment, test quality; absorbed former coverage)
+- Splits the work across 4 angles — `correctness` (correctness + exploitability; absorbed former line-scan + cross-file + security) · `regression` · `cleanup` (cleanup plus a light-touch Test value lens) · `requirement` (AC mapping or intent inference; absorbed former coverage)
 - Collects candidates from each angle finder independently
 - Deduplicates and aggregates — does not assign verdicts (CONFIRMED/PLAUSIBLE/REFUTED)
 - Returns the un-judged candidate set to the upstream `code-review` for verification
 
+**Static review only**:
+- Members, the conductor, and the in-session fallback all perform static review only. They do not run tests, builds, linters, installers/installs, or project code.
+- Candidates are grounded with the diff, source reads, and searches. When static evidence cannot resolve something, the review surfaces uncertainty or a coverage limitation instead of executing it.
+- The conductor may still run orchestration lifecycle commands: `job.ts` `start`, `collect`, `resume-member`, `results`, `stop`, and `clean`, plus `usage-summary.ts`. The static-review restriction still applies to the fallback.
+
 **Role boundary**:
 - "Conductor, not a reviewer" — does not read code itself, assign severity, or decide whether anything should be merged.
 - If all finders are unavailable (no config, CLI not installed, timeout), falls back to in-session finder mode directly.
+- `requirement` only maps supplied acceptance criteria (ACs), or infers intent from the diff when ACs are absent.
+- `cleanup` owns a light-touch Test value lens: false confidence or fake coverage, verification value versus feedback-loop cost, and implementation-coupled or unstable tests. It is not a scoring rubric.
+
+**How the execution restriction is applied**:
+- A prompt contract and dedicated Claude/Codex PreToolUse guard twins (`review-exec-guard.sh` / `codex-review-exec-guard.sh`) work together. Both guards use one shared shell invariant to judge the same high-cost commands.
+- Workers receive `OMT_REVIEW_ROLE=member` to mark member review context. A conductor is in scope only when its job metadata's `conductorSessionId` and a live job directory establish review context.
+- The restriction activates only in review context. The same high-cost command remains unblocked by these guards in a normal development session.
 
 **Process cleanup**: Each finder runs as its own worker process, reaped through three independent paths — the worker's own exit path, job cleanup (`clean`), and reclamation when a new session starts. The latter two only signal when they can confirm the process group is still this job's own, so a conductor that never reaches its own cleanup step isn't always backed up by the other paths. Which MCP servers a worker can start is also restricted by an allowlist (`mcps.allow`) in the job config; leaving it unset blocks every server this engine enumerates (opt-in, fail-closed). Its sibling setting under the same `settings:` block, `deny.skills` (which blocks specific skills a review worker can invoke), defaults the opposite way: leaving it unset blocks nothing (a no-op).
 

@@ -134,6 +134,7 @@ skills:
 - **label-edit-warn.sh** / **codex-label-edit-warn.sh**: Soft-warns (never blocks) when just-written content contains a bare invented/opaque label
 - **persistent-mode/** / **codex-persistent-mode/**: Prevents stopping when work remains incomplete (shared `makeDecision`)
 - **pre-tool-enforcer.sh** / **codex-write-guard.sh**: PreToolUse gates — TaskOutput blocking, session-ledger write guard, code-review artifact identity guard; Codex twin additionally denies dangerous commands (`rm -rf`, `git push --force`)
+- **review-exec-guard.sh** / **codex-review-exec-guard.sh**: Review-context PreToolUse guards — enforce the shared static-review execution invariant for `orchestrate-review`; block tests, builds, installs, and linters only while member or conductor review context is active
 - **codex-spawn-depth-gate.sh**: Codex PreToolUse gate capping subagent spawn depth at 2 (Claude enforces the same cap natively via `claude.yaml`'s `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`)
 
 ### Key Workflows
