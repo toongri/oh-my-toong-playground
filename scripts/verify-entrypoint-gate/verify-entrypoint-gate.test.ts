@@ -1005,6 +1005,37 @@ describe("arming — overlay presence, not registration site, decides where the 
 		}
 	});
 
+	test("a chained cd resolves each target from the directory the previous one landed in", () => {
+		// `cd <base> && cd repo && …` — the second hop is relative to where the
+		// first one landed, not to the payload's workdir. Resolving every target
+		// against the original cwd probes `<workdir>/repo`, finds nothing, and
+		// lets the command through.
+		const base = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-chain-base-"));
+		const armed = join(base, "repo");
+		mkdirSync(join(armed, ".claude", "scripts", "verify-entrypoint-gate"), { recursive: true });
+		writeFileSync(join(armed, "pnpm-workspace.yaml"), "packages: []\n");
+		writeFileSync(join(armed, "package.json"), JSON.stringify({ scripts: { verify: "echo v", test: "echo t" } }));
+		writeFileSync(
+			join(armed, ".claude", "scripts", "verify-entrypoint-gate", "verify-entrypoint-gate.local.yaml"),
+			"# armed\n",
+		);
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-chain-outside-"));
+		try {
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: `cd ${base} && cd repo && npx vitest run`, workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(output).not.toBe("");
+			expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(base, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
 	test("a cd target the gate cannot resolve statically does not arm on a false path", () => {
 		// Shell-variable indirection (`cd $DIR`) is an accepted gap class for this
 		// gate — the point of pinning it is that the unresolved token must not be
