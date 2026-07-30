@@ -8,7 +8,6 @@ These scenarios validate the metis agent's pre-planning analysis quality without
 
 | # | Scenario | Primary Technique | Validation Focus |
 |---|----------|-------------------|------------------|
-| M-1 | Intent Classification | Phase 0 classification | Correct intent type + rationale |
 | M-2 | Scope and Guardrails | Analysis framework | In-scope/out-of-scope clarity |
 | M-3 | Verifiability Gate | Verdict criteria | Unverifiable AC => REQUEST_CHANGES |
 | M-4 | AC Quality Check | Analysis guards | Observable outcomes + concrete verification |
@@ -39,22 +38,6 @@ These scenarios validate the metis agent's pre-planning analysis quality without
    부차 축이 batch/Ambiguity/verb를 B1/B3로 재라벨한 것이면 FAIL(#1 위반).
 4. **negative control**: M-7은 진짜 B1-B4 구멍이 없어야 하며 no-blocking(APPROVE 또는 no-blocking COMMENT)에
    도달해야 한다.
-
----
-
-## Scenario M-1: Intent Classification
-
-**Prompt:**
-```
-다음 요구사항 초안을 검토해줘:
-- 기존 유저 검색 API 응답이 느려서 리팩토링 필요
-- 동작은 바뀌면 안 됨
-```
-
-**Expected:**
-- Type = `Refactoring`
-- Classification rationale included
-- Behavior-preservation questions included
 
 ---
 
@@ -385,16 +368,14 @@ Scope:
   리터럴(가변 토큰 없음)이라 모호성 없음; 존재·부재 양방향이 관측 가능한 종단상태로 검증됨 — 위반 없음
 - B4 (unvalidated + unflagged load-bearing assumption): 기존 리터럴 3종 완전집합·각 파일 보유가
   사전 스캔으로 검증되고 브리프에 flag되어 첨부됨 — load-bearing 가정이 validated+flagged라 위반 없음
-- **(HEAD baseline)**: 이 AC는 10개 파일에 대한 단일 aggregate 검증(`wc -l` = 10)만 제공하고
-  파일별 개별 pass/fail 확인 경로를 제공하지 않음 — `agents/metis.md`의
-  `## AC Quality Detail Rules`가 정의하는 batch-pattern(enumeration) + aggregate-only
-  verification에 해당하여, 현재 HEAD metis는 이를 `[CERTAIN]` blocker로 `REQUEST_CHANGES`
-  할 것으로 예상됨 — 이것이 RED baseline
-- **(재설계 후)**: batch-pattern/aggregate-only는 whitelist 밖이므로 **COMMENT로 강등**되어
-  blocker가 아니다 — GREEN 판정 기준은 "metis가 batch/aggregate를 blocker로 인용하지 않음"이다
-  (`## Blocking-Axis Judgment Criterion` #1). 만약 진짜 B1-B4 구멍이 남아 RC가 나오더라도 그
-  RC가 batch 축이 아니면 batch-demotion 회귀는 없다(HEAD는 batch를 [CERTAIN] blocker로 인용,
-  재설계는 batch를 COMMENT로 강등 — 이 대조가 discriminator)
+- 이 AC는 10개 파일에 대한 단일 aggregate 검증(`wc -l` = 10)만 제공하고 파일별 개별
+  pass/fail 확인 경로를 제공하지 않음 — `agents/metis.md`의 `## AC Quality Detail Rules`가
+  정의하는 batch-pattern(enumeration) + aggregate-only verification에 해당해 `[CERTAIN]`
+  severity로 표시된다. 다만 `[CERTAIN]`은 verifiability severity일 뿐 blocking authority가
+  아니며(오직 B1-B4만 gate), batch-pattern/aggregate-only는 whitelist 밖이므로
+  **COMMENT로 강등**되어 blocker가 아니다 — GREEN 판정 기준은 "metis가 batch/aggregate를
+  blocker로 인용하지 않음"이다(`## Blocking-Axis Judgment Criterion` #1). 진짜 B1-B4
+  구멍이 남아 RC가 나오더라도 그 RC의 인용 축이 batch가 아니면 통과다.
 - 명시: 이 픽스처의 discriminating power는 aggregate-only batch AC에 있다 — per-file
   granularity(파일별 개별 확인 문구)를 넣으면 현재 metis도 이미 demote하므로 회귀를
   증명하지 못한다.
