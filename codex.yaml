@@ -81,6 +81,34 @@ hooks:
     - component: codex-label-commit-gate.sh
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
+    # verify-entrypoint-gate — 무필터 test/lint deny + entrypoint 화이트리스트.
+    # 이 훅만 전역에 있는 이유가 다른 항목들과 다르다. 나머지는 "루트 claude.yaml이
+    # 전역이니 Codex도 전역"이라는 패리티 미러지만, 이건 Claude 짝이 여전히
+    # projects/acme-home/claude.yaml에 프로젝트 스코프로 남아 있다. Codex만
+    # 전역인 건 착지점이 달라서다 — Claude는 gitignore된 settings.local.json에
+    # 떨어지지만, Codex의 프로젝트 등록은 대상 레포가 git으로 추적하는
+    # `<repo>/.codex/hooks.json`에 떨어지고 어댑터가 그 파일의 `hooks` 키를 통째로
+    # 교체하므로(tools/adapters/codex.ts의 updateSettings) 팀이 커밋해둔 훅을
+    # 덮어쓴다. 실제로 그렇게 됐다: acme-home 워크트리 8곳에서 팀의
+    # rules-injector 훅 4종이 지워졌다.
+    #
+    # 전역 등록으로 acme-home 안에서도 정상 발동한다 — codex-cli 0.145.0
+    # 실측(격리 CODEX_HOME 4 arm): 전역 hooks.json과 레포 hooks.json은 합쳐져
+    # 둘 다 실행된다(레포 쪽은 config.toml에 그 프로젝트가 trust_level = "trusted"로
+    # 등록돼 있을 때만 산다).
+    #
+    # 전역 등록이라 이 훅은 모든 레포에서 호출되지만, 판정 여부는 배포된 오버레이
+    # 정책(verify-entrypoint-gate.local.yaml) 존재가 결정한다 —
+    # scripts/verify-entrypoint-gate/index.ts의 findOverlayDir. 오버레이가 없는
+    # 레포(pnpm 워크스페이스가 아예 없는 곳 포함)는 판정 없이 통과시킨다.
+    #
+    # command의 `.codex/`는 어댑터가 배포 루트 기준 절대경로로 재작성한다
+    # (codex.ts:832). 이 파일의 타겟은 루트 sync.yaml의 `~`이므로
+    # $HOME/.codex/scripts/... 로 착지한다 — 스크립트 전역 단일본의 실제 위치이며,
+    # 프로젝트 스코프 시절 필요했던 따옴표 분할 회피 트릭도 이제 필요 없다.
+    - command: "bun run .codex/scripts/verify-entrypoint-gate/index.ts"
+      matcher: "Bash|bash|exec_command|shell_command"
+      timeout: 10
     # NOT a Claude<->Codex hook-parity mirror -- Claude enforces the same
     # nested-spawn-depth policy natively via the CLAUDE_CODE_MAX_SUBAGENT_
     # SPAWN_DEPTH env var, so it has no matching hook. This hook exists only
