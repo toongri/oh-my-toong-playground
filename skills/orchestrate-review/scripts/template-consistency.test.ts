@@ -308,3 +308,85 @@ describe("dispatch JSON-field binding (SKILL.md Step 5 <-> serializeReviewContex
 		).toEqual(sortedActual);
 	});
 });
+
+const ORCHESTRATE_REVIEW_DIR = join(REPO_ROOT, "skills", "orchestrate-review");
+const MEMBER_ROLE_PROMPTS = [
+	"correctness",
+	"regression",
+	"cleanup",
+	"requirement",
+	"default",
+] as const;
+const MEMBER_PROMPT_DIR = join(ORCHESTRATE_REVIEW_DIR, "scripts", "prompts");
+const IN_SESSION_FALLBACK_PROMPT = join(ORCHESTRATE_REVIEW_DIR, "prompts", "default.md");
+const ORCHESTRATE_REVIEW_SKILL = join(ORCHESTRATE_REVIEW_DIR, "SKILL.md");
+const ORCHESTRATE_REVIEW_CONFIG = join(
+	ORCHESTRATE_REVIEW_DIR,
+	"orchestrate-review.config.yaml",
+);
+
+function expectStaticReviewOnlyContract(content: string, fixture: string): void {
+	expect(
+		content,
+		`${fixture} must state the recognizable STATIC REVIEW ONLY contract.`,
+	).toMatch(/\bSTATIC REVIEW ONLY\b/i);
+}
+
+describe("정적 리뷰와 Test value 책임 경계 계약", () => {
+	it("`all member prompts and the in-session fallback declare STATIC REVIEW ONLY`", () => {
+		// Keep this list explicit: adding a member prompt without the contract must fail.
+		for (const member of MEMBER_ROLE_PROMPTS) {
+			const fixture = `scripts/prompts/${member}.md`;
+			expectStaticReviewOnlyContract(
+				readFileSync(join(MEMBER_PROMPT_DIR, `${member}.md`), "utf-8"),
+				fixture,
+			);
+		}
+
+		expectStaticReviewOnlyContract(
+			readFileSync(IN_SESSION_FALLBACK_PROMPT, "utf-8"),
+			"prompts/default.md",
+		);
+	});
+
+	it("`cleanup owns one light-touch Test value lens with the approved categories`", () => {
+		const cleanup = readFileSync(join(MEMBER_PROMPT_DIR, "cleanup.md"), "utf-8");
+		const testValueHeadings = cleanup.match(/^#{1,6}\s+Test value\b/gim) ?? [];
+
+		expect(testValueHeadings, "cleanup must own exactly one Test value lens.").toHaveLength(1);
+		expect(cleanup).toMatch(/false confidence|fake coverage/i);
+		expect(cleanup).toMatch(/verification value/i);
+		expect(cleanup).toMatch(/feedback[- ]loop cost/i);
+		expect(cleanup).toMatch(/implementation[- ]coupled|unstable tests?/i);
+	});
+
+	it("`requirement remains pure AC mapping while preserving implementation-or-test evidence`", () => {
+		const requirement = readFileSync(join(MEMBER_PROMPT_DIR, "requirement.md"), "utf-8");
+
+		expect(requirement).not.toMatch(/^#{1,6}\s+Test quality\b/im);
+		expect(requirement).not.toMatch(/test-quality issues?/i);
+		expect(requirement).toContain("implements and/or tests it");
+	});
+
+	it("`fallbacks, conductor, and configuration synchronize the static-only responsibility split`", () => {
+		const dispatchFallback = readFileSync(join(MEMBER_PROMPT_DIR, "default.md"), "utf-8");
+		const inSessionFallback = readFileSync(IN_SESSION_FALLBACK_PROMPT, "utf-8");
+		const skill = readFileSync(ORCHESTRATE_REVIEW_SKILL, "utf-8");
+		const config = readFileSync(ORCHESTRATE_REVIEW_CONFIG, "utf-8");
+
+		for (const [fixture, content] of [
+			["scripts/prompts/default.md", dispatchFallback],
+			["prompts/default.md", inSessionFallback],
+			["SKILL.md", skill],
+			["orchestrate-review.config.yaml", config],
+		] as const) {
+			expectStaticReviewOnlyContract(content, fixture);
+			expect(content, `${fixture} must assign Test value to cleanup.`).toMatch(
+				/cleanup[^\n]{0,160}Test value|Test value[^\n]{0,160}cleanup/i,
+			);
+			expect(content, `${fixture} must keep requirement focused on AC mapping.`).toMatch(
+				/requirement[^\n]{0,160}(AC mapping|acceptance criteria)|(AC mapping|acceptance criteria)[^\n]{0,160}requirement/i,
+			);
+		}
+	});
+});

@@ -106,12 +106,48 @@ function addLibSourceRoot(roots: LibSourceRoots, location: string, sourcePath: s
 	set.add(sourcePath);
 }
 
+/**
+ * Per-platform set of component displayNames OMT actually resolved a real
+ * source for THIS run — the name-provenance guard `rewritePlatformPaths`
+ * needs for a subtree it must not walk unrestricted. The general form of
+ * `codexSkillNames` (tools/sync.ts:1382), which already scopes
+ * `.agents/skills/<name>` this same way. Two subtrees share this shape today:
+ * `hooks/` (recursively copies a whole bundled directory, README.md and all,
+ * like a skill does) and `rules/` (a flat `<name>.md` per item, sharing its
+ * root with any hand-authored non-OMT `.md` at the same level). Both need the
+ * same protection: a team-owned file sharing that root (e.g. a hand-authored
+ * `.codex/hooks/README.md` or `.codex/rules/conventions.md`) must never be
+ * clobbered by a rewrite it never asked for.
+ */
+export type OwnedHookNames = Map<Platform, Set<string>>;
+/** Same shape as OwnedHookNames, scoping the `rules/` subtree instead. */
+export type OwnedRuleNames = Map<Platform, Set<string>>;
+
+/** Record a resolved displayName under a platform in an owned-name accumulator (hooks or rules). */
+function addOwnedName(names: OwnedHookNames | OwnedRuleNames, platform: Platform, displayName: string): void {
+	let set = names.get(platform);
+	if (!set) {
+		set = new Set<string>();
+		names.set(platform, set);
+	}
+	set.add(displayName);
+}
+
 // ---------------------------------------------------------------------------
 // syncCategory
 // ---------------------------------------------------------------------------
 
 /** All categories handled by syncCategory. */
 export const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
+
+/**
+ * Platforms whose adapters actually write hooks. Hooks are not a sync.yaml
+ * category — they arrive through `{platform}.yaml` — so SUPPORTED_CATEGORIES
+ * has no entry to consult for them, and this is the equivalent table for that
+ * one axis. OpenCode's adapter refuses the whole hooks section (warn + skip),
+ * so nothing under `.opencode/hooks/` is ever OMT's to rewrite.
+ */
+const HOOK_DEPLOYING_PLATFORMS: Platform[] = ["claude", "gemini", "codex"];
 
 /**
  * Single source of truth for "does this project deploy anything into <path>/.claude/?".
@@ -459,6 +495,7 @@ export async function syncPlatformConfigs(
 	adapters: AdapterMap,
 	rootDir: string,
 	libSourceRoots?: LibSourceRoots,
+	ownedHookNames?: OwnedHookNames,
 ): Promise<void> {
 	for (const platform of KNOWN_PLATFORMS) {
 		const merged = await parseAndMergePlatformYaml(yamlDir, platform);
@@ -502,6 +539,13 @@ export async function syncPlatformConfigs(
 						// Record the hook SOURCE so syncLib deploys any @lib/ deps it imports.
 						if (libSourceRoots) {
 							addLibSourceRoot(libSourceRoots, platform, resolved.path);
+						}
+						// Record the hook's deployed NAME so rewritePlatformPaths can scope
+						// its `hooks/` walk to entries OMT actually resolved this run.
+						// Resolving a component is not deploying one: a platform whose
+						// adapter skips hooks outright owns nothing under its `hooks/`.
+						if (ownedHookNames && HOOK_DEPLOYING_PLATFORMS.includes(platform)) {
+							addOwnedName(ownedHookNames, platform, resolved.displayName);
 						}
 					}
 				}
@@ -1347,11 +1391,35 @@ export async function syncLib(
  * names exactly the skills OMT deployed to `.agents/skills` THIS run — the
  * only names this function is allowed to walk there; anything else under
  * `.agents/skills` (e.g. a foreign `plannotator-compound`) is left untouched.
+ *
+ * Within a single-root platform's own root (and within `.codex/` itself), the
+ * walk still cleaves by content type ONLY (`.md`, per collectMdFiles) — EXCEPT
+ * for two subtrees, `hooks/` (recursively copies a whole bundled directory,
+ * README.md and all, the same way `.agents/skills/<name>` does) and `rules/`
+ * (a flat `<name>.md` per item, sharing its root with any hand-authored
+ * non-OMT `.md` at the same level). `ownedHookNames`/`ownedRuleNames` scope
+ * those two subtrees to entries OMT actually resolved a component for THIS
+ * run — the general form of `codexSkillNames` — so a team-owned file sharing
+ * that root (e.g. a hand-authored `.codex/hooks/README.md` or
+ * `.codex/rules/conventions.md` with no corresponding OMT source) is never
+ * opened. Both default to fail-closed (an empty set, same model as
+ * `codexSkillNames`): a caller — a direct unit-level call with no
+ * `processYaml` around it, or `processYaml` itself when this run resolved
+ * zero components for that platform — that doesn't pass owned names walks
+ * NOTHING in `hooks/`/`rules/`, never everything. There is no manifest for
+ * either subtree (they aren't in CATEGORIES's deploy-tracking), so
+ * "resolved by OMT this run" is the only provenance signal available, and
+ * defaulting to unrestricted would silently clobber a team-owned file the
+ * instant the platform becomes rewrite-eligible for ANY reason — including
+ * one that resolves zero hooks/rules at all (e.g. a `scripts.items` entry
+ * naming the platform, with no codex.yaml/rules items in the same run).
  */
 export async function rewritePlatformPaths(
 	targetPath: string,
 	platform: Platform,
 	codexSkillNames: ReadonlySet<string> = new Set(),
+	ownedHookNames: ReadonlySet<string> = new Set(),
+	ownedRuleNames: ReadonlySet<string> = new Set(),
 ): Promise<void> {
 	const rules = PLATFORM_REWRITE_RULES[platform];
 	// Claude's rule table is empty by design (tools/lib/rewrite-rules.ts) — this
@@ -1362,7 +1430,14 @@ export async function rewritePlatformPaths(
 	if (rules.length === 0) return;
 
 	if (platform !== "codex") {
-		await rewriteFilesUnder(path.join(targetPath, `.${platform}`), rules);
+		await rewriteFilesUnder(
+			path.join(targetPath, `.${platform}`),
+			rules,
+			[],
+			undefined,
+			ownedHookNames,
+			ownedRuleNames,
+		);
 		return;
 	}
 
@@ -1372,7 +1447,14 @@ export async function rewritePlatformPaths(
 	// survives (e.g. `.system`) is a foreign resident this function must never
 	// touch.
 	const codexDir = path.join(targetPath, ".codex");
-	await rewriteFilesUnder(codexDir, rules, [path.join(codexDir, "skills")]);
+	await rewriteFilesUnder(
+		codexDir,
+		rules,
+		[path.join(codexDir, "skills")],
+		undefined,
+		ownedHookNames,
+		ownedRuleNames,
+	);
 
 	// Root 2: .agents/skills/<name>, manifest-owned only. For each owned skill,
 	// also bake the contextual ${CLAUDE_SKILL_DIR} token to that skill's
@@ -1489,20 +1571,103 @@ export async function formatDeployedRoots(
 }
 
 /**
+ * True when `relPath` (a candidate file's path relative to a platform's
+ * config root) sits inside the `hooks/` subtree — one of the two subtrees
+ * (the other being `rules/`, see isUnderRulesDir below) that `rewriteFilesUnder`
+ * scopes to provenance (ownedHookNames / ownedRuleNames), never walking it
+ * unrestricted. Every other subtree (agents, scripts, skills-in-single-root,
+ * commands) keeps the pre-existing unrestricted walk: narrowing them too
+ * would break the coarse "this platform is a real deploy target this run, so
+ * walk whatever its root holds" contract several `processYaml` tests pin down
+ * for a project whose specific component resolution fails but whose PLATFORM
+ * is still genuinely eligible (tools/sync.test.ts: "still rewrites deployed
+ * codex md via feature-platforms default", "rewrites deployed md for a
+ * section-level non-claude platform override").
+ */
+function isUnderHooksDir(relPath: string): boolean {
+	return relPath.split(path.sep)[0] === "hooks";
+}
+
+/**
+ * True when a `hooks/`-subtree relPath (e.g. `hooks/sample/README.md`) names
+ * an entry OMT actually resolved a hook component for THIS run. Prefix match:
+ * a hook deploys as a whole directory (README.md and all), so ownership
+ * extends to every file under `hooks/<name>/`.
+ */
+function isOwnedHookPath(relPath: string, ownedHookNames: ReadonlySet<string>): boolean {
+	for (const name of ownedHookNames) {
+		const entry = path.join("hooks", name);
+		if (relPath === entry || relPath.startsWith(entry + path.sep)) return true;
+	}
+	return false;
+}
+
+/**
+ * True when `relPath` sits inside the `rules/` subtree — the second subtree
+ * `rewriteFilesUnder` scopes to provenance (see isUnderHooksDir above). A
+ * rules item always deploys as a single flat `<name>.md` (syncRulesDirect /
+ * ClaudeAdapter.syncRulesDirect never write a directory), so it shares its
+ * root with any hand-authored non-OMT `.md` sitting at the same level (e.g. a
+ * team's own `.codex/rules/conventions.md`) with no directory boundary to
+ * tell them apart — the same clobber risk `hooks/` has, on a flat root
+ * instead of a nested one.
+ */
+function isUnderRulesDir(relPath: string): boolean {
+	return relPath.split(path.sep)[0] === "rules";
+}
+
+/**
+ * True when a `rules/`-subtree relPath (e.g. `rules/my-rule.md`) names an
+ * entry OMT actually resolved a rule component for THIS run. Exact match
+ * (unlike isOwnedHookPath's prefix match): a rule is always exactly one file,
+ * `rules/<name>.md`, never a directory.
+ */
+function isOwnedRulePath(relPath: string, ownedRuleNames: ReadonlySet<string>): boolean {
+	for (const name of ownedRuleNames) {
+		if (relPath === path.join("rules", `${name}.md`)) return true;
+	}
+	return false;
+}
+
+/**
  * Apply `rules` (plus an optional per-file `extraTransform`, e.g. the
  * ${CLAUDE_SKILL_DIR} bake) to every rewrite-candidate file under `dir`,
  * writing back only files whose content actually changed. This IS the "does
  * any rule match" check (D2): a file no rule (and no extraTransform) touches
  * comes back identical and is never written.
+ *
+ * `ownedHookNames`/`ownedRuleNames` scope the `hooks/`/`rules/` subtrees
+ * (see isUnderHooksDir/isOwnedHookPath and isUnderRulesDir/isOwnedRulePath
+ * above) to entries OMT actually resolved a component for THIS run. Both
+ * default to fail-closed (an empty set): a subtree gated by an owned-names
+ * set that has nothing in it — because the caller never passed one, not
+ * because it deliberately declared zero components — walks nothing rather
+ * than everything. There is no manifest or reconciliation mechanism for
+ * hooks/rules (they aren't in CATEGORIES's deploy-tracking), so "resolved by
+ * OMT this run" is the only provenance signal that exists; defaulting open
+ * would mean the one hand-authored file a team keeps at that root (e.g.
+ * `.codex/hooks/README.md`, `.codex/rules/conventions.md`) is silently
+ * rewritten the instant the platform becomes eligible for any unrelated
+ * reason (e.g. a `scripts.items` entry with `platforms: [claude, codex]`),
+ * even though this run resolved zero real hooks/rules for it.
  */
 async function rewriteFilesUnder(
 	dir: string,
 	rules: readonly RewriteRule[],
 	excludeDirs: string[] = [],
 	extraTransform?: (content: string) => string,
+	ownedHookNames: ReadonlySet<string> = new Set(),
+	ownedRuleNames: ReadonlySet<string> = new Set(),
 ): Promise<void> {
 	const files = await collectMdFiles(dir, excludeDirs);
 	for (const filePath of files) {
+		const relPath = path.relative(dir, filePath);
+		if (isUnderHooksDir(relPath) && !isOwnedHookPath(relPath, ownedHookNames)) {
+			continue;
+		}
+		if (isUnderRulesDir(relPath) && !isOwnedRulePath(relPath, ownedRuleNames)) {
+			continue;
+		}
 		let content: string;
 		try {
 			content = await fs.readFile(filePath, "utf8");
@@ -1692,6 +1857,12 @@ export async function processYaml(
 	// than threaded out of syncCategory's local deployedNames map — this loop
 	// already resolves every item, so a second plumbing path would only drift.
 	const codexSkillNames = new Set<string>();
+	// Rules this sync.yaml declares, per non-claude platform, keyed by DEPLOYED
+	// displayName (`.{platform}/rules/<name>.md`) — the same model as
+	// codexSkillNames/ownedHookNames, feeding rewritePlatformPaths's `rules/`
+	// provenance gate (see isOwnedRulePath) so a team-owned `.codex/rules/*.md`
+	// OMT never deployed is never opened by the rewrite walk.
+	const ownedRuleNames: OwnedRuleNames = new Map();
 	for (const category of CATEGORIES) {
 		const section = syncYaml[category];
 		if (!section || !Array.isArray(section.items) || section.items.length === 0) continue;
@@ -1712,6 +1883,30 @@ export async function processYaml(
 					);
 					if (!("error" in resolved)) {
 						codexSkillNames.add(resolved.displayName);
+					}
+				}
+			}
+			if (category === "rules") {
+				const componentRef = typeof item === "string" ? item : (item.component ?? "");
+				if (componentRef) {
+					const resolved = resolveComponentPath(
+						componentRef,
+						category,
+						rootDir,
+						context.projectDir || undefined,
+					);
+					if (!("error" in resolved)) {
+						for (const platform of platforms) {
+							if (platform === "claude") continue;
+							// Ownership follows what can actually be deployed, not what was
+							// declared. syncCategory skips an unsupported platform×category
+							// pair outright (gemini has no rules support), so claiming the
+							// name here would hand the rewrite walk a file OMT never wrote —
+							// a hand-authored .gemini/rules/<same name>.md would be mutated
+							// by a run that deployed no rule at all.
+							if (!SUPPORTED_CATEGORIES[platform]?.has("rules")) continue;
+							addOwnedName(ownedRuleNames, platform, resolved.displayName);
+						}
 					}
 				}
 			}
@@ -1755,6 +1950,9 @@ export async function processYaml(
 			// Each worktree's deploy is independent — fresh source-root accumulator so
 			// syncLib targets this deployRoot's .{platform}/lib only.
 			const libSourceRoots: LibSourceRoots = new Map();
+			// Fresh per-worktree too — the hook displayNames rewritePlatformPaths
+			// scopes its `hooks/` walk to (see OwnedHookNames above).
+			const ownedHookNames: OwnedHookNames = new Map();
 
 			// Per-worktree dry-run target line (AC6.1): list this worktree, never the
 			// container, as a deploy target.
@@ -1769,7 +1967,15 @@ export async function processYaml(
 				await fs.mkdir(path.join(deployRoot, ".claude"), { recursive: true });
 			}
 
-			await syncPlatformConfigs(context, deployRoot, yamlDir, adapters, rootDir, libSourceRoots);
+			await syncPlatformConfigs(
+				context,
+				deployRoot,
+				yamlDir,
+				adapters,
+				rootDir,
+				libSourceRoots,
+				ownedHookNames,
+			);
 
 			// Sync 5 categories
 			for (const category of CATEGORIES) {
@@ -1823,7 +2029,27 @@ export async function processYaml(
 					if (context.dryRun) {
 						logDry(`Rewrite .claude/ paths -> .${platform}/ in ${platformDir}/`);
 					} else {
-						await rewritePlatformPaths(deployRoot, platform, codexSkillNames);
+						// Fail-closed, explicitly: `.get(platform)` is undefined whenever
+						// this run resolved zero real hooks/rules for this platform —
+						// including the case that motivated this fix, where the platform
+						// became eligible ONLY through an unrelated category (e.g. a
+						// scripts.items entry with `platforms: [claude, codex]`) and never
+						// even ran syncPlatformConfigs's hook loop or a rules item for
+						// codex. `?? new Set()` (redundant with rewritePlatformPaths's own
+						// fail-closed default, kept here so the intent reads at the call
+						// site) means that case walks NOTHING in hooks/rules — never a
+						// carte-blanche rewrite of a team-owned `.codex/hooks/README.md` or
+						// `.codex/rules/conventions.md` this run never touched. Every other
+						// subtree (agents, scripts, skills-in-single-root, commands) still
+						// gets the pre-existing unrestricted walk — see rewriteFilesUnder's
+						// isUnderHooksDir doc comment.
+						await rewritePlatformPaths(
+							deployRoot,
+							platform,
+							codexSkillNames,
+							ownedHookNames.get(platform) ?? new Set<string>(),
+							ownedRuleNames.get(platform) ?? new Set<string>(),
+						);
 					}
 				}
 			}

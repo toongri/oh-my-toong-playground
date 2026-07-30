@@ -620,6 +620,22 @@ describe("loadConfig", () => {
 // everything else produces "" — and, critically, "allow" never appears
 // anywhere in any output this function can produce.
 // -----------------------------------------------------------------------------
+// Every processHookInput fixture below deploys an overlay file, because the
+// gate arms on overlay presence (index.ts's findOverlayDir): a workspace
+// without one is passed through before any judgment runs, so a fixture that
+// omits it would assert "" for the wrong reason. The overlay is written
+// comment-only (parses to no keys), so every policy key still falls through
+// to base — these fixtures exercise base policy, not an overlay divergence.
+function makeArmedWorkspace(prefix: string): string {
+	const root = mkdtempSync(join(tmpdir(), prefix));
+	writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+	writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
+	const overlayDir = join(root, ".claude", "scripts", "verify-entrypoint-gate");
+	mkdirSync(overlayDir, { recursive: true });
+	writeFileSync(join(overlayDir, "verify-entrypoint-gate.local.yaml"), "# armed; every key falls through to base\n");
+	return root;
+}
+
 describe("processHookInput", () => {
 	const moduleDir = fileURLToPath(new URL(".", import.meta.url));
 
@@ -646,31 +662,38 @@ describe("processHookInput", () => {
 	});
 
 	test("end-to-end deny: emits a PreToolUse deny envelope, never allow", () => {
-		const output = processHookInput(
-			JSON.stringify({ tool_name: "Bash", tool_input: { command: "npx vitest run" }, cwd: "/tmp" }),
-			moduleDir,
-		);
-		const parsed = JSON.parse(output);
-		expect(parsed.hookSpecificOutput.hookEventName).toBe("PreToolUse");
-		expect(parsed.hookSpecificOutput.permissionDecision).toBe("deny");
-		expect(typeof parsed.hookSpecificOutput.permissionDecisionReason).toBe("string");
-		expect(output).not.toContain('"allow"');
+		const root = makeArmedWorkspace("verify-entrypoint-gate-deny-");
+		try {
+			const output = processHookInput(
+				JSON.stringify({ tool_name: "Bash", tool_input: { command: "npx vitest run" }, cwd: root }),
+				moduleDir,
+			);
+			const parsed = JSON.parse(output);
+			expect(parsed.hookSpecificOutput.hookEventName).toBe("PreToolUse");
+			expect(parsed.hookSpecificOutput.permissionDecision).toBe("deny");
+			expect(typeof parsed.hookSpecificOutput.permissionDecisionReason).toBe("string");
+			expect(output).not.toContain('"allow"');
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	test("passthrough emits no output at all — never an allow envelope", () => {
-		const output = processHookInput(
-			JSON.stringify({ tool_name: "Bash", tool_input: { command: "pnpm start" }, cwd: "/tmp" }),
-			moduleDir,
-		);
-		expect(output).toBe("");
+		const root = makeArmedWorkspace("verify-entrypoint-gate-pass-");
+		try {
+			const output = processHookInput(
+				JSON.stringify({ tool_name: "Bash", tool_input: { command: "pnpm start" }, cwd: root }),
+				moduleDir,
+			);
+			expect(output).toBe("");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	test("a real workspace root round-trip: verify at the root passes through, denies elsewhere", () => {
-		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-e2e-"));
+		const root = makeArmedWorkspace("verify-entrypoint-gate-e2e-");
 		try {
-			writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
-			writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
-
 			const passOutput = processHookInput(
 				JSON.stringify({ tool_name: "Bash", tool_input: { command: "pnpm verify" }, cwd: root }),
 				moduleDir,
@@ -710,10 +733,7 @@ describe("processHookInput — Codex payload support", () => {
 	const moduleDir = fileURLToPath(new URL(".", import.meta.url));
 
 	function makeWorkspace(): string {
-		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-codex-e2e-"));
-		writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
-		writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
-		return root;
+		return makeArmedWorkspace("verify-entrypoint-gate-codex-e2e-");
 	}
 
 	test("exec_command + cmd + workdir: `pnpm verify backend --force` denies — the real dolomite-awe incident shape", () => {
@@ -834,6 +854,383 @@ describe("processHookInput — Codex payload support", () => {
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 			rmSync(decoy, { recursive: true, force: true });
+		}
+	});
+});
+
+// -----------------------------------------------------------------------------
+// Arming — the hook registers globally ($HOME/.codex/hooks.json), so it is
+// invoked in every repo; what decides whether it JUDGES is the presence of a
+// deployed overlay. These tests pin that boundary from both sides: the same
+// command, in the same workspace, must flip between passthrough and deny on
+// overlay presence alone.
+// -----------------------------------------------------------------------------
+describe("arming — overlay presence, not registration site, decides where the gate judges", () => {
+	const moduleDir = fileURLToPath(new URL(".", import.meta.url));
+
+	test("the same denied command passes through when no overlay is deployed", () => {
+		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-unarmed-"));
+		try {
+			writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+			writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
+			const payload = JSON.stringify({
+				tool_name: "Bash",
+				tool_input: { command: "npx vitest run" },
+				cwd: root,
+			});
+
+			expect(processHookInput(payload, moduleDir)).toBe("");
+
+			// Arm the SAME workspace and re-run the SAME payload — only the
+			// overlay changed, so a deny here proves the passthrough above was
+			// the arming gate and not some unrelated shape mismatch.
+			const overlayDir = join(root, ".claude", "scripts", "verify-entrypoint-gate");
+			mkdirSync(overlayDir, { recursive: true });
+			writeFileSync(join(overlayDir, "verify-entrypoint-gate.local.yaml"), "# armed\n");
+
+			expect(JSON.parse(processHookInput(payload, moduleDir)).hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("a repo with no pnpm workspace is passed through instead of fail-closed denied", () => {
+		// The regression this arming rule exists to prevent: a global
+		// registration made this gate fire in every repo, and outside a pnpm
+		// workspace decide() fail-closes — so `pytest` in a python repo and
+		// `npx tsc` in a non-pnpm node repo were both denied with a
+		// "run it inside a pnpm workspace" reason that does not apply there.
+		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-foreign-repo-"));
+		try {
+			for (const command of ["pytest -q", "npx tsc --noEmit", "uv run pytest"]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: root }),
+					moduleDir,
+				);
+				expect(output).toBe("");
+			}
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("a command that cd's into an armed workspace from outside it is still armed", () => {
+		// Arming reads the directory the command actually RUNS in, so a leading
+		// `cd <armed workspace>` moves that target even when the payload's own
+		// workdir sits outside. Without this, `cd <repo> && npx vitest` returns
+		// before decide() and never reaches the compound-command deny that this
+		// exact shape is otherwise caught by — a bypass of the gate's whole point.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-cd-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-cd-outside-"));
+		try {
+			for (const cmd of [`cd ${armed} && npx vitest run`, `cd ${armed} && pnpm verify --force`]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+
+			// The complement stays open: cd'ing to a directory with no overlay is
+			// not this gate's business, so it must still pass through.
+			const passOutput = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: `cd ${outside} && npx vitest run`, workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(passOutput).toBe("");
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("pushd moves the shell the same as cd and arms the same way", () => {
+		// `pushd <dir>` changes the working directory in both bash and zsh
+		// (measured); only the directory stack bookkeeping differs. `popd` is NOT
+		// recognized — its destination lives on a stack this gate cannot see from
+		// the command text, the same unknowable class as `cd -`.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-pushd-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-pushd-outside-"));
+		try {
+			for (const cmd of [
+				`pushd ${armed} && npx vitest run`,
+				`pushd ${armed} > /dev/null && npx vitest run`,
+			]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("a cd wrapped in a transparent prefix still arms", () => {
+		// Each prefix below leaves `cd` running as the shell's own builtin, so the
+		// directory really does move (measured in bash: `command cd`, `builtin cd`,
+		// `\cd`, and a leading `FOO=1` assignment all change the shell's cwd).
+		// Matching the raw text against a bare /^cd/ missed every one of them, which
+		// reopened the same bypass the plain-`cd` case above closes.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-wrapcd-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-wrapcd-outside-"));
+		try {
+			const wrapped = [
+				`command cd ${armed} && npx vitest run`,
+				`builtin cd ${armed} && npx vitest run`,
+				`\\cd ${armed} && npx vitest run`,
+				`FOO=1 cd ${armed} && npx vitest run`,
+			];
+			for (const cmd of wrapped) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("cd options are consumed before the directory operand", () => {
+		// `cd [-L|-P] [dir]` is bash's own usage, so `cd -P <armed>` moves the
+		// directory exactly like the bare form. Reading the token right after `cd`
+		// as the operand probed `<cwd>/-P`, found no overlay, and let the command
+		// through — the same bypass as the wrapped-cd case, wearing a flag.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-cdopt-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-cdopt-outside-"));
+		try {
+			const withOptions = [
+				`cd -P ${armed} && npx vitest run`,
+				`cd -L ${armed} && npx vitest run`,
+				`cd -P -- ${armed} && npx vitest run`,
+				`command cd -P ${armed} && npx vitest run`,
+			];
+			for (const cmd of withOptions) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("a chained cd resolves each target from the directory the previous one landed in", () => {
+		// `cd <base> && cd repo && …` — the second hop is relative to where the
+		// first one landed, not to the payload's workdir. Resolving every target
+		// against the original cwd probes `<workdir>/repo`, finds nothing, and
+		// lets the command through.
+		const base = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-chain-base-"));
+		const armed = join(base, "repo");
+		mkdirSync(join(armed, ".claude", "scripts", "verify-entrypoint-gate"), { recursive: true });
+		writeFileSync(join(armed, "pnpm-workspace.yaml"), "packages: []\n");
+		writeFileSync(join(armed, "package.json"), JSON.stringify({ scripts: { verify: "echo v", test: "echo t" } }));
+		writeFileSync(
+			join(armed, ".claude", "scripts", "verify-entrypoint-gate", "verify-entrypoint-gate.local.yaml"),
+			"# armed\n",
+		);
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-chain-outside-"));
+		try {
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: `cd ${base} && cd repo && npx vitest run`, workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(output).not.toBe("");
+			expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(base, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("a cd inside a nested shell arms", () => {
+		// `bash -c '…'` keeps its inner command in one quoted segment, so the scan
+		// sees a `bash` token and no `cd`. Attempt detection already descends into
+		// `bash -c`/`eval`; arming has to descend the same way or the descent never
+		// happens — the early return fires first.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-nestsh-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-nestsh-outside-"));
+		try {
+			for (const cmd of [
+				`bash -c 'cd ${armed} && npx vitest run'`,
+				`sh -c "cd ${armed} && npx vitest run"`,
+				`eval "cd ${armed} && npx vitest run"`,
+			]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("a nested shell arms regardless of how its -c is spelled or what trails it", () => {
+		// `bash -lc` is the everyday login-shell spelling and `sh -euc` the strict
+		// one; both run the operand exactly like `-c`. Matching `-c` exactly meant
+		// the inner command was never extracted, so no cd target was ever seen.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-lc-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-lc-outside-"));
+		try {
+			for (const cmd of [
+				`bash -lc 'cd ${armed} && npx vitest run'`,
+				`sh -euc 'cd ${armed} && npx vitest run'`,
+				`bash -x -c 'cd ${armed} && npx vitest run'`,
+				`bash -c 'cd ${armed} && npx vitest run' scriptname`,
+			]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("a cd on the failed side of || does not become the only base for the next one", () => {
+		// `cd missing || cd protected` runs the second `cd` from the ORIGINAL
+		// directory, because the first one failed. Advancing a single cursor made
+		// `protected` resolve under `missing/`, which exists nowhere.
+		const start = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-orbranch-"));
+		const armed = join(start, "protected");
+		mkdirSync(join(armed, ".claude", "scripts", "verify-entrypoint-gate"), { recursive: true });
+		writeFileSync(join(armed, "pnpm-workspace.yaml"), "packages: []\n");
+		writeFileSync(join(armed, "package.json"), JSON.stringify({ scripts: { verify: "echo v", test: "echo t" } }));
+		writeFileSync(
+			join(armed, ".claude", "scripts", "verify-entrypoint-gate", "verify-entrypoint-gate.local.yaml"),
+			"# armed\n",
+		);
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-orbranch-outside-"));
+		try {
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: `cd ${start}/missing || cd ${start}/protected && npx vitest run`, workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(output).not.toBe("");
+			expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+
+			// Same shape written relatively — the form that actually motivated this,
+			// since an absolute second target would have resolved either way.
+			const relative = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: "cd missing || cd protected && npx vitest run", workdir: start },
+				}),
+				moduleDir,
+			);
+			expect(relative).not.toBe("");
+			expect(JSON.parse(relative).hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(start, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("an unquoted tilde operand is expanded before the overlay probe", () => {
+		// `cd ~/…` is the everyday way to name a repo. Left literal, it probes
+		// `<cwd>/~/…`, which exists nowhere, so the gate armed on nothing.
+		// HOME is redirected at the process level for this test so the armed
+		// workspace really does sit under the home the hook resolves.
+		const home = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-tilde-home-"));
+		const armed = join(home, "repos", "protected");
+		mkdirSync(join(armed, ".claude", "scripts", "verify-entrypoint-gate"), { recursive: true });
+		writeFileSync(join(armed, "pnpm-workspace.yaml"), "packages: []\n");
+		writeFileSync(join(armed, "package.json"), JSON.stringify({ scripts: { verify: "echo v", test: "echo t" } }));
+		writeFileSync(
+			join(armed, ".claude", "scripts", "verify-entrypoint-gate", "verify-entrypoint-gate.local.yaml"),
+			"# armed\n",
+		);
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-tilde-outside-"));
+		const realHome = process.env.HOME;
+		try {
+			process.env.HOME = home;
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: "cd ~/repos/protected && npx vitest run", workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(output).not.toBe("");
+			expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+
+			// A QUOTED tilde is literal to the shell, so it must stay literal here.
+			const quoted = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: `cd "~/repos/protected" && npx vitest run`, workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(quoted).toBe("");
+		} finally {
+			if (realHome === undefined) delete process.env.HOME;
+			else process.env.HOME = realHome;
+			rmSync(home, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("a cd target the gate cannot resolve statically does not arm on a false path", () => {
+		// Shell-variable indirection (`cd $DIR`) is an accepted gap class for this
+		// gate — the point of pinning it is that the unresolved token must not be
+		// joined onto cwd as if it were a literal directory name.
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-cd-var-"));
+		try {
+			const output = processHookInput(
+				JSON.stringify({
+					tool_name: "exec_command",
+					tool_input: { cmd: "cd $REPO && npx vitest run", workdir: outside },
+				}),
+				moduleDir,
+			);
+			expect(output).toBe("");
+		} finally {
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("an overlay at the workspace root arms a command run in a nested directory", () => {
+		const root = makeArmedWorkspace("verify-entrypoint-gate-nested-");
+		try {
+			const nested = join(root, "apps", "admin");
+			mkdirSync(nested, { recursive: true });
+			const output = processHookInput(
+				JSON.stringify({ tool_name: "exec_command", tool_input: { cmd: "npx vitest run", workdir: nested } }),
+				moduleDir,
+			);
+			expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
 		}
 	});
 });

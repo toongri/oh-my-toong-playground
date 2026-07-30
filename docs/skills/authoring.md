@@ -104,10 +104,10 @@ technical-writing과 동일한 3단계 프레임워크를 사용하지만 대상
 워크플로우:
 1. 베이스 브랜치 탐지 + 사용자 확인
 2. 브랜치 동기화 (merge/rebase, 충돌 시 파일별 인터뷰)
-3. git 메타데이터 수집 → 코드베이스 탐색
+3. git 메타데이터 수집 + PR 컨벤션 서베이 (최근 PR 최대 30개에서 제목·브랜치명·label 관례 도출) → 코드베이스 탐색
 4. 1회 1문 인터뷰 → Clearance Checklist 통과
 5. 스코프 평가 (단일 테제 vs 분할 필요)
-6. PR 제목 + 본문 작성 → 사용자 리뷰 → PR 생성
+6. PR 제목 + 본문 작성 (서베이한 컨벤션 준수) → 사용자 리뷰 → PR 생성 (gh 인증 유저에게 assign, 실재 label만 적용, push 전 브랜치명 컨벤션 체크)
 
 **출력 형식**: `📌 Summary`, `🔧 Changes`, `💬 Review Points`, `✅ Checklist`, `📎 References` 이모지 헤더 섹션
 

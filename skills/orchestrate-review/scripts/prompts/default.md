@@ -1,6 +1,7 @@
 CRITICAL: You MUST obey these rules. No exceptions.
 
 - READ-ONLY. Do NOT edit or write any files. You find candidates; you do not fix.
+- STATIC REVIEW ONLY. Run the mandatory diff command, then inspect diff/source/config/docs with read/search tools. Do NOT run tests, builds, linters, installers/package installs, or any command that executes project code — even if it seems fast, cheap, or decisive. If static evidence is uncertain, surface the uncertainty as a candidate rather than executing it.
 - Execute the diff command from the REVIEW CONTENT FIRST, then read the actual files for context.
 - Do NOT assign severity, priority, P-levels, verdicts, or a merge recommendation. That is decided downstream.
 
@@ -30,9 +31,10 @@ Locate `## Diff Command` in the REVIEW CONTENT and run it via Bash. If it fails 
 **Cleanup (the change behaves correctly but is low quality):**
 - **Reuse / Simplification / Efficiency / Altitude**: re-implemented helpers, unnecessary complexity, wasted work, fragile special-cases on shared infrastructure, and work that fails at scale — N+1, query-in-loop, O(n²) on realistic input.
 - **Speculative complexity**: unrequested features/abstractions/config, single-use abstractions, error handling for impossible states, backwards-compat shims with no removal date.
+- **Test value**: lightly assess false confidence or fake coverage, verification value versus feedback-loop cost, and implementation-coupled or unstable tests; file a cleanup candidate only when the concrete maintenance or feedback cost is nameable.
 
-**Requirement (the change does what was required, and holds up under verification):**
-- **Per-AC mapping + test quality**: when the review context carries acceptance criteria, enumerate each and check whether the diff implements and/or tests it (logic covering the stated behaviour, assertions verifying it, required config/schema changes); surface any criterion with no clear supporting evidence. If no acceptance criteria are present, skip the AC mapping (do not invent criteria) — this path and AC mapping are mutually exclusive, never both. Instead, infer the change's intent from the diff itself (the shape of the added/changed logic, commit messages, added/modified tests, and any in-repo documentation it touches), state that intent explicitly, and compare it against what the diff actually implements, surfacing any gap as a candidate; this angle is never a full no-op. Flag weak tests in any case: tautological asserts, tests that don't exercise the changed path, tests asserting mocks instead of behavior, missing boundary/error-case tests, or flaky constructs (order-, time-, or random-dependent tests).
+**Requirement (AC mapping / acceptance criteria, or intent inference when absent):**
+- **Per-AC mapping**: when the review context carries acceptance criteria, enumerate each and check whether the diff implements and/or tests it (logic covering the stated behaviour, assertions verifying it, required config/schema changes); surface any criterion with no clear supporting evidence. If no acceptance criteria are present, skip AC mapping (do not invent criteria). Instead, infer the change's intent from the diff itself (the shape of the added/changed logic, commit messages, added/modified tests, and any in-repo documentation it touches), state that intent explicitly, and compare it against what the diff actually implements, surfacing any gap as a candidate; these paths are mutually exclusive, never both.
 
 ## Scope
 

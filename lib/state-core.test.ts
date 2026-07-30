@@ -178,7 +178,14 @@ describe("resolveSessionIdOrThrow (B2)", () => {
 		expect(() => resolveSessionIdOrThrow()).toThrow();
 	});
 
-	// (f) representative UUIDv7 as CODEX_THREAD_ID, OMT_SESSION_ID absent → returns it
+	// (f) OMT_SESSION_ID explicitly empty, CODEX_THREAD_ID set safe → throws (no fallthrough)
+	test("throws when OMT_SESSION_ID is empty even though CODEX_THREAD_ID is safe (no fallthrough)", () => {
+		process.env.OMT_SESSION_ID = "";
+		process.env.CODEX_THREAD_ID = "codex-thread-1";
+		expect(() => resolveSessionIdOrThrow()).toThrow();
+	});
+
+	// (g) representative UUIDv7 as CODEX_THREAD_ID, OMT_SESSION_ID absent → returns it
 	test("accepts a UUIDv7 CODEX_THREAD_ID when OMT_SESSION_ID is absent", () => {
 		delete process.env.OMT_SESSION_ID;
 		process.env.CODEX_THREAD_ID = "01920a7b-1c3d-7e4f-8a2b-1234567890ab";

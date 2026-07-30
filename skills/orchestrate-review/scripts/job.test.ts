@@ -4627,6 +4627,80 @@ describe("cmdStart writes workerPgid to job.json", () => {
 });
 
 // ---------------------------------------------------------------------------
+// cmdStart — conductor session witness in job.json
+// ---------------------------------------------------------------------------
+
+describe("cmdStart records the trustworthy conductor session in job.json", () => {
+	let tmpDir: string;
+	let priorOmtSessionId: string | undefined;
+	let priorCodexThreadId: string | undefined;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		priorOmtSessionId = process.env.OMT_SESSION_ID;
+		priorCodexThreadId = process.env.CODEX_THREAD_ID;
+	});
+
+	afterEach(() => {
+		if (priorOmtSessionId === undefined) delete process.env.OMT_SESSION_ID;
+		else process.env.OMT_SESSION_ID = priorOmtSessionId;
+		if (priorCodexThreadId === undefined) delete process.env.CODEX_THREAD_ID;
+		else process.env.CODEX_THREAD_ID = priorCodexThreadId;
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	test.each([
+		["Claude OMT_SESSION_ID", "claude_session", undefined, "claude_session"],
+		["Codex CODEX_THREAD_ID fallback", undefined, "codex_thread", "codex_thread"],
+		["mismatched IDs", "claude_session", "codex_thread", null],
+		["unsafe ID", "unsafe/session", undefined, null],
+		["absent IDs", undefined, undefined, null],
+	])(
+		"%s is persisted through the worker-PGID rewrite",
+		async (_caseName, omtSessionId, codexThreadId, expected) => {
+			if (omtSessionId === undefined) delete process.env.OMT_SESSION_ID;
+			else process.env.OMT_SESSION_ID = omtSessionId;
+			if (codexThreadId === undefined) delete process.env.CODEX_THREAD_ID;
+			else process.env.CODEX_THREAD_ID = codexThreadId;
+
+			const configPath = path.join(tmpDir, "config.yaml");
+			fs.writeFileSync(
+				configPath,
+				[
+					"chunk-review:",
+					"  chairman:",
+					"    role: none",
+					"  members:",
+					"    - name: alice",
+					"      command: echo alice",
+					"  settings:",
+					"    exclude_chairman_from_members: false",
+				].join("\n"),
+			);
+			const jobsDir = path.join(tmpDir, "jobs");
+			fs.mkdirSync(jobsDir, { recursive: true });
+
+			await cmdStart(
+				{ config: configPath, "jobs-dir": jobsDir, chairman: "none", json: true },
+				"test prompt",
+			);
+
+			const jobDir = path.join(jobsDir, fs.readdirSync(jobsDir)[0]);
+			const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, "job.json"), "utf8"));
+			expect(jobMeta.conductorSessionId).toBe(expected);
+			expect(jobMeta.members[0].workerPgid).toBeGreaterThan(0);
+
+			try {
+				process.kill(-jobMeta.members[0].workerPgid, "SIGKILL");
+			} catch {
+				// already exited — nothing to clean up
+			}
+		},
+	);
+});
+
+
+// ---------------------------------------------------------------------------
 // start → spawnWorkers wiring: declared deny reaches each dispatched entity
 // (AC6 — verified by spying on the shared lib's spawnWorkers, per the spec's
 // allowed fallback method since detached workers are not easily inspectable).
@@ -4777,4 +4851,3 @@ describe("start: mcpBlock reaches spawnWorkers entities", () => {
 		}
 	});
 });
-
