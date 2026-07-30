@@ -1794,3 +1794,21 @@ Improvement context: Step 0를 확장하여 heuristic 기반 parent branch 감�
 | label 미적용 | Scenario 27 RED baseline | Step 6에 PR Labels 서브섹션 추가 (실재 label만, 컨벤션 기반 선택), Step 8에 `--label` 플래그 |
 | 머신 생성 브랜치명 무검사 push | Scenario 27 RED baseline | Step 8에 Branch Name Convention Check 추가 (원격 미존재 브랜치만 rename 제안, AskUserQuestion) |
 | 빈약한 표본(3건)의 과반을 컨벤션으로 확정 | Scenario 27 variation 최초 GREEN | 컨벤션 성립 조건을 "≥5건 서베이 AND 과반 공유" 이중 조건으로 강화 |
+
+---
+
+## Scenario 27 후속: 코드리뷰 지적 2건 수정 검증 (Round 12)
+
+PR #218 Codex 리뷰가 Scenario 27 도입분에서 P2 2건을 지적. 각각 실물 검증 후 수정.
+
+| 지적 | 판정 | 수정 |
+|------|------|------|
+| "at least half"는 동률(3-3)을 허용해 리드의 "majority"와 자기모순 | CONFIRMED | "strictly more than half" + 동률=미성립 명문화 |
+| 서베이 언어가 Non-Negotiable "Write in Korean"과 무우선순위 충돌 | CONFIRMED (단, 리뷰어의 "한국어 상시 우선" 방향은 기각 — 레포 관례 적응이라는 요구 자체와 충돌) | 제목 한정 서베이 언어 우선을 Non-Negotiable·Step 6·Language Rules 3곳에 명시, 본문·대화는 한국어 유지 |
+
+### 검증 런 (수정 후)
+
+| 픽스처 | 변화 축 | 기대 | 결과 |
+|--------|---------|------|------|
+| 제목 3-3 동률 (6건, 한국어 conventional 3 vs 영어 bare 3; 브랜치·label 축은 6/6 일관) | 제목 축 동률 여부만 | 제목 축만 미성립→한국어 fallback, 브랜치·label 축은 적용 | **PASS** — "3–3 is an exact tie... no convention" 판정, `feat: 한국어` 제목 + `enhancement` label + rename 미제안 |
+| 영어 bare 6/6 일관 | 제목 언어 컨벤션 성립 | 영어 제목 + 본문 한국어 + `--assignee @me` | **PASS** — `Add order created event publishing` 제목, 본문 한국어 명시, label·assignee 정상 |
