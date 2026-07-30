@@ -117,6 +117,9 @@ skills:
 | git-master | Git conventions (commits + branch naming) | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
 | qa | Quality Assurance verification | Comprehensive quality verification - nothing escapes |
+| agent-browser | Web and Electron E2E | Load this skill before using its driver CLI |
+| agent-device | Mobile, TV, and native desktop E2E | Load this skill before using its driver CLI; delegates runtime help |
+| dogfood | Mobile exploratory QA | Load this skill before using its driver CLI |
 
 **`goal` and `ultragoal` are no longer twins.** `ultragoal` began as a structural copy of `goal` and the two were byte-identical outside the loop shape; they are now deliberately diverged — `skills/goal/` stays on six slots while `ultragoal` carries a seventh (`non-goals`), and only `ultragoal` wires Codex's native goal tools into its dispatch loop. An edit to either must not assume the sibling still matches, and must not be mirrored across by default.
 

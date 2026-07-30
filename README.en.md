@@ -32,6 +32,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 - **Per-project differentiation** — override global components with project-specific conventions via upward search
 - **Orphan cleanup** — components removed from the library disappear from targets on the next sync
 - **Multi-platform support** — Claude / Gemini / Codex / OpenCode abstracted via adapters
+- **Surface-specific E2E routing** — validate web/Electron with `agent-browser`, and mobile/TV/native desktop with `agent-device`
 
 ## Philosophy — Why This Design
 
@@ -46,7 +47,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 
 ## Documentation
 
-The details of the library's skills (42) and agents (13) live under `docs/`.
+The details of the library's skills (44) and agents (13) live under `docs/`.
 
 | Doc | Contents |
 |-----|----------|
@@ -55,7 +56,7 @@ The details of the library's skills (42) and agents (13) live under `docs/`.
 | [Research](docs/skills/research.en.md) | ultraresearch · insane-browsing — saturation research engine and blocked-source browsing |
 | [Authoring/Utilities](docs/skills/authoring.en.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [Knowledge Graph (pins)](docs/skills/knowledge-graph-pins.en.md) | pins knowledge graph — pin-setup · record · query · audit · wrap-up |
-| [Utilities & Personal Workflows](docs/skills/utilities-personal.en.md) | hud · resume · jd · mock-interview, etc. |
+| [Utilities & Personal Workflows](docs/skills/utilities-personal.en.md) | agent-device · agent-browser · dogfood · hud · resume · jd · mock-interview, etc. |
 | [Private Fork Management](docs/PRIVATE-FORK-MANAGEMENT.en.md) | Operating a private fork — mirroring upstream and continuous sync |
 | [Orchestration Guide](docs/ORCHESTRATION.en.md) | prometheus → sisyphus workflow and usage |
 | [Model Assignment](docs/model-assignment.en.md) | Per-agent model tier principles and `model-map` substitution rules |

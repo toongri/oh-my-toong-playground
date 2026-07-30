@@ -32,6 +32,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 - **프로젝트별 분화** — 상향 탐색으로 글로벌 컴포넌트 위에 프로젝트 고유 컨벤션 오버라이드
 - **고아 정리** — 라이브러리에서 제거한 컴포넌트는 다음 sync 때 대상에서도 사라짐
 - **멀티플랫폼 지원** — Claude / Gemini / Codex / OpenCode를 어댑터로 추상화
+- **표면별 E2E 라우팅** — 웹/Electron은 `agent-browser`, 모바일/TV/네이티브 데스크톱은 `agent-device`로 검증
 
 ## 철학 — 왜 이 설계인가
 
@@ -46,7 +47,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 ## 문서
 
-라이브러리에 담긴 스킬(42종)·에이전트(13종)의 상세는 `docs/`에 정리되어 있습니다.
+라이브러리에 담긴 스킬(44종)·에이전트(13종)의 상세는 `docs/`에 정리되어 있습니다.
 
 | 문서 | 내용 |
 |------|------|
@@ -55,7 +56,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 | [리서치](docs/skills/research.md) | ultraresearch · insane-browsing — 포화 리서치 엔진과 차단 소스 브라우징 |
 | [문서/콘텐츠·유틸](docs/skills/authoring.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
 | [지식 그래프(pins)](docs/skills/knowledge-graph-pins.md) | pins 지식 그래프 — pin-setup · record · query · audit · wrap-up |
-| [유틸·개인 워크플로우](docs/skills/utilities-personal.md) | hud · resume · jd · mock-interview 등 |
+| [유틸·개인 워크플로우](docs/skills/utilities-personal.md) | agent-device · agent-browser · dogfood · hud · resume · jd · mock-interview 등 |
 | [프라이빗 포크 관리](docs/PRIVATE-FORK-MANAGEMENT.md) | 프라이빗 포크 운영 가이드 — 업스트림 미러링과 지속 동기화 |
 | [오케스트레이션 가이드](docs/ORCHESTRATION.md) | prometheus → sisyphus 워크플로우와 사용법 |
 | [모델 배정](docs/model-assignment.md) | 에이전트별 모델 등급 배정 원칙과 `model-map` 치환 규칙 |
