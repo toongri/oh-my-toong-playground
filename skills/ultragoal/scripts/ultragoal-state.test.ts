@@ -140,6 +140,27 @@ describe("review dispatch budget", () => {
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "failure" });
 	});
 
+	test("renewal only extends an active pursuit and preserves cap and hash otherwise", () => {
+		writeCleanReview();
+		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", cap: 10 });
+
+		setGoalState(S, { phase: "planning" });
+		const planning = rawState();
+		expect(approveReviewDispatchRenewal(S)).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
+		expect(rawState()).toMatchObject({
+			review_dispatch_cap: planning.review_dispatch_cap,
+			approved_review_artifact_sha256: planning.approved_review_artifact_sha256,
+		});
+
+		setBudgetLimited(S);
+		const budgetLimited = rawState();
+		expect(approveReviewDispatchRenewal(S)).toEqual({ allowed: false, reason: "failure", used: 0, cap: 0 });
+		expect(rawState()).toMatchObject({
+			review_dispatch_cap: budgetLimited.review_dispatch_cap,
+			approved_review_artifact_sha256: budgetLimited.approved_review_artifact_sha256,
+		});
+	});
+
 	test("fresh pursuit resets inherited review dispatch budget and approval hash", () => {
 		writeCleanReview();
 		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, cap: 10 });
