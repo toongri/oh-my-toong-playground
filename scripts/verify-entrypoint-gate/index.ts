@@ -654,7 +654,9 @@ export function findOverlayDir(startDir: string): string | null {
 // npx vitest`, issued with a workdir outside that repo, would otherwise find no
 // overlay and return before decide() — never reaching the compound-command deny
 // that catches this exact shape. So every `cd` target in the command joins cwd
-// as an arming candidate.
+// as an arming candidate — each one resolved against where the previous `cd`
+// landed, not against cwd, because that is what the shell does: in
+// `cd <base> && cd repo`, `repo` is `<base>/repo`.
 //
 // Arming on the SESSION's directory instead was the other way to close this,
 // and it is wrong: it arms on where the session sits rather than where the
@@ -685,13 +687,15 @@ export function findOverlayDir(startDir: string): string | null {
 // waved through, and `env cd <dir> && …` is not a shape anyone writes.
 function armingCandidates(command: string, cwd: string): string[] {
 	const candidates = [cwd];
+	let current = cwd;
 	for (const segment of splitSegments(command)) {
 		const unwrapped = stripLeadingTransparentWrappers(stripLeadingEnvAssignments(segment));
 		const match = /^(\S+)((?:\s+-\S*)*)\s+("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(unwrapped);
 		if (match === null || normalizeToken(match[1]) !== "cd") continue;
 		const target = match[3].replace(/^["']|["']$/g, "");
 		if (target.length === 0 || target.includes("$") || target.includes("`")) continue;
-		candidates.push(resolve(cwd, target));
+		current = resolve(current, target);
+		candidates.push(current);
 	}
 	return candidates;
 }
