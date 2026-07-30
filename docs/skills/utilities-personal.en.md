@@ -14,6 +14,10 @@ This page covers two categories of skills. **Utility skills** support the develo
 
 The HUD displays Oh-My-Toong operational state in real time inside Claude Code's statusLine. Running `/hud setup` checks for Bun and jq, then updates the `statusLine` key in `settings.local.json` to point at the HUD script. Displayed elements include context window usage, running subagent count, Todo completion status, and the active skill name. `/hud restore` recovers the original statusLine configuration that was backed up on first setup. Because all paths are resolved via `${CLAUDE_SKILL_DIR}` self-location, the skill behaves identically whether deployed user-globally or project-locally.
 
+### E2E Drivers
+
+Choose the driver and skill together based on the surface under test. Use `agent-browser` for web pages, browser pages, and Electron desktop apps; use `agent-device` for iOS, Android, mobile, TV, and native desktop apps. Always load the matching skill before invoking either CLI. This document does not duplicate `agent-device` CLI syntax: after loading the skill, consult the installed version's runtime help. `dogfood` is the workflow for exploratory mobile QA performed with `agent-device`.
+
 ---
 
 ## Personal Workflow Skills
