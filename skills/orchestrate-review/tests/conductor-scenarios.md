@@ -117,7 +117,7 @@
 
 ## Manifest Workflow Scenarios (MA-*)
 
-> Tests the data-acquisition mechanism: start → collect (poll, cap 6 calls; an `awaiting_resume` state routes to `resume-member` first) → Read each outputFile → merge. `start` uses Bash `timeout: 180000`; `collect` uses Bash `timeout: 600000` with `--timeout-ms 540000`.
+> Tests the data-acquisition mechanism: start → collect (poll, cap 6 calls; an `awaiting_resume` state routes to `resume-member` first) → Read each outputFile → merge. `collect` uses Bash `timeout: 600000` with `--timeout-ms 540000`.
 
 ### MA-1: Full success (4/4)
 

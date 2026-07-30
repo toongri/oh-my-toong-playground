@@ -45,25 +45,7 @@ These premises must be reflected in the chunk-reviewer dispatch prompt — see S
 | Individual chunk review | NEVER | chunk-reviewer |
 | Code modification | NEVER | (forbidden entirely) |
 
-**RULE**: Orchestration, synthesis, and decisions = Do directly. Per-candidate inline judgment = Do directly in Phase 2 (reasoning → confidence → verdict + enrichment). Escalated candidates (confidence below threshold) = DELEGATE to verifier subagents (one per candidate). Multi-angle finding = DELEGATE to chunk-reviewer. Code modification = FORBIDDEN.
-
 ### Role Separation
-
-```dot
-digraph role_separation {
-    rankdir=LR;
-    "Orchestrator" [shape=box];
-    "chunk-reviewer" [shape=box];
-    "verifier" [shape=box];
-    "Codebase" [shape=cylinder];
-    "Orchestrator" -> "chunk-reviewer" [label="dispatch with {DIFF_COMMAND}"];
-    "chunk-reviewer" -> "Orchestrator" [label="candidate findings"];
-    "Orchestrator" -> "Codebase" [label="Read/Grep inline (Phase 2)"];
-    "Orchestrator" -> "verifier" [label="dispatch per escalated candidate"];
-    "verifier" -> "Codebase" [label="Read/Grep to verify"];
-    "verifier" -> "Orchestrator" [label="verdict (supersedes inline)"];
-}
-```
 
 **Your role as orchestrator:**
 - Dispatch chunk-reviewer agents with diff command strings (each fans out the angle finders)
@@ -89,15 +71,6 @@ digraph role_separation {
 - Phase 2 inline judgment output (reasoning, verdicts, enriched findings for non-escalated candidates)
 - Escalated verifier subagent verdicts + enriched findings (Phase 2, candidates below confidence threshold)
 - Code reading via Read/Grep for Phase 2 inline candidate judgment
-
-**Forbidden in orchestrator context:**
-- Running the raw `git diff` command (chunk-reviewers execute the diff, not you)
-- Modifying any source files
-
-**Context management:**
-- Phase 2 inline judgment reads candidate code directly in your context (non-escalated candidates); only escalated candidates' code reading moves into verifier subagent contexts
-
-**RULE**: Inline judgment for non-escalated candidates runs in your context. Only escalated candidates are delegated to verifier subagents. You CANNOT run the raw diff command or modify files.
 
 ## Step 0: Input Parsing
 
@@ -318,8 +291,6 @@ Run build, test, and lint checks BEFORE dispatching any chunk-reviewer agents. T
 
 Discovery is **per-command** and **independent** — if build is found but lint is not, run build and test; skip only the undiscovered command. If no commands are discovered at all, skip this step with the unavailable message (see Output Format below).
 
-Default timeout per command: **120 seconds**.
-
 ### Execution Order
 
 Run in sequence — stop immediately on first failure:
@@ -367,7 +338,7 @@ If any check fails:
 1. Populate {EVIDENCE_RESULTS} Part 1 with the failure details (last 30 lines of failing command output)
 2. Omit Part 2 (Test Coverage Mapping) — it is not needed on failure
 3. Do NOT proceed to Step 4 or dispatch chunk-reviewer agents
-4. **Completion-gate dispatch signal present** (the dispatch prompt carried a `{gate}-codereview-{sid}.json` artifact path — the same non-interactive discriminator Step 1 uses): before reporting, write that artifact directly — `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}`. This is the exact code-review artifact schema `skills/{gate}/references/completion-gate.md` defines. A build/test/lint fail-fast is neither a finished review (`status: "COMPLETE"`) nor a confirmed defect (`findings` stays empty — the failing command and its last 30 lines of output belong in this reviewer's own failure report surfaced to the dispatching gate, not folded into a per-finding `ref`) — it is the review itself failing to complete, which is exactly what `INCONCLUSIVE` means. Writing `status: "INCONCLUSIVE"` is sufficient by itself: it structurally blocks `request-complete` (the never-false-complete gate in `{gate}-state.ts`) without promoting to `status: "COMPLETE"` or introducing any new status value. If the artifact write itself fails, do not retry or invent a status — leave the artifact absent, which `request-complete`'s existing absent-artifact refusal already blocks on.
+4. **Completion-gate dispatch signal present** (the `{gate}-codereview-{sid}.json` discriminator from Step 1's Intent Block Gate): before reporting, write that artifact directly — `{"status": "INCONCLUSIVE", "reviewer": "<reviewer id>", "at": "<ISO timestamp>", "findings": []}`. This is the exact code-review artifact schema `skills/{gate}/references/completion-gate.md` defines. A build/test/lint fail-fast is neither a finished review (`status: "COMPLETE"`) nor a confirmed defect (`findings` stays empty — the failing command and its last 30 lines of output belong in this reviewer's own failure report surfaced to the dispatching gate, not folded into a per-finding `ref`) — it is the review itself failing to complete, which is exactly what `INCONCLUSIVE` means. Writing `status: "INCONCLUSIVE"` is sufficient by itself: it structurally blocks `request-complete` (the never-false-complete gate in `{gate}-state.ts`) without promoting to `status: "COMPLETE"` or introducing any new status value. If the artifact write itself fails, do not retry or invent a status — leave the artifact absent, which `request-complete`'s existing absent-artifact refusal already blocks on.
 5. **Completion-gate dispatch signal absent** (interactive main-session review — no completion-gate artifact path in play): no artifact write; this path is unchanged from before.
 6. Report {EVIDENCE_RESULTS} and exit immediately
 
@@ -412,7 +383,7 @@ The orchestrator constructs this command string but does NOT execute it. The com
    - {COMMIT_HISTORY} ← Step 2 commit history
    - {EVIDENCE_RESULTS} ← Step 3 evidence summary (Source: Step 3. Fallback: "Evidence verification unavailable — no build/test/lint commands discovered")
 
-   The five intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}/{NON_GOAL}) source differently depending on mode — the same `{gate}-codereview-{sid}.json` dispatch signal Step 1's Intent Block Gate uses to discriminate non-interactive dispatch. In structured-output mode (completion-gate dispatch), the Step 1 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, follow the same INCONCLUSIVE artifact bridge Step 3 uses on build failure and stop before dispatching chunk-reviewer agents — do not guess field values from malformed input.
+   The five intent placeholders above ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}/{NON_GOAL}) source differently depending on mode, discriminated by the completion-gate dispatch signal from Step 1's Intent Block Gate. In structured-output mode (completion-gate dispatch), the Step 1 payload is a JSON object with named fields `what_was_implemented`/`description`/`requirements`/`project_context`/`non_goals` — `JSON.parse` it and read each named field 1:1 into its placeholder above. This is a named-field read, not a blob split — never dump the whole payload into one placeholder. If the payload fails to parse as JSON, follow the same INCONCLUSIVE artifact bridge Step 3 uses on build failure and stop before dispatching chunk-reviewer agents — do not guess field values from malformed input.
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
 
 **Dispatch rules:**
@@ -477,7 +448,6 @@ Finders surface candidates; they do not judge them. You judge each deduped candi
 Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json` (project overrides user):
 - Resolve `omt.codeReview.escalationConfidenceThreshold` into `<threshold>`; if undefined, use `0.35`
 - Resolve `omt.codeReview.escalationKCap` into `<k>`; if undefined, use `3`
-- Resolve `omt.codeReview.findInclusionThreshold` into `<findInclusionThreshold>`; if undefined, use `50000` (output tokens; also resolved in the Find Phase Sink above)
 
 **Inline judgment steps:**
 
@@ -520,8 +490,6 @@ Read `[$CLAUDE_CONFIG_DIR|~/.claude]/settings.json` and `./.claude/settings.json
 
 **Cap & batching:** judge at most **25 candidates per batch** inline. If more survive dedup, batch by file proximity, **correctness candidates first**, and state how many were deferred — never silently drop.
 
-**The verdict ladder, verification method, and the enrichment output contract all live in `references/verifier-prompt.md`** — that is the single source; the inline judgment mirrors this contract directly.
-
 ### Phase 3: Findings Synthesis (report-only)
 
 This is a **report**. You surface verified findings, ranked by what matters most. You do NOT decide whether to merge and you do NOT decide whether to fix — that is the reader's call. Removing the merge verdict is deliberate: a reviewer that labels findings and shows the failure path is more trusted than one that issues a pass/fail an author then argues with.
@@ -546,7 +514,7 @@ This is a **report**. You surface verified findings, ranked by what matters most
 
 This is a **report**. It does not gate. There is no Assessment / "Ready to merge" section, and there is no HTML — the deliverable is the Phase 3 findings as terminal text.
 
-**Exception — completion-gate dispatch.** When the dispatch prompt carried a `{gate}-codereview-{sid}.json` artifact path (the same non-interactive discriminator Step 1 uses), the deliverable is that artifact, not terminal text: write the ranked findings there as `{"status": "COMPLETE", "reviewer": …, "at": …, "findings": [{"class", "verdict", "ref"}]}` — the schema `skills/{gate}/references/completion-gate.md` defines, and the same one the build-failure `INCONCLUSIVE` write above uses. The caller reads only that file; it never transcribes returned text, so ending a completion-gate dispatch with terminal text alone deadlocks it on an absent artifact.
+**Exception — completion-gate dispatch.** When the completion-gate dispatch signal from Step 1's Intent Block Gate is present, the deliverable is that `{gate}-codereview-{sid}.json` artifact, not terminal text: write the ranked findings there as `{"status": "COMPLETE", "reviewer": …, "at": …, "findings": [{"class", "verdict", "ref"}]}` — the schema `skills/{gate}/references/completion-gate.md` defines, and the same one the build-failure `INCONCLUSIVE` write above uses. The caller reads only that file; it never transcribes returned text, so ending a completion-gate dispatch with terminal text alone deadlocks it on an absent artifact.
 
 Emit the ranked findings directly: each finding carries its verdict (CONFIRMED / PLAUSIBLE), class (correctness / cleanup / requirement-gap), `file:line`, and enriched evidence (current code, what's wrong, failure scenario, fix, blast radius — the enrichment shape from `references/verifier-prompt.md`, produced inline for non-escalated findings or by the escalated verifier for superseded ones). Pre-existing findings go under Out of Scope. This findings text is also the handoff contract consumed by `review-report` when it dispatches a code-reviewer agent that runs this skill — do not invent a different format.
 
