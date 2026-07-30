@@ -11,11 +11,12 @@ setup_test_env() {
     TEST_TMP_DIR=$(mktemp -d)
     export OMT_DIR="$TEST_TMP_DIR/.omt"
     export OMT_SESSION_ID="codex-review-test"
+    unset CODEX_THREAD_ID
     mkdir -p "$OMT_DIR"
 }
 
 teardown_test_env() {
-    unset OMT_DIR OMT_SESSION_ID || true
+    unset OMT_DIR OMT_SESSION_ID CODEX_THREAD_ID || true
     rm -rf "$TEST_TMP_DIR"
 }
 
@@ -38,6 +39,10 @@ seed_pursuing() {
 
 payload() {
     jq -n --arg tool "$1" --arg agent "$2" '{tool_name:$tool,tool_input:{agent_type:$agent}}'
+}
+
+payload_with_session() {
+    jq -n --arg tool "$1" --arg agent "$2" --arg session_id "$3" '{tool_name:$tool,tool_input:{agent_type:$agent},session_id:$session_id}'
 }
 
 run_hook() {
@@ -137,6 +142,42 @@ test_schema_valid_malformed_states_fail_closed_or_pass_known_inactive() {
     [ "$(jq -r '.review_dispatch_used // 0' "$state_file")" = "0" ]
 }
 
+test_codex_thread_id_scrubs_stale_omt_session_id() {
+    local current_sid="codex-current-session" foreign_sid="claude-foreign-session" current_state foreign_state out rc=0
+    current_state="$OMT_DIR/ultragoal-state-$current_sid.json"
+    foreign_state="$OMT_DIR/ultragoal-state-$foreign_sid.json"
+    printf '%s' '{"active":true,"phase":"pursuing","iteration":0,"max_iterations":10,"started_at":"2026-01-01T00:00:00","last_touched_at":"2026-01-01T00:00:00"}' > "$current_state"
+    printf '%s' '{"active":true,"phase":"pursuing","iteration":0,"max_iterations":10,"review_dispatch_used":5,"started_at":"2026-01-01T00:00:00","last_touched_at":"2026-01-01T00:00:00"}' > "$foreign_state"
+
+    export OMT_SESSION_ID="$foreign_sid"
+    export CODEX_THREAD_ID="$current_sid"
+    out=$(payload "collaborationspawn_agent" "code-reviewer" | run_hook) || rc=$?
+    assert_allow "$out" "$rc" "CODEX_THREAD_ID must select current state without payload session" || return 1
+    [ "$(jq -r '.review_dispatch_used' "$current_state")" = "1" ] || return 1
+    [ "$(jq -r '.review_dispatch_used' "$foreign_state")" = "5" ] || return 1
+    [ "$OMT_SESSION_ID" = "$foreign_sid" ] || return 1
+
+    jq '.review_dispatch_used = 5' "$current_state" > "$OMT_DIR/state.tmp"
+    mv "$OMT_DIR/state.tmp" "$current_state"
+    jq 'del(.review_dispatch_used)' "$foreign_state" > "$OMT_DIR/state.tmp"
+    mv "$OMT_DIR/state.tmp" "$foreign_state"
+    rc=0
+    out=$(payload_with_session "collaborationspawn_agent" "code-reviewer" "$foreign_sid" | run_hook) || rc=$?
+    assert_deny "$out" "$rc" "CODEX_THREAD_ID must override mismatched payload session" || return 1
+    [ "$(jq -r '.review_dispatch_used' "$current_state")" = "5" ] || return 1
+    [ "$(jq -r '.review_dispatch_used // 0' "$foreign_state")" = "0" ] || return 1
+    [ "$OMT_SESSION_ID" = "$foreign_sid" ]
+}
+
+test_without_codex_thread_id_keeps_omt_session_fallback() {
+    local out rc=0
+    seed_pursuing
+    unset CODEX_THREAD_ID
+    out=$(payload_with_session "collaborationspawn_agent" "code-reviewer" "payload-session" | run_hook) || rc=$?
+    assert_allow "$out" "$rc" "OMT_SESSION_ID fallback without CODEX_THREAD_ID" || return 1
+    [ "$(jq -r '.review_dispatch_used' "$OMT_DIR/ultragoal-state-$OMT_SESSION_ID.json")" = "1" ]
+}
+
 test_jq_absent_allows() {
     local out rc=0 no_jq_bin cmd
     seed_pursuing
@@ -154,6 +195,8 @@ main() {
     run_test test_planning_nonreviewer_and_nontool_pass
     run_test test_malformed_state_denies_safely
     run_test test_schema_valid_malformed_states_fail_closed_or_pass_known_inactive
+    run_test test_codex_thread_id_scrubs_stale_omt_session_id
+    run_test test_without_codex_thread_id_keeps_omt_session_fallback
     run_test test_jq_absent_allows
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
     [ "$TESTS_FAILED" -eq 0 ]
