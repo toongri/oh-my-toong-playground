@@ -186,6 +186,32 @@ test_jvm_static_scan_boundaries() {
     return "$result"
 }
 
+test_jvm_unbounded_nested_static_scan() {
+    local nested_denied='mvn test' nested_safe='echo static' nested_quoted='mvn test' nested_shell='mvn test' escaped_shell command out rc=0 result=0 i
+    for ((i = 0; i < 8; i++)); do
+        nested_denied="echo \$($nested_denied)"
+        nested_safe="echo \$($nested_safe)"
+        nested_quoted="\$(echo $nested_quoted)"
+        escaped_shell=${nested_shell//\\/\\\\}
+        escaped_shell=${escaped_shell//\"/\\\"}
+        nested_shell="bash -c \"$escaped_shell\""
+    done
+
+    for command in "$nested_denied" "$nested_shell"; do
+        new_sandbox
+        out=$(payload "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK")
+        assert_denied "$out" "jvm-deep-deny-$command" || result=1
+        cleanup_sandbox
+    done
+    for command in "$nested_safe" "echo '$nested_quoted'"; do
+        new_sandbox
+        rc=0; out=$(payload "$command" | env -u OMT_SESSION_ID -u CODEX_THREAD_ID OMT_DIR="$SBX/omt" OMT_REVIEW_ROLE=member bash "$HOOK") || rc=$?
+        assert_allowed "$out" "$rc" "jvm-deep-allow-$command" || result=1
+        cleanup_sandbox
+    done
+    return "$result"
+}
+
 main() {
     run_test test_member_denies_representative_high_cost_commands
     run_test test_matching_conductor_denies_even_done_status
@@ -252,6 +278,7 @@ main() {
     run_test jvm-allow-kotlin-double-version test_jvm_allowed_row 'kotlin --version' jvm-allow-kotlin-double-version
     run_test jvm-allow-rg-literal test_jvm_allowed_row 'rg "gradle test"' jvm-allow-rg-literal
     run_test jvm-static-scan-boundaries test_jvm_static_scan_boundaries
+    run_test jvm-unbounded-nested-static-scan test_jvm_unbounded_nested_static_scan
     run_test jvm-allow-inactive-jvm test_jvm_allowed_row 'gradle test' jvm-allow-inactive-jvm inactive
     run_test regression-deny-cargo-test test_jvm_denied_row 'cargo test' regression-deny-cargo-test
     run_test regression-deny-cargo-build test_jvm_denied_row 'cargo build' regression-deny-cargo-build
