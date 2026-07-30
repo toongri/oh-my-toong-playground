@@ -38,6 +38,8 @@ import { ProjectKeyError, deriveClaudeProjectKey } from "./lib/git-key.ts";
 import { DeployTargetsError } from "./lib/resolve-deploy-targets.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { CodexAdapter } from "./adapters/codex.ts";
+import { GeminiAdapter } from "./adapters/gemini.ts";
+import { opencodeAdapter } from "./adapters/opencode.ts";
 import { cleanupOldBackups, isSafeBackupRoot } from "./lib/backup.ts";
 import { deriveProjectName } from "../lib/omt-dir.ts";
 import { execFileSync } from "child_process";
@@ -1875,13 +1877,17 @@ describe("processYaml", () => {
 		// untouched to the rewrite pass. The gate keys on the file's presence on
 		// disk plus the un-narrowed config, not on a real syncSkillsDirect write.
 		//
-		// Deliberately planted under .codex/hooks/, NOT .codex/skills/: the
-		// latter is the deprecated pre-b9908fbc fossil root, which the .codex/
-		// walk now excludes entirely (TODO 4 / D3) — skills live in
-		// .agents/skills. This test's actual subject is the eligibility-gating
-		// fallthrough to feature-platforms.skills, not the skills category
-		// itself, so any non-fossil .codex/ path exercises it equally.
-		const codexFile = path.join(targetPath, ".codex", "hooks", "oracle", "README.md");
+		// Deliberately planted under .codex/agents/, NOT .codex/hooks/ or
+		// .codex/rules/ (both are now provenance-gated by
+		// ownedHookNames/ownedRuleNames — a planted file with no resolved
+		// component this run would be left untouched there, defeating this
+		// test's purpose) and NOT .codex/skills/ (the deprecated pre-b9908fbc
+		// fossil root, which the .codex/ walk excludes entirely — skills live in
+		// .agents/skills). This test's actual subject is the eligibility-gating
+		// fallthrough to feature-platforms.skills, not which specific .codex/
+		// subtree gets rewritten, so any still-unrestricted subtree exercises it
+		// equally.
+		const codexFile = path.join(targetPath, ".codex", "agents", "oracle.md");
 		const before = "See .claude/rules/ for conventions.\n";
 		await writeFile(codexFile, before);
 
@@ -1891,10 +1897,10 @@ describe("processYaml", () => {
 		await processYaml(context, syncYamlPath, adapters, rootDir);
 
 		const after = await readFile(codexFile);
-		expect(after, ".codex/hooks/oracle/README.md must be rewritten to .codex/rules/").toContain(
+		expect(after, ".codex/agents/oracle.md must be rewritten to .codex/rules/").toContain(
 			".codex/rules/",
 		);
-		expect(after, ".codex/hooks/oracle/README.md must no longer contain .claude/").not.toContain(
+		expect(after, ".codex/agents/oracle.md must no longer contain .claude/").not.toContain(
 			".claude/",
 		);
 	});
@@ -3093,7 +3099,10 @@ describe("rewritePlatformPaths", () => {
 		await fs.mkdir(codexDir, { recursive: true });
 		await writeFile(path.join(codexDir, "rule.md"), "See .claude/agents/ directory\n");
 
-		await rewritePlatformPaths(targetPath, "codex");
+		// `rules/` is provenance-gated (fail-closed by default, same model as
+		// codexSkillNames) — model this file as OMT-owned this run by naming it
+		// explicitly, rather than relying on an unrestricted default.
+		await rewritePlatformPaths(targetPath, "codex", new Set(), new Set(), new Set(["rule"]));
 
 		const content = await readFile(path.join(codexDir, "rule.md"));
 		expect(content).toContain(".codex/agents/");
@@ -3213,7 +3222,9 @@ describe("rewritePlatformPaths — codex two-root rule-table rewrite (TODO 4)", 
 		await fs.mkdir(hookDir, { recursive: true });
 		await writeFile(path.join(hookDir, "README.md"), "Configured under .claude/hooks/sample\n");
 
-		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]));
+		// `hooks/` is provenance-gated (fail-closed by default) — model this
+		// README as an OMT-owned hook this run by naming it explicitly.
+		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]), new Set(["sample"]));
 
 		const skillContent = await readFile(path.join(skillDir, "SKILL.md"));
 		expect(skillContent).toContain(".agents/skills/x");
@@ -3645,6 +3656,351 @@ describe("processYaml — rules category deploys to codex with rewrite applied (
 			.then(() => true)
 			.catch(() => false);
 		expect(exists).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: rewritePlatformPaths hooks-provenance regression
+//
+// Bug: rewritePlatformPaths's Root-1 walk (`.{platform}/`, or `.codex/` for
+// codex) rewrote every `.md` it found, with no check for whether OMT actually
+// deployed that specific file THIS run. A team-owned file sharing that same
+// root — e.g. a git-tracked `.codex/hooks/README.md` documenting the target
+// repo's OWN hooks, with no corresponding OMT source anywhere — got its
+// `.claude/` references silently rewritten to `.codex/` alongside real OMT
+// output. Root 2 (`.agents/skills/<name>`) already scoped this by name
+// (codexSkillNames); Root 1's ONE subtree with the same shape — `hooks/`,
+// which recursively copies a whole bundled directory, README.md and all —
+// did not. Fix: `ownedHookNames` (OwnedHookNames, tools/sync.ts) restricts the
+// `hooks/` walk to entries OMT actually resolved a component for this run;
+// every other subtree (agents/rules/scripts/skills-in-single-root/commands)
+// is deliberately left as broadly-walked as before (see the tests pinning
+// that down earlier in this file: "still rewrites deployed codex md via
+// feature-platforms default", "rewrites deployed md for a section-level
+// non-claude platform override").
+// ---------------------------------------------------------------------------
+
+describe("processYaml — rewritePlatformPaths hooks-provenance regression (team-owned file OMT never deployed)", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "process-yaml-hooks-provenance-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(rootDir, { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("codex: preserves a git-tracked .codex/hooks/README.md OMT never deployed, while still rewriting the OMT-deployed hook in the same run", async () => {
+		// OMT-owned hook: a real source directory this run actually deploys.
+		await writeFile(
+			path.join(rootDir, "hooks", "my-omt-hook", "index.ts"),
+			"export const run = () => {};\n",
+		);
+		await writeFile(
+			path.join(rootDir, "hooks", "my-omt-hook", "README.md"),
+			"Configured under .claude/hooks/my-omt-hook — see .claude/rules/ too.\n",
+		);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(
+			path.join(rootDir, "codex.yaml"),
+			"hooks:\n  PreToolUse:\n    - component: my-omt-hook\n",
+		);
+
+		// Team-owned file: mirrors acme-home's real `.codex/hooks/README.md`
+		// — git-tracked in the target repo, no corresponding OMT source anywhere.
+		const teamFile = path.join(targetPath, ".codex", "hooks", "README.md");
+		const teamContent = "# Hooks\n\nSee `.claude/rules/` for the shared rule conventions.\n";
+		await writeFile(teamFile, teamContent);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(
+			await readFile(teamFile),
+			"team-owned .codex/hooks/README.md must survive byte-identical",
+		).toBe(teamContent);
+
+		const omtHookReadme = await readFile(
+			path.join(targetPath, ".codex", "hooks", "my-omt-hook", "README.md"),
+		);
+		expect(omtHookReadme).toContain(".codex/hooks/my-omt-hook");
+		expect(omtHookReadme).toContain(".codex/rules/");
+		expect(omtHookReadme).not.toContain(".claude/");
+	});
+
+	it("gemini: preserves a hand-authored .gemini/hooks/README.md OMT never deployed, while still rewriting the OMT-deployed hook in the same run", async () => {
+		await writeFile(
+			path.join(rootDir, "hooks", "my-omt-hook", "index.ts"),
+			"export const run = () => {};\n",
+		);
+		await writeFile(
+			path.join(rootDir, "hooks", "my-omt-hook", "README.md"),
+			"See .claude/rules/ for conventions.\n",
+		);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(
+			path.join(rootDir, "gemini.yaml"),
+			"hooks:\n  PreToolUse:\n    - component: my-omt-hook\n",
+		);
+
+		const teamFile = path.join(targetPath, ".gemini", "hooks", "README.md");
+		const teamContent = "Hand-authored gemini hooks index. See .claude/rules/.\n";
+		await writeFile(teamFile, teamContent);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["gemini", new GeminiAdapter()],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(
+			await readFile(teamFile),
+			"team-owned .gemini/hooks/README.md must survive byte-identical",
+		).toBe(teamContent);
+
+		const omtHookReadme = await readFile(
+			path.join(targetPath, ".gemini", "hooks", "my-omt-hook", "README.md"),
+		);
+		expect(omtHookReadme).not.toContain(".claude/");
+	});
+
+	it("opencode: declaring a hook for a platform that deploys no hooks claims no ownership", async () => {
+		// opencodeAdapter refuses the whole hooks section (it warns and skips), so
+		// OMT never writes anything under .opencode/hooks/ — which makes every file
+		// there someone else's. Recording ownership off the DECLARATION let the
+		// rewrite walk mutate a hand-authored file on the strength of a hook that
+		// was never deployed. The gemini case above already carries the "this
+		// wiring is not codex-only" proof, and gemini actually deploys hooks.
+		await writeFile(
+			path.join(rootDir, "hooks", "my-hook", "index.ts"),
+			"export const run = () => {};\n",
+		);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(syncYamlPath, `path: ${targetPath}\n`);
+		await writeFile(
+			path.join(rootDir, "opencode.yaml"),
+			"hooks:\n  PreToolUse:\n    - component: my-hook\n",
+		);
+
+		// Planted directly on disk — opencodeAdapter never copies either of these
+		// for real. One path matches the declared hook name ("my-hook"), the other
+		// does not; neither is OMT's, so both must survive.
+		const declaredNameFile = path.join(targetPath, ".opencode", "hooks", "my-hook", "README.md");
+		const foreignNameFile = path.join(targetPath, ".opencode", "hooks", "unrelated", "README.md");
+		const before = "See .claude/rules/ for conventions.\n";
+		await writeFile(declaredNameFile, before);
+		await writeFile(foreignNameFile, before);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["opencode", opencodeAdapter],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(
+			await readFile(declaredNameFile),
+			".opencode/hooks/my-hook/README.md must survive — the declaration deployed nothing",
+		).toBe(before);
+		expect(
+			await readFile(foreignNameFile),
+			".opencode/hooks/unrelated/README.md (not declared this run) must survive byte-identical",
+		).toBe(before);
+	});
+
+	it("real-world shape: codex eligible ONLY via scripts.items(platforms: [claude, codex]), no codex.yaml at all — team-owned .codex/hooks/README.md must survive", async () => {
+		// Mirrors acme-home exactly: this project declares zero codex hooks
+		// (no codex.yaml, so syncPlatformConfigs's hook pre-resolution loop never
+		// runs for codex and ownedHookNames never gains a "codex" key at all —
+		// `.get("codex")` returns undefined). Codex becomes a rewrite-eligible
+		// platform ONLY through the CATEGORIES loop over `scripts.items`, whose
+		// `platforms: [claude, codex]` is the sole reason `rewriteEligiblePlatforms`
+		// contains codex. The component need not even resolve to a real source —
+		// eligibility is computed from resolvePlatforms alone, before
+		// resolveComponentPath ever runs.
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nscripts:\n  items:\n    - component: verify-entrypoint-gate\n      platforms: [claude, codex]\n`,
+		);
+
+		// Team-owned file: mirrors acme-home's real `.codex/hooks/README.md`
+		// — git-tracked in the target repo, no corresponding OMT hook source
+		// anywhere, and no codex.yaml to ever populate ownedHookNames["codex"].
+		const teamFile = path.join(targetPath, ".codex", "hooks", "README.md");
+		const teamContent = "# Hooks\n\nSee `.claude/rules/` for the shared rule conventions.\n";
+		await writeFile(teamFile, teamContent);
+
+		const adapters = makeAdapterMap(["claude", "codex"]);
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(
+			await readFile(teamFile),
+			"team-owned .codex/hooks/README.md must survive byte-identical when codex is eligible only via scripts.items, with no codex.yaml ever populating ownedHookNames",
+		).toBe(teamContent);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Suite: rewritePlatformPaths rules-provenance regression (same model as the
+// hooks-provenance suite above, applied to the `rules/` subtree)
+//
+// Bug: a rules item always deploys as one flat `<name>.md` (never a
+// directory — syncRulesDirect / ClaudeAdapter.syncRulesDirect never write a
+// directory), so it shares its root with any hand-authored non-OMT `.md`
+// sitting at the same level with no directory boundary to tell them apart —
+// the same clobber risk `hooks/` has, on a flat root instead of a nested one.
+// `ownedRuleNames` (OwnedRuleNames, tools/sync.ts) restricts the `rules/`
+// walk to entries OMT actually resolved a rule component for this run, the
+// same way `ownedHookNames` restricts `hooks/`.
+// ---------------------------------------------------------------------------
+
+describe("processYaml — rewritePlatformPaths rules-provenance regression (team-owned file OMT never deployed)", () => {
+	let tmpDir: string;
+	let rootDir: string;
+	let targetPath: string;
+
+	beforeEach(async () => {
+		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "process-yaml-rules-provenance-test-"));
+		rootDir = path.join(tmpDir, "root");
+		targetPath = path.join(tmpDir, "target");
+		await fs.mkdir(rootDir, { recursive: true });
+		await fs.mkdir(targetPath, { recursive: true });
+		await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+		_resetConfigCache();
+	});
+
+	afterEach(async () => {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+		_resetConfigCache();
+	});
+
+	it("codex: preserves a git-tracked .codex/rules/conventions.md OMT never deployed, while still rewriting the OMT-deployed rule in the same run", async () => {
+		// OMT-owned rule: a real source this run actually deploys.
+		await writeFile(
+			path.join(rootDir, "rules", "my-omt-rule.md"),
+			"Ask via AskUserQuestion. See .claude/hooks/ too.\n",
+		);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nrules:\n  platforms: [codex]\n  items:\n    - my-omt-rule\n`,
+		);
+
+		// Team-owned file: git-tracked in the target repo, no corresponding OMT
+		// rule source anywhere, and no rules item ever resolving to this name —
+		// ownedRuleNames["codex"] never gains "conventions".
+		const teamFile = path.join(targetPath, ".codex", "rules", "conventions.md");
+		const teamContent = "# Conventions\n\nSee `.claude/rules/` for the shared conventions doc.\n";
+		await writeFile(teamFile, teamContent);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(
+			await readFile(teamFile),
+			"team-owned .codex/rules/conventions.md must survive byte-identical",
+		).toBe(teamContent);
+
+		const omtRule = await readFile(path.join(targetPath, ".codex", "rules", "my-omt-rule.md"));
+		expect(omtRule).toContain(".codex/hooks/");
+		expect(omtRule).not.toContain(".claude/");
+	});
+
+	it("gemini: declaring a rule for a platform that cannot deploy rules claims no ownership", async () => {
+		// Gemini is absent from SUPPORTED_CATEGORIES.gemini for "rules", so
+		// syncCategory skips the item with a warning and writes nothing. Ownership
+		// recorded off the DECLARATION rather than the deploy would still hand the
+		// rewrite walk that name, and a hand-authored .gemini/rules/<same name>.md
+		// would be mutated by a run that deployed no rule at all.
+		await writeFile(path.join(rootDir, "rules", "my-rule.md"), "See .claude/hooks/ for conventions.\n");
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nrules:\n  platforms: [gemini]\n  items:\n    - my-rule\n`,
+		);
+
+		const handAuthored = path.join(targetPath, ".gemini", "rules", "my-rule.md");
+		const before = "See .claude/hooks/ for conventions.\n";
+		await writeFile(handAuthored, before);
+
+		const adapters = makeAdapterMap(["gemini"]);
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(
+			await readFile(handAuthored),
+			"gemini cannot deploy rules, so nothing under .gemini/rules/ is OMT-owned",
+		).toBe(before);
+	});
+
+	it("opencode: the rules/ scoping mechanism is wired identically for opencode — a declared rule name is rewritten, a same-run foreign name under rules/ is not", async () => {
+		await writeFile(
+			path.join(rootDir, "rules", "my-rule", "index.md"),
+			"See .claude/hooks/ for conventions.\n",
+		);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nrules:\n  platforms: [opencode]\n  items:\n    - my-rule\n`,
+		);
+
+		// Planted directly on disk — opencodeAdapter's mock never copies either
+		// of these for real (opencode is exercised via makeAdapterMap's mock, not
+		// a real deploy-capable adapter, mirroring the hooks-provenance suite's
+		// opencode test above: this proves the SAME `ownedRuleNames` wiring
+		// reaches opencode, not a codex-only patch). One path matches the
+		// declared rule name ("my-rule"); the other stands in for a team-owned
+		// file under the same root.
+		const declaredNameFile = path.join(targetPath, ".opencode", "rules", "my-rule.md");
+		const foreignNameFile = path.join(targetPath, ".opencode", "rules", "unrelated.md");
+		const before = "See .claude/hooks/ for conventions.\n";
+		await writeFile(declaredNameFile, before);
+		await writeFile(foreignNameFile, before);
+
+		const adapters = makeAdapterMap(["opencode"]);
+		const context = makeContext();
+
+		await processYaml(context, syncYamlPath, adapters, rootDir);
+
+		expect(
+			await readFile(declaredNameFile),
+			".opencode/rules/my-rule.md (declared this run) must be rewritten",
+		).toContain(".opencode/hooks/");
+		expect(
+			await readFile(foreignNameFile),
+			".opencode/rules/unrelated.md (not declared this run) must survive byte-identical",
+		).toBe(before);
 	});
 });
 

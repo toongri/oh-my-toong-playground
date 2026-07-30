@@ -58,7 +58,10 @@ export async function materializeCodexRule(
 	await adapter.syncRulesDirect(deployRoot, ruleName, path.join(ruleSourceRoot, "rules", `${ruleName}.md`));
 
 	if (options.skipRewrite !== true) {
-		await rewritePlatformPaths(deployRoot, "codex");
+		// rules/ is provenance-gated (fail-closed by default): `ruleName` really
+		// was deployed this run (syncRulesDirect above), so it is named
+		// explicitly rather than relying on an unrestricted default.
+		await rewritePlatformPaths(deployRoot, "codex", new Set(), new Set(), new Set([ruleName]));
 	}
 
 	return path.join(deployRoot, ".codex", "rules", `${ruleName}.md`);
