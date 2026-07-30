@@ -61,7 +61,7 @@ review_exec_normalize_command() {
                 if (c == bs && i < n) { out=out "  "; i++; continue }
                 if (c == sq && !indq) { insq=1; continue }
                 if (c == dq) { indq=!indq; continue }
-                if (c == dl && i < n && substr($0,i+1,1) == lp) {
+                if ((c == dl || c == "<" || c == ">") && i < n && substr($0,i+1,1) == lp) {
                     depth=1; body=""; body_sq=0; body_dq=0; i+=2
                     for (; i<=n && depth>0; i++) {
                         c=substr($0,i,1)
@@ -165,21 +165,70 @@ review_exec_segment_denied() {
             if (start > count) next
             classified=1
             if (high_cost(words, start, count)) exit 0
-            if (words[start] ~ /(^|\/)(sh|bash|zsh)$/) {
-                for (i=start + 1; i<=count; i++) if (words[i] == "-c" && i + 1 <= count && high_cost(words, i + 1, count)) exit 0
-            }
             exit 1
         }
         END { if (!classified) exit 1 }'
 }
 
-review_exec_command_denied() {
-    local command="$1" normalized segment
+review_exec_shell_body() {
+    local segment="$1"
+    printf '%s\n' "$segment" | awk '
+        {
+            count=split($0, words, /[ \t]+/)
+            start=1
+            while (start <= count && words[start] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) start++
+            if (words[start] == "env") {
+                start++
+                while (start <= count) {
+                    argument=words[start]
+                    if (argument == "--") { start++; break }
+                    if (argument ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || argument ~ /^-[i0]$/ || argument ~ /^--(ignore-environment|null)$/ || argument ~ /^--(unset|chdir)=/) { start++; continue }
+                    if (argument == "-u" || argument == "--unset" || argument == "-C" || argument == "--chdir") { start += 2; continue }
+                    if (argument ~ /^-/) { start++; continue }
+                    break
+                }
+            }
+            if (start > count || words[start] !~ /(^|\/)(sh|bash|zsh)$/) next
+            for (i=start + 1; i<=count; i++) {
+                argument=words[i]
+                if (argument == "--") continue
+                if (argument == "-c" || argument ~ /^-[A-Za-z]*c[A-Za-z]*$/) {
+                    if (i + 1 > count) next
+                    body=""
+                    for (j=i + 1; j<=count; j++) body=body (j == i + 1 ? "" : " ") words[j]
+                    if (body ~ /^\047.*\047$/ || body ~ /^\042.*\042$/) {
+                        body=substr(body, 2, length(body) - 2)
+                    }
+                    print body
+                    next
+                }
+            }
+        }'
+}
+
+review_exec_command_denied_walk() {
+    local command="$1" depth="$2" normalized segment shell_body
+    shell_body=$(review_exec_shell_body "$command")
+    if [ "$depth" -lt 4 ] && [ -n "$shell_body" ] && review_exec_command_denied_walk "$shell_body" $((depth + 1)); then
+        return 0
+    fi
     normalized=$(review_exec_normalize_command "$command") || return 1
     while IFS= read -r segment; do
         review_exec_segment_denied "$segment" && return 0
+        [ "$depth" -lt 4 ] || continue
+        shell_body=$(review_exec_shell_body "$segment")
+        if [ -n "$shell_body" ] && review_exec_command_denied_walk "$shell_body" $((depth + 1)); then
+            return 0
+        fi
+        if [ "$segment" != "$command" ] && review_exec_command_denied_walk "$segment" $((depth + 1)); then
+            return 0
+        fi
     done <<EOF
 $(printf '%s' "$normalized" | tr ';|&' '\n')
 EOF
     return 1
+}
+
+review_exec_command_denied() {
+    review_exec_command_denied_walk "$1" 0
 }
