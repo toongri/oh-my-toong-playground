@@ -54,18 +54,18 @@ skills:
     - component: hud
       platforms: [claude]
     - component: pin-record
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: pin-query
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: pin-audit
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: pin-wrap-up
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: pin-setup
-      platforms: [claude]
+      platforms: [claude, codex]
     - scan-pdf-to-notes
     - component: meeting-notes
-      platforms: [claude]
+      platforms: [claude, codex]
     # 전역 등록된 SessionStart 훅 orphan-reaper.sh(claude.yaml)가
     # $HOME/.claude/skills/orchestrate-review/scripts/job.ts를 참조한다.
     # 전역 배포가 없으면 대상 파일이 없어 그 훅이 fail-open으로 조용히
@@ -99,11 +99,11 @@ skills:
     - agent-browser
     - dogfood
     - component: receiving-code-review
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: test-driven-development
-      platforms: [claude]
+      platforms: [claude, codex]
     - component: writing-skills
-      platforms: [claude]
+      platforms: [claude, codex]
 
 scripts:
   items:
