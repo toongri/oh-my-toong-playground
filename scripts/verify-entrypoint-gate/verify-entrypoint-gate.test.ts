@@ -620,6 +620,22 @@ describe("loadConfig", () => {
 // everything else produces "" — and, critically, "allow" never appears
 // anywhere in any output this function can produce.
 // -----------------------------------------------------------------------------
+// Every processHookInput fixture below deploys an overlay file, because the
+// gate arms on overlay presence (index.ts's findOverlayDir): a workspace
+// without one is passed through before any judgment runs, so a fixture that
+// omits it would assert "" for the wrong reason. The overlay is written
+// comment-only (parses to no keys), so every policy key still falls through
+// to base — these fixtures exercise base policy, not an overlay divergence.
+function makeArmedWorkspace(prefix: string): string {
+	const root = mkdtempSync(join(tmpdir(), prefix));
+	writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+	writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
+	const overlayDir = join(root, ".claude", "scripts", "verify-entrypoint-gate");
+	mkdirSync(overlayDir, { recursive: true });
+	writeFileSync(join(overlayDir, "verify-entrypoint-gate.local.yaml"), "# armed; every key falls through to base\n");
+	return root;
+}
+
 describe("processHookInput", () => {
 	const moduleDir = fileURLToPath(new URL(".", import.meta.url));
 
@@ -646,31 +662,38 @@ describe("processHookInput", () => {
 	});
 
 	test("end-to-end deny: emits a PreToolUse deny envelope, never allow", () => {
-		const output = processHookInput(
-			JSON.stringify({ tool_name: "Bash", tool_input: { command: "npx vitest run" }, cwd: "/tmp" }),
-			moduleDir,
-		);
-		const parsed = JSON.parse(output);
-		expect(parsed.hookSpecificOutput.hookEventName).toBe("PreToolUse");
-		expect(parsed.hookSpecificOutput.permissionDecision).toBe("deny");
-		expect(typeof parsed.hookSpecificOutput.permissionDecisionReason).toBe("string");
-		expect(output).not.toContain('"allow"');
+		const root = makeArmedWorkspace("verify-entrypoint-gate-deny-");
+		try {
+			const output = processHookInput(
+				JSON.stringify({ tool_name: "Bash", tool_input: { command: "npx vitest run" }, cwd: root }),
+				moduleDir,
+			);
+			const parsed = JSON.parse(output);
+			expect(parsed.hookSpecificOutput.hookEventName).toBe("PreToolUse");
+			expect(parsed.hookSpecificOutput.permissionDecision).toBe("deny");
+			expect(typeof parsed.hookSpecificOutput.permissionDecisionReason).toBe("string");
+			expect(output).not.toContain('"allow"');
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	test("passthrough emits no output at all — never an allow envelope", () => {
-		const output = processHookInput(
-			JSON.stringify({ tool_name: "Bash", tool_input: { command: "pnpm start" }, cwd: "/tmp" }),
-			moduleDir,
-		);
-		expect(output).toBe("");
+		const root = makeArmedWorkspace("verify-entrypoint-gate-pass-");
+		try {
+			const output = processHookInput(
+				JSON.stringify({ tool_name: "Bash", tool_input: { command: "pnpm start" }, cwd: root }),
+				moduleDir,
+			);
+			expect(output).toBe("");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	test("a real workspace root round-trip: verify at the root passes through, denies elsewhere", () => {
-		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-e2e-"));
+		const root = makeArmedWorkspace("verify-entrypoint-gate-e2e-");
 		try {
-			writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
-			writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
-
 			const passOutput = processHookInput(
 				JSON.stringify({ tool_name: "Bash", tool_input: { command: "pnpm verify" }, cwd: root }),
 				moduleDir,
@@ -710,10 +733,7 @@ describe("processHookInput — Codex payload support", () => {
 	const moduleDir = fileURLToPath(new URL(".", import.meta.url));
 
 	function makeWorkspace(): string {
-		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-codex-e2e-"));
-		writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
-		writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
-		return root;
+		return makeArmedWorkspace("verify-entrypoint-gate-codex-e2e-");
 	}
 
 	test("exec_command + cmd + workdir: `pnpm verify backend --force` denies — the real dolomite-awe incident shape", () => {
@@ -834,6 +854,78 @@ describe("processHookInput — Codex payload support", () => {
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 			rmSync(decoy, { recursive: true, force: true });
+		}
+	});
+});
+
+// -----------------------------------------------------------------------------
+// Arming — the hook registers globally ($HOME/.codex/hooks.json), so it is
+// invoked in every repo; what decides whether it JUDGES is the presence of a
+// deployed overlay. These tests pin that boundary from both sides: the same
+// command, in the same workspace, must flip between passthrough and deny on
+// overlay presence alone.
+// -----------------------------------------------------------------------------
+describe("arming — overlay presence, not registration site, decides where the gate judges", () => {
+	const moduleDir = fileURLToPath(new URL(".", import.meta.url));
+
+	test("the same denied command passes through when no overlay is deployed", () => {
+		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-unarmed-"));
+		try {
+			writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+			writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { verify: "echo verify" } }));
+			const payload = JSON.stringify({
+				tool_name: "Bash",
+				tool_input: { command: "npx vitest run" },
+				cwd: root,
+			});
+
+			expect(processHookInput(payload, moduleDir)).toBe("");
+
+			// Arm the SAME workspace and re-run the SAME payload — only the
+			// overlay changed, so a deny here proves the passthrough above was
+			// the arming gate and not some unrelated shape mismatch.
+			const overlayDir = join(root, ".claude", "scripts", "verify-entrypoint-gate");
+			mkdirSync(overlayDir, { recursive: true });
+			writeFileSync(join(overlayDir, "verify-entrypoint-gate.local.yaml"), "# armed\n");
+
+			expect(JSON.parse(processHookInput(payload, moduleDir)).hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("a repo with no pnpm workspace is passed through instead of fail-closed denied", () => {
+		// The regression this arming rule exists to prevent: a global
+		// registration made this gate fire in every repo, and outside a pnpm
+		// workspace decide() fail-closes — so `pytest` in a python repo and
+		// `npx tsc` in a non-pnpm node repo were both denied with a
+		// "run it inside a pnpm workspace" reason that does not apply there.
+		const root = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-foreign-repo-"));
+		try {
+			for (const command of ["pytest -q", "npx tsc --noEmit", "uv run pytest"]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: root }),
+					moduleDir,
+				);
+				expect(output).toBe("");
+			}
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("an overlay at the workspace root arms a command run in a nested directory", () => {
+		const root = makeArmedWorkspace("verify-entrypoint-gate-nested-");
+		try {
+			const nested = join(root, "apps", "admin");
+			mkdirSync(nested, { recursive: true });
+			const output = processHookInput(
+				JSON.stringify({ tool_name: "exec_command", tool_input: { cmd: "npx vitest run", workdir: nested } }),
+				moduleDir,
+			);
+			expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
 		}
 	});
 });

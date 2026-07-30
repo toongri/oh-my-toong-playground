@@ -600,24 +600,48 @@ export function readPackageScripts(workspaceRoot: string): string[] {
 
 // -----------------------------------------------------------------------------
 // Config loading — base (this module's own directory, committed) + local
-// (the TARGET WORKSPACE ROOT's `.claude/scripts/verify-entrypoint-gate/`,
-// deployed there as a project overlay) merged one key at a time: a key local
-// declares replaces base's whole array for that key; a key local omits falls
-// through to base. `localDir` has no static default — it depends on the
-// workspace root resolved from `cwd`, so callers pass it explicitly (or omit
-// it to get base-only, e.g. when no workspace root was found at all).
+// (the project overlay deployed into `.claude/scripts/verify-entrypoint-gate/`
+// or `.codex/scripts/...`, found by findOverlayDir below) merged one key at a
+// time: a key local declares replaces base's whole array for that key; a key
+// local omits falls through to base. `localDir` has no static default — it
+// depends on the cwd the command runs in, so callers pass it explicitly (the
+// base-only `undefined` form survives for direct callers and tests; the hook
+// path never uses it, since no overlay means the gate does not run at all).
 // -----------------------------------------------------------------------------
-// Resolves which project-overlay directory to read `verify-entrypoint-gate.
-// local.yaml` from, for a given workspace root. Both platforms sync the SAME
-// overlay source to two different deploy roots (`.claude/scripts/...` and
-// `.codex/scripts/...` — see deployLocationForManifest in tools/sync.ts), so
-// their content is identical; this order only decides which copy's presence
-// to trust first when both COULD exist (`.claude` wins), never a policy
-// difference between the two.
-function resolveLocalDir(workspaceRoot: string): string {
-	const claudeDir = join(workspaceRoot, ".claude", "scripts", "verify-entrypoint-gate");
-	if (existsSync(join(claudeDir, "verify-entrypoint-gate.local.yaml"))) return claudeDir;
-	return join(workspaceRoot, ".codex", "scripts", "verify-entrypoint-gate");
+// Resolves the project-overlay directory: the nearest ancestor of the
+// command's OWN cwd carrying a deployed `verify-entrypoint-gate.local.yaml`.
+// Its presence is also what ARMS the gate — see processHookInput, which
+// returns "" when this yields null.
+//
+// Arming lives here, not at the hook's registration site, because the hook
+// registers globally ($HOME/.codex/hooks.json via root codex.yaml) and is
+// therefore invoked in every repo. Registering per-project instead is not an
+// option for codex: a project registration lands in `<repo>/.codex/hooks.json`,
+// which target repos track in git, and the adapter replaces that file's whole
+// `hooks` key (tools/adapters/codex.ts's updateSettings) — it would overwrite
+// the team's own committed hook entries. So scope is decided by deployed
+// policy DATA instead: `make sync` puts an overlay only in the repos this
+// policy was written for, and a repo without one is passed through untouched
+// rather than fail-closed denied (a repo with no pnpm workspace would
+// otherwise have every `pytest` / `npx tsc` denied for a reason that does not
+// apply to it).
+//
+// Both platforms sync the SAME overlay source to two different deploy roots
+// (`.claude/scripts/...` and `.codex/scripts/...` — see
+// deployLocationForManifest in tools/sync.ts), so their content is identical;
+// the `.claude`-first order only decides which copy's presence to trust when
+// both COULD exist, never a policy difference between the two.
+export function findOverlayDir(startDir: string): string | null {
+	let dir = resolve(startDir);
+	while (true) {
+		for (const platformDir of [".claude", ".codex"]) {
+			const candidate = join(dir, platformDir, "scripts", "verify-entrypoint-gate");
+			if (existsSync(join(candidate, "verify-entrypoint-gate.local.yaml"))) return candidate;
+		}
+		const parent = dirname(dir);
+		if (parent === dir) return null;
+		dir = parent;
+	}
 }
 
 export function loadConfig(
@@ -712,9 +736,13 @@ export function processHookInput(
 		const workdir = pickNonEmptyString(input.tool_input?.workdir) ?? pickNonEmptyString(input.tool_input?.cwd);
 		const cwd = workdir === undefined ? resolve(topCwd) : resolve(topCwd, workdir);
 
+		// Arming gate — no deployed overlay above this cwd means this repo was
+		// never given this policy, so nothing is judged here at all.
+		const overlayDir = findOverlayDir(cwd);
+		if (overlayDir === null) return "";
+
 		const workspaceRoot = findWorkspaceRoot(cwd);
-		const localDir = workspaceRoot === null ? undefined : resolveLocalDir(workspaceRoot);
-		const policy = loadConfig(baseDir, localDir);
+		const policy = loadConfig(baseDir, overlayDir);
 		const scripts = workspaceRoot === null ? [] : readPackageScripts(workspaceRoot);
 
 		const result = decide({
