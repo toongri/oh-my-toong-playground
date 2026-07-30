@@ -2,16 +2,18 @@
 /**
  * F3-flow: proves the usage-summary harvest must precede clean, and clean must precede return.
  *
- * Three tests together establish the ordering constraint:
+ * Four tests together establish the ordering constraint:
  *   1. summarizeUsage on a fixture job dir returns a known non-zero aggregate (harvest works).
  *   2. summarizeUsage on the SAME fixture after members/ is deleted returns 0
  *      (harvest is impossible post-clean — proves the window closes).
- *   3. SKILL.md conductor execution steps mention "Find Token Usage" (the label appended
- *      to the returned text) BEFORE the `clean` teardown reference — enforcing the prose
- *      correctly sequences harvest → clean → return (final response).
+ *   3-4. SKILL.md mentions "Find Token Usage" (the label appended to the returned text)
+ *      BEFORE the `clean` teardown reference — checked separately on EACH conductor path
+ *      that runs clean, since either one reordered destroys the member data.
  *
  * Tests 1 & 2 are green from the start (summarizeUsage already implemented in T3).
- * Test 3 is the RED gate: it fails until SKILL.md wires usage-summary before clean before return.
+ * Tests 3 & 4 are the RED gate: each fails until its path wires usage-summary before clean.
+ * They must stay per-path: a single scan over the whole Conductor Workflow section resolves
+ * every index inside the timeout-fallback branch, so a reordered normal path passes unnoticed.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
@@ -48,6 +50,31 @@ function makeJobFixture(dir: string): void {
 	}
 }
 
+/**
+ * Slice one named region out of SKILL.md. Each ordering assertion must be anchored to a
+ * SINGLE conductor path: a whole-section scan lets one path's correct ordering satisfy the
+ * index lookups while another path is silently reordered.
+ */
+function sliceRegion(skill: string, startMarker: string, endMarker: string): string {
+	const start = skill.indexOf(startMarker);
+	expect(start).toBeGreaterThan(-1);
+	const end = skill.indexOf(endMarker, start + startMarker.length);
+	expect(end).toBeGreaterThan(-1);
+	return skill.slice(start, end);
+}
+
+/** Assert this path harvests token usage before deleting the job dir. Returns the clean position. */
+function expectHarvestBeforeClean(block: string): number {
+	const findTokenUsagePos = block.indexOf("Find Token Usage");
+	expect(findTokenUsagePos).toBeGreaterThan(-1);
+
+	const cleanPos = block.indexOf('clean "$JOB_DIR"', findTokenUsagePos);
+	expect(cleanPos).toBeGreaterThan(-1);
+	expect(findTokenUsagePos).toBeLessThan(cleanPos);
+
+	return cleanPos;
+}
+
 describe("F3-flow: usage-summary 하베스트는 clean보다 먼저 실행돼야 한다", () => {
 	let tmpDir: string;
 
@@ -80,32 +107,28 @@ describe("F3-flow: usage-summary 하베스트는 clean보다 먼저 실행돼야
 		expect(result.usage).toEqual({});
 	});
 
-	test('SKILL.md 지휘자 단계에서 "Find Token Usage"는 `clean` 앞에, `clean`은 최종 return 앞에 위치한다', () => {
-		const skill = fs.readFileSync(SKILL_MD_PATH, "utf8");
+	test('SKILL.md 정상 경로(Step 4)에서 "Find Token Usage"는 `clean` 앞에, `clean`은 최종 return 앞에 위치한다', () => {
+		const step4 = sliceRegion(
+			fs.readFileSync(SKILL_MD_PATH, "utf8"),
+			"### Step 4 — Merge, Teardown & Return",
+			"\n## ",
+		);
 
-		// "Find Token Usage" is the labelled block the conductor appends to returned text.
-		// It must appear inside the CRITICAL: Execution Constraint section, before the clean step.
-		const execConstraintStart = skill.indexOf("## CRITICAL: Execution Constraint");
-		expect(execConstraintStart).toBeGreaterThan(-1);
+		const cleanPos = expectHarvestBeforeClean(step4);
 
-		// Search only within the execution-constraint block (up to the next ## heading)
-		const nextHeadingPos = skill.indexOf("\n## ", execConstraintStart + 1);
-		const execSection =
-			nextHeadingPos > -1
-				? skill.slice(execConstraintStart, nextHeadingPos)
-				: skill.slice(execConstraintStart);
+		// The final response must be handed back AFTER the clean step — teardown before return
+		const returnPos = step4.indexOf("return the merged candidate list", cleanPos);
+		expect(returnPos).toBeGreaterThan(-1);
+		expect(cleanPos).toBeLessThan(returnPos);
+	});
 
-		const findTokenUsagePos = execSection.indexOf("Find Token Usage");
-		expect(findTokenUsagePos).toBeGreaterThan(-1);
+	test('SKILL.md 타임아웃 폴백 분기에서도 "Find Token Usage"는 `clean` 앞에 위치한다', () => {
+		const fallback = sliceRegion(
+			fs.readFileSync(SKILL_MD_PATH, "utf8"),
+			"If the 6th call still does not report",
+			"Response JSON (done)",
+		);
 
-		// clean must appear in this section, AFTER the Find Token Usage step
-		const cleanAfterPos = execSection.indexOf("`clean`", findTokenUsagePos);
-		expect(cleanAfterPos).toBeGreaterThan(-1);
-		expect(findTokenUsagePos).toBeLessThan(cleanAfterPos);
-
-		// The final "Return" step must appear AFTER the clean step — teardown before return
-		const returnAfterCleanPos = execSection.indexOf("Return", cleanAfterPos);
-		expect(returnAfterCleanPos).toBeGreaterThan(-1);
-		expect(cleanAfterPos).toBeLessThan(returnAfterCleanPos);
+		expectHarvestBeforeClean(fallback);
 	});
 });
