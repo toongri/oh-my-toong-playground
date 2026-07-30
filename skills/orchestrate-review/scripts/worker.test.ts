@@ -5,10 +5,34 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { execFileSync, spawn, execSync } from "child_process";
-import { filterPromptSections, KNOWN_SECTION_NAMES } from "./worker.ts";
+import { buildWorkerEnv, filterPromptSections, KNOWN_SECTION_NAMES } from "./worker.ts";
 
 const TEMPLATE_PATH = path.join(import.meta.dirname, "chunk-reviewer-prompt.md");
 const WORKER_PATH = path.join(import.meta.dirname, "worker.ts");
+
+describe("buildWorkerEnv", () => {
+	it("호출자 환경값은 보존하되 OMT_REVIEW_ROLE은 항상 member로 고정한다", () => {
+		expect(
+			buildWorkerEnv([
+				"--env",
+				"CUSTOM=value",
+				"--env",
+				"OMT_REVIEW_ROLE=conductor",
+			]),
+		).toEqual({
+			CUSTOM: "value",
+			OMT_REVIEW_ROLE: "member",
+		});
+	});
+
+	it("역할 환경값이 없어도 Codex와 Claude 공용 workerEnv에 member 마커를 넣는다", () => {
+		for (const command of ["codex exec --json", "claude -p --output-format json"]) {
+			expect(buildWorkerEnv(["--command", command])).toMatchObject({
+				OMT_REVIEW_ROLE: "member",
+			});
+		}
+	});
+});
 
 /**
  * Build a realistic prompt.txt-equivalent fixture from the actual template file, with each

@@ -100,7 +100,7 @@ export function isSafeSessionId(id: string): boolean {
  */
 export function resolveSessionIdOrThrow(): string {
 	const omtSid = process.env["OMT_SESSION_ID"];
-	if (omtSid) {
+	if (omtSid !== undefined) {
 		if (!isSafeSessionId(omtSid)) {
 			throw new Error(
 				`OMT_SESSION_ID "${omtSid}" is not a safe session id (must match ^[A-Za-z0-9_-]+$, length 1..200).`,

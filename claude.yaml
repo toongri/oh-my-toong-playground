@@ -17,6 +17,9 @@ hooks:
   PreToolUse:
     - component: pre-tool-enforcer.sh
       timeout: 5
+    - component: review-exec-guard.sh
+      matcher: "Bash"
+      timeout: 5
     - component: label-commit-gate.sh
       matcher: "Bash"
       timeout: 5

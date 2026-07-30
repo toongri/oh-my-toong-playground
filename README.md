@@ -60,6 +60,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 | [프라이빗 포크 관리](docs/PRIVATE-FORK-MANAGEMENT.md) | 프라이빗 포크 운영 가이드 — 업스트림 미러링과 지속 동기화 |
 | [오케스트레이션 가이드](docs/ORCHESTRATION.md) | prometheus → sisyphus 워크플로우와 사용법 |
 | [모델 배정](docs/model-assignment.md) | 에이전트별 모델 등급 배정 원칙과 `model-map` 치환 규칙 |
+| [플랫폼 YAML 설정 배포](docs/platform-yaml-config-deployment.md) | 플랫폼별 설정·훅·MCP의 배포·병합·삭제 규칙 |
 
 ## Quick Start
 
