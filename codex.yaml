@@ -111,6 +111,9 @@ hooks:
     - component: codex-spawn-depth-gate.sh
       type: command
       matcher: ".*[sS]pawn_[aA]gent"
+    - component: codex-review-dispatch-gate.sh
+      type: command
+      matcher: ".*[sS]pawn_[aA]gent"
   PostToolUse:
     - component: rules-injector
       type: command
