@@ -7,14 +7,14 @@
 | 0-A: Base Branch Detection | `git fetch --all --prune`, merge-base analysis for all remote branches | Build candidate table, always confirm with AskUserQuestion — no auto-skip |
 | 0-B: Target Sync | `git rev-list --left-right --count` to detect diverge | If behind > 0: merge/rebase interview + execute |
 | 0-C: Conflict Resolution | Per-file context analysis + AskUserQuestion per conflict | Stage each resolved file, finalize with commit / rebase --continue |
-| Collect Git Metadata | Run `git log`, `git diff --stat` | Metadata only, NO file contents |
+| Collect Git Metadata & PR Conventions | Run `git log`, `git diff --stat`, then `gh pr list --state all --limit 30` + `gh label list` | Metadata only, NO file contents. Derive title/branch/label conventions (majority pattern or "no convention") |
 | Explore Codebase | Use explore agent | Do NOT ask user about codebase |
 | User Interview | One question at a time, Clearance Checklist-based | Adaptive question count |
 | Clearance Checklist | Check after every turn | Continue until all YES |
 | Scope Assessment | Analyze thesis count, propose split if multi-thesis | Proxy signals trigger analysis, thesis isolation decides |
-| Write PR Title & Description | Follow output-format.md exactly | Emoji headers, Impact Scope, file paths in Checklist |
+| Write PR Title & Description | Follow output-format.md exactly; title + labels per surveyed conventions | Emoji headers, Impact Scope, file paths in Checklist. Labels only from `gh label list` |
 | User Review | Present and collect feedback | Repeat until approved |
-| PR Creation | CAS freshness check → re-sync if target moved → `gh pr create` after user confirmation | Re-use Step 0-B strategy; re-interview only on conflict |
+| PR Creation | CAS freshness check → re-sync if target moved → branch name convention check → `gh pr create` after user confirmation | Re-use Step 0-B strategy; re-interview only on conflict. Always `--assignee @me`; `--label` per selected label |
 
 ---
 
@@ -50,3 +50,8 @@
 | Deleting original branch after split | User cannot recover | Always preserve the original branch |
 | Skipping freshness check before PR creation | `gh pr create` fails or wrong diff when target branch moved | CAS pattern target SHA re-verification in Step 8 |
 | References를 클릭 불가능한 bare-text로 작성 | GitHub-renderable 아님; reviewer가 navigate 불가 | `[Title](URL)` markdown link 사용. URL 없으면 user에게 한 번 묻고, 없으면 bare-text 허용 (Slack 채널 단독 예외) |
+| Writing title from default style when the repo has a surveyed title convention | PR looks foreign in the repo's PR list | Survey result wins; defaults are fallback only |
+| Creating PR without `--assignee @me` | PR left unassigned; ownership unclear | Always include `--assignee @me` in `gh pr create` |
+| Applying a label that is not in `gh label list` | `gh pr create` fails or pollutes the label set | Only existing labels; if none fits, apply none |
+| Pushing a machine-generated branch name without the convention check | Branch list pollution, convention drift | Check `{branch-convention}` before push; propose rename for unpushed branches |
+| Forcing a convention from a handful of inconsistent PRs | Wrong convention applied confidently | ≥5 surveyed PRs AND majority pattern required; otherwise mark axis "no convention" and use fallback |
