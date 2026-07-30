@@ -387,6 +387,11 @@ export const OUT_OF_SCOPE_TOKENS: readonly { token: string; reason: string }[] =
 			"skills/collect-jd/tests/concurrency-dogfood.md:136: Korean prose describing that collect-jd is a Claude Code skill — documentation about Claude, not an instruction to the agent.",
 	},
 	{
+		token: "CLAUDE_MD_TESTING",
+		reason:
+			"filename fragment, not an env var: skills/writing-skills/testing-skills-with-subagents.md:15 points at that skill's own `examples/CLAUDE_MD_TESTING.md`. The codex adapter copies file NAMES verbatim, so the referenced path resolves identically on the codex deploy surface — rewriting the reference would break it.",
+	},
+	{
 		token: "WebEnvironment",
 		reason:
 			"Spring Boot Test API (`@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)`); appears in the project-local `testing` skill's e2e-test.md reference, duplicated in both projects/loopers-kotlin-spring-template and projects/toong-java-spring-template (Kotlin/Java variants of the same test-setup snippet). Not enumerated by the original corpus scan — found by running the G4-2 scanner itself against the full (unfiltered) project set.",
