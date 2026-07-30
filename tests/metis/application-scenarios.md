@@ -8,7 +8,6 @@ These scenarios validate the metis agent's pre-planning analysis quality without
 
 | # | Scenario | Primary Technique | Validation Focus |
 |---|----------|-------------------|------------------|
-| M-1 | Intent Classification | Phase 0 classification | Correct intent type + rationale |
 | M-2 | Scope and Guardrails | Analysis framework | In-scope/out-of-scope clarity |
 | M-3 | Verifiability Gate | Verdict criteria | Unverifiable AC => REQUEST_CHANGES |
 | M-4 | AC Quality Check | Analysis guards | Observable outcomes + concrete verification |
@@ -20,7 +19,7 @@ These scenarios validate the metis agent's pre-planning analysis quality without
 | M-10 | Axis-Isolated Control (B3) | B1-B4 whitelist | Unobservable AC end-state => RC citing B3 only |
 | M-11 | Axis-Isolated Control (B4) | B1-B4 whitelist | Unflagged load-bearing assumption => RC citing B4 only (RED-at-HEAD control) |
 | M-12 | Convergence Regression | Batch/Ambiguity demotion | 56-AC-style batch brief => 0 blocking on demoted axes |
-| M-13 | Carried-Forward Deadlock | Option-B orchestrator-owned terminal | K=3 same-item RC => prometheus records residual + proceeds (metis stays RC, round-unaware) |
+| M-13 | Carried-Forward Deadlock | Option-B orchestrator-owned terminal | 2-round artifact cap RC => prometheus records residual + proceeds (metis stays RC, round-unaware) |
 | M-14 | S1→S4 Relocation | COMMENT-carry + plan operationalization | Batch COMMENT => per-TODO AC => momus S4 bounded convergence |
 
 ---
@@ -39,22 +38,6 @@ These scenarios validate the metis agent's pre-planning analysis quality without
    부차 축이 batch/Ambiguity/verb를 B1/B3로 재라벨한 것이면 FAIL(#1 위반).
 4. **negative control**: M-7은 진짜 B1-B4 구멍이 없어야 하며 no-blocking(APPROVE 또는 no-blocking COMMENT)에
    도달해야 한다.
-
----
-
-## Scenario M-1: Intent Classification
-
-**Prompt:**
-```
-다음 요구사항 초안을 검토해줘:
-- 기존 유저 검색 API 응답이 느려서 리팩토링 필요
-- 동작은 바뀌면 안 됨
-```
-
-**Expected:**
-- Type = `Refactoring`
-- Classification rationale included
-- Behavior-preservation questions included
 
 ---
 
@@ -114,12 +97,8 @@ These scenarios validate the metis agent's pre-planning analysis quality without
 ```
 
 **Expected:**
-- `QA Directives (Executable Only)` section exists
-- Each item includes all fields:
-  - Check
-  - Command/Assertion
-  - Expected Result
-  - Failure Signal
+- 전용 `QA Directives (Executable Only)` 섹션 신설은 요구하지 않음 — 현행 4-섹션 출력 계약(Domain Context/Findings/Questions for User/Verdict)상 QA directive 항목은 Findings(주로 Advisory)에 나타남
+- 그 안의 QA directive 항목이 template 4-필드 형식을 갖춤: Check / Command-Assertion / Expected Result(결정적 pass) / Failure Signal(결정적 fail)
 - No manual-only wording (`user confirms`, `looks good`, `manual check`)
 
 ---
@@ -385,16 +364,14 @@ Scope:
   리터럴(가변 토큰 없음)이라 모호성 없음; 존재·부재 양방향이 관측 가능한 종단상태로 검증됨 — 위반 없음
 - B4 (unvalidated + unflagged load-bearing assumption): 기존 리터럴 3종 완전집합·각 파일 보유가
   사전 스캔으로 검증되고 브리프에 flag되어 첨부됨 — load-bearing 가정이 validated+flagged라 위반 없음
-- **(HEAD baseline)**: 이 AC는 10개 파일에 대한 단일 aggregate 검증(`wc -l` = 10)만 제공하고
-  파일별 개별 pass/fail 확인 경로를 제공하지 않음 — `agents/metis.md`의
-  `## AC Quality Detail Rules`가 정의하는 batch-pattern(enumeration) + aggregate-only
-  verification에 해당하여, 현재 HEAD metis는 이를 `[CERTAIN]` blocker로 `REQUEST_CHANGES`
-  할 것으로 예상됨 — 이것이 RED baseline
-- **(재설계 후)**: batch-pattern/aggregate-only는 whitelist 밖이므로 **COMMENT로 강등**되어
-  blocker가 아니다 — GREEN 판정 기준은 "metis가 batch/aggregate를 blocker로 인용하지 않음"이다
-  (`## Blocking-Axis Judgment Criterion` #1). 만약 진짜 B1-B4 구멍이 남아 RC가 나오더라도 그
-  RC가 batch 축이 아니면 batch-demotion 회귀는 없다(HEAD는 batch를 [CERTAIN] blocker로 인용,
-  재설계는 batch를 COMMENT로 강등 — 이 대조가 discriminator)
+- 이 AC는 10개 파일에 대한 단일 aggregate 검증(`wc -l` = 10)만 제공하고 파일별 개별
+  pass/fail 확인 경로를 제공하지 않음 — `agents/metis.md`의 `## AC Quality Detail Rules`가
+  정의하는 batch-pattern(enumeration) + aggregate-only verification에 해당해 `[CERTAIN]`
+  severity로 표시된다. 다만 `[CERTAIN]`은 verifiability severity일 뿐 blocking authority가
+  아니며(오직 B1-B4만 gate), batch-pattern/aggregate-only는 whitelist 밖이므로
+  **COMMENT로 강등**되어 blocker가 아니다 — GREEN 판정 기준은 "metis가 batch/aggregate를
+  blocker로 인용하지 않음"이다(`## Blocking-Axis Judgment Criterion` #1). 진짜 B1-B4
+  구멍이 남아 RC가 나오더라도 그 RC의 인용 축이 batch가 아니면 통과다.
 - 명시: 이 픽스처의 discriminating power는 aggregate-only batch AC에 있다 — per-file
   granularity(파일별 개별 확인 문구)를 넣으면 현재 metis도 이미 demote하므로 회귀를
   증명하지 못한다.
@@ -415,23 +392,29 @@ Scope: In-scope 배치잡 스케줄 설정만. Out-of-scope: 알림 로직 자�
 ```
 
 **라운드 카운터 모델 (prometheus 상태 — metis 호출 밖에서 모델링, 프롬프트에 절대 미포함):**
-prometheus가 위 **동일 브리프**를 3회 연속 디스패치했고 매번 동일 B4 항목(exactly-once
-미검증 가정)에서 REQUEST_CHANGES를 받았다고 가정 — `(B4, 알림 발송 로직)` 키가 K=3 도달.
-이 카운터는 prometheus가 소유하며 metis 프롬프트에는 결코 실리지 않는다(종단 카운터를
-prometheus가 소유하고 metis는 라운드를 수신하지 않는 설계 결정).
+prometheus는 아티팩트(현재 브리프의 버전)를 키로 하는 라운드 카운터를 소유한다 — 최초
+리뷰가 라운드 1, 재리뷰가 라운드 2다. 위 브리프가 라운드 1에서 디스패치되어 동일 B4
+항목(exactly-once 미검증 가정)에서 REQUEST_CHANGES를 받았다고 가정. prometheus는 라운드 1
+REQUEST_CHANGES를 받으면 먼저 블로킹 사용자-질문("기존 알림 발송 로직의 exactly-once 보장을
+어떻게 검증할 것인가")을 Interview로 해소하고, 그 답변을 반영한 수정본으로 재리뷰(라운드
+2)를 정확히 1회 디스패치한다. 라운드 2에서도 동일 B4 항목에 REQUEST_CHANGES가 재발했다고
+가정 — 이 시점에 prometheus는 3번째 라운드를 디스패치하지 않는다. 이 카운터는 prometheus가
+소유하며 metis 프롬프트에는 결코 실리지 않는다(round-unaware 설계 결정 — Option B).
 
 **Expected:**
 - (a) Residual 항목이 명명됨: "기존 알림 발송 로직의 exactly-once 미검증 가정"(B4)
 - (b) metis는 라운드 정보를 프롬프트에서 전혀 받지 않으므로 오직 브리프 내용만으로 **동일
-  B4 항목에 REQUEST_CHANGES를 반환**한다. round-unaware 불변식이 teeth를 갖는 이유는 바로
-  이것이다 — 프롬프트에 라운드 신호가 부재하므로 metis가 라운드를 조건화하는 것 자체가
-  원천 불가능하다(라운드를 프롬프트에 넣으면 round-aware 실패모드도 동일 RC를 내 구별
-  불가가 되어 테스트가 공허해진다). 이 픽스처는 실제 시스템(Option B: metis는 라운드를
-  절대 수신 안 함)에 충실하게 metis 프롬프트를 라운드-무지 상태로 유지한다
-- (c) 관측 대상은 metis의 verdict가 아니라 **prometheus의 행동**: 위 라운드 카운터 모델에서
-  K=3 도달 시 prometheus가 residual을 기록하고 terminal transition(S2 진행)함을 assert —
-  이 K=3은 metis 호출과 분리된 prometheus 상태에서 온다
-- "metis 자신은 REQUEST_CHANGES를 반환(round-unaware) — terminal은 D-1 Option B에 따라
+  B4 항목에 REQUEST_CHANGES를 반환**한다(라운드 1·라운드 2 두 디스패치 모두). round-unaware
+  불변식이 teeth를 갖는 이유는 바로 이것이다 — 프롬프트에 라운드 신호가 부재하므로 metis가
+  라운드를 조건화하는 것 자체가 원천 불가능하다(라운드를 프롬프트에 넣으면 round-aware
+  실패모드도 동일 RC를 내 구별 불가가 되어 테스트가 공허해진다). 이 픽스처는 실제 시스템
+  (Option B: metis는 라운드를 절대 수신 안 함)에 충실하게 metis 프롬프트를 라운드-무지
+  상태로 유지한다
+- (c) 관측 대상은 metis의 verdict가 아니라 **prometheus의 행동**: 라운드 2 REQUEST_CHANGES
+  이후 prometheus가 3번째 라운드를 디스패치하지 않고, residual을 carried-forward gap
+  (`Unknown + Verification Plan`)으로 기록한 뒤 terminal transition(S2 진행)함을 assert —
+  이 2-라운드 캡은 metis 호출과 분리된 prometheus 상태에서 온다
+- "metis 자신은 REQUEST_CHANGES를 반환(round-unaware) — terminal은 Option B에 따라
   prometheus-owned이며, metis의 verdict 자체가 아님"임을 명시
 
 ---
