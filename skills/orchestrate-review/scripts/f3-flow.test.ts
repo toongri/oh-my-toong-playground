@@ -84,27 +84,27 @@ describe("F3-flow: usage-summary 하베스트는 clean보다 먼저 실행돼야
 		const skill = fs.readFileSync(SKILL_MD_PATH, "utf8");
 
 		// "Find Token Usage" is the labelled block the conductor appends to returned text.
-		// It must appear inside the CRITICAL: Execution Constraint section, before the clean step.
-		const execConstraintStart = skill.indexOf("## CRITICAL: Execution Constraint");
-		expect(execConstraintStart).toBeGreaterThan(-1);
+		// It must appear inside the Conductor Workflow section, before the clean step.
+		const workflowStart = skill.indexOf("## Conductor Workflow");
+		expect(workflowStart).toBeGreaterThan(-1);
 
-		// Search only within the execution-constraint block (up to the next ## heading)
-		const nextHeadingPos = skill.indexOf("\n## ", execConstraintStart + 1);
-		const execSection =
+		// Search only within the conductor-workflow block (up to the next ## heading)
+		const nextHeadingPos = skill.indexOf("\n## ", workflowStart + 1);
+		const workflowSection =
 			nextHeadingPos > -1
-				? skill.slice(execConstraintStart, nextHeadingPos)
-				: skill.slice(execConstraintStart);
+				? skill.slice(workflowStart, nextHeadingPos)
+				: skill.slice(workflowStart);
 
-		const findTokenUsagePos = execSection.indexOf("Find Token Usage");
+		const findTokenUsagePos = workflowSection.indexOf("Find Token Usage");
 		expect(findTokenUsagePos).toBeGreaterThan(-1);
 
 		// clean must appear in this section, AFTER the Find Token Usage step
-		const cleanAfterPos = execSection.indexOf("`clean`", findTokenUsagePos);
+		const cleanAfterPos = workflowSection.indexOf('clean "$JOB_DIR"', findTokenUsagePos);
 		expect(cleanAfterPos).toBeGreaterThan(-1);
 		expect(findTokenUsagePos).toBeLessThan(cleanAfterPos);
 
 		// The final "Return" step must appear AFTER the clean step — teardown before return
-		const returnAfterCleanPos = execSection.indexOf("Return", cleanAfterPos);
+		const returnAfterCleanPos = workflowSection.indexOf("Return", cleanAfterPos);
 		expect(returnAfterCleanPos).toBeGreaterThan(-1);
 		expect(cleanAfterPos).toBeLessThan(returnAfterCleanPos);
 	});
