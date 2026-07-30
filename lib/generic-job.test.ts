@@ -653,7 +653,7 @@ describe("assertMcpAllowShape", () => {
 	test("mcps.allow 원소에 '.'이 섞이면 exit 1이다", () => {
 		expect(() =>
 			assertMcpAllowShape(
-				{ mcps: { allow: ["mcp_servers.maestro"] } },
+				{ mcps: { allow: ["mcp_servers.nutrition-tools"] } },
 				councilConfig,
 				"/path/to/config.yaml",
 			),
@@ -698,19 +698,20 @@ describe("enumerateConfiguredMcpServers", () => {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	// Regression test for the sub-table trap: this host's real config.toml has
-	// [mcp_servers.maestro] followed by [mcp_servers.maestro.env] — the .env
-	// suffix is a nested table (env vars for the maestro server), not a second
-	// server named "maestro.env". A looser `^\[mcp_servers\.(.+)\]$` regex
-	// would capture "maestro.env" as its own server name.
-	test("하위 테이블([mcp_servers.maestro.env])을 서버로 오인하지 않는다", () => {
+	// Regression test for the sub-table trap: a config may contain
+	// [mcp_servers.nutrition-tools] followed by [mcp_servers.nutrition-tools.env]
+	// — the .env suffix is a nested table (env vars for the nutrition-tools
+	// server), not a second server named "nutrition-tools.env". A looser
+	// `^\[mcp_servers\.(.+)\]$` regex would capture "nutrition-tools.env" as its
+	// own server name.
+	test("하위 테이블([mcp_servers.nutrition-tools.env])을 서버로 오인하지 않는다", () => {
 		fs.writeFileSync(
 			path.join(tmpDir, "config.toml"),
 			[
-				"[mcp_servers.maestro]",
+				"[mcp_servers.nutrition-tools]",
 				'command = "npx"',
 				"",
-				"[mcp_servers.maestro.env]",
+				"[mcp_servers.nutrition-tools.env]",
 				'FOO = "bar"',
 				"",
 			].join("\n"),
@@ -718,8 +719,8 @@ describe("enumerateConfiguredMcpServers", () => {
 
 		const result = enumerateConfiguredMcpServers(tmpDir);
 
-		expect(result).toEqual(["maestro"]);
-		expect(result).not.toContain("maestro.env");
+		expect(result).toEqual(["nutrition-tools"]);
+		expect(result).not.toContain("nutrition-tools.env");
 	});
 
 	test("여러 서버를 정렬된 중복없는 배열로 열거한다", () => {
