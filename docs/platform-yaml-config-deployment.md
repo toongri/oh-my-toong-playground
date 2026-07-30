@@ -1,9 +1,11 @@
 # per-platform YAML config 배포 — config/hooks/mcps는 어디로 가나
 
 `claude.yaml`(과 그 오버레이 `claude.local.yaml`)의 `config`·`hooks`·`mcps`는
-컴포넌트(agents/skills/…)와 달리 파일로 복사되지 않고, 대상 프로젝트의
-**settings 파일에 병합**된다. 개인 절대경로(예: `TURBO_CACHE_DIR`)를 어디에 둬야
-안전한지는 이 배포 경로와 **두 개의 서로 다른 gitignore 계층**으로 결정된다.
+컴포넌트(agents/skills/…)와 달리 파일로 복사되지 않는다. `config`·`hooks`는
+대상 프로젝트의 **settings 파일에 병합**되지만, `mcps`는 다른 파일(`~/.claude.json`)에
+**항목 단위로 대입**된다 — 아래 "무엇이 어디로 배포되나" 참고. 개인 절대경로(예:
+`TURBO_CACHE_DIR`)를 어디에 둬야 안전한지는 이 배포 경로와 **두 개의 서로 다른
+gitignore 계층**으로 결정된다.
 
 ## 무엇이 어디로 배포되나
 
@@ -12,17 +14,29 @@
   `tools/adapters/claude.ts`의 `isGlobalSync(targetPath) ? "settings.json" :
   "settings.local.json"` 분기.
 - deep-merge라 기존 settings를 통째로 덮지 않고 기본적으로 **additive**하게
-  얹는다(같은 키만 갱신). `mcps`도 같은 파일의 해당 섹션으로 병합된다.
+  얹는다(같은 키만 갱신).
 - 단 **키 레벨의 예외가 있다**: 값이 `null`인 키는 대상 파일에서 그 키를
   **삭제**한다(RFC 7386 JSON Merge Patch 의미론, `tools/lib/deep-merge.ts`).
   소스 yaml에서 키를 그냥 지우기만 하면 additive 병합이 옛 값을 그대로 통과시켜
   배포본에서 사라지지 않는다 — 삭제하려면 그 키 값을 명시적으로 `null`로 써야
-  한다. 이건 **절(section) 레벨 `null`과는 다른 메커니즘**이다: `config: null` /
-  `hooks: null`처럼 섹션 전체를 `null`로 두면 `deepMerge` 호출 전에
-  `tools/adapters/claude.ts`의 가드(`syncPlatformYaml`의 `yaml.config !== null` /
-  `yaml.hooks !== null` 체크)가 그 섹션 자체를 배포 대상에서 제외한다. 키 레벨
-  `null`은 섹션 안의 개별 키를 지우고, 절 레벨 `null`은 섹션 전체를 배포에서
-  건너뛴다 — 둘을 혼동하면 안 된다.
+  한다.
+
+**`mcps`는 이 축과 다르다** — 같은 파일로 병합되지 않고, 삭제 레버도 없다:
+
+| | `config`/`hooks`/`statusLine` | `mcps` |
+|---|---|---|
+| 착지점 | 대상의 `.claude/settings.local.json` (전역 sync는 `settings.json`) | `~/.claude.json` (`CLAUDE_USER_CONFIG` 환경변수로 override 가능) |
+| 병합 방식 | `deepMerge` — additive, 기존 값 보존 | per-entry 대입(`syncMcpsMerge`, `tools/adapters/claude.ts:749-785`): `mcpServers[name] = serverJson` |
+| 키 레벨 `null` | 키 삭제 (RFC 7386, `tools/lib/deep-merge.ts:20-23`) | **삭제 안 됨** — `mcpServers[name]`에 리터럴 `null`이 그대로 기록된다. 소스 yaml에서 MCP 선언을 지워도 additive 대입은 옛 값을 건드리지 않으므로 배포본엔 영원히 남는다 |
+| 제거 경로 | 그 키 값을 명시적으로 `null`로 쓴다 | `claude mcp remove <name> -s local` — 유일한 제거 경로 |
+
+절(section) 레벨 `null`은 두 축 모두에 유효하다: `config: null` / `hooks: null` /
+`mcps: null`처럼 섹션 전체를 `null`로 두면 `deepMerge`(또는 `mcps`의 per-entry
+대입) 호출 전에 `tools/adapters/claude.ts`의 가드(`syncPlatformYaml`의
+`yaml.config !== null` / `yaml.hooks !== null` / `yaml.mcps !== null` 체크,
+같은 파일 530행)가 그 섹션 자체를 배포 대상에서 제외한다. 키 레벨 `null`은
+섹션 안의 개별 키를 지우고(`mcps`엔 이 레버가 없다), 절 레벨 `null`은 섹션
+전체를 배포에서 건너뛴다 — 둘을 혼동하면 안 된다.
 
 ## 두 개의 gitignore 계층 (핵심)
 
