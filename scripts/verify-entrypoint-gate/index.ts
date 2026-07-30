@@ -720,6 +720,13 @@ export function findOverlayDir(startDir: string): string | null {
 // child's chdir dies with it — and unwrapping it here over-arms that one shape.
 // That direction is the safe one: an over-armed command is judged rather than
 // waved through, and `env cd <dir> && …` is not a shape anyone writes.
+// Builtins that take a directory operand and move the shell into it. `pushd`
+// belongs here with `cd` — it changes the working directory in both bash and
+// zsh (measured); the directory stack is bookkeeping on the side. `popd` does
+// not: its destination is on that stack, not in the command text, so it joins
+// `cd -` and `cd $VAR` as unknowable rather than being guessed at.
+const DIR_CHANGING_BUILTINS = ["cd", "pushd"];
+
 function armingCandidates(command: string, cwd: string): string[] {
 	const bases = [cwd];
 	const add = (dir: string): void => {
@@ -737,7 +744,7 @@ function armingCandidates(command: string, cwd: string): string[] {
 		}
 
 		const match = /^(\S+)((?:\s+-\S*)*)\s+("[^"]*"|'[^']*'|[^\s;&|]+)/.exec(unwrapped);
-		if (match === null || normalizeToken(match[1]) !== "cd") continue;
+		if (match === null || !DIR_CHANGING_BUILTINS.includes(normalizeToken(match[1]))) continue;
 		const target = cdOperand(match[3]);
 		if (target === null) continue;
 		for (const base of [...bases]) add(resolve(base, target));

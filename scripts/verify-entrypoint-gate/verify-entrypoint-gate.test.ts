@@ -948,6 +948,31 @@ describe("arming — overlay presence, not registration site, decides where the 
 		}
 	});
 
+	test("pushd moves the shell the same as cd and arms the same way", () => {
+		// `pushd <dir>` changes the working directory in both bash and zsh
+		// (measured); only the directory stack bookkeeping differs. `popd` is NOT
+		// recognized — its destination lives on a stack this gate cannot see from
+		// the command text, the same unknowable class as `cd -`.
+		const armed = makeArmedWorkspace("verify-entrypoint-gate-pushd-armed-");
+		const outside = mkdtempSync(join(tmpdir(), "verify-entrypoint-gate-pushd-outside-"));
+		try {
+			for (const cmd of [
+				`pushd ${armed} && npx vitest run`,
+				`pushd ${armed} > /dev/null && npx vitest run`,
+			]) {
+				const output = processHookInput(
+					JSON.stringify({ tool_name: "exec_command", tool_input: { cmd, workdir: outside } }),
+					moduleDir,
+				);
+				expect(output, `expected deny for: ${cmd}`).not.toBe("");
+				expect(JSON.parse(output).hookSpecificOutput.permissionDecision).toBe("deny");
+			}
+		} finally {
+			rmSync(armed, { recursive: true, force: true });
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
 	test("a cd wrapped in a transparent prefix still arms", () => {
 		// Each prefix below leaves `cd` running as the shell's own builtin, so the
 		// directory really does move (measured in bash: `command cd`, `builtin cd`,
