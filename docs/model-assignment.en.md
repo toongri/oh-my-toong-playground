@@ -3,13 +3,13 @@
 Which model tier each agent gets, and how that tier is substituted into a
 concrete per-platform model.
 
-This document exists for a specific reason. The two principles below were decided
-on 2026-06-26 and 2026-07-21, but they lived **only in commit bodies** — and as a
+This document exists for a specific reason. The first two principles below were
+decided on 2026-06-26 and 2026-07-21, but they lived **only in commit bodies** — and as a
 result `hermes` kept its initial value through 2026-07-28 without ever being
 reviewed under either one. A principle that is invisible at code-review time does
 not get applied.
 
-## The two assignment principles
+## Assignment principles
 
 ### Generation-versus-verification split (2026-06-26)
 
@@ -29,7 +29,30 @@ actual verdict is produced by another process — with the agent itself only
 dispatching and collecting — contributes almost nothing to output quality through
 its own model tier.
 
-### When the two conflict, delegation structure wins
+### Absence-judgment principle (2026-07-30)
+
+**Within verification and judgment, an agent that judges absence with no mandated
+evidence-anchoring procedure runs Fable; otherwise Opus.**
+
+This separates Opus from Fable inside the verification layer the two principles
+above carve out. For an agent meeting all four conditions below, the model's
+reasoning lands directly on the output.
+
+1. **What is judged is an absence** — the claim is about what is *not* in a set (a
+   requirement with no corresponding AC, an unstated scope boundary, an unflagged
+   assumption). This is the failure class that passes by checking whether a token
+   appears, instead of counting whether the property holds across the whole set.
+2. **No mandated evidence anchoring** — the contract has no clause obliging the
+   agent to read the references and confirm the claim.
+3. **Failures are unobservable** — a question never asked leaves no trace in the
+   artifact, so there is nothing to diff.
+4. **It is upstream** — its output feeds downstream artifacts, so degradation
+   propagates with the trail broken.
+
+Exactly one agent hits all four today: `metis`, and the second condition is what
+actually decides the split. See the individual record below for how it was applied.
+
+### When principles conflict, delegation structure wins
 
 Some agents are verification by role but delegation by structure. In that cell,
 **delegation structure takes precedence** — Sonnet.
@@ -51,7 +74,7 @@ verdict, but the verdict actually comes from the `Verdict` enum in
 |---|---|---|
 | `code-reviewer` | opus | Judges with its own model |
 | `issue-reviewer` | opus | Judges with its own model |
-| `metis` | opus | Judges with its own model |
+| `metis` | fable | Absence judgment with no mandated evidence anchoring (all four absence-judgment conditions) |
 | `momus` | opus | Judges with its own model |
 | `tech-claim-examiner` | opus | Judges with its own model |
 | `chunk-reviewer` | sonnet | Delegation structure (`orchestrate-review`) |
@@ -66,11 +89,18 @@ verdict, but the verdict actually comes from the `Verdict` enum in
 The single source of truth for an agent's tier is the `model:` field in
 `agents/<name>.md` frontmatter.
 
-## The tier vocabulary is two values
+## The tier vocabulary is three values
 
-`opus` and `sonnet`, nothing else. Adding a third requires evidence that some
-assignment can only be expressed with it — "I want this agent somewhere between
-opus and sonnet" is not enough.
+`fable`, `opus`, and `sonnet`. It was two until `fable` was added on 2026-07-30, and
+the bar for adding one is unchanged — a fourth tier needs evidence that some
+assignment can only be expressed with it. "I want this agent somewhere between two
+tiers" is not enough.
+
+What cleared that bar for `fable` is the absence-judgment principle, which produces
+one assignment that opus cannot express. Note that the tier only differentiates on
+the claude deploy surface — `claude-fable-5` vs Opus 5. On codex there is nothing
+above `gpt-5.6-sol`, so it resolves to the same model as `opus`. This is the first
+platform asymmetry the tier vocabulary has admitted.
 
 ## Substituting a tier into a concrete model
 
@@ -96,8 +126,8 @@ resolveCodexAgentModel: modelMap.agents?.[name] ?? modelMap.tiers[tier]
 ```
 
 Since a tier fixes the model alone, the one thing that qualifies for `agents:` is
-**an agent that must pin an effort instead of following the session**. With the
-tier vocabulary fixed at two, that is effectively its only use.
+**an agent that must pin an effort instead of following the session**. As long as
+model differentiation is expressed as a tier, that is effectively its only use.
 
 Pure model differentiation belongs in a tier, not here. A new entry must state
 **why it could not be expressed as a tier**.
@@ -114,6 +144,50 @@ pairing a specific model does not support (say `ultra` on `gpt-5.5`) still passe
 What it catches is the typo.
 
 ## Records for individual assignments
+
+### `metis`, opus to fable (2026-07-30)
+
+Decided by contrast with `momus`. Both were opus and both are the same verification
+layer by role, but the structure that produces the judgment differs.
+
+The `metis` contract (`agents/metis.md`) says "Operate with available context
+only", with no clause corresponding to `momus`'s Reference Verification
+(`skills/momus/SKILL.md`). It holds Read/Glob/Grep/Bash, yet instead of going to
+confirm evidence it marks `Unknown + Verification Plan`. Meanwhile all four axes of
+its blocking whitelist B1-B4 are absence judgments — a requirement with no
+verifiable AC, no stated scope boundary, an AC with no observable end-state plus a
+missing `| decider:` clause, and an assumption neither validated nor marked
+`Unknown`. Each is a claim about an absence over a set, made with no mandated
+anchor. `momus`, by contrast, has MANDATORY Reference Verification, a verdict
+decided mechanically by the presence of `[CERTAIN]`, and a wrong `[CERTAIN]`
+refuted by the author within one round — its accuracy comes from whether the
+reading was actually done, and its errors get detected.
+
+The counter-frame remains. **Blocking authority belongs to momus** — momus is where
+a wrong APPROVE releases a defective plan into execution. But that gate's inputs are
+mechanically checkable facts (does the file exist, does it contain what was
+claimed), while the judgments that cannot be checked mechanically sit in metis.
+
+The alternative of fixing the contract instead of raising the tier — making metis's
+absence findings enumerate the set they inspected and state `file:line` or "no
+corresponding AC" per item, turning token lookup into counting — was considered in
+the same sitting, and the tier raise was chosen. The two interventions are not
+mutually exclusive.
+
+Three items left unresolved.
+
+- **Landing unverified.** See the claude entry under "Per-platform notes" below;
+  post-deploy measurement is required. The binary also carries the strings
+  `fableCreditsRequired`, `fableOverageConsentV2`, and `fableConsentSessionFallback`,
+  which suggests a separate credits/consent flow with a fallback path — how that gate
+  behaves on subagent spawn was not checked.
+- **Org data-retention setting.** Fable 5 requires 30-day retention, and in a
+  zero-data-retention org every request becomes `400 invalid_request_error`. This
+  org's setting was not verified.
+- **Refusal classifier.** Fable 5's safety classifier can refuse a request
+  (`stop_reason: "refusal"`). metis's input is plan/spec text, so it is less exposed
+  than the code-review family, but its behavior when reviewing a security-shaped plan
+  is unmeasured.
 
 ### `hermes`, opus to sonnet (2026-07-28)
 
@@ -161,10 +235,16 @@ measurement appears.
 
 ## Per-platform notes
 
-- **claude** — does not use `model-map`. The frontmatter values `opus` and
-  `sonnet` are already valid, so no substitution is needed.
+- **claude** — does not use `model-map`. The frontmatter values `fable`, `opus`, and
+  `sonnet` are already valid, so no substitution is needed. The `fable` alias was
+  confirmed to sit in the same alias table as `opus`/`sonnet` in the CLI 2.1.220
+  binary, but whether that table is also used on the agent-frontmatter path cannot be
+  settled by static inspection. The only way to confirm landing is to dispatch metis
+  after deploy and observe which model ran.
 - **codex** — the `model` key in a role TOML beats the model given by the session
-  or CLI. The deployed value is the value at run time.
+  or CLI. The deployed value is the value at run time. `fable` and `opus` both resolve
+  to `gpt-5.6-sol` — deleting the `fable` tier from `codex.yaml` as redundant makes
+  `assertMappedTier` hard-fail `metis`'s codex deploy.
 - **opencode** — no agents deploy here (`feature-platforms.agents` in
   `config.yaml` is `[claude, codex]`). The `model-map` stays declared anyway:
   without it the tier string survives verbatim and an unresolvable value would
