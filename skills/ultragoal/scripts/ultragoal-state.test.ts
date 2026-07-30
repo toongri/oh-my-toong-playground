@@ -131,13 +131,24 @@ describe("review dispatch budget", () => {
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 1, cap: 5 });
 	});
 
-	test("absent or malformed approval artifact fails closed independently of state validity", () => {
-		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: false, reason: "failure" });
+	test("absent or malformed artifact still renews the cap without touching the approval hash", () => {
+		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", cap: 10 });
+		expect(rawState().approved_review_artifact_sha256).toBe("");
 		writeFileSync(codeReviewArtifactPath(S), "not json", "utf8");
-		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: false, reason: "failure" });
+		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", cap: 15 });
+		expect(rawState().approved_review_artifact_sha256).toBe("");
 
 		writeFileSync(resolveStatePath(S), "{broken", "utf8");
 		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "failure" });
+	});
+
+	test("five artifact-less dispatch failures stay recoverable via approved renewal", () => {
+		for (let used = 1; used <= 5; used += 1) {
+			expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used, cap: 5 });
+		}
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: false, reason: "budget_exhausted", used: 5, cap: 5 });
+		expect(approveReviewDispatchRenewal(S)).toMatchObject({ allowed: true, reason: "allowed", used: 5, cap: 10 });
+		expect(claimReviewDispatch(S)).toMatchObject({ allowed: true, reason: "allowed", used: 6, cap: 10 });
 	});
 
 	test("renewal only extends an active pursuit and preserves cap and hash otherwise", () => {
