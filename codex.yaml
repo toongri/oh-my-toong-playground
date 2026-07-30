@@ -81,6 +81,12 @@ hooks:
     - component: codex-label-commit-gate.sh
       type: command
       matcher: "Bash|bash|exec_command|shell_command"
+    # Claude<->Codex hook-parity: root claude.yaml registers review-exec-guard.sh
+    # globally for Bash, so its Codex analog covers every root-config shell-tool
+    # spelling. Codex applies this matcher as a full-string regex.
+    - component: codex-review-exec-guard.sh
+      type: command
+      matcher: "Bash|bash|exec_command|shell_command"
     # NOT a Claude<->Codex hook-parity mirror -- Claude enforces the same
     # nested-spawn-depth policy natively via the CLAUDE_CODE_MAX_SUBAGENT_
     # SPAWN_DEPTH env var, so it has no matching hook. This hook exists only
