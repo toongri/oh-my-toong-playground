@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import {
 	applyRewriteRules,
+	bakeOmtDirToken,
 	bakeSkillDirToken,
 	BROAD_DETECTORS,
 	KEEP_IDENTICAL_TOKENS,
@@ -353,6 +354,41 @@ describe("bakeSkillDirToken", () => {
 		const content = `bun ${SKILL_DIR_TOKEN}/scripts/job.ts`;
 		const once = bakeSkillDirToken(content, "/home/u/.agents/skills/goal");
 		const twice = bakeSkillDirToken(once, "/home/u/.agents/skills/goal");
+		expect(twice).toBe(once);
+	});
+});
+
+describe("bakeOmtDirToken", () => {
+	const cli = "/home/u/.agents/lib/omt-dir.ts";
+
+	it("$OMT_DIR를 resolver CLI 커맨드 치환으로 바꾼다", () => {
+		const content = "write ONE markdown file to $OMT_DIR/meeting-notes/{slug}.md";
+		expect(bakeOmtDirToken(content, cli)).toBe(
+			`write ONE markdown file to $(bun "${cli}")/meeting-notes/{slug}.md`,
+		);
+	});
+
+	it("여러 번 등장해도 전부 치환한다", () => {
+		const content = "$OMT_DIR/plans/a.md and $OMT_DIR/evidence/b.txt";
+		const result = bakeOmtDirToken(content, cli);
+		expect(result).not.toContain("$OMT_DIR");
+		expect(result.split(`$(bun "${cli}")`).length - 1).toBe(2);
+	});
+
+	it("접미사가 붙은 다른 변수명($OMT_DIRX)은 건드리지 않는다", () => {
+		const content = "echo $OMT_DIRX";
+		expect(bakeOmtDirToken(content, cli)).toBe(content);
+	});
+
+	it("토큰이 없으면 원본 문자열을 그대로 반환한다", () => {
+		const content = "no token here";
+		expect(bakeOmtDirToken(content, cli)).toBe(content);
+	});
+
+	it("두 번 호출해도 같은 결과를 반환한다 (치환 결과에 토큰이 남지 않음)", () => {
+		const content = "path: $OMT_DIR/reviews/{slug}.html";
+		const once = bakeOmtDirToken(content, cli);
+		const twice = bakeOmtDirToken(once, cli);
 		expect(twice).toBe(once);
 	});
 });
