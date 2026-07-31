@@ -21,6 +21,10 @@ model-map:
   # tier cannot express (effort differentiation), and nothing here needs it.
   agents: {}
 mcps:
+  # Tombstones delete these carried-over MCPs on existing targets; fresh targets
+  # have no entries to remove.
+  context7: null
+  playwright: null
   # Figma hosted MCP. OpenCode must see this as a remote MCP to run OAuth.
   # Note: Figma currently allowlists remote MCP clients; OpenCode may receive HTTP 403 until approved.
   figma:
