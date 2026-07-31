@@ -146,7 +146,7 @@ What works perfectly for Opus might need more detail for Haiku. If you plan to u
 <Note>
   **YAML Frontmatter**: The SKILL.md frontmatter requires two fields:
 
-  * `name` - Human-readable name of the Skill (64 characters maximum)
+  * `name` - Human-readable name of the Skill, 64 characters maximum
   * `description` - One-line description of what the Skill does and when to use it (1024 characters maximum)
 
   For complete Skill structure details, see the [Skills overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview#skill-structure).

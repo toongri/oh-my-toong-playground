@@ -3238,6 +3238,22 @@ describe("rewritePlatformPaths — codex two-root rule-table rewrite (TODO 4)", 
 		expect(hookContent).not.toContain(".claude/");
 	});
 
+	it("owned codex skill의 $OMT_DIR를 배포된 resolver CLI 커맨드 치환으로 bake한다 (Claude 쪽은 원본 유지)", async () => {
+		const skillDir = path.join(targetPath, ".agents", "skills", "mine");
+		await fs.mkdir(skillDir, { recursive: true });
+		await writeFile(
+			path.join(skillDir, "SKILL.md"),
+			"Write the report to $OMT_DIR/meeting-notes/{slug}.md\n",
+		);
+
+		await rewritePlatformPaths(targetPath, "codex", new Set(["mine"]));
+
+		const expectedCli = path.join(targetPath, ".agents", "lib", "omt-dir.ts");
+		const skillContent = await readFile(path.join(skillDir, "SKILL.md"));
+		expect(skillContent).toContain(`$(bun "${expectedCli}")/meeting-notes/{slug}.md`);
+		expect(skillContent).not.toContain("$OMT_DIR");
+	});
+
 	it("never touches a foreign .agents/skills resident absent from codexSkillNames (highest blast-radius guard — fails against a whole-dir walk)", async () => {
 		const ownedDir = path.join(targetPath, ".agents", "skills", "mine");
 		await fs.mkdir(ownedDir, { recursive: true });
@@ -3524,6 +3540,49 @@ describe("processYaml — codex skill @lib/ import resolves under .agents/lib (L
 		const claudeContent = await readFile(claudeScript);
 		expect(claudeContent).not.toContain("@lib/");
 		expect(claudeContent).toContain("../../../lib/omt-dir");
+	});
+
+	it("SKILL.md 산문의 $OMT_DIR만으로도 (스크립트 @lib import 없이) omt-dir.ts가 .agents/lib에 착지하고 배포본은 bake된다", async () => {
+		await writeFile(path.join(rootDir, "lib", "omt-dir.ts"), "export const OMT_DIR = '/tmp/omt';\n");
+
+		// Prompt-only skill: prose references $OMT_DIR, no scripts/ at all — the
+		// meeting-notes shape. The @lib/ import scan sees nothing; only the
+		// prose-token clause in syncLib can pull the resolver in.
+		const skillDir = path.join(rootDir, "skills", "prose-skill");
+		await writeFile(
+			path.join(skillDir, "SKILL.md"),
+			"Write the report to $OMT_DIR/meeting-notes/{slug}.md\n",
+		);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nskills:\n  platforms: [claude, codex]\n  items:\n    - prose-skill\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+
+		await processYaml(makeContext(), syncYamlPath, adapters, rootDir);
+
+		// Resolver CLI lands where the baked command points.
+		const cliPath = path.join(targetPath, ".agents", "lib", "omt-dir.ts");
+		expect(await exists(cliPath)).toBe(true);
+
+		// Codex deploy: token baked to the command substitution over that CLI.
+		const codexSkillMd = await readFile(
+			path.join(targetPath, ".agents", "skills", "prose-skill", "SKILL.md"),
+		);
+		expect(codexSkillMd).toContain(`$(bun "${cliPath}")/meeting-notes/{slug}.md`);
+		expect(codexSkillMd).not.toContain("$OMT_DIR");
+
+		// Claude deploy: untouched — the harness exports $OMT_DIR natively there.
+		const claudeSkillMd = await readFile(
+			path.join(targetPath, ".claude", "skills", "prose-skill", "SKILL.md"),
+		);
+		expect(claudeSkillMd).toContain("$OMT_DIR/meeting-notes/{slug}.md");
 	});
 });
 

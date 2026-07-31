@@ -66,6 +66,7 @@ import type { PlatformAdapter } from "./adapters/types.ts";
 import {
 	PLATFORM_REWRITE_RULES,
 	applyRewriteRules,
+	bakeOmtDirToken,
 	bakeSkillDirToken,
 	type RewriteRule,
 } from "./lib/rewrite-rules.ts";
@@ -1122,6 +1123,37 @@ async function collectTsFiles(dir: string): Promise<string[]> {
 }
 
 /**
+ * True when any .md file under the given component source roots carries a
+ * `$OMT_DIR` token — the trigger for deploying lib/omt-dir.ts to the agents
+ * bucket (the codex $OMT_DIR bake's runtime target; see syncLib's caller note).
+ * Scans SOURCE roots, mirroring collectRequiredLibModulesFromSources: the
+ * deployed tree is what the bake rewrites, so it cannot be the signal.
+ */
+async function sourceRootsCarryOmtDirToken(sourceRoots: Iterable<string>): Promise<boolean> {
+	for (const root of sourceRoots) {
+		let stat: import("fs").Stats;
+		try {
+			stat = await fs.stat(root);
+		} catch {
+			continue;
+		}
+		const mdFiles = stat.isDirectory()
+			? await collectMdFiles(root, [])
+			: root.endsWith(".md")
+				? [root]
+				: [];
+		for (const filePath of mdFiles) {
+			try {
+				if (/\$OMT_DIR\b/.test(await fs.readFile(filePath, "utf8"))) return true;
+			} catch {
+				// unreadable file — skip
+			}
+		}
+	}
+	return false;
+}
+
+/**
  * Deploy lib/ directory to each platform target, then rewrite @lib/* aliases.
  * Mirrors sync_lib in sync.sh:1422-1457.
  *
@@ -1181,6 +1213,15 @@ export async function syncLib(
 		// at copy time, so the deployed tree carries zero raw `@lib/` to match.
 		const sourceRoots = libSourceRoots?.get(platform) ?? new Set<string>();
 		const requiredModules = await collectRequiredLibModulesFromSources(sourceRoots, libSrc);
+
+		// The codex adapter bakes `$OMT_DIR` in skill .md prose to a command
+		// substitution over lib/omt-dir.ts (rewritePlatformPaths). That reference
+		// lives in markdown, invisible to the @lib/ import scan above — so when any
+		// agents-bucket skill body carries the token, pull the resolver in
+		// explicitly or the baked command points at a file that never landed.
+		if (platform === "agents" && (await sourceRootsCarryOmtDirToken(sourceRoots))) {
+			requiredModules.add(path.join(libSrc, "omt-dir.ts"));
+		}
 
 		// Discover bare npm imports across BOTH scan surfaces, intersecting each hit
 		// with declared packages. A bare `import 'picomatch'` traces through no @lib/
@@ -1461,9 +1502,15 @@ export async function rewritePlatformPaths(
 	// absolute deployed dir (Claude Code expands the token at skill-injection
 	// time; Codex has no expander, and a skill's shell command runs under the
 	// agent's session cwd, not the skill dir, so only an absolute path resolves).
+	// $OMT_DIR bakes to a command substitution over the deployed resolver CLI
+	// (syncLib guarantees .agents/lib/omt-dir.ts lands whenever a deployed codex
+	// skill body carries the token — see the agents-bucket clause there).
+	const omtDirCli = path.join(codexSkillsDir(targetPath), "..", "lib", "omt-dir.ts");
 	for (const name of codexSkillNames) {
 		const skillDir = path.join(codexSkillsDir(targetPath), name);
-		await rewriteFilesUnder(skillDir, rules, [], (content) => bakeSkillDirToken(content, skillDir));
+		await rewriteFilesUnder(skillDir, rules, [], (content) =>
+			bakeOmtDirToken(bakeSkillDirToken(content, skillDir), omtDirCli),
+		);
 	}
 }
 
