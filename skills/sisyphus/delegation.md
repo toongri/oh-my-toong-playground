@@ -17,7 +17,7 @@ When delegating to sisyphus-junior, include all 7 sections:
 
 ## 3. REQUIRED TOOLS
 - [tool]: [what to search/check]
-- context7: Look up [library] docs
+- librarian agent: research [library] official docs
 - Bash: [specific commands and restrictions]
 
 Standard file tools (Read, Edit, Write, Grep, Glob) are always permitted.
@@ -55,7 +55,7 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 ## 3. REQUIRED TOOLS
 - Grep: Navigate to router setup and existing middleware chain in src/api/router.ts (search for `app.use` / route registration patterns)
 - ast-grep: Understand middleware structure in src/api/middleware/ (structural outline of exported functions per file)
-- context7: Look up express-rate-limit library docs for configuration options
+- librarian agent: research express-rate-limit official docs for configuration options
 - Bash: Run `npm test -- --grep "rate limit"` for verification only — no other shell commands
 
 ## 4. MUST DO
