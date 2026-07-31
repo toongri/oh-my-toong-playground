@@ -21,22 +21,62 @@ gitignore 계층**으로 결정된다.
   배포본에서 사라지지 않는다 — 삭제하려면 그 키 값을 명시적으로 `null`로 써야
   한다.
 
-**`mcps`는 이 축과 다르다** — 같은 파일로 병합되지 않고, 삭제 레버도 없다:
+**`mcps`는 이 축과 다르다** — 플랫폼별 MCP 착지점과 삭제 계약을 따른다:
 
 | | `config`/`hooks`/`statusLine` | `mcps` |
 |---|---|---|
-| 착지점 | 대상의 `.claude/settings.local.json` (전역 sync는 `settings.json`) | `~/.claude.json` (`CLAUDE_USER_CONFIG` 환경변수로 override 가능) |
-| 병합 방식 | `deepMerge` — additive, 기존 값 보존 | per-entry 대입(`syncMcpsMerge`, `tools/adapters/claude.ts:749-785`): `mcpServers[name] = serverJson` |
-| 키 레벨 `null` | 키 삭제 (RFC 7386, `tools/lib/deep-merge.ts:20-23`) | **삭제 안 됨** — `mcpServers[name]`에 리터럴 `null`이 그대로 기록된다. 소스 yaml에서 MCP 선언을 지워도 additive 대입은 옛 값을 건드리지 않으므로 배포본엔 영원히 남는다 |
-| 제거 경로 | 그 키 값을 명시적으로 `null`로 쓴다 | `claude mcp remove <name> -s local` — 유일한 제거 경로 |
+| 착지점 | 대상의 `.claude/settings.local.json` (전역 sync는 `settings.json`) | 플랫폼별 MCP 설정 저장소 |
+| 병합 방식 | `deepMerge` — additive, 기존 값 보존 | 플랫폼별 어댑터가 이름 단위로 처리 |
+| 키 레벨 `null` | 키 삭제 (RFC 7386, `tools/lib/deep-merge.ts`) | 지원 플랫폼에서 이름 붙은 MCP 삭제 tombstone |
+| 제거 경로 | 그 키 값을 명시적으로 `null`로 쓴다 | `mcps.<name>: null`을 명시한다 |
 
-절(section) 레벨 `null`은 두 축 모두에 유효하다: `config: null` / `hooks: null` /
-`mcps: null`처럼 섹션 전체를 `null`로 두면 `deepMerge`(또는 `mcps`의 per-entry
-대입) 호출 전에 `tools/adapters/claude.ts`의 가드(`syncPlatformYaml`의
-`yaml.config !== null` / `yaml.hooks !== null` / `yaml.mcps !== null` 체크,
-같은 파일 530행)가 그 섹션 자체를 배포 대상에서 제외한다. 키 레벨 `null`은
-섹션 안의 개별 키를 지우고(`mcps`엔 이 레버가 없다), 절 레벨 `null`은 섹션
-전체를 배포에서 건너뛴다 — 둘을 혼동하면 안 된다.
+### MCP 이름별 삭제
+
+선언을 **생략**하면 기존 상태가 보존된다. 이전에 배포한 MCP를 제거하려면
+desired-state migration으로 명시적 tombstone을 남긴다.
+
+```yaml
+mcps:
+  obsolete-server: null
+```
+
+이 문법은 Claude·Codex·OpenCode에서 지원한다. 이름 하나만 제거하므로 형제 MCP와
+해당 설정 파일의 다른 내용은 보존되며, 이미 없는 이름을 다시 tombstone으로
+처리해도 결과는 같다(idempotent).
+
+| 플랫폼 | `mcps.<name>: null`의 범위·착지점 |
+|---|---|
+| Claude | 루트 `claude.yaml`은 사용자 범위 `~/.claude.json`의 최상위 `mcpServers.<name>`을 삭제한다. 프로젝트 `claude.yaml`은 같은 사용자 설정 파일 안에서 해당 프로젝트의 local MCP 위치(`projects.<derived-project-key>.mcpServers.<name>`)만 삭제한다. `CLAUDE_USER_CONFIG`로 파일 위치를 바꿀 수 있다. |
+| Codex | 관리되는 MCP 블록에서 해당 이름만 제외한다. |
+| OpenCode | 대상의 `.opencode/opencode.json`에서 `mcp.<name>`만 삭제한다. |
+| Gemini | **지원하지 않는다.** `mcps.<name>: null`은 검증에서 거부된다. Gemini는 `mcps` 섹션이 제공되면 `.gemini/settings.json`의 `mcpServers` 전체를 교체하므로, 이 삭제 tombstone 계약의 대상이 아니다. |
+
+수동 CLI로는 루트 전역 MCP에 `claude mcp remove <name> --scope user`, 프로젝트
+local MCP에 `claude mcp remove <name> --scope local`을 쓴다. scope를 생략하면
+Claude CLI가 MCP의 존재 위치를 찾는다. 이 수동 방법은 계속 쓸 수 있지만 선언형
+sync의 유일한 제거 경로는 아니다. 설정에서 선언을 지우는 것만으로는 Claude·Codex·
+OpenCode의 기존 MCP가 삭제되지 않는다.
+
+절(section) 레벨 `null`인 `config: null` / `hooks: null` / `mcps: null`은 개별
+삭제와 다르다. 어댑터의 `syncPlatformYaml` 가드가 그 섹션 전체를 이번 배포에서
+건너뛰게 할 뿐이며, 기존 상태를 제거하지 않는다.
+
+### Claude 플러그인 삭제
+
+Claude의 `plugins.items`는 문자열 또는 객체 항목을 받는다. 문자열과
+`{ name: <name> }`, `{ name: <name>, state: present }`는 기존과 동일하게 설치를
+뜻한다(`state`의 기본값은 `present`). 특정 플러그인만 제거하려면 다음처럼 쓴다.
+
+```yaml
+plugins:
+  items:
+    - name: obsolete-plugin@marketplace
+      state: absent
+```
+
+`state: absent`는 해당 이름만 `claude plugin uninstall`하며, 루트 YAML에서는 user
+scope, 프로젝트 YAML에서는 project scope로 실행한다. 다른 플러그인은 보존되고,
+이미 제거된 플러그인을 다시 지정해도 안전하게 처리된다.
 
 ## 두 개의 gitignore 계층 (핵심)
 
