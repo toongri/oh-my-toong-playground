@@ -70,14 +70,13 @@ cloudflare_turnstile:
     server_contains: ["cloudflare"]
     body: ["Just a moment...", "Checking your browser", "cf-chl-bypass", "Attention Required! | Cloudflare"]
   capabilities_needed:
-    - needs_js_exec        # MCP Playwright Chromium OK — no real-TLS required
+    - needs_js_exec        # real Chromium TLS passes CF baseline — no separate real-TLS requirement
   tls_impersonate_candidates:
     - [chrome, chrome_android]
   referer_strategies:
     - google_search
     - self_root
   fallback_when_challenge:
-    - playwright_mcp       # MCP sufficient; Chromium TLS passes CF baseline
     - playwright_real_chrome
 
 f5_big_ip:
@@ -154,7 +153,6 @@ unknown_challenge:
     - original
     - mobile_subdomain
   fallback_when_challenge:
-    - playwright_mcp
     - playwright_real_chrome
   notes: |
     When detector returns low-confidence results we land here. Broad,

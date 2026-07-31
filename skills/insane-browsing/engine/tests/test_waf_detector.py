@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from engine.waf_detector import _load_profiles, _score_profile  # noqa: E402
+from engine.waf_detector import _DEFAULT_PROFILES, _load_profiles, _score_profile  # noqa: E402
 
 
 class _Resp:
@@ -104,6 +104,15 @@ class AwsWafHeaderDetectorTest(unittest.TestCase):
         hit = _score_profile("aws_waf", self._PROFILE, resp)
         self.assertIsNotNone(hit, "x-amzn-waf-* header must produce an aws_waf hit")
         self.assertIn("header:x-amzn-waf-*", hit.signals)
+
+
+class DefaultProfileFallbackChain(unittest.TestCase):
+    """The playwright_mcp tier is retired — only the on-demand local
+    real-Chrome executor remains in the in-code default fallback chain."""
+
+    def test_unknown_challenge_fallback_has_no_mcp_tier(self) -> None:
+        fallback = _DEFAULT_PROFILES["unknown_challenge"]["fallback_when_challenge"]
+        self.assertEqual(fallback, ["playwright_real_chrome"])
 
 
 if __name__ == "__main__":
