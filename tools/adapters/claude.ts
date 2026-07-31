@@ -552,6 +552,10 @@ export class ClaudeAdapter implements PlatformAdapter {
 						logWarn("플러그인 항목에 name 필드 없음 (스킵)");
 						continue;
 					}
+					if (obj.state === "absent") {
+						await this._uninstallPluginSafe(obj.name, targetPath, dryRun, pluginScope);
+						continue;
+					}
 					await this._installPluginObjectSafe(
 						obj.name,
 						obj.check,
@@ -749,7 +753,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 	async syncMcpsMerge(
 		targetPath: string,
 		serverName: string,
-		serverJson: Record<string, unknown>,
+		serverJson: Record<string, unknown> | null,
 		dryRun = false,
 		scope?: "local",
 	): Promise<void> {
@@ -760,27 +764,45 @@ export class ClaudeAdapter implements PlatformAdapter {
 			const projectKey = deriveClaudeProjectKey(targetPath);
 			if (dryRun) {
 				logDry(`local MCP key: ${projectKey}`);
-				logDry(`MCP merge: ${serverName} -> ~/.claude.json (local: ${targetPath})`);
+				logDry(
+					`MCP ${serverJson === null ? "removed" : "merge"}: ${serverName} -> ~/.claude.json (local: ${targetPath})`,
+				);
 				return;
 			}
 			const current = await readJsonFile(claudeUserConfig);
 			const projects = isRecord(current["projects"]) ? current["projects"] : {};
 			const projectEntry = isRecord(projects[projectKey]) ? projects[projectKey] : {};
 			const mcpServers = isRecord(projectEntry["mcpServers"]) ? projectEntry["mcpServers"] : {};
-			mcpServers[serverName] = serverJson;
+			if (serverJson === null) {
+				if (!Object.prototype.hasOwnProperty.call(mcpServers, serverName)) {
+					logInfo(`MCP removed: ${serverName} -> ~/.claude.json (local: ${targetPath})`);
+					return;
+				}
+				delete mcpServers[serverName];
+			} else {
+				mcpServers[serverName] = serverJson;
+			}
 			projects[projectKey] = { ...projectEntry, mcpServers };
 			await writeJsonFile(claudeUserConfig, { ...current, projects });
-			logInfo(`MCP merged: ${serverName} -> ~/.claude.json (local: ${targetPath})`);
+			logInfo(`MCP ${serverJson === null ? "removed" : "merged"}: ${serverName} -> ~/.claude.json (local: ${targetPath})`);
 		} else {
 			if (dryRun) {
-				logDry(`MCP merge: ${serverName} -> ~/.claude.json (user scope)`);
+				logDry(`MCP ${serverJson === null ? "removed" : "merge"}: ${serverName} -> ~/.claude.json (user scope)`);
 				return;
 			}
 			const current = await readJsonFile(claudeUserConfig);
 			const mcpServers = isRecord(current["mcpServers"]) ? current["mcpServers"] : {};
-			mcpServers[serverName] = serverJson;
+			if (serverJson === null) {
+				if (!Object.prototype.hasOwnProperty.call(mcpServers, serverName)) {
+					logInfo(`MCP removed: ${serverName} -> ~/.claude.json (user scope)`);
+					return;
+				}
+				delete mcpServers[serverName];
+			} else {
+				mcpServers[serverName] = serverJson;
+			}
 			await writeJsonFile(claudeUserConfig, { ...current, mcpServers });
-			logInfo(`MCP merged: ${serverName} -> ~/.claude.json (user scope)`);
+			logInfo(`MCP ${serverJson === null ? "removed" : "merged"}: ${serverName} -> ~/.claude.json (user scope)`);
 		}
 	}
 
@@ -906,6 +928,30 @@ export class ClaudeAdapter implements PlatformAdapter {
 			logInfo(`플러그인 설치 완료: ${name} (scope: ${scope})`);
 		} catch {
 			logWarn(`플러그인 설치 실패 (계속 진행): ${name}`);
+		}
+	}
+
+	private async _uninstallPluginSafe(
+		name: string,
+		targetPath: string,
+		dryRun: boolean,
+		scope: PluginScope,
+	): Promise<void> {
+		const command = `claude plugin uninstall --scope ${scope} ${name}`;
+		if (dryRun) {
+			logDry(command);
+			return;
+		}
+
+		try {
+			const result = await this._runCommand(command, targetPath);
+			if (result.exitCode !== 0) {
+				logWarn(`플러그인 제거 실패 (계속 진행): ${name}`);
+				return;
+			}
+			logInfo(`플러그인 제거 완료: ${name} (scope: ${scope})`);
+		} catch {
+			logWarn(`플러그인 제거 실패 (계속 진행): ${name}`);
 		}
 	}
 
