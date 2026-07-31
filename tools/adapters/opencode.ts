@@ -410,26 +410,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Merge an MCP server definition into .opencode/opencode.json at `.mcp.<name>`.
- * Transforms incoming definitions to OpenCode's McpLocal format.
- * Removes stale top-level `env` key if present.
+ * A null definition removes only the named MCP entry.
+ * Non-null definitions are transformed to OpenCode's McpLocal format and remove
+ * a stale top-level `env` key if present.
  */
 export async function syncMcpsMerge(
 	targetPath: string,
 	serverName: string,
-	serverDef: Record<string, unknown>,
+	serverDef: Record<string, unknown> | null,
 	dryRun: boolean,
 ): Promise<void> {
 	const configFile = path.join(targetPath, ".opencode", "opencode.json");
-	const transformed = transformMcpServerDef(serverDef);
 
 	if (dryRun) {
-		logDry(`MCP merge: ${serverName} -> ${configFile}`);
-		logDry(`Server config: ${JSON.stringify(transformed)}`);
+		logDry(`MCP ${serverDef === null ? "removal" : "merge"}: ${serverName} -> ${configFile}`);
+		if (serverDef !== null) {
+			const transformed = transformMcpServerDef(serverDef);
+			logDry(`Server config: ${JSON.stringify(transformed)}`);
+		}
 		return;
 	}
 
 	const current = await readJsonFile(configFile);
 	const mcp: Record<string, unknown> = isRecord(current["mcp"]) ? current["mcp"] : {};
+	if (serverDef === null) {
+		if (!Object.prototype.hasOwnProperty.call(mcp, serverName)) {
+			logInfo(`MCP removed: ${serverName} -> ${configFile}`);
+			return;
+		}
+		delete mcp[serverName];
+		current["mcp"] = mcp;
+		await writeJsonFile(configFile, current);
+		logInfo(`MCP removed: ${serverName} -> ${configFile}`);
+		return;
+	}
+
+	const transformed = transformMcpServerDef(serverDef);
 	mcp[serverName] = transformed;
 	current["mcp"] = mcp;
 
