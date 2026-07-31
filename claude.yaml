@@ -74,9 +74,9 @@ config:
       - "Bash(rm -r -f *)"
       - "Bash(rm -f -r *)"
 
-# 전역에는 레포를 가리지 않고 쓰는 것만 둔다 — 코드 그래프(codegraph)와 브라우저
-# 자동화(playwright). stdio MCP는 세션마다 프로세스로 떠서 세션당 램을 먹으므로
-# (실측: playwright 163MB / postgres 99MB / opensearch 86MB /
+# 전역에는 레포를 가리지 않고 쓰는 것만 둔다 — 코드 그래프(codegraph).
+# stdio MCP는 세션마다 프로세스로 떠서 세션당 램을 먹으므로
+# (실측: postgres 99MB / opensearch 86MB /
 # codegraph 87MB), 특정 프로젝트에서만 쓰는 것은 projects/<name>/claude.yaml로
 # 내린다. notion/linear/slack/sentry는 회사 계정과 개인 계정을 섞지 않기 위해
 # 전역에서 빼고 프로젝트별로 등록한다(type: http라 램은 0).
@@ -93,16 +93,9 @@ mcps:
     args:
       - "serve"
       - "--mcp"
-  playwright:
-    command: npx
-    args:
-      - "--prefer-offline"
-      - "-y"
-      - "@playwright/mcp@0.0.76"
 
 plugins:
   items:
-    - context7
     - code-review
     - frontend-design
     - name: plannotator@plannotator

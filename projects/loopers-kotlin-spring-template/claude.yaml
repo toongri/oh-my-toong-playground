@@ -9,13 +9,6 @@ hooks:
 config:
   enableAllProjectMcpServers: true
 
-mcps:
-  playwright:
-    command: npx
-    args:
-      - -y
-      - "@playwright/mcp@latest"
-
 plugins:
   items:
     - kotlin-lsp
