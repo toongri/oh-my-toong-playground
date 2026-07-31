@@ -23,11 +23,20 @@ chunk-review:
     #     렌즈에 몰렸다.
     #   · effort 상향은 cleanup에서만 효과가 있다. 같은 diff를 구성당 3회씩 돌려
     #     2회 이상 독립 재현된 finding(consensus)만 세면, cleanup이 회차당 잡는
-    #     consensus가 medium 4/4/3 → high 6/6/5로 겹침 없이 올라간다. 나머지 세
-    #     앵글은 effort를 올려도 회차 간 변동(±1)을 못 넘는다.
-    #   · 그래서 cleanup만 올린다. 4앵글 전부 high로 올리면 output 토큰 +64%,
-    #     wall +60%인데 cleanup만 올리면 +16% / wall 변화 없음(병렬 구조에서
-    #     cleanup은 임계 경로가 아니다). xhigh는 high보다 나은 게 없고 +134%.
+    #     consensus가 두 레포·3개 PR에서 일관되게 올랐다 — 28파일 +2.33건,
+    #     21파일 +2.00건. 같은 실행에서 설정을 안 바꾼 세 앵글은 평균 0 근처로
+    #     움직여, 그게 노이즈 바닥이자 cleanup 상승이 실재라는 근거다. 4앵글 전부
+    #     high는 output +64%·wall +60%를 쓰고도 cleanup 몫 이상을 못 준다.
+    #     xhigh는 high보다 나은 게 없고 +134%.
+    #   · 다만 이 이득은 diff가 클 때만 나오고, 비용은 레포마다 갈린다. 5파일
+    #     PR에서는 상승(+1.33)이 노이즈와 구분되지 않으면서 output은 +22% 들었다.
+    #     wall은 −6%(oh-my-toong #221) ~ +81%(acme-home #1549)로 벌어지는데,
+    #     4 finder 병렬 구조에서 소요 시간은 가장 느린 레인이 정하기 때문이다:
+    #     cleanup이 그 diff에서 최저비용 레인이면 high로 올려도 correctness 뒤에
+    #     숨지만(#221: 5,357→12,555 대 correctness 11,729), 이미 무거운 레포에서는
+    #     임계 경로를 가져간다(#1549: 9,347→20,957 대 correctness 14,396).
+    #     현재 포맷에는 diff 크기별로 effort를 달리할 레버가 없다 — 이 값은 전
+    #     레포·전 diff에 일괄 적용된다.
     # `model` + `effort_level` + `output_format` (below) plus
     # `settings.deny.skills` (below) resolve (via buildAugmentedCommand) to:
     #   codex exec -c agents.enabled=false -m gpt-5.6-sol \
