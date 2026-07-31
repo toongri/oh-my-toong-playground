@@ -79,7 +79,7 @@ Run this WITHOUT a TDD skill. Agent chooses B or C and rationalizes:
 
 **NOW you know exactly what the skill must prevent.**
 
-## GREEN Phase: Write Minimal Skill (Make It Pass)
+## GREEN Phase: Write Minimal Skill — Make It Pass
 
 Write skill addressing the specific baseline failures you documented. Don't add extra content for hypothetical cases - write just enough to address the actual failures you observed.
 

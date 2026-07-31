@@ -479,3 +479,39 @@ describe("resolvePinsHome", () => {
 		expect(omtResult).toBe("/tmp/x-omt-override");
 	});
 });
+
+describe("CLI entry", () => {
+	const modulePath = join(import.meta.dir, "omt-dir.ts");
+
+	it("`bun omt-dir.ts` prints the resolved dir when OMT_DIR is set", () => {
+		const override = join(testTmpBase, "cli-env-override");
+		const out = execSync(`bun ${JSON.stringify(modulePath)}`, {
+			encoding: "utf-8",
+			env: { ...process.env, OMT_DIR: override },
+		}).trim();
+
+		expect(out).toBe(override);
+	});
+
+	it("`bun omt-dir.ts` still prints an absolute path when OMT_DIR is unset (Codex condition)", () => {
+		// Codex never sets OMT_DIR (no CLAUDE_ENV_FILE, and session-start.sh is not
+		// registered in codex.yaml). The CLI must fall through to the git/cwd
+		// derivation rather than printing an empty string — an empty result is what
+		// makes a SKILL.md `$OMT_DIR/x.md` write land at the filesystem root.
+		const env = { ...process.env };
+		delete env.OMT_DIR;
+		const out = execSync(`bun ${JSON.stringify(modulePath)}`, { encoding: "utf-8", env }).trim();
+
+		expect(out.length).toBeGreaterThan(0);
+		expect(out.startsWith("/")).toBe(true);
+		expect(out).toContain("/.omt/");
+	});
+
+	it("importing the module prints nothing (guard stays inert on import)", () => {
+		const out = execSync(`bun -e ${JSON.stringify(`import ${JSON.stringify(modulePath)};`)}`, {
+			encoding: "utf-8",
+		}).trim();
+
+		expect(out).toBe("");
+	});
+});

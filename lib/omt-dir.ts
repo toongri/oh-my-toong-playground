@@ -82,6 +82,26 @@ export function resolveProjectRoot(cwd: string = process.cwd()): string {
 	}
 }
 
+/**
+ * CLI entry: print the resolved OMT working directory and exit.
+ *
+ * Exists for deployed skill bodies on Codex: Claude's harness exports `$OMT_DIR`
+ * (session-start.sh writes it to CLAUDE_ENV_FILE); Codex has no CLAUDE_ENV_FILE
+ * and never registers that hook, so the codex adapter bakes the `$OMT_DIR` token
+ * in skill prose to a command substitution over this entry (see
+ * bakeOmtDirToken in tools/lib/rewrite-rules.ts). Deliberately delegates to
+ * getOmtDir() rather than letting prose re-derive the path in shell: the
+ * git-common-dir branch in deriveProjectName is what makes a bare-repo worktree
+ * resolve to the REPO name, which `git rev-parse --show-toplevel` alone gets
+ * wrong.
+ *
+ * `import.meta.main` is undefined on runtimes that lack it, so the guard is
+ * simply false there and importing this module stays side-effect free.
+ */
+if (import.meta.main) {
+	process.stdout.write(`${getOmtDir()}\n`);
+}
+
 export function deriveProjectName(cwd: string): string {
 	try {
 		const gitCommonDir = execSync("git rev-parse --git-common-dir", {
