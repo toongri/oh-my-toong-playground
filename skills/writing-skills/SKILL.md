@@ -315,10 +315,10 @@ digraph when_flowchart {
 
 See `graphviz-conventions.dot` in this directory for graphviz style rules.
 
-**Visualizing for your human partner:** Use `render-graphs.js` in this directory to render a skill's flowcharts to SVG:
+**Visualizing for your human partner:** Use the bundled `render-graphs.js` to render a skill's flowcharts to SVG. The argument is the directory containing the SKILL.md to render — give it a path that resolves from your current working directory (e.g. `skills/some-skill` in the project repo):
 ```bash
-./render-graphs.js ../some-skill           # Each diagram separately
-./render-graphs.js ../some-skill --combine # All diagrams in one SVG
+node "${CLAUDE_SKILL_DIR}/render-graphs.js" skills/some-skill           # Each diagram separately
+node "${CLAUDE_SKILL_DIR}/render-graphs.js" skills/some-skill --combine # All diagrams in one SVG
 ```
 
 ## Code Examples
