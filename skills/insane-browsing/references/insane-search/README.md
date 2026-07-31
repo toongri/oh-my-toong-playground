@@ -30,7 +30,7 @@
 **R5 — Phase 0 공식 API 우선**: X/Reddit/YouTube/HN/arXiv 등 **공식 공개 엔드포인트**가 있는 플랫폼은 Phase 0 테이블을 먼저 확인하고 해당 API를 쓴다. 이건 편향이 아니라 합의된 접근 경로.
 
 **R6 — 실패 선언은 전수 시도 후에만**: 격자(URL 변환 × TLS impersonate × Referer × Playwright fallback)를 **모두** 돌린 뒤에만 "뚫을 수 없음" 결론. CLI의 `max_attempts` 기본 12가 이를 보장.
-단, R7 조건(WAF 조기 감지)이 성립하면 engine 격자는 계속 돌되, Claude가 **병렬로** MCP 정찰 루트를 시도할 수 있다. 빠른 쪽이 이긴다.
+단, R7 조건(WAF 조기 감지)이 성립하면 engine 격자는 계속 돌되, Claude가 **병렬로** `agent-browser` 정찰 루트를 시도할 수 있다. 빠른 쪽이 이긴다.
 
 **R7 — WAF 조기 감지 시 API-first 병행 분기** (분기 결정은 자동이지만 사용자가 결과에서 확인 가능 — 어떤 우회 경로로 성공/실패했는지 결과 metadata에 명시):
 발동 조건 (AND):
@@ -42,16 +42,16 @@
 
 **"병렬"의 실행 의미** (Claude 도구 호출이 순차이므로 명확화):
 - engine은 `run_in_background=true`로 Bash 툴에서 띄워둔다 — 격자는 그대로 돌되 블로킹하지 않음
-- Claude는 그 사이 foreground에서 MCP Playwright 정찰 루트를 진행
-- engine이 먼저 성공해도 좋고, MCP 정찰로 얻은 API가 먼저 성공해도 좋음. 빠른 쪽 결과 채택
+- Claude는 그 사이 foreground에서 Tier 3 `agent-browser` 정찰 루트를 진행 (온디맨드 real Chrome 세션 — 상주 브라우저 아님)
+- engine이 먼저 성공해도 좋고, 정찰로 얻은 API가 먼저 성공해도 좋음. 빠른 쪽 결과 채택
 
-**MCP 정찰 루트**:
-1. `mcp__playwright__browser_navigate` → 대상 페이지 로드 (브라우저 렌더링)
-2. `mcp__playwright__browser_network_requests` → XHR/fetch 호출 목록 수집, `/api/`·`/graphql`·`\.json` 필터로 내부 엔드포인트 식별
+**정찰 루트** (`agent-browser`, [`SKILL.md`](../../SKILL.md) Tier 3 참고):
+1. `agent-browser`로 대상 페이지를 열어 real Chrome 세션으로 렌더링
+2. 네트워크 요청 로그에서 `/api/`·`/graphql`·`\.json` 필터로 내부 엔드포인트 식별
 3. 식별된 JSON API URL을 `python3 -m engine <API_URL>`로 재호출 (백그라운드 engine과는 별개 호출). 대부분 API 레이어는 페이지 HTML보다 WAF 보호가 얕아 curl_cffi로 바로 수집됨
 4. 응답 스키마 파악 후 pagination / query parameter 조합해 반복 수집
 
-**왜**: SPA + WAF 사이트(쇼핑몰·커머스 다수)는 마케팅 페이지(HTML)만 WAF로 중투자하고 내부 API는 gateway 레벨 기본 방어만 쓰는 경우가 많다. HTML 격자 전수 낭비(50회 × 0.5s + Playwright fallback 40s ≈ 65초)보다 **MCP 정찰 1회(5~10초) + API 재호출(0.5초)**가 훨씬 경제적이고 성공률 높음.
+**왜**: SPA + WAF 사이트(쇼핑몰·커머스 다수)는 마케팅 페이지(HTML)만 WAF로 중투자하고 내부 API는 gateway 레벨 기본 방어만 쓰는 경우가 많다. HTML 격자 전수 낭비(50회 × 0.5s + Playwright fallback 40s ≈ 65초)보다 **정찰 1회(5~10초) + API 재호출(0.5초)**가 훨씬 경제적이고 성공률 높음.
 
 **R7을 쓰지 말아야 할 때**: 단일 페이지 본문 읽기만 필요한 단건 조회(문서 하나, 블로그 포스트 하나)는 engine만으로 충분하다 — 발동 조건 #3이 이를 배제한다.
 
@@ -137,7 +137,7 @@ if result.ok:
     print(result.verdict)     # strong_ok | weak_ok
     html = result.content
 else:
-    # Phase 3 수동 개입 (Playwright MCP) 필요 — result.trace로 원인 진단
+    # Phase 3 폴백 실패 (로컬 real Chrome) — result.trace로 원인 진단
     pass
 ```
 
@@ -151,7 +151,7 @@ validate   — 4-계층 검증 (marker / size / cookie / success_selectors)
 detect     — WAF 제품 감지 ([(profile_id, confidence)] 랭킹)
 plan       — 프로파일의 tls_candidates × url_transforms × referer 격자 구성
 execute    — 격자 전수 시도 (첫 200에서 탈출하지 않음)
-fallback   — capability 태그 기반 Playwright 라우팅 (MCP or local+chrome)
+fallback   — capability 태그 기반 로컬 real Chrome 라우팅 (desktop or mobile)
 report     — FetchResult(ok, verdict, profile_used, trace, summary)
 ```
 
@@ -184,16 +184,14 @@ report     — FetchResult(ok, verdict, profile_used, trace, summary)
 | 태그 | 실행기 | 언제 |
 |------|--------|------|
 | `needs_real_tls_stack` + `needs_js_exec` | `playwright_real_chrome.js` (로컬 Node) | Akamai Bot Manager 등 — Chromium 번들 TLS는 탐지됨 |
-| `needs_js_exec` only | Playwright MCP (`mcp__playwright__*`) | Cloudflare 기본 방어 등 |
+| `needs_js_exec` only | `playwright_real_chrome.js` (로컬 Node) | Cloudflare 기본 방어 등 |
 | `needs_mobile_context` (+ real_tls) | `playwright_mobile_chrome.js` | 모바일 디바이스 에뮬레이션 필요 |
 
 자세한 선택 기준: [playwright.md](playwright.md).
 
-### Playwright MCP 호출 규칙
+### 로컬 real Chrome 호출 규칙
 
-`fetch_chain`의 `needs_js_exec only` 케이스는 **Claude 세션에서 MCP 도구를 직접 호출**해야 한다. subprocess 경로 없음. 즉:
-1. `result.summary`에 "Playwright MCP must be invoked from the Claude session"이 포함되면
-2. `mcp__playwright__browser_navigate` → `browser_wait_for` → `browser_snapshot` 흐름으로 Claude가 직접 처리
+`fetch_chain`의 Playwright 폴백은 `run_playwright_fallback()`이 subprocess로 `engine/templates/playwright_real_chrome.js`(또는 mobile 변종)를 자동 실행한다 — Claude가 브라우저 도구를 직접 호출할 필요는 없다. Node/Chrome 미설치 등으로 로컬 실행이 불가능하면 `result.summary`에 설치 안내가 담기며, 이 경우에만 Tier 3 `agent-browser`로 수동 전환한다([`SKILL.md`](../../SKILL.md) Tier 3 참고).
 
 ## Phase 2 — 수동 개입 (옵션)
 
@@ -283,7 +281,7 @@ yt-dlp --write-sub --write-auto-sub --sub-lang "en,ko" --skip-download -o "/tmp/
 | 파일 | 언제 읽는가 | 무엇을 다루는가 |
 |------|-------------|-----------------|
 | [`tls-impersonate.md`](tls-impersonate.md) | curl_cffi 격자가 전부 `challenge`/`blocked`로 끝날 때, 새 impersonate 타겟을 `waf_profiles.yaml`에 추가할 때 | curl_cffi로 Safari/Chrome/Firefox TLS(JA3/JA4) 지문 복제하는 방법, WAF(Akamai/Cloudflare/F5 등)별 최적 타겟 조합, 임퍼소네이션 타겟 버전 목록, `tls_impersonate_avoid`의 실증 근거 |
-| [`playwright.md`](playwright.md) | engine이 Playwright fallback으로 넘어가는데 MCP/Local Chrome 중 어디로 갈지 확인 필요할 때 | Approach 1 (`mcp__playwright__*` — Cloudflare급 챌린지), Approach 2 (Local Node + `channel:'chrome'` + stealth — Akamai Bot Manager급), 템플릿 파라미터 규격 |
+| [`playwright.md`](playwright.md) | engine이 Playwright fallback으로 넘어갈 때 | 로컬 Node + `channel:'chrome'` + stealth 온디맨드 real Chrome (Cloudflare 기본부터 Akamai Bot Manager급까지 단일 경로로 커버), 템플릿 파라미터 규격 |
 | [`fallback.md`](fallback.md) | `verdict`가 애매하거나 Phase 전환 타이밍 결정 필요할 때 | engine의 Phase 0→1→2→3 에스컬레이션 원칙, 응답 성공/실패 판정 기준 세부, 각 Phase 종료 조건 |
 | [`metadata.md`](metadata.md) | 본문 전체를 못 가져왔지만 제목·요약·가격·저자 같은 핵심만이라도 필요할 때 | OGP 메타 태그, JSON-LD (Schema.org), Twitter Card 파싱, 구조화 데이터 추출 패턴 |
 
@@ -314,6 +312,6 @@ yt-dlp --write-sub --write-auto-sub --sub-lang "en,ko" --skip-download -o "/tmp/
 | `engine/waf_detector.py` | WAF 랭킹 감지 알고리즘, `_LAST_LOAD_ERROR` 처리 |
 | `engine/waf_profiles.yaml` | 프로파일별 detectors·tls_candidates·capabilities_needed |
 | `engine/url_transforms.py` | URL 변환 규칙 추가할 때 |
-| `engine/executor.py` | Playwright MCP vs local capability 매칭 로직 |
+| `engine/executor.py` | 프로파일 태그 기반 local Playwright 실행기(real_chrome / mobile_chrome) 매칭 로직 |
 | `engine/templates/*.js` | Playwright 템플릿 튜닝 (warmup, reload, devices) |
 | `engine/bias_check.py` | 편향 린터 규칙 — brand denylist, URL_PATTERN, excluded dirs |

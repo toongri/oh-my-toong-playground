@@ -37,6 +37,40 @@ def _run_with_envelope(env_stdout: str):
         )
 
 
+class PickExecutorNoMcpTier(unittest.TestCase):
+    """The playwright_mcp / playwright_mcp_mobile tiers are retired — only the
+    on-demand local playwright_real_chrome / playwright_mobile_chrome
+    executors remain reachable from capability inference."""
+
+    def test_js_exec_only_routes_to_real_chrome_not_mcp(self) -> None:
+        self.assertEqual(
+            executor._pick_executor(["needs_js_exec"], "auto"),
+            "playwright_real_chrome",
+        )
+
+    def test_mobile_context_without_real_tls_routes_to_mobile_chrome_not_mcp(self) -> None:
+        self.assertEqual(
+            executor._pick_executor(["needs_mobile_context"], "auto"),
+            "playwright_mobile_chrome",
+        )
+
+    def test_no_choice_ever_starts_with_playwright_mcp(self) -> None:
+        capability_combos = [
+            [],
+            ["needs_js_exec"],
+            ["needs_real_tls_stack"],
+            ["needs_mobile_context"],
+            ["needs_mobile_context", "needs_real_tls_stack"],
+        ]
+        for caps in capability_combos:
+            for device_class in ("auto", "mobile", "desktop"):
+                choice = executor._pick_executor(caps, device_class)
+                self.assertFalse(
+                    choice.startswith("playwright_mcp"),
+                    f"_pick_executor({caps!r}, {device_class!r}) returned retired tier {choice!r}",
+                )
+
+
 class ExecutorEnvelope(unittest.TestCase):
     def test_real_http_status_not_faked_200(self) -> None:
         env = _envelope(403, REQUESTED_URL, "<html><body>forbidden</body></html>")
@@ -51,6 +85,22 @@ class ExecutorEnvelope(unittest.TestCase):
         att, _content = _run_with_envelope(env)
 
         self.assertEqual(att.url, final_url)
+
+    def test_forced_mcp_executor_has_no_dedicated_dead_branch(self) -> None:
+        """A stale profile still naming the retired 'playwright_mcp' executor
+        must fall through to the generic no-template error, not the removed
+        MCP hand-off guidance."""
+        with patch.object(executor, "load_profile", return_value={"capabilities_needed": []}), \
+                patch.object(executor, "_chrome_channel_available", return_value=True):
+            att, content = executor.run_playwright_fallback(
+                REQUESTED_URL,
+                profile_id="unknown_challenge",
+                force_executor="playwright_mcp",
+            )
+
+        self.assertEqual(content, "")
+        self.assertNotIn("mcp__playwright", att.error or "")
+        self.assertIn("no template for executor", att.error or "")
 
 
 if __name__ == "__main__":
