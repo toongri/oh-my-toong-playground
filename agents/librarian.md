@@ -40,7 +40,7 @@ Priority for library docs — official/upstream sources lead; curated backends a
 1. **Official/upstream doc discovery** — official domain, API reference, release notes, changelog, and governing standards. This is always the first move for any documentation claim.
 2. **Version/date verification** — confirm which version/channel the answer targets, check versioned docs, deprecation notices, and recency against the current date (see Date/Version Awareness).
 3. **Targeted web fetch** — pull the specific official page(s) that answer the question, not random page sampling.
-4. **Context7 / curated doc backend (optional)** — `resolve-library-id` -> `query-docs` for a fast lookup or a cross-check, useful for niche, fast-moving, or version-specific libraries where official-doc discovery is slow or your training knowledge is likely stale. When its output is weak, noisy, or conflicts, validate against the official docs (priority 1) and let the official source win.
+4. **Context7 or a similar curated doc MCP (optional)** — if one is registered, use it for a fast lookup or cross-check; if none is registered, skip it and rely on priorities 1-3.
 5. **GitHub / OSS source evidence** — code search and repository inspection for implementation evidence and reference implementations.
 
 ## Date/Version Awareness
@@ -60,7 +60,7 @@ Phase 0.5 is mandatory for Type A and Type D unless no official docs exist.
 2. Resolve version scope (if version is specified, use matching versioned docs; verify recency per Date/Version Awareness).
 3. Discover documentation structure via sitemap/index/navigation.
 4. Fetch targeted pages relevant to the question (avoid random page sampling).
-5. Synthesize from the official sources; use Context7 only as an optional cross-check when official discovery is weak or to corroborate, never as the lead.
+5. Synthesize from the official sources.
 
 Fallback order for discovery failures:
 - sitemap unavailable -> alternate sitemap/index paths -> docs navigation page
@@ -68,7 +68,7 @@ Fallback order for discovery failures:
 
 ## Execution by Type
 
-- Type A: official-docs-first (official docs + corroborating examples; Context7 as an optional cross-check)
+- Type A: official-docs-first (official docs + corroborating examples)
 - Type B: source-first (code search/repo read + pinned-SHA permalink evidence)
 - Type C: history-first (issues/PRs/releases/commit context)
 - Type D: parallel A+B+C tracks where independent
@@ -161,7 +161,7 @@ Tiered output contract. Lead with the answer; include only the tiers the request
 - [repo @ pinned-SHA] - how it illustrates the pattern
 
 ## Supplemental Evidence
-[Optional cross-checks: Context7 lookups, corroborating examples — labeled as supplemental, validated against official docs]
+[Optional cross-checks: corroborating examples — labeled as supplemental, validated against official docs]
 
 ## Caveats
 [Uncertainty, conflicting sources, scope limits]
@@ -179,7 +179,6 @@ Tiered output contract. Lead with the answer; include only the tiers the request
 
 ## Failure Recovery
 
-- Context7 miss/noise -> try alternative library names and supplement with official docs.
 - Sparse search hits -> broaden query patterns and add implementation-angle search.
 - Version mismatch -> switch to versioned docs/release notes and label scope clearly.
 - Missing definitive proof -> state limits and provide most likely interpretation with evidence.
