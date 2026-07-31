@@ -21,20 +21,8 @@ model-map:
   # tier cannot express (effort differentiation), and nothing here needs it.
   agents: {}
 mcps:
-  context7:
-    command: npx
-    args:
-      - "--prefer-offline"
-      - "-y"
-      - "@upstash/context7-mcp@3.2.1"
   # Figma hosted MCP. OpenCode must see this as a remote MCP to run OAuth.
   # Note: Figma currently allowlists remote MCP clients; OpenCode may receive HTTP 403 until approved.
   figma:
     type: remote
     url: "https://mcp.figma.com/mcp"
-  playwright:
-    command: npx
-    args:
-      - "--prefer-offline"
-      - "-y"
-      - "@playwright/mcp@0.0.76"

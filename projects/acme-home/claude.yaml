@@ -36,7 +36,7 @@ hooks:
 # 업무용 MCP는 전부 여기 모은다. 두 가지 이유가 겹친다.
 #   1) 램 — stdio MCP는 세션마다 프로세스로 뜬다(실측: postgres 99MB /
 #      opensearch 86MB). 전역에 두면 OMT나 개인 레포 세션도 쓰지도 않는
-#      2종을 물어 세션당 185MB를 낭비한다. codegraph·playwright는 레포를 가리지
+#      2종을 물어 세션당 185MB를 낭비한다. codegraph는 레포를 가리지
 #      않고 쓰므로 전역에 남긴다.
 #      이 수치는 소스 선언 기준이다. sync는 선언된 MCP를 대입만 하므로 여기서
 #      지워도 이미 배포된 ~/.claude.json 항목은 그대로 남는다 — 이미 sync한
@@ -70,7 +70,6 @@ mcps:
   sentry:
     type: http
     url: "https://mcp.sentry.dev/mcp"
-  # playwright는 레포를 가리지 않고 쓰므로 전역(루트 claude.yaml)에 둔다.
   # Requires shell env: OPENSEARCH_URL, OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD
   # (AWS: AWS_REGION, AWS_IAM_ARN or AWS_PROFILE). See opensearch-project/opensearch-mcp-server-py.
   opensearch:
