@@ -9,6 +9,7 @@ export type PluginScope = "user" | "project";
 
 export type PluginObjectItem = {
 	name: string;
+	state?: "present" | "absent";
 	check?: string;
 	"pre-commands"?: string[];
 };
@@ -75,7 +76,7 @@ export type PlatformYamlHookItem = {
 export type PlatformYaml = {
 	config?: Record<string, unknown>;
 	hooks?: Record<string, PlatformYamlHookItem[]>;
-	mcps?: Record<string, Record<string, unknown>>;
+	mcps?: Record<string, Record<string, unknown> | null>;
 	plugins?: { items?: Array<string | PluginObjectItem> };
 	statusLine?: string;
 	"model-map"?: ModelMap;
