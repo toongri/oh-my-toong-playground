@@ -53,11 +53,11 @@ council:
       # surface un-judged candidates, and `diagnose` invites verifying them instead); council members
       # fan out through the same `lib/generic-job.ts` spawn path with the same free skill loading, so
       # the shape carries over even though no council run has shown it.
-      # (3) prompt-budget guard, the remaining 26 — no skill here is relevant to a member's job of
+      # (3) prompt-budget guard, the remaining 35 — no skill here is relevant to a member's job of
       # arguing its assigned perspective, so each is dead weight; the size saved is pinned by
       # `codex-skill-deny-efficacy.test.ts`, not restated here.
       #
-      # List stops at 30 (OpenAI-bundled plugin skills use `plugin:skill` colon form, rejected by
+      # List stops at 39 (OpenAI-bundled plugin skills use `plugin:skill` colon form, rejected by
       # `lib/generic-job.ts`'s `assertDenySkillsShape`); fail-open by design (unlisted means visible,
       # the safe direction). Kept in lockstep with `orchestrate-review.config.yaml` —
       # `codex-skill-deny-efficacy.test.ts` asserts the two files declare the same set.
@@ -80,15 +80,24 @@ council:
         - humanizer
         - insane-browsing
         - make-pr
+        - meeting-notes
         - momus
         - orchestrate-review
+        - pin-audit
+        - pin-query
+        - pin-record
+        - pin-setup
+        - pin-wrap-up
         - prometheus
         - qa
+        - receiving-code-review
         - review-report
         - scan-pdf-to-notes
         - sisyphus
         - slides-review
         - technical-copywriting
         - technical-writing
+        - test-driven-development
         - ultragoal
         - ultraresearch
+        - writing-skills
