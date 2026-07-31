@@ -645,6 +645,19 @@ describe("syncPlatformYaml", () => {
 		expect(mcpServers["context7"]).toBeDefined();
 	});
 
+	it("rejects null MCP entries without mutating settings.json via `syncPlatformYaml`", async () => {
+		const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+		const originalSettings = '{"mcpServers":{"existing":{"command":"existing"}},"theme":"dark"}\n';
+		await writeFile(settingsFile, originalSettings);
+
+		const yaml = { mcps: { notion: null } } as unknown as PlatformYaml;
+
+		await expect(adapter.syncPlatformYaml(targetPath, yaml, false)).rejects.toThrow(
+			/Gemini MCP entries must be non-null objects/,
+		);
+		expect(await fs.readFile(settingsFile, "utf8")).toBe(originalSettings);
+	});
+
 	it("processes hooks section and includes it in processedSections via `syncPlatformYaml`", async () => {
 		const yaml = {
 			hooks: {
