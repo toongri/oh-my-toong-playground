@@ -177,21 +177,9 @@ hooks:
       command: "bun run .codex/hooks/codex-persistent-mode/cli.ts hook stop"
 
 mcps:
-  context7:
-    command: npx
-    args:
-      - "--prefer-offline"
-      - "-y"
-      - "@upstash/context7-mcp@3.2.1"
   # Figma hosted MCP. Codex handles this as a streamable HTTP server with OAuth login.
   figma:
     url: "https://mcp.figma.com/mcp"
-  playwright:
-    command: npx
-    args:
-      - "--prefer-offline"
-      - "-y"
-      - "@playwright/mcp@0.0.76"
   # codegraph local code-graph MCP (Tree-sitter -> SQLite call graph; 100% local, no API key).
   # Requires per-machine binary (`npm i -g @colbymchenry/codegraph`) and per-repo `codegraph init` to build the index.
   codegraph:

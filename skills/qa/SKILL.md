@@ -101,7 +101,7 @@ Drive the changed surface for real and attack it. Two parts, both required when 
 | Change Type | Driver |
 |-------------|--------|
 | API endpoint | `curl` |
-| Frontend / UI | `agent-browser` (fallback: `playwright`) |
+| Frontend / UI | `agent-browser` (fallback: `playwright`, if available) |
 | Mobile / native UI | `agent-device` |
 | CLI / TUI | interactive `bash` |
 
@@ -309,7 +309,7 @@ CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [
 PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed
 BASELINE:   build/test/lint green. See stage1-commands.md
 MATRIX:     6 categories — failure paths, boundary/malformed input, injection, interruption, misleading success, idempotency. Breadth via scenario-authoring.md, depth via stage3-handson.md
-DRIVERS:    API→curl, Frontend→agent-browser (fallback playwright), Mobile/native UI→agent-device (load its skill first; use runtime help guidance), CLI→bash. No tmux.
+DRIVERS:    API→curl, Frontend→agent-browser (fallback playwright, if available), Mobile/native UI→agent-device (load its skill first; use runtime help guidance), CLI→bash. No tmux.
 LOOP:       DIAGNOSIS→oracle (fresh, read-only) | FIX→sisyphus-junior (commits own scoped fix, never git commit -a) | RE-VERIFY→qa, full re-run, distrust fixer
 EXIT:       Goal Met / max_cycles=5 / Same-Failure-3x (scenario-id+root-cause-file+root-cause-symbol) / Safety
 ROLLBACK:   git revert fix_head_before..HEAD only, NEVER git reset --hard; 3 guards: linear-descendant, non-empty-range=ERROR, post-revert disjointness on user_dirty_set; REFUSE the cycle on user_dirty_set overlap; rm -rf/force auto-deny honored

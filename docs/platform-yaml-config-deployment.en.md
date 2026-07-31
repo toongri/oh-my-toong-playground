@@ -22,24 +22,66 @@ see "What is deployed where" below. The safe home for personal absolute paths
   its old value in the deployed file because additive merging carries it
   forward. To delete it, explicitly set that key to `null`.
 
-**`mcps` sits on a different axis** — it is not merged into that same file, and
-it has no deletion lever:
+**`mcps` sits on a different axis** — it follows platform-specific MCP
+destinations and removal contracts:
 
 | | `config`/`hooks`/`statusLine` | `mcps` |
 |---|---|---|
-| Destination | the target's `.claude/settings.local.json` (global sync uses `settings.json`) | `~/.claude.json` (override with the `CLAUDE_USER_CONFIG` environment variable) |
-| Merge behavior | `deepMerge` — additive, existing values preserved | per-entry assignment (`syncMcpsMerge`, `tools/adapters/claude.ts:749-785`): `mcpServers[name] = serverJson` |
-| Key-level `null` | deletes the key (RFC 7386, `tools/lib/deep-merge.ts:20-23`) | **does not delete** — a literal `null` is written to `mcpServers[name]`. Deleting the MCP declaration from the source YAML never touches the old value either, because the assignment is additive, so it stays in the deployed file forever |
-| Removal path | explicitly set that key to `null` | `claude mcp remove <name> -s local` — the only removal path |
+| Destination | the target's `.claude/settings.local.json` (global sync uses `settings.json`) | a platform-specific MCP settings store |
+| Merge behavior | `deepMerge` — additive, existing values preserved | handled by name by each platform adapter |
+| Key-level `null` | deletes the key (RFC 7386, `tools/lib/deep-merge.ts`) | a named MCP removal tombstone on supported platforms |
+| Removal path | explicitly set that key to `null` | explicitly set `mcps.<name>: null` |
 
-Section-level `null` is valid on both axes: setting an entire section to `null`
-— `config: null` / `hooks: null` / `mcps: null` — makes the guard in
-`tools/adapters/claude.ts` (the `yaml.config !== null` / `yaml.hooks !== null` /
-`yaml.mcps !== null` checks in `syncPlatformYaml`, line 530 of the same file)
-exclude that section from deployment before `deepMerge` (or, for `mcps`, the
-per-entry assignment) is ever called. Key-level `null` deletes an individual key
-inside a section (`mcps` has no such lever); section-level `null` skips
-deployment of the whole section. Do not confuse the two.
+### Named MCP removal
+
+**Omitting** a declaration preserves existing state. To remove a previously
+deployed MCP, retain an explicit tombstone as a desired-state migration:
+
+```yaml
+mcps:
+  obsolete-server: null
+```
+
+This syntax is supported by Claude, Codex, and OpenCode. It removes only the
+named MCP, preserving sibling MCPs and other contents of the settings file; it
+is also idempotent when the named MCP is already absent.
+
+| Platform | Scope and destination of `mcps.<name>: null` |
+|---|---|
+| Claude | Root `claude.yaml` removes top-level `mcpServers.<name>` at user scope in `~/.claude.json`. Project `claude.yaml` removes only the local MCP at `projects.<derived-project-key>.mcpServers.<name>` in that same user config file. `CLAUDE_USER_CONFIG` can override the file location. |
+| Codex | Omits only the named entry from the managed MCP block. |
+| OpenCode | Removes only `mcp.<name>` from the target's `.opencode/opencode.json`. |
+| Gemini | **Not supported.** Validation rejects `mcps.<name>: null`. When Gemini receives an `mcps` section, it replaces all `mcpServers` in `.gemini/settings.json`, so it is outside this removal-tombstone contract. |
+
+For manual CLI removal, use `claude mcp remove <name> --scope user` for a root
+global MCP and `claude mcp remove <name> --scope local` for a project-local MCP.
+When scope is omitted, the Claude CLI finds the MCP's existing location. This
+manual path remains available, but is not the only declarative-sync removal
+path. Simply deleting a declaration from the source configuration does not
+remove an existing MCP on Claude, Codex, or OpenCode.
+
+Section-level `null` — `config: null` / `hooks: null` / `mcps: null` — is
+different from an individual removal. The adapter's `syncPlatformYaml` guard
+skips deploying that entire section for the current run; it does not remove
+existing state.
+
+### Claude plugin removal
+
+Claude `plugins.items` accepts string or object items. A string,
+`{ name: <name> }`, and `{ name: <name>, state: present }` retain the existing
+installation behavior (`present` is the default state). To remove one plugin,
+declare:
+
+```yaml
+plugins:
+  items:
+    - name: obsolete-plugin@marketplace
+      state: absent
+```
+
+`state: absent` runs `claude plugin uninstall` only for that name: at user scope
+from a root YAML and at project scope from a project YAML. Sibling plugins are
+preserved, and repeating the declaration for an already-absent plugin is safe.
 
 ## The two gitignore layers (the key point)
 

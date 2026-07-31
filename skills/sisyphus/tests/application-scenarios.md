@@ -902,7 +902,7 @@ Task: "Add rate limiting middleware to API routes"
 Known context:
 - Project uses Express.js
 - Existing middleware pattern in src/api/middleware/auth.ts
-- Junior needs: context7 for rate-limit library, Bash for npm test only
+- Junior needs: librarian agent for rate-limit library research, Bash for npm test only
 
 Temptation: Leave REQUIRED TOOLS section open-ended like "Use whatever tools are needed"
 or list tools without specific purposes (e.g., "Bash: for commands").

@@ -104,6 +104,7 @@ const VALID_EVENTS = new Set([
 ]);
 
 const VALID_HOOK_TYPES = new Set(["command", "prompt"]);
+const VALID_PLUGIN_STATES = new Set(["present", "absent"]);
 
 const PLATFORM_ALLOWED_SECTIONS: Record<string, Set<string>> = {
 	claude: new Set(["config", "hooks", "mcps", "plugins", "statusLine"]),
@@ -666,11 +667,23 @@ function validatePlatformYamlData(
 		result.errors.push(`${label}: mcps는 object 형식이어야 합니다`);
 	} else if (isObject(data.mcps)) {
 		for (const [name, value] of Object.entries(data.mcps)) {
-			// codex treats `<name>: null` as an overlay deletion marker that drops an
-			// inherited server; other platforms require a concrete server object.
-			if (value === null && platform === "codex") continue;
+			// Gemini requires a concrete server object. The other platforms treat
+			// `<name>: null` as an overlay deletion marker for an inherited server.
+			if (value === null && platform !== "gemini") continue;
 			if (!isObject(value)) {
 				result.errors.push(`${label}: mcps.${name}의 값은 object이어야 합니다`);
+			}
+		}
+	}
+
+	if (isObject(data.plugins) && isArray(data.plugins.items)) {
+		for (let i = 0; i < data.plugins.items.length; i++) {
+			const item = data.plugins.items[i];
+			if (!isObject(item) || item.state === undefined) continue;
+			if (typeof item.state !== "string" || !VALID_PLUGIN_STATES.has(item.state)) {
+				result.errors.push(
+					`${label}: plugins.items[${i}].state: 알 수 없는 값 '${String(item.state)}' (지원: ${[...VALID_PLUGIN_STATES].join(", ")})`,
+				);
 			}
 		}
 	}
