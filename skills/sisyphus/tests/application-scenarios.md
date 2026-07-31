@@ -4,6 +4,10 @@
 
 These scenarios test whether the sisyphus skill's **core techniques** are correctly applied. Each scenario targets delegation rules, subagent coordination, verification flow, inline verify execution, decision gates, interview mode, and context brokering.
 
+> **2026-07 단일 파일 재저작 이후 스위트 상태.** SKILL.md가 참조 3파일(delegation/decision-gates/verification.md)과 skill-catalog 훅을 흡수·삭제한 단일 본문으로 재저작되었다. 현행 합격 게이트는 `codex-delegation-scenarios.md`(CX-1/2/3 + CL-R)다. 이 문서의 시나리오는 두 부류로 갈린다:
+> - **은퇴(기계 장치 소멸)**: S-13·S-33(7-Section/REQUIRED TOOLS → 5-필드 디스패치로 대체), S-27(mnemosyne 5-section → 동일 5-필드), S-30~S-32(Skill Selection Protocol/카탈로그 → TASK 필드의 mandatory skills로 축소), S-16·S-19·S-20·S-23(Interview Mode 프로토콜 → Vague Requests 단락으로 축소), S-5·S-36 및 UC의 Completeness check(Verification Spec 문서 의식 → AC 명령 인라인 실행으로 대체).
+> - **현행(라우팅·검증 계약 유지)**: S-1~S-4, S-6~S-12, S-14, S-15, S-17, S-18, S-21, S-22, S-24~S-26, S-28, S-29, S-34, S-35, UC-S1/S2 골격. Test Results의 과거 PASS 기록은 당시 본문 기준 이력으로 보존한다.
+
 ## Evaluation Criteria
 
 | Verdict | Meaning |
