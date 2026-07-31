@@ -13,6 +13,10 @@ mcps:
 
 plugins:
   items:
+    # Plugin에서 프로젝트 범위 MCP로 전환한 기존 배포 상태를 정리한다.
+    # tombstone은 기존 대상만 정리하며 새 대상에는 영향이 없다.
+    - name: playwright@claude-plugins-official
+      state: absent
     - name: frontend-design@claude-plugins-official
       check: jq -e '.plugins["frontend-design@claude-plugins-official"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
       pre-commands:

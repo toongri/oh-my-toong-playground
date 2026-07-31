@@ -81,11 +81,11 @@ config:
 # 내린다. notion/linear/slack/sentry는 회사 계정과 개인 계정을 섞지 않기 위해
 # 전역에서 빼고 프로젝트별로 등록한다(type: http라 램은 0).
 #
-# 주의: mcps는 config/hooks와 달리 삭제 수단이 없다. tools/adapters/claude.ts의
-# syncMcpsMerge가 mcpServers[name] = json 단순 대입이라 여기서 지워도 이미 배포된
-# ~/.claude.json에는 그대로 남는다(키를 null로 써도 안 지워진다). 실제로 끄려면
-# ~/.claude.json의 최상위 mcpServers에서 직접 지워야 한다.
+# retired MCP는 null tombstone으로 선언한다. 소스에서 키를 지우는 것만으로는 이미
+# 배포된 ~/.claude.json의 mcpServers 항목이 남으므로, 동기화가 해당 항목을 제거한다.
+# 새 대상에는 삭제할 기존 항목이 없어 영향이 없다.
 mcps:
+  playwright: null
   # codegraph local code-graph MCP (Tree-sitter -> SQLite call graph; 100% local, no API key).
   # Requires per-machine binary (`npm i -g @colbymchenry/codegraph`) and per-repo `codegraph init` to build the index.
   codegraph:
@@ -96,6 +96,9 @@ mcps:
 
 plugins:
   items:
+    # retired plugin tombstone: existing targets are cleaned; fresh targets are unaffected.
+    - name: context7
+      state: absent
     - code-review
     - frontend-design
     - name: plannotator@plannotator
