@@ -419,6 +419,22 @@ export function bakeSkillDirToken(content: string, skillDirAbsPath: string): str
 }
 
 /**
+ * `$OMT_DIR` in skill prose names the per-project OMT working directory. On
+ * Claude the harness exports it (session-start.sh via CLAUDE_ENV_FILE); Codex
+ * has no CLAUDE_ENV_FILE and never registers that hook, so the raw token
+ * expands to empty and a `$OMT_DIR/x.md` write lands at the filesystem root.
+ *
+ * Unlike SKILL_DIR_TOKEN this cannot bake to a static path: the value is
+ * per-project (derived from the session cwd's git repo), and a global sync
+ * target serves every project. So it bakes to a command substitution over the
+ * deployed resolver CLI (lib/omt-dir.ts run as a script), which re-derives the
+ * path at session time. `\b` guards suffix collisions (`$OMT_DIRX` stays).
+ */
+export function bakeOmtDirToken(content: string, omtDirCliAbsPath: string): string {
+	return content.replace(/\$OMT_DIR\b/g, `$(bun "${omtDirCliAbsPath}")`);
+}
+
+/**
  * Completeness net for plan AC G4-2. Deliberately BROADER than the specific
  * rows above, so a Claude-ism nobody has enumerated in PLATFORM_REWRITE_RULES
  * still gets caught by the (follow-up) scanner (validateCodexRewriteCoverage).
