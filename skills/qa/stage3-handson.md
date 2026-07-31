@@ -17,7 +17,7 @@ The applicability gate is not "is the surface user-facing?" — it is **does the
 | Signal in Prompt | Change Type | Action |
 |------------------|-------------|--------|
 | API endpoint, route, handler, REST, HTTP | API | Verify with `curl` |
-| UI, page, component, frontend, render | Frontend | Verify with `agent-browser` (fallback: `playwright`) |
+| UI, page, component, frontend, render | Frontend | Verify with `agent-browser` (fallback: `playwright`, if available) |
 | iOS, tvOS, macOS, Android, and Vega OS TV apps; simulator, emulator | Native app | Verify with `agent-device` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
 | Feature-flag-gated logic, payment/notification resolver internals, permission/state-transition branch — no direct UI/API entry point but touches a **risk surface** | Internal / risk surface | Do NOT skip — derive scenarios via [scenario-authoring.md] Layer A→B→C, then verify hands-on |
@@ -117,9 +117,9 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 ---
 
-## Step 3.4: Frontend Verification (agent-browser → fallback: playwright)
+## Step 3.4: Frontend Verification (agent-browser → fallback: playwright, if available)
 
-**Verify UI behavior with `agent-browser`. Fall back to `playwright` only when an agent-browser attempt actually fails or cannot express the check — not as a preemptive capability decision.**
+**Verify UI behavior with `agent-browser`. Fall back to `playwright`, when available, only when an agent-browser attempt actually fails or cannot express the check — not as a preemptive capability decision.**
 
 ### Procedure
 
@@ -154,14 +154,9 @@ curl -s http://localhost:{port}/endpoint | jq .
    agent-browser close
    ```
 
-**Fallback path — playwright (only on agent-browser attempt failure or inexpressible check):**
+**Fallback path — playwright, only if available (optional):**
 
-If any agent-browser step returns a non-zero exit code or the required assertion cannot be expressed via the agent-browser CLI, switch to playwright for that check. Document the failure reason in evidence.
-
-1. Ensure playwright is installed in the project (check `package.json`)
-2. Navigate to the affected page/component
-3. Verify visual elements render correctly
-4. Test user interactions described in EXPECTED OUTCOME
+If an agent-browser step returns a non-zero exit code or the required assertion cannot be expressed via the agent-browser CLI, and a playwright is available in this environment (however it's supplied), use it to verify that check instead — document the failure reason in evidence. If no playwright is available, do not install or set one up: report that check as verification-unavailable rather than working around the gap.
 
 ### Verification Criteria
 
