@@ -2,19 +2,15 @@
 
 The fetch_chain's probe/grid phase uses curl_cffi directly. When curl can't
 punch through (JS challenge, real-TLS detection), this module routes to the
-right browser executor based on the profile's `capabilities_needed` tags:
+right on-demand local browser executor based on the profile's
+`capabilities_needed` tags:
 
-    needs_real_tls_stack + needs_js_exec  → playwright_real_chrome.js
-    needs_js_exec only                    → Playwright MCP (if available)
-    needs_mobile_context (+ real_tls)     → playwright_mobile_chrome.js
+    needs_mobile_context (+ real_tls)  → playwright_mobile_chrome.js
+    everything else                    → playwright_real_chrome.js
 
 The JS templates live in `engine/templates/` and accept only generic
 parameters ({{url}}, {{waitSelector}}, {{profileDir}}, {{device}}). No
 site-specific logic.
-
-Playwright MCP invocation requires caller's tool access; this module
-provides the subprocess path for local JS templates but only stubs the MCP
-path (MCP must be driven from the Claude session itself).
 """
 from __future__ import annotations
 
@@ -52,13 +48,7 @@ def _chrome_channel_available() -> bool:
 def _pick_executor(capabilities: list[str], device_class: str) -> str:
     caps = set(capabilities or [])
     if device_class == "mobile" or "needs_mobile_context" in caps:
-        if "needs_real_tls_stack" in caps:
-            return "playwright_mobile_chrome"
-        return "playwright_mcp_mobile"
-    if "needs_real_tls_stack" in caps:
-        return "playwright_real_chrome"
-    if "needs_js_exec" in caps:
-        return "playwright_mcp"
+        return "playwright_mobile_chrome"
     return "playwright_real_chrome"  # safest general fallback
 
 
@@ -123,7 +113,7 @@ def run_playwright_fallback(
     force_executor: caller-specified executor name (from a profile's
     `fallback_when_challenge` list). When set, it overrides capability-based
     inference. Recognized values: "playwright_real_chrome",
-    "playwright_mobile_chrome", "playwright_mcp".
+    "playwright_mobile_chrome".
 
     Returns (Attempt, html_content). Attempt.verdict reflects validation.
     """
@@ -140,15 +130,6 @@ def run_playwright_fallback(
         impersonate=None,
         referer="",
     )
-
-    if choice.startswith("playwright_mcp"):
-        att.error = (
-            "Playwright MCP must be invoked from the Claude session — "
-            "call mcp__playwright__* tools directly instead of fetch_chain."
-        )
-        att.verdict = Verdict.UNKNOWN.value
-        att.elapsed_s = round(time.time() - t0, 3)
-        return att, ""
 
     if not _chrome_channel_available():
         att.error = "node/npx not available for local Playwright template"

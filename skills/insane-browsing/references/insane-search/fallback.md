@@ -103,18 +103,25 @@ for target in TARGETS:
 
 ---
 
-## Phase 3: Playwright MCP (브라우저)
+## Phase 3: 로컬 real Chrome (브라우저)
 
 **조건**: Phase 2도 실패 또는 JS 챌린지/CAPTCHA 감지
 
-```
-browser_navigate → {URL}
-browser_wait_for → "body" (3초)
-browser_evaluate → () => document.body.innerText  (Light Mode — 먼저)
-필요 시 browser_snapshot → 접근성 트리 전체
+상주 브라우저 세션 없이, 필요할 때만 로컬 Chrome을 온디맨드로 기동한다:
+
+```python
+from engine.executor import run_playwright_fallback
+
+attempt, html = run_playwright_fallback(
+    "{URL}",
+    profile_id="{감지된 WAF 프로파일}",
+    success_selectors=["body"],
+)
 ```
 
-**API 발견**: `browser_network_requests`로 숨은 JSON API를 찾으면 이후 curl_cffi로 재사용 가능.
+내부적으로 `engine/templates/playwright_real_chrome.js`가 시스템 설치 실제 Chrome(`channel:'chrome'` + stealth)으로 페이지를 로드하고 HTML을 반환한다.
+
+**API 발견**: 숨은 JSON API 엔드포인트를 찾아야 하면 Tier 3 `agent-browser`(대화형 real Chrome 세션)로 전환해 네트워크 요청을 확인한 뒤 curl_cffi로 재사용한다 — [`SKILL.md`](../../SKILL.md) Tier 3 참고.
 
 상세: [playwright.md](playwright.md)
 

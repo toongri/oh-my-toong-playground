@@ -626,10 +626,10 @@ model-map:
 			expect(result.warnings).toHaveLength(0);
 		});
 
-		it("allows mcps.<name>: null as a codex deletion marker via `validatePlatformYaml`", () => {
+		it("allows mcps.<name>: null deletion markers for supported overlay platforms via `validatePlatformYaml`", () => {
 			const path = writeYaml(
 				dir,
-				"codex.local.yaml",
+				"claude.local.yaml",
 				`
 mcps:
   keep:
@@ -637,20 +637,22 @@ mcps:
   notion: null
 `,
 			);
-			const result = validatePlatformYaml(path, "codex");
-			expect(result.errors).toHaveLength(0);
+			for (const platform of ["claude", "codex", "opencode"]) {
+				const result = validatePlatformYaml(path, platform);
+				expect(result.errors).toHaveLength(0);
+			}
 		});
 
-		it("rejects mcps.<name>: null for non-codex platforms via `validatePlatformYaml`", () => {
+		it("rejects mcps.<name>: null for gemini via `validatePlatformYaml`", () => {
 			const path = writeYaml(
 				dir,
-				"claude.local.yaml",
+				"gemini.local.yaml",
 				`
 mcps:
   notion: null
 `,
 			);
-			const result = validatePlatformYaml(path, "claude");
+			const result = validatePlatformYaml(path, "gemini");
 			expect(result.errors.some((e) => e.includes("mcps.notion"))).toBe(true);
 		});
 
@@ -814,6 +816,42 @@ mcps:
 			);
 			const result = validatePlatformYaml(path, "claude");
 			expect(result.errors).toHaveLength(0);
+		});
+	});
+
+	// --- plugin state validation ---
+	describe("plugin state 검증", () => {
+		it("accepts string and object plugin items with valid optional state via `validatePlatformYaml`", () => {
+			const path = writeYaml(
+				dir,
+				"claude.yaml",
+				`
+plugins:
+  items:
+    - context7
+    - name: context7
+      state: absent
+    - name: other-plugin
+      state: present
+`,
+			);
+			const result = validatePlatformYaml(path, "claude");
+			expect(result.errors).toHaveLength(0);
+		});
+
+		it("rejects invalid plugin state via `validatePlatformYaml`", () => {
+			const path = writeYaml(
+				dir,
+				"claude.yaml",
+				`
+plugins:
+  items:
+    - name: context7
+      state: removed
+`,
+			);
+			const result = validatePlatformYaml(path, "claude");
+			expect(result.errors.some((e) => e.includes("state") && e.includes("removed"))).toBe(true);
 		});
 	});
 

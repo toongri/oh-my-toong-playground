@@ -62,6 +62,26 @@ async function defaultCommandRunner(command: string, cwd: string): Promise<{ exi
 	return { exitCode: proc.exitCode ?? 1 };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertGeminiMcpServers(
+	mcps: unknown,
+): asserts mcps is Record<string, Record<string, unknown>> {
+	if (!isRecord(mcps)) {
+		throw new Error("Gemini MCP configuration must be a non-null object");
+	}
+
+	for (const [name, server] of Object.entries(mcps)) {
+		if (!isRecord(server)) {
+			throw new Error(
+				`Gemini MCP entries must be non-null objects; unsupported entry: ${name}`,
+			);
+		}
+	}
+}
+
 // =============================================================================
 // Gemini Adapter
 // =============================================================================
@@ -571,6 +591,7 @@ export class GeminiAdapter implements PlatformAdapter {
 
 		// --- mcps ---
 		if (yaml.mcps !== undefined && yaml.mcps !== null) {
+			assertGeminiMcpServers(yaml.mcps);
 			await this.syncMcpsMerge(targetPath, yaml.mcps, dryRun);
 			processedSections.push("mcps");
 		}

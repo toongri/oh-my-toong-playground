@@ -980,6 +980,84 @@ describe("Plugin install (DI 패턴)", () => {
 // ---------------------------------------------------------------------------
 
 describe("plugin scope 및 object format", () => {
+	it("uninstalls an absent object plugin without running its check, pre-commands, or installer", async () => {
+		const installedNames: string[] = [];
+		const commands: string[] = [];
+		const mockInstaller = async (name: string) => {
+			installedNames.push(name);
+		};
+		const mockCommandRunner = async (command: string, _cwd: string) => {
+			commands.push(command);
+			return { exitCode: 0 };
+		};
+
+		const adapterWithMock = new ClaudeAdapter(mockInstaller, mockCommandRunner);
+		await adapterWithMock.syncPlatformYaml(
+			targetPath,
+			{
+				plugins: {
+					items: [
+						{
+							name: "obsolete-plugin@marketplace",
+							state: "absent",
+							check: "which obsolete-plugin",
+							"pre-commands": ["should-not-run"],
+						},
+					],
+				},
+			},
+			false,
+			"project",
+		);
+
+		expect(commands).toEqual([
+			"claude plugin uninstall --scope project obsolete-plugin@marketplace",
+		]);
+		expect(installedNames).toHaveLength(0);
+	});
+
+	it("continues when absent plugin uninstall fails", async () => {
+		const mockCommandRunner = async (_command: string, _cwd: string) => ({ exitCode: 1 });
+		const adapterWithMock = new ClaudeAdapter(async () => {}, mockCommandRunner);
+
+		await expect(
+			adapterWithMock.syncPlatformYaml(
+				targetPath,
+				{ plugins: { items: [{ name: "missing-plugin", state: "absent" }] } },
+				false,
+				"user",
+			),
+		).resolves.toBeDefined();
+	});
+
+	it("dry-run logs absent plugin uninstall without invoking command runner", async () => {
+		const commands: string[] = [];
+		const stderrChunks: string[] = [];
+		const mockCommandRunner = async (command: string, _cwd: string) => {
+			commands.push(command);
+			return { exitCode: 0 };
+		};
+		const stderrSpy = spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		});
+		try {
+			const adapterWithMock = new ClaudeAdapter(async () => {}, mockCommandRunner);
+			await adapterWithMock.syncPlatformYaml(
+				targetPath,
+				{ plugins: { items: [{ name: "obsolete-plugin", state: "absent" }] } },
+				true,
+				"user",
+			);
+			expect(commands).toHaveLength(0);
+			expect(stderrChunks.join("")).toContain(
+				"claude plugin uninstall --scope user obsolete-plugin",
+			);
+		} finally {
+			stderrSpy.mockRestore();
+		}
+	});
+
 	it("passes 'user' scope to plugin installer", async () => {
 		const capturedScopes: string[] = [];
 		const mockInstaller = async (_name: string, _targetPath: string, scope: string) => {
@@ -1585,6 +1663,80 @@ describe("syncPlatformYaml - mcps scope", () => {
 		const config = await readJsonFile(claudeConfigFile);
 		const mcpServers = config["mcpServers"] as Record<string, unknown>;
 		expect(mcpServers["explicit-user-server"]).toEqual({ command: "npx explicit-user-server" });
+	});
+
+	it("user MCP tombstone removes only the matching top-level server", async () => {
+		await fs.writeFile(
+			claudeConfigFile,
+			JSON.stringify({
+				otherSetting: true,
+				mcpServers: {
+					remove: { command: "npx remove" },
+					keep: { command: "npx keep" },
+				},
+			}),
+			"utf8",
+		);
+
+		await adapter.syncPlatformYaml(targetPath, { mcps: { remove: null } }, false, "user");
+
+		const config = await readJsonFile(claudeConfigFile);
+		expect(config["otherSetting"]).toBe(true);
+		expect(config["mcpServers"]).toEqual({ keep: { command: "npx keep" } });
+
+		await adapter.syncPlatformYaml(targetPath, { mcps: { remove: null } }, false, "user");
+		expect(await readJsonFile(claudeConfigFile)).toEqual(config);
+	});
+
+	it("project MCP tombstone removes only the matching derived project server", async () => {
+		const derivedKey = deriveClaudeProjectKey(targetPath);
+		await fs.writeFile(
+			claudeConfigFile,
+			JSON.stringify({
+				mcpServers: { user: { command: "npx user" } },
+				projects: {
+					[derivedKey]: {
+						projectSetting: "keep",
+						mcpServers: {
+							remove: { command: "npx remove" },
+							keep: { command: "npx keep" },
+						},
+					},
+					other: { mcpServers: { untouched: { command: "npx untouched" } } },
+				},
+			}),
+			"utf8",
+		);
+
+		await adapter.syncPlatformYaml(targetPath, { mcps: { remove: null } }, false, "project");
+
+		const config = await readJsonFile(claudeConfigFile);
+		const projects = config["projects"] as Record<string, Record<string, unknown>>;
+		expect(projects[derivedKey]).toEqual({
+			projectSetting: "keep",
+			mcpServers: { keep: { command: "npx keep" } },
+		});
+		expect(projects["other"]).toEqual({
+			mcpServers: { untouched: { command: "npx untouched" } },
+		});
+		expect(config["mcpServers"]).toEqual({ user: { command: "npx user" } });
+	});
+
+	it("dry-run logs MCP removal intent without writing", async () => {
+		const stderrChunks: string[] = [];
+		const stderrSpy = spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+			stderrChunks.push(String(chunk));
+			return true;
+		});
+		try {
+			await adapter.syncPlatformYaml(targetPath, { mcps: { remove: null } }, true, "project");
+			expect(await exists(claudeConfigFile)).toBe(false);
+			expect(stderrChunks.join("")).toContain(
+				`MCP removed: remove -> ~/.claude.json (local: ${targetPath})`,
+			);
+		} finally {
+			stderrSpy.mockRestore();
+		}
 	});
 });
 

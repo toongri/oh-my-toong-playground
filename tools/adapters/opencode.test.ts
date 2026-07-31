@@ -383,7 +383,11 @@ describe("syncMcpsMerge", () => {
 
 	it("adds new server while preserving existing MCP servers via `syncMcpsMerge`", async () => {
 		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
-		await writeJson(configFile, { mcp: { existing: { type: "stdio" } } });
+		await writeJson(configFile, {
+			mcp: { existing: { type: "stdio" } },
+			model: "openai/o3",
+			instructions: [".opencode/rules/*.md"],
+		});
 
 		await syncMcpsMerge(tmpDir, "new-server", { type: "http", url: "http://example.com" }, false);
 
@@ -394,6 +398,68 @@ describe("syncMcpsMerge", () => {
 			type: "http",
 			url: "http://example.com",
 		});
+		expect(config["model"]).toBe("openai/o3");
+		expect(config["instructions"]).toEqual([".opencode/rules/*.md"]);
+	});
+
+	it("removes only the named MCP while preserving sibling servers and top-level config via `syncMcpsMerge`", async () => {
+		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+		await writeJson(configFile, {
+			mcp: {
+				context7: { type: "http", url: "https://context7.example" },
+				figma: { type: "http", url: "https://figma.example" },
+			},
+			model: "openai/o3",
+			instructions: [".opencode/rules/*.md"],
+			env: { LEGACY_KEY: "preserve-on-removal" },
+		});
+
+		await syncMcpsMerge(tmpDir, "context7", null, false);
+
+		const config = await readJson(configFile);
+		expect(config["mcp"]).toEqual({
+			figma: { type: "http", url: "https://figma.example" },
+		});
+		expect(config["model"]).toBe("openai/o3");
+		expect(config["instructions"]).toEqual([".opencode/rules/*.md"]);
+		expect(config["env"]).toEqual({ LEGACY_KEY: "preserve-on-removal" });
+	});
+
+	it("treats deletion of a missing MCP as idempotent via `syncMcpsMerge`", async () => {
+		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+		await writeJson(configFile, {
+			mcp: { figma: { type: "http", url: "https://figma.example" } },
+			model: "openai/o3",
+		});
+
+		await expect(syncMcpsMerge(tmpDir, "context7", null, false)).resolves.toBeUndefined();
+		await expect(syncMcpsMerge(tmpDir, "context7", null, false)).resolves.toBeUndefined();
+
+		expect(await readJson(configFile)).toEqual({
+			mcp: { figma: { type: "http", url: "https://figma.example" } },
+			model: "openai/o3",
+		});
+	});
+
+	it("does not write when removing an MCP in dry-run mode via `syncMcpsMerge`", async () => {
+		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+		const initial = { mcp: { context7: { type: "http" }, figma: { type: "http" } } };
+		await writeJson(configFile, initial);
+		const messages: string[] = [];
+		const originalWrite = process.stderr.write;
+		process.stderr.write = ((chunk: string | Uint8Array) => {
+			messages.push(String(chunk));
+			return true;
+		}) as typeof process.stderr.write;
+
+		try {
+			await syncMcpsMerge(tmpDir, "context7", null, true);
+		} finally {
+			process.stderr.write = originalWrite;
+		}
+
+		expect(await readJson(configFile)).toEqual(initial);
+		expect(messages.join("")).toContain("MCP removal: context7");
 	});
 
 	it("skips file write in dry-run mode via `syncMcpsMerge`", async () => {
@@ -662,6 +728,30 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
 			url: "http://localhost:3000",
 		});
 		expect(mcp["serena"]).toEqual({ type: "stdio", command: "npx serena" });
+	});
+
+	it("removes null MCP declarations while preserving remaining servers via `syncPlatformYaml`", async () => {
+		const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+		await writeJson(configFile, {
+			mcp: {
+				context7: { type: "http", url: "https://context7.example" },
+				playwright: { type: "http", url: "https://playwright.example" },
+				figma: { type: "http", url: "https://figma.example" },
+			},
+			model: "openai/o3",
+		});
+
+		const result = await opencodeAdapter.syncPlatformYaml(
+			tmpDir,
+			{ mcps: { context7: null, playwright: null } },
+			false,
+		);
+
+		expect(result.processedSections).toContain("mcps");
+		expect(await readJson(configFile)).toEqual({
+			mcp: { figma: { type: "http", url: "https://figma.example" } },
+			model: "openai/o3",
+		});
 	});
 
 	it("skips file write in dry-run mode via `syncPlatformYaml`", async () => {

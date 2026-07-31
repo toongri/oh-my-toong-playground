@@ -1,10 +1,5 @@
 # MCP definitions shared with codex.yaml — keep in sync
 mcps:
-  context7:
-    command: npx
-    args:
-      - -y
-      - "@upstash/context7-mcp@latest"
   # Figma hosted MCP via mcp-remote stdio proxy. OAuth on first run.
   figma:
     command: npx

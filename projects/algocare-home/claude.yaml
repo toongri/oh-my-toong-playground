@@ -36,11 +36,11 @@ hooks:
 # 업무용 MCP는 전부 여기 모은다. 두 가지 이유가 겹친다.
 #   1) 램 — stdio MCP는 세션마다 프로세스로 뜬다(실측: postgres 99MB /
 #      opensearch 86MB). 전역에 두면 OMT나 개인 레포 세션도 쓰지도 않는
-#      2종을 물어 세션당 185MB를 낭비한다. codegraph·playwright는 레포를 가리지
+#      2종을 물어 세션당 185MB를 낭비한다. codegraph는 레포를 가리지
 #      않고 쓰므로 전역에 남긴다.
-#      이 수치는 소스 선언 기준이다. sync는 선언된 MCP를 대입만 하므로 여기서
-#      지워도 이미 배포된 ~/.claude.json 항목은 그대로 남는다 — 이미 sync한
-#      머신에서는 `claude mcp remove <name>`으로 배포본을 정리해야 185MB가 성립한다.
+#      이 수치는 소스 선언 기준이다. 선언을 생략하면 이미 배포된 MCP는 보존된다.
+#      제거하려면 `mcps.<name>: null` tombstone을 명시해 해당 프로젝트-local MCP만
+#      삭제한다.
 #   2) 계정 분리 — notion/linear/slack/sentry는 회사 워크스페이스와 개인 계정이
 #      다르다. OAuth 토큰이 MCP 서버 이름 단위로 저장되므로, 전역에 한 벌만 두면
 #      회사/개인 중 하나로 고정된다. type: http라 프로세스는 뜨지 않아 램은 0.
@@ -70,7 +70,6 @@ mcps:
   sentry:
     type: http
     url: "https://mcp.sentry.dev/mcp"
-  # playwright는 레포를 가리지 않고 쓰므로 전역(루트 claude.yaml)에 둔다.
   # Requires shell env: OPENSEARCH_URL, OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD
   # (AWS: AWS_REGION, AWS_IAM_ARN or AWS_PROFILE). See opensearch-project/opensearch-mcp-server-py.
   opensearch:
@@ -96,12 +95,9 @@ mcps:
   # ── 토스페이먼츠 MCP 2종: 지금은 불필요해 비활성. 쓸 일이 생기면 아래 블록의
   # 주석만 풀고 `make sync`를 돌리면 된다.
   #
-  # 주의: 여기서 다시 주석처리해도 이미 배포된 건 꺼지지 않는다. MCP 배포는
-  # tools/adapters/claude.ts의 syncMcpsMerge가 mcpServers[name] = json 단순
-  # 대입으로 처리하는 추가 전용 경로라 삭제 수단이 없다(config/hooks의 null
-  # merge-patch 삭제는 settings.local.json 쪽 얘기라 여기 적용 안 됨).
-  # 끌 때는 ~/.claude.json의 projects["…/algocare-home/.bare"].mcpServers에서
-  # 직접 지워야 한다.
+  # 주의: 여기서 다시 주석처리하거나 선언을 생략하면 이미 배포된 MCP는 보존된다.
+  # 제거하려면 `mcps.<name>: null` tombstone을 명시해 해당 프로젝트-local MCP만
+  # 삭제한다.
   #
   # 연동가이드 MCP. 호스팅 엔드포인트가 없는 stdio 전용 패키지이며
   # (mcp.tosspayments.com은 마케팅 사이트로 가는 301일 뿐 MCP가 아니다),
