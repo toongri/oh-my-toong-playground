@@ -3,6 +3,14 @@ hooks:
     - component: resume-forge-start.sh
       timeout: 10
 
+mcps:
+  playwright:
+    command: npx
+    args:
+      - "--prefer-offline"
+      - "-y"
+      - "@playwright/mcp@0.0.76"
+
 plugins:
   items:
     - name: frontend-design@claude-plugins-official
@@ -13,7 +21,3 @@ plugins:
       check: jq -e '.plugins["insane-search@gptaku-plugins"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
       pre-commands:
         - claude plugin marketplace add fivetaku/gptaku_plugins
-    - name: playwright@claude-plugins-official
-      check: jq -e '.plugins["playwright@claude-plugins-official"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
-      pre-commands:
-        - claude plugin marketplace add anthropics/claude-plugins-official
