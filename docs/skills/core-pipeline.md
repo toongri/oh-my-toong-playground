@@ -133,10 +133,8 @@ flowchart TB
     Start([사용자 요청]) --> Classify{요청 유형?}
     Classify -->|단순| Direct[직접 도구 사용]
     Classify -->|명시적| Execute[직접 실행]
-    Classify -->|탐색적| Explore[explore 에이전트 실행]
-    Classify -->|개방형| Interview[심층 인터뷰]
+    Classify -->|탐색적/개방형| Explore[explore로 사실 확보<br/>→ 선호만 사용자에게 질문]
 
-    Interview --> Tasks[태스크 목록 생성]
     Explore --> Tasks
 
     Tasks --> Loop{대기 중인<br/>태스크?}
@@ -155,9 +153,9 @@ flowchart TB
 **검증 프로토콜**:
 
 - **검증**: implement 태스크는 sisyphus-junior의 보고로 완료됩니다(별도 QA 단계 없음). 검증이 필요하면 별도 verify 태스크에서 sisyphus가 AC 명령을 직접 실행해 인라인으로 처리합니다.
-- **Evidence Audit Gate**: verify 태스크에서 sisyphus가 인라인 검증을 수행하면 Evidence Audit Gate를 거칩니다(verify 태스크는 파일을 바꾸지 않으므로 커밋 없음). 커밋은 implement 태스크의 junior 완료 후 mnemosyne가 수행합니다.
-- **Retry 제한 없음**: 인라인 검증이 통과할 때까지 계속합니다.
-- **지속성**: 사용자가 프로세스 중간에 끼어들어 멈출 수 없습니다.
+- **증거 기반 판정**: verify 태스크에서 sisyphus가 AC 명령을 직접 실행해 출력을 증거 경로에 저장하고, 그 관측된 출력으로만 판정합니다(verify 태스크는 파일을 바꾸지 않으므로 커밋 없음). 커밋은 implement 태스크의 junior 완료 후 mnemosyne가 수행합니다.
+- **수정 루프**: REQUEST_CHANGES → oracle 진단 → 수정 태스크(진단 결과를 그대로 실어) → junior → 그 태스크만 재검증. 실패한 단위에만 범위가 한정되며, 이미 통과한 태스크는 다시 돌리지 않습니다.
+- **루프 이탈 조건**: oracle이 가설 3회 연속 실패 후 문제를 재정의하면 수정 루프를 멈추고 사용자에게 올립니다.
 
 **라우팅 원칙**: 작업 유형으로 위임 대상을 결정합니다. 파일을 변경하는 구현 태스크는 sisyphus-junior에 위임하고, PASS/FAIL 판정이 필요한 검증 태스크는 sisyphus가 AC 명령을 직접 실행해 인라인으로 처리하며, 원인·아키텍처 분석은 oracle, 코드베이스 검색은 explore로 보냅니다. 직전 태스크가 어떤 경로였든 새 태스크는 자기 유형의 경로를 따릅니다.
 
