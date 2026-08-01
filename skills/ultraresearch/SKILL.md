@@ -193,11 +193,11 @@ A Scoped in-interview single-fact call (deep-interview asking this engine to gro
 
 ## Pre-work handoff conformance
 
-On the pre-work postures, the goal/prometheus-facing handoff **conforms to the existing deep-interview handoff schema** at `$OMT_DIR/deep-interview/{slug}.md`. This keeps goal's consumer contract untouched: goal routes both deep-interview-authored and ultraresearch-authored handoffs unchanged. `SYNTHESIS.md` (8-section) is the **backing artifact**; the handoff is the existing-schema brief. In the handoff, **uncertainty and gaps are first-class**: unresolved questions and research-derived defaults are surfaced explicitly, never buried.
+On the pre-work postures, the prometheus/ultragoal-facing handoff **conforms to the existing deep-interview handoff schema** at `$OMT_DIR/deep-interview/{slug}.md`. This keeps the Phase 5 consumer contract untouched: the deep-interview Phase 5 router routes both deep-interview-authored and ultraresearch-authored handoffs unchanged. `SYNTHESIS.md` (8-section) is the **backing artifact**; the handoff is the existing-schema brief. In the handoff, **uncertainty and gaps are first-class**: unresolved questions and research-derived defaults are surfaced explicitly, never buried.
 
 ## Human end-gate
 
-The grounding handoff must NOT silently unlock execution: it is presented for human approval before it unlocks `goal`/`prometheus`. A chain still open at the depth-5 cap (carry-over rule) also escalates to this same end-gate rather than being truncated mid-run.
+The grounding handoff must NOT silently unlock execution: it is presented for human approval before it unlocks `prometheus`/`ultragoal`. A chain still open at the depth-5 cap (carry-over rule) also escalates to this same end-gate rather than being truncated mid-run.
 
 </Postures>
 
