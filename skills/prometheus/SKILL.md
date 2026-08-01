@@ -87,7 +87,8 @@ digraph prometheus_flow {
     "Stage B: Execution Recommendation" [shape=box];
     "Stage C: Execution Bridge" [shape=ellipse];
     "User's choice?" [shape=diamond];
-    "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [shape=box];
+    "S8: Execution Dispatch\n(invoke ultragoal with the plan path)" [shape=box];
+    "Finish (emit prometheus-done)" [shape=ellipse];
 
     "User Request" -> "Interpret as planning request";
     "Interpret as planning request" -> "Context Loading";
@@ -114,8 +115,8 @@ digraph prometheus_flow {
     "Stage A: Markdown Render" -> "Stage B: Execution Recommendation";
     "Stage B: Execution Recommendation" -> "Stage C: Execution Bridge";
     "Stage C: Execution Bridge" -> "User's choice?";
-    "User's choice?" -> "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [label="(1) Full orchestration\n(fresh S4 APPROVE/COMMENT)"];
-    "User's choice?" -> "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [label="(2) Focused execution\n(fresh S4 APPROVE/COMMENT)"];
+    "User's choice?" -> "S8: Execution Dispatch\n(invoke ultragoal with the plan path)" [label="(1) Continue to ultragoal\n(fresh S4 APPROVE/COMMENT)"];
+    "User's choice?" -> "Finish (emit prometheus-done)" [label="(2) Finish"];
     "User's choice?" -> "Requirements Interview" [label="(3) Revise plan (user-initiated)"];
 }
 ```
@@ -1077,8 +1078,8 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT or on the 2-round carried-forward terminal (a never-downgrade-class residual cannot take this terminal — it escalates to the user via Interview); on REQUEST_CHANGES → **scoped re-review by default**: revise the plan and re-run only S4 (fresh Momus), upstream preserved. Earliest-affected re-walk is the exception, taken only on an upstream root cause: → S0 on a requirements root cause (re-Metis → … → re-Momus), → S2 on a design root cause (human gate → re-plan → re-Momus) |
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
 | **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
-| **S7: Execution Bridge** | Stage C mode choice ONLY — present the 3 execution options (Full orchestration / Focused execution / Revise plan) and capture the user's selection | → S8 on execution selection (option 1 or 2), valid ONLY against the fresh S4 APPROVE/COMMENT on the current artifact or the S4 carried-forward terminal (residual disclosed); → S0 on "Revise plan" (user-initiated) |
-| **S8: Execution Dispatch** | Invoke skill per selection | (terminal) |
+| **S7: Execution Bridge** | Stage C mode choice ONLY — present the 3 execution options (Continue to ultragoal / Finish / Revise plan) and capture the user's selection | → S8 on "Continue to ultragoal" (option 1), valid ONLY against the fresh S4 APPROVE/COMMENT on the current artifact or the S4 carried-forward terminal (residual disclosed); → terminal on "Finish" (option 2, emit `<prometheus-done/>`); → S0 on "Revise plan" (user-initiated) |
+| **S8: Execution Dispatch** | Invoke `Skill(skill: "ultragoal")` with the plan path | (terminal) |
 
 **S8 reachability invariant:** S8 is reachable ONLY from an S7 execution selection taken against a **fresh S4 (Momus) APPROVE/COMMENT** on the current artifact, or the S4 2-round carried-forward terminal (its residual disclosed in the S7 presentation). There is no plan-mutation-after-S4 → S8 path: any artifact change after S4 is a defect that routes to re-review — scoped by default (re-run only S4 Momus, upstream preserved), or to its earliest affected phase on an upstream root cause (S0 for a requirements root cause, S2 for a design root cause) — and forces a fresh S4 re-review before S7 can offer execution again. Recording the carried-forward residual into the plan Context at the cap terminal is part of that terminal, not a post-S4 mutation. A never-downgrade-class residual (data loss, security breach, financial impact) cannot ride the carried-forward terminal — it blocks S5 until the user explicitly decides via Interview.
 
@@ -1123,7 +1124,7 @@ These directives govern how prometheus records its own pipeline state via the st
   ```
   bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" set --phase S3 --mark-plan-done
   ```
-- **Teardown**: At S8 dispatch and on abort, emit `<prometheus-done/>` as a standalone output token. The persistent-mode hook detects this token and performs the actual state-file deletion — the model does not call `clear` directly.
+- **Teardown**: At S8 dispatch, on the Stage C Finish selection, and on abort, emit `<prometheus-done/>` as a standalone output token. The persistent-mode hook detects this token and performs the actual state-file deletion — the model does not call `clear` directly.
 - **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable. The CLI hard-fails with a non-zero exit when `OMT_SESSION_ID` is absent or unsafe — there is no fallback.
 - **Restore**: on restore, you MUST:
   1. Run `bun "${CLAUDE_SKILL_DIR}/scripts/prometheus-state.ts" get` and read `steps.acceptance_criteria.content` from its output to recover the prior confirmed AC (do not re-derive AC that was already confirmed — use the stored content directly).
@@ -1190,12 +1191,12 @@ The third is what the loop-backs need: after a scoped re-review or an S7→S0 re
 | Stage | Mandate | Detail location |
 |---|---|---|
 | **Stage A** | Render the plan to a single-file markdown presentation at `$OMT_DIR/plans/presentation/{name}.md` — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts. The Bird's-Eye section opens with the six-lens coverage table, then every triggered diagram: a bird's-eye System topology diagram REQUIRED when the plan has >= 2 components (governed by `review-pipeline.md`), plus each of the six lens diagrams (System topology / Module-API / User-Actor / Domain state / Domain-Service object / Business logic, defined in `diagram-guide.md`) REQUIRED when its trigger FACT holds in `plan.md` (trigger-based, not optional; the only reason to omit a lens is that its trigger FACT is false). Every diagram shows the runtime behavior the implemented plan would produce — flows, sequences, state transitions, object structures. Diagram count scales with plan size; there is no cap. Re-visualize decided content only, never inventing edges. Diagrams run macro → micro within the Bird's-Eye section, which precedes a Review Digest (AC + per-AC verification, re-surfaced verbatim), which precedes the plan body; TODO execution detail collapsed in `<details>` (never omitted) + session-derived boxes (Stage B recommendation, Pipeline State) rendered as blockquote callouts. Directly authored per the Presentation Section Order (no template, no substitution); when the plan is approved, the presentation gets made. | Presentation Section Order, translation invariants, readability enrichment in `review-pipeline.md`; diagram type-selection + authoring rules + guardrails + presentation protocol + post-draw self-audit in `diagram-guide.md` |
-| **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Momus feasibility signal). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
-| **Stage C** | Execution Bridge (S7) via platform's user-prompt primitive — mode choice ONLY: 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. Execution selection is valid only against a fresh S4 pass on the current artifact (see the S8 reachability invariant in the Pipeline State Machine). | Option formatting in `review-pipeline.md` |
+| **Stage B** | Compute the handoff recommendation from the re-keyed signal table (carried-forward residuals, unresolved questions/open forks, feasibility-concern comments, machine-verifiability of the plan). Output: Recommendation (Continue to ultragoal / Finish) + Rationale + What-tips-the-balance. | Signal table details in `review-pipeline.md` |
+| **Stage C** | Execution Bridge (S7) via platform's user-prompt primitive — mode choice ONLY: 3 options (Continue to ultragoal / Finish / Revise plan). `(Recommended)` label computed from the re-keyed signal table, NOT hardcoded. Execution selection is valid only against a fresh S4 pass on the current artifact (see the S8 reachability invariant in the Pipeline State Machine). | Option formatting in `review-pipeline.md` |
 
 **Stage A language gate — execute BEFORE rendering any prose:** First state the session's conversation language out loud, then render every prose string in the presentation markdown in that language — hero text, headings, body, callouts alike. Detection is render-time, never hard-coded. Only the preservation list stays verbatim (code blocks, file paths, CLI, `WI-N`, `AC#M`, `S0-S8`, `drawn`, `trigger FALSE:`); `plan.md` on disk is never rewritten. This gate is binding on its own; the full Translation Rule (3 invariants) in `review-pipeline.md` adds detail but is not a precondition for honoring it.
 
-On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 → delegate to sisyphus-junior. Option 3 → return to the S0 Requirements interview (user-initiated revise).
+On selection: Option 1 → `Skill(skill: "ultragoal")` with the plan path. Option 2 → emit `<prometheus-done/>`; the plan file is the deliverable. Option 3 → return to the S0 Requirements interview (user-initiated revise).
 
 **IMPORTANT**: On execution selection, MUST invoke via `Skill()` or delegate. Do NOT tell user to run a command manually.
 
@@ -1213,7 +1214,7 @@ On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 �
 | Momus | Separate metis results in prompt | Already in Plan Context + anchoring risk |
 | Momus | Adding review instructions | Momus has own criteria |
 
-> Detailed invocation templates (3-Section Metis, Daedalus Verification Focus, Momus path-only) + Stage A markdown rendering procedure (section order, translation invariants, readability enrichment) + Stage B Decision Matrix details + Stage C option formatting → [review-pipeline.md](review-pipeline.md). Lookup-only — read the relevant section when executing that specific stage.
+> Detailed invocation templates (3-Section Metis, Daedalus Verification Focus, Momus path-only) + Stage A markdown rendering procedure (section order, translation invariants, readability enrichment) + Stage B signal table details + Stage C option formatting → [review-pipeline.md](review-pipeline.md). Lookup-only — read the relevant section when executing that specific stage.
 
 ---
 
