@@ -185,7 +185,7 @@ Once the cycle concludes (any EXIT outcome — Goal Met, max_cycles, Same-Failur
 
 ## Fix-Loop Nesting Contract
 
-qa's fix-loop (DIAGNOSIS → FIX → RE-VERIFY) **must NOT be called inside another fix-loop** (e.g. `goal`'s own pursuit loop) — running one fix-loop inside another double-loops retries and confuses which loop owns EXIT. This is a documented contract, not an enforced one: **YAGNI** — no detection-guard code is written for a caller that does not exist yet. Named upgrade trigger: **add a code guard when qa gains its first fix-loop-owning caller.**
+qa's fix-loop (DIAGNOSIS → FIX → RE-VERIFY) **must NOT be called inside another fix-loop** (e.g. `ultragoal`'s own pursuit loop) — running one fix-loop inside another double-loops retries and confuses which loop owns EXIT. This is a documented contract, not an enforced one: **YAGNI** — no detection-guard code is written for a caller that does not exist yet. Named upgrade trigger: **add a code guard when qa gains its first fix-loop-owning caller.**
 
 ---
 
@@ -314,7 +314,7 @@ LOOP:       DIAGNOSIS→oracle (fresh, read-only) | FIX→sisyphus-junior (commi
 EXIT:       Goal Met / max_cycles=5 / Same-Failure-3x (scenario-id+root-cause-file+root-cause-symbol) / Safety
 ROLLBACK:   git revert fix_head_before..HEAD only, NEVER git reset --hard; 3 guards: linear-descendant, non-empty-range=ERROR, post-revert disjointness on user_dirty_set; REFUSE the cycle on user_dirty_set overlap; rm -rf/force auto-deny honored
 STATE:      bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>; continue resumes at last phase/cycle
-NESTING:    qa's fix-loop must NOT be called inside another fix-loop (e.g. goal) — doc contract, YAGNI; upgrade trigger: add a code guard when qa gains its first fix-loop-owning caller
+NESTING:    qa's fix-loop must NOT be called inside another fix-loop (e.g. ultragoal) — doc contract, YAGNI; upgrade trigger: add a code guard when qa gains its first fix-loop-owning caller
 ROSTER:     ## Scenarios Executed is a precondition for verdict issuance; absent → verdict not issued, cycle incomplete. Exception: PRE-FLIGHT fail-fast issues REQUEST_CHANGES with no roster — never synthesize an empty one there; present+0 rows means inert refactor, a completed cycle
 FEEDBACK:   feedback-protocol.md for Confidence Scoring; CONFIDENCE 0-49 discard, 50-79 nitpick, 80+ report
 ```

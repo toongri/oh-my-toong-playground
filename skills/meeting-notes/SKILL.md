@@ -104,7 +104,7 @@ For each extracted action item, recommend how to make progress on it, drawn from
 - **No fit? Say so honestly**: label the item a manual / external action (e.g. "manual: read the vendor doc", "external: waiting on another team"). Never invent a skill name to fill the slot.
 - **Decision follow-ups are optional**: a decision may get a light record/notify follow-up bullet, but a decision is never force-fit with an execution tool. If nothing natural fits a decision, leave it with no recommendation.
 
-This mirrors the live-list, no-hardcoded-catalog idiom used by `goal` and `deep-interview` Phase 5.
+This mirrors the live-list, no-hardcoded-catalog idiom used by `deep-interview` Phase 5.
 
 ---
 
