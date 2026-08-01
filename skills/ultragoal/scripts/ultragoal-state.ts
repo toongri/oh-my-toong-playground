@@ -948,8 +948,9 @@ export function addStory(sessionId: string, story: Story, evidence: string, rati
 	}
 
 	// Force status to unconfirmed regardless of what was passed
+	const { split_from: _splitFrom, split_into: _splitInto, ...storyWithoutSplitProvenance } = story;
 	const normalized: Story = {
-		...story,
+		...storyWithoutSplitProvenance,
 		status: "unconfirmed",
 		steering_evidence: evidence,
 		steering_rationale: rationale,
@@ -1007,9 +1008,10 @@ export function reviseStory(
 	}
 
 	// Apply the patch but ALWAYS reset status to unconfirmed
+	const { split_from: _splitFrom, split_into: _splitInto, ...patchWithoutSplitProvenance } = patch;
 	const updated: Story = {
 		...stories[idx],
-		...patch,
+		...patchWithoutSplitProvenance,
 		status: "unconfirmed",
 		steering_evidence: evidence,
 		steering_rationale: rationale,
@@ -1145,13 +1147,16 @@ export function splitStory(
 		steering_rationale: rationale,
 		split_into: replacements.map((c) => c.id),
 	};
-	const children: Story[] = replacements.map((c): Story => ({
-		...c,
-		status: "unconfirmed",
-		steering_evidence: evidence,
-		steering_rationale: rationale,
-		split_from: parent.id,
-	}));
+	const children: Story[] = replacements.map((c): Story => {
+		const { split_from: _splitFrom, split_into: _splitInto, ...childWithoutSplitProvenance } = c;
+		return {
+			...childWithoutSplitProvenance,
+			status: "unconfirmed",
+			steering_evidence: evidence,
+			steering_rationale: rationale,
+			split_from: parent.id,
+		};
+	});
 	const updated = [...stories.slice(0, idx), retiredParent, ...children, ...stories.slice(idx + 1)];
 	mergeWrite(sessionId, { stories: updated });
 }
