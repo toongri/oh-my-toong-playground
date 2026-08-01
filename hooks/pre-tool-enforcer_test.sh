@@ -1650,6 +1650,95 @@ test_cr15_bash_mv_source_ledger_denied() {
     wg_assert_deny "mv \"$(wg_ledger_path)\" /tmp/saved.md" "CR15(mv ledger source)"
 }
 
+# =============================================================================
+# CR-16/17 -- SIGPIPE regression (write-guard-core.sh's write_guard_core_run /
+# codereview_guard_core_run both `return 0` early on a match/identity bypass
+# WITHOUT draining the rest of stdin). This hook wires both functions at the
+# end of an internal pipe (`printf ... | write_guard_core_run ...` /
+# `... | codereview_guard_core_run ...`, both captured via command
+# substitution) -- when the candidate stream left unread after the early
+# return exceeds a real pipe's kernel buffer (64KB), the still-writing
+# `printf` blocks and is then killed once the reader closes its end. Under
+# this script's own `set -euo pipefail`, that failing assignment aborts the
+# WHOLE hook immediately, before the `if [[ -n "$_wg_cr_out" ]]` line that
+# would have printed it ever runs -- so a computed deny is silently discarded,
+# and an allow verdict never gets its `{"continue": true}` line at all.
+#
+# hg_pad_redirect_targets appends <count> SEPARATE `;`-segments, each holding
+# one harmless never-matching `> <long-filler>` redirect target, so the
+# candidate list built from them alone is comfortably >64KB -- deterministic
+# on SIZE, never on scheduling luck. Each padding segment sits AFTER the real
+# `mv` segment, so the guard-worthy candidate is always read FIRST and the
+# padding is left entirely undrained at the moment of an early return. Kept
+# to a LOW segment count with a LONG filler per segment rather than thousands
+# of tiny ones: this hook's extractor forks a subprocess (awk/grep) per CHAIN
+# SEGMENT, and an earlier many-tiny-segments draft of this helper turned
+# "make the candidate list big" into "fork thousands of subprocesses in one
+# shell invocation" -- which crashed the Codex twin's hook process outright
+# on this environment's bash (a resource-exhaustion confound, not the
+# SIGPIPE defect this suite targets).
+# =============================================================================
+hg_pad_redirect_targets() {
+    local count="$1" i=0 out="" filler
+    printf -v filler '%*s' 3200 ''
+    filler="${filler// /x}"
+    while [ "$i" -lt "$count" ]; do
+        out="${out}; > /tmp/omt-pte-sigpipe-pad-$(printf '%03d' "$i")-$filler"
+        i=$((i + 1))
+    done
+    printf '%s' "$out"
+}
+
+# hg_run_capture_exit <json> -- runs the hook and captures BOTH stdout (in
+# HG_OUT) and the hook's own exit code (in HG_RC), not just stdout -- the
+# SIGPIPE regression manifests as a wrong PROCESS exit code even in the one
+# case (deny) where the JSON text itself still happens to look right.
+hg_run_capture_exit() {
+    local json="$1"
+    HG_RC=0
+    HG_OUT=$(printf '%s' "$json" | bash "$SCRIPT_DIR/pre-tool-enforcer.sh") || HG_RC=$?
+}
+
+# CR-16 -- CR13's payload (goal-codereview path, agent_type=code-reviewer,
+# `mv` source) with >64KB of trailing redirect padding appended to the SAME
+# Bash command. The hook must still ALLOW (`{"continue": true}`, exit 0) --
+# currently the internal codereview_guard_core_run pipe (pre-tool-
+# enforcer.sh:394) never reads a byte of the oversized stdin before its
+# identity-bypass `return 0`, so the writer is killed and the hook aborts with
+# a nonzero exit and empty stdout instead.
+test_cr16_bash_mv_source_goal_codereview_code_reviewer_large_candidates_allowed() {
+    local path cmd json
+    path=$(cr_goal_path)
+    cmd="mv \"$path\" /tmp/saved.json$(hg_pad_redirect_targets 80)"
+    json=$(hg_bash_json_agent "$cmd" "code-reviewer")
+    hg_run_capture_exit "$json"
+    if [ "$HG_RC" -ne 0 ]; then
+        echo "ASSERTION FAILED CR16: expected exit 0 for code-reviewer with >64KB candidates, got exit $HG_RC. Output: $HG_OUT"
+        return 1
+    fi
+    hg_is_allow "$HG_OUT" || { echo "ASSERTION FAILED CR16: expected allow. Got: $HG_OUT"; return 1; }
+}
+
+# CR-17 -- same oversized candidate set as CR16, but WITHOUT agent_type ==
+# code-reviewer, so codereview_guard_core_run's EARLY RETURN is the deny match
+# (line 279 in write-guard-core.sh) instead of the identity bypass. The
+# already-computed deny JSON must still reach stdout with exit 0 -- currently
+# it is computed, then discarded whole when the internal pipe's SIGPIPE aborts
+# the hook before the `if [[ -n "$_wg_cr_out" ]]` print ever runs (fail-open:
+# the orchestrator's forged write silently proceeds unblocked).
+test_cr17_bash_mv_source_goal_codereview_no_agent_type_large_candidates_denied() {
+    local path cmd json
+    path=$(cr_goal_path)
+    cmd="mv \"$path\" /tmp/saved.json$(hg_pad_redirect_targets 80)"
+    json=$(hg_bash_json "$cmd")
+    hg_run_capture_exit "$json"
+    if [ "$HG_RC" -ne 0 ]; then
+        echo "ASSERTION FAILED CR17: expected exit 0 for a non-reviewer deny with >64KB candidates, got exit $HG_RC. Output: $HG_OUT"
+        return 1
+    fi
+    hg_is_deny "$HG_OUT" || { echo "ASSERTION FAILED CR17: expected the already-computed deny JSON to survive the oversized candidate pipe, not be discarded. Got: $HG_OUT"; return 1; }
+}
+
 test_regression_ambient_claude_env_file_not_leaked_by_unscrubbed_call() {
     # Regression guard for the ambient CLAUDE_ENV_FILE leak: AC9's session-
     # start.sh invocation (test_ac9_started_at_parseable_by_stale_cleanup)
@@ -1921,6 +2010,8 @@ main() {
     run_test test_cr13_bash_mv_source_goal_codereview_code_reviewer_allowed
     run_test test_cr14_bash_cp_source_ultragoal_codereview_allowed
     run_test test_cr15_bash_mv_source_ledger_denied
+    run_test test_cr16_bash_mv_source_goal_codereview_code_reviewer_large_candidates_allowed
+    run_test test_cr17_bash_mv_source_goal_codereview_no_agent_type_large_candidates_denied
     run_test test_rdg_matching_claude_candidate_allows_and_increments
     run_test test_rdg_sixth_candidate_denied_without_increment
     run_test test_rdg_clean_and_cleanup_reviews_deny_with_completion_actions
