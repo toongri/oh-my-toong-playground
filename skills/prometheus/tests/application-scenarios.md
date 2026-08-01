@@ -520,7 +520,7 @@ silently, proceed.
 
 Turn 8 (S5 + S7):
 Full plan presented to user (S5). User reviews the rendered plan.
-Execution Bridge: User selects "(1) Full orchestration".
+Execution Bridge: User selects "(1) Continue to ultragoal".
 ```
 
 **Verification Points:**
@@ -535,7 +535,7 @@ Execution Bridge: User selects "(1) Full orchestration".
 | V6 | Co-Design precedes plan write | After Metis APPROVE, S2 Co-Design runs the in-phase Daedalus advisory pass (advisory only — no verdict, no gate) and the human design gate. Plan (S3) is NOT written until the user gives explicit design approval at the human gate |
 | V7 | Plan contains all required sections | TL;DR, Context (Interview Summary), Work Objectives (Must NOT Have), TODOs (References + QA), Execution Strategy, Verification Strategy, Success Criteria, ADR |
 | V8 | Momus gates before User — sequential | Momus (S4 plan gate, post-plan) MUST pass (APPROVE/COMMENT) before user sees the plan. Daedalus is advisory and does NOT gate; the human design gate gates S2. No gate skipped |
-| V9 | Execution Bridge invokes Skill, not manual command | On "(1) Full orchestration", Prometheus invokes `Skill(skill: "sisyphus")` — does NOT tell user to run a command |
+| V9 | Execution Bridge invokes Skill, not manual command | On "(1) Continue to ultragoal", Prometheus invokes `Skill(skill: "ultragoal")` — does NOT tell user to run a command |
 
 ---
 
@@ -676,78 +676,72 @@ Prometheus output MUST contain evidence of all three pass indicators when a Verd
 
 ## Scenario P-22: Markdown Presentation
 
-**Primary Technique:** Markdown Presentation — Stage B Decision Matrix 신호에 따른 실행 권고 계산
+**Primary Technique:** Markdown Presentation — Stage B re-keyed signal table 신호에 따른 실행 권고 계산
 
-**Primary Technique secondary:** Stage B Execution Recommendation — Plan more wins conflict resolution
+**Primary Technique secondary:** Stage B Execution Recommendation — even split defaults to Finish (human review first)
 
 **Setup:**
 Both variants assume the full review pipeline has completed (Metis APPROVE, S2 Co-Design human design gate approved, Momus APPROVE).
-The variants differ only in the Decision Matrix signals present in each scenario's session state.
+The variants differ only in the re-keyed signal table signals present in each scenario's session state.
 
 #### Variant A:
 
 **Session state signals:**
-- TODO count: 6 (≥ 4 → Strong signal toward Complex/Architecture)
-- Plan classification: Complex flag present (Strong signal toward Complex/Architecture)
-- Ambiguity Score: 2.5 (> 2 → Moderate signal toward Complex/Architecture)
-- Momus feasibility signal: APPROVE (no codebase concern)
-- Scope questions: all resolved
+- Carried-forward residual: present (Strong toward Finish)
+- Unresolved questions or open forks: none
+- Post-plan gate: APPROVE (no feasibility-concern COMMENT)
+- Plan fully machine-verifiable with no residuals: no
 
-**Expected recommendation:** `Plan more` / Full Orchestration
+**Expected recommendation:** Finish
 
 Prometheus MUST output a Stage B recommendation block citing dominant signals:
 ```
-**Recommendation**: Full orchestration
-**Execution mode**: Complex/Architecture
-**Rationale**: TODO count ≥ 4 (Strong) and Complex flag (Strong) dominate. Ambiguity Score > 2 adds moderate weight.
-**What tips the balance**: 6-TODO plan with Complex classification — clear Full Orchestration signal.
+**Recommendation**: Finish
+**Rationale**: A carried-forward residual is a Strong signal toward Finish.
+**What tips the balance**: Carried-forward residual present.
 ```
 
 #### Variant B:
 
 **Session state signals:**
-- TODO count: 2 (< 4 → no Strong signal toward Complex)
-- Plan classification: Scoped flag present (Strong signal toward Trivial/Scoped)
-- Ambiguity Score: 0.1 (≤ 2 → no moderate signal)
-- Momus feasibility signal: APPROVE (no codebase concern)
-- Scope questions: all resolved
+- Carried-forward residual: none
+- Unresolved questions or open forks: none
+- Post-plan gate: APPROVE (no feasibility-concern COMMENT)
+- Plan fully machine-verifiable with no residuals: yes (Strong toward Continue to ultragoal)
 
-**Expected recommendation:** `Execute now` / Focused Execution
+**Expected recommendation:** Continue to ultragoal
 
 Prometheus MUST output a Stage B recommendation block:
 ```
-**Recommendation**: Focused execution
-**Execution mode**: Trivial/Scoped
-**Rationale**: Scoped flag (Strong) with only 2 TODOs and Ambiguity Score 0.1 — lightweight plan.
-**What tips the balance**: Scoped classification with no competing Strong signals.
+**Recommendation**: Continue to ultragoal
+**Rationale**: A plan fully machine-verifiable with no residuals is a Strong signal toward Continue to ultragoal.
+**What tips the balance**: Plan fully machine-verifiable with no residuals.
 ```
 
 #### Variant C:
 
 **Session state signals:**
-- TODO count: 4 (≥ 4 → Strong signal toward Complex/Architecture)
-- Plan classification: Scoped flag present (Strong signal toward Trivial/Scoped)
-- Ambiguity Score: 0.5 (≤ 2 → no signal)
-- Momus feasibility signal: APPROVE (no codebase concern)
-- Scope questions: all resolved
+- Carried-forward residual: none
+- Unresolved question or open fork in the plan: present (Strong toward Finish)
+- Post-plan gate: APPROVE (no feasibility-concern COMMENT)
+- Plan fully machine-verifiable with no residuals: yes (Strong toward Continue to ultragoal)
 
-**Expected recommendation:** `Plan more` / Full Orchestration (tie: 1 Strong Complex vs 1 Strong Trivial)
+**Expected recommendation:** Finish (even split → human review first)
 
-Prometheus MUST apply "Plan more wins" tie-breaking:
+Prometheus MUST apply the even-split conflict resolution:
 ```
-**Recommendation**: Full orchestration
-**Execution mode**: Complex/Architecture
-**Rationale**: TODO count ≥ 4 (Strong Complex) and Scoped flag (Strong Trivial) produce a balanced signal split. "Plan more wins" conflict resolution defaults to Full Orchestration.
-**What tips the balance**: Even split between Strong Complex and Strong Trivial signals — tie-breaking rule applies.
+**Recommendation**: Finish
+**Rationale**: An unresolved question or open fork in the plan is a Strong signal toward Finish, while a plan fully machine-verifiable with no residuals is a Strong signal toward Continue to ultragoal. The signals split evenly, so Finish is selected for human review first.
+**What tips the balance**: Even split — Finish (human review first).
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Variant A → Full Orchestration recommended | Prometheus computes "Full orchestration" recommendation when TODO ≥ 4 and Complex flag are both present |
-| V2 | Variant B → Focused Execution recommended | Prometheus computes "Focused execution" recommendation when Scoped flag and TODO < 4 are both present |
-| V3 | Variant C tie-breaking: Plan more wins | When Decision Matrix signals split evenly (Variant C: 1 Strong Complex + 1 Strong Trivial), Prometheus applies "Plan more wins" — recommends Full Orchestration, does NOT arbitrarily pick Focused Execution |
+| V1 | Variant A → Finish recommended | Prometheus computes "Finish" recommendation when a carried-forward residual is present |
+| V2 | Variant B → Continue to ultragoal recommended | Prometheus computes "Continue to ultragoal" recommendation when the plan is fully machine-verifiable with no residuals |
+| V3 | Variant C tie-breaking: Finish (human review first) | When re-keyed signal-table signals split evenly (Variant C: 1 Strong Finish vs 1 Strong Continue to ultragoal), Prometheus defaults to Finish for human review first |
 | V4 | Recommendation is computed, not hardcoded | The `(Recommended)` label attaches dynamically to the option matching Stage B output — Prometheus does NOT hardcode "Option 1 is recommended" |
 | V5 | Stage A presentation artifact produced | Prometheus authors `$OMT_DIR/plans/presentation/{name}.md` directly at render-time, following the Presentation Section Order in `review-pipeline.md` — no template, no format converter, no placeholder-substitution engine; the artifact is not committed to disk as `plan.{lang}.md` |
 | V6 | SESSION-DERIVED-BOXES-HERE injection order | The `<!-- SESSION-DERIVED-BOXES-HERE ... -->` block is replaced by exactly 2 `.section-box` elements in order: (a) Stage B · Execution Recommendation, (b) Pipeline State |
@@ -1411,7 +1405,7 @@ If any RF row lacks an explicit Decision column value, that fork is not actually
 | P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
 | P-20 | AC Granularity | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Compound AC 판정(Universal quantifier + Explicit enumeration 동시 매칭), per-concern 분해(rule×file), per-file PASS/FAIL bash 제공. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-20.md |
 | P-21 | Verdict Bypass | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Red Flag 2개 phrase 식별, Operational Definition of Revise 3단계 분석, State Machine S1→S0→S1(fresh) 복귀 경로. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-21.md |
-| P-22 | Markdown Presentation | **RETEST** | 2026-05-26 | Stage A spec 변경(per-plan path `presentation/{name}.md`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. V11(Stage A는 항상 presentation 산출물 생성, skip 없음) 신규 추가 — 2026-05-26 GREEN 단독 통과(tool-absence+시간압박 주입 시 산출물 생성 도망 없음). V12/V13(trigger-based REQUIRED diagram + no invented edges) 신규 추가 — 재검증 필요. 기존 V1-V8(Stage B Decision Matrix)은 무영향 |
+| P-22 | Markdown Presentation | **RETEST** | 2026-05-26 | Stage A spec 변경(per-plan path `presentation/{name}.md`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. V11(Stage A는 항상 presentation 산출물 생성, skip 없음) 신규 추가 — 2026-05-26 GREEN 단독 통과(tool-absence+시간압박 주입 시 산출물 생성 도망 없음). V12/V13(trigger-based REQUIRED diagram + no invented edges) 신규 추가 — 재검증 필요. 기존 V1-V8(Stage B signal table)은 무영향 |
 | UC-P1 | End-to-End — Full Planning Pipeline | | | Rebaselined to actual pipeline (Metis → Co-Design [Daedalus advisory + human design gate] → Plan → Momus). Needs re-testing |
 | UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | Rebaselined to Momus-gated + defect-type loop-back. Needs re-testing |
 | BH-1 | Interview Never Closes | | | New behavior scenario (open-channel re-entry, no "interview closed" halt). Needs testing |
