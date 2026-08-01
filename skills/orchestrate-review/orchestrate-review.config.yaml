@@ -14,20 +14,31 @@ chunk-review:
     # CONFIRMED/PLAUSIBLE/REFUTED) and ranks the survivors.
     #
     # Per-angle model: each member carries its own command/model, so any angle
-    # can run on a different CLI/model. Every angle runs on codex at gpt-5.6-sol.
-    # Effort is medium everywhere except cleanup, which runs high. Both settings
-    # come from 2026-07-31 실측 (리포트:
+    # can run on a different CLI/model. Every angle runs on codex at gpt-5.6-sol,
+    # medium reasoning effort. 모델 하향도 effort 상향도 2026-07-31~08-01 실측 후
+    # 전부 기각했다 (리포트:
     # `~/.omt/oh-my-toong-playground/reports/code-review-finder-tiering-verification-20260731.md`):
-    #   · terra/luna 하향은 전부 기각 — 21파일 diff에서 terra cleanup 발견량이
-    #     11건 → 1~3건으로 무너졌고, 손실이 주변 모듈 탐색이 필요한 Reuse·Efficiency
-    #     렌즈에 몰렸다.
-    #   · effort 상향은 cleanup에서만 효과가 있다. 같은 diff를 구성당 3회씩 돌려
-    #     2회 이상 독립 재현된 finding(consensus)만 세면, cleanup이 회차당 잡는
-    #     consensus가 medium 4/4/3 → high 6/6/5로 겹침 없이 올라간다. 나머지 세
-    #     앵글은 effort를 올려도 회차 간 변동(±1)을 못 넘는다.
-    #   · 그래서 cleanup만 올린다. 4앵글 전부 high로 올리면 output 토큰 +64%,
-    #     wall +60%인데 cleanup만 올리면 +16% / wall 변화 없음(병렬 구조에서
-    #     cleanup은 임계 경로가 아니다). xhigh는 high보다 나은 게 없고 +134%.
+    #   · terra/luna 하향 — 발견을 익명화해 판정자에 대조하니 sol/medium이 회당 확증
+    #     7.67건·확증 1건당 52초로 최저 비용이었다. 하향은 정밀도를 사는 거래가 아니다:
+    #     terra/medium은 확증률이 89%로 더 높은데 확증 1건당 70초로 오히려 비싸다.
+    #     결정타는 `requirement` 확증이 terra/medium·terra/high·luna/xhigh에서 0건인 것
+    #     (sol/medium은 6/6). 차단 클래스가 꺼지면 루프는 짧아지는 게 아니라 잘못 끝난다.
+    #     경량 모델에 effort를 올리면 정밀도가 되레 떨어진다(terra 89→67→64%).
+    #   · effort 상향 — 판정 축은 루프 종료다. `{gate}/references/completion-gate.md`대로
+    #     완료를 막는 것은 `correctness`·`requirement-gap` 클래스뿐이고 `cleanup`은
+    #     비차단이라, cleanup을 몇 건 더 찾아도 루프는 짧아지지 않는다. 그리고 그
+    #     차단 집합은 effort에 반응하지 않는다: 4앵글 전부 high는 회차당 도달이
+    #     8.00 → 8.33으로 사실상 그대로였고 xhigh는 8.00 → 6.67로 오히려 나빠졌다.
+    #   · cleanup만 high로 올리는 안도 같은 이유로 기각했다. 차단 집합 도달 Δ가
+    #     세 PR에서 +1.00 / −1.00 / 0.00으로 평균 0인데(애초에 앵글마다 별도
+    #     프로세스라 인과 경로가 없다), 회당 wall +49%·output +26%가 루프 전
+    #     회차에 곱해진다. 그 대가로 얻는 것은 6회 누적 비차단 cleanup +2건뿐이다.
+    #   · 앵글 하나만 내리는 안도 기각했다. `regression`은 sol에서 정밀도가 네 앵글 중
+    #     최저(44%)라 유일한 하향 후보였지만, 다른 레포에서 재현에 실패했다 — terra는
+    #     12건 중 2건만 제출했고 그 2건이 sol 확증 5종의 부분집합이었다. 확증률 100%가
+    #     엄선이 아니라 미제출인 경우다. 판정 축은 확증률이 아니라 회당 확증 수다.
+    # 즉 이 레버들로 지금 성능을 못 올린다. 실측이 드러낸 진짜 병목은 차단 3앵글의
+    # 수렴이다 — 28파일 diff에서 6회를 돌려도 차단 집합의 78%에서 멈췄다.
     # `model` + `effort_level` + `output_format` (below) plus
     # `settings.deny.skills` (below) resolve (via buildAugmentedCommand) to:
     #   codex exec -c agents.enabled=false -m gpt-5.6-sol \
@@ -64,7 +75,7 @@ chunk-review:
       model: gpt-5.6-sol
       emoji: "\U0001F9F9"
       color: "YELLOW"
-      effort_level: high
+      effort_level: medium
       output_format: json
     - name: requirement
       command: codex exec -c agents.enabled=false
