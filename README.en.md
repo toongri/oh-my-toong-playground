@@ -48,7 +48,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 
 ## Documentation
 
-The details of the library's skills (44) and agents (13) live under `docs/`.
+The details of the library's skills (43) and agents (13) live under `docs/`.
 
 | Doc | Contents |
 |-----|----------|
