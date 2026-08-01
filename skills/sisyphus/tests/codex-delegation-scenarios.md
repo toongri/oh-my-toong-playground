@@ -66,7 +66,7 @@ codex 실행은 **행동**을 잰다. 시뮬레이션으로 잰 값을 행동에
 | `classify` | Classification Block 발화 **횟수**(= 작업 단위 수), 없으면 `no` |
 | `routing` | 블록에 선언된 라우팅 대상. 실제 `routing:` 값은 `independent code-reviewer`처럼 산문이라 첫 낱말이 아니라 값 전체에서 정의된 역할명을 골라낸다 |
 | `kept` | **선언 = 실스폰**이면 MATCH, 어긋나면 DRIFT. 위임 품질을 관측 가능한 술어로 환원한 것. 자기 실행 동의어(`inline`/`me`/`self`)는 스폰으로 세지 않는다 — 재저작본은 `inline`, 구본은 `me`로 쓴다. **블록이 1개일 때만 유효**하고 그 외에는 `n/a`다 — 긴 세션은 블록이 여러 개라 선언의 합집합과 세션 전체 스폰 집합을 비교하면 가짜 DRIFT가 난다 |
-| `bad-role` | `~/.codex/agents/*.toml`에 정의가 없는데 스폰된 역할. **codex는 정의 없는 agent_type을 조용히 받아 실행한다** — 오타가 실패하지 않고 의도한 역할 프롬프트 없이 토큰만 태운다. 두 모양을 잡는다: 오타(`explorer`)와 **누락**(`?` = `agent_type` 미지정 → `agent_role` NULL) |
+| `bad-role` | 정의 집합(`~/.codex/agents/*.toml`) 밖의 스폰. 오타(`explorer`)와 누락(`?` = `agent_type` 미지정)을 잡는다. **판정이 아니라 사실이다** — 아래 정정 절 참조: 이 모집단의 대부분은 대응 에이전트가 애초에 없는 리뷰 앵글 팬아웃이다 |
 | `verdict` | 등장한 판정 토큰 |
 | `repo-writes` | 부모가 직접 쓴 **레포 파일 수**(`apply_patch` 대상 중 `$OMT_DIR` 밖). Iron Law는 "네 손은 산출물에 닿지 않는다"이고 `$OMT_DIR` 기록만 예외이므로, 이 수치는 후보가 아니라 **위반 건수**다 |
 
@@ -159,9 +159,30 @@ evidence: `$OMT_DIR/evidence/sisyphus-rewrite/reviewfix/rf-{cur,old}-{1,2}.jsonl
 `explorer`(정식 명은 `explore`, `~/.codex/agents/`에 정의 없음)를 두 번 띄워 3.7M 토큰을
 태웠고 — 그 세션에서 어느 정식 역할보다 많은 양이다 — 둘 다 `verify_*_review` 작업이었다.
 `019fb6a4`은 `agent_type`을 아예 지정하지 않은 자식(`agent_path: /root/foundation_sisyphus`,
-`agent_role` NULL, depth 1, fork 아님)에 **102.3M 토큰**이 실렸다. 이름으로 보아 구현 위임
-의도였는데 역할 프롬프트 없이 일반 에이전트로 돌았다. 오타와 누락은 같은 실패 계열이다.
-지금은 각각 1건이라 본문 결함의 근거로 쓸 수 없다. 재현되면 RED다.
+`agent_role` NULL, depth 1, fork 아님)에 **102.3M 토큰**이 실렸다.
+
+### ⚠️ 정정 (2026-08-01) — bad-role은 결함 지표가 아니다
+
+DB 전체를 세어 "스폰 4380건 중 1582건이 역할 프롬프트 없이 돌았다"까지 확인한 뒤, 그 모집단이
+무엇인지 확인하지 않고 결함으로 부를 뻔했다. 실제로 확인하니 이렇다.
+
+| 역할 | 건수 | 대표 작업명 |
+|---|---|---|
+| `<미지정>` | 1310 | `test_quality`, `ac_mapping`, `cleanup_reuse`, `cleanup_conventions` |
+| `explorer` | 242 | `test_quality`, `ac_mapping`, `test_teeth`, `regression_batch` |
+| `worker` / `default` | 30 | — |
+
+작업명이 전부 **리뷰 앵글**이고, 부모는 `source='exec'`에 `<system-instructions> CRITICAL…`로
+시작하는 세션 — `orchestrate-review`가 CLI 프로세스로 띄운 리뷰 워커들이다. 앵글에 대응하는
+에이전트 정의는 `~/.codex/agents/`에 애초에 없다(있는 것은 `chunk-reviewer`까지). **대응
+에이전트가 없는 팬아웃을 일반 서브에이전트로 띄우는 것은 이 문맥에서 정상이다.**
+
+`explorer`도 같은 모집단이다 — `<미지정>`과 작업명이 겹친다. 이름을 지어낸 것은 맞지만
+(`explorer`는 OMT 소스 어디에도 없다) 앵글 파인더에 줄 올바른 이름이 애초에 없다.
+
+그러므로 `bad-role`은 **사실 보고**이지 위반 판정이 아니다. 진짜 오배정(정의된 에이전트를
+의도했는데 이름을 틀린 경우)과 정상 팬아웃을 기계로 가를 수 없다 — 작업명을 읽어야 한다.
+`019fb6a4`의 `foundation_sisyphus`처럼 정의된 역할을 명백히 의도한 이름만 후보다.
 
 ## Fixture
 
