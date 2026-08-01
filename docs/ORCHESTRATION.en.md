@@ -93,7 +93,8 @@ flowchart TD
 - **Role**: Strategic planning, requirements interviews
 - **Constraint**: **READ-ONLY**. NEVER writes code.
 - **Output**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (via `$OMT_DIR`)
-- **Workflow**: Interview -> Research -> Metis consultation -> Plan creation
+- **Workflow**: Scope split gate -> Interview -> Research -> Metis consultation -> Plan creation
+- **Scope split**: Complex and Architecture requests first settle whether a subset could be merged on its own and leave the system working. If one could, only the first subset becomes this run's scope; the rest each become their own prometheus run.
 
 ### sisyphus (The Orchestrator)
 
@@ -130,10 +131,11 @@ When requirements are unclear, crystallize a spec with `/deep-interview` before 
 
 When requirements are clear, use `/prometheus`:
 
-1. **Interview Mode**: Collects context through questions
-2. **Research**: Investigates codebase via explore/librarian agents
-3. **Metis Consultation**: MANDATORY gap analysis before plan creation
-4. **Plan Generation**: Writes structured plan to `~/.omt/{OMT_PROJECT}/plans/*.md`
+1. **Scope Split Gate**: Complex and Architecture only. If a subset could be merged on its own, the subsets are listed in order and only the first becomes this run's scope
+2. **Interview Mode**: Collects context through questions
+3. **Research**: Investigates codebase via explore/librarian agents
+4. **Metis Consultation**: MANDATORY gap analysis before plan creation
+5. **Plan Generation**: Writes structured plan to `~/.omt/{OMT_PROJECT}/plans/*.md`
 
 ### Phase 2: Execution
 

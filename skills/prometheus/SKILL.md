@@ -203,6 +203,24 @@ After loading context, classify the user's request. Classification determines in
 
 **Classification boundary rule:** File count takes precedence over per-file complexity. 3 files with trivial changes = Scoped, not Trivial.
 
+### Scope Split Gate (Complex and Architecture only)
+
+Run after classification, before the requirements interview. Trivial and Scoped skip it.
+
+Ask one question of the request:
+
+> Is there a subset of this work that could be merged on its own — leaving the system working, with something that verifies it — without the rest?
+
+**NO** → this request is one plan. Proceed to the interview.
+
+**YES** → this request is several plans. Produce, in this order:
+
+1. **The subsets, ordered.** A subset that changes no observable behavior goes first; every other subset names what must land before it.
+2. **A plan for the FIRST subset only.** That subset is the User Goal + Scope for this run.
+3. **The remaining subsets recorded under `## Context` as deferred**, each naming its blocker. Each becomes its own prometheus run.
+
+One prometheus run produces one plan; a request that is several plans is planned one subset at a time.
+
 ## Clearance Checklist (Transition Gate)
 
 **Run after EVERY interview turn.** If ANY item is NO, CONTINUE interviewing.
