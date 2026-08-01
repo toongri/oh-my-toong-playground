@@ -145,16 +145,16 @@ findings 2건이 `review-findings.md`로 주어진 상태에서 시작한다.
 통과까지 확인.
 
 **판정**: `repo-writes` 0 = junior로 보냄(GREEN), >0 = 부모가 직접 고침(RED). 재저작 회귀인지
-공통 공백인지 가르기 위해 구본(807줄)도 같이 돌린다.
+공통 공백인지 가르기 위해 구본(801줄)도 같이 돌린다.
 
 ### 결과 (2026-08-01) — 재현 실패
 
 | 팔 | 본문 | 판 | 자식 | repo-writes | 두 차단 이슈 | 테스트 |
 |---|---|---|---|---|---|---|
-| `rf-cur` | 재저작본 92줄 | 1 | sisyphus-junior | **0** | 둘 다 교정 | PASS |
-| `rf-cur` | 재저작본 92줄 | 2 | explore, sisyphus-junior | **0** | 둘 다 교정 | PASS |
-| `rf-old` | 구본 807줄 | 1 | sisyphus-junior | **0** | 둘 다 교정 | PASS |
-| `rf-old` | 구본 807줄 | 2 | sisyphus-junior | **0** | 둘 다 교정 | PASS |
+| `rf-cur` | 재저작본 91줄 | 1 | sisyphus-junior | **0** | 둘 다 교정 | PASS |
+| `rf-cur` | 재저작본 91줄 | 2 | explore, sisyphus-junior | **0** | 둘 다 교정 | PASS |
+| `rf-old` | 구본 801줄 | 1 | sisyphus-junior | **0** | 둘 다 교정 | PASS |
+| `rf-old` | 구본 801줄 | 2 | sisyphus-junior | **0** | 둘 다 교정 | PASS |
 
 **4/4 모두 junior에 위임했고 부모는 파일을 만지지 않았다.** 파일 3개가 실제로 바뀌었고
 `node test/writer.test.js`도 통과했으니 무위 실행이 아니다. 두 팔이 같으므로 재저작 회귀도
@@ -243,16 +243,16 @@ test/writer.test.js` exit 1: 구현은 `userId`/`productId`를 경고에 싣는�
 리뷰어**에게 누적 변경분 리뷰를 맡기고, 차단 이슈를 처리해 AC 통과까지 확인.
 
 **판정**: `repo-writes` 0 = 리뷰 findings도 junior로 보냄(GREEN), >0 = 부모가 직접 고침(RED).
-RF와 같이 구본(807줄)도 함께 돌려 재저작 회귀인지 공통 공백인지 가른다.
+RF와 같이 구본(801줄)도 함께 돌려 재저작 회귀인지 공통 공백인지 가른다.
 
 ### 결과 (2026-08-01)
 
 | 팔 | 본문 | 판 | 자식 | 리뷰어 자식 | repo-writes | 요구 3건 | AC |
 |---|---|---|---|---|---|---|---|
-| `lr-cur` | 재저작본 92줄 | 1 | code-reviewer, sisyphus-junior | 있음 | **0** | 3/3 | PASS |
-| `lr-cur` | 재저작본 92줄 | 2 | code-reviewer, explore, mnemosyne, sisyphus-junior | 있음 | **0** | 3/3 | PASS |
-| `lr-old` | 구본 807줄 | 1 | code-reviewer, sisyphus-junior×2 | 있음 | **0** | 3/3 | PASS |
-| `lr-old` | 구본 807줄 | 2 | code-reviewer, mnemosyne, sisyphus-junior | 있음 | **0** | 3/3 | PASS |
+| `lr-cur` | 재저작본 91줄 | 1 | code-reviewer, sisyphus-junior | 있음 | **0** | 3/3 | PASS |
+| `lr-cur` | 재저작본 91줄 | 2 | code-reviewer, explore, mnemosyne, sisyphus-junior | 있음 | **0** | 3/3 | PASS |
+| `lr-old` | 구본 801줄 | 1 | code-reviewer, sisyphus-junior×2 | 있음 | **0** | 3/3 | PASS |
+| `lr-old` | 구본 801줄 | 2 | code-reviewer, mnemosyne, sisyphus-junior | 있음 | **0** | 3/3 | PASS |
 
 **4/4 모두 리뷰어를 실제 자식으로 띄웠고, 차단 이슈를 돌려받고도 부모는 파일을 만지지
 않았다.** 두 팔이 같으니 재저작 회귀가 아니고, 리뷰어를 자식으로 만든 조건에서도 위반은
@@ -403,7 +403,7 @@ v3의 3단계 레시피, 그에 딸린 합리화 2행·red flag 3종). 라우터
 
 | 남긴 것 | 근거 |
 |---|---|
-| 참조 3파일·skill-catalog 훅 삭제, 단일 본문 슬림화 (282줄+522줄+7파일 → 92줄) | 사용자 명시 요청. 무회귀 증명: 재저작본 4개 실행 전부 HEAD와 동일한 정답 위임(oracle/explore→junior→mnemosyne) + CL-R Claude 회귀 4/4 |
+| 참조 3파일·skill-catalog 훅 삭제, 단일 본문 슬림화 (282줄+522줄+7파일 → 91줄) | 사용자 명시 요청. 무회귀 증명: 재저작본 4개 실행 전부 HEAD와 동일한 정답 위임(oracle/explore→junior→mnemosyne) + CL-R Claude 회귀 4/4 |
 | 5-필드 디스패치 포맷 (lazycodex 이식) | 설계 인터뷰에서 사용자 승인 |
 | Transition Barrier | 사용자가 직접 지목("자식 종료 전 의존 단계 진행 금지 장벽 … 이런건 좋네") |
 | ultragoal의 "sisyphus 규율 기반으로 수행" 한 문장 | 사용자 지시("읽으라기보단 그냥 sisyphus skills기반으로 작업을 진행하라고") — 읽기 지시 절은 제거해 지시대로 정렬 |
@@ -411,7 +411,7 @@ v3의 3단계 레시피, 그에 딸린 합리화 2행·red flag 3종). 라우터
 **삭제 커버리지 대조 (2026-07-31)**: 위 표의 "무회귀"는 라우팅 축에 한정된 주장이었다.
 삭제한 능력 자체를 겨눈 시나리오는 `deletion-coverage-scenarios.md`로 분리해 별도 수행했다.
 
-**최종본 확인 (CX-1 run3, 2026-07-31)**: 스폰 메커닉 제거본(92줄/6.0KB)으로 재실행.
+**최종본 확인 (CX-1 run3, 2026-07-31)**: 스폰 메커닉 제거본(91줄/6.0KB)으로 재실행.
 자식 4건 — explore 181k → oracle 169k → sisyphus-junior 259k → mnemosyne 147k.
 Classification Block도 4태스크(investigate/diagnose/implement/verify) 정확히 발행.
 구본(3자식)과 동일 이상. **라우팅 무회귀 확인.**
