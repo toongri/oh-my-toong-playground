@@ -50,15 +50,17 @@ flowchart LR
         prometheus["prometheus"]
     end
     subgraph 실행
+        ultragoal["ultragoal"]
         sisyphus["sisyphus"]
     end
 
     deep -->|"$OMT_DIR/deep-interview/{slug}.md"| prometheus
-    prometheus -->|"$OMT_DIR/plans/*.md"| sisyphus
+    prometheus -->|"$OMT_DIR/plans/*.md"| ultragoal
+    ultragoal -->|"스토리 순차 디스패치"| sisyphus
     sisyphus -->|"검증된 코드"| Done((완료))
 ```
 
-각 화살표는 파일 핸드오프입니다. deep-interview는 명세를 prometheus에 넘기고, prometheus는 계획을 sisyphus에 넘기며, sisyphus는 검증된 코드 변경으로 마무리합니다. 단계를 건너뛰어도 동작하지만, 앞 단계의 명확성이 뒤 단계의 품질을 결정합니다.
+각 화살표는 파일 핸드오프입니다. deep-interview는 명세를 prometheus에 넘기고, prometheus는 계획을 ultragoal에 넘기고, ultragoal이 스토리를 sisyphus에 순차 디스패치하며, sisyphus는 검증된 코드 변경으로 마무리합니다. 단계를 건너뛰어도 동작하지만, 앞 단계의 명확성이 뒤 단계의 품질을 결정합니다.
 
 ---
 
@@ -109,7 +111,7 @@ flowchart TB
     Criteria -->|아니오| Draft[기준 초안<br/>-> 사용자 확인]
     Draft --> Metis
     Metis --> Write["$OMT_DIR/plans/*.md에<br/>계획 작성"]
-    Write --> Handoff([sisyphus로 전달])
+    Write --> Handoff([ultragoal로 전달])
 ```
 
 **금지된 행위**:
@@ -121,7 +123,7 @@ flowchart TB
 
 **Scope Split Gate**: Complex·Architecture로 분류된 요청은 인터뷰에 들어가기 전에 한 가지를 먼저 판정합니다 — *나머지 없이도 혼자 머지돼서, 시스템이 돌고, 그걸 검증할 무언가가 있는 부분집합이 있는가.* 있으면 그 요청은 계획 하나가 아닙니다. 덩어리를 순서대로 나열하되 동작이 바뀌지 않는 것을 먼저 두고, **첫 덩어리만** 이번 실행의 범위로 삼으며, 나머지는 각자의 선행 조건과 함께 `## Context`에 이월로 적습니다. 이월된 덩어리는 각각 별도의 prometheus 실행이 됩니다. Trivial·Scoped는 이 게이트를 건너뜁니다.
 
-**파이프라인 연결**: 인터뷰 → 조사(explore/librarian) → metis 갭 분석 → 계획 작성 순으로 진행합니다. 산출된 계획은 `$OMT_DIR/plans/*.md`에 저장되어 sisyphus의 입력이 됩니다. prometheus 한 번은 계획 하나를 냅니다 — 계획 여러 개로 갈린 요청은 한 덩어리씩 따로 실행합니다.
+**파이프라인 연결**: 인터뷰 → 조사(explore/librarian) → metis 갭 분석 → 계획 작성 순으로 진행합니다. 산출된 계획은 `$OMT_DIR/plans/*.md`에 저장되어 ultragoal의 입력이 됩니다. prometheus 한 번은 계획 하나를 냅니다 — 계획 여러 개로 갈린 요청은 한 덩어리씩 따로 실행합니다.
 
 ---
 
