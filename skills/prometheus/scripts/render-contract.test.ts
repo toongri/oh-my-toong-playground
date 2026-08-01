@@ -192,7 +192,7 @@ describe("presence — markdown render contract", () => {
 
 describe("survival — Stage B / Stage C headings must remain", () => {
 	it("S1: ## Stage B: Decision Matrix heading survives", () => {
-		expect(reviewPipelineContent).toContain("## Stage B: Decision Matrix");
+		expect(reviewPipelineContent).toContain("## Stage B: Re-keyed Signal Table");
 	});
 
 	it("S2: ## Stage C: Execution Bridge heading survives", () => {
