@@ -2194,16 +2194,16 @@ codex_full_payload() {
     local tool_name="$1" tool_input="$2" sid="$3" cwd="$4"
     if [ "$#" -ge 5 ]; then
         local agent_type="$5"
-        jq -n --arg tool_name "$tool_name" --argjson tool_input "$tool_input" \
+        printf '%s' "$tool_input" | jq -n --arg tool_name "$tool_name" \
             --arg sid "$sid" --arg cwd "$cwd" --arg agent_type "$agent_type" \
-            '{session_id:$sid, turn_id:"turn-1", agent_type:$agent_type,
+            'input as $tool_input | {session_id:$sid, turn_id:"turn-1", agent_type:$agent_type,
               transcript_path:"/tmp/codex-transcript.jsonl", hook_event_name:"PreToolUse",
               model:"gpt-5-codex", permission_mode:"default", trigger:"tool_call",
               tool_name:$tool_name, tool_input:$tool_input, tool_use_id:"tu-1", cwd:$cwd}'
     else
-        jq -n --arg tool_name "$tool_name" --argjson tool_input "$tool_input" \
+        printf '%s' "$tool_input" | jq -n --arg tool_name "$tool_name" \
             --arg sid "$sid" --arg cwd "$cwd" \
-            '{session_id:$sid, turn_id:"turn-1",
+            'input as $tool_input | {session_id:$sid, turn_id:"turn-1",
               transcript_path:"/tmp/codex-transcript.jsonl", hook_event_name:"PreToolUse",
               model:"gpt-5-codex", permission_mode:"default", trigger:"tool_call",
               tool_name:$tool_name, tool_input:$tool_input, tool_use_id:"tu-1", cwd:$cwd}'
@@ -2485,6 +2485,95 @@ test_codereview_nested_agent_type_in_tool_input_denies() {
 }
 
 # =============================================================================
+# SIGPIPE regression (codex twin of the Claude suite's CR-16/17) --
+# write_guard_core_run / codereview_guard_core_run both `return 0` early on a
+# match/identity bypass WITHOUT draining the rest of stdin (hooks/write-guard-
+# core.sh:208/231/262/272/279). This hook wires codereview_guard_core_run at
+# the very end of an internal pipe (codex-write-guard.sh:901); when the
+# candidate stream left unread after the early return exceeds a real pipe's
+# kernel buffer (64KB), the still-writing `printf` is killed, and `pipefail`
+# makes the WHOLE hook process exit nonzero even though the function's own
+# stdout (allow: nothing; deny: the JSON) was already correct -- the harness
+# cannot tell that apart from a crashed hook. Not a symmetric copy of the
+# Claude cases (that shim captures this call into a variable and discards the
+# output too; this one streams it straight through as the LAST statement in
+# the script, so only the exit code is wrong here) -- same invariant, though:
+# a >64KB candidate stream must never turn a correct verdict into exit 141.
+#
+# cwg_pad_redirect_targets appends <count> SEPARATE `;`-segments, each holding
+# one harmless never-matching `> <long-filler>` redirect target, so the
+# candidate list alone comfortably exceeds 64KB -- deterministic on SIZE,
+# never scheduling. Each padding segment sits AFTER the real `mv` segment, so
+# the goal-codereview candidate is always read FIRST and the padding is left
+# entirely undrained at the moment of an early return. Kept to a LOW segment
+# count with a LONG filler per segment rather than thousands of tiny ones:
+# this hook's extractor forks a subprocess (awk/grep) per CHAIN SEGMENT, and
+# a many-tiny-segments draft of this helper turned "make the candidate list
+# big" into "fork thousands of subprocesses in one shell invocation" --
+# which crashed the real hook process outright (SIGSEGV) on this
+# environment's bash, a resource-exhaustion confound this suite must not
+# depend on.
+# =============================================================================
+cwg_pad_redirect_targets() {
+    local count="$1" i=0 out="" filler
+    printf -v filler '%*s' 3200 ''
+    filler="${filler// /x}"
+    while [ "$i" -lt "$count" ]; do
+        out="${out}; > /tmp/omt-cwg-sigpipe-pad-$(printf '%03d' "$i")-$filler"
+        i=$((i + 1))
+    done
+    printf '%s' "$out"
+}
+
+# (a) code-reviewer identity-bypass allow, >64KB candidates -> exit 0. The
+# bypass returns before reading ANY stdin, so the oversized write blocks and
+# the internal pipe's SIGPIPE propagates as this hook's own nonzero exit even
+# though the function's own stdout is correctly empty (allow).
+test_sigpipe_codereview_shell_command_code_reviewer_large_candidates_allowed() {
+    new_sandbox
+    cr_paths
+    local cmd tool_input out rc=0 result=0
+
+    cmd="mv $CR_GOAL /tmp/saved.json$(cwg_pad_redirect_targets 80)"
+    tool_input=$(printf '%s' "$cmd" | jq -Rs '{cmd:.}')
+    out=$(codex_full_payload "shell_command" "$tool_input" "cx" "$GITDIR" "code-reviewer" | run_hook) || rc=$?
+    if ! assert_allow "$out" "$rc" "sigpipe-codereview-code-reviewer-large-candidates"; then
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# (b) a non-reviewer deny, >64KB candidates -> the deny JSON must reach
+# stdout AND the hook's own exit must be 0. codereview_guard_core_run's
+# match-triggered early return leaves virtually all of the padding undrained,
+# so the internal pipe's SIGPIPE makes this LAST-statement pipeline's exit
+# status nonzero (pipefail) even though the deny JSON was already streamed
+# straight through (unlike the ledger guard above it, this call site is not
+# captured into a variable) -- the hook process itself still exits wrong.
+test_sigpipe_codereview_shell_command_no_agent_type_large_candidates_denied() {
+    new_sandbox
+    cr_paths
+    local cmd tool_input out rc=0 result=0
+
+    cmd="mv $CR_GOAL /tmp/saved.json$(cwg_pad_redirect_targets 80)"
+    tool_input=$(printf '%s' "$cmd" | jq -Rs '{cmd:.}')
+    out=$(codex_full_payload "shell_command" "$tool_input" "cx" "$GITDIR" | run_hook) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "ASSERTION FAILED sigpipe-codereview-deny-large-candidates: expected exit 0, got exit $rc, output '$out'"
+        result=1
+    fi
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED sigpipe-codereview-deny-large-candidates: expected the already-streamed deny JSON to survive, got '$out'"
+        result=1
+    fi
+
+    rm -rf "$SBX"
+    return "$result"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -2613,6 +2702,8 @@ main() {
     run_test test_codereview_negative_control_candidates_json_allows
     run_test test_ac4_codex_claude_deny_json_byte_identical
     run_test test_codereview_nested_agent_type_in_tool_input_denies
+    run_test test_sigpipe_codereview_shell_command_code_reviewer_large_candidates_allowed
+    run_test test_sigpipe_codereview_shell_command_no_agent_type_large_candidates_denied
     run_test test_codereview_shell_command_mv_source_denies
     run_test test_codereview_shell_command_cp_source_allows
     run_test test_ledger_shell_command_mv_source_denies
