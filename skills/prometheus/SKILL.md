@@ -203,6 +203,24 @@ After loading context, classify the user's request. Classification determines in
 
 **Classification boundary rule:** File count takes precedence over per-file complexity. 3 files with trivial changes = Scoped, not Trivial.
 
+### Scope Split Gate (Complex and Architecture only)
+
+Run after classification, before the requirements interview. Trivial and Scoped skip it.
+
+Ask one question of the request:
+
+> Is there a subset of this work that could be merged on its own — leaving the system working, with something that verifies it — without the rest?
+
+**NO** → this request is one plan. Proceed to the interview.
+
+**YES** → this request is several plans. Produce, in this order:
+
+1. **The subsets, ordered.** A subset that changes no observable behavior goes first; every other subset names what must land before it.
+2. **A plan for the FIRST subset only.** That subset is the User Goal + Scope for this run.
+3. **The remaining subsets recorded under `## Context` as deferred**, each naming its blocker. Each becomes its own prometheus run.
+
+One prometheus run produces one plan; a request that is several plans is planned one subset at a time.
+
 ## Clearance Checklist (Transition Gate)
 
 **Run after EVERY interview turn.** If ANY item is NO, CONTINUE interviewing.
@@ -1127,7 +1145,7 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 2 | File references exist | All file paths and line references resolve |
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
-| 5 | Section validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Momus. |
+| 5 | Plan validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). It checks section presence AND TODO graph semantics (id uniqueness, Blocked By resolution, self-dependency/cycle ban, `Wave = max(blocker waves) + 1`). If it reports violations, fix the plan and re-run before submitting to Momus. |
 | 6 | design forks resolved | Every CRITICAL design fork is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
 | 7 | structural enumeration present (Complex/Arch) | For a Complex or Architecture plan, the artifact carries the decision log with structural enumeration OR the anti-ceremony escape with a named, specific consequence recorded. Presence only; fork resolution stays with item 6. |
 

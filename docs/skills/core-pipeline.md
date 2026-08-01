@@ -97,7 +97,10 @@ flowchart TB
 ```mermaid
 flowchart TB
     Start([사용자 요청]) --> Interpret["'X 계획 수립'으로<br/>해석"]
-    Interpret --> Interview[인터뷰 모드]
+    Interpret --> Split{"Complex/Architecture:<br/>혼자 머지해도 되는<br/>부분집합이 있나?"}
+    Split -->|아니오| Interview[인터뷰 모드]
+    Split -->|예| Slice["덩어리를 순서대로 나열<br/>첫 덩어리만 이번 범위로<br/>나머지는 이월 기록"]
+    Slice --> Interview
     Interview --> Research[explore/librarian으로<br/>조사]
     Research --> More{추가<br/>질문?}
     More -->|예| Interview
@@ -116,7 +119,9 @@ flowchart TB
 - 구현 명령 실행
 - "작업을 수행하는" 모든 행위
 
-**파이프라인 연결**: 인터뷰 → 조사(explore/librarian) → metis 갭 분석 → 계획 작성 순으로 진행합니다. 산출된 계획은 `$OMT_DIR/plans/*.md`에 저장되어 sisyphus의 입력이 됩니다.
+**Scope Split Gate**: Complex·Architecture로 분류된 요청은 인터뷰에 들어가기 전에 한 가지를 먼저 판정합니다 — *나머지 없이도 혼자 머지돼서, 시스템이 돌고, 그걸 검증할 무언가가 있는 부분집합이 있는가.* 있으면 그 요청은 계획 하나가 아닙니다. 덩어리를 순서대로 나열하되 동작이 바뀌지 않는 것을 먼저 두고, **첫 덩어리만** 이번 실행의 범위로 삼으며, 나머지는 각자의 선행 조건과 함께 `## Context`에 이월로 적습니다. 이월된 덩어리는 각각 별도의 prometheus 실행이 됩니다. Trivial·Scoped는 이 게이트를 건너뜁니다.
+
+**파이프라인 연결**: 인터뷰 → 조사(explore/librarian) → metis 갭 분석 → 계획 작성 순으로 진행합니다. 산출된 계획은 `$OMT_DIR/plans/*.md`에 저장되어 sisyphus의 입력이 됩니다. prometheus 한 번은 계획 하나를 냅니다 — 계획 여러 개로 갈린 요청은 한 덩어리씩 따로 실행합니다.
 
 ---
 

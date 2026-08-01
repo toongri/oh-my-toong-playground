@@ -30,6 +30,7 @@ import {
 	reviseStory,
 	addStory,
 	retireStory,
+	splitStory,
 	serializeRequirements,
 	BACKFILL_MARKER,
 	readCodeReviewArtifact,
@@ -1957,6 +1958,57 @@ describe("story layer: mutations", () => {
 		expect(s3After.status).toBe("retired");
 	});
 
+	test("add-story strips caller-supplied split provenance", () => {
+		seedWithStories(S);
+		addStory(
+			S,
+			{
+				id: "S2",
+				story: "add search",
+				acceptance_criteria: ["search returns results"],
+				verification_surface: "E2E search test",
+				status: "unconfirmed",
+				split_from: "forged-parent",
+				split_into: ["forged-child"],
+			},
+			"e",
+			"r",
+		);
+		const added = readGoalGet(S)!.stories!.find((story) => story.id === "S2")!;
+		expect(added.split_from).toBeUndefined();
+		expect(added.split_into).toBeUndefined();
+	});
+
+	test("revise-story cannot inject or overwrite split provenance", () => {
+		seedWithStories(S, [baseStory, baseStory2]);
+		const raw = JSON.parse(readFileSync(resolveStatePath(S), "utf8"));
+		raw.stories[0].split_from = "normal-parent";
+		raw.stories[0].split_into = ["normal-child"];
+		writeFileSync(resolveStatePath(S), JSON.stringify(raw), "utf8");
+
+		reviseStory(
+			S,
+			"S2",
+			{ split_from: "forged-parent", split_into: ["forged-child"] },
+			"e",
+			"r",
+		);
+		reviseStory(
+			S,
+			"S1",
+			{ story: "ship feature X revised", split_from: "forged-parent", split_into: ["forged-child"] },
+			"e",
+			"r",
+		);
+		const stories = readGoalGet(S)!.stories!;
+		const revisedWithoutLineage = stories.find((story) => story.id === "S2")!;
+		const revisedWithLineage = stories.find((story) => story.id === "S1")!;
+		expect(revisedWithoutLineage.split_from).toBeUndefined();
+		expect(revisedWithoutLineage.split_into).toBeUndefined();
+		expect(revisedWithLineage.split_from).toBe("normal-parent");
+		expect(revisedWithLineage.split_into).toEqual(["normal-child"]);
+	});
+
 	// AC-4b: no mutation subcommand can write a status outside the enum or write confirmed
 	test("mutation fence rejects", () => {
 		seedWithStories(S);
@@ -2210,6 +2262,213 @@ function buildSatisfiedFixture(sid: string): object {
 		at: "2026-06-12T10:00:00",
 	};
 }
+
+// ---------------------------------------------------------------------------
+// ultragoal: split-story — dedicated split mutation. A story that turns out to be
+// two stories mid-flight is retired and replaced by >=2 children IN PLACE (sequential
+// dispatch order preserved), with the split recorded machine-readably: parent gets
+// split_into, children get split_from. Composes the existing steering invariants
+// (ADR D-4 evidence/rationale, D-9 no-confirmed-via-mutation, retire fences).
+// ---------------------------------------------------------------------------
+
+describe("story layer: split-story", () => {
+	const parent: Story = {
+		id: "S1",
+		story: "migrate prescriptions to category layer",
+		acceptance_criteria: ["all consumers switched"],
+		verification_surface: "parity harness",
+		status: "unconfirmed",
+	};
+	const tail: Story = {
+		id: "S2",
+		story: "unrelated tail story",
+		acceptance_criteria: ["tail done"],
+		verification_surface: "tail check",
+		status: "unconfirmed",
+	};
+	const childA: Story = {
+		id: "S1a",
+		story: "introduce new table + backfill",
+		acceptance_criteria: ["backfill idempotent"],
+		verification_surface: "row-count parity",
+		status: "unconfirmed",
+	};
+	const childB: Story = {
+		id: "S1b",
+		story: "dual-write all ten sites",
+		acceptance_criteria: ["both tables written"],
+		verification_surface: "id-set parity",
+		status: "unconfirmed",
+	};
+
+	function seed(): void {
+		setGoalState(S, { phase: "planning", outcome: "category layer shipped" });
+		setStories(S, [parent, tail]);
+	}
+
+	test("splits: parent retired in place, children inserted after it, order preserved", () => {
+		seed();
+		splitStory(S, "S1", [childA, childB], "e: story spans two merges", "r: split them");
+		const stories = readGoalGet(S)!.stories!;
+		expect(stories.map((s) => s.id)).toEqual(["S1", "S1a", "S1b", "S2"]);
+		expect(stories[0].status).toBe("retired");
+		expect(stories[1].status).toBe("unconfirmed");
+		expect(stories[2].status).toBe("unconfirmed");
+	});
+
+	test("records split provenance machine-readably", () => {
+		seed();
+		splitStory(S, "S1", [childA, childB], "e", "r");
+		const stories = readGoalGet(S)!.stories!;
+		expect(stories[0].split_into).toEqual(["S1a", "S1b"]);
+		expect(stories[1].split_from).toBe("S1");
+		expect(stories[2].split_from).toBe("S1");
+		expect(stories[0].steering_evidence).toBe("e");
+		expect(stories[1].steering_evidence).toBe("e");
+	});
+
+	test("derives replacement provenance from its actual parent", () => {
+		seed();
+		splitStory(
+			S,
+			"S1",
+			[
+				{ ...childA, split_from: "forged-parent", split_into: ["forged-child"] },
+				{ ...childB, split_from: "forged-parent", split_into: ["forged-child"] },
+			],
+			"e",
+			"r",
+		);
+		const stories = readGoalGet(S)!.stories!;
+		expect(stories[1]).toMatchObject({ split_from: "S1" });
+		expect(stories[1].split_into).toBeUndefined();
+		expect(stories[2]).toMatchObject({ split_from: "S1" });
+		expect(stories[2].split_into).toBeUndefined();
+	});
+
+	test("keeps a split child's existing lineage when it later becomes a parent", () => {
+		seed();
+		splitStory(S, "S1", [childA, childB], "e", "r");
+		splitStory(
+			S,
+			"S1a",
+			[
+				{ ...childA, id: "S1a1", split_from: "forged-parent", split_into: ["forged-child"] },
+				{ ...childB, id: "S1a2", split_from: "forged-parent", split_into: ["forged-child"] },
+			],
+			"e2",
+			"r2",
+		);
+		const stories = readGoalGet(S)!.stories!;
+		const splitChild = stories.find((story) => story.id === "S1a")!;
+		expect(splitChild.split_from).toBe("S1");
+		expect(splitChild.split_into).toEqual(["S1a1", "S1a2"]);
+	});
+
+	test("refuses fewer than 2 replacements", () => {
+		seed();
+		expect(() => splitStory(S, "S1", [childA], "e", "r")).toThrow();
+	});
+
+	test("refuses blank evidence or rationale (ADR D-4)", () => {
+		seed();
+		expect(() => splitStory(S, "S1", [childA, childB], "  ", "r")).toThrow();
+		expect(() => splitStory(S, "S1", [childA, childB], "e", "")).toThrow();
+	});
+
+	test("refuses unknown parent id", () => {
+		seed();
+		expect(() => splitStory(S, "S9", [childA, childB], "e", "r")).toThrow();
+	});
+
+	test("refuses already-retired parent", () => {
+		seed();
+		retireStory(S, "S1", "e", "r");
+		expect(() => splitStory(S, "S1", [childA, childB], "e", "r")).toThrow();
+	});
+
+	test("refuses confirmed parent during pursuit (D-9 anti-dodge fence)", () => {
+		seed();
+		confirmStory(S, "S1");
+		confirmStory(S, "S2");
+		setGoalState(S, { phase: "pursuing" });
+		expect(() => splitStory(S, "S1", [childA, childB], "e", "r")).toThrow();
+	});
+
+	test("confirmed parent splittable while planning", () => {
+		seed();
+		confirmStory(S, "S1");
+		expect(() => splitStory(S, "S1", [childA, childB], "e", "r")).not.toThrow();
+		expect(readGoalGet(S)!.stories![0].status).toBe("retired");
+	});
+
+	test("unconfirmed parent splittable during pursuit", () => {
+		seed();
+		// Enter pursuing with everything confirmed (the gate refuses unconfirmed stories),
+		// then surgically revert the parent to unconfirmed — same fixture surgery the
+		// retire-story pursuing tests use.
+		confirmStory(S, "S1");
+		confirmStory(S, "S2");
+		setGoalState(S, { phase: "pursuing" });
+		const raw = JSON.parse(readFileSync(resolveStatePath(S), "utf8"));
+		raw.stories[0].status = "unconfirmed";
+		writeFileSync(resolveStatePath(S), JSON.stringify(raw, null, 2), "utf8");
+		expect(() => splitStory(S, "S1", [childA, childB], "e", "r")).not.toThrow();
+	});
+
+	test("refuses child id colliding with existing story (parent included)", () => {
+		seed();
+		expect(() =>
+			splitStory(S, "S1", [childA, { ...childB, id: "S2" }], "e", "r"),
+		).toThrow();
+		expect(() =>
+			splitStory(S, "S1", [childA, { ...childB, id: "S1" }], "e", "r"),
+		).toThrow();
+	});
+
+	test("refuses duplicate ids within replacements", () => {
+		seed();
+		expect(() =>
+			splitStory(S, "S1", [childA, { ...childB, id: "S1a" }], "e", "r"),
+		).toThrow();
+	});
+
+	test("refuses confirmed status in a replacement (D-9)", () => {
+		seed();
+		expect(() =>
+			splitStory(S, "S1", [childA, { ...childB, status: "confirmed" }], "e", "r"),
+		).toThrow();
+	});
+
+	test("refuses structurally invalid replacement (empty AC)", () => {
+		seed();
+		expect(() =>
+			splitStory(S, "S1", [childA, { ...childB, acceptance_criteria: [] }], "e", "r"),
+		).toThrow();
+	});
+
+	test("refusal leaves state unchanged (atomicity)", () => {
+		seed();
+		const before = JSON.stringify(readGoalGet(S)!.stories);
+		expect(() =>
+			splitStory(S, "S1", [childA, { ...childB, id: "S1a" }], "e", "r"),
+		).toThrow();
+		expect(JSON.stringify(readGoalGet(S)!.stories)).toBe(before);
+	});
+
+	test("set-stories strips split provenance on re-ingestion (D-11)", () => {
+		seed();
+		splitStory(S, "S1", [childA, childB], "e", "r");
+		const carried = readGoalGet(S)!.stories!;
+		// re-plan: re-ingest the set copied from get — split provenance must not survive
+		setGoalState(S, { phase: "planning" });
+		setStories(S, carried);
+		for (const s of readGoalGet(S)!.stories!) {
+			expect(s.split_from).toBeUndefined();
+			expect(s.split_into).toBeUndefined();
+		}
+	});
+});
 
 describe("story layer: request-complete verdict gate (T4)", () => {
 	// AC-6a: artifact schema validation — malformed and unknown-id both rejected

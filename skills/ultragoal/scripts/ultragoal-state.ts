@@ -47,7 +47,10 @@
  *                                         (appends unconfirmed story — D-9)
  *   retire-story <id> --evidence <text> --rationale <text>
  *                                         (sets retired; confirmed-retire fence — D-9)
- *   --evidence/--rationale on the three steering mutations above are required — omitted
+ *   split-story <id> --json '<array>' --evidence <text> --rationale <text>
+ *                                         (retires parent in place, inserts >=2 replacements
+ *                                          after it; split recorded via split_from/split_into)
+ *   --evidence/--rationale on the four steering mutations above are required — omitted
  *   or whitespace-only values are refused (ADR D-4).
  */
 
@@ -107,6 +110,13 @@ export interface Story {
 	steering_evidence?: string;
 	/** Why this mutation is the right response to `steering_evidence`. Same writers as above. */
 	steering_rationale?: string;
+	/**
+	 * Split provenance (written ONLY by split-story, stripped on re-ingestion like the
+	 * steering keys above): on a retired parent, the ids of its replacements; on a
+	 * replacement, the id of the story it was split from.
+	 */
+	split_from?: string;
+	split_into?: string[];
 }
 const DEFAULT_MAX_ITERATIONS = 10;
 const DEFAULT_REVIEW_DISPATCH_CAP = 5;
@@ -852,7 +862,7 @@ export function setStories(sessionId: string, stories: Story[]): void {
 	// carries these keys on the spread; drop them so a planning-created story can never
 	// present fabricated mid-flight evidence.
 	const normalized: Story[] = stories.map((s): Story => {
-		const { steering_evidence: _se, steering_rationale: _sr, ...rest } = s;
+		const { steering_evidence: _se, steering_rationale: _sr, split_from: _sf, split_into: _si, ...rest } = s;
 		return { ...rest, status: "unconfirmed" };
 	});
 	mergeWrite(sessionId, { stories: normalized });
@@ -938,8 +948,9 @@ export function addStory(sessionId: string, story: Story, evidence: string, rati
 	}
 
 	// Force status to unconfirmed regardless of what was passed
+	const { split_from: _splitFrom, split_into: _splitInto, ...storyWithoutSplitProvenance } = story;
 	const normalized: Story = {
-		...story,
+		...storyWithoutSplitProvenance,
 		status: "unconfirmed",
 		steering_evidence: evidence,
 		steering_rationale: rationale,
@@ -997,9 +1008,10 @@ export function reviseStory(
 	}
 
 	// Apply the patch but ALWAYS reset status to unconfirmed
+	const { split_from: _splitFrom, split_into: _splitInto, ...patchWithoutSplitProvenance } = patch;
 	const updated: Story = {
 		...stories[idx],
-		...patch,
+		...patchWithoutSplitProvenance,
 		status: "unconfirmed",
 		steering_evidence: evidence,
 		steering_rationale: rationale,
@@ -1054,6 +1066,99 @@ export function retireStory(sessionId: string, storyId: string, evidence: string
 			: s,
 	);
 	mergeWrite(sessionId, { stories: updatedStories });
+}
+
+/**
+ * Splits one story into >=2 replacements in a single atomic write: the parent is
+ * retired IN PLACE and the replacements are inserted directly after it, preserving
+ * sequential dispatch order. The split is recorded machine-readably — the retired
+ * parent gets `split_into: [child ids]`, each replacement gets `split_from: parent id` —
+ * so a split is distinguishable in state from an unrelated retire + adds.
+ *
+ * Composes the existing invariants rather than inventing new ones:
+ *   - steering justification required (ADR D-4, same as add/revise/retire)
+ *   - parent fences mirror retire-story: unknown id refused, already-retired refused,
+ *     confirmed parent splittable ONLY while `phase=planning` (D-9 anti-dodge fence)
+ *   - replacements validated like add-story: schema, no `confirmed` status (D-9),
+ *     ids unique among themselves AND against every existing story, status forced
+ *     to `unconfirmed`
+ * All refusals: throws, state unchanged.
+ */
+export function splitStory(
+	sessionId: string,
+	storyId: string,
+	replacements: Story[],
+	evidence: string,
+	rationale: string,
+): void {
+	requireSteeringReason("split-story", evidence, rationale);
+	const prior = readPrior(sessionId);
+	const stories: Story[] = prior.stories ?? [];
+	const idx = stories.findIndex((s) => s.id === storyId);
+
+	if (idx === -1) {
+		throw new Error(`split-story: unknown story id "${storyId}"`);
+	}
+	const parent = stories[idx];
+	if (parent.status === "retired") {
+		throw new Error(`split-story: refused — story "${storyId}" is already retired`);
+	}
+	// Anti-dodge fence (D-9): a split retires the parent, so the retire fence applies
+	if (parent.status === "confirmed" && (prior.phase ?? "planning") === "pursuing") {
+		throw new Error(
+			`split-story: refused — confirmed story "${storyId}" cannot be split during pursuit. ` +
+				`Re-plan first (set --phase planning) to split confirmed stories.`,
+		);
+	}
+
+	if (replacements.length < 2) {
+		throw new Error(
+			`split-story: refused — a split needs >=2 replacements (got ${replacements.length}); ` +
+				`for a 1:1 change use revise-story`,
+		);
+	}
+
+	const VALID_STATUSES: StoryStatus[] = ["unconfirmed", "confirmed", "retired"];
+	const existingIds = new Set(stories.map((s) => s.id));
+	const seenIds = new Set<string>();
+	for (const child of replacements) {
+		if (child.status !== undefined && !VALID_STATUSES.includes(child.status)) {
+			throw new Error(`split-story: refused — invalid status "${child.status}"`);
+		}
+		if (child.status === "confirmed") {
+			throw new Error(
+				`split-story: refused — mutations cannot produce confirmed status (use confirm-story)`,
+			);
+		}
+		validateStoryFields(child, "split-story");
+		if (existingIds.has(child.id)) {
+			throw new Error(`split-story: refused — story id "${child.id}" already exists`);
+		}
+		if (seenIds.has(child.id)) {
+			throw new Error(`split-story: refused — duplicate replacement id "${child.id}"`);
+		}
+		seenIds.add(child.id);
+	}
+
+	const retiredParent: Story = {
+		...parent,
+		status: "retired",
+		steering_evidence: evidence,
+		steering_rationale: rationale,
+		split_into: replacements.map((c) => c.id),
+	};
+	const children: Story[] = replacements.map((c): Story => {
+		const { split_from: _splitFrom, split_into: _splitInto, ...childWithoutSplitProvenance } = c;
+		return {
+			...childWithoutSplitProvenance,
+			status: "unconfirmed",
+			steering_evidence: evidence,
+			steering_rationale: rationale,
+			split_from: parent.id,
+		};
+	});
+	const updated = [...stories.slice(0, idx), retiredParent, ...children, ...stories.slice(idx + 1)];
+	mergeWrite(sessionId, { stories: updated });
 }
 
 /**
@@ -2189,13 +2294,44 @@ function main(): void {
 				strFlagOrBlank(args["evidence"]),
 				strFlagOrBlank(args["rationale"]),
 			);
+		} else if (subcommand === "split-story") {
+			// split-story <id> --json '<array of stories>' --evidence <text> --rationale <text>
+			// id is positionals[1] — see revise-story's comment above for why this must not
+			// be a raw argv scan.
+			const rawId = positionals[1];
+			if (!rawId) {
+				process.stderr.write("split-story: <id> argument is required\n");
+				process.exit(1);
+			}
+			const jsonArg = str(args["json"]);
+			if (!jsonArg) {
+				process.stderr.write("split-story: --json <array of stories> is required\n");
+				process.exit(1);
+			}
+			let replacements: Story[];
+			try {
+				replacements = JSON.parse(jsonArg);
+				if (!Array.isArray(replacements)) {
+					throw new Error("expected JSON array");
+				}
+			} catch (e) {
+				process.stderr.write(`split-story: invalid JSON — ${String(e)}\n`);
+				process.exit(1);
+			}
+			splitStory(
+				sessionId,
+				rawId,
+				replacements,
+				strFlagOrBlank(args["evidence"]),
+				strFlagOrBlank(args["rationale"]),
+			);
 		} else if (subcommand === "serialize-requirements") {
 			process.stdout.write(serializeRequirements(sessionId));
 		} else if (subcommand === "serialize-review-context") {
 			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|serialize-requirements|serialize-review-context> [options]\n",
+				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
 			);
 			process.exit(1);
 		}

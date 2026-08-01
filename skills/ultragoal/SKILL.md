@@ -68,7 +68,7 @@ If no candidates exist, say so and proceed fresh. The branch never renames on it
 
 ## Planning: Seven Slots & Story Definition
 
-**You MUST read `references/planning.md` first** before seeding the seven slots (`set --phase planning`), auto-generating and bulk-approving the Story set (`set-stories`/`confirm-all-stories`), or applying any mid-flight story mutation (`add-story`/`revise-story`/`retire-story`/`reorder-stories`) — it is the single owner of the slot definitions and the full story lifecycle.
+**You MUST read `references/planning.md` first** before seeding the seven slots (`set --phase planning`), auto-generating and bulk-approving the Story set (`set-stories`/`confirm-all-stories`), or applying any mid-flight story mutation (`add-story`/`revise-story`/`retire-story`/`split-story`/`reorder-stories`) — it is the single owner of the slot definitions and the full story lifecycle.
 
 ---
 
@@ -122,7 +122,7 @@ The autonomous loop blocks ONLY when `phase=pursuing`. Set the phase around deco
   bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set --phase pursuing
   ```
 
-Initial path: `set --phase planning` (seed slots) → auto-generate the Story set → user bulk-approves via `confirm-all-stories` → `set --phase pursuing` → dispatch story #1 to sisyphus. Re-plan loop-back: `set --phase planning` (clears the verdict) → re-generate or steer the Story set (`add-story`/`revise-story`/`retire-story`/`reorder-stories`) → user re-approves via `confirm-all-stories` → `set --phase pursuing` → dispatch the fresh sisyphus call.
+Initial path: `set --phase planning` (seed slots) → auto-generate the Story set → user bulk-approves via `confirm-all-stories` → `set --phase pursuing` → dispatch story #1 to sisyphus. Re-plan loop-back: `set --phase planning` (clears the verdict) → re-generate or steer the Story set (`add-story`/`revise-story`/`retire-story`/`split-story`/`reorder-stories`) → user re-approves via `confirm-all-stories` → `set --phase pursuing` → dispatch the fresh sisyphus call.
 
 ---
 
