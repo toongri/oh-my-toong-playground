@@ -73,7 +73,7 @@ emit() {
   # under $OMT_DIR are the one carve-out (orchestration bookkeeping), so count
   # only apply_patch targets outside it — those are violations, not candidates.
   writes=$(printf '%s' "$tools" \
-    | grep -oE '\*\*\* (Add|Update|Delete) File: [^\\"]+' \
+    | grep -oE '\*\*\* [A-Za-z]+ File: [^\\"]+' \
     | sed 's/.*File: //' | grep -v '/\.omt/' | wc -l | tr -d ' ' || true)
 
   printf '%s\t%s\t%s\t%s\t%s/%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
@@ -90,7 +90,12 @@ score_stream() {
   todo=$(jqs 'select(.item.type=="todo_list") | .item.items
               | "\(map(select(.completed)) | length) \(length)"' "$f" | tr -d '"' | tail -1)
   msgs=$(jqs 'select(.item.type=="agent_message") | .item.text' "$f" || true)
-  writes=$(jqs 'select(.item.type=="command_execution") | .item.command' "$f" || true)
+  # The parent's own edits arrive as `file_change` items — NOT as apply_patch text
+  # inside a command. A positive control (parent told to edit directly, no skill)
+  # produced zero `Begin Patch` and one `file_change`, so a command-only detector
+  # reports 0 for every run and never fires.
+  writes=$(jqs 'select(.item.type=="file_change") | select(.type=="item.completed")
+                | .item.changes[] | "*** \(.kind) File: \(.path)"' "$f" | tr -d '"' || true)
 
   emit "$(basename "$f" .jsonl)" "$root" "$msgs" "${todo%% *}" "${todo##* }" "$writes"
 }
