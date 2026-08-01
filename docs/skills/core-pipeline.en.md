@@ -133,10 +133,8 @@ flowchart TB
     Start([User request]) --> Classify{Request type?}
     Classify -->|Simple| Direct[Use tools directly]
     Classify -->|Explicit| Execute[Execute directly]
-    Classify -->|Exploratory| Explore[Run explore agent]
-    Classify -->|Open-ended| Interview[Deep interview]
+    Classify -->|Exploratory/Open-ended| Explore[explore for the facts<br/>→ ask the user preferences only]
 
-    Interview --> Tasks[Create task list]
     Explore --> Tasks
 
     Tasks --> Loop{Pending<br/>tasks?}
@@ -155,9 +153,9 @@ flowchart TB
 **Verification protocol**:
 
 - **Verification**: an implement task completes on sisyphus-junior's report (no separate QA step). When verification is needed, it is a separate verify task that sisyphus handles inline by running the AC commands itself.
-- **Evidence Audit Gate**: when sisyphus runs an inline verify (a verify task), it proceeds through the Evidence Audit Gate (a verify task changes no files, so it does not commit). Commits are performed by mnemosyne after junior completes an implement task.
-- **No retry limit**: it continues until the inline verify passes.
-- **Persistence**: the user cannot interrupt the process to stop it midway.
+- **Evidence-backed verdict**: on a verify task sisyphus runs the AC commands itself, saves each output to the evidence path, and renders the verdict from that observed output alone (a verify task changes no files, so it does not commit). Commits are performed by mnemosyne after junior completes an implement task.
+- **Fix loop**: REQUEST_CHANGES → oracle diagnosis → fix task carrying that diagnosis verbatim → junior → re-verify that one task only. Already-passed tasks are never re-run.
+- **Loop exit**: if oracle reframes the problem after 3 consecutive failed hypotheses, the fix loop halts and the reframe is surfaced to the user.
 
 **Routing principle**: The delegation target is decided by task type. Implementation tasks that change files go to sisyphus-junior, verification tasks needing a PASS/FAIL verdict are handled inline by sisyphus (it runs the AC commands itself), root-cause/architecture analysis goes to oracle, and codebase search goes to explore. Whatever path the previous task took, a new task follows the path of its own type.
 

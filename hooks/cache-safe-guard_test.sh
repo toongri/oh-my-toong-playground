@@ -14,7 +14,6 @@
 # Emitters under guard:
 #   - hooks/session-start.sh         (prometheus restore + pending + ledger recording instruction)
 #   - hooks/resume-forge-start.sh    (restore block)
-#   - skills/sisyphus/hooks/skill-catalog/index.ts  (static macro)
 # =============================================================================
 set -euo pipefail
 
@@ -180,14 +179,13 @@ SCRATCH_EOF
 }
 
 # =============================================================================
-# AC12 GREEN: combined stdout of all three real emitters matches NONE of 5 patterns
+# AC12 GREEN: combined stdout of both real emitters matches NONE of 5 patterns
 #
 # Emitter setup:
 #   session-start.sh  — active prometheus state (restore block)
 #                     + pending todos (pending-tasks block)
 #                     + static ledger recording instruction (TODO 3, every session)
 #   resume-forge-start.sh — active resume-forge state file (restore block)
-#   skill-catalog/index.ts — static macro (no fixture needed)
 # =============================================================================
 test_cache_safe_guard_ac12_green() {
     local sid="zzqqxx"
@@ -266,18 +264,9 @@ EOF
         return 1
     fi
 
-    # --- skill-catalog macro ---
-    # Static output: no session IDs, no abs paths, no digit/digit, no filenames.
-    # HOME=TEST_HOME means no user skills dir → deterministic minimal output.
-    local sc_out
-    sc_out=$(bun run "$REPO_DIR/skills/sisyphus/hooks/skill-catalog/index.ts" 2>/dev/null) || {
-        echo "ASSERTION FAILED: skill-catalog invocation failed (bun available?)"
-        return 1
-    }
-
-    # Combine all three emitters' stdout
+    # Combine both emitters' stdout
     local combined
-    combined="${ss_out}${rf_out}${sc_out}"
+    combined="${ss_out}${rf_out}"
 
     # Core assertion: combined stdout must match NONE of the 5 volatile-value patterns
     if ! assert_no_volatile_patterns "$combined" "$sid" ""; then

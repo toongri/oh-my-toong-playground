@@ -30,7 +30,7 @@ The caller composes a QA REQUEST using this structure:
 [WHAT to verify — requirements, criteria, constraints, MUST-NOT-DO scope]
 
 ## Required Verification
-[HOW to verify — verification commands, QA scenarios, evidence paths to collect. Optional but standard for sisyphus-orchestrated QA requests; see `skills/sisyphus/verification.md` §QA REQUEST Composition for the canonical recipe.]
+[HOW to verify — verification commands, QA scenarios, evidence paths to collect. Optional but standard for sisyphus-orchestrated QA requests.]
 
 ## Scope
 - Changed files:
