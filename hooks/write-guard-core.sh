@@ -195,6 +195,23 @@ write_guard_core_check_dangerous_command() {
     return 0
 }
 
+# _wg_core_drain_stdin
+# Consumes whatever candidate lines remain on stdin. Every caller of the two
+# functions below pipes candidate paths in (`printf ... | write_guard_core_run
+# ...`), and both platform shims that pipe into this core run under
+# `set -o pipefail` + `set -e`. If a match is found early and the function
+# just `return`s without reading the rest, the still-writing upstream printf
+# gets SIGPIPE on its next write -> its exit status becomes 141 ->
+# `pipefail` promotes that 141 to the whole pipeline's exit code -> `set -e`
+# aborts the hook, discarding the deny JSON already printed. Draining here
+# lets the upstream writer finish normally so its exit status stays 0.
+# Pure bash (no `cat`) since this core runs on every guarded tool call.
+_wg_core_drain_stdin() {
+    local _wg_core_discard
+    while IFS= read -r _wg_core_discard; do :; done
+    return 0
+}
+
 write_guard_core_run() {
     local omt_dir="$1"
     local session_id="$2"
@@ -205,6 +222,7 @@ write_guard_core_run() {
         norm_candidate="$(_wg_core_normpath "$candidate")"
         if [ "$norm_candidate" = "$ledger_path" ]; then
             printf '%s\n' "$_wg_core_deny_json"
+            _wg_core_drain_stdin
             return 0
         fi
         # Glob candidate (e.g. `rm session-ledger-*.md`): never EXACT-matches,
@@ -228,6 +246,7 @@ write_guard_core_run() {
             *[*?[]*)
                 if _wg_core_pathwise_glob_match "$norm_candidate" "$ledger_path"; then
                     printf '%s\n' "$_wg_core_deny_json"
+                    _wg_core_drain_stdin
                     return 0
                 fi
                 ;;
@@ -259,6 +278,7 @@ codereview_guard_core_run() {
     local session_id="$2"
     local agent_type="${3:-}"
     if [ "$agent_type" = "code-reviewer" ]; then
+        _wg_core_drain_stdin
         return 0
     fi
     local ultragoal_path goal_path
@@ -269,6 +289,7 @@ codereview_guard_core_run() {
         norm_candidate="$(_wg_core_normpath "$candidate")"
         if [ "$norm_candidate" = "$ultragoal_path" ] || [ "$norm_candidate" = "$goal_path" ]; then
             printf '%s\n' "$_wg_core_codereview_deny_json"
+            _wg_core_drain_stdin
             return 0
         fi
         case "$norm_candidate" in
@@ -276,6 +297,7 @@ codereview_guard_core_run() {
                 if _wg_core_pathwise_glob_match "$norm_candidate" "$ultragoal_path" \
                     || _wg_core_pathwise_glob_match "$norm_candidate" "$goal_path"; then
                     printf '%s\n' "$_wg_core_codereview_deny_json"
+                    _wg_core_drain_stdin
                     return 0
                 fi
                 ;;

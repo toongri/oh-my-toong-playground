@@ -758,6 +758,104 @@ test_codereview_guard_other_session_allows() {
 }
 
 # =============================================================================
+# SIGPIPE regression -- both write_guard_core_run and codereview_guard_core_run
+# early `return 0` (exact match, glob match, or the code-reviewer identity
+# bypass) WITHOUT draining the rest of stdin first. Every caller invokes these
+# functions at the end of a pipe (`printf ... | write_guard_core_run ...`), so
+# when the candidate stream left unread after the early return exceeds a real
+# pipe's kernel buffer (64KB), the still-writing `printf` blocks and then gets
+# SIGPIPE the moment this reader closes its end -- the pipeline's exit status
+# becomes 141 under `pipefail`, discarding whatever this function already
+# printed to its own stdout (a computed deny JSON, in two of the four cases
+# below). This is deterministic on SIZE alone (a candidate stream >64KB after
+# the matching line), never on scheduling luck -- `wg_oversized_candidates`
+# below always emits ~268KB of harmless, never-matching trailing lines.
+#
+# `wg_pipefail_run` executes the pipeline inside its OWN `set -o pipefail`
+# subshell (via the `$(...)` command substitution boundary), independent of
+# whatever pipefail state this suite's own top-of-file `set -euo pipefail`
+# happens to be in -- so a passing assertion here is never an artifact of how
+# this file is invoked. Bash 3.2 has no nameref; results land in the globals
+# WG_PF_OUT / WG_PF_RC by convention.
+# =============================================================================
+
+wg_oversized_candidates() {
+    local i=0
+    while [ "$i" -lt 4000 ]; do
+        printf '/tmp/omt-wg-sigpipe-pad-%05d-0123456789abcdefghijklmnopqrstuvwxyz\n' "$i"
+        i=$((i + 1))
+    done
+}
+
+wg_pipefail_run() {
+    # $1 = full stdin text (the matching candidate line(s) followed by the
+    # oversized trailing padding); $2 = the reader snippet (source the core,
+    # call the function under test).
+    local stdin_text="$1" reader="$2"
+    WG_PF_RC=0
+    WG_PF_OUT=$(set -o pipefail; printf '%s' "$stdin_text" | bash -c "$reader") || WG_PF_RC=$?
+}
+
+test_sigpipe_ledger_exact_match_early_return_survives_oversized_trailing_candidates() {
+    local expected stdin_text
+    expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the durable session ledger (session-ledger-*.md). Use hooks/omt-ledger.sh append/now instead."}}'
+    stdin_text="$(printf '%s\n' "$OD/session-ledger-$SID.md"; wg_oversized_candidates)"
+    wg_pipefail_run "$stdin_text" "source '$CORE'; write_guard_core_run '$OD' '$SID'"
+    if [ "$WG_PF_RC" -ne 0 ]; then
+        echo "ASSERTION FAILED sigpipe-ledger-exact: expected exit 0, got exit $WG_PF_RC (a nonzero writer exit -- 141 when SIGPIPE terminates it, 1 when this shell reports the write() EPIPE itself -- means the >64KB trailing candidates after the EXACT-match early return killed the writer). out='$WG_PF_OUT'"
+        return 1
+    fi
+    if [ "$WG_PF_OUT" != "$expected" ]; then
+        echo "ASSERTION FAILED sigpipe-ledger-exact: expected deny JSON intact, got '$WG_PF_OUT'"
+        return 1
+    fi
+}
+
+test_sigpipe_ledger_glob_match_early_return_survives_oversized_trailing_candidates() {
+    local expected stdin_text
+    expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: direct write/delete targets the durable session ledger (session-ledger-*.md). Use hooks/omt-ledger.sh append/now instead."}}'
+    stdin_text="$(printf '%s\n' "$OD/session-ledger-*.md"; wg_oversized_candidates)"
+    wg_pipefail_run "$stdin_text" "source '$CORE'; write_guard_core_run '$OD' '$SID'"
+    if [ "$WG_PF_RC" -ne 0 ]; then
+        echo "ASSERTION FAILED sigpipe-ledger-glob: expected exit 0, got exit $WG_PF_RC (a nonzero writer exit -- 141 when SIGPIPE terminates it, 1 when this shell reports the write() EPIPE itself -- means the >64KB trailing candidates after the GLOB-match early return killed the writer). out='$WG_PF_OUT'"
+        return 1
+    fi
+    if [ "$WG_PF_OUT" != "$expected" ]; then
+        echo "ASSERTION FAILED sigpipe-ledger-glob: expected deny JSON intact, got '$WG_PF_OUT'"
+        return 1
+    fi
+}
+
+test_sigpipe_codereview_identity_bypass_survives_oversized_candidates() {
+    local stdin_text
+    stdin_text="$(printf '%s\n' "$OD/ultragoal-codereview-$CRSID.json"; wg_oversized_candidates)"
+    wg_pipefail_run "$stdin_text" "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID' 'code-reviewer'"
+    if [ "$WG_PF_RC" -ne 0 ]; then
+        echo "ASSERTION FAILED sigpipe-codereview-identity-bypass: expected exit 0, got exit $WG_PF_RC (a nonzero writer exit -- 141 when SIGPIPE terminates it, 1 when this shell reports the write() EPIPE itself -- means the code-reviewer bypass, returning before reading ANY stdin, killed the writer against >64KB candidates). out='$WG_PF_OUT'"
+        return 1
+    fi
+    if [ -n "$WG_PF_OUT" ]; then
+        echo "ASSERTION FAILED sigpipe-codereview-identity-bypass: expected empty (ALLOW), got '$WG_PF_OUT'"
+        return 1
+    fi
+}
+
+test_sigpipe_codereview_deny_match_early_return_survives_oversized_trailing_candidates() {
+    local expected stdin_text
+    expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: this code-review artifact (ultragoal-codereview-*.json / goal-codereview-*.json) may only be written by the code-reviewer subagent, not the orchestrator."}}'
+    stdin_text="$(printf '%s\n' "$OD/ultragoal-codereview-$CRSID.json"; wg_oversized_candidates)"
+    wg_pipefail_run "$stdin_text" "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID' 'sisyphus-junior'"
+    if [ "$WG_PF_RC" -ne 0 ]; then
+        echo "ASSERTION FAILED sigpipe-codereview-deny: expected exit 0, got exit $WG_PF_RC (a nonzero writer exit -- 141 when SIGPIPE terminates it, 1 when this shell reports the write() EPIPE itself -- means the >64KB trailing candidates after the deny-match early return killed the writer). out='$WG_PF_OUT'"
+        return 1
+    fi
+    if [ "$WG_PF_OUT" != "$expected" ]; then
+        echo "ASSERTION FAILED sigpipe-codereview-deny: expected deny JSON intact, got '$WG_PF_OUT'"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -810,6 +908,10 @@ main() {
     run_test test_codereview_guard_verdict_artifact_allows
     run_test test_codereview_guard_durable_sink_candidates_allows
     run_test test_codereview_guard_other_session_allows
+    run_test test_sigpipe_ledger_exact_match_early_return_survives_oversized_trailing_candidates
+    run_test test_sigpipe_ledger_glob_match_early_return_survives_oversized_trailing_candidates
+    run_test test_sigpipe_codereview_identity_bypass_survives_oversized_candidates
+    run_test test_sigpipe_codereview_deny_match_early_return_survives_oversized_trailing_candidates
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
