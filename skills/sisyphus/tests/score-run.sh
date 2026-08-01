@@ -23,10 +23,10 @@ done | sort)
 
 jqs() { jq -Rc "fromjson? | $1" "$2"; }
 
-# emit <label> <root-thread-id> <agent-messages> <todo-done> <todo-total> <parent-writes>
+# emit <label> <root-thread-id> <agent-messages> <todo-done> <todo-total> <parent-tool-text>
 emit() {
-  local label="$1" root="$2" msgs="$3" todo_done="$4" todo_n="$5" writes="$6"
-  local children roles tokens classify routes verdict declared spawned kept
+  local label="$1" root="$2" msgs="$3" todo_done="$4" todo_n="$5" tools="$6"
+  local children roles tokens classify routes verdict declared spawned kept writes
 
   children=$(sqlite3 "$DB" \
     "SELECT count(*) FROM thread_spawn_edges WHERE parent_thread_id='$root';")
@@ -69,6 +69,13 @@ emit() {
   local bad
   bad=$(comm -23 <(printf '%s\n' "$spawned") <(printf '%s\n' "$known_roles") | paste -sd, - || true)
 
+  # Iron Law: the orchestrator's own hands must not touch a deliverable. Writes
+  # under $OMT_DIR are the one carve-out (orchestration bookkeeping), so count
+  # only apply_patch targets outside it — those are violations, not candidates.
+  writes=$(printf '%s' "$tools" \
+    | grep -oE '\*\*\* (Add|Update|Delete) File: [^\\"]+' \
+    | sed 's/.*File: //' | grep -v '/\.omt/' | wc -l | tr -d ' ' || true)
+
   printf '%s\t%s\t%s\t%s\t%s/%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$label" "$children" "${roles:--}" "$tokens" "$todo_done" "$todo_n" \
     "$classify" "${routes:--}" "$kept" "${bad:--}" "${verdict:--}" "$writes"
@@ -83,8 +90,7 @@ score_stream() {
   todo=$(jqs 'select(.item.type=="todo_list") | .item.items
               | "\(map(select(.completed)) | length) \(length)"' "$f" | tr -d '"' | tail -1)
   msgs=$(jqs 'select(.item.type=="agent_message") | .item.text' "$f" || true)
-  writes=$(jqs 'select(.item.type=="command_execution") | .item.command' "$f" \
-    | grep -cE 'apply_patch|sed -i| tee |>>?[^&|]' || true)
+  writes=$(jqs 'select(.item.type=="command_execution") | .item.command' "$f" || true)
 
   emit "$(basename "$f" .jsonl)" "$root" "$msgs" "${todo%% *}" "${todo##* }" "$writes"
 }
@@ -98,8 +104,7 @@ score_thread() {
   msgs=$(jq -rc 'select(.type=="event_msg" and .payload.type=="agent_message")
                  | .payload.message' "$rp" 2>/dev/null || true)
   writes=$(jq -rc 'select(.payload.type=="function_call" or .payload.type=="custom_tool_call")
-                   | (.payload.arguments // .payload.input // "")' "$rp" 2>/dev/null \
-    | grep -cE 'apply_patch|sed -i| tee |>>?[^&|]' || true)
+                   | (.payload.arguments // .payload.input // "")' "$rp" 2>/dev/null || true)
 
   # Best-effort todo: the last update_plan payload, whatever tool shape carried it.
   # Keep the payload JSON-encoded (-c, not -rc) so one payload stays one line —
@@ -108,8 +113,9 @@ score_thread() {
                 | (.payload.arguments // .payload.input // "")
                 | select(test("update_plan"))' "$rp" 2>/dev/null | tail -1 | jq -r . 2>/dev/null || true)
   if [ -n "$plan" ]; then
-    done=$(printf '%s' "$plan" | grep -oE '"completed"' | wc -l | tr -d ' ')
-    total=$(printf '%s' "$plan" | grep -oE '"(completed|in_progress|pending)"' | wc -l | tr -d ' ')
+    # a plan with zero completed steps makes grep exit 1 — pipefail would kill the run
+    done=$(printf '%s' "$plan" | grep -oE '"completed"' | wc -l | tr -d ' ' || true)
+    total=$(printf '%s' "$plan" | grep -oE '"(completed|in_progress|pending)"' | wc -l | tr -d ' ' || true)
   else
     done=- total=-
   fi
@@ -129,7 +135,7 @@ case "${1:-}" in
             set -- $ids; mode=thread ;;
 esac
 
-printf 'run\tchildren\troles\ttokens\ttodo\tclassify\trouting\tkept\tbad-role\tverdict\tp-writes\n'
+printf 'run\tchildren\troles\ttokens\ttodo\tclassify\trouting\tkept\tbad-role\tverdict\trepo-writes\n'
 for a in "$@"; do
   case "$mode" in
     thread) score_thread "$a" ;;
