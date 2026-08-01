@@ -397,53 +397,6 @@ test_seed_di_no_session_id_field() {
 }
 
 # =============================================================================
-# seed-goal — Skill(goal) seeds the pristine goal skeleton
-# =============================================================================
-
-test_seed_goal_creates_skeleton() {
-    local state_file="$OMT_DIR/goal-state-test-sid.json"
-
-    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
-        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
-
-    assert_file_exists "$state_file" "goal state file should be created" || return 1
-
-    jq -e '.phase == "planning" and .iteration == 0 and .outcome == "" and .active == true
-        and (.started_at | length > 0) and (.last_touched_at | length > 0)' \
-        "$state_file" > /dev/null 2>&1 \
-        || { echo "ASSERTION FAILED: goal seed does not match pristine skeleton"; return 1; }
-}
-
-# =============================================================================
-# seed-goal-idem — second goal seed run leaves the existing file unchanged
-# =============================================================================
-
-test_seed_goal_is_idempotent() {
-    local state_file="$OMT_DIR/goal-state-test-sid.json"
-
-    # First seed
-    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
-        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
-
-    assert_file_exists "$state_file" "goal state file should exist after first seed" || return 1
-
-    # Mutate iteration to 3
-    local tmp
-    tmp=$(mktemp)
-    jq '.iteration = 3' "$state_file" > "$tmp" && mv "$tmp" "$state_file"
-
-    jq -e '.iteration == 3' "$state_file" > /dev/null 2>&1 \
-        || { echo "ASSERTION FAILED: mutation of iteration to 3 failed"; return 1; }
-
-    # Re-fire seed
-    printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
-        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" > /dev/null
-
-    jq -e '.iteration == 3' "$state_file" > /dev/null 2>&1 \
-        || { echo "ASSERTION FAILED: re-fire seed must not reset iteration (create-if-absent only)"; return 1; }
-}
-
-# =============================================================================
 # seed-ultragoal — Skill(ultragoal) seeds the pristine ultragoal skeleton
 # (mirrors seed-goal; ultragoal-state.ts is a structural copy of goal-state.ts
 # with its own prefix, so the seed skeleton content is identical to goal's)
@@ -522,11 +475,11 @@ test_b1_absent_session_id_skips_and_warns() {
     # --- B1a: stdin session_id present → seed created, no session-absent warning ---
     local exit_code_a=0
     local stderr_a
-    local state_file_a="$OMT_DIR/goal-state-stdin-derived-sid.json"
+    local state_file_a="$OMT_DIR/ultragoal-state-stdin-derived-sid.json"
 
     stderr_a=$(
         unset OMT_SESSION_ID
-        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"stdin-derived-sid\",\"cwd\":\"$OMT_DIR\"}" \
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"ultragoal\"},\"session_id\":\"stdin-derived-sid\",\"cwd\":\"$OMT_DIR\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code_a=$?
 
@@ -548,7 +501,7 @@ test_b1_absent_session_id_skips_and_warns() {
 
     stderr_b=$(
         unset OMT_SESSION_ID
-        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
+        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code_b=$?
 
@@ -578,7 +531,7 @@ test_b3_unsafe_session_id_skips_and_warns() {
 
     stderr_out=$(
         export OMT_SESSION_ID="../escape"
-        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
+        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
 
@@ -619,12 +572,12 @@ test_ac8a_env_stripped_full_payload_seeds_derived_path() {
         source "$SCRIPT_DIR/lib/omt-dir.sh" && resolve_omt_dir "$project_cwd"
     )
 
-    local expected_file="$derived_omt_dir/goal-state-${stdin_sid}.json"
+    local expected_file="$derived_omt_dir/ultragoal-state-${stdin_sid}.json"
 
     stderr_out=$(
         unset OMT_DIR OMT_SESSION_ID
         export HOME="$fake_home"
-        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"$stdin_sid\",\"cwd\":\"$project_cwd\"}" \
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"ultragoal\"},\"session_id\":\"$stdin_sid\",\"cwd\":\"$project_cwd\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
 
@@ -652,7 +605,7 @@ test_ac8b_i_missing_session_id_loud_failure() {
     stderr_out=$(
         unset OMT_DIR OMT_SESSION_ID
         export HOME="$fake_home"
-        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"cwd\":\"$project_cwd\"}" \
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"ultragoal\"},\"cwd\":\"$project_cwd\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
 
@@ -687,7 +640,7 @@ test_ac8b_ii_missing_cwd_loud_failure() {
     stderr_out=$(
         unset OMT_DIR
         export HOME="$fake_home"
-        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"$stdin_sid\"}" \
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"ultragoal\"},\"session_id\":\"$stdin_sid\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
 
@@ -728,7 +681,7 @@ test_ac8b_iii_nonproject_cwd_falls_back_with_warning() {
     stderr_out=$(
         unset OMT_DIR OMT_SESSION_ID
         export HOME="$fake_home"
-        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"goal\"},\"session_id\":\"$stdin_sid\",\"cwd\":\"$bare_cwd\"}" \
+        printf '%s' "{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"ultragoal\"},\"session_id\":\"$stdin_sid\",\"cwd\":\"$bare_cwd\"}" \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
 
@@ -741,10 +694,10 @@ test_ac8b_iii_nonproject_cwd_falls_back_with_warning() {
     echo "$stderr_out" | grep -q "non-canonical" \
         || { echo "ASSERTION FAILED AC-8b-iii: stderr should contain 'non-canonical'. Got: '$stderr_out'"; return 1; }
 
-    # Fallback contract: seed IS created at $HOME/.omt/<basename of bare_cwd>/goal-state-<sid>.json
+    # Fallback contract: seed IS created at $HOME/.omt/<basename of bare_cwd>/ultragoal-state-<sid>.json
     local bare_basename
     bare_basename=$(basename "$bare_cwd")
-    local expected_file="$fake_home/.omt/${bare_basename}/goal-state-${stdin_sid}.json"
+    local expected_file="$fake_home/.omt/${bare_basename}/ultragoal-state-${stdin_sid}.json"
     assert_file_exists "$expected_file" \
         "AC-8b-iii: Seed file must be created at fallback path for non-project cwd" || return 1
 }
@@ -821,7 +774,7 @@ test_fail_loud_write_failure_warns_not_silent() {
     chmod -w "$OMT_DIR"
 
     stderr_out=$(
-        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"goal"}}' \
+        printf '%s' '{"tool_name":"Skill","tool_input":{"skill":"ultragoal"}}' \
             | bash "$SCRIPT_DIR/pre-tool-enforcer.sh" 2>&1 >/dev/null
     ) || exit_code=$?
 
@@ -1912,13 +1865,11 @@ main() {
     run_test test_ac9_started_at_parseable_by_stale_cleanup
     run_test test_ac10_seed_and_cli_set_phase_compose
 
-    # New seeds: P1 (prometheus last_touched_at), A2 (deep-interview), seed-goal, seed-goal-idem,
+    # New seeds: P1 (prometheus last_touched_at), A2 (deep-interview),
     # seed-DI-shape, B1 (absent id), B3 (unsafe id), fail-loud
     run_test test_p1_prometheus_seed_has_last_touched_at
     run_test test_a2_deep_interview_seed_creates_marker
     run_test test_seed_di_no_session_id_field
-    run_test test_seed_goal_creates_skeleton
-    run_test test_seed_goal_is_idempotent
     run_test test_seed_ultragoal_creates_skeleton
     run_test test_seed_ultragoal_is_idempotent
     run_test test_seed_ultragoal_does_not_seed_goal_state
