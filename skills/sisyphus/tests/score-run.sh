@@ -18,9 +18,12 @@ DB="$CODEX/state_5.sqlite"
 # Defined agent types. codex accepts an undefined or omitted agent_type silently
 # and runs it. Reporting one is a FACT, not a verdict: the dominant population is
 # review-angle fan-out, where no defined agent corresponds in the first place.
+# `|| true`: a missing or empty agents dir makes `ls` exit non-zero, and pipefail
+# would then kill the whole script inside this assignment — before the header
+# prints, with no message. An empty role set is a valid state, not a crash.
 known_roles=$(ls "$CODEX/agents"/*.toml 2>/dev/null | while read -r p; do
   b=${p##*/}; printf '%s\n' "${b%.toml}"
-done | sort)
+done | sort || true)
 
 jqs() { jq -Rc "fromjson? | $1" "$2"; }
 

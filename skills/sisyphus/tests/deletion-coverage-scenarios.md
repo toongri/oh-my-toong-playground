@@ -14,11 +14,18 @@
 
 | 팔 | 본문 | 규모 |
 |---|---|---|
-| A | 재저작 전 구본 — `SKILL.md` + `delegation.md` + `decision-gates.md` + `verification.md` | 807줄 |
+| A | 재저작 전 구본 — `SKILL.md` + `delegation.md` + `decision-gates.md` + `verification.md` | 801줄 |
 | B | 재저작 후 최종본 — `SKILL.md` 단일 | 91줄 |
-| C | B + 이 문서의 RED를 닫은 수정본 | 92줄 |
+| C | B + 이 문서의 RED를 닫은 수정본 | 91줄 |
 
-구본 재구성: `git show HEAD:skills/sisyphus/<file>` 4개를 이어 붙인다.
+구본 재구성: 재저작 이후 `HEAD`에는 참조 3파일이 없다. 삭제 커밋의 부모에서 꺼낸다.
+
+```bash
+DEL=$(git log --diff-filter=D -1 --format=%H -- skills/sisyphus/delegation.md)
+for f in SKILL delegation decision-gates verification; do
+  git show "$DEL^:skills/sisyphus/$f.md"
+done > /tmp/head-body.md
+```
 
 ## 시나리오 ↔ 삭제 덩어리 매핑
 
