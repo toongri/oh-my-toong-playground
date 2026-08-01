@@ -18,8 +18,12 @@ chunk-review:
     # medium reasoning effort. 모델 하향도 effort 상향도 2026-07-31~08-01 실측 후
     # 전부 기각했다 (리포트:
     # `~/.omt/oh-my-toong-playground/reports/code-review-finder-tiering-verification-20260731.md`):
-    #   · terra/luna 하향 — 21파일 diff에서 terra cleanup 발견량이 11건 → 1~3건으로
-    #     무너졌고, 손실이 주변 모듈 탐색이 필요한 Reuse·Efficiency 렌즈에 몰렸다.
+    #   · terra/luna 하향 — 발견을 익명화해 판정자에 대조하니 sol/medium이 회당 확증
+    #     7.67건·확증 1건당 52초로 최저 비용이었다. 하향은 정밀도를 사는 거래가 아니다:
+    #     terra/medium은 확증률이 89%로 더 높은데 확증 1건당 70초로 오히려 비싸다.
+    #     결정타는 `requirement` 확증이 terra/medium·terra/high·luna/xhigh에서 0건인 것
+    #     (sol/medium은 6/6). 차단 클래스가 꺼지면 루프는 짧아지는 게 아니라 잘못 끝난다.
+    #     경량 모델에 effort를 올리면 정밀도가 되레 떨어진다(terra 89→67→64%).
     #   · effort 상향 — 판정 축은 루프 종료다. `{gate}/references/completion-gate.md`대로
     #     완료를 막는 것은 `correctness`·`requirement-gap` 클래스뿐이고 `cleanup`은
     #     비차단이라, cleanup을 몇 건 더 찾아도 루프는 짧아지지 않는다. 그리고 그
