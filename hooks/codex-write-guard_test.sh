@@ -2194,16 +2194,16 @@ codex_full_payload() {
     local tool_name="$1" tool_input="$2" sid="$3" cwd="$4"
     if [ "$#" -ge 5 ]; then
         local agent_type="$5"
-        jq -n --arg tool_name "$tool_name" --argjson tool_input "$tool_input" \
+        printf '%s' "$tool_input" | jq -n --arg tool_name "$tool_name" \
             --arg sid "$sid" --arg cwd "$cwd" --arg agent_type "$agent_type" \
-            '{session_id:$sid, turn_id:"turn-1", agent_type:$agent_type,
+            'input as $tool_input | {session_id:$sid, turn_id:"turn-1", agent_type:$agent_type,
               transcript_path:"/tmp/codex-transcript.jsonl", hook_event_name:"PreToolUse",
               model:"gpt-5-codex", permission_mode:"default", trigger:"tool_call",
               tool_name:$tool_name, tool_input:$tool_input, tool_use_id:"tu-1", cwd:$cwd}'
     else
-        jq -n --arg tool_name "$tool_name" --argjson tool_input "$tool_input" \
+        printf '%s' "$tool_input" | jq -n --arg tool_name "$tool_name" \
             --arg sid "$sid" --arg cwd "$cwd" \
-            '{session_id:$sid, turn_id:"turn-1",
+            'input as $tool_input | {session_id:$sid, turn_id:"turn-1",
               transcript_path:"/tmp/codex-transcript.jsonl", hook_event_name:"PreToolUse",
               model:"gpt-5-codex", permission_mode:"default", trigger:"tool_call",
               tool_name:$tool_name, tool_input:$tool_input, tool_use_id:"tu-1", cwd:$cwd}'
@@ -2535,7 +2535,7 @@ test_sigpipe_codereview_shell_command_code_reviewer_large_candidates_allowed() {
     local cmd tool_input out rc=0 result=0
 
     cmd="mv $CR_GOAL /tmp/saved.json$(cwg_pad_redirect_targets 80)"
-    tool_input=$(jq -n --arg cmd "$cmd" '{cmd:$cmd}')
+    tool_input=$(printf '%s' "$cmd" | jq -Rs '{cmd:.}')
     out=$(codex_full_payload "shell_command" "$tool_input" "cx" "$GITDIR" "code-reviewer" | run_hook) || rc=$?
     if ! assert_allow "$out" "$rc" "sigpipe-codereview-code-reviewer-large-candidates"; then
         result=1
@@ -2558,7 +2558,7 @@ test_sigpipe_codereview_shell_command_no_agent_type_large_candidates_denied() {
     local cmd tool_input out rc=0 result=0
 
     cmd="mv $CR_GOAL /tmp/saved.json$(cwg_pad_redirect_targets 80)"
-    tool_input=$(jq -n --arg cmd "$cmd" '{cmd:$cmd}')
+    tool_input=$(printf '%s' "$cmd" | jq -Rs '{cmd:.}')
     out=$(codex_full_payload "shell_command" "$tool_input" "cx" "$GITDIR" | run_hook) || rc=$?
     if [ "$rc" -ne 0 ]; then
         echo "ASSERTION FAILED sigpipe-codereview-deny-large-candidates: expected exit 0, got exit $rc, output '$out'"

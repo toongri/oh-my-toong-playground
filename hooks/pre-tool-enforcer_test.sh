@@ -849,9 +849,9 @@ hg_is_allow() {
 }
 
 hg_bash_json() {
-    # $1 = raw command string, already fully resolved by the caller (no shell
-    # expansion happens inside this helper -- jq --arg treats it as a literal)
-    jq -n --arg cmd "$1" '{tool_name: "Bash", tool_input: {command: $cmd}}'
+    # $1 = raw command string, already fully resolved by the caller. Slurp it
+    # from stdin so large commands do not exceed jq's argv-size limit.
+    printf '%s' "$1" | jq -Rs '{tool_name: "Bash", tool_input: {command: .}}'
 }
 
 # =============================================================================
@@ -1477,9 +1477,9 @@ cr_goal_path() {
 }
 
 hg_bash_json_agent() {
-    # $1 = raw command string, $2 = agent_type value -- both literal via
-    # jq --arg, no shell expansion inside this helper.
-    jq -n --arg cmd "$1" --arg at "$2" '{tool_name: "Bash", tool_input: {command: $cmd}, agent_type: $at}'
+    # $1 = raw command string, $2 = agent_type value. Slurp the command from
+    # stdin so large commands do not exceed jq's argv-size limit.
+    printf '%s' "$1" | jq -Rs --arg at "$2" '{tool_name: "Bash", tool_input: {command: .}, agent_type: $at}'
 }
 
 hg_write_json_agent() {
