@@ -13,7 +13,8 @@ sisyphus 재저작(스펙: `~/.omt/oh-my-toong-playground/deep-interview/sisyphu
 ```bash
 # fixture 준비 (아래 Fixture 절), 이후:
 codex exec --json -C <fixture-dir> -s workspace-write \
-  '<시나리오 프롬프트>' > <evidence>.jsonl 2>&1
+  '<시나리오 프롬프트>' < /dev/null > <evidence>.jsonl 2>&1
+# `< /dev/null` 없이 백그라운드로 띄우면 프롬프트를 인자로 줘도 stdin을 기다리며 영구 정지한다.
 
 # 부모 thread id를 스트림에서 얻고 (item의 sender_thread_id),
 # 스폰 실측은 codex 상태 DB에서 한다:
@@ -32,6 +33,44 @@ sqlite3 ~/.codex/state_5.sqlite \
 > 모델이 `fork_turns`를 고쳐 재시도해 성공한다.
 
 evidence 경로: `$OMT_DIR/evidence/sisyphus-rewrite/{scenario}/{run}.jsonl`
+
+## 축 ↔ 계측기 배정
+
+어느 축을 어느 실행체로 재는지 먼저 고정한다. 서브에이전트 시뮬레이션은 **의도**를,
+codex 실행은 **행동**을 잰다. 시뮬레이션으로 잰 값을 행동에 대한 주장으로 옮겨 적는 것이
+이 문서의 첫 오판이었다.
+
+| 축 | 계측기 | 이유 |
+|---|---|---|
+| 라우팅 결정, 디스패치 문안, Classification Block, 압력 저항 | 서브에이전트 시뮬레이션 | 산출물이 판단 자체라 도구 실행이 필요 없다 |
+| 실제 스폰·대상 역할·자식 작업량 | codex 실행 + 상태 DB | 시뮬레이션에는 스폰이 일어나지 않는다 |
+| verify 판정 심각도 | codex 실행 (실제 파일 위) | 파일이 없으면 "관측된 부재"가 "미보고"로 바뀌어 더 쉬운 문제가 된다 |
+| Transition Barrier 준수 | codex 실행 | 시간 축이 있어야 자식 생존 구간을 잴 수 있다 |
+
+**규칙: 판정이 산출물 관측에 의존하는 시나리오는 실제 파일 위에서 돌린다.**
+
+## 판정기
+
+`score-run.sh`가 스트림 + 상태 DB를 읽어 축별 지표를 뽑는다.
+
+```bash
+./skills/sisyphus/tests/score-run.sh "$OMT_DIR"/evidence/sisyphus-rewrite/*/*.jsonl | column -t -s$'\t'
+```
+
+| 열 | 의미 |
+|---|---|
+| `children` / `roles` | 스폰 실측 — 자식 수와 역할 |
+| `todo` | 최종 todo_list의 `완료/전체`. **점수가 아니다** — 미완료 항목이 정직하게 열려 있는 경우와 조용히 방치된 경우를 이 수치는 구분하지 못하므로, 열린 항목은 최종 보고와 대조해 읽는다 |
+| `classify` | Classification Block 발화 여부 |
+| `routing` | 블록에 선언된 라우팅 대상 |
+| `kept` | **선언 = 실스폰**이면 MATCH, 어긋나면 DRIFT. 위임 품질을 관측 가능한 술어로 환원한 것. 자기 실행 동의어(`inline`/`me`/`self`)는 스폰으로 세지 않는다 — 재저작본은 `inline`, 구본은 `me`로 쓴다 |
+| `verdict` | 등장한 판정 토큰 |
+| `p-writes` | 부모가 실행한 쓰기성 명령 수. evidence 경로 쓰기는 정당하므로 **후보**이지 위반이 아니다 — 손으로 읽는다 |
+
+기존 증거 15판 실측: MATCH 14 / DRIFT 1. 갈린 한 건은 cx2-head run1(구본)으로, 선언은
+`sisyphus-junior`뿐인데 실스폰은 `code-reviewer`+`mnemosyne`+`sisyphus-junior`였다 —
+선언되지 않은 스폰 2건. n=1이라 본문 차이의 근거로 쓸 수 없다. 계측기가 판별력을 가진다는
+것까지만 보인 값이다.
 
 ## Fixture
 

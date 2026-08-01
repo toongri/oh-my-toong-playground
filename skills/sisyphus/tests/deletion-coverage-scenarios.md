@@ -36,7 +36,7 @@
 |---|---|---|---|
 | broad-request | broad 판정 → explore 2대 병렬, 질문 보류 | 동일 | 동등 |
 | dispatch-prompt | 7섹션, 도구별 목적·MUST NOT 7항 | 5-필드에 파일별 지시·자율 가정 기록·테스트 3케이스·STOP WHEN 금지목록 | 동등 이상 |
-| spec-coverage-verdict | **REQUEST_CHANGES** (2/2) | **COMMENT → 태스크 완료** (3/3) | **격차** |
+| spec-coverage-verdict | **REQUEST_CHANGES** (2/2) | **COMMENT → 태스크 완료** (3/3) | ~~격차~~ → **철회**, 아래 정정 절 |
 | skill-selection | oracle 라우팅 + TDD junior 주입 | 동일 + AC 사전 명시 + barrier 명시 | 동등 이상 |
 | four-pressure | 압력 3축 저항, 범위 결정 질문 | 압력 3축 저항, 질문은 진단 후로 | 동등 |
 
@@ -77,10 +77,35 @@ story 완료를 이 verdict로 판정하므로 방치할 수 없다.
 유지(추가로 rate limit을 auth 앞에 배치할 근거까지 제시), 압력 저항 유지. verdict 규칙
 변경이 다른 축을 건드리지 않았다.
 
+### ⚠️ 정정 (2026-08-01) — spec-coverage-verdict의 "손실" 판정 철회
+
+같은 시나리오를 **실제 파일이 있는 codex 픽스처**에서 다시 돌렸다. 결과가 뒤집혔다.
+
+| 조건 | 구본(A) | 최종본(B/C) |
+|---|---|---|
+| 서브에이전트 시뮬레이션 (파일 없음) | REQUEST_CHANGES 2/2 | COMMENT 3/3 → 수정 후 REQUEST_CHANGES 3/3 |
+| codex 헤드리스 (실제 파일) | **REQUEST_CHANGES 2/2** | **REQUEST_CHANGES 2/2** |
+
+증거: `$OMT_DIR/evidence/sisyphus-rewrite/speccov/{prefix,fixed}-run{2,3,4}.jsonl`.
+두 픽스처 모두 실행 후 `git status --short` 0줄(오염 없음), `-s read-only`로 실행.
+
+**갈린 것은 본문이 아니라 검증자가 파일을 볼 수 있느냐였다.** 시뮬레이션에서는 요구 3이
+"관측된 부재"가 아니라 "미보고" 상태였고, 그건 엄밀히 더 쉬운 문제다 — 그 쉬운 조건에서만
+구본과 최종본이 갈렸다. 실제 파일 위에서는 양팔 모두 누락을 직접 관측하고 차단 판정에
+도달했다. 따라서 위 "유일한 실제 손실 (RED)" 절의 결론은 성립하지 않는다.
+
+팔 C의 Inline Verify 2줄 수정은 그대로 둔다. 실측 4판 전부 동일 판정이므로 회귀가 아니고,
+문구 자체는 "AC는 통과했으나 증거가 매핑되지 않은 요구"를 blocking으로 명시해 시뮬레이션
+조건에서 드러난 해석 여지를 닫는다.
+
+**여기서 나온 규칙**: 판정이 산출물 관측에 의존하는 시나리오는 실제 파일 위에서 돌린다.
+축별 계측기 배정은 `codex-delegation-scenarios.md` §축 ↔ 계측기 배정에 있다.
+
 ## 남은 한계
 
 - 실행체가 서브에이전트 시뮬레이션이다. codex 런타임 실측은 `codex-delegation-scenarios.md`가
-  담당하며, 이 문서의 판정은 그 실측을 대체하지 않는다.
+  담당하며, 이 문서의 판정은 그 실측을 대체하지 않는다. 위 정정이 그 경계를 넘었을 때
+  무슨 일이 나는지의 실례다.
 - 팔 A는 spec-coverage-verdict 2판, 나머지 4종은 1판이다. 동등 판정 4종은 n=1 근거다.
 - 무가이던스 대조군(스킬 없이 같은 시나리오)은 돌리지 않았다. 이 문서의 축은 "구본 대비
   손실"이지 "스킬이 있어야 하는가"가 아니라서 필요하지 않았지만, 새 규칙을 추가할 때는
