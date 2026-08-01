@@ -66,9 +66,9 @@ describe("main", () => {
 const ISOLATED = { home: "/tmp/iso-home", codexHome: "/tmp/iso-home/.codex" };
 
 describe("buildProbeSpec", () => {
-	it("puts `$goal` at the very front of the prompt (user-input position, so codex's mention scanner mechanically loads it)", () => {
+	it("puts `$ultragoal` at the very front of the prompt (user-input position, so codex's mention scanner mechanically loads it)", () => {
 		const spec = buildProbeSpec("/tmp/some-deploy-root", ISOLATED);
-		expect(spec.session.prompt.startsWith("$goal ")).toBe(true);
+		expect(spec.session.prompt.startsWith("$ultragoal ")).toBe(true);
 	});
 
 	it("targets the given deployRoot as cwd, with a read-only sandbox and a finite timeout", () => {
