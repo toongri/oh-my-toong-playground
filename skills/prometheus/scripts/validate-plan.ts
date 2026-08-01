@@ -4,10 +4,12 @@
  * Deterministic validator for prometheus plans, two independent passes:
  * (1) Section presence — the 7 always-required plan sections exist as level-2
  *     headings with non-empty bodies (cheap PRESENCE pre-filter).
- * (2) Graph semantics — within `## TODOs`: TODO id uniqueness, Blocked By
- *     reference resolution, self-dependency/cycle ban, and the Wave rule
- *     `Wave = max(blocker waves) + 1` (empty Blocked By = Wave 1; `Wave: FINAL`
- *     tasks are exempt from the numeric formula).
+ * (2) Graph semantics — a non-empty `## TODOs` section contains at least one
+ *     canonical checkbox TODO; IDs are unique and either numeric or F1-F4;
+ *     Blocked By references resolve with no self-dependency/cycles; `Wave: FINAL`
+ *     is reserved for F1-F4 audit TODOs and required for them; numeric
+ *     implementation TODOs satisfy `Wave = max(blocker waves) + 1` (no blockers
+ *     means Wave 1).
  *
  * Usage: bun skills/prometheus/scripts/validate-plan.ts <plan_path>
  * Exit 0 = all sections present and non-empty, and no graph violations.
@@ -162,22 +164,40 @@ function parseTodos(content: string): TodoNode[] {
 	return todos;
 }
 
+/** Whether a first `## TODOs` section exists and has non-whitespace body text. */
+function hasNonEmptyTodosSection(content: string): boolean {
+	const stripped = stripFences(content);
+	const sectionMatch = /^##[ \t]+TODOs[ \t]*$/m.exec(stripped);
+	if (sectionMatch === null) return false;
+	const bodyStart = sectionMatch.index + sectionMatch[0].length;
+	const nextHeading = /^##[ \t]+/m.exec(stripped.slice(bodyStart));
+	const body = stripped.slice(
+		bodyStart,
+		nextHeading !== null ? bodyStart + nextHeading.index : stripped.length,
+	);
+	return body.trim().length > 0;
+}
+
 /**
  * Validate graph semantics of the `## TODOs` section.
  *
  * Checks:
- * (a) TODO id uniqueness
- * (b) every Blocked By reference resolves to a defined TODO
- * (c) no self-dependency, no dependency cycles
- * (d) Wave rule: numeric tasks satisfy `Wave = max(blocker waves) + 1`
- *     (no blockers → Wave 1). `Wave: FINAL` tasks are exempt; a numeric task
- *     blocked by a FINAL task is a violation.
+ * (a) a non-empty TODOs section contains at least one canonical checkbox TODO
+ * (b) TODO IDs are unique and either numeric or F1-F4
+ * (c) every Blocked By reference resolves to a defined TODO
+ * (d) no self-dependency, no dependency cycles
+ * (e) `Wave: FINAL` is reserved for F1-F4 audit TODOs and required for them
+ * (f) numeric implementation TODOs satisfy `Wave = max(blocker waves) + 1`
+ *     (no blockers → Wave 1); a numeric task blocked by a FINAL task is invalid
  *
  * @returns Array of human-readable violation messages (empty = OK).
  */
 export function validatePlanGraph(content: string): string[] {
 	const todos = parseTodos(content);
 	const violations: string[] = [];
+	if (todos.length === 0 && hasNonEmptyTodosSection(content)) {
+		violations.push("TODOs section contains no canonical checkbox TODOs");
+	}
 
 	// (a) id uniqueness — first definition wins for graph resolution
 	const byId = new Map<string, TodoNode>();
@@ -232,7 +252,20 @@ export function validatePlanGraph(content: string): string[] {
 		if (!color.has(id)) dfs(id);
 	}
 
-	// (d) Wave rule for numeric tasks
+	// (d) FINAL is reserved for the F1-F4 audit TODOs.
+	for (const todo of byId.values()) {
+		const isFinalTodo = /^F[1-4]$/.test(todo.id);
+		if (!/^\d+$/.test(todo.id) && !isFinalTodo) {
+			violations.push(`invalid TODO id: ${todo.id}`);
+		}
+		if (todo.wave === "FINAL" && !isFinalTodo) {
+			violations.push(`TODO ${todo.id}: Wave FINAL is reserved for F1-F4`);
+		} else if (isFinalTodo && todo.wave !== "FINAL") {
+			violations.push(`TODO ${todo.id}: F1-F4 TODO must use Wave FINAL`);
+		}
+	}
+
+	// (e) Wave rule for numeric implementation tasks
 	for (const todo of byId.values()) {
 		if (todo.wave === "FINAL") continue;
 		if (todo.wave === null) {

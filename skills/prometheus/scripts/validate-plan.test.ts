@@ -224,6 +224,25 @@ describe("graph semantics", () => {
 		expect(validatePlanGraph(plan)).toEqual([]);
 	});
 
+	test("numeric TODO cannot use Wave FINAL", () => {
+		const plan = buildGraphPlan([todoBlock("1", { wave: "FINAL" })]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODO 1: Wave FINAL is reserved for F1-F4",
+		);
+	});
+
+	test("noncanonical FINAL TODO id is rejected", () => {
+		const plan = buildGraphPlan([todoBlock("F5", { wave: "FINAL" })]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODO F5: Wave FINAL is reserved for F1-F4",
+		);
+	});
+
+	test("F1-F4 TODO must use Wave FINAL", () => {
+		const plan = buildGraphPlan([todoBlock("F1", { wave: "1" })]);
+		expect(validatePlanGraph(plan)).toContain("TODO F1: F1-F4 TODO must use Wave FINAL");
+	});
+
 	test("numeric-wave task blocked by FINAL task detected", () => {
 		const plan = buildGraphPlan([
 			todoBlock("F1", { wave: "FINAL" }),
@@ -245,6 +264,20 @@ describe("graph semantics", () => {
 			"```\n- [ ] 1. duplicate inside fence\n- [ ] 9. phantom\n```",
 		]);
 		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("noncanonical checkbox TODO-only section is rejected", () => {
+		const plan = buildGraphPlan(["- [ ] A. Task"]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODOs section contains no canonical checkbox TODOs",
+		);
+	});
+
+	test("prose-only TODO section is rejected", () => {
+		const plan = buildGraphPlan(["Describe the work here."]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODOs section contains no canonical checkbox TODOs",
+		);
 	});
 
 	test("no TODOs section yields no graph violations", () => {
