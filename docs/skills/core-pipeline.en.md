@@ -97,7 +97,10 @@ flowchart TB
 ```mermaid
 flowchart TB
     Start([User request]) --> Interpret["Interpret as<br/>'plan X'"]
-    Interpret --> Interview[Interview mode]
+    Interpret --> Split{"Complex/Architecture:<br/>is there a subset that<br/>could be merged alone?"}
+    Split -->|No| Interview[Interview mode]
+    Split -->|Yes| Slice["List subsets in order<br/>Scope this run to the first<br/>Record the rest as deferred"]
+    Slice --> Interview
     Interview --> Research[Research via<br/>explore/librarian]
     Research --> More{More<br/>questions?}
     More -->|Yes| Interview
@@ -116,7 +119,9 @@ flowchart TB
 - Running implementation commands
 - Anything that "does the work"
 
-**Pipeline link**: It proceeds interview → research (explore/librarian) → metis gap analysis → plan writing. The resulting plan is saved to `$OMT_DIR/plans/*.md` and becomes sisyphus's input.
+**Scope Split Gate**: Requests classified Complex or Architecture settle one question before the interview begins — *is there a subset of this work that could be merged on its own, leaving the system working, with something that verifies it?* If there is, the request is not one plan. The subsets are listed in order with the behavior-preserving one first, **only the first subset** becomes this run's scope, and the rest are recorded under `## Context` as deferred, each naming its blocker. Each deferred subset becomes its own prometheus run. Trivial and Scoped skip this gate.
+
+**Pipeline link**: It proceeds interview → research (explore/librarian) → metis gap analysis → plan writing. The resulting plan is saved to `$OMT_DIR/plans/*.md` and becomes sisyphus's input. One prometheus run produces one plan — a request that splits into several plans is run one subset at a time.
 
 ---
 
