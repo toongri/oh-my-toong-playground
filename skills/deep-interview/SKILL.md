@@ -490,20 +490,19 @@ When the Design Interview phase has exited with all design branches resolved, or
 
 After the spec is written, choose the recommended execution route from the spec's own characteristics, and present options via `AskUserQuestion`.
 
-**Recommend the route by judging the spec you just wrote — its output shape and how much HOW-uncertainty the interview left open:**
-- If the spec's output maps cleanly to a single domain skill available in this session (e.g., documentation → `technical-writing`, slides → `create-slides`), recommend that skill **directly** — this terminal domain output bypasses `goal` (it needs no planning/execution orchestration). Read the live available-skills list to find the match — do NOT hardcode a skill catalog here, because the available skills change.
-- Else (the remaining work is planning and/or multi-step execution — code that benefits from AC-gated planning, or settled multi-step orchestration), recommend handing the spec to **`goal`**, which pursues the objective through planning/execution downstream. Do NOT recommend prometheus or sisyphus directly for planning/execution work; hand it to `goal` instead.
-
-`goal` is the recommended destination for planning/execution work rather than prometheus or sisyphus directly. Do not reflexively pre-pick prometheus vs sisyphus here — its core value, requirements clarification, is exactly what this phase already delivered, and `goal` determines the downstream path from the spec it receives.
+**Recommend the route by judging the spec you just wrote — its output shape and the topology frozen during the interview:**
+- **Rule 1:** If the spec's output maps cleanly to a single domain skill available in this session (e.g., documentation → `technical-writing`, slides → `create-slides`), recommend that skill **directly**. Read the live available-skills list to find the match — do NOT hardcode a skill catalog here, because the available skills change.
+- **Rule 2:** Otherwise (planning and/or multi-step execution), route by the active-component count in `state.topology`: exactly 1 active component → recommend **`ultragoal`** directly, because a single-story pursuit needs no separate planning pass; otherwise (0 or ≥2 active components) → recommend **`prometheus`**, for feasibility/design review, plan-reliability review, and a human-readable plan that ultragoal executes from. This count is frozen at Round 0 with user confirmation, so the router never judges its own spec. A missing `topology` field is `legacy_missing`; Round 0 must run first rather than routing it here.
+- **Rule 3:** Never recommend `sisyphus` directly — ultragoal uses it as the sole executor.
 
 **Question:** "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
 
 **Build the options like this** (recommended route first, tagged "(Recommended)", with a one-sentence rationale tied to THIS spec):
-- The recommended route from the rule above (a domain skill directly, or `goal` for planning/execution work).
-- When the recommended route is `goal`, also offer a domain skill as the override only if the spec plausibly maps to one. When the recommended route is a domain skill, offer `goal` as the override (so planning/execution can still be chosen). Planning/execution work always goes to `goal` — never offer prometheus or sisyphus as direct options here.
+- The recommended route from the rules above (a domain skill directly, `ultragoal` for exactly 1 active component, or `prometheus` otherwise), tagged "(Recommended)" with its spec-tied rationale.
+- Offer a domain skill as an override only if the spec plausibly maps to one.
 - **Continue interviewing** — "Continue interviewing to improve clarity (current: {score}%)" → return to the Phase 2 loop.
 
-Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the planning/execution option invokes `Skill(skill: "goal")`).
+Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context (the planning/execution option invokes `Skill(skill: "prometheus")` or `Skill(skill: "ultragoal")` according to the active-component count).
 
 **IMPORTANT:** On execution selection, **MUST** invoke the chosen skill via `Skill()`. Do NOT implement directly. The deep-interview agent is a requirements agent, not an execution agent. Pass the spec file path forward (and the prompt-safe summary, if the initial context was summarized) — never the raw oversized source material.
 
