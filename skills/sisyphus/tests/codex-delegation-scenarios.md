@@ -66,7 +66,7 @@ codex 실행은 **행동**을 잰다. 시뮬레이션으로 잰 값을 행동에
 | `classify` | Classification Block 발화 **횟수**(= 작업 단위 수), 없으면 `no` |
 | `routing` | 블록에 선언된 라우팅 대상. 실제 `routing:` 값은 `independent code-reviewer`처럼 산문이라 첫 낱말이 아니라 값 전체에서 정의된 역할명을 골라낸다 |
 | `kept` | **선언 = 실스폰**이면 MATCH, 어긋나면 DRIFT. 위임 품질을 관측 가능한 술어로 환원한 것. 자기 실행 동의어(`inline`/`me`/`self`)는 스폰으로 세지 않는다 — 재저작본은 `inline`, 구본은 `me`로 쓴다. **블록이 1개일 때만 유효**하고 그 외에는 `n/a`다 — 긴 세션은 블록이 여러 개라 선언의 합집합과 세션 전체 스폰 집합을 비교하면 가짜 DRIFT가 난다 |
-| `bad-role` | `~/.codex/agents/*.toml`에 정의가 없는데 스폰된 역할. **codex는 정의 없는 agent_type을 조용히 받아 실행한다** — 오타가 실패하지 않고 의도한 역할 프롬프트 없이 토큰만 태운다 |
+| `bad-role` | `~/.codex/agents/*.toml`에 정의가 없는데 스폰된 역할. **codex는 정의 없는 agent_type을 조용히 받아 실행한다** — 오타가 실패하지 않고 의도한 역할 프롬프트 없이 토큰만 태운다. 두 모양을 잡는다: 오타(`explorer`)와 **누락**(`?` = `agent_type` 미지정 → `agent_role` NULL) |
 | `verdict` | 등장한 판정 토큰 |
 | `repo-writes` | 부모가 직접 쓴 **레포 파일 수**(`apply_patch` 대상 중 `$OMT_DIR` 밖). Iron Law는 "네 손은 산출물에 닿지 않는다"이고 `$OMT_DIR` 기록만 예외이므로, 이 수치는 후보가 아니라 **위반 건수**다 |
 
@@ -158,8 +158,10 @@ evidence: `$OMT_DIR/evidence/sisyphus-rewrite/reviewfix/rf-{cur,old}-{1,2}.jsonl
 곁가지: **정의 없는 역할로 스폰해도 조용히 성공한다.** `019fb768`은
 `explorer`(정식 명은 `explore`, `~/.codex/agents/`에 정의 없음)를 두 번 띄워 3.7M 토큰을
 태웠고 — 그 세션에서 어느 정식 역할보다 많은 양이다 — 둘 다 `verify_*_review` 작업이었다.
-`019fb6a4`은 역할이 아예 없는 자식에 165.7M 토큰이 실렸다. 지금은 각각 1건이라 본문 결함의
-근거로 쓸 수 없다. 재현되면 RED다.
+`019fb6a4`은 `agent_type`을 아예 지정하지 않은 자식(`agent_path: /root/foundation_sisyphus`,
+`agent_role` NULL, depth 1, fork 아님)에 **102.3M 토큰**이 실렸다. 이름으로 보아 구현 위임
+의도였는데 역할 프롬프트 없이 일반 에이전트로 돌았다. 오타와 누락은 같은 실패 계열이다.
+지금은 각각 1건이라 본문 결함의 근거로 쓸 수 없다. 재현되면 RED다.
 
 ## Fixture
 
