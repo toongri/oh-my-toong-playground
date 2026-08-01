@@ -1145,7 +1145,7 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 2 | File references exist | All file paths and line references resolve |
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
-| 5 | Section validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Momus. |
+| 5 | Plan validator passes | Run `bun "${CLAUDE_SKILL_DIR}/scripts/validate-plan.ts" <plan_path>` (invoked ONLY here, pre-S4, full plan). It checks section presence AND TODO graph semantics (id uniqueness, Blocked By resolution, self-dependency/cycle ban, `Wave = max(blocker waves) + 1`). If it reports violations, fix the plan and re-run before submitting to Momus. |
 | 6 | design forks resolved | Every CRITICAL design fork is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
 | 7 | structural enumeration present (Complex/Arch) | For a Complex or Architecture plan, the artifact carries the decision log with structural enumeration OR the anti-ceremony escape with a named, specific consequence recorded. Presence only; fork resolution stays with item 6. |
 

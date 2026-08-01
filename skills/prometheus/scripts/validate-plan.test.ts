@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { REQUIRED_HEADINGS, validatePlan } from "./validate-plan.ts";
+import { REQUIRED_HEADINGS, validatePlan, validatePlanGraph } from "./validate-plan.ts";
 
 // ---------------------------------------------------------------------------
 // Self-test: canonical heading list
@@ -130,6 +130,126 @@ describe("validator policy", () => {
 		const plan = buildPlan() + "\n## TODOs\n\n\n";
 		const missing = validatePlan(plan);
 		expect(missing).not.toContain("TODOs");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Graph semantics — TODO id uniqueness, Blocked By resolution, cycles, Wave rule
+// ---------------------------------------------------------------------------
+
+/** Build a plan whose ## TODOs section contains the given TODO blocks. */
+function buildGraphPlan(todoBlocks: string[]): string {
+	return buildPlan({ TODOs: todoBlocks.join("\n") });
+}
+
+/** One TODO block in the plan-template checkbox shape. */
+function todoBlock(id: string, opts: { blockedBy?: string; wave?: string } = {}): string {
+	const lines = [`- [ ] ${id}. Task ${id}`];
+	lines.push(`  - What to do: work for task ${id}`);
+	if (opts.blockedBy !== undefined) lines.push(`  - Blocked By: ${opts.blockedBy}`);
+	if (opts.wave !== undefined) lines.push(`  - Wave: ${opts.wave}`);
+	return lines.join("\n");
+}
+
+describe("graph semantics", () => {
+	test("valid dependency graph passes", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { wave: "1" }),
+			todoBlock("3", { blockedBy: "TODO 1, TODO 2", wave: "2" }),
+			todoBlock("F1", { blockedBy: "TODO 3", wave: "FINAL" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("duplicate TODO id detected", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("1", { wave: "1" }),
+		]);
+		expect(validatePlanGraph(plan)).toContain("duplicate TODO id: 1");
+	});
+
+	test("Blocked By reference to undefined TODO detected", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { blockedBy: "TODO 9", wave: "2" }),
+		]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODO 2: Blocked By references undefined TODO 9",
+		);
+	});
+
+	test("self-dependency detected", () => {
+		const plan = buildGraphPlan([todoBlock("1", { blockedBy: "TODO 1", wave: "1" })]);
+		expect(validatePlanGraph(plan)).toContain("TODO 1: blocked by itself");
+	});
+
+	test("dependency cycle detected", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { blockedBy: "TODO 2", wave: "1" }),
+			todoBlock("2", { blockedBy: "TODO 1", wave: "2" }),
+		]);
+		const violations = validatePlanGraph(plan);
+		expect(violations.some((v: string) => v.startsWith("dependency cycle:"))).toBe(true);
+	});
+
+	test("Wave mismatch against max(blocker)+1 detected", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("2", { blockedBy: "TODO 1", wave: "3" }),
+		]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODO 2: Wave 3 but expected 2 (= max(blocker waves) + 1)",
+		);
+	});
+
+	test("empty Blocked By expects Wave 1", () => {
+		const plan = buildGraphPlan([todoBlock("1", { wave: "2" })]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODO 1: Wave 2 but expected 1 (= max(blocker waves) + 1)",
+		);
+	});
+
+	test("Blocked By: None treated as no blockers", () => {
+		const plan = buildGraphPlan([todoBlock("1", { blockedBy: "None", wave: "1" })]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("Wave FINAL task exempt from numeric formula", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			todoBlock("F1", { blockedBy: "TODO 1", wave: "FINAL" }),
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("numeric-wave task blocked by FINAL task detected", () => {
+		const plan = buildGraphPlan([
+			todoBlock("F1", { wave: "FINAL" }),
+			todoBlock("2", { blockedBy: "TODO F1", wave: "2" }),
+		]);
+		expect(validatePlanGraph(plan)).toContain(
+			"TODO 2: numeric-wave task blocked by FINAL task F1",
+		);
+	});
+
+	test("missing Wave field detected", () => {
+		const plan = buildGraphPlan([todoBlock("1")]);
+		expect(validatePlanGraph(plan)).toContain("TODO 1: missing Wave");
+	});
+
+	test("checkbox lines inside fences ignored", () => {
+		const plan = buildGraphPlan([
+			todoBlock("1", { wave: "1" }),
+			"```\n- [ ] 1. duplicate inside fence\n- [ ] 9. phantom\n```",
+		]);
+		expect(validatePlanGraph(plan)).toEqual([]);
+	});
+
+	test("no TODOs section yields no graph violations", () => {
+		// Section presence is validatePlan's job — graph validator must not duplicate it
+		expect(validatePlanGraph("# not a plan\n\nprose only\n")).toEqual([]);
 	});
 });
 
