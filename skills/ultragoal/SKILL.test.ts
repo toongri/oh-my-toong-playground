@@ -309,7 +309,7 @@ describe("axis 2: auto-generated decomposition + bulk approval via confirm-all-s
 	test("planning.md frames decomposition as auto-generate, not a per-story confirm dialogue", () => {
 		expect(planningMd).toContain("auto-generate");
 		expect(planningMd).toContain(
-			"replacing goal's per-story `confirm-story` dialogue",
+			"replacing a per-story `confirm-story` dialogue",
 		);
 	});
 
@@ -355,7 +355,7 @@ describe("gate cost model: per-story self-attested verdict mid-loop, code-review
 describe("single-story degrade: ultragoal collapses to goal's single-gate behavior", () => {
 	test("SKILL.md states a single-story objective degrades to goal's behavior", () => {
 		expect(skillMd).toContain("**Single-story degrade.**");
-		expect(skillMd).toContain("ultragoal degrades to goal's behavior");
+		expect(skillMd).toContain("ultragoal collapses to a single-gate loop");
 	});
 });
 
@@ -370,7 +370,7 @@ describe("invariant: sisyphus stays the executor, no runtime goal call", () => {
 
 	test("SKILL.md states explicitly that ultragoal never invokes goal at runtime", () => {
 		expect(skillMd).toContain(
-			"ultragoal never invokes the goal skill at runtime",
+			"ultragoal never delegates execution to another skill at runtime",
 		);
 	});
 });
@@ -858,22 +858,22 @@ describe("stale duplicate sentence removed from Execution Dispatch closing (line
 describe("disambiguation clause: OMT goal skill vs Codex native goal tools", () => {
 	test("the sealed substring is preserved byte-exact", () => {
 		expect(skillMd).toContain(
-			"ultragoal never invokes the goal skill at runtime",
+			"ultragoal never delegates execution to another skill at runtime",
 		);
 	});
 
 	test("a clarifying clause distinguishes the goal skill from Codex's native goal tools", () => {
 		expect(skillMd).toContain(
-			"OMT's `goal` **skill** (invoked via `Skill(...)`) and Codex's native goal tools (`create_goal`/`update_goal`/`get_goal`) are different things, and calling the latter is not a violation of this invariant",
+			"Codex's native goal tools (`create_goal`/`update_goal`/`get_goal`) are model-callable tools, not skill dispatches, and calling them is not a violation of this invariant",
 		);
 	});
 
 	test("the clarifying clause follows the sealed substring", () => {
 		const sealedIdx = skillMd.indexOf(
-			"ultragoal never invokes the goal skill at runtime",
+			"ultragoal never delegates execution to another skill at runtime",
 		);
 		const clauseIdx = skillMd.indexOf(
-			"OMT's `goal` **skill** (invoked via `Skill(...)`) and Codex's native goal tools",
+			"Codex's native goal tools",
 		);
 		expect(sealedIdx).toBeGreaterThan(-1);
 		expect(clauseIdx).toBeGreaterThan(-1);
