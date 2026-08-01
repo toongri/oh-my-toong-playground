@@ -1958,6 +1958,57 @@ describe("story layer: mutations", () => {
 		expect(s3After.status).toBe("retired");
 	});
 
+	test("add-story strips caller-supplied split provenance", () => {
+		seedWithStories(S);
+		addStory(
+			S,
+			{
+				id: "S2",
+				story: "add search",
+				acceptance_criteria: ["search returns results"],
+				verification_surface: "E2E search test",
+				status: "unconfirmed",
+				split_from: "forged-parent",
+				split_into: ["forged-child"],
+			},
+			"e",
+			"r",
+		);
+		const added = readGoalGet(S)!.stories!.find((story) => story.id === "S2")!;
+		expect(added.split_from).toBeUndefined();
+		expect(added.split_into).toBeUndefined();
+	});
+
+	test("revise-story cannot inject or overwrite split provenance", () => {
+		seedWithStories(S, [baseStory, baseStory2]);
+		const raw = JSON.parse(readFileSync(resolveStatePath(S), "utf8"));
+		raw.stories[0].split_from = "normal-parent";
+		raw.stories[0].split_into = ["normal-child"];
+		writeFileSync(resolveStatePath(S), JSON.stringify(raw), "utf8");
+
+		reviseStory(
+			S,
+			"S2",
+			{ split_from: "forged-parent", split_into: ["forged-child"] },
+			"e",
+			"r",
+		);
+		reviseStory(
+			S,
+			"S1",
+			{ story: "ship feature X revised", split_from: "forged-parent", split_into: ["forged-child"] },
+			"e",
+			"r",
+		);
+		const stories = readGoalGet(S)!.stories!;
+		const revisedWithoutLineage = stories.find((story) => story.id === "S2")!;
+		const revisedWithLineage = stories.find((story) => story.id === "S1")!;
+		expect(revisedWithoutLineage.split_from).toBeUndefined();
+		expect(revisedWithoutLineage.split_into).toBeUndefined();
+		expect(revisedWithLineage.split_from).toBe("normal-parent");
+		expect(revisedWithLineage.split_into).toEqual(["normal-child"]);
+	});
+
 	// AC-4b: no mutation subcommand can write a status outside the enum or write confirmed
 	test("mutation fence rejects", () => {
 		seedWithStories(S);
@@ -2274,6 +2325,44 @@ describe("story layer: split-story", () => {
 		expect(stories[2].split_from).toBe("S1");
 		expect(stories[0].steering_evidence).toBe("e");
 		expect(stories[1].steering_evidence).toBe("e");
+	});
+
+	test("derives replacement provenance from its actual parent", () => {
+		seed();
+		splitStory(
+			S,
+			"S1",
+			[
+				{ ...childA, split_from: "forged-parent", split_into: ["forged-child"] },
+				{ ...childB, split_from: "forged-parent", split_into: ["forged-child"] },
+			],
+			"e",
+			"r",
+		);
+		const stories = readGoalGet(S)!.stories!;
+		expect(stories[1]).toMatchObject({ split_from: "S1" });
+		expect(stories[1].split_into).toBeUndefined();
+		expect(stories[2]).toMatchObject({ split_from: "S1" });
+		expect(stories[2].split_into).toBeUndefined();
+	});
+
+	test("keeps a split child's existing lineage when it later becomes a parent", () => {
+		seed();
+		splitStory(S, "S1", [childA, childB], "e", "r");
+		splitStory(
+			S,
+			"S1a",
+			[
+				{ ...childA, id: "S1a1", split_from: "forged-parent", split_into: ["forged-child"] },
+				{ ...childB, id: "S1a2", split_from: "forged-parent", split_into: ["forged-child"] },
+			],
+			"e2",
+			"r2",
+		);
+		const stories = readGoalGet(S)!.stories!;
+		const splitChild = stories.find((story) => story.id === "S1a")!;
+		expect(splitChild.split_from).toBe("S1");
+		expect(splitChild.split_into).toEqual(["S1a1", "S1a2"]);
 	});
 
 	test("refuses fewer than 2 replacements", () => {
