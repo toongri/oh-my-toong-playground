@@ -154,7 +154,7 @@ describe("codex 규칙 6a — `Skill(` 형태는 Codex mention sigil `$name`로 
 		expect(applyRewriteRules('Skill(skill: "...")', PLATFORM_REWRITE_RULES.codex)).toBe("$...");
 	});
 
-	it('JS 템플릿 리터럴 안의 `Skill(skill: "${entry.name}")` -> "$${entry.name}" (skills/sisyphus/hooks/skill-catalog/catalog.ts:201) — 템플릿 리터럴 보간과 합쳐져 최종 "$humanizer" 등으로 렌더되므로 의도된 정상 동작', () => {
+	it('JS 템플릿 리터럴 안의 `Skill(skill: "${entry.name}")` -> "$${entry.name}" (구 캐리어 skills/sisyphus/hooks/skill-catalog/catalog.ts:201은 2026-07 sisyphus 재저작으로 삭제 — 회귀 핀으로 유지) — 템플릿 리터럴 보간과 합쳐져 최종 "$humanizer" 등으로 렌더되므로 의도된 정상 동작', () => {
 		expect(
 			applyRewriteRules('Skill(skill: "${entry.name}")', PLATFORM_REWRITE_RULES.codex),
 		).toBe("$${entry.name}");
