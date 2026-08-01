@@ -51,26 +51,55 @@ codex 실행은 **행동**을 잰다. 시뮬레이션으로 잰 값을 행동에
 
 ## 판정기
 
-`score-run.sh`가 스트림 + 상태 DB를 읽어 축별 지표를 뽑는다.
+`score-run.sh`가 스트림 + 상태 DB를 읽어 축별 지표를 뽑는다. 헤드리스는 스트림 파일을,
+대화형 세션은 thread id를 준다(rollout은 DB의 `rollout_path`로 찾는다).
 
 ```bash
-./skills/sisyphus/tests/score-run.sh "$OMT_DIR"/evidence/sisyphus-rewrite/*/*.jsonl | column -t -s$'\t'
+./skills/sisyphus/tests/score-run.sh "$OMT_DIR"/evidence/.../*.jsonl   # 헤드리스
+./skills/sisyphus/tests/score-run.sh --last 4                          # 최근 대화형 세션
 ```
 
 | 열 | 의미 |
 |---|---|
-| `children` / `roles` | 스폰 실측 — 자식 수와 역할 |
+| `children` / `roles` / `tokens` | 스폰 실측 — 자식 수, 역할, 자식이 실제로 쓴 토큰 합 |
 | `todo` | 최종 todo_list의 `완료/전체`. **점수가 아니다** — 미완료 항목이 정직하게 열려 있는 경우와 조용히 방치된 경우를 이 수치는 구분하지 못하므로, 열린 항목은 최종 보고와 대조해 읽는다 |
-| `classify` | Classification Block 발화 여부 |
-| `routing` | 블록에 선언된 라우팅 대상 |
-| `kept` | **선언 = 실스폰**이면 MATCH, 어긋나면 DRIFT. 위임 품질을 관측 가능한 술어로 환원한 것. 자기 실행 동의어(`inline`/`me`/`self`)는 스폰으로 세지 않는다 — 재저작본은 `inline`, 구본은 `me`로 쓴다 |
+| `classify` | Classification Block 발화 **횟수**(= 작업 단위 수), 없으면 `no` |
+| `routing` | 블록에 선언된 라우팅 대상. 실제 `routing:` 값은 `independent code-reviewer`처럼 산문이라 첫 낱말이 아니라 값 전체에서 정의된 역할명을 골라낸다 |
+| `kept` | **선언 = 실스폰**이면 MATCH, 어긋나면 DRIFT. 위임 품질을 관측 가능한 술어로 환원한 것. 자기 실행 동의어(`inline`/`me`/`self`)는 스폰으로 세지 않는다 — 재저작본은 `inline`, 구본은 `me`로 쓴다. **블록이 1개일 때만 유효**하고 그 외에는 `n/a`다 — 긴 세션은 블록이 여러 개라 선언의 합집합과 세션 전체 스폰 집합을 비교하면 가짜 DRIFT가 난다 |
+| `bad-role` | `~/.codex/agents/*.toml`에 정의가 없는데 스폰된 역할. **codex는 정의 없는 agent_type을 조용히 받아 실행한다** — 오타가 실패하지 않고 의도한 역할 프롬프트 없이 토큰만 태운다 |
 | `verdict` | 등장한 판정 토큰 |
 | `p-writes` | 부모가 실행한 쓰기성 명령 수. evidence 경로 쓰기는 정당하므로 **후보**이지 위반이 아니다 — 손으로 읽는다 |
 
-기존 증거 15판 실측: MATCH 14 / DRIFT 1. 갈린 한 건은 cx2-head run1(구본)으로, 선언은
-`sisyphus-junior`뿐인데 실스폰은 `code-reviewer`+`mnemosyne`+`sisyphus-junior`였다 —
+`todo`는 대화형 모드에서 **마지막 update_plan 스냅샷**이다 — 여러 작업 단위가 이어진
+세션에서는 세션 전체가 아니라 마지막 단위의 계획을 가리킨다.
+
+헤드리스 증거 15판 실측: MATCH 12 / DRIFT 1 / n/a 2, `bad-role` 0. 갈린 한 건은 cx2-head run1(구본)으로,
+선언은 `sisyphus-junior`뿐인데 실스폰은 `code-reviewer`+`mnemosyne`+`sisyphus-junior`였다 —
 선언되지 않은 스폰 2건. n=1이라 본문 차이의 근거로 쓸 수 없다. 계측기가 판별력을 가진다는
 것까지만 보인 값이다.
+
+## 대화형 세션 실측 (2026-08-01) — 원래 전제의 반증
+
+이 재저작 작업의 출발 전제는 "codex에서 위임이 너무 안 된다"였고, 관측 조건은 헤드리스가
+아니라 **대화형 세션**이었다. 그 조건을 `--last`로 직접 쟀다.
+
+| 세션 | 자식 | 역할 | 자식 토큰 | 분류 블록 | bad-role |
+|---|---|---|---|---|---|
+| `019fb73d` | 44 | code-reviewer, mnemosyne, oracle, sisyphus-junior | 89.6M | 4 | - |
+| `019fb871` | 9 | code-reviewer, oracle, sisyphus-junior | 14.1M | 3 | - |
+| `019fb67e` | 11 | mnemosyne, sisyphus-junior | 5.3M | 1 | - |
+| `019fb768` | 6 | explore, **explorer**, mnemosyne, oracle, sisyphus-junior | 5.3M | 2 | explorer |
+| `019fb6a4` | 2 | **?**, oracle | 165.7M | 1 | ? |
+
+**위임 부재는 재현되지 않았다.** 자식이 안 뜨는 게 아니라 수십 개가 뜨고 수천만 토큰의
+실작업을 한다. "위임을 안 하는 느낌"의 정체는 부모 화면이 자식 활동을 거의 보여주지 않는
+것이며, 고칠 대상은 본문이 아니라 관측이다 — 세션 뒤에 `--last`를 돌리면 숫자로 확인된다.
+
+대신 다른 것이 나왔다: **정의 없는 역할로 스폰해도 조용히 성공한다.** `019fb768`은
+`explorer`(정식 명은 `explore`, `~/.codex/agents/`에 정의 없음)를 두 번 띄워 3.7M 토큰을
+태웠고 — 그 세션에서 어느 정식 역할보다 많은 양이다 — 둘 다 `verify_*_review` 작업이었다.
+`019fb6a4`은 역할이 아예 없는 자식에 165.7M 토큰이 실렸다. 지금은 각각 1건이라 본문 결함의
+근거로 쓸 수 없다. 재현되면 RED다.
 
 ## Fixture
 
