@@ -1,7 +1,7 @@
 # Continuation Contract
 
 How to end — or not end — a turn while a persistent-mode session is active
-(deep-interview, prometheus, goal, ultragoal, or a live todo list). The
+(deep-interview, prometheus, ultragoal, or a live todo list). The
 persistent-mode Stop hook keeps you working when work remains; this contract
 names the THREE distinct things you can do at a turn boundary, so "don't
 stop" never collapses into a blunt binary.
@@ -26,7 +26,7 @@ At every turn boundary, exactly one of these applies:
    question and the user declined it (re-firing it would ignore their
    expressed preference), end your turn with the literal token
    `<awaiting-user/>`. The hook treats this as a legitimate yield: it allows
-   the stop, keeps all session state intact (the interview/goal resumes on
+   the stop, keeps all session state intact (the interview or pursuit resumes on
    the user's next reply), and does not mark the work complete.
    `<awaiting-user/>` is the only sanctioned way to stop while a
    persistent-mode session is active.

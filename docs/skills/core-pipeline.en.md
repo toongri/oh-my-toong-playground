@@ -50,15 +50,17 @@ flowchart LR
         prometheus["prometheus"]
     end
     subgraph Execute
+        ultragoal["ultragoal"]
         sisyphus["sisyphus"]
     end
 
     deep -->|"$OMT_DIR/deep-interview/{slug}.md"| prometheus
-    prometheus -->|"$OMT_DIR/plans/*.md"| sisyphus
+    prometheus -->|"$OMT_DIR/plans/*.md"| ultragoal
+    ultragoal -->|"story-by-story dispatch"| sisyphus
     sisyphus -->|"verified code"| Done((Done))
 ```
 
-Each arrow is a file handoff. deep-interview hands a spec to prometheus, prometheus hands a plan to sisyphus, and sisyphus closes out with verified code changes. Skipping a stage still works, but the clarity of each stage determines the quality of the next.
+Each arrow is a file handoff. deep-interview hands a spec to prometheus, prometheus hands a plan to ultragoal, which dispatches stories to sisyphus one at a time, and sisyphus closes out with verified code changes. Skipping a stage still works, but the clarity of each stage determines the quality of the next.
 
 ---
 
@@ -109,7 +111,7 @@ flowchart TB
     Criteria -->|No| Draft[Draft criteria<br/>-> user confirms]
     Draft --> Metis
     Metis --> Write["Write plan to<br/>$OMT_DIR/plans/*.md"]
-    Write --> Handoff([Hand off to sisyphus])
+    Write --> Handoff([Hand off to ultragoal])
 ```
 
 **Forbidden actions**:
@@ -121,7 +123,7 @@ flowchart TB
 
 **Scope Split Gate**: Requests classified Complex or Architecture settle one question before the interview begins — *is there a subset of this work that could be merged on its own, leaving the system working, with something that verifies it?* If there is, the request is not one plan. The subsets are listed in order with the behavior-preserving one first, **only the first subset** becomes this run's scope, and the rest are recorded under `## Context` as deferred, each naming its blocker. Each deferred subset becomes its own prometheus run. Trivial and Scoped skip this gate.
 
-**Pipeline link**: It proceeds interview → research (explore/librarian) → metis gap analysis → plan writing. The resulting plan is saved to `$OMT_DIR/plans/*.md` and becomes sisyphus's input. One prometheus run produces one plan — a request that splits into several plans is run one subset at a time.
+**Pipeline link**: It proceeds interview → research (explore/librarian) → metis gap analysis → plan writing. The resulting plan is saved to `$OMT_DIR/plans/*.md` and becomes ultragoal's input. One prometheus run produces one plan — a request that splits into several plans is run one subset at a time.
 
 ---
 
