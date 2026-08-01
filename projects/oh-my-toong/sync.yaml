@@ -51,8 +51,6 @@ skills:
     # mention sigil을 런타임에 방출한다(rewrite 규칙 6a와 동일 문법).
     - component: sisyphus
       platforms: [claude, codex]
-    - component: goal
-      platforms: [claude, codex]
     - component: ultraresearch
       platforms: [claude, codex]
     - component: insane-browsing
