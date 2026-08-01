@@ -1,13 +1,17 @@
 /**
  * validate-plan.ts
  *
- * Deterministic section-presence validator for prometheus plans.
- * Checks that the 7 always-required plan sections exist as level-2 headings
- * with non-empty bodies. This is a cheap PRESENCE pre-filter, not a quality gate.
+ * Deterministic validator for prometheus plans, two independent passes:
+ * (1) Section presence — the 7 always-required plan sections exist as level-2
+ *     headings with non-empty bodies (cheap PRESENCE pre-filter).
+ * (2) Graph semantics — within `## TODOs`: TODO id uniqueness, Blocked By
+ *     reference resolution, self-dependency/cycle ban, and the Wave rule
+ *     `Wave = max(blocker waves) + 1` (empty Blocked By = Wave 1; `Wave: FINAL`
+ *     tasks are exempt from the numeric formula).
  *
  * Usage: bun skills/prometheus/scripts/validate-plan.ts <plan_path>
- * Exit 0 = all sections present and non-empty.
- * Exit 1 = one or more sections missing or empty (offending literals printed to stdout).
+ * Exit 0 = all sections present and non-empty, and no graph violations.
+ * Exit 1 = violations found (offending literals/messages printed to stdout).
  */
 
 export const REQUIRED_HEADINGS: string[] = [
@@ -88,6 +92,185 @@ export function validatePlan(content: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Graph semantics — TODO id uniqueness, Blocked By resolution, cycles, Wave rule
+// ---------------------------------------------------------------------------
+
+interface TodoNode {
+	id: string;
+	blockedBy: string[]; // resolved blocker ids (self included if self-referenced)
+	wave: string | null; // raw Wave value ("2", "FINAL", …) or null when absent
+	violations: string[]; // parse-level violations local to this TODO
+}
+
+/**
+ * Parse TODO nodes out of the `## TODOs` section (first occurrence, fences
+ * stripped). A TODO is a checkbox line `- [ ] <id>. Title` where id is a
+ * number or F-number (F1-F4 FINAL-wave tasks). `Blocked By:` / `Wave:` lines
+ * up to the next checkbox line belong to that TODO.
+ */
+function parseTodos(content: string): TodoNode[] {
+	const stripped = stripFences(content);
+
+	// Isolate the ## TODOs section body; absence is validatePlan's concern.
+	const sectionMatch = /^##[ \t]+TODOs[ \t]*$/m.exec(stripped);
+	if (sectionMatch === null) return [];
+	const bodyStart = sectionMatch.index + sectionMatch[0].length;
+	const nextHeading = /^##[ \t]+/m.exec(stripped.slice(bodyStart));
+	const body = stripped.slice(
+		bodyStart,
+		nextHeading !== null ? bodyStart + nextHeading.index : stripped.length,
+	);
+
+	const todos: TodoNode[] = [];
+	let current: TodoNode | null = null;
+
+	for (const line of body.split("\n")) {
+		const todoMatch = /^\s*- \[[ xX]\] (F?\d+)\.\s/.exec(line);
+		if (todoMatch !== null) {
+			current = { id: todoMatch[1], blockedBy: [], wave: null, violations: [] };
+			todos.push(current);
+			continue;
+		}
+		if (current === null) continue;
+
+		const blockedMatch = /^\s*-?\s*Blocked By:\s*(.*)$/.exec(line);
+		if (blockedMatch !== null) {
+			const value = blockedMatch[1].trim();
+			if (value !== "" && !/^none$/i.test(value)) {
+				for (const raw of value.split(",")) {
+					const entry = raw.trim();
+					if (entry === "") continue;
+					const ref = /^(?:TODO\s+)?(F?\d+)$/.exec(entry);
+					if (ref === null) {
+						current.violations.push(
+							`TODO ${current.id}: unparseable Blocked By entry "${entry}"`,
+						);
+					} else {
+						current.blockedBy.push(ref[1]);
+					}
+				}
+			}
+			continue;
+		}
+
+		const waveMatch = /^\s*-?\s*Wave:\s*(.+?)\s*$/.exec(line);
+		if (waveMatch !== null) {
+			current.wave = waveMatch[1];
+		}
+	}
+
+	return todos;
+}
+
+/**
+ * Validate graph semantics of the `## TODOs` section.
+ *
+ * Checks:
+ * (a) TODO id uniqueness
+ * (b) every Blocked By reference resolves to a defined TODO
+ * (c) no self-dependency, no dependency cycles
+ * (d) Wave rule: numeric tasks satisfy `Wave = max(blocker waves) + 1`
+ *     (no blockers → Wave 1). `Wave: FINAL` tasks are exempt; a numeric task
+ *     blocked by a FINAL task is a violation.
+ *
+ * @returns Array of human-readable violation messages (empty = OK).
+ */
+export function validatePlanGraph(content: string): string[] {
+	const todos = parseTodos(content);
+	const violations: string[] = [];
+
+	// (a) id uniqueness — first definition wins for graph resolution
+	const byId = new Map<string, TodoNode>();
+	for (const todo of todos) {
+		if (byId.has(todo.id)) {
+			violations.push(`duplicate TODO id: ${todo.id}`);
+		} else {
+			byId.set(todo.id, todo);
+		}
+		violations.push(...todo.violations);
+	}
+
+	// (b) reference resolution + self-dependency
+	for (const todo of byId.values()) {
+		for (const ref of todo.blockedBy) {
+			if (ref === todo.id) {
+				violations.push(`TODO ${todo.id}: blocked by itself`);
+			} else if (!byId.has(ref)) {
+				violations.push(`TODO ${todo.id}: Blocked By references undefined TODO ${ref}`);
+			}
+		}
+	}
+
+	// (c) cycle detection — DFS with colors, definition order, self-loops excluded
+	const color = new Map<string, "visiting" | "done">();
+	const stack: string[] = [];
+	const inCycle = new Set<string>();
+
+	function dfs(id: string): void {
+		color.set(id, "visiting");
+		stack.push(id);
+		const node = byId.get(id);
+		if (node !== undefined) {
+			for (const ref of node.blockedBy) {
+				if (ref === id || !byId.has(ref)) continue; // reported above
+				const state = color.get(ref);
+				if (state === "visiting") {
+					const cycle = stack.slice(stack.indexOf(ref)).concat(ref);
+					if (!cycle.some((n) => inCycle.has(n))) {
+						violations.push(`dependency cycle: ${cycle.join(" -> ")}`);
+						for (const n of cycle) inCycle.add(n);
+					}
+				} else if (state === undefined) {
+					dfs(ref);
+				}
+			}
+		}
+		stack.pop();
+		color.set(id, "done");
+	}
+	for (const id of byId.keys()) {
+		if (!color.has(id)) dfs(id);
+	}
+
+	// (d) Wave rule for numeric tasks
+	for (const todo of byId.values()) {
+		if (todo.wave === "FINAL") continue;
+		if (todo.wave === null) {
+			violations.push(`TODO ${todo.id}: missing Wave`);
+			continue;
+		}
+		if (!/^\d+$/.test(todo.wave)) {
+			violations.push(`TODO ${todo.id}: unparseable Wave "${todo.wave}"`);
+			continue;
+		}
+		if (inCycle.has(todo.id)) continue; // expected wave undefined inside a cycle
+
+		let expected = 1;
+		let computable = true;
+		for (const ref of todo.blockedBy) {
+			const blocker = byId.get(ref);
+			if (blocker === undefined || ref === todo.id) {
+				computable = false; // unresolved/self refs already reported
+			} else if (blocker.wave === "FINAL") {
+				violations.push(`TODO ${todo.id}: numeric-wave task blocked by FINAL task ${ref}`);
+				computable = false;
+			} else if (blocker.wave === null || !/^\d+$/.test(blocker.wave)) {
+				computable = false; // blocker's own wave violation already reported
+			} else {
+				expected = Math.max(expected, Number(blocker.wave) + 1);
+			}
+		}
+		if (computable && Number(todo.wave) !== expected) {
+			violations.push(
+				`TODO ${todo.id}: Wave ${todo.wave} but expected ${expected} (= max(blocker waves) + 1)`,
+			);
+		}
+	}
+
+	return violations;
+}
+
+// ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
 
@@ -100,12 +283,12 @@ if (import.meta.main) {
 
 	const { readFileSync } = await import("fs");
 	const content = readFileSync(planPath, "utf8");
-	const missing = validatePlan(content);
+	const problems = [...validatePlan(content), ...validatePlanGraph(content)];
 
-	if (missing.length > 0) {
-		for (const h of missing) {
-			// eslint-disable-next-line no-console -- CLI contract (see file header): offending heading literals printed to stdout for the invoking skill to read
-			console.log(h);
+	if (problems.length > 0) {
+		for (const p of problems) {
+			// eslint-disable-next-line no-console -- CLI contract (see file header): offending literals/messages printed to stdout for the invoking skill to read
+			console.log(p);
 		}
 		process.exit(1);
 	}
