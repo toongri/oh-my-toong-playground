@@ -15,8 +15,9 @@ set -euo pipefail
 CODEX="${CODEX_HOME:-$HOME/.codex}"
 DB="$CODEX/state_5.sqlite"
 
-# Defined agent types. codex accepts an undefined agent_type silently and runs it
-# without the intended role prompt, so a typo burns real tokens and reports success.
+# Defined agent types. codex accepts an undefined or omitted agent_type silently
+# and runs it. Reporting one is a FACT, not a verdict: the dominant population is
+# review-angle fan-out, where no defined agent corresponds in the first place.
 known_roles=$(ls "$CODEX/agents"/*.toml 2>/dev/null | while read -r p; do
   b=${p##*/}; printf '%s\n' "${b%.toml}"
 done | sort)
@@ -71,7 +72,10 @@ emit() {
 
   # Iron Law: the orchestrator's own hands must not touch a deliverable. Writes
   # under $OMT_DIR are the one carve-out (orchestration bookkeeping), so count
-  # only apply_patch targets outside it — those are violations, not candidates.
+  # only targets outside it. Callers normalise their own shape into this text:
+  # headless passes `file_change` items, interactive passes apply_patch payloads.
+  # Still read the paths — a fixture living outside $OMT_DIR makes its own
+  # bookkeeping files (e.g. a verdict tmp) look like deliverable writes.
   writes=$(printf '%s' "$tools" \
     | grep -oE '\*\*\* [A-Za-z]+ File: [^\\"]+' \
     | sed 's/.*File: //' | grep -v '/\.omt/' | wc -l | tr -d ' ' || true)
@@ -89,6 +93,7 @@ score_stream() {
 
   todo=$(jqs 'select(.item.type=="todo_list") | .item.items
               | "\(map(select(.completed)) | length) \(length)"' "$f" | tr -d '"' | tail -1)
+  [ -n "$todo" ] || todo="- -"   # no todo_list at all — print -/- , not a bare slash
   msgs=$(jqs 'select(.item.type=="agent_message") | .item.text' "$f" || true)
   # The parent's own edits arrive as `file_change` items — NOT as apply_patch text
   # inside a command. A positive control (parent told to edit directly, no skill)
