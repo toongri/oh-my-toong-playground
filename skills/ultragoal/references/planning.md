@@ -62,7 +62,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts set-stories --json '<array-of
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts confirm-all-stories
 ```
 
-`confirm-all-stories` bulk-confirms every currently-unconfirmed story in one call — the same `unconfirmed`→`confirmed` transition `confirm-story` performs, just batched over the whole set; it is ultragoal's decomposition-ownership affordance, replacing goal's per-story `confirm-story` dialogue. A `retired` story is left untouched (it was never reachable); an already-`confirmed` story is left untouched (idempotent). No other subcommand (`set`, `set-verdict`, `set-stories --json` re-ingestion) can produce `confirmed`. The pursuing phase is refused while any story remains `unconfirmed` — `set --phase pursuing` names the offending ids on stderr. Once all stories are `confirmed` (or `retired`), the pursuing transition is allowed.
+`confirm-all-stories` bulk-confirms every currently-unconfirmed story in one call — the same `unconfirmed`→`confirmed` transition `confirm-story` performs, just batched over the whole set; it is ultragoal's decomposition-ownership affordance, replacing a per-story `confirm-story` dialogue. A `retired` story is left untouched (it was never reachable); an already-`confirmed` story is left untouched (idempotent). No other subcommand (`set`, `set-verdict`, `set-stories --json` re-ingestion) can produce `confirmed`. The pursuing phase is refused while any story remains `unconfirmed` — `set --phase pursuing` names the offending ids on stderr. Once all stories are `confirmed` (or `retired`), the pursuing transition is allowed.
 
 <!-- story-layer:end -->
 
