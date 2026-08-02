@@ -9,8 +9,8 @@
 | Complexity | Approach | When to Use |
 |------------|----------|-------------|
 | **Simple** | Just prompt | Quick fixes, single-file changes |
-| **Fuzzy scope** | `/deep-interview` -> `/prometheus` -> `/sisyphus` | You have an idea but requirements are unclear |
-| **Complex** | `/prometheus` -> `/sisyphus` | Multi-step work requiring planning and orchestration |
+| **Fuzzy scope** | `/deep-interview` -> conditional `/ultragoal` or `/prometheus` | You have an idea but requirements are unclear |
+| **Complex** | `/prometheus` -> `/ultragoal` -> `/sisyphus` | Multi-step work requiring planning and orchestration |
 
 **Decision Flow:**
 
@@ -18,9 +18,9 @@
 Is it a quick fix or simple task?
   |-- YES -> Just prompt normally
   |-- NO  -> Are the requirements clear?
-              |-- NO  -> /deep-interview to crystallize a spec -> /prometheus -> /sisyphus
+              |-- NO  -> /deep-interview to crystallize a spec -> /ultragoal if exactly one topology component is active; otherwise /prometheus
               |-- YES -> Do you need multi-step execution?
-                          |-- YES -> /prometheus for planning -> /sisyphus for execution
+                          |-- YES -> /prometheus for planning -> /ultragoal -> /sisyphus for execution
                           |-- NO  -> Just prompt with context
 ```
 
@@ -39,6 +39,7 @@ Oh-My-Toong solves this by clearly separating roles:
 |------|-------|----------------|
 | **Definition** | deep-interview | Resolves ambiguity into a spec, NEVER writes code |
 | **Planning** | prometheus | Strategic planning, NEVER writes code |
+| **Story execution** | ultragoal | Sequentially dispatches plan stories to sisyphus |
 | **Execution** | sisyphus | Orchestrates via delegation, NEVER works alone |
 | **Implementation** | sisyphus-junior | Writes code (delegated by sisyphus) |
 | **Quality Assurance** | sisyphus (inline verify) | Runs a verify task's AC commands itself to validate implementation quality, plan compliance, and instruction fulfillment |
@@ -57,17 +58,20 @@ flowchart TD
 
     subgraph Definition Phase
         DeepInterview --> SpecFile["$OMT_DIR/deep-interview/{slug}.md"]
+        SpecFile --> Route{Exactly one active<br/>topology component?}
     end
 
     subgraph Planning Phase
-        SpecFile --> Prometheus["/prometheus"]
+        Route -->|No| Prometheus["/prometheus"]
         Prometheus --> Metis[metis<br/>Gap Analysis]
         Metis --> Prometheus
         Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
     end
 
     subgraph Execution Phase
-        PlanFile --> Sisyphus["/sisyphus"]
+        Route -->|Yes| Ultragoal["/ultragoal"]
+        PlanFile --> Ultragoal
+        Ultragoal -->|Sequentially dispatches stories| Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
         Junior --> Done((Done))
         Sisyphus -->|verify task| QA[Inline verify<br/>sisyphus runs it]
@@ -84,8 +88,8 @@ flowchart TD
 
 - **Role**: Crystallizes a vague idea into a spec before autonomous execution
 - **Constraint**: Won't proceed to execution while the ambiguity score stays above threshold. Never implements directly.
-- **Output**: `$OMT_DIR/deep-interview/{slug}.md` (prometheus's input)
-- **Workflow**: One question at a time, targeting the weakest clarity dimension -> measure ambiguity -> finalize spec once below threshold
+- **Output**: `$OMT_DIR/deep-interview/{slug}.md`
+- **Workflow**: One question at a time, targeting the weakest clarity dimension -> measure ambiguity -> finalize spec once below threshold -> in Phase 5, recommend `/ultragoal` when exactly one topology component is active; otherwise recommend `/prometheus`. Present the non-recommended skill as an explicit override.
 - **Origin**: Borrowed almost as-is from oh-my-claudecode (omc), whose implementation was simply too good to reinvent (originally inspired by [Ouroboros](https://github.com/Q00/ouroboros))
 
 ### prometheus (The Planner)
@@ -93,8 +97,13 @@ flowchart TD
 - **Role**: Strategic planning, requirements interviews
 - **Constraint**: **READ-ONLY**. NEVER writes code.
 - **Output**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (via `$OMT_DIR`)
-- **Workflow**: Scope split gate -> Interview -> Research -> Metis consultation -> Plan creation
+- **Workflow**: Scope split gate -> Interview -> Research -> Metis consultation -> Plan creation -> hand off to `/ultragoal`
 - **Scope split**: Complex and Architecture requests first settle whether a subset could be merged on its own and leave the system working. If one could, only the first subset becomes this run's scope; the rest each become their own prometheus run.
+
+### ultragoal (The Story Executor)
+
+- **Role**: Executes plan stories sequentially
+- **Workflow**: Dispatches each story to `/sisyphus` in sequence and starts the next story only after the previous one completes
 
 ### sisyphus (The Orchestrator)
 
@@ -125,7 +134,7 @@ When requirements are unclear, crystallize a spec with `/deep-interview` before 
 
 1. **One question at a time**: Targets the weakest clarity dimension
 2. **Ambiguity gating**: Repeats until the score drops below threshold
-3. **Spec finalized**: Saved to `$OMT_DIR/deep-interview/{slug}.md` -> prometheus input
+3. **Spec finalization and route selection**: Save to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, recommend `/ultragoal` when exactly one topology component is active; otherwise recommend `/prometheus`. Present the non-recommended skill as an explicit override.
 
 ### Phase 1: Planning
 
@@ -137,14 +146,15 @@ When requirements are clear, use `/prometheus`:
 4. **Metis Consultation**: MANDATORY gap analysis before plan creation
 5. **Plan Generation**: Writes structured plan to `~/.omt/{OMT_PROJECT}/plans/*.md`
 
-### Phase 2: Execution
+### Phase 2: Story Execution
 
-With a plan ready, use `/sisyphus`:
+With a plan ready, `/ultragoal` sequentially dispatches its stories to `/sisyphus`:
 
-1. **Task Creation**: Breaks plan into TaskCreate items
-2. **Delegation**: Assigns tasks to sisyphus-junior
-3. **Quality Assurance**: a verify task is handled inline by sisyphus (skip junior) — it runs the AC commands itself for a PASS/FAIL verdict; implement tasks complete on sisyphus-junior's report (no separate QA step)
-4. **Iteration**: Continues until all tasks pass review
+1. **Sequential Story Processing**: It dispatches the next story to sisyphus only after the previous story completes
+2. **Task Creation**: sisyphus breaks the story into TaskCreate items
+3. **Delegation**: Assigns tasks to sisyphus-junior
+4. **Quality Assurance**: a verify task is handled inline by sisyphus (skip junior) — it runs the AC commands itself for a PASS/FAIL verdict; implement tasks complete on sisyphus-junior's report (no separate QA step)
+5. **Iteration**: Continues until all stories and tasks pass review
 
 ---
 
@@ -154,7 +164,8 @@ With a plan ready, use `/sisyphus`:
 |---------|---------|--------|
 | `/deep-interview <idea>` | Crystallize a spec via ambiguity gating | `$OMT_DIR/deep-interview/{slug}.md` |
 | `/prometheus <task>` | Create work plan | `~/.omt/{OMT_PROJECT}/plans/*.md` |
-| `/sisyphus` | Execute plan via orchestration | Verified code changes |
+| `/ultragoal` | Sequentially dispatch plan stories to sisyphus | Story-by-story execution progress |
+| `/sisyphus` | Orchestrate execution of a dispatched story | Verified code changes |
 | `/hud setup\|restore` | HUD setup and management | statusLine configuration |
 
 ---
@@ -198,4 +209,4 @@ Contain all TODOs in one plan file. This prevents context fragmentation and make
 ## See Also
 
 - [README](../README.en.md) - Project overview
-- [Core Pipeline Skills](skills/core-pipeline.en.md) - deep-interview · prometheus · sisyphus details
+- [Core Pipeline Skills](skills/core-pipeline.en.md) - deep-interview · prometheus · ultragoal · sisyphus details

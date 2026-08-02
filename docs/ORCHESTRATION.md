@@ -9,8 +9,8 @@
 | 복잡도 | 접근 방식 | 사용 시점 |
 |--------|----------|-----------|
 | **단순** | 그냥 프롬프트 | 빠른 수정, 단일 파일 변경 |
-| **범위 흐림** | `/deep-interview` -> `/prometheus` -> `/sisyphus` | 아이디어는 있지만 요구사항이 불명확한 작업 |
-| **복잡** | `/prometheus` -> `/sisyphus` | 기획과 조율이 필요한 다단계 작업 |
+| **범위 흐림** | `/deep-interview` -> 조건부 `/ultragoal` 또는 `/prometheus` | 아이디어는 있지만 요구사항이 불명확한 작업 |
+| **복잡** | `/prometheus` -> `/ultragoal` -> `/sisyphus` | 기획과 조율이 필요한 다단계 작업 |
 
 **결정 흐름:**
 
@@ -18,9 +18,9 @@
 빠른 수정이나 단순 작업인가?
   |-- 예 -> 그냥 평소처럼 프롬프트
   |-- 아니오 -> 요구사항이 명확한가?
-                  |-- 아니오 -> /deep-interview로 명세 수렴 -> /prometheus -> /sisyphus
+                  |-- 아니오 -> /deep-interview로 명세 수렴 -> 활성 토폴로지 컴포넌트가 정확히 하나면 /ultragoal, 아니면 /prometheus
                   |-- 예 -> 다단계 실행이 필요한가?
-                              |-- 예 -> /prometheus로 기획 -> /sisyphus로 실행
+                              |-- 예 -> /prometheus로 기획 -> /ultragoal -> /sisyphus로 실행
                               |-- 아니오 -> 컨텍스트와 함께 프롬프트
 ```
 
@@ -39,6 +39,7 @@ Oh-My-Toong은 역할을 명확히 분리하여 이를 해결합니다:
 |------|----------|------|
 | **정의** | deep-interview | 모호성을 해소해 명세로 수렴, 절대 코드 작성 안 함 |
 | **기획** | prometheus | 전략적 기획, 절대 코드 작성 안 함 |
+| **스토리 실행** | ultragoal | 계획의 스토리를 순서대로 sisyphus에 전달 |
 | **실행** | sisyphus | 위임을 통한 조율, 절대 단독 작업 안 함 |
 | **구현** | sisyphus-junior | 코드 작성 (sisyphus가 위임) |
 | **품질 보증** | sisyphus (인라인 검증) | verify 태스크의 AC 명령을 직접 실행해 구현 품질·계획 준수·지시 이행 검증 |
@@ -57,17 +58,20 @@ flowchart TD
 
     subgraph 정의 단계
         DeepInterview --> SpecFile["$OMT_DIR/deep-interview/{slug}.md"]
+        SpecFile --> Route{활성 토폴로지<br/>컴포넌트가 정확히 하나인가?}
     end
 
     subgraph 기획 단계
-        SpecFile --> Prometheus["/prometheus"]
+        Route -->|아니오| Prometheus["/prometheus"]
         Prometheus --> Metis[metis<br/>갭 분석]
         Metis --> Prometheus
         Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
     end
 
     subgraph 실행 단계
-        PlanFile --> Sisyphus["/sisyphus"]
+        Route -->|예| Ultragoal["/ultragoal"]
+        PlanFile --> Ultragoal
+        Ultragoal -->|스토리를 순서대로 전달| Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
         Junior --> Done((완료))
         Sisyphus -->|verify 태스크| QA[인라인 검증<br/>sisyphus 직접 실행]
@@ -84,8 +88,8 @@ flowchart TD
 
 - **역할**: 모호한 아이디어를 자율 실행 전에 명세로 수렴
 - **제약**: 모호성 점수가 임계값을 넘으면 실행으로 넘어가지 않음. 직접 구현 안 함.
-- **출력**: `$OMT_DIR/deep-interview/{slug}.md` (prometheus의 입력)
-- **워크플로우**: 한 번에 한 질문, 가장 약한 명확성 차원을 겨냥 -> 모호성 측정 -> 임계값 이하면 명세 확정
+- **출력**: `$OMT_DIR/deep-interview/{slug}.md`
+- **워크플로우**: 한 번에 한 질문, 가장 약한 명확성 차원을 겨냥 -> 모호성 측정 -> 임계값 이하면 명세 확정 -> 5단계에서 활성 토폴로지 컴포넌트가 정확히 하나면 `/ultragoal`, 아니면 `/prometheus` 권장. 권장하지 않은 다른 스킬은 명시적 재정의 옵션으로 제시
 - **출처**: oh-my-claudecode(omc)의 구현이 워낙 잘 만들어져 거의 그대로 가져와 다듬었습니다 (originally [Ouroboros](https://github.com/Q00/ouroboros) 영감)
 
 ### prometheus (기획자)
@@ -93,8 +97,13 @@ flowchart TD
 - **역할**: 전략적 기획, 요구사항 인터뷰
 - **제약**: **READ-ONLY**. 절대 코드 작성 안 함.
 - **출력**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (`$OMT_DIR` 경유)
-- **워크플로우**: 범위 분할 판정 -> 인터뷰 -> 조사 -> Metis 상담 -> 계획 작성
+- **워크플로우**: 범위 분할 판정 -> 인터뷰 -> 조사 -> Metis 상담 -> 계획 작성 -> `/ultragoal`에 전달
 - **범위 분할**: Complex·Architecture 요청은 인터뷰 전에 "혼자 머지해도 시스템이 도는 부분집합이 있나"를 먼저 묻고, 있으면 첫 덩어리만 이번 실행의 범위로 삼습니다. 나머지는 각자 별도 prometheus 실행이 됩니다.
+
+### ultragoal (스토리 실행자)
+
+- **역할**: 계획의 스토리를 순서대로 실행
+- **워크플로우**: 각 스토리를 `/sisyphus`에 순차적으로 전달하고, 이전 스토리가 끝난 뒤 다음 스토리를 시작
 
 ### sisyphus (오케스트레이터)
 
@@ -125,7 +134,7 @@ flowchart TD
 
 1. **한 질문씩**: 가장 약한 명확성 차원을 겨냥해 질문
 2. **모호성 게이팅**: 점수가 임계값 아래로 떨어질 때까지 반복
-3. **명세 확정**: `$OMT_DIR/deep-interview/{slug}.md`에 저장 -> prometheus 입력
+3. **명세 확정 및 경로 선택**: `$OMT_DIR/deep-interview/{slug}.md`에 저장. 5단계에서 활성 토폴로지 컴포넌트가 정확히 하나면 `/ultragoal`, 아니면 `/prometheus`를 권장하고, 권장하지 않은 스킬은 명시적 재정의 옵션으로 제시
 
 ### 1단계: 기획
 
@@ -137,14 +146,15 @@ flowchart TD
 4. **Metis 상담**: 계획 작성 전 필수 갭 분석
 5. **계획 생성**: `~/.omt/{OMT_PROJECT}/plans/*.md`에 구조화된 계획 작성
 
-### 2단계: 실행
+### 2단계: 스토리 실행
 
-계획이 준비되면 `/sisyphus` 사용:
+계획이 준비되면 `/ultragoal`이 스토리를 순서대로 `/sisyphus`에 전달합니다:
 
-1. **태스크 생성**: 계획을 TaskCreate 항목으로 분해
-2. **위임**: sisyphus-junior에 태스크 할당
-3. **품질 보증**: verify 태스크는 sisyphus가 AC 명령을 직접 실행해 인라인으로 PASS/FAIL 판정을 내리고(junior 생략), implement 태스크는 sisyphus-junior의 완료 보고로 완결(별도 QA 단계 없음)
-4. **반복**: 모든 태스크가 리뷰 통과할 때까지 계속
+1. **스토리 순차 처리**: 이전 스토리가 끝난 뒤 다음 스토리를 sisyphus에 전달
+2. **태스크 생성**: sisyphus가 스토리를 TaskCreate 항목으로 분해
+3. **위임**: sisyphus-junior에 태스크 할당
+4. **품질 보증**: verify 태스크는 sisyphus가 AC 명령을 직접 실행해 인라인으로 PASS/FAIL 판정을 내리고(junior 생략), implement 태스크는 sisyphus-junior의 완료 보고로 완결(별도 QA 단계 없음)
+5. **반복**: 모든 스토리와 태스크가 리뷰를 통과할 때까지 계속
 
 ---
 
@@ -154,7 +164,8 @@ flowchart TD
 |--------|------|------|
 | `/deep-interview <아이디어>` | 모호성 게이팅으로 명세 수렴 | `$OMT_DIR/deep-interview/{slug}.md` |
 | `/prometheus <작업>` | 작업 계획 생성 | `~/.omt/{OMT_PROJECT}/plans/*.md` |
-| `/sisyphus` | 조율을 통한 계획 실행 | 검증된 코드 변경 |
+| `/ultragoal` | 계획의 스토리를 순서대로 sisyphus에 전달 | 스토리별 실행 진행 |
+| `/sisyphus` | 전달된 스토리를 조율해 실행 | 검증된 코드 변경 |
 | `/hud setup\|restore` | HUD 설정 및 관리 | statusLine 설정 |
 
 ---
@@ -198,4 +209,4 @@ prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, �
 ## 참고 자료
 
 - [README](../README.md) - 프로젝트 개요
-- [핵심 파이프라인 스킬](skills/core-pipeline.md) - deep-interview · prometheus · sisyphus 상세
+- [핵심 파이프라인 스킬](skills/core-pipeline.md) - deep-interview · prometheus · ultragoal · sisyphus 상세
