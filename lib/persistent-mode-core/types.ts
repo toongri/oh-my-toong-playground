@@ -5,7 +5,7 @@ export interface HookInput {
 	cwd?: string;
 	transcript_path?: string;
 	last_assistant_message?: string;
-	/** Claude Code v2.1.145+: running background tasks at stop time. */
+	/** Claude Code v2.1.145+: background tasks at stop time; running/pending entries are active. */
 	background_tasks?: Array<{ id: string; type?: string; status?: string; [k: string]: unknown }>;
 }
 
