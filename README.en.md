@@ -42,7 +42,7 @@ oh-my-toong is an **agent central-management project**. It keeps skills, agents,
 **Step 2 — Conventions Differ per Project, and So Does the Vessel That Holds Them**: The same `testing` means "Classical TDD, no verify(), BDD structure" in `projects/toong-java-spring-template/` and something else entirely elsewhere. There are two ways to express that differentiation.
 
 - **Skill override** (`projects/<name>/skills/`): during sync, **Upward Search** applies — when `sync.yaml` references `testing`, it looks in the project folder first and falls back to the global `skills/testing/`. Use this to swap a whole convention wholesale.
-- **rules index + docs grounding** (`projects/<name>/rules/`, `projects/<name>/docs/`): when a convention is too large for a single skill, split it across rules and docs. `loopers-kotlin-spring-template` (19 docs + 7 rules) keeps its rules a pure index — they say only which document to open. `loop-pack-fe-l2-vol1` (16 docs + 8 rules) puts frequently-used criteria directly in the rules and defers only the deeper grounding to docs. Either way the point is to bound what stays always-loaded.
+- **rules index + docs grounding** (`projects/<name>/rules/`, `projects/<name>/docs/`): when a convention is too large for a single skill, split it across rules and docs. `loopers-kotlin-spring-template` (19 docs + 7 rules) keeps its rules a pure index — they say only which document to open. `loop-pack-fe-l2-vol1` (26 docs + 9 rules) puts frequently-used criteria directly in the rules and defers only the deeper grounding to docs. Either way the point is to bound what stays always-loaded.
 
 **Step 3 — The Same Content Sits in a Different Place on Each Platform**: Claude uses `.claude/`, Codex splits across `.codex/` and `.agents/`, Gemini uses `.gemini/` — directory layout and supported categories differ across the board. Adapters absorb that difference, so a convention is written once and `sync.yaml`'s `platforms` decides which platforms it reaches and how far.
 
@@ -117,7 +117,7 @@ Two projects differentiate their conventions with this structure.
 
 ```
 projects/
-├── loop-pack-fe-l2-vol1/            # 16 docs + 8 rules
+├── loop-pack-fe-l2-vol1/            # 26 docs + 9 rules
 │   ├── rules/                        # situational index: react, testing, nextjs, ...
 │   └── docs/
 │       ├── react/                    # component boundaries, hook design, props contracts
