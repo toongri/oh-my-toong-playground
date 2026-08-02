@@ -110,7 +110,7 @@ const { mutate: addToCart } = useMutation({
 - `app/loading.tsx` — 그 세그먼트의 Suspense fallback
 - 같은 세그먼트 `layout.tsx`의 에러는 그 세그먼트의 `error.tsx`가 잡지 못하고 상위로 올라간다.
 
-Next App Router의 파일 라우팅 자체는 [`../nextjs/app-router.md`](../nextjs/app-router.md), FSD 레이어와 라우팅의 관계는 [`./nextjs-fsd.md`](./nextjs-fsd.md)를 참고한다.
+Next App Router의 파일 라우팅 자체는 [`../nextjs/app-router.md`](../nextjs/app-router.md), FSD 레이어와 라우팅의 관계(route 파일 진입점·`_pages` 매핑)는 [`./layers.md`](./layers.md)를 참고한다.
 
 ## 근거
 

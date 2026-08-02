@@ -9,11 +9,9 @@
 - **route 파일**: 프레임워크 route 파일은 얇게 유지하고 Page로 위임한다.
 - **배치가 애매할 때**: docs를 열어 다섯 질문을 통과시킨다.
 
-- `docs/architecture/fsd-overview.md` — **FSD 개요·도입 배경**: 구조 진화사(기술 계층→Atomic→feature 폴더→FSD), FSD 정의·세 원칙, 레이어 구성, slice·segment(ui·model·api·lib·config), pages-first 버전, Features 코-로케이션과의 차이, 도입·비도입 조건, 대안 비교
-- `docs/architecture/layers.md` — **레이어별 책임**: App·Pages·Widgets·Features·Entities·Shared 적합·부적합 책임, Processes 레이어의 지위, 실패 모드(overslicing·Shared landfill·obese Entity)
+- `docs/architecture/layers.md` — **FSD 전제·레이어별 책임**: 핵심 원칙(slice·public API·하향 의존), 의존 규칙(같은 레이어·App/Shared 예외·Processes), slice·segment(ui·model·api·lib·config), pages-first, App·Pages·Widgets·Features·Entities·Shared 적합·부적합 책임, Next.js 디렉토리 매핑(_app·_pages), route entry 두께 관례, RSC 경계와 FSD 레이어의 관계, 흔히 빠지는 함정(overslicing·Shared landfill·obese Entity)
 - `docs/architecture/placement.md` — **배치 판단**: 경계 판단 다섯 질문, 배치 decision tree, 책임별 배치 매트릭스(hook·type·constant·HTTP client·서버 상태·클라이언트 상태·form·validation·auth·analytics·feature flag·i18n·generated API), store 배치, 같은 레이어 import 해소 사다리
 - `docs/architecture/public-api.md` — **public API·진입점**: barrel vs public API, index.ts 규칙(진입점 위치·상대 경로·export-star), @x 표기, shared/ui 컴포넌트별 진입점(tree-shaking), index.server.ts
-- `docs/architecture/nextjs-fsd.md` — **Next.js 런타임과 FSD 축 분리**: app/·pages/ 이름 충돌(_pages), route entry 두께 관례, RSC 경계와 FSD 레이어의 관계
 - `docs/architecture/error-layers.md` — **에러 처리 계층**: 계층 구성(컴포넌트·페이지·전역 Boundary·HTTP 공통), 실패 종류별 처리 위치, throwOnError, Suspense 쌍 배치, 이벤트 핸들러·비동기 에러의 Boundary 한계
 - `docs/architecture/design-process.md` — **설계 프로세스**: 변경 영향 범위 질문, RADIO 5단계, RFC(스켈레톤·작성 3원칙), FSD 점진 마이그레이션·strangler
 

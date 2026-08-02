@@ -1,6 +1,60 @@
 # 레이어별 책임
 
-레이어를 가르는 기준은 크기나 파일 종류가 아니라 "무엇이 바뀔 때 이 코드도 함께 바뀌는가"라는 책임 질문이다. 여섯 레이어는 각자 다른 책임 질문에 답한다 — App은 조립, Pages는 화면, Widgets는 재사용 대형 블록, Features는 사용자 행위, Entities는 도메인 개념, Shared는 도메인 무관 기반. 레이어 목록과 의존 방향의 기본 규칙은 [`./fsd-overview.md`](./fsd-overview.md)에 있다.
+이 프로젝트는 FSD(Feature-Sliced Design) 기반이다. 코드는 App · Pages · Widgets · Features · Entities · Shared 여섯 레이어로 나뉘고, 의존은 항상 상위 레이어에서 하위 레이어로만 흐른다.
+
+핵심은 셋이다.
+
+1. 관련 UI·상태·API를 한 책임 단위(slice)에 모은다.
+2. 외부 소비자는 그 단위의 public API만 사용한다.
+3. 의존성은 상위 레이어에서 하위 레이어로만 흐른다.
+
+레이어를 가르는 기준은 크기나 파일 종류가 아니라 "무엇이 바뀔 때 이 코드도 함께 바뀌는가"라는 책임 질문이다. 여섯 레이어는 각자 다른 책임 질문에 답한다 — App은 조립, Pages는 화면, Widgets는 재사용 대형 블록, Features는 사용자 행위, Entities는 도메인 개념, Shared는 도메인 무관 기반.
+
+## 의존 규칙
+
+```text
+App → Pages → Widgets → Features → Entities → Shared
+(상위)                                        (하위)
+```
+
+- slice는 **엄격히 더 아래 레이어**의 다른 slice만 import한다.
+- 같은 레이어의 다른 slice는 직접 import하지 않는다.
+- 같은 slice 내부 import는 자유롭다.
+- **App과 Shared는 예외다** — 도메인 slice가 없는 "레이어이면서 하나의 slice"라, 내부 segment 간 import가 가능하다.
+
+```tsx
+// features/add-to-cart/ui/AddToCartButton.tsx
+import { ProductPrice } from "@/entities/product";   // ✅ 하위 레이어
+import { Button } from "@/shared/ui";                 // ✅ 하위 레이어
+import { WishlistToggle } from "@/features/toggle-wishlist"; // ❌ 같은 레이어 — 금지
+```
+
+**Processes는 쓰지 않는다.** 여러 Page에 걸친 흐름을 담는 별도 레이어를 새로 만들지 않는다. 그런 책임은 다음으로 옮긴다.
+
+- router/server-level orchestration → App
+- 재사용 user interaction → Feature
+- 특정 Page들의 로컬 flow → Page 또는 상위 composition
+
+## Slice와 Segment
+
+**Slice**는 제품 의미로 묶는 단위다 — `checkout`, `user`처럼 도메인 언어로 이름 붙는다. 같은 레이어의 slice끼리는 zero coupling, slice 내부는 high cohesion을 지향한다.
+
+**Segment**는 slice 내부를 기술 목적별로 나눈다: `ui`(표시·interaction) · `model`(상태·schema·규칙) · `api`(backend 상호작용) · `lib`(slice 안의 보조 로직) · `config`(slice 설정). `components`·`hooks`·`types`·`utils`처럼 파일 형식만 말하는 이름은 지양한다 — hook과 type은 그 자체로 책임이 아니라 "어느 변경과 함께 움직이는가"가 책임이기 때문이다.
+
+애매한 책임을 슬라이스/세그먼트 어디에 둘지는 [`./placement.md`](./placement.md), slice가 외부에 무엇을 공개할지는 [`./public-api.md`](./public-api.md)에서 다룬다.
+
+## pages-first 규칙
+
+새 화면의 UI·폼·데이터 로딩·로컬 상태는 Page slice에서 시작한다. **두 번째 실제 소비자**, 독립된 의미, 안정된 public contract가 생겼을 때만 아래 레이어로 추출한다. Pages·Shared·App만으로 충분하면 거기서 멈춘다.
+
+```text
+features/select-color/
+├── ui/ColorPicker.tsx   ← 실질 코드 1개
+├── model/useColor.ts
+└── index.ts
+```
+
+실 소비자가 하나뿐인데 레이어부터 만드는 것은 아래 "흔히 빠지는 함정"의 overslicing이다.
 
 ## App
 
@@ -26,11 +80,31 @@
 
 판단 기준은 "전역으로 사용된다"가 아니라 "앱 전체를 **조립·초기화**한다"다. Provider가 App에 있다고 해서 그 provider가 제공하는 business logic까지 App에 둘 필요는 없다 — provider 껍데기는 App, 안의 상태·규칙은 소유 slice에 남긴다.
 
+**Next.js 매핑.** Next의 `app/`은 라우팅용으로 예약된 디렉터리다 — 이 이름을 그대로 쓰면 Next가 폴더 전체를 라우트로 해석한다. FSD App 레이어는 `src/_app`에 둔다 — providers, router 조립, global CSS가 여기 있다. 같은 이유로 FSD Pages 레이어는 `src/_pages`(또는 `views`)에 둔다.
+
+```text
+src/
+├─ _app/            # FSD App 레이어 — providers, router 조립, global.css
+├─ _pages/          # FSD Pages 레이어 — 화면 단위 UI/로직
+│  └─ product-detail/
+├─ widgets/
+├─ features/
+├─ entities/
+└─ shared/
+
+app/                 # Next App Router — 라우팅 전용
+├─ layout.tsx
+├─ page.tsx
+└─ products/
+   └─ [id]/
+      └─ page.tsx
+```
+
 ## Pages
 
 **책임 — 사용자가 방문하거나 수행하는 화면/activity 단위.**
 
-v2.1에서 **가장 중요한 기본 소유자**다. 새 화면 코드는 일단 여기서 시작한다.
+**가장 중요한 기본 소유자**다. 새 화면 코드는 일단 여기서 시작한다.
 
 적합한 것
 
@@ -43,6 +117,33 @@ v2.1에서 **가장 중요한 기본 소유자**다. 새 화면 코드는 일단
 - 여러 하위 블록의 composition
 
 **Page가 얇아야 한다는 규칙은 없다.** 한 화면에서만 쓰인다면 "business logic이 있다"는 이유만으로 Feature나 Entity로 내리지 않는다. Page가 커 보인다는 느낌만으로도 추출 근거는 부족하다 — 독립 변경, 재사용, 명확한 계약이 실제로 생겼는지를 본다. 판단 절차는 [`./placement.md`](./placement.md)의 다섯 질문을 쓴다.
+
+**Next.js 매핑.** FSD Pages 레이어는 `src/_pages`에 둔다. `src/pages`는 특히 피한다 — Next가 legacy Pages Router로 인식할 수 있다. route 파일(`page.tsx`, `layout.tsx`, `route.ts` 등)은 로직을 갖지 않는다 — `_pages` 슬라이스의 public API를 import해서 그대로 내보내는 얇은 진입점(thin adapter)이다.
+
+```tsx
+// ❌ app/products/[id]/page.tsx — route 파일에 fetch·마크업이 직접 들어감
+export default async function ProductDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const product = await fetchProduct(id);
+  return <div>{product.name}</div>;
+}
+```
+
+```tsx
+// ✅ src/_pages/product-detail/index.ts — public API
+export { ProductDetailPage } from "./ui/ProductDetailPage";
+
+// ✅ app/products/[id]/page.tsx — 얇은 adapter, re-export뿐
+export { ProductDetailPage as default } from "@/_pages/product-detail";
+```
+
+실제 화면 UI, 데이터 로딩, 상태는 `_pages/product-detail` 안에 있다. **route 파일을 열었을 때 로직이 보이면 그 로직은 `_pages`로 옮길 대상이다.**
+
+**Server/Client 경계는 FSD 레이어를 정하지 않는다.** `'use client'`는 Next 런타임의 실행 경계 표시일 뿐이다. 같은 슬라이스에 서버 전용 코드와 클라이언트 컴포넌트가 공존할 수 있다. `'use client'` 전파의 상세는 [`../nextjs/app-router.md`](../nextjs/app-router.md), server-only export가 client 번들을 오염시킬 때의 `index.server.ts` 분리는 [`./public-api.md`](./public-api.md)에 있다. `loading.tsx`·`error.tsx` 경계를 어느 화면 단위에 걸지는 [`./error-layers.md`](./error-layers.md)에서 다룬다.
 
 ## Widgets
 
@@ -61,7 +162,7 @@ v2.1에서 **가장 중요한 기본 소유자**다. 새 화면 코드는 일단
 - 단일 버튼/action
 - 단지 UI가 크다는 이유로 분리한 component
 
-v2.1에서 Widget은 단순 조립 전용이 아니다. **자체 API/state/business logic을 가질 수 있다** — "Widget은 로직이 없어야 한다"는 해석은 구식이다.
+Widget은 단순 조립 전용이 아니다. **자체 API/state/business logic을 가질 수 있다** — "Widget은 로직이 없어야 한다"는 해석은 구식이다.
 
 ## Features
 
@@ -163,17 +264,9 @@ export function ProductCard({ product, actions }: {
 
 Shared는 하위 레이어라 어디서나 접근되고 내부 규칙도 느슨하다. 그래서 가장 쉽게 landfill이 된다. **"두 곳에서 사용"은 Shared의 충분조건이 아니다.** business-independent인가가 먼저다 — 도메인을 몰라도 이해되는 코드인지 스스로에게 물어본다.
 
-## Processes — deprecated
+## 흔히 빠지는 함정
 
-과거에는 여러 Page에 걸친 흐름을 담는 escape hatch였다. 현재는 만들지 않는다. 있던 책임은 다음으로 옮긴다.
-
-- router/server-level orchestration → App
-- 재사용 user interaction → Feature
-- 특정 Page들의 로컬 flow → Page 또는 상위 composition
-
-## 실패 모드
-
-**Overslicing** — 실제 소비자가 하나뿐인 Entity/Feature/Widget이 폭증한다. 가장 흔하고 v2.1이 직접 교정한 문제다. `select-color/ui/ColorPicker.tsx` 하나 때문에 `ui/`·`model/`·`index.ts` 세 파일이 생기는 식이다.
+**Overslicing** — 실제 소비자가 하나뿐인 Entity/Feature/Widget이 폭증한다. 가장 흔한 함정이다. `select-color`처럼 실질 코드 하나 때문에 `ui/`·`model/`·`index.ts` 세 파일이 생기는 식이다.
 
 **Shared landfill** — 여러 곳에서 쓴다는 이유로 domain policy가 Shared로 흘러간다. Shared는 도메인 무관이 기준이지 사용 빈도가 기준이 아니다.
 
@@ -187,3 +280,6 @@ Shared는 하위 레이어라 어디서나 접근되고 내부 규칙도 느슨�
 
 - [FSD — Layers](https://feature-sliced.design/docs/reference/layers)
 - [FSD — Authentication example](https://feature-sliced.design/docs/guides/examples/auth)
+- [FSD — Slices and segments](https://feature-sliced.design/docs/reference/slices-segments)
+- [FSD — v2.1 migration guide](https://feature-sliced.design/docs/guides/migration/from-v2-0)
+- [FSD — Next.js guide](https://feature-sliced.design/docs/guides/tech/with-nextjs)
