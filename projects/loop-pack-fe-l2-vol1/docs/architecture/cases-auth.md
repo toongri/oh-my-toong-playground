@@ -111,7 +111,9 @@ export const ACCESS_TOKEN_KEY = "access_token";
 import { ACCESS_TOKEN_KEY } from "@/shared/api/token";
 
 export const useAuthStore = create<AuthState>((set) => ({
-  token: null,
+  // 새로고침 후에도 인증 상태가 유지되려면 저장된 토큰으로 초기화한다.
+  // SSR에는 localStorage가 없으므로 window 가드 필수 — 서버 렌더는 null로 시작한다.
+  token: typeof window !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null,
   setToken: (token: string) => {
     localStorage.setItem(ACCESS_TOKEN_KEY, token);
     set({ token });
@@ -132,6 +134,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return <AuthContext.Provider value={{ token }}>{children}</AuthContext.Provider>;
 }
 ```
+
+서버 렌더(null)와 클라이언트 초기값(저장된 토큰)이 달라지는 hydration mismatch는 이 방식의 알려진 비용이다 — 이 비용까지 사라지는 것이 아래 쿠키 대안의 근거 중 하나다.
 
 **이상적인 대안은 쿠키다.** httpOnly 쿠키로 토큰을 관리하면 프론트엔드 아키텍처 측면에서는 거의 고려가 필요 없어진다 — 브라우저와 서버가 자동으로 주고받으므로 위 세 옵션 중 어디에 둘지 자체가 질문이 아니게 된다. 세 옵션 트레이드오프는 클라이언트가 토큰을 직접 들고 있어야 하는 상황(SPA + 별도 API 서버 등)에 한정된다.
 

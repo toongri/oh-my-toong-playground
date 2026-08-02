@@ -98,14 +98,31 @@ features/
 import { applyFilter } from "@/features/photo-editing/effects/lib/filters"; // 내부 경로
 ```
 
-**판단 과정.** 폴더로 묶는 것은 탐색 편의를 위한 것이지, slice 경계를 없애는 것이 아니다. `gallery-page`가 `effects`의 내부 구현을 참조하려면 여전히 `effects`의 public API를 거쳐야 한다.
+public API를 거치면 고쳐진 것처럼 보이지만 아니다.
 
 ```ts
-// ✅ features/photo-editing/gallery-page/ui/Gallery.tsx
-import { applyFilter } from "@/features/photo-editing/effects"; // public API 경유
+// ❌ 여전히 위반 — public API를 거쳐도 같은 레이어 slice 간 import다.
+// 그룹 폴더는 격리 규칙을 완화하지 않는다(FSD 공식: 그룹 안에서도 no code sharing).
+import { applyFilter } from "@/features/photo-editing/effects";
 ```
 
-그룹 폴더는 이름만 봐도 무엇이 함께 바뀌는지 보여주는 문서화 장치다. slice 간의 계약을 없애는 도구로 쓰면 그룹 안에서만 예외적으로 결합이 강해지고, 나중에 그룹을 쪼갤 때 그 결합이 전부 드러난다.
+**판단 과정.** 폴더로 묶는 것은 탐색 편의를 위한 것이지, slice 경계를 없애는 것이 아니다. `gallery-page`가 `effects`를 참조해야 한다는 문제 자체가 그룹 안에서는 풀리지 않는다 — deep import를 public API로 바꿔도 같은 레이어의 다른 slice를 직접 import한다는 사실은 그대로다. 해소는 [`./placement.md`](./placement.md)의 "같은 레이어 import가 필요할 때" 사다리를 따라 둘 중 하나로 간다.
+
+- **상위 레이어가 두 Feature를 조립한다.** `gallery-page`가 실은 `photo`와 `effects`를 엮는 자리라면, 그 조립은 `gallery-page` 자신이 아니라 그보다 위인 Page가 한다.
+
+  ```tsx
+  // ✅ pages/gallery/ui/GalleryPage.tsx — 상위 레이어가 두 Feature를 조립
+  import { PhotoCanvas } from "@/features/photo-editing/photo";
+  import { EffectsPanel } from "@/features/photo-editing/effects";
+
+  export function GalleryPage() {
+    return <Editor canvas={<PhotoCanvas />} tools={<EffectsPanel />} />;
+  }
+  ```
+
+- **항상 함께 바뀐다면 애초에 하나의 slice로 합친다.** `photo`와 `effects`가 매번 같이 수정된다면 둘로 나눈 경계 자체가 틀린 것이다.
+
+그룹 폴더는 무엇이 함께 바뀌는지 보여주는 문서화 장치일 뿐, slice 간의 계약을 없애는 도구가 아니다. 그룹 안이라는 이유로 결합을 허용하면 나중에 그룹을 쪼갤 때 그 결합이 전부 드러난다.
 
 ## 케이스 4 — segment 이름: 형태가 아니라 목적
 
