@@ -159,6 +159,142 @@ test_session_start_no_generic_ultrawork_state() {
 }
 
 # =============================================================================
+# Tests: legacy goal-state retirement
+# goal is retired, rather than restored, regardless of its JSON lifecycle state.
+# =============================================================================
+
+write_legacy_goal_state() {
+    local sid="$1"
+    local phase="$2"
+    local active="$3"
+    local outcome="$4"
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{"active": ${active}, "phase": "${phase}", "outcome": "${outcome}", "iteration": 1}
+EOF
+}
+
+assert_legacy_goal_retired() {
+    local sid="$1"
+    local expected_content="$2"
+    local source="$TEST_OMT_DIR/goal-state-${sid}.json"
+    local retired_dir="$TEST_OMT_DIR/retired"
+
+    if [ -f "$source" ]; then
+        echo "ASSERTION FAILED: legacy goal-state source must be moved out of OMT_DIR"
+        return 1
+    fi
+    if [ ! -d "$retired_dir" ]; then
+        echo "ASSERTION FAILED: legacy goal-state must be moved into retired/"
+        return 1
+    fi
+    local archived=""
+    local candidate
+    for candidate in "$retired_dir"/goal-state-"${sid}"*.json; do
+        [ -f "$candidate" ] || continue
+        if printf '%s\n' "$expected_content" | cmp -s - "$candidate"; then
+            archived="$candidate"
+            break
+        fi
+    done
+    if [ -z "$archived" ]; then
+        echo "ASSERTION FAILED: retired legacy goal-state archive is missing"
+        return 1
+    fi
+}
+
+test_session_start_retires_legacy_goal_states_without_restore() {
+    local sid phase active outcome
+    for sid in legacy-planning legacy-pursuing legacy-terminal legacy-pristine; do
+        case "$sid" in
+            legacy-planning) phase=planning; active=true; outcome=planned ;;
+            legacy-pursuing) phase=pursuing; active=true; outcome=pursuing ;;
+            legacy-terminal) phase=complete; active=false; outcome=complete ;;
+            *) phase=planning; active=true; outcome="" ;;
+        esac
+        write_legacy_goal_state "$sid" "$phase" "$active" "$outcome"
+        local source="$TEST_OMT_DIR/goal-state-${sid}.json"
+        local original
+        original=$(cat "$source")
+        local output
+        output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+        assert_output_not_contains "$output" "GOAL RESTORED" "legacy goal-state must never be restored" || return 1
+        assert_legacy_goal_retired "$sid" "$original" || return 1
+    done
+}
+
+test_session_start_preserves_legacy_goal_archive_collisions() {
+    local sid="legacy-collision"
+    local source="$TEST_OMT_DIR/goal-state-${sid}.json"
+    local retired_dir="$TEST_OMT_DIR/retired"
+    local existing="$retired_dir/goal-state-${sid}.retired-0.json"
+    mkdir -p "$retired_dir"
+    printf 'existing archive must survive\n' > "$existing"
+    write_legacy_goal_state "$sid" pursuing true collision
+    local original
+    original=$(cat "$source")
+
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    if ! grep -qF 'existing archive must survive' "$existing"; then
+        echo "ASSERTION FAILED: an existing retired archive must never be overwritten"
+        return 1
+    fi
+    assert_legacy_goal_retired "$sid" "$original"
+}
+
+test_session_start_legacy_goal_archive_collision_limit_preserves_source() {
+    local sid="legacy-collision-limit"
+    local retired_dir="$TEST_OMT_DIR/retired"
+    local suffix
+    mkdir -p "$retired_dir"
+    for suffix in $(seq 0 31); do
+        printf 'existing %s\n' "$suffix" > "$retired_dir/goal-state-${sid}.retired-${suffix}.json"
+    done
+    write_legacy_goal_state "$sid" pursuing true exhausted
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+    if [ ! -f "$TEST_OMT_DIR/goal-state-${sid}.json" ]; then
+        echo "ASSERTION FAILED: source must remain when archive suffixes are exhausted"
+        return 1
+    fi
+    assert_output_contains "$output" "archive suffix limit" "suffix exhaustion must be diagnosed on stderr" || return 1
+}
+
+test_session_start_legacy_goal_archive_creation_failure_preserves_source() {
+    local sid="legacy-archive-create-failure"
+    printf 'not a directory\n' > "$TEST_OMT_DIR/retired"
+    write_legacy_goal_state "$sid" pursuing true preserve
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+    if [ ! -f "$TEST_OMT_DIR/goal-state-${sid}.json" ]; then
+        echo "ASSERTION FAILED: source must remain when retired directory cannot be created"
+        return 1
+    fi
+    assert_output_contains "$output" "could not create retired directory" "archive creation failure must be diagnosed" || return 1
+}
+
+test_session_start_retires_goal_and_restores_ultragoal() {
+    local sid="legacy-goal-with-ultragoal"
+    local source="$TEST_OMT_DIR/goal-state-${sid}.json"
+    write_legacy_goal_state "$sid" pursuing true legacy
+    local original
+    original=$(cat "$source")
+    cat > "$TEST_OMT_DIR/ultragoal-state-${sid}.json" << 'EOF'
+{"active": true, "phase": "pursuing", "outcome": "keep ultragoal", "iteration": 1}
+EOF
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+    if echo "$output" | grep -qF '[GOAL RESTORED]'; then
+        echo "ASSERTION FAILED: legacy goal must not restore alongside ultragoal"
+        return 1
+    fi
+    assert_output_contains "$output" "ULTRAGOAL RESTORED" "ultragoal must still restore" || return 1
+    assert_legacy_goal_retired "$sid" "$original"
+}
+
+# =============================================================================
 # Tests: OMT_DIR export and directory creation
 # =============================================================================
 
@@ -369,64 +505,6 @@ EOF
     return 0
 }
 
-# =============================================================================
-# Tests: Goal state restore — planning-resume vs pursuing-resume
-# =============================================================================
-
-test_session_start_goal_state_restore_planning_vs_pursuing() {
-    local sid_plan="test-goal-planning"
-    local sid_pursue="test-goal-pursuing"
-    # Use a current timestamp so stale-cleanup does not delete the file before restore runs
-    local now_ts
-    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
-
-    # Active goal-state in planning phase
-    cat > "$TEST_OMT_DIR/goal-state-${sid_plan}.json" << EOF
-{
-  "active": true,
-  "phase": "planning",
-  "plan_path": "",
-  "resume_summary": "Defining the outcome and constraints for the goal.",
-  "outcome": "Build feature X",
-  "iteration": 0,
-  "started_at": "${now_ts}"
-}
-EOF
-
-    local out_plan
-    out_plan=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_plan"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Must contain GOAL RESTORED
-    assert_output_contains "$out_plan" "GOAL RESTORED" "planning: should inject GOAL RESTORED" || return 1
-    # Must distinguish planning
-    assert_output_contains "$out_plan" "planning" "planning: should include phase label" || return 1
-    # Must re-assert re-invocation refusal
-    assert_output_contains "$out_plan" "refused" "planning: should assert re-invocation refused" || return 1
-
-    # Active goal-state in pursuing phase
-    cat > "$TEST_OMT_DIR/goal-state-${sid_pursue}.json" << EOF
-{
-  "active": true,
-  "phase": "pursuing",
-  "plan_path": "",
-  "resume_summary": "Iterating toward the objective. Block 2 of 5.",
-  "outcome": "Build feature X",
-  "iteration": 2,
-  "started_at": "${now_ts}"
-}
-EOF
-
-    local out_pursue
-    out_pursue=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_pursue"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Must contain GOAL RESTORED
-    assert_output_contains "$out_pursue" "GOAL RESTORED" "pursuing: should inject GOAL RESTORED" || return 1
-    # Must distinguish pursuing
-    assert_output_contains "$out_pursue" "pursuing" "pursuing: should include phase label" || return 1
-    # Must re-assert re-invocation refusal
-    assert_output_contains "$out_pursue" "refused" "pursuing: should assert re-invocation refused" || return 1
-}
-
 test_session_start_stale_goal_state_purged() {
     # Create a goal-state file with last_touched_at older than ACTIVE_IDLE_TTL (6h) — use 7h
     local stale_ts
@@ -452,194 +530,6 @@ EOF
         return 1
     fi
     return 0
-}
-
-test_session_start_terminal_goal_state_not_restored() {
-    local sid="test-goal-terminal"
-    # Use a current timestamp so stale-cleanup does not delete the file;
-    # we are testing that active=false suppresses restoration, not that the file is absent.
-    local now_ts
-    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
-
-    # Terminal goal-state: active=false, phase=complete
-    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
-{
-  "active": false,
-  "phase": "complete",
-  "plan_path": "",
-  "resume_summary": "Goal was completed.",
-  "outcome": "Build feature X",
-  "iteration": 3,
-  "started_at": "${now_ts}"
-}
-EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Must NOT inject a goal restore block
-    assert_output_not_contains "$output" "GOAL RESTORED" "terminal goal-state must NOT inject GOAL RESTORED" || return 1
-}
-
-test_session_start_goal_pursuing_resume_rereads_plan() {
-    local sid="test-goal-pursuing-plan"
-    local now_ts
-    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
-
-    # Create a real plan file on disk so plan_path resolves to an existing file
-    local plan_file="$TEST_OMT_DIR/test-goal-plan.md"
-    echo "# Test Plan" > "$plan_file"
-
-    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
-{
-  "active": true,
-  "phase": "pursuing",
-  "plan_path": "${plan_file}",
-  "resume_summary": "Iterating toward the objective. Block 2 of 5.",
-  "outcome": "Build feature X",
-  "iteration": 2,
-  "max_iterations": 10,
-  "started_at": "${now_ts}"
-}
-EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Must instruct to re-read the plan
-    assert_output_contains "$output" "Re-read the current plan from disk" "pursuing with plan file: should instruct to re-read plan" || return 1
-}
-
-test_session_start_goal_pursuing_resume_no_plan_file() {
-    local sid="test-goal-pursuing-noplan"
-    local now_ts
-    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
-
-    # plan_path is empty — no plan file available
-    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
-{
-  "active": true,
-  "phase": "pursuing",
-  "plan_path": "",
-  "resume_summary": "Iterating toward the objective. Block 2 of 5.",
-  "outcome": "Build feature X",
-  "iteration": 2,
-  "max_iterations": 10,
-  "started_at": "${now_ts}"
-}
-EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Must NOT instruct to re-read (no plan on disk)
-    assert_output_not_contains "$output" "Re-read the current plan from disk" "pursuing without plan file: must NOT inject re-read instruction" || return 1
-    # Must still surface iteration info
-    assert_output_contains "$output" "GOAL RESTORED" "pursuing without plan file: should still inject GOAL RESTORED" || return 1
-}
-
-# Fix B: planning + no plan file → session-invariant guidance text emitted
-test_session_start_goal_planning_no_plan_emits_guidance_and_is_invariant() {
-    local ts
-    ts=$(date "+%Y-%m-%dT%H:%M:%S")
-    local sid_a="plan-nofile-sid-alpha"
-    local sid_b="plan-nofile-sid-beta"
-
-    # Non-pristine planning states (outcome set) with empty plan_path — no plan file on disk.
-    # resume_summary differs between the two sids to prove it is NOT visible in output.
-    cat > "$TEST_OMT_DIR/goal-state-${sid_a}.json" << EOF
-{
-  "active": true,
-  "phase": "planning",
-  "plan_path": "",
-  "resume_summary": "Alpha planning summary - should not appear in output.",
-  "outcome": "Build feature X",
-  "iteration": 1,
-  "started_at": "${ts}",
-  "last_touched_at": "${ts}"
-}
-EOF
-
-    cat > "$TEST_OMT_DIR/goal-state-${sid_b}.json" << EOF
-{
-  "active": true,
-  "phase": "planning",
-  "plan_path": "",
-  "resume_summary": "Beta planning summary - totally different text.",
-  "outcome": "Build feature X",
-  "iteration": 1,
-  "started_at": "${ts}",
-  "last_touched_at": "${ts}"
-}
-EOF
-
-    local out_a out_b
-    out_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_a"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-    out_b=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_b"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    # Guidance text must be present: new defer-to-read-state wording
-    local ctx_a
-    ctx_a=$(echo "$out_a" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-    if ! echo "$ctx_a" | grep -q "from the state you just read"; then
-        echo "ASSERTION FAILED: planning+no-plan must emit 'from the state you just read' guidance"
-        echo "  ctx_a: ${ctx_a:0:500}"
-        return 1
-    fi
-    if ! echo "$ctx_a" | grep -q "resume_summary"; then
-        echo "ASSERTION FAILED: planning+no-plan guidance must reference the 'resume_summary' field"
-        echo "  ctx_a: ${ctx_a:0:500}"
-        return 1
-    fi
-
-    # Regression guard: must NOT contain the old unconditional restart directive
-    if echo "$ctx_a" | grep -q "Continue planning from the beginning"; then
-        echo "ASSERTION FAILED (regression): planning+no-plan must NOT emit 'Continue planning from the beginning' directive"
-        echo "  ctx_a: ${ctx_a:0:500}"
-        return 1
-    fi
-
-    # Output is session-invariant: byte-identical across two sids with different resume_summary
-    if [ "$out_a" != "$out_b" ]; then
-        echo "ASSERTION FAILED (Fix B): planning+no-plan guidance must be session-invariant (byte-identical across sids)"
-        echo "  out_a: ${out_a:0:500}"
-        echo "  out_b: ${out_b:0:500}"
-        return 1
-    fi
-}
-
-test_session_start_goal_plan_path_backslash_produces_valid_json() {
-    local sid="test-goal-planpath-backslash"
-    local now_ts
-    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
-
-    # Active pursuing goal-state with a backslash in plan_path (e.g. Windows-style path).
-    # plan_path does NOT exist on disk (so the existence check stays false — we are testing
-    # the JSON-escaping code path, not the file-available branch).
-    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
-{
-  "active": true,
-  "phase": "pursuing",
-  "plan_path": "/tmp/a\\\\plan.md",
-  "resume_summary": "checkpoint",
-  "outcome": "Test goal",
-  "iteration": 1,
-  "max_iterations": 10,
-  "started_at": "${now_ts}"
-}
-EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    # The hook stdout must be valid JSON (parseable by jq)
-    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
-        echo "ASSERTION FAILED: hook stdout is not valid JSON when plan_path contains a backslash"
-        echo "  Output: ${output:0:500}"
-        return 1
-    fi
-
-    # The parsed additionalContext must contain GOAL RESTORED
-    assert_output_contains "$output" "GOAL RESTORED" "goal plan_path backslash: should inject GOAL RESTORED" || return 1
 }
 
 # =============================================================================
@@ -709,7 +599,8 @@ test_session_start_fresh_deep_interview_marker_survives() {
 # ACTIVE_IDLE_TTL=6h, TERMINAL_TTL=30m (see state-liveness.sh for exact values)
 # =============================================================================
 
-# C2: current session's active state with 7h-old heartbeat SURVIVES (never reap own session)
+# C2: a current session's legacy goal state is retired even when its heartbeat
+# is old; retirement takes precedence over the normal current-session GC carveout.
 test_gc_current_session_active_7h_idle_survives() {
     local stale_ts
     stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
@@ -725,8 +616,8 @@ test_gc_current_session_active_7h_idle_survives() {
 }
 EOF
     echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-    if [ ! -f "$state_file" ]; then
-        echo "ASSERTION FAILED: current session's active state should survive GC even with 7h-old heartbeat"
+    if [ -f "$state_file" ] || [ ! -d "$TEST_OMT_DIR/retired" ]; then
+        echo "ASSERTION FAILED: current session's legacy goal state should be retired even with 7h-old heartbeat"
         return 1
     fi
     return 0
@@ -844,8 +735,7 @@ EOF
     return 0
 }
 
-# C3a-ultragoal: other-session ultragoal-state with 7h-old heartbeat is REAPED
-# (mirrors test_gc_other_session_active_7h_idle_reaped for the goal-state prefix)
+# C3a-ultragoal: other-session ultragoal-state with 7h-old heartbeat is REAPED.
 test_gc_other_session_ultragoal_7h_idle_reaped() {
     local stale_ts
     stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
@@ -867,8 +757,7 @@ EOF
     return 0
 }
 
-# C2-ultragoal: current session's active ultragoal-state with 7h-old heartbeat SURVIVES
-# (mirrors test_gc_current_session_active_7h_idle_survives for the goal-state prefix)
+# C2-ultragoal: current session's active ultragoal-state with 7h-old heartbeat SURVIVES.
 test_gc_current_session_ultragoal_active_7h_idle_survives() {
     local stale_ts
     stale_ts=$(date -j -v-7H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "7 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
@@ -953,88 +842,9 @@ test_gc_old_threshold_constants_removed() {
 }
 
 # =============================================================================
-# Tests: Pristine goal-state is invisible to session-start restore
-# A pristine seed (phase=planning, iteration=0, outcome="") must NOT produce
-# [GOAL RESTORED]; a non-pristine active state must still be restored.
-# =============================================================================
-
-test_session_start_pristine_goal_state_not_restored() {
-    local sid="test-goal-pristine"
-    local now_ts
-    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
-
-    # Pristine seed: phase=planning, iteration=0, outcome="" — the PreToolUse hook
-    # seeded this before the goal skill ran; if the skill refuses, this file lingers.
-    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
-{
-  "active": true,
-  "phase": "planning",
-  "iteration": 0,
-  "max_iterations": 10,
-  "outcome": "",
-  "started_at": "${now_ts}"
-}
-EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Pristine seed must NOT produce GOAL RESTORED
-    assert_output_not_contains "$output" "GOAL RESTORED" "pristine goal-state must NOT inject GOAL RESTORED" || return 1
-}
-
-test_session_start_non_pristine_planning_goal_still_restored() {
-    local sid="test-goal-nonpristine"
-    local now_ts
-    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
-
-    # Non-pristine: outcome is set — this is a real in-progress goal.
-    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
-{
-  "active": true,
-  "phase": "planning",
-  "iteration": 0,
-  "max_iterations": 10,
-  "outcome": "ship feature X",
-  "started_at": "${now_ts}"
-}
-EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    # Non-pristine planning state must still produce GOAL RESTORED
-    assert_output_contains "$output" "GOAL RESTORED" "non-pristine planning goal-state must inject GOAL RESTORED" || return 1
-}
-
-test_session_start_pristine_goal_absent_outcome_not_restored() {
-    # outcome field entirely absent (jq .outcome returns null) → treated as "" → pristine → not restored
-    local sid="test-goal-pristine-absent-outcome"
-    local now_ts
-    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
-
-    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
-{
-  "active": true,
-  "phase": "planning",
-  "iteration": 0,
-  "max_iterations": 10,
-  "started_at": "${now_ts}"
-}
-EOF
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
-
-    assert_output_not_contains "$output" "GOAL RESTORED" "pristine goal-state (absent outcome) must NOT inject GOAL RESTORED" || return 1
-}
-
-# =============================================================================
-# Tests: Ultragoal state restore — parity fix (ultragoal-state-* was omitted
-# from the restore-block enumeration alongside goal/prometheus/deep-interview/qa).
-# ultragoal shares GoalState's exact JSON shape (UltragoalState = GoalState in
-# lib/state-core.ts), so the same non-pristine restore / pristine-seed-guard
-# logic mirrors the goal-state tests above verbatim.
+# Tests: Ultragoal state restore
+# ultragoal-state uses its own GoalState-compatible JSON shape. A non-pristine
+# active state restores; a pristine planning seed is intentionally inert.
 # =============================================================================
 
 test_session_start_ultragoal_state_restore_non_pristine() {
@@ -1067,8 +877,7 @@ test_session_start_pristine_ultragoal_state_not_restored() {
     local now_ts
     now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
 
-    # Pristine seed: phase=planning, iteration=0, outcome="" — mirrors the goal
-    # pristine-seed guard exactly (same JSON shape).
+    # Pristine ultragoal seed: phase=planning, iteration=0, outcome="".
     cat > "$TEST_OMT_DIR/ultragoal-state-${sid}.json" << EOF
 {
   "active": true,
@@ -1101,8 +910,8 @@ test_session_start_encoder_invariants_in_source() {
         return 1
     fi
 
-    # Exactly 0 per-field backslash escapers: PROM_RESUME, GOAL_RESUME, GOAL_PLAN_PATH
-    # are no longer embedded in MESSAGES — all 3 escapers have been removed (cache-safe TODO 3).
+    # Restore state fields are not embedded in MESSAGES, so no per-field
+    # backslash escapers should remain after the cache-safe refactor.
     local escaper_count
     escaper_count=$(grep -cF "sed 's/\\\\/\\\\\\\\/g'" "$SCRIPT_DIR/session-start.sh" 2>/dev/null || true)
     if [ "$escaper_count" -ne 0 ]; then
@@ -1139,25 +948,6 @@ _write_prom_sentinel_state() {
   "started_at": "${ts}",
   "last_touched_at": "${ts}",
   "steps": {"acceptance_criteria": {"done": false, "content": [], "recorded_at": ""}, "design_decisions": {"done": false, "ref": ""}, "plan": {"done": false}}
-}
-EOF
-}
-
-_write_goal_sentinel_state() {
-    local sid="$1"
-    local ts
-    ts=$(date "+%Y-%m-%dT%H:%M:%S")
-    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
-{
-  "active": true,
-  "phase": "pursuing",
-  "plan_path": "/SENTINEL_PP_zzqqxx/plan.md",
-  "resume_summary": "SENTINEL_RS_zzqqxx",
-  "outcome": "Test objective",
-  "iteration": 3,
-  "max_iterations": 10,
-  "started_at": "${ts}",
-  "last_touched_at": "${ts}"
 }
 EOF
 }
@@ -1292,151 +1082,6 @@ test_cache_safe_prom_round_trip() {
     fi
 }
 
-# AC3a: goal plan_path, resume_summary, iteration sentinels must NOT appear in stdout
-test_cache_safe_goal_sentinel_not_in_stdout() {
-    local sid="goal-sentinel-zzqqxx"
-    _write_goal_sentinel_state "$sid"
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    local pp_count rs_count
-    pp_count=$(echo "$output" | grep -c "SENTINEL_PP_zzqqxx" 2>/dev/null || true)
-    rs_count=$(echo "$output" | grep -c "SENTINEL_RS_zzqqxx" 2>/dev/null || true)
-
-    if [ "${pp_count:-0}" -ne 0 ]; then
-        echo "ASSERTION FAILED (AC3a): goal plan_path sentinel must not appear in stdout (count=$pp_count)"
-        return 1
-    fi
-    if [ "${rs_count:-0}" -ne 0 ]; then
-        echo "ASSERTION FAILED (AC3a): goal resume_summary sentinel must not appear in stdout (count=$rs_count)"
-        return 1
-    fi
-
-    # No iteration digit pattern
-    local ctx
-    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-    if echo "$ctx" | grep -qE 'Iteration:? *[0-9]+/[0-9]+'; then
-        echo "ASSERTION FAILED (AC3a): iteration digit pattern must not appear in stdout"
-        return 1
-    fi
-}
-
-# AC3b: goal cat pointer + run-now; retained sentences; GOAL_PLAN_AVAILABLE branch.
-#        Must NOT introduce new "Invoke the goal skill" imperative.
-test_cache_safe_goal_pointer_and_imperative() {
-    local sid="goal-ptr-zzqqxx"
-    _write_goal_sentinel_state "$sid"
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
-        echo "ASSERTION FAILED (AC3b): hook stdout must be valid JSON"
-        return 1
-    fi
-
-    local ctx
-    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-
-    # Exactly 1 UNEXPANDED cat pointer
-    local ptr_count
-    ptr_count=$(echo "$ctx" | grep -cF 'cat "$OMT_DIR/goal-state-$OMT_SESSION_ID.json"' 2>/dev/null || true)
-    if [ "${ptr_count:-0}" -ne 1 ]; then
-        echo "ASSERTION FAILED (AC3b): additionalContext should contain exactly 1 goal cat pointer (found ${ptr_count:-0})"
-        echo "  ctx: ${ctx:0:600}"
-        return 1
-    fi
-
-    # run-now imperative
-    if ! echo "$ctx" | grep -qiE 'now, before any other action|run .*now|before resuming'; then
-        echo "ASSERTION FAILED (AC3b): additionalContext should contain run-now imperative"
-        return 1
-    fi
-
-    # "Continue pursuing the objective autonomously" retained
-    if ! echo "$ctx" | grep -q "Continue pursuing the objective autonomously"; then
-        echo "ASSERTION FAILED (AC3b): 'Continue pursuing the objective autonomously' must be retained"
-        return 1
-    fi
-
-    # "refused" sentence retained (distinct substring)
-    if ! echo "$ctx" | grep -q "refused"; then
-        echo "ASSERTION FAILED (AC3b): re-invocation refused sentence must be retained"
-        return 1
-    fi
-
-    # GOAL RESTORED retained
-    if ! echo "$ctx" | grep -q "GOAL RESTORED"; then
-        echo "ASSERTION FAILED (AC3b): GOAL RESTORED header must be retained"
-        return 1
-    fi
-
-    # No new "Invoke the goal skill" imperative (D-4)
-    if echo "$ctx" | grep -qiE 'invoke the goal skill|run the goal skill|restart.*goal'; then
-        echo "ASSERTION FAILED (AC3b/D-4): must NOT introduce a new 'Invoke the goal skill' imperative"
-        return 1
-    fi
-
-    # GOAL_PLAN_AVAILABLE=true branch works
-    local plan_file="$TEST_OMT_DIR/test-goal-plan.md"
-    echo "# Plan" > "$plan_file"
-    local sid2="goal-ptr-planok"
-    local now_ts
-    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
-    cat > "$TEST_OMT_DIR/goal-state-${sid2}.json" << EOF
-{
-  "active": true,
-  "phase": "pursuing",
-  "plan_path": "${plan_file}",
-  "resume_summary": "checkpoint",
-  "outcome": "Test objective",
-  "iteration": 2,
-  "max_iterations": 10,
-  "started_at": "${now_ts}"
-}
-EOF
-    local out2
-    out2=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid2"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-    local ctx2
-    ctx2=$(echo "$out2" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
-    if ! echo "$ctx2" | grep -q "Re-read the current plan from disk before continuing"; then
-        echo "ASSERTION FAILED (AC3b): GOAL_PLAN_AVAILABLE=true branch must emit re-read instruction"
-        echo "  ctx2: ${ctx2:0:600}"
-        return 1
-    fi
-}
-
-# AC3c: goal round-trip via sourced CLAUDE_ENV_FILE
-test_cache_safe_goal_round_trip() {
-    local sid="goal-rt-zzqqxx"
-    _write_goal_sentinel_state "$sid"
-
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-    if ! echo "$output" | jq -e . > /dev/null 2>&1; then
-        echo "ASSERTION FAILED (AC3c-pre): hook stdout must be valid JSON"
-        return 1
-    fi
-
-    local tmp_env
-    tmp_env=$(mktemp)
-    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' \
-        | CLAUDE_ENV_FILE="$tmp_env" "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
-
-    # shellcheck source=/dev/null
-    source "$tmp_env"
-    rm -f "$tmp_env"
-
-    local state_out
-    state_out=$(cat "$OMT_DIR/goal-state-$OMT_SESSION_ID.json" 2>/dev/null) || true
-    if ! echo "$state_out" | jq -e '.plan_path,.resume_summary,.iteration' > /dev/null 2>&1; then
-        echo "ASSERTION FAILED (AC3c): round-trip cat must recover plan_path, resume_summary, iteration"
-        echo "  state_out: ${state_out:0:300}"
-        return 1
-    fi
-}
-
 # AC4: INCOMPLETE_COUNT 7 vs 3 → pending block byte-identical, no digit
 test_cache_safe_incomplete_count_existence_only() {
     local todos_dir="$TEST_HOME/.claude/todos"
@@ -1500,33 +1145,6 @@ test_cache_safe_prom_session_invariant() {
 
     if [ "$out_a" != "$out_b" ]; then
         echo "ASSERTION FAILED (AC6-prom): prometheus restore output must be byte-identical across session IDs"
-        echo "  out_a: ${out_a:0:500}"
-        echo "  out_b: ${out_b:0:500}"
-        return 1
-    fi
-}
-
-# AC6: goal restore output is byte-identical across two different session IDs,
-# even when resume_summary differs — proving resume_summary is not embedded in output.
-test_cache_safe_goal_session_invariant() {
-    local ts
-    ts=$(date "+%Y-%m-%dT%H:%M:%S")
-
-    local sid_a="aaaa-goal-inv"
-    local sid_b="zzqqxx-goal-inv"
-
-    # Different resume_summary per sid: if resume_summary were still embedded, outputs would differ.
-    echo '{"active":true,"phase":"pursuing","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_alpha","outcome":"Test objective","iteration":3,"max_iterations":10,"started_at":"'"$ts"'","last_touched_at":"'"$ts"'"}' \
-        > "$TEST_OMT_DIR/goal-state-${sid_a}.json"
-    echo '{"active":true,"phase":"pursuing","plan_path":"/SENTINEL_PP_zzqqxx/plan.md","resume_summary":"SENTINEL_RS_beta","outcome":"Test objective","iteration":3,"max_iterations":10,"started_at":"'"$ts"'","last_touched_at":"'"$ts"'"}' \
-        > "$TEST_OMT_DIR/goal-state-${sid_b}.json"
-
-    local out_a out_b
-    out_a=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_a"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-    out_b=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_b"'"}' | "$SCRIPT_DIR/session-start.sh" 2>/dev/null) || true
-
-    if [ "$out_a" != "$out_b" ]; then
-        echo "ASSERTION FAILED (AC6-goal): goal restore output must be byte-identical across session IDs"
         echo "  out_a: ${out_a:0:500}"
         echo "  out_b: ${out_b:0:500}"
         return 1
@@ -2842,23 +2460,17 @@ main() {
     # Prometheus restore: backslashes in resume_summary produce valid JSON and are preserved
     run_test test_session_start_prometheus_resume_summary_backslash_produces_valid_json
 
-    # Goal state restore
-    run_test test_session_start_goal_state_restore_planning_vs_pursuing
+    # Legacy goal-state retirement
+    run_test test_session_start_retires_legacy_goal_states_without_restore
+    run_test test_session_start_preserves_legacy_goal_archive_collisions
+    run_test test_session_start_legacy_goal_archive_collision_limit_preserves_source
+    run_test test_session_start_legacy_goal_archive_creation_failure_preserves_source
+    run_test test_session_start_retires_goal_and_restores_ultragoal
+
+    # Legacy stale-state GC remains covered for other sessions.
     run_test test_session_start_stale_goal_state_purged
-    run_test test_session_start_terminal_goal_state_not_restored
-    run_test test_session_start_goal_pursuing_resume_rereads_plan
-    run_test test_session_start_goal_pursuing_resume_no_plan_file
-    run_test test_session_start_goal_planning_no_plan_emits_guidance_and_is_invariant
 
-    # Goal state restore: backslash in plan_path produces valid JSON
-    run_test test_session_start_goal_plan_path_backslash_produces_valid_json
-
-    # Pristine goal-state: invisible to session-start restore
-    run_test test_session_start_pristine_goal_state_not_restored
-    run_test test_session_start_non_pristine_planning_goal_still_restored
-    run_test test_session_start_pristine_goal_absent_outcome_not_restored
-
-    # Ultragoal state restore — parity fix (mirrors goal-state restore tests)
+    # Ultragoal state restore — JSON-shape and pristine-seed coverage
     run_test test_session_start_ultragoal_state_restore_non_pristine
     run_test test_session_start_pristine_ultragoal_state_not_restored
 
@@ -2889,12 +2501,8 @@ main() {
     run_test test_cache_safe_prom_sentinel_not_in_stdout
     run_test test_cache_safe_prom_pointer_and_imperative
     run_test test_cache_safe_prom_round_trip
-    run_test test_cache_safe_goal_sentinel_not_in_stdout
-    run_test test_cache_safe_goal_pointer_and_imperative
-    run_test test_cache_safe_goal_round_trip
     run_test test_cache_safe_incomplete_count_existence_only
     run_test test_cache_safe_prom_session_invariant
-    run_test test_cache_safe_goal_session_invariant
 
     # Ledger recording instruction (TODO 3)
     run_test test_session_start_ledger_recording_every_source
