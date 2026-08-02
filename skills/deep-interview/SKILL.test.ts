@@ -1033,3 +1033,61 @@ describe("interviewer is instructed to call set-nongoals when a non-goal decider
 		expect(section.toLowerCase()).toContain("full-replace");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Phase-5 route contract: topology selects the recommendation, not a claim
+// about how many stories the later executor will derive. The other planning
+// skill remains a deliberate override, and both paths stay skill-dispatched.
+// (must FAIL before the corresponding SKILL.md edits -- RED)
+// ---------------------------------------------------------------------------
+
+describe("Phase 5 execution bridge preserves the approved topology recommendation", () => {
+	const phaseStart = skillMd.indexOf("## Phase 5: Execution Bridge");
+	const phaseEnd = skillMd.indexOf("</Steps>", phaseStart);
+	const section = phaseStart === -1 ? "" : skillMd.slice(phaseStart, phaseEnd === -1 ? undefined : phaseEnd);
+
+	test("exactly one active topology component recommends ultragoal", () => {
+		expect(section).toContain("exactly 1 active component → recommend **`ultragoal`**");
+	});
+
+	test("every other active-component count recommends Prometheus", () => {
+		expect(section).toContain("otherwise (0 or ≥2 active components) → recommend **`prometheus`**");
+	});
+
+	test("the routing rationale does not equate one component with a single-story pursuit", () => {
+		expect(section).not.toContain("single-story pursuit");
+		expect(section).not.toContain("single-story");
+		expect(section).not.toContain("needs no separate planning pass");
+	});
+
+	test("the stale purpose route no longer names removed goal", () => {
+		const purposeEnd = skillMd.indexOf("</Purpose>");
+		const purpose = purposeEnd === -1 ? "" : skillMd.slice(0, purposeEnd);
+		expect(purpose).not.toContain("via `goal`");
+		expect(purpose).toContain("`prometheus` or `ultragoal`");
+	});
+});
+
+describe("Phase 5 execution bridge offers reciprocal planning-skill overrides", () => {
+	const phaseStart = skillMd.indexOf("## Phase 5: Execution Bridge");
+	const phaseEnd = skillMd.indexOf("</Steps>", phaseStart);
+	const section = phaseStart === -1 ? "" : skillMd.slice(phaseStart, phaseEnd === -1 ? undefined : phaseEnd);
+
+	test("ultragoal recommendation explicitly offers Prometheus as an override", () => {
+		expect(section).toContain("When `ultragoal` is recommended, offer `prometheus` as an explicit override.");
+	});
+
+	test("Prometheus recommendation explicitly offers ultragoal as an override", () => {
+		expect(section).toContain("When `prometheus` is recommended, offer `ultragoal` as an explicit override.");
+	});
+
+	test("sisyphus is never a direct option", () => {
+		expect(section).toContain("Never recommend `sisyphus` directly");
+		expect(section).not.toContain("- `sisyphus`");
+	});
+
+	test("both selected planning skills dispatch through Skill()", () => {
+		expect(section).toContain('Skill(skill: "prometheus")');
+		expect(section).toContain('Skill(skill: "ultragoal")');
+	});
+});

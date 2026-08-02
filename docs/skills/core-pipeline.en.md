@@ -29,8 +29,8 @@ The core pipeline prevents this by separating concerns. Each stage of **define �
 | Stage | Skill | Responsibility | Output |
 |-------|-------|----------------|--------|
 | Define | deep-interview | Resolve ambiguity, converge to a spec | `$OMT_DIR/deep-interview/{slug}.md` |
-| Plan | prometheus | Turn the spec into an executable work plan | `$OMT_DIR/plans/*.md` |
-| Execute | sisyphus | Orchestrate implementation via specialist agents | Verified code changes |
+| Plan | ultragoal (exactly 1 active topology component) / prometheus (otherwise) | Choose the recommended Phase 5 route; offer the other planning/execution skill as an explicit override | ultragoal execution / human-readable plan |
+| Execute | ultragoal → sisyphus | ultragoal dispatches stories to sisyphus to orchestrate execution | Verified code changes |
 | Verify | sisyphus (inline) | Run a verify task's AC commands to confirm implementation quality, plan compliance, instruction fulfillment | APPROVE / REQUEST_CHANGES |
 
 Supporting roles attach to this spine. **clarify** is a gate that halts whenever ambiguity appears at any stage; **momus** is a critic that reviews plans before execution; **diagnose** is a read-only advisor that diagnoses root causes; **agent-council** is an advisory body that gathers multiple opinions when judgment is split.
@@ -54,13 +54,17 @@ flowchart LR
         sisyphus["sisyphus"]
     end
 
-    deep -->|"$OMT_DIR/deep-interview/{slug}.md"| prometheus
+    deep -->|"$OMT_DIR/deep-interview/{slug}.md"| Route{Exactly 1 active<br/>topology component?}
+    Route -->|Yes: recommend ultragoal| ultragoal
+    Route -->|No: recommend prometheus| prometheus
+    Route -.->|Prometheus override when 1| prometheus
+    Route -.->|ultragoal override otherwise| ultragoal
     prometheus -->|"$OMT_DIR/plans/*.md"| ultragoal
     ultragoal -->|"story-by-story dispatch"| sisyphus
     sisyphus -->|"verified code"| Done((Done))
 ```
 
-Each arrow is a file handoff. deep-interview hands a spec to prometheus, prometheus hands a plan to ultragoal, which dispatches stories to sisyphus one at a time, and sisyphus closes out with verified code changes. Skipping a stage still works, but the clarity of each stage determines the quality of the next.
+Each arrow is a file handoff. In Phase 5, deep-interview recommends ultragoal when there is exactly one active topology component and prometheus otherwise, while offering the non-recommended planning/execution skill as an explicit override. If prometheus is selected, it produces a human-readable plan and hands it to ultragoal; ultragoal dispatches stories to sisyphus one at a time, and sisyphus closes out with verified code changes. Skipping a stage still works, but the clarity of each stage determines the quality of the next.
 
 ---
 
@@ -68,7 +72,7 @@ Each arrow is a file handoff. deep-interview hands a spec to prometheus, prometh
 
 **Purpose**: Converge a vague idea into a clear specification before autonomous execution. It asks one question at a time, targeting the weakest dimension, until a weighted ambiguity score drops below the threshold.
 
-**Core constraint**: It does not proceed to execution while ambiguity exceeds the threshold. It never implements directly; it produces a spec and hands it to prometheus.
+**Core constraint**: It does not proceed to execution while ambiguity exceeds the threshold. It never implements directly; after producing a spec, Phase 5 recommends ultragoal or prometheus by the active topology-component count and offers the other route as an explicit override.
 
 **When to use**: Use it when you have an idea but the scope is fuzzy, or when you say "interview me", "don't assume", "make sure you understand". Conversely, if the request already names file paths, function names, and acceptance criteria, it is right to execute directly without an interview.
 
@@ -79,10 +83,14 @@ flowchart TB
     Score --> Gate{Ambiguity ≤ threshold?}
     Gate -->|No| Ask
     Gate -->|Yes| Spec[Crystallize spec]
-    Spec --> Handoff([Hand off to prometheus])
+    Spec --> Route{Exactly 1 active<br/>topology component?}
+    Route -->|Yes: recommend ultragoal| Ultra([Hand off to ultragoal])
+    Route -->|No: recommend prometheus| Prom([Hand off to prometheus])
+    Route -.->|Prometheus override when 1| Prom
+    Route -.->|ultragoal override otherwise| Ultra
 ```
 
-**Pipeline link**: The output spec is saved to `$OMT_DIR/deep-interview/{slug}.md` and becomes prometheus's input. It is built on the premise that specification quality is the primary bottleneck in AI-assisted development.
+**Pipeline link**: The output spec is saved to `$OMT_DIR/deep-interview/{slug}.md`. In Phase 5, deep-interview recommends ultragoal when there is exactly one active topology component and prometheus otherwise, while offering the non-recommended route as an explicit override. If prometheus is selected, it uses the spec to produce a human-readable plan and hands it to ultragoal. This flow is built on the premise that specification quality is the primary bottleneck in AI-assisted development.
 
 > This skill was borrowed almost as-is from [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) (omc), whose implementation was simply too good to reinvent (originally inspired by [Ouroboros](https://github.com/Q00/ouroboros)).
 
