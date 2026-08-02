@@ -72,20 +72,24 @@ const { data, error } = useQuery({
 function ProductDetailPage({ params }: { params: { id: string } }) {
   return (
     <ErrorBoundary fallback={<PageErrorFallback />}>
-      <Suspense fallback={<ProductSkeleton />}>
-        <ProductInfo id={params.id} />
-        <ErrorBoundary fallback={<ReviewsErrorFallback />}>
-          <Suspense fallback={<ReviewsSkeleton />}>
-            <ProductReviews id={params.id} />
-          </Suspense>
-        </ErrorBoundary>
-      </Suspense>
+      <ErrorBoundary fallback={<ProductInfoErrorFallback />}>
+        <Suspense fallback={<ProductSkeleton />}>
+          <ProductInfo id={params.id} />
+        </Suspense>
+      </ErrorBoundary>
+      <ErrorBoundary fallback={<ReviewsErrorFallback />}>
+        <Suspense fallback={<ReviewsSkeleton />}>
+          <ProductReviews id={params.id} />
+        </Suspense>
+      </ErrorBoundary>
     </ErrorBoundary>
   );
 }
 ```
 
 상품 정보가 실패해도 리뷰 영역은 살아 있다(또는 그 반대). 페이지 전체가 하얘지는 대신 부분적으로 동작하는 화면을 보여줄 수 있다.
+
+주의 — Boundary의 fallback은 자식 트리 전체를 대체하므로, 한 섹션을 다른 섹션의 Boundary 안에 중첩하면 바깥 섹션의 실패가 안쪽 섹션까지 죽인다. 독립 생존이 목적이면 섹션 Boundary는 형제로 배치한다.
 
 ## Boundary가 못 잡는 에러 — 이벤트 핸들러 · 비동기 콜백
 

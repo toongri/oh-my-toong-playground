@@ -181,22 +181,22 @@ function WishlistHeart({ productId, isWished }: { productId: string; isWished: b
 ```ts
 // ✅ features/toggle-wishlist/api/toggle-wishlist-mutation.ts — 여러 지점이 함께 바뀔 때만 cache 방식
 export function useToggleWishlist() {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: toggleWishlistRequest,
-    onMutate: async (productId: string) => {
-      await queryClient.cancelQueries({ queryKey: wishlistKeys.all });
-      const previous = queryClient.getQueryData(wishlistKeys.all);
-      queryClient.setQueryData(wishlistKeys.all, (old) => toggleId(old, productId));
+    onMutate: async (productId: string, context) => {
+      const { client } = context;
+      await client.cancelQueries({ queryKey: wishlistKeys.all });
+      const previous = client.getQueryData(wishlistKeys.all);
+      client.setQueryData(wishlistKeys.all, (old) => toggleId(old, productId));
       return { previous };
     },
-    onError: (_err, _productId, context) => {
-      // v5는 onError/onSettled 콜백에 QueryClient가 context.client로 주입된다 —
-      // 구버전 자료처럼 클로저로 잡은 useQueryClient()를 다시 호출할 필요가 없다
-      context?.client.setQueryData(wishlistKeys.all, context.previous);
+    // v5는 콜백의 마지막 인자 context로 QueryClient를 주입한다(onError는 4번째).
+    // 3번째 인자는 onMutate 반환값 — context가 아니다. 클로저로 잡은 QueryClient 재호출도 불필요.
+    onError: (_err, _productId, onMutateResult, context) => {
+      context.client.setQueryData(wishlistKeys.all, onMutateResult?.previous);
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: wishlistKeys.all });
+    onSettled: (_data, _err, _productId, _onMutateResult, context) => {
+      context.client.invalidateQueries({ queryKey: wishlistKeys.all });
     },
   });
 }
