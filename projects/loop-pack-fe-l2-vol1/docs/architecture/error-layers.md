@@ -23,27 +23,34 @@
 
 ## Error Boundary 계층 배치
 
-전역 Boundary 안에 페이지 Boundary를 중첩한다. 폴백 컴포넌트는 재시도를 위한 `reset`을 받는다.
+전역 Boundary 안에 페이지 Boundary를 중첩한다. 폴백 컴포넌트는 재시도를 위한 `reset`을 받는다. 재시도 버튼이 Boundary만 리셋하면 query가 에러 상태로 남아 같은 에러를 즉시 다시 던진다 — TanStack Query의 `QueryErrorResetBoundary`가 주는 `reset`을 Boundary의 `onReset`에 함께 물린다.
 
 ```tsx
+import { QueryErrorResetBoundary } from "@tanstack/react-query";
+import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+
 function App() {
   return (
-    <ErrorBoundary fallback={GlobalErrorFallback}>
+    <ErrorBoundary FallbackComponent={GlobalErrorFallback}>
       <Header />
-      <ErrorBoundary fallback={PageErrorFallback}>
-        <Outlet />
-      </ErrorBoundary>
+      <QueryErrorResetBoundary>
+        {({ reset }) => (
+          <ErrorBoundary onReset={reset} FallbackComponent={PageErrorFallback}>
+            <Outlet />
+          </ErrorBoundary>
+        )}
+      </QueryErrorResetBoundary>
       <Footer />
     </ErrorBoundary>
   );
 }
 
-function PageErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
+function PageErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   return (
     <div>
       <h2>페이지를 불러오는데 실패했습니다</h2>
       <p>{error.message}</p>
-      <button onClick={reset}>다시 시도</button>
+      <button onClick={() => resetErrorBoundary()}>다시 시도</button>
     </div>
   );
 }

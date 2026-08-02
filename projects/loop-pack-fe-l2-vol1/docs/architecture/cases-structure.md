@@ -160,7 +160,7 @@ import { applyFilter } from "@/features/photo-editing/effects";
 
 ### ESLint `import/no-restricted-paths` — cross-feature와 역방향 import 차단
 
-하위 레이어가 상위 레이어를 참조하는 것은 zones로 막는다. cross-feature 차단은 slice별로 zone을 하나씩 열거해야 하는데, 여기엔 함정이 있다: target/from에 glob을 쓰면 glob 규약으로 매치되고 `*` 하나는 경로 구분자를 넘지 못한다 — `./src/features`에 `*`를 붙인 형태는 `src/features/photo/ui/Photo.tsx` 같은 중첩 파일에 매치되지 않는 no-op zone이 된다. glob 없는 디렉토리 경로는 그 아래 전부에 재귀 매치되므로, slice 디렉토리를 그대로 target으로 쓴다(bulletproof-react 방식).
+하위 레이어가 상위 레이어를 참조하는 것은 zones로 막는다. zone의 `target`은 import 문이 있는 쪽 — 위반의 주체 — 을 선택하고, `from`은 그 파일들이 import하면 안 되는 곳이다. cross-feature 차단은 slice별로 zone을 하나씩 열거해야 하는데, 여기엔 함정이 있다: target/from에 glob을 쓰면 glob 규약으로 매치되고 `*` 하나는 경로 구분자를 넘지 못한다 — `./src/features`에 `*`를 붙인 형태는 `src/features/photo/ui/Photo.tsx` 같은 중첩 파일에 매치되지 않는 no-op zone이 된다. glob 없는 디렉토리 경로는 그 아래 전부에 재귀 매치되므로, slice 디렉토리를 그대로 target으로 쓴다(bulletproof-react 방식).
 
 ```json
 {
@@ -187,7 +187,7 @@ import { applyFilter } from "@/features/photo-editing/effects";
 }
 ```
 
-첫 번째 zone이 케이스 3의 `gallery-page → effects` 내부 참조 같은 것을 기계적으로 막고, 두 번째 zone이 케이스 2에서 `shared`가 `widgets`를 import하려던 실수를 빌드 단계에서 잡는다. 다만 이 방식은 slice마다 zone을 하나씩 열거해야 한다(위 `photo` 것을 다른 slice마다 반복). 열거 없이 일반형으로 같은 레이어 간 import를 잡는 것은 아래 Steiger의 `forbidden-imports`가 담당한다.
+위 zone은 `photo`가 다른 feature를 import하는 것을 막는다. 케이스 3의 `gallery-page → effects`를 잡으려면 `gallery-page`를 target으로 한 zone이 따로 있어야 한다 — 그래서 이 방식은 slice마다 zone을 하나씩 열거해야 한다. 두 번째 zone은 케이스 2에서 `shared`가 `widgets`를 import하려던 실수를 빌드 단계에서 잡는다. 열거 없이 일반형으로 같은 레이어 간 import를 잡는 것은 아래 Steiger의 `forbidden-imports`가 담당한다.
 
 ### Steiger — FSD 전용 정적 분석이 잡는 위반
 
