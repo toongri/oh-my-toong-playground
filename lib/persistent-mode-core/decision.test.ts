@@ -1317,7 +1317,7 @@ describe("makeDecision", () => {
 	// -------------------------------------------------------------------------
 	// Background-aware Stop hook guards
 	// Guard 2: activeBackgroundTaskCount > 0 — must pass through immediately.
-	// Any running/pending background task passes through (type-agnostic); count 0 still blocks.
+	// Only running/pending items with type === "subagent" pass through; zero qualifying subagents block.
 	// -------------------------------------------------------------------------
 	describe("background-aware Stop hook guards", () => {
 		it("activeBackgroundTaskCount=1 with incompleteTodos yields continue (NOT block)", () => {

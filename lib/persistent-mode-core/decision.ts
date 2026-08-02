@@ -337,10 +337,10 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		/* never let a heartbeat write failure suppress the guard below */
 	}
 
-	// Guard 2: any running/pending background task is active (type-agnostic).
-	// Claude Code re-invokes the Stop hook via a task-notification wake when it completes,
-	// so allowing now defers enforcement safely. The status allowlist is fail-closed:
-	// terminal and unknown statuses keep enforcement active.
+	// Guard 2: any running/pending subagent is active.
+	// Claude Code re-invokes the Stop hook via a subagent-completion notification wake,
+	// so allowing now defers enforcement safely until that work completes. The status
+	// allowlist is fail-closed: terminal and unknown subagent statuses keep enforcement active.
 	if (activeBackgroundTaskCount > 0) {
 		return formatContinueOutput();
 	}

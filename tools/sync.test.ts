@@ -3723,7 +3723,15 @@ describe("processYaml — rules category deploys to codex with rewrite applied (
 		expect(claude).toBe(source);
 		expect(claude).toContain("On Claude Code");
 		expect(claude).toContain("background_tasks");
+		expect(claude).toContain("**Background subagent is running or pending");
+		expect(claude).toContain('`type === "subagent"`');
+		expect(claude).toContain("`status` is `running` or `pending`");
 		expect(claude).toContain("task-notification");
+		expect(claude).toContain("`shell`, `monitor`, and typeless");
+		expect(claude).toContain("remain case 1");
+		expect(claude).toContain("keep the turn alive");
+		expect(claude).not.toContain("**Background work is running or pending");
+		expect(claude).not.toContain("background work is running or pending, use case 4");
 		expect(codex).toContain("Codex has no equivalent Stop payload");
 		expect(codex).toContain("write_stdin");
 		expect(codex).toContain("poll");

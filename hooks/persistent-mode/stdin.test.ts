@@ -158,23 +158,30 @@ describe("parseInput", () => {
 		expect(result.activeBackgroundTaskCount).toBe(1);
 	});
 
-	it("shell running → activeBackgroundTaskCount 1 (type-agnostic)", () => {
+	it("subagent pending → activeBackgroundTaskCount 1", () => {
+		const result = parseInput(
+			JSON.stringify({ background_tasks: [{ id: "p", type: "subagent", status: "pending" }] }),
+		);
+		expect(result.activeBackgroundTaskCount).toBe(1);
+	});
+
+	it("shell running → activeBackgroundTaskCount 0 (long-lived task not counted)", () => {
 		const result = parseInput(
 			JSON.stringify({ background_tasks: [{ id: "b", type: "shell", status: "running" }] }),
 		);
-		expect(result.activeBackgroundTaskCount).toBe(1);
+		expect(result.activeBackgroundTaskCount).toBe(0);
 	});
 
-	it("monitor pending → activeBackgroundTaskCount 1 (type-agnostic)", () => {
+	it("monitor pending → activeBackgroundTaskCount 0 (long-lived task not counted)", () => {
 		const result = parseInput(
 			JSON.stringify({ background_tasks: [{ id: "m", type: "monitor", status: "pending" }] }),
 		);
-		expect(result.activeBackgroundTaskCount).toBe(1);
+		expect(result.activeBackgroundTaskCount).toBe(0);
 	});
 
-	it("typeless running entry → activeBackgroundTaskCount 1 (type field not read)", () => {
+	it("typeless running entry → activeBackgroundTaskCount 0 (type required)", () => {
 		const result = parseInput(JSON.stringify({ background_tasks: [{ id: "t", status: "running" }] }));
-		expect(result.activeBackgroundTaskCount).toBe(1);
+		expect(result.activeBackgroundTaskCount).toBe(0);
 	});
 
 	it("unknown status queued → activeBackgroundTaskCount 0 (fail-closed allowlist)", () => {
@@ -203,7 +210,7 @@ describe("parseInput", () => {
 		expect(result.activeBackgroundTaskCount).toBe(0);
 	});
 
-	it("mixed: subagent running + shell running → activeBackgroundTaskCount 2", () => {
+	it("mixed: subagent running + shell running → activeBackgroundTaskCount 1", () => {
 		const result = parseInput(
 			JSON.stringify({
 				background_tasks: [
@@ -212,7 +219,7 @@ describe("parseInput", () => {
 				],
 			}),
 		);
-		expect(result.activeBackgroundTaskCount).toBe(2);
+		expect(result.activeBackgroundTaskCount).toBe(1);
 	});
 
 	it("absent background_tasks → activeBackgroundTaskCount 0", () => {
