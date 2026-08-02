@@ -686,6 +686,23 @@ describe("codex-persistent-mode cli", () => {
 	});
 
 	describe("hook stop: shared continuation contract (makeDecision integration)", () => {
+		test("payload with foreign background_tasks field + incomplete todos → still blocks (no background bypass)", async () => {
+			const sid = "sid-foreign-background-blocks";
+			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
+			const { exitCode, stdout } = await runCli(
+				"stop",
+				{
+					...stopPayload(sid, projectDir),
+					background_tasks: [{ id: "x", type: "shell", status: "running" }],
+				},
+				omtDir,
+			);
+			expect(exitCode).toBe(0);
+			const parsed = JSON.parse(stdout);
+			expect(parsed.decision).toBe("block");
+			expect(parsed.reason).toContain("2");
+		});
+
 		test("awaiting-user token allows stop even with incomplete=2 (priority over baseline-todo)", async () => {
 			const sid = "sid-awaiting-with-incomplete";
 			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));

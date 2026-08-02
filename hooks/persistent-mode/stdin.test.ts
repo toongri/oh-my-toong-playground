@@ -151,28 +151,59 @@ describe("parseInput", () => {
 		expect(result.lastAssistantMessage).toBeNull();
 	});
 
-	it("subagent running → activeSubagentCount 1", () => {
+	it("subagent running → activeBackgroundTaskCount 1", () => {
 		const result = parseInput(
 			JSON.stringify({ background_tasks: [{ id: "a", type: "subagent", status: "running" }] }),
 		);
-		expect(result.activeSubagentCount).toBe(1);
+		expect(result.activeBackgroundTaskCount).toBe(1);
 	});
 
-	it("shell running → activeSubagentCount 0 (non-subagent not counted)", () => {
+	it("shell running → activeBackgroundTaskCount 1 (type-agnostic)", () => {
 		const result = parseInput(
 			JSON.stringify({ background_tasks: [{ id: "b", type: "shell", status: "running" }] }),
 		);
-		expect(result.activeSubagentCount).toBe(0);
+		expect(result.activeBackgroundTaskCount).toBe(1);
 	});
 
-	it("subagent completed → activeSubagentCount 0 (non-active not counted)", () => {
+	it("monitor pending → activeBackgroundTaskCount 1 (type-agnostic)", () => {
+		const result = parseInput(
+			JSON.stringify({ background_tasks: [{ id: "m", type: "monitor", status: "pending" }] }),
+		);
+		expect(result.activeBackgroundTaskCount).toBe(1);
+	});
+
+	it("typeless running entry → activeBackgroundTaskCount 1 (type field not read)", () => {
+		const result = parseInput(JSON.stringify({ background_tasks: [{ id: "t", status: "running" }] }));
+		expect(result.activeBackgroundTaskCount).toBe(1);
+	});
+
+	it("unknown status queued → activeBackgroundTaskCount 0 (fail-closed allowlist)", () => {
+		const result = parseInput(
+			JSON.stringify({ background_tasks: [{ id: "q", type: "shell", status: "queued" }] }),
+		);
+		expect(result.activeBackgroundTaskCount).toBe(0);
+	});
+
+	it("terminal statuses only → activeBackgroundTaskCount 0 (fail-closed)", () => {
+		const result = parseInput(
+			JSON.stringify({
+				background_tasks: [
+					{ id: "c", type: "shell", status: "completed" },
+					{ id: "f", type: "monitor", status: "failed" },
+				],
+			}),
+		);
+		expect(result.activeBackgroundTaskCount).toBe(0);
+	});
+
+	it("subagent completed → activeBackgroundTaskCount 0 (non-active not counted)", () => {
 		const result = parseInput(
 			JSON.stringify({ background_tasks: [{ id: "c", type: "subagent", status: "completed" }] }),
 		);
-		expect(result.activeSubagentCount).toBe(0);
+		expect(result.activeBackgroundTaskCount).toBe(0);
 	});
 
-	it("mixed: subagent running + shell running → activeSubagentCount 1", () => {
+	it("mixed: subagent running + shell running → activeBackgroundTaskCount 2", () => {
 		const result = parseInput(
 			JSON.stringify({
 				background_tasks: [
@@ -181,11 +212,16 @@ describe("parseInput", () => {
 				],
 			}),
 		);
-		expect(result.activeSubagentCount).toBe(1);
+		expect(result.activeBackgroundTaskCount).toBe(2);
 	});
 
-	it("absent background_tasks → activeSubagentCount 0", () => {
+	it("absent background_tasks → activeBackgroundTaskCount 0", () => {
 		const result = parseInput(JSON.stringify({ sessionId: "test" }));
-		expect(result.activeSubagentCount).toBe(0);
+		expect(result.activeBackgroundTaskCount).toBe(0);
+	});
+
+	it("empty background_tasks array → activeBackgroundTaskCount 0 (fail-closed)", () => {
+		const result = parseInput(JSON.stringify({ background_tasks: [] }));
+		expect(result.activeBackgroundTaskCount).toBe(0);
 	});
 });

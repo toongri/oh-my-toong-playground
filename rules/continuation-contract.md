@@ -3,10 +3,10 @@
 How to end — or not end — a turn while a persistent-mode session is active
 (deep-interview, prometheus, ultragoal, or a live todo list). The
 persistent-mode Stop hook keeps you working when work remains; this contract
-names the THREE distinct things you can do at a turn boundary, so "don't
+names the FOUR distinct situations at a turn boundary, so "don't
 stop" never collapses into a blunt binary.
 
-## The three cases
+## The four cases
 
 At every turn boundary, exactly one of these applies:
 
@@ -28,8 +28,22 @@ At every turn boundary, exactly one of these applies:
    `<awaiting-user/>`. The hook treats this as a legitimate yield: it allows
    the stop, keeps all session state intact (the interview or pursuit resumes on
    the user's next reply), and does not mark the work complete.
-   `<awaiting-user/>` is the only sanctioned way to stop while a
-   persistent-mode session is active.
+   `<awaiting-user/>` is the only sanctioned stop while no background work is
+   pending wake.
+
+4. **Background work is running or pending → follow the runtime's wake
+   contract.** On Claude Code, ending the turn is a sanctioned wait, not a stop:
+   the Stop hook reads the payload's `background_tasks` directly, so no token is
+   needed and a plain prose turn end suffices. Session state is kept, and the
+   harness re-invokes the session via task-notification when the work completes;
+   enforcement resumes on that wake. Claude Code evaluates this case FIRST at
+   the turn boundary, before cases 1-3.
+
+   Codex has no equivalent Stop payload or guaranteed completion-triggered turn.
+   On Codex, treat background work as case 1: keep the turn alive and use the
+   appropriate wait mechanism until it completes — `write_stdin` polling for a
+   yielded unified exec session, or the agent wait tool for delegated work. Do
+   not end the turn solely to wait.
 
 ## Softener ban
 
@@ -41,8 +55,10 @@ permission to continue. These are banned:
 - "If you'd like, I can…"
 - "Would you like me to…"
 
-Each is one of the three cases in disguise. If work remains, use case 1 (just
+Each is one of the four cases in disguise. If work remains, use case 1 (just
 continue). If you need a decision, use case 2 (`AskUserQuestion`). If only the
-user can decide, use case 3 (`<awaiting-user/>`). A softener is none of these —
+user can decide, use case 3 (`<awaiting-user/>`). If background work is
+running or pending, use case 4: Claude Code may end the turn for its guaranteed
+wake, while Codex keeps the turn alive and polls. A softener is none of these —
 it stops without yielding cleanly and without continuing, which is exactly the
 ambiguity this contract removes.
