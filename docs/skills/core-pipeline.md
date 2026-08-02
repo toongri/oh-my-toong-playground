@@ -29,8 +29,8 @@ oh-my-toong은 AI 에이전트 설정을 중앙에서 버전 관리하고 프로
 | 단계 | 스킬 | 책임 | 산출물 |
 |------|------|------|--------|
 | 정의 | deep-interview | 모호성을 해소해 명세로 수렴 | `$OMT_DIR/deep-interview/{slug}.md` |
-| 기획 | prometheus | 명세를 실행 가능한 작업 계획으로 변환 | `$OMT_DIR/plans/*.md` |
-| 실행 | sisyphus | 전문 에이전트를 통한 구현 조율 | 검증된 코드 변경 |
+| 기획 | ultragoal (활성 토폴로지 컴포넌트 1개) / prometheus (그 외) | Phase 5에서 권장 경로를 고르고, 다른 기획·실행 스킬은 명시적 오버라이드로 제공 | ultragoal 실행 / 사람이 읽을 수 있는 계획 |
+| 실행 | ultragoal → sisyphus | ultragoal이 스토리를 sisyphus에 위임해 실행 조율 | 검증된 코드 변경 |
 | 검증 | sisyphus (인라인) | verify 태스크의 AC 명령을 직접 실행해 구현 품질·계획 준수·지시 이행 확인 | APPROVE / REQUEST_CHANGES |
 
 여기에 보조 역할이 붙습니다. **clarify**는 어느 단계든 모호함이 보이면 멈추는 게이트, **momus**는 실행 전 계획을 검토하는 비평가, **diagnose**는 원인을 진단하는 읽기 전용 조언자, **agent-council**은 판단이 갈릴 때 다수 의견을 모으는 자문 기구입니다.
@@ -50,15 +50,21 @@ flowchart LR
         prometheus["prometheus"]
     end
     subgraph 실행
+        ultragoal["ultragoal"]
         sisyphus["sisyphus"]
     end
 
-    deep -->|"$OMT_DIR/deep-interview/{slug}.md"| prometheus
-    prometheus -->|"$OMT_DIR/plans/*.md"| sisyphus
+    deep -->|"$OMT_DIR/deep-interview/{slug}.md"| Route{활성 토폴로지<br/>컴포넌트가 정확히 1개?}
+    Route -->|예: ultragoal 권장| ultragoal
+    Route -->|아니오: prometheus 권장| prometheus
+    Route -.->|1개일 때 prometheus 오버라이드| prometheus
+    Route -.->|그 외 ultragoal 오버라이드| ultragoal
+    prometheus -->|"$OMT_DIR/plans/*.md"| ultragoal
+    ultragoal -->|"스토리 순차 디스패치"| sisyphus
     sisyphus -->|"검증된 코드"| Done((완료))
 ```
 
-각 화살표는 파일 핸드오프입니다. deep-interview는 명세를 prometheus에 넘기고, prometheus는 계획을 sisyphus에 넘기며, sisyphus는 검증된 코드 변경으로 마무리합니다. 단계를 건너뛰어도 동작하지만, 앞 단계의 명확성이 뒤 단계의 품질을 결정합니다.
+각 화살표는 파일 핸드오프입니다. deep-interview의 Phase 5는 활성 토폴로지 컴포넌트가 정확히 1개면 ultragoal을, 그 외에는 prometheus를 권장하고, 권장하지 않은 기획·실행 스킬은 명시적 오버라이드로 제공합니다. prometheus를 선택하면 사람이 읽을 수 있는 계획을 만들어 ultragoal에 넘기며, ultragoal은 스토리를 sisyphus에 순차 디스패치하고 sisyphus는 검증된 코드 변경으로 마무리합니다. 단계를 건너뛰어도 동작하지만, 앞 단계의 명확성이 뒤 단계의 품질을 결정합니다.
 
 ---
 
@@ -66,7 +72,7 @@ flowchart LR
 
 **목적**: 모호한 아이디어를 자율 실행 전에 명확한 명세로 수렴시킵니다. 가중치 기반 모호성 점수가 임계값 아래로 떨어질 때까지, 한 번에 하나씩, 가장 약한 차원을 겨냥해 질문합니다.
 
-**핵심 제약**: 모호성이 임계값을 넘으면 실행으로 넘어가지 않습니다. 직접 구현하지 않고, 명세를 만들어 prometheus로 넘깁니다.
+**핵심 제약**: 모호성이 임계값을 넘으면 실행으로 넘어가지 않습니다. 직접 구현하지 않고 명세를 만든 뒤, Phase 5에서 활성 토폴로지 컴포넌트 수에 따라 ultragoal 또는 prometheus를 권장하며 다른 경로는 명시적 오버라이드로 제공합니다.
 
 **언제 쓰나**: 아이디어는 있지만 범위가 흐릿할 때, "물어봐줘", "넘겨짚지 마", "확실히 이해했는지 봐줘" 같은 요청이 있을 때 씁니다. 반대로 파일 경로·함수명·인수 기준까지 명확한 요청이라면 인터뷰 없이 바로 실행하는 게 맞습니다.
 
@@ -77,10 +83,14 @@ flowchart TB
     Score --> Gate{모호성 ≤ 임계값?}
     Gate -->|아니오| Ask
     Gate -->|예| Spec[명세 crystallize]
-    Spec --> Handoff([prometheus로 전달])
+    Spec --> Route{활성 토폴로지<br/>컴포넌트가 정확히 1개?}
+    Route -->|예: ultragoal 권장| Ultra([ultragoal로 전달])
+    Route -->|아니오: prometheus 권장| Prom([prometheus로 전달])
+    Route -.->|1개일 때 prometheus 오버라이드| Prom
+    Route -.->|그 외 ultragoal 오버라이드| Ultra
 ```
 
-**파이프라인 연결**: 출력 명세는 `$OMT_DIR/deep-interview/{slug}.md`에 저장되어 prometheus의 입력이 됩니다. "specification quality가 AI 개발의 핵심 병목"이라는 전제 위에 설계되었습니다.
+**파이프라인 연결**: 출력 명세는 `$OMT_DIR/deep-interview/{slug}.md`에 저장됩니다. Phase 5는 활성 토폴로지 컴포넌트가 정확히 1개면 ultragoal을, 그 외에는 prometheus를 권장하고 권장하지 않은 경로는 명시적 오버라이드로 제공합니다. prometheus를 선택하면 이 명세를 바탕으로 사람이 읽을 수 있는 계획을 작성해 ultragoal에 넘깁니다. 이 흐름은 "specification quality가 AI 개발의 핵심 병목"이라는 전제 위에 설계되었습니다.
 
 > 이 스킬은 [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode)(omc)의 구현이 워낙 잘 만들어져 거의 그대로 가져와 다듬은 것입니다 (originally [Ouroboros](https://github.com/Q00/ouroboros) 영감).
 
@@ -109,7 +119,7 @@ flowchart TB
     Criteria -->|아니오| Draft[기준 초안<br/>-> 사용자 확인]
     Draft --> Metis
     Metis --> Write["$OMT_DIR/plans/*.md에<br/>계획 작성"]
-    Write --> Handoff([sisyphus로 전달])
+    Write --> Handoff([ultragoal로 전달])
 ```
 
 **금지된 행위**:
@@ -121,7 +131,7 @@ flowchart TB
 
 **Scope Split Gate**: Complex·Architecture로 분류된 요청은 인터뷰에 들어가기 전에 한 가지를 먼저 판정합니다 — *나머지 없이도 혼자 머지돼서, 시스템이 돌고, 그걸 검증할 무언가가 있는 부분집합이 있는가.* 있으면 그 요청은 계획 하나가 아닙니다. 덩어리를 순서대로 나열하되 동작이 바뀌지 않는 것을 먼저 두고, **첫 덩어리만** 이번 실행의 범위로 삼으며, 나머지는 각자의 선행 조건과 함께 `## Context`에 이월로 적습니다. 이월된 덩어리는 각각 별도의 prometheus 실행이 됩니다. Trivial·Scoped는 이 게이트를 건너뜁니다.
 
-**파이프라인 연결**: 인터뷰 → 조사(explore/librarian) → metis 갭 분석 → 계획 작성 순으로 진행합니다. 산출된 계획은 `$OMT_DIR/plans/*.md`에 저장되어 sisyphus의 입력이 됩니다. prometheus 한 번은 계획 하나를 냅니다 — 계획 여러 개로 갈린 요청은 한 덩어리씩 따로 실행합니다.
+**파이프라인 연결**: 인터뷰 → 조사(explore/librarian) → metis 갭 분석 → 계획 작성 순으로 진행합니다. 산출된 계획은 `$OMT_DIR/plans/*.md`에 저장되어 ultragoal의 입력이 됩니다. prometheus 한 번은 계획 하나를 냅니다 — 계획 여러 개로 갈린 요청은 한 덩어리씩 따로 실행합니다.
 
 ---
 

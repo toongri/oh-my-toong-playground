@@ -10,7 +10,7 @@
  * causal claim is false rather than merely unproven?
  *
  * skill-chain-load could not answer this: its own `--negative` control
- * compared the REAL goal skill with/without the rewrite pass, but goal's
+ * compared the REAL chain skill with/without the rewrite pass, but the chain skill's
  * body and its references/*.md mention "sisyphus" in plain prose in several
  * places independent of rule 6a — so both arms handed the model the same
  * non-sigil textual cues, and both rendered exit 0. This probe isolates cue
@@ -92,12 +92,12 @@ export function buildProbeSpec(deployRoot: string, arm: Arm, isolated: IsolatedC
 	return {
 		session: {
 			// `$alpha` MUST lead the user-input prompt — same mechanical-load
-			// reasoning as skill-chain-load's `$goal` (a user-position `$X` is
+			// reasoning as skill-chain-load's `$ultragoal` (a user-position `$X` is
 			// machine-loaded by codex's mention scanner).
 			prompt: `$alpha ${OBJECTIVE}`,
 			cwd: deployRoot,
 			sandbox: "read-only",
-			// alpha is a one-hop synthetic dispatch, not goal's Six-Slot
+			// alpha is a one-hop synthetic dispatch, not ultragoal's Seven-Slot
 			// decomposition — a short but still generous timeout.
 			timeoutMs: 120_000,
 			env: { HOME: isolated.home, CODEX_HOME: isolated.codexHome },

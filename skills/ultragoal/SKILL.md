@@ -1,23 +1,23 @@
 ---
 name: ultragoal
-description: Autonomous multi-story objective-pursuit executor — restructures goal into a per-story sequential loop. Auto-generates and bulk-approves a Story set, dispatches each confirmed story to sisyphus one at a time gated by a per-story APPROVE verdict, then runs one independent code-review over the accumulated diff at the final story.
+description: Autonomous multi-story objective-pursuit executor — runs objective pursuit as a per-story sequential loop. Auto-generates and bulk-approves a Story set, dispatches each confirmed story to sisyphus one at a time gated by a per-story APPROVE verdict, then runs one independent code-review over the accumulated diff at the final story.
 ---
 
 <Role>
 
 # Ultragoal — Sequential Multi-Story Objective-Pursuit Executor
 
-Ultragoal decomposes a single OBJECTIVE into the Seven Slots and an auto-generated Story set, has the user review and bulk-approve that set in one pass, then dispatches the confirmed stories to sisyphus **one story at a time, in sequence**: the next story is never dispatched until the current story's per-story verdict is `APPROVE`. Only after every confirmed story is APPROVE does a single independent code-review run over the accumulated diff. sisyphus remains the sole executor throughout — ultragoal never invokes the goal skill at runtime. OMT's `goal` **skill** (invoked via `Skill(...)`) and Codex's native goal tools (`create_goal`/`update_goal`/`get_goal`) are different things, and calling the latter is not a violation of this invariant.
+Ultragoal decomposes a single OBJECTIVE into the Seven Slots and an auto-generated Story set, has the user review and bulk-approve that set in one pass, then dispatches the confirmed stories to sisyphus **one story at a time, in sequence**: the next story is never dispatched until the current story's per-story verdict is `APPROVE`. Only after every confirmed story is APPROVE does a single independent code-review run over the accumulated diff. sisyphus remains the sole executor throughout — ultragoal never delegates execution to another skill at runtime. Codex's native goal tools (`create_goal`/`update_goal`/`get_goal`) are model-callable tools, not skill dispatches, and calling them is not a violation of this invariant.
 
 **Design philosophy: autonomy is post-planning.** Planning carries a single human gate — bulk approval of the auto-generated Story set; that gate runs UN-wrapped. The autonomy begins after planning, during the per-story pursuit loop. The single load-bearing invariant of the whole design: **the loop never false-completes.** Every state-write or verdict-write failure degrades toward continued pursuit of the current story or block — never toward a claimed completion.
 
-**Single-story degrade.** When the objective decomposes to exactly one story, ultragoal degrades to goal's behavior: `set-stories --single` auto-derives and auto-confirms the one story, a single `Skill(skill: "sisyphus")` dispatch runs, and the per-story advance gate and the final completion gate collapse into the same single check goal already runs.
+**Single-story degrade.** When the objective decomposes to exactly one story, ultragoal collapses to a single-gate loop: `set-stories --single` auto-derives and auto-confirms the one story, a single `Skill(skill: "sisyphus")` dispatch runs, and the per-story advance gate and the final completion gate collapse into the same single check.
 
 </Role>
 
 ## State CLI
 
-The autonomous loop is gated by a session-keyed state file driven through the bundled CLI, kept in its own artifact namespace (`ultragoal-state-`/`ultragoal-verdict-`/`ultragoal-codereview-`) separate from goal's. Reference it ONLY via the skill-dir variable, never CWD-relative:
+The autonomous loop is gated by a session-keyed state file driven through the bundled CLI, kept in its own artifact namespace (`ultragoal-state-`/`ultragoal-verdict-`/`ultragoal-codereview-`). Reference it ONLY via the skill-dir variable, never CWD-relative:
 
 ```
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts <subcommand> [options]
@@ -28,7 +28,7 @@ Subcommands used by this orchestrator:
 | Subcommand | Authority | Purpose |
 |------------|-----------|---------|
 | `set --phase <planning\|pursuing> [slot flags…]` | orchestrator | Seed/advance phase; carries the slot values. Accepts ONLY `planning`/`pursuing` — it can never write `complete`, and on `planning` it resets the verdict to `absent`. |
-| `confirm-all-stories` | orchestrator | Bulk-approves every unconfirmed story in the auto-generated set in one call — ultragoal's decomposition affordance, replacing goal's per-story `confirm-story` dialogue. |
+| `confirm-all-stories` | orchestrator | Bulk-approves every unconfirmed story in the auto-generated set in one call — ultragoal's decomposition affordance, replacing a per-story `confirm-story` dialogue. |
 | `reorder-stories --order <id1,id2,...>` | orchestrator | Planning-only reorder of the story array to an exact permutation of the current ids — steers the sequential dispatch order before pursuit begins. |
 | `set-verdict --verdict <APPROVE\|REQUEST_CHANGES\|COMMENT\|absent>` | gate layer | The ONLY writer of `objective_verdict`. |
 | `request-complete` | gate layer | The ONLY path to `phase=complete`; structurally gated on completion-evidence being present and `objective_verdict=APPROVE`. |
@@ -130,7 +130,7 @@ Initial path: `set --phase planning` (seed slots) → auto-generate the Story se
 
 **You MUST read `references/completion-gate.md` first** before rendering a per-story verdict, evaluating the final code-review lane, or running the completion sequence (`set-verdict`/`request-complete`) — it is the single owner of the evidence rubric, the per-story and code-review artifact schemas, the pass signal, the concrete-progress routing per verdict, and the blocked-stop conditions.
 
-Middle stories get a **lightweight, self-attested per-story verdict** — the same inline objective self-check goal already runs, scoped to the one story just dispatched — no code-review runs per story. Only once every confirmed story is APPROVE does the independent code-review lane run, and it runs exactly once, over the accumulated diff of all stories, exactly like goal's final-completion code-review.
+Middle stories get a **lightweight, self-attested per-story verdict** — an inline objective self-check scoped to the one story just dispatched — no code-review runs per story. Only once every confirmed story is APPROVE does the independent code-review lane run, and it runs exactly once, over the accumulated diff of all stories, as the final completion code-review.
 
 ---
 

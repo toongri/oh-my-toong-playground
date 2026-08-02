@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, spyOn } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import { makeDecision, DecisionContext } from "./decision.ts";
 import { mkdir, mkdtemp, writeFile, rm, readFile } from "fs/promises";
@@ -190,32 +190,6 @@ describe("makeDecision", () => {
 			expect(existsSync(markerPath)).toBe(true);
 			// Block-count is reset
 			expect(existsSync(join(stateDir, "block-count-test-session"))).toBe(false);
-		});
-
-		it("AC3: awaiting-user allows stop during an active goal pursuit, leaving iteration untouched", async () => {
-			const goalPath = join(omtDir, "goal-state-test-session.json");
-			await writeFile(
-				goalPath,
-				JSON.stringify({
-					active: true,
-					phase: "pursuing",
-					objective_verdict: "",
-					iteration: 2,
-					max_iterations: 10,
-					outcome: "goal objective text",
-				}),
-			);
-
-			const context = createContext({
-				lastAssistantMessage: "Need your input. <awaiting-user/>",
-			});
-
-			const result = makeDecision(context);
-
-			expect(result).toEqual({ continue: true });
-			const { readFileSync } = await import("fs");
-			const after = JSON.parse(readFileSync(goalPath, "utf8"));
-			expect(after.iteration).toBe(2);
 		});
 
 		it("AC3: awaiting-user allows stop during an active ultragoal pursuit, leaving iteration untouched", async () => {
@@ -1195,842 +1169,8 @@ describe("makeDecision", () => {
 		});
 	});
 
-	describe("Priority 1.4: Goal autonomous pursuit loop", () => {
-		const goalPath = join(omtDir, "goal-state-test-session.json");
-
-		const writeGoal = async (state: Record<string, unknown>) => {
-			await writeFile(goalPath, JSON.stringify(state));
-		};
-
-		const readGoalFile = async (): Promise<Record<string, unknown>> => {
-			const { readFileSync } = await import("fs");
-			return JSON.parse(readFileSync(goalPath, "utf8"));
-		};
-
-		it("goal yields for any non-pursuing phase incl fresh entry", async () => {
-			await writeGoal({
-				active: true,
-				phase: "planning",
-				objective_verdict: "",
-				iteration: 0,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result).toEqual({ continue: true });
-			// No iteration++ for non-pursuing phase
-			const after = await readGoalFile();
-			expect(after.iteration).toBe(0);
-		});
-
-		it("goal blocks when objective unmet incl absent verdict during pursuit", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				// objective_verdict intentionally absent
-				iteration: 2,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("[GOAL - ITERATION 3/10]");
-			const after = await readGoalFile();
-			expect(after.iteration).toBe(3);
-		});
-
-		it("APPROVE alone does not allow the stop", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "APPROVE",
-				iteration: 2,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			// APPROVE falls through to the normal block-and-increment path — only
-			// request-complete's terminal state (active:false) allows the stop.
-			const after = await readGoalFile();
-			expect(after.iteration).toBe(3);
-		});
-
-		it("terminal complete still allows the stop", async () => {
-			// This is the state request-complete (skills/goal/scripts/goal-state.ts) writes —
-			// the only legitimate allow-stop path once APPROVE's shortcut is removed.
-			await writeGoal({
-				active: false,
-				phase: "complete",
-				objective_verdict: "APPROVE",
-				iteration: 3,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result).toEqual({ continue: true });
-		});
-
-		it("budget exhaustion soft-stops without completing", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "REQUEST_CHANGES",
-				iteration: 10,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const after = await readGoalFile();
-			expect(after.phase).toBe("budget_limited");
-			expect(after.active).toBe(false);
-			expect(after.budget_limit_notified).toBe(true);
-			// No iteration++ on cap path
-			expect(after.iteration).toBe(10);
-		});
-
-		it("cap reached with APPROVE coinciding → budget_limited soft-stop, not complete", async () => {
-			// complete-wins (ADR-7) applies only when request-complete gate is called;
-			// decision.ts must not write phase='complete' directly even when verdict=APPROVE.
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "APPROVE",
-				iteration: 10,
-				max_iterations: 10,
-				outcome: "goal objective text",
-				completion_evidence_paths: ["artifacts/report.md"],
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const after = await readGoalFile();
-			expect(after.phase).toBe("budget_limited");
-			expect(after.active).toBe(false);
-			expect(after.budget_limit_notified).toBe(true);
-		});
-
-		it("goal pursuit ignores shared block-count hatch", async () => {
-			// Block-count already at the baseline escape-hatch limit (5)
-			await writeFile(join(stateDir, "block-count-test-session"), "5");
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 3,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
-
-			// Goal still blocks even though shared block-count is maxed out
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("[GOAL - ITERATION 4/10]");
-			const after = await readGoalFile();
-			expect(after.iteration).toBe(4);
-		});
-
-		it("goal active suppresses baseline todo branch", async () => {
-			await writeGoal({
-				active: true,
-				phase: "planning",
-				objective_verdict: "",
-				iteration: 0,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext({ incompleteTodoCount: 5 }));
-
-			// Yields without firing baseline todo-continuation
-			expect(result).toEqual({ continue: true });
-			expect(result.reason ?? "").not.toContain("<todo-continuation>");
-		});
-
-		it("goal pursuit fires when only goal-state exists on disk", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 1,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("[GOAL - ITERATION 2/10]");
-		});
-
-		it("continuation has untrusted_objective wrap", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 1,
-				max_iterations: 10,
-				outcome: "SENTINEL_OBJECTIVE_TEXT",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<untrusted_objective>");
-			expect(result.reason).toContain("</untrusted_objective>");
-			expect(result.reason).toContain("SENTINEL_OBJECTIVE_TEXT");
-		});
-
-		it("continuation has iteration and tokens-not-measured", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 4,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("[GOAL - ITERATION 5/10]");
-			expect(result.reason!.toLowerCase()).toContain("not measured");
-		});
-
-		it("continuation is behavioral steering without audit rubric", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 1,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!;
-			// behavioral steering: next concrete action + proxy-signal refusal
-			expect(reason.toLowerCase()).toContain("next");
-			expect(reason.toLowerCase()).toContain("proxy");
-			// NO audit rubric leaked into the continuation (ADR-5: rubric lives in the goal skill)
-			expect(reason.toLowerCase()).not.toContain("prompt-to-artifact");
-			expect(reason.toLowerCase()).not.toContain("verify-the-verifier");
-		});
-
-		it("continuation branch-A: next concrete action toward objective; proxy-signal completion rejected", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 1,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!;
-			// Branch A: asserts next concrete action
-			expect(reason.toLowerCase()).toContain("next concrete action");
-			// Branch A: proxy-signal refusal — named explicitly
-			expect(reason).toContain("proxy signals");
-			expect(reason).toContain("NOT objective completion");
-		});
-
-		it("continuation branch-B: claim-to-disprove framing for done belief", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 1,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!;
-			// Branch B: claim-to-disprove framing
-			expect(reason).toMatch(/claim to disprove|not trusted until verified/i);
-		});
-
-		it("continuation branch-B: names both completion-gate lanes (objective self-check + code-review) and request-complete", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 1,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!;
-			// Branch B: redirects to completion gate naming BOTH lanes
-			expect(reason.toLowerCase()).toContain("self-check");
-			expect(reason.toLowerCase()).toContain("code-review");
-			// Branch B: names request-complete
-			expect(reason).toContain("request-complete");
-		});
-
-		it("continuation envelope is unchanged: GOAL-ITERATION header and untrusted_objective block preserved", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 2,
-				max_iterations: 10,
-				outcome: "SENTINEL_OBJECTIVE_TEXT",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!;
-			// Envelope: iteration header unchanged
-			expect(reason).toContain("[GOAL - ITERATION 3/10]");
-			// Envelope: untrusted_objective wrap unchanged
-			expect(reason).toContain("<untrusted_objective>");
-			expect(reason).toContain("</untrusted_objective>");
-			expect(reason).toContain("SENTINEL_OBJECTIVE_TEXT");
-		});
-
-		it("continuation has complete-blocked gate", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "",
-				iteration: 1,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!.toLowerCase();
-			expect(reason).toContain("complete");
-			expect(reason).toContain("blocked");
-		});
-
-		it("budget_limit message forbids new work and completion", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "REQUEST_CHANGES",
-				iteration: 10,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!.toLowerCase();
-			// forbid starting new work
-			expect(reason).toContain("new");
-			// require a progress summary + next step
-			expect(reason).toContain("summary");
-			expect(reason).toContain("next");
-			// explicitly do NOT complete
-			expect(reason).toContain("not");
-			expect(reason).toContain("complete");
-		});
-
-		// Oracle-mandated safety tests (beyond the plan's enumerated ACs)
-
-		it("goal at cap with APPROVE but no evidence soft-stops not completes", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "APPROVE",
-				iteration: 10,
-				max_iterations: 10,
-				outcome: "goal objective text",
-				completion_evidence_paths: [], // APPROVE but NO evidence
-			});
-
-			const result = makeDecision(createContext());
-
-			// M2: APPROVE without evidence at cap → budget_limited, NOT complete
-			expect(result.decision).toBe("block");
-			const after = await readGoalFile();
-			expect(after.phase).toBe("budget_limited");
-			expect(after.active).toBe(false);
-		});
-
-		it("goal suppresses baseline todo for terminal goal-state", async () => {
-			// Terminal goal-state file (active:false, complete) still present on disk
-			await writeGoal({
-				active: false,
-				phase: "complete",
-				objective_verdict: "APPROVE",
-				iteration: 5,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext({ incompleteTodoCount: 4 }));
-
-			// M3: terminal goal-state owns lifecycle → yields, no todo-block
-			expect(result).toEqual({ continue: true });
-			expect(result.reason ?? "").not.toContain("<todo-continuation>");
-		});
-
-		// B2: a lingering/terminal goal-state must not strip an unrelated active
-		// deep-interview's continuation loop.
-		it("terminal goal-state does not suppress an active deep-interview", async () => {
-			await writeGoal({
-				active: false,
-				phase: "complete",
-				objective_verdict: "APPROVE",
-				iteration: 5,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-			await writeFile(
-				join(omtDir, "deep-interview-active-state-test-session.json"),
-				JSON.stringify({
-					active: true,
-					sessionId: "test-session",
-					started_at: new Date().toISOString(),
-					last_touched_at: new Date().toISOString(),
-					state: { phase: "in_progress" },
-				}),
-			);
-
-			const result = makeDecision(createContext({ lastAssistantMessage: "no done token" }));
-
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<deep-interview-continuation>");
-		});
-
-		it("non-pursuing active goal-state does not suppress an active deep-interview", async () => {
-			await writeGoal({
-				active: true,
-				phase: "planning",
-				objective_verdict: "",
-				iteration: 0,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-			await writeFile(
-				join(omtDir, "deep-interview-active-state-test-session.json"),
-				JSON.stringify({
-					active: true,
-					sessionId: "test-session",
-					started_at: new Date().toISOString(),
-					last_touched_at: new Date().toISOString(),
-					state: { phase: "in_progress" },
-				}),
-			);
-
-			const result = makeDecision(createContext({ lastAssistantMessage: "no done token" }));
-
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<deep-interview-continuation>");
-		});
-
-		it("corrupted completion_evidence_paths does not affect cap path — budget_limited regardless", async () => {
-			// The cap path no longer inspects completion_evidence_paths at all; this confirms
-			// corrupted state is harmless (budget_limited is the unconditional cap outcome).
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "APPROVE",
-				iteration: 10,
-				max_iterations: 10,
-				outcome: "goal objective text",
-				completion_evidence_paths: "x", // non-array (corrupted) — ignored by cap path
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const after = await readGoalFile();
-			expect(after.phase).toBe("budget_limited");
-			expect(after.active).toBe(false);
-		});
-
-		it("APPROVE + array evidence at cap still soft-stops — complete requires request-complete gate", async () => {
-			// B5 non-array check is now irrelevant (shortcut removed); this test confirms
-			// that even valid evidence does not bypass the gate.
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "APPROVE",
-				iteration: 10,
-				max_iterations: 10,
-				outcome: "goal objective text",
-				completion_evidence_paths: ["artifacts/report.md"],
-			});
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const after = await readGoalFile();
-			expect(after.phase).toBe("budget_limited");
-			expect(after.active).toBe(false);
-		});
-
-		// Regression: cap path must always merge into budget_limited — no shortcut to complete.
-		it("cap reached with APPROVE + evidence → budget_limited block, decision.ts never writes complete", async () => {
-			await writeGoal({
-				active: true,
-				phase: "pursuing",
-				objective_verdict: "APPROVE",
-				iteration: 10,
-				max_iterations: 10,
-				outcome: "goal objective text",
-				completion_evidence_paths: ["artifacts/report.md"],
-			});
-
-			const result = makeDecision(createContext());
-
-			// complete is ONLY reachable via request-complete gate; cap path must soft-stop.
-			expect(result.decision).toBe("block");
-			const after = await readGoalFile();
-			expect(after.phase).toBe("budget_limited");
-			expect(after.active).toBe(false);
-			expect(after.budget_limit_notified).toBe(true);
-		});
-
-		// Schema-guard regression tests
-
-		it("malformed active goal-state does NOT suppress baseline-todo (fails schema guard)", async () => {
-			// {active:true, phase:"pursuit"} fails the phase guard → readGoalStateRaw returns null
-			// → goalRaw is null → goalSuppressesBaselineTodo stays false → todo branch fires.
-			await writeGoal({
-				active: true,
-				phase: "pursuit", // typo'd — not a valid GoalPhase
-				// max_iterations intentionally omitted to also fail that guard
-			});
-
-			const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
-
-			// Baseline-todo continuation FIRES (not suppressed by malformed goal)
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<todo-continuation>");
-		});
-
-		it("VALID terminal goal-state (active:false, valid phase) still suppresses baseline-todo (M3 preserved)", async () => {
-			// A well-formed terminal state passes the schema guard → readGoalStateRaw returns the
-			// object → goalSuppressesBaselineTodo = true → baseline-todo does NOT fire (M3).
-			await writeGoal({
-				active: false,
-				phase: "complete",
-				objective_verdict: "APPROVE",
-				iteration: 5,
-				max_iterations: 10,
-				outcome: "goal objective text",
-			});
-
-			const result = makeDecision(createContext({ incompleteTodoCount: 4 }));
-
-			// M3: terminal goal-state suppresses baseline-todo
-			expect(result).toEqual({ continue: true });
-			expect(result.reason ?? "").not.toContain("<todo-continuation>");
-		});
-
-		// B-4: a SUSTAINED updateGoalState write failure on the iteration++ block path
-		// must not block the AI forever. The read path stays healthy (file readable) while
-		// only the write fails, so the on-disk iteration never advances and the cap is
-		// never reached. The block-count is reused as a write-failure escape.
-		describe("write-failure escape on iteration++ block path", () => {
-			it("escapes after MAX_BLOCK_COUNT turns when iteration write fails every turn, never completing", async () => {
-				await writeGoal({
-					active: true,
-					phase: "pursuing",
-					objective_verdict: "REQUEST_CHANGES", // not APPROVE → iteration++ block path
-					iteration: 1,
-					max_iterations: 100, // cap never reached
-					outcome: "goal objective text",
-				});
-				// Force updateGoalState's openSync to throw a non-ENOENT error ONLY for the
-				// goal-state file, so the on-disk iteration never advances while readGoalStateRaw
-				// and the sibling block-count writes (which use writeFileSync) stay healthy.
-				// updateGoalState now uses writeFileNoCreate (openSync r+ / ftruncateSync / writeSync)
-				// rather than writeFileSync, so the mock must target openSync.
-				// IMPORTANT: ENOENT must NOT be thrown here — updateGoalState swallows ENOENT as
-				// its normal "race-deleted file" no-op, so decision.ts would never see writeOk=false.
-				// A non-ENOENT error (e.g. EACCES / EIO) simulates a real write failure (disk full,
-				// permissions) that updateGoalState re-throws and decision.ts catches as writeOk=false.
-				// A mocked syscall is deterministic regardless of uid; chmod 0444 is silently bypassed
-				// by root (common in CI containers), making chmod unreliable.
-				const realOpenSync = fs.openSync;
-				const openSpy = spyOn(fs, "openSync").mockImplementation(((path: any, ...rest: any[]) => {
-					if (path === goalPath) {
-						const err = new Error("simulated goal-state write failure") as NodeJS.ErrnoException;
-						err.code = "EIO"; // non-ENOENT → re-thrown by updateGoalState → writeOk=false
-						throw err;
-					}
-					return (realOpenSync as any)(path, ...rest);
-				}) as any);
-
-				try {
-					// MAX_BLOCK_COUNT = 5: turns 1..5 block (incrementing the stuck-counter),
-					// turn 6 sees blockCount >= 5 and escapes.
-					for (let i = 0; i < 5; i++) {
-						const blocked = makeDecision(createContext());
-						expect(blocked.decision).toBe("block");
-					}
-
-					const escaped = makeDecision(createContext());
-					expect(escaped).toEqual({ continue: true });
-				} finally {
-					openSpy.mockRestore();
-				}
-
-				// Never false-completed: phase stays pursuing, file untouched by the escape.
-				const after = await readGoalFile();
-				expect(after.phase).toBe("pursuing");
-				expect(after.active).toBe(true);
-				expect(after.iteration).toBe(1); // never advanced (write kept failing)
-			});
-
-			it("does NOT escape early when writes SUCCEED, no matter how many turns", async () => {
-				await writeGoal({
-					active: true,
-					phase: "pursuing",
-					objective_verdict: "REQUEST_CHANGES", // not APPROVE → iteration++ block path
-					iteration: 1,
-					max_iterations: 100, // cap never reached within the loop
-					outcome: "goal objective text",
-				});
-
-				// Run well past MAX_BLOCK_COUNT (5) — 7 turns. Writes succeed each turn, so the
-				// stuck-counter is reset every turn and the escape NEVER fires.
-				for (let i = 0; i < 7; i++) {
-					const result = makeDecision(createContext());
-					expect(result.decision).toBe("block");
-				}
-
-				// iteration advanced once per turn; goal still pursuing (no spurious escape/complete).
-				const after = await readGoalFile();
-				expect(after.iteration).toBe(8); // 1 + 7 turns
-				expect(after.phase).toBe("pursuing");
-				expect(after.active).toBe(true);
-			});
-		});
-	});
-
-	// -------------------------------------------------------------------------
-	// C2 witness: suppression read (ADR-8) refreshes last_touched_at
-	// -------------------------------------------------------------------------
-	describe("C2 (ADR-8): terminal goal suppression read refreshes heartbeat", () => {
-		const goalPath = join(omtDir, "goal-state-test-session.json");
-		const OLD_STAMP = "2020-01-01T00:00:00+00:00";
-
-		it("(C2-witness) suppression path on a terminal goal advances last_touched_at", async () => {
-			// Terminal goal (active=false) — this takes the suppression path (M3),
-			// setting goalSuppressesBaselineTodo=true. ADR-8 requires updateGoalState({})
-			// to be called after line 355 so the heartbeat refreshes.
-			await writeFile(
-				goalPath,
-				JSON.stringify({
-					active: false,
-					phase: "complete",
-					objective_verdict: "APPROVE",
-					iteration: 3,
-					max_iterations: 10,
-					last_touched_at: OLD_STAMP,
-					started_at: OLD_STAMP,
-					outcome: "shipped",
-					completion_evidence_paths: ["a.md"],
-				}),
-			);
-
-			// Run the decision path (no blocking state, no deep-interview, no incomplete todos)
-			makeDecision(createContext());
-
-			const content = await readFile(goalPath, "utf8");
-			const after = JSON.parse(content);
-			// last_touched_at must have advanced beyond the old stamp
-			expect(after.last_touched_at).not.toBe(OLD_STAMP);
-			expect(after.last_touched_at > OLD_STAMP).toBe(true);
-		});
-
-		it("(C2-absent) suppression path with no goal file creates nothing", () => {
-			// No goal-state file — decision must still exit without creating a file
-			makeDecision(createContext());
-
-			expect(fs.existsSync(goalPath)).toBe(false);
-		});
-	});
-
-	// -------------------------------------------------------------------------
-	// Pristine goal-state: invisible to all consumers except the goal skill
-	// A pristine seed (phase=planning, iteration=0, outcome="") must be INERT:
-	//   - does NOT suppress baseline-todo continuation
-	//   - does NOT refresh last_touched_at (no heartbeat write)
-	// -------------------------------------------------------------------------
-	describe("Pristine goal-state is inert to consumers", () => {
-		const goalPath = join(omtDir, "goal-state-test-session.json");
-		const OLD_STAMP = "2020-01-01T00:00:00+00:00";
-
-		it("pristine active goal-state does NOT suppress baseline-todo", async () => {
-			// Pristine seed: phase=planning, iteration=0, outcome="" — the Entry Gate
-			// hasn't run yet; orphan if goal skill refused. Must NOT suppress todo block.
-			await writeFile(
-				goalPath,
-				JSON.stringify({
-					active: true,
-					phase: "planning",
-					iteration: 0,
-					max_iterations: 10,
-					outcome: "",
-					last_touched_at: OLD_STAMP,
-					started_at: OLD_STAMP,
-				}),
-			);
-
-			const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
-
-			// Baseline-todo continuation MUST fire (pristine does NOT suppress)
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<todo-continuation>");
-		});
-
-		it("pristine active goal-state does NOT refresh last_touched_at (heartbeat not kept alive)", async () => {
-			// An orphan pristine seed must age toward ACTIVE TTL and be GC'd —
-			// NOT be kept alive by a suppression-path heartbeat refresh.
-			await writeFile(
-				goalPath,
-				JSON.stringify({
-					active: true,
-					phase: "planning",
-					iteration: 0,
-					max_iterations: 10,
-					outcome: "",
-					last_touched_at: OLD_STAMP,
-					started_at: OLD_STAMP,
-				}),
-			);
-
-			makeDecision(createContext());
-
-			// File content must be unchanged — no heartbeat write must have occurred
-			const content = fs.readFileSync(goalPath, "utf8");
-			const after = JSON.parse(content);
-			expect(after.last_touched_at).toBe(OLD_STAMP);
-		});
-
-		it("non-pristine planning state (outcome set) still suppresses baseline-todo (regression guard)", async () => {
-			// A planning state with a real outcome is NOT pristine — it is a real goal.
-			// Suppression must still apply (regression guard for the pristine gate).
-			await writeFile(
-				goalPath,
-				JSON.stringify({
-					active: true,
-					phase: "planning",
-					iteration: 0,
-					max_iterations: 10,
-					outcome: "ship feature X",
-					last_touched_at: OLD_STAMP,
-					started_at: OLD_STAMP,
-				}),
-			);
-
-			const result = makeDecision(createContext({ incompleteTodoCount: 3 }));
-
-			// Non-pristine planning → suppress; baseline-todo must NOT fire
-			expect(result).toEqual({ continue: true });
-			expect(result.reason ?? "").not.toContain("<todo-continuation>");
-		});
-
-		it("non-pristine planning state (outcome set) refreshes heartbeat (regression guard)", async () => {
-			await writeFile(
-				goalPath,
-				JSON.stringify({
-					active: true,
-					phase: "planning",
-					iteration: 0,
-					max_iterations: 10,
-					outcome: "ship feature X",
-					last_touched_at: OLD_STAMP,
-					started_at: OLD_STAMP,
-				}),
-			);
-
-			makeDecision(createContext());
-
-			const content = fs.readFileSync(goalPath, "utf8");
-			const after = JSON.parse(content);
-			// Non-pristine suppression path DOES refresh the heartbeat
-			expect(after.last_touched_at).not.toBe(OLD_STAMP);
-		});
-
-		it("pristine with iteration absent (undefined) also treated as inert", async () => {
-			// iteration absent from the seed file → isPristine treats it as 0
-			await writeFile(
-				goalPath,
-				JSON.stringify({
-					active: true,
-					phase: "planning",
-					max_iterations: 10,
-					outcome: "",
-					last_touched_at: OLD_STAMP,
-					started_at: OLD_STAMP,
-					// iteration intentionally absent
-				}),
-			);
-
-			const result = makeDecision(createContext({ incompleteTodoCount: 2 }));
-
-			// Must NOT suppress — iteration absent = pristine = inert
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<todo-continuation>");
-		});
-
-		it("pristine with outcome absent (undefined) also treated as inert", async () => {
-			// outcome absent from the seed file → isPristine treats it as ""
-			await writeFile(
-				goalPath,
-				JSON.stringify({
-					active: true,
-					phase: "planning",
-					iteration: 0,
-					max_iterations: 10,
-					last_touched_at: OLD_STAMP,
-					started_at: OLD_STAMP,
-					// outcome intentionally absent
-				}),
-			);
-
-			const result = makeDecision(createContext({ incompleteTodoCount: 2 }));
-
-			// Must NOT suppress — outcome absent = pristine = inert
-			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<todo-continuation>");
-		});
-	});
-
 	// -------------------------------------------------------------------------
 	// Priority 1.45: Ultragoal autonomous pursuit loop
-	// Mirrors the Priority 1.4 goal loop above (same message envelope shape,
-	// same cap/write-failure/suppression semantics) but reads/writes the
-	// separate ultragoal-state-<sid>.json prefix and is independent of goal —
-	// neither loop's logic branches on the other's state.
 	// -------------------------------------------------------------------------
 	describe("Priority 1.45: Ultragoal autonomous pursuit loop", () => {
 		const ultragoalPath = join(omtDir, "ultragoal-state-test-session.json");
@@ -2113,7 +1253,7 @@ describe("makeDecision", () => {
 			expect(result.reason ?? "").not.toContain("<todo-continuation>");
 		});
 
-		it("ultragoal loop is independent of the goal loop — a live pursuing goal fires its own continuation, not ultragoal's", async () => {
+		it("a legacy pursuing goal is inert while an ultragoal pursues", async () => {
 			await writeFile(
 				join(omtDir, "goal-state-test-session.json"),
 				JSON.stringify({
@@ -2136,14 +1276,41 @@ describe("makeDecision", () => {
 
 			const result = makeDecision(createContext());
 
-			// Goal is checked first (Priority 1.4) and returns immediately — this
-			// turn's block reason is goal's, not ultragoal's, and ultragoal's
-			// on-disk iteration is untouched (proves no merged/shared branching).
+			// Legacy goal state must not preempt ultragoal or receive an iteration write.
 			expect(result.decision).toBe("block");
-			expect(result.reason).toContain("<goal-continuation>");
-			expect(result.reason ?? "").not.toContain("<ultragoal-continuation>");
+			expect(result.reason).toContain("<ultragoal-continuation>");
+			expect(result.reason ?? "").not.toContain("<goal-continuation>");
 			const after = await readUltragoalFile();
-			expect(after.iteration).toBe(1);
+			expect(after.iteration).toBe(2);
+			const goalAfter = JSON.parse(
+				await readFile(join(omtDir, "goal-state-test-session.json"), "utf8"),
+			);
+			expect(goalAfter.iteration).toBe(1);
+		});
+	});
+
+	describe("legacy goal-state compatibility", () => {
+		it("treats planning, pursuing, terminal, pristine, and malformed goal files as inert to baseline todos", async () => {
+			const goalPath = join(omtDir, "goal-state-test-session.json");
+			const states: Record<string, unknown>[] = [
+				{ active: true, phase: "planning", iteration: 2, max_iterations: 10, outcome: "legacy" },
+				{ active: true, phase: "pursuing", iteration: 2, max_iterations: 10, outcome: "legacy" },
+				{ active: false, phase: "complete", iteration: 2, max_iterations: 10, outcome: "legacy" },
+				{ active: true, phase: "planning", iteration: 0, max_iterations: 10, outcome: "" },
+				{ unexpected: "legacy malformed state" },
+			];
+
+			for (const state of states) {
+				await writeFile(goalPath, JSON.stringify(state));
+				const result = makeDecision(createContext({ incompleteTodoCount: 1 }));
+
+				expect(result.decision).toBe("block");
+				expect(result.reason).toContain("<todo-continuation>");
+				if (typeof state.iteration === "number") {
+					const after = JSON.parse(await readFile(goalPath, "utf8"));
+					expect(after.iteration).toBe(state.iteration);
+				}
+			}
 		});
 	});
 
@@ -2259,7 +1426,7 @@ describe("makeDecision", () => {
 			}
 		});
 
-		it("preserves walk-away collectability: hooks/session-start.sh still reaps an abandoned session's state and releases its block", async () => {
+		it("preserves walk-away collectability: hooks/session-start.sh still reaps an abandoned session's inert state", async () => {
 			const walkedAwaySid = "heartbeat-walked-away";
 			const controlSid = "heartbeat-walked-away-control";
 			const currentSid = "heartbeat-fresh-caller";
@@ -2277,15 +1444,13 @@ describe("makeDecision", () => {
 			};
 			await writeFile(walkedAwayPath, JSON.stringify(pursuingState));
 			ageFile(walkedAwayPath, 7 * 3600);
-			// Control: an identical pursuing state, fresh, for a different sid —
-			// demonstrates this shape blocks its own Stop call, without touching
-			// (or aging) the walked-away fixture the GC step below depends on.
+			// Control: an identical legacy state is inert to its own Stop call, without
+			// touching (or aging) the walked-away fixture the GC step below depends on.
 			await writeFile(controlPath, JSON.stringify(pursuingState));
 			const controlDecision = makeDecision(
 				createContext({ sessionId: controlSid, activeSubagentCount: 0 }),
 			);
-			expect(controlDecision.decision).toBe("block");
-			expect(controlDecision.reason).toContain("<goal-continuation>");
+			expect(controlDecision).toEqual({ continue: true });
 
 			const repoRoot = join(import.meta.dir, "..", "..");
 			const hookPath = join(repoRoot, "hooks", "session-start.sh");
@@ -2800,27 +1965,6 @@ describe("makeDecision", () => {
 			expect(reason).toContain("Prefer this");
 		});
 
-		it("goal continuation includes the shared skeleton (exceptional posture)", async () => {
-			await writeFile(
-				join(omtDir, "goal-state-test-session.json"),
-				JSON.stringify({
-					active: true,
-					phase: "pursuing",
-					objective_verdict: "",
-					iteration: 1,
-					max_iterations: 10,
-					outcome: "goal objective text",
-				}),
-			);
-
-			const result = makeDecision(createContext());
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!;
-			assertSharedSkeleton(reason);
-			expect(reason).toContain("EXCEPTIONAL");
-		});
-
 		it("ultragoal continuation includes the shared skeleton (exceptional posture)", async () => {
 			await writeFile(
 				join(omtDir, "ultragoal-state-test-session.json"),
@@ -2912,26 +2056,6 @@ describe("makeDecision", () => {
 			expect(reason).not.toContain("AskUserQuestion");
 		});
 
-		it("applies the platform-supplied askToolName in the exceptional posture too (goal continuation)", async () => {
-			await writeFile(
-				join(omtDir, "goal-state-test-session.json"),
-				JSON.stringify({
-					active: true,
-					phase: "pursuing",
-					objective_verdict: "",
-					iteration: 1,
-					max_iterations: 10,
-					outcome: "goal objective text",
-				}),
-			);
-
-			const result = makeDecision(createContext({ askToolName: "request_user_input" }));
-
-			expect(result.decision).toBe("block");
-			const reason = result.reason!;
-			expect(reason).toContain("request_user_input");
-			expect(reason).not.toContain("AskUserQuestion");
-		});
 	});
 
 	// Codex-only chain ratchet: the codex-persistent-mode Stop reader derives
@@ -3071,77 +2195,7 @@ describe("makeDecision", () => {
 		});
 	});
 
-	// Hole 1 (companion to the wedge-axis describe above): updateGoalState and
-	// updateUltragoalState (lib/persistent-mode-core/state.ts) are GC-only writers
-	// in the same sense as touchSessionStates whenever they are
-	// called with an EMPTY partial — the non-pursuing-active suppression path
-	// refreshes the heartbeat with no real work having happened (ADR-8: "every
-	// suppression read IS a use"). Measured findings (two distinct, independently
-	// confirmed defects — NOT the single symmetric defect a naive read of
-	// touchSessionStates' own fix would suggest):
-	//
-	//  (a) Called through the ONLY current production path (makeDecision), the
-	//      empty-partial case does NOT actually corrupt anything: touchSessionStates
-	//      fires unconditionally, first, on every makeDecision call (see the "The
-	//      heartbeat (touchSessionStates) fires HERE" comment above), and it already
-	//      backfills progress_touched_at before updateGoalState/updateUltragoalState
-	//      ever run — so by the time the empty-partial call reads the file, a legacy
-	//      file's progress_touched_at is already present and gets carried through
-	//      untouched by the plain object spread. The "backfills from touchSessionStates
-	//      preceding it" tests below document and pin this already-correct behavior.
-	//  (b) Called in ISOLATION — i.e. the function's own contract, independent of
-	//      call order in its one current caller — the empty-partial path IS broken:
-	//      it overwrites last_touched_at unconditionally with no backfill of its own,
-	//      permanently losing the file's last genuine-activity timestamp the moment
-	//      progress_touched_at is still absent. This is a real defect in the function
-	//      itself (the documented state-core.ts invariant — "progress_touched_at
-	//      absent ⟹ no GC-only writer has touched this file" — is a lie about this
-	//      function read on its own), even though today's single caller happens to
-	//      never trigger it. The "in isolation" tests below reproduce this directly.
-	//  (c) A DIFFERENT, more serious defect than either (a) or (b) as originally
-	//      hypothesized: once progress_touched_at IS backfilled (by touchSessionStates,
-	//      case (a)), a SUBSEQUENT genuine, non-empty-partial write (e.g. the
-	//      "pursuing" phase's per-Stop iteration++) does NOT advance it — the
-	//      current code has no notion that a non-empty partial is real progress, so
-	//      progress_touched_at freezes at whatever it was first backfilled to and
-	//      never moves again, even while the goal/ultragoal loop keeps genuinely
-	//      iterating. A goal actively pursued for hours would eventually read as
-	//      progress-dead to listOthers/adopt despite continuous real work. The
-	//      "genuine iteration advance" tests below reproduce this — it is the one
-	//      actually reachable through the real makeDecision call path today.
-	describe("goal/ultragoal progress_touched_at across the GC-only vs genuine-write split (hole 1)", () => {
-		it("goal (in isolation): an empty-partial call to updateGoalState loses the genuine last_touched_at with no backfill of its own", async () => {
-			const { updateGoalState } = await import("./state.ts");
-			const sid = "goal-isolated-empty-partial-loses-history";
-			const staleTouch = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
-			const statePath = join(omtDir, `goal-state-${sid}.json`);
-			await writeFile(
-				statePath,
-				JSON.stringify({
-					active: true,
-					phase: "blocked",
-					iteration: 3,
-					outcome: "some real goal",
-					max_iterations: 10,
-					started_at: staleTouch,
-					last_touched_at: staleTouch,
-					// no progress_touched_at — legacy shape
-				}),
-			);
-
-			// Called directly — NOT through makeDecision, so touchSessionStates never
-			// runs first. This is the function's own contract in isolation.
-			updateGoalState(sid, {});
-
-			const after = JSON.parse(await readFile(statePath, "utf8"));
-			// last_touched_at is bumped to now, as documented.
-			expect(Math.abs(Date.now() - Date.parse(after.last_touched_at))).toBeLessThan(5000);
-			// The pre-write last_touched_at (the file's last genuine-activity signal)
-			// must survive into progress_touched_at — an unprotected empty-partial
-			// write must not be the one place this invariant is allowed to break.
-			expect(after.progress_touched_at).toBe(staleTouch);
-		});
-
+	describe("ultragoal progress_touched_at and legacy goal inertness", () => {
 		it("ultragoal (in isolation): an empty-partial call to updateUltragoalState loses the genuine last_touched_at with no backfill of its own", async () => {
 			const { updateUltragoalState } = await import("./state.ts");
 			const sid = "ultragoal-isolated-empty-partial-loses-history";
@@ -3162,31 +2216,6 @@ describe("makeDecision", () => {
 			);
 
 			updateUltragoalState(sid, {});
-
-			const after = JSON.parse(await readFile(statePath, "utf8"));
-			expect(Math.abs(Date.now() - Date.parse(after.last_touched_at))).toBeLessThan(5000);
-			expect(after.progress_touched_at).toBe(staleTouch);
-		});
-
-		it("goal (full stack): an empty-partial suppression heartbeat is ALREADY safe today, because touchSessionStates backfills first", async () => {
-			const sid = "goal-suppression-heartbeat-backfill";
-			const staleTouch = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
-			const statePath = join(omtDir, `goal-state-${sid}.json`);
-			await writeFile(
-				statePath,
-				JSON.stringify({
-					active: true,
-					phase: "blocked",
-					iteration: 3,
-					outcome: "some real goal",
-					max_iterations: 10,
-					started_at: staleTouch,
-					last_touched_at: staleTouch,
-					// no progress_touched_at — legacy shape
-				}),
-			);
-
-			makeDecision(createContext({ sessionId: sid }));
 
 			const after = JSON.parse(await readFile(statePath, "utf8"));
 			expect(Math.abs(Date.now() - Date.parse(after.last_touched_at))).toBeLessThan(5000);
@@ -3218,7 +2247,7 @@ describe("makeDecision", () => {
 			expect(after.progress_touched_at).toBe(staleTouch);
 		});
 
-		it("goal: a genuine iteration advance (non-empty partial) DOES advance progress_touched_at, unlike freezing at the first backfilled value", async () => {
+		it("legacy goal: makeDecision does not advance iteration", async () => {
 			const sid = "goal-genuine-progress-advances";
 			const staleTouch = new Date(Date.now() - 7 * 3600 * 1000).toISOString();
 			const statePath = join(omtDir, `goal-state-${sid}.json`);
@@ -3239,13 +2268,7 @@ describe("makeDecision", () => {
 			makeDecision(createContext({ sessionId: sid }));
 
 			const after = JSON.parse(await readFile(statePath, "utf8"));
-			expect(after.iteration).toBe(4);
-			// A genuine write (iteration advanced) is real progress — progress_touched_at
-			// advances to now. Without the fix, touchSessionStates (which runs first)
-			// backfills progress_touched_at to the stale pre-call last_touched_at, and
-			// updateGoalState's own genuine write never advances it past that — so this
-			// would stay ~7h stale despite iteration having just genuinely moved.
-			expect(Math.abs(Date.now() - Date.parse(after.progress_touched_at))).toBeLessThan(5000);
+			expect(after.iteration).toBe(3);
 		});
 
 		it("ultragoal: a genuine iteration advance (non-empty partial) DOES advance progress_touched_at, unlike freezing at the first backfilled value", async () => {

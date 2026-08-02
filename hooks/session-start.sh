@@ -219,59 +219,49 @@ if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
   fi
 fi
 
-# Check for active goal state (session-specific)
-if [ -f "$OMT_DIR/goal-state-${SESSION_ID}.json" ]; then
-  GOAL_STATE=$(cat "$OMT_DIR/goal-state-${SESSION_ID}.json" 2>/dev/null)
+# The legacy goal skill has been removed. Preserve any state from this session
+# outside the scanned top-level state namespace instead of reviving it. Reserve
+# the destination with noclobber before rename so an existing archive is never
+# replaced; `mv` then performs an atomic same-filesystem move into retired/.
+retire_legacy_goal_state() {
+  local max_suffix=31
+  local source="$OMT_DIR/goal-state-${SESSION_ID}.json"
+  local retired_dir="$OMT_DIR/retired"
+  local suffix=0
+  local archive=""
 
-  if command -v jq &> /dev/null; then
-    GOAL_ACTIVE=$(echo "$GOAL_STATE" | jq -r '.active // false' 2>/dev/null)
-    if [ "$GOAL_ACTIVE" = "true" ]; then
-      GOAL_PHASE=$(echo "$GOAL_STATE" | jq -r '.phase // ""' 2>/dev/null)
-
-      # Pristine-seed guard: a freshly seeded state (phase=planning, iteration=0,
-      # outcome="" or absent) is inert — it may be an orphan from a refused goal
-      # invocation. Skip the restore block; GC reaps the orphan by TTL.
-      GOAL_ITERATION_RAW=$(echo "$GOAL_STATE" | jq -r '.iteration // 0' 2>/dev/null)
-      GOAL_OUTCOME_RAW=$(echo "$GOAL_STATE" | jq -r '.outcome // ""' 2>/dev/null)
-      GOAL_IS_PRISTINE=false
-      if [ "$GOAL_PHASE" = "planning" ] && [ "$GOAL_ITERATION_RAW" = "0" ] && [ "$GOAL_OUTCOME_RAW" = "" ]; then
-        GOAL_IS_PRISTINE=true
-      fi
-
-      if [ "$GOAL_IS_PRISTINE" = "false" ]; then
-        GOAL_PLAN_PATH=$(echo "$GOAL_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
-
-        # Determine whether the plan file is available on disk.
-        GOAL_PLAN_AVAILABLE=false
-        if [ -n "$GOAL_PLAN_PATH" ] && [ "$GOAL_PLAN_PATH" != "null" ] && [ -f "$GOAL_PLAN_PATH" ]; then
-          GOAL_PLAN_AVAILABLE=true
-        fi
-
-        GOAL_INSTRUCTION=""
-        if [ "$GOAL_PHASE" = "planning" ]; then
-          # Planning-resume: guide the AI to continue co-designing the plan
-          if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
-            GOAL_INSTRUCTION="\nRe-read the current plan from disk and continue the planning process where you left off.\n"
-          else
-            GOAL_INSTRUCTION="\nNo plan file on disk yet. Continue planning from the state you just read above — resume from its resume_summary checkpoint if present, otherwise begin planning afresh.\n"
-          fi
-        else
-          # Pursuing-resume: guide the AI to continue autonomous pursuit
-          GOAL_INSTRUCTION="\nContinue pursuing the objective autonomously.\n"
-          if [ "$GOAL_PLAN_AVAILABLE" = "true" ]; then
-            GOAL_INSTRUCTION="${GOAL_INSTRUCTION}Re-read the current plan from disk before continuing.\n"
-          fi
-        fi
-
-        MESSAGES="$MESSAGES<session-restore>\n\n[GOAL RESTORED]\n\nYou have an active goal session (phase: $GOAL_PHASE).\n\nRun this command NOW, before any other action:\n  cat \"\$OMT_DIR/goal-state-\$OMT_SESSION_ID.json\"\n(\$OMT_DIR and \$OMT_SESSION_ID are set in CLAUDE_ENV_FILE exported by this hook.)\n$GOAL_INSTRUCTION\nIMPORTANT: Invoking the goal skill again while a goal is already active is refused. Continue the existing goal, do not start a new one.\n\n</session-restore>\n\n---\n\n"
-      fi
-    fi
+  [ -f "$source" ] || return 0
+  if ! mkdir -p "$retired_dir"; then
+    echo "session-start.sh: could not create retired directory for legacy goal-state" >&2
+    return 0
   fi
-fi
+
+  while [ "$suffix" -le "$max_suffix" ]; do
+    archive="$retired_dir/goal-state-${SESSION_ID}.retired-${suffix}.json"
+    if (set -C; : > "$archive") 2>/dev/null; then
+      if mv "$source" "$archive"; then
+        echo "session-start.sh: retired legacy goal-state" >&2
+      else
+        echo "session-start.sh: could not retire legacy goal-state" >&2
+        rm -f "$archive" 2>/dev/null || true
+      fi
+      return 0
+    fi
+    if [ ! -e "$archive" ]; then
+      echo "session-start.sh: could not create legacy goal-state archive" >&2
+      return 0
+    fi
+    suffix=$((suffix + 1))
+  done
+
+  echo "session-start.sh: legacy goal-state archive suffix limit reached" >&2
+}
+
+retire_legacy_goal_state
 
 # Check for active ultragoal state (session-specific). ultragoal shares GoalState's
-# exact JSON shape (UltragoalState = GoalState in lib/state-core.ts), so this block
-# mirrors the goal-state restore block above verbatim, save for the prefix/label swap.
+# exact JSON shape (UltragoalState = GoalState in lib/state-core.ts), so this
+# remains its own restore path while legacy goal-state files are retired above.
 if [ -f "$OMT_DIR/ultragoal-state-${SESSION_ID}.json" ]; then
   ULTRAGOAL_STATE=$(cat "$OMT_DIR/ultragoal-state-${SESSION_ID}.json" 2>/dev/null)
 

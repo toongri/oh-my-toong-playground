@@ -1293,7 +1293,6 @@ describe("ensureSeed ↔ bash seed parity (ES-parity)", () => {
 	}
 
 	const cases: Array<"goal" | "prometheus" | "deep-interview" | "qa"> = [
-		"goal",
 		"prometheus",
 		"deep-interview",
 		"qa",

@@ -2,7 +2,7 @@
 
 **This file is lookup-only.** The mandatory review-pipeline rules are defined inline in `SKILL.md > ## Review Pipeline (Mandatory Contract)`. The contract is authoritative.
 
-Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A markdown render, Stage B Decision Matrix computation, or Stage C option presentation. Read the corresponding section in full at that moment.
+Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A markdown render, Stage B signal-table computation, or Stage C option presentation. Read the corresponding section in full at that moment.
 
 ---
 
@@ -169,29 +169,24 @@ Rationale: `plan.md` is the artifact the pipeline reviewed — Momus reviewed th
 
 ---
 
-## Stage B: Decision Matrix
+## Stage B: Re-keyed Signal Table
 
-Before asking the user to choose execution mode, compute a recommendation:
+Before asking the user to choose an execution option, compute a recommendation:
 
-| Signal | Weight toward Complex/Architecture | Weight toward Trivial/Scoped |
-|--------|------------------------------------|------------------------------|
-| TODO ≥ 4 | Strong | — |
-| Complex/Architecture flag in plan | Strong | — |
-| Trivial/Scoped flag in plan | — | Strong |
-| AC gap (unverified acceptance criteria) | Moderate | — |
-| Ambiguity Score > 2 | Moderate | — |
-| Daedalus surfaces a design-complexity concern (advisory) | Moderate | — |
-| Momus COMMENT with codebase/feasibility concern | Moderate | — |
-| Scope question unresolved | Moderate | — |
+| Signal | Weight toward Finish | Weight toward Continue to ultragoal |
+|--------|----------------------|--------------------------------------|
+| Carried-forward residual present | Strong | — |
+| Unresolved question or open fork in the plan | Strong | — |
+| Feasibility-concern COMMENT from the post-plan gate | Moderate | — |
+| Plan fully machine-verifiable with no residuals | — | Strong |
 
-**Conflict resolution**: When signals split evenly, "Plan more wins" — default to Full Orchestration.
+**Conflict resolution**: When signals split evenly, default to Finish (human review first).
 
 **Recommendation Output Template** (present before Stage C):
 
 ```
-**Recommendation**: [Full orchestration | Focused execution]
-**Execution mode**: [Complex/Architecture | Trivial/Scoped]
-**Rationale**: [1–2 sentences citing the dominant signals from the Decision Matrix]
+**Recommendation**: [Continue to ultragoal | Finish]
+**Rationale**: [1–2 sentences citing the dominant signals from the re-keyed signal table]
 **What tips the balance**: [The single strongest signal that drove the recommendation]
 ```
 
@@ -201,16 +196,16 @@ Before asking the user to choose execution mode, compute a recommendation:
 
 After the user reads Stage B's recommendation, present execution options via the platform's user-prompt primitive (structured choice):
 
-**(1) Full orchestration**
-Multi-agent task orchestration with QA verification. 3+ TODOs or cross-module changes.
+**(1) Continue to ultragoal**
+Hand the plan to ultragoal for autonomous story-by-story execution (sisyphus as sole executor).
 
-**(2) Focused execution**
-Single-pass implementation. 1-2 straightforward TODOs.
+**(2) Finish**
+End the session with the plan as the deliverable; emit `<prometheus-done/>`.
 
 **(3) Revise plan**
 Return to Interview Mode for modifications.
 
-The `(Recommended)` label is **computed from the Decision Matrix, NOT hardcoded** — attach it to whichever option Stage B selected.
+The `(Recommended)` label is **computed from the re-keyed signal table, NOT hardcoded** — attach it to whichever option Stage B selected.
 
 | User Response | Action |
 |---------------|--------|
