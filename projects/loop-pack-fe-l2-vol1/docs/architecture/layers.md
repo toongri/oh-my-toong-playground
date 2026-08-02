@@ -203,7 +203,7 @@ Feature가 되기 나쁜 신호
 - 화면별 filter/sort/pagination
 - "백엔드 table이 있으니까" 만든 slice
 
-Entity는 아래 레이어라 많은 곳에서 접근 가능하다. 잘못 만들면 사실상 global namespace가 된다. **"명사이므로 Entity"가 아니라, 안정된 제품 개념이며 여러 상위 책임이 공유하는지**를 본다. Entity 간 직접 import가 늘어나면 경계가 잘못됐거나 상위 composition이 빠졌다는 신호다.
+Entity는 아래 레이어라 많은 곳에서 접근 가능하다. 잘못 만들면 사실상 global namespace가 된다. **"명사이므로 Entity"가 아니라, 안정된 제품 개념이며 여러 상위 책임이 공유하는지**를 본다. Entity 간 직접 import가 늘어나면 경계가 잘못됐거나 상위 composition이 빠졌다는 신호다. store를 Entities에 둘지 Feature에 둘지, 상태 원본을 어디로 볼지의 실전 판단은 [`./cases-state-ownership.md`](./cases-state-ownership.md)에 케이스로 있다.
 
 ```tsx
 // ❌ entities/product/ui/ProductCard.tsx — Entity가 Feature를 알아버림
@@ -262,11 +262,11 @@ export function ProductCard({ product, actions }: {
 - generic 이름의 거대한 `utils`/`types`/`constants`
 - owner가 불명확한 business state
 
-Shared는 하위 레이어라 어디서나 접근되고 내부 규칙도 느슨하다. 그래서 가장 쉽게 landfill이 된다. **"두 곳에서 사용"은 Shared의 충분조건이 아니다.** business-independent인가가 먼저다 — 도메인을 몰라도 이해되는 코드인지 스스로에게 물어본다.
+Shared는 하위 레이어라 어디서나 접근되고 내부 규칙도 느슨하다. 그래서 가장 쉽게 landfill이 된다. **"두 곳에서 사용"은 Shared의 충분조건이 아니다.** business-independent인가가 먼저다 — 도메인을 몰라도 이해되는 코드인지 스스로에게 물어본다. API 함수·타입이 Shared로 갈지 slice에 남을지의 구체 사례는 [`./cases-api-and-types.md`](./cases-api-and-types.md)에서 케이스로 다룬다.
 
 ## 흔히 빠지는 함정
 
-**Overslicing** — 실제 소비자가 하나뿐인 Entity/Feature/Widget이 폭증한다. 가장 흔한 함정이다. `select-color`처럼 실질 코드 하나 때문에 `ui/`·`model/`·`index.ts` 세 파일이 생기는 식이다.
+**Overslicing** — 실제 소비자가 하나뿐인 Entity/Feature/Widget이 폭증한다. 가장 흔한 함정이다. `select-color`처럼 실질 코드 하나 때문에 `ui/`·`model/`·`index.ts` 세 파일이 생기는 식이다. 재사용 범위를 근거로 승격을 판단하는 실전 사례와 이를 자동으로 잡아내는 린트 규칙은 [`./cases-structure.md`](./cases-structure.md)에 있다.
 
 **Shared landfill** — 여러 곳에서 쓴다는 이유로 domain policy가 Shared로 흘러간다. Shared는 도메인 무관이 기준이지 사용 빈도가 기준이 아니다.
 

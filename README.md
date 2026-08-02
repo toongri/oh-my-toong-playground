@@ -42,7 +42,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 **2단계 — 프로젝트마다 컨벤션이 다르고, 분화의 그릇도 하나가 아니다**: 같은 `testing`이라도 `projects/toong-java-spring-template/`에서는 "Classical TDD, verify() 금지, BDD 구조"를 뜻하고 다른 프로젝트에서는 전혀 다른 것을 뜻합니다. 이 분화를 담는 방식은 두 가지입니다.
 
 - **스킬 오버라이드** (`projects/<name>/skills/`): 동기화 시 **상향 탐색(Upward Search)** 이 동작해, `sync.yaml`이 `testing`을 참조하면 프로젝트 폴더를 먼저 찾고 없으면 글로벌 `skills/testing/`으로 폴백합니다. 컨벤션 한 덩어리를 통째로 갈아끼울 때 씁니다.
-- **rules 인덱스 + docs 근거** (`projects/<name>/rules/`, `projects/<name>/docs/`): 컨벤션이 스킬 하나에 담기엔 클 때 rules와 docs로 나눕니다. `loopers-kotlin-spring-template`(docs 19 + rules 7)은 rules에 "어느 문서를 열어야 하는지"만 두는 순수 인덱스 방식이고, `loop-pack-fe-l2-vol1`(docs 21 + rules 9)은 자주 쓰는 판단 기준을 rules에 직접 두고 깊은 근거만 docs로 미룹니다 — 어느 쪽이든 항상 로드되는 분량을 통제하는 게 목적입니다.
+- **rules 인덱스 + docs 근거** (`projects/<name>/rules/`, `projects/<name>/docs/`): 컨벤션이 스킬 하나에 담기엔 클 때 rules와 docs로 나눕니다. `loopers-kotlin-spring-template`(docs 19 + rules 7)은 rules에 "어느 문서를 열어야 하는지"만 두는 순수 인덱스 방식이고, `loop-pack-fe-l2-vol1`(docs 26 + rules 9)은 자주 쓰는 판단 기준을 rules에 직접 두고 깊은 근거만 docs로 미룹니다 — 어느 쪽이든 항상 로드되는 분량을 통제하는 게 목적입니다.
 
 **3단계 — 같은 내용이 플랫폼마다 다른 자리에 앉는다**: Claude는 `.claude/`, Codex는 `.codex/`와 `.agents/` 두 갈래, Gemini는 `.gemini/`로 디렉터리 구조도 지원 카테고리도 제각각입니다. 그 차이는 어댑터가 흡수하므로, 컨벤션은 한 번만 쓰면 되고 어떤 플랫폼으로 얼마나 내보낼지는 `sync.yaml`의 `platforms`가 결정합니다.
 
@@ -117,7 +117,7 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 ```
 projects/
-├── loop-pack-fe-l2-vol1/            # docs 21개 + rules 9개
+├── loop-pack-fe-l2-vol1/            # docs 26개 + rules 9개
 │   ├── rules/                        # react, testing, nextjs 등 상황별 인덱스
 │   └── docs/
 │       ├── react/                    # 컴포넌트 경계, 훅 설계, props 계약
