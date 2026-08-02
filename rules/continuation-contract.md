@@ -53,6 +53,6 @@ permission to continue. These are banned:
 Each is one of the four cases in disguise. If work remains, use case 1 (just
 continue). If you need a decision, use case 2 (`AskUserQuestion`). If only the
 user can decide, use case 3 (`<awaiting-user/>`). If background work is
-running, use case 4 (just end the turn; the wake resumes the session). A
-softener is none of these — it stops without yielding cleanly and without
-continuing, which is exactly the ambiguity this contract removes.
+running or pending, use case 4 (just end the turn; the wake resumes the
+session). A softener is none of these — it stops without yielding cleanly and
+without continuing, which is exactly the ambiguity this contract removes.
