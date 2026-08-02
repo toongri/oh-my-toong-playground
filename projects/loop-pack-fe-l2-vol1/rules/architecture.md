@@ -14,5 +14,10 @@
 - `docs/architecture/public-api.md` — **public API·진입점**: barrel vs public API, index.ts 규칙(진입점 위치·상대 경로·export-star), @x 표기, shared/ui 컴포넌트별 진입점(tree-shaking), index.server.ts
 - `docs/architecture/error-layers.md` — **에러 처리 계층**: 계층 구성(컴포넌트·페이지·전역 Boundary·HTTP 공통), 실패 종류별 처리 위치, throwOnError, Suspense 쌍 배치, 이벤트 핸들러·비동기 에러의 Boundary 한계
 - `docs/architecture/design-process.md` — **설계 프로세스**: 변경 영향 범위 질문, RADIO 5단계, RFC(스켈레톤·작성 3원칙), FSD 점진 마이그레이션·strangler
+- `docs/architecture/cases-auth.md` — **인증 분해 사례**: 로그인 폼 위치(pages/widget), 폼 검증 스키마 위치, 토큰 저장 옵션별 트레이드오프(shared/api·entities·쿠키), 로그아웃 처리 위치, 갱신 실패 failsafe
+- `docs/architecture/cases-state-ownership.md` — **상태 소유권 사례**: 원본 이중화(URL·store), query key 조건 누락, queryOptions 콜로케이션, mutation 후 invalidation(prefix·exact), 폼 상태의 전역 store 배치, 파생값 저장, selector 구독 범위, store의 슬라이스 위치(entities vs features)
+- `docs/architecture/cases-api-and-types.md` — **API·타입 배치 사례**: 요청 함수 공유/전용(shared/api/endpoints), 응답 타입과 entities 타이밍, query 훅 콜로케이션, shared/types 이슈, 엔티티 간 타입 순환(@x), enum·zod 스키마·RootState·앰비언트 선언·자동생성 타입 위치
+- `docs/architecture/cases-structure.md` — **구조·경계 사례**: widget/feature 승격 판단(재사용 범위), 레이아웃 배치(shared·app·주입), slice 폴더 그룹핑, segment 명명(형태/목적), shared/lib 그룹핑, 경계 린트 강제(ESLint zones·Steiger 규칙), barrel과 tree-shaking 긴장, Next route handler·DB 쿼리 위치
+- `docs/architecture/cases-ui-flows.md` — **구체 UI 흐름 배치 사례**: 모달·다이얼로그 위치(전역 매니저·로컬·widget), 페이지네이션·필터·정렬(URL·query key·소유 결합, key factory), 다단계 폼·마법사, 찜·좋아요 optimistic update(variables/cache), 권한별 UI 분기(route guard·domain rule·세션 infra), analytics 이벤트 호출 위치
 
 **관련 규칙**: cross-feature 공유·조립 판단은 `feature-boundary.md` rule에, 상태 구조·위치·분류는 `react.md` rule에, App Router 렌더링 경계·데이터·자산은 `nextjs.md` rule에 있다.
