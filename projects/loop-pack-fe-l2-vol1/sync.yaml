@@ -1,5 +1,6 @@
 name: loop-pack-fe-l2-vol1
 path: ~/repos/loop-pack-fe-l2-vol1
+format: "pnpm exec prettier --write"
 
 rules:
   items:
