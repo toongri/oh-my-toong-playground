@@ -4,15 +4,15 @@
  *
  * SCOPE (narrowed — see REPORT for the incident this narrowing fixes):
  * answers ONLY "does a load trace exist" — spec AC line 70: does a real
- * codex session, given `$goal` at the user-input position, produce a tool
+ * codex session, given `$ultragoal` at the user-input position, produce a tool
  * call that opens skills/sisyphus/SKILL.md at all. It does NOT, and cannot,
  * answer the CAUSAL question "does the `$sisyphus` sigil (vs. prose
  * `Skill(skill: "sisyphus")`) cause that open" — that question lives in
  * probes/skill-chain-cue-form, which isolates cue form with a synthetic
- * fixture free of the confounds real skill prose carries (goal's own body
+ * fixture free of the confounds real skill prose carries (ultragoal's own body
  * and its references/*.md mention "sisyphus" in plain prose in several
  * places independent of rule 6a's rewrite, so a rewrite-applied/skipped
- * comparison on the REAL goal skill cannot isolate sigil-vs-prose as the
+ * comparison on the REAL ultragoal skill cannot isolate sigil-vs-prose as the
  * cause — both arms give the model the same non-sigil textual cues to
  * follow). This probe used to also expose a `--negative` control built on
  * exactly that confounded comparison; it rendered exit 0 on both arms
@@ -44,11 +44,11 @@ import { materializeCodexSkills } from "./materialize.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
-const CHAIN_SKILL = "goal";
+const CHAIN_SKILL = "ultragoal";
 const TARGET_SKILL = "sisyphus";
 
 /**
- * Tiny but falsifiable objective — passes goal's Entry Gate (a machine-
+ * Tiny but falsifiable objective — passes ultragoal's Entry Gate (a machine-
  * checkable verification surface: `test -f`'s exit code) without asking the
  * model to perform real work. `-s read-only` (see buildProbeSpec) makes any
  * accidental write attempt a no-op at the sandbox layer, independent of
@@ -74,20 +74,20 @@ const OBJECTIVE =
  * that makes this probe's primary deployment-behavior experiment
  * machine-dependent. (Concrete trigger, not a hypothetical: this machine's
  * `~/.agents/skills` already carries discovery-oriented skills, and root
- * sync.yaml deploys goal/ultragoal there.) Isolating HOME/CODEX_HOME is the
+ * sync.yaml deploys ultragoal there.) Isolating HOME/CODEX_HOME is the
  * same measure probes/ultrawork-keyword-injection and
  * probes/rules-runtime-leak-absence already take.
  */
 export function buildProbeSpec(deployRoot: string, isolated: IsolatedCodexHome): ProbeSpec {
 	return {
 		session: {
-			// `$goal` MUST lead the user-input prompt: a user-position `$X` is
+			// `$ultragoal` MUST lead the user-input prompt: a user-position `$X` is
 			// mechanically loaded by codex's mention scanner (verified fact,
 			// see this repo's parity spec) — a body-position mention is not.
-			prompt: `$goal ${OBJECTIVE}`,
+			prompt: `$ultragoal ${OBJECTIVE}`,
 			cwd: deployRoot,
 			sandbox: "read-only",
-			// Generous but finite: goal's Entry Gate + Six-Slot decomposition is a
+			// Generous but finite: ultragoal's Entry Gate + Seven-Slot decomposition is a
 			// generative multi-step task, not a one-shot reply — but probe.ts's
 			// timeout still guarantees exit 2 rather than hanging forever.
 			timeoutMs: 300_000,

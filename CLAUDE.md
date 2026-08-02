@@ -121,8 +121,6 @@ skills:
 | agent-device | iOS, tvOS, macOS, Android, Vega OS TV E2E | Load this skill before using its driver CLI; delegates runtime help |
 | dogfood | Mobile exploratory QA | Load this skill before using its driver CLI |
 
-**`goal` and `ultragoal` are no longer twins.** `ultragoal` began as a structural copy of `goal` and the two were byte-identical outside the loop shape; they are now deliberately diverged — `skills/goal/` stays on six slots while `ultragoal` carries a seventh (`non-goals`), only `ultragoal` wires Codex's native goal tools into its dispatch loop, and the five-round final-review budget is ultragoal-only. An edit to either must not assume the sibling still matches, and must not be mirrored across by default.
-
 ### Hooks
 
 - **session-start.sh**: Restores persistent mode state and garbage-collects `$OMT_DIR` on session start
