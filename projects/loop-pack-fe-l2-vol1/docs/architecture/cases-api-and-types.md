@@ -140,9 +140,16 @@ export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 // ✅ entities/product/model/types.ts — Product를 아는 사람이 여기를 본다
 export interface Product { id: string; name: string; price: number; }
 
-// ✅ entities/order/model/types.ts
+// ✅ entities/product/@x/order.ts — order slice에게만 공개하는 진입점
+export type { Product } from "../model/types";
+
+// ✅ entities/order/model/types.ts — 다른 Entity 타입은 @x 진입점으로만
+import type { Product } from "@/entities/product/@x/order";
+
 export interface Order { id: string; items: Product[]; }
 ```
+
+`Order`가 `Product` 타입을 쓰는 순간 엔티티 간 의존이 생긴다 — 같은 레이어 slice를 직접 import하는 대신 @x 진입점을 경유한다. 바로 아래 케이스 5가 이 시나리오를 다룬다.
 
 ## 케이스 5 — 엔티티 간 타입 순환 참조: `@x` 실전
 
