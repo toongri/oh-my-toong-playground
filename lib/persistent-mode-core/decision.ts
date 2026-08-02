@@ -26,7 +26,7 @@ export interface DecisionContext {
 	sessionId: string;
 	lastAssistantMessage: string | null;
 	incompleteTodoCount: number;
-	activeSubagentCount: number;
+	activeBackgroundTaskCount: number;
 	/**
 	 * Codex-only chain ratchet (see hooks/codex-persistent-mode/cli.ts's runStop):
 	 * skill names referenced (via a validated `$name` sigil) by an already-opened
@@ -110,8 +110,10 @@ function truncateText(text: string, maxLength: number): string {
 type AskPosture = "preferred" | "exceptional";
 
 // Shared continuation-contract skeleton emitted by every continuation builder.
-// Mirrors the always-on rule rules/continuation-contract.md (the SSOT). Only the
-// case-2 ask posture varies per family: "preferred" (deep-interview/prometheus/todo)
+// This is a post-Guard-2 projection of the always-on rule: background-wait
+// (case 4) is already ruled out because Guard 2 returned continue before any
+// block message is built, so only the three remaining cases are live options.
+// Only the case-2 ask posture varies per family: "preferred" (deep-interview/prometheus/todo)
 // vs "exceptional" (ultragoal — autonomy is post-planning, asking is the rare case).
 // `askToolName` names the "ask a structured question" tool for THIS platform
 // (see DecisionContext.askToolName's doc comment) — threaded in by every
@@ -289,7 +291,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		sessionId,
 		lastAssistantMessage,
 		incompleteTodoCount,
-		activeSubagentCount,
+		activeBackgroundTaskCount,
 		pendingSkillChainSkills,
 	} = context;
 	// See DecisionContext.askToolName's doc comment: undefined for every Claude
@@ -298,7 +300,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 
 	// The heartbeat (touchSessionStates) fires HERE — on entry to makeDecision,
 	// unconditionally, before Guard 2 below is even evaluated. It used to live
-	// inside that guard's activeSubagentCount > 0 branch, right before the
+	// inside that guard's activeBackgroundTaskCount > 0 branch, right before the
 	// branch's own return; that placement is now wrong for two measured reasons.
 	//
 	// 1. A session with many running subagents was measured at 6h 38m between
@@ -311,7 +313,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	// 2. Independently of subagent activity: ultragoal self-refreshes its own
 	//    last_touched_at on every "pursuing" Stop call (updateUltragoalState), but prometheus, deep-interview,
 	//    and qa have no per-family idle-Stop updater of their own — nothing else
-	//    in makeDecision ever wrote their last_touched_at when activeSubagentCount
+	//    in makeDecision ever wrote their last_touched_at when activeBackgroundTaskCount
 	//    was 0. A long-running session with zero active subagents let those three
 	//    families' state age toward the 6h TTL on every ordinary Stop call — the
 	//    same defect this file exists to close, in a different window.
@@ -335,11 +337,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		/* never let a heartbeat write failure suppress the guard below */
 	}
 
-	// Guard 2: active subagent tasks are running (type=subagent, status=running|pending).
-	// Claude Code will re-invoke the Stop hook via task-notification when they finish, so blocking now is unnecessary.
-	// Non-subagent background tasks (shell/monitor/etc.) do NOT suppress enforcement — only subagents wake the main
-	// via task-notification, so only they make a deferred Stop hook re-invocation safe.
-	if (activeSubagentCount > 0) {
+	// Guard 2: any running/pending background task is active (type-agnostic).
+	// Claude Code re-invokes the Stop hook via a task-notification wake when it completes,
+	// so allowing now defers enforcement safely. The status allowlist is fail-closed:
+	// terminal and unknown statuses keep enforcement active.
+	if (activeBackgroundTaskCount > 0) {
 		return formatContinueOutput();
 	}
 

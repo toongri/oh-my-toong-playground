@@ -42,7 +42,7 @@ describe("makeDecision", () => {
 		sessionId: "test-session",
 		lastAssistantMessage: null,
 		incompleteTodoCount: 0,
-		activeSubagentCount: 0,
+		activeBackgroundTaskCount: 0,
 		...overrides,
 	});
 
@@ -1316,20 +1316,20 @@ describe("makeDecision", () => {
 
 	// -------------------------------------------------------------------------
 	// Background-aware Stop hook guards
-	// Guard 2: activeSubagentCount > 0 — must pass through immediately.
-	// Non-subagent background tasks (shell/monitor/etc.) must NOT bypass enforcement.
+	// Guard 2: activeBackgroundTaskCount > 0 — must pass through immediately.
+	// Any running/pending background task passes through (type-agnostic); count 0 still blocks.
 	// -------------------------------------------------------------------------
 	describe("background-aware Stop hook guards", () => {
-		it("activeSubagentCount=1 with incompleteTodos yields continue (NOT block)", () => {
+		it("activeBackgroundTaskCount=1 with incompleteTodos yields continue (NOT block)", () => {
 			const result = makeDecision(
-				createContext({ activeSubagentCount: 1, incompleteTodoCount: 3 }),
+				createContext({ activeBackgroundTaskCount: 1, incompleteTodoCount: 3 }),
 			);
 			expect(result).toEqual({ continue: true });
 		});
 
-		it("activeSubagentCount=0 with incompleteTodos still blocks (no subagent bypass)", () => {
+		it("activeBackgroundTaskCount=0 with incompleteTodos still blocks (no subagent bypass)", () => {
 			const result = makeDecision(
-				createContext({ activeSubagentCount: 0, incompleteTodoCount: 3 }),
+				createContext({ activeBackgroundTaskCount: 0, incompleteTodoCount: 3 }),
 			);
 			expect(result.decision).toBe("block");
 			expect(result.reason).toContain("<todo-continuation>");
@@ -1338,7 +1338,7 @@ describe("makeDecision", () => {
 
 	// -------------------------------------------------------------------------
 	// TODO 4: the Stop-hook heartbeat (touchSessionStates) fires unconditionally
-	// on entry to makeDecision, BEFORE Guard 2's activeSubagentCount > 0 check —
+	// on entry to makeDecision, BEFORE Guard 2's activeBackgroundTaskCount > 0 check —
 	// not scoped inside it — so every Stop call proves this session is alive and
 	// refreshes its state files, whether or not a subagent is currently running.
 	// Two windows this closes: (1) a session with many running subagents never
@@ -1346,7 +1346,7 @@ describe("makeDecision", () => {
 	// ACTIVE_IDLE_TTL while still in use; (2) prometheus/deep-interview/qa have
 	// no per-family idle-Stop updater of their own (unlike goal/ultragoal, which
 	// self-refresh on every pursuing Stop call), so with the heartbeat scoped to
-	// activeSubagentCount > 0, those three families' state also aged toward the
+	// activeBackgroundTaskCount > 0, those three families' state also aged toward the
 	// TTL on every ordinary (zero-subagent) Stop call.
 	// -------------------------------------------------------------------------
 	describe("session-state heartbeat fires before the subagent guard", () => {
@@ -1374,7 +1374,7 @@ describe("makeDecision", () => {
 			);
 			ageFile(statePath, 7 * 3600);
 
-			const result = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 1 }));
+			const result = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 1 }));
 
 			expect(result).toEqual({ continue: true });
 			const parsed = JSON.parse(await readFile(statePath, "utf8"));
@@ -1386,7 +1386,7 @@ describe("makeDecision", () => {
 			// A dedicated OMT_DIR with no `state/` subdirectory pre-created — unlike
 			// the shared beforeEach fixture above, which always mkdir's stateDir up
 			// front. The heartbeat fires unconditionally on entry to makeDecision,
-			// before Guard 2's activeSubagentCount > 0 check, so it touches this
+			// before Guard 2's activeBackgroundTaskCount > 0 check, so it touches this
 			// session's state regardless of subagent activity. With a subagent active,
 			// Guard 2's own early return still fires right after, before makeDecision
 			// ever reaches the stateDir/ensureDir call further down — this test checks
@@ -1412,7 +1412,7 @@ describe("makeDecision", () => {
 					}),
 				);
 
-				const result = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 1 }));
+				const result = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 1 }));
 
 				expect(result).toEqual({ continue: true });
 				expect(fs.existsSync(join(freshOmtDir, "state"))).toBe(false);
@@ -1448,7 +1448,7 @@ describe("makeDecision", () => {
 			// touching (or aging) the walked-away fixture the GC step below depends on.
 			await writeFile(controlPath, JSON.stringify(pursuingState));
 			const controlDecision = makeDecision(
-				createContext({ sessionId: controlSid, activeSubagentCount: 0 }),
+				createContext({ sessionId: controlSid, activeBackgroundTaskCount: 0 }),
 			);
 			expect(controlDecision).toEqual({ continue: true });
 
@@ -1469,7 +1469,7 @@ describe("makeDecision", () => {
 			});
 
 			expect(fs.existsSync(walkedAwayPath)).toBe(false);
-			const afterGc = makeDecision(createContext({ sessionId: walkedAwaySid, activeSubagentCount: 0 }));
+			const afterGc = makeDecision(createContext({ sessionId: walkedAwaySid, activeBackgroundTaskCount: 0 }));
 			expect(afterGc).toEqual({ continue: true });
 		});
 
@@ -1491,7 +1491,7 @@ describe("makeDecision", () => {
 			);
 			ageFile(statePath, 7 * 3600);
 
-			makeDecision(createContext({ sessionId: sid, activeSubagentCount: 1 }));
+			makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 1 }));
 
 			const parsedAfter = JSON.parse(await readFile(statePath, "utf8"));
 			expect(parsedAfter.last_touched_at).toBe(old);
@@ -1515,13 +1515,13 @@ describe("makeDecision", () => {
 		});
 
 		// This assertion fails if the heartbeat call is ever moved back inside Guard
-		// 2's activeSubagentCount > 0 block — that is the point of the test. qa and
+		// 2's activeBackgroundTaskCount > 0 block — that is the point of the test. qa and
 		// prometheus are the two state families with no per-family idle-Stop updater
 		// of their own anywhere else in makeDecision (unlike goal/ultragoal, which
 		// self-refresh last_touched_at on every pursuing Stop call): the ONLY thing
-		// that can move either family's last_touched_at at activeSubagentCount === 0
+		// that can move either family's last_touched_at at activeBackgroundTaskCount === 0
 		// is touchSessionStates firing unconditionally on entry, ahead of the guard.
-		it("activeSubagentCount === 0 still fires the heartbeat for families with no per-family idle updater (prometheus, qa)", async () => {
+		it("activeBackgroundTaskCount === 0 still fires the heartbeat for families with no per-family idle updater (prometheus, qa)", async () => {
 			const sid = "heartbeat-fires-when-idle";
 			const old = isoAgo(7 * 3600);
 			const prometheusPath = join(omtDir, `prometheus-state-${sid}.json`);
@@ -1548,7 +1548,7 @@ describe("makeDecision", () => {
 			ageFile(qaPath, 7 * 3600);
 
 			makeDecision(
-				createContext({ sessionId: sid, activeSubagentCount: 0, lastAssistantMessage: "still working" }),
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 0, lastAssistantMessage: "still working" }),
 			);
 
 			const prometheusAfter = JSON.parse(await readFile(prometheusPath, "utf8"));
@@ -1603,7 +1603,7 @@ describe("makeDecision", () => {
 
 			// Heartbeat crossing: a Stop call while a subagent is active revives
 			// last_touched_at (GC axis) but must not touch progress_touched_at.
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1611,7 +1611,7 @@ describe("makeDecision", () => {
 			expect(revived.progress_touched_at).toBe(staleIso);
 
 			// Now Stop with no subagents active — must NOT wedge on the revived corpse.
-			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+			const stopResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }));
 			expect(stopResult).toEqual({ continue: true });
 		});
 
@@ -1628,7 +1628,7 @@ describe("makeDecision", () => {
 				}),
 			);
 
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1636,7 +1636,7 @@ describe("makeDecision", () => {
 			expect(revived.progress_touched_at).toBe(staleIso);
 
 			// First Stop call after revival — must not block, well before MAX_BLOCK_COUNT (5).
-			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+			const stopResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }));
 			expect(stopResult).toEqual({ continue: true });
 		});
 
@@ -1732,7 +1732,7 @@ describe("makeDecision", () => {
 			// Heartbeat crossing: revives last_touched_at (GC axis) to now, but
 			// backfills progress_touched_at from the PRE-overwrite (stale) value —
 			// that backfilled value is what must keep this corpse from reviving.
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1741,7 +1741,7 @@ describe("makeDecision", () => {
 			expect(revived.progress_touched_at).toBe(staleIso);
 
 			// Now Stop with no subagents active — must NOT wedge on the revived corpse.
-			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+			const stopResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }));
 			expect(stopResult).toEqual({ continue: true });
 		});
 
@@ -1758,7 +1758,7 @@ describe("makeDecision", () => {
 				}),
 			);
 
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1766,7 +1766,7 @@ describe("makeDecision", () => {
 			expect(revived.started_at).toBe(staleIso);
 			expect(revived.progress_touched_at).toBe(staleIso);
 
-			const stopResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 0 }));
+			const stopResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }));
 			expect(stopResult).toEqual({ continue: true });
 		});
 
@@ -1775,7 +1775,7 @@ describe("makeDecision", () => {
 		// attempt that fell back to `started_at`). A legacy file that has never had a
 		// GC-only writer touch it (progress_touched_at absent) must be judged by
 		// `last_touched_at` alone. touchSessionStates now fires unconditionally on
-		// every makeDecision call regardless of activeSubagentCount, so a heartbeat
+		// every makeDecision call regardless of activeBackgroundTaskCount, so a heartbeat
 		// crossing DOES happen even in this single-call test — but its effect here is
 		// a backfill, not a corruption: progress_touched_at is set to the PRE-heartbeat
 		// last_touched_at value (this test's stale value), never to the fresh stamp
@@ -1838,7 +1838,7 @@ describe("makeDecision", () => {
 			// Heartbeat crossing: backfills progress_touched_at from the genuinely
 			// recent last_touched_at (2 minutes ago) before bumping last_touched_at
 			// itself to now.
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1847,7 +1847,7 @@ describe("makeDecision", () => {
 			// Next Stop call with no subagents active — must still block: the backfilled
 			// progress_touched_at is fresh (2 minutes old), well under the 6h TTL.
 			const stopResult = makeDecision(
-				createContext({ sessionId: sid, activeSubagentCount: 0, lastAssistantMessage: "still working" }),
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 0, lastAssistantMessage: "still working" }),
 			);
 			expect(stopResult.decision).toBe("block");
 			expect(stopResult.reason).toContain("<deep-interview-continuation>");
@@ -1871,14 +1871,14 @@ describe("makeDecision", () => {
 				}),
 			);
 
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
 			expect(revived.progress_touched_at).toBe(recentTouch);
 
 			const stopResult = makeDecision(
-				createContext({ sessionId: sid, activeSubagentCount: 0, lastAssistantMessage: "still working" }),
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 0, lastAssistantMessage: "still working" }),
 			);
 			expect(stopResult.decision).toBe("block");
 			expect(stopResult.reason).toContain("<prometheus-continuation>");
@@ -1911,13 +1911,13 @@ describe("makeDecision", () => {
 			);
 
 			// Heartbeat crossing backfills progress_touched_at from recentTouch.
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeSubagentCount: 2 }));
+			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const stopResult = makeDecision(
 				createContext({
 					sessionId: sid,
-					activeSubagentCount: 0,
+					activeBackgroundTaskCount: 0,
 					lastAssistantMessage: "Interview complete. <deep-interview-done/>",
 				}),
 			);
