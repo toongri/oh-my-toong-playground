@@ -1,6 +1,6 @@
 # 테스트 컨벤션 (Vitest + React Testing Library)
 
-> 테스트를 작성할 때는 Vitest + React Testing Library + (네트워크) MSW를 기준으로 상황에 맞게 사용한다. MSW를 쓸 때 핸들러는 `src/mocks/handlers.ts`에 두고, 테스트 파일은 `no-cross-feature` 의존성 규칙상 `src/mocks/server.ts`를 import할 수 없으므로 `server.use(...)`로 테스트별 핸들러를 덮어쓰는 대신 핸들러가 요청 쿼리를 읽어 분기한다.
+> 테스트를 작성할 때는 Vitest + React Testing Library + (네트워크) MSW를 기준으로 상황에 맞게 사용한다. MSW 핸들러는 루트 `mocks/handlers.ts`에 둔다. `pnpm depcruise`(= `depcruise src`)는 `src/`만 스캔하므로, 핸들러가 `src/mocks/`에 있던 예전 구조에서는 `no-cross-feature` 규칙이 `src/<feature>/*` → `src/mocks/*` import를 막아 어떤 피처의 테스트도 `mocks/server.ts`를 import해 `server.use(...)`로 핸들러를 재정의할 수 없었다. 루트 `mocks/`는 이 스캔 범위 밖이라 어느 피처의 스위트든 자유롭게 import할 수 있다 — 이것이 테스트별 오버라이드에 `server.use(...)`를 쓸 수 있게 된 이유다.
 
 ## 원칙
 
@@ -33,14 +33,15 @@
 
 ## 모킹
 
-- 네트워크는 MSW 핸들러(`src/mocks/handlers.ts`)로. axios/fetch 무관하게 환경 레벨에서 인터셉트되고 재사용된다.
+- 네트워크는 MSW 핸들러(`mocks/handlers.ts`)로. axios/fetch 무관하게 환경 레벨에서 인터셉트되고 재사용된다.
 - **외부 경계만** 모킹한다. 내 코드의 내부 모듈을 `vi.mock`하면 실제 통합을 숨겨 false green을 만든다.
 - `afterEach(() => vi.clearAllMocks())`로 테스트 간 오염을 차단한다.
 
 ## 테스트 유틸 · 픽스처
 
 - 공용 `render` — provider(Query client·테마·i18n 등)로 감싸는 커스텀 `render`를 만들고 `@testing-library/react`를 전부 re-export하면서 `render`만 덮어쓴다(https://testing-library.com/docs/react-testing-library/setup/). 모든 테스트에 동일한 앰비언트 컨텍스트를 공급할 뿐 특정 테스트의 원인은 인코딩하지 않는다 — General Fixture와는 다르다. 그 경계 판단은 [setup-and-coupling.md](./setup-and-coupling.md) 참고.
-- 핸들러 조직 — 커지면 도메인별 파일로 나누고 나중에 합성한다(https://mswjs.io/docs/best-practices/structuring-handlers). 공식 권장은 테스트별 오버라이드를 `server.use()`로 얹는 것이다(https://mswjs.io/docs/best-practices/network-behavior-overrides). 이 레포는 위 상단 안내대로 `no-cross-feature` 규칙상 `server.use()`를 못 써 핸들러가 요청 쿼리를 읽어 분기하는 방식으로 우회한다.
+  - 단, 이 저장소는 `export *`(`ExportAllDeclaration`)를 배럴 규칙으로 전역 금지한다(`eslint.config.mjs`의 `no-restricted-syntax`, 메시지: "배럴은 순수 named re-export만 — `export *` 금지"). 그래서 `mocks/render.tsx`는 공식 처방의 "전부 re-export" 대신 **실제로 쓰는 이름만 named re-export**한다(`export { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react"`). 새 RTL API(예: `act`)가 필요해지면 이 목록에 먼저 추가해야 한다.
+- 핸들러 조직 — 커지면 도메인별 파일로 나누고 나중에 합성한다(https://mswjs.io/docs/best-practices/structuring-handlers). 공식 권장은 테스트별 오버라이드를 `server.use()`로 얹는 것이다(https://mswjs.io/docs/best-practices/network-behavior-overrides). 이 레포는 위 상단 안내대로 `mocks/`가 `src/` 밖에 있어 `no-cross-feature` 제약을 받지 않으므로, 테스트별 오버라이드가 필요하면 공식 권장대로 `server.use()`를 그대로 쓸 수 있다.
 - 테스트 데이터는 팩토리로 뽑는다. 테스트 대역 배선(`vi.mock` 연결)은 값이 아니라 구조라 팩토리로 못 뽑는다 — 상세는 [setup-and-coupling.md](./setup-and-coupling.md).
 
 ## 네이밍 · 구조
@@ -50,13 +51,13 @@
 
 ## AI 단골 안티패턴
 
-| 안티패턴                            | 대신                          |
-| ----------------------------------- | ----------------------------- |
-| `container.querySelector('.class')` | `getByRole(...)`              |
-| 내부 state·메서드 assert            | state 변화가 만든 UI를 검증   |
-| 전체 컴포넌트 snapshot 남용         | 작고 안정적인 조각에만        |
-| `waitFor` 빈/다중 콜백              | 콜백 안 assertion 하나        |
-| 내 피처 코드 `vi.mock`              | 외부/프레임워크 경계·어댑터만 |
-| `getByTestId` 기본 사용             | `getByRole`/`getByLabelText`  |
+| 안티패턴                            | 대신                             |
+| ----------------------------------- | -------------------------------- |
+| `container.querySelector('.class')` | `getByRole(...)`                 |
+| 내부 state·메서드 assert            | state 변화가 만든 UI를 검증      |
+| 전체 컴포넌트 snapshot 남용         | 작고 안정적인 조각에만           |
+| `waitFor` 빈/다중 콜백              | 콜백 안 assertion 하나           |
+| 내 피처 코드 `vi.mock`              | 외부/프레임워크 경계·어댑터만    |
+| `getByTestId` 기본 사용             | `getByRole`/`getByLabelText`     |
 | 훅 함수를 직접 호출해 촉발          | 실제 상호작용(클릭)으로 촉발한다 |
 | 파일마다 mock 스캐폴드 복붙         | 경계를 밖으로 밀어 셋업을 없앤다 |
