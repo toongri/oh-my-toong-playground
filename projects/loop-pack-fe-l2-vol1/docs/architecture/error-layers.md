@@ -62,7 +62,7 @@ const { data, error } = useQuery({
 });
 ```
 
-`useSuspenseQuery`는 에러를 항상 throw한다. 그래서 Boundary와 Suspense는 같은 위치에 쌍으로 배치한다 — 둘 중 하나만 두면 남은 상태(로딩 또는 에러)를 처리할 곳이 없다.
+`useSuspenseQuery`는 보여줄 데이터가 없을 때 에러를 throw한다 — 기본 predicate가 `typeof query.state.data === 'undefined'`일 때만 던지도록 정의돼 있다. 이미 성공한 데이터가 캐시에 있으면 background refetch 실패는 throw되지 않고 stale 데이터로 렌더된다. 첫 로드 실패는 Boundary가 잡으므로 Boundary와 Suspense는 같은 위치에 쌍으로 배치한다 — 둘 중 하나만 두면 남은 상태(로딩 또는 에러)를 처리할 곳이 없다.
 
 ## Suspense는 Boundary의 짝 — 독립 섹션마다 쌍으로 배치
 

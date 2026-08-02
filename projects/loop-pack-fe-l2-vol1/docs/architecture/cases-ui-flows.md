@@ -218,9 +218,9 @@ export function canCancelOrder(user: User, order: Order): boolean { /* 도메인
 **다섯 질문 적용.** 2번(변경 이유가 무엇인가)이 이 셋을 가른다 — route guard는 라우팅 구조가 바뀔 때, 도메인 판정은 주문 정책이 바뀔 때, 세션 인프라는 토큰 갱신 방식이 바뀔 때 각각 따로 바뀐다. 배치 매트릭스의 "접근 제어(Access control)" 행이 이 분해를 이미 정의한다: domain authorization은 해당 flow/Entity의 rule, route guard는 App/Page, session infrastructure는 Shared/App.
 
 ```ts
-// ✅ entities/order/model/can-cancel.ts — 도메인 판정은 Order를 아는 Entity가 소유
-export function canCancelOrder(user: User, order: Order): boolean {
-  return order.status === "pending" && order.ownerId === user.id;
+// ✅ entities/order/model/can-cancel.ts — 도메인 판정은 Order를 아는 Entity가 소유. 다른 Entity의 타입이 아니라 필요한 값(userId)만 받는다 — 같은 레이어 의존이 생기지 않는다.
+export function canCancelOrder(userId: string, order: Order): boolean {
+  return order.status === "pending" && order.ownerId === userId;
 }
 ```
 
@@ -230,10 +230,11 @@ import { canCancelOrder } from "@/entities/order";
 
 function CancelButton({ order }: { order: Order }) {
   const user = useCurrentUser();
-  if (!canCancelOrder(user, order)) return null;
+  if (!canCancelOrder(user.id, order)) return null;
   return <button onClick={handleCancel}>주문 취소</button>;
 }
 ```
+판정이 User의 여러 속성을 정말로 필요로 하게 되면 그때는 @x 표기(entity 간 cross-import의 공식 예외)로 간다 — [`./cases-api-and-types.md`](./cases-api-and-types.md)의 엔티티 간 타입 순환 절이 다룬다.
 
 ```tsx
 // ✅ _app/guards/RequireAuth.tsx — route 전체 접근 여부는 App/Page의 책임
