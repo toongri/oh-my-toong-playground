@@ -3,7 +3,7 @@
 How to end — or not end — a turn while a persistent-mode session is active
 (deep-interview, prometheus, ultragoal, or a live todo list). The
 persistent-mode Stop hook keeps you working when work remains; this contract
-names the FOUR distinct things you can do at a turn boundary, so "don't
+names the FOUR distinct situations at a turn boundary, so "don't
 stop" never collapses into a blunt binary.
 
 ## The four cases
@@ -31,14 +31,19 @@ At every turn boundary, exactly one of these applies:
    `<awaiting-user/>` is the only sanctioned stop while no background work is
    pending wake.
 
-4. **Background work is running or pending → ending the turn is a sanctioned
-   wait, not a stop.** The Stop hook reads the payload's `background_tasks`
-   directly, so no token is needed — a plain prose turn end suffices. Session
-   state is kept, and the harness re-invokes the session via task-notification
-   when the work completes; enforcement resumes on that wake. This case is
-   evaluated FIRST at the turn boundary: when running or pending background work
-   exists, the hook allows the turn end before any other case is considered, so
-   cases 1-3 describe the no-background-work world.
+4. **Background work is running or pending → follow the runtime's wake
+   contract.** On Claude Code, ending the turn is a sanctioned wait, not a stop:
+   the Stop hook reads the payload's `background_tasks` directly, so no token is
+   needed and a plain prose turn end suffices. Session state is kept, and the
+   harness re-invokes the session via task-notification when the work completes;
+   enforcement resumes on that wake. Claude Code evaluates this case FIRST at
+   the turn boundary, before cases 1-3.
+
+   Codex has no equivalent Stop payload or guaranteed completion-triggered turn.
+   On Codex, treat background work as case 1: keep the turn alive and use the
+   appropriate wait mechanism until it completes — `write_stdin` polling for a
+   yielded unified exec session, or the agent wait tool for delegated work. Do
+   not end the turn solely to wait.
 
 ## Softener ban
 
@@ -53,6 +58,7 @@ permission to continue. These are banned:
 Each is one of the four cases in disguise. If work remains, use case 1 (just
 continue). If you need a decision, use case 2 (`AskUserQuestion`). If only the
 user can decide, use case 3 (`<awaiting-user/>`). If background work is
-running or pending, use case 4 (just end the turn; the wake resumes the
-session). A softener is none of these — it stops without yielding cleanly and
-without continuing, which is exactly the ambiguity this contract removes.
+running or pending, use case 4: Claude Code may end the turn for its guaranteed
+wake, while Codex keeps the turn alive and polls. A softener is none of these —
+it stops without yielding cleanly and without continuing, which is exactly the
+ambiguity this contract removes.

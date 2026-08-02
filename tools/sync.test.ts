@@ -3694,6 +3694,42 @@ describe("processYaml — rules category deploys to codex with rewrite applied (
 		expect(deployed).toContain(".codex/rules/");
 	});
 
+	it("keeps Claude background wake semantics but tells Codex to wait and poll", async () => {
+		const source = await readFile(
+			path.join(import.meta.dir, "..", "rules", "continuation-contract.md"),
+		);
+		await writeFile(path.join(rootDir, "rules", "continuation-contract.md"), source);
+
+		const syncYamlPath = path.join(rootDir, "sync.yaml");
+		await writeFile(
+			syncYamlPath,
+			`path: ${targetPath}\nrules:\n  platforms: [claude, codex]\n  items:\n    - continuation-contract\n`,
+		);
+
+		const adapters = new Map<Platform, PlatformAdapter>([
+			["claude", new ClaudeAdapter()],
+			["codex", new CodexAdapter()],
+		]) as AdapterMap;
+
+		await processYaml(makeContext(), syncYamlPath, adapters, rootDir);
+
+		const claude = await readFile(
+			path.join(targetPath, ".claude", "rules", "continuation-contract.md"),
+		);
+		const codex = await readFile(
+			path.join(targetPath, ".codex", "rules", "continuation-contract.md"),
+		);
+
+		expect(claude).toBe(source);
+		expect(claude).toContain("On Claude Code");
+		expect(claude).toContain("background_tasks");
+		expect(claude).toContain("task-notification");
+		expect(codex).toContain("Codex has no equivalent Stop payload");
+		expect(codex).toContain("write_stdin");
+		expect(codex).toContain("poll");
+		expect(codex).toContain("not end the turn solely to wait");
+	});
+
 	it("dry-run reports the rule copy and the codex rewrite without writing files", async () => {
 		await writeFile(path.join(rootDir, "rules", "my-rule.md"), "Ask via AskUserQuestion.\n");
 
