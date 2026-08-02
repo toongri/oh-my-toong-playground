@@ -31,14 +31,14 @@ At every turn boundary, exactly one of these applies:
    `<awaiting-user/>` is the only sanctioned stop while no background work is
    pending wake.
 
-4. **Background work is running → ending the turn is a sanctioned wait, not a
-   stop.** The Stop hook reads the payload's `background_tasks` directly, so no
-   token is needed — a plain prose turn end suffices. Session state is kept, and
-   the harness re-invokes the session via task-notification when the work
-   completes; enforcement resumes on that wake. This case is evaluated FIRST at
-   the turn boundary: when active background work exists, the hook allows the
-   turn end before any other case is considered, so cases 1-3 describe the
-   no-background-work world.
+4. **Background work is running or pending → ending the turn is a sanctioned
+   wait, not a stop.** The Stop hook reads the payload's `background_tasks`
+   directly, so no token is needed — a plain prose turn end suffices. Session
+   state is kept, and the harness re-invokes the session via task-notification
+   when the work completes; enforcement resumes on that wake. This case is
+   evaluated FIRST at the turn boundary: when running or pending background work
+   exists, the hook allows the turn end before any other case is considered, so
+   cases 1-3 describe the no-background-work world.
 
 ## Softener ban
 
