@@ -251,7 +251,11 @@ function runStop(input: Record<string, unknown>): void {
 		lastAssistantMessage: typeof lam === "string" ? lam : null,
 		projectRoot: cwd,
 		incompleteTodoCount,
-		activeSubagentCount: 0,
+		// Codex Stop payload's closed schema carries no background-task data, and completion
+		// is queued as context with trigger_turn:false, so it has no guaranteed wake/re-invocation.
+		// Shared invariant: Stop may bypass only if deferred re-invocation is guaranteed;
+		// Codex lacks that guarantee, so keep no background-task bypass.
+		activeBackgroundTaskCount: 0,
 		pendingSkillChainSkills,
 		// Codex's real AskUserQuestion analog (rewrite rule 14 in
 		// tools/lib/rewrite-rules.ts) — see DecisionContext.askToolName's doc

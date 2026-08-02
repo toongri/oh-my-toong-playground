@@ -875,7 +875,7 @@ function typeFromStateFilename(filename: string): StateType | null {
  * per-file error (ENOENT from a read/write race, a parse failure, a malformed file)
  * is swallowed and the sweep continues — this is called unconditionally at the
  * very top of makeDecision (lib/persistent-mode-core/decision.ts), before Guard
- * 2's activeSubagentCount check, wrapped in its own try/catch there, so a throw
+ * 2's activeBackgroundTaskCount check, wrapped in its own try/catch there, so a throw
  * here would corrupt the Stop hook's decision if it were allowed to propagate.
  *
  * GC-only writer (see backfillProgressTouchedAt's doc comment): before this
