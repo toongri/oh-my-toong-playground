@@ -24,9 +24,7 @@ export function parseInput(raw: string): ParsedInput {
 	const directory = input.cwd || process.cwd();
 	const lastAssistantMessage = input.last_assistant_message || null;
 	const activeBackgroundTaskCount = Array.isArray(input.background_tasks)
-		? input.background_tasks.filter(
-			(t) => t.type === "subagent" && (t.status === "running" || t.status === "pending"),
-		).length
+		? input.background_tasks.filter((t) => t.status === "running" || t.status === "pending").length
 		: 0;
 
 	return { sessionId, directory, lastAssistantMessage, activeBackgroundTaskCount };

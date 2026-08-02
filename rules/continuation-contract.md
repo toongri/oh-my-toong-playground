@@ -28,23 +28,19 @@ At every turn boundary, exactly one of these applies:
    `<awaiting-user/>`. The hook treats this as a legitimate yield: it allows
    the stop, keeps all session state intact (the interview or pursuit resumes on
    the user's next reply), and does not mark the work complete.
-   `<awaiting-user/>` is the only sanctioned stop unless case 4 applies.
+   `<awaiting-user/>` is the only sanctioned stop while no background work is
+   pending wake.
 
-4. **Background subagent is running or pending → Claude Code may wait for its
-   wake.** On Claude Code, this case applies only when a `background_tasks`
-   entry has `type === "subagent"` and its `status` is `running` or `pending`.
-   Ending the turn is then a sanctioned wait, not a stop: no token is needed and
-   a plain prose turn end suffices. Session state is kept, and the harness
-   re-invokes the session via task-notification when that subagent completes;
-   enforcement resumes on that wake. Claude Code evaluates this subagent-only
-   case FIRST at the turn boundary, before cases 1-3.
-
-   Other Claude Code background types — `shell`, `monitor`, and typeless
-   entries — remain case 1, as do subagents in other statuses: keep the turn
-   alive and poll; do not end the turn solely to wait.
+4. **Background work is running or pending → follow the runtime's wake
+   contract.** On Claude Code, ending the turn is a sanctioned wait, not a stop:
+   the Stop hook reads the payload's `background_tasks` directly, so no token is
+   needed and a plain prose turn end suffices. Session state is kept, and the
+   harness re-invokes the session via task-notification when the work completes;
+   enforcement resumes on that wake. Claude Code evaluates this case FIRST at
+   the turn boundary, before cases 1-3.
 
    Codex has no equivalent Stop payload or guaranteed completion-triggered turn.
-   On Codex, all background work is case 1: keep the turn alive and use the
+   On Codex, treat background work as case 1: keep the turn alive and use the
    appropriate wait mechanism until it completes — `write_stdin` polling for a
    yielded unified exec session, or the agent wait tool for delegated work. Do
    not end the turn solely to wait.
@@ -61,8 +57,8 @@ permission to continue. These are banned:
 
 Each is one of the four cases in disguise. If work remains, use case 1 (just
 continue). If you need a decision, use case 2 (`AskUserQuestion`). If only the
-user can decide, use case 3 (`<awaiting-user/>`). If a qualifying Claude Code
-background subagent is active, use case 4; all other background work stays case
-1 and must be polled with the turn alive. A softener is none of these — it stops
-without yielding cleanly and without continuing, which is exactly the ambiguity
-this contract removes.
+user can decide, use case 3 (`<awaiting-user/>`). If background work is
+running or pending, use case 4: Claude Code may end the turn for its guaranteed
+wake, while Codex keeps the turn alive and polls. A softener is none of these —
+it stops without yielding cleanly and without continuing, which is exactly the
+ambiguity this contract removes.
