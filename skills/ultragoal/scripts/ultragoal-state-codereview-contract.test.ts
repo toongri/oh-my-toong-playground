@@ -3,7 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
+	dismissReviewFinding,
 	readCodeReviewArtifact,
+	readGoalState,
 	requestComplete,
 	setGoalState,
 	setSingleStory,
@@ -232,5 +234,169 @@ describe("T7: requirement-gap 클래스 커버리지 계약 (regression guard)",
 		});
 
 		expect(requestComplete(SID)).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// T8: user-authorized dismissal of a wrong code-review finding
+//
+// The completion lane has an escape hatch for "run the review once more"
+// (approveReviewDispatchRenewal) but NONE for "this finding is wrong". A single
+// false-positive CONFIRMED correctness finding therefore makes the objective
+// permanently uncompletable: the only exits are editing correct code to satisfy
+// a wrong review, or set-blocked. `dismissReviewFinding` is the missing lever,
+// shaped after the renewal one it sits beside — user-authorized, recorded in
+// state (never in the write-guarded artifact), and pinned to the exact artifact
+// bytes the dismissal was issued against.
+// ---------------------------------------------------------------------------
+
+/** The blocking finding these tests dismiss — CONFIRMED correctness, the class that deadlocks. */
+const FALSE_POSITIVE = { class: "correctness", verdict: "CONFIRMED", ref: "src/auth.ts:142" };
+
+function writeBlockingArtifact(sid: string, findings: object[], at = "2026-06-26T10:00:00"): void {
+	writeArtifact(sid, { status: "COMPLETE", findings, reviewer: "code-reviewer", at });
+}
+
+describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () => {
+	test("무효화 전에는 CONFIRMED correctness 1건이 완료를 차단한다 (기준선)", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE]);
+
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	test("무효화하면 그 finding이 차단 집합에서 빠져 requestComplete가 통과한다", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE]);
+
+		expect(
+			dismissReviewFinding(SID, {
+				ref: FALSE_POSITIVE.ref,
+				class: "correctness",
+				rationale: "142행 위 guard가 null을 이미 걸러내므로 NPE 경로가 도달 불가",
+			}),
+		).toBe(true);
+		expect(requestComplete(SID)).toBe(true);
+	});
+
+	test("입도는 finding 단위 — 무효화하지 않은 나머지 CONFIRMED는 계속 완료를 막는다", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [
+			FALSE_POSITIVE,
+			{ class: "requirement-gap", verdict: "CONFIRMED", ref: "src/pay.ts:20" },
+		]);
+
+		expect(
+			dismissReviewFinding(SID, {
+				ref: FALSE_POSITIVE.ref,
+				class: "correctness",
+				rationale: "142행 위 guard가 null을 이미 걸러냄",
+			}),
+		).toBe(true);
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	test("SHA 핀: 아티팩트 바이트가 바뀌면 같은 ref/class가 재발해도 무효화가 이월되지 않는다", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE]);
+		expect(
+			dismissReviewFinding(SID, {
+				ref: FALSE_POSITIVE.ref,
+				class: "correctness",
+				rationale: "142행 위 guard가 null을 이미 걸러냄",
+			}),
+		).toBe(true);
+
+		// 다음 라운드: 코드가 바뀌어 같은 위치에 진짜 결함이 생긴 새 리뷰 아티팩트.
+		// ref/class는 동일하지만 바이트가 다르므로 이전 무효화는 적용되면 안 된다.
+		writeBlockingArtifact(SID, [FALSE_POSITIVE], "2026-06-27T09:00:00");
+
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	test("현재 아티팩트에 매칭되는 CONFIRMED finding이 없으면 무효화를 거부한다 (선제 무효화 차단)", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE]);
+
+		expect(
+			dismissReviewFinding(SID, {
+				ref: "src/nowhere.ts:1",
+				class: "correctness",
+				rationale: "아직 나오지도 않은 finding을 미리 무효화",
+			}),
+		).toBe(false);
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	test("비차단 클래스(cleanup)는 무효화 대상이 아니다 — 이미 완료를 막지 않음", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [{ class: "cleanup", verdict: "CONFIRMED", ref: "src/log.ts:8" }]);
+
+		expect(
+			dismissReviewFinding(SID, {
+				ref: "src/log.ts:8",
+				class: "cleanup" as "correctness",
+				rationale: "무의미한 무효화",
+			}),
+		).toBe(false);
+	});
+
+	test("빈 rationale은 거부한다 — 무효화는 근거 없이 기록되지 않는다", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE]);
+
+		expect(
+			dismissReviewFinding(SID, { ref: FALSE_POSITIVE.ref, class: "correctness", rationale: "   " }),
+		).toBe(false);
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	// A dismissal is keyed by (artifact bytes, ref, class), so two DISTINCT confirmed
+	// findings sharing a ref and class are indistinguishable to it — refuting one
+	// would clear both and let a genuine defect complete. Refusing the ambiguous
+	// dismissal is the fail-closed direction: the user loses the escape hatch for
+	// that finding, never the block on the other one.
+	test("같은 ref/class의 CONFIRMED가 2건이면 무효화를 거부한다 — 한 건만 무효화하려다 진짜 결함까지 지우는 false-complete 차단", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE, { ...FALSE_POSITIVE }]);
+
+		expect(
+			dismissReviewFinding(SID, {
+				ref: FALSE_POSITIVE.ref,
+				class: "correctness",
+				rationale: "둘 중 하나만 오탐",
+			}),
+		).toBe(false);
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	test("값 없는 --rationale은 거부한다 — parseArgs의 boolean true가 근거 \"true\"로 기록되면 안 됨", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE]);
+
+		expect(
+			dismissReviewFinding(SID, {
+				ref: FALSE_POSITIVE.ref,
+				class: "correctness",
+				rationale: true as unknown as string,
+			}),
+		).toBe(false);
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	test("ADR-3: 무효화는 네 번째 verdict carrier — re-plan 시 함께 비워진다", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE]);
+		expect(
+			dismissReviewFinding(SID, {
+				ref: FALSE_POSITIVE.ref,
+				class: "correctness",
+				rationale: "142행 위 guard가 null을 이미 걸러냄",
+			}),
+		).toBe(true);
+
+		setGoalState(SID, { phase: "planning", outcome: "ship it v2", verification_surface: "v2" });
+
+		expect(readGoalState(SID)?.dismissed_review_findings ?? []).toEqual([]);
 	});
 });

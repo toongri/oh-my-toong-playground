@@ -343,6 +343,21 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
                     }
                     print out
                 }')
+            # User-authorized ultragoal-state subcommands (approve-review-dispatch-
+            # renewal / dismiss-review-finding). Runs on the WHOLE masked command,
+            # deliberately OUTSIDE the segment loop below: a `sub=<subcommand>;`
+            # assignment puts the subcommand name in a different chain segment from
+            # the script path, so a per-segment check never sees both. Masked rather
+            # than raw because the documented invocation quotes the script path
+            # (`bun "${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts" <sub>`).
+            # Shares this block's `_wg_sid`/`_wg_omt_dir` precondition with the
+            # ledger and code-review guards -- a payload that resolves neither
+            # already leaves all of them dark, so this adds no new dark path.
+            _wg_ua_out=$(write_guard_core_check_user_authorized_command "$_wg_scan")
+            if [[ -n "$_wg_ua_out" ]]; then
+                printf '%s\n' "$_wg_ua_out"
+                exit 0
+            fi
             while IFS= read -r _wg_seg; do
                 [[ -z "$_wg_seg" ]] && continue
                 while IFS= read -r _wg_target; do
