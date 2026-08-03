@@ -785,7 +785,9 @@ async function main(): Promise<void> {
 		const promptArg = optionalString(options.prompt);
 		if (!promptArg) exitWithError("--prompt required");
 		try {
-			await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG);
+			await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG, {
+				workerPath: WORKER_PATH,
+			});
 		} catch (e: unknown) {
 			exitWithError(e instanceof Error ? e.message : String(e));
 		}

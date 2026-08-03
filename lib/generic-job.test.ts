@@ -2922,6 +2922,171 @@ describe("cmdResumeMember", () => {
 			/session.*preserv|--resume.*persona|intentionally.*omit|not forwarded|session-preserving/i,
 		);
 	});
+
+	// ---------------------------------------------------------------------------
+	// workerPath opt: detached-spawn resume dispatch (in-process path above stays
+	// the legacy default for callers that never pass workerPath).
+	// ---------------------------------------------------------------------------
+
+	function makeSpawnStub() {
+		const calls: { command: string; args: string[]; options: Record<string, unknown> }[] = [];
+		const spawnFn = ((command: string, args: string[], options: Record<string, unknown>) => {
+			calls.push({ command, args, options });
+			return { unref: () => {} } as unknown as ReturnType<typeof spawn>;
+		}) as unknown as typeof spawn;
+		return { spawnFn, calls };
+	}
+
+	test("workerPath가 주어지면 resumeFn을 호출하지 않고 스폰만 한다", async () => {
+		const entityDir = path.join(jobDir, "members", "alice");
+		writeMemberStatus(entityDir, {
+			member: "alice",
+			state: "done",
+			sessionID: "sess-abc",
+			resume_count: 0,
+			command: "opencode",
+		});
+
+		const { spawnFn, calls } = makeSpawnStub();
+		let resumeFnCalled = false;
+
+		await cmdResumeMember(jobDir, "alice", "follow up", membersConfig, {
+			driverFactory: () => makeMockDriver(),
+			resumeOneTurnFn: async () => {
+				resumeFnCalled = true;
+				return { state: "done", sessionID: "sess-abc", text: "", exitCode: 0 };
+			},
+			workerPath: "/fake/worker.ts",
+			spawnFn,
+		});
+
+		expect(resumeFnCalled).toBe(false);
+		expect(calls.length).toBe(1);
+	});
+
+	test("workerPath 모드는 spawn을 detached로 호출하고 workerPath/--session/--prompt를 인자로 전달한다", async () => {
+		const entityDir = path.join(jobDir, "members", "alice");
+		writeMemberStatus(entityDir, {
+			member: "alice",
+			state: "done",
+			sessionID: "sess-abc",
+			resume_count: 0,
+			command: "opencode",
+			workerEnv: { CUSTOM: "val" },
+		});
+
+		const { spawnFn, calls } = makeSpawnStub();
+		await cmdResumeMember(jobDir, "alice", "follow up prompt", membersConfig, {
+			driverFactory: () => makeMockDriver(),
+			workerPath: "/fake/worker.ts",
+			spawnFn,
+		});
+
+		expect(calls.length).toBe(1);
+		const call = calls[0];
+		expect(call.command).toBe(process.execPath);
+		expect(call.args).toEqual([
+			"/fake/worker.ts",
+			"--job-dir",
+			jobDir,
+			"--member",
+			"alice",
+			"--command",
+			"opencode",
+			"--session",
+			"sess-abc",
+			"--prompt",
+			"follow up prompt",
+			"--env",
+			"CUSTOM=val",
+			"--timeout",
+			"300",
+		]);
+		expect(call.options).toMatchObject({ detached: true, stdio: "ignore" });
+	});
+
+	test("workerPath 모드는 spawn 전에 status.json을 queued로 전환하며 기존 필드를 보존한다", async () => {
+		const entityDir = path.join(jobDir, "members", "alice");
+		writeMemberStatus(entityDir, {
+			member: "alice",
+			state: "awaiting_resume",
+			sessionID: "sess-abc",
+			resume_count: 1,
+			command: "opencode",
+			workerEnv: { CUSTOM: "val" },
+			usage: { output_tokens: 42 },
+		});
+
+		const { spawnFn } = makeSpawnStub();
+		await cmdResumeMember(jobDir, "alice", "follow up", membersConfig, {
+			driverFactory: () => makeMockDriver(),
+			workerPath: "/fake/worker.ts",
+			spawnFn,
+		});
+
+		const status = readMemberStatus(entityDir);
+		expect(status.state).toBe("queued");
+		expect(typeof status.queuedAt).toBe("string");
+		expect(status.sessionID).toBe("sess-abc");
+		expect(status.command).toBe("opencode");
+		expect(status.workerEnv).toEqual({ CUSTOM: "val" });
+		expect(status.resume_count).toBe(2);
+		expect(status.usage).toEqual({ output_tokens: 42 });
+	});
+
+	test("workerPath 모드는 stdout에 dispatched ack를 출력하고 즉시 반환한다", async () => {
+		const entityDir = path.join(jobDir, "members", "alice");
+		writeMemberStatus(entityDir, {
+			member: "alice",
+			state: "done",
+			sessionID: "sess-abc",
+			resume_count: 0,
+			command: "opencode",
+		});
+
+		const { spawnFn } = makeSpawnStub();
+		let captured = "";
+		const origWrite = process.stdout.write.bind(process.stdout);
+		process.stdout.write = ((chunk: string | Uint8Array) => {
+			captured += String(chunk);
+			return true;
+		}) as typeof process.stdout.write;
+		try {
+			await expect(
+				cmdResumeMember(jobDir, "alice", "follow up", membersConfig, {
+					driverFactory: () => makeMockDriver(),
+					workerPath: "/fake/worker.ts",
+					spawnFn,
+				}),
+			).resolves.toBeUndefined();
+		} finally {
+			process.stdout.write = origWrite;
+		}
+
+		expect(JSON.parse(captured.trim())).toEqual({ state: "dispatched", member: "alice" });
+	});
+
+	test("workerPath 모드에서도 resume_count가 캡(3)이면 스폰 없이 reject한다", async () => {
+		const entityDir = path.join(jobDir, "members", "alice");
+		writeMemberStatus(entityDir, {
+			member: "alice",
+			state: "done",
+			sessionID: "sess-abc",
+			resume_count: 3,
+			command: "opencode",
+		});
+
+		const { spawnFn, calls } = makeSpawnStub();
+		await expect(
+			cmdResumeMember(jobDir, "alice", "follow up", membersConfig, {
+				driverFactory: () => makeMockDriver(),
+				workerPath: "/fake/worker.ts",
+				spawnFn,
+			}),
+		).rejects.toThrow("resume cap exceeded (3/3)");
+
+		expect(calls.length).toBe(0);
+	});
 });
 
 // ---------------------------------------------------------------------------
