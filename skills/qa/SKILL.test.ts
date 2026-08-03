@@ -740,7 +740,7 @@ describe("new-prose: a failed row's disposition is pinned", () => {
 
 	test("a failed H-priority row blocks regardless of confidence", () => {
 		expect(skillMd).toContain(
-			"A failed `H`-priority row blocks regardless of its confidence score",
+			"A failed **`H`-priority** row blocks whatever its score",
 		);
 	});
 
@@ -752,6 +752,56 @@ describe("new-prose: a failed row's disposition is pinned", () => {
 		const guardStart = skillMd.indexOf("## Approval Decision");
 		expect(guardStart).not.toBe(-1);
 		expect(skillMd.slice(guardStart)).toContain("CHECK soft-passes");
+	});
+});
+
+describe("new-prose: the soft-pass carve-out is reachable and unambiguously scoped", () => {
+	test("the soft-pass band is stated as a concrete score range, not a named threshold in another file", () => {
+		const checkStart = skillMd.indexOf("### CHECK");
+		const checkSection = skillMd.slice(
+			checkStart,
+			skillMd.indexOf("### DIAGNOSIS", checkStart + 1),
+		);
+		expect(checkSection).toContain("50–79");
+		expect(checkSection).not.toContain("blocking threshold");
+	});
+
+	test("caller-provided and 80+ failures are excluded from the carve-out", () => {
+		expect(skillMd).toContain("A failed **caller-provided** row blocks");
+		expect(skillMd).toContain("A finding scoring **80+** blocks");
+	});
+
+	test("a failure that cannot be scored at 50+ is re-run, not soft-passed", () => {
+		expect(skillMd).toContain("not a soft pass but an unexplained failure");
+	});
+
+	test("the upstream ADVERSARIAL E2E gate routes by row class instead of stopping on any failure", () => {
+		expect(stage3Md).not.toContain("ADVERSARIAL E2E Failure = Immediate Stop");
+		expect(stage3Md).toContain("Stop or Carry, by Row Class");
+		expect(stage3Md).toContain("this stage never issues the verdict itself");
+		expect(stage3Md).toContain("carry it to CHECK");
+	});
+
+	test("feedback-protocol's threshold rule matches its own 50-row instead of contradicting it", () => {
+		const feedbackMd = readFileSync(
+			join(import.meta.dir, "feedback-protocol.md"),
+			"utf8",
+		);
+		expect(feedbackMd).not.toContain("Report only issues scoring 80+");
+		expect(feedbackMd).toContain("`nitpick (non-blocking)`");
+		expect(feedbackMd).toContain("Below 50 → discard");
+	});
+});
+
+describe("new-prose: the boundary rule does not override verbatim caller scenarios", () => {
+	test("the boundary rule is scoped to self-authored scenarios", () => {
+		expect(skillMd).toContain("Every **self-authored** scenario is executed");
+	});
+
+	test("a caller-provided scenario is exempt from relocation but not from disclosure", () => {
+		expect(skillMd).toContain("exempt from relocation");
+		expect(skillMd).toContain("not exempt from disclosure");
+		expect(skillMd).toContain("supports no claim above that layer");
 	});
 });
 
