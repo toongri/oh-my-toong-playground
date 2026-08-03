@@ -870,6 +870,53 @@ describe("new-prose: B subset-of A has a reading when A is absent", () => {
 	});
 });
 
+describe("new-prose: precondition bootstrap precedes unreachability", () => {
+	test("the bootstrap ladder gates the word unreachable", () => {
+		expect(skillMd).toContain("Precondition bootstrap (CRITICAL)");
+		expect(skillMd).toContain(
+			"A missing precondition is work to do, not an obstacle to record",
+		);
+		expect(skillMd).toContain(
+			"one still unreachable after the bootstrap ladder above",
+		);
+	});
+
+	test("each rung names its bootstrap, not a surrender", () => {
+		expect(skillMd).toContain("Non-deployment is an environment choice");
+		expect(skillMd).toContain("create seed data");
+		expect(skillMd).toContain("mint a test token");
+		expect(skillMd).toContain("launch that platform too");
+	});
+
+	// The old example list taught the failure: it named a bootstrappable
+	// obstacle (a missing credential) as a legitimate unreachable boundary.
+	test("a missing credential is no longer an example of an unreachable boundary", () => {
+		expect(skillMd).not.toContain(
+			"a dependency answering 502, a missing credential",
+		);
+	});
+
+	test("the roster spans the journey, not the diff", () => {
+		expect(skillMd).toContain(
+			"Never QA only the platform where the change landed",
+		);
+	});
+
+	test("undeclared rung attempts are named boundary evasion", () => {
+		expect(skillMd).toContain("boundary evasion, not a coverage delta");
+	});
+
+	test("the public docs carry the bootstrap ladder, in both languages", () => {
+		const docsDir = join(import.meta.dir, "..", "..", "docs", "skills");
+		expect(
+			readFileSync(join(docsDir, "review-quality.md"), "utf8"),
+		).toContain("전제조건 부트스트랩");
+		expect(
+			readFileSync(join(docsDir, "review-quality.en.md"), "utf8"),
+		).toContain("Precondition bootstrap");
+	});
+});
+
 // ---------------------------------------------------------------------------
 // REGRESSION GUARD: frontmatter identity (must PASS before AND after)
 // ---------------------------------------------------------------------------

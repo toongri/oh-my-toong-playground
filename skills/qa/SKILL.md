@@ -83,6 +83,8 @@ Enumerate every actor the changed surface serves and pin each one's boundary, as
 
 A change with no UI still has actors. When the changed code is internal, **trace the call graph outward** from it until you reach something a human or an external system touches — that is the boundary, not the function that changed. Emit the result as the `## Actor Roster` output section.
 
+**The roster spans the actor's journey, not the diff (CRITICAL).** Never QA only the platform where the change landed. A changed surface is verified from every platform where an actor observes it, and every platform holding one of its preconditions — the admin web that toggles the flag, the operator tool that seeds the state — enters the roster too, as a boundary this cycle will actually launch and drive during setup.
+
 #### PLAN.2 — Scenarios, per actor
 
 Parse the QA REQUEST's Spec/AC into concrete verification targets: what BASELINE must run green, what ADVERSARIAL E2E must attack from each actor's boundary, and what CHECK will judge against. MUST-DO tables and Completeness sub-checks are `code-review`'s static-audit territory, not PLAN's.
@@ -124,7 +126,17 @@ For mobile/native UI work, load the `agent-device` skill first and derive the cu
 
 A **caller-provided** scenario is exempt from relocation and stays verbatim (part 1 above) whatever layer it enters at — the caller owns that choice. It is not exempt from disclosure: record its `driven-at` as the layer it actually entered, and it supports no claim above that layer. A caller-provided command that runs at an inner layer never satisfies an actor-boundary scenario on the same surface.
 
-**Boundary substitution.** An unreachable boundary — no physical device, a dependency answering 502, a missing credential — never relocates the scenario inward while the claim stays where it was. In order:
+**Precondition bootstrap (CRITICAL) — exhausted before any hop is called unreachable.** A missing precondition is work to do, not an obstacle to record. Bootstrap it, rung by rung:
+
+1. **Environment not deployed / not accessible** (branch not on stage, endpoint 404, no deploy permission) → the deployed environment was never the boundary. Stand the stack up locally — backend, database, bundler — and re-point or re-build the app against that local backend. Non-deployment is an environment choice, not a boundary obstacle.
+2. **No data** → read the schema and create seed data.
+3. **No account / credential** → run the signup flow as its own scenario step, or mint a test token and inject it (cookie/header/session).
+4. **Precondition satisfiable only on another platform** (a flag toggled in an admin web, a state set from an operator tool) → launch that platform too, satisfy the precondition there for real, then verify the feature on the platform under test. Launching the precondition platform is setup cost, and setup cost never skips a scenario.
+5. **Genuinely external dependency outside your control** (third-party API off-network, physical hardware absent) → only this rung enters *Boundary substitution* below: fake that hop alone while every other layer runs real.
+
+Declaring an obstacle without recording which rungs were attempted and why each failed is boundary evasion, not a coverage delta.
+
+**Boundary substitution.** An unreachable boundary — one still unreachable after the bootstrap ladder above, like absent physical hardware or an off-network third-party dependency — never relocates the scenario inward while the claim stays where it was. In order:
 
 1. Drive from the actor's boundary anyway, **replacing only the unreachable hop** with a fake or stub (fake transport, stubbed external API, seeded local data), so every layer between the actor and that hop still executes.
 2. Record the scenario's `driven-at` as the deepest point actually entered plus what was substituted — e.g. `app dispense screen → hardware command (USB transport faked)`.
@@ -141,6 +153,10 @@ A **caller-provided** scenario is exempt from relocation and stays verbatim (par
 | "No physical device / the API returns 502 — record it as coverage delta" | Fake the last hop and run everything above it. Delta is what remains after that, not instead of it. |
 | "Component tests pass and the app boots — together that's end-to-end" | Two runs at two depths never compose into a third. |
 | "Same scenario either way, only the entry point differs" | The entry point is what is under test. Every layer skipped is a layer unverified. |
+| "The branch isn't deployed to stage — record the boundary as blocked" | The deployed env was never the boundary. Stand the full stack up locally and build the app against it. |
+| "No test account / credentials were provided" | Signup is a scenario step. Register, or mint a test token and inject it. |
+| "No seed data exists" | Read the schema and create it. |
+| "The precondition can only be set on another platform" | Launch that platform too and satisfy it for real. |
 
 Command execution is **non-blocking only**: every command either returns control on its own or is explicitly backgrounded (`run_in_background`, or trailing `&` with output redirected — a bare `cmd &` without redirection leaves the harness waiting on inherited file descriptors and hangs the agent). A bare blocking command that hangs the shell is forbidden. See [stage3-handson.md] Step 3.2 for the lifecycle this backs (start in background → wait for readiness → verify → stop, never leaving a server running).
 
@@ -359,7 +375,8 @@ Every issue surfaced MUST include a confidence score. See [feedback-protocol.md]
 CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop ≤5] → EXIT → CLEANUP → ROLLBACK → STATE
 PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed. No EXPECTED OUTCOME → B⊆A is not-evaluable, never A:=Scope
 CHECK:      a FAILED row blocks, except a self-authored M/L row scoring 50-74 = soft pass → EXIT Goal Met, soft pass → COMMENT, never APPROVE. 75+ blocks, H blocks, caller-provided blocks, unscorable-below-50 = re-run not soft-pass
-ACTOR:      Actor Roster before scenarios — actor · boundary · driver · reachable; a function/class/module is never a boundary; internal change → trace the call graph outward. Enter every scenario at its actor's boundary; substitute only the unreachable hop and record driven-at; otherwise NOT-RUN, never PASS. H-priority NOT-RUN blocks APPROVE
+ACTOR:      Actor Roster before scenarios — actor · boundary · driver · reachable; a function/class/module is never a boundary; internal change → trace the call graph outward; roster spans the actor's journey, not the diff — precondition platforms enter it too. Enter every scenario at its actor's boundary; substitute only the unreachable hop and record driven-at; otherwise NOT-RUN, never PASS. H-priority NOT-RUN blocks APPROVE
+BOOTSTRAP:  a missing precondition is work, not an obstacle — undeployed env → stand the stack up locally; no data → seed it; no account → signup or inject a test token; precondition on another platform → launch that platform too; only a genuinely external hop enters substitution. Never QA only the diff's platform
 EVIDENCE:   per-scenario before/action/after at the actor's boundary; launch/splash/landing captures are not scenario evidence; internal logs support, never replace; depths never merge into a deeper claim
 BASELINE:   build/test/lint green. See stage1-commands.md
 MATRIX:     6 categories — failure paths, boundary/malformed input, injection, interruption, misleading success, idempotency. Breadth via scenario-authoring.md, depth via stage3-handson.md
