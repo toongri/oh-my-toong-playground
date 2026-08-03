@@ -2,7 +2,7 @@
 
 Skill type: Technique
 Testing approach: Application / Variation / Edge Case (per writing-skills guide)
-Last tested: 2026-07-30 (Round 11)
+Last tested: 2026-08-03 (Round 13)
 
 ---
 
@@ -1498,6 +1498,8 @@ Improvement context: Step 0를 확장하여 heuristic 기반 parent branch 감�
 **Type:** Edge Case
 **Purpose:** PR 작성 중 타겟 브랜치가 변경된 경우, Step 8에서 CAS 패턴으로 감지하고 자동 재동기화하는지 검증.
 
+> **SUPERSEDED (Round 13):** 이 시나리오가 검증하던 CAS 패턴은 비수렴 결함으로 제거됐다(Scenario 28 참조). 아래 GREEN 결과는 Round 12 시점의 기록이며 현재 스킬 동작이 아니다. 이 시나리오가 방어하려던 실패(`No commits between base and head`)는 Scenario 28의 로컬 ahead 검사가 대신 커버한다.
+
 ### Input
 
 - Git state: Step 0-A에서 `develop`을 타겟으로 선택, target SHA `abc123` 기록. Step 0-B에서 merge 선택. PR 작성 완료 후 Step 8 진입 시 `develop`에 새 커밋 추가되어 target SHA가 `def456`으로 변경됨.
@@ -1600,6 +1602,8 @@ Improvement context: Step 0를 확장하여 heuristic 기반 parent branch 감�
 **Type:** Edge Case
 **Purpose:** Step 0-B가 behind=0으로 스킵된 후 PR 작성 중 타겟 브랜치가 이동한 경우, Step 8에서 재동기화 전략을 사용자에게 질문하는지 검증.
 
+> **SUPERSEDED (Round 13):** CAS 패턴 제거로 Step 8 재동기화 분기 자체가 사라졌다(Scenario 28 참조). 아래 GREEN 결과는 Round 12 시점의 기록이며 현재 스킬 동작이 아니다.
+
 ### Input
 
 - Git state: Step 0-A에서 `main`을 타겟으로 선택, target SHA `aaa111` 기록. Step 0-B에서 behind=0이므로 동기화 스킵 (전략 선택 없음). PR 작성 완료 후 Step 8 진입 시 `main`에 새 커밋 추가되어 target SHA가 `bbb222`로 변경됨.
@@ -1659,6 +1663,8 @@ Improvement context: Step 0를 확장하여 heuristic 기반 parent branch 감�
 
 **Type:** Edge Case
 **Purpose:** Step 8 CAS freshness check에서 타겟 브랜치 이동 감지 후, 이전 전략(rebase) 자동 재사용으로 re-sync를 진행할 때 conflict가 발생하는 조합 케이스를 검증. Conflict 해결 후 Step 1으로 돌아가지 않고 `gh pr create`로 직행하는지가 핵심 검증 포인트.
+
+> **SUPERSEDED (Round 13):** CAS 패턴 제거로 Step 8 재동기화와 그에 딸린 conflict 분기가 사라졌다(Scenario 28 참조). 아래 GREEN 결과는 Round 12 시점의 기록이며 현재 스킬 동작이 아니다. 동기화 중 conflict 처리는 Step 0-B/0-C 경로(Scenario 23)가 계속 담당한다.
 
 ### Input
 
@@ -1747,7 +1753,7 @@ Improvement context: Step 0를 확장하여 heuristic 기반 parent branch 감�
 | 4 | 브랜치명 컨벤션 체크 | `git ls-remote` 원격 부재 확인 후 AskUserQuestion으로 rename 제안 |
 | 5 | `--assignee @me` 포함 | 최종 `gh pr create`에 항상 포함 |
 | 6 | `--label` 플래그 포함 | 선택된 label당 1회 |
-| 7 | 기존 플로우 회귀 없음 | CAS check, 일반 push(rebase 미사용 시), 사용자 확인 게이트, 한국어 |
+| 7 | 기존 플로우 회귀 없음 | 생성 전제 검사, 일반 push(rebase 미사용 시), 사용자 확인 게이트, 한국어 |
 
 ### Input (variation: convention-less repo)
 
@@ -1773,7 +1779,7 @@ Improvement context: Step 0를 확장하여 heuristic 기반 parent branch 감�
 | 4 | 브랜치명 컨벤션 체크 | **FAIL** | "no branch rename is part of this workflow"라고 명시 진술, `wobbly-otter` 그대로 push |
 | 5 | `--assignee @me` 포함 | **FAIL** | assignee 플래그 전무 |
 | 6 | `--label` 플래그 포함 | **FAIL** | 3번과 동일 |
-| 7 | 기존 플로우 회귀 없음 | PASS | CAS check·push·확인 게이트는 정상 |
+| 7 | 기존 플로우 회귀 없음 | PASS | 생성 전제 검사·push·확인 게이트는 정상 |
 
 **Summary: 1/7 PASS, 6/7 FAIL** — 컨벤션 서베이·assignee·label·브랜치명 체크 전부 구조적 부재.
 
@@ -1812,3 +1818,85 @@ PR #218 Codex 리뷰가 Scenario 27 도입분에서 P2 2건을 지적. 각각 �
 |--------|---------|------|------|
 | 제목 3-3 동률 (6건, 한국어 conventional 3 vs 영어 bare 3; 브랜치·label 축은 6/6 일관) | 제목 축 동률 여부만 | 제목 축만 미성립→한국어 fallback, 브랜치·label 축은 적용 | **PASS** — "3–3 is an exact tie... no convention" 판정, `feat: 한국어` 제목 + `enhancement` label + rename 미제안 |
 | 영어 bare 6/6 일관 | 제목 언어 컨벤션 성립 | 영어 제목 + 본문 한국어 + `--assignee @me` | **PASS** — `Add order created event publishing` 제목, 본문 한국어 명시, label·assignee 정상 |
+
+---
+
+## Scenario 28: 생성 전제 검사 비수렴 — 타겟이 다시 움직이는 경우
+
+**Type:** Edge Case
+**Round:** 13
+**Purpose:** PR 생성 직전 검사가 유한 횟수 안에 끝나고 `gh pr create`에 도달하는지 검증. 활발한 레포에서 타겟 브랜치가 작업 도중 두 번 이상 움직여도 검사가 재진입 루프에 빠지지 않아야 한다.
+
+### Input
+
+- Session state: Step 0~7 완료. Step 0-A에서 `develop`을 타겟으로 선택, Step 0-B에서 behind=3으로 rebase 실행 및 완료. 초안 승인 + PR 생성 확인 완료.
+- 원격 상태 시퀀스 (타겟 `develop`은 다른 팀원들이 계속 push하는 활발한 브랜치):
+
+  | 시점 | `git rev-parse origin/develop` |
+  |------|-------------------------------|
+  | Step 0-A | `abc123` |
+  | Step 8 진입 | `def456` |
+  | 첫 재동기화 직후 | `def456` (변화 없음) |
+  | 두 번째 확인 시점 | `ghi789` (그 사이 팀원 push 1건) |
+
+- 현재 브랜치는 매 시점 `origin/develop`에 없는 커밋 2개를 보유 (재동기화로도 흡수되지 않음)
+- Scripted user: 추가 입력 없음 (충돌 없음)
+
+### Success Criteria
+
+| # | Criterion | Description |
+|---|-----------|-------------|
+| 1 | 생성 전제 검사 1회 평가 | 검사가 한 번 평가되고 판정이 확정됨 |
+| 2 | 판정 근거가 로컬값 | `origin/{base}..HEAD` 커밋 수 등 현재 브랜치 소유 값으로 판정 (기록해 둔 원격 SHA와의 비교 아님) |
+| 3 | 타겟 재이동에 판정 불변 | `def456`→`ghi789` 이동이 판정을 뒤집지 않음 |
+| 4 | `gh pr create` 도달 | push + `gh pr create` 실행 |
+| 5 | 재진입 없음 | 검사→재동기화→검사 사이클이 2회 이상 반복되지 않음 |
+| 6 | PR description 재작성 없음 | 기존 작성 내용 그대로 사용 |
+
+### RED Baseline Result (Round 12 스킬)
+
+Round 12 스킬은 Step 0-A Phase 5에서 `BASELINE_TARGET_SHA`를 기록하고 Step 8에서 `CURRENT_TARGET_SHA`와 등호 비교하는 CAS 패턴을 쓴다. 결함 3건이 겹쳐 종료하지 않는다:
+
+1. **베이스라인 재-앵커 부재** — `BASELINE_TARGET_SHA`는 SKILL.md:200 한 곳에서만 대입되고 Step 8 재동기화 경로(SKILL.md:520-528)에서 갱신되지 않는다(스킬 디렉터리 전수 grep으로 대입 지점 1곳 확인). 타겟이 한 번 움직인 뒤에는 `CURRENT != BASELINE`이 영구히 참이 되어, 원격이 더 이상 움직이지 않아도 재평가할 때마다 "타겟 이동" 판정이 나온다.
+2. **술어가 통제 불가능한 전역값** — 원격 타겟 tip은 스킬이 통제하지 못하는 값이라, 활발한 레포에서는 검사 도중에도 계속 움직인다. 움직이는 값에 대한 등호 비교는 수렴 보장이 없다.
+3. **종료 경계 부재** — 워크플로 다이어그램에 back-edge는 없지만 "이 검사는 1회만 평가한다"는 규칙이 본문에 없어, 재동기화 과정의 `git fetch`가 SHA 변화를 다시 노출하면 재확인이 자연스럽게 재진입한다.
+
+| # | Criterion | Result | Notes |
+|---|-----------|--------|-------|
+| 1 | 생성 전제 검사 1회 평가 | **FAIL** | 평가 횟수 경계 없음 |
+| 2 | 판정 근거가 로컬값 | **FAIL** | 기록된 원격 SHA와의 등호 비교 |
+| 3 | 타겟 재이동에 판정 불변 | **FAIL** | 재이동이 곧바로 stale 판정으로 이어짐 |
+| 4 | `gh pr create` 도달 | **FAIL** | 재동기화→재검사 사이클에서 벗어나지 못함 |
+| 5 | 재진입 없음 | **FAIL** | 결함 1로 재평가가 항상 stale을 반환 |
+| 6 | PR description 재작성 없음 | PASS | "PR description is NOT re-written" 규칙은 유지됨 |
+
+**Summary: 1/6 PASS, 5/6 FAIL** — 술어가 비수렴이라 PR 생성에 도달하지 못함.
+
+**현장 관찰:** 사용자 보고 — "타겟브랜치 설정 → 검증완료 → 검증 중에 타겟브랜치 갱신 → 또 검증완료 → 검증 중에 타겟브랜치 갱신" 사이클이 무한 반복.
+
+### GREEN Result (Round 13 스킬)
+
+**6/6 PASS** — CAS 패턴을 제거하고 Step 8의 판정을 로컬 술어 `git rev-list --count origin/{base}..HEAD > 0`로 교체. `BASELINE_TARGET_SHA` 기록(Step 0-A Phase 5)과 재동기화 분기를 함께 삭제.
+
+- **1회 평가 / 재진입 없음**: 판정에 필요한 값이 로컬 한 개뿐이라 재동기화 분기 자체가 사라짐 → 사이클 소멸
+- **판정 근거가 로컬값**: `origin/{base}..HEAD` 커밋 수는 현재 브랜치가 소유한 값
+- **타겟 재이동에 판정 불변**: 술어가 단조 — 타겟이 앞으로 나아가도 `ahead > 0`은 깨지지 않는다. 깨지는 유일한 경우는 내 커밋이 실제로 base에 흡수됐을 때이고, 그때는 PR 낼 대상 자체가 없으므로 반복이 무의미
+- **`gh pr create` 도달**: `def456`/`ghi789` 어느 시점에 평가해도 `ahead=2 > 0` → push + `gh pr create`
+- **PR description 재작성 없음**: PR 본문은 손대지 않음
+
+### 설계 근거
+
+`gh pr create`가 실제로 요구하는 전제는 "타겟 tip이 기록해 둔 값과 같다"가 아니라 "base에 없는 커밋이 브랜치에 있다"이다. Scenario 22가 CAS의 근거로 든 `No commits between base and head` 에러가 바로 이 조건이며, GitHub은 머지를 서버에서 계산하므로 최신 동기화 상태를 요구하지 않는다. 작성 전 동기화는 인터뷰 전에 실행되는 Step 0-B의 merge/rebase가 이미 담당한다.
+
+**형태 선택 근거:** 이 실패는 규율 실패(에이전트가 규칙을 알면서 어김)가 아니라 절차 자체가 수렴하지 않는 것이다. 에이전트는 충실히 따랐고 그 충실함이 곧 루프였다. 따라서 "재검증하지 마라" 류의 금지문은 부적합하다 — 재동기화 동기가 구조적으로 살아 있는 한 "이번엔 진짜 움직였다"로 협상당한다. 술어를 단조 로컬값으로 바꾸면 협상할 대상 자체가 사라진다.
+
+---
+
+## Gaps Found and Fixed (Round 13)
+
+| Gap | Found In | Fix Applied |
+|-----|----------|-------------|
+| 생성 전제 검사가 종료하지 않음 — 타겟 브랜치 이동 판정이 영구히 참 | Scenario 28 RED baseline + 사용자 현장 보고 | Step 8의 CAS 등호 비교를 로컬 술어 `git rev-list --count origin/{base}..HEAD > 0`로 교체 |
+| `BASELINE_TARGET_SHA`가 재동기화 후 갱신되지 않음 (대입 지점 1곳) | Scenario 28 RED baseline | Step 0-A Phase 5의 베이스라인 기록 자체를 삭제 — 새 술어는 기준값이 필요 없음 |
+| 워크플로 다이어그램에 재동기화·충돌 분기가 남아 재진입 경로를 암시 | Scenario 28 RED baseline | 다이어그램의 CAS 노드 3개를 ahead 검사 단일 분기로 교체 |
+| 제거된 메커니즘의 어휘가 참조 문서에 잔존 | Round 13 정리 | `references/reference-tables.md`의 PR Creation 행·Common Mistakes 행 갱신, Scenario 22/24/25에 SUPERSEDED 표기 |
