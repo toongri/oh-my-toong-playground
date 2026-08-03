@@ -9,8 +9,9 @@ const SKILL_MD = join(REPO_ROOT, "skills", "code-review", "SKILL.md");
 // Regression guard: main-session interactive paths preserved when the
 // {gate}-codereview-{sid}.json signal is absent.
 //
-// The Step 0 non-interactive discriminator and the Step 3 INCONCLUSIVE bridge
-// added signal-gated branches alongside the pre-existing main-session
+// The non-interactive discriminator (Intent Block Gate) and the dispatch-payload
+// parse-failure INCONCLUSIVE bridge (Agent Dispatch step) added signal-gated
+// branches alongside the pre-existing main-session
 // interactive paths in SKILL.md. This test pins
 // that those additions stayed additive: the interactive rows/branches must
 // still exist, and the new branches must remain conditional on the
@@ -110,38 +111,26 @@ describe("code-review SKILL.md: 신호-게이팅 불변식 (regression guard: ma
 		});
 	});
 
-	describe("Step 3 Fail-Fast Gate: signal-present/signal-absent 양 브랜치가 하나의 exit로 수렴", () => {
-		const gateSection = extractSection(skillContent, "### Fail-Fast Gate");
-		const numberedLines = gateSection
-			.split("\n")
-			.filter((line) => /^\d+\.\s/.test(line.trim()))
-			.map((line) => line.trim());
+	describe("Agent Dispatch 페이로드 파싱 실패: INCONCLUSIVE 브리지는 완료-게이트 신호에 조건부다", () => {
+		it("파싱 실패 시 신호-present에서만 INCONCLUSIVE 아티팩트를 기록하고, 리뷰를 실행하는 정적 검토 경로에 build/test/lint 실행 요구가 없다", () => {
+			const parseFailureSentence = skillContent
+				.split("\n")
+				.find((line) => line.includes("If the payload fails to parse as JSON"));
 
-		it("signal-present 브랜치가 존재하고 INCONCLUSIVE 아티팩트를 기록한다", () => {
-			const presentLine = numberedLines.find((line) =>
-				line.includes("Completion-gate dispatch signal present"),
+			expect(parseFailureSentence).toBeDefined();
+			expect(parseFailureSentence).toContain("INCONCLUSIVE");
+			// Conditional on the completion-gate dispatch signal, not unconditional.
+			expect(parseFailureSentence).toContain(
+				"When the completion-gate dispatch signal is present",
 			);
-
-			expect(presentLine).toBeDefined();
-			expect(presentLine).toContain("INCONCLUSIVE");
 		});
 
-		it("signal-absent 브랜치가 존재하고 아티팩트를 기록하지 않는다 — 메인세션은 INCONCLUSIVE write 안 함", () => {
-			const absentLine = numberedLines.find((line) =>
-				line.includes("Completion-gate dispatch signal absent"),
+		it("리뷰 시작 전 build/test/lint 실행을 요구하는 Evidence Verification 게이트가 존재하지 않는다 (정적-전용 리뷰 불변식)", () => {
+			expect(skillContent).not.toContain("Evidence Verification");
+			expect(skillContent).not.toContain("{EVIDENCE_RESULTS}");
+			expect(skillContent).not.toContain(
+				"Run build, test, and lint checks BEFORE dispatching",
 			);
-
-			expect(absentLine).toBeDefined();
-			expect(absentLine).toContain("no artifact write");
-			expect(absentLine).not.toContain("INCONCLUSIVE");
-		});
-
-		it("양 브랜치가 단일 'Report ... and exit' 단계로 수렴한다 (분기별 중복 없음)", () => {
-			const reportLines = numberedLines.filter((line) =>
-				/Report \{EVIDENCE_RESULTS\} and exit immediately/.test(line),
-			);
-
-			expect(reportLines.length).toBe(1);
 		});
 	});
 });
