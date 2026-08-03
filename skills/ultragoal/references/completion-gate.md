@@ -87,7 +87,7 @@ Then stop and wait. **You never run this command yourself** — a `PreToolUse` g
 
 **Scope of one dismissal.** It removes exactly one finding from the blocking set — remaining `CONFIRMED` blocking findings still block, and each needs its own proposal. It is pinned to the current artifact's exact bytes, so it lapses when the next review round writes a new artifact; a genuine defect that later appears at the same `file:line` blocks normally.
 
-The command refuses a `--class cleanup` (cleanup never blocked), an empty `--rationale`, and any `--ref` with no matching `CONFIRMED` finding in the current artifact — so a dismissal cannot be issued ahead of the finding it answers.
+The command refuses a `--class cleanup` (cleanup never blocked), a missing or empty `--rationale`, and any `--ref` with no matching `CONFIRMED` finding in the current artifact — so a dismissal cannot be issued ahead of the finding it answers. It also refuses when the artifact holds **more than one** `CONFIRMED` finding at that same `ref` and `class`: a dismissal cannot tell them apart, so clearing one would clear the other too. Report both findings to the user instead; the block stands until the review round that produced them is superseded.
 
 **After the dismissal.** Re-run the completion check. If no blocking finding remains, proceed to `request-complete`; the dismissed finding is still reported in the completion summary, with its rationale. If the user declines the proposal, treat the finding as real and route it to sisyphus.
 

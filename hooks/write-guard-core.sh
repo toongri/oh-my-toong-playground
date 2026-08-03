@@ -219,11 +219,19 @@ write_guard_core_check_dangerous_command() {
 # entry for these, so this hook is the only layer on BOTH platforms -- not a
 # Codex-side emulation of a declarative rule that already exists on Claude.
 #
-# Matching requires the subcommand to sit IMMEDIATELY after the script name,
-# which is where a real invocation puts it (`bun <path>/ultragoal-state.ts
-# <subcommand> [flags]`). Prose that merely mentions a subcommand name -- e.g.
-# telling the user which command to run -- carries no adjacent script path and
-# stays allowed; without that, reporting the denial would itself be denied.
+# Takes the WHOLE masked command, never a single chain segment, and matches when
+# the script name and a guarded subcommand BOTH appear, in either order. Requiring
+# adjacency (`ultragoal-state.ts dismiss-review-finding`) matched only one spelling:
+# `sub=dismiss-review-finding; bun <path>/ultragoal-state.ts "$sub"` reaches the
+# CLI identically, yet the hook sees unexpanded text where the two tokens are
+# neither adjacent nor even in the same `;`-separated segment. Order-free
+# whole-command matching covers that shape; a NAME the command computes rather
+# than spells (base64, string concat) still passes -- this raises the cost of
+# bypass, it does not make bypass impossible.
+#
+# Prose that merely mentions a subcommand name -- telling the user which command
+# to run -- carries no script path and stays allowed; without that, reporting the
+# denial would itself be denied.
 write_guard_core_check_user_authorized_command() {
     local seg="$1"
     # Same normalization the dangerous-command guard applies, for the same
@@ -233,10 +241,13 @@ write_guard_core_check_user_authorized_command() {
     seg="${seg#"${seg%%[![:space:]]*}"}"
     seg="$(printf '%s' "$seg" | tr -s '[:space:]' ' ')"
     case "$seg" in
-        *"ultragoal-state.ts dismiss-review-finding"* | \
-        *"ultragoal-state.ts approve-review-dispatch-renewal"*)
-            printf '%s\n' "$_wg_core_user_authorized_deny_json"
-            return 0
+        *"ultragoal-state.ts"*)
+            case "$seg" in
+                *"dismiss-review-finding"* | *"approve-review-dispatch-renewal"*)
+                    printf '%s\n' "$_wg_core_user_authorized_deny_json"
+                    return 0
+                    ;;
+            esac
             ;;
     esac
     return 0

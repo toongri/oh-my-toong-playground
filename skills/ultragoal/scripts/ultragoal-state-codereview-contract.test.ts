@@ -351,6 +351,39 @@ describe("T8: 사용자 승인 finding 무효화 (dismiss-review-finding)", () =
 		expect(requestComplete(SID)).toBe(false);
 	});
 
+	// A dismissal is keyed by (artifact bytes, ref, class), so two DISTINCT confirmed
+	// findings sharing a ref and class are indistinguishable to it — refuting one
+	// would clear both and let a genuine defect complete. Refusing the ambiguous
+	// dismissal is the fail-closed direction: the user loses the escape hatch for
+	// that finding, never the block on the other one.
+	test("같은 ref/class의 CONFIRMED가 2건이면 무효화를 거부한다 — 한 건만 무효화하려다 진짜 결함까지 지우는 false-complete 차단", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE, { ...FALSE_POSITIVE }]);
+
+		expect(
+			dismissReviewFinding(SID, {
+				ref: FALSE_POSITIVE.ref,
+				class: "correctness",
+				rationale: "둘 중 하나만 오탐",
+			}),
+		).toBe(false);
+		expect(requestComplete(SID)).toBe(false);
+	});
+
+	test("값 없는 --rationale은 거부한다 — parseArgs의 boolean true가 근거 \"true\"로 기록되면 안 됨", () => {
+		buildObjectiveLaneGreenFixture(SID);
+		writeBlockingArtifact(SID, [FALSE_POSITIVE]);
+
+		expect(
+			dismissReviewFinding(SID, {
+				ref: FALSE_POSITIVE.ref,
+				class: "correctness",
+				rationale: true as unknown as string,
+			}),
+		).toBe(false);
+		expect(requestComplete(SID)).toBe(false);
+	});
+
 	test("ADR-3: 무효화는 네 번째 verdict carrier — re-plan 시 함께 비워진다", () => {
 		buildObjectiveLaneGreenFixture(SID);
 		writeBlockingArtifact(SID, [FALSE_POSITIVE]);

@@ -584,6 +584,36 @@ test_user_authorized_approve_renewal_denies() {
 # Whitespace-run tolerance, same hazard the dangerous-command guard fixed: a
 # real shell treats any run of spaces/tabs as one separator, so a literal
 # single-space pattern would silently ALLOW the identical command.
+# Indirection bypass: the subcommand name reaches the CLI through a variable, so
+# it never sits next to the script path in the command text -- and a `;` puts the
+# two tokens in different chain segments. Matching requires both tokens anywhere
+# in the WHOLE command, in either order, precisely so this shape is covered.
+test_user_authorized_variable_indirection_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "sub=dismiss-review-finding; $UGCLI \"\$sub\" --ref a --class correctness --rationale x")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-variable-indirection: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+# Same shape for the renewal sibling, and with the subcommand token appearing
+# BEFORE the script path -- the assignment-first ordering the bypass produces.
+test_user_authorized_reverse_order_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "s=approve-review-dispatch-renewal && $UGCLI \"\$s\"")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-reverse-order: expected deny, got '$out'"
+        return 1
+    fi
+}
+
 test_user_authorized_whitespace_run_denies() {
     local out
     out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
@@ -1016,6 +1046,8 @@ main() {
     run_test test_dangerous_git_push_force_multispace_denies
     run_test test_user_authorized_dismiss_review_finding_denies
     run_test test_user_authorized_approve_renewal_denies
+    run_test test_user_authorized_variable_indirection_denies
+    run_test test_user_authorized_reverse_order_denies
     run_test test_user_authorized_whitespace_run_denies
     run_test test_user_authorized_deny_names_user_run_route
     run_test test_negative_ultragoal_get_allows

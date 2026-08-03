@@ -386,14 +386,16 @@ if ! command -v jq > /dev/null 2>&1; then
     if [ -n "$_cwg_nojq_cmd" ]; then
         _cwg_nojq_stripped=$(_cwg_strip_heredoc_bodies "$_cwg_nojq_cmd")
         _cwg_nojq_masked=$(_cwg_mask_quoted "$_cwg_nojq_stripped")
+        # Whole-command, not per-segment: a `sub=<subcommand>;` assignment splits
+        # the two tokens across chain segments (see write-guard-core.sh).
+        _cwg_nojq_out=$(write_guard_core_check_user_authorized_command "$_cwg_nojq_masked")
+        if [ -n "$_cwg_nojq_out" ]; then
+            printf '%s\n' "$_cwg_nojq_out"
+            exit 0
+        fi
         while IFS= read -r _cwg_nojq_seg; do
             [ -n "$_cwg_nojq_seg" ] || continue
             _cwg_nojq_out=$(write_guard_core_check_dangerous_command "$_cwg_nojq_seg")
-            if [ -n "$_cwg_nojq_out" ]; then
-                printf '%s\n' "$_cwg_nojq_out"
-                exit 0
-            fi
-            _cwg_nojq_out=$(write_guard_core_check_user_authorized_command "$_cwg_nojq_seg")
             if [ -n "$_cwg_nojq_out" ]; then
                 printf '%s\n' "$_cwg_nojq_out"
                 exit 0
@@ -462,14 +464,15 @@ case "$tool_name" in
             [ -n "$_cwg_dc_cmd" ] || continue
             _cwg_dc_stripped=$(_cwg_strip_heredoc_bodies "$_cwg_dc_cmd")
             _cwg_dc_masked=$(_cwg_mask_quoted "$_cwg_dc_stripped")
+            # Whole-command, not per-segment — same reason as the no-jq path above.
+            _cwg_dc_out=$(write_guard_core_check_user_authorized_command "$_cwg_dc_masked")
+            if [ -n "$_cwg_dc_out" ]; then
+                printf '%s\n' "$_cwg_dc_out"
+                exit 0
+            fi
             while IFS= read -r _cwg_dc_seg; do
                 [ -n "$_cwg_dc_seg" ] || continue
                 _cwg_dc_out=$(write_guard_core_check_dangerous_command "$_cwg_dc_seg")
-                if [ -n "$_cwg_dc_out" ]; then
-                    printf '%s\n' "$_cwg_dc_out"
-                    exit 0
-                fi
-                _cwg_dc_out=$(write_guard_core_check_user_authorized_command "$_cwg_dc_seg")
                 if [ -n "$_cwg_dc_out" ]; then
                     printf '%s\n' "$_cwg_dc_out"
                     exit 0

@@ -1616,6 +1616,12 @@ export function dismissReviewFinding(
 	// A dismissal overrides an independent reviewer; an unexplained one leaves no way to
 	// tell a refuted finding from an inconvenient one. Same trim idiom the story-steering
 	// writers use.
+	//
+	// The typeof checks are load-bearing, not belt-and-braces: `parseArgs` represents a
+	// valueless flag (`--rationale` with nothing after it) as boolean `true`, and `str()`
+	// stringifies that to "true" — a non-empty string that would sail past a bare trim
+	// check and record "true" as the refutation for a finding nobody actually refuted.
+	if (typeof opts.rationale !== "string" || typeof opts.ref !== "string") return false;
 	const rationale = opts.rationale.trim();
 	if (rationale === "") return false;
 	if (opts.ref.trim() === "") return false;
@@ -1639,10 +1645,17 @@ export function dismissReviewFinding(
 			const reviewed = readCodeReviewArtifactRaw(sessionId);
 			if (reviewed === null) return false;
 			const artifactSha = sha256(reviewed.raw);
-			const found = reviewed.artifact.findings.some(
+			// EXACTLY one match, not at-least-one. A dismissal is keyed by (artifact bytes,
+			// ref, class) and findings carry no identity of their own, so two DISTINCT
+			// confirmed findings at the same ref and class are indistinguishable to it —
+			// refuting one would silently clear the other and let a genuine defect complete,
+			// against the never-false-complete invariant. Refusing the ambiguous dismissal
+			// is the fail-closed direction: the user loses the escape hatch for that one
+			// finding, never the block on its twin.
+			const matches = reviewed.artifact.findings.filter(
 				(f) => f.verdict === "CONFIRMED" && f.class === opts.class && f.ref === opts.ref,
-			);
-			if (!found) return false;
+			).length;
+			if (matches !== 1) return false;
 
 			const dismissed = readDismissals(prior);
 			const already = dismissed.some(
