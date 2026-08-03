@@ -256,6 +256,8 @@ The stop-driving classes exist so an expensive cycle is not spent against a surf
 | "I can see the code is correct" | "Can see" != "verified". Run it. |
 | "It worked in the test suite" | Test suite mocks may hide real integration issues. |
 | "No test data available" | Create minimal test data. No excuses. |
+| "The branch isn't deployed to stage/dev" | For an undeployed source change, deployment is an environment choice — run the full stack locally and point the app at it. When the deployment itself is under test, its absence or 404 is the FAIL. |
+| "No account / the flag lives on another platform" | Sign up, inject a test token, and launch the precondition platform too — multi-platform setup is setup cost, not an obstacle. |
 | "Skip for internal changes" | If truly internal, document skip. Don't use as escape hatch. |
 | "E2E tests simulate HTTP" | MockMvc/WebTestClient operate without a servlet container. They are not real HTTP. |
 

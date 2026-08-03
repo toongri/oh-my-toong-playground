@@ -870,6 +870,95 @@ describe("new-prose: B subset-of A has a reading when A is absent", () => {
 	});
 });
 
+describe("new-prose: precondition bootstrap precedes unreachability", () => {
+	test("the bootstrap ladder gates the word unreachable", () => {
+		expect(skillMd).toContain("Precondition bootstrap (CRITICAL)");
+		expect(skillMd).toContain(
+			"A missing precondition is work to do, not an obstacle to record",
+		);
+		expect(skillMd).toContain(
+			"one still unreachable after the bootstrap ladder above",
+		);
+	});
+
+	test("each rung names its bootstrap, not a surrender", () => {
+		expect(skillMd).toContain("non-deployment is an environment choice");
+		expect(skillMd).toContain("create seed data");
+		expect(skillMd).toContain("mint a test token");
+		expect(skillMd).toContain("launch that platform too");
+	});
+
+	// The old example list taught the failure: it named a bootstrappable
+	// obstacle (a missing credential) as a legitimate unreachable boundary.
+	test("a missing credential is no longer an example of an unreachable boundary", () => {
+		expect(skillMd).not.toContain(
+			"a dependency answering 502, a missing credential",
+		);
+	});
+
+	test("the roster spans the journey, not the diff", () => {
+		expect(skillMd).toContain(
+			"Never QA only the platform where the change landed",
+		);
+	});
+
+	test("undeclared rung attempts are named boundary evasion", () => {
+		expect(skillMd).toContain("boundary evasion, not a coverage delta");
+	});
+
+	// The local-fallback rung must not swallow deployment-targeted QA: when the
+	// QA REQUEST verifies the deployment itself, a stage 404 is the failure
+	// under test, and a local stack cannot stand in for the deployed artifact.
+	test("rung 1 branches on what the QA REQUEST verifies", () => {
+		expect(skillMd).not.toContain(
+			"no deploy permission) → the deployed environment was never the boundary",
+		);
+		expect(skillMd).toContain("verifies the deployment itself");
+		expect(skillMd).toContain("the deployed environment IS the boundary");
+		expect(skillMd).toContain("never a precondition to bootstrap around");
+	});
+
+	test("the public docs carry the bootstrap ladder, in both languages", () => {
+		const docsDir = join(import.meta.dir, "..", "..", "docs", "skills");
+		expect(
+			readFileSync(join(docsDir, "review-quality.md"), "utf8"),
+		).toContain("전제조건 부트스트랩");
+		expect(
+			readFileSync(join(docsDir, "review-quality.en.md"), "utf8"),
+		).toContain("Precondition bootstrap");
+	});
+});
+
+describe("new-prose: product use-case breadth is a required derivation axis", () => {
+	// The gap this closes: journey scenarios appeared in probes only when the
+	// prompt handed the verifier a feature map. Real runs hand nothing — the
+	// skill must mandate building the map and walking its axes.
+	test("Layer D exists and mandates building the product-context map from the repo", () => {
+		expect(scenarioAuthoringMd).toContain("Layer D — Product Use-Case Breadth");
+		expect(scenarioAuthoringMd).toContain("product-context map");
+		expect(scenarioAuthoringMd).toContain("from the repo, not from the QA REQUEST");
+	});
+
+	test("the three use-case axes are named as conditional requirements", () => {
+		expect(scenarioAuthoringMd).toContain("Arrival paths");
+		expect(scenarioAuthoringMd).toContain("Adjacent state transitions");
+		expect(scenarioAuthoringMd).toContain("Lifecycle stances");
+	});
+
+	test("the cycle's breadth step and coverage delta carry Layer D", () => {
+		expect(skillMd).toContain("Layer D");
+		expect(skillMd).toContain(
+			"arrival paths · adjacent state transitions · lifecycle stances",
+		);
+	});
+
+	test("an absent axis is an authoring omission, not a delta", () => {
+		expect(scenarioAuthoringMd).toContain(
+			"an authoring omission, not a delta",
+		);
+	});
+});
+
 // ---------------------------------------------------------------------------
 // REGRESSION GUARD: frontmatter identity (must PASS before AND after)
 // ---------------------------------------------------------------------------
