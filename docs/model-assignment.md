@@ -84,9 +84,10 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 있어야 한다. "이 에이전트를 두 등급 사이 어딘가에 두고 싶다"는 정도로는 부족하다.
 
 `fable`이 그 문턱을 넘은 근거는 부재 판정 원칙이고, 그 원칙은 Opus로는 표현되지 않는
-배정을 하나 만든다. 다만 이 등급이 실제로 갈리는 것은 claude 배포면뿐이다 —
-`claude-fable-5` vs Opus 5. codex에서는 `gpt-5.6-sol` 위가 없어 `opus`와 같은 모델로
-떨어진다. 등급 어휘가 플랫폼 비대칭을 처음으로 들인 지점이다.
+배정을 하나 만든다. 이 등급은 두 배포면 모두에서 실제로 갈린다 — claude는
+`claude-fable-5` vs Opus 5, codex는 `gpt-5.6-sol` vs `gpt-5.6-terra`다(2026-08-04
+재배정 이후. 그전에는 codex에 `gpt-5.6-sol` 위가 없어 `fable`과 `opus`가 같은 모델로
+떨어지는 플랫폼 비대칭이 있었다).
 
 ## 등급을 실제 모델로 치환하는 규칙
 
@@ -97,8 +98,9 @@ verdict를 자기가 만드는 것처럼 보이지만 실제로는 `skills/insan
 ```yaml
 model-map:
   tiers:
-    opus:   { model: gpt-5.6-sol }
-    sonnet: { model: gpt-5.6-terra }
+    fable:  { model: gpt-5.6-sol }
+    opus:   { model: gpt-5.6-terra }
+    sonnet: { model: gpt-5.6-luna }
 ```
 
 **등급은 모델만 정한다.** `effort`를 적지 않으면 배포되는 role TOML에
@@ -208,9 +210,10 @@ Claude 시절 frontmatter `model: haiku`를 코덱스 슬러그로 기계 번역
   정적 확인으로 판별되지 않는다. 착지 확인 방법은 배포 후 metis를 실제로 디스패치해 어느
   모델이 돌았는지 보는 것뿐이다.
 - **codex** — role TOML의 `model` 키는 세션·CLI에서 지정한 모델을 이긴다. 배포된 값이
-  실행 시점의 값이다. `fable`과 `opus`는 둘 다 `gpt-5.6-sol`로 떨어진다 — `codex.yaml`의
-  `fable` 티어를 중복으로 보고 지우면 `assertMappedTier`가 `metis`의 codex 배포를 하드
-  실패시킨다.
+  실행 시점의 값이다. 세 티어는 `gpt-5.6-sol`(`fable`)·`gpt-5.6-terra`(`opus`)·
+  `gpt-5.6-luna`(`sonnet`)로 각각 갈린다 — 어느 티어든 `codex.yaml`에서 지우면
+  `assertMappedTier`가 그 티어를 쓰는 에이전트의 codex 배포를 하드 실패시킨다
+  (예: `fable` 삭제 → `metis` 실패).
 - **opencode** — 에이전트가 배포되지 않는다(`config.yaml`의 `feature-platforms.agents`가
   `[claude, codex]`). `model-map`은 선언만 유지하는데, 없으면 등급 문자열이 그대로 남아
   opencode가 해석하지 못하는 값이 조용히 배포되기 때문이다. 선언되어 있으면
