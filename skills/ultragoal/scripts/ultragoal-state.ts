@@ -118,6 +118,25 @@ export interface Story {
 	split_from?: string;
 	split_into?: string[];
 }
+/**
+ * One user-authorized dismissal of a wrong code-review finding.
+ *
+ * `artifact_sha256` pins the dismissal to the exact artifact bytes it was issued
+ * against — the same byte-pinning `approved_review_artifact_sha256` uses for
+ * dispatch renewal. Without it a dismissal keyed on `ref` alone would silently
+ * suppress a genuine defect that later appears at the same location.
+ *
+ * `class` is narrowed to the two blocking classes: dismissing a `cleanup`
+ * finding would be a no-op, and accepting one would misrepresent the lever as
+ * general finding suppression rather than a completion unblock.
+ */
+export interface DismissedReviewFinding {
+	artifact_sha256: string;
+	ref: string;
+	class: "correctness" | "requirement-gap";
+	rationale: string;
+}
+
 const DEFAULT_MAX_ITERATIONS = 10;
 const DEFAULT_REVIEW_DISPATCH_CAP = 5;
 const REVIEW_LOCK_RETRIES = 100;
@@ -160,6 +179,13 @@ export interface GoalState {
 	review_dispatch_cap: number;
 	/** SHA-256 of the exact approved code-review artifact bytes, or empty when unapproved. */
 	approved_review_artifact_sha256: string;
+	/**
+	 * User-authorized dismissals of individual blocking code-review findings —
+	 * the escape hatch for a WRONG review. Recorded here and never in the
+	 * code-review artifact, which the write guard reserves for the code-reviewer
+	 * subagent. Absent field reads as [] (backward-compatible).
+	 */
+	dismissed_review_findings?: DismissedReviewFinding[];
 	/**
 	 * WHAT-slices of the objective. Defined during planning, tracked through completion.
 	 * Absent field reads as [] (backward-compatible). Writers: setStories, setSingleStory,
@@ -324,6 +350,11 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 			: DEFAULT_REVIEW_DISPATCH_CAP,
 		approved_review_artifact_sha256:
 			next.approved_review_artifact_sha256 ?? prior.approved_review_artifact_sha256 ?? "",
+		// Same silent-drop hazard the `stories` field above carries: enumerate here or
+		// every unrelated write wipes the recorded dismissals and re-blocks a completion
+		// the user already unblocked. Sole writer: dismissReviewFinding.
+		dismissed_review_findings:
+			next.dismissed_review_findings ?? prior.dismissed_review_findings ?? [],
 	};
 	const state: GoalState = mergeWithHeartbeat(partial, {});
 	try {
@@ -724,6 +755,12 @@ export function setGoalState(sessionId: string, opts: SetGoalOpts): void {
 		// `pursuing` phase right before completing. A new objective must never complete on a
 		// prior objective's evidence.
 		next.completion_evidence_paths = [];
+		// Dismissals are a verdict carrier of the same species as the two fields above —
+		// per-round judgment about a specific review, not accumulated budget. Byte-pinning
+		// already makes a stale dismissal inert (the artifact is deleted below, so the next
+		// one hashes differently), so this clear keeps the carrier set literally complete
+		// rather than repairing a live hole.
+		next.dismissed_review_findings = [];
 		// A recorded codex_goal_objective is a FOURTH carrier of the same staleness, and it
 		// arms Gate 9. It names the native goal registered for the story that was being
 		// pursued — the very story a re-plan revises or retires. Left behind, the gate stays
@@ -1407,15 +1444,43 @@ function readCodeReviewArtifactRaw(
 	return isCodeReviewArtifact(obj) ? { raw, artifact: obj } : null;
 }
 
-/** Single completion predicate shared by requestComplete and review-dispatch eligibility. */
-function isCompletionEligibleCodeReview(artifact: CodeReviewArtifact): boolean {
+/**
+ * Single completion predicate shared by requestComplete and review-dispatch eligibility.
+ *
+ * Takes the raw bytes alongside the parsed artifact because a dismissal only counts
+ * against the exact artifact it was issued for — see `isDismissed`.
+ */
+function isCompletionEligibleCodeReview(
+	reviewed: { raw: string; artifact: CodeReviewArtifact },
+	dismissed: DismissedReviewFinding[],
+): boolean {
+	const artifactSha = sha256(reviewed.raw);
 	return (
-		artifact.status === "COMPLETE" &&
-		!artifact.findings.some(
+		reviewed.artifact.status === "COMPLETE" &&
+		!reviewed.artifact.findings.some(
 			(f) =>
 				f.verdict === "CONFIRMED" &&
-				(f.class === "correctness" || f.class === "requirement-gap"),
+				(f.class === "correctness" || f.class === "requirement-gap") &&
+				!isDismissed(f, artifactSha, dismissed)
 		)
+	);
+}
+
+/**
+ * A blocking finding counts as dismissed only when the user authorized THIS finding
+ * against THESE artifact bytes. A finding with no `ref` can never match and so is
+ * never dismissable — the code-review artifact schema always carries one, and a
+ * ref-less finding offers nothing to key an authorization to.
+ */
+function isDismissed(
+	finding: CodeReviewFinding,
+	artifactSha: string,
+	dismissed: DismissedReviewFinding[],
+): boolean {
+	if (!finding.ref) return false;
+	return dismissed.some(
+		(d) =>
+			d.artifact_sha256 === artifactSha && d.ref === finding.ref && d.class === finding.class,
 	);
 }
 
@@ -1461,7 +1526,7 @@ export function claimReviewDispatch(sessionId: string): ReviewDispatchClaim {
 			const approved = prior.approved_review_artifact_sha256 ?? "";
 			if (
 				reviewed !== null &&
-				isCompletionEligibleCodeReview(reviewed.artifact) &&
+				isCompletionEligibleCodeReview(reviewed, readDismissals(prior)) &&
 				sha256(reviewed.raw) !== approved
 			) {
 				return { allowed: false, reason: "completion_eligible", used, cap };
@@ -1522,6 +1587,93 @@ export function approveReviewDispatchRenewal(sessionId: string): ReviewDispatchC
 		});
 	} catch {
 		return { allowed: false, reason: "failure", used: 0, cap: 0 };
+	}
+}
+
+/** Fail-closed read: a corrupt non-array on disk yields zero dismissals, never a throw. */
+function readDismissals(prior: Partial<GoalState>): DismissedReviewFinding[] {
+	return Array.isArray(prior.dismissed_review_findings) ? prior.dismissed_review_findings : [];
+}
+
+/**
+ * User-authorized dismissal of ONE wrong blocking code-review finding — the only
+ * in-band recovery from a false-positive review, which otherwise makes the objective
+ * permanently uncompletable (the alternatives being to edit correct code to satisfy a
+ * wrong review, or to abandon the pursuit via set-blocked).
+ *
+ * Deliberately narrow, so the lever unblocks a specific wrong call rather than
+ * disabling the review lane. It refuses unless a CONFIRMED finding with this exact
+ * `ref` and blocking `class` is present in the CURRENT artifact — a dismissal cannot
+ * be issued ahead of the finding it answers — and it records the artifact's byte hash,
+ * so it lapses the moment the next review round writes different bytes.
+ *
+ * Returns true when the dismissal is recorded (or already was), false on any refusal.
+ */
+export function dismissReviewFinding(
+	sessionId: string,
+	opts: { ref: string; class: "correctness" | "requirement-gap"; rationale: string },
+): boolean {
+	// A dismissal overrides an independent reviewer; an unexplained one leaves no way to
+	// tell a refuted finding from an inconvenient one. Same trim idiom the story-steering
+	// writers use.
+	//
+	// The typeof checks are load-bearing, not belt-and-braces: `parseArgs` represents a
+	// valueless flag (`--rationale` with nothing after it) as boolean `true`, and `str()`
+	// stringifies that to "true" — a non-empty string that would sail past a bare trim
+	// check and record "true" as the refutation for a finding nobody actually refuted.
+	if (typeof opts.rationale !== "string" || typeof opts.ref !== "string") return false;
+	const rationale = opts.rationale.trim();
+	if (rationale === "") return false;
+	if (opts.ref.trim() === "") return false;
+	// Runtime enum check, not just the TypeScript type: a cleanup dismissal would be a
+	// no-op against a predicate that never blocked on cleanup, and silently accepting one
+	// would advertise this as general finding suppression.
+	if (opts.class !== "correctness" && opts.class !== "requirement-gap") return false;
+
+	const stateFilePath = resolveStatePath(sessionId);
+	try {
+		ensureSeed("ultragoal", sessionId);
+		return withStateLock(stateFilePath, () => {
+			const rawState = readFileOrNull(stateFilePath);
+			if (rawState === null) return false;
+			const prior = parseClaimableState(rawState);
+			if (prior === null) return false;
+			// Mirrors the renewal lever: authorization is advisory while this caller waits
+			// for the lock, so re-check the live state before recording anything.
+			if (!prior.active || prior.phase !== "pursuing") return false;
+
+			const reviewed = readCodeReviewArtifactRaw(sessionId);
+			if (reviewed === null) return false;
+			const artifactSha = sha256(reviewed.raw);
+			// EXACTLY one match, not at-least-one. A dismissal is keyed by (artifact bytes,
+			// ref, class) and findings carry no identity of their own, so two DISTINCT
+			// confirmed findings at the same ref and class are indistinguishable to it —
+			// refuting one would silently clear the other and let a genuine defect complete,
+			// against the never-false-complete invariant. Refusing the ambiguous dismissal
+			// is the fail-closed direction: the user loses the escape hatch for that one
+			// finding, never the block on its twin.
+			const matches = reviewed.artifact.findings.filter(
+				(f) => f.verdict === "CONFIRMED" && f.class === opts.class && f.ref === opts.ref,
+			).length;
+			if (matches !== 1) return false;
+
+			const dismissed = readDismissals(prior);
+			const already = dismissed.some(
+				(d) =>
+					d.artifact_sha256 === artifactSha && d.ref === opts.ref && d.class === opts.class,
+			);
+			if (already) return true;
+
+			mergeWriteLocked(sessionId, stateFilePath, {
+				dismissed_review_findings: [
+					...dismissed,
+					{ artifact_sha256: artifactSha, ref: opts.ref, class: opts.class, rationale },
+				],
+			});
+			return true;
+		});
+	} catch {
+		return false;
 	}
 }
 
@@ -1691,14 +1843,14 @@ export function requestComplete(sessionId: string, codexGoalArg?: string): boole
 	// Absent/invalid artifact → block (never-false-complete: degrade toward block). The
 // gate blocks only CONFIRMED correctness or requirement-gap findings. CONFIRMED cleanup findings
 // are non-blocking quality notes; `class` is otherwise not branched on.
-	const codeReview = readCodeReviewArtifact(sessionId);
+	const codeReview = readCodeReviewArtifactRaw(sessionId);
 	if (codeReview === null) {
 		return false;
 	}
 	// INCONCLUSIVE (D1): the review itself did not finish (timeout/ack-only/BLOCKED/
 	// genuinely uncertain) — distinct from a finished review that found CONFIRMED work.
 	// Blocks completion without implying a sisyphus re-dispatch is warranted.
-	if (!isCompletionEligibleCodeReview(codeReview)) {
+	if (!isCompletionEligibleCodeReview(codeReview, readDismissals(prior))) {
 		return false;
 	}
 
@@ -2148,6 +2300,27 @@ function main(): void {
 			const result = approveReviewDispatchRenewal(sessionId);
 			process.stdout.write(JSON.stringify(result) + "\n");
 			if (!result.allowed) process.exit(1);
+		} else if (subcommand === "dismiss-review-finding") {
+			const ref = str(args["ref"]) ?? "";
+			const findingClass = str(args["class"]) ?? "";
+			const rationale = str(args["rationale"]) ?? "";
+			if (findingClass !== "correctness" && findingClass !== "requirement-gap") {
+				process.stderr.write(
+					"dismiss-review-finding: --class must be correctness or requirement-gap " +
+						"(cleanup findings never block completion, so dismissing one is a no-op)\n",
+				);
+				process.exit(1);
+			}
+			const dismissed = dismissReviewFinding(sessionId, { ref, class: findingClass, rationale });
+			if (!dismissed) {
+				process.stderr.write(
+					"dismiss-review-finding: refused — requires an active pursuing goal, a non-empty " +
+						`--ref and --rationale, and a CONFIRMED ${findingClass} finding at "${ref}" in the ` +
+						"current code-review artifact\n",
+				);
+				process.exit(1);
+			}
+			process.stdout.write(`dismissed ${findingClass} finding at ${ref}\n`);
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readGoalGet(sessionId)) + "\n");
 		} else if (subcommand === "status") {
@@ -2331,7 +2504,7 @@ function main(): void {
 			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
+				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
 			);
 			process.exit(1);
 		}

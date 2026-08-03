@@ -540,6 +540,156 @@ test_negative_double_space_nondangerous_allows() {
     fi
 }
 
+# =============================================================================
+# write_guard_core_check_user_authorized_command <command-segment>
+#
+# ultragoal exposes two state mutations the SKILL's own authority table marks
+# "orchestrator, only after explicit user approval": approve-review-dispatch-
+# renewal (extends the review budget) and dismiss-review-finding (removes a
+# blocking finding from the completion gate). Both were enforced by prose
+# alone -- the AI could run either unprompted and clear its own gate. This
+# guard makes the authorization structural: the AI's own Bash path is denied,
+# so the command reaches the CLI only when the user runs it.
+#
+# ALLOW cases (get/status/request-complete/set-verdict) are the negative
+# control -- without them a deny guard cannot be told apart from "deny every
+# ultragoal-state invocation".
+# =============================================================================
+UGCLI="bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts"
+
+test_user_authorized_dismiss_review_finding_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI dismiss-review-finding --ref src/auth.ts:142 --class correctness --rationale x")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-dismiss: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_approve_renewal_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI approve-review-dispatch-renewal")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-renewal: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+# Whitespace-run tolerance, same hazard the dangerous-command guard fixed: a
+# real shell treats any run of spaces/tabs as one separator, so a literal
+# single-space pattern would silently ALLOW the identical command.
+# Indirection bypass: the subcommand name reaches the CLI through a variable, so
+# it never sits next to the script path in the command text -- and a `;` puts the
+# two tokens in different chain segments. Matching requires both tokens anywhere
+# in the WHOLE command, in either order, precisely so this shape is covered.
+test_user_authorized_variable_indirection_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "sub=dismiss-review-finding; $UGCLI \"\$sub\" --ref a --class correctness --rationale x")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-variable-indirection: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+# Same shape for the renewal sibling, and with the subcommand token appearing
+# BEFORE the script path -- the assignment-first ordering the bypass produces.
+test_user_authorized_reverse_order_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "s=approve-review-dispatch-renewal && $UGCLI \"\$s\"")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-reverse-order: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+test_user_authorized_whitespace_run_denies() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI  dismiss-review-finding   --ref a --class correctness --rationale x")
+    if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-whitespace-run: expected deny, got '$out'"
+        return 1
+    fi
+}
+
+# The deny must name the user-run route; an AI told only "denied" has no next
+# move and will either retry or abandon a legitimate user request.
+test_user_authorized_deny_names_user_run_route() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI dismiss-review-finding --ref a --class correctness --rationale x")
+    if printf '%s' "$out" | grep -q '사용자'; then
+        return 0
+    else
+        echo "ASSERTION FAILED user-authorized-deny-message: expected the user-run route in the reason, got '$out'"
+        return 1
+    fi
+}
+
+test_negative_ultragoal_get_allows() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ "$UGCLI get")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED negative-ultragoal-get: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+test_negative_ultragoal_request_complete_allows() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI request-complete")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED negative-ultragoal-request-complete: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+test_negative_ultragoal_set_verdict_allows() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "$UGCLI set-verdict --verdict APPROVE")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED negative-ultragoal-set-verdict: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
+# The guarded subcommand name appearing as free text -- not as an invocation of
+# the CLI -- must stay allowed, or reporting a denial to the user becomes
+# self-denying.
+test_negative_subcommand_name_as_prose_allows() {
+    local out
+    out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
+        "echo 'run dismiss-review-finding yourself'")
+    if [ -z "$out" ]; then
+        return 0
+    else
+        echo "ASSERTION FAILED negative-subcommand-as-prose: expected empty (ALLOW), got '$out'"
+        return 1
+    fi
+}
+
 # codereview_guard_core_run <OMT_DIR> <session_id> <agent_type> tests
 # (code-review-artifact-guard-core plan) -- identity-conditional guard: unlike
 # write_guard_core_run's unconditional deny, this one allows the SAME guarded
@@ -894,6 +1044,16 @@ main() {
     run_test test_dangerous_rm_rf_double_space_denies
     run_test test_dangerous_rm_rf_tab_denies
     run_test test_dangerous_git_push_force_multispace_denies
+    run_test test_user_authorized_dismiss_review_finding_denies
+    run_test test_user_authorized_approve_renewal_denies
+    run_test test_user_authorized_variable_indirection_denies
+    run_test test_user_authorized_reverse_order_denies
+    run_test test_user_authorized_whitespace_run_denies
+    run_test test_user_authorized_deny_names_user_run_route
+    run_test test_negative_ultragoal_get_allows
+    run_test test_negative_ultragoal_request_complete_allows
+    run_test test_negative_ultragoal_set_verdict_allows
+    run_test test_negative_subcommand_name_as_prose_allows
     run_test test_negative_double_space_nondangerous_allows
     run_test test_ac_codereview_byte_identical_deny
     run_test test_codereview_guard_ultragoal_empty_agent_type_denies
