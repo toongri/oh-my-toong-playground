@@ -62,6 +62,20 @@ Stance sharpens a roster actor; it never replaces one:
 
 ---
 
+## Layer D — Product Use-Case Breadth
+
+Risk derivation (Layer A) finds where a silent failure is expensive; it does not enumerate how the product is actually used. Layer D walks the changed surface the way real usage reaches and mutates it, so the scenario set reads like the product's life, not just its attack surface.
+
+**Build the product-context map first — from the repo, not from the QA REQUEST.** The QA REQUEST rarely hands over a feature map; derive it by reading the code around the changed surface: navigation/route definitions, deeplink and push-notification handlers, and every writer of the data the surface displays. The map answers three questions, and each axis below derives scenarios from one of them:
+
+1. **Arrival paths** — every distinct way an actor reaches the changed surface in production: direct navigation, deeplink/push entry, redirects from other flows. When the map shows an arrival path other than direct navigation, at least one scenario enters through it.
+2. **Adjacent state transitions** — every product action elsewhere that changes what the changed surface shows (the writers of its data: a dispense that decrements stock, a bottle replacement that resets it). When the map shows such a writer, at least one scenario drives the writer action first and then observes the changed surface, asserting the transition landed rather than a cached prior state.
+3. **Lifecycle stances** — the states a real account passes through: freshly onboarded (empty or partial data), established daily use, just after a maintenance action. When these states differ in what the surface shows, each distinct state gets a scenario.
+
+Each Layer D scenario is a multi-step realistic flow, still entered at its actor's boundary (Layer C) and still written in the six-field shape; its `why-needed` names the use-case axis it covers. The coverage-delta line names all three axes and which are covered or uncovered — an axis silently absent from the roster is an authoring omission, not a delta.
+
+---
+
 ## Unified Scenario Shape
 
 Every self-authored scenario is written in this six-field shape, in this order:
@@ -96,4 +110,4 @@ Omitting any of the six fields, or leaving `why-needed` blank, makes the scenari
 
 ## Breadth Then Depth
 
-Author in two passes, in this order. **Breadth first**: walk Layer A → B → C for the change under review to derive the full set of risk-covering scenarios — this is what guarantees the scenario set covers the risk surface, not just the files that changed. **Depth second**: once a scenario is derived with its six fields, subject it to the 6-category `Adversarial Scenario Matrix` in `stage3-handson.md` — that matrix is the hostile-**depth** dimension applied to each scenario this file derives, not a replacement for derivation. Do not skip straight to the matrix on an undifferentiated changed-file list; derive first, then harden each derived scenario against the matrix's categories.
+Author in two passes, in this order. **Breadth first**: walk Layer A → B → C → D for the change under review to derive the full set of risk-covering and use-case-covering scenarios — this is what guarantees the scenario set covers the risk surface and the product's real usage, not just the files that changed. **Depth second**: once a scenario is derived with its six fields, subject it to the 6-category `Adversarial Scenario Matrix` in `stage3-handson.md` — that matrix is the hostile-**depth** dimension applied to each scenario this file derives, not a replacement for derivation. Do not skip straight to the matrix on an undifferentiated changed-file list; derive first, then harden each derived scenario against the matrix's categories.

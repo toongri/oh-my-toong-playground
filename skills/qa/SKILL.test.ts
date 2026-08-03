@@ -929,6 +929,36 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 	});
 });
 
+describe("new-prose: product use-case breadth is a required derivation axis", () => {
+	// The gap this closes: journey scenarios appeared in probes only when the
+	// prompt handed the verifier a feature map. Real runs hand nothing — the
+	// skill must mandate building the map and walking its axes.
+	test("Layer D exists and mandates building the product-context map from the repo", () => {
+		expect(scenarioAuthoringMd).toContain("Layer D — Product Use-Case Breadth");
+		expect(scenarioAuthoringMd).toContain("product-context map");
+		expect(scenarioAuthoringMd).toContain("from the repo, not from the QA REQUEST");
+	});
+
+	test("the three use-case axes are named as conditional requirements", () => {
+		expect(scenarioAuthoringMd).toContain("Arrival paths");
+		expect(scenarioAuthoringMd).toContain("Adjacent state transitions");
+		expect(scenarioAuthoringMd).toContain("Lifecycle stances");
+	});
+
+	test("the cycle's breadth step and coverage delta carry Layer D", () => {
+		expect(skillMd).toContain("Layer D");
+		expect(skillMd).toContain(
+			"arrival paths · adjacent state transitions · lifecycle stances",
+		);
+	});
+
+	test("an absent axis is an authoring omission, not a delta", () => {
+		expect(scenarioAuthoringMd).toContain(
+			"an authoring omission, not a delta",
+		);
+	});
+});
+
 // ---------------------------------------------------------------------------
 // REGRESSION GUARD: frontmatter identity (must PASS before AND after)
 // ---------------------------------------------------------------------------
