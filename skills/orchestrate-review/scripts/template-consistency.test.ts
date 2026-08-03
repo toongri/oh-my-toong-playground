@@ -15,7 +15,7 @@ const TEMPLATE_MD = join(
 );
 
 /**
- * Extract placeholder names from SKILL.md Step 5's "Interpolate placeholders" bullet list.
+ * Extract placeholder names from SKILL.md Step 4 (Agent Dispatch)'s "Interpolate placeholders" bullet list.
  *
  * The block starts at the line containing "Interpolate placeholders with context from"
  * and ends at the next line beginning with "##" or "###" (or the next numbered list item
@@ -32,7 +32,7 @@ function extractSkillPlaceholders(content: string): Set<string> {
 	);
 	if (startIndex === -1) {
 		throw new Error(
-			"SKILL.md: Could not locate 'Interpolate placeholders with context from' marker in Step 5. " +
+			"SKILL.md: Could not locate 'Interpolate placeholders with context from' marker in Step 4 (Agent Dispatch). " +
 				"The section may have been renamed — update the parser in template-consistency.test.ts.",
 		);
 	}
@@ -146,7 +146,7 @@ describe("dispatch template body coverage", () => {
 });
 
 describe("dispatch template placeholder consistency", () => {
-	it("SKILL.md Step 5 and chunk-reviewer-prompt.md Field Reference declare the same placeholder set", () => {
+	it("SKILL.md Step 4 and chunk-reviewer-prompt.md Field Reference declare the same placeholder set", () => {
 		// Arrange
 		const skillContent = readFileSync(SKILL_MD, "utf-8");
 		const templateContent = readFileSync(TEMPLATE_MD, "utf-8");
@@ -166,12 +166,12 @@ describe("dispatch template placeholder consistency", () => {
 		const mismatchLines: string[] = [];
 		if (onlyInSkill.length > 0) {
 			mismatchLines.push(
-				`Declared in SKILL.md Step 5 but MISSING from chunk-reviewer-prompt.md Field Reference: ${onlyInSkill.join(", ")}`,
+				`Declared in SKILL.md Step 4 but MISSING from chunk-reviewer-prompt.md Field Reference: ${onlyInSkill.join(", ")}`,
 			);
 		}
 		if (onlyInTemplate.length > 0) {
 			mismatchLines.push(
-				`Declared in chunk-reviewer-prompt.md Field Reference but MISSING from SKILL.md Step 5: ${onlyInTemplate.join(", ")}`,
+				`Declared in chunk-reviewer-prompt.md Field Reference but MISSING from SKILL.md Step 4: ${onlyInTemplate.join(", ")}`,
 			);
 		}
 
@@ -180,24 +180,24 @@ describe("dispatch template placeholder consistency", () => {
 });
 
 /**
- * Extract the JSON field names named by "JSON field `x`" bullets in SKILL.md Step 5.
+ * Extract the JSON field names named by "JSON field `x`" bullets in SKILL.md Step 4 (Agent Dispatch).
  *
- * Of the nine placeholder bullets under "Interpolate placeholders", only the five intent
+ * Of the eight placeholder bullets under "Interpolate placeholders", only the five intent
  * placeholders ({WHAT_WAS_IMPLEMENTED}/{DESCRIPTION}/{REQUIREMENTS}/{PROJECT_CONTEXT}/{NON_GOAL})
- * carry a "JSON field `x`" tag — the codebase-derived bullets ({FILE_LIST}/{DIFF_COMMAND}/
- * {COMMIT_HISTORY}/{EVIDENCE_RESULTS}) do not. The regex itself is the selector: only
+ * carry a "JSON field `x`" tag — the codebase-derived bullets
+ * ({FILE_LIST}/{DIFF_COMMAND}/{COMMIT_HISTORY}) do not. The regex itself is the selector: only
  * matching lines contribute a name.
  *
- * Scoped to the "## Step 5" section (stops at the next level-2 heading) so a same-named
+ * Scoped to the "## Step 4" section (stops at the next level-2 heading) so a same-named
  * JSON field mentioned elsewhere in the file is never picked up by accident.
  */
 function extractSkillJsonFieldBullets(content: string): Set<string> {
 	const lines = content.split("\n");
 
-	const startIndex = lines.findIndex((line) => /^##\s+Step 5:/.test(line));
+	const startIndex = lines.findIndex((line) => /^##\s+Step 4:/.test(line));
 	if (startIndex === -1) {
 		throw new Error(
-			"SKILL.md: Could not locate '## Step 5:' heading. " +
+			"SKILL.md: Could not locate '## Step 4:' heading. " +
 				"The section may have been renamed — update the parser in template-consistency.test.ts.",
 		);
 	}
@@ -205,7 +205,7 @@ function extractSkillJsonFieldBullets(content: string): Set<string> {
 	const fields = new Set<string>();
 	for (let i = startIndex + 1; i < lines.length; i++) {
 		const line = lines[i];
-		if (/^##\s/.test(line)) break; // next level-2 heading ends Step 5
+		if (/^##\s/.test(line)) break; // next level-2 heading ends Step 4
 
 		const match = line.match(/JSON field `([a-zA-Z_]+)`/);
 		if (match) {
@@ -217,7 +217,7 @@ function extractSkillJsonFieldBullets(content: string): Set<string> {
 }
 
 /**
- * Extract the field names from Step 5's summary sentence: "named fields
+ * Extract the field names from Step 4's summary sentence: "named fields
  * `a`/`b`/`c`/..." — the second, independent place the same five field names are spelled
  * out in prose. A drift where only the bullets or only this sentence gets updated is the
  * exact failure mode this parser exists to catch.
@@ -226,7 +226,7 @@ function extractSkillNamedFieldsSummary(content: string): Set<string> {
 	const match = content.match(/named fields ((?:`[a-zA-Z_]+`\/?)+)/);
 	if (!match) {
 		throw new Error(
-			"SKILL.md: Could not locate the 'named fields `...`/`...`' summary sentence in Step 5. " +
+			"SKILL.md: Could not locate the 'named fields `...`/`...`' summary sentence in Step 4. " +
 				"The wording may have changed — update the parser in template-consistency.test.ts.",
 		);
 	}
@@ -241,8 +241,8 @@ function extractSkillNamedFieldsSummary(content: string): Set<string> {
 	return fields;
 }
 
-describe("dispatch JSON-field binding (SKILL.md Step 5 <-> serializeReviewContext)", () => {
-	// This binding today lives only in prose: Step 5's bullets and summary sentence name the
+describe("dispatch JSON-field binding (SKILL.md Step 4 <-> serializeReviewContext)", () => {
+	// This binding today lives only in prose: Step 4's bullets and summary sentence name the
 	// JSON field keys a completion-gate dispatch payload must carry, but nothing checks that
 	// those names still match the keys serializeReviewContext() actually emits. Renaming a
 	// field on either side silently breaks completion-gate dispatch without failing any test.
@@ -294,7 +294,7 @@ describe("dispatch JSON-field binding (SKILL.md Step 5 <-> serializeReviewContex
 		// one prose spot getting updated without the other is a real drift mode.
 		expect(
 			sortedSummary,
-			`Step 5 summary sentence field list drifted from the per-field bullet list. ` +
+			`Step 4 summary sentence field list drifted from the per-field bullet list. ` +
 				`bullets=[${sortedBullets.join(", ")}] summary=[${sortedSummary.join(", ")}]`,
 		).toEqual(sortedBullets);
 
@@ -303,7 +303,7 @@ describe("dispatch JSON-field binding (SKILL.md Step 5 <-> serializeReviewContex
 		// this test closes.
 		expect(
 			sortedBullets,
-			`SKILL.md Step 5 JSON field names do not match serializeReviewContext's actual output keys. ` +
+			`SKILL.md Step 4 JSON field names do not match serializeReviewContext's actual output keys. ` +
 				`skill=[${sortedBullets.join(", ")}] actual=[${sortedActual.join(", ")}]`,
 		).toEqual(sortedActual);
 	});

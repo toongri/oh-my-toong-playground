@@ -22,7 +22,7 @@ const ANGLE_SECTION_ALLOWLIST: Record<string, string[]> = {
 	correctness: [],
 	regression: ["commit_history"],
 	cleanup: ["non_goal"],
-	requirement: ["requirements", "non_goal", "evidence_results", "commit_history"],
+	requirement: ["requirements", "non_goal", "commit_history"],
 };
 
 /**
@@ -39,14 +39,13 @@ const CLOSE_MARKER_RE = /^<!-- \/section:([a-z_]+) -->$/gm;
 /**
  * The complete, exact set of conditional section names chunk-reviewer-prompt.md declares.
  * Every one is always interpolated with real content or a backfill sentinel (never omitted) per
- * code-review/SKILL.md Step 5, so a legitimate prompt.txt always carries exactly this set —
- * verified against the template itself by worker.test.ts.
+ * code-review/SKILL.md Step 4 (Agent Dispatch), so a legitimate prompt.txt always carries exactly
+ * this set — verified against the template itself by worker.test.ts.
  */
 export const KNOWN_SECTION_NAMES = new Set([
 	"requirements",
 	"project_context",
 	"non_goal",
-	"evidence_results",
 	"commit_history",
 	"field_reference",
 ]);

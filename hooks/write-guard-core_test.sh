@@ -875,18 +875,18 @@ test_codereview_guard_verdict_artifact_allows() {
 }
 
 # -----------------------------------------------------------------------------
-# AC9 -- false-positive negative control: the code-review pipeline's own
-# durable-sink output (skills/code-review/scripts/durable-sink.ts) at
-# $OMT_DIR/code-review/<sid>/candidates.json is outside the guarded set.
-# Denying it with agent_type absent would break the review pipeline itself.
+# AC9 -- false-positive negative control: a session-scoped sibling file at
+# $OMT_DIR/code-review/<sid>/candidates.json is outside the guarded set --
+# the guard must deny ONLY the exact completion-gate artifact file, never
+# other files under the session's own directories.
 # -----------------------------------------------------------------------------
-test_codereview_guard_durable_sink_candidates_allows() {
+test_codereview_guard_sibling_path_allows() {
     local out
     out=$(printf '%s\n' "$OD/code-review/$CRSID/candidates.json" | bash -c "source '$CORE'; codereview_guard_core_run '$OD' '$CRSID'")
     if [ -z "$out" ]; then
         return 0
     else
-        echo "ASSERTION FAILED codereview-durable-sink-candidates-allows: expected empty (ALLOW), got '$out'"
+        echo "ASSERTION FAILED codereview-sibling-path-allows: expected empty (ALLOW), got '$out'"
         return 1
     fi
 }
@@ -1066,7 +1066,7 @@ main() {
     run_test test_codereview_guard_glob_candidate_missing_agent_type_denies
     run_test test_codereview_guard_dot_segment_missing_agent_type_denies
     run_test test_codereview_guard_verdict_artifact_allows
-    run_test test_codereview_guard_durable_sink_candidates_allows
+    run_test test_codereview_guard_sibling_path_allows
     run_test test_codereview_guard_other_session_allows
     run_test test_sigpipe_ledger_exact_match_early_return_survives_oversized_trailing_candidates
     run_test test_sigpipe_ledger_glob_match_early_return_survives_oversized_trailing_candidates
