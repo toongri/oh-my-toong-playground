@@ -14,7 +14,7 @@
 | Scope Assessment | Analyze thesis count, propose split if multi-thesis | Proxy signals trigger analysis, thesis isolation decides |
 | Write PR Title & Description | Follow output-format.md exactly; title + labels per surveyed conventions | Emoji headers, Impact Scope, file paths in Checklist. Labels only from `gh label list` |
 | User Review | Present and collect feedback | Repeat until approved |
-| PR Creation | CAS freshness check → re-sync if target moved → branch name convention check → `gh pr create` after user confirmation | Re-use Step 0-B strategy; re-interview only on conflict. Always `--assignee @me`; `--label` per selected label |
+| PR Creation | Pre-creation check (`origin/{base}..HEAD` ahead count > 0) → branch name convention check → `gh pr create` after user confirmation | Always `--assignee @me`; `--label` per selected label |
 
 ---
 
@@ -48,7 +48,8 @@
 | Proposing unnecessary split for single-thesis PR | User burden, workflow delay | If single thesis, proceed to Step 6 immediately |
 | Reading git diff file contents during scope assessment | Violates Non-Negotiable Rule | Use only git diff --stat and git log |
 | Deleting original branch after split | User cannot recover | Always preserve the original branch |
-| Skipping freshness check before PR creation | `gh pr create` fails or wrong diff when target branch moved | CAS pattern target SHA re-verification in Step 8 |
+| Pushing without confirming the branch has commits the base lacks | `gh pr create` fails with "No commits between base and head" | Check `git rev-list --count origin/{base-branch}..HEAD > 0` before push |
+| Gating PR creation on the remote target tip matching a SHA recorded earlier | On an active repo the target keeps moving during the interview, so the comparison never settles and the check re-fires indefinitely | Gate on the local ahead count instead — it is owned by the current branch and does not change when the target moves |
 | References를 클릭 불가능한 bare-text로 작성 | GitHub-renderable 아님; reviewer가 navigate 불가 | `[Title](URL)` markdown link 사용. URL 없으면 user에게 한 번 묻고, 없으면 bare-text 허용 (Slack 채널 단독 예외) |
 | Writing title from default style when the repo has a surveyed title convention | PR looks foreign in the repo's PR list | Survey result wins; defaults are fallback only |
 | Creating PR without `--assignee @me` | PR left unassigned; ownership unclear | Always include `--assignee @me` in `gh pr create` |
