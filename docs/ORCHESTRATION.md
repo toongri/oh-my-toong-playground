@@ -109,7 +109,8 @@ flowchart TD
 
 - **역할**: 실행과 위임
 - **제약**: **절대 단독 작업 안 함**. 모든 코드 변경 = sisyphus-junior 위임.
-- **검증**: verify 태스크(AC 명시 + PASS/FAIL 판정)는 sisyphus가 AC 명령을 직접 실행해 인라인으로 처리(junior 생략) — 별도 QA 에이전트는 없습니다. implement 태스크는 sisyphus-junior의 완료 보고로 완결 — implement 경로에는 별도 QA 단계가 없습니다.
+- **검증**: verify 태스크(AC 명시 + PASS/FAIL 판정)는 sisyphus가 AC 명령을 직접 실행해 인라인으로 처리(junior 생략) — 별도 QA 에이전트는 없습니다. 모든 implement 태스크는 같은 태스크 목록에 verify 태스크가 짝으로 생성되므로 junior 산출물은 항상 판정까지 도달합니다. junior의 자체 검증은 그 판정의 증거이지 판정을 대신하지 않습니다.
+- **커밋**: APPROVE 또는 COMMENT가 나오면 sisyphus가 mnemosyne을 디스패치해 해당 태스크의 변경을 커밋합니다. REQUEST_CHANGES 상태에서는 아무것도 커밋하지 않으며, 판정이 통과했는데 변경이 커밋되지 않은 채로 남으면 그 태스크는 미완료입니다.
 
 ### sisyphus-junior (구현자)
 
@@ -153,8 +154,9 @@ flowchart TD
 1. **스토리 순차 처리**: 이전 스토리가 끝난 뒤 다음 스토리를 sisyphus에 전달
 2. **태스크 생성**: sisyphus가 스토리를 TaskCreate 항목으로 분해
 3. **위임**: sisyphus-junior에 태스크 할당
-4. **품질 보증**: verify 태스크는 sisyphus가 AC 명령을 직접 실행해 인라인으로 PASS/FAIL 판정을 내리고(junior 생략), implement 태스크는 sisyphus-junior의 완료 보고로 완결(별도 QA 단계 없음)
-5. **반복**: 모든 스토리와 태스크가 리뷰를 통과할 때까지 계속
+4. **품질 보증**: 모든 implement 태스크에 verify 태스크가 짝으로 붙고, sisyphus가 AC 명령을 직접 실행해 인라인으로 PASS/FAIL 판정(junior 생략)
+5. **커밋**: APPROVE/COMMENT가 나오면 mnemosyne을 디스패치해 해당 태스크의 변경을 커밋
+6. **반복**: 모든 스토리와 태스크가 리뷰를 통과할 때까지 계속
 
 ---
 

@@ -25,7 +25,7 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 
 Each `OUT of Scope` item must carry a decider — `| decider: {how to tell a finding belongs to this exclusion}` — so a reviewer can tell whether a candidate finding falls inside it. An exclusion without a decider has no edge to any finding, so it does nothing. The gate in `agents/metis.md` (B3) rejects an undecidered exclusion with REQUEST_CHANGES; this template fixes the format that gate checks.
 
-**On Metis REQUEST_CHANGES**: Return to Interview Mode — and ask the user first. Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Before re-invoking Metis, ask the user to clarify the gaps Metis identified via the normal Interview question channel, and apply the answer and the resulting revision. Only then re-invoke Metis with the same 3-Section structure containing updated content. This loop is bounded by the shared 2-round cap owned by prometheus (`SKILL.md > ### State Lifecycle Directives`); metis stays round-unaware.
+**On Metis REQUEST_CHANGES**: Return to Interview Mode — and ask the user first. Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Before re-invoking Metis, ask the user to clarify the gaps Metis identified via the normal Interview question channel, and apply the answer and the resulting revision. Only then re-invoke Metis with the same 3-Section structure containing updated content. This loop is bounded by the Metis round cap (2 rounds) owned by prometheus (`SKILL.md > ### State Lifecycle Directives`); metis stays round-unaware.
 
 **On nonempty Questions for User (any verdict)**: route the questions to the user via the normal Interview question channel and apply the answers before advancing — an APPROVE/COMMENT verdict does not waive them. Recording the answers does not expire the verdict; no re-review is required for answer recording alone.
 
@@ -165,7 +165,7 @@ Translating any item is a rule violation.
 - Writing enrichment back to disk. Per Invariant 3 the callouts live only in the derived presentation file; `plan.md` stays the single source of truth and every re-render redraws from it.
 - Drawing a diagram edge, arrow, or relationship that `plan.md` did not already decide. A diagram cannot be vaguer than the plan it visualizes — if you cannot draw it without inventing a who-calls-whom or ownership decision the plan never made, that is a plan defect: fix the plan and re-run the pipeline, do not invent the edge at render time.
 
-Rationale: `plan.md` is the artifact the pipeline reviewed — Momus reviewed the finished plan at S4, and Daedalus reviewed its design-brief / ADR sections at S2 — and it is the artifact the executor runs from. Net-new content in the presentation file would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
+`plan.md` is the artifact the pipeline reviewed and the artifact the executor runs from; net-new content in the presentation file would be unreviewed.
 
 ---
 

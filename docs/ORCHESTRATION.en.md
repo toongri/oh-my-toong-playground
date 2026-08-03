@@ -109,7 +109,8 @@ flowchart TD
 
 - **Role**: Execution and delegation
 - **Constraint**: **NEVER works alone**. ALL code changes = DELEGATE to sisyphus-junior.
-- **Verification**: sisyphus handles verify tasks inline (explicit AC + PASS/FAIL verdict) by running the AC commands itself, skipping junior — there is no separate QA agent. An implement task completes on sisyphus-junior's report — no QA step runs on the implement path.
+- **Verification**: sisyphus handles verify tasks inline (explicit AC + PASS/FAIL verdict) by running the AC commands itself, skipping junior — there is no separate QA agent. Every implement task carries a paired verify task created in the same task list, so junior's output always reaches a verdict; junior's own self-check is evidence for that verdict, not a substitute for it.
+- **Commit**: on APPROVE or COMMENT, sisyphus dispatches mnemosyne to commit that task's changes. Nothing is committed while a task sits in REQUEST_CHANGES, and a passing verdict that leaves changes uncommitted is an unfinished task.
 
 ### sisyphus-junior (The Implementer)
 
@@ -153,8 +154,9 @@ With a plan ready, `/ultragoal` sequentially dispatches its stories to `/sisyphu
 1. **Sequential Story Processing**: It dispatches the next story to sisyphus only after the previous story completes
 2. **Task Creation**: sisyphus breaks the story into TaskCreate items
 3. **Delegation**: Assigns tasks to sisyphus-junior
-4. **Quality Assurance**: a verify task is handled inline by sisyphus (skip junior) — it runs the AC commands itself for a PASS/FAIL verdict; implement tasks complete on sisyphus-junior's report (no separate QA step)
-5. **Iteration**: Continues until all stories and tasks pass review
+4. **Quality Assurance**: every implement task carries a paired verify task, handled inline by sisyphus (skip junior) — it runs the AC commands itself for a PASS/FAIL verdict
+5. **Commit**: on APPROVE/COMMENT, mnemosyne is dispatched to commit that task's changes
+6. **Iteration**: Continues until all stories and tasks pass review
 
 ---
 
