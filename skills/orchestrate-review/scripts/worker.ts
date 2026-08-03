@@ -6,7 +6,13 @@ import path from "path";
 import { initLogger, logInfo, logError, logStart, logEnd } from "@lib/logging";
 import { exitWithError, parseArgs, logRootForJobsDir } from "@lib/job-utils";
 import { getOmtDir } from "@lib/omt-dir";
-import { splitCommand, atomicWriteJson, runOneTurn, reapOwnProcessGroup } from "@lib/worker-utils";
+import {
+	splitCommand,
+	atomicWriteJson,
+	runOneTurn,
+	resumeOneTurn,
+	reapOwnProcessGroup,
+} from "@lib/worker-utils";
 import { detectCliType } from "@lib/generic-job";
 import type { CliType } from "@lib/agent-drivers/types";
 
@@ -193,19 +199,43 @@ function main() {
 	const detectedCliType = detectCliType(command);
 	const cliType: CliType = isCliType(detectedCliType) ? detectedCliType : "unknown";
 
-	runOneTurn({
-		program,
-		args,
-		prompt: EXECUTION_INSTRUCTION,
-		reviewContent: promptContent,
-		member,
-		memberDir,
-		command,
-		timeoutSec,
-		workerEnv,
-		cliType,
-		promptsDir: PROMPTS_DIR,
-	}).then(async (result) => {
+	// Resume mode: --session + --prompt together (spawned by cmdResumeMember's detached-worker
+	// dispatch, lib/generic-job.ts) select resumeOneTurn over the initial-turn runOneTurn below.
+	// promptsDir/reviewContent are deliberately NOT forwarded here — session-preserving CLIs
+	// (claude --resume, opencode session resume, codex exec resume) retain persona + review
+	// content server-side, making assemblePrompt re-injection redundant on resume (see
+	// cmdResumeMember's own comment in lib/generic-job.ts).
+	const session = options.session;
+	const resumePrompt = options.prompt;
+
+	const turnPromise =
+		typeof session === "string" && session !== "" && typeof resumePrompt === "string" && resumePrompt !== ""
+			? resumeOneTurn(session, {
+					program,
+					args,
+					prompt: resumePrompt,
+					member,
+					memberDir,
+					command,
+					timeoutSec,
+					workerEnv,
+					cliType,
+				})
+			: runOneTurn({
+					program,
+					args,
+					prompt: EXECUTION_INSTRUCTION,
+					reviewContent: promptContent,
+					member,
+					memberDir,
+					command,
+					timeoutSec,
+					workerEnv,
+					cliType,
+					promptsDir: PROMPTS_DIR,
+				});
+
+	turnPromise.then(async (result) => {
 		logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
 		logEnd();
 		// Must run AFTER logging: the group SIGKILL this sends also terminates this
