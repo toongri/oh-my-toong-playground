@@ -2880,6 +2880,122 @@ describe("resume-member", () => {
 });
 
 // ---------------------------------------------------------------------------
+// resume-member CLI dispatch: detached-spawn contract (the actual `job.ts resume-member`
+// entry point, unlike the tests above which call cmdResumeMember directly and never pass
+// workerPath — that exercises the shared in-process fallback other skills still use). This is
+// the surface the deliverable targets: a resume turn must not block the caller (a Bash tool
+// call with its own timeout) for the turn's full duration.
+// ---------------------------------------------------------------------------
+
+describe("resume-member CLI 배선 — detached spawn 계약", () => {
+	const SCRIPT = path.join(import.meta.dirname, "job.ts");
+	let tmpDir: string;
+	let jobDir: string;
+	let memberDir: string;
+	let stubDir: string;
+
+	/**
+	 * Fake `opencode` binary on PATH: sleeps long enough that a caller blocking in-process on
+	 * it would observably block, then emits a minimal opencode NDJSON stream the real
+	 * opencodeDriver can parse (step_finish/stop + one text event) before exiting 0.
+	 */
+	function makeSlowOpencodeStub(sleepSec: number): string {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "resume-spawn-stub-"));
+		const stubPath = path.join(dir, "opencode");
+		fs.writeFileSync(
+			stubPath,
+			[
+				"#!/bin/sh",
+				`sleep ${sleepSec}`,
+				'echo \'{"type":"step_finish","sessionID":"sess-123","part":{"reason":"stop"}}\'',
+				'echo \'{"type":"text","part":{"text":"resumed done"}}\'',
+				"exit 0",
+			].join("\n"),
+			"utf8",
+		);
+		fs.chmodSync(stubPath, 0o755);
+		return dir;
+	}
+
+	beforeEach(() => {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "resume-spawn-job-"));
+		jobDir = path.join(tmpDir, "job1");
+		memberDir = path.join(jobDir, "members", "opencode");
+		fs.mkdirSync(memberDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(memberDir, "status.json"),
+			JSON.stringify(
+				{
+					member: "opencode",
+					state: "awaiting_resume",
+					sessionID: "sess-existing",
+					resume_count: 0,
+					command: "opencode --format json",
+				},
+				null,
+				2,
+			),
+			"utf8",
+		);
+		stubDir = makeSlowOpencodeStub(2);
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+		fs.rmSync(stubDir, { recursive: true, force: true });
+	});
+
+	function readStatus(): Record<string, unknown> {
+		return JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
+	}
+
+	test(
+		"resume-member 서브커맨드는 워커 완료를 기다리지 않고 즉시 dispatched ack로 반환한다",
+		async () => {
+			const start = Date.now();
+			const result = execFileSync(
+				process.execPath,
+				[SCRIPT, "resume-member", "--job", jobDir, "--member", "opencode", "--prompt", "continue"],
+				{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+			);
+			const elapsedMs = Date.now() - start;
+
+			// The fake CLI sleeps 2s before it would ever finish a turn — a caller still blocking
+			// in-process on that turn would take at least that long. Returning in a small fraction
+			// of that window is the direct evidence dispatch is non-blocking.
+			expect(elapsedMs).toBeLessThan(1500);
+			expect(JSON.parse(result.toString())).toEqual({ state: "dispatched", member: "opencode" });
+
+			// Queued pre-transition: cmdCollect's "awaiting_resume already ended its own turn"
+			// early-return must not still apply to this freshly-dispatched resume.
+			const queuedStatus = readStatus();
+			expect(queuedStatus.state).toBe("queued");
+			expect(queuedStatus.sessionID).toBe("sess-existing");
+			expect(queuedStatus.command).toBe("opencode --format json");
+			expect(queuedStatus.resume_count).toBe(1);
+
+			// Poll for the detached worker to actually finish the turn — state transitions
+			// queued → running (runOnce's own status write, before the stub's 2s sleep resolves)
+			// → done (executeOneTurn's final write once stdout is parsed).
+			const deadline = Date.now() + 10000;
+			let finalStatus = readStatus();
+			while (
+				(finalStatus.state === "queued" || finalStatus.state === "running") &&
+				Date.now() < deadline
+			) {
+				await new Promise((resolve) => setTimeout(resolve, 200));
+				finalStatus = readStatus();
+			}
+
+			expect(finalStatus.state).toBe("done");
+			expect(finalStatus.sessionID).toBe("sess-123");
+			expect(finalStatus.resume_count).toBe(1);
+		},
+		15000,
+	);
+});
+
+// ---------------------------------------------------------------------------
 // cmdResults
 // ---------------------------------------------------------------------------
 

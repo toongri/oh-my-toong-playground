@@ -316,6 +316,86 @@ describe("main() 배선: prompt.txt가 필터링되어 reviewContent로 전달�
 	);
 });
 
+// worker.ts's resume mode (--session + --prompt) is what cmdResumeMember's detached-worker
+// dispatch (lib/generic-job.ts) spawns instead of awaiting resumeOneTurn in-process. Drives the
+// real main() as a subprocess against a fake `opencode` binary on PATH — a real driver
+// (opencodeDriver) parses its stdout, so this proves resumeOneTurn (not runOneTurn) actually ran:
+// promptsDir is never forwarded to it, so assembled-prompt.txt must not appear, and the fake CLI
+// receives the resume-shaped `--session <id>` argv only driver.resumeCommand injects.
+describe("main() 배선: --session/--prompt는 resumeOneTurn 경로(assembled-prompt.txt 미생성)를 태운다", () => {
+	let tmpRoot: string;
+	let stubDir: string;
+
+	function makeJobDir(): string {
+		tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "chunk-worker-resume-test-"));
+		const jobDir = path.join(tmpRoot, "jobs", "chunk-review-resume-test");
+		fs.mkdirSync(path.join(jobDir, "members", "opencode"), { recursive: true });
+		return jobDir;
+	}
+
+	function makeOpencodeStub(): string {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "worker-resume-stub-"));
+		const stubPath = path.join(dir, "opencode");
+		fs.writeFileSync(
+			stubPath,
+			[
+				"#!/bin/sh",
+				`echo "$@" > ${JSON.stringify(path.join(dir, "argv.txt"))}`,
+				'echo \'{"type":"step_finish","sessionID":"sess-123","part":{"reason":"stop"}}\'',
+				'echo \'{"type":"text","part":{"text":"resumed"}}\'',
+				"exit 0",
+			].join("\n"),
+			"utf8",
+		);
+		fs.chmodSync(stubPath, 0o755);
+		return dir;
+	}
+
+	afterEach(() => {
+		fs.rmSync(tmpRoot, { recursive: true, force: true });
+		fs.rmSync(stubDir, { recursive: true, force: true });
+	});
+
+	// See the wiring test above for why an explicit timeout is required: reapOwnProcessGroup's
+	// fixed 5s SIGTERM grace runs before the worker process itself exits.
+	it(
+		"--session/--prompt가 있으면 assembled-prompt.txt를 만들지 않고 driver.resumeCommand의 --session 인자로 실제 CLI를 호출한다",
+		() => {
+			const jobDir = makeJobDir();
+			stubDir = makeOpencodeStub();
+
+			execFileSync(
+				process.execPath,
+				[
+					WORKER_PATH,
+					"--job-dir",
+					jobDir,
+					"--member",
+					"opencode",
+					"--command",
+					"opencode --format json",
+					"--session",
+					"sess-existing",
+					"--prompt",
+					"continue please",
+				],
+				{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+			);
+
+			const memberDir = path.join(jobDir, "members", "opencode");
+			expect(fs.existsSync(path.join(memberDir, "assembled-prompt.txt"))).toBe(false);
+
+			const argv = fs.readFileSync(path.join(stubDir, "argv.txt"), "utf8");
+			expect(argv).toContain("--session sess-existing");
+
+			const status = JSON.parse(fs.readFileSync(path.join(memberDir, "status.json"), "utf8"));
+			expect(status.state).toBe("done");
+			expect(status.sessionID).toBe("sess-123");
+		},
+		20000,
+	);
+});
+
 // worker.ts 종료 경로에 lib/worker-utils.ts의 reapOwnProcessGroup이 실제로 연결돼
 // 있는지를 검증하는 헤르메틱 통합 테스트. 실제 worker.ts를 detached 자식으로 띄우고,
 // 그 워커가 실행하는 커맨드(셸 스크립트)가 백그라운드 자손(sleep)을 남긴 채 자신은

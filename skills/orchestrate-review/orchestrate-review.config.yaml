@@ -14,31 +14,32 @@ chunk-review:
     # CONFIRMED/PLAUSIBLE/REFUTED) and ranks the survivors.
     #
     # Per-angle model: each member carries its own command/model, so any angle
-    # can run on a different CLI/model. Every angle runs on codex at gpt-5.6-sol,
-    # medium reasoning effort. 모델 하향도 effort 상향도 2026-07-31~08-01 실측 후
-    # 전부 기각했다 (리포트:
-    # `~/.omt/oh-my-toong-playground/reports/code-review-finder-tiering-verification-20260731.md`):
-    #   · terra/luna 하향 — 발견을 익명화해 판정자에 대조하니 sol/medium이 회당 확증
-    #     7.67건·확증 1건당 52초로 최저 비용이었다. 하향은 정밀도를 사는 거래가 아니다:
-    #     terra/medium은 확증률이 89%로 더 높은데 확증 1건당 70초로 오히려 비싸다.
-    #     결정타는 `requirement` 확증이 terra/medium·terra/high·luna/xhigh에서 0건인 것
-    #     (sol/medium은 6/6). 차단 클래스가 꺼지면 루프는 짧아지는 게 아니라 잘못 끝난다.
-    #     경량 모델에 effort를 올리면 정밀도가 되레 떨어진다(terra 89→67→64%).
-    #   · effort 상향 — 판정 축은 루프 종료다. `{gate}/references/completion-gate.md`대로
-    #     완료를 막는 것은 `correctness`·`requirement-gap` 클래스뿐이고 `cleanup`은
-    #     비차단이라, cleanup을 몇 건 더 찾아도 루프는 짧아지지 않는다. 그리고 그
-    #     차단 집합은 effort에 반응하지 않는다: 4앵글 전부 high는 회차당 도달이
-    #     8.00 → 8.33으로 사실상 그대로였고 xhigh는 8.00 → 6.67로 오히려 나빠졌다.
-    #   · cleanup만 high로 올리는 안도 같은 이유로 기각했다. 차단 집합 도달 Δ가
-    #     세 PR에서 +1.00 / −1.00 / 0.00으로 평균 0인데(애초에 앵글마다 별도
-    #     프로세스라 인과 경로가 없다), 회당 wall +49%·output +26%가 루프 전
-    #     회차에 곱해진다. 그 대가로 얻는 것은 6회 누적 비차단 cleanup +2건뿐이다.
-    #   · 앵글 하나만 내리는 안도 기각했다. `regression`은 sol에서 정밀도가 네 앵글 중
-    #     최저(44%)라 유일한 하향 후보였지만, 다른 레포에서 재현에 실패했다 — terra는
-    #     12건 중 2건만 제출했고 그 2건이 sol 확증 5종의 부분집합이었다. 확증률 100%가
-    #     엄선이 아니라 미제출인 경우다. 판정 축은 확증률이 아니라 회당 확증 수다.
-    # 즉 이 레버들로 지금 성능을 못 올린다. 실측이 드러낸 진짜 병목은 차단 3앵글의
-    # 수렴이다 — 28파일 diff에서 6회를 돌려도 차단 집합의 78%에서 멈췄다.
+    # can run on a different CLI/model. 현재 배정은 앵글별 이종 구성이다:
+    #   correctness=sol/medium · regression=luna/xhigh · cleanup=luna/xhigh ·
+    #   requirement=luna/max
+    # 근거는 2026-08-02~03 2차 실측 (리포트:
+    # `~/.omt/oh-my-toong-playground/reports/code-review-finder-impact-per-cost-20260803.md`,
+    # 판정식 = 앵글별 Σimpact(유효 finding, 블라인드 Claude 채점) ÷ USD, 6구성 ×
+    # 4앵글 × algocare-home PR 5개):
+    #   · luna/xhigh가 4앵글 전부 임팩트/$1 1위(총괄 52.9 대 sol/medium 4.8)이고,
+    #     구성 단위 중복 제거 후 절대 임팩트도 luna 103 ≥ sol 97. 고임팩트(≥5)
+    #     결함 6종 커버리지는 luna/xhigh = sol/medium = 6/6.
+    #   · correctness만 sol 유지: sol correctness의 단독 포착(업데이트 게이트 도달
+    #     불가 등)이 luna 두 구성에 없고, 절대 임팩트 37 대 30/25로 우위.
+    #   · requirement만 luna/max: 유효 5/6·임팩트 19로 전 구성 1위(sol 10, luna/xhigh
+    #     11). 이 혼합이 실측 합집합 112점으로 전-luna/max(115)에 근접하면서
+    #     regression·cleanup 레인은 xhigh로 wall을 아낀다. 단 requirement 레인이
+    #     luna/max인 이상 라운드 wall은 그 레인이 지배한다(~20분, 현행 sol 단일
+    #     구성 대비 약 4배) — 시간보다 임팩트를 우선한 의도적 트레이드다.
+    # 1차 실측(2026-07-31~08-01, `code-review-finder-tiering-verification-20260731.md`)은
+    # 같은 하향을 전부 기각했었다. 뒤집힌 원인은 모델이 아니라 측정 축 셋이다:
+    # ① 1차 비용 축에 달러 환산이 없었다(sol:luna output 단가 25배), ② 1차 collect
+    # 18분 예산이 luna를 절단시켰다(2차는 완주), ③ 판정자가 sol/high → 구성 은닉
+    # Claude로 바뀌었다("하향=requirement 침묵"도 미재현: luna/max requirement가
+    # 절대 1위). 축을 바꾸면 결론이 바뀐다 — 다음 재평가 때 두 리포트를 같이 볼 것.
+    # 미해소 유보: OMT 레포(하네스 코드) 교차 재현 없음 — 2차 검증 PR은 전부
+    # algocare-home 제품 코드다. 1차가 찾은 진짜 병목(차단 3앵글의 수렴: 28파일
+    # diff 6회에도 차단 집합 78%)은 luna 전환으로 재검하지 않았다.
     # `model` + `effort_level` + `output_format` (below) plus
     # `settings.deny.skills` (below) resolve (via buildAugmentedCommand) to:
     #   codex exec -c agents.enabled=false -m gpt-5.6-sol \
@@ -46,9 +47,11 @@ chunk-review:
     #     -c model_reasoning_effort=<this member's effort_level> --json --skip-git-repo-check
     # `agents.enabled=false` strips codex's subagent tool descriptions (spawn_agent etc.)
     # from the session entirely, so a finder can't spawn subagents even if asked to.
-    # Note: codex uses bare model ids (no `openai/` prefix). Git history attests
-    # codex with gpt-5.4 / gpt-5.3-codex (gpt-5.5 itself only ran via opencode);
-    # if codex rejects `gpt-5.6-sol`, fall back to `gpt-5.5`.
+    # Note: codex uses bare model ids (no `openai/` prefix). 2026-08-02 스모크로
+    # gpt-5.6-sol(low/medium)·gpt-5.6-luna(xhigh/max)·gpt-5.6-terra(high/xhigh)
+    # 전 조합의 codex 수용을 확인했다. codex에는 unsupported model id의 자동
+    # fallback이 없다 — 모델 교체 시 반드시 사전 스모크를 거칠 것. 긴급 폴백은
+    # 전 앵글 `gpt-5.6-sol`/medium(직전 검증 구성).
     # Change one member's `model`/`command` to run that angle on a different model/CLI.
     #
     # Angle set: 4 angles, each asking a distinct question about the diff —
@@ -64,28 +67,31 @@ chunk-review:
       effort_level: medium
       output_format: json
     - name: regression
-      command: codex exec -c agents.enabled=false
-      model: gpt-5.6-sol
+      command: codex exec -c agents.enabled=false -c service_tier=fast
+      model: gpt-5.6-luna
       emoji: "\U0001F5D1"
       color: "MAGENTA"
-      effort_level: medium
+      effort_level: xhigh
       output_format: json
     - name: cleanup
-      command: codex exec -c agents.enabled=false
-      model: gpt-5.6-sol
+      command: codex exec -c agents.enabled=false -c service_tier=fast
+      model: gpt-5.6-luna
       emoji: "\U0001F9F9"
       color: "YELLOW"
-      effort_level: medium
+      effort_level: xhigh
       output_format: json
     - name: requirement
-      command: codex exec -c agents.enabled=false
-      model: gpt-5.6-sol
+      command: codex exec -c agents.enabled=false -c service_tier=fast
+      model: gpt-5.6-luna
       emoji: "\U0001F4CB"
       color: "GREEN"
-      effort_level: medium
+      effort_level: max
       output_format: json
   settings:
-    timeout: 1800
+    # 2700 = 행 킬 안전장치이지 정상 런 상한이 아니다. 1800이던 시절 37파일 diff에서
+    # luna 레인이 절단됐고(절단분까지가 그 앵글 최고점 — 즉 절단은 과소평가 방향),
+    # 정상 런은 이 값에 닿지 않는다. 절단 시에도 부분 출력은 수확된다(fail-soft).
+    timeout: 2700
     # No-op with the angle members above (no `claude` member to exclude); kept
     # for compatibility if a claude-hosted angle is added later.
     exclude_chairman_from_members: false
