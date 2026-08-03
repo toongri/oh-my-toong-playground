@@ -882,7 +882,7 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 	});
 
 	test("each rung names its bootstrap, not a surrender", () => {
-		expect(skillMd).toContain("Non-deployment is an environment choice");
+		expect(skillMd).toContain("non-deployment is an environment choice");
 		expect(skillMd).toContain("create seed data");
 		expect(skillMd).toContain("mint a test token");
 		expect(skillMd).toContain("launch that platform too");
@@ -904,6 +904,18 @@ describe("new-prose: precondition bootstrap precedes unreachability", () => {
 
 	test("undeclared rung attempts are named boundary evasion", () => {
 		expect(skillMd).toContain("boundary evasion, not a coverage delta");
+	});
+
+	// The local-fallback rung must not swallow deployment-targeted QA: when the
+	// QA REQUEST verifies the deployment itself, a stage 404 is the failure
+	// under test, and a local stack cannot stand in for the deployed artifact.
+	test("rung 1 branches on what the QA REQUEST verifies", () => {
+		expect(skillMd).not.toContain(
+			"no deploy permission) → the deployed environment was never the boundary",
+		);
+		expect(skillMd).toContain("verifies the deployment itself");
+		expect(skillMd).toContain("the deployed environment IS the boundary");
+		expect(skillMd).toContain("never a precondition to bootstrap around");
 	});
 
 	test("the public docs carry the bootstrap ladder, in both languages", () => {
