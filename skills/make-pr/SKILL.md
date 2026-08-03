@@ -101,10 +101,11 @@ digraph make_pr_flow {
     "Present to User" [shape=box];
     "User Feedback" [shape=diamond];
     "Confirm PR Creation" [shape=diamond];
-    "CAS Freshness\nCheck" [shape=diamond];
+    "Ahead Check\n(commits not in base)" [shape=diamond];
     "gh pr create" [shape=box];
     "Return PR URL" [shape=ellipse];
     "Output Description Only" [shape=ellipse];
+    "Report Absorbed\n+ Stop" [shape=ellipse];
 
     "User Request" -> "0-A: Fetch & Analyze\nAll Remote Branches";
     "0-B: Check Diverge\n(behind count)" -> "Collect Git Metadata" [label="behind = 0"];
@@ -128,14 +129,9 @@ digraph make_pr_flow {
     "User Feedback" -> "Draft PR Description" [label="Revision requested"];
     "User Feedback" -> "Confirm PR Creation" [label="Approved"];
     "Confirm PR Creation" -> "Output Description Only" [label="Declined"];
-    "Confirm PR Creation" -> "CAS Freshness\nCheck" [label="Confirmed"];
-    "CAS Freshness\nCheck" -> "gh pr create" [label="Fresh"];
-    "CAS Re-sync\n(re-use or\nnew interview)" [shape=box];
-    "CAS Conflict\nResolution (→ 0-C)" [shape=box];
-    "CAS Freshness\nCheck" -> "CAS Re-sync\n(re-use or\nnew interview)" [label="Stale"];
-    "CAS Re-sync\n(re-use or\nnew interview)" -> "gh pr create" [label="sync complete"];
-    "CAS Re-sync\n(re-use or\nnew interview)" -> "CAS Conflict\nResolution (→ 0-C)" [label="conflict"];
-    "CAS Conflict\nResolution (→ 0-C)" -> "gh pr create";
+    "Confirm PR Creation" -> "Ahead Check\n(commits not in base)" [label="Confirmed"];
+    "Ahead Check\n(commits not in base)" -> "gh pr create" [label="ahead > 0"];
+    "Ahead Check\n(commits not in base)" -> "Report Absorbed\n+ Stop" [label="ahead = 0"];
     "gh pr create" -> "Return PR URL";
 }
 ```
@@ -191,16 +187,6 @@ Present the candidate table, then ask the user to select the target branch. Incl
 - An option to type a custom branch name if none of the candidates apply
 
 Use the confirmed value as `{base-branch}` in all subsequent git commands.
-
-**Phase 5 — Record baseline target SHA:**
-
-After user confirms the target branch, record the target branch tip SHA as the CAS baseline for Step 8 freshness check:
-
-```bash
-BASELINE_TARGET_SHA=$(git rev-parse origin/{base-branch})
-```
-
-This value is compared again at PR creation time (Step 8) to detect if the target branch tip has moved during the PR writing process.
 
 ---
 
@@ -498,34 +484,21 @@ Present the drafted PR description to the user and collect feedback.
 
 After user approves the PR description, ask if they want to create the PR.
 
-### Pre-creation Freshness Check (CAS Pattern)
+### Pre-creation Check
 
-Before pushing and creating the PR, verify the target branch hasn't changed since Step 0-A:
+Before pushing, verify the branch still holds commits that `{base-branch}` does not:
 
 ```bash
-# Re-fetch target branch
 git fetch origin {base-branch}
-
-# Check target branch tip
-CURRENT_TARGET_SHA=$(git rev-parse origin/{base-branch})
+AHEAD=$(git rev-list --count origin/{base-branch}..HEAD)
 ```
-
-**Compare with baseline:**
 
 | Condition | Action |
 |-----------|--------|
-| `CURRENT_TARGET_SHA == BASELINE_TARGET_SHA` | Target unchanged — proceed to push + `gh pr create` |
-| `CURRENT_TARGET_SHA != BASELINE_TARGET_SHA` | Target has moved — re-sync before creating PR |
+| `AHEAD > 0` | Proceed to push + `gh pr create` |
+| `AHEAD == 0` | The branch's commits already exist in `{base-branch}` — there is nothing to open a PR for. Tell the user and stop |
 
-**When target has moved:**
-
-1. Inform the user that the target branch has new commits since the analysis began
-2. If a strategy was selected in Step 0-B: re-use it automatically (do NOT re-interview)
-   If Step 0-B was skipped (behind was 0): ask the user via AskUserQuestion which strategy to use (merge/rebase)
-3. Execute the sync (merge or rebase)
-4. If conflict arises: follow Step 0-C conflict resolution interview
-5. After successful sync: proceed to push + `gh pr create`
-6. PR description is NOT re-written (the feature branch changes are the same; only the base has moved)
+`AHEAD` is a property of the current branch, so this check is evaluated once and its answer does not change when the target branch receives new commits meanwhile. It is also the only precondition `gh pr create` needs: GitHub computes the merge server-side, so the branch does not have to be up to date with the target. Synchronizing the branch with the target is handled earlier, by the Step 0-B merge/rebase that runs before the interview.
 
 - If user confirms: check branch name convention, push the branch, and run `gh pr create` with the approved title, description, assignee, and labels
 - If user declines: output the final PR description only
@@ -543,7 +516,7 @@ If `{branch-convention}` exists (Step 1 survey) and the current branch name does
 
 ```bash
 # Single PR (create after remote push)
-# If rebase was used (Step 0-B or Step 8 CAS re-sync):
+# If the Step 0-B synchronization used rebase:
 git push --force-with-lease -u origin HEAD
 # If merge was used or no sync was needed:
 git push -u origin HEAD
