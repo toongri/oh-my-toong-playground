@@ -27,6 +27,13 @@ hooks:
     - component: label-edit-warn.sh
       matcher: "Write|Edit|MultiEdit"
       timeout: 5
+    # timeout 이 다른 훅보다 큰 이유: 이 훅만 유일하게 외부 렌더러(헤드리스
+    # Chromium)를 띄운다. mermaid 블록이 없는 마크다운은 grep 한 번으로 즉시
+    # 빠지고, 블록이 있는 문서는 5블록 기준 약 3초, 실패해서 블록별 재렌더까지
+    # 가면 약 9초다. 60 은 그 최악 경로에 얹은 여유값이지 기대값이 아니다.
+    - component: mermaid-render-gate.sh
+      matcher: "Write|Edit|MultiEdit"
+      timeout: 60
   SessionStart:
     - component: session-start.sh
       timeout: 10
