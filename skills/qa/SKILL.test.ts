@@ -718,6 +718,54 @@ describe("new-prose: scenario-authoring actor layer carries the boundary", () =>
 });
 
 // ---------------------------------------------------------------------------
+// NEW-PROSE: two gaps that surfaced when the cycle was actually run against
+// acme-home (skills/qa/tests/actor-boundary-scenario.md, "Observed on
+// re-run"): a scenario that FAILED with a below-threshold finding had no state
+// in the contract, and B ⊆ A had no reading when the QA REQUEST carries no
+// EXPECTED OUTCOME — one run declared it not-evaluable, another filled A from
+// the Scope list, making the gate vacuously true.
+// ---------------------------------------------------------------------------
+
+describe("new-prose: a failed row's disposition is pinned", () => {
+	test("CHECK states that a FAILED row blocks, with the soft-pass carve-out", () => {
+		const checkStart = skillMd.indexOf("### CHECK");
+		expect(checkStart).not.toBe(-1);
+		const checkEnd = skillMd.indexOf("### DIAGNOSIS", checkStart + 1);
+		expect(checkEnd).not.toBe(-1);
+		const checkSection = skillMd.slice(checkStart, checkEnd);
+		expect(checkSection).toContain("A FAILED scenario row blocks CHECK");
+		expect(checkSection).toContain("soft pass");
+		expect(checkSection).toContain("COMMENT, never APPROVE");
+	});
+
+	test("a failed H-priority row blocks regardless of confidence", () => {
+		expect(skillMd).toContain(
+			"A failed `H`-priority row blocks regardless of its confidence score",
+		);
+	});
+
+	test("restating a failed row as PASS is forbidden", () => {
+		expect(skillMd).toContain("Never restate a failed row as PASS");
+	});
+
+	test("the Approval Decision table carries the soft-pass row", () => {
+		const guardStart = skillMd.indexOf("## Approval Decision");
+		expect(guardStart).not.toBe(-1);
+		expect(skillMd.slice(guardStart)).toContain("CHECK soft-passes");
+	});
+});
+
+describe("new-prose: B subset-of A has a reading when A is absent", () => {
+	test("a missing EXPECTED OUTCOME makes the gate not-evaluable", () => {
+		expect(skillMd).toContain("`not-evaluable`");
+	});
+
+	test("filling A from the Scope list is named as a rubber stamp", () => {
+		expect(skillMd).toContain("Never fill A from the Scope list");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // REGRESSION GUARD: frontmatter identity (must PASS before AND after)
 // ---------------------------------------------------------------------------
 

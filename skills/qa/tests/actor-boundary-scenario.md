@@ -93,6 +93,19 @@ The verifier pins the household member at the dispense screen as the actor befor
 
 ---
 
+## Observed on re-run (2026-08-03, acme-home)
+
+Three live cycles were run against real merged commits — two with the guidance above, one control with the pre-guidance skill — measuring where each entered and what it retained.
+
+**Same change, two arms** (`42caf76edd`, `ConsistentRead` on 7 DynamoDB reads). The control drove 21 of its 31 scenarios by calling the production repo methods directly from a harness (`listCheckupsByHashedCi`, `getCheckupItemByDataKey`, …), performed the user's 연동 action by calling repo `save*` directly, retained 6 flat log files, and reported repo-tier and HTTP-tier rows in one table under a single ADVERSARIAL E2E PASS with no depth column. The guided arm entered every row at the tRPC HTTP endpoint, performed 연동 through `requestHealthCheckup` → `confirmUserAuth` → the real BullMQ worker with only the external CODEF API and AWS DynamoDB substituted, and retained 31 files with per-scenario before/action/after plus a wire tap proving `ConsistentRead=True, IndexName=None` on each read.
+
+**Not attributable to the guidance.** Both arms independently declared the same honest limit — DynamoDB Local answers strongly-consistently regardless of the flag, so the eventual-consistency race itself was never reproduced — and both ran a GSI negative control. Depth honesty about an environment's own limits is not what this guidance changed; where the cycle enters and what it keeps is.
+
+**Two gaps the runs exposed**, now closed in `SKILL.md`:
+
+1. A scenario that genuinely FAILED with a below-blocking-threshold finding had no state in the contract. CHECK demanded a full pass while the feedback protocol defined a non-blocking band, so the run improvised a resolution and declared the tension itself.
+2. `B ⊆ A` had no reading when the QA REQUEST carries no EXPECTED OUTCOME. One run recorded it not-evaluable; another filled A from the Scope list and reported PASS — a gate that is true by construction.
+
 ## Notes
 
 - Documentation-only and human-run; not wired into `make test`. `SKILL.test.ts` guards the guidance text's presence, this rubric guards that the text produces the behavior.
