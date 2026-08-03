@@ -30,14 +30,14 @@ When finders cannot deliver — none configured/available after filtering, or al
 You may ONLY execute these commands via Bash:
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — start a review job
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"` — collect results (blocks until done or the 540000ms timeout; no external sleep needed)
-- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete finder to a complete answer (see Member Resume Policy; cap 3 attempts)
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — dispatch a resume turn for an incomplete finder; returns immediately with a dispatch ack, then poll via `collect` to observe it (see Member Resume Policy; cap 3 attempts)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" results --manifest "$JOB_DIR"` — fetch the manifest directly (see Step 2)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" stop "$JOB_DIR"` — SIGTERM any still-`running` finder (see Step 2)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/usage-summary.ts" "$JOB_DIR"` — harvest per-member token usage; **run BEFORE `clean`** (job dir is deleted by clean)
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir and reap each worker's process group when its identity can still be verified; teardown step, run only after usage-summary and everything else is complete
 - `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean --force "$JOB_DIR"` — same as `clean`, but skips the active-member guard; use it when an ordinary `clean` is refused for active members
 
-**CRITICAL**: Set `timeout: 600000` on `collect` and `resume-member` Bash calls — the Bash tool's default timeout would kill them mid-poll. See Member Resume Policy for what to do if Bash kills a `resume-member` call before it returns.
+**CRITICAL**: Set `timeout: 600000` on `collect` Bash calls — the Bash tool's default timeout would kill it mid-poll. `resume-member` returns immediately with a dispatch ack and does not need this extended timeout.
 
 ### Allowed Read Usage
 
@@ -73,8 +73,8 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect --timeout-ms 540000 "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
-- If response shows `"overallState": "awaiting_resume"` → that response already carries the full manifest; find each entry whose `errorMessage` is `"awaiting_resume"` and run `resume-member` on that member per Member Resume Policy.
-- Otherwise (`"running"`, `"queued"`, etc., excluding `awaiting_resume` above), or if the Bash tool itself times out/force-kills the call with no JSON returned at all → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total**, counting both cases.
+- If response shows `"overallState": "awaiting_resume"` → that response already carries the full manifest; find each entry whose `errorMessage` is `"awaiting_resume"` and run `resume-member` on that member per Member Resume Policy. `resume-member` returns immediately with a dispatch ack; the resume turn itself runs in the background. After dispatching, call `collect` again (same command) to poll for it — this counts as one of the calls in the cap below.
+- Otherwise (`"running"`, `"queued"`, etc., excluding `awaiting_resume` above), or if the Bash tool itself times out/force-kills the call with no JSON returned at all → call `collect` again (same command, foreground, timeout: 600000). **Cap: 6 calls total**, counting all cases (including post-resume-dispatch polls).
 - If the 6th call still does not report `"done"`:
   1. Run `stop "$JOB_DIR"` to SIGTERM any finder still `running`, and read `outputFilePath` per finder from the manifest JSON it prints per Allowed Read Usage.
   2. Apply the Degradation Policy table below to the resulting responded/N ratio — treating every finder that never produced a non-null `outputFilePath` as not-responded (denominator stays N = total dispatched).
@@ -127,7 +127,7 @@ Each finder CLI emits its native structured output (codex: NDJSON via `--json`; 
 
 **Member Resume Policy (`resume-member`):**
 
-Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), or an `awaiting_resume` member is still `awaiting_resume` after 3 `resume-member` attempts, fall back to in-session per the trigger logic below.
+Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts per member). `resume-member` returns immediately: it prints a dispatch ack (`{"state":"dispatched","member":<name>}`) and exits, while the resume turn itself runs as a detached background worker. It does not block waiting for the resume turn to finish.
 
 ```
 bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your candidate list."
@@ -135,7 +135,7 @@ bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member
 
 The prompt is written by the Conductor to fit the situation. The above is a reference example only.
 
-**If the Bash tool itself kills a `resume-member` call before any JSON comes back: do NOT re-call `resume-member` for that member** — the attempt is already spent and the turn may still be live. Instead, call `collect` next: it will detect the stalled member and flip it to `"error"`, at which point treat it as an outright-failed finder per the trigger logic above.
+After dispatching, observe the resume turn the same way you observed the original turn: call `collect` again per Step 2. If `resume-member` itself exits with an error and no dispatch ack (e.g. `"resume cap exceeded (3/3)"`), that attempt is spent — do not re-call it for that member. If instead the dispatched worker later goes silent or hangs, `collect`'s staleness detection flips that member to `"error"` on its own; treat it as an outright-failed finder per the trigger logic below once that happens. If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), or an `awaiting_resume` member is still `awaiting_resume` after 3 `resume-member` attempts, fall back to in-session per the trigger logic below.
 
 ## Aggregation
 

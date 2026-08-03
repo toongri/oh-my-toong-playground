@@ -2068,6 +2068,18 @@ export type ResumeMemberOpts = {
 	resumeOneTurnFn?: (sessionID: string, opts: RunOneTurnOpts) => Promise<OneTurnResult>;
 	/** Test-only: forwarded to resumeOneTurn for spawn-less e2e wire validation. */
 	runOnceFn?: typeof runOnce;
+	/**
+	 * Path to worker.ts to spawn for the resume turn (same script spawnWorkers dispatches the
+	 * initial turn to). When provided, cmdResumeMember dispatches the resume as a detached
+	 * process — mirroring spawnWorkers' initial-turn dispatch — instead of awaiting resumeFn
+	 * in-process, so a caller blocked on this call (e.g. a Bash tool invocation with its own
+	 * timeout) returns immediately rather than for the turn's full duration. Absent (legacy
+	 * callers that never pass it), the turn still runs in-process synchronously via resumeFn,
+	 * unchanged.
+	 */
+	workerPath?: string;
+	/** Test-only: override the detached spawn call itself. */
+	spawnFn?: typeof spawn;
 };
 
 export async function cmdResumeMember(
@@ -2131,7 +2143,8 @@ export async function cmdResumeMember(
 	// resume_count via read-then-write (line 449 of worker-utils.ts).
 	const resumeCount = typeof status.resume_count === "number" ? status.resume_count : 0;
 	if (resumeCount >= 3) throw new Error("resume cap exceeded (3/3)");
-	atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
+	const reservedStatus = { ...status, resume_count: resumeCount + 1 };
+	atomicWriteJson(statusPath, reservedStatus);
 	const [origProgram, ...origArgs] = tokens;
 
 	// P2-1: read timeoutSec from job.json instead of hardcoding
@@ -2148,9 +2161,56 @@ export async function cmdResumeMember(
 		/* keep default 300 */
 	}
 
-	// Note: promptsDir and fallbackFile are intentionally not forwarded here.
-	// session-preserving CLIs (claude --resume, opencode session resume, codex exec resume)
-	// retain persona + reviewContent server-side, making assemblePrompt re-injection redundant on resume.
+	// Note: promptsDir and fallbackFile are intentionally not forwarded here (spawn path below
+	// included). session-preserving CLIs (claude --resume, opencode session resume, codex exec
+	// resume) retain persona + reviewContent server-side, making assemblePrompt re-injection
+	// redundant on resume.
+
+	if (opts.workerPath) {
+		// Queued pre-transition: MUST land before spawn, not after. cmdCollect (above in this
+		// file) returns immediately without polling once overallState is "awaiting_resume" — the
+		// prior turn's own terminal write. Flipping to "queued" here is what makes the fresh
+		// resume turn observable to collect's poll loop again, the same as the initial dispatch.
+		// Preserves sessionID/command/workerEnv/resume_count(+1) — everything the cap-reservation
+		// write above already set, except state/queuedAt.
+		atomicWriteJson(statusPath, {
+			...reservedStatus,
+			state: "queued",
+			queuedAt: new Date().toISOString(),
+		});
+
+		const workerArgs = [
+			opts.workerPath,
+			"--job-dir",
+			jobDir,
+			"--member",
+			name,
+			"--command",
+			cmdStr,
+			"--session",
+			String(sessionID),
+			"--prompt",
+			prompt,
+		];
+		for (const [key, value] of Object.entries(storedWorkerEnv)) {
+			workerArgs.push("--env", `${key}=${value}`);
+		}
+		if (timeoutSec && Number.isFinite(timeoutSec) && timeoutSec > 0) {
+			workerArgs.push("--timeout", String(timeoutSec));
+		}
+
+		const spawnFn = opts.spawnFn ?? spawn;
+		const child = spawnFn(process.execPath, workerArgs, {
+			detached: true,
+			stdio: "ignore",
+			env: process.env,
+		});
+		child.unref();
+
+		process.stdout.write(`${JSON.stringify({ state: "dispatched", member: name })}\n`);
+		return;
+	}
+
 	const resumeFn = opts.resumeOneTurnFn ?? resumeOneTurn;
 	await resumeFn(String(sessionID), {
 		program: origProgram,
