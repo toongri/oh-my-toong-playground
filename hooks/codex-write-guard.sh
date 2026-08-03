@@ -393,6 +393,11 @@ if ! command -v jq > /dev/null 2>&1; then
                 printf '%s\n' "$_cwg_nojq_out"
                 exit 0
             fi
+            _cwg_nojq_out=$(write_guard_core_check_user_authorized_command "$_cwg_nojq_seg")
+            if [ -n "$_cwg_nojq_out" ]; then
+                printf '%s\n' "$_cwg_nojq_out"
+                exit 0
+            fi
         done < <(printf '%s\n' "$_cwg_nojq_masked" | sed -E 's/(&&|\|\||;|\||&)/\n/g')
     fi
     exit 0
@@ -460,6 +465,11 @@ case "$tool_name" in
             while IFS= read -r _cwg_dc_seg; do
                 [ -n "$_cwg_dc_seg" ] || continue
                 _cwg_dc_out=$(write_guard_core_check_dangerous_command "$_cwg_dc_seg")
+                if [ -n "$_cwg_dc_out" ]; then
+                    printf '%s\n' "$_cwg_dc_out"
+                    exit 0
+                fi
+                _cwg_dc_out=$(write_guard_core_check_user_authorized_command "$_cwg_dc_seg")
                 if [ -n "$_cwg_dc_out" ]; then
                     printf '%s\n' "$_cwg_dc_out"
                     exit 0

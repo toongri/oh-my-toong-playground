@@ -28,7 +28,7 @@ Because the orchestrator now runs this check on its own pursuit, the rubric is t
 
 For each non-retired story, map the story's acceptance criteria and verification surface to concrete evidence and render an `APPROVE` or `REQUEST_CHANGES` per-story verdict. A single non-APPROVE per-story entry blocks completion regardless of the `objective_verdict` field — `objective_verdict === 'APPROVE'` alone is never sufficient.
 
-`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). As a second structural refusal lane, `request-complete` also reads the code-review artifact (`ultragoal-codereview-{sid}.json`) from its conventional path internally (no path argument) and refuses if that artifact is absent or schema-invalid (a missing `status` field is schema-invalid — there is no default-to-COMPLETE coercion), has `status: "INCONCLUSIVE"`, or contains a `CONFIRMED` `correctness` or `requirement-gap` finding (see code-review lane below); `CONFIRMED` `cleanup` findings are non-blocking. This refusal is structural — it runs inside `request-complete` itself independent of the orchestrator loop, so completion is blocked even if the loop misbehaves. When all checks pass, `request-complete` writes `phase=complete` and `active=false`.
+`request-complete` reads the artifact from the conventional path internally (no path argument). It refuses if: the artifact is absent or schema-invalid; any non-retired story entry is non-APPROVE; any non-retired story is `unconfirmed`; an entry is missing for any non-retired story; zero non-retired stories exist; or the existing dual gate is unmet (`objective_verdict !== 'APPROVE'` in state, or empty `completion_evidence_paths`). As a second structural refusal lane, `request-complete` also reads the code-review artifact (`ultragoal-codereview-{sid}.json`) from its conventional path internally (no path argument) and refuses if that artifact is absent or schema-invalid (a missing `status` field is schema-invalid — there is no default-to-COMPLETE coercion), has `status: "INCONCLUSIVE"`, or contains an undismissed `CONFIRMED` `correctness` or `requirement-gap` finding (see code-review lane below); `CONFIRMED` `cleanup` findings are non-blocking. This refusal is structural — it runs inside `request-complete` itself independent of the orchestrator loop, so completion is blocked even if the loop misbehaves. When all checks pass, `request-complete` writes `phase=complete` and `active=false`.
 
 <!-- story-layer:end -->
 
@@ -56,26 +56,52 @@ The artifact schema the code-reviewer must emit:
 
 `status` is **required**. `COMPLETE` = the reviewer rendered a verdict over the diff, so findings (possibly empty) are trustworthy. `INCONCLUSIVE` = the review did not finish — reviewer timeout, ack-only response, a `BLOCKED` reviewer, or genuine uncertainty — so `findings` is not exhaustive even when empty. An artifact missing `status` is schema-invalid and refused exactly like an absent one; there is no default-to-COMPLETE coercion.
 
-**Pass signal:** completion requires `status === "COMPLETE"` AND no `CONFIRMED` finding whose `class` is `correctness` or `requirement-gap`. `CONFIRMED` `cleanup` findings and all `PLAUSIBLE` findings are non-blocking; they are reported but do not prevent completion. `status === "INCONCLUSIVE"` blocks regardless of findings.
+**Pass signal:** completion requires `status === "COMPLETE"` AND no `CONFIRMED` finding whose `class` is `correctness` or `requirement-gap` — except one the user dismissed against these exact artifact bytes (see Wrong blocking finding below). `CONFIRMED` `cleanup` findings and all `PLAUSIBLE` findings are non-blocking; they are reported but do not prevent completion. `status === "INCONCLUSIVE"` blocks regardless of findings.
 
 **Completion-eligible discretion.** When `status === "COMPLETE"` and only `PLAUSIBLE` or `CONFIRMED` `cleanup` findings remain, choose based on the current value of the findings and the remaining time:
 
 - **마무리** → run `request-complete`, then report every remaining non-blocking finding with its exact `file:line` reference and a one-line summary.
-- **계속** → ask the user; only after explicit approval, pass the selected `CONFIRMED` `cleanup` finding(s) to sisyphus for repair, then run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal` before the next code-reviewer dispatch.
+- **계속** → ask the user; only after explicit approval, pass the selected `CONFIRMED` `cleanup` finding(s) to sisyphus for repair, then ask the user to run `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal` themselves before the next code-reviewer dispatch (the guard denies it on your own Bash path).
 
 `PLAUSIBLE` findings remain non-blocking report items. They are not confirmed work items and this rule does not require dispatching sisyphus to fix them.
+
+### Wrong blocking finding: propose a dismissal
+
+A `CONFIRMED` `correctness` or `requirement-gap` finding blocks completion structurally. When such a finding is **wrong**, the loop has no other exit: fixing correct code to satisfy it makes the code worse, and the pursuit otherwise runs until the dispatch budget dies.
+
+**Trigger — when you can quote the refutation.** After reading a blocking finding, go to the cited `file:line` and look for the line, guard, or invariant that makes its failure scenario unreachable. If you can quote one, propose a dismissal on your next turn. If you cannot quote one, the finding stands: route it to sisyphus as an ordinary blocking finding. Disagreeing with a finding you cannot refute in a quoted line is not a trigger.
+
+**The proposal carries four parts, in this order:**
+
+1. The finding as the reviewer stated it — its `ref`, its `class`, and its claim in one line.
+2. The refuting quote — the exact source line, with its own `file:line`.
+3. Why that line makes the reviewer's failure scenario unreachable.
+4. The exact command for the **user** to run — in their terminal, or by prefixing it with `!` in the prompt:
+
+```
+bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts dismiss-review-finding \
+  --ref '<file:line>' --class <correctness|requirement-gap> --rationale '<the refutation from part 3>'
+```
+
+Then stop and wait. **You never run this command yourself** — a `PreToolUse` guard denies it on your Bash path on both Claude and Codex, so the authorization is structural rather than a rule you are trusted to follow. The same guard covers `approve-review-dispatch-renewal` for the same reason: both let this loop clear its own completion gate.
+
+**Scope of one dismissal.** It removes exactly one finding from the blocking set — remaining `CONFIRMED` blocking findings still block, and each needs its own proposal. It is pinned to the current artifact's exact bytes, so it lapses when the next review round writes a new artifact; a genuine defect that later appears at the same `file:line` blocks normally.
+
+The command refuses a `--class cleanup` (cleanup never blocked), an empty `--rationale`, and any `--ref` with no matching `CONFIRMED` finding in the current artifact — so a dismissal cannot be issued ahead of the finding it answers.
+
+**After the dismissal.** Re-run the completion check. If no blocking finding remains, proceed to `request-complete`; the dismissed finding is still reported in the completion summary, with its rationale. If the user declines the proposal, treat the finding as real and route it to sisyphus.
 
 ### Five-round review dispatch budget
 
 Before an active `phase=pursuing` code-reviewer dispatch, the Claude and Codex `PreToolUse` hooks automatically run `claim-review-dispatch`; an allowed claim persists `used += 1` before dispatch. The initial cap is 5. Per-story dispatches, non-reviewer dispatches, and any non-pursuing state are unaffected. The hooks do not change `code-review` or `orchestrate-review` behavior; they only decide whether the already-planned code-reviewer dispatch may proceed.
 
-At the cap, the hook denies the next dispatch and the AI must ask the user whether to **마무리** or **계속**. A completion-eligible artifact (a `COMPLETE` artifact with no `CONFIRMED` `correctness` or `requirement-gap` finding, including cleanup-only or PLAUSIBLE-only findings) also denies re-dispatch until the AI either runs `request-complete` or asks to continue. After an explicit user approval to continue, the orchestrator runs exactly:
+At the cap, the hook denies the next dispatch and the AI must ask the user whether to **마무리** or **계속**. A completion-eligible artifact (a `COMPLETE` artifact with no `CONFIRMED` `correctness` or `requirement-gap` finding, including cleanup-only or PLAUSIBLE-only findings) also denies re-dispatch until the AI either runs `request-complete` or asks to continue. To continue, the orchestrator presents this command and the **user** runs it — in their terminal, or by prefixing it with `!` in the prompt:
 
 ```
 bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts approve-review-dispatch-renewal
 ```
 
-Each approval adds `cap += 5` and stores the SHA-256 of the current code-review artifact's exact raw bytes. That marker approves only that artifact version: a byte-changed completion-eligible artifact requires a new user approval. The hook alone calls `claim-review-dispatch`; the orchestrator must never edit the counters itself.
+A `PreToolUse` guard denies this command on the orchestrator's own Bash path on both platforms, so "only after explicit user approval" is enforced by the harness rather than by the orchestrator's restraint. Each approval adds `cap += 5` and stores the SHA-256 of the current code-review artifact's exact raw bytes. That marker approves only that artifact version: a byte-changed completion-eligible artifact requires a new user approval. The hook alone calls `claim-review-dispatch`; the orchestrator must never edit the counters itself.
 
 The two block reasons route differently: a blocking code-review finding (`CONFIRMED` `correctness` or `requirement-gap`, under `status: "COMPLETE"`) routes back to sisyphus re-dispatch targeted at those specific findings — the same concrete-progress shape as an objective-lane REQUEST_CHANGES verdict. An `INCONCLUSIVE` status routes to a **reviewer-only re-run** instead — re-dispatch a fresh **code-reviewer** over the same diff, NOT sisyphus (there is no confirmed work item to fix; the review itself just needs to finish).
 
@@ -120,8 +146,8 @@ Every non-APPROVE verdict drives a concrete progress action — never action-les
 - **REQUEST_CHANGES naming incomplete work items** (tactical — the work is unfinished, the plan is sound) → re-dispatch `Skill(skill: "sisyphus")` on the named incomplete TODOs. This stays inside sisyphus's junior loop; phase remains `pursuing`.
 - **Strategic plan inadequacy** (the plan itself cannot reach the objective — the decomposition is wrong, not merely unfinished) → steer the plan directly (correct the TODO breakdown yourself), then re-dispatch `Skill(skill: "sisyphus")` against the corrected TODOs; phase remains `pursuing`.
 - **COMMENT (soft pass — non-blocking notes)** → re-dispatch `Skill(skill: "sisyphus")` to address the self-check notes, then re-verify toward APPROVE; do NOT `request-complete` on a COMMENT (the code gate requires `objective_verdict=APPROVE`).
-- **Code-review lane: `CONFIRMED` `correctness` or `requirement-gap` finding** (under `status: "COMPLETE"`) → re-dispatch `Skill(skill: "sisyphus")` on the specific findings in `ultragoal-codereview-{sid}.json`. Phase remains `pursuing`; run a fresh code-review dispatch after sisyphus resolves the findings — that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed. A `CONFIRMED` `cleanup` finding is reported but does not trigger re-dispatch.
-- **Code-review lane: completion-eligible cleanup-only or PLAUSIBLE-only artifact** → use the completion-eligible discretion above: finish with `request-complete` and the remaining-finding report, or after explicit user approval send selected `CONFIRMED` `cleanup` finding(s) to sisyphus, then run `approve-review-dispatch-renewal` before the next code-reviewer dispatch. `PLAUSIBLE` findings stay report-only unless separately chosen by the user. This routing changes neither `code-review` nor `orchestrate-review`; it only controls the ultragoal dispatch permission.
+- **Code-review lane: `CONFIRMED` `correctness` or `requirement-gap` finding** (under `status: "COMPLETE"`) → re-dispatch `Skill(skill: "sisyphus")` on the specific findings in `ultragoal-codereview-{sid}.json`. When you can quote the line that refutes one of those findings, propose a dismissal for it first (see Wrong blocking finding above) rather than sending sisyphus after correct code. Phase remains `pursuing`; run a fresh code-review dispatch after sisyphus resolves the findings — that fresh dispatch carries the same fixed two-item payload as the dispatch-prompt contract above, not the finding history from the round that just closed. A `CONFIRMED` `cleanup` finding is reported but does not trigger re-dispatch.
+- **Code-review lane: completion-eligible cleanup-only or PLAUSIBLE-only artifact** → use the completion-eligible discretion above: finish with `request-complete` and the remaining-finding report, or after explicit user approval send selected `CONFIRMED` `cleanup` finding(s) to sisyphus, then ask the user to run `approve-review-dispatch-renewal` themselves before the next code-reviewer dispatch. `PLAUSIBLE` findings stay report-only unless separately chosen by the user. This routing changes neither `code-review` nor `orchestrate-review`; it only controls the ultragoal dispatch permission.
 - **Code-review lane: `status: "INCONCLUSIVE"`** (reviewer timeout, ack-only response, `BLOCKED` reviewer, or genuine reviewer uncertainty) → re-dispatch a **fresh code-reviewer only** over the same diff — NOT sisyphus, since no finding was confirmed. Phase remains `pursuing`.
 
 ### Blocked-stop

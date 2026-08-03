@@ -345,6 +345,22 @@ if [[ -n "$_wg_sid" && -n "$_wg_omt_dir" ]]; then
                 }')
             while IFS= read -r _wg_seg; do
                 [[ -z "$_wg_seg" ]] && continue
+                # User-authorized ultragoal-state subcommands (approve-review-
+                # dispatch-renewal / dismiss-review-finding). Checked on the
+                # quote-MASKED segment, not the raw command, because the
+                # documented invocation quotes the script path
+                # (`bun "${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts" <sub>`)
+                # and the raw form's quote characters would break the
+                # script-name/subcommand adjacency the pattern requires.
+                # Shares this block's `_wg_sid`/`_wg_omt_dir` precondition with
+                # the ledger and code-review guards -- a payload that resolves
+                # neither already leaves all of them dark, so this adds no new
+                # dark path.
+                _wg_ua_out=$(write_guard_core_check_user_authorized_command "$_wg_seg")
+                if [[ -n "$_wg_ua_out" ]]; then
+                    printf '%s\n' "$_wg_ua_out"
+                    exit 0
+                fi
                 while IFS= read -r _wg_target; do
                     [[ -z "$_wg_target" ]] && continue
                     _wg_candidates="${_wg_candidates}$(_wg_absolutize "$_wg_target")

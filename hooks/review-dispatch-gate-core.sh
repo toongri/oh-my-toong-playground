@@ -89,10 +89,10 @@ review_dispatch_gate_core_run() {
     reason=$(printf '%s' "$claim_out" | jq -r '.reason // "failure"' 2>/dev/null) || reason="failure"
     case "$reason" in
         budget_exhausted)
-            _rdg_deny '코드 리뷰 예산이 소진되었습니다. 사용자에게 마무리할지 계속할지 물으세요. 계속을 명시적으로 승인하면 approve-review-dispatch-renewal을 실행하세요.'
+            _rdg_deny '코드 리뷰 예산이 소진되었습니다. 사용자에게 마무리할지 계속할지 물으세요. 계속하기로 하면 approve-review-dispatch-renewal 명령어를 제시하고 사용자가 직접 실행하도록 요청하세요 (AI 실행은 차단됩니다).'
             ;;
         completion_eligible)
-            _rdg_deny '현재 코드 리뷰는 완료 가능 상태입니다. request-complete를 실행하거나, 계속하려면 사용자에게 승인받은 뒤 approve-review-dispatch-renewal을 실행하세요.'
+            _rdg_deny '현재 코드 리뷰는 완료 가능 상태입니다. request-complete를 실행하거나, 계속하려면 approve-review-dispatch-renewal 명령어를 제시하고 사용자가 직접 실행하도록 요청하세요 (AI 실행은 차단됩니다).'
             ;;
         *)
             _rdg_deny '코드 리뷰 dispatch 예약에 실패했습니다. 안전하게 중단하고 상태를 확인하세요.'

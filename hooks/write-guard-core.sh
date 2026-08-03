@@ -52,6 +52,15 @@ _wg_core_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permiss
 # the wording.
 _wg_core_codereview_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: this code-review artifact (ultragoal-codereview-*.json / goal-codereview-*.json) may only be written by the code-reviewer subagent, not the orchestrator."}}'
 
+# Deny JSON for write_guard_core_check_user_authorized_command below. A THIRD
+# distinct sentence: this is not "wrong writer" but "wrong actor entirely" --
+# the command is legitimate, and only the human may issue it. The reason text
+# must name the user-run route, because an AI told only "denied" has no next
+# move and will either retry the same call or abandon a request the user
+# actually made. Single source of truth so both platform shims emit
+# byte-identical deny text.
+_wg_core_user_authorized_deny_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked: 이 명령은 사용자만 실행할 수 있습니다. AI는 실행하지 말고, 근거와 함께 명령어 전문을 제시한 뒤 사용자가 직접 실행하도록 요청하세요 (터미널에서 직접, 또는 프롬프트에 ! 를 붙여서)."}}'
+
 # _wg_core_normpath <path>
 # Pure LEXICAL path normalization (os.path.normpath semantics): collapse
 # empty (//), '.' and '..' segments WITHOUT touching the filesystem. This
@@ -189,6 +198,44 @@ write_guard_core_check_dangerous_command() {
         "rm -rf "* | "rm -fr "* | "rm -Rf "* | "rm -r -f "* | "rm -f -r "* | \
         "git push --force"* | "git push "*" --force"* | "git push -f"* | "git push "*" -f"*)
             printf '%s\n' "$_wg_core_dangerous_deny_json"
+            return 0
+            ;;
+    esac
+    return 0
+}
+
+# write_guard_core_check_user_authorized_command <command-segment>
+# Denies the two ultragoal-state subcommands whose authority row reads
+# "orchestrator, only after explicit user approval":
+#   approve-review-dispatch-renewal -- extends the code-review dispatch budget
+#   dismiss-review-finding          -- removes a blocking finding from the gate
+# Both let the loop clear its own completion gate, so leaving them to prose
+# ("run this only after the user approves") makes the authorization
+# vigilance-based -- the exact property ultragoal/SKILL.md rejects for its
+# other gates. Denying the AI's Bash path makes it structural instead: the
+# command reaches the CLI only when the human runs it.
+#
+# Unlike rm -rf / git push --force, Claude has NO native permissions.deny
+# entry for these, so this hook is the only layer on BOTH platforms -- not a
+# Codex-side emulation of a declarative rule that already exists on Claude.
+#
+# Matching requires the subcommand to sit IMMEDIATELY after the script name,
+# which is where a real invocation puts it (`bun <path>/ultragoal-state.ts
+# <subcommand> [flags]`). Prose that merely mentions a subcommand name -- e.g.
+# telling the user which command to run -- carries no adjacent script path and
+# stays allowed; without that, reporting the denial would itself be denied.
+write_guard_core_check_user_authorized_command() {
+    local seg="$1"
+    # Same normalization the dangerous-command guard applies, for the same
+    # reason: a real shell treats any run of spaces/tabs as one separator, so
+    # a literal single-space pattern would silently ALLOW `... ultragoal-state.ts
+    # <TAB> dismiss-review-finding`, which executes identically.
+    seg="${seg#"${seg%%[![:space:]]*}"}"
+    seg="$(printf '%s' "$seg" | tr -s '[:space:]' ' ')"
+    case "$seg" in
+        *"ultragoal-state.ts dismiss-review-finding"* | \
+        *"ultragoal-state.ts approve-review-dispatch-renewal"*)
+            printf '%s\n' "$_wg_core_user_authorized_deny_json"
             return 0
             ;;
     esac
