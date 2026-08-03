@@ -47,16 +47,18 @@ Reproduction-gate categories:
 
 ---
 
-## Layer C — Actor
+## Layer C — Actor and Its Boundary
 
-Name the actor for every derived scenario. The actor is who is performing the steps, and it changes what "expected" means:
+Every derived scenario takes its actor from the **Actor Roster** pinned at PLAN.1 (`SKILL.md`), which already names that actor's boundary and driver. Two things follow, and derivation must honor both: the actor's stance decides what `expected` means, and its boundary decides where the scenario starts — **steps begin at that actor's boundary**, never at the changed function.
+
+Stance sharpens a roster actor; it never replaces one:
 
 - **Normal user** — following the intended path, no ill intent, may still hit an edge case.
 - **Malicious user** — actively trying to break, bypass, or exploit the change.
 - **Careless user** — ignores instructions, skips fields, pastes garbage, double-clicks, retries impatiently.
 - **Specific role** — a named role in the system (household owner vs payer, admin vs member) whose permissions or state the scenario specifically probes.
 
-Every scenario must name its actor explicitly — do not leave it implicit as "the user."
+"A household member on the app's dispense screen, acting carelessly" is an actor. "Careless user" on its own is a mood — it names no boundary, so the steps under it can start anywhere.
 
 ---
 
@@ -66,9 +68,9 @@ Every self-authored scenario is written in this six-field shape, in this order:
 
 `actor · preconditions · steps · expected · why-needed · priority`
 
-1. **actor** — from Layer C.
+1. **actor** — from Layer C: the roster actor plus its stance, carrying the boundary the steps must start at.
 2. **preconditions** — the reproduction gate from Layer B (or the literal `none`).
-3. **steps** — the concrete action sequence to execute.
+3. **steps** — the concrete action sequence to execute, entered at the actor's boundary.
 4. **expected** — the observable outcome that proves pass or fail.
 5. **why-needed** — **mandatory.** States the reason this scenario exists — mostly "what automation/e2e already misses" from the Layer A2 coverage-gap judgment. A scenario without a `why-needed` field is incomplete; this is what separates a derived scenario from a mechanically-generated one.
 6. **priority** — the `H/M/L` value from Layer A3.
@@ -81,7 +83,7 @@ Omitting any of the six fields, or leaving `why-needed` blank, makes the scenari
 
 **Change**: a new discount-percentage branch in the payment checkout flow, gated behind a feature flag rolled out to a `group` cohort during a KST business-hours time window (09:00–18:00 KST), affecting Smart Subscription resupply orders.
 
-- **actor**: specific role — a household `payer` (not the `owner`) completing a Smart Subscription resupply checkout.
+- **actor**: specific role — a household `payer` (not the `owner`) at the app's Smart Subscription resupply checkout screen, the boundary every step below is entered from.
 - **preconditions**: `feature flag` = `payment.discount_v2` enabled for the payer's cohort group; `time window` = request issued at 17:55 KST (5 minutes before the window closes) to probe the boundary.
 - **steps**: log in as the payer, trigger a Smart Subscription resupply checkout while the flag is enabled and the clock is inside the window, then repeat the same checkout request 6 minutes later (after 18:00 KST, window closed).
 - **expected**: the discount applies and the payment succeeds at 17:55 KST; at 18:06 KST the discount no longer applies and the checkout falls back to full price without erroring or double-charging.
