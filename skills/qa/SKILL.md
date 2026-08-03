@@ -62,7 +62,7 @@ Every phase below runs once per pass, except the bracketed loop, which repeats o
 A **behavior-invisible contract check** — a narrow exception to qa's dynamic-only posture, because no amount of running the app surfaces a scope violation. Gates on exactly two things:
 
 1. **MUST-NOT-DO scope membership.** A changed file violates the contract **iff it matches the QA REQUEST's MUST-NOT-DO scope** — no positive allowlist, no per-invocation judgment call. Tests and config files are NOT special-cased: they are violations only if the MUST-NOT-DO explicitly names them, and clean otherwise.
-2. **B ⊆ A scope boundary.** Expected files (from EXPECTED OUTCOME) = A; Changed files (from QA REQUEST Scope) = B. PASS if B ⊆ A.
+2. **B ⊆ A scope boundary.** Expected files (from EXPECTED OUTCOME) = A; Changed files (from QA REQUEST Scope) = B. PASS if B ⊆ A. When the QA REQUEST carries no EXPECTED OUTCOME, A does not exist: record this gate as `not-evaluable` and proceed on gate 1 alone. **Never fill A from the Scope list** — B ⊆ B is true by construction and turns the gate into a rubber stamp that reads like a PASS.
 
 **On violation: immediate REQUEST_CHANGES, cycle NOT executed** — fail-fast. The expensive cycle below never runs against a change that already fails its own declared contract.
 
@@ -151,7 +151,10 @@ Is the goal met — BASELINE green and the full ADVERSARIAL E2E pass (provided s
 - Did each scenario traverse the changed surface from its actor's boundary all the way through, or did it stop at an inner layer? Read `driven-at`, not the PASS.
 - Is any `H`-priority scenario still `NOT-RUN`? Then the goal is not met, whatever the other rows say.
 
+A FAILED scenario row blocks CHECK, with exactly one carve-out: a failed `M`/`L` row whose finding scores below the blocking threshold ([feedback-protocol.md]) leaves the cycle a **soft pass** — the row stays FAIL in the roster, the finding is reported, and the verdict is COMMENT, never APPROVE. A failed `H`-priority row blocks regardless of its confidence score. Never restate a failed row as PASS to reach a clean sheet.
+
 - **Pass → PASS.** Emit APPROVE (see Output Format).
+- **Soft pass → PASS with COMMENT.**
 - **Fail → enter the loop below.**
 
 ### DIAGNOSIS → FIX → RE-VERIFY (loop, ≤5 cycles)
@@ -336,6 +339,7 @@ Close the table with exactly one coverage-delta line naming the impact-map domai
 |-----------|---------|
 | PRE-FLIGHT contract violation | **REQUEST_CHANGES** (MUST-NOT-DO / B⊆A violated, cycle not executed) |
 | EXIT via max_cycles/Same-Failure-3x/Safety, unresolved | **REQUEST_CHANGES** (unresolved after cycle) |
+| CHECK soft-passes (a failed `M`/`L` row, finding below the blocking threshold) | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
 | CHECK passes (BASELINE + full matrix green) | **APPROVE** (or **COMMENT** to surface LOW notes — see *On COMMENT* below) |
 
 Every issue surfaced MUST include a confidence score. See [feedback-protocol.md] for Confidence Scoring, Validation, and Conventional Comments.
@@ -348,7 +352,8 @@ Every issue surfaced MUST include a confidence score. See [feedback-protocol.md]
 
 ```
 CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop ≤5] → EXIT → CLEANUP → ROLLBACK → STATE
-PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed
+PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed. No EXPECTED OUTCOME → B⊆A is not-evaluable, never A:=Scope
+CHECK:      a FAILED row blocks, except a below-threshold M/L failure = soft pass → COMMENT, never APPROVE; a failed H row always blocks
 ACTOR:      Actor Roster before scenarios — actor · boundary · driver · reachable; a function/class/module is never a boundary; internal change → trace the call graph outward. Enter every scenario at its actor's boundary; substitute only the unreachable hop and record driven-at; otherwise NOT-RUN, never PASS. H-priority NOT-RUN blocks APPROVE
 EVIDENCE:   per-scenario before/action/after at the actor's boundary; launch/splash/landing captures are not scenario evidence; internal logs support, never replace; depths never merge into a deeper claim
 BASELINE:   build/test/lint green. See stage1-commands.md
