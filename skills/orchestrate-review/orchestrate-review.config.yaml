@@ -67,21 +67,21 @@ chunk-review:
       effort_level: medium
       output_format: json
     - name: regression
-      command: codex exec -c agents.enabled=false
+      command: codex exec -c agents.enabled=false -c service_tier=fast
       model: gpt-5.6-luna
       emoji: "\U0001F5D1"
       color: "MAGENTA"
       effort_level: xhigh
       output_format: json
     - name: cleanup
-      command: codex exec -c agents.enabled=false
+      command: codex exec -c agents.enabled=false -c service_tier=fast
       model: gpt-5.6-luna
       emoji: "\U0001F9F9"
       color: "YELLOW"
       effort_level: xhigh
       output_format: json
     - name: requirement
-      command: codex exec -c agents.enabled=false
+      command: codex exec -c agents.enabled=false -c service_tier=fast
       model: gpt-5.6-luna
       emoji: "\U0001F4CB"
       color: "GREEN"
