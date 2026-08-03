@@ -233,15 +233,15 @@ After native-app verification completes (pass or fail), use the loaded skill's v
 
 ## ADVERSARIAL E2E Failure = Stop or Carry, by Row Class
 
-Whatever fails, first report it with specific output (response body, error message, evidence reference). Then dispose of it by the row's class — **this stage never issues the verdict itself**; SKILL.md `### CHECK` owns that:
+Whatever fails, first report it with specific output (response body, error message, evidence reference). Then dispose of it by the row's class. **No scenario-row failure issues a verdict here** — all three classes below end at SKILL.md `### CHECK`, which owns it. What the class decides is whether the remaining rows still get driven. (A lifecycle failure — the server never starting or crashing outright — is a different class, handled by *Lifecycle Failures* above.)
 
 | Failed row | Disposition |
 |------------|-------------|
-| Caller-provided scenario | **Do NOT proceed to CHECK.** Stop the server/application, issue `REQUEST_CHANGES` immediately, re-run from BASELINE after the fix |
-| Self-authored `H`-priority row | Same — stop and issue `REQUEST_CHANGES` immediately |
-| Self-authored `M`/`L` row | Record it FAIL in the roster, finish the remaining rows, and carry it to CHECK, which decides between a blocking failure and a soft pass |
+| Caller-provided scenario | **Stop driving.** Abandon the remaining rows (leave them `NOT-RUN`), stop the server/application, go straight to CHECK — where a failed caller-provided row blocks, so the cycle enters DIAGNOSIS → FIX → RE-VERIFY and re-runs from BASELINE after the fix |
+| Self-authored `H`-priority row | Same — stop driving, abandon the remaining rows, go straight to CHECK, which blocks on it |
+| Self-authored `M`/`L` row | Keep driving. Record it FAIL in the roster, finish the remaining rows, and carry it to CHECK, which decides between a blocking failure and a soft pass |
 
-The immediate-stop classes exist so an expensive cycle is not spent against a surface that already failed what the caller or the risk ranking called essential. A lower-priority failure does not earn that interrupt — it earns a FAIL row and a verdict decided with the whole roster in view.
+The stop-driving classes exist so an expensive cycle is not spent against a surface that already failed what the caller or the risk ranking called essential. A lower-priority failure does not earn that interrupt — it earns a FAIL row and a verdict decided with the whole roster in view. Stopping early is not a verdict: the abandoned rows stay `NOT-RUN` in the roster and CHECK reads them as unproven, never as passing.
 
 ---
 

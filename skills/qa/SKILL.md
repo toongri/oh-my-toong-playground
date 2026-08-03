@@ -153,9 +153,9 @@ Is the goal met — BASELINE green and the full ADVERSARIAL E2E pass (provided s
 - Did each scenario traverse the changed surface from its actor's boundary all the way through, or did it stop at an inner layer? Read `driven-at`, not the PASS.
 - Is any `H`-priority scenario still `NOT-RUN`? Then the goal is not met, whatever the other rows say.
 
-A FAILED scenario row blocks CHECK, with exactly one carve-out: a failed **self-authored `M`/`L`** row whose finding scores **50–79** — the `nitpick (non-blocking)` band — leaves the cycle a **soft pass**: the row stays FAIL in the roster, the finding is reported as a LOW note, and the verdict is COMMENT, never APPROVE.
+A FAILED scenario row blocks CHECK, with exactly one carve-out: a failed **self-authored `M`/`L`** row whose finding scores **50–74** — the `nitpick (non-blocking)` band, which [feedback-protocol.md]'s scale defines as *real but minor, rarely happens in practice* — leaves the cycle a **soft pass**: the row stays FAIL in the roster, the finding is reported as a LOW note, and the verdict is COMMENT, never APPROVE.
 
-Everything else blocks. A finding scoring **80+** blocks whatever the row's priority. A failed **`H`-priority** row blocks whatever its score. A failed **caller-provided** row blocks — it never soft-passes, per `### ADVERSARIAL E2E` part 1. And a failed row whose finding cannot be scored at **50 or above** is not a soft pass but an unexplained failure: re-run or diagnose it, because a scenario that failed for reasons you cannot state is the one most likely to matter. Never restate a failed row as PASS to reach a clean sheet.
+Everything else blocks. A finding scoring **75+** blocks whatever the row's priority — the scale calls 75 *likely to occur in practice, directly impacts functionality*, which is a defect, not a nitpick. A failed **`H`-priority** row blocks whatever its score. A failed **caller-provided** row blocks — it never soft-passes, per `### ADVERSARIAL E2E` part 1. And a failed row whose finding cannot be scored at **50 or above** is not a soft pass but an unexplained failure: re-run or diagnose it, because a scenario that failed for reasons you cannot state is the one most likely to matter. Never restate a failed row as PASS to reach a clean sheet.
 
 - **Pass → PASS.** Emit APPROVE (see Output Format).
 - **Soft pass → PASS with COMMENT.**
@@ -188,6 +188,7 @@ Loop back to CHECK. Continue until an EXIT condition below fires.
 | Condition | Trigger | Action |
 |-----------|---------|--------|
 | **Goal Met** | CHECK passes (BASELINE + full matrix green) | PASS → APPROVE |
+| **Goal Met, soft pass** | CHECK soft-passes (one carve-out row, per `### CHECK`) | PASS → COMMENT, carrying the failed row and its LOW note |
 | **max_cycles=5** | `cycle` reaches `max_cycles` (5) still unresolved | Terminate, report unresolved with last diagnosis |
 | **Same-Failure-3x** | The same failure repeats 3 times | Terminate, report thrash |
 | **Safety** | A safety invariant (e.g. ROLLBACK guard) refuses to proceed | Terminate, report the refusal reason |
@@ -343,7 +344,7 @@ Close the table with exactly one coverage-delta line naming the impact-map domai
 |-----------|---------|
 | PRE-FLIGHT contract violation | **REQUEST_CHANGES** (MUST-NOT-DO / B⊆A violated, cycle not executed) |
 | EXIT via max_cycles/Same-Failure-3x/Safety, unresolved | **REQUEST_CHANGES** (unresolved after cycle) |
-| CHECK soft-passes (a failed `M`/`L` row, finding below the blocking threshold) | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
+| CHECK soft-passes (a failed self-authored `M`/`L` row, finding in the 50–74 nitpick band) | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
 | CHECK passes (BASELINE + full matrix green) | **APPROVE** (or **COMMENT** to surface LOW notes — see *On COMMENT* below) |
 
 Every issue surfaced MUST include a confidence score. See [feedback-protocol.md] for Confidence Scoring, Validation, and Conventional Comments.
@@ -357,7 +358,7 @@ Every issue surfaced MUST include a confidence score. See [feedback-protocol.md]
 ```
 CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop ≤5] → EXIT → CLEANUP → ROLLBACK → STATE
 PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed. No EXPECTED OUTCOME → B⊆A is not-evaluable, never A:=Scope
-CHECK:      a FAILED row blocks, except a self-authored M/L row scoring 50-79 = soft pass → COMMENT, never APPROVE. 80+ blocks, H blocks, caller-provided blocks (stops at ADVERSARIAL E2E), unscorable-below-50 = re-run not soft-pass
+CHECK:      a FAILED row blocks, except a self-authored M/L row scoring 50-74 = soft pass → EXIT Goal Met, soft pass → COMMENT, never APPROVE. 75+ blocks, H blocks, caller-provided blocks, unscorable-below-50 = re-run not soft-pass
 ACTOR:      Actor Roster before scenarios — actor · boundary · driver · reachable; a function/class/module is never a boundary; internal change → trace the call graph outward. Enter every scenario at its actor's boundary; substitute only the unreachable hop and record driven-at; otherwise NOT-RUN, never PASS. H-priority NOT-RUN blocks APPROVE
 EVIDENCE:   per-scenario before/action/after at the actor's boundary; launch/splash/landing captures are not scenario evidence; internal logs support, never replace; depths never merge into a deeper claim
 BASELINE:   build/test/lint green. See stage1-commands.md
@@ -369,5 +370,5 @@ ROLLBACK:   git revert fix_head_before..HEAD only, NEVER git reset --hard; 3 gua
 STATE:      bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>; continue resumes at last phase/cycle
 NESTING:    qa's fix-loop must NOT be called inside another fix-loop (e.g. ultragoal) — doc contract, YAGNI; upgrade trigger: add a code guard when qa gains its first fix-loop-owning caller
 ROSTER:     ## Scenarios Executed is a precondition for verdict issuance; absent → verdict not issued, cycle incomplete. Exception: PRE-FLIGHT fail-fast issues REQUEST_CHANGES with no roster — never synthesize an empty one there; present+0 rows means inert refactor, a completed cycle
-FEEDBACK:   feedback-protocol.md for Confidence Scoring; CONFIDENCE 0-49 discard, 50-79 nitpick, 80+ report
+FEEDBACK:   feedback-protocol.md for Confidence Scoring; CONFIDENCE 0-49 discard, 50-74 nitpick, 75+ blocking
 ```

@@ -26,6 +26,10 @@ const scenarioAuthoringMd = readFileSync(
 );
 const stage3Md = readFileSync(join(import.meta.dir, "stage3-handson.md"), "utf8");
 const stage1Md = readFileSync(join(import.meta.dir, "stage1-commands.md"), "utf8");
+const feedbackMd = readFileSync(
+	join(import.meta.dir, "feedback-protocol.md"),
+	"utf8",
+);
 
 // ---------------------------------------------------------------------------
 // NEW-PROSE: cycle phase vocabulary (must FAIL before rewrite — RED)
@@ -762,13 +766,39 @@ describe("new-prose: the soft-pass carve-out is reachable and unambiguously scop
 			checkStart,
 			skillMd.indexOf("### DIAGNOSIS", checkStart + 1),
 		);
-		expect(checkSection).toContain("50–79");
+		expect(checkSection).toContain("50–74");
 		expect(checkSection).not.toContain("blocking threshold");
 	});
 
-	test("caller-provided and 80+ failures are excluded from the carve-out", () => {
+	test("caller-provided and 75+ failures are excluded from the carve-out", () => {
 		expect(skillMd).toContain("A failed **caller-provided** row blocks");
-		expect(skillMd).toContain("A finding scoring **80+** blocks");
+		expect(skillMd).toContain("A finding scoring **75+** blocks");
+	});
+
+	// A 75 is "likely to occur in practice, directly impacts functionality" on
+	// feedback-protocol's own scale. A band that swallowed it into `nitpick`
+	// would let a functional failure close a cycle as COMMENT instead of
+	// entering DIAGNOSIS → FIX → RE-VERIFY.
+	test("the nitpick band stops below the score the scale calls functional", () => {
+		expect(skillMd).not.toContain("scores **50–79**");
+		expect(feedbackMd).toContain("75+ → report as a blocking issue");
+		expect(feedbackMd).toContain("50–74 → report as `nitpick (non-blocking)`");
+		expect(feedbackMd).not.toContain("50–79");
+		const quickRef = skillMd.slice(skillMd.indexOf("## Quick Reference"));
+		expect(quickRef).toContain("50-74 nitpick, 75+ blocking");
+	});
+
+	// CHECK's soft pass is a distinct cycle outcome; EXIT is mandatory and its
+	// table was exhaustive over {full-green, max_cycles, same-failure, safety},
+	// leaving the soft pass with no transition to CLEANUP/STATE.
+	test("EXIT has a transition for the soft pass", () => {
+		const exitStart = skillMd.indexOf("### EXIT");
+		const exitSection = skillMd.slice(
+			exitStart,
+			skillMd.indexOf("### CLEANUP", exitStart + 1),
+		);
+		expect(exitSection).toContain("Goal Met, soft pass");
+		expect(exitSection).toContain("PASS → COMMENT");
 	});
 
 	test("a failure that cannot be scored at 50+ is re-run, not soft-passed", () => {
@@ -778,15 +808,26 @@ describe("new-prose: the soft-pass carve-out is reachable and unambiguously scop
 	test("the upstream ADVERSARIAL E2E gate routes by row class instead of stopping on any failure", () => {
 		expect(stage3Md).not.toContain("ADVERSARIAL E2E Failure = Immediate Stop");
 		expect(stage3Md).toContain("Stop or Carry, by Row Class");
-		expect(stage3Md).toContain("this stage never issues the verdict itself");
+		expect(stage3Md).toContain("No scenario-row failure issues a verdict here");
 		expect(stage3Md).toContain("carry it to CHECK");
 	});
 
-	test("feedback-protocol's threshold rule matches its own 50-row instead of contradicting it", () => {
-		const feedbackMd = readFileSync(
-			join(import.meta.dir, "feedback-protocol.md"),
-			"utf8",
+	// The stop-driving classes used to issue REQUEST_CHANGES themselves, which
+	// both bypassed the DIAGNOSIS → FIX → RE-VERIFY loop and contradicted the
+	// stage's own claim that CHECK owns the verdict.
+	test("the stop-driving classes delegate the verdict instead of issuing one", () => {
+		const tableStart = stage3Md.indexOf("## ADVERSARIAL E2E Failure");
+		const table = stage3Md.slice(
+			tableStart,
+			stage3Md.indexOf("\n---", tableStart + 1),
 		);
+		expect(table).not.toContain("Do NOT proceed to CHECK");
+		expect(table).not.toContain("REQUEST_CHANGES");
+		expect(table).toContain("go straight to CHECK");
+		expect(table).toContain("stay `NOT-RUN` in the roster");
+	});
+
+	test("feedback-protocol's threshold rule matches its own 50-row instead of contradicting it", () => {
 		expect(feedbackMd).not.toContain("Report only issues scoring 80+");
 		expect(feedbackMd).toContain("`nitpick (non-blocking)`");
 		expect(feedbackMd).toContain("Below 50 → discard");
