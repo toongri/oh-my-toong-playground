@@ -181,7 +181,9 @@ flowchart TB
 
 **판정**: `CONFIRMED` `correctness` 또는 `requirement-gap` finding과 `INCONCLUSIVE` review는 완료를 막습니다. `cleanup`만 남은 `COMPLETE` review는 AI가 현재 가치와 남은 시간을 판단해 마무리할 수 있으며, 이때 남은 finding마다 정확한 `file:line`과 한 줄 요약을 보고합니다.
 
-**5회 창과 사용자 중재**: Claude와 Codex의 `PreToolUse` hook은 active `phase=pursuing` `code-reviewer` dispatch를 자동 claim/count합니다. 초기 창은 5회이며 cap 소진 또는 완료 가능 artifact의 재dispatch는 deny합니다. 계속하려면 사용자 명시 승인을 받고 `approve-review-dispatch-renewal`을 실행해 cap을 5 늘린 뒤 다음 최종 리뷰를 dispatch합니다.
+**5회 창과 사용자 중재**: Claude와 Codex의 `PreToolUse` hook은 active `phase=pursuing` `code-reviewer` dispatch를 자동 claim/count합니다. 초기 창은 5회이며 cap 소진 또는 완료 가능 artifact의 재dispatch는 deny합니다. 계속하려면 `approve-review-dispatch-renewal` 명령어를 제시하고 사용자가 직접 실행해 cap을 5 늘린 뒤 다음 최종 리뷰를 dispatch합니다 — PreToolUse 가드가 AI의 Bash 경로에서 이 명령을 deny하므로 "사용자 승인 후에만"이 문구가 아니라 하네스로 강제됩니다.
+
+**잘못된 차단 finding 무효화**: 차단 finding이 틀렸을 때의 유일한 탈출구입니다. AI는 그 finding을 무력화하는 소스 줄을 인용할 수 있을 때만 무효화를 제안하고, 사용자가 승인하면 사용자가 직접 `dismiss-review-finding --ref <file:line> --class <correctness|requirement-gap> --rationale <근거>`를 실행합니다. 한 번에 finding 하나만 차단 집합에서 빠지며, 무효화는 해당 artifact의 raw 바이트에 고정되어 다음 리뷰 라운드에는 이월되지 않습니다.
 
 ---
 

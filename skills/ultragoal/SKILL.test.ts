@@ -395,7 +395,12 @@ describe("review dispatch budget runtime contract", () => {
 	test("State CLI table distinguishes automatic claim from user-approved renewal", () => {
 		expect(skillMd).toContain("`claim-review-dispatch` | PreToolUse hook only");
 		expect(skillMd).toContain("The initial cap is 5");
-		expect(skillMd).toContain("`approve-review-dispatch-renewal` | orchestrator, only after explicit user approval to continue");
+		// The renewal row's authority is "user only", enforced by a PreToolUse guard on
+		// the orchestrator's Bash path — not "orchestrator, after the user approves",
+		// which left the approval to the orchestrator's own restraint.
+		expect(skillMd).toContain(
+			"`approve-review-dispatch-renewal` | **user only** — a PreToolUse guard denies it on the orchestrator's Bash path",
+		);
 		expect(skillMd).toContain("Adds exactly 5");
 		expect(skillMd).toContain(
 			"when a valid code-review artifact exists, also records the SHA-256 of its exact raw bytes as the user-approved marker",
