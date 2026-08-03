@@ -44,14 +44,6 @@ This describes what kind of software is being reviewed. Finders must factor this
 Each declared non-goal has the form `- {what this change deliberately does not do} | decider: {how to recognize a candidate finding that falls inside this non-goal}`. Finders must not generate a candidate finding whose failure scenario is fully explained by a declared non-goal — this is suppression at generation time, not a filter applied after generating the candidate.
 <!-- /section:non_goal -->
 
-<!-- section:evidence_results -->
-## Evidence Results
-
-{EVIDENCE_RESULTS}
-
-If evidence results are provided above, they are from automated build/test/lint execution — treat them as verified facts. Do NOT re-evaluate pass/fail status. Use this information to assess test quality and coverage, not test correctness. If evidence is unavailable, skip evidence-based checks.
-<!-- /section:evidence_results -->
-
 ## Diff Command
 
 **Files in this chunk:** {FILE_LIST}
@@ -75,13 +67,12 @@ Execute the following command to obtain the diff for review. You MUST run this c
 
 | Field | Required | Source |
 |-------|----------|--------|
-| {WHAT_WAS_IMPLEMENTED} | Required | Step 0 interview or auto-extracted |
-| {DESCRIPTION} | Required | Step 0 interview or commit messages |
-| {REQUIREMENTS} | Optional | Step 0 interview, "N/A" if deferred |
-| {PROJECT_CONTEXT} | Required | Step 0 project context |
+| {WHAT_WAS_IMPLEMENTED} | Required | Step 1 interview or auto-extracted |
+| {DESCRIPTION} | Required | Step 1 interview or commit messages |
+| {REQUIREMENTS} | Optional | Step 1 interview, "N/A" if deferred |
+| {PROJECT_CONTEXT} | Required | Step 1 project context |
 | {NON_GOAL} | Required | Completion-gate payload field `non_goals` (backfilled to "(none provided)" when blank) |
-| {EVIDENCE_RESULTS} | Optional | Step 3 Evidence Verification (may be 'unavailable' message) |
 | {FILE_LIST} | Required | Step 2 git diff --name-only |
-| {DIFF_COMMAND} | Required | Step 4 — constructed from range + chunk file list |
+| {DIFF_COMMAND} | Required | Step 3 — constructed from range + chunk file list |
 | {COMMIT_HISTORY} | Required | Step 2 git log output |
 <!-- /section:field_reference -->
