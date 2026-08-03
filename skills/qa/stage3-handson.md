@@ -1,8 +1,8 @@
 # ADVERSARIAL E2E: Hands-On QA
 
-> **Hands-on execution applicability**: This is the detail target for SKILL.md's `Hands-on execution` trigger, which activates on a disjunction: **user-facing change OR caller-provided executable scenarios**. Either arm alone activates it. Caller-provided scenarios run verbatim on either arm. The adversarial matrix is added only when the **user-facing** arm is active — activation by caller-provided scenarios alone (non-user-facing change) runs those scenarios verbatim without the matrix.
+> **Applicability**: this is the detail target for SKILL.md's ADVERSARIAL E2E phase, which activates whenever the change touches a **risk surface** — user-facing or internal — and whenever the caller provided executable scenarios. Only a genuinely inert refactor skips it.
 
-Verify user-facing behavior by actually running the changed code. This is not optional when applicable.
+Verify behavior by actually running the change, entered at the boundary from the Actor Roster. This is not optional when applicable.
 
 ---
 
@@ -20,7 +20,7 @@ The applicability gate is not "is the surface user-facing?" — it is **does the
 | UI, page, component, frontend, render | Frontend | Verify with `agent-browser` (fallback: `playwright`, if available) |
 | iOS, tvOS, macOS, Android, and Vega OS TV apps; simulator, emulator | Native app | Verify with `agent-device` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
-| Feature-flag-gated logic, payment/notification resolver internals, permission/state-transition branch — no direct UI/API entry point but touches a **risk surface** | Internal / risk surface | Do NOT skip — derive scenarios via [scenario-authoring.md] Layer A→B→C, then verify hands-on |
+| Feature-flag-gated logic, payment/notification resolver internals, permission/state-transition branch — no direct UI/API entry point but touches a **risk surface** | Internal / risk surface | Do NOT skip — trace the call graph outward to the actor's real boundary (screen, endpoint, job trigger), derive scenarios via [scenario-authoring.md] Layer A→B→C, then drive from that boundary |
 | Refactoring, internal logic, utility, helper, config that touches **no risk surface** (pure refactor, no behavior/branch change) | Internal only | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — no risk surface touched) |
 | Documentation, markdown, comments only | Non-code | **Skip ADVERSARIAL E2E** — unless caller-provided executable scenarios are present; in that case, run them verbatim (no adversarial matrix — no risk surface touched) |
 
@@ -88,24 +88,9 @@ Apply the corresponding row's primitives based on the change type detected in St
 
 ### Procedure
 
-1. Identify endpoints affected by the change (from EXPECTED OUTCOME)
-2. Construct `curl` commands for each endpoint
-3. Verify response status code, body structure, and key values
-
-### curl Usage
-
-```bash
-# Basic GET
-curl -s -o /dev/null -w "%{http_code}" http://localhost:{port}/endpoint
-
-# POST with body
-curl -s -X POST http://localhost:{port}/endpoint \
-  -H "Content-Type: application/json" \
-  -d '{"key": "value"}'
-
-# Capture full response
-curl -s http://localhost:{port}/endpoint | jq .
-```
+1. Identify the endpoints that are the roster boundary for a client actor
+2. Issue each scenario's request exactly as that client would — same method, headers, auth, and body
+3. Verify response status code, body structure, and key values, and capture the request/response pair as that scenario's `action`/`after` evidence
 
 ### Verification Criteria
 
@@ -145,7 +130,7 @@ curl -s http://localhost:{port}/endpoint | jq .
    agent-browser get url              # current URL after navigation
    agent-browser get text @eN         # element text content
    ```
-6. **Capture a screenshot** (mandatory — attach as visual evidence for the review):
+6. **Capture the asserted state** (mandatory — one screenshot before the action, one after, each showing the state the scenario asserts, not a landing page):
    ```bash
    agent-browser screenshot
    ```
@@ -165,7 +150,7 @@ If an agent-browser step returns a non-zero exit code or the required assertion 
 | Page loads | No console errors, expected elements visible |
 | Interaction | Click/input produces expected result |
 | Navigation | Routes resolve to correct pages |
-| Screenshot captured | At least one screenshot taken and referenced in evidence |
+| Screenshot captured | Before/after captures of the asserted state, referenced in evidence — a landing or splash capture does not count |
 | CJK / glyph rendering | CJK characters, emoji, and non-ASCII glyphs render without replacement boxes or mojibake |
 | Layout overflow | No element overflows its container; horizontal scroll width does not exceed viewport width |
 
@@ -275,7 +260,7 @@ If ANY verification fails:
 
 ## Adversarial Scenario Matrix
 
-This matrix is the **hostile-depth** dimension of scenario verification — it is not where scenario derivation starts. Scenarios are first derived by **breadth** in [scenario-authoring.md]: walk that framework's Layer A → B → C for the change under review to produce the full six-field scenario set (`actor · preconditions · steps · expected · why-needed · priority`) covering the risk surface. Only after breadth derivation is done does **depth** apply — subject each derived scenario to the rows below as the hostile attack layer. Breadth first, depth second: do not skip straight to this matrix on an undifferentiated changed-file list.
+This matrix is the **hostile-depth** dimension applied to scenarios already derived by breadth in [scenario-authoring.md] — see that file's `Breadth Then Depth`. Do not skip straight to this matrix on an undifferentiated changed-file list, and run each row from the scenario's actor boundary, not against the changed unit.
 
 Hands-on verification is not "run the happy path once." A change is only verified when it survives hostile probing. When running these checks, adopt the mindset of a malicious or careless user: someone who ignores documentation, pastes garbage data, skips required fields, and actively tries to confuse or break the system. After the modality procedures above confirm the happy path, run the adversarial checks below. Each category names what a hostile check looks like so a verifier running hands-on knows what to probe — pick the rows that apply to the change under review and actually execute them, do not reason about them on paper.
 
