@@ -123,12 +123,13 @@ oh-my-toong's review and quality skills systematically verify the completeness o
 
 **Purpose**: Quality assurance guardian that verifies implementation correctness. This skill operates under the principle: "Nothing ships without proof."
 
-**What it verifies**:
-- Automated checks — build, typecheck, tests, lint
-- Spec/AC compliance — verifies implementation against provided criteria; when a completeness directive is present, confirms every prose requirement is reflected in the deliverable
-- Hands-on execution — runs caller-provided scenarios verbatim and self-authors a 6-category adversarial matrix for any user-facing change; activates when a user-facing change is present OR caller-provided scenarios are supplied
+**The cycle**: PRE-FLIGHT (contract gate) → PLAN (actor roster + scenario derivation) → BASELINE (build/test/lint) → ADVERSARIAL E2E (drive it for real + the 6-category matrix) → CHECK → on failure, a DIAGNOSIS→FIX→RE-VERIFY loop (≤5 cycles) → EXIT → CLEANUP → ROLLBACK → STATE. One invocation owns everything from detection through fix and re-verification, and the fixer (`sisyphus-junior`) never certifies its own fix.
 
-**Critical distinction**: Automated tests and hands-on QA are not substitutes. Automated tests verify "code behaves as intended." Hands-on QA verifies "the application boots and responds to real requests as in production." These are complementary.
+**Actor-boundary principle**: the **Actor Roster** is pinned before any scenario is written — actor · the boundary that actor actually touches (screen, endpoint, CLI command) · the driver that reaches it · whether it is reachable. A function, class, or internal module is never a boundary. Every **self-authored** scenario is entered at its actor's boundary; when the boundary is unreachable, **only the last unreachable hop is faked** so every layer above it still executes. When even that is impossible the scenario is `NOT-RUN`, not PASS — and an `H`-priority scenario left `NOT-RUN` blocks APPROVE. A **caller-provided** scenario is exempt from this relocation and runs verbatim at whatever layer the caller chose, but not from disclosure: its `driven-at` records the layer it actually entered, and it supports no claim above that layer.
+
+**Evidence**: every executed scenario carries actor-perspective `before` / `action` / `after` evidence — the state that actor actually observes. A launch, splash, or landing capture is not scenario evidence. Internal signals (server logs, DB rows) are supporting evidence, never a replacement.
+
+**Critical distinction**: Automated tests and hands-on QA are not substitutes. Automated tests verify "code behaves as intended." Hands-on QA verifies "the actor's path works as in production." Evidence sets collected at different depths never merge into a deeper claim.
 
 **How it is called**: In a `sisyphus`-orchestrated pipeline, invoked with a QA REQUEST after implementation is complete. Can also be called directly by the user for standalone verification.
 

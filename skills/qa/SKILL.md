@@ -62,7 +62,7 @@ Every phase below runs once per pass, except the bracketed loop, which repeats o
 A **behavior-invisible contract check** — a narrow exception to qa's dynamic-only posture, because no amount of running the app surfaces a scope violation. Gates on exactly two things:
 
 1. **MUST-NOT-DO scope membership.** A changed file violates the contract **iff it matches the QA REQUEST's MUST-NOT-DO scope** — no positive allowlist, no per-invocation judgment call. Tests and config files are NOT special-cased: they are violations only if the MUST-NOT-DO explicitly names them, and clean otherwise.
-2. **B ⊆ A scope boundary.** Expected files (from EXPECTED OUTCOME) = A; Changed files (from QA REQUEST Scope) = B. PASS if B ⊆ A.
+2. **B ⊆ A scope boundary.** Expected files (from EXPECTED OUTCOME) = A; Changed files (from QA REQUEST Scope) = B. PASS if B ⊆ A. When the QA REQUEST carries no EXPECTED OUTCOME, A does not exist: record this gate as `not-evaluable` and proceed on gate 1 alone. **Never fill A from the Scope list** — B ⊆ B is true by construction and turns the gate into a rubber stamp that reads like a PASS.
 
 **On violation: immediate REQUEST_CHANGES, cycle NOT executed** — fail-fast. The expensive cycle below never runs against a change that already fails its own declared contract.
 
@@ -70,7 +70,22 @@ A **behavior-invisible contract check** — a narrow exception to qa's dynamic-o
 
 ### PLAN
 
-Parse the QA REQUEST's Spec/AC into concrete verification targets and adversarial scenarios: what BASELINE must run green, what ADVERSARIAL E2E must attack, and what CHECK will judge against. Spec/AC understanding is retained here in full; MUST-DO tables and Completeness sub-checks are `code-review`'s static-audit territory, not PLAN's.
+Two ordered outputs. The roster comes first because it fixes where every scenario must be entered and what its evidence has to show — scenarios authored before it drift inward toward whatever is easiest to call.
+
+#### PLAN.1 — Actor Roster, before any scenario
+
+Enumerate every actor the changed surface serves and pin each one's boundary, as `actor · boundary · driver · reachable`:
+
+- **actor** — who acts: an end user on a named path, a specific role (household owner vs payer), an operator/admin, a calling client system, an attacker.
+- **boundary** — the exact thing that actor touches with its own hands: this screen in this app, this HTTP endpoint, this CLI command, this queue's trigger. **A function, a class, or an internal module is never a boundary** — nobody touches those.
+- **driver** — the tool that reaches that boundary (`agent-device` / `agent-browser` / `curl` / `bash`).
+- **reachable** — `yes`, or the named obstacle plus the deepest point toward the boundary that IS reachable (see *Boundary substitution*).
+
+A change with no UI still has actors. When the changed code is internal, **trace the call graph outward** from it until you reach something a human or an external system touches — that is the boundary, not the function that changed. Emit the result as the `## Actor Roster` output section.
+
+#### PLAN.2 — Scenarios, per actor
+
+Parse the QA REQUEST's Spec/AC into concrete verification targets: what BASELINE must run green, what ADVERSARIAL E2E must attack from each actor's boundary, and what CHECK will judge against. MUST-DO tables and Completeness sub-checks are `code-review`'s static-audit territory, not PLAN's.
 
 See [scenario-authoring.md] for the risk/coverage-gap derivation framework.
 
@@ -94,8 +109,6 @@ Drive the changed surface for real and attack it. Two parts, both required when 
    1. **Derive candidate scenarios by breadth** via [scenario-authoring.md]: Layer A impact-map → coverage-gap → H/M/L priority.
    2. **Attack each derived scenario with the applicable depth rows, working highest-priority (H) first**, from the 6-category matrix: failure paths, boundary/malformed input, injection, interruption-resume + dirty state, misleading success, idempotency. See [stage3-handson.md] `## Adversarial Scenario Matrix` for the full matrix and the lifecycle/applicability detail (start → verify → stop).
 
-   Breadth (step 1) MUST precede depth (step 2) — do not skip straight to the matrix on an undifferentiated changed-file list.
-
 **Inline modality drivers, no tmux.** qa itself drives the modality-appropriate tool inline — it is not delegated to a separate driver subagent:
 
 | Change Type | Driver |
@@ -107,17 +120,45 @@ Drive the changed surface for real and attack it. Two parts, both required when 
 
 For mobile/native UI work, load the `agent-device` skill first and derive the current concrete commands from its runtime `agent-device help <topic>` guidance. Do not copy or invent concrete driving command syntax in this skill.
 
-An internal risk surface with no direct UI/API is driven via its nearest entry point — an API/`curl` call if reachable, or a `bash` harness that invokes the code path directly.
+**Enter at the actor's boundary.** Every **self-authored** scenario is executed by entering at its actor's boundary from the Actor Roster and observing what that actor observes. Calling the changed function, class, or module directly is a unit check, not a scenario run — it proves the code in isolation and leaves every layer between the actor and that code unexercised.
 
-Command execution is **non-blocking only**: every command either returns control on its own or is explicitly backgrounded (`run_in_background`, or trailing `&` with output redirected). A bare blocking command that hangs the shell is forbidden. See [stage3-handson.md] Step 3.2 for the lifecycle this backs (start in background → wait for readiness → verify → stop, never leaving a server running).
+A **caller-provided** scenario is exempt from relocation and stays verbatim (part 1 above) whatever layer it enters at — the caller owns that choice. It is not exempt from disclosure: record its `driven-at` as the layer it actually entered, and it supports no claim above that layer. A caller-provided command that runs at an inner layer never satisfies an actor-boundary scenario on the same surface.
+
+**Boundary substitution.** An unreachable boundary — no physical device, a dependency answering 502, a missing credential — never relocates the scenario inward while the claim stays where it was. In order:
+
+1. Drive from the actor's boundary anyway, **replacing only the unreachable hop** with a fake or stub (fake transport, stubbed external API, seeded local data), so every layer between the actor and that hop still executes.
+2. Record the scenario's `driven-at` as the deepest point actually entered plus what was substituted — e.g. `app dispense screen → hardware command (USB transport faked)`.
+3. Only when even that is impossible is the scenario `NOT-RUN`, not PASS. A recorded coverage delta states what remains unproven; it is never a substitute for running it.
+
+**Depth honesty.** A verdict claims exactly the boundary its scenarios were driven from. Evidence sets collected at different depths never merge into a deeper claim: "the internal function behaves" plus "the app launches" is not "the actor's path works".
+
+#### Red Flags — Boundary Evasion
+
+| Excuse | Reality |
+|--------|---------|
+| "It's a pure function, so calling it directly is the closest real entry point" | The closest real entry point is the boundary an actor can reach. A harness reaches nothing. |
+| "The new bundle installs and the app launches, so the change is verified" | Launching proves the bundle loads. Drive the screen where the change is observable. |
+| "No physical device / the API returns 502 — record it as coverage delta" | Fake the last hop and run everything above it. Delta is what remains after that, not instead of it. |
+| "Component tests pass and the app boots — together that's end-to-end" | Two runs at two depths never compose into a third. |
+| "Same scenario either way, only the entry point differs" | The entry point is what is under test. Every layer skipped is a layer unverified. |
+
+Command execution is **non-blocking only**: every command either returns control on its own or is explicitly backgrounded (`run_in_background`, or trailing `&` with output redirected — a bare `cmd &` without redirection leaves the harness waiting on inherited file descriptors and hangs the agent). A bare blocking command that hangs the shell is forbidden. See [stage3-handson.md] Step 3.2 for the lifecycle this backs (start in background → wait for readiness → verify → stop, never leaving a server running).
 
 **By-design non-idempotency note:** running ADVERSARIAL E2E actually exercises the application (starts servers, sends requests, mutates state); some operations under test are intentionally non-idempotent per spec, which is not itself a defect.
 
 ### CHECK
 
-Is the goal met — BASELINE green and the full ADVERSARIAL E2E pass (provided scenarios + matrix)?
+Is the goal met — BASELINE green and the full ADVERSARIAL E2E pass (provided scenarios + matrix)? Judge each scenario on its own row, then ask the two questions that a per-scenario PASS does not answer:
+
+- Did each scenario traverse the changed surface from its actor's boundary all the way through, or did it stop at an inner layer? Read `driven-at`, not the PASS.
+- Is any `H`-priority scenario still `NOT-RUN`? Then the goal is not met, whatever the other rows say.
+
+A FAILED scenario row blocks CHECK, with exactly one carve-out: a failed **self-authored `M`/`L`** row whose finding scores **50–74** — the `nitpick (non-blocking)` band, which [feedback-protocol.md]'s scale defines as *real but minor, rarely happens in practice* — leaves the cycle a **soft pass**: the row stays FAIL in the roster, the finding is reported as a LOW note, and the verdict is COMMENT, never APPROVE.
+
+Everything else blocks. A finding scoring **75+** blocks whatever the row's priority — the scale calls 75 *likely to occur in practice, directly impacts functionality*, which is a defect, not a nitpick. A failed **`H`-priority** row blocks whatever its score. A failed **caller-provided** row blocks — it never soft-passes, per `### ADVERSARIAL E2E` part 1. And a failed row whose finding cannot be scored at **50 or above** is not a soft pass but an unexplained failure: re-run or diagnose it, because a scenario that failed for reasons you cannot state is the one most likely to matter. Never restate a failed row as PASS to reach a clean sheet.
 
 - **Pass → PASS.** Emit APPROVE (see Output Format).
+- **Soft pass → PASS with COMMENT.**
 - **Fail → enter the loop below.**
 
 ### DIAGNOSIS → FIX → RE-VERIFY (loop, ≤5 cycles)
@@ -147,6 +188,7 @@ Loop back to CHECK. Continue until an EXIT condition below fires.
 | Condition | Trigger | Action |
 |-----------|---------|--------|
 | **Goal Met** | CHECK passes (BASELINE + full matrix green) | PASS → APPROVE |
+| **Goal Met, soft pass** | CHECK soft-passes (one carve-out row, per `### CHECK`) | PASS → COMMENT, carrying the failed row and its LOW note |
 | **max_cycles=5** | `cycle` reaches `max_cycles` (5) still unresolved | Terminate, report unresolved with last diagnosis |
 | **Same-Failure-3x** | The same failure repeats 3 times | Terminate, report thrash |
 | **Safety** | A safety invariant (e.g. ROLLBACK guard) refuses to proceed | Terminate, report the refusal reason |
@@ -202,6 +244,20 @@ Every verification **command execution** (BASELINE, ADVERSARIAL E2E, RE-VERIFY) 
 | Objective command output | Save to file | build/test/lint logs, curl response body + status, agent-browser/Playwright/agent-device screenshots and reports, CLI execution logs |
 | Subjective judgment | Response only (no file) | PLAN's spec/AC reading, oracle's diagnosis narrative |
 
+### Actor-Perspective Evidence (per executed scenario)
+
+An evidence set proves what its actor could observe at its boundary. Every executed scenario gets its own set, named for that scenario id from the roster so the two map 1:1, holding three slots in this order:
+
+| Slot | What it holds |
+|------|---------------|
+| `before` | The actor-observable state the scenario starts from — the screen the actor is on, the value the endpoint currently returns, the record as it stands. |
+| `action` | The action as the actor issues it at its boundary — the tap/click sequence, the exact request, the command typed — with the immediate response. |
+| `after` | The outcome the actor observes — the resulting screen, the response body, the delivered payload or written record — asserted against the scenario's `expected`. |
+
+At a UI boundary, `before` and `after` are captures of the asserted state: the screen where the change is visible. **A screenshot of a launch, splash, or landing screen is not scenario evidence** — it proves the app started.
+
+Internal signals (server logs, DB rows, emitted command payloads, instrumentation) are supporting evidence attached beside these three, never a replacement for them. Build/test/lint logs are BASELINE evidence and prove nothing about any actor's path.
+
 ### Evidence File Content Requirements
 
 Evidence files must contain meaningful content that demonstrates the verification result. Empty (0-byte) files are not valid evidence. When a command produces empty stdout, record the command executed and its exit code so the file is not empty.
@@ -230,21 +286,6 @@ Omit this section when no commands were executed (a PRE-FLIGHT fail-fast, judgme
 
 ---
 
-## Command Execution Policy: Non-Blocking Only
-
-qa is non-interactive and headless. Every command it runs MUST return control to the shell when finished or be explicitly backgrounded. Foreground processes that occupy the agent shell indefinitely are **forbidden**.
-
-| Pattern | Status | Example |
-|---------|--------|---------|
-| Command exits on completion | Allowed | `bun test`, `curl http://localhost:8080/health` |
-| Command backgrounded via tool | Allowed | `run_in_background` with `emulator -avd Pixel_9` |
-| Command backgrounded in shell with output redirection | Allowed | `emulator -avd Pixel_9 >/tmp/emulator.log 2>&1 &` |
-| Bare blocking command | **FORBIDDEN** | `emulator -avd Pixel_9` (hangs the shell indefinitely) |
-
-**Rule**: if a command does not terminate on its own, it MUST be launched with `run_in_background`, OR with a trailing `&` AND output redirected to a file or `/dev/null`. A bare `cmd &` without redirection inherits stdout/stderr from the agent shell — the harness then waits on the inherited file descriptors until the backgrounded process exits, hanging the agent.
-
----
-
 <Output_Format>
 
 ## Output Format
@@ -259,12 +300,19 @@ qa is non-interactive and headless. Every command it runs MUST return control to
 | ADVERSARIAL E2E | PASS / FAIL | [matrix + scenario summary] |
 | Cycles run | N / max_cycles | [Same-Failure key if terminated early] |
 
+## Actor Roster
+
+| actor | boundary | driver | reachable |
+|---|---|---|---|
+
+One row per actor the changed surface serves, from PLAN.1. `boundary` names an interface an actor touches — never a function, class, or module. `reachable` is `yes` or the obstacle plus the deepest reachable point toward that boundary. On a PRE-FLIGHT fail-fast the cycle never reaches PLAN, so this section is absent rather than empty — same as the scenario roster below.
+
 ## Scenarios Executed
 
-| # | source | actor | preconditions | steps | expected | result | why-needed | priority |
-|---|---|---|---|---|---|---|---|---|
+| # | source | actor | driven-at | preconditions | steps | expected | result | evidence | why-needed | priority |
+|---|---|---|---|---|---|---|---|---|---|---|
 
-Every row's `source` is either `self-authored` or `caller-provided`. A `self-authored` row carries the six-field shape from [scenario-authoring.md] — actor · preconditions · steps · expected · why-needed · priority — filled in full; a `caller-provided` row carries whatever shape the caller supplied. This table is the canonical scenario record for the cycle: `result` maps to `Status` and `why-needed` maps to `Why-Needed` in the four-column working table [stage3-handson.md] mandates for hands-on execution — the column-count divergence is declared here, not fixed there.
+Every row's `source` is either `self-authored` or `caller-provided`. A `self-authored` row carries the six-field shape from [scenario-authoring.md] — actor · preconditions · steps · expected · why-needed · priority — filled in full; a `caller-provided` row carries whatever shape the caller supplied. `driven-at` names the boundary actually entered plus any substitution; `result` is PASS / FAIL / `NOT-RUN`; `evidence` is the path to that scenario's evidence set. This table is the canonical scenario record for the cycle: `result` maps to `Status` and `why-needed` maps to `Why-Needed` in the four-column working table [stage3-handson.md] mandates for hands-on execution — the column-count divergence is declared here, not fixed there.
 
 Close the table with exactly one coverage-delta line naming the impact-map domains from [scenario-authoring.md], which of those domains the rows above cover, and which are left uncovered.
 
@@ -290,10 +338,13 @@ Close the table with exactly one coverage-delta line naming the impact-map domai
 
 1. **Issuance precondition.** A `## Scenarios Executed` section is a precondition for issuing a verdict. When it is absent, the `## Verdict` heading is omitted rather than a verdict being issued — this reads as an unfinished cycle, never as a fourth value alongside the `{APPROVE, REQUEST_CHANGES, COMMENT}` domain below. The single exception to this absence rule is the PRE-FLIGHT fail-fast, which legitimately issues **REQUEST_CHANGES** with no cycle run and therefore no `## Scenarios Executed` section. A section that is *present* with zero rows is a separate case, not an omission: when ADVERSARIAL E2E was skipped because the change is a genuinely inert refactor touching no risk surface (`### ADVERSARIAL E2E` above), the cycle is complete, its coverage-delta line states the change touched no risk surface, and a verdict **is** issued per the table below.
 
+2. **Boundary gate.** APPROVE requires every `H`-priority scenario to have been executed at its actor's boundary, with any substitution declared in `driven-at`. **An `H`-priority scenario left `NOT-RUN` blocks APPROVE** — issue REQUEST_CHANGES naming the obstacle. The verdict never describes the cycle as end-to-end unless the roster's `driven-at` values say it was.
+
 | Condition | Verdict |
 |-----------|---------|
 | PRE-FLIGHT contract violation | **REQUEST_CHANGES** (MUST-NOT-DO / B⊆A violated, cycle not executed) |
 | EXIT via max_cycles/Same-Failure-3x/Safety, unresolved | **REQUEST_CHANGES** (unresolved after cycle) |
+| CHECK soft-passes (a failed self-authored `M`/`L` row, finding in the 50–74 nitpick band) | **COMMENT** (never APPROVE — the failed row stays FAIL in the roster) |
 | CHECK passes (BASELINE + full matrix green) | **APPROVE** (or **COMMENT** to surface LOW notes — see *On COMMENT* below) |
 
 Every issue surfaced MUST include a confidence score. See [feedback-protocol.md] for Confidence Scoring, Validation, and Conventional Comments.
@@ -306,7 +357,10 @@ Every issue surfaced MUST include a confidence score. See [feedback-protocol.md]
 
 ```
 CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop ≤5] → EXIT → CLEANUP → ROLLBACK → STATE
-PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed
+PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed. No EXPECTED OUTCOME → B⊆A is not-evaluable, never A:=Scope
+CHECK:      a FAILED row blocks, except a self-authored M/L row scoring 50-74 = soft pass → EXIT Goal Met, soft pass → COMMENT, never APPROVE. 75+ blocks, H blocks, caller-provided blocks, unscorable-below-50 = re-run not soft-pass
+ACTOR:      Actor Roster before scenarios — actor · boundary · driver · reachable; a function/class/module is never a boundary; internal change → trace the call graph outward. Enter every scenario at its actor's boundary; substitute only the unreachable hop and record driven-at; otherwise NOT-RUN, never PASS. H-priority NOT-RUN blocks APPROVE
+EVIDENCE:   per-scenario before/action/after at the actor's boundary; launch/splash/landing captures are not scenario evidence; internal logs support, never replace; depths never merge into a deeper claim
 BASELINE:   build/test/lint green. See stage1-commands.md
 MATRIX:     6 categories — failure paths, boundary/malformed input, injection, interruption, misleading success, idempotency. Breadth via scenario-authoring.md, depth via stage3-handson.md
 DRIVERS:    API→curl, Frontend→agent-browser (fallback playwright, if available), Mobile/native UI→agent-device (load its skill first; use runtime help guidance), CLI→bash. No tmux.
@@ -316,5 +370,5 @@ ROLLBACK:   git revert fix_head_before..HEAD only, NEVER git reset --hard; 3 gua
 STATE:      bun ${CLAUDE_SKILL_DIR}/scripts/qa-state.ts <sub>; continue resumes at last phase/cycle
 NESTING:    qa's fix-loop must NOT be called inside another fix-loop (e.g. ultragoal) — doc contract, YAGNI; upgrade trigger: add a code guard when qa gains its first fix-loop-owning caller
 ROSTER:     ## Scenarios Executed is a precondition for verdict issuance; absent → verdict not issued, cycle incomplete. Exception: PRE-FLIGHT fail-fast issues REQUEST_CHANGES with no roster — never synthesize an empty one there; present+0 rows means inert refactor, a completed cycle
-FEEDBACK:   feedback-protocol.md for Confidence Scoring; CONFIDENCE 0-49 discard, 50-79 nitpick, 80+ report
+FEEDBACK:   feedback-protocol.md for Confidence Scoring; CONFIDENCE 0-49 discard, 50-74 nitpick, 75+ blocking
 ```
