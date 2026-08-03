@@ -844,6 +844,20 @@ describe("new-prose: the boundary rule does not override verbatim caller scenari
 		expect(skillMd).toContain("not exempt from disclosure");
 		expect(skillMd).toContain("supports no claim above that layer");
 	});
+
+	// The public docs promised unconditional relocation, which a caller
+	// supplying an inner-layer harness would observe as a broken promise.
+	test("the public docs carry the same exemption, in both languages", () => {
+		const docsDir = join(import.meta.dir, "..", "..", "docs", "skills");
+		for (const file of ["review-quality.md", "review-quality.en.md"]) {
+			const doc = readFileSync(join(docsDir, file), "utf8");
+			expect(doc).toContain("caller-provided");
+			expect(doc).toContain("driven-at");
+			expect(doc).not.toContain(
+				"Every scenario is entered at its actor's boundary",
+			);
+		}
+	});
 });
 
 describe("new-prose: B subset-of A has a reading when A is absent", () => {
