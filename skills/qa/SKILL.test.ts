@@ -466,9 +466,9 @@ describe("new-prose: Scenarios Executed roster (roster axis)", () => {
 		expect(skillMd).toContain("## Scenarios Executed");
 	});
 
-	test("the nine-column header appears in the pinned order", () => {
+	test("the roster header appears in the pinned order, carrying driven-at and evidence", () => {
 		expect(skillMd).toContain(
-			"| # | source | actor | preconditions | steps | expected | result | why-needed | priority |",
+			"| # | source | actor | driven-at | preconditions | steps | expected | result | evidence | why-needed | priority |",
 		);
 	});
 
@@ -557,6 +557,163 @@ describe("new-prose: Quick Reference ROSTER line names the PRE-FLIGHT carve-out"
 			.find((line) => line.startsWith("ROSTER:"));
 		expect(rosterLine).toBeDefined();
 		expect(rosterLine).toContain("PRE-FLIGHT fail-fast");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: Actor Roster — actors and their boundaries are pinned at PLAN,
+// before any scenario exists (must FAIL before the edit — RED)
+//
+// Baseline this closes (skills/qa/tests/actor-boundary-scenario.md): a live
+// cycle named its actor, then executed the scenario by calling the changed
+// function from a harness, captured a launch screen as mobile evidence, filed
+// the unreachable hardware hop as coverage delta, and summed two evidence sets
+// collected at different depths into an end-to-end APPROVE.
+// ---------------------------------------------------------------------------
+
+describe("new-prose: Actor Roster is produced before scenarios", () => {
+	test("PLAN's first sub-step is the Actor Roster", () => {
+		const planStart = skillMd.indexOf("### PLAN");
+		expect(planStart).not.toBe(-1);
+		const planEnd = skillMd.indexOf("### BASELINE", planStart + 1);
+		expect(planEnd).not.toBe(-1);
+		const planSection = skillMd.slice(planStart, planEnd);
+		expect(planSection).toContain("Actor Roster");
+		expect(planSection).toContain("before any scenario");
+	});
+
+	test("the roster row shape names actor, boundary, driver, and reachability", () => {
+		expect(skillMd).toContain("`actor · boundary · driver · reachable`");
+	});
+
+	test("an inner code unit is explicitly disqualified as a boundary", () => {
+		expect(skillMd).toContain(
+			"A function, a class, or an internal module is never a boundary",
+		);
+	});
+
+	test("an internal change is required to trace outward to a real boundary", () => {
+		expect(skillMd).toContain("trace the call graph outward");
+	});
+
+	test("the Output Format carries an ## Actor Roster section", () => {
+		expect(skillMd).toContain("## Actor Roster");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: scenarios are driven FROM the actor's boundary; an unreachable
+// boundary is substituted at the last hop, never relocated inward
+// ---------------------------------------------------------------------------
+
+describe("new-prose: boundary-entry rule and substitution", () => {
+	test("direct invocation of the changed unit is named a unit check, not a scenario run", () => {
+		expect(skillMd).toContain(
+			"Calling the changed function, class, or module directly is a unit check, not a scenario run",
+		);
+	});
+
+	test("boundary substitution replaces only the unreachable hop", () => {
+		expect(skillMd).toContain("Boundary substitution");
+		expect(skillMd).toContain("replacing only the unreachable hop");
+	});
+
+	test("an unrunnable scenario is NOT-RUN rather than PASS", () => {
+		expect(skillMd).toContain("`NOT-RUN`, not PASS");
+	});
+
+	test("a recorded coverage delta is not a substitute for running the scenario", () => {
+		expect(skillMd).toContain("never a substitute for running it");
+	});
+
+	test("depth honesty forbids merging evidence sets collected at different depths", () => {
+		expect(skillMd).toContain(
+			"Evidence sets collected at different depths never merge into a deeper claim",
+		);
+	});
+
+	test("the old inward-relocation license is gone", () => {
+		expect(skillMd).not.toContain(
+			"bash harness that invokes the code path directly",
+		);
+		expect(skillMd).not.toContain("nearest entry point");
+	});
+
+	test("boundary-evasion rationalizations are answered in a red-flag table", () => {
+		expect(skillMd).toContain("Red Flags — Boundary Evasion");
+		expect(skillMd).toContain("closest real entry point");
+		expect(skillMd).toContain("the app launches");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: evidence proves what the actor could observe at its boundary
+// ---------------------------------------------------------------------------
+
+describe("new-prose: actor-perspective evidence contract", () => {
+	test("every executed scenario carries before/action/after slots", () => {
+		expect(skillMd).toContain("Actor-Perspective Evidence");
+		expect(skillMd).toContain("| `before` |");
+		expect(skillMd).toContain("| `action` |");
+		expect(skillMd).toContain("| `after` |");
+	});
+
+	test("a launch/splash/landing capture is disqualified as scenario evidence", () => {
+		expect(skillMd).toContain(
+			"A screenshot of a launch, splash, or landing screen is not scenario evidence",
+		);
+	});
+
+	test("internal signals are supporting evidence, never a replacement", () => {
+		expect(skillMd).toContain("supporting evidence");
+		expect(skillMd).toContain("never a replacement");
+	});
+
+	test("evidence files are named per scenario id so the roster maps 1:1", () => {
+		expect(skillMd).toContain("scenario id");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: the verdict may not out-claim the depth it was driven at
+// ---------------------------------------------------------------------------
+
+describe("new-prose: approval is gated on boundary depth", () => {
+	test("an H-priority scenario left NOT-RUN blocks APPROVE", () => {
+		const guardStart = skillMd.indexOf("## Approval Decision");
+		expect(guardStart).not.toBe(-1);
+		expect(skillMd.slice(guardStart)).toContain(
+			"An `H`-priority scenario left `NOT-RUN` blocks APPROVE",
+		);
+	});
+
+	test("Quick Reference carries the actor-boundary and evidence lines", () => {
+		const quickRefStart = skillMd.indexOf("## Quick Reference");
+		expect(quickRefStart).not.toBe(-1);
+		const quickRef = skillMd.slice(quickRefStart);
+		const lines = quickRef.split("\n");
+		const actorLine = lines.find((line) => line.startsWith("ACTOR:"));
+		expect(actorLine).toBeDefined();
+		expect(actorLine).toContain("boundary");
+		const evidenceLine = lines.find((line) => line.startsWith("EVIDENCE:"));
+		expect(evidenceLine).toBeDefined();
+		expect(evidenceLine).toContain("before/action/after");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// NEW-PROSE: scenario-authoring.md's actor layer binds actor -> boundary
+// ---------------------------------------------------------------------------
+
+describe("new-prose: scenario-authoring actor layer carries the boundary", () => {
+	test("the actor layer takes its actors from the Actor Roster", () => {
+		expect(scenarioAuthoringMd).toContain("Actor Roster");
+	});
+
+	test("steps are required to begin at the actor's boundary", () => {
+		expect(scenarioAuthoringMd).toContain(
+			"steps begin at that actor's boundary",
+		);
 	});
 });
 
