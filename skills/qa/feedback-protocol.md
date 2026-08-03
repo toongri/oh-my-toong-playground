@@ -20,7 +20,7 @@ Guidelines for providing actionable, well-calibrated code review feedback.
 
 ### Threshold Rule
 
-**Report only issues scoring 80+.** Lower scores are filtered automatically.
+**80+ → report as a blocking issue. 50–79 → report as `nitpick (non-blocking)`. Below 50 → discard.** The 50–79 band is what the scale's `50` row already prescribes; it is reported, not filtered, and it never blocks on its own.
 
 
 ### Scoring Checklist

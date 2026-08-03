@@ -226,19 +226,22 @@ After native-app verification completes (pass or fail), use the loaded skill's v
 | [Endpoint/Page/Command] | [why this scenario exists — the coverage gap it fills, from the derived scenario's `why-needed` field] | PASS / FAIL | [response/behavior summary] |
 | Server stop | - | PASS / FAIL | [cleanup details] |
 
-**ADVERSARIAL E2E Result:** PASS -> Proceed to CHECK / FAIL -> REQUEST_CHANGES / SKIPPED -> Proceed to CHECK
+**ADVERSARIAL E2E Result:** PASS -> Proceed to CHECK / FAIL -> by row class, see below / SKIPPED -> Proceed to CHECK
 ```
 
 ---
 
-## ADVERSARIAL E2E Failure = Immediate Stop
+## ADVERSARIAL E2E Failure = Stop or Carry, by Row Class
 
-If ANY verification fails:
-1. **Do NOT proceed to CHECK**
-2. Report the failure with specific output (response body, error message, screenshot reference)
-3. **Stop** the server/application
-4. Issue `REQUEST_CHANGES` immediately
-5. Wait for fix and re-run from BASELINE
+Whatever fails, first report it with specific output (response body, error message, evidence reference). Then dispose of it by the row's class — **this stage never issues the verdict itself**; SKILL.md `### CHECK` owns that:
+
+| Failed row | Disposition |
+|------------|-------------|
+| Caller-provided scenario | **Do NOT proceed to CHECK.** Stop the server/application, issue `REQUEST_CHANGES` immediately, re-run from BASELINE after the fix |
+| Self-authored `H`-priority row | Same — stop and issue `REQUEST_CHANGES` immediately |
+| Self-authored `M`/`L` row | Record it FAIL in the roster, finish the remaining rows, and carry it to CHECK, which decides between a blocking failure and a soft pass |
+
+The immediate-stop classes exist so an expensive cycle is not spent against a surface that already failed what the caller or the risk ranking called essential. A lower-priority failure does not earn that interrupt — it earns a FAIL row and a verdict decided with the whole roster in view.
 
 ---
 

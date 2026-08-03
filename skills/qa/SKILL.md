@@ -120,7 +120,9 @@ Drive the changed surface for real and attack it. Two parts, both required when 
 
 For mobile/native UI work, load the `agent-device` skill first and derive the current concrete commands from its runtime `agent-device help <topic>` guidance. Do not copy or invent concrete driving command syntax in this skill.
 
-**Enter at the actor's boundary.** Every scenario is executed by entering at its actor's boundary from the Actor Roster and observing what that actor observes. Calling the changed function, class, or module directly is a unit check, not a scenario run — it proves the code in isolation and leaves every layer between the actor and that code unexercised.
+**Enter at the actor's boundary.** Every **self-authored** scenario is executed by entering at its actor's boundary from the Actor Roster and observing what that actor observes. Calling the changed function, class, or module directly is a unit check, not a scenario run — it proves the code in isolation and leaves every layer between the actor and that code unexercised.
+
+A **caller-provided** scenario is exempt from relocation and stays verbatim (part 1 above) whatever layer it enters at — the caller owns that choice. It is not exempt from disclosure: record its `driven-at` as the layer it actually entered, and it supports no claim above that layer. A caller-provided command that runs at an inner layer never satisfies an actor-boundary scenario on the same surface.
 
 **Boundary substitution.** An unreachable boundary — no physical device, a dependency answering 502, a missing credential — never relocates the scenario inward while the claim stays where it was. In order:
 
@@ -151,7 +153,9 @@ Is the goal met — BASELINE green and the full ADVERSARIAL E2E pass (provided s
 - Did each scenario traverse the changed surface from its actor's boundary all the way through, or did it stop at an inner layer? Read `driven-at`, not the PASS.
 - Is any `H`-priority scenario still `NOT-RUN`? Then the goal is not met, whatever the other rows say.
 
-A FAILED scenario row blocks CHECK, with exactly one carve-out: a failed `M`/`L` row whose finding scores below the blocking threshold ([feedback-protocol.md]) leaves the cycle a **soft pass** — the row stays FAIL in the roster, the finding is reported, and the verdict is COMMENT, never APPROVE. A failed `H`-priority row blocks regardless of its confidence score. Never restate a failed row as PASS to reach a clean sheet.
+A FAILED scenario row blocks CHECK, with exactly one carve-out: a failed **self-authored `M`/`L`** row whose finding scores **50–79** — the `nitpick (non-blocking)` band — leaves the cycle a **soft pass**: the row stays FAIL in the roster, the finding is reported as a LOW note, and the verdict is COMMENT, never APPROVE.
+
+Everything else blocks. A finding scoring **80+** blocks whatever the row's priority. A failed **`H`-priority** row blocks whatever its score. A failed **caller-provided** row blocks — it never soft-passes, per `### ADVERSARIAL E2E` part 1. And a failed row whose finding cannot be scored at **50 or above** is not a soft pass but an unexplained failure: re-run or diagnose it, because a scenario that failed for reasons you cannot state is the one most likely to matter. Never restate a failed row as PASS to reach a clean sheet.
 
 - **Pass → PASS.** Emit APPROVE (see Output Format).
 - **Soft pass → PASS with COMMENT.**
@@ -353,7 +357,7 @@ Every issue surfaced MUST include a confidence score. See [feedback-protocol.md]
 ```
 CYCLE:      PRE-FLIGHT → PLAN → BASELINE → ADVERSARIAL E2E → CHECK → [DIAGNOSIS → FIX → RE-VERIFY loop ≤5] → EXIT → CLEANUP → ROLLBACK → STATE
 PRE-FLIGHT: MUST-NOT-DO scope + B⊆A only; violation = immediate REQUEST_CHANGES, cycle NOT executed. No EXPECTED OUTCOME → B⊆A is not-evaluable, never A:=Scope
-CHECK:      a FAILED row blocks, except a below-threshold M/L failure = soft pass → COMMENT, never APPROVE; a failed H row always blocks
+CHECK:      a FAILED row blocks, except a self-authored M/L row scoring 50-79 = soft pass → COMMENT, never APPROVE. 80+ blocks, H blocks, caller-provided blocks (stops at ADVERSARIAL E2E), unscorable-below-50 = re-run not soft-pass
 ACTOR:      Actor Roster before scenarios — actor · boundary · driver · reachable; a function/class/module is never a boundary; internal change → trace the call graph outward. Enter every scenario at its actor's boundary; substitute only the unreachable hop and record driven-at; otherwise NOT-RUN, never PASS. H-priority NOT-RUN blocks APPROVE
 EVIDENCE:   per-scenario before/action/after at the actor's boundary; launch/splash/landing captures are not scenario evidence; internal logs support, never replace; depths never merge into a deeper claim
 BASELINE:   build/test/lint green. See stage1-commands.md
