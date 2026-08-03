@@ -97,10 +97,11 @@ assignment can only be expressed with it. "I want this agent somewhere between t
 tiers" is not enough.
 
 What cleared that bar for `fable` is the absence-judgment principle, which produces
-one assignment that opus cannot express. Note that the tier only differentiates on
-the claude deploy surface — `claude-fable-5` vs Opus 5. On codex there is nothing
-above `gpt-5.6-sol`, so it resolves to the same model as `opus`. This is the first
-platform asymmetry the tier vocabulary has admitted.
+one assignment that opus cannot express. The tier now differentiates on both deploy
+surfaces — `claude-fable-5` vs Opus 5 on claude, `gpt-5.6-sol` vs `gpt-5.6-terra`
+on codex (since the 2026-08-04 remap; before it codex had nothing above
+`gpt-5.6-sol`, so `fable` and `opus` fell to the same model — the first platform
+asymmetry the tier vocabulary had admitted).
 
 ## Substituting a tier into a concrete model
 
@@ -111,8 +112,9 @@ Handled by `model-map` in each `{platform}.yaml`.
 ```yaml
 model-map:
   tiers:
-    opus:   { model: gpt-5.6-sol }
-    sonnet: { model: gpt-5.6-terra }
+    fable:  { model: gpt-5.6-sol }
+    opus:   { model: gpt-5.6-terra }
+    sonnet: { model: gpt-5.6-luna }
 ```
 
 **A tier sets the model only.** Omitting `effort` leaves `model_reasoning_effort`
@@ -242,9 +244,11 @@ measurement appears.
   settled by static inspection. The only way to confirm landing is to dispatch metis
   after deploy and observe which model ran.
 - **codex** — the `model` key in a role TOML beats the model given by the session
-  or CLI. The deployed value is the value at run time. `fable` and `opus` both resolve
-  to `gpt-5.6-sol` — deleting the `fable` tier from `codex.yaml` as redundant makes
-  `assertMappedTier` hard-fail `metis`'s codex deploy.
+  or CLI. The deployed value is the value at run time. The three tiers resolve to
+  `gpt-5.6-sol` (`fable`), `gpt-5.6-terra` (`opus`), and `gpt-5.6-luna` (`sonnet`)
+  respectively — deleting any tier from `codex.yaml` makes `assertMappedTier`
+  hard-fail the codex deploy of every agent on that tier (e.g. deleting `fable`
+  fails `metis`).
 - **opencode** — no agents deploy here (`feature-platforms.agents` in
   `config.yaml` is `[claude, codex]`). The `model-map` stays declared anyway:
   without it the tier string survives verbatim and an unresolvable value would

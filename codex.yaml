@@ -21,21 +21,16 @@ model-map:
   # at whatever effort the session is configured for instead of a value frozen at
   # sync time.
   tiers:
-    # `fable` and `opus` resolve to the same codex model, and that is NOT the
-    # redundancy that got the four `agents:` entries deleted below. Those were
-    # per-agent overrides whose removal changed nothing; this is a tier in the
-    # vocabulary, and `assertMappedTier` (tools/lib/model-map.ts:22) aborts sync
-    # for any deployed agent whose tier is absent here -- delete this and
+    # Every tier named here is load-bearing regardless of what it resolves to:
+    # `assertMappedTier` (tools/lib/model-map.ts:22) aborts sync for any
+    # deployed agent whose tier is absent here -- delete `fable` and
     # `agents/metis.md` stops deploying to codex with a named ModelMapError.
-    # It duplicates `opus` only because codex has nothing above gpt-5.6-sol; the
-    # grade differentiation the tier exists to carry is real on claude
-    # (claude-fable-5 vs Opus 5) and lands here the day a sol-successor ships.
     fable:
       model: gpt-5.6-sol
     opus:
-      model: gpt-5.6-sol
-    sonnet:
       model: gpt-5.6-terra
+    sonnet:
+      model: gpt-5.6-luna
   # `agents:` is for what a tier cannot express. With tiers carrying model alone,
   # that is effort: an agent that must pin an effort rather than follow the
   # session. It previously held code-reviewer/metis/momus/tech-claim-examiner,
