@@ -167,7 +167,8 @@ flowchart TB
 
 **Verification protocol**:
 
-- **Verification**: an implement task completes on sisyphus-junior's report (no separate QA step). When verification is needed, it is a separate verify task that sisyphus handles inline by running the AC commands itself.
+- **Verification**: every implement task carries a paired verify task. Sisyphus handles it inline by running the AC commands itself (no separate QA agent); junior's own self-check is evidence for that verdict, not a substitute for it.
+- **Commit**: on an APPROVE/COMMENT verdict, mnemosyne is dispatched to commit that task's changes. Nothing is committed while a task sits in REQUEST_CHANGES.
 - **Evidence-backed verdict**: on a verify task sisyphus runs the AC commands itself, saves each output to the evidence path, and renders the verdict from that observed output alone (a verify task changes no files, so it does not commit). Commits are performed by mnemosyne after junior completes an implement task.
 - **Fix loop**: REQUEST_CHANGES → oracle diagnosis → fix task carrying that diagnosis verbatim → junior → re-verify that one task only. Already-passed tasks are never re-run.
 - **Loop exit**: if oracle reframes the problem after 3 consecutive failed hypotheses, the fix loop halts and the reframe is surfaced to the user.

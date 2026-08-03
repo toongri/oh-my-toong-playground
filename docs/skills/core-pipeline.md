@@ -167,7 +167,8 @@ flowchart TB
 
 **검증 프로토콜**:
 
-- **검증**: implement 태스크는 sisyphus-junior의 보고로 완료됩니다(별도 QA 단계 없음). 검증이 필요하면 별도 verify 태스크에서 sisyphus가 AC 명령을 직접 실행해 인라인으로 처리합니다.
+- **검증**: 모든 implement 태스크에는 verify 태스크가 짝으로 붙습니다. sisyphus가 AC 명령을 직접 실행해 인라인으로 판정하며(별도 QA 에이전트 없음), junior의 자체 검증은 그 판정의 증거일 뿐 판정을 대신하지 않습니다.
+- **커밋**: 판정이 APPROVE/COMMENT면 mnemosyne을 디스패치해 해당 태스크의 변경을 커밋합니다. REQUEST_CHANGES 상태에서는 커밋하지 않습니다.
 - **증거 기반 판정**: verify 태스크에서 sisyphus가 AC 명령을 직접 실행해 출력을 증거 경로에 저장하고, 그 관측된 출력으로만 판정합니다(verify 태스크는 파일을 바꾸지 않으므로 커밋 없음). 커밋은 implement 태스크의 junior 완료 후 mnemosyne가 수행합니다.
 - **수정 루프**: REQUEST_CHANGES → oracle 진단 → 수정 태스크(진단 결과를 그대로 실어) → junior → 그 태스크만 재검증. 실패한 단위에만 범위가 한정되며, 이미 통과한 태스크는 다시 돌리지 않습니다.
 - **루프 이탈 조건**: oracle이 가설 3회 연속 실패 후 문제를 재정의하면 수정 루프를 멈추고 사용자에게 올립니다.
