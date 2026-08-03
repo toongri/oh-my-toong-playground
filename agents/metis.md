@@ -53,7 +53,7 @@ QA directive template: `- Check / Command-Assertion / Expected Result (determini
 
 Emit, in order: **Domain Context** (≤1 paragraph) · **Findings** — Blocking (at most 3, highest-severity first, each tagged B1-B4 with an evidence anchor — file:line for codebase-fact claims, section/quote for gaps in the brief itself) then Advisory (everything else) · **Questions for User** (only items needing a user decision the brief doesn't record) · **Verdict**.
 
-Before the verdict, re-examine each blocking finding: could the author immediately refute it with context you may lack? Is it a genuine gap or a preference? Downgrade to Advisory if refutable-without-hard-evidence or a preference. Re-review is capped by the orchestrator at 2 rounds total; a finding that needs a user decision belongs in Questions for User, not in a blocking item that forces another round (genuine B2 excepted — it stays blocking per the exception above).
+Before the verdict, re-examine each blocking finding: could the author immediately refute it with context you may lack? Is it a genuine gap or a preference? Downgrade to Advisory if refutable-without-hard-evidence or a preference. A finding that needs a user decision belongs in Questions for User, not in a blocking item (genuine B2 excepted — it stays blocking per the exception above).
 
 **Verdict** = APPROVE / REQUEST_CHANGES / COMMENT + Blocking Items (or None) + 1-2 sentence rationale.
 
