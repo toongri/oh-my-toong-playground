@@ -687,7 +687,7 @@ describe("codex-persistent-mode cli", () => {
 	});
 
 	describe("hook stop (reader, G6-1 / G6-3)", () => {
-		test("active pursuing ultragoal child keeps stop blocked", async () => {
+		test("live child blocks without consuming", async () => {
 			const sid = "sid-child-live";
 			const codexHome = join(projectDir, "codex-home");
 			mkdirSync(codexHome, { recursive: true });
@@ -762,7 +762,7 @@ describe("codex-persistent-mode cli", () => {
 			}
 		});
 
-		test("ten sequential live-child Stops preserve pursuit iteration", async () => {
+		test("waiting-only stop chain does not exhaust budget", async () => {
 			const sid = "sid-ten-live";
 			const home = join(projectDir, "ten");
 			const rollout = join(home, "child.jsonl");
@@ -800,7 +800,7 @@ describe("codex-persistent-mode cli", () => {
 			}
 		});
 
-		test("detector failures fail open with exactly one diagnostic", async () => {
+		test("fail-open emits stderr diagnostic", async () => {
 			const cases = [
 				["missing-db", "missing-db", "none"],
 				["malformed-sqlite", "malformed-sqlite", "db"],
