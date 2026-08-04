@@ -1352,13 +1352,17 @@ describe("get subcommand includes pristine field", () => {
 });
 
 describe("recovery-and-guards: resume-pursuit", () => {
-	test("status shows budget_limited while get keeps inactive-fold contract", () => {
+	test("status shows budget_limited", () => {
 		setBudgetLimited(S);
 		expect(runCli("status")).toBe("budget_limited\n");
+	});
+
+	test("get keeps active-fold contract", () => {
+		setBudgetLimited(S);
 		expect(readGoalGet(S)).toBeNull();
 	});
 
-	test("success resumes budget_limited and preserves stories and other fields", () => {
+	test("resume-pursuit restores pursuing state", () => {
 		setGoalState(S, { phase: "planning", outcome: "keep me", resume_summary: "summary" });
 		setStories(S, [{ id: "S1", story: "story", acceptance_criteria: ["works"], verification_surface: "tests", status: "confirmed" }]);
 		setBudgetLimited(S);
@@ -1368,7 +1372,20 @@ describe("recovery-and-guards: resume-pursuit", () => {
 		expect(state.stories).toHaveLength(1);
 	});
 
-	test("refuses pursuing, blocked, complete, absent, and corrupt without changing bytes", () => {
+	test("resume-pursuit refreshes stale heartbeat timestamps", () => {
+		setBudgetLimited(S);
+		const path = resolveStatePath(S);
+		const stale = "2020-01-01T00:00:00";
+		const prior = JSON.parse(readFileSync(path, "utf8"));
+		writeFileSync(path, JSON.stringify({ ...prior, last_touched_at: stale, progress_touched_at: stale }), "utf8");
+
+		resumePursuit(S);
+		const resumed = JSON.parse(readFileSync(path, "utf8"));
+		expect(resumed.last_touched_at).not.toBe(stale);
+		expect(resumed.progress_touched_at).not.toBe(stale);
+	});
+
+	test("resume-pursuit refuses outside budget_limited", () => {
 		for (const phase of ["pursuing", "blocked", "complete"] as const) {
 			writeFileSync(resolveStatePath(S), JSON.stringify({ ...rawState(), phase, active: phase === "pursuing" }), "utf8");
 			const before = readFileSync(resolveStatePath(S), "utf8");
@@ -1383,7 +1400,7 @@ describe("recovery-and-guards: resume-pursuit", () => {
 		expect(readFileSync(resolveStatePath(S), "utf8")).toBe("{broken");
 	});
 
-	test("terminal lock survives refusal", () => {
+	test("terminal lock survives new seed attempt", () => {
 		setBudgetLimited(S);
 		const lock = `${resolveStatePath(S)}.lock`;
 		mkdirSync(lock);

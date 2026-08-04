@@ -901,6 +901,8 @@ describe("Ultragoal state management", () => {
 				max_iterations: 10,
 				outcome: "Ship the multi-story feature",
 				schema_version: 1,
+				stories: [{ id: "S1", story: "Keep this", status: "confirmed" }],
+				approved_review_artifact_sha256: "unchanged-hash",
 			}),
 		);
 
@@ -911,12 +913,38 @@ describe("Ultragoal state management", () => {
 		expect(parsed.iteration).toBe(3);
 		expect(parsed.outcome).toBe("Ship the multi-story feature");
 		expect(parsed.schema_version).toBe(1);
+		expect(parsed.stories).toEqual([{ id: "S1", story: "Keep this", status: "confirmed" }]);
+		expect(parsed.approved_review_artifact_sha256).toBe("unchanged-hash");
 
 		const absentSessionId = "nonexistent-ultragoal-update";
 		const absentFile = join(omtDir, `ultragoal-state-${absentSessionId}.json`);
 		expect(existsSync(absentFile)).toBe(false);
 		updateUltragoalState(absentSessionId, { iteration: 3 });
 		expect(existsSync(absentFile)).toBe(false);
+	});
+
+	it("ultragoal: updateUltragoalState fails closed under fresh lock contention without changing bytes", async () => {
+		const stateFile = join(omtDir, `ultragoal-state-${sessionId}.json`);
+		const original = JSON.stringify({
+			active: true,
+			phase: "pursuing",
+			objective_verdict: "absent",
+			iteration: 1,
+			max_iterations: 10,
+			stories: [{ id: "S1", status: "confirmed" }],
+		});
+		await writeFile(stateFile, original);
+		const lockPath = `${stateFile}.lock`;
+		await mkdir(lockPath);
+		await writeFile(
+			join(lockPath, "owner.json"),
+			JSON.stringify({ ownerPid: process.pid, token: "live-owner", startedAt: Date.now() }),
+		);
+
+		expect(() => updateUltragoalState(sessionId, { iteration: 2 })).toThrow(
+			"ultragoal-state: state lock contended; refusing unlocked write",
+		);
+		expect(await readFile(stateFile, "utf8")).toBe(original);
 	});
 });
 
