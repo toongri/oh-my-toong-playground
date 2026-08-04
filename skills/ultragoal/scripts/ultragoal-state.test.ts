@@ -286,6 +286,30 @@ describe("review dispatch stale-lock recovery", () => {
 });
 
 describe("goal state", () => {
+	test("fingerprint fields survive an unrelated merge write byte-identically", () => {
+		const path = resolveStatePath(S);
+		const seeded = JSON.parse(readFileSync(path, "utf8"));
+		const lastSeenHead = "abc123\nwith-newline";
+		const lastSeenStoriesDigest = "sha256:deadbeef==";
+		writeFileSync(
+			path,
+			JSON.stringify({ ...seeded, last_seen_head: lastSeenHead, last_seen_stories_digest: lastSeenStoriesDigest }),
+			"utf8",
+		);
+
+		setGoalState(S, { phase: "planning", resume_summary: "unrelated write" });
+
+		const persisted = JSON.parse(readFileSync(path, "utf8"));
+		expect(persisted.last_seen_head).toBe(lastSeenHead);
+		expect(persisted.last_seen_stories_digest).toBe(lastSeenStoriesDigest);
+	});
+
+	test("fingerprint fields are omitted from a fresh seed", () => {
+		const persisted = JSON.parse(readFileSync(resolveStatePath(S), "utf8"));
+		expect(Object.prototype.hasOwnProperty.call(persisted, "last_seen_head")).toBe(false);
+		expect(Object.prototype.hasOwnProperty.call(persisted, "last_seen_stories_digest")).toBe(false);
+	});
+
 	// AC #1
 	test("merge-write preserves prior fields and never re-seeds started_at", () => {
 		// First write: a full set of content/loop-control slots
