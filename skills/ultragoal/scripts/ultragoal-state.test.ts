@@ -288,7 +288,7 @@ describe("review dispatch stale-lock recovery", () => {
 });
 
 describe("goal state", () => {
-	test("fingerprint fields survive an unrelated merge write byte-identically", () => {
+	test("fingerprint fields survive merge write", () => {
 		const path = resolveStatePath(S);
 		const seeded = JSON.parse(readFileSync(path, "utf8"));
 		const lastSeenHead = "abc123\nwith-newline";
@@ -306,7 +306,7 @@ describe("goal state", () => {
 		expect(persisted.last_seen_stories_digest).toBe(lastSeenStoriesDigest);
 	});
 
-	test("fingerprint fields are omitted from a fresh seed", () => {
+	test("fresh seed omits fingerprint fields", () => {
 		const persisted = JSON.parse(readFileSync(resolveStatePath(S), "utf8"));
 		expect(Object.prototype.hasOwnProperty.call(persisted, "last_seen_head")).toBe(false);
 		expect(Object.prototype.hasOwnProperty.call(persisted, "last_seen_stories_digest")).toBe(false);
