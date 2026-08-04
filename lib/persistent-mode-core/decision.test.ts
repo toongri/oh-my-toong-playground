@@ -16,6 +16,13 @@ describe("makeDecision", () => {
 
 	beforeAll(async () => {
 		await mkdir(stateDir, { recursive: true });
+		await mkdir(projectRoot, { recursive: true });
+		execFileSync("git", ["init", "-q"], { cwd: projectRoot });
+		execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: projectRoot });
+		execFileSync("git", ["config", "user.name", "Test"], { cwd: projectRoot });
+		await writeFile(join(projectRoot, "baseline"), "baseline");
+		execFileSync("git", ["add", "baseline"], { cwd: projectRoot });
+		execFileSync("git", ["commit", "-qm", "baseline"], { cwd: projectRoot });
 	});
 
 	afterAll(async () => {
@@ -147,7 +154,9 @@ describe("makeDecision", () => {
 
 			expect(result.decision).toBe("block");
 			expect(fs.existsSync(join(stateDir, "block-count-skill-chain-test-session"))).toBe(true);
-			expect(fs.readFileSync(join(stateDir, "block-count-skill-chain-test-session"), "utf-8")).toBe("3");
+			expect(fs.readFileSync(join(stateDir, "block-count-skill-chain-test-session"), "utf-8")).toBe(
+				"3",
+			);
 		});
 	});
 
@@ -516,9 +525,7 @@ describe("makeDecision", () => {
 						current_ambiguity: 0.05,
 						threshold: 0.15,
 						topology: {
-							components: [
-								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
-							],
+							components: [{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS }],
 						},
 						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope" }],
 					},
@@ -712,9 +719,7 @@ describe("makeDecision", () => {
 						current_ambiguity: 0.05,
 						threshold: 0.15,
 						topology: {
-							components: [
-								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
-							],
+							components: [{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS }],
 						},
 						// non_goals intentionally absent.
 					},
@@ -745,9 +750,7 @@ describe("makeDecision", () => {
 						current_ambiguity: 0.05,
 						threshold: 0.15,
 						topology: {
-							components: [
-								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
-							],
+							components: [{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS }],
 						},
 						non_goals: [],
 					},
@@ -778,9 +781,7 @@ describe("makeDecision", () => {
 						current_ambiguity: 0.05,
 						threshold: 0.15,
 						topology: {
-							components: [
-								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
-							],
+							components: [{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS }],
 						},
 						non_goals: [
 							{ item: "out-of-scope thing", decider: "" },
@@ -814,11 +815,11 @@ describe("makeDecision", () => {
 						current_ambiguity: 0.05,
 						threshold: 0.15,
 						topology: {
-							components: [
-								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
-							],
+							components: [{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS }],
 						},
-						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope in round 2" }],
+						non_goals: [
+							{ item: "out-of-scope thing", decider: "user confirmed out of scope in round 2" },
+						],
 					},
 				}),
 			);
@@ -847,7 +848,9 @@ describe("makeDecision", () => {
 				}),
 			);
 
-			const result = makeDecision(createContext({ lastAssistantMessage: "some message without done token" }));
+			const result = makeDecision(
+				createContext({ lastAssistantMessage: "some message without done token" }),
+			);
 
 			const { existsSync } = await import("fs");
 			expect(existsSync(markerPath)).toBe(true);
@@ -868,9 +871,7 @@ describe("makeDecision", () => {
 						current_ambiguity: 0.05,
 						threshold: 0.15,
 						topology: {
-							components: [
-								{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS },
-							],
+							components: [{ id: "c1", name: "C1", status: "active", clarity_scores: SCORED_DIMS }],
 						},
 						// non_goals absent — but staleness must still fall through to cleanup.
 					},
@@ -1183,6 +1184,16 @@ describe("makeDecision", () => {
 			const { readFileSync } = await import("fs");
 			return JSON.parse(readFileSync(ultragoalPath, "utf8"));
 		};
+		const runGit = (args: string[]) => execFileSync("git", args, { cwd: projectRoot });
+		const commitProject = async (file: string, value: string) => {
+			await writeFile(join(projectRoot, file), value);
+			runGit(["add", file]);
+			runGit(["commit", "-qm", value]);
+			return execFileSync("git", ["rev-parse", "HEAD"], {
+				cwd: projectRoot,
+				encoding: "utf8",
+			}).trim();
+		};
 
 		it("ultragoal blocks with <ultragoal-continuation> and increments iteration when objective unmet during pursuit", async () => {
 			await writeUltragoal({
@@ -1198,9 +1209,161 @@ describe("makeDecision", () => {
 
 			expect(result.decision).toBe("block");
 			expect(result.reason).toContain("<ultragoal-continuation>");
-			expect(result.reason).toContain("[ULTRAGOAL - ITERATION 3/10]");
+			expect(result.reason).toContain("[ULTRAGOAL - NO-PROGRESS 3/10]");
 			const after = await readUltragoalFile();
 			expect(after.iteration).toBe(3);
+		});
+
+		it("iteration 9 with unchanged HEAD reaches no-progress limit on the 10th Stop", async () => {
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 9,
+				max_iterations: 10,
+				outcome: "objective",
+			});
+			const result = makeDecision(createContext());
+			expect(result.reason).toContain("[ULTRAGOAL - NO-PROGRESS LIMIT REACHED 10/10]");
+			expect(result.reason).toContain("no diff-carrying commit, no story transition");
+			const after = await readUltragoalFile();
+			expect(after.phase).toBe("budget_limited");
+			expect(after.active).toBe(false);
+		});
+
+		it("a diff-carrying commit resets no-progress iteration and advances fingerprint", async () => {
+			const head = execFileSync("git", ["rev-parse", "HEAD"], {
+				cwd: projectRoot,
+				encoding: "utf8",
+			}).trim();
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 9,
+				max_iterations: 10,
+				last_seen_head: head,
+				outcome: "objective",
+			});
+			await writeFile(join(projectRoot, "progress"), "progress");
+			execFileSync("git", ["add", "progress"], { cwd: projectRoot });
+			execFileSync("git", ["commit", "-qm", "progress"], { cwd: projectRoot });
+			const result = makeDecision(createContext());
+			expect(result.reason).toContain("[ULTRAGOAL - NO-PROGRESS 0/10]");
+			const after = await readUltragoalFile();
+			expect(after.iteration).toBe(0);
+			expect(after.last_seen_head).not.toBe(head);
+		});
+
+		it("a story status transition resets no-progress iteration", async () => {
+			const head = execFileSync("git", ["rev-parse", "HEAD"], {
+				cwd: projectRoot,
+				encoding: "utf8",
+			}).trim();
+			const digest = "invalidated-by-transition";
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 5,
+				max_iterations: 10,
+				last_seen_head: head,
+				last_seen_stories_digest: digest,
+				stories: [{ id: "s1", status: "pending" }],
+				outcome: "objective",
+			});
+			const result = makeDecision(createContext());
+			expect(result.reason).toContain("[ULTRAGOAL - NO-PROGRESS 0/10]");
+			expect((await readUltragoalFile()).iteration).toBe(0);
+		});
+
+		it("max_iterations 3 limits on the third unchanged Stop", async () => {
+			for (const iteration of [0, 1]) {
+				await writeUltragoal({
+					active: true,
+					phase: "pursuing",
+					iteration,
+					max_iterations: 3,
+					outcome: "objective",
+				});
+				makeDecision(createContext());
+			}
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 2,
+				max_iterations: 3,
+				outcome: "objective",
+			});
+			const result = makeDecision(createContext());
+			expect(result.reason).toContain("[ULTRAGOAL - NO-PROGRESS LIMIT REACHED 3/3]");
+		});
+
+		it("empty commit after an observed baseline increments no-progress", async () => {
+			const prior = execFileSync("git", ["rev-parse", "HEAD"], {
+				cwd: projectRoot,
+				encoding: "utf8",
+			}).trim();
+			runGit(["commit", "--allow-empty", "-qm", "empty"]);
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 5,
+				max_iterations: 10,
+				last_seen_head: prior,
+				outcome: "objective",
+			});
+			const result = makeDecision(createContext());
+			expect(result.reason).toContain("[ULTRAGOAL - NO-PROGRESS 6/10]");
+			expect((await readUltragoalFile()).iteration).toBe(6);
+		});
+
+		it("amending the observed prior HEAD increments no-progress", async () => {
+			const prior = await commitProject("amend-boundary", "amend");
+			runGit(["commit", "--amend", "--allow-empty", "--no-edit"]);
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 5,
+				max_iterations: 10,
+				last_seen_head: prior,
+				outcome: "objective",
+			});
+			expect(makeDecision(createContext()).reason).toContain("[ULTRAGOAL - NO-PROGRESS 6/10]");
+		});
+
+		it("rebasing the observed prior HEAD increments no-progress", async () => {
+			const base = execFileSync("git", ["rev-parse", "HEAD"], {
+				cwd: projectRoot,
+				encoding: "utf8",
+			}).trim();
+			const prior = await commitProject("rebase-boundary", "rebase");
+			runGit(["checkout", "-qb", "rebased-boundary"]);
+			runGit(["rebase", "--onto", base, base, "rebased-boundary"]);
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 5,
+				max_iterations: 10,
+				last_seen_head: prior,
+				outcome: "objective",
+			});
+			expect(makeDecision(createContext()).reason).toContain("[ULTRAGOAL - NO-PROGRESS 6/10]");
+		});
+
+		it("commit then revert from observed baseline increments no-progress", async () => {
+			const prior = execFileSync("git", ["rev-parse", "HEAD"], {
+				cwd: projectRoot,
+				encoding: "utf8",
+			}).trim();
+			await commitProject("revert-boundary", "revert");
+			runGit(["revert", "--no-edit", "HEAD"]);
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 5,
+				max_iterations: 10,
+				last_seen_head: prior,
+				outcome: "objective",
+			});
+			expect(makeDecision(createContext()).reason).toContain("[ULTRAGOAL - NO-PROGRESS 6/10]");
 		});
 
 		it("terminal complete ultragoal-state still allows the stop", async () => {
@@ -1412,7 +1575,9 @@ describe("makeDecision", () => {
 					}),
 				);
 
-				const result = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 1 }));
+				const result = makeDecision(
+					createContext({ sessionId: sid, activeBackgroundTaskCount: 1 }),
+				);
 
 				expect(result).toEqual({ continue: true });
 				expect(fs.existsSync(join(freshOmtDir, "state"))).toBe(false);
@@ -1469,7 +1634,9 @@ describe("makeDecision", () => {
 			});
 
 			expect(fs.existsSync(walkedAwayPath)).toBe(false);
-			const afterGc = makeDecision(createContext({ sessionId: walkedAwaySid, activeBackgroundTaskCount: 0 }));
+			const afterGc = makeDecision(
+				createContext({ sessionId: walkedAwaySid, activeBackgroundTaskCount: 0 }),
+			);
 			expect(afterGc).toEqual({ continue: true });
 		});
 
@@ -1548,7 +1715,11 @@ describe("makeDecision", () => {
 			ageFile(qaPath, 7 * 3600);
 
 			makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 0, lastAssistantMessage: "still working" }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 0,
+					lastAssistantMessage: "still working",
+				}),
 			);
 
 			const prometheusAfter = JSON.parse(await readFile(prometheusPath, "utf8"));
@@ -1603,7 +1774,9 @@ describe("makeDecision", () => {
 
 			// Heartbeat crossing: a Stop call while a subagent is active revives
 			// last_touched_at (GC axis) but must not touch progress_touched_at.
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
+			const heartbeatResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1611,7 +1784,9 @@ describe("makeDecision", () => {
 			expect(revived.progress_touched_at).toBe(staleIso);
 
 			// Now Stop with no subagents active — must NOT wedge on the revived corpse.
-			const stopResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }));
+			const stopResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }),
+			);
 			expect(stopResult).toEqual({ continue: true });
 		});
 
@@ -1628,7 +1803,9 @@ describe("makeDecision", () => {
 				}),
 			);
 
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
+			const heartbeatResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1636,7 +1813,9 @@ describe("makeDecision", () => {
 			expect(revived.progress_touched_at).toBe(staleIso);
 
 			// First Stop call after revival — must not block, well before MAX_BLOCK_COUNT (5).
-			const stopResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }));
+			const stopResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }),
+			);
 			expect(stopResult).toEqual({ continue: true });
 		});
 
@@ -1732,7 +1911,9 @@ describe("makeDecision", () => {
 			// Heartbeat crossing: revives last_touched_at (GC axis) to now, but
 			// backfills progress_touched_at from the PRE-overwrite (stale) value —
 			// that backfilled value is what must keep this corpse from reviving.
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
+			const heartbeatResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1741,7 +1922,9 @@ describe("makeDecision", () => {
 			expect(revived.progress_touched_at).toBe(staleIso);
 
 			// Now Stop with no subagents active — must NOT wedge on the revived corpse.
-			const stopResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }));
+			const stopResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }),
+			);
 			expect(stopResult).toEqual({ continue: true });
 		});
 
@@ -1758,7 +1941,9 @@ describe("makeDecision", () => {
 				}),
 			);
 
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
+			const heartbeatResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1766,7 +1951,9 @@ describe("makeDecision", () => {
 			expect(revived.started_at).toBe(staleIso);
 			expect(revived.progress_touched_at).toBe(staleIso);
 
-			const stopResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }));
+			const stopResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 0 }),
+			);
 			expect(stopResult).toEqual({ continue: true });
 		});
 
@@ -1838,7 +2025,9 @@ describe("makeDecision", () => {
 			// Heartbeat crossing: backfills progress_touched_at from the genuinely
 			// recent last_touched_at (2 minutes ago) before bumping last_touched_at
 			// itself to now.
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
+			const heartbeatResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
@@ -1847,7 +2036,11 @@ describe("makeDecision", () => {
 			// Next Stop call with no subagents active — must still block: the backfilled
 			// progress_touched_at is fresh (2 minutes old), well under the 6h TTL.
 			const stopResult = makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 0, lastAssistantMessage: "still working" }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 0,
+					lastAssistantMessage: "still working",
+				}),
 			);
 			expect(stopResult.decision).toBe("block");
 			expect(stopResult.reason).toContain("<deep-interview-continuation>");
@@ -1871,14 +2064,20 @@ describe("makeDecision", () => {
 				}),
 			);
 
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
+			const heartbeatResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const revived = JSON.parse(await readFile(statePath, "utf8"));
 			expect(revived.progress_touched_at).toBe(recentTouch);
 
 			const stopResult = makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 0, lastAssistantMessage: "still working" }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 0,
+					lastAssistantMessage: "still working",
+				}),
 			);
 			expect(stopResult.decision).toBe("block");
 			expect(stopResult.reason).toContain("<prometheus-continuation>");
@@ -1911,7 +2110,9 @@ describe("makeDecision", () => {
 			);
 
 			// Heartbeat crossing backfills progress_touched_at from recentTouch.
-			const heartbeatResult = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }));
+			const heartbeatResult = makeDecision(
+				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
 			const stopResult = makeDecision(
@@ -2055,7 +2256,6 @@ describe("makeDecision", () => {
 			expect(reason).toContain("request_user_input");
 			expect(reason).not.toContain("AskUserQuestion");
 		});
-
 	});
 
 	// Codex-only chain ratchet: the codex-persistent-mode Stop reader derives
@@ -2157,7 +2357,9 @@ describe("makeDecision", () => {
 
 			// Chain A resolves (the referenced skill got opened) — pendingSkillChainSkills
 			// goes empty on the next two turns, no other blocking condition fires.
-			expect(makeDecision(createContext({ pendingSkillChainSkills: [] }))).toEqual({ continue: true });
+			expect(makeDecision(createContext({ pendingSkillChainSkills: [] }))).toEqual({
+				continue: true,
+			});
 			expect(makeDecision(createContext())).toEqual({ continue: true });
 
 			// The counter must be gone — NOT sitting at 3.
