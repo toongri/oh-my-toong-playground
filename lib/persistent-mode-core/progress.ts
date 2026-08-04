@@ -32,8 +32,9 @@ function digestStories(state: ProgressState): string {
 			: [];
 	const pairs = source
 		.filter(
-			(story): story is Required<Pick<StoryLike, "id" | "status">> =>
-				story?.id != null && story?.status != null,
+				(story): story is Required<Pick<StoryLike, "id" | "status">> =>
+					story?.id !== null && story?.id !== undefined &&
+					story?.status !== null && story?.status !== undefined,
 		)
 		.map((story) => [String(story.id), String(story.status)] as const)
 		.sort(([a, as], [b, bs]) => (a < b ? -1 : a > b ? 1 : as < bs ? -1 : as > bs ? 1 : 0));
