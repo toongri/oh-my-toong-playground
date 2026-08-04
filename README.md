@@ -69,7 +69,8 @@ oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에
 
 - Claude Code CLI 설치됨
 - Node.js v18+ (HUD 기능용)
-- `jq` (훅이 페이로드 파싱에 사용 — 없으면 가드가 조용히 열림)
+- `jq` (훅이 페이로드 파싱에 사용 — 없으면 가드가 차단하지 않음)
+- `sqlite3` (Codex detector가 `state_5.sqlite` 상태 데이터베이스를 조회하는 데 사용 — 없으면 detector가 0건을 세고 stderr에 진단 1건을 출력)
 - macOS 또는 Linux
 
 ### 설정

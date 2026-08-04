@@ -105,6 +105,12 @@ flowchart TD
 - **Role**: Executes plan stories sequentially
 - **Workflow**: Dispatches each story to `/sisyphus` in sequence and starts the next story only after the previous one completes
 
+#### Iteration budget, no-progress, and resume
+
+- During pursuit, `iteration` counts consecutive Stops with no observed progress. A diff-carrying commit or Story status transition resets it to `0`; Stops that wait for background work are not counted.
+- Reaching `max_iterations` (default 10) soft-stops without dispatching new work as non-complete `budget_limited`, preserving state. After in-flight work drains and the completion gate is checked, only the user may run `resume-pursuit` to restore `pursuing` with `iteration=0`.
+- `blocked` is separate: it is reported only for B1 (no actionable incomplete work) or when the configured `blocked-stop` predicate is met.
+
 ### sisyphus (The Orchestrator)
 
 - **Role**: Execution and delegation
@@ -158,6 +164,8 @@ With a plan ready, `/ultragoal` sequentially dispatches its stories to `/sisyphu
 5. **Commit**: on APPROVE/COMMENT, mnemosyne is dispatched to commit that task's changes
 6. **Iteration**: Continues until all stories and tasks pass review
 
+`ultragoal`'s `iteration` counts consecutive no-progress Stops and resets to 0 on a diff-carrying commit or Story status transition; waiting for background work does not consume it. At `max_iterations` (default 10), it soft-stops as non-complete `budget_limited`, preserves state, and dispatches no new work. After in-flight work drains and the completion gate is checked, only the user-run `resume-pursuit` restores `pursuing` at iteration 0. `blocked` is separate and occurs only for B1 (no actionable incomplete work) or the configured `blocked-stop` predicate.
+
 ---
 
 ## 5. Commands
@@ -203,7 +211,7 @@ Contain all TODOs in one plan file. This prevents context fragmentation and make
 | Problem | Solution |
 |---------|----------|
 | Prometheus keeps interviewing | It needs more context. Answer thoroughly or say "generate plan now". |
-| Sisyphus won't stop | This is by design. It persists until verification passes. |
+| Sisyphus won't stop | This is by design. ultragoal counts consecutive no-progress Stops and may soft-stop as `budget_limited` at `max_iterations` (default 10), preserving state. |
 | Inline verify keeps failing | Review the feedback carefully. The issues are real. |
 
 ---

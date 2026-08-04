@@ -185,6 +185,10 @@ flowchart TB
 
 **잘못된 차단 finding 무효화**: 차단 finding이 틀렸을 때의 유일한 탈출구입니다. AI는 그 finding을 무력화하는 소스 줄을 인용할 수 있을 때만 무효화를 제안하고, 사용자가 승인하면 사용자가 직접 `dismiss-review-finding --ref <file:line> --class <correctness|requirement-gap> --rationale <근거>`를 실행합니다. 한 번에 finding 하나만 차단 집합에서 빠지며, 무효화는 해당 artifact의 raw 바이트에 고정되어 다음 리뷰 라운드에는 이월되지 않습니다.
 
+### ultragoal 반복 예산·진전 없음·재개
+
+`ultragoal` pursuit의 `iteration`은 진전이 관찰되지 않은 Stop의 연속 횟수입니다. diff를 포함한 커밋이나 Story 상태 전환은 카운터를 `0`으로 리셋하고, 백그라운드 작업을 기다리는 Stop은 소비하지 않습니다. `max_iterations`(기본 10)에 도달하면 새 작업 없이 상태를 보존한 비완료 `budget_limited`로 소프트 정지합니다. 진행 중 작업을 비우고 completion gate를 확인한 뒤 사용자만 `resume-pursuit`를 실행해 `pursuing`과 iteration 0을 복원합니다. `blocked`는 별도이며 B1(실행 가능한 미완료 항목 없음) 또는 설정한 `blocked-stop` 조건에서만 발생합니다.
+
 ---
 
 ## 6. 보조 스킬
