@@ -1280,6 +1280,26 @@ describe("makeDecision", () => {
 			expect((await readUltragoalFile()).last_seen_head).toEqual(expect.any(String));
 		});
 
+		it("empty last_seen_head initializes then detects a later diff commit", async () => {
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 0,
+				max_iterations: 10,
+				last_seen_head: "",
+				outcome: "objective",
+			});
+			makeDecision(createContext());
+			const first = await readUltragoalFile();
+			expect(first.last_seen_head).toEqual(expect.any(String));
+			const baseline = first.last_seen_head;
+			await commitProject("empty-head-progress", "progress");
+			makeDecision(createContext());
+			const after = await readUltragoalFile();
+			expect(after.iteration).toBe(0);
+			expect(after.last_seen_head).not.toBe(baseline);
+		});
+
 		it("story transition resets counter", async () => {
 			const head = execFileSync("git", ["rev-parse", "HEAD"], {
 				cwd: projectRoot,

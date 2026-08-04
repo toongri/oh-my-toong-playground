@@ -377,7 +377,8 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				last_seen_stories_digest: progress.newFingerprint.last_seen_stories_digest,
 			};
 			const fingerprintPatch = {
-				...(ultragoal.last_seen_head === undefined && progress.newFingerprint.last_seen_head !== null
+				...((typeof ultragoal.last_seen_head !== "string" || ultragoal.last_seen_head.trim() === "") &&
+				progress.newFingerprint.last_seen_head !== null
 					? { last_seen_head: progress.newFingerprint.last_seen_head }
 					: {}),
 				...(ultragoal.last_seen_stories_digest === undefined
