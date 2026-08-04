@@ -807,6 +807,13 @@ hg_bash_json() {
     printf '%s' "$1" | jq -Rs '{tool_name: "Bash", tool_input: {command: .}}'
 }
 
+test_user_authorized_resume_pursuit_reaches_claude_shared_guard() {
+    local out
+    out=$(printf '%s' "$(hg_bash_json 'bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts resume-pursuit')" \
+        | bash "$SCRIPT_DIR/pre-tool-enforcer.sh")
+    hg_is_deny "$out" || { echo "ASSERTION FAILED Claude resume-pursuit wiring: expected shared deny. Got: $out"; return 1; }
+}
+
 # =============================================================================
 # Ledger write-guard (compaction-continuous-record plan, TODO 7, D5).
 # Corpus (a)-(i): each case is a decisive gate for the blacklist arming
@@ -1937,6 +1944,7 @@ main() {
     run_test test_wg_s1_quoted_paren_in_substitution_ledger_rm_denied
     run_test test_wg_s2_substitution_closing_paren_adjacent_ledger_rm_denied
     run_test test_wg_s3_substitution_nonledger_allows
+    run_test test_user_authorized_resume_pursuit_reaches_claude_shared_guard
 
     # Defect 5 -- Claude<->Codex ledger-guard parity (double-quote masking)
     run_test test_defect5_row1_plain_redirect_denies

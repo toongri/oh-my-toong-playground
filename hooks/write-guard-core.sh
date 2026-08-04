@@ -205,11 +205,12 @@ write_guard_core_check_dangerous_command() {
 }
 
 # write_guard_core_check_user_authorized_command <command-segment>
-# Denies the two ultragoal-state subcommands whose authority row reads
+# Denies the three ultragoal-state subcommands whose authority row reads
 # "orchestrator, only after explicit user approval":
 #   approve-review-dispatch-renewal -- extends the code-review dispatch budget
 #   dismiss-review-finding          -- removes a blocking finding from the gate
-# Both let the loop clear its own completion gate, so leaving them to prose
+#   resume-pursuit                  -- resumes a previously paused pursuit
+# All three let the loop clear its own completion gate, so leaving them to prose
 # ("run this only after the user approves") makes the authorization
 # vigilance-based -- the exact property ultragoal/SKILL.md rejects for its
 # other gates. Denying the AI's Bash path makes it structural instead: the
@@ -243,7 +244,7 @@ write_guard_core_check_user_authorized_command() {
     case "$seg" in
         *"ultragoal-state.ts"*)
             case "$seg" in
-                *"dismiss-review-finding"* | *"approve-review-dispatch-renewal"*)
+                *"dismiss-review-finding"* | *"approve-review-dispatch-renewal"* | *"resume-pursuit"*)
                     printf '%s\n' "$_wg_core_user_authorized_deny_json"
                     return 0
                     ;;
