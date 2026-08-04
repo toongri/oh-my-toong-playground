@@ -204,6 +204,10 @@ export interface GoalState {
 	 * CLI branch below for why.
 	 */
 	codex_goal_objective: string;
+	/** Last observed repository HEAD used by progress-fingerprint callers. */
+	last_seen_head?: string;
+	/** Digest of the last observed story set used by progress-fingerprint callers. */
+	last_seen_stories_digest?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,6 +346,10 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 		// `set --phase pursuing` (no codex flag) would silently wipe the last-registered
 		// native-goal objective back to "" on every unrelated write.
 		codex_goal_objective: next.codex_goal_objective ?? prior.codex_goal_objective ?? "",
+		// Progress fingerprints are caller-owned metadata. Enumerate them here so an
+		// unrelated merge write cannot silently drop the last observed values.
+		last_seen_head: next.last_seen_head ?? prior.last_seen_head,
+		last_seen_stories_digest: next.last_seen_stories_digest ?? prior.last_seen_stories_digest,
 		review_dispatch_used: validNonNegativeInteger(reviewDispatchUsedCandidate)
 			? reviewDispatchUsedCandidate
 			: 0,
