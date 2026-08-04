@@ -185,6 +185,10 @@ flowchart TB
 
 **Dismissing a wrong blocking finding**: the only exit when a blocking finding is wrong. The AI proposes a dismissal only when it can quote the source line that makes the finding's failure scenario unreachable; on explicit user approval the USER runs `dismiss-review-finding --ref <file:line> --class <correctness|requirement-gap> --rationale <refutation>`. One dismissal removes one finding from the blocking set, pinned to that artifact's raw bytes so it does not carry into the next review round.
 
+### ultragoal iteration budget, no-progress, and resume
+
+`ultragoal` pursuit `iteration` counts consecutive Stops with no observed progress. A diff-carrying commit or Story status transition resets it to `0`; Stops waiting for background work do not consume it. At `max_iterations` (default 10), pursuit soft-stops as non-complete `budget_limited`, preserves state, and dispatches no new work. After in-flight work drains and the completion gate is checked, only the user-run `resume-pursuit` restores `pursuing` at iteration 0. `blocked` is separate and occurs only for B1 (no actionable incomplete work) or the configured `blocked-stop` predicate.
+
 ---
 
 ## 6. Supporting Skills
