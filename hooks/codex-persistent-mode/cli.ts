@@ -43,13 +43,23 @@
  * rationale on the mirror file itself.
  */
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import {
+	mkdirSync,
+	readFileSync,
+	writeFileSync,
+	existsSync,
+	statSync,
+	openSync,
+	readSync,
+	closeSync,
+} from "node:fs";
 import { stdin as processStdin } from "node:process";
 import { join, dirname, basename, resolve, isAbsolute } from "node:path";
 
 import { isSafeSessionId } from "@lib/state-core";
 import { resolveOmtDir } from "@lib/omt-dir";
 import { makeDecision, DecisionContext } from "@lib/persistent-mode-core/decision";
+import { readUltragoalStateRaw } from "@lib/persistent-mode-core/state";
 import { isFailedToolResponse } from "@lib/tool-response";
 
 // Declared before the top-level dispatch below (not after): this module uses
@@ -57,6 +67,8 @@ import { isFailedToolResponse } from "@lib/tool-response";
 // textually positioned after the dispatch block would still be uninitialized
 // (TDZ) when a handler invoked from within that same await resolves.
 const COMMAND_TOOL_NAMES = new Set(["bash", "shell_command", "exec_command"]);
+const CODEX_CHILD_STALE_TTL_SECONDS = 1800;
+const ROLLOUT_TAIL_BYTES = 64 * 1024;
 
 const command = process.argv[2];
 const subcommand = process.argv[3];
@@ -189,7 +201,11 @@ function recordSkillChain(input: Record<string, unknown>, sessionId: string): vo
 
 	writeFileSync(
 		path,
-		JSON.stringify({ ...mirror, openedSkills: [...openedSkills], expectedSkills: [...expectedSkills] }),
+		JSON.stringify({
+			...mirror,
+			openedSkills: [...openedSkills],
+			expectedSkills: [...expectedSkills],
+		}),
 	);
 }
 
@@ -246,6 +262,11 @@ function runStop(input: Record<string, unknown>): void {
 	// (codex-rs/hooks/schema/generated/stop.command.input.schema.json의 required 필드, StopCommandInput).
 	// Stop/SubagentStop 이벤트만 이 필드를 실음. 부재 시 null fail-open(토큰 미발화).
 	const lam = input["last_assistant_message"];
+	const ultragoalState = readUltragoalStateRaw(sessionId);
+	const activeBackgroundTaskCount =
+		ultragoalState?.active === true && ultragoalState.phase === "pursuing"
+			? detectActiveCodexChildren(sessionId)
+			: 0;
 	const context: DecisionContext = {
 		sessionId,
 		lastAssistantMessage: typeof lam === "string" ? lam : null,
@@ -255,7 +276,8 @@ function runStop(input: Record<string, unknown>): void {
 		// is queued as context with trigger_turn:false, so it has no guaranteed wake/re-invocation.
 		// Shared invariant: Stop may bypass only if deferred re-invocation is guaranteed;
 		// Codex lacks that guarantee, so keep no background-task bypass.
-		activeBackgroundTaskCount: 0,
+		activeBackgroundTaskCount,
+		deferredStopWakeGuaranteed: false,
 		pendingSkillChainSkills,
 		// Codex's real AskUserQuestion analog (rewrite rule 14 in
 		// tools/lib/rewrite-rules.ts) — see DecisionContext.askToolName's doc
@@ -284,6 +306,78 @@ function countIncomplete(toolInput: unknown): number {
 		if (!isRecord(entry) || entry["status"] !== "completed") count++;
 	}
 	return count;
+}
+
+/**
+ * Reads Codex's private state DB only for an active ultragoal pursuit. The
+ * detector is deliberately fail-open: any unavailable/malformed input emits
+ * one diagnostic and contributes zero active children.
+ */
+function detectActiveCodexChildren(sessionId: string): number {
+	const fail = (reason: string): number => {
+		process.stderr.write(`codex-persistent-mode: child detector failed (${reason})\n`);
+		return 0;
+	};
+	try {
+		const which = Bun.spawnSync(["sh", "-c", "command -v sqlite3"], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		if (which.exitCode !== 0) return fail("sqlite3 unavailable");
+		const codexHome = process.env.CODEX_HOME || join(process.env.HOME || "", ".codex");
+		const dbPath = join(codexHome, "state_5.sqlite");
+		if (!existsSync(dbPath)) return fail("state database unavailable");
+		const escapedSession = sessionId.replace(/'/g, "''");
+		const query =
+			"SELECT t.id, t.rollout_path FROM thread_spawn_edges e JOIN threads t ON t.id=e.child_thread_id " +
+			`WHERE e.parent_thread_id='${escapedSession}' AND e.status='open';`;
+		const result = Bun.spawnSync(["sqlite3", "-readonly", "-separator", "|", dbPath, query], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		if (result.exitCode !== 0) return fail("sqlite query failed");
+		const output = new TextDecoder().decode(result.stdout).trim();
+		if (!output) return 0;
+		let count = 0;
+		for (const line of output.split("\n")) {
+			const fields = line.split("|");
+			if (fields.length !== 2 || !fields[0] || !fields[1]) return fail("malformed sqlite output");
+			const rolloutPath = fields[1];
+			const ageSeconds = (Date.now() - statSync(rolloutPath).mtimeMs) / 1000;
+			if (ageSeconds > CODEX_CHILD_STALE_TTL_SECONDS) continue;
+			const content = readRolloutTail(rolloutPath);
+			let lastMarker: string | undefined;
+			for (const rawLine of content.split("\n")) {
+				if (!rawLine.trim()) continue;
+				const event: unknown = JSON.parse(rawLine);
+				if (!isRecord(event)) return fail("unreadable or malformed rollout");
+				const payload = event["payload"];
+				const marker = isRecord(payload) ? payload["type"] : undefined;
+				if (marker === "task_started" || marker === "task_complete" || marker === "turn_aborted") {
+					lastMarker = marker;
+				}
+			}
+			if (lastMarker === "task_started") count++;
+		}
+		return count;
+	} catch (error) {
+		const detail = error instanceof Error ? error.message : "unknown";
+		return fail(`unreadable or malformed rollout: ${detail}`);
+	}
+}
+
+function readRolloutTail(path: string): string {
+	const fd = openSync(path, "r");
+	try {
+		const size = statSync(path).size;
+		const length = Math.min(size, ROLLOUT_TAIL_BYTES);
+		const buffer = Buffer.alloc(length);
+		readSync(fd, buffer, 0, length, Math.max(0, size - length));
+		const text = buffer.toString("utf8");
+		return size > length ? text.slice(text.indexOf("\n") + 1) : text;
+	} finally {
+		closeSync(fd);
+	}
 }
 
 function mirrorPath(omtDir: string, sessionId: string): string {
