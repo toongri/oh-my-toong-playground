@@ -20,9 +20,11 @@ import {
 	readFileSync,
 	existsSync,
 	readdirSync,
+	utimesSync,
+	chmodSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 
 const CLI_PATH = join(import.meta.dirname, "cli.ts");
 
@@ -64,16 +66,42 @@ function stopPayload(sessionId: string, cwd: string, lastAssistantMessage?: stri
 	return payload;
 }
 
+function writeUltragoalState(omtDir: string, sid: string, iteration = 0): void {
+	writeFileSync(
+		join(omtDir, `ultragoal-state-${sid}.json`),
+		JSON.stringify({
+			active: true,
+			phase: "pursuing",
+			iteration,
+			max_iterations: 20,
+			objective_verdict: "absent",
+		}),
+	);
+}
+
+function makeChildDb(home: string, sid: string, rollout: string): void {
+	mkdirSync(home, { recursive: true });
+	const db = join(home, "state_5.sqlite");
+	const sql = [
+		"CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT);",
+		"CREATE TABLE thread_spawn_edges (parent_thread_id TEXT, child_thread_id TEXT, status TEXT);",
+		`INSERT INTO threads VALUES ('child-1', '${rollout}');`,
+		`INSERT INTO thread_spawn_edges VALUES ('${sid}', 'child-1', 'open');`,
+	].join(" ");
+	expect(Bun.spawnSync(["sqlite3", db, sql]).exitCode).toBe(0);
+}
+
 async function runCli(
 	subcommand: "post-tool-use" | "stop",
 	input: unknown,
 	omtDir: string,
+	extraEnv: Record<string, string> = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
 	const proc = Bun.spawn(["bun", "run", CLI_PATH, "hook", subcommand], {
 		stdin: new TextEncoder().encode(JSON.stringify(input)),
 		stdout: "pipe",
 		stderr: "pipe",
-		env: { ...process.env, OMT_DIR: omtDir },
+		env: { ...process.env, OMT_DIR: omtDir, ...extraEnv },
 	});
 	const exitCode = await proc.exited;
 	const stdout = await new Response(proc.stdout).text();
@@ -177,7 +205,10 @@ describe("codex-persistent-mode cli", () => {
 					stderr: "",
 				});
 				const written = JSON.parse(readFileSync(mirrorPath(omtDir, c.sid), "utf8"));
-				expect({ sid: c.sid, written }).toEqual({ sid: c.sid, written: { incomplete: c.expected } });
+				expect({ sid: c.sid, written }).toEqual({
+					sid: c.sid,
+					written: { incomplete: c.expected },
+				});
 			}
 		});
 	});
@@ -540,7 +571,9 @@ describe("codex-persistent-mode cli", () => {
 					omtDir,
 				);
 				expect(exitCode).toBe(0);
-				expect(JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"))).toEqual({ incomplete: 1 });
+				expect(JSON.parse(readFileSync(mirrorPath(omtDir, sid), "utf8"))).toEqual({
+					incomplete: 1,
+				});
 			}
 
 			// tool_response field absent entirely (not merely null).
@@ -551,7 +584,9 @@ describe("codex-persistent-mode cli", () => {
 			delete (payloadAbsent as Record<string, unknown>)["tool_response"];
 			const { exitCode: exitCodeAbsent } = await runCli("post-tool-use", payloadAbsent, omtDir);
 			expect(exitCodeAbsent).toBe(0);
-			expect(JSON.parse(readFileSync(mirrorPath(omtDir, sidAbsent), "utf8"))).toEqual({ incomplete: 1 });
+			expect(JSON.parse(readFileSync(mirrorPath(omtDir, sidAbsent), "utf8"))).toEqual({
+				incomplete: 1,
+			});
 		});
 
 		test("arm 6 (failure-predicate axis): isError/error-string/status=error each block the write", async () => {
@@ -604,7 +639,10 @@ describe("codex-persistent-mode cli", () => {
 			const sid = "sid-chain-stop-allow";
 			writeFileSync(
 				mirrorPath(omtDir, sid),
-				JSON.stringify({ openedSkills: ["chain-alpha", "chain-bravo"], expectedSkills: ["chain-bravo"] }),
+				JSON.stringify({
+					openedSkills: ["chain-alpha", "chain-bravo"],
+					expectedSkills: ["chain-bravo"],
+				}),
 			);
 			const { exitCode, stdout } = await runCli("stop", stopPayload(sid, projectDir), omtDir);
 			expect(exitCode).toBe(0);
@@ -649,6 +687,255 @@ describe("codex-persistent-mode cli", () => {
 	});
 
 	describe("hook stop (reader, G6-1 / G6-3)", () => {
+		test("active pursuing ultragoal child keeps stop blocked", async () => {
+			const sid = "sid-child-live";
+			const codexHome = join(projectDir, "codex-home");
+			mkdirSync(codexHome, { recursive: true });
+			const rollout = join(codexHome, "child.jsonl");
+			writeFileSync(
+				rollout,
+				JSON.stringify({ type: "event_msg", payload: { type: "task_started" } }) + "\n",
+			);
+			const db = join(codexHome, "state_5.sqlite");
+			const sql = [
+				"CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT);",
+				"CREATE TABLE thread_spawn_edges (parent_thread_id TEXT, child_thread_id TEXT, status TEXT);",
+				`INSERT INTO threads VALUES ('child-1', '${rollout}');`,
+				`INSERT INTO thread_spawn_edges VALUES ('${sid}', 'child-1', 'open');`,
+			].join(" ");
+			const created = Bun.spawnSync(["sqlite3", db, sql]);
+			expect(created.exitCode).toBe(0);
+			writeFileSync(
+				join(omtDir, `ultragoal-state-${sid}.json`),
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					iteration: 0,
+					max_iterations: 10,
+					objective_verdict: "absent",
+				}),
+			);
+			const result = await runCli("stop", stopPayload(sid, projectDir), omtDir, {
+				CODEX_HOME: codexHome,
+			});
+			expect(result.exitCode).toBe(0);
+			expect(JSON.parse(result.stdout).decision).toBe("block");
+			expect(result.stdout).toContain("[ULTRAGOAL - WAITING ON BACKGROUND WORK]");
+			expect(
+				JSON.parse(readFileSync(join(omtDir, `ultragoal-state-${sid}.json`), "utf8")).iteration,
+			).toBe(0);
+		});
+
+		test("lifecycle and stale truth table counts only a live last task_started", async () => {
+			const cases = [
+				["live", ["task_started"], false],
+				["finished", ["task_started", "task_complete"], false],
+				["aborted", ["task_started", "turn_aborted"], false],
+				["open-only", ["other"], false],
+				["stale", ["task_started"], true],
+			] as const;
+			for (const [name, markers, stale] of cases) {
+				const sid = `sid-${name}`;
+				const home = join(projectDir, name);
+				const rollout = join(home, "child.jsonl");
+				mkdirSync(home, { recursive: true });
+				writeFileSync(
+					rollout,
+					markers
+						.map((type) => JSON.stringify({ type: "event_msg", payload: { type } }))
+						.join("\n") + "\n",
+				);
+				if (stale) {
+					const old = new Date(Date.now() - 1901 * 1000);
+					utimesSync(rollout, old, old);
+				}
+				makeChildDb(home, sid, rollout);
+				writeUltragoalState(omtDir, sid);
+				const result = await runCli("stop", stopPayload(sid, projectDir), omtDir, {
+					CODEX_HOME: home,
+				});
+				expect(result.exitCode).toBe(0);
+				expect(result.stderr).toBe("");
+				expect(
+					JSON.parse(readFileSync(join(omtDir, `ultragoal-state-${sid}.json`), "utf8")).iteration,
+				).toBe(name === "live" ? 0 : 1);
+			}
+		});
+
+		test("ten sequential live-child Stops preserve pursuit iteration", async () => {
+			const sid = "sid-ten-live";
+			const home = join(projectDir, "ten");
+			const rollout = join(home, "child.jsonl");
+			mkdirSync(home, { recursive: true });
+			writeFileSync(
+				rollout,
+				JSON.stringify({ type: "event_msg", payload: { type: "task_started" } }) + "\n",
+			);
+			makeChildDb(home, sid, rollout);
+			writeUltragoalState(omtDir, sid);
+			for (let i = 0; i < 10; i++) {
+				await runCli("stop", stopPayload(sid, projectDir), omtDir, { CODEX_HOME: home });
+				const state = JSON.parse(readFileSync(join(omtDir, `ultragoal-state-${sid}.json`), "utf8"));
+				expect(state.iteration).toBe(0);
+				expect(state.phase).toBe("pursuing");
+			}
+		});
+
+		test("inactive or planning ultragoal skips detector entirely", async () => {
+			for (const [name, state] of [
+				["absent", undefined],
+				["inactive", { active: false, phase: "complete", iteration: 0, max_iterations: 20 }],
+				["planning", { active: true, phase: "planning", iteration: 0, max_iterations: 20 }],
+			] as const) {
+				const sid = `sid-gate-${name}`;
+				const home = join(projectDir, name);
+				mkdirSync(home, { recursive: true });
+				if (state)
+					writeFileSync(join(omtDir, `ultragoal-state-${sid}.json`), JSON.stringify(state));
+				const result = await runCli("stop", stopPayload(sid, projectDir), omtDir, {
+					CODEX_HOME: home,
+				});
+				expect(result.exitCode).toBe(0);
+				expect(result.stderr).toBe("");
+			}
+		});
+
+		test("detector failures fail open with exactly one diagnostic", async () => {
+			const cases = [
+				["missing-db", "missing-db", "none"],
+				["malformed-sqlite", "malformed-sqlite", "db"],
+				["malformed-json", "malformed-json", "{broken"],
+				["scalar-json", "scalar-json", "42"],
+				["unreadable-rollout", "unreadable-rollout", undefined],
+			] as const;
+			for (const [name, dirName, content] of cases) {
+				const sid = `sid-failure-${name}`;
+				const home = join(projectDir, dirName);
+				mkdirSync(home, { recursive: true });
+				if (name === "malformed-sqlite") {
+					writeFileSync(join(home, "state_5.sqlite"), "not sqlite");
+				} else if (name !== "missing-db") {
+					const rollout = join(home, "child.jsonl");
+					if (content !== undefined) writeFileSync(rollout, content);
+					else writeFileSync(rollout, "");
+					makeChildDb(home, sid, rollout);
+					if (name === "unreadable-rollout") chmodSync(rollout, 0o000);
+				}
+				writeUltragoalState(omtDir, sid);
+				const result = await runCli("stop", stopPayload(sid, projectDir), omtDir, {
+					CODEX_HOME: home,
+				});
+				expect(result.exitCode).toBe(0);
+				expect(
+					JSON.parse(readFileSync(join(omtDir, `ultragoal-state-${sid}.json`), "utf8")).iteration,
+				).toBe(1);
+				expect(
+					result.stderr
+						.split("\n")
+						.filter((line) => line.includes("codex-persistent-mode: child detector failed")).length,
+				).toBe(1);
+			}
+		});
+
+		test("bounded rollout tail uses the final complete in-tail marker", async () => {
+			const sid = "sid-tail-bound";
+			const home = join(projectDir, "tail");
+			const rollout = join(home, "child.jsonl");
+			mkdirSync(home, { recursive: true });
+			const prefix =
+				JSON.stringify({ type: "event_msg", payload: { type: "task_started" } }) +
+				"\n" +
+				"x".repeat(70000);
+			writeFileSync(
+				rollout,
+				prefix +
+					"\n" +
+					JSON.stringify({ type: "event_msg", payload: { type: "task_complete" } }) +
+					"\n",
+			);
+			makeChildDb(home, sid, rollout);
+			writeUltragoalState(omtDir, sid);
+			const result = await runCli("stop", stopPayload(sid, projectDir), omtDir, {
+				CODEX_HOME: home,
+			});
+			expect(result.exitCode).toBe(0);
+			expect(result.stderr).toBe("");
+			expect(
+				JSON.parse(readFileSync(join(omtDir, `ultragoal-state-${sid}.json`), "utf8")).iteration,
+			).toBe(1);
+		});
+
+		test("missing sqlite binary fails open with one diagnostic", async () => {
+			const sid = "sid-no-sqlite";
+			const home = join(projectDir, "no-sqlite");
+			mkdirSync(home, { recursive: true });
+			writeUltragoalState(omtDir, sid);
+			const pathWithoutSqlite = join(dirname(process.execPath), ":/bin");
+			const result = await runCli("stop", stopPayload(sid, projectDir), omtDir, {
+				CODEX_HOME: home,
+				PATH: pathWithoutSqlite,
+			});
+			expect(result.exitCode).toBe(0);
+			expect(
+				JSON.parse(readFileSync(join(omtDir, `ultragoal-state-${sid}.json`), "utf8")).iteration,
+			).toBe(1);
+			expect(
+				result.stderr
+					.split("\n")
+					.filter((line) => line.includes("codex-persistent-mode: child detector failed")).length,
+			).toBe(1);
+		});
+
+		test("sqlite invocation includes -readonly", async () => {
+			const sid = "sid-readonly-argv";
+			const home = join(projectDir, "argv");
+			const bin = join(home, "bin");
+			mkdirSync(bin, { recursive: true });
+			const real = Bun.spawnSync(["sh", "-c", "command -v sqlite3"], { stdout: "pipe" })
+				.stdout.toString()
+				.trim();
+			const log = join(home, "argv.log");
+			const shim = join(bin, "sqlite3");
+			writeFileSync(shim, `#!/bin/sh\nprintf '%s\\n' "$@" > '${log}'\nexec '${real}' "$@"\n`);
+			chmodSync(shim, 0o755);
+			const rollout = join(home, "child.jsonl");
+			writeFileSync(
+				rollout,
+				JSON.stringify({ type: "event_msg", payload: { type: "task_complete" } }) + "\n",
+			);
+			makeChildDb(home, sid, rollout);
+			writeUltragoalState(omtDir, sid);
+			const result = await runCli("stop", stopPayload(sid, projectDir), omtDir, {
+				CODEX_HOME: home,
+				PATH: `${bin}:${dirname(process.execPath)}:/bin:/usr/bin`,
+			});
+			expect(result.exitCode).toBe(0);
+			expect(readFileSync(log, "utf8").split("\n")).toContain("-readonly");
+		});
+
+		test("malformed sqlite output row fails open once", async () => {
+			const sid = "sid-bad-sql-output";
+			const home = join(projectDir, "bad-output");
+			const bin = join(home, "bin");
+			mkdirSync(bin, { recursive: true });
+			const shim = join(bin, "sqlite3");
+			writeFileSync(shim, "#!/bin/sh\nprintf '%s\\n' 'too|many|fields'\n");
+			chmodSync(shim, 0o755);
+			writeUltragoalState(omtDir, sid);
+			const result = await runCli("stop", stopPayload(sid, projectDir), omtDir, {
+				CODEX_HOME: home,
+				PATH: `${bin}:${dirname(process.execPath)}:/bin:/usr/bin`,
+			});
+			expect(result.exitCode).toBe(0);
+			expect(
+				JSON.parse(readFileSync(join(omtDir, `ultragoal-state-${sid}.json`), "utf8")).iteration,
+			).toBe(1);
+			expect(
+				result.stderr
+					.split("\n")
+					.filter((line) => line.includes("codex-persistent-mode: child detector failed")).length,
+			).toBe(1);
+		});
 		test("G6-1: incomplete:2 blocks with a non-empty reason naming the count", async () => {
 			const sid = "sid-block-1";
 			writeFileSync(mirrorPath(omtDir, sid), JSON.stringify({ incomplete: 2 }));
@@ -766,7 +1053,9 @@ describe("codex-persistent-mode cli", () => {
 						// refused while zero non-goals carry a non-empty decider, so the
 						// allow-stop path requires at least one recorded decider — mirrors
 						// decision.test.ts UC13 "cleans up when … non-empty decider".
-						non_goals: [{ item: "out-of-scope thing", decider: "user confirmed out of scope in round 2" }],
+						non_goals: [
+							{ item: "out-of-scope thing", decider: "user confirmed out of scope in round 2" },
+						],
 					},
 				}),
 			);
