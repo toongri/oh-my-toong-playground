@@ -56,7 +56,7 @@ import {
 import { stdin as processStdin } from "node:process";
 import { join, dirname, basename, resolve, isAbsolute } from "node:path";
 
-import { isSafeSessionId } from "@lib/state-core";
+import { isSafeSessionId, TERMINAL_TTL_SECONDS } from "@lib/state-core";
 import { resolveOmtDir } from "@lib/omt-dir";
 import { makeDecision, DecisionContext } from "@lib/persistent-mode-core/decision";
 import { readUltragoalStateRaw } from "@lib/persistent-mode-core/state";
@@ -67,7 +67,7 @@ import { isFailedToolResponse } from "@lib/tool-response";
 // textually positioned after the dispatch block would still be uninitialized
 // (TDZ) when a handler invoked from within that same await resolves.
 const COMMAND_TOOL_NAMES = new Set(["bash", "shell_command", "exec_command"]);
-const CODEX_CHILD_STALE_TTL_SECONDS = 1800;
+const CODEX_CHILD_STALE_TTL_SECONDS = TERMINAL_TTL_SECONDS;
 const ROLLOUT_TAIL_BYTES = 64 * 1024;
 
 const command = process.argv[2];
