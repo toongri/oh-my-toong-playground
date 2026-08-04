@@ -1315,7 +1315,7 @@ describe("makeDecision", () => {
 			expect((await readUltragoalFile()).iteration).toBe(6);
 		});
 
-		it("amending the observed prior HEAD increments no-progress", async () => {
+		it("amend reads as no commit progress", async () => {
 			const prior = await commitProject("amend-boundary", "amend");
 			runGit(["commit", "--amend", "--allow-empty", "--no-edit"]);
 			await writeUltragoal({
@@ -1348,7 +1348,7 @@ describe("makeDecision", () => {
 			expect(makeDecision(createContext()).reason).toContain("[ULTRAGOAL - NO-PROGRESS 6/10]");
 		});
 
-		it("commit then revert from observed baseline increments no-progress", async () => {
+		it("commit then revert reads as no commit progress", async () => {
 			const prior = execFileSync("git", ["rev-parse", "HEAD"], {
 				cwd: projectRoot,
 				encoding: "utf8",
