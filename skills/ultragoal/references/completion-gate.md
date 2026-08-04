@@ -131,7 +131,7 @@ Use stdin (`-`) with a **quoted** heredoc here too: the snapshot echoes the regi
 
 **Omitting `--codex-goal-json` when it is required is a refusal, not a silent pass.** Once `set --codex-goal-objective` has armed the cross-check, a missing, unparseable, or non-matching snapshot leaves `phase` at `pursuing` — the safe, never-false-complete direction — and `request-complete`'s own refusal message names this condition, so read that message rather than retrying the same call.
 
-Evidence is recorded BEFORE the verdict flips so the full gate (verdict + evidence + per-story artifact checks) is satisfiable the moment `objective_verdict=APPROVE` appears. `request-complete` is the ONLY path to `phase=complete` — the hook layer never writes `complete` (cap reached → `budget_limited` block). A `budget_limited` state does not bar `request-complete` in the same turn: complete wins over a prior `budget_limited`. If `request-complete` is refused, report the blocker honestly and stop.
+Evidence is recorded BEFORE the verdict flips so the full gate (verdict + evidence + per-story artifact checks) is satisfiable the moment `objective_verdict=APPROVE` appears. `request-complete` is the ONLY path to `phase=complete` — the hook layer never writes `complete` (the no-progress cap reached → `budget_limited` block). A `budget_limited` state does not bar `request-complete` in the same turn: drain any in-flight delegated work, harvest and commit its results, then run the completion gate; completion wins over a prior `budget_limited` when every gate passes. Do not dispatch new stories or interrupt running executors during this drain. If the gate is refused, report the blocker honestly and stop; the user can recover the preserved pursuit by running `bun ${CLAUDE_SKILL_DIR}/scripts/ultragoal-state.ts resume-pursuit`, which restores `pursuing` and resets the no-progress counter to `0`.
 
 APPROVE alone does NOT leave the ultragoal pursuit pursuing/active — the `request-complete` handoff is what transitions to terminal `complete` (and it is structurally gated on completion-evidence, so a write that never reached the gate cannot false-complete).
 
@@ -152,7 +152,7 @@ Every non-APPROVE verdict drives a concrete progress action — never action-les
 
 ### Blocked-stop
 
-Pursuit stops as blocked (non-complete) ONLY on a decidable, point-in-time predicate — there is no cross-iteration stall detector; `max_iterations` absorbs genuine stalls. Exactly two conditions trip blocked:
+Pursuit stops as blocked (non-complete) ONLY on a decidable, point-in-time predicate. The no-progress cap is a separate soft-stop: consecutive Stops without a diff-carrying commit or story transition accumulate toward `max_iterations`, while observed progress resets the counter; reaching the cap yields `budget_limited`, preserves state, and requires user-run `resume-pursuit` after any drain. Exactly two conditions trip blocked:
 
 - **B1** — the objective self-check names NO actionable incomplete work item while the objective is still unmet (no valid progress path: nothing to re-dispatch and the verification surface is not satisfied).
 - **B2** — the captured **blocked-stop** slot's objective-specific condition is met.
