@@ -694,7 +694,9 @@ describe("codex-persistent-mode cli", () => {
 			const rollout = join(codexHome, "child.jsonl");
 			writeFileSync(
 				rollout,
-				JSON.stringify({ type: "event_msg", payload: { type: "task_started" } }) + "\n",
+				JSON.stringify({ type: "event_msg", payload: { type: "task_started" } }) +
+					"\n" +
+					'{"type":"event_msg","payload":{"type":"task_started"',
 			);
 			const db = join(codexHome, "state_5.sqlite");
 			const sql = [
@@ -804,7 +806,7 @@ describe("codex-persistent-mode cli", () => {
 			const cases = [
 				["missing-db", "missing-db", "none"],
 				["malformed-sqlite", "malformed-sqlite", "db"],
-				["malformed-json", "malformed-json", "{broken"],
+				["malformed-json", "malformed-json", "{broken\n"],
 				["scalar-json", "scalar-json", "42"],
 				["unreadable-rollout", "unreadable-rollout", undefined],
 			] as const;

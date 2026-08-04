@@ -347,9 +347,16 @@ function detectActiveCodexChildren(sessionId: string): number {
 			if (ageSeconds > CODEX_CHILD_STALE_TTL_SECONDS) continue;
 			const content = readRolloutTail(rolloutPath);
 			let lastMarker: string | undefined;
-			for (const rawLine of content.split("\n")) {
+			const lines = content.split("\n");
+			for (const [index, rawLine] of lines.entries()) {
 				if (!rawLine.trim()) continue;
-				const event: unknown = JSON.parse(rawLine);
+				let event: unknown;
+				try {
+					event = JSON.parse(rawLine);
+				} catch {
+					if (index === lines.length - 1 && !content.endsWith("\n")) continue;
+					throw new Error("malformed rollout line");
+				}
 				if (!isRecord(event)) return fail("unreadable or malformed rollout");
 				const payload = event["payload"];
 				const marker = isRecord(payload) ? payload["type"] : undefined;
