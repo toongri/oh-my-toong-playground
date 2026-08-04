@@ -50,11 +50,19 @@ describe("progress fingerprint", () => {
 		});
 	});
 
-	it("reports no progress for an empty commit range", async () => {
+	it("empty commit reports no progress", async () => {
 		const cwd = await repo("empty");
 		const head = await commit(cwd, "a", "a");
 		run(cwd, ["commit", "--allow-empty", "-qm", "empty"]);
 		expect(evaluateProgress(state({ last_seen_head: head }), cwd).progressed).toBe(false);
+	});
+
+	it("work commit followed by empty commit reports progress", async () => {
+		const cwd = await repo("work-empty-cumulative");
+		const baseline = await commit(cwd, "a", "a");
+		await commit(cwd, "b", "b");
+		run(cwd, ["commit", "--allow-empty", "-qm", "empty"]);
+		expect(evaluateProgress(state({ last_seen_head: baseline }), cwd).progressed).toBe(true);
 	});
 
 	it("ignores worktree changes and an empty commit", async () => {
@@ -65,14 +73,14 @@ describe("progress fingerprint", () => {
 		expect(evaluateProgress(state({ last_seen_head: head }), cwd).progressed).toBe(false);
 	});
 
-	it("reports a non-empty descendant range", async () => {
+	it("diff-carrying commit on top of seen head reports progress", async () => {
 		const cwd = await repo("diff");
 		const first = await commit(cwd, "a", "a");
 		await commit(cwd, "b", "b");
 		expect(evaluateProgress(state({ last_seen_head: first }), cwd).progressed).toBe(true);
 	});
 
-	it("does not count a diverged checkout", async () => {
+	it("checkout to diverged branch reports no progress", async () => {
 		const cwd = await repo("diverged");
 		const first = await commit(cwd, "a", "a");
 		const second = await commit(cwd, "b", "b");
@@ -151,7 +159,7 @@ describe("progress fingerprint", () => {
 		);
 	});
 
-	it("preserves fingerprint fields through raw state reads", async () => {
+	it("fingerprint fields survive raw read", async () => {
 		const dir = join(root, "omt");
 		await mkdir(dir, { recursive: true });
 		const previous = process.env.OMT_DIR;

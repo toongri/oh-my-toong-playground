@@ -1214,7 +1214,7 @@ describe("makeDecision", () => {
 			expect(after.iteration).toBe(3);
 		});
 
-		it("iteration 9 with unchanged HEAD reaches no-progress limit on the 10th Stop", async () => {
+		it("tenth consecutive no-progress stop transitions to budget_limited", async () => {
 			await writeUltragoal({
 				active: true,
 				phase: "pursuing",
@@ -1230,7 +1230,7 @@ describe("makeDecision", () => {
 			expect(after.active).toBe(false);
 		});
 
-		it("a diff-carrying commit resets no-progress iteration and advances fingerprint", async () => {
+		it("diff commit resets no-progress counter", async () => {
 			const head = execFileSync("git", ["rev-parse", "HEAD"], {
 				cwd: projectRoot,
 				encoding: "utf8",
@@ -1253,7 +1253,7 @@ describe("makeDecision", () => {
 			expect(after.last_seen_head).not.toBe(head);
 		});
 
-		it("a story status transition resets no-progress iteration", async () => {
+		it("story transition resets counter", async () => {
 			const head = execFileSync("git", ["rev-parse", "HEAD"], {
 				cwd: projectRoot,
 				encoding: "utf8",
@@ -1274,7 +1274,7 @@ describe("makeDecision", () => {
 			expect((await readUltragoalFile()).iteration).toBe(0);
 		});
 
-		it("max_iterations 3 limits on the third unchanged Stop", async () => {
+		it("max_iterations override transitions on the third no-progress stop", async () => {
 			for (const iteration of [0, 1]) {
 				await writeUltragoal({
 					active: true,
@@ -1296,7 +1296,7 @@ describe("makeDecision", () => {
 			expect(result.reason).toContain("[ULTRAGOAL - NO-PROGRESS LIMIT REACHED 3/3]");
 		});
 
-		it("empty commit after an observed baseline increments no-progress", async () => {
+		it("empty commit does not reset counter", async () => {
 			const prior = execFileSync("git", ["rev-parse", "HEAD"], {
 				cwd: projectRoot,
 				encoding: "utf8",
@@ -1400,6 +1400,23 @@ describe("makeDecision", () => {
 			expect(after.budget_limit_notified).toBe(true);
 		});
 
+		it("budget limit message states drain policy", async () => {
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 9,
+				max_iterations: 10,
+				outcome: "objective",
+			});
+			const reason = makeDecision(createContext()).reason ?? "";
+			expect(reason).toContain("[ULTRAGOAL - NO-PROGRESS LIMIT REACHED 10/10]");
+			expect(reason).toContain("Let in-flight delegated work FINISH — harvest results and commit them.");
+			expect(reason).toContain("Do NOT dispatch new stories.");
+			expect(reason).toContain("Do NOT interrupt running executors.");
+			expect(reason).toContain("resume-pursuit");
+			expect(reason).not.toMatch(/(?:^|\n)\s*(?:kill|interrupt)\b/i);
+		});
+
 		it("ultragoal active non-pursuing (planning) suppresses baseline todo branch", async () => {
 			await writeUltragoal({
 				active: true,
@@ -1483,7 +1500,7 @@ describe("makeDecision", () => {
 	// Any running/pending background task passes through (type-agnostic); count 0 still blocks.
 	// -------------------------------------------------------------------------
 	describe("background-aware Stop hook guards", () => {
-		it("activeBackgroundTaskCount=1 with incompleteTodos yields continue (NOT block)", () => {
+		it("background tasks with wake guarantee continue without consuming", () => {
 			const result = makeDecision(
 				createContext({
 					activeBackgroundTaskCount: 1,
@@ -1494,7 +1511,7 @@ describe("makeDecision", () => {
 			expect(result).toEqual({ continue: true });
 		});
 
-		it("active work without a wake guarantee blocks ultragoal without consuming progress", async () => {
+		it("background tasks without wake guarantee block without consuming", async () => {
 			await writeFile(
 				join(omtDir, "ultragoal-state-test-session.json"),
 				JSON.stringify({
@@ -1519,7 +1536,7 @@ describe("makeDecision", () => {
 			expect(after.last_seen_stories_digest).toBe("d");
 		});
 
-		it("active work without a wake guarantee falls through when no ultragoal pursues", () => {
+		it("no active ultragoal falls through guard 2 unchanged", () => {
 			const noWake = makeDecision(
 				createContext({
 					activeBackgroundTaskCount: 1,
