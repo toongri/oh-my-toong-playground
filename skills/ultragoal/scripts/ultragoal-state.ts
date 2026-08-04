@@ -29,6 +29,7 @@
  *       [--blocked-stop ..] [--plan-path ..] [--resume-summary ..]
  *       [--completion-evidence p1,p2] [--codex-goal-objective <text>]
  *   set-budget-limited                       (system-only)
+ *   resume-pursuit                            (user-only recovery from budget_limited)
  *   set-blocked --reason <text>              (system-only)
  *   request-complete [--codex-goal-json <json|path>]
  *                                         (gated: requires objective_verdict=APPROVE and completion
@@ -545,6 +546,13 @@ function releaseStateLock(lockPath: string, token: string): void {
 // ---------------------------------------------------------------------------
 
 export function readGoalState(sessionId: string): GoalState | null {
+	const state = readGoalStateRaw(sessionId);
+	if (state === null || !state.active) return null;
+	return state;
+}
+
+/** Schema-validated state read that preserves terminal (active:false) phases. */
+export function readGoalStateRaw(sessionId: string): GoalState | null {
 	const content = readFileOrNull(resolveStatePath(sessionId));
 	if (!content) return null;
 	try {
@@ -572,7 +580,6 @@ export function readGoalState(sessionId: string): GoalState | null {
 		) {
 			return null;
 		}
-		if (!state.active) return null;
 		// The shared seed skeleton predates review dispatch state. Keep reads compatible
 		// with those files without making a re-plan reset an already-persisted budget.
 		return {
@@ -821,6 +828,25 @@ export function setBudgetLimited(sessionId: string): void {
 		phase: "budget_limited",
 		active: false,
 		budget_limit_notified: true,
+	});
+}
+
+/**
+ * User-only recovery edge: budget_limited → pursuing. This is deliberately a
+ * strict raw read/validate/write path: it never seeds or performs a generic merge.
+ */
+export function resumePursuit(sessionId: string): void {
+	const stateFilePath = resolveStatePath(sessionId);
+	withStateLock(stateFilePath, () => {
+		const raw = readFileOrNull(stateFilePath);
+		if (raw === null) throw new Error("resume-pursuit: refused — state file is absent");
+		const prior = parseClaimableState(raw);
+		if (prior === null) throw new Error("resume-pursuit: refused — state is corrupt or invalid");
+		if (prior.phase !== "budget_limited") {
+			throw new Error(`resume-pursuit: refused — phase must be budget_limited (got "${String(prior.phase)}")`);
+		}
+		const next = { ...prior, phase: "pursuing", active: true, iteration: 0, budget_limit_notified: false };
+		writeFileNoCreate(stateFilePath, JSON.stringify(next, null, 2));
 	});
 }
 
@@ -2275,6 +2301,8 @@ function main(): void {
 			setVerdict(sessionId, v);
 		} else if (subcommand === "set-budget-limited") {
 			setBudgetLimited(sessionId);
+		} else if (subcommand === "resume-pursuit") {
+			resumePursuit(sessionId);
 		} else if (subcommand === "set-blocked") {
 			setBlocked(sessionId, String(args["reason"] ?? ""));
 		} else if (subcommand === "request-complete") {
@@ -2332,7 +2360,7 @@ function main(): void {
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readGoalGet(sessionId)) + "\n");
 		} else if (subcommand === "status") {
-			const state = readGoalState(sessionId);
+			const state = readGoalStateRaw(sessionId);
 			process.stdout.write((state ? deriveStatus(state) : "absent") + "\n");
 		} else if (subcommand === "list-others") {
 			const candidates = listOthers("ultragoal");
@@ -2512,7 +2540,7 @@ function main(): void {
 			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
+				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|resume-pursuit|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
 			);
 			process.exit(1);
 		}

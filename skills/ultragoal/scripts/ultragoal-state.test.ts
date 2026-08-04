@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
 	mkdtempSync,
+	mkdirSync,
 	rmSync,
 	readFileSync,
 	writeFileSync,
@@ -16,6 +17,7 @@ import {
 	readGoalState,
 	setGoalState,
 	setBudgetLimited,
+	resumePursuit,
 	setBlocked,
 	requestComplete,
 	setVerdict,
@@ -1346,6 +1348,58 @@ describe("get subcommand includes pristine field", () => {
 		const parsed = JSON.parse(out);
 		expect(typeof parsed.pristine).toBe("boolean");
 		expect(parsed.pristine).toBe(true);
+	});
+});
+
+describe("recovery-and-guards: resume-pursuit", () => {
+	test("status shows budget_limited while get keeps inactive-fold contract", () => {
+		setBudgetLimited(S);
+		expect(runCli("status")).toBe("budget_limited\n");
+		expect(readGoalGet(S)).toBeNull();
+	});
+
+	test("success resumes budget_limited and preserves stories and other fields", () => {
+		setGoalState(S, { phase: "planning", outcome: "keep me", resume_summary: "summary" });
+		setStories(S, [{ id: "S1", story: "story", acceptance_criteria: ["works"], verification_surface: "tests", status: "confirmed" }]);
+		setBudgetLimited(S);
+		resumePursuit(S);
+		const state = rawState();
+		expect(state).toMatchObject({ phase: "pursuing", active: true, iteration: 0, budget_limit_notified: false, outcome: "keep me", resume_summary: "summary" });
+		expect(state.stories).toHaveLength(1);
+	});
+
+	test("refuses pursuing, blocked, complete, absent, and corrupt without changing bytes", () => {
+		for (const phase of ["pursuing", "blocked", "complete"] as const) {
+			writeFileSync(resolveStatePath(S), JSON.stringify({ ...rawState(), phase, active: phase === "pursuing" }), "utf8");
+			const before = readFileSync(resolveStatePath(S), "utf8");
+			expect(() => resumePursuit(S)).toThrow();
+			expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+		}
+		rmSync(resolveStatePath(S));
+		expect(() => resumePursuit(S)).toThrow();
+		expect(existsSync(resolveStatePath(S))).toBe(false);
+		writeFileSync(resolveStatePath(S), "{broken", "utf8");
+		expect(() => resumePursuit(S)).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe("{broken");
+	});
+
+	test("terminal lock survives refusal", () => {
+		setBudgetLimited(S);
+		const lock = `${resolveStatePath(S)}.lock`;
+		mkdirSync(lock);
+		writeFileSync(`${lock}/owner.json`, JSON.stringify({ ownerPid: process.pid, token: "live", startedAt: Date.now() }), "utf8");
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => resumePursuit(S)).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+		expect(existsSync(lock)).toBe(true);
+		rmSync(lock, { recursive: true, force: true });
+	});
+
+	test("CLI registers resume-pursuit usage and succeeds", () => {
+		setBudgetLimited(S);
+		expect(runCli("resume-pursuit")).toBe("");
+		const usage = runCliCaptured("unknown");
+		expect(usage.stderr).toContain("resume-pursuit");
 	});
 });
 
