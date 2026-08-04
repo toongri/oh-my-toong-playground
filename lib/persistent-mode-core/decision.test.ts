@@ -1485,9 +1485,56 @@ describe("makeDecision", () => {
 	describe("background-aware Stop hook guards", () => {
 		it("activeBackgroundTaskCount=1 with incompleteTodos yields continue (NOT block)", () => {
 			const result = makeDecision(
-				createContext({ activeBackgroundTaskCount: 1, incompleteTodoCount: 3 }),
+				createContext({
+					activeBackgroundTaskCount: 1,
+					deferredStopWakeGuaranteed: true,
+					incompleteTodoCount: 3,
+				}),
 			);
 			expect(result).toEqual({ continue: true });
+		});
+
+		it("active work without a wake guarantee blocks ultragoal without consuming progress", async () => {
+			await writeFile(
+				join(omtDir, "ultragoal-state-test-session.json"),
+				JSON.stringify({
+					active: true,
+					phase: "pursuing",
+					iteration: 4,
+					max_iterations: 10,
+					last_seen_head: "h",
+					last_seen_stories_digest: "d",
+					outcome: "objective",
+				}),
+			);
+			const result = makeDecision(createContext({ activeBackgroundTaskCount: 1 }));
+			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("[ULTRAGOAL - WAITING ON BACKGROUND WORK]");
+			expect(result.reason).toContain("Do NOT dispatch new stories");
+			const after = JSON.parse(
+				await readFile(join(omtDir, "ultragoal-state-test-session.json"), "utf8"),
+			);
+			expect(after.iteration).toBe(4);
+			expect(after.last_seen_head).toBe("h");
+			expect(after.last_seen_stories_digest).toBe("d");
+		});
+
+		it("active work without a wake guarantee falls through when no ultragoal pursues", () => {
+			const noWake = makeDecision(
+				createContext({
+					activeBackgroundTaskCount: 1,
+					incompleteTodoCount: 2,
+					sessionId: "no-wake",
+				}),
+			);
+			const control = makeDecision(
+				createContext({
+					activeBackgroundTaskCount: 0,
+					incompleteTodoCount: 2,
+					sessionId: "control",
+				}),
+			);
+			expect(noWake).toEqual(control);
 		});
 
 		it("activeBackgroundTaskCount=0 with incompleteTodos still blocks (no subagent bypass)", () => {
@@ -1537,7 +1584,13 @@ describe("makeDecision", () => {
 			);
 			ageFile(statePath, 7 * 3600);
 
-			const result = makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 1 }));
+			const result = makeDecision(
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 1,
+					deferredStopWakeGuaranteed: true,
+				}),
+			);
 
 			expect(result).toEqual({ continue: true });
 			const parsed = JSON.parse(await readFile(statePath, "utf8"));
@@ -1576,7 +1629,11 @@ describe("makeDecision", () => {
 				);
 
 				const result = makeDecision(
-					createContext({ sessionId: sid, activeBackgroundTaskCount: 1 }),
+					createContext({
+						sessionId: sid,
+						activeBackgroundTaskCount: 1,
+						deferredStopWakeGuaranteed: true,
+					}),
 				);
 
 				expect(result).toEqual({ continue: true });
@@ -1658,7 +1715,13 @@ describe("makeDecision", () => {
 			);
 			ageFile(statePath, 7 * 3600);
 
-			makeDecision(createContext({ sessionId: sid, activeBackgroundTaskCount: 1 }));
+			makeDecision(
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 1,
+					deferredStopWakeGuaranteed: true,
+				}),
+			);
 
 			const parsedAfter = JSON.parse(await readFile(statePath, "utf8"));
 			expect(parsedAfter.last_touched_at).toBe(old);
@@ -1775,7 +1838,11 @@ describe("makeDecision", () => {
 			// Heartbeat crossing: a Stop call while a subagent is active revives
 			// last_touched_at (GC axis) but must not touch progress_touched_at.
 			const heartbeatResult = makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 2,
+					deferredStopWakeGuaranteed: true,
+				}),
 			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
@@ -1804,7 +1871,11 @@ describe("makeDecision", () => {
 			);
 
 			const heartbeatResult = makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 2,
+					deferredStopWakeGuaranteed: true,
+				}),
 			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
@@ -1912,7 +1983,11 @@ describe("makeDecision", () => {
 			// backfills progress_touched_at from the PRE-overwrite (stale) value —
 			// that backfilled value is what must keep this corpse from reviving.
 			const heartbeatResult = makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 2,
+					deferredStopWakeGuaranteed: true,
+				}),
 			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
@@ -1942,7 +2017,11 @@ describe("makeDecision", () => {
 			);
 
 			const heartbeatResult = makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 2,
+					deferredStopWakeGuaranteed: true,
+				}),
 			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
@@ -2026,7 +2105,11 @@ describe("makeDecision", () => {
 			// recent last_touched_at (2 minutes ago) before bumping last_touched_at
 			// itself to now.
 			const heartbeatResult = makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 2,
+					deferredStopWakeGuaranteed: true,
+				}),
 			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
@@ -2065,7 +2148,11 @@ describe("makeDecision", () => {
 			);
 
 			const heartbeatResult = makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 2,
+					deferredStopWakeGuaranteed: true,
+				}),
 			);
 			expect(heartbeatResult).toEqual({ continue: true });
 
@@ -2111,7 +2198,11 @@ describe("makeDecision", () => {
 
 			// Heartbeat crossing backfills progress_touched_at from recentTouch.
 			const heartbeatResult = makeDecision(
-				createContext({ sessionId: sid, activeBackgroundTaskCount: 2 }),
+				createContext({
+					sessionId: sid,
+					activeBackgroundTaskCount: 2,
+					deferredStopWakeGuaranteed: true,
+				}),
 			);
 			expect(heartbeatResult).toEqual({ continue: true });
 

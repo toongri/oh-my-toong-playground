@@ -28,6 +28,7 @@ export interface DecisionContext {
 	lastAssistantMessage: string | null;
 	incompleteTodoCount: number;
 	activeBackgroundTaskCount: number;
+	deferredStopWakeGuaranteed?: boolean;
 	/**
 	 * Codex-only chain ratchet (see hooks/codex-persistent-mode/cli.ts's runStop):
 	 * skill names referenced (via a validated `$name` sigil) by an already-opened
@@ -81,6 +82,10 @@ function formatBlockOutput(reason: string): HookOutput {
 
 function formatContinueOutput(): HookOutput {
 	return { continue: true };
+}
+
+function buildUltragoalWaitingOnBackgroundMessage(): string {
+	return `<ultragoal-background-wait>\n\n[ULTRAGOAL - WAITING ON BACKGROUND WORK]\n\nBackground work is still running. Use the platform wait mechanism and harvest its results when it finishes. Do NOT dispatch new stories. This turn is not counted toward no-progress.\n\n</ultragoal-background-wait>\n\n---\n`;
 }
 
 const MAX_PROMPT_LENGTH = 2000;
@@ -347,7 +352,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
 	// so allowing now defers enforcement safely. The status allowlist is fail-closed:
 	// terminal and unknown statuses keep enforcement active.
 	if (activeBackgroundTaskCount > 0) {
-		return formatContinueOutput();
+		if (context.deferredStopWakeGuaranteed === true) return formatContinueOutput();
+		const waitingState = readUltragoalStateRaw(sessionId);
+		if (waitingState?.active && waitingState.phase === "pursuing") {
+			return formatBlockOutput(buildUltragoalWaitingOnBackgroundMessage());
+		}
 	}
 
 	const stateDir = join(getOmtDir(), "state");
