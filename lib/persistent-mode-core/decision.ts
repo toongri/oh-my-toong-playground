@@ -20,6 +20,7 @@ import { generateAttemptId, ensureDir } from "./utils.ts";
 import { join } from "path";
 import { getOmtDir } from "@lib/omt-dir";
 import { isPristine, isProgressLive, touchSessionStates } from "@lib/state-core";
+import { evaluateProgress } from "./progress.ts";
 
 export interface DecisionContext {
 	projectRoot: string;
@@ -236,7 +237,7 @@ function buildUltragoalContinuationMessage(
 
 	return `<ultragoal-continuation>
 
-[ULTRAGOAL - ITERATION ${iteration}/${ultragoal.max_iterations}]
+[ULTRAGOAL - NO-PROGRESS ${iteration}/${ultragoal.max_iterations}]
 
 The objective is NOT verified complete yet. Keep pursuing it.
 
@@ -283,6 +284,10 @@ INSTRUCTIONS:
 
 ---
 `;
+}
+
+function buildUltragoalNoProgressLimitMessage(ultragoal: UltragoalState): string {
+	return `<ultragoal-no-progress-limit>\n\n[ULTRAGOAL - NO-PROGRESS LIMIT REACHED ${ultragoal.iteration}/${ultragoal.max_iterations}]\n\nThe pursuit is paused: ${ultragoal.max_iterations} consecutive Stops passed with no observed progress (no diff-carrying commit, no story transition). Let in-flight delegated work FINISH — harvest results and commit them. Do NOT dispatch new stories. Do NOT interrupt running executors. To resume pursuit, resolve your ultragoal skill scripts directory and present the user the full runnable command bun <resolved path>/ultragoal-state.ts resume-pursuit to run themselves — the AI's own execution is denied by a PreToolUse guard.\n\n</ultragoal-no-progress-limit>\n\n---\n`;
 }
 
 export function makeDecision(context: DecisionContext): HookOutput {
@@ -392,16 +397,52 @@ export function makeDecision(context: DecisionContext): HookOutput {
 				}
 				return formatBlockOutput(message); // NO iteration++
 			}
+			const progress = evaluateProgress(ultragoal, projectRoot);
+			const hasFingerprint =
+				ultragoal.last_seen_head !== undefined || ultragoal.last_seen_stories_digest !== undefined;
+			const persistedFingerprint = {
+				...(progress.newFingerprint.last_seen_head === null
+					? {}
+					: { last_seen_head: progress.newFingerprint.last_seen_head }),
+				last_seen_stories_digest: progress.newFingerprint.last_seen_stories_digest,
+			};
+			const fingerprintPatch = !hasFingerprint ? persistedFingerprint : {};
+			if (progress.progressed) {
+				const message = buildUltragoalContinuationMessage(ultragoal, 0, askToolName);
+				try {
+					updateUltragoalState(sessionId, { iteration: 0, ...persistedFingerprint });
+					cleanupBlockCountFiles(stateDir, attemptId);
+					return formatBlockOutput(message);
+				} catch {
+					/* fall through to the write-failure escape below */
+				}
+			}
 			// Budget remains. verdict in {APPROVE, REQUEST_CHANGES, COMMENT, absent} → block +
 			// continuation + iteration++: the loop itself writes
 			// objective_verdict via set-verdict, so trusting it here would let the loop stop
 			// itself before request-complete's gate ever runs.
 			const newIteration = ultragoal.iteration + 1;
+			if (newIteration >= ultragoal.max_iterations) {
+				const limited = { ...ultragoal, iteration: newIteration };
+				const message = buildUltragoalNoProgressLimitMessage(limited);
+				try {
+					updateUltragoalState(sessionId, {
+						...fingerprintPatch,
+						iteration: newIteration,
+						phase: "budget_limited",
+						active: false,
+						budget_limit_notified: true,
+					});
+				} catch {
+					/* M1 */
+				}
+				return formatBlockOutput(message);
+			}
 			const message = buildUltragoalContinuationMessage(ultragoal, newIteration, askToolName); // build FIRST (E1)
 			let writeOk = true;
 			// M1: swallow write failure — STILL block, never degrade to continue.
 			try {
-				updateUltragoalState(sessionId, { iteration: newIteration });
+				updateUltragoalState(sessionId, { ...fingerprintPatch, iteration: newIteration });
 			} catch {
 				writeOk = false;
 			}
@@ -531,7 +572,8 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// separate `!isPristine(...)` fall-through further down, unrelated to this flag.
 			const nonGoals = deepInterviewStateRaw.state?.non_goals;
 			const nonEmptyDeciderCount = Array.isArray(nonGoals)
-				? nonGoals.filter((ng) => typeof ng?.decider === "string" && ng.decider.trim() !== "").length
+				? nonGoals.filter((ng) => typeof ng?.decider === "string" && ng.decider.trim() !== "")
+						.length
 				: 0;
 			const hasNoNonGoalDecider = nonEmptyDeciderCount === 0;
 
@@ -633,7 +675,9 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			return formatContinueOutput();
 		}
 		incrementBlockCount(stateDir, chainAttemptId);
-		return formatBlockOutput(buildSkillChainContinuationMessage(pendingSkillChainSkills, askToolName));
+		return formatBlockOutput(
+			buildSkillChainContinuationMessage(pendingSkillChainSkills, askToolName),
+		);
 	}
 
 	// No blocking needed. Reset the skill-chain counter here (mirroring ultragoal's
