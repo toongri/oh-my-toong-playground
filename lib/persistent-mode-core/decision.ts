@@ -269,28 +269,6 @@ ${continuationContract("exceptional", askToolName)}
 `;
 }
 
-// Ultragoal-scoped budget-limit message.
-function buildUltragoalBudgetLimitMessage(ultragoal: UltragoalState): string {
-	return `<ultragoal-budget-limit>
-
-[ULTRAGOAL - BUDGET LIMIT REACHED ${ultragoal.iteration}/${ultragoal.max_iterations}]
-
-The iteration budget for this objective is exhausted. The objective is NOT verified complete.
-
-INSTRUCTIONS:
-1. Do NOT start any new work.
-2. Do NOT call request-complete unless the objective is genuinely achieved AND you can cite
-   concrete artifacts as evidence. The request-complete gate will reject unsubstantiated claims.
-   If the gate rejects, report the blocker honestly and stop — do not retry.
-3. Write a short progress summary of what was accomplished so far.
-4. State the single next step that would resume progress if the gate rejects.
-
-</ultragoal-budget-limit>
-
----
-`;
-}
-
 function buildUltragoalNoProgressLimitMessage(ultragoal: UltragoalState): string {
 	return `<ultragoal-no-progress-limit>\n\n[ULTRAGOAL - NO-PROGRESS LIMIT REACHED ${ultragoal.iteration}/${ultragoal.max_iterations}]\n\nThe pursuit is paused: ${ultragoal.max_iterations} consecutive Stops passed with no observed progress (no diff-carrying commit, no story transition). Let in-flight delegated work FINISH — harvest results and commit them. Do NOT dispatch new stories. Do NOT interrupt running executors. To resume pursuit, resolve your ultragoal skill scripts directory and present the user the full runnable command bun <resolved path>/ultragoal-state.ts resume-pursuit to run themselves — the AI's own execution is denied by a PreToolUse guard.\n\n</ultragoal-no-progress-limit>\n\n---\n`;
 }
@@ -391,31 +369,21 @@ export function makeDecision(context: DecisionContext): HookOutput {
 		// Single read; derive the active-only view locally (no second I/O, no TOCTOU).
 		const ultragoal = ultragoalRaw.active ? ultragoalRaw : null;
 		if (ultragoal && ultragoal.phase === "pursuing") {
-			if (ultragoal.iteration >= ultragoal.max_iterations) {
-				// Cap reached — always soft-stop via budget_limited.
-				const message = buildUltragoalBudgetLimitMessage(ultragoal); // build FIRST (E1)
-				// M1: swallow write failure — STILL soft-stop.
-				try {
-					updateUltragoalState(sessionId, {
-						phase: "budget_limited",
-						active: false,
-						budget_limit_notified: true,
-					});
-				} catch {
-					/* M1 */
-				}
-				return formatBlockOutput(message); // NO iteration++
-			}
 			const progress = evaluateProgress(ultragoal, projectRoot);
-			const hasFingerprint =
-				ultragoal.last_seen_head !== undefined || ultragoal.last_seen_stories_digest !== undefined;
 			const persistedFingerprint = {
 				...(progress.newFingerprint.last_seen_head === null
 					? {}
 					: { last_seen_head: progress.newFingerprint.last_seen_head }),
 				last_seen_stories_digest: progress.newFingerprint.last_seen_stories_digest,
 			};
-			const fingerprintPatch = !hasFingerprint ? persistedFingerprint : {};
+			const fingerprintPatch = {
+				...(ultragoal.last_seen_head === undefined && progress.newFingerprint.last_seen_head !== null
+					? { last_seen_head: progress.newFingerprint.last_seen_head }
+					: {}),
+				...(ultragoal.last_seen_stories_digest === undefined
+					? { last_seen_stories_digest: progress.newFingerprint.last_seen_stories_digest }
+					: {}),
+			};
 			if (progress.progressed) {
 				const message = buildUltragoalContinuationMessage(ultragoal, 0, askToolName);
 				try {
@@ -430,7 +398,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 			// continuation + iteration++: the loop itself writes
 			// objective_verdict via set-verdict, so trusting it here would let the loop stop
 			// itself before request-complete's gate ever runs.
-			const newIteration = ultragoal.iteration + 1;
+			const newIteration = Math.min(ultragoal.iteration + 1, ultragoal.max_iterations);
 			if (newIteration >= ultragoal.max_iterations) {
 				const limited = { ...ultragoal, iteration: newIteration };
 				const message = buildUltragoalNoProgressLimitMessage(limited);

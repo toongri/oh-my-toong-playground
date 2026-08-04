@@ -726,7 +726,7 @@ describe("codex-persistent-mode cli", () => {
 			).toBe(0);
 		});
 
-		test("lifecycle and stale truth table counts only a live last task_started", async () => {
+		test("detector lifecycle and stale truth table counts only a live last task_started", async () => {
 			const cases = [
 				["live", ["task_started"], false],
 				["finished", ["task_started", "task_complete"], false],

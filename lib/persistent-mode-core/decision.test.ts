@@ -1238,7 +1238,7 @@ describe("makeDecision", () => {
 			await writeUltragoal({
 				active: true,
 				phase: "pursuing",
-				iteration: 9,
+				iteration: 10,
 				max_iterations: 10,
 				last_seen_head: head,
 				outcome: "objective",
@@ -1251,6 +1251,33 @@ describe("makeDecision", () => {
 			const after = await readUltragoalFile();
 			expect(after.iteration).toBe(0);
 			expect(after.last_seen_head).not.toBe(head);
+		});
+
+		it("partial fingerprint with head only initializes missing digest", async () => {
+			const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).trim();
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 0,
+				max_iterations: 10,
+				last_seen_head: head,
+				outcome: "objective",
+			});
+			makeDecision(createContext());
+			expect((await readUltragoalFile()).last_seen_stories_digest).toEqual(expect.any(String));
+		});
+
+		it("partial fingerprint with digest only initializes missing head", async () => {
+			await writeUltragoal({
+				active: true,
+				phase: "pursuing",
+				iteration: 0,
+				max_iterations: 10,
+				last_seen_stories_digest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+				outcome: "objective",
+			});
+			makeDecision(createContext());
+			expect((await readUltragoalFile()).last_seen_head).toEqual(expect.any(String));
 		});
 
 		it("story transition resets counter", async () => {
@@ -1394,6 +1421,9 @@ describe("makeDecision", () => {
 			const result = makeDecision(createContext());
 
 			expect(result.decision).toBe("block");
+			expect(result.reason).toContain("[ULTRAGOAL - NO-PROGRESS LIMIT REACHED 10/10]");
+			expect(result.reason).toContain("Let in-flight delegated work FINISH — harvest results and commit them.");
+			expect(result.reason).not.toContain("[ULTRAGOAL - BUDGET LIMIT REACHED");
 			const after = await readUltragoalFile();
 			expect(after.phase).toBe("budget_limited");
 			expect(after.active).toBe(false);
