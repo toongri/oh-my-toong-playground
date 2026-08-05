@@ -17,19 +17,25 @@ council:
   #   model:         Model name passed to CLI (claude/gemini: --model, codex: -m)
   #   effort_level:  Thinking effort (low/medium/high)
   #                  claude: env CLAUDE_CODE_EFFORT_LEVEL, codex: -c flag, gemini: ignored
+  #
+  # `name` never selects the model — it only binds the role prompt
+  # (`prompts/<name>.md`, falling back to `prompts/default.md`) and labels the
+  # member's output. The model comes solely from `model:` below; omitting it
+  # would leave the CLI on its own configured default, not on the name.
   members:
-    - name: claude
-      command: "claude -p"
-      emoji: "🧠"
-      color: "CYAN"
-      model: "claude-opus-4-7"
-      effort_level: "xhigh"
-
-    - name: gpt
+    - name: sol
       command: codex exec
       emoji: "🤖"
       color: "BLUE"
       model: "gpt-5.6-sol"
+      effort_level: "high"
+      output_format: json
+
+    - name: terra
+      command: codex exec
+      emoji: "🌍"
+      color: "GREEN"
+      model: "gpt-5.6-terra"
       effort_level: "high"
       output_format: json
 
@@ -42,9 +48,17 @@ council:
 
   # Execution settings
   settings:
-    exclude_chairman_from_members: false  # Chairman also participates as a council member
+    # No-op with the members above (no `claude` member to exclude); the chairman is
+    # the calling Claude session, which synthesizes rather than arguing a seat.
+    exclude_chairman_from_members: false
     timeout: 1200                         # Timeout seconds per agent (0 to disable)
     deny:
+      # Subagent axis: a council member argues its own assigned perspective alone. Spawning is a
+      # second fan-out beneath this one — unbudgeted cost, and opinions no perspective prompt
+      # shaped. Translated per member CLI by `buildAugmentedCommand` (codex: `-c
+      # agents.enabled=false`, claude: `--settings permissions.deny`, opencode: `permission.task`);
+      # a member on a CLI with no such lever fails `start` rather than running unguarded.
+      subagents: true
       # Three separate reasons, not one list: (1) self-recursion fan-out guard, 3 skills — members
       # run claude/codex/opencode CLIs that could themselves invoke a review/council skill and spawn
       # another fan-out beneath this one; already live since `code-review` deploys to codex via root
@@ -58,9 +72,11 @@ council:
       # `codex-skill-deny-efficacy.test.ts`, not restated here.
       #
       # List stops at 40 (OpenAI-bundled plugin skills use `plugin:skill` colon form, rejected by
-      # `lib/generic-job.ts`'s `assertDenySkillsShape`); fail-open by design (unlisted means visible,
-      # the safe direction). Kept in lockstep with `orchestrate-review.config.yaml` —
-      # `codex-skill-deny-efficacy.test.ts` asserts the two files declare the same set.
+      # `lib/generic-job.ts`'s `assertDenyShape`); fail-open by design (unlisted means visible,
+      # the safe direction).
+      # Kept in lockstep with the other job configs (`orchestrate-review`, `agent-council`,
+      # `design-review`, `diagnose`) — `codex-skill-deny-efficacy.test.ts` asserts all four
+      # declare the same set.
       skills:
         - agent-browser
         - agent-council
