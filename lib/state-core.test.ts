@@ -1355,8 +1355,27 @@ describe("qa seed chain parity", () => {
 		expect(isPristine("qa", state)).toBe(false);
 	});
 
+	test("qa run_checks treats an empty object as pristine and populated checks as non-pristine", () => {
+		const base = { phase: "PRE-FLIGHT", cycle: 0, phase_max: 0, target: "" };
+		expect(isPristine("qa", { ...base, run_checks: {} })).toBe(true);
+		expect(isPristine("qa", { ...base, run_checks: { stale_state: { status: "pass" } } })).toBe(false);
+	});
+
+	test("qa run_checks treats null and undefined as pristine", () => {
+		const base = { phase: "PRE-FLIGHT", cycle: 0, phase_max: 0, target: "" };
+		expect(isPristine("qa", { ...base, run_checks: null })).toBe(true);
+		expect(isPristine("qa", base)).toBe(true);
+	});
+
+	test("qa malformed run_checks is non-pristine without throwing", () => {
+		const base = { phase: "PRE-FLIGHT", cycle: 0, phase_max: 0, target: "" };
+		for (const runChecks of [[], "malformed", 1, false]) {
+			expect(() => isPristine("qa", { ...base, run_checks: runChecks })).not.toThrow();
+			expect(isPristine("qa", { ...base, run_checks: runChecks })).toBe(false);
+		}
+	});
+
 	test("touch preserves qa chain fields", () => {
-		const path = join(omtDir, "qa-state-S.json");
 		const before = {
 			active: true, phase: "PLAN", phase_max: 1, cycle: 1, target: "app",
 			actors: [{ id: "dev" }], stories: [{ id: "s1", actor: "dev" }], cells: [],

@@ -51,6 +51,7 @@ export interface QaStory {
 	actor?: string;
 	actor_id?: string;
 	baseline?: QaBaseline | null;
+	baseline_history?: QaBaseline[];
 }
 
 export interface QaCell {
@@ -78,10 +79,13 @@ export interface QaRunChecks {
 	flaky_rerun?: QaRunCheck | QaResult | null;
 }
 
+export type QaRunCheckHistory = Partial<Record<"stale-state" | "dirty-worktree" | "flaky-rerun", QaRunCheck[]>>;
+
 export interface QaWaive {
 	story: string;
 	cls: number;
 	sub?: "hang-timeout" | "flaky-green";
+	reason?: string;
 	cycle?: number;
 }
 
@@ -109,7 +113,8 @@ export interface QaChainState {
 	actors?: QaActor[];
 	stories?: QaStory[];
 	cells?: QaCell[];
-	run_checks?: QaRunChecks;
+	run_checks?: QaRunChecks | null;
+	run_checks_history?: QaRunCheckHistory;
 	waives?: QaWaive[];
 	inert?: QaInert;
 	verdict?: QaVerdict;

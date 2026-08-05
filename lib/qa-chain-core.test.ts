@@ -11,7 +11,14 @@ import {
 	requiredCells,
 	rosterComplete,
 	type QaChainState,
+	type QaStory,
 } from "./qa-chain-core";
+
+const _serializedHistoryShape: QaStory = {
+	id: "history-story",
+	baseline_history: [],
+};
+void _serializedHistoryShape;
 
 type CompleteFixture = QaChainState & {
 	actors: NonNullable<QaChainState["actors"]>;

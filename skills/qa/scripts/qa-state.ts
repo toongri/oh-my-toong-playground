@@ -56,9 +56,7 @@ import {
 	type QaChainState,
 	type QaDriver,
 	type QaPhase,
-	type QaPriority,
-	type QaResult,
-	type QaRunCheck,
+	type QaRunCheckHistory,
 	type QaRunChecks,
 	type QaStory,
 	type QaWaive,
@@ -91,11 +89,26 @@ export interface QaState extends QaChainState {
 }
 
 type ChainState = QaState & QaChainState;
+type QaStateSeed = Pick<
+	QaState,
+	| "active"
+	| "phase"
+	| "cycle"
+	| "max_cycles"
+	| "same_failure_key"
+	| "same_failure_count"
+	| "fix_head_before"
+	| "user_dirty_set"
+	| "target"
+	| "started_at"
+> & QaChainState;
 
 const DRIVERS = ["agent-device", "agent-browser", "curl", "bash"] as const;
 const PRIORITIES = ["H", "M", "L"] as const;
 const RESULTS = ["pass", "fail", "na"] as const;
+const BINARY_RESULTS = ["pass", "fail"] as const;
 const CHECKS = ["stale-state", "dirty-worktree", "flaky-rerun"] as const;
+const VERDICTS = ["APPROVE", "COMMENT", "REQUEST_CHANGES"] as const;
 type CheckName = (typeof CHECKS)[number];
 
 function nonEmpty(value: unknown, field: string): string {
@@ -110,12 +123,13 @@ function currentCycle(state: Partial<ChainState>): number {
 function probeEvidence(path: string, surface: string, driver: QaDriver): string {
 	const absolute = resolve(path);
 	if (surface !== driver) throw new Error(`evidence-surface must match actor driver "${driver}"`);
-	let size = 0;
-	try {
-		size = statSync(absolute).size;
-	} catch {
-		throw new Error(`evidence-path does not exist: ${absolute}`);
-	}
+	const size = (() => {
+		try {
+			return statSync(absolute).size;
+		} catch {
+			throw new Error(`evidence-path does not exist: ${absolute}`);
+		}
+	})();
 	if (size <= 0) throw new Error(`evidence-path is empty: ${absolute}`);
 	return absolute;
 }
@@ -150,6 +164,31 @@ function isOneOf<T extends readonly string[]>(value: unknown, options: T): value
 	return typeof value === "string" && options.includes(value);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function isQaState(value: Partial<ChainState>): value is QaState {
+	return (
+		typeof value.active === "boolean" &&
+		isOneOf(value.phase, QA_PHASES) &&
+		typeof value.cycle === "number" &&
+		Number.isInteger(value.cycle) &&
+		value.cycle >= 0 &&
+		typeof value.max_cycles === "number" &&
+		Number.isInteger(value.max_cycles) &&
+		value.max_cycles >= 1 &&
+		typeof value.same_failure_key === "string" &&
+		typeof value.same_failure_count === "number" &&
+		typeof value.fix_head_before === "string" &&
+		Array.isArray(value.user_dirty_set) &&
+		value.user_dirty_set.every((item) => typeof item === "string") &&
+		typeof value.target === "string" &&
+		typeof value.started_at === "string" &&
+		typeof value.last_touched_at === "string"
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Path resolution — identical dir resolution as goal-state
 // ---------------------------------------------------------------------------
@@ -180,11 +219,15 @@ function seedStartedAt(): string {
 // Internal: read prior state (raw, regardless of active), {} on malformed
 // ---------------------------------------------------------------------------
 
-function readPrior(sessionId: string): Partial<QaState> {
+function readPrior(sessionId: string): Partial<ChainState> {
 	const content = readFileOrNull(resolveStatePath(sessionId));
 	if (!content) return {};
 	try {
-		return JSON.parse(content);
+		const parsed: unknown = JSON.parse(content);
+		if (!isRecord(parsed)) return {};
+		const prior: Partial<ChainState> = {};
+		Object.assign(prior, parsed);
+		return prior;
 	} catch {
 		return {};
 	}
@@ -229,7 +272,7 @@ function mergeWriteUnlocked(sessionId: string, next: Partial<ChainState>): QaSta
 	const stateFilePath = resolveStatePath(sessionId);
 	const prior = readPrior(sessionId);
 	const maxCyclesCandidate = next.max_cycles ?? prior.max_cycles;
-	const partial: Omit<QaState, "last_touched_at"> = {
+	const partial: QaStateSeed = {
 		active: next.active ?? prior.active ?? true,
 		phase: next.phase ?? prior.phase ?? "PRE-FLIGHT",
 		cycle: next.cycle ?? prior.cycle ?? 0,
@@ -246,11 +289,10 @@ function mergeWriteUnlocked(sessionId: string, next: Partial<ChainState>): QaSta
 		target: next.target ?? prior.target ?? "",
 		started_at: prior.started_at ?? seedStartedAt(),
 	};
-	const merged: Record<string, unknown> = { ...prior, ...partial };
+	const chain: QaStateSeed = { ...prior, ...partial };
 	for (const [key, value] of Object.entries(next)) {
-		if (value !== undefined) merged[key] = value;
+		if (value !== undefined) chain[key] = value;
 	}
-	const chain = merged as ChainState;
 	const derived = {
 		chain_complete: chainComplete(chain),
 		record_complete: recordComplete(chain, stateProbe),
@@ -286,24 +328,8 @@ function mergeWrite(sessionId: string, next: Partial<ChainState>): QaState {
 // ---------------------------------------------------------------------------
 
 export function readQaState(sessionId: string): QaState | null {
-	const content = readFileOrNull(resolveStatePath(sessionId));
-	if (!content) return null;
-	try {
-		const state = JSON.parse(content);
-		if (
-			typeof state.active !== "boolean" ||
-			!isOneOf(state.phase, QA_PHASES) ||
-			!Number.isInteger(state.cycle) ||
-			state.cycle < 0 ||
-			!Number.isInteger(state.max_cycles) ||
-			state.max_cycles < 1
-		) {
-			return null;
-		}
-		return state.active ? state : null;
-	} catch {
-		return null;
-	}
+	const state = readPrior(sessionId);
+	return isQaState(state) && state.active ? state : null;
 }
 
 export interface SetQaOpts {
@@ -317,12 +343,12 @@ export interface SetQaOpts {
 }
 
 function writePhase(sessionId: string, phase: QaPhase, target?: string): void {
-	const prior = readPrior(sessionId) as ChainState;
+	const prior = readPrior(sessionId);
 	const index = QA_PHASES.indexOf(phase);
 	if (index >= BASELINE_INDEX && !chainComplete(prior)) {
 		throw new Error(`phase funnel: ${phase} requires a complete actor/story/scenario chain`);
 	}
-	const priorMax = Number.isInteger(prior.phase_max) && (prior.phase_max as number) >= 0 ? (prior.phase_max as number) : 0;
+	const priorMax = typeof prior.phase_max === "number" && Number.isInteger(prior.phase_max) && prior.phase_max >= 0 ? prior.phase_max : 0;
 	mergeWrite(sessionId, { phase, phase_max: Math.max(priorMax, index), target });
 }
 
@@ -404,7 +430,7 @@ export interface AddActorOpts {
 export function addActor(sessionId: string, opts: AddActorOpts): void {
 	const id = nonEmpty(opts.id, "id");
 	const reachable = nonEmpty(opts.reachable, "reachable");
-	const prior = readPrior(sessionId) as ChainState;
+	const prior = readPrior(sessionId);
 	const actors = [...(prior.actors ?? [])];
 	const index = actors.findIndex((candidate) => candidate.id === id);
 	const existing = index >= 0 ? actors[index] : undefined;
@@ -427,7 +453,7 @@ export interface AddStoryOpts {
 export function addStory(sessionId: string, opts: AddStoryOpts): void {
 	const id = nonEmpty(opts.id, "id");
 	const actor = nonEmpty(opts.actor, "actor");
-	const prior = readPrior(sessionId) as ChainState;
+	const prior = readPrior(sessionId);
 	if (!(prior.actors ?? []).some((candidate) => candidate.id === actor)) {
 		throw new Error(`add-story: unknown actor "${actor}"`);
 	}
@@ -465,18 +491,18 @@ export function authorCell(sessionId: string, opts: AuthorCellOpts): void {
 	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
 	const attackPoint = nonEmpty(opts.attackPoint, "attack-point");
 	if (!isOneOf(opts.priority, PRIORITIES)) throw new Error(`priority must be one of ${PRIORITIES.join("|")}`);
-	const prior = readPrior(sessionId) as ChainState;
+	const prior = readPrior(sessionId);
 	if (!(prior.stories ?? []).some((story) => story.id === selector.story)) throw new Error(`author-cell: unknown story "${selector.story}"`);
 	const cycle = currentCycle(prior);
 	const cells = [...(prior.cells ?? [])];
-	const next: QaCell = { ...selector, attack_point: attackPoint, priority: opts.priority as QaPriority, cycle };
+	const next: QaCell = { ...selector, attack_point: attackPoint, priority: opts.priority, cycle };
 	const index = cells.findIndex((cell) => cell.cycle === cycle && sameCell(cell, selector));
 	if (index >= 0) cells[index] = next;
 	else cells.push(next);
 	mergeWrite(sessionId, { cells });
 }
 
-function actorDriver(state: ChainState, storyId: string): QaDriver {
+function actorDriver(state: QaChainState, storyId: string): QaDriver {
 	const story = (state.stories ?? []).find((candidate) => candidate.id === storyId);
 	if (!story) throw new Error(`unknown story "${storyId}"`);
 	const actorId = story.actor ?? story.actor_id;
@@ -495,8 +521,8 @@ export interface RecordBaselineOpts {
 
 export function recordBaseline(sessionId: string, opts: RecordBaselineOpts): void {
 	const storyId = nonEmpty(opts.story, "story");
-	if (!isOneOf(opts.result, RESULTS.filter((result): result is "pass" | "fail" => result !== "na"))) throw new Error("result must be pass or fail");
-	const prior = readPrior(sessionId) as ChainState;
+	if (!isOneOf(opts.result, BINARY_RESULTS)) throw new Error("result must be pass or fail");
+	const prior = readPrior(sessionId);
 	const story = (prior.stories ?? []).find((candidate) => candidate.id === storyId);
 	if (!story) throw new Error(`record-baseline: unknown story "${storyId}"`);
 	const cycle = currentCycle(prior);
@@ -505,15 +531,14 @@ export function recordBaseline(sessionId: string, opts: RecordBaselineOpts): voi
 		if (!opts.evidencePath || !opts.evidenceSurface) throw new Error("pass baseline requires evidence-path and evidence-surface");
 		evidence = { path: probeEvidence(opts.evidencePath, opts.evidenceSurface, actorDriver(prior, storyId)), surface: opts.evidenceSurface };
 	}
-	const baseline: QaBaseline = { result: opts.result as "pass" | "fail", ...(opts.note !== undefined ? { note: opts.note } : {}), ...(evidence ? { evidence, cycle } : { cycle }) };
+	const baseline: QaBaseline = { result: opts.result, ...(opts.note !== undefined ? { note: opts.note } : {}), ...(evidence ? { evidence, cycle } : { cycle }) };
 	const stories = [...(prior.stories ?? [])];
 	const index = stories.findIndex((candidate) => candidate.id === storyId);
 	const existing = stories[index];
-	const priorHistory = Array.isArray((existing as unknown as Record<string, unknown>).baseline_history)
-		? ([...(existing as unknown as Record<string, unknown>).baseline_history as QaBaseline[]])
-		: [];
+	if (!existing) throw new Error(`record-baseline: unknown story "${storyId}"`);
+	const priorHistory = existing.baseline_history ? [...existing.baseline_history] : [];
 	if (existing.baseline && existing.baseline.cycle !== cycle) priorHistory.push(existing.baseline);
-	stories[index] = { ...existing, baseline, ...(priorHistory.length ? { baseline_history: priorHistory } : {}) } as QaStory;
+	stories[index] = { ...existing, baseline, ...(priorHistory.length ? { baseline_history: priorHistory } : {}) };
 	mergeWrite(sessionId, { stories });
 }
 
@@ -530,7 +555,7 @@ export interface RecordCellOpts {
 export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
 	if (!isOneOf(opts.status, RESULTS)) throw new Error(`status must be one of ${RESULTS.join("|")}`);
-	const prior = readPrior(sessionId) as ChainState;
+	const prior = readPrior(sessionId);
 	const cycle = currentCycle(prior);
 	const authored = (prior.cells ?? []).find((cell) => cell.cycle === cycle && sameCell(cell, selector));
 	if (!authored || !authored.attack_point || !authored.priority) throw new Error("record-cell requires an authored current-cycle cell");
@@ -544,7 +569,7 @@ export function recordCell(sessionId: string, opts: RecordCellOpts): void {
 		...selector,
 		attack_point: authored.attack_point,
 		priority: authored.priority,
-		status: opts.status as QaResult,
+		status: opts.status,
 		cycle,
 		...(opts.naReason !== undefined ? { na_reason: opts.naReason } : {}),
 		...(evidence ? { evidence } : {}),
@@ -563,29 +588,34 @@ export interface RecordRunCheckOpts {
 
 export function recordRunCheck(sessionId: string, opts: RecordRunCheckOpts): void {
 	if (!isOneOf(opts.check, CHECKS)) throw new Error(`check must be one of ${CHECKS.join("|")}`);
-	if (!isOneOf(opts.result, ["pass", "fail"] as const)) throw new Error("result must be pass or fail");
+	if (!isOneOf(opts.result, BINARY_RESULTS)) throw new Error("result must be pass or fail");
 	if (opts.result === "fail" && !opts.note?.trim()) throw new Error("fail result requires note");
-	const prior = readPrior(sessionId) as ChainState;
+	const prior = readPrior(sessionId);
 	const cycle = currentCycle(prior);
-	const key = opts.check as CheckName;
-	const existingChecks = { ...(prior.run_checks ?? {}) } as QaRunChecks;
-	const history = { ...((prior as unknown as Record<string, unknown>).run_checks_history as Record<string, QaRunCheck[]> | undefined) };
-	const field = key.replace("-", "_") as keyof QaRunChecks;
+	const key = opts.check;
+	const existingChecks: QaRunChecks = { ...(prior.run_checks ?? {}) };
+	const history: QaRunCheckHistory = { ...(prior.run_checks_history ?? {}) };
+	const fields: Record<CheckName, keyof QaRunChecks> = {
+		"stale-state": "stale_state",
+		"dirty-worktree": "dirty_worktree",
+		"flaky-rerun": "flaky_rerun",
+	};
+	const field = fields[key];
 	const old = existingChecks[field];
 	if (old && typeof old !== "string" && old.cycle !== cycle) {
 		history[key] = [...(history[key] ?? []), old];
 	}
-	existingChecks[field] = { result: opts.result as "pass" | "fail", ...(opts.note !== undefined ? { note: opts.note } : {}), cycle };
-	mergeWrite(sessionId, { run_checks: existingChecks, ...(Object.keys(history).length ? { run_checks_history: history } : {}) } as Partial<ChainState>);
+	existingChecks[field] = { result: opts.result, ...(opts.note !== undefined ? { note: opts.note } : {}), cycle };
+	mergeWrite(sessionId, { run_checks: existingChecks, ...(Object.keys(history).length ? { run_checks_history: history } : {}) });
 }
 
 export function setVerdict(sessionId: string, verdict: string): void {
-	if (!isOneOf(verdict, ["APPROVE", "COMMENT", "REQUEST_CHANGES"] as const)) {
+	if (!isOneOf(verdict, VERDICTS)) {
 		throw new Error("set-verdict: verdict must be APPROVE, COMMENT, or REQUEST_CHANGES");
 	}
 	withStateLock(resolveStatePath(sessionId), () => {
 		ensureSeed("qa", sessionId);
-		const prior = readPrior(sessionId) as ChainState;
+		const prior = readPrior(sessionId);
 		if (verdict === "APPROVE" && !approveOk(prior, stateProbe)) {
 			throw new Error("set-verdict: APPROVE refused — approveOk is false; record/waive cells or use REQUEST_CHANGES");
 		}
@@ -596,19 +626,17 @@ export function setVerdict(sessionId: string, verdict: string): void {
 	});
 }
 
-type QaWaiveWithReason = QaWaive & { reason: string };
-
 export function waiveCell(sessionId: string, opts: { story: string; cls: number; sub?: string; reason: string }): void {
 	const selector = validateCellSelector(opts.story, opts.cls, opts.sub);
 	const reason = nonEmpty(opts.reason, "reason");
-	const prior = readPrior(sessionId) as ChainState;
+	const prior = readPrior(sessionId);
 	const cycle = currentCycle(prior);
 	if (!(prior.stories ?? []).some((story) => story.id === selector.story)) throw new Error(`waive: unknown story "${selector.story}"`);
 	if (!(prior.cells ?? []).some((cell) => cell.cycle === cycle && sameCell(cell, selector))) {
 		throw new Error("waive: cell must be authored in the current cycle");
 	}
-	const waives = ([...(prior.waives ?? [])] as QaWaiveWithReason[]);
-	const next: QaWaiveWithReason = { ...selector, cycle, reason };
+	const waives = [...(prior.waives ?? [])];
+	const next: QaWaive = { ...selector, cycle, reason };
 	const index = waives.findIndex((item) => item.cycle === cycle && sameCell(item, selector));
 	if (index >= 0) waives[index] = next;
 	else waives.push(next);
@@ -624,11 +652,11 @@ export function startQa(sessionId: string, target: string): void {
 	const stateFilePath = resolveStatePath(sessionId);
 	withStateLock(stateFilePath, () => {
 		ensureSeed("qa", sessionId);
-		const prior = readPrior(sessionId) as ChainState;
+		const prior = readPrior(sessionId);
 		if (prior.active !== false && !cycleUntouched(prior)) {
 			throw new Error("start: refused — active cycle has work; run gated complete first");
 		}
-		const reset: Record<string, unknown> = {
+		const reset: QaStateSeed = {
 			...prior,
 			active: true,
 			phase: "PRE-FLIGHT",
@@ -640,6 +668,7 @@ export function startQa(sessionId: string, target: string): void {
 			fix_head_before: "",
 			user_dirty_set: [],
 			target: nonEmpty(target, "target"),
+			started_at: prior.started_at ?? seedStartedAt(),
 			actors: [],
 			stories: [],
 			cells: [],
@@ -649,16 +678,15 @@ export function startQa(sessionId: string, target: string): void {
 		};
 		delete reset.inert;
 		delete reset.run_checks_history;
-		const chain = reset as ChainState;
-		chain.derived = {
-			chain_complete: chainComplete(chain),
-			record_complete: recordComplete(chain, stateProbe),
-			approve_ok: approveOk(chain, stateProbe),
-			comment_ok: commentOk(chain, stateProbe),
-			roster_complete: rosterComplete(chain),
-			driver_gate_armed: driverGateArmed(chain),
+		reset.derived = {
+			chain_complete: chainComplete(reset),
+			record_complete: recordComplete(reset, stateProbe),
+			approve_ok: approveOk(reset, stateProbe),
+			comment_ok: commentOk(reset, stateProbe),
+			roster_complete: rosterComplete(reset),
+			driver_gate_armed: driverGateArmed(reset),
 		};
-		const state = mergeWithHeartbeat(chain, {});
+		const state: QaState = mergeWithHeartbeat(reset, {});
 		writeFileNoCreate(stateFilePath, JSON.stringify(state, null, 2));
 	});
 }
@@ -672,7 +700,7 @@ export function startQa(sessionId: string, target: string): void {
 export function completeQa(sessionId: string): void {
 	withStateLock(resolveStatePath(sessionId), () => {
 		ensureSeed("qa", sessionId);
-		const prior = readPrior(sessionId) as ChainState;
+		const prior = readPrior(sessionId);
 		const verdict = prior.verdict;
 		const canComplete =
 			(verdict === "APPROVE" && approveOk(prior, stateProbe)) ||
@@ -687,16 +715,16 @@ export function completeQa(sessionId: string): void {
 
 type QaView = QaState & {
 	prior_cycle_cells: QaCell[];
-	prior_cycle_waives: QaWaiveWithReason[];
-	verdict_report: { verdict: QaState["verdict"]; cycle: number; waives: QaWaiveWithReason[]; inert?: QaInert };
+	prior_cycle_waives: QaWaive[];
+	verdict_report: { verdict: QaState["verdict"]; cycle: number; waives: QaWaive[]; inert?: QaInert };
 };
 
 function readQaView(sessionId: string): QaView | null {
 	const state = readQaState(sessionId);
 	if (!state) return null;
 	const cycle = currentCycle(state);
-	const cells = (state.cells ?? []) as QaCell[];
-	const waives = (state.waives ?? []) as QaWaiveWithReason[];
+	const cells = state.cells ?? [];
+	const waives = state.waives ?? [];
 	const currentWaives = waives.filter((waive) => waive.cycle === cycle);
 	const currentInert = state.inert?.cycle === undefined || state.inert.cycle === cycle ? state.inert : undefined;
 	return {
