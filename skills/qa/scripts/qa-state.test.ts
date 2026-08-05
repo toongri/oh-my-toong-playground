@@ -472,6 +472,23 @@ describe("qa-state CLI wiring", () => {
 		expect(records[1].status).toBe("fail");
 	});
 
+	test("re-recorded baseline and run-check history survive later writes", () => {
+		authorCompleteChain();
+		run("record-baseline --story story-1 --result fail --note first");
+		run("inc-cycle");
+		run("record-baseline --story story-1 --result fail --note second");
+		run("record-run-check --check stale-state --result fail --note first");
+		run("inc-cycle");
+		run("record-run-check --check stale-state --result fail --note second");
+		const state = rawState();
+		expect(state.stories[0].baseline_history).toEqual([
+			expect.objectContaining({ result: "fail", note: "first", cycle: 0 }),
+		]);
+		expect(state.run_checks_history["stale-state"]).toEqual([
+			expect.objectContaining({ result: "fail", note: "first", cycle: 1 }),
+		]);
+	});
+
 	test("derived: every successful chain write persists recomputed flags", () => {
 		run("set --phase PLAN");
 		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');

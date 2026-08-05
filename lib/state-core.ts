@@ -270,7 +270,7 @@ export function readQaStateRaw(sessionId: string): QaChainState | null {
 	if (!isSafeSessionId(sessionId)) return null;
 	try {
 		const parsed: unknown = JSON.parse(readFileSync(statePath("qa", sessionId), "utf8"));
-		return isPlainObject(parsed) ? (parsed as QaChainState) : null;
+		return isPlainObject(parsed) ? parsed : null;
 	} catch {
 		return null;
 	}
@@ -484,6 +484,11 @@ export function isPristine(type: StateType, parsed: Record<string, unknown>): bo
 		return parsed["state"] === undefined || parsed["state"] === null;
 	}
 	if (type === "qa") {
+		const runChecks = parsed["run_checks"];
+		const runChecksEmpty =
+			runChecks === null ||
+			runChecks === undefined ||
+			(isPlainObject(runChecks) && Object.keys(runChecks).length === 0);
 		return (
 			parsed["phase"] === "PRE-FLIGHT" &&
 			(parsed["cycle"] === 0 || parsed["cycle"] === undefined) &&
@@ -492,7 +497,7 @@ export function isPristine(type: StateType, parsed: Record<string, unknown>): bo
 			(!Array.isArray(parsed["actors"]) || parsed["actors"].length === 0) &&
 			(!Array.isArray(parsed["stories"]) || parsed["stories"].length === 0) &&
 			(!Array.isArray(parsed["cells"]) || parsed["cells"].length === 0) &&
-			(parsed["run_checks"] == null || Object.keys(parsed["run_checks"] as object).length === 0)
+			runChecksEmpty
 		);
 	}
 	return false;
