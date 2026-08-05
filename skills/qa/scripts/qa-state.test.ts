@@ -127,9 +127,9 @@ describe("qa state: phase/target round-trip", () => {
 
 	test("advance-phase writes phase without touching target", () => {
 		setQaState(S, { phase: "PRE-FLIGHT", target: "feature Z" });
-		advancePhase(S, "BASELINE");
+		advancePhase(S, "PLAN");
 		const state = readQaState(S)!;
-		expect(state.phase).toBe("BASELINE");
+		expect(state.phase).toBe("PLAN");
 		expect(state.target).toBe("feature Z");
 	});
 
@@ -162,7 +162,7 @@ describe("qa state: cycle counting", () => {
 
 describe("qa state: Same-Failure key semantics", () => {
 	test("same key 3x accumulates count to 3 and signals terminate", () => {
-		setQaState(S, { phase: "CHECK" });
+		setQaState(S, { phase: "PLAN" });
 		let r = noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
 		expect(r.same_failure_count).toBe(1);
 		expect(r.terminate).toBe(false);
@@ -180,7 +180,7 @@ describe("qa state: Same-Failure key semantics", () => {
 	// equality check (===3): a resumed run can call note-failure again after
 	// count already hit 3, landing on 4 — the 3x-exit must still fire.
 	test("same key 4x (resumed run past the 3x boundary) still signals terminate", () => {
-		setQaState(S, { phase: "CHECK" });
+		setQaState(S, { phase: "PLAN" });
 		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
 		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
 		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
@@ -190,7 +190,7 @@ describe("qa state: Same-Failure key semantics", () => {
 	});
 
 	test("a different key resets count to 1 and updates same_failure_key", () => {
-		setQaState(S, { phase: "CHECK" });
+		setQaState(S, { phase: "PLAN" });
 		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
 		noteFailure(S, "scenario-1:file.ts:rootCauseSymbol");
 		const r = noteFailure(S, "scenario-2:other.ts:differentSymbol");
@@ -204,7 +204,7 @@ describe("qa state: Same-Failure key semantics", () => {
 
 describe("qa state: fix_head_before + user_dirty_set", () => {
 	test("record-fix-head and capture-dirty-set persist and read back", () => {
-		setQaState(S, { phase: "FIX" });
+		setQaState(S, { phase: "PLAN" });
 		recordFixHead(S, "abc123deadbeef");
 		captureDirtySet(S, ["src/foo.ts", "src/bar.ts"]);
 		const state = readQaState(S)!;
@@ -213,7 +213,7 @@ describe("qa state: fix_head_before + user_dirty_set", () => {
 	});
 
 	test("capture-dirty-set with empty array clears the set", () => {
-		setQaState(S, { phase: "FIX" });
+		setQaState(S, { phase: "PLAN" });
 		captureDirtySet(S, ["a.ts"]);
 		captureDirtySet(S, []);
 		expect(readQaState(S)!.user_dirty_set).toEqual([]);
@@ -223,7 +223,7 @@ describe("qa state: fix_head_before + user_dirty_set", () => {
 describe("qa state: terminal completion (P2 finding 1 — no active:false resurrection)", () => {
 	test("completeQa marks active:false so readQaState no longer restores the session", () => {
 		setQaState(S, { phase: "PRE-FLIGHT" });
-		advancePhase(S, "STATE");
+		advancePhase(S, "PLAN");
 		expect(readQaState(S)).not.toBeNull();
 		completeQa(S);
 		expect(readQaState(S)).toBeNull();
@@ -240,6 +240,15 @@ describe("qa state: terminal completion (P2 finding 1 — no active:false resurr
 describe("qa-state CLI wiring", () => {
 	const script = join(import.meta.dir, "qa-state.ts");
 	const run = (cmd: string) => execSync(`bun ${script} ${cmd}`, { encoding: "utf8", env: process.env });
+	const authorCompleteChain = () => {
+		run("set --phase PLAN");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		run('add-story --id story-1 --actor actor-1');
+		for (const [cls, sub] of [[1, ""], [2, ""], [3, ""], [4, ""], [5, ""], [6, ""], [1, "hang-timeout"], [5, "flaky-green"]] as const) {
+			const suffix = sub ? ` --sub ${sub}` : "";
+			run(`author-cell --story story-1 --cls ${cls}${suffix} --attack-point "attack ${cls} ${sub}" --priority ${cls === 1 ? "H" : "L"}`);
+		}
+	};
 
 	test("CLI set/get/status round-trip", () => {
 		run('set --phase PLAN --target "cli target"');
@@ -262,7 +271,7 @@ describe("qa-state CLI wiring", () => {
 	});
 
 	test("CLI note-failure prints same_failure_count+terminate JSON", () => {
-		run("set --phase CHECK");
+		run("set --phase PLAN");
 		run('note-failure "k1"');
 		const out = run('note-failure "k1"');
 		const parsed = JSON.parse(out);
@@ -276,6 +285,71 @@ describe("qa-state CLI wiring", () => {
 		expect(rawState().active).toBe(false);
 		const out = run("get").trim();
 		expect(out).toBe("null");
+	});
+
+	test("byte-identical: unknown actor and invalid authoring are refused before write", () => {
+		run("set --phase PLAN");
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => run("add-story --id story-1 --actor missing")).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		const beforeCell = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => run("author-cell --story missing --cls 1 --attack-point x --priority H")).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(beforeCell);
+	});
+
+	test("phase gate: both phase writers refuse BASELINE until the chain is complete", () => {
+		run("set --phase PLAN");
+		const before = readFileSync(resolveStatePath(S), "utf8");
+		expect(() => run("advance-phase BASELINE")).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+		expect(() => run("set --phase BASELINE")).toThrow();
+		expect(readFileSync(resolveStatePath(S), "utf8")).toBe(before);
+		authorCompleteChain();
+		expect(() => run("advance-phase BASELINE")).not.toThrow();
+	});
+
+	test("phase_max: high-water mark is not lowered by a backward set", () => {
+		authorCompleteChain();
+		run('advance-phase "ADVERSARIAL E2E"');
+		expect(rawState().phase_max).toBe(3);
+		run("set --phase PLAN");
+		expect(rawState().phase).toBe("PLAN");
+		expect(rawState().phase_max).toBe(3);
+	});
+
+	test("re-record: current-cycle records replace while prior-cycle records remain", () => {
+		authorCompleteChain();
+		run("record-cell --story story-1 --cls 1 --status fail");
+		run("record-cell --story story-1 --cls 1 --status pass --evidence-path skills/qa/scripts/qa-state.test.ts --evidence-surface bash");
+		const firstCycle = rawState();
+		const current = firstCycle.cells.find((cell: any) => cell.story === "story-1" && cell.cls === 1 && !cell.sub);
+		expect(current.status).toBe("pass");
+		run("inc-cycle");
+		run("author-cell --story story-1 --cls 1 --attack-point corrected --priority H");
+		run("record-cell --story story-1 --cls 1 --status fail");
+		const second = rawState();
+		const records = second.cells.filter((cell: any) => cell.story === "story-1" && cell.cls === 1 && !cell.sub);
+		expect(records).toHaveLength(2);
+		expect(records[0].cycle).toBe(0);
+		expect(records[0].status).toBe("pass");
+		expect(records[1].cycle).toBe(1);
+		expect(records[1].status).toBe("fail");
+	});
+
+	test("derived: every successful chain write persists recomputed flags", () => {
+		run("set --phase PLAN");
+		run('add-actor --id actor-1 --name "User" --boundary "home" --driver bash --reachable yes');
+		const afterActor = rawState();
+		expect(afterActor.derived).toMatchObject({ chain_complete: false, driver_gate_armed: true });
+		run('add-story --id story-1 --actor actor-1');
+		expect(rawState()).toHaveProperty("derived.chain_complete");
+	});
+
+	test("funnel: exported phase writers share the BASELINE gate", () => {
+		setQaState(S, { phase: "PLAN" });
+		expect(() => advancePhase(S, "BASELINE")).toThrow();
+		expect(() => setQaState(S, { phase: "BASELINE" })).toThrow();
 	});
 
 	test("(B2) CLI exits non-zero when no session identifier is available", () => {
