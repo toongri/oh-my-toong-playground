@@ -9,6 +9,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Git exports repository-local variables while running hooks (for example,
+# GIT_DIR). Keep those variables out of tests so they resolve their own repo
+# context rather than inheriting the hook's repository context.
+GIT_LOCAL_ENV_VARS="$(git rev-parse --local-env-vars 2>/dev/null || true)"
+
+run_without_git_local_env() {
+    local var
+    while IFS= read -r var; do
+        [[ -z "$var" ]] && continue
+        unset "$var"
+    done <<< "$GIT_LOCAL_ENV_VARS"
+    "$@"
+}
+
 # 색상
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -67,7 +81,7 @@ run_shell_tests() {
         log_info "실행: $rel_path"
 
         local output
-        if output=$(bash "$test_file" 2>&1); then
+        if output=$(run_without_git_local_env bash "$test_file" 2>&1); then
             ((SHELL_PASS++)) || true
             log_success "  통과: $rel_path"
         else
@@ -99,7 +113,7 @@ run_bun_tests() {
     fi
 
     local output
-    if output=$(cd "$ROOT_DIR" && bun test ./tools/ ./lib/ ./scripts/ ./hooks/ ./skills/ ./projects/ 2>&1); then
+    if output=$(cd "$ROOT_DIR" && run_without_git_local_env bun test ./tools/ ./lib/ ./scripts/ ./hooks/ ./skills/ ./projects/ 2>&1); then
         TS_PASS=1
         TS_TOTAL=1
         log_success "  Bun 테스트 통과"
