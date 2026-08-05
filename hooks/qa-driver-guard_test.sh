@@ -46,7 +46,7 @@ run_hook() {
 
 assert_denied() {
     local out="$1" label="$2"
-    printf '%s' "$out" | jq -e '.continue == false and (.reason | test("QA driver gate"; "i"))' >/dev/null \
+    printf '%s' "$out" | jq -e '.continue == false and (.reason | test("QA driver gate"; "i") and test("agent-device"; "i") and test("agent-browser"; "i") and test("curl"; "i") and test("bash"; "i"))' >/dev/null \
         || { echo "ASSERTION FAILED $label: expected Claude deny, got '$out'"; return 1; }
 }
 
@@ -65,11 +65,24 @@ test_armed_driver_commands_denied() {
     for command in \
         'agent-browser open https://example.test' \
         'agent-device --version' \
+        'curl https://example.test' \
+        'bash --version' \
         'npx agent-browser screenshot' \
         'pnpm exec agent-device tap'; do
         out=$(run_hook "$command")
         assert_denied "$out" "$command" || result=1
     done
+    cleanup_sandbox
+    return "$result"
+}
+
+test_argument_token_is_not_driver_invocation() {
+    new_sandbox
+    write_state true true
+    local out rc=0
+    out=$(run_hook 'printf %s agent-device') || rc=$?
+    assert_allowed "$out" "$rc" argument-token
+    local result=$?
     cleanup_sandbox
     return "$result"
 }
@@ -123,6 +136,7 @@ test_jq_absent_fails_open() {
 
 for test_name in \
     test_armed_driver_commands_denied \
+    test_argument_token_is_not_driver_invocation \
     test_roster_first_plan_arm_allows_driver \
     test_other_allow_arms_are_silent \
     test_jq_absent_fails_open; do
