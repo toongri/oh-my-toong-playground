@@ -49,6 +49,7 @@ import { join } from "path";
 // (the sync alias-rewriter skips lib/** files). Relative imports let `make sync`'s dep collector
 // follow the path and deploy omt-dir alongside this module.
 import { getOmtDir, resolveOmtDir } from "./omt-dir";
+import type { QaChainState } from "./qa-chain-core";
 
 // ---------------------------------------------------------------------------
 // Timestamp
@@ -256,6 +257,23 @@ export const STATE_PREFIX: Record<StateType, string> = {
 	"deep-interview": "deep-interview-active-state-",
 	qa: "qa-state-",
 };
+
+/**
+ * Reads the QA state without folding inactive files to null. The Stop gate
+ * must distinguish a legacy untouched inactive marker from a forged
+ * deactivation after work was recorded, so this reader intentionally returns
+ * `active:false` states as-is. Missing, malformed, or non-object JSON is
+ * treated as absent.
+ */
+export function readQaStateRaw(sessionId: string): QaChainState | null {
+	if (!isSafeSessionId(sessionId)) return null;
+	try {
+		const parsed: unknown = JSON.parse(readFileSync(statePath("qa", sessionId), "utf8"));
+		return isPlainObject(parsed) ? (parsed as QaChainState) : null;
+	} catch {
+		return null;
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Internal helpers
