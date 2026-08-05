@@ -116,3 +116,13 @@ describe("visual-qa harness prose", () => {
 		expect(skillMd).not.toContain("## Codex Harness Tool Compatibility");
 	});
 });
+
+describe("visual-qa platform dispatch contract", () => {
+	test("Claude documents the canonical Agent oracle dispatch", () => {
+		expect(skillMd).toMatch(/Agent\(subagent_type="oracle", prompt=/);
+	});
+
+	test("Codex documents the native spawn_agent oracle dispatch", () => {
+		expect(skillMd).toMatch(/spawn_agent\(\{[\s\S]*?"agent_type": "oracle"/);
+	});
+});

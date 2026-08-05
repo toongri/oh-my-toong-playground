@@ -96,7 +96,17 @@ Static screenshots miss what moves. For every interactive element and every anim
 
 This independent review is REQUIRED before any "done" claim. Do not self-review inside the main agent and call the UI verified - a self-graded pass is the failure mode this step exists to stop. Dispatch it yourself, every time, without waiting to be told. Give each reviewer the captures for every enumerated page from Step 2, not a sample, and tell it the page count so it can confirm none were skipped.
 
-Dispatch both reviewers with OMT's native `spawn_agent` call. Give each call a
+This skill is deployed unchanged to Claude Code and Codex, so use the native
+dispatch form for the active platform rather than relying on a deployment
+rewrite:
+
+- Claude Code: call `Agent(subagent_type="oracle", prompt=<complete pass prompt>)`
+  once for each pass.
+- Codex: call `spawn_agent({...})` once for each pass with `agent_type: "oracle"`,
+  a distinct `task_name`, the complete prompt in `message`, and
+  `fork_turns: "none"`.
+
+For the Codex `spawn_agent` form, give each call a
 distinct `task_name`, set `agent_type: "oracle"`, put the complete role
 instructions in `message`, and use `fork_turns: "none"` so the oracle receives
 only the evidence in its prompt.
