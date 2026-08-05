@@ -9,22 +9,6 @@ drives a real Chromium and can screenshot a page at a fixed viewport — exactly
 
 Repo: https://github.com/vercel-labs/agent-browser
 
-## Install
-
-```
-npm install -g agent-browser && agent-browser install
-```
-
-`npm install -g agent-browser` installs the CLI globally; `agent-browser install` downloads the
-managed browser it drives. If Bun is already available, `bun add -g agent-browser && agent-browser install`
-is equivalent, but npm is the default for broad runtime compatibility.
-
-Confirm it is ready and discover the current flags:
-
-```
-agent-browser --help
-```
-
 ## Capture a screenshot at a fixed viewport
 
 Set the viewport first, then screenshot — this guarantees the ACTUAL capture matches the
