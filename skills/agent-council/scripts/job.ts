@@ -20,8 +20,9 @@ import {
 	type JobConfig,
 	assertMembersOrExit,
 	assertDenyEnforceable,
-	assertDenySkillsShape,
+	assertDenyShape,
 	extractDenySkills,
+	extractDenySubagents,
 	computeStatus as frameworkComputeStatus,
 	buildUiPayload as frameworkBuildUiPayload,
 	spawnWorkers as frameworkSpawnWorkers,
@@ -169,7 +170,7 @@ async function parseCouncilConfig(configPath: string): Promise<CouncilConfig> {
 		merged.council.settings = { ...merged.council.settings, ...council.settings };
 	}
 
-	assertDenySkillsShape(merged.council.settings, COUNCIL_CONFIG, configPath);
+	assertDenyShape(merged.council.settings, COUNCIL_CONFIG, configPath);
 
 	return merged;
 }
@@ -393,7 +394,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	assertMembersOrExit(members, COUNCIL_CONFIG, configPath);
 
 	const denySkills = extractDenySkills(config.council.settings);
-	assertDenyEnforceable(members, denySkills, COUNCIL_CONFIG, configPath);
+	const denySubagents = extractDenySubagents(config.council.settings);
+	assertDenyEnforceable(members, denySkills, COUNCIL_CONFIG, configPath, denySubagents);
 
 	const jobId = generateJobId();
 	const jobDir = path.join(jobsDir, `council-${jobId}`);
@@ -412,6 +414,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 			excludeChairmanFromMembers,
 			timeoutSec: timeoutSec || null,
 			denySkills,
+			denySubagents,
 		},
 		members: members.map((m) => ({
 			name: String(m.name),
@@ -428,7 +431,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 
 	// Use framework spawnWorkers — it calls detectCliType + buildAugmentedCommand internally
 	frameworkSpawnWorkers({
-		entities: members.map((m) => ({ ...m, deny: denySkills })),
+		entities: members.map((m) => ({ ...m, deny: denySkills, denySubagents })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: membersDir,
