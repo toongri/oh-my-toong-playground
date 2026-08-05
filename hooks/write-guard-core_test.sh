@@ -616,6 +616,40 @@ test_qa_state_other_session_allows() {
     return 1
 }
 
+# =============================================================================
+# QA glob bypass (CONFIRMED P2 defect) -- an unquoted QA-state glob never
+# EXACT-string-matches the current-session state path, but `rm
+# "$OMT_DIR"/qa-state-*.json` can destroy qa-state-<sid>.json at runtime.
+# The glob branch must apply to the QA state anchor just as it does to the
+# session ledger anchor.
+# =============================================================================
+test_qa_state_glob_current_session_denies() {
+    local out cand
+    cand="$OD/qa-state-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if printf '%s' "$out" | grep -qi 'qa-state'; then return 0; fi
+    echo "ASSERTION FAILED qa-state-glob-current: expected deny for '$cand', got '$out'"
+    return 1
+}
+
+test_qa_state_glob_other_session_allows() {
+    local out cand
+    cand="$OD/qa-state-other-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED qa-state-glob-other: expected allow for '$cand', got '$out'"
+    return 1
+}
+
+test_qa_state_glob_nonmatching_allows() {
+    local out cand
+    cand="$OD/qa-other-*.json"
+    out=$(printf '%s\n' "$cand" | bash -c "source '$CORE'; write_guard_core_run '$OD' '$SID'")
+    if [ -z "$out" ]; then return 0; fi
+    echo "ASSERTION FAILED qa-state-glob-nonmatching: expected allow for '$cand', got '$out'"
+    return 1
+}
+
 test_user_authorized_dismiss_review_finding_denies() {
     local out
     out=$(bash -c "source '$CORE'; write_guard_core_check_user_authorized_command \"\$1\"" _ \
@@ -1163,6 +1197,9 @@ main() {
     run_test test_user_authorized_qa_record_cell_waive_collision_denies
     run_test test_qa_state_exact_path_denies
     run_test test_qa_state_other_session_allows
+    run_test test_qa_state_glob_current_session_denies
+    run_test test_qa_state_glob_other_session_allows
+    run_test test_qa_state_glob_nonmatching_allows
     run_test test_user_authorized_variable_indirection_denies
     run_test test_user_authorized_reverse_order_denies
     run_test test_user_authorized_whitespace_run_denies
