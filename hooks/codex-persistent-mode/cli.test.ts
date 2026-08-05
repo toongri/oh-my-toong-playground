@@ -867,6 +867,30 @@ describe("codex-persistent-mode cli", () => {
 			).toBe(1);
 		});
 
+		test("fresh oversized open rollout with no terminal marker in tail blocks without consuming", async () => {
+			const sid = "sid-tail-fresh-open";
+			const home = join(projectDir, "tail-fresh-open");
+			const rollout = join(home, "child.jsonl");
+			mkdirSync(home, { recursive: true });
+			const started = JSON.stringify({ type: "event_msg", payload: { type: "task_started" } });
+			const filler = JSON.stringify({ type: "event_msg", payload: { type: "other" } }) + "\n";
+			const fillerLines = Math.ceil((64 * 1024) / filler.length) + 1;
+			writeFileSync(rollout, started + "\n" + filler.repeat(fillerLines));
+			makeChildDb(home, sid, rollout);
+			writeUltragoalState(omtDir, sid);
+
+			const result = await runCli("stop", stopPayload(sid, projectDir), omtDir, {
+				CODEX_HOME: home,
+			});
+			expect(result.exitCode).toBe(0);
+			expect(result.stderr).toBe("");
+			expect(JSON.parse(result.stdout).decision).toBe("block");
+			expect(result.stdout).toContain("[ULTRAGOAL - WAITING ON BACKGROUND WORK]");
+			expect(
+				JSON.parse(readFileSync(join(omtDir, `ultragoal-state-${sid}.json`), "utf8")).iteration,
+			).toBe(0);
+		});
+
 		test("missing sqlite binary fails open with one diagnostic", async () => {
 			const sid = "sid-no-sqlite";
 			const home = join(projectDir, "no-sqlite");

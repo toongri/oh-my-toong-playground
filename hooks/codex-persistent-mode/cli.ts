@@ -343,7 +343,8 @@ function detectActiveCodexChildren(sessionId: string): number {
 			const fields = line.split("|");
 			if (fields.length !== 2 || !fields[0] || !fields[1]) return fail("malformed sqlite output");
 			const rolloutPath = fields[1];
-			const ageSeconds = (Date.now() - statSync(rolloutPath).mtimeMs) / 1000;
+			const rolloutStat = statSync(rolloutPath);
+			const ageSeconds = (Date.now() - rolloutStat.mtimeMs) / 1000;
 			if (ageSeconds > CODEX_CHILD_STALE_TTL_SECONDS) continue;
 			const content = readRolloutTail(rolloutPath);
 			let lastMarker: string | undefined;
@@ -364,7 +365,15 @@ function detectActiveCodexChildren(sessionId: string): number {
 					lastMarker = marker;
 				}
 			}
-			if (lastMarker === "task_started") count++;
+			if (
+				lastMarker === "task_started" ||
+				(lastMarker === undefined && rolloutStat.size > ROLLOUT_TAIL_BYTES)
+			) {
+				// A fresh open rollout may have its initial task_started marker before
+				// the bounded tail. Without a retained terminal marker, conservatively
+				// treat that child as active; terminal markers in the tail still win.
+				count++;
+			}
 		}
 		return count;
 	} catch (error) {
