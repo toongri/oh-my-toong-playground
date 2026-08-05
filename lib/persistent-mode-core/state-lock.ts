@@ -149,9 +149,20 @@ function isolateAndRemoveStaleLock(lockPath: string): void {
 }
 
 function releaseStateLock(lockPath: string, token: string): void {
-	withStateLockRecoveryGuard(lockPath, () => {
-		if (readStateLockOwner(lockPath)?.token === token) {
-			rmSync(lockPath, { recursive: true, force: true });
+	// Keep waiting until the recovery guard is acquired; abandoned guards are
+	// reclaimed by withStateLockRecoveryGuard's existing stale-TTL path.
+	while (true) {
+		if (
+			withStateLockRecoveryGuard(lockPath, () => {
+				if (readStateLockOwner(lockPath)?.token === token) {
+					rmSync(lockPath, { recursive: true, force: true });
+				}
+			})
+		) {
+			return;
 		}
-	});
+		// A fresh recovery guard may belong to a concurrent stale-lock observer;
+		// wait for it rather than leaving our own primary lock behind.
+		Atomics.wait(STATE_LOCK_SLEEP, 0, 0, STATE_LOCK_RETRY_MS);
+	}
 }

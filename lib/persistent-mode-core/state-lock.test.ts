@@ -62,4 +62,26 @@ describe("withStateLock", () => {
 		expect(existsSync(lockPath)).toBe(true);
 		expect(JSON.parse(readFileSync(join(lockPath, "owner.json"), "utf8")).token).toBe("successor");
 	});
+
+	test("owner release waits for a long fresh recovery guard before allowing a subsequent writer", async () => {
+		const recoveryPath = `${lockPath}.recovery`;
+		let recoveryReleaser: ReturnType<typeof Bun.spawn> | undefined;
+
+		withStateLock(stateFilePath, () => {
+			mkdirSync(recoveryPath);
+			recoveryReleaser = Bun.spawn([
+				"sh",
+				"-c",
+				"sleep 0.7; rm -rf \"$1\"",
+				"release-recovery",
+				recoveryPath,
+			]);
+		});
+
+		expect(recoveryReleaser).toBeDefined();
+		expect(await recoveryReleaser!.exited).toBe(0);
+		expect(existsSync(lockPath)).toBe(false);
+		expect(withStateLock(stateFilePath, () => "written")).toBe("written");
+		expect(existsSync(lockPath)).toBe(false);
+	});
 });
