@@ -354,3 +354,135 @@ describe("resume-member subcommand", () => {
 		expect(output).toContain("resume-member: missing prompt");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// settings.deny — skills 축 + subagents 축이 job.json에 기록되고, 집행 불가 CLI는
+// jobDir 생성 전에 차단된다. `start`가 spawn하는 워커는 member의 진짜 CLI를 exec
+// 하므로, 실 CLI 이름을 쓰는 테스트는 PATH를 no-op 스텁으로 가린다.
+// ---------------------------------------------------------------------------
+
+function makeCliStubDir(): string {
+	const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), "themis-cli-stub-"));
+	for (const cli of ["codex", "claude", "opencode"]) {
+		const stubPath = path.join(stubDir, cli);
+		fs.writeFileSync(stubPath, "#!/bin/sh\nexit 0\n");
+		fs.chmodSync(stubPath, 0o755);
+	}
+	return stubDir;
+}
+
+describe("settings.deny 배관", () => {
+	let tmpDir: string;
+	let stubDir: string;
+
+	beforeEach(() => {
+		tmpDir = makeTmpDir();
+		stubDir = makeCliStubDir();
+	});
+
+	afterEach(() => {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function writeDenyConfig(configPath: string, command: string) {
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: gpt",
+				`      command: ${command}`,
+				"  settings:",
+				"    timeout: 10",
+				"    deny:",
+				"      subagents: true",
+				"      skills:",
+				"        - design-review",
+				"        - code-review",
+			].join("\n"),
+			"utf8",
+		);
+	}
+
+	test("두 축 모두 job.json settings에 기록된다", () => {
+		const configPath = path.join(tmpDir, "design-review.config.yaml");
+		writeDenyConfig(configPath, "codex exec");
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		const result = execFileSync(
+			process.execPath,
+			[SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "--json", "deny prompt"],
+			{ stdio: "pipe", env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` } },
+		);
+		const output = JSON.parse(result.toString());
+		expect(output.settings.denySkills).toEqual(["design-review", "code-review"]);
+		expect(output.settings.denySubagents).toBe(true);
+
+		try {
+			execFileSync(process.execPath, [SCRIPT, "stop", output.jobDir], { stdio: "pipe" });
+		} catch {}
+		try {
+			execFileSync(process.execPath, [SCRIPT, "clean", output.jobDir, "--jobs-dir", jobsDir], {
+				stdio: "pipe",
+			});
+		} catch {}
+	});
+
+	test("집행 레버가 없는 CLI member는 exit 1 — jobDir도 만들어지지 않는다", () => {
+		const configPath = path.join(tmpDir, "design-review.config.yaml");
+		writeDenyConfig(configPath, "echo done");
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		let exitCode = 0;
+		let output = "";
+		try {
+			execFileSync(
+				process.execPath,
+				[SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "--json", "deny prompt"],
+				{ stdio: "pipe" },
+			);
+		} catch (e: any) {
+			exitCode = e.status;
+			output = (e.stderr?.toString() || "") + (e.stdout?.toString() || "");
+		}
+		expect(exitCode).toBe(1);
+		expect(output).toContain("gpt (unknown)");
+		expect(fs.readdirSync(jobsDir)).toEqual([]);
+	});
+
+	test("deny.subagents가 boolean이 아니면 exit 1이다", () => {
+		const configPath = path.join(tmpDir, "design-review.config.yaml");
+		fs.writeFileSync(
+			configPath,
+			[
+				"review:",
+				"  members:",
+				"    - name: gpt",
+				"      command: codex exec",
+				"  settings:",
+				"    deny:",
+				"      subagents: yes-please",
+			].join("\n"),
+			"utf8",
+		);
+		const jobsDir = path.join(tmpDir, "jobs");
+		fs.mkdirSync(jobsDir, { recursive: true });
+
+		let exitCode = 0;
+		let output = "";
+		try {
+			execFileSync(
+				process.execPath,
+				[SCRIPT, "start", "--config", configPath, "--jobs-dir", jobsDir, "--json", "deny prompt"],
+				{ stdio: "pipe" },
+			);
+		} catch (e: any) {
+			exitCode = e.status;
+			output = (e.stderr?.toString() || "") + (e.stdout?.toString() || "");
+		}
+		expect(exitCode).toBe(1);
+		expect(output).toContain("settings.deny.subagents' must be a boolean");
+	});
+});
