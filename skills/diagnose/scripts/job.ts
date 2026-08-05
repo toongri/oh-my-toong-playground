@@ -15,6 +15,10 @@ import {
 import {
 	type JobConfig,
 	assertMembersOrExit,
+	assertDenyEnforceable,
+	assertDenyShape,
+	extractDenySkills,
+	extractDenySubagents,
 	computeStatus as frameworkComputeStatus,
 	spawnWorkers as frameworkSpawnWorkers,
 	cmdResults as frameworkCmdResults,
@@ -145,9 +149,16 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 		settings: { ...defaultReview.settings, ...pr.settings },
 	};
 
+	const settings = reviewConfig.settings ?? {};
+	assertDenyShape(settings, DIAGNOSE_CONFIG, configPath);
+
 	const members = (reviewConfig.members ?? []).filter((m) => m && m.name && m.command);
 	assertMembersOrExit(members, DIAGNOSE_CONFIG, configPath);
 	const timeoutSec = Number(reviewConfig.settings?.timeout ?? 0);
+
+	const denySkills = extractDenySkills(settings);
+	const denySubagents = extractDenySubagents(settings);
+	assertDenyEnforceable(members, denySkills, DIAGNOSE_CONFIG, configPath, denySubagents);
 
 	const jobId = generateJobId();
 	const jobDir = path.join(jobsDir, `diagnose-${jobId}`);
@@ -162,6 +173,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 		configPath,
 		settings: {
 			timeoutSec: timeoutSec || null,
+			denySkills,
+			denySubagents,
 		},
 		members: members.map((m) => ({
 			name: String(m.name),
@@ -177,7 +190,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 	atomicWriteJson(path.join(jobDir, "job.json"), jobMeta);
 
 	frameworkSpawnWorkers({
-		entities: members,
+		entities: members.map((m) => ({ ...m, deny: denySkills, denySubagents })),
 		workerPath: WORKER_PATH,
 		jobDir,
 		entitiesDir: reviewersDir,

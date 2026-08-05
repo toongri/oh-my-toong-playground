@@ -1473,11 +1473,11 @@ describe("start: settings.deny.skills recorded in job.json settings.denySkills",
 			],
 			{ stdio: "pipe", env: { ...process.env, PATH: `${sharedStubDir}:${process.env.PATH}` } },
 		);
-		// stdout must be pure JSON — the informational "no skill deny declared"
+		// stdout must be pure JSON — the informational "declares no deny"
 		// note (deny defaults to empty here) must not leak into the same stream.
 		const stdout = result.toString();
 		expect(() => JSON.parse(stdout)).not.toThrow();
-		expect(stdout).not.toContain("no skill deny declared");
+		expect(stdout).not.toContain("declares no deny");
 
 		const output = JSON.parse(stdout);
 		expect(output.settings.denySkills).toEqual([]);
