@@ -34,6 +34,7 @@ export async function main(): Promise<void> {
 			lastAssistantMessage: input.lastAssistantMessage,
 			incompleteTodoCount,
 			activeBackgroundTaskCount: input.activeBackgroundTaskCount,
+			deferredStopWakeGuaranteed: true,
 		};
 
 		// Make decision

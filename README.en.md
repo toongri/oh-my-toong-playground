@@ -69,7 +69,8 @@ The details of the library's skills (43) and agents (13) live under `docs/`.
 
 - Claude Code CLI installed
 - Node.js v18+ (for HUD functionality)
-- `jq` (hooks parse payloads with it — guards silently fail open without it)
+- `jq` (hooks parse payloads with it — guards do not block when it is unavailable)
+- `sqlite3` (the Codex detector queries the `state_5.sqlite` state database with it — when unavailable, the detector counts zero and emits one stderr diagnostic)
 - macOS or Linux
 
 ### Setup

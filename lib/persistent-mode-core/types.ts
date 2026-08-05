@@ -111,6 +111,9 @@ export interface GoalState {
 	completion_evidence_paths?: string[];
 	/** Set by the hook when it emits the budget-limit notice (write-once guard). */
 	budget_limit_notified?: boolean;
+	/** Last observed repository and story fingerprints used by progress detection. */
+	last_seen_head?: string;
+	last_seen_stories_digest?: string;
 	/** Refreshed on every write (heartbeat). Used by the GC liveness check. */
 	last_touched_at?: string;
 }

@@ -12,7 +12,7 @@ Five content slots (from capture):
 
 Two minted slots (not in the request — this orchestrator supplies them):
 
-6. **iteration-policy** → `max_iterations` (`--max-iterations <n>`) — the finite cap on pursuit blocks. Default **10** when not overridden at invocation; invocation-overridable. This is the SOLE soft-stop bound: when pursuit hits `max_iterations` the loop soft-stops (state preserved), it does NOT hard-kill.
+6. **iteration-policy** → `max_iterations` (`--max-iterations <n>`) — the finite cap on **consecutive no-progress Stop turns**. Default **10** when not overridden at invocation; invocation-overridable. A diff-carrying commit or a story status transition is observed progress and resets the counter to `0`; a Stop while background work is still running is a wait and is not counted. When the counter reaches `max_iterations`, the loop soft-stops as `budget_limited` (state is preserved; it does NOT hard-kill or dispatch new work). After in-flight work is drained, only the user may resume the pursuit with `resume-pursuit`, which re-arms `pursuing` and resets the counter to `0`.
 7. **blocked-stop** (`--blocked-stop <text>`) — the objective-specific predicate that means "no valid path forward". A decidable, point-in-time condition (no cross-iteration memory); when met, pursuit stops and reports the blocker, non-complete.
 
 Seed example (run at the first `planning` transition):

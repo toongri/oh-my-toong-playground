@@ -29,6 +29,7 @@
  *       [--blocked-stop ..] [--plan-path ..] [--resume-summary ..]
  *       [--completion-evidence p1,p2] [--codex-goal-objective <text>]
  *   set-budget-limited                       (system-only)
+ *   resume-pursuit                            (user-only recovery from budget_limited)
  *   set-blocked --reason <text>              (system-only)
  *   request-complete [--codex-goal-json <json|path>]
  *                                         (gated: requires objective_verdict=APPROVE and completion
@@ -54,18 +55,11 @@
  *   or whitespace-only values are refused (ADR D-4).
  */
 
-import {
-	mkdirSync,
-	readFileSync,
-	renameSync,
-	rmSync,
-	statSync,
-	unlinkSync,
-	writeFileSync,
-} from "node:fs";
+import { readFileSync, unlinkSync } from "node:fs";
 import { execSync } from "child_process";
 import { createHash } from "crypto";
 import { getOmtDir } from "@lib/omt-dir";
+import { withStateLock } from "@lib/persistent-mode-core/state-lock";
 import {
 	mergeWithHeartbeat,
 	resolveSessionIdOrThrow,
@@ -75,8 +69,6 @@ import {
 	isPristine,
 	ensureSeed,
 } from "@lib/state-core";
-
-import { join } from "node:path";
 
 export type GoalPhase = "planning" | "pursuing" | "budget_limited" | "blocked" | "complete";
 export type ObjectiveVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | "absent";
@@ -139,9 +131,6 @@ export interface DismissedReviewFinding {
 
 const DEFAULT_MAX_ITERATIONS = 10;
 const DEFAULT_REVIEW_DISPATCH_CAP = 5;
-const REVIEW_LOCK_RETRIES = 100;
-const REVIEW_LOCK_RETRY_MS = 5;
-const REVIEW_LOCK_SLEEP = new Int32Array(new SharedArrayBuffer(4));
 
 export interface GoalState {
 	// --- 5 content slots ---
@@ -204,6 +193,10 @@ export interface GoalState {
 	 * CLI branch below for why.
 	 */
 	codex_goal_objective: string;
+	/** Last observed repository HEAD used by progress-fingerprint callers. */
+	last_seen_head?: string;
+	/** Digest of the last observed story set used by progress-fingerprint callers. */
+	last_seen_stories_digest?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,6 +335,10 @@ function mergeWriteLocked(sessionId: string, stateFilePath: string, next: Partia
 		// `set --phase pursuing` (no codex flag) would silently wipe the last-registered
 		// native-goal objective back to "" on every unrelated write.
 		codex_goal_objective: next.codex_goal_objective ?? prior.codex_goal_objective ?? "",
+		// Progress fingerprints are caller-owned metadata. Enumerate them here so an
+		// unrelated merge write cannot silently drop the last observed values.
+		last_seen_head: next.last_seen_head ?? prior.last_seen_head,
+		last_seen_stories_digest: next.last_seen_stories_digest ?? prior.last_seen_stories_digest,
 		review_dispatch_used: validNonNegativeInteger(reviewDispatchUsedCandidate)
 			? reviewDispatchUsedCandidate
 			: 0,
@@ -403,140 +400,18 @@ function parseClaimableState(raw: string): Partial<GoalState> | null {
 	}
 }
 
-/**
- * Minimal mkdir lock for every read-modify-write of this state file. A contention
- * timeout fails closed; we never perform an unlocked fallback after a lock error.
- */
-const REVIEW_LOCK_STALE_TTL_MS = 30_000;
-const REVIEW_LOCK_OWNER_FILE = "owner.json";
-
-type ReviewLockOwner = { ownerPid: number; token: string; startedAt: number };
-
-function withStateLock<T>(stateFilePath: string, callback: () => T): T {
-	const lockPath = `${stateFilePath}.lock`;
-	for (let attempt = 0; attempt < REVIEW_LOCK_RETRIES; attempt += 1) {
-		const token = crypto.randomUUID();
-		try {
-			mkdirSync(lockPath);
-			writeFileSync(join(lockPath, REVIEW_LOCK_OWNER_FILE), JSON.stringify({
-				ownerPid: process.pid,
-				token,
-				startedAt: Date.now(),
-			} satisfies ReviewLockOwner));
-			try {
-				return callback();
-			} finally {
-				releaseStateLock(lockPath, token);
-			}
-		} catch (err) {
-			if (isErrnoException(err) && err.code === "EEXIST") {
-				if (!recoverStaleStateLock(lockPath)) {
-					Atomics.wait(REVIEW_LOCK_SLEEP, 0, 0, REVIEW_LOCK_RETRY_MS);
-				}
-				continue;
-			}
-			throw err;
-		}
-	}
-	throw new Error("ultragoal-state: state lock contended; refusing unlocked write");
-}
-
-function readStateLockOwner(lockPath: string): ReviewLockOwner | undefined {
-	try {
-		const value: unknown = JSON.parse(readFileSync(join(lockPath, REVIEW_LOCK_OWNER_FILE), "utf8"));
-		if (
-			isRecord(value) &&
-			typeof value.ownerPid === "number" &&
-			Number.isInteger(value.ownerPid) &&
-			value.ownerPid > 0 &&
-			typeof value.token === "string" &&
-			value.token.length > 0 &&
-			typeof value.startedAt === "number"
-		) {
-			return { ownerPid: value.ownerPid, token: value.token, startedAt: value.startedAt };
-		}
-	} catch {
-		return undefined;
-	}
-	return undefined;
-}
-
-function isStateLockStale(lockPath: string): boolean {
-	const owner = readStateLockOwner(lockPath);
-	if (owner !== undefined && !isPidAlive(owner.ownerPid)) return true;
-	try {
-		return statSync(lockPath).mtimeMs + REVIEW_LOCK_STALE_TTL_MS < Date.now();
-	} catch {
-		return true;
-	}
-}
-
-function isPidAlive(pid: number): boolean {
-	try {
-		process.kill(pid, 0);
-		return true;
-	} catch (err) {
-		return isErrnoException(err) && err.code === "EPERM";
-	}
-}
-
-/** Serializes stale recovery so a second observer cannot rename a successor lock. */
-function recoverStaleStateLock(lockPath: string): boolean {
-	let recovered = false;
-	if (!withStateLockRecoveryGuard(lockPath, () => {
-		if (!isStateLockStale(lockPath)) return;
-		isolateAndRemoveStaleLock(lockPath);
-		recovered = true;
-	})) return false;
-	return recovered;
-}
-
-/** Prevents stale recovery from racing a token-checked holder release. */
-function withStateLockRecoveryGuard(lockPath: string, callback: () => void): boolean {
-	const recoveryPath = `${lockPath}.recovery`;
-	for (let attempt = 0; attempt < 2; attempt += 1) {
-		try {
-			mkdirSync(recoveryPath);
-		} catch (err) {
-			if (!(isErrnoException(err) && err.code === "EEXIST")) throw err;
-			if (!isStateLockStale(recoveryPath)) return false;
-			isolateAndRemoveStaleLock(recoveryPath);
-			continue;
-		}
-		try {
-			callback();
-			return true;
-		} finally {
-			rmSync(recoveryPath, { recursive: true, force: true });
-		}
-	}
-	return false;
-}
-
-function isolateAndRemoveStaleLock(lockPath: string): void {
-	const stalePath = `${lockPath}.stale-${process.pid}-${crypto.randomUUID()}`;
-	try {
-		renameSync(lockPath, stalePath);
-	} catch (err) {
-		if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "EEXIST")) return;
-		throw err;
-	}
-	rmSync(stalePath, { recursive: true, force: true });
-}
-
-function releaseStateLock(lockPath: string, token: string): void {
-	withStateLockRecoveryGuard(lockPath, () => {
-		if (readStateLockOwner(lockPath)?.token === token) {
-			rmSync(lockPath, { recursive: true, force: true });
-		}
-	});
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 export function readGoalState(sessionId: string): GoalState | null {
+	const state = readGoalStateRaw(sessionId);
+	if (state === null || !state.active) return null;
+	return state;
+}
+
+/** Schema-validated state read that preserves terminal (active:false) phases. */
+export function readGoalStateRaw(sessionId: string): GoalState | null {
 	const content = readFileOrNull(resolveStatePath(sessionId));
 	if (!content) return null;
 	try {
@@ -564,7 +439,6 @@ export function readGoalState(sessionId: string): GoalState | null {
 		) {
 			return null;
 		}
-		if (!state.active) return null;
 		// The shared seed skeleton predates review dispatch state. Keep reads compatible
 		// with those files without making a re-plan reset an already-persisted budget.
 		return {
@@ -813,6 +687,29 @@ export function setBudgetLimited(sessionId: string): void {
 		phase: "budget_limited",
 		active: false,
 		budget_limit_notified: true,
+	});
+}
+
+/**
+ * User-only recovery edge: budget_limited → pursuing. This is deliberately a
+ * strict raw read/validate/write path: it never seeds or performs a generic merge.
+ */
+export function resumePursuit(sessionId: string): void {
+	const stateFilePath = resolveStatePath(sessionId);
+	withStateLock(stateFilePath, () => {
+		const raw = readFileOrNull(stateFilePath);
+		if (raw === null) throw new Error("resume-pursuit: refused — state file is absent");
+		const prior = parseClaimableState(raw);
+		if (prior === null) throw new Error("resume-pursuit: refused — state is corrupt or invalid");
+		if (prior.phase !== "budget_limited") {
+			throw new Error(`resume-pursuit: refused — phase must be budget_limited (got "${String(prior.phase)}")`);
+		}
+		mergeWriteLocked(sessionId, stateFilePath, {
+			phase: "pursuing",
+			active: true,
+			iteration: 0,
+			budget_limit_notified: false,
+		});
 	});
 }
 
@@ -2267,6 +2164,8 @@ function main(): void {
 			setVerdict(sessionId, v);
 		} else if (subcommand === "set-budget-limited") {
 			setBudgetLimited(sessionId);
+		} else if (subcommand === "resume-pursuit") {
+			resumePursuit(sessionId);
 		} else if (subcommand === "set-blocked") {
 			setBlocked(sessionId, String(args["reason"] ?? ""));
 		} else if (subcommand === "request-complete") {
@@ -2324,7 +2223,7 @@ function main(): void {
 		} else if (subcommand === "get") {
 			process.stdout.write(JSON.stringify(readGoalGet(sessionId)) + "\n");
 		} else if (subcommand === "status") {
-			const state = readGoalState(sessionId);
+			const state = readGoalStateRaw(sessionId);
 			process.stdout.write((state ? deriveStatus(state) : "absent") + "\n");
 		} else if (subcommand === "list-others") {
 			const candidates = listOthers("ultragoal");
@@ -2504,7 +2403,7 @@ function main(): void {
 			process.stdout.write(JSON.stringify(serializeReviewContext(sessionId)) + "\n");
 		} else {
 			process.stderr.write(
-				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
+				"Usage: ultragoal-state.ts <set|set-verdict|set-budget-limited|resume-pursuit|set-blocked|request-complete|claim-review-dispatch|approve-review-dispatch-renewal|dismiss-review-finding|get|status|list-others|adopt|set-stories|confirm-story|confirm-all-stories|reorder-stories|revise-story|add-story|retire-story|split-story|serialize-requirements|serialize-review-context> [options]\n",
 			);
 			process.exit(1);
 		}

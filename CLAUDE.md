@@ -30,11 +30,16 @@ bun test                                   # All TypeScript tests
 
 ### Prerequisites
 
-`bun`, `bash` (macOS 3.2 compatible), `jq`
+`bun`, `bash` (macOS 3.2 compatible), `jq`, `sqlite3`
 
 `jq` is a runtime prerequisite, not just a dev tool: the shipped hooks parse their
 payloads with it and **fail open (no guard) when it is absent**. macOS
 15+ ships it in the base system at `/usr/bin/jq`; older macOS needs it installed.
+
+`sqlite3` is a runtime prerequisite for Codex's active-ultragoal child detector. If
+the binary, state database, query, or rollout data is unavailable or malformed,
+`codex-persistent-mode` emits one diagnostic to stderr and fails open by counting
+zero active children.
 
 ## Architecture
 
@@ -131,8 +136,8 @@ skills:
 - **label-commit-gate.sh** / **codex-label-commit-gate.sh**: Hard-blocks a commit whose message subject contains an invented/opaque label
 - **label-edit-warn.sh** / **codex-label-edit-warn.sh**: Soft-warns (never blocks) when just-written content contains a bare invented/opaque label
 - **mermaid-render-gate.sh**: PostToolUse gate — renders every mermaid block of a just-written markdown file through `mmdc` (real mermaid inside headless Chromium, so layout-stage crashes surface too, not just parse errors) and blocks with the failing block located by file line number. Fails open when `mmdc` is absent (`npm i -g @mermaid-js/mermaid-cli` to enable); Claude-only, no Codex twin
-- **persistent-mode/** / **codex-persistent-mode/**: Prevents stopping when work remains incomplete (shared `makeDecision`)
-- **pre-tool-enforcer.sh** / **codex-write-guard.sh**: PreToolUse gates — TaskOutput blocking, session-ledger write guard, code-review artifact identity guard, user-only ultragoal-state command guard (`approve-review-dispatch-renewal` / `dismiss-review-finding` — both clear the loop's own completion gate, so the AI's Bash path is denied and the user runs them); Codex twin additionally denies dangerous commands (`rm -rf`, `git push --force`)
+- **persistent-mode/** / **codex-persistent-mode/**: Prevents stopping when work remains incomplete (shared `makeDecision`); for an active ultragoal, consecutive no-progress Stops increment the iteration counter, observed diff-carrying commits or story transitions reset it, background-work waits are not counted, and the cap soft-stops as `budget_limited` for user-only `resume-pursuit` recovery
+- **pre-tool-enforcer.sh** / **codex-write-guard.sh**: PreToolUse gates — TaskOutput blocking, session-ledger write guard, code-review artifact identity guard, user-only ultragoal-state command guard (`approve-review-dispatch-renewal` / `dismiss-review-finding` / `resume-pursuit` — each is user-authorized; the AI's Bash path is denied and the user runs them); Codex twin additionally denies dangerous commands (`rm -rf`, `git push --force`)
 - **review-dispatch-gate-core.sh** / **pre-tool-enforcer.sh** / **codex-review-dispatch-gate.sh**: Shared final-review dispatch budget — Claude/Codex shims atomically claim only active `phase=pursuing` `code-reviewer` dispatches; the initial five-dispatch window denies cap exhaustion or completion-eligible re-dispatch until explicit user approval renews the cap by 5.
 - **review-exec-guard.sh** / **codex-review-exec-guard.sh**: Review-context PreToolUse guards — enforce the shared static-review execution invariant for `orchestrate-review`; block tests, builds, installs, and linters only while member or conductor review context is active
 - **codex-spawn-depth-gate.sh**: Codex PreToolUse gate capping subagent spawn depth at 2 (Claude enforces the same cap natively via `claude.yaml`'s `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`)

@@ -1439,6 +1439,61 @@ test_ac_dangerous_exec_command_rm_rf_denies() {
     fi
 }
 
+# User-authorized ultragoal-state command wiring: the Codex shim must route the
+# whole Bash command through the shared deny for resume-pursuit, including the
+# same indirection/order/whitespace shapes covered by the core tests.
+test_user_authorized_resume_pursuit_direct_denies() {
+    new_sandbox
+    local cmd out result=0
+    cmd="bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts resume-pursuit"
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED user-authorized-resume-pursuit-direct: expected deny, got '$out'"
+        result=1
+    fi
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_user_authorized_resume_pursuit_variable_indirection_denies() {
+    new_sandbox
+    local cmd out result=0
+    cmd='sub=resume-pursuit; bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts "$sub"'
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED user-authorized-resume-pursuit-variable-indirection: expected deny, got '$out'"
+        result=1
+    fi
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_user_authorized_resume_pursuit_reverse_order_denies() {
+    new_sandbox
+    local cmd out result=0
+    cmd='s=resume-pursuit && bun /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts "$s"'
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED user-authorized-resume-pursuit-reverse-order: expected deny, got '$out'"
+        result=1
+    fi
+    rm -rf "$SBX"
+    return "$result"
+}
+
+test_user_authorized_resume_pursuit_whitespace_run_denies() {
+    new_sandbox
+    local cmd out result=0
+    cmd='bun  /Users/x/.claude/skills/ultragoal/scripts/ultragoal-state.ts   resume-pursuit   --reason x'
+    out=$(jq -n --arg cmd "$cmd" --arg cwd "$GITDIR" '{tool_name:"Bash", tool_input:{command:$cmd}, session_id:"cx", cwd:$cwd}' | run_hook)
+    if ! printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then
+        echo "ASSERTION FAILED user-authorized-resume-pursuit-whitespace-run: expected deny, got '$out'"
+        result=1
+    fi
+    rm -rf "$SBX"
+    return "$result"
+}
+
 # CONFIRMED BYPASS regression: a `<<EOF` token sitting inside a quoted string
 # opens no heredoc at real execution time, but the heredoc stripper used to
 # read it as an opener and drop every following line through `EOF` -- which
@@ -2657,6 +2712,10 @@ main() {
     run_test test_ac_dangerous_rm_rf_denies
     run_test test_ac_dangerous_git_push_force_denies
     run_test test_ac_dangerous_exec_command_rm_rf_denies
+    run_test test_user_authorized_resume_pursuit_direct_denies
+    run_test test_user_authorized_resume_pursuit_variable_indirection_denies
+    run_test test_user_authorized_resume_pursuit_reverse_order_denies
+    run_test test_user_authorized_resume_pursuit_whitespace_run_denies
     run_test test_ac4_negative_plain_rm_allows
     run_test test_ac4_negative_rm_r_allows
     run_test test_ac4_negative_git_push_no_force_allows
