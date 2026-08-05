@@ -17,6 +17,18 @@
 /projects/*/*.local.yaml
 .mcp.json
 
+# 이 레포는 public이다. projects/ 는 기본 제외로 두고 공개할 것만 아래에서 연다 —
+# 제외 목록에 이름을 적으면 그 줄 자체가 비공개 대상의 이름을 노출하기 때문이다.
+# 여기서 열리지 않은 프로젝트의 실체는 toong-dotfiles(private)의 omt/projects/ 가
+# 들고 있고, 그쪽 bin/omt-apply 가 각 워크트리로 복사한다.
+/projects/*/
+!/projects/loop-pack-fe-l2-vol1/
+!/projects/loopers-kotlin-spring-template/
+!/projects/oh-my-resume/
+!/projects/oh-my-toong/
+!/projects/resume-manage/
+!/projects/toong-java-spring-template/
+
 *.log
 .DS_Store
 
