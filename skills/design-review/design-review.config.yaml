@@ -16,3 +16,66 @@ review:
 
   settings:
     timeout: 1200
+    deny:
+      # Subagent axis: the reviewer answers the design question alone. Spawning is a second
+      # fan-out beneath this one — unbudgeted cost, and counsel no review prompt shaped.
+      # Translated per member CLI by `buildAugmentedCommand` (codex: `-c agents.enabled=false`);
+      # a member on a CLI with no such lever fails `start` rather than running unguarded.
+      subagents: true
+      # Three separate reasons, not one list: (1) self-recursion fan-out guard, 3 skills — this
+      # reviewer runs `codex exec`, which could otherwise invoke a review/council skill and spawn
+      # another fan-out beneath this one; already live since `code-review` deploys to codex via
+      # root `sync.yaml`'s `platforms: [claude, codex]`.
+      # (2) role-boundary guard, `diagnose` alone — this reviewer gives advisory design counsel,
+      # not a root-cause verdict, and `diagnose` would pull it across that line.
+      # (3) prompt-budget guard, the remaining 36 — none help reason about a design's tradeoffs,
+      # so each is dead prompt weight; the size this saves is pinned by
+      # `codex-skill-deny-efficacy.test.ts`, not restated here.
+      #
+      # List stops at 40: further items are OpenAI-bundled plugin skills outside this repo,
+      # named in `plugin:skill` colon form, which `lib/generic-job.ts`'s `assertDenyShape`
+      # rejects outright. Fail-open by design: a skill added later stays loadable — unlisted
+      # means visible, the safe direction. Kept in lockstep with the other job configs
+      # (`orchestrate-review`, `agent-council`, `design-review`, `diagnose`) —
+      # `codex-skill-deny-efficacy.test.ts` asserts all four declare the same set.
+      skills:
+        - agent-browser
+        - agent-council
+        - agent-device
+        - clarify
+        - code-review
+        - collect-jd
+        - craft-issue
+        - create-slides
+        - deep-interview
+        - design-review
+        - diagnose
+        - dogfood
+        - frontend
+        - git-master
+        - hud
+        - humanizer
+        - insane-browsing
+        - make-pr
+        - meeting-notes
+        - momus
+        - orchestrate-review
+        - pin-audit
+        - pin-query
+        - pin-record
+        - pin-setup
+        - pin-wrap-up
+        - prometheus
+        - qa
+        - receiving-code-review
+        - review-report
+        - scan-pdf-to-notes
+        - sisyphus
+        - slides-review
+        - technical-copywriting
+        - technical-writing
+        - test-driven-development
+        - ultragoal
+        - ultraresearch
+        - visual-qa
+        - writing-skills

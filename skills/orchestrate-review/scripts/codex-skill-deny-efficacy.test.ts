@@ -24,13 +24,14 @@ import { buildAugmentedCommand } from "@lib/generic-job";
 import { splitCommand } from "@lib/worker-utils";
 
 const CONFIG_PATH = path.join(import.meta.dir, "..", "orchestrate-review.config.yaml");
-const COUNCIL_CONFIG_PATH = path.join(
-	import.meta.dir,
-	"..",
-	"..",
-	"agent-council",
-	"council.config.yaml",
-);
+const SKILLS_DIR = path.join(import.meta.dir, "..", "..");
+
+/** 같은 선언 집합을 들고 있어야 하는 나머지 job config들 — [경로, 최상위 키]. */
+const LOCKSTEP_CONFIGS: Array<[string, string]> = [
+	[path.join(SKILLS_DIR, "agent-council", "council.config.yaml"), "council"],
+	[path.join(SKILLS_DIR, "design-review", "design-review.config.yaml"), "review"],
+	[path.join(SKILLS_DIR, "diagnose", "diagnose.config.yaml"), "review"],
+];
 
 const codexPath = Bun.which("codex");
 
@@ -160,9 +161,24 @@ describe("codex 축 실효성 — settings.deny.skills가 실제 프롬프트에
 		controlBlock = extractSkillsInstructionsBlock(controlOutput);
 	}, { timeout: 0 });
 
-	test("council.config.yaml은 orchestrate-review.config.yaml과 동일한 선언 집합을 갖는다 (각자 파일에서 읽음)", () => {
-		const councilNames = readDeclaredDenySkills(COUNCIL_CONFIG_PATH, "council");
-		expect([...councilNames].sort()).toEqual([...declaredNames].sort());
+	test("job config 4종은 동일한 선언 집합을 갖는다 (각자 파일에서 읽음)", () => {
+		for (const [configPath, topLevelKey] of LOCKSTEP_CONFIGS) {
+			const names = readDeclaredDenySkills(configPath, topLevelKey);
+			expect([...names].sort(), `lockstep 이탈: ${configPath}`).toEqual([...declaredNames].sort());
+		}
+	});
+
+	// deny.skills와 달리 subagents 축은 프롬프트 크기가 아니라 능력을 끄는 선언이라
+	// 여기서는 "4개 config 전부가 켜 두었는가"만 본다 — 실효성은 아래 codex 프롬프트
+	// 측정이 아니라 lib/generic-job.test.ts의 번역 테스트가 담당한다.
+	test("job config 4종 모두 settings.deny.subagents를 켜 두었다", () => {
+		const all: Array<[string, string]> = [[CONFIG_PATH, "chunk-review"], ...LOCKSTEP_CONFIGS];
+		for (const [configPath, topLevelKey] of all) {
+			const parsed = Bun.YAML.parse(fs.readFileSync(configPath, "utf8")) as Record<string, any>;
+			expect(parsed?.[topLevelKey]?.settings?.deny?.subagents, `subagents 미선언: ${configPath}`).toBe(
+				true,
+			);
+		}
 	});
 
 	test("선언 이름의 과반은 baseline > 0이다(블록 내부) — 과반에 못 미치면 블록 추출이 깨졌다는 신호다", () => {
@@ -255,10 +271,10 @@ function skillDirExists(name: string): boolean {
 }
 
 describe("오타 검출 — 선언된 이름이 실재하는 스킬인가", () => {
-	test("orchestrate-review.config.yaml과 council.config.yaml에 선언된 모든 deny.skills 이름은 skills/<name>/SKILL.md로 실재한다", () => {
+	test("job config 4종에 선언된 모든 deny.skills 이름은 skills/<name>/SKILL.md로 실재한다", () => {
 		const sources: Array<{ configPath: string; topLevelKey: string }> = [
 			{ configPath: CONFIG_PATH, topLevelKey: "chunk-review" },
-			{ configPath: COUNCIL_CONFIG_PATH, topLevelKey: "council" },
+			...LOCKSTEP_CONFIGS.map(([configPath, topLevelKey]) => ({ configPath, topLevelKey })),
 		];
 
 		const missing: string[] = [];
