@@ -48,7 +48,7 @@ Before any reviewer sees an image, verify each capture yourself: the file signat
 ### Web
 
 1. Capture a REFERENCE image: the user's mock/target, generated page snapshot, Figma export, source-site capture, or known-good baseline. Save as PNG. If the user provided overview text or annotations, save them next to the image and treat them as part of the reference packet.
-2. Capture the ACTUAL rendered screenshot at the same viewport size. Load the `agent-browser` skill before using its CLI, then use [agent-browser](https://github.com/vercel-labs/agent-browser) for navigation, page state inspection, and screenshots. Save as PNG. If the CLI is not installed, install it (`npm install -g agent-browser && agent-browser install`) and capture with it — see `${CLAUDE_SKILL_DIR}/references/agent-browser-setup.md` for the full setup, including how to shoot a fixed-viewport screenshot.
+2. Capture the ACTUAL rendered screenshot at the same viewport size. Load the `agent-browser` skill before using its CLI, then use [agent-browser](https://github.com/vercel-labs/agent-browser) for navigation, page state inspection, and screenshots. Save as PNG. See `${CLAUDE_SKILL_DIR}/references/agent-browser-setup.md` for the capture details, including how to shoot a fixed-viewport screenshot.
 3. Run the diff and keep the JSON:
 
 ```
